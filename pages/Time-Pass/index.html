@@ -2,10 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Time Pass</title>
   <meta name="description" content="Track time until and since the moments that matter — with Google sync.">
   <meta name="theme-color" content="#050814">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Time Pass">
   <link rel="manifest" href="site.webmanifest">
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
@@ -18,6 +22,12 @@
         document.documentElement.dataset.theme = t;
         var m = document.querySelector('meta[name="theme-color"]');
         if (m) m.content = t === 'light' ? '#f4f6fb' : t === 'oled' ? '#000000' : '#050814';
+      }
+      if (window.navigator.standalone === true ||
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.matchMedia('(display-mode: fullscreen)').matches ||
+          window.matchMedia('(display-mode: minimal-ui)').matches) {
+        document.documentElement.classList.add('is-pwa');
       }
     } catch (e) {}
   </script>
@@ -38,7 +48,7 @@
   <div id="app">
     <header class="app-header glass" id="app-header">
       <a href="/index.html" class="home-escape" aria-label="Back to Xander Wiles home">
-        <span class="ui-icon ui-icon--back" style="--ui-icon: url('/assets/SVGs/Left-ArrowIcons.svg')" aria-hidden="true"></span>
+        <span class="ui-icon ui-icon--home" style="--ui-icon: url('/assets/SVGs/home.svg')" aria-hidden="true"></span>
       </a>
       <div class="brand">
         <h1>Time Pass</h1>

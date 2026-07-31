@@ -14,7 +14,17 @@ import {
   setView,
   patchSettings,
   filtersAreActive,
+  getCategories,
 } from './store.js';
+import {
+  DEFAULT_CATEGORY,
+  NEW_CATEGORY_VALUE,
+  canDeleteCategory,
+  categoriesEqual,
+  normalizeCategories,
+  normalizeCategoryName,
+  resolveEventCategory,
+} from './categories.js';
 import {
   formatUnitValue,
   recurrenceLabel,
@@ -22,10 +32,12 @@ import {
   formatDisplayDate,
   formatDisplayTime,
   formatRelativeCue,
+  formatAppTimestamp,
   buildCopySummary,
   copyText,
   todayIsoDate,
   offsetIsoDate,
+  offsetIsoMonths,
   COMMON_TIME_ZONES,
 } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
@@ -38,7 +50,7 @@ import {
   OFFSET_UNIT_FIELDS,
 } from './calculator.js';
 import { THEMES } from './theme.js';
-import { SORT_OPTIONS, normalizeSort } from './filters.js';
+import { SORT_OPTIONS, normalizeSort, vmStatBlocks } from './filters.js';
 
 const LAST_COLOR_KEY = 'time-pass:last-color';
 const FILTERS_OPEN_KEY = 'time-pass:filters-open';
@@ -54,6 +66,8 @@ const ICON_URLS = {
   shrink: '/assets/SVGs/shrink.svg',
   close: '/assets/icons/close-icon.svg',
   back: '/assets/SVGs/Left-ArrowIcons.svg',
+  home: '/assets/SVGs/home.svg',
+  plus: '/assets/SVGs/plus-icon.svg',
 };
 
 let handlers = {
@@ -67,6 +81,7 @@ let handlers = {
   onExport: () => {},
   onImport: () => {},
   onSaveSettings: async () => {},
+  onDeleteCategory: async () => {},
 };
 
 let lastFocus = null;
@@ -178,6 +193,7 @@ function formatTzShort(tz) {
 function buildEventMeta(event) {
   const bits = [formatDisplayDate(event.date)];
   if (event.time) bits.push(formatDisplayTime(event.time));
+  bits.push(resolveEventCategory(event, state.settings.categories));
   bits.push(recurrenceLabel(event.recurrence?.frequency || 'none'));
   bits.push(formatTzShort(event.timeZone || getBrowserTimeZone()));
   return bits.join(' · ');
@@ -276,10 +292,10 @@ export function renderChrome() {
     if (brandSub) brandSub.textContent = state.user?.displayName || state.user?.email || 'Signed in';
     if (banner) banner.hidden = true;
     actions.appendChild(
-      el('button', {
-        type: 'button',
-        className: 'btn',
-        text: 'Add',
+      iconButton({
+        icon: 'plus',
+        label: 'Add event',
+        className: 'icon-btn icon-btn--accent',
         onClick: () => openEventModal(null),
       })
     );
@@ -306,53 +322,37 @@ export function renderChrome() {
 export function renderToolbar(nowMs = Date.now()) {
   const toolbar = document.getElementById('toolbar');
   if (!toolbar) return;
+
+  const prevSearch = document.getElementById('search-input');
+  const restoreSearch =
+    prevSearch && document.activeElement === prevSearch
+      ? {
+          value: prevSearch.value,
+          start: prevSearch.selectionStart,
+          end: prevSearch.selectionEnd,
+        }
+      : null;
+
   const f = state.settings.filters;
   const density = state.settings.cardDensity === 'compact' ? 'compact' : 'expanded';
   const filtersActive = filtersAreActive();
 
   toolbar.classList.toggle('has-active-filters', filtersActive);
 
-  const densityGroup = el('div', {
-    className: 'chip-group chip-group--exclusive',
-    role: 'radiogroup',
-    'aria-label': 'Card density',
+  const densityToggle = iconButton({
+    icon: density === 'compact' ? 'expand' : 'shrink',
+    label: density === 'compact' ? 'Expand cards' : 'Compact cards',
+    className: 'icon-btn density-toggle',
+    onClick: () => {
+      const next = density === 'compact' ? 'expanded' : 'compact';
+      patchSettings({ cardDensity: next });
+      handlers.onSaveSettings({ cardDensity: next }).catch((err) => {
+        toast(err.message || 'Could not save density', 'error');
+      });
+    },
   });
-  for (const [value, label, icon] of [
-    ['compact', 'Compact', 'shrink'],
-    ['expanded', 'Expanded', 'expand'],
-  ]) {
-    densityGroup.appendChild(
-      el(
-        'button',
-        {
-          type: 'button',
-          className: `chip chip-with-icon${density === value ? ' is-active' : ''}`,
-          role: 'radio',
-          'aria-checked': density === value,
-          'aria-label': label,
-          title: label,
-          onClick: async () => {
-            if (density === value) return;
-            patchSettings({ cardDensity: value });
-            try {
-              await handlers.onSaveSettings({ cardDensity: value });
-            } catch (err) {
-              toast(err.message || 'Could not save density', 'error');
-            }
-          },
-        },
-        [uiIcon(icon), el('span', { text: label })]
-      )
-    );
-  }
-
-  const densityRow = el('div', { className: 'filter-family filter-family--density' }, [
-    el('div', { className: 'filter-family-head' }, [
-      el('span', { className: 'filter-family-label', text: 'Cards' }),
-      el('span', { className: 'filter-family-hint', text: 'Pick one' }),
-    ]),
-    densityGroup,
-  ]);
+  densityToggle.title = density === 'compact' ? 'Expanded view' : 'Compact view';
+  densityToggle.setAttribute('aria-pressed', density === 'compact' ? 'true' : 'false');
 
   const dirGroup = el('div', {
     className: 'chip-group chip-group--exclusive',
@@ -414,6 +414,30 @@ export function renderToolbar(nowMs = Date.now()) {
     recGroup,
   ]);
 
+  const categoryFilterValue = f.category && f.category !== 'all' ? f.category : 'all';
+  const categoryFilterSelect = el('select', {
+    className: 'category-select',
+    'aria-label': 'Filter by category',
+    onChange: (e) => handlers.onFilters({ category: e.target.value }),
+  });
+  categoryFilterSelect.appendChild(el('option', { value: 'all', text: 'All categories' }));
+  for (const cat of getCategories()) {
+    const opt = el('option', { value: cat, text: cat });
+    if (categoriesEqual(cat, categoryFilterValue)) opt.selected = true;
+    categoryFilterSelect.appendChild(opt);
+  }
+  if (categoryFilterValue === 'all') {
+    categoryFilterSelect.querySelector('option[value="all"]').selected = true;
+  }
+
+  const categoryFamily = el('div', { className: 'filter-family filter-family--category' }, [
+    el('div', { className: 'filter-family-head' }, [
+      el('span', { className: 'filter-family-label', text: 'Category' }),
+      el('span', { className: 'filter-family-hint', text: 'Pick one' }),
+    ]),
+    el('div', { className: 'category-select-wrap' }, [categoryFilterSelect]),
+  ]);
+
   const sortValue = normalizeSort(f.sort);
   const sortSelect = el('select', {
     className: 'sort-select',
@@ -450,7 +474,7 @@ export function renderToolbar(nowMs = Date.now()) {
   const searchFamily = el('div', { className: 'filter-family filter-family--search' }, [
     el('div', { className: 'filter-family-head' }, [
       el('span', { className: 'filter-family-label', text: 'Search' }),
-      el('span', { className: 'filter-family-hint', text: 'Combines with When, Type & Order' }),
+      el('span', { className: 'filter-family-hint', text: 'Combines with When, Type, Category & Order' }),
     ]),
     search,
   ]);
@@ -458,9 +482,15 @@ export function renderToolbar(nowMs = Date.now()) {
   const filtersPanel = el('div', { className: 'filters-panel' }, [
     el('p', {
       className: 'filters-combine-note',
-      text: 'When, Type, Order, and Search work together — choose one option in each group.',
+      text: 'When, Type, Category, Order, and Search work together — choose one option in each group.',
     }),
-    el('div', { className: 'filters-grid' }, [whenFamily, typeFamily, orderFamily, searchFamily]),
+    el('div', { className: 'filters-grid' }, [
+      whenFamily,
+      typeFamily,
+      categoryFamily,
+      orderFamily,
+      searchFamily,
+    ]),
   ]);
 
   const shown = getViewList(nowMs).length;
@@ -477,14 +507,19 @@ export function renderToolbar(nowMs = Date.now()) {
         className: 'chip chip--clear',
         text: 'Clear filters',
         onClick: () =>
-          handlers.onFilters({ direction: 'all', recurring: 'all', query: '', sort: 'smart' }),
+          handlers.onFilters({
+            direction: 'all',
+            recurring: 'all',
+            query: '',
+            sort: 'smart',
+            category: 'all',
+          }),
       })
     );
   }
 
   const drawerOpen = getFiltersDrawerOpen();
   const drawerBody = el('div', { className: 'filters-drawer-body', id: 'filters-drawer-body' }, [
-    densityRow,
     filtersPanel,
     metaRow,
   ]);
@@ -513,7 +548,10 @@ export function renderToolbar(nowMs = Date.now()) {
     ]
   );
 
-  const collapsedBar = el('div', { className: 'filters-drawer-summary' }, [toggle]);
+  const collapsedBar = el('div', { className: 'filters-drawer-summary' }, [
+    toggle,
+    densityToggle,
+  ]);
   if (filtersActive) {
     collapsedBar.appendChild(
       el('button', {
@@ -521,7 +559,13 @@ export function renderToolbar(nowMs = Date.now()) {
         className: 'chip chip--clear',
         text: 'Clear',
         onClick: () =>
-          handlers.onFilters({ direction: 'all', recurring: 'all', query: '', sort: 'smart' }),
+          handlers.onFilters({
+            direction: 'all',
+            recurring: 'all',
+            query: '',
+            sort: 'smart',
+            category: 'all',
+          }),
       })
     );
   }
@@ -539,6 +583,22 @@ export function renderToolbar(nowMs = Date.now()) {
 
   const listView = document.getElementById('list-view');
   if (listView) listView.classList.toggle('has-active-filters', filtersActive);
+
+  if (restoreSearch) {
+    const next = document.getElementById('search-input');
+    if (next) {
+      next.value = restoreSearch.value;
+      next.focus();
+      try {
+        const len = next.value.length;
+        const start = Math.min(restoreSearch.start ?? len, len);
+        const end = Math.min(restoreSearch.end ?? len, len);
+        next.setSelectionRange(start, end);
+      } catch {
+        /* type=search may reject selection in some browsers */
+      }
+    }
+  }
 }
 
 
@@ -556,20 +616,81 @@ function renderUnitRow(parts, visibleUnits) {
   return row;
 }
 
-function renderDirectionRow(block) {
+function renderDirectionRow(block, compact = false) {
   const row = el('div', { className: 'direction-row' });
-  row.appendChild(
-    el('span', {
-      className: 'direction-tag',
-      text: block.direction === 'until' ? 'Until next' : 'Since',
-    })
-  );
+  if (!compact) {
+    row.appendChild(
+      el('span', {
+        className: 'direction-tag',
+        text: block.direction === 'until' ? 'Until next' : 'Since',
+      })
+    );
+  }
   row.appendChild(el('span', { className: 'relative-cue', text: formatRelativeCue(block) }));
   return row;
 }
 
+function renderStatExtra(block, label, compact) {
+  const sec = el('div', { className: 'secondary-block' });
+  const secRow = el('div', { className: 'direction-row' });
+  if (!compact) {
+    secRow.appendChild(el('span', { className: 'direction-tag', text: label }));
+  }
+  secRow.appendChild(el('span', { className: 'relative-cue', text: formatRelativeCue(block) }));
+  sec.appendChild(secRow);
+  if (!compact) {
+    sec.appendChild(renderUnitRow(block.parts, block.visibleUnits));
+  }
+  return sec;
+}
+
+function renderCycleProgress(progress, compact) {
+  const wrap = el('div', {
+    className: `cycle-progress${compact ? ' is-compact' : ''}`,
+  });
+  const row = el('div', { className: 'direction-row' });
+  row.appendChild(el('span', { className: 'direction-tag', text: 'Through cycle' }));
+  row.appendChild(
+    el('span', {
+      className: 'relative-cue cycle-progress-cue',
+      text: `${progress.label} · ${progress.percent}%`,
+    })
+  );
+  wrap.appendChild(row);
+
+  if (!compact) {
+    const track = el('div', {
+      className: 'cycle-progress-track',
+      role: 'progressbar',
+      'aria-valuemin': '0',
+      'aria-valuemax': '100',
+      'aria-valuenow': String(progress.percent),
+      'aria-label': progress.label,
+    });
+    const fill = el('div', { className: 'cycle-progress-fill' });
+    fill.style.width = `${progress.percent}%`;
+    track.appendChild(fill);
+    const marks = el('div', { className: 'cycle-progress-marks', 'aria-hidden': 'true' });
+    for (const pct of [25, 50, 75]) {
+      const mark = el('span', { className: 'cycle-progress-mark' });
+      mark.style.left = `${pct}%`;
+      marks.appendChild(mark);
+    }
+    track.appendChild(marks);
+    wrap.appendChild(track);
+    wrap.appendChild(
+      el('p', {
+        className: 'cycle-progress-detail',
+        text: progress.detail,
+      })
+    );
+  }
+
+  return wrap;
+}
+
 function renderCard(vm, readOnly) {
-  const { event, primary, secondary } = vm;
+  const { event, primary, secondary, sinceFirst, cycleProgress } = vm;
   const fullColour = Boolean(state.settings.fullColourCards);
   const compact = state.settings.cardDensity === 'compact';
   const li = el('li', {
@@ -609,27 +730,14 @@ function renderCard(vm, readOnly) {
   }
 
   li.appendChild(head);
-  li.appendChild(renderDirectionRow(primary));
+  li.appendChild(renderDirectionRow(primary, compact));
   if (!compact) {
     li.appendChild(renderUnitRow(primary.parts, primary.visibleUnits));
   }
 
-  if (secondary) {
-    const sec = el('div', { className: 'secondary-block' });
-    const secRow = el('div', { className: 'direction-row' });
-    secRow.appendChild(
-      el('span', {
-        className: 'direction-tag',
-        text: secondary.direction === 'until' ? 'Until' : 'Since last',
-      })
-    );
-    secRow.appendChild(el('span', { className: 'relative-cue', text: formatRelativeCue(secondary) }));
-    sec.appendChild(secRow);
-    if (!compact) {
-      sec.appendChild(renderUnitRow(secondary.parts, secondary.visibleUnits));
-    }
-    li.appendChild(sec);
-  }
+  if (cycleProgress && !compact) li.appendChild(renderCycleProgress(cycleProgress, false));
+  if (secondary) li.appendChild(renderStatExtra(secondary, 'Since last', compact));
+  if (sinceFirst) li.appendChild(renderStatExtra(sinceFirst, 'Since first', compact));
 
   return li;
 }
@@ -840,10 +948,44 @@ function renderSettingsPage() {
 
   const densityNote = el('p', {
     className: 'settings-muted',
-    text: 'Card density (Compact / Expanded) is controlled from the list toolbar and syncs with your account when signed in.',
+    text: 'Card density is controlled by the compact/expand icon in the list toolbar and syncs when signed in.',
   });
   appearance.appendChild(densityNote);
   page.appendChild(appearance);
+
+  const categoriesSection = el('section', { className: 'settings-section' });
+  categoriesSection.appendChild(el('h3', { text: 'Categories' }));
+  categoriesSection.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: 'Every event needs a category (Misc by default). Delete a category to move its events to Misc.',
+    })
+  );
+
+  const catList = el('ul', { className: 'category-manage-list' });
+  for (const cat of getCategories()) {
+    const row = el('li', { className: 'category-manage-row' });
+    row.appendChild(el('span', { className: 'category-manage-name', text: cat }));
+    if (canDeleteCategory(cat)) {
+      const count = state.events.filter((e) =>
+        categoriesEqual(e.category || DEFAULT_CATEGORY, cat)
+      ).length;
+      row.appendChild(
+        el('button', {
+          type: 'button',
+          className: 'btn btn-danger btn-sm',
+          text: 'Delete',
+          'aria-label': `Delete category ${cat}`,
+          onClick: () => confirmDeleteCategory(cat, count),
+        })
+      );
+    } else {
+      row.appendChild(el('span', { className: 'category-manage-lock', text: 'Default' }));
+    }
+    catList.appendChild(row);
+  }
+  categoriesSection.appendChild(catList);
+  page.appendChild(categoriesSection);
 
   const data = el('section', { className: 'settings-section' });
   data.appendChild(el('h3', { text: 'Data' }));
@@ -1441,14 +1583,29 @@ export function renderAll(nowMs = Date.now()) {
 }
 
 function patchRelativeCues(card, vm) {
-  const cues = card.querySelectorAll('.relative-cue');
-  const blocks = [vm.primary, vm.secondary].filter(Boolean);
+  const cues = card.querySelectorAll('.relative-cue:not(.cycle-progress-cue)');
+  const blocks = vmStatBlocks(vm);
   blocks.forEach((block, i) => {
     const cueEl = cues[i];
     if (!cueEl) return;
     const next = formatRelativeCue(block);
     if (cueEl.textContent !== next) cueEl.textContent = next;
   });
+
+  const progressCue = card.querySelector('.cycle-progress-cue');
+  const progress = vm.cycleProgress;
+  if (progressCue && progress) {
+    const next = `${progress.label} · ${progress.percent}%`;
+    if (progressCue.textContent !== next) progressCue.textContent = next;
+  }
+  const track = card.querySelector('.cycle-progress-track');
+  const fill = card.querySelector('.cycle-progress-fill');
+  if (track && fill && progress) {
+    const w = `${progress.percent}%`;
+    if (fill.style.width !== w) fill.style.width = w;
+    track.setAttribute('aria-valuenow', String(progress.percent));
+    track.setAttribute('aria-label', progress.label);
+  }
 }
 
 export function patchListDigits(nowMs = Date.now()) {
@@ -1473,7 +1630,7 @@ export function patchListDigits(nowMs = Date.now()) {
     }
 
     const rows = card.querySelectorAll('.unit-row');
-    const blocks = [vm.primary, vm.secondary].filter(Boolean);
+    const blocks = vmStatBlocks(vm);
     blocks.forEach((block, bi) => {
       const row = rows[bi];
       if (!row) return;
@@ -1566,6 +1723,9 @@ export function openEventModal(event) {
     units: new Set(event?.units?.length ? event.units : DEFAULT_UNITS),
     frequency: event?.recurrence?.frequency || 'none',
     showSinceLast: event?.showSinceLast !== false,
+    showSinceFirst: event?.showSinceFirst !== false,
+    showCycleProgress: event?.showCycleProgress !== false,
+    category: resolveEventCategory(event, getCategories()),
   };
 
   const backdrop = el('div', {
@@ -1584,6 +1744,26 @@ export function openEventModal(event) {
 
   modal.appendChild(el('h2', { id: 'event-modal-title', text: isEdit ? 'Edit event' : 'Add event' }));
 
+  if (isEdit) {
+    const createdLabel = formatAppTimestamp(event.createdAt);
+    const editedLabel = formatAppTimestamp(event.updatedAt || event.createdAt);
+    const metaBits = [];
+    if (createdLabel) metaBits.push(['Created', createdLabel]);
+    if (editedLabel) metaBits.push(['Last edited', editedLabel]);
+    if (metaBits.length) {
+      const meta = el('div', { className: 'event-history', 'aria-label': 'Event history' });
+      for (const [label, value] of metaBits) {
+        meta.appendChild(
+          el('p', { className: 'event-history-row' }, [
+            el('span', { className: 'event-history-label', text: label }),
+            el('span', { className: 'event-history-value', text: value }),
+          ])
+        );
+      }
+      modal.appendChild(meta);
+    }
+  }
+
   const form = el('form', { className: 'form-grid' });
 
   const nameInput = el('input', {
@@ -1596,28 +1776,111 @@ export function openEventModal(event) {
   });
   form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Name' }), nameInput]));
 
+  let modalCategories = [...getCategories()];
+  let selectedCategory = draft.category;
+
+  const categorySelect = el('select', {
+    className: 'category-select',
+    name: 'category',
+    'aria-label': 'Category',
+  });
+
+  const newCategoryWrap = el('div', {
+    className: 'category-new-row',
+    hidden: true,
+  });
+  const newCategoryInput = el('input', {
+    type: 'text',
+    className: 'category-new-input',
+    maxlength: '40',
+    placeholder: 'New category name',
+    autocomplete: 'off',
+    'aria-label': 'New category name',
+  });
+  const addCategoryBtn = el('button', {
+    type: 'button',
+    className: 'btn btn-ghost',
+    text: 'Add',
+  });
+  newCategoryWrap.appendChild(newCategoryInput);
+  newCategoryWrap.appendChild(addCategoryBtn);
+
+  const rebuildCategoryOptions = () => {
+    categorySelect.replaceChildren();
+    for (const cat of modalCategories) {
+      const opt = el('option', { value: cat, text: cat });
+      if (categoriesEqual(cat, selectedCategory)) opt.selected = true;
+      categorySelect.appendChild(opt);
+    }
+    categorySelect.appendChild(
+      el('option', { value: NEW_CATEGORY_VALUE, text: '+ New category…' })
+    );
+  };
+  rebuildCategoryOptions();
+
+  categorySelect.addEventListener('change', () => {
+    if (categorySelect.value === NEW_CATEGORY_VALUE) {
+      newCategoryWrap.hidden = false;
+      newCategoryInput.value = '';
+      requestAnimationFrame(() => newCategoryInput.focus());
+      return;
+    }
+    newCategoryWrap.hidden = true;
+    selectedCategory = categorySelect.value;
+  });
+
+  const commitNewCategory = () => {
+    const raw = String(newCategoryInput.value || '').trim();
+    if (!raw) {
+      toast('Enter a category name.', 'info');
+      return;
+    }
+    const name = normalizeCategoryName(raw);
+    modalCategories = normalizeCategories([...modalCategories, name]);
+    selectedCategory = modalCategories.find((c) => categoriesEqual(c, name)) || name;
+    newCategoryWrap.hidden = true;
+    newCategoryInput.value = '';
+    rebuildCategoryOptions();
+  };
+  addCategoryBtn.addEventListener('click', commitNewCategory);
+  newCategoryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitNewCategory();
+    }
+  });
+
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('label', { text: 'Category' }),
+      el('div', { className: 'category-select-wrap' }, [categorySelect]),
+      newCategoryWrap,
+      el('p', {
+        className: 'field-hint',
+        text: 'Required. Pick an existing category or add a new one. Default is Misc.',
+      }),
+    ])
+  );
+
   const dateInput = el('input', { type: 'date', name: 'date', required: true, value: draft.date });
-  const dateQuick = el('div', { className: 'date-quick' });
-  dateQuick.appendChild(
-    el('button', {
-      type: 'button',
-      className: 'chip',
-      text: 'Today',
-      onClick: () => {
-        dateInput.value = todayIsoDate();
-      },
-    })
-  );
-  dateQuick.appendChild(
-    el('button', {
-      type: 'button',
-      className: 'chip',
-      text: 'Tomorrow',
-      onClick: () => {
-        dateInput.value = offsetIsoDate(1);
-      },
-    })
-  );
+  const dateQuick = el('div', { className: 'date-quick', role: 'group', 'aria-label': 'Quick dates' });
+  for (const [label, apply] of [
+    ['Today', () => todayIsoDate()],
+    ['Tomorrow', () => offsetIsoDate(1)],
+    ['+1 week', () => offsetIsoDate(7)],
+    ['+1 month', () => offsetIsoMonths(1)],
+  ]) {
+    dateQuick.appendChild(
+      el('button', {
+        type: 'button',
+        className: 'chip',
+        text: label,
+        onClick: () => {
+          dateInput.value = apply();
+        },
+      })
+    );
+  }
   form.appendChild(
     el('div', { className: 'field' }, [el('label', { text: 'Date' }), dateQuick, dateInput])
   );
@@ -1712,29 +1975,54 @@ export function openEventModal(event) {
   }
   form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Recurrence' }), freqSelect]));
 
-  const sinceToggle = el('input', {
+  const sinceLastToggle = el('input', {
     type: 'checkbox',
     checked: draft.showSinceLast,
   });
-  const sinceField = el('div', {
-    className: 'field field--since-last',
-    hidden: draft.frequency === 'none',
-  }, [
-    el('div', { className: 'checkbox-row' }, [
-      sinceToggle,
-      el('label', { text: 'Show time since last occurrence' }),
-    ]),
-    el('p', {
-      className: 'field-hint',
-      text: 'When on, recurring cards also show how long it has been since the previous occurrence.',
-    }),
-  ]);
+  const sinceFirstToggle = el('input', {
+    type: 'checkbox',
+    checked: draft.showSinceFirst,
+  });
+  const cycleToggle = el('input', {
+    type: 'checkbox',
+    checked: draft.showCycleProgress,
+  });
+  const sinceField = el(
+    'div',
+    {
+      className: 'field field--since-opts',
+      hidden: draft.frequency === 'none',
+    },
+    [
+      el('label', { text: 'Recurring stats' }),
+      el('div', { className: 'checkbox-row' }, [
+        cycleToggle,
+        el('label', { text: 'Show progress through current cycle' }),
+      ]),
+      el('div', { className: 'checkbox-row' }, [
+        sinceLastToggle,
+        el('label', { text: 'Show time since last occurrence' }),
+      ]),
+      el('div', { className: 'checkbox-row' }, [
+        sinceFirstToggle,
+        el('label', { text: 'Show time since first occurrence' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: 'Cards always show until the next occurrence. Progress describes how far you are from last to next (e.g. halfway, three quarters).',
+      }),
+    ]
+  );
   form.appendChild(sinceField);
 
   const syncSinceVisibility = () => {
     const recurring = freqSelect.value !== 'none';
     sinceField.hidden = !recurring;
-    if (!recurring) sinceToggle.checked = true;
+    if (!recurring) {
+      sinceLastToggle.checked = true;
+      sinceFirstToggle.checked = true;
+      cycleToggle.checked = true;
+    }
   };
   freqSelect.addEventListener('change', syncSinceVisibility);
 
@@ -1788,8 +2076,15 @@ export function openEventModal(event) {
       timeZone: tzInput.value.trim() || null,
       color: selectedColor,
       units: [...draft.units],
+      category:
+        categorySelect.value === NEW_CATEGORY_VALUE
+          ? normalizeCategoryName(newCategoryInput.value)
+          : selectedCategory || DEFAULT_CATEGORY,
       recurrence: { frequency: freqSelect.value },
-      showSinceLast: freqSelect.value === 'none' ? true : sinceToggle.checked,
+      showSinceLast: freqSelect.value === 'none' ? true : sinceLastToggle.checked,
+      showSinceFirst: freqSelect.value === 'none' ? true : sinceFirstToggle.checked,
+      showCycleProgress: freqSelect.value === 'none' ? true : cycleToggle.checked,
+      _categories: modalCategories,
     };
     const saveAsEdit = isEdit;
     const eventId = editingId;
@@ -1837,6 +2132,50 @@ function confirmDelete(event) {
       onClick: () => {
         closeModal();
         handlers.onDelete(event.id);
+      },
+    })
+  );
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.getElementById('modal-root').replaceChildren(backdrop);
+  trapFocus(modal);
+}
+
+function confirmDeleteCategory(categoryName, eventCount) {
+  lastFocus = document.activeElement;
+  const backdrop = el('div', {
+    className: 'modal-backdrop',
+    onClick: (e) => {
+      if (e.target === backdrop) closeModal();
+    },
+  });
+  const modal = el('div', {
+    className: 'modal glass',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'delete-category-title',
+  });
+  modal.appendChild(el('h2', { id: 'delete-category-title', text: 'Delete category?' }));
+  modal.appendChild(
+    el('p', {
+      text:
+        eventCount > 0
+          ? `Delete “${categoryName}”? ${eventCount} event${eventCount === 1 ? '' : 's'} will move to Misc.`
+          : `Delete “${categoryName}”? No events currently use it.`,
+    })
+  );
+  const actions = el('div', { className: 'modal-actions' });
+  actions.appendChild(
+    el('button', { type: 'button', className: 'btn btn-ghost', text: 'Cancel', onClick: () => closeModal() })
+  );
+  actions.appendChild(
+    el('button', {
+      type: 'button',
+      className: 'btn btn-danger',
+      text: 'Delete category',
+      onClick: () => {
+        closeModal();
+        handlers.onDeleteCategory(categoryName);
       },
     })
   );

@@ -13,15 +13,42 @@
   --accent-2: #5b8cff;
   --danger: #f87171;
   --font-ui: "Outfit", system-ui, sans-serif;
-  --radius: 14px;
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
-  --header-h: 3.25rem;
+
+  /* Fluid scale — tracks viewport without hard jumps */
+  --page-pad: clamp(0.4rem, 2.4vw, 0.85rem);
+  --space-xs: clamp(0.22rem, 0.7vw, 0.4rem);
+  --space-sm: clamp(0.35rem, 1.1vw, 0.65rem);
+  --space-md: clamp(0.5rem, 1.5vw, 0.9rem);
+  --space-lg: clamp(0.7rem, 2vw, 1.25rem);
+  --radius: clamp(10px, 1.6vw, 14px);
+  --header-h: clamp(2.7rem, 7vw, 3.35rem);
+  --touch: clamp(36px, 8vw, 44px);
+  --font-body: clamp(0.9rem, 0.82rem + 0.35vw, 1rem);
+  --font-brand: clamp(0.92rem, 0.78rem + 0.7vw, 1.2rem);
+  --font-title: clamp(1.05rem, 0.95rem + 0.55vw, 1.3rem);
+  --font-cue: clamp(0.62rem, 0.55rem + 0.25vw, 0.72rem);
+  --card-min: clamp(15.5rem, 42vw, 20rem);
+  --card-min-compact: clamp(11.5rem, 34vw, 15rem);
+  --main-max: 1280px;
+  --calc-max: 40rem;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 html,
@@ -31,11 +58,16 @@ body {
   background: var(--bg-0);
   color: var(--text);
   font-family: var(--font-ui);
+  font-size: var(--font-body);
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 }
 
 body {
   min-height: 100dvh;
+  width: 100%;
+  overflow-x: clip;
+  padding-bottom: var(--safe-bottom);
 }
 
 button,
@@ -44,6 +76,15 @@ select,
 textarea {
   font: inherit;
   color: inherit;
+  max-width: 100%;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 a {
@@ -66,8 +107,12 @@ a {
   position: relative;
   z-index: 1;
   min-height: 100dvh;
+  min-height: 100svh;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 /* —— OLED: pure black —— */

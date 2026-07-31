@@ -6,6 +6,12 @@ import {
   normalizeSort,
 } from './filters.js';
 import { applyTheme, normalizeTheme, readStoredTheme } from './theme.js';
+import {
+  DEFAULT_CATEGORY,
+  mergeCategoriesFromEvents,
+  normalizeCategories,
+  normalizeCategoryName,
+} from './categories.js';
 
 const listeners = new Set();
 
@@ -18,18 +24,28 @@ export function defaultSettings() {
     cardDensity: 'expanded',
     /** 'atmosphere' | 'oled' | 'light' */
     theme: 'atmosphere',
-    filters: { direction: 'all', recurring: 'all', query: '', sort: 'smart' },
+    categories: [DEFAULT_CATEGORY],
+    filters: {
+      direction: 'all',
+      recurring: 'all',
+      query: '',
+      sort: 'smart',
+      category: 'all',
+    },
   };
 }
+
+const guestEvents = createGuestDemoEvents();
 
 export const state = {
   user: null,
   mode: 'guest',
   view: 'list',
-  events: createGuestDemoEvents(),
+  events: guestEvents,
   settings: {
     ...defaultSettings(),
     theme: readStoredTheme(),
+    categories: mergeCategoriesFromEvents([DEFAULT_CATEGORY], guestEvents),
   },
   ready: true,
   authError: null,
@@ -49,6 +65,8 @@ export function notify() {
 }
 
 export function setUser(user) {
+  const prevUid = state.user?.uid || null;
+  const nextUid = user?.uid || null;
   state.user = user;
   state.mode = user ? 'signed-in' : 'guest';
   if (!user) {
@@ -61,7 +79,8 @@ export function setUser(user) {
     state.syncReady = true;
     state.syncing = false;
     applyTheme(state.settings.theme);
-  } else {
+  } else if (prevUid !== nextUid) {
+    // Only reset sync flags when the signed-in account actually changes
     state.syncReady = false;
     state.syncing = true;
   }
@@ -81,19 +100,38 @@ export function setFirebaseReady(ready) {
 
 export function setEvents(events) {
   state.events = Array.isArray(events) ? events : [];
+  state.settings = {
+    ...state.settings,
+    categories: mergeCategoriesFromEvents(state.settings.categories, state.events),
+  };
   notify();
 }
 
 export function setSettings(settings) {
   const base = defaultSettings();
+  const categories = mergeCategoriesFromEvents(
+    settings?.categories ?? base.categories,
+    state.events
+  );
+  const filtersIn = {
+    ...base.filters,
+    ...(settings?.filters || {}),
+    sort: normalizeSort(settings?.filters?.sort ?? base.filters.sort),
+  };
+  if (filtersIn.category && filtersIn.category !== 'all') {
+    const stillExists = categories.some(
+      (c) => c.toLowerCase() === String(filtersIn.category).toLowerCase()
+    );
+    if (!stillExists) filtersIn.category = 'all';
+  } else {
+    filtersIn.category = 'all';
+  }
+
   state.settings = {
     ...base,
     ...settings,
-    filters: {
-      ...base.filters,
-      ...(settings?.filters || {}),
-      sort: normalizeSort(settings?.filters?.sort ?? base.filters.sort),
-    },
+    filters: filtersIn,
+    categories,
     fullColourCards: Boolean(settings?.fullColourCards),
     cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
     theme: normalizeTheme(settings?.theme ?? readStoredTheme()),
@@ -102,19 +140,26 @@ export function setSettings(settings) {
   notify();
 }
 
-export function setFilters(partial) {
+export function setFilters(partial, { silent = false } = {}) {
   const next = { ...state.settings.filters, ...partial };
   if (partial.sort !== undefined) next.sort = normalizeSort(partial.sort);
+  if (partial.category !== undefined) {
+    next.category =
+      partial.category === 'all' ? 'all' : normalizeCategoryName(partial.category);
+  }
   state.settings = {
     ...state.settings,
     filters: next,
   };
-  notify();
+  if (!silent) notify();
 }
 
 export function patchSettings(partial) {
   const next = { ...state.settings, ...partial };
   if (partial.theme !== undefined) next.theme = normalizeTheme(partial.theme);
+  if (partial.categories !== undefined) {
+    next.categories = normalizeCategories(partial.categories);
+  }
   state.settings = next;
   if (partial.theme !== undefined) applyTheme(state.settings.theme);
   notify();
@@ -154,6 +199,11 @@ export function filtersAreActive() {
     f.direction !== 'all' ||
     f.recurring !== 'all' ||
     normalizeSort(f.sort) !== 'smart' ||
+    (f.category && f.category !== 'all') ||
     Boolean((f.query || '').trim())
   );
+}
+
+export function getCategories() {
+  return normalizeCategories(state.settings.categories);
 }

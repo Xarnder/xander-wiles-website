@@ -1,4 +1,4 @@
-const CACHE_NAME = 'time-pass-v19';
+const CACHE_NAME = 'time-pass-v40';
 const OWNED_PREFIX = 'time-pass-';
 const ASSETS = [
   './',
@@ -21,6 +21,7 @@ const ASSETS = [
   './js/constants.js',
   './js/calculator.js',
   './js/theme.js',
+  './js/categories.js',
   './favicon.ico',
   './favicon-dark.svg',
   './favicon-light.svg',
@@ -33,6 +34,8 @@ const ASSETS = [
   '/assets/SVGs/expand.svg',
   '/assets/SVGs/shrink.svg',
   '/assets/SVGs/Left-ArrowIcons.svg',
+  '/assets/SVGs/home.svg',
+  '/assets/SVGs/plus-icon.svg',
   '/assets/SVGs/Down-ArrowIcons.svg',
   '/assets/icons/close-icon.svg',
 ];

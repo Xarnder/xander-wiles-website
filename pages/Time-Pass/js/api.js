@@ -24,6 +24,12 @@ import {
   isValidColor,
   normalizeUnits,
 } from './constants.js';
+import {
+  DEFAULT_CATEGORY,
+  categoriesEqual,
+  normalizeCategories,
+  normalizeCategoryName,
+} from './categories.js';
 
 function eventsCol(uid) {
   return collection(db, 'users', uid, 'events');
@@ -65,8 +71,11 @@ export function validateEventInput(raw) {
     return { ok: false, error: 'Invalid recurrence.' };
   }
 
-  /** Recurring only: show secondary “since last” block. Default on. */
+  /** Recurring only: optional extra stats. Default on. */
   const showSinceLast = frequency === 'none' ? true : raw.showSinceLast !== false;
+  const showSinceFirst = frequency === 'none' ? true : raw.showSinceFirst !== false;
+  const showCycleProgress = frequency === 'none' ? true : raw.showCycleProgress !== false;
+  const category = normalizeCategoryName(raw.category);
 
   return {
     ok: true,
@@ -79,6 +88,9 @@ export function validateEventInput(raw) {
       units,
       recurrence: { frequency },
       showSinceLast,
+      showSinceFirst,
+      showCycleProgress,
+      category,
     },
   };
 }
@@ -111,7 +123,14 @@ export function subscribeSettings(uid, onData, onError) {
           fullColourCards: false,
           cardDensity: 'expanded',
           theme: 'atmosphere',
-          filters: { direction: 'all', recurring: 'all', query: '', sort: 'smart' },
+          categories: [DEFAULT_CATEGORY],
+          filters: {
+            direction: 'all',
+            recurring: 'all',
+            query: '',
+            sort: 'smart',
+            category: 'all',
+          },
         });
         return;
       }
@@ -132,7 +151,14 @@ export async function ensureSettings(uid, partial = {}) {
       fullColourCards: false,
       cardDensity: 'expanded',
       theme: 'atmosphere',
-      filters: { direction: 'all', recurring: 'all', query: '', sort: 'smart' },
+      categories: [DEFAULT_CATEGORY],
+      filters: {
+        direction: 'all',
+        recurring: 'all',
+        query: '',
+        sort: 'smart',
+        category: 'all',
+      },
       ...partial,
       updatedAt: serverTimestamp(),
     },
@@ -188,6 +214,59 @@ export async function deleteEvent(uid, eventId) {
   await deleteDoc(doc(eventsCol(uid), eventId));
 }
 
+/** Move events out of a category, then remove it from settings. Misc cannot be deleted. */
+export async function deleteCategory(uid, categoryName, events, settings) {
+  assertConfigured();
+  const name = normalizeCategoryName(categoryName);
+  if (categoriesEqual(name, DEFAULT_CATEGORY)) {
+    throw new Error('Misc cannot be deleted.');
+  }
+
+  const affected = (Array.isArray(events) ? events : []).filter((e) =>
+    categoriesEqual(e.category || DEFAULT_CATEGORY, name)
+  );
+
+  for (let i = 0; i < affected.length; i += 400) {
+    const chunk = affected.slice(i, i + 400);
+    const batch = writeBatch(db);
+    for (const e of chunk) {
+      batch.update(doc(eventsCol(uid), e.id), {
+        category: DEFAULT_CATEGORY,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    await batch.commit();
+  }
+
+  const nextCategories = normalizeCategories(settings?.categories).filter(
+    (c) => !categoriesEqual(c, name)
+  );
+  const filters = { ...(settings?.filters || {}) };
+  if (filters.category && categoriesEqual(filters.category, name)) {
+    filters.category = 'all';
+  }
+
+  await saveSettings(uid, {
+    categories: nextCategories,
+    filters: {
+      direction: filters.direction || 'all',
+      recurring: filters.recurring || 'all',
+      query: filters.query || '',
+      sort: filters.sort || 'smart',
+      category: filters.category || 'all',
+    },
+    hasSeededDemo: Boolean(settings?.hasSeededDemo),
+    fullColourCards: Boolean(settings?.fullColourCards),
+    cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+    theme:
+      settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
+        ? settings.theme
+        : 'atmosphere',
+  });
+
+  return { reassigned: affected.length, categories: nextCategories };
+}
+
 export async function seedEventsIfNeeded(uid, events, settings) {
   assertConfigured();
   if (settings?.hasSeededDemo) return false;
@@ -212,7 +291,14 @@ export async function seedEventsIfNeeded(uid, events, settings) {
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
           ? settings.theme
           : 'atmosphere',
-      filters: settings?.filters || { direction: 'all', recurring: 'all', query: '', sort: 'smart' },
+      categories: normalizeCategories(settings?.categories),
+      filters: settings?.filters || {
+        direction: 'all',
+        recurring: 'all',
+        query: '',
+        sort: 'smart',
+        category: 'all',
+      },
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -276,7 +362,14 @@ export function exportPayload(events, settings) {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     settings: {
-      filters: settings?.filters || { direction: 'all', recurring: 'all', query: '', sort: 'smart' },
+      filters: settings?.filters || {
+        direction: 'all',
+        recurring: 'all',
+        query: '',
+        sort: 'smart',
+        category: 'all',
+      },
+      categories: normalizeCategories(settings?.categories),
       fullColourCards: Boolean(settings?.fullColourCards),
       cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
       theme:
@@ -292,8 +385,11 @@ export function exportPayload(events, settings) {
       timeZone: e.timeZone ?? null,
       color: e.color,
       units: normalizeUnits(e.units),
+      category: normalizeCategoryName(e.category),
       recurrence: { frequency: e.recurrence?.frequency || 'none' },
       showSinceLast: e.showSinceLast !== false,
+      showSinceFirst: e.showSinceFirst !== false,
+      showCycleProgress: e.showCycleProgress !== false,
       createdAt: e.createdAt || null,
       updatedAt: e.updatedAt || null,
     })),

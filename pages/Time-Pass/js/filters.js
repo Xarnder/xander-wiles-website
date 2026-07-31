@@ -1,5 +1,6 @@
-import { buildPrimaryView } from './time-engine.js';
+import { buildPrimaryView, resolveEventInstant } from './time-engine.js';
 import { resolveOccurrenceWindow } from './recurrence.js';
+import { buildCycleProgress } from './format.js';
 
 /**
  * Build list view-models, filter, and sort (Q18/Q19).
@@ -31,7 +32,15 @@ export function toViewModel(event, nowMs) {
   if (freq === 'none') {
     const target = nextMs ?? lastMs;
     const primary = buildPrimaryView(event, target, nowMs);
-    return { event, primary, secondary: null, sortKeyUpcoming: nextMs, sortKeyPast: lastMs };
+    return {
+      event,
+      primary,
+      secondary: null,
+      sinceFirst: null,
+      cycleProgress: null,
+      sortKeyUpcoming: nextMs,
+      sortKeyPast: lastMs,
+    };
   }
 
   let primary = null;
@@ -52,13 +61,39 @@ export function toViewModel(event, nowMs) {
     primary = buildPrimaryView(event, nowMs, nowMs);
   }
 
+  /** Optional “since first occurrence” (event.date). Skip if still in the future or already shown. */
+  let sinceFirst = null;
+  if (event.showSinceFirst !== false) {
+    const firstMs = resolveEventInstant(event);
+    if (firstMs <= nowMs) {
+      const alreadyShown =
+        (secondary && secondary.targetMs === firstMs) ||
+        (primary && primary.direction === 'since' && primary.targetMs === firstMs);
+      if (!alreadyShown) {
+        sinceFirst = buildPrimaryView(event, firstMs, nowMs);
+      }
+    }
+  }
+
+  const cycleProgress =
+    event.showCycleProgress !== false && lastMs != null && nextMs != null
+      ? buildCycleProgress(lastMs, nextMs, nowMs)
+      : null;
+
   return {
     event,
     primary,
     secondary,
+    sinceFirst,
+    cycleProgress,
     sortKeyUpcoming: nextMs,
     sortKeyPast: lastMs,
   };
+}
+
+/** Primary + optional since-last + optional since-first, in display order. */
+export function vmStatBlocks(vm) {
+  return [vm.primary, vm.secondary, vm.sinceFirst].filter(Boolean);
 }
 
 function isUpcomingVm(vm) {
@@ -81,6 +116,12 @@ export function filterViewModels(vms, filters) {
 
     if (direction === 'upcoming' && !isUpcomingVm(vm)) return false;
     if (direction === 'past' && isUpcomingVm(vm)) return false;
+
+    const catFilter = filters?.category || 'all';
+    if (catFilter !== 'all') {
+      const eventCat = String(vm.event.category || 'Misc').trim() || 'Misc';
+      if (eventCat.toLowerCase() !== String(catFilter).toLowerCase()) return false;
+    }
 
     if (query && !String(vm.event.name || '').toLowerCase().includes(query)) return false;
     return true;
@@ -215,11 +256,9 @@ export function buildFilteredSortedSections(events, filters, nowMs) {
 }
 
 export function listNeedsSecondTick(vms) {
-  return vms.some((vm) => {
-    const units = vm.primary?.visibleUnits || [];
-    const units2 = vm.secondary?.visibleUnits || [];
-    return units.includes('seconds') || units2.includes('seconds');
-  });
+  return vms.some((vm) =>
+    vmStatBlocks(vm).some((block) => (block.visibleUnits || []).includes('seconds'))
+  );
 }
 
 export { isUpcomingVm };

@@ -3,6 +3,7 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  deleteCategory,
   subscribeEvents,
   subscribeSettings,
   saveSettings,
@@ -16,12 +17,14 @@ import {
   setEvents,
   setSettings,
   setFilters,
+  patchSettings,
   setSeeding,
   setSyncStatus,
   setView,
   needsSecondTick,
 } from './store.js';
-import { renderAll, patchListDigits, setUIHandlers, focusSearch, openEventModal } from './ui.js';
+import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY } from './categories.js';
+import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal } from './ui.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
 import { COLOR_PALETTE, DEFAULT_UNITS, SOFT_EVENT_CAP } from './constants.js';
@@ -29,10 +32,23 @@ import { applyTheme, readStoredTheme } from './theme.js';
 
 let unsubEvents = null;
 let unsubSettings = null;
+let attachedUid = null;
 let tickTimer = null;
 let seedAttempted = false;
 let filterPersistTimer = null;
 let lastA11yMinute = -1;
+
+function isBenignFirestoreError(err) {
+  const code = String(err?.code || '');
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    code === 'cancelled' ||
+    code === 'aborted' ||
+    msg.includes('client has already been terminated') ||
+    msg.includes('client is terminated') ||
+    msg.includes('the client has been terminated')
+  );
+}
 
 function clearListeners() {
   if (unsubEvents) {
@@ -43,6 +59,7 @@ function clearListeners() {
     unsubSettings();
     unsubSettings = null;
   }
+  attachedUid = null;
   seedAttempted = false;
 }
 
@@ -96,6 +113,7 @@ function persistSettingsSoon(extra = {}) {
         fullColourCards: state.settings.fullColourCards,
         cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
         theme: state.settings.theme,
+        categories: normalizeCategories(state.settings.categories),
         ...extra,
       });
     } catch (err) {
@@ -104,8 +122,33 @@ function persistSettingsSoon(extra = {}) {
   }, 400);
 }
 
+async function syncCategoriesAfterEvent(category, modalCategories) {
+  const next = normalizeCategories([
+    ...(state.settings.categories || []),
+    ...(Array.isArray(modalCategories) ? modalCategories : []),
+    category,
+  ]);
+  const prev = normalizeCategories(state.settings.categories);
+  if (next.join('\0') === prev.join('\0')) return;
+  patchSettings({ categories: next });
+  if (state.user && isFirebaseConfigured) {
+    await saveSettings(state.user.uid, {
+      categories: next,
+      filters: state.settings.filters,
+      hasSeededDemo: state.settings.hasSeededDemo,
+      fullColourCards: state.settings.fullColourCards,
+      cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
+      theme: state.settings.theme,
+    });
+  }
+}
+
 function attachFirestore(uid) {
+  if (!uid) return;
+  if (attachedUid === uid && unsubEvents && unsubSettings) return;
+
   clearListeners();
+  attachedUid = uid;
   setSyncStatus({ syncReady: false, syncing: true });
 
   let eventsReady = false;
@@ -129,6 +172,10 @@ function attachFirestore(uid) {
       markReady();
     },
     (err) => {
+      if (isBenignFirestoreError(err)) {
+        console.warn('Events listener closed', err);
+        return;
+      }
       console.error(err);
       setSyncStatus({ syncing: false, syncReady: true });
       toast(`Events sync error: ${err.message}`, 'error');
@@ -144,6 +191,10 @@ function attachFirestore(uid) {
       markReady();
     },
     (err) => {
+      if (isBenignFirestoreError(err)) {
+        console.warn('Settings listener closed', err);
+        return;
+      }
       console.error(err);
       toast(`Settings sync error: ${err.message}`, 'error');
     }
@@ -158,7 +209,19 @@ setUIHandlers({
     toast('Signed out', 'success');
   },
   onFilters: (partial) => {
-    setFilters(partial);
+    const keys = Object.keys(partial);
+    const queryOnly = keys.length === 1 && keys[0] === 'query';
+
+    // Typing in search must not full-notify (that rebuilds the input and steals focus).
+    if (queryOnly) {
+      setFilters(partial, { silent: true });
+      renderToolbar(Date.now());
+      renderList(Date.now());
+      scheduleTick();
+    } else {
+      setFilters(partial);
+    }
+
     // Debounce Firestore writes especially for search typing
     const delay = partial.query !== undefined ? 450 : 0;
     clearTimeout(filterPersistTimer);
@@ -166,33 +229,42 @@ setUIHandlers({
   },
   onSaveSettings: async (partial) => {
     if (state.user && isFirebaseConfigured) {
-      await saveSettings(state.user.uid, {
-        hasSeededDemo: state.settings.hasSeededDemo,
-        filters: state.settings.filters,
-        fullColourCards:
-          partial.fullColourCards !== undefined
-            ? partial.fullColourCards
-            : state.settings.fullColourCards,
-        cardDensity:
-          partial.cardDensity !== undefined
-            ? partial.cardDensity === 'compact'
-              ? 'compact'
-              : 'expanded'
-            : state.settings.cardDensity === 'compact'
-              ? 'compact'
-              : 'expanded',
-        theme:
-          partial.theme !== undefined
-            ? partial.theme
-            : state.settings.theme,
-        ...partial,
-      });
+      try {
+        await saveSettings(state.user.uid, {
+          hasSeededDemo: state.settings.hasSeededDemo,
+          filters: state.settings.filters,
+          fullColourCards:
+            partial.fullColourCards !== undefined
+              ? partial.fullColourCards
+              : state.settings.fullColourCards,
+          cardDensity:
+            partial.cardDensity !== undefined
+              ? partial.cardDensity === 'compact'
+                ? 'compact'
+                : 'expanded'
+              : state.settings.cardDensity === 'compact'
+                ? 'compact'
+                : 'expanded',
+          theme: partial.theme !== undefined ? partial.theme : state.settings.theme,
+          ...partial,
+          categories: normalizeCategories(
+            partial.categories !== undefined ? partial.categories : state.settings.categories
+          ),
+        });
+      } catch (err) {
+        if (isBenignFirestoreError(err)) {
+          console.warn('Settings save ignored', err);
+          return;
+        }
+        throw err;
+      }
     }
-    renderAll(Date.now());
   },
   onAdd: async (payload) => {
     try {
-      await createEvent(state.user.uid, payload, state.events.length);
+      const { _categories, ...eventPayload } = payload;
+      await createEvent(state.user.uid, eventPayload, state.events.length);
+      await syncCategoriesAfterEvent(eventPayload.category, _categories);
       if (state.events.length + 1 === SOFT_EVENT_CAP) {
         toast(`Soft limit of ${SOFT_EVENT_CAP} events reached.`, 'info');
       }
@@ -203,7 +275,9 @@ setUIHandlers({
   },
   onEdit: async (id, payload) => {
     try {
-      await updateEvent(state.user.uid, id, payload);
+      const { _categories, ...eventPayload } = payload;
+      await updateEvent(state.user.uid, id, eventPayload);
+      await syncCategoriesAfterEvent(eventPayload.category, _categories);
       toast('Event saved', 'success');
     } catch (err) {
       toast(err.message, 'error');
@@ -213,6 +287,32 @@ setUIHandlers({
     try {
       await deleteEvent(state.user.uid, id);
       toast('Event deleted', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  },
+  onDeleteCategory: async (name) => {
+    try {
+      if (state.user && isFirebaseConfigured) {
+        await deleteCategory(state.user.uid, name, state.events, state.settings);
+      } else {
+        if (!canDeleteCategory(name)) throw new Error('Misc cannot be deleted.');
+        const nextEvents = state.events.map((e) =>
+          categoriesEqual(e.category || DEFAULT_CATEGORY, name)
+            ? { ...e, category: DEFAULT_CATEGORY, updatedAt: new Date().toISOString() }
+            : e
+        );
+        const nextCategories = normalizeCategories(state.settings.categories).filter(
+          (c) => !categoriesEqual(c, name)
+        );
+        const filters = { ...state.settings.filters };
+        if (filters.category && categoriesEqual(filters.category, name)) {
+          filters.category = 'all';
+        }
+        setEvents(nextEvents);
+        patchSettings({ categories: nextCategories, filters });
+      }
+      toast(`Category “${name}” deleted`, 'success');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -230,8 +330,11 @@ setUIHandlers({
         timeZone: event.timeZone ?? null,
         color: COLOR_PALETTE.includes(event.color) ? event.color : COLOR_PALETTE[0],
         units: event.units?.length ? [...event.units] : [...DEFAULT_UNITS],
+        category: normalizeCategoryName(event.category),
         recurrence: { frequency: event.recurrence?.frequency || 'none' },
         showSinceLast: event.showSinceLast !== false,
+        showSinceFirst: event.showSinceFirst !== false,
+        showCycleProgress: event.showCycleProgress !== false,
       };
       await createEvent(state.user.uid, payload, state.events.length);
       toast('Event duplicated', 'success');
@@ -333,18 +436,27 @@ async function boot() {
   setupKeyboardShortcuts();
 
   await initAuth((user) => {
-    clearListeners();
-    if (user) {
-      if (!isFirebaseConfigured) {
-        toast('Firebase config missing — cannot sync.', 'error');
-        setSyncStatus({ syncReady: true, syncing: false });
-        return;
-      }
-      attachFirestore(user.uid);
-    } else {
+    const uid = user?.uid || null;
+
+    if (!uid) {
+      clearListeners();
       setSyncStatus({ syncReady: true, syncing: false });
       renderAll(Date.now());
+      return;
     }
+
+    // Token refresh / duplicate auth callbacks — keep existing listeners
+    if (attachedUid === uid && unsubEvents && unsubSettings) {
+      return;
+    }
+
+    if (!isFirebaseConfigured) {
+      toast('Firebase config missing — cannot sync.', 'error');
+      setSyncStatus({ syncReady: true, syncing: false });
+      return;
+    }
+
+    attachFirestore(uid);
   });
 
   if ('serviceWorker' in navigator) {
