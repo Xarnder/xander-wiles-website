@@ -35,22 +35,30 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <code>.txt</code> file), then press <strong>Done</strong>.
           </li>
           <li>
-            Optionally open <strong>Settings</strong> to pick a mic, font size,
-            line width, dark/light mode, <strong>script mirror</strong> (text
-            only), or <strong>UI mirror</strong> (flips icons and labels without
-            rearranging the layout).
+            Optionally open <strong>Settings</strong> to pick display mode
+            (full script, one word, or two words), mic, camera (front/back), font
+            size (up to 128px for small phones), line width, dark/light mode,{' '}
+            <strong>script mirror</strong> (text only), or <strong>UI mirror</strong>{' '}
+            (flips icons and labels without rearranging the layout).
           </li>
           <li>
-            Press <strong>Start</strong> and allow microphone access. The first
-            run downloads the speech model (cached afterward).
+            Turn on <strong>Record</strong> to capture camera video. The same
+            microphone is used for the video soundtrack and for voice-follow
+            scrolling (iPhone / iPad Safari &amp; Chrome supported).
+          </li>
+          <li>
+            Press <strong>Start</strong> and allow microphone (and camera if
+            recording). The first run downloads the speech model (cached
+            afterward).
           </li>
           <li>
             Read the highlighted word aloud at a natural pace. The script scrolls
             with you.
           </li>
           <li>
-            Press <strong>Pause</strong> to stop listening, or <strong>Reset</strong>{' '}
-            to jump back to the beginning.
+            Press <strong>Pause</strong> to stop. If you recorded, use{' '}
+            <strong>Save / Share</strong> to keep the video (Photos or Files on
+            iOS), or <strong>Reset</strong> to jump back to the beginning.
           </li>
         </ol>
 
@@ -229,6 +237,10 @@ export function HowToUse({ onClose }: HowToUseProps) {
             footer for easier reach (thumb-friendly).
           </li>
           <li>
+            <strong>Display mode</strong> — full scrolling script, one giant
+            next-word cue, or two-word (said + next) for iPhone-sized prompts.
+          </li>
+          <li>
             <strong>Large controls</strong> — chunkier buttons, stats, and
             chrome for iPad / touch (header can grow; layout still wraps cleanly).
           </li>
@@ -236,13 +248,18 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <strong>Preload model</strong> — download the speech model before you
             go on camera.
           </li>
+          <li>
+            <strong>Record</strong> — capture front or back camera video while you
+            read. Audio is shared with speech recognition so scrolling still works.
+          </li>
         </ul>
 
         <h3>Privacy</h3>
         <p>
           Speech recognition runs entirely on your device. Nothing is uploaded to
-          a speech API. After the first model download, you can use the app
-          offline.
+          a speech API. Camera recordings stay on your device until you choose
+          Save / Share. After the first model download, you can use the app
+          offline (recording still needs camera permission).
         </p>
       </div>
     </section>

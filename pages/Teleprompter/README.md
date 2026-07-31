@@ -25,9 +25,14 @@ npm run preview
 ## Architecture
 
 - `src/asr` — Moonshine streaming mic transcription (`useVAD: false`)
+- `src/media` — camera+mic capture helpers tuned for iOS / iPadOS Safari & Chrome
 - `src/alignment` — pure fuzzy alignment engine (unit-tested)
 - `src/scroll` — rAF scroll controller with pace-aware easing
 - `src/components` — teleprompter UI
+
+Optional **Record** mode opens one `getUserMedia` stream with camera + microphone.
+The same audio tracks feed both `MediaRecorder` (video file) and Moonshine ASR
+(script scrolling). On Apple devices recordings prefer MP4 (H.264/AAC).
 
 Model weights for `model/tiny` ship under `public/moonshine/` and are cached by the service worker for offline reuse after the first load. ONNX Runtime / Silero VAD assets are runtime-cached from the CDN on first use.
 

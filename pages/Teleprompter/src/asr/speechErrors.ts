@@ -88,13 +88,65 @@ export function classifySpeechError(
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false
 
   if (looksLikePermission(message, name) || message === 'PermissionDenied') {
+    const wantsCamera = /camera|video/i.test(message)
     return {
       kind: 'permission',
-      title: 'Microphone blocked',
-      message: 'This browser blocked microphone access, so voice-follow cannot start.',
-      fix: 'Allow microphone access for this site in your browser settings, then try again.',
-      summary:
-        'Microphone permission denied. Allow mic access in your browser settings to use voice-follow.',
+      title: wantsCamera ? 'Camera or microphone blocked' : 'Microphone blocked',
+      message: wantsCamera
+        ? 'This browser blocked camera or microphone access, so recording and voice-follow cannot start.'
+        : 'This browser blocked microphone access, so voice-follow cannot start.',
+      fix: wantsCamera
+        ? 'Allow camera and microphone access for this site in Safari or Chrome settings, then try again.'
+        : 'Allow microphone access for this site in your browser settings, then try again.',
+      summary: wantsCamera
+        ? 'Camera/microphone permission denied. Allow access in browser settings.'
+        : 'Microphone permission denied. Allow mic access in your browser settings to use voice-follow.',
+    }
+  }
+
+  if (
+    name === 'SecurityError' ||
+    /https|secure connection|secure context/i.test(message)
+  ) {
+    return {
+      kind: 'platform',
+      title: 'Secure connection required',
+      message:
+        'Camera recording only works on HTTPS (or localhost). This page is not in a secure context.',
+      fix: 'Open the site with https:// in Safari or Chrome, then try Record again.',
+      summary: 'Camera recording requires HTTPS.',
+    }
+  }
+
+  if (
+    name === 'NotSupportedError' ||
+    /video recording is not supported|mediarecorder|could not create a video recorder/i.test(
+      message,
+    )
+  ) {
+    return {
+      kind: 'platform',
+      title: 'Recording not supported',
+      message:
+        'This browser cannot record camera video with MediaRecorder (needed on iPhone/iPad Safari & Chrome).',
+      fix: 'Update to the latest iOS / iPadOS and try again in Safari or Chrome. You can still use voice-follow without Record.',
+      summary: 'Video recording is not supported in this browser.',
+    }
+  }
+
+  if (
+    /empty video|recorder did not|recording failed|stopped during recording|mediarecorder\.start|track ended|track is disabled/i.test(
+      message,
+    )
+  ) {
+    return {
+      kind: 'microphone',
+      title: 'Recording failed',
+      message:
+        message ||
+        'The camera recording could not be saved. This is often an iPhone permission or backgrounding issue.',
+      fix: 'In iPhone Settings → Safari (or Chrome) allow Camera and Microphone. Keep the app open while recording, then Pause to save. Try again.',
+      summary: message || 'Camera recording failed.',
     }
   }
 
@@ -153,25 +205,38 @@ export function classifySpeechError(
     name === 'OverconstrainedError' ||
     name === 'NotReadableError' ||
     name === 'AbortError' ||
-    /getusermedia|mediaDevices|microphone|audio device/i.test(message)
+    /getusermedia|mediaDevices|microphone|audio device|camera|video/i.test(message)
   ) {
+    const involvesCamera = /camera|video/i.test(`${name} ${message}`)
     let fix =
       'Check that a microphone is connected, not used by another app, and selected in Settings.'
+    let title = 'Microphone unavailable'
+    let body = 'Could not open the selected microphone.'
+
+    if (involvesCamera) {
+      title = 'Camera or microphone unavailable'
+      body = 'Could not open the camera and microphone for recording.'
+      fix =
+        'Allow camera + microphone access, close other apps using them, then try again. On iPhone/iPad, check Settings → Safari (or Chrome) → Camera & Microphone.'
+    }
     if (name === 'NotReadableError') {
       fix =
-        'Close other apps using the microphone, then try again. On some systems only one app can use the mic at a time.'
+        'Close other apps using the camera or microphone, then try again. On phones, only one app can often use them at a time.'
     } else if (name === 'OverconstrainedError') {
-      fix = 'Pick a different microphone in Settings, or choose the default device and try again.'
+      fix =
+        'Try the other camera (front/back), pick a different microphone in Settings, or turn Record off and use voice-follow only.'
     } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-      fix = 'Plug in or enable a microphone, grant access if asked, then refresh and try again.'
+      fix = involvesCamera
+        ? 'Make sure this device has a camera and microphone, grant access if asked, then refresh and try again.'
+        : 'Plug in or enable a microphone, grant access if asked, then refresh and try again.'
     }
 
     return {
       kind: 'microphone',
-      title: 'Microphone unavailable',
-      message: 'Could not open the selected microphone.',
+      title,
+      message: body,
       fix,
-      summary: message || 'Could not start the microphone.',
+      summary: message || body,
     }
   }
 

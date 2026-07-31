@@ -24,6 +24,48 @@ const CGT_RATE_HIGHER = 0.24;
 const NI_PRIMARY_THRESHOLD = 12570;
 const NI_UPPER_LIMIT = 50270;
 
+// --- Constants (Student Loan 2026/27) ---
+const PGL_THRESHOLD = 21000;
+const PGL_RATE = 0.06;
+const STUDENT_LOAN_PLANS = {
+    plan1: {
+        label: 'Plan 1',
+        threshold: 26900,
+        rate: 0.09,
+        hint: 'Plan 1 (2026/27): repay 9% of income above £26,900. Based on gross pay before tax & NI.'
+    },
+    plan2: {
+        label: 'Plan 2',
+        threshold: 29385,
+        rate: 0.09,
+        hint: 'Plan 2 (2026/27): repay 9% of income above £29,385. Based on gross pay before tax & NI.'
+    },
+    plan4: {
+        label: 'Plan 4',
+        threshold: 33795,
+        rate: 0.09,
+        hint: 'Plan 4 / Scotland (2026/27): repay 9% of income above £33,795. Based on gross pay before tax & NI.'
+    },
+    plan5: {
+        label: 'Plan 5',
+        threshold: 25000,
+        rate: 0.09,
+        hint: 'Plan 5 (2026/27): repay 9% of income above £25,000. Based on gross pay before tax & NI.'
+    },
+    pgl: {
+        label: 'Postgraduate Loan',
+        threshold: PGL_THRESHOLD,
+        rate: PGL_RATE,
+        hint: 'Postgraduate Loan: repay 6% of income above £21,000. Can stack with an undergraduate plan.'
+    },
+    custom: {
+        label: 'Custom',
+        threshold: 29385,
+        rate: 0.09,
+        hint: 'Custom estimate: set any repayment threshold and percentage cut. Still applied to gross income.'
+    }
+};
+
 // --- Elements ---
 const incomeInput = document.getElementById('incomeInput');
 const niLetterSelect = document.getElementById('niLetter');
@@ -59,6 +101,17 @@ const passiveValueInput = document.getElementById('passiveValueInput');
 const passiveRateInput = document.getElementById('passiveRateInput');
 
 const passiveNetDisplay = document.getElementById('passiveNetDisplay');
+
+// --- Student Loan Elements ---
+const studentLoanToggle = document.getElementById('studentLoanToggle');
+const studentLoanOptions = document.getElementById('studentLoanOptions');
+const studentLoanPlanSelect = document.getElementById('studentLoanPlan');
+const studentLoanThresholdInput = document.getElementById('studentLoanThreshold');
+const studentLoanRateInput = document.getElementById('studentLoanRate');
+const postgraduateLoanToggle = document.getElementById('postgraduateLoanToggle');
+const postgraduateLoanGroup = document.getElementById('postgraduateLoanGroup');
+const studentLoanHint = document.getElementById('studentLoanHint');
+const legendStudentLoan = document.getElementById('legendStudentLoan');
 
 // --- Interest Calculator Elements ---
 const taxModeBtn = document.getElementById('taxModeBtn');
@@ -133,6 +186,110 @@ function getNIRates(letter) {
     }
 }
 
+// --- Logic: Student Loan config & calculation ---
+function isStudentLoanEnabled() {
+    return !!(studentLoanToggle && studentLoanToggle.checked);
+}
+
+function getStudentLoanConfig() {
+    const planKey = studentLoanPlanSelect ? studentLoanPlanSelect.value : 'plan2';
+    const plan = STUDENT_LOAN_PLANS[planKey] || STUDENT_LOAN_PLANS.plan2;
+    const threshold = parseFloat(studentLoanThresholdInput?.value);
+    const ratePct = parseFloat(studentLoanRateInput?.value);
+    const includePgl = !!(postgraduateLoanToggle && postgraduateLoanToggle.checked && planKey !== 'pgl');
+
+    return {
+        enabled: isStudentLoanEnabled(),
+        planKey,
+        planLabel: plan.label,
+        // Undergraduate / custom / pgl-as-main repayment
+        threshold: Number.isFinite(threshold) ? threshold : plan.threshold,
+        rate: Number.isFinite(ratePct) ? ratePct / 100 : plan.rate,
+        includePgl,
+        pglThreshold: PGL_THRESHOLD,
+        pglRate: PGL_RATE
+    };
+}
+
+function calculateStudentLoan(income, type = 'paye') {
+    // Student loan deductions apply to earned/PAYE-style income estimates only.
+    if (type !== 'paye') return 0;
+
+    const cfg = getStudentLoanConfig();
+    if (!cfg.enabled) return 0;
+
+    let repayment = 0;
+    if (cfg.planKey === 'pgl') {
+        repayment += Math.max(0, income - cfg.threshold) * cfg.rate;
+    } else {
+        repayment += Math.max(0, income - cfg.threshold) * cfg.rate;
+        if (cfg.includePgl) {
+            repayment += Math.max(0, income - cfg.pglThreshold) * cfg.pglRate;
+        }
+    }
+    return repayment;
+}
+
+function getMarginalStudentLoanRate(incomePoint, type = 'paye') {
+    if (type !== 'paye') return 0;
+    const cfg = getStudentLoanConfig();
+    if (!cfg.enabled) return 0;
+
+    let rate = 0;
+    if (cfg.planKey === 'pgl') {
+        if (incomePoint > cfg.threshold) rate += cfg.rate * 100;
+    } else {
+        if (incomePoint > cfg.threshold) rate += cfg.rate * 100;
+        if (cfg.includePgl && incomePoint > cfg.pglThreshold) rate += cfg.pglRate * 100;
+    }
+    return rate;
+}
+
+function refreshStudentLoanUI() {
+    const enabled = isStudentLoanEnabled();
+    if (studentLoanOptions) {
+        studentLoanOptions.style.display = enabled ? 'flex' : 'none';
+    }
+    if (legendStudentLoan) {
+        legendStudentLoan.style.display = enabled ? '' : 'none';
+    }
+
+    const planKey = studentLoanPlanSelect ? studentLoanPlanSelect.value : 'plan2';
+    const plan = STUDENT_LOAN_PLANS[planKey] || STUDENT_LOAN_PLANS.plan2;
+
+    if (postgraduateLoanGroup) {
+        postgraduateLoanGroup.style.display = planKey === 'pgl' ? 'none' : 'flex';
+    }
+
+    if (studentLoanHint) {
+        let hint = plan.hint;
+        if (planKey !== 'pgl' && postgraduateLoanToggle && postgraduateLoanToggle.checked) {
+            hint += ' Plus Postgraduate Loan: 6% above £21,000.';
+        }
+        studentLoanHint.textContent = hint;
+    }
+}
+
+function applyStudentLoanPlanDefaults() {
+    const planKey = studentLoanPlanSelect ? studentLoanPlanSelect.value : 'plan2';
+    const plan = STUDENT_LOAN_PLANS[planKey] || STUDENT_LOAN_PLANS.plan2;
+    if (planKey === 'custom') {
+        refreshStudentLoanUI();
+        return;
+    }
+    if (studentLoanThresholdInput) studentLoanThresholdInput.value = plan.threshold;
+    if (studentLoanRateInput) studentLoanRateInput.value = (plan.rate * 100).toFixed(plan.rate * 100 % 1 === 0 ? 0 : 1);
+    refreshStudentLoanUI();
+}
+
+function recalculateCurrentView() {
+    if (passiveModeToggle && passiveModeToggle.checked) {
+        processPassiveInput();
+    } else {
+        processInput();
+    }
+}
+
 // --- Reverse Calculation: Gross from Net ---
 function calculateGrossFromNet(targetNet, type = 'paye') {
     if (targetNet <= 0) return 0;
@@ -145,7 +302,8 @@ function calculateGrossFromNet(targetNet, type = 'paye') {
         currentGross = (low + high) / 2;
         const tax = calculateIncomeTax(currentGross, type);
         const ni = calculateNI(currentGross, type);
-        const net = currentGross - tax - ni;
+        const loan = calculateStudentLoan(currentGross, type);
+        const net = currentGross - tax - ni - loan;
         
         if (Math.abs(net - targetNet) < 0.01) break;
         
@@ -237,7 +395,7 @@ function calculateNI(income, type = 'paye') {
 }
 
 // --- UI: Breakdown ---
-function updateBreakdownUI(income, tax, ni, type = 'paye') {
+function updateBreakdownUI(income, tax, ni, type = 'paye', studentLoan = 0) {
     let html = '';
 
     if (type === 'cgt') {
@@ -403,6 +561,38 @@ function updateBreakdownUI(income, tax, ni, type = 'paye') {
         }
     }
 
+    // Student loan breakdown (PAYE estimates only)
+    if (type === 'paye' && studentLoan > 0) {
+        const cfg = getStudentLoanConfig();
+        html += `<div class="breakdown-header" style="margin-top:20px; color:var(--highlight-loan);">
+                Student Loan (${cfg.planLabel})
+             </div>`;
+
+        if (cfg.planKey === 'pgl') {
+            const taxable = Math.max(0, income - cfg.threshold);
+            html += `<div class="breakdown-row">
+                        <span class="breakdown-label">Postgraduate (${(cfg.rate * 100).toFixed(cfg.rate * 100 % 1 === 0 ? 0 : 1)}%)</span>
+                        <span class="breakdown-val">${formatCurrency(studentLoan)} <span class="sub-text">on ${formatCurrency(taxable)} above ${formatCurrency(cfg.threshold)}</span></span>
+                     </div>`;
+        } else {
+            const ugTaxable = Math.max(0, income - cfg.threshold);
+            const ugRepay = ugTaxable * cfg.rate;
+            html += `<div class="breakdown-row">
+                        <span class="breakdown-label">${cfg.planLabel} (${(cfg.rate * 100).toFixed(cfg.rate * 100 % 1 === 0 ? 0 : 1)}%)</span>
+                        <span class="breakdown-val">${formatCurrency(ugRepay)} <span class="sub-text">on ${formatCurrency(ugTaxable)} above ${formatCurrency(cfg.threshold)}</span></span>
+                     </div>`;
+
+            if (cfg.includePgl) {
+                const pglTaxable = Math.max(0, income - cfg.pglThreshold);
+                const pglRepay = pglTaxable * cfg.pglRate;
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Postgraduate (6%)</span>
+                            <span class="breakdown-val">${formatCurrency(pglRepay)} <span class="sub-text">on ${formatCurrency(pglTaxable)} above ${formatCurrency(cfg.pglThreshold)}</span></span>
+                         </div>`;
+            }
+        }
+    }
+
     breakdownList.innerHTML = html;
 }
 
@@ -467,16 +657,21 @@ function generateFormula(income, type = 'paye') {
     } else {
         const niRates = getNIRates(niLetterSelect.value);
         const allowance = getPersonalAllowance(income);
+        const cfg = getStudentLoanConfig();
         
         const paChunk = Math.min(tempIncome, allowance);
         if (paChunk > 0) {
-            parts.push(`(<span class="math-num">£${paChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`);
+            const loanRate = cfg.enabled ? getMarginalStudentLoanRate(paChunk, type) / 100 : 0;
+            const mult = (1 - loanRate).toFixed(2);
+            parts.push(`(<span class="math-num">£${paChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
         }
         tempIncome -= paChunk;
 
         const basicChunk = Math.min(tempIncome, 37700);
         if (basicChunk > 0) {
-            const mult = (1 - RATE_BASIC - niRates.main).toFixed(2);
+            const endOfBand = paChunk + basicChunk;
+            const loanRate = cfg.enabled ? getMarginalStudentLoanRate(endOfBand, type) / 100 : 0;
+            const mult = (1 - RATE_BASIC - niRates.main - loanRate).toFixed(2);
             parts.push(`(<span class="math-num">£${basicChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
         }
         tempIncome -= basicChunk;
@@ -485,20 +680,24 @@ function generateFormula(income, type = 'paye') {
         const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
         const higherChunk = Math.min(tempIncome, higherBandSize);
         if (higherChunk > 0) {
-            const mult = (1 - RATE_HIGHER - niRates.upper).toFixed(2);
+            const endOfBand = accountedSoFar + higherChunk;
+            const loanRate = cfg.enabled ? getMarginalStudentLoanRate(endOfBand, type) / 100 : 0;
+            const mult = (1 - RATE_HIGHER - niRates.upper - loanRate).toFixed(2);
             parts.push(`(<span class="math-num">£${higherChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
         }
         tempIncome -= higherChunk;
 
         if (tempIncome > 0) {
-            const mult = (1 - RATE_ADDITIONAL - niRates.upper).toFixed(2);
+            const loanRate = cfg.enabled ? getMarginalStudentLoanRate(income, type) / 100 : 0;
+            const mult = (1 - RATE_ADDITIONAL - niRates.upper - loanRate).toFixed(2);
             parts.push(`(<span class="math-num">£${tempIncome.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
         }
     }
 
     const tax = calculateIncomeTax(income, type);
     const ni = calculateNI(income, type);
-    const takeHome = income - tax - ni;
+    const loan = calculateStudentLoan(income, type);
+    const takeHome = income - tax - ni - loan;
 
     let html = parts.join('<span class="math-op"> + </span>');
     html += ` <span class="math-op"> = </span> <span class="math-total">${formatCurrency(takeHome)}</span>`;
@@ -555,6 +754,11 @@ function updateChart(income, type = 'paye') {
     for (let i = 0; i <= steps; i++) keyPoints.push(i * stepSize);
 
     [0, 12570, 50270, 100000, 125140, income, maxView].forEach((p) => keyPoints.push(p));
+    if (isStudentLoanEnabled() && type === 'paye') {
+        const cfgEarly = getStudentLoanConfig();
+        keyPoints.push(cfgEarly.threshold);
+        if (cfgEarly.includePgl) keyPoints.push(cfgEarly.pglThreshold);
+    }
 
     const labels = [...new Set(keyPoints)]
         .filter((p) => p >= 0 && p <= maxView)
@@ -563,28 +767,38 @@ function updateChart(income, type = 'paye') {
     // AVERAGE arrays
     const avgTaxOnly = [];
     const avgTaxAndNi = [];
+    const avgTaxNiAndLoan = [];
     const avgTakeHome = [];
-    const avgTakeHomeAndNi = [];
+    const avgTakeHomeAndLoan = [];
+    const avgTakeHomeLoanAndNi = [];
 
     // MARGINAL arrays
     const margTaxOnly = [];
     const margTaxAndNi = [];
+    const margTaxNiAndLoan = [];
     const margTakeHome = [];
-    const margTakeHomeAndNi = [];
+    const margTakeHomeAndLoan = [];
+    const margTakeHomeLoanAndNi = [];
 
     const ceiling = [];
+    const loanEnabled = isStudentLoanEnabled() && type === 'paye';
+    const cfg = getStudentLoanConfig();
 
     labels.forEach((point) => {
         if (point <= 0) {
             avgTaxOnly.push(0);
             avgTaxAndNi.push(0);
+            avgTaxNiAndLoan.push(0);
             avgTakeHome.push(100);
-            avgTakeHomeAndNi.push(100);
+            avgTakeHomeAndLoan.push(100);
+            avgTakeHomeLoanAndNi.push(100);
 
             margTaxOnly.push(0);
             margTaxAndNi.push(0);
+            margTaxNiAndLoan.push(0);
             margTakeHome.push(100);
-            margTakeHomeAndNi.push(100);
+            margTakeHomeAndLoan.push(100);
+            margTakeHomeLoanAndNi.push(100);
 
             ceiling.push(100);
             return;
@@ -593,24 +807,31 @@ function updateChart(income, type = 'paye') {
         // Average
         const tax = calculateIncomeTax(point, type);
         const ni = calculateNI(point, type);
+        const loan = calculateStudentLoan(point, type);
         const taxPct = point > 0 ? (tax / point) * 100 : 0;
         const niPct = point > 0 ? (ni / point) * 100 : 0;
-        const keepPct = Math.max(0, 100 - taxPct - niPct);
+        const loanPct = point > 0 ? (loan / point) * 100 : 0;
+        const keepPct = Math.max(0, 100 - taxPct - niPct - loanPct);
 
         avgTaxOnly.push(taxPct);
         avgTaxAndNi.push(taxPct + niPct);
+        avgTaxNiAndLoan.push(taxPct + niPct + loanPct);
         avgTakeHome.push(keepPct);
-        avgTakeHomeAndNi.push(keepPct + niPct);
+        avgTakeHomeAndLoan.push(keepPct + loanPct);
+        avgTakeHomeLoanAndNi.push(keepPct + loanPct + niPct);
 
         // Marginal
         const tRate = getMarginalTaxRate(point, type);
         const nRate = getMarginalNIRate(point, type);
-        const keepMarg = Math.max(0, 100 - tRate - nRate);
+        const lRate = getMarginalStudentLoanRate(point, type);
+        const keepMarg = Math.max(0, 100 - tRate - nRate - lRate);
 
         margTaxOnly.push(tRate);
         margTaxAndNi.push(tRate + nRate);
+        margTaxNiAndLoan.push(tRate + nRate + lRate);
         margTakeHome.push(keepMarg);
-        margTakeHomeAndNi.push(keepMarg + nRate);
+        margTakeHomeAndLoan.push(keepMarg + lRate);
+        margTakeHomeLoanAndNi.push(keepMarg + lRate + nRate);
 
         ceiling.push(100);
     });
@@ -628,6 +849,10 @@ function updateChart(income, type = 'paye') {
     orangeGradient.addColorStop(0, 'rgba(251, 146, 60, 0.9)');
     orangeGradient.addColorStop(1, 'rgba(251, 146, 60, 0.5)');
 
+    const loanGradient = ctx.createLinearGradient(0, 0, 0, 400);
+    loanGradient.addColorStop(0, 'rgba(45, 212, 191, 0.9)');
+    loanGradient.addColorStop(1, 'rgba(45, 212, 191, 0.5)');
+
     if (taxChart) taxChart.destroy();
 
     let datasets;
@@ -638,7 +863,6 @@ function updateChart(income, type = 'paye') {
         yAxisTitle = 'Share of your next £ (%)';
 
         if (isRedBottom) {
-            // Red bottom
             datasets = [
                 {
                     label: 'Income Tax (next £)',
@@ -659,19 +883,30 @@ function updateChart(income, type = 'paye') {
                     fill: '-1',
                     backgroundColor: orangeGradient,
                     pointRadius: 0
-                },
-                {
-                    label: 'You Keep (next £)',
-                    data: ceiling,
-                    borderColor: 'transparent',
-                    stepped: 'after',
-                    fill: '-1',
-                    backgroundColor: greenGradient,
-                    pointRadius: 0
                 }
             ];
+            if (loanEnabled) {
+                datasets.push({
+                    label: 'Student Loan (next £)',
+                    data: margTaxNiAndLoan,
+                    borderColor: '#2dd4bf',
+                    borderWidth: 2,
+                    stepped: 'after',
+                    fill: '-1',
+                    backgroundColor: loanGradient,
+                    pointRadius: 0
+                });
+            }
+            datasets.push({
+                label: 'You Keep (next £)',
+                data: ceiling,
+                borderColor: 'transparent',
+                stepped: 'after',
+                fill: '-1',
+                backgroundColor: greenGradient,
+                pointRadius: 0
+            });
         } else {
-            // Green bottom
             datasets = [
                 {
                     label: 'You Keep (next £)',
@@ -682,10 +917,24 @@ function updateChart(income, type = 'paye') {
                     fill: 'origin',
                     backgroundColor: greenGradient,
                     pointRadius: 0
-                },
+                }
+            ];
+            if (loanEnabled) {
+                datasets.push({
+                    label: 'Student Loan (next £)',
+                    data: margTakeHomeAndLoan,
+                    borderColor: '#2dd4bf',
+                    borderWidth: 2,
+                    stepped: 'after',
+                    fill: '-1',
+                    backgroundColor: loanGradient,
+                    pointRadius: 0
+                });
+            }
+            datasets.push(
                 {
                     label: 'National Insurance (next £)',
-                    data: margTakeHomeAndNi,
+                    data: margTakeHomeLoanAndNi,
                     borderColor: '#fb923c',
                     borderWidth: 2,
                     stepped: 'after',
@@ -702,14 +951,13 @@ function updateChart(income, type = 'paye') {
                     backgroundColor: redGradient,
                     pointRadius: 0
                 }
-            ];
+            );
         }
     } else {
         // --- Average view ---
         yAxisTitle = 'Share of your total income (%)';
 
         if (isRedBottom) {
-            // Red bottom
             datasets = [
                 {
                     label: 'Income Tax (total)',
@@ -730,19 +978,30 @@ function updateChart(income, type = 'paye') {
                     fill: '-1',
                     backgroundColor: orangeGradient,
                     pointRadius: 0
-                },
-                {
-                    label: 'You Keep (total)',
-                    data: ceiling,
-                    borderColor: 'transparent',
-                    stepped: 'after',
-                    fill: '-1',
-                    backgroundColor: greenGradient,
-                    pointRadius: 0
                 }
             ];
+            if (loanEnabled) {
+                datasets.push({
+                    label: 'Student Loan (total)',
+                    data: avgTaxNiAndLoan,
+                    borderColor: '#2dd4bf',
+                    borderWidth: 2,
+                    stepped: 'after',
+                    fill: '-1',
+                    backgroundColor: loanGradient,
+                    pointRadius: 0
+                });
+            }
+            datasets.push({
+                label: 'You Keep (total)',
+                data: ceiling,
+                borderColor: 'transparent',
+                stepped: 'after',
+                fill: '-1',
+                backgroundColor: greenGradient,
+                pointRadius: 0
+            });
         } else {
-            // Green bottom
             datasets = [
                 {
                     label: 'You Keep (total)',
@@ -753,10 +1012,24 @@ function updateChart(income, type = 'paye') {
                     fill: 'origin',
                     backgroundColor: greenGradient,
                     pointRadius: 0
-                },
+                }
+            ];
+            if (loanEnabled) {
+                datasets.push({
+                    label: 'Student Loan (total)',
+                    data: avgTakeHomeAndLoan,
+                    borderColor: '#2dd4bf',
+                    borderWidth: 2,
+                    stepped: 'after',
+                    fill: '-1',
+                    backgroundColor: loanGradient,
+                    pointRadius: 0
+                });
+            }
+            datasets.push(
                 {
                     label: 'National Insurance (total)',
-                    data: avgTakeHomeAndNi,
+                    data: avgTakeHomeLoanAndNi,
                     borderColor: '#fb923c',
                     borderWidth: 2,
                     stepped: 'after',
@@ -773,12 +1046,14 @@ function updateChart(income, type = 'paye') {
                     backgroundColor: redGradient,
                     pointRadius: 0
                 }
-            ];
+            );
         }
     }
 
     const annotationsObj = {};
     const thresholdLines = [12570, 50270, 100000, 125140];
+    if (loanEnabled && cfg.threshold > 0) thresholdLines.push(cfg.threshold);
+    if (loanEnabled && cfg.includePgl) thresholdLines.push(cfg.pglThreshold);
     thresholdLines.forEach((t, i) => {
         if (t < maxView) {
             annotationsObj['line' + i] = {
@@ -885,7 +1160,7 @@ function updateComparisonChart(income, type = 'paye') {
 
     for (let i = 0; i <= maxRange; i += step) {
         labels.push(i);
-        const total = calculateIncomeTax(i, type) + calculateNI(i, type);
+        const total = calculateIncomeTax(i, type) + calculateNI(i, type) + calculateStudentLoan(i, type);
         dataPoints.push(i - total);
     }
 
@@ -941,7 +1216,7 @@ function updateComparisonChart(income, type = 'paye') {
                         userPoint: {
                             type: 'point',
                             xValue: income,
-                            yValue: income - (calculateIncomeTax(income, type) + calculateNI(income, type)),
+                            yValue: income - (calculateIncomeTax(income, type) + calculateNI(income, type) + calculateStudentLoan(income, type)),
                             backgroundColor: '#4ade80',
                             radius: 6,
                             borderColor: '#fff',
@@ -1003,7 +1278,10 @@ function setupRateModeToggle() {
         rateModeToggle.addEventListener('change', () => {
             updateRateModeCaption();
             const income = parseFloat(incomeInput.value) || 0;
-            updateChart(income);
+            const type = (passiveModeToggle && passiveModeToggle.checked && passiveIncomeTypeSelect)
+                ? passiveIncomeTypeSelect.value
+                : 'paye';
+            updateChart(income, type);
         });
     }
 }
@@ -1026,7 +1304,8 @@ function processInput() {
     }
     const tax = calculateIncomeTax(income);
     const ni = calculateNI(income);
-    const total = tax + ni;
+    const loan = calculateStudentLoan(income);
+    const total = tax + ni + loan;
     const takeHome = income - total;
     const rate = income > 0 ? (total / income) * 100 : 0;
 
@@ -1034,7 +1313,7 @@ function processInput() {
     takeHomeDisplay.textContent = formatCurrency(takeHome);
     effectiveRateDisplay.textContent = rate.toFixed(1) + '%';
 
-    updateBreakdownUI(income, tax, ni);
+    updateBreakdownUI(income, tax, ni, 'paye', loan);
     generateFormula(income);
     updateChart(income);
     updateComparisonChart(income);
@@ -1069,7 +1348,8 @@ function processPassiveInput() {
     
     const tax = calculateIncomeTax(gross, type);
     const ni = calculateNI(gross, type);
-    const totalTax = tax + ni;
+    const loan = calculateStudentLoan(gross, type);
+    const totalTax = tax + ni + loan;
     const net = gross - totalTax;
     
     passivePotDisplay.textContent = formatCurrency(potSize);
@@ -1083,7 +1363,7 @@ function processPassiveInput() {
     takeHomeDisplay.textContent = formatCurrency(net);
     effectiveRateDisplay.textContent = rate_eff.toFixed(1) + '%';
     
-    updateBreakdownUI(gross, tax, ni, type);
+    updateBreakdownUI(gross, tax, ni, type, loan);
     generateFormula(gross, type);
     updateChart(gross, type);
     updateComparisonChart(gross, type);
@@ -1105,7 +1385,8 @@ function updatePassiveChart(currentPotSize, ratePct, type = 'paye') {
         const g = i * rate;
         const t = calculateIncomeTax(g, type);
         const n = calculateNI(g, type);
-        netData.push(g - t - n);
+        const l = calculateStudentLoan(g, type);
+        netData.push(g - t - n - l);
     }
     
     if (passiveChart) passiveChart.destroy();
@@ -1117,7 +1398,8 @@ function updatePassiveChart(currentPotSize, ratePct, type = 'paye') {
     const currentGross = currentPotSize * rate;
     const currentTax = calculateIncomeTax(currentGross, type);
     const currentNI = calculateNI(currentGross, type);
-    const currentNet = currentGross - currentTax - currentNI;
+    const currentLoan = calculateStudentLoan(currentGross, type);
+    const currentNet = currentGross - currentTax - currentNI - currentLoan;
     
     passiveChart = new Chart(ctxPassive, {
         type: 'line',
@@ -1405,11 +1687,48 @@ niLetterSelect.addEventListener('change', () => {
         processInput();
     }
 });
-viewToggle.addEventListener('change', () =>
-    updateChart(parseFloat(incomeInput.value) || 0)
-);
+viewToggle.addEventListener('change', () => {
+    const income = parseFloat(incomeInput.value) || 0;
+    const type = (passiveModeToggle && passiveModeToggle.checked && passiveIncomeTypeSelect)
+        ? passiveIncomeTypeSelect.value
+        : 'paye';
+    updateChart(income, type);
+});
 incomeInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') processInput();
+});
+
+// Student Loan Event Listeners
+if (studentLoanToggle) {
+    studentLoanToggle.addEventListener('change', () => {
+        refreshStudentLoanUI();
+        recalculateCurrentView();
+    });
+}
+if (studentLoanPlanSelect) {
+    studentLoanPlanSelect.addEventListener('change', () => {
+        applyStudentLoanPlanDefaults();
+        recalculateCurrentView();
+    });
+}
+if (postgraduateLoanToggle) {
+    postgraduateLoanToggle.addEventListener('change', () => {
+        refreshStudentLoanUI();
+        recalculateCurrentView();
+    });
+}
+[studentLoanThresholdInput, studentLoanRateInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+        if (studentLoanPlanSelect && studentLoanPlanSelect.value !== 'custom') {
+            studentLoanPlanSelect.value = 'custom';
+            refreshStudentLoanUI();
+        }
+        recalculateCurrentView();
+    });
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') recalculateCurrentView();
+    });
 });
 
 // Passive Mode Event Listeners
@@ -1516,5 +1835,7 @@ if (contributionToggle) {
 // Initialise after everything is loaded
 window.addEventListener('load', () => {
     setupRateModeToggle();
+    applyStudentLoanPlanDefaults();
+    refreshStudentLoanUI();
     processInput();
 });

@@ -2,10 +2,16 @@ import { useState } from 'react'
 import type { MicDevice } from '../hooks/useMicDevices'
 import {
   DEFAULT_SETTINGS,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  LINE_WIDTH_MAX,
+  LINE_WIDTH_MIN,
+  type DisplayMode,
   type TeleprompterSettings,
 } from '../hooks/useTeleprompter'
 import type { SpeechStatus } from '../asr/useSpeechStream'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
+import type { FacingMode } from '../media/platform'
 import { ConfirmModal } from './Modal'
 import {
   IconArrowDown,
@@ -37,6 +43,10 @@ interface ControlsProps {
   }
   wpm: number | null
   isFullscreen: boolean
+  recordCamera: boolean
+  recordingActive: boolean
+  recordingSupported: boolean
+  facingMode: FacingMode
   onStart: () => void
   onPause: () => void
   onReset: () => void
@@ -46,6 +56,8 @@ interface ControlsProps {
   onToggleSettings: () => void
   onToggleHowTo: () => void
   onToggleFullscreen: () => void
+  onToggleRecordCamera: () => void
+  onFacingModeChange: (mode: FacingMode) => void
   onNudge: (delta: number) => void
   onNudgeSentence: (direction: 'up' | 'down') => void
   onUpdateSettings: (patch: Partial<TeleprompterSettings>) => void
@@ -127,6 +139,10 @@ export function Controls({
   progress,
   wpm,
   isFullscreen,
+  recordCamera,
+  recordingActive,
+  recordingSupported,
+  facingMode,
   onStart,
   onPause,
   onReset,
@@ -136,6 +152,8 @@ export function Controls({
   onToggleSettings,
   onToggleHowTo,
   onToggleFullscreen,
+  onToggleRecordCamera,
+  onFacingModeChange,
   onNudge,
   onNudgeSentence,
   onUpdateSettings,
@@ -147,12 +165,16 @@ export function Controls({
   const scrollMode: 'live' | 'paused' = isLiveScroll ? 'live' : 'paused'
 
   const statusLabel = isLiveScroll
-    ? 'Live scroll'
+    ? recordingActive
+      ? 'Live scroll · recording'
+      : 'Live scroll'
     : isHoldingOffScript
       ? 'Paused — off script'
       : status === 'loading'
         ? modelReady
-          ? 'Starting mic…'
+          ? recordCamera
+            ? 'Starting camera…'
+            : 'Starting mic…'
           : 'Loading speech model…'
         : status === 'error'
           ? 'Error'
@@ -196,6 +218,25 @@ export function Controls({
               Pause
             </button>
           )}
+          <button
+            type="button"
+            className={`btn record-btn${recordCamera ? ' active' : ''}${recordingActive ? ' is-recording' : ''}`}
+            onClick={onToggleRecordCamera}
+            disabled={!recordingSupported || (isRunning && status === 'listening')}
+            title={
+              !recordingSupported
+                ? 'Video recording is not supported in this browser'
+                : isRunning && status === 'listening'
+                  ? 'Stop the session before changing Record'
+                  : recordCamera
+                    ? 'Record camera is on — Start will capture video + audio while scrolling'
+                    : 'Record camera with audio (same mic powers speech recognition)'
+            }
+            aria-pressed={recordCamera}
+          >
+            <span className="record-btn-dot" aria-hidden />
+            Record
+          </button>
         </div>
 
         <div className="controls-rest">
@@ -441,8 +482,8 @@ export function Controls({
             <SliderField
               label="Font size"
               valueLabel={`${settings.fontSize}px`}
-              min={22}
-              max={64}
+              min={FONT_SIZE_MIN}
+              max={FONT_SIZE_MAX}
               value={settings.fontSize}
               onChange={(fontSize) => onUpdateSettings({ fontSize })}
               onReset={() => resetSlider('fontSize')}
@@ -451,13 +492,18 @@ export function Controls({
             <SliderField
               label="Line width"
               valueLabel={`${settings.lineWidth}ch`}
-              min={24}
-              max={140}
+              min={LINE_WIDTH_MIN}
+              max={LINE_WIDTH_MAX}
               value={settings.lineWidth}
               onChange={(lineWidth) => onUpdateSettings({ lineWidth })}
               onReset={() => resetSlider('lineWidth')}
               isDefault={settings.lineWidth === DEFAULT_SETTINGS.lineWidth}
             />
+            <p className="settings-hint">
+              On a small iPhone, try One word or Two words mode for giant cues, or
+              a large font (80–128px) with a narrow line width (8–16ch) in full
+              script mode.
+            </p>
             <SliderField
               label="Match confidence"
               valueLabel={`${Math.round(settings.confidenceThreshold * 100)}%`}
@@ -488,6 +534,25 @@ export function Controls({
               }
             />
             <label className="settings-mic">
+              <span>Display mode</span>
+              <select
+                value={settings.displayMode}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    displayMode: e.target.value as DisplayMode,
+                  })
+                }
+              >
+                <option value="script">Full script</option>
+                <option value="one_word">One word (next only)</option>
+                <option value="two_word">Two words (said + next)</option>
+              </select>
+            </label>
+            <p className="settings-hint">
+              One / two word modes use giant fullscreen cues on iPhone. Font size
+              still scales them. Line width only applies to full script mode.
+            </p>
+            <label className="settings-mic">
               <span>Cursor position</span>
               <select
                 value={settings.scrollAnchor}
@@ -499,6 +564,7 @@ export function Controls({
                       | 'hybrid',
                   })
                 }
+                disabled={settings.displayMode !== 'script'}
               >
                 <option value="top">Keep at top</option>
                 <option value="middle">Keep in middle</option>
@@ -655,6 +721,25 @@ export function Controls({
                 ))}
               </select>
             </label>
+            <label className="settings-mic">
+              <span>Camera (when Record is on)</span>
+              <select
+                value={facingMode}
+                onChange={(e) =>
+                  onFacingModeChange(e.target.value as FacingMode)
+                }
+                disabled={!recordingSupported || (isRunning && status === 'listening')}
+              >
+                <option value="user">Front camera</option>
+                <option value="environment">Back camera</option>
+              </select>
+            </label>
+            <p className="settings-hint">
+              Record uses the same microphone for the video file and for
+              voice-follow scrolling. On iPhone, watch the preview meters: Cam on
+              / Mic on, and the Mic bar should move when you speak. Works on
+              Safari &amp; Chrome (HTTPS).
+            </p>
 
             <div className="settings-section-label">Stats</div>
             <label className="toggle">

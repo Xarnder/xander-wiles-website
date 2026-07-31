@@ -7,6 +7,7 @@
     --highlight-green: #4ade80;
     --highlight-red: #f87171;
     --highlight-orange: #fb923c;
+    --highlight-loan: #2dd4bf;
     --glass-bg: rgba(255, 255, 255, 0.05);
     --glass-border: rgba(255, 255, 255, 0.1);
 }
@@ -167,8 +168,24 @@ button:hover { transform: scale(1.02); filter: brightness(1.1); }
 }
 input:checked + .slider { background-color: var(--highlight-red); }
 input:checked + .slider:before { transform: translateX(18px); }
+input:checked + .slider.loan-slider { background-color: var(--highlight-loan); }
 .slider.round { border-radius: 34px; }
 .slider.round:before { border-radius: 50%; }
+
+.student-loan-row {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--card-border);
+    align-items: flex-end;
+}
+
+.student-loan-hint {
+    flex: 1 1 100%;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    line-height: 1.45;
+    margin: 0;
+}
 
 /* Summary */
 .summary-card {
@@ -227,6 +244,7 @@ canvas { width: 100% !important; height: 100% !important; }
 .dot.green { background-color: #4ade80; }
 .dot.red { background-color: #f87171; }
 .dot.orange { background-color: #fb923c; }
+.dot.loan { background-color: #2dd4bf; }
 
 .btn-small {
     background: rgba(255,255,255,0.1); color: #cbd5e1; padding: 5px 12px;

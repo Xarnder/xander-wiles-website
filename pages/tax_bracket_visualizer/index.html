@@ -140,6 +140,64 @@
                         <span class="toggle-label">On</span>
                     </div>
                 </div>
+
+                <div class="toggle-group">
+                    <label>Student Loan</label>
+                    <div class="toggle-wrapper" style="border-color: var(--highlight-loan);">
+                        <span class="toggle-label">Off</span>
+                        <label class="switch">
+                            <input type="checkbox" id="studentLoanToggle">
+                            <span class="slider round loan-slider"></span>
+                        </label>
+                        <span class="toggle-label">On</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-row student-loan-row" id="studentLoanOptions" style="display: none;">
+                <div class="input-group" style="max-width: 180px;">
+                    <label for="studentLoanPlan">Plan</label>
+                    <div class="input-wrapper">
+                        <select id="studentLoanPlan">
+                            <option value="plan1">Plan 1</option>
+                            <option value="plan2" selected>Plan 2</option>
+                            <option value="plan4">Plan 4 (Scotland)</option>
+                            <option value="plan5">Plan 5</option>
+                            <option value="pgl">Postgraduate only</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group" id="studentLoanThresholdGroup">
+                    <label for="studentLoanThreshold">Repayment Threshold (£)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="studentLoanThreshold" value="29385" min="0" step="1">
+                    </div>
+                </div>
+
+                <div class="input-group" id="studentLoanRateGroup" style="max-width: 140px;">
+                    <label for="studentLoanRate">Rate (%)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="studentLoanRate" value="9" min="0" max="100" step="0.1">
+                    </div>
+                </div>
+
+                <div class="toggle-group" id="postgraduateLoanGroup">
+                    <label>Also Postgraduate Loan</label>
+                    <div class="toggle-wrapper" style="border-color: var(--highlight-loan);">
+                        <span class="toggle-label">Off</span>
+                        <label class="switch">
+                            <input type="checkbox" id="postgraduateLoanToggle">
+                            <span class="slider round loan-slider"></span>
+                        </label>
+                        <span class="toggle-label">On</span>
+                    </div>
+                </div>
+
+                <p class="student-loan-hint" id="studentLoanHint">
+                    Plan 2 (2026/27): repay 9% of income above £29,385. Based on gross pay before tax &amp; NI.
+                </p>
             </div>
         </div>
 
@@ -154,7 +212,7 @@
                 <p id="passiveGrossDisplay">£0</p>
             </div>
             <div class="stat">
-                <h3>Total Tax & NI</h3>
+                <h3>Total Tax, NI & Loan</h3>
                 <p id="passiveTaxDisplay" style="color: var(--highlight-red);">£0</p>
             </div>
             <div class="stat highlight">
@@ -218,6 +276,7 @@
             </div>
             <div class="legend-custom">
                 <div><span class="dot green"></span> You Keep</div>
+                <div id="legendStudentLoan" style="display: none;"><span class="dot loan"></span> Student Loan</div>
                 <div><span class="dot orange"></span> National Insurance</div>
                 <div><span class="dot red"></span> Income Tax</div>
             </div>
@@ -245,6 +304,9 @@
             <h4>Capital Gains</h4>
             <p>This is the profit you make when you sell an asset (like stocks or property) that has increased in value. You get a £3,000 Annual Exempt Amount (tax-free profit). The remaining profit is taxed at 18% (Basic) or 24% (Higher) for standard assets. Like dividends, Capital Gains are exempt from National Insurance.</p>
             
+            <h4>Student Loan</h4>
+            <p>UK student loan repayments are taken from your <em>gross</em> income (before tax and NI), not from your take-home pay after tax. You only repay a percentage of earnings above your plan’s threshold — the balance you owe does not change how much is deducted each payday. Undergraduate plans (1, 2, 4, and 5) repay at 9%; a Postgraduate Loan repays at 6% above £21,000. If you have both, both deductions apply. Thresholds shown are for the 2026/27 tax year and can be edited for custom estimates.</p>
+
             <h4>Marginal vs. Average Rate</h4>
             <p>Your <strong>Average Rate</strong> is simply your total tax bill divided by your total income. Your <strong>Marginal Rate</strong> is the amount of tax you will pay on the very <em>next</em> £1 you earn. Watching your Marginal Rate is crucial for tax planning, as crossing a new threshold (like the £50,270 higher rate limit) makes your next £1 significantly less valuable.</p>
         </div>

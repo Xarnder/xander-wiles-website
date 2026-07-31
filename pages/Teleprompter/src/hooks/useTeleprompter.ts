@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlignmentEngine, type AlignmentState } from '../alignment/AlignmentEngine'
 import { useSpeechStream } from '../asr/useSpeechStream'
+import type { FacingMode } from '../media/platform'
 import { useScrollController, type ScrollAnchorMode } from '../scroll/useScrollController'
 import { tokenizeTranscript } from '../utils/tokenize'
 import { isSentenceEnd, nextSentenceBoundary } from '../utils/sentences'
@@ -8,7 +9,15 @@ import { DEFAULT_SCRIPT } from '../utils/defaultScript'
 
 /** Extra spacing after a full stop in the displayed script. */
 export type SentenceBreakMode = 'off' | 'tab' | 'line'
+/** How the script is shown while prompting. */
+export type DisplayMode = 'script' | 'one_word' | 'two_word'
 export type { ScrollAnchorMode }
+
+/** Script typography limits — wide max for small-phone teleprompter reading. */
+export const FONT_SIZE_MIN = 18
+export const FONT_SIZE_MAX = 128
+export const LINE_WIDTH_MIN = 8
+export const LINE_WIDTH_MAX = 140
 
 export interface TeleprompterSettings {
   fontSize: number
@@ -35,6 +44,10 @@ export interface TeleprompterSettings {
    * (works even when preserveBreaks is off).
    */
   sentenceBreak: SentenceBreakMode
+  /**
+   * Full scrolling script, one giant next-word cue, or said+next cue.
+   */
+  displayMode: DisplayMode
   /**
    * Highlight / scroll this many words ahead of the detected spoken word.
    * 0 = highlight the matched word; positive = lead the reader.
@@ -73,6 +86,7 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   scrollSensitivity: 1,
   preserveBreaks: true,
   sentenceBreak: 'off',
+  displayMode: 'script',
   cursorOffset: 0,
   showCursorHighlight: true,
   allowJumpBack: true,
@@ -107,17 +121,23 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
     p.scrollAnchor === 'hybrid'
       ? p.scrollAnchor
       : DEFAULT_SETTINGS.scrollAnchor
+  const displayMode: DisplayMode =
+    p.displayMode === 'one_word' ||
+    p.displayMode === 'two_word' ||
+    p.displayMode === 'script'
+      ? p.displayMode
+      : DEFAULT_SETTINGS.displayMode
 
   return {
     fontSize: clamp(
       typeof p.fontSize === 'number' ? p.fontSize : DEFAULT_SETTINGS.fontSize,
-      22,
-      64,
+      FONT_SIZE_MIN,
+      FONT_SIZE_MAX,
     ),
     lineWidth: clamp(
       typeof p.lineWidth === 'number' ? p.lineWidth : DEFAULT_SETTINGS.lineWidth,
-      24,
-      140,
+      LINE_WIDTH_MIN,
+      LINE_WIDTH_MAX,
     ),
     mirror: typeof p.mirror === 'boolean' ? p.mirror : DEFAULT_SETTINGS.mirror,
     uiMirror:
@@ -155,6 +175,7 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
         ? p.preserveBreaks
         : DEFAULT_SETTINGS.preserveBreaks,
     sentenceBreak,
+    displayMode,
     cursorOffset: clamp(
       typeof p.cursorOffset === 'number'
         ? Math.round(p.cursorOffset)
@@ -251,7 +272,14 @@ function persistDeviceId(deviceId: string | null): void {
   }
 }
 
-export function useTeleprompter() {
+export interface UseTeleprompterOptions {
+  /** Record camera+mic while listening; same mic tracks feed speech recognition. */
+  recordCamera?: boolean
+  facingMode?: FacingMode
+}
+
+export function useTeleprompter(options: UseTeleprompterOptions = {}) {
+  const { recordCamera = false, facingMode = 'user' } = options
   const [script, setScriptState] = useState(loadStoredScript)
   const [settings, setSettings] = useState<TeleprompterSettings>(loadStoredSettings)
   const [cursor, setCursor] = useState(0)
@@ -446,21 +474,32 @@ export function useTeleprompter() {
     error,
     errorAction,
     modelReady,
+    captureStream,
+    recordingActive,
+    recordingResult,
+    recordingSupported,
     start: startSpeech,
     stop: stopSpeech,
     preload,
     resetTranscript,
     clearError,
+    clearRecordingResult,
   } = useSpeechStream({
     deviceId,
+    recordCamera,
+    facingMode,
     onPartial,
     onCommitted,
   })
 
-  // Auto-scroll only while mic is live and alignment is tracking
+  // Auto-scroll only while mic is live, tracking, and showing the full script
   useEffect(() => {
-    setLiveScroll(status === 'listening' && alignState === 'tracking')
-  }, [status, alignState])
+    setLiveScroll(
+      status === 'listening' &&
+        alignState === 'tracking' &&
+        settings.displayMode === 'script',
+    )
+  }, [status, alignState, settings.displayMode])
 
   useEffect(() => {
     const wasListening = listeningRef.current
@@ -481,12 +520,12 @@ export function useTeleprompter() {
   }, [cursor, startSpeech])
 
   const pause = useCallback(() => {
-    stopSpeech()
+    void stopSpeech()
     setIsRunning(false)
   }, [stopSpeech])
 
   const reset = useCallback(() => {
-    stopSpeech()
+    void stopSpeech()
     resetTranscript()
     committedWordsRef.current = []
     partialWordsRef.current = []
@@ -628,6 +667,11 @@ export function useTeleprompter() {
       modelReady,
       preload,
       clearError,
+      captureStream,
+      recordingActive,
+      recordingResult,
+      recordingSupported,
+      clearRecordingResult,
     },
   }
 }

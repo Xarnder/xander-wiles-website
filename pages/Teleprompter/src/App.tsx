@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CameraPreview } from './components/CameraPreview'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
 import { AlertModal } from './components/Modal'
@@ -7,6 +8,11 @@ import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
 import { useTeleprompter } from './hooks/useTeleprompter'
 import { useWakeLock } from './hooks/useWakeLock'
+import {
+  isMediaRecorderSupported,
+  saveRecordingBlob,
+  type FacingMode,
+} from './media/platform'
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -20,7 +26,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export default function App() {
-  const tp = useTeleprompter()
+  const [recordCamera, setRecordCamera] = useState(false)
+  const [facingMode, setFacingMode] = useState<FacingMode>('user')
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const tp = useTeleprompter({ recordCamera, facingMode })
   const {
     devices,
     selectedDeviceId,
@@ -101,6 +112,34 @@ export default function App() {
     void startSession()
   }, [startSession, tp.speech])
 
+  const dismissRecording = useCallback(() => {
+    setSaveError(null)
+    tp.speech.clearRecordingResult()
+  }, [tp.speech])
+
+  const saveRecording = useCallback(async () => {
+    const result = tp.speech.recordingResult
+    if (!result || saveBusy) return
+    setSaveBusy(true)
+    setSaveError(null)
+    try {
+      await saveRecordingBlob(result.blob, result.filename)
+      tp.speech.clearRecordingResult()
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // User cancelled the share sheet — keep the take.
+      } else {
+        setSaveError(
+          err instanceof Error
+            ? err.message
+            : 'Could not save the recording. Try again or use Share from Files.',
+        )
+      }
+    } finally {
+      setSaveBusy(false)
+    }
+  }, [saveBusy, tp.speech])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -108,6 +147,11 @@ export default function App() {
       if (e.key === 'Escape') {
         if (document.fullscreenElement) {
           void document.exitFullscreen()
+          return
+        }
+        if (tp.speech.recordingResult) {
+          e.preventDefault()
+          dismissRecording()
           return
         }
         if (tp.speech.error) {
@@ -184,6 +228,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [
     closePanels,
+    dismissRecording,
     dismissSpeechError,
     editorOpen,
     howToOpen,
@@ -193,6 +238,13 @@ export default function App() {
     toggleFullscreen,
     tp,
   ])
+
+  const previewStream =
+    tp.speech.recordingActive && tp.speech.captureStream
+      ? tp.speech.captureStream
+      : null
+
+  const recording = tp.speech.recordingResult
 
   return (
     <div
@@ -221,6 +273,10 @@ export default function App() {
         progress={tp.progress}
         wpm={tp.wpm}
         isFullscreen={isFullscreen}
+        recordCamera={recordCamera}
+        recordingActive={tp.speech.recordingActive}
+        recordingSupported={tp.speech.recordingSupported && isMediaRecorderSupported()}
+        facingMode={facingMode}
         onStart={startSession}
         onPause={tp.pause}
         onReset={tp.reset}
@@ -245,6 +301,11 @@ export default function App() {
           setSettingsOpen(false)
         }}
         onToggleFullscreen={() => void toggleFullscreen()}
+        onToggleRecordCamera={() => {
+          if (!isMediaRecorderSupported()) return
+          setRecordCamera((v) => !v)
+        }}
+        onFacingModeChange={setFacingMode}
         onNudge={tp.nudge}
         onNudgeSentence={tp.nudgeSentence}
         onUpdateSettings={tp.updateSettings}
@@ -271,6 +332,7 @@ export default function App() {
             mirror={tp.settings.mirror}
             preserveBreaks={tp.settings.preserveBreaks}
             sentenceBreak={tp.settings.sentenceBreak}
+            displayMode={tp.settings.displayMode}
             showCursorHighlight={tp.settings.showCursorHighlight}
             scrollAnchor={tp.settings.scrollAnchor}
             onSeek={tp.seekTo}
@@ -279,6 +341,12 @@ export default function App() {
           />
         )}
       </main>
+
+      <CameraPreview
+        stream={previewStream}
+        mirror={facingMode === 'user'}
+        recording={tp.speech.recordingActive}
+      />
 
       <AlertModal
         open={tp.speech.error != null}
@@ -289,6 +357,27 @@ export default function App() {
         actionLabel="Retry"
         onAction={retrySpeechError}
         dismissLabel="Dismiss"
+      />
+
+      <AlertModal
+        open={recording != null}
+        title="Recording ready"
+        message={
+          saveError
+            ? saveError
+            : `Your take is ready (${recording?.filename ?? 'video'}). On iPhone and iPad, Share saves it to Photos or Files. The same microphone powered both the video audio and voice-follow scrolling.`
+        }
+        fix={
+          saveError
+            ? 'Try Share again, or dismiss and start a new take.'
+            : 'Tap Save / Share to keep the file, or Dismiss to discard it.'
+        }
+        onClose={dismissRecording}
+        actionLabel={saveBusy ? 'Saving…' : 'Save / Share'}
+        onAction={() => {
+          if (!saveBusy) void saveRecording()
+        }}
+        dismissLabel="Discard"
       />
     </div>
   )
