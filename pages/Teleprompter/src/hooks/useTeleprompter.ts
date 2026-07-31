@@ -443,11 +443,14 @@ export function useTeleprompter() {
     partialTranscript,
     committedTranscript,
     errorMessage,
+    error,
+    errorAction,
     modelReady,
     start: startSpeech,
     stop: stopSpeech,
     preload,
     resetTranscript,
+    clearError,
   } = useSpeechStream({
     deviceId,
     onPartial,
@@ -473,7 +476,8 @@ export function useTeleprompter() {
     sentenceStartIndexRef.current = cursor
     sentenceStartTsRef.current = performance.now()
     prevCursorRef.current = cursor
-    await startSpeech()
+    const ok = await startSpeech()
+    if (!ok) setIsRunning(false)
   }, [cursor, startSpeech])
 
   const pause = useCallback(() => {
@@ -619,8 +623,11 @@ export function useTeleprompter() {
       partialTranscript,
       committedTranscript,
       errorMessage,
+      error,
+      errorAction,
       modelReady,
       preload,
+      clearError,
     },
   }
 }

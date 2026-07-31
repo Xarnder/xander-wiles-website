@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
+import { AlertModal } from './components/Modal'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
@@ -86,6 +87,20 @@ export default function App() {
     void tp.start()
   }, [closePanels, tp])
 
+  const dismissSpeechError = useCallback(() => {
+    tp.speech.clearError()
+  }, [tp.speech])
+
+  const retrySpeechError = useCallback(() => {
+    const action = tp.speech.errorAction
+    tp.speech.clearError()
+    if (action === 'preload') {
+      void tp.speech.preload()
+      return
+    }
+    void startSession()
+  }, [startSession, tp.speech])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -93,6 +108,11 @@ export default function App() {
       if (e.key === 'Escape') {
         if (document.fullscreenElement) {
           void document.exitFullscreen()
+          return
+        }
+        if (tp.speech.error) {
+          e.preventDefault()
+          dismissSpeechError()
           return
         }
         if (editorOpen || settingsOpen || howToOpen) {
@@ -164,6 +184,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [
     closePanels,
+    dismissSpeechError,
     editorOpen,
     howToOpen,
     isListening,
@@ -191,7 +212,6 @@ export default function App() {
         alignState={tp.alignState}
         confidence={tp.confidence}
         modelReady={tp.speech.modelReady}
-        errorMessage={tp.speech.errorMessage}
         devices={devices}
         deviceId={tp.deviceId}
         settings={tp.settings}
@@ -259,6 +279,17 @@ export default function App() {
           />
         )}
       </main>
+
+      <AlertModal
+        open={tp.speech.error != null}
+        title={tp.speech.error?.title}
+        message={tp.speech.error?.message ?? ''}
+        fix={tp.speech.error?.fix}
+        onClose={dismissSpeechError}
+        actionLabel="Retry"
+        onAction={retrySpeechError}
+        dismissLabel="Dismiss"
+      />
     </div>
   )
 }

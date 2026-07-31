@@ -15,6 +15,8 @@ import {
     THEME_META_COLORS,
     RECENT_FILES_KEY,
     RECENT_FILES_MAX,
+    PINNED_ITEMS_KEY,
+    PINNED_ITEMS_MAX,
 } from './config.js';
 import {
     clearToken,
@@ -75,8 +77,10 @@ import {
     promptForName,
     promptItemActions,
     promptMoveDestination,
+    promptPinnedShortcutIssue,
     promptUnsavedChanges,
     renderFileList,
+    renderPinnedList,
     renderFolderPath,
     scrollFinderToMarkdownSection,
     setBrowseEmptyMessage,
@@ -279,6 +283,100 @@ function updateRecentFileName(fileId, name) {
         }
     }
     if (changed) writeRecentFiles(entries);
+}
+
+function normalizeParentId(parents) {
+    if (Array.isArray(parents) && parents[0]) return String(parents[0]);
+    return '';
+}
+
+function readPinnedItems() {
+    try {
+        const raw = localStorage.getItem(PINNED_ITEMS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+            .map((entry) => ({
+                id: entry.id,
+                name: entry.name || (isFolder(entry) ? 'Folder' : 'Untitled.md'),
+                mimeType: entry.mimeType || 'text/markdown',
+                parentId: typeof entry.parentId === 'string' ? entry.parentId : '',
+                pinnedAt: Number(entry.pinnedAt) || 0,
+            }))
+            .sort((a, b) => b.pinnedAt - a.pinnedAt)
+            .slice(0, PINNED_ITEMS_MAX);
+    } catch {
+        return [];
+    }
+}
+
+function writePinnedItems(entries) {
+    try {
+        localStorage.setItem(PINNED_ITEMS_KEY, JSON.stringify(entries.slice(0, PINNED_ITEMS_MAX)));
+    } catch {
+        // ignore
+    }
+}
+
+function isPinned(fileId) {
+    if (!fileId) return false;
+    return readPinnedItems().some((entry) => entry.id === fileId);
+}
+
+function pinItem(file, { switchToPinned = true } = {}) {
+    if (!file?.id) return;
+    const parentId = normalizeParentId(file.parents);
+    const next = [
+        {
+            id: file.id,
+            name: file.name || (isFolder(file) ? 'Folder' : 'Untitled.md'),
+            mimeType: file.mimeType || 'text/markdown',
+            parentId,
+            pinnedAt: Date.now(),
+        },
+        ...readPinnedItems().filter((entry) => entry.id !== file.id),
+    ].slice(0, PINNED_ITEMS_MAX);
+    writePinnedItems(next);
+    setStatus(`Pinned ${file.name || 'item'}`, 'ok');
+    if (switchToPinned) {
+        showPinnedView();
+    }
+}
+
+function unpinItem(fileId, { refresh = true } = {}) {
+    if (!fileId) return;
+    const next = readPinnedItems().filter((entry) => entry.id !== fileId);
+    writePinnedItems(next);
+    if (refresh) renderPinnedView();
+}
+
+function updatePinnedItem(fileId, patch = {}) {
+    if (!fileId) return;
+    const entries = readPinnedItems();
+    let changed = false;
+    for (const entry of entries) {
+        if (entry.id !== fileId) continue;
+        if (patch.name != null) entry.name = patch.name;
+        if (patch.mimeType != null) entry.mimeType = patch.mimeType;
+        if (patch.parentId != null) entry.parentId = patch.parentId;
+        changed = true;
+    }
+    if (changed) writePinnedItems(entries);
+}
+
+function renderPinnedView() {
+    renderPinnedList(readPinnedItems(), {
+        onOpen: handleOpenPinnedEntry,
+        onMenu: handlePinnedItemMenu,
+    });
+}
+
+function showPinnedView() {
+    showAppView('pinned');
+    renderPinnedView();
+    setStatus(readPinnedItems().length ? '' : 'Pin notes or folders from Finder');
 }
 
 function isMyDriveRoot() {
@@ -933,7 +1031,25 @@ async function handleOpenEntry(file) {
 }
 
 async function handleItemMenu(file) {
-    const action = await promptItemActions(file);
+    const action = await promptItemActions(file, { isPinned: isPinned(file.id) });
+    if (action === 'pin') {
+        // Prefer fresh parent metadata when available
+        let toPin = file;
+        if (!Array.isArray(file.parents) || !file.parents[0]) {
+            try {
+                toPin = await getFileMetadata(file.id);
+            } catch {
+                // keep local file snapshot
+            }
+        }
+        pinItem(toPin);
+        return;
+    }
+    if (action === 'unpin') {
+        unpinItem(file.id, { refresh: false });
+        setStatus(`Unpinned ${file.name || 'item'}`, 'ok');
+        return;
+    }
     if (action === 'rename') {
         await handleRenameEntry(file);
         return;
@@ -945,6 +1061,115 @@ async function handleItemMenu(file) {
     if (action === 'download') {
         await handleDownloadEntry(file);
     }
+}
+
+async function handlePinnedItemMenu(file) {
+    const action = await promptItemActions(file, { isPinned: true });
+    if (action === 'unpin' || action === 'pin') {
+        // From Pinned tab the control is Unpin
+        unpinItem(file.id);
+        setStatus(`Unpinned ${file.name || 'item'}`, 'ok');
+        return;
+    }
+    if (action === 'rename') {
+        await handleRenameEntry(file);
+        renderPinnedView();
+        return;
+    }
+    if (action === 'move') {
+        await handleMoveEntry(file);
+        renderPinnedView();
+        return;
+    }
+    if (action === 'download') {
+        await handleDownloadEntry(file);
+    }
+}
+
+/**
+ * Resolve a pinned shortcut; warn if missing, renamed, or moved.
+ * @returns {Promise<object|null>} live Drive metadata, or null if shortcut removed / cancelled
+ */
+async function resolvePinnedEntry(pinned) {
+    if (!pinned?.id) return null;
+    setStatus('Checking pinned item…');
+    try {
+        const meta = await getFileMetadata(pinned.id);
+        const liveParent = normalizeParentId(meta.parents);
+        const renamed = Boolean(pinned.name) && meta.name !== pinned.name;
+        const moved = Boolean(pinned.parentId) && liveParent && pinned.parentId !== liveParent;
+
+        if (renamed || moved) {
+            const parts = [];
+            if (renamed) {
+                parts.push(`Renamed from “${pinned.name}” to “${meta.name}”.`);
+            }
+            if (moved) {
+                parts.push('It was moved to a different folder in Google Drive.');
+            }
+            const choice = await promptPinnedShortcutIssue({
+                title: renamed && moved ? 'Moved and renamed' : renamed ? 'Renamed' : 'Moved',
+                message: `${parts.join(' ')} Keep this pinned shortcut?`,
+                name: meta.name || pinned.name,
+            });
+            if (choice === 'delete') {
+                unpinItem(pinned.id);
+                setStatus('Pinned shortcut removed', 'ok');
+                return null;
+            }
+            updatePinnedItem(pinned.id, {
+                name: meta.name,
+                mimeType: meta.mimeType,
+                parentId: liveParent,
+            });
+            renderPinnedView();
+        } else {
+            // Refresh stored snapshot quietly
+            updatePinnedItem(pinned.id, {
+                name: meta.name,
+                mimeType: meta.mimeType,
+                parentId: liveParent || pinned.parentId || '',
+            });
+        }
+        setStatus('');
+        return meta;
+    } catch (err) {
+        const missing = Number(err?.status) === 404;
+        const choice = await promptPinnedShortcutIssue({
+            title: missing ? 'Pinned item missing' : 'Pinned item unavailable',
+            message: missing
+                ? 'This pinned file or folder was moved, deleted, or is no longer accessible. Delete the shortcut or keep it for later?'
+                : `${err.message || 'Could not open this pinned item.'} Delete the shortcut or keep it?`,
+            name: pinned.name,
+        });
+        if (choice === 'delete') {
+            unpinItem(pinned.id);
+            setStatus('Pinned shortcut removed', 'ok');
+        } else {
+            setStatus(err.message || 'Pinned item unavailable', 'warn');
+        }
+        return null;
+    }
+}
+
+async function handleOpenPinnedEntry(pinned) {
+    const meta = await resolvePinnedEntry(pinned);
+    if (!meta) return;
+
+    if (isFolder(meta)) {
+        state.browseMode = 'folder';
+        state.folderStack = [
+            { id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME },
+            { id: meta.id, name: meta.name || 'Folder' },
+        ];
+        // If parent is known and not root, still open the pinned folder directly
+        showAppView('finder');
+        await loadBrowse(true);
+        setStatus(`Opened pinned folder ${meta.name || ''}`, 'ok');
+        return;
+    }
+
+    await openMarkdownFile(meta);
 }
 
 async function resolveCurrentParentId(file) {
@@ -1001,6 +1226,7 @@ async function handleMoveEntry(file) {
         });
         state.files = state.files.filter((f) => f.id !== file.id);
         renderCurrentFileList();
+        updatePinnedItem(file.id, { parentId: destination.folderId });
         // If we moved a folder that is in the path stack, truncate path to before it
         const pathIndex = state.folderStack.findIndex((frame) => frame.id === file.id);
         if (pathIndex >= 0) {
@@ -1059,6 +1285,7 @@ async function handleRenameEntry(file) {
             syncEditorChrome(state.editor);
         }
         if (!folder) updateRecentFileName(file.id, updated.name);
+        updatePinnedItem(file.id, { name: updated.name });
         if (idx >= 0 || (!folder && isMyDriveRoot())) {
             renderCurrentFileList();
         }
@@ -1368,8 +1595,8 @@ async function saveCurrentFile() {
 }
 
 /**
- * Switch app mode tabs. Open files stay in memory across Finder / Edit / Settings.
- * @param {'finder' | 'editor' | 'settings'} mode
+ * Switch app mode tabs. Open files stay in memory across Pinned / Finder / Edit / Settings.
+ * @param {'pinned' | 'finder' | 'editor' | 'settings'} mode
  */
 async function switchAppMode(mode) {
     if (mode === 'editor') {
@@ -1397,6 +1624,11 @@ async function switchAppMode(mode) {
         state.placingList = false;
         state.pendingImportList = null;
         state.clickEdit = false;
+    }
+
+    if (mode === 'pinned') {
+        showPinnedView();
+        return;
     }
 
     if (mode === 'finder') {
@@ -1444,7 +1676,6 @@ function signOut() {
 }
 
 async function afterSignedIn() {
-    showAppView('finder');
     setStatus('');
     state.browseMode = 'folder';
 
@@ -1461,6 +1692,15 @@ async function afterSignedIn() {
         }
     }
 
+    // Prefer Pinned when the user has shortcuts; Finder stays one tap away.
+    if (readPinnedItems().length) {
+        showPinnedView();
+        // Warm Finder listing in the background for when they switch tabs
+        loadBrowse(true).catch(() => {});
+        return;
+    }
+
+    showAppView('finder');
     await loadBrowse(true);
 }
 
@@ -1492,6 +1732,10 @@ function wireEvents() {
     });
     editorSearch.bind();
 
+    els.tabPinned?.addEventListener('click', () => {
+        editorSearch?.close({ restoreFocus: false });
+        switchAppMode('pinned');
+    });
     els.tabFinder.addEventListener('click', () => {
         editorSearch?.close({ restoreFocus: false });
         switchAppMode('finder');

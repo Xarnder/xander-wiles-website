@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Pass</title>
+  <meta name="description" content="Track time until and since the moments that matter — with Google sync.">
+  <meta name="theme-color" content="#050814">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <script>
+    try {
+      var t = localStorage.getItem('time-pass:theme');
+      if (t === 'oled' || t === 'light' || t === 'atmosphere') {
+        document.documentElement.dataset.theme = t;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.content = t === 'light' ? '#f4f6fb' : t === 'oled' ? '#000000' : '#050814';
+      }
+    } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/atmosphere.css">
+  <link rel="stylesheet" href="styles/components.css">
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div id="app">
+    <header class="app-header glass" id="app-header">
+      <a href="/index.html" class="home-escape" aria-label="Back to Xander Wiles home">
+        <span class="ui-icon ui-icon--back" style="--ui-icon: url('/assets/SVGs/Left-ArrowIcons.svg')" aria-hidden="true"></span>
+      </a>
+      <div class="brand">
+        <h1>Time Pass</h1>
+        <p class="brand-sub" id="brand-sub">Sign in to sync your moments</p>
+      </div>
+      <div class="header-actions" id="header-actions"></div>
+    </header>
+
+    <main class="main" id="main">
+      <section id="list-view">
+        <div id="preview-banner" class="preview-banner glass" hidden></div>
+        <div class="toolbar glass" id="toolbar"></div>
+        <ul class="event-list" id="event-list" aria-live="off"></ul>
+        <div id="empty-state" class="empty-state glass" hidden></div>
+      </section>
+
+      <section id="calculator-view" class="calculator-view" hidden>
+        <div class="calculator-page" id="calculator-page"></div>
+      </section>
+
+      <section id="settings-view" class="settings-view" hidden>
+        <div class="settings-page glass" id="settings-page"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-host" aria-live="polite"></div>
+  <div id="a11y-live" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

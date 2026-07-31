@@ -74,6 +74,13 @@
                 </div>
             </section>
 
+            <section id="view-pinned" class="view" hidden>
+                <div id="pinned-list" class="file-list file-list--pinned" role="list"></div>
+                <p id="pinned-empty" class="empty-state" hidden>
+                    No pinned files or folders yet. In Finder, tap ⋮ on a note or folder and choose Pin.
+                </p>
+            </section>
+
             <section id="view-finder" class="view" hidden>
                 <form id="search-form" class="search-form" hidden>
                     <label class="sr-only" for="search-input">Search markdown file names</label>
@@ -88,7 +95,7 @@
             <section id="view-editor" class="view view-editor" hidden>
                 <div id="editor-empty" class="empty-panel" hidden>
                     <p class="empty-panel-title">No file open</p>
-                    <p class="empty-panel-copy">Open a markdown file from Finder to start editing.</p>
+                    <p class="empty-panel-copy">Open a markdown file from Pinned or Finder to start editing.</p>
                     <button type="button" id="btn-go-finder" class="btn btn-primary">Go to Finder</button>
                 </div>
                 <div id="editor-loading" class="editor-loading" hidden aria-live="polite" aria-busy="true">
@@ -191,6 +198,7 @@
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
+                        <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder — Pinned opens first after sign-in.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
                 </div>
@@ -221,6 +229,9 @@
                 </div>
             </div>
             <div class="nav-bar-inner" role="tablist" aria-label="App modes">
+                <button type="button" id="tab-pinned" class="nav-tab" role="tab" aria-selected="false" data-mode="pinned">
+                    <span class="nav-tab-label">Pinned</span>
+                </button>
                 <button type="button" id="tab-finder" class="nav-tab" role="tab" aria-selected="false" data-mode="finder">
                     <span class="nav-tab-label">Finder</span>
                 </button>
@@ -262,10 +273,23 @@
             <h2 id="item-actions-title">Actions</h2>
             <p id="item-actions-name" class="dialog-hint"></p>
             <div class="item-actions-list">
+                <button type="submit" value="pin" id="item-action-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
                 <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
                 <button type="submit" value="download" id="item-action-download" class="btn btn-ghost btn-block item-action-btn">Download</button>
                 <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="pinned-missing-dialog" class="dialog dialog--warn">
+        <form method="dialog" class="dialog-body">
+            <h2 id="pinned-missing-title">Pinned item changed</h2>
+            <p id="pinned-missing-message">This pinned shortcut may have been moved or renamed.</p>
+            <p id="pinned-missing-name" class="dialog-emphasis" hidden></p>
+            <div class="dialog-actions">
+                <button type="submit" value="keep" class="btn btn-ghost">Keep shortcut</button>
+                <button type="submit" value="delete" class="btn btn-danger">Delete shortcut</button>
             </div>
         </form>
     </dialog>

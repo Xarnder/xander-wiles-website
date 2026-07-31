@@ -329,7 +329,7 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
 
 .nav-bar-inner {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     padding: 4px;
     border-radius: 14px;
@@ -344,10 +344,10 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
     color: var(--text-muted);
     border-radius: 10px;
     min-height: 48px;
-    padding: 0.55rem 0.4rem;
+    padding: 0.55rem 0.25rem;
     font: inherit;
     font-weight: 600;
-    font-size: 0.92rem;
+    font-size: 0.85rem;
     cursor: pointer;
     touch-action: manipulation;
     transition: background 0.15s ease, color 0.15s ease;
@@ -965,6 +965,35 @@ html[data-theme="oled"] .file-group--recent {
 
 .file-group--recent .file-group-title {
     color: var(--ok);
+}
+
+.file-list--pinned {
+    gap: 12px;
+}
+
+.file-group--pinned-folders,
+.file-group--pinned-markdown {
+    background: rgba(240, 198, 116, 0.08);
+    border-color: rgba(240, 198, 116, 0.4);
+    box-shadow: inset 0 0 0 1px rgba(240, 198, 116, 0.1);
+}
+
+html[data-theme="light"] .file-group--pinned-folders,
+html[data-theme="light"] .file-group--pinned-markdown {
+    background: rgba(176, 126, 20, 0.08);
+    border-color: rgba(176, 126, 20, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(176, 126, 20, 0.08);
+}
+
+html[data-theme="oled"] .file-group--pinned-folders,
+html[data-theme="oled"] .file-group--pinned-markdown {
+    background: rgba(240, 198, 116, 0.1);
+    border-color: rgba(240, 198, 116, 0.35);
+}
+
+.file-group--pinned-folders .file-group-title,
+.file-group--pinned-markdown .file-group-title {
+    color: var(--warn);
 }
 
 .file-group--recent .file-group-list > .file-row:nth-child(n + 4) {
@@ -2655,6 +2684,14 @@ html[data-theme="light"] .md-preview h2 {
 
 .dialog--danger .dialog-body h2 {
     color: var(--danger);
+}
+
+.dialog--warn {
+    border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+
+.dialog--warn .dialog-body h2 {
+    color: var(--warn);
 }
 
 .dialog-emphasis {

@@ -1,0 +1,193 @@
+:root {
+  --bg-0: #050814;
+  --bg-1: #0a1230;
+  --bg-2: #121a3a;
+  --glass-bg: rgba(255, 255, 255, 0.07);
+  --glass-bg-strong: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-blur: 18px;
+  --text: #f4f7ff;
+  --text-muted: rgba(244, 247, 255, 0.62);
+  --accent: #3cf0ff;
+  --accent-dim: rgba(60, 240, 255, 0.35);
+  --accent-2: #5b8cff;
+  --danger: #f87171;
+  --font-ui: "Outfit", system-ui, sans-serif;
+  --radius: 14px;
+  --shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  --header-h: 3.25rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* —— OLED: pure black —— */
+html[data-theme="oled"] {
+  --bg-0: #000000;
+  --bg-1: #000000;
+  --bg-2: #0a0a0a;
+  --glass-bg: #0a0a0a;
+  --glass-bg-strong: #111111;
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-blur: 0px;
+  --text: #f2f2f2;
+  --text-muted: rgba(242, 242, 242, 0.58);
+  --accent: #3cf0ff;
+  --accent-dim: rgba(60, 240, 255, 0.28);
+  --accent-2: #5b8cff;
+  --shadow: none;
+}
+
+html[data-theme="oled"] .atmosphere {
+  background: #000000;
+}
+
+html[data-theme="oled"] .orb {
+  display: none;
+}
+
+html[data-theme="oled"] .glass {
+  background: var(--glass-bg);
+  background-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border: 1px solid var(--glass-border);
+}
+
+html[data-theme="oled"] .event-card.is-full-colour {
+  background: color-mix(in srgb, var(--event-color, var(--accent)) 22%, #000);
+}
+
+/* —— Light: white / soft —— */
+html[data-theme="light"] {
+  --bg-0: #f4f6fb;
+  --bg-1: #e9eef8;
+  --bg-2: #dde6f5;
+  --glass-bg: rgba(255, 255, 255, 0.86);
+  --glass-bg-strong: rgba(255, 255, 255, 0.94);
+  --glass-border: rgba(15, 23, 42, 0.12);
+  --glass-blur: 14px;
+  --text: #0f172a;
+  --text-muted: rgba(15, 23, 42, 0.58);
+  --accent: #0284c7;
+  --accent-dim: rgba(2, 132, 199, 0.25);
+  --accent-2: #2563eb;
+  --danger: #dc2626;
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .atmosphere {
+  background:
+    radial-gradient(1000px 700px at 12% -8%, rgba(56, 189, 248, 0.18), transparent 55%),
+    radial-gradient(800px 600px at 92% 8%, rgba(99, 102, 241, 0.12), transparent 50%),
+    linear-gradient(165deg, #f7f9fd, #eef2fa 48%, #e6ecf7 100%);
+}
+
+html[data-theme="light"] .orb {
+  opacity: 0.28;
+  filter: blur(70px);
+}
+
+html[data-theme="light"] .glass {
+  background: var(--glass-bg);
+  background-image:
+    linear-gradient(var(--glass-bg), var(--glass-bg)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(226, 232, 240, 0.5) 45%, rgba(2, 132, 199, 0.12));
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="light"] .event-card {
+  background: #ffffff;
+}
+
+html[data-theme="light"] .event-card.is-full-colour {
+  background: color-mix(in srgb, var(--event-color, var(--accent)) 24%, #ffffff);
+}
+
+html[data-theme="light"] .btn {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.14), rgba(37, 99, 235, 0.1));
+}
+
+html[data-theme="light"] .btn-ghost {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+html[data-theme="light"] .chip,
+html[data-theme="light"] .search-input,
+html[data-theme="light"] .calc-input,
+html[data-theme="light"] .unit-pill,
+html[data-theme="light"] .filter-family,
+html[data-theme="light"] .calc-endpoint,
+html[data-theme="light"] .calc-offset-grid,
+html[data-theme="light"] .calc-offset-cell {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+html[data-theme="light"] .chip-group--exclusive,
+html[data-theme="light"] .calc-tool-tabs,
+html[data-theme="light"] .calc-op-toggle {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .calc-op-btn.is-active {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .home-escape {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+html[data-theme="light"] .toast {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+}

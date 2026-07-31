@@ -21,7 +21,6 @@ interface ControlsProps {
   alignState: AlignmentState
   confidence: number
   modelReady: boolean
-  errorMessage: string | null
   devices: MicDevice[]
   deviceId: string | null
   settings: TeleprompterSettings
@@ -119,7 +118,6 @@ export function Controls({
   alignState,
   confidence,
   modelReady,
-  errorMessage,
   devices,
   deviceId,
   settings,
@@ -429,12 +427,6 @@ export function Controls({
           </div>
         </div>
       </div>
-
-      {errorMessage && (
-        <p className="error-banner" role="alert">
-          {errorMessage}
-        </p>
-      )}
 
       {status === 'loading' && !modelReady && (
         <div className="loading-bar" aria-live="polite">

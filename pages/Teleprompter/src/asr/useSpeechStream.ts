@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  classifySpeechError,
+  type SpeechErrorInfo,
+} from './speechErrors'
 
 export type SpeechStatus = 'idle' | 'loading' | 'listening' | 'error'
+
+export type SpeechErrorAction = 'preload' | 'start'
 
 export interface SpeechStreamState {
   status: SpeechStatus
   partialTranscript: string
   committedTranscript: string
   errorMessage: string | null
+  error: SpeechErrorInfo | null
+  /** Which user action to retry after dismissing the error popup. */
+  errorAction: SpeechErrorAction | null
   modelReady: boolean
 }
 
@@ -41,7 +50,8 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const [status, setStatus] = useState<SpeechStatus>('idle')
   const [partialTranscript, setPartialTranscript] = useState('')
   const [committedTranscript, setCommittedTranscript] = useState('')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [error, setError] = useState<SpeechErrorInfo | null>(null)
+  const [errorAction, setErrorAction] = useState<SpeechErrorAction | null>(null)
   const [modelReady, setModelReady] = useState(false)
 
   const moonshineRef = useRef<MoonshineModule | null>(null)
@@ -50,11 +60,33 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const onPartialRef = useRef(onPartial)
   const onCommittedRef = useRef(onCommitted)
   const committedAccRef = useRef('')
+  const loadingModelRef = useRef(false)
+  const pendingActionRef = useRef<SpeechErrorAction | null>(null)
 
   useEffect(() => {
     onPartialRef.current = onPartial
     onCommittedRef.current = onCommitted
   }, [onPartial, onCommitted])
+
+  const reportError = useCallback(
+    (
+      err: unknown,
+      context: 'model-load' | 'start' | 'runtime',
+      action: SpeechErrorAction | null = pendingActionRef.current,
+    ) => {
+      const info = classifySpeechError(err, context)
+      setError(info)
+      setErrorAction(action)
+      setStatus('error')
+    },
+    [],
+  )
+
+  const clearError = useCallback(() => {
+    setError(null)
+    setErrorAction(null)
+    setStatus((s) => (s === 'error' ? 'idle' : s))
+  }, [])
 
   const cleanupStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -76,9 +108,13 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
 
   const loadMoonshine = useCallback(async () => {
     if (moonshineRef.current) return moonshineRef.current
-    const mod = await import('@moonshine-ai/moonshine-js')
-    moonshineRef.current = mod
-    return mod
+    try {
+      const mod = await import('@moonshine-ai/moonshine-js')
+      moonshineRef.current = mod
+      return mod
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to load speech engine')
+    }
   }, [])
 
   const ensureTranscriber = useCallback(async () => {
@@ -91,31 +127,23 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       modelId,
       {
         onModelLoadStarted() {
+          loadingModelRef.current = true
           setStatus('loading')
-          setErrorMessage(null)
+          setError(null)
+          setErrorAction(null)
         },
         onModelLoaded() {
+          loadingModelRef.current = false
           setModelReady(true)
         },
         onPermissionsRequested() {
-          setErrorMessage(null)
+          setError(null)
+          setErrorAction(null)
         },
         onError(error) {
-          const message =
-            typeof error === 'string'
-              ? error
-              : error instanceof Error
-                ? error.message
-                : 'Speech recognition error'
-          const isPermission =
-            message.toLowerCase().includes('permission') ||
-            message === 'PermissionDenied'
-          setErrorMessage(
-            isPermission
-              ? 'Microphone permission denied. Allow mic access in your browser settings to use voice-follow.'
-              : message,
-          )
-          setStatus('error')
+          const context = loadingModelRef.current ? 'model-load' : 'runtime'
+          loadingModelRef.current = false
+          reportError(error, context)
           cleanupStream()
         },
         onTranscribeStarted() {
@@ -144,47 +172,64 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
 
     transcriberRef.current = transcriber
     return transcriber
-  }, [cleanupStream, loadMoonshine, modelId])
+  }, [cleanupStream, loadMoonshine, modelId, reportError])
+
+  const loadModel = useCallback(async (transcriber: TranscriberInstance) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      throw new Error('You appear to be offline')
+    }
+    loadingModelRef.current = true
+    try {
+      await transcriber.load()
+      loadingModelRef.current = false
+      setModelReady(true)
+    } catch (err) {
+      loadingModelRef.current = false
+      throw err
+    }
+  }, [])
 
   const preload = useCallback(async () => {
+    pendingActionRef.current = 'preload'
     setStatus('loading')
-    setErrorMessage(null)
+    setError(null)
+    setErrorAction(null)
     try {
       const transcriber = await ensureTranscriber()
-      await transcriber.load()
-      setModelReady(true)
+      await loadModel(transcriber)
       setStatus('idle')
+      pendingActionRef.current = null
+      return true
     } catch (err) {
-      setStatus('error')
-      setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : 'Failed to load the on-device speech model.',
-      )
+      reportError(err, 'model-load', 'preload')
+      return false
     }
-  }, [ensureTranscriber])
+  }, [ensureTranscriber, loadModel, reportError])
 
   const start = useCallback(async () => {
-    setErrorMessage(null)
+    pendingActionRef.current = 'start'
+    setError(null)
+    setErrorAction(null)
 
     try {
       const permission = await navigator.permissions
         ?.query({ name: 'microphone' as PermissionName })
         .catch(() => null)
       if (permission?.state === 'denied') {
-        setStatus('error')
-        setErrorMessage(
-          'Microphone permission denied. Allow mic access in your browser settings to use voice-follow.',
-        )
-        return
+        reportError('PermissionDenied', 'start', 'start')
+        return false
       }
 
       setStatus('loading')
       const transcriber = await ensureTranscriber()
 
       if (!modelReady) {
-        await transcriber.load()
-        setModelReady(true)
+        try {
+          await loadModel(transcriber)
+        } catch (err) {
+          reportError(err, 'model-load', 'start')
+          return false
+        }
       }
 
       cleanupStream()
@@ -204,21 +249,14 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       transcriber.attachStream(stream)
       await transcriber.start()
       setStatus('listening')
+      pendingActionRef.current = null
+      return true
     } catch (err) {
       cleanupStream()
-      const name = err instanceof DOMException ? err.name : ''
-      const isPermission =
-        name === 'NotAllowedError' || name === 'PermissionDeniedError'
-      setStatus('error')
-      setErrorMessage(
-        isPermission
-          ? 'Microphone permission denied. Allow mic access in your browser settings to use voice-follow.'
-          : err instanceof Error
-            ? err.message
-            : 'Could not start the microphone.',
-      )
+      reportError(err, 'start', 'start')
+      return false
     }
-  }, [cleanupStream, deviceId, ensureTranscriber, modelReady])
+  }, [cleanupStream, deviceId, ensureTranscriber, loadModel, modelReady, reportError])
 
   const resetTranscript = useCallback(() => {
     committedAccRef.current = ''
@@ -237,20 +275,26 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     }
   }, [cleanupStream])
 
+  const errorMessage = error?.summary ?? null
+
   return {
     status,
     partialTranscript,
     committedTranscript,
     errorMessage,
+    error,
+    errorAction,
     modelReady,
     start,
     stop,
     preload,
     resetTranscript,
+    clearError,
   } satisfies SpeechStreamState & {
-    start: () => Promise<void>
+    start: () => Promise<boolean>
     stop: () => void
-    preload: () => Promise<void>
+    preload: () => Promise<boolean>
     resetTranscript: () => void
+    clearError: () => void
   }
 }

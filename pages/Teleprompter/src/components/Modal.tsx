@@ -143,15 +143,27 @@ interface AlertModalProps {
   open: boolean
   title?: string
   message: string
+  /** Optional “how to fix” guidance under the main message. */
+  fix?: string
   onClose: () => void
+  /** Optional primary action (e.g. Retry). Falls back to a single OK. */
+  actionLabel?: string
+  onAction?: () => void
+  dismissLabel?: string
 }
 
 export function AlertModal({
   open,
   title = 'Notice',
   message,
+  fix,
   onClose,
+  actionLabel,
+  onAction,
+  dismissLabel = 'OK',
 }: AlertModalProps) {
+  const hasAction = Boolean(actionLabel && onAction)
+
   return (
     <Modal
       open={open}
@@ -159,12 +171,24 @@ export function AlertModal({
       onClose={onClose}
       size="sm"
       footer={
-        <button type="button" className="btn primary" onClick={onClose}>
-          OK
-        </button>
+        hasAction ? (
+          <>
+            <button type="button" className="btn ghost" onClick={onClose}>
+              {dismissLabel === 'OK' ? 'Dismiss' : dismissLabel}
+            </button>
+            <button type="button" className="btn primary" onClick={onAction}>
+              {actionLabel}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn primary" onClick={onClose}>
+            {dismissLabel}
+          </button>
+        )
       }
     >
       <p className="modal-message">{message}</p>
+      {fix ? <p className="modal-fix">{fix}</p> : null}
     </Modal>
   )
 }

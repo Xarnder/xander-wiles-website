@@ -11,6 +11,7 @@ export function bindUi() {
     els.navActions = document.getElementById('nav-actions');
     els.navActionsFinder = document.getElementById('nav-actions-finder');
     els.navActionsEditor = document.getElementById('nav-actions-editor');
+    els.tabPinned = document.getElementById('tab-pinned');
     els.tabFinder = document.getElementById('tab-finder');
     els.tabEditor = document.getElementById('tab-editor');
     els.tabSettings = document.getElementById('tab-settings');
@@ -37,9 +38,12 @@ export function bindUi() {
     els.searchInput = document.getElementById('search-input');
     els.configError = document.getElementById('config-error');
     els.viewLogin = document.getElementById('view-login');
+    els.viewPinned = document.getElementById('view-pinned');
     els.viewFinder = document.getElementById('view-finder');
     els.viewEditor = document.getElementById('view-editor');
     els.viewSettings = document.getElementById('view-settings');
+    els.pinnedList = document.getElementById('pinned-list');
+    els.pinnedEmpty = document.getElementById('pinned-empty');
     els.editorEmpty = document.getElementById('editor-empty');
     els.editorLoading = document.getElementById('editor-loading');
     els.loadingFileName = document.getElementById('loading-file-name');
@@ -73,7 +77,12 @@ export function bindUi() {
     els.itemActionsDialog = document.getElementById('item-actions-dialog');
     els.itemActionsTitle = document.getElementById('item-actions-title');
     els.itemActionsName = document.getElementById('item-actions-name');
+    els.itemActionPin = document.getElementById('item-action-pin');
     els.itemActionDownload = document.getElementById('item-action-download');
+    els.pinnedMissingDialog = document.getElementById('pinned-missing-dialog');
+    els.pinnedMissingTitle = document.getElementById('pinned-missing-title');
+    els.pinnedMissingMessage = document.getElementById('pinned-missing-message');
+    els.pinnedMissingName = document.getElementById('pinned-missing-name');
     els.moveDialog = document.getElementById('move-dialog');
     els.moveDialogTitle = document.getElementById('move-dialog-title');
     els.moveDialogHint = document.getElementById('move-dialog-hint');
@@ -108,11 +117,13 @@ export function setStatus(message, kind = '') {
 
 function setActiveTab(mode) {
     const tabs = [
+        [els.tabPinned, 'pinned'],
         [els.tabFinder, 'finder'],
         [els.tabEditor, 'editor'],
         [els.tabSettings, 'settings'],
     ];
     for (const [tab, name] of tabs) {
+        if (!tab) continue;
         const active = name === mode;
         tab.classList.toggle('is-active', active);
         tab.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -150,7 +161,7 @@ export function syncNavLayout() {
 
 /**
  * Show the contextual action strip above mode tabs when the current view has buttons.
- * @param {'login' | 'finder' | 'editor' | 'settings'} mode
+ * @param {'login' | 'pinned' | 'finder' | 'editor' | 'settings'} mode
  * @param {{ hasOpenFile?: boolean }} [options]
  */
 function syncNavActions(mode, options = {}) {
@@ -169,13 +180,14 @@ function syncNavActions(mode, options = {}) {
 }
 
 /**
- * @param {'login' | 'finder' | 'editor' | 'settings'} name
- * @param {{ hasOpenFile?: boolean }} [options]
+ * @param {'login' | 'pinned' | 'finder' | 'editor' | 'settings'} name
+ * @param {{ hasOpenFile?: boolean, loading?: boolean }} [options]
  */
 export function showView(name, options = {}) {
     const hasOpenFile = Boolean(options.hasOpenFile);
 
     els.viewLogin.hidden = name !== 'login';
+    if (els.viewPinned) els.viewPinned.hidden = name !== 'pinned';
     els.viewFinder.hidden = name !== 'finder';
     els.viewEditor.hidden = name !== 'editor';
     els.viewSettings.hidden = name !== 'settings';
@@ -197,7 +209,11 @@ export function showView(name, options = {}) {
     if (els.finderPathBar) els.finderPathBar.hidden = name !== 'finder';
     syncNavLayout();
 
-    if (name === 'finder') {
+    if (name === 'pinned') {
+        els.viewTitle.textContent = 'Pinned';
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
+    } else if (name === 'finder') {
         els.viewTitle.textContent = 'Finder';
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
@@ -225,7 +241,7 @@ export function showView(name, options = {}) {
             els.btnSave.hidden = !hasOpenFile;
             if (!hasOpenFile) {
                 els.viewTitle.textContent = 'Edit';
-                setStatus('Open a file from Finder');
+                setStatus('Open a file from Pinned or Finder');
             }
         }
     }
@@ -399,6 +415,46 @@ export function renderFileList(files, { onOpen, onMenu, recent = [], scrollToMar
     applyFinderLayoutPrefs();
     if (scrollToMarkdown && notes.length) {
         scrollFinderToMarkdownSection();
+    }
+}
+
+/**
+ * Render the Pinned tab list (folders + markdown shortcuts).
+ * @param {Array<object>} items
+ * @param {{ onOpen: Function, onMenu: Function }} handlers
+ */
+export function renderPinnedList(items, { onOpen, onMenu }) {
+    if (!els.pinnedList) return;
+    els.pinnedList.replaceChildren();
+    const list = Array.isArray(items) ? items : [];
+    if (els.pinnedEmpty) els.pinnedEmpty.hidden = list.length > 0;
+
+    if (!list.length) return;
+
+    const folders = list.filter((f) => isFolder(f));
+    const notes = list.filter((f) => !isFolder(f));
+
+    if (folders.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-folders',
+                title: 'Folders',
+                files: folders,
+                onOpen,
+                onMenu,
+            })
+        );
+    }
+    if (notes.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-markdown',
+                title: 'Markdown',
+                files: notes,
+                onOpen,
+                onMenu,
+            })
+        );
     }
 }
 
@@ -768,15 +824,17 @@ export function promptUnsavedChanges(dialogEl) {
 }
 
 /**
- * Action sheet for a Finder row.
+ * Action sheet for a Finder / Pinned row.
  * @param {object} file
- * @returns {Promise<'rename'|'move'|'download'|null>}
+ * @param {{ isPinned?: boolean }} [options]
+ * @returns {Promise<'pin'|'unpin'|'rename'|'move'|'download'|null>}
  */
-export function promptItemActions(file) {
+export function promptItemActions(file, options = {}) {
     const dialog = els.itemActionsDialog;
     if (!dialog) return Promise.resolve(null);
 
     const folder = isFolder(file);
+    const pinned = Boolean(options.isPinned);
     const canDownload = !folder && isMarkdownCandidate(file);
     if (els.itemActionsTitle) {
         els.itemActionsTitle.textContent = folder ? 'Folder actions' : 'Markdown actions';
@@ -785,17 +843,70 @@ export function promptItemActions(file) {
         els.itemActionsName.textContent = file.name || '(unnamed)';
         els.itemActionsName.hidden = !file.name;
     }
+    if (els.itemActionPin) {
+        els.itemActionPin.hidden = false;
+        els.itemActionPin.value = pinned ? 'unpin' : 'pin';
+        els.itemActionPin.textContent = pinned ? 'Unpin' : 'Pin';
+    }
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;
 
     return new Promise((resolve) => {
         const onClose = () => {
             dialog.removeEventListener('close', onClose);
             const value = dialog.returnValue;
-            if (value === 'rename' || value === 'move' || value === 'download') resolve(value);
-            else resolve(null);
+            if (
+                value === 'pin' ||
+                value === 'unpin' ||
+                value === 'rename' ||
+                value === 'move' ||
+                value === 'download'
+            ) {
+                resolve(value);
+            } else resolve(null);
         };
         dialog.addEventListener('close', onClose);
         dialog.returnValue = 'cancel';
+        dialog.showModal();
+    });
+}
+
+/**
+ * Warn when a pinned shortcut looks moved, renamed, or missing.
+ * @param {{ title?: string, message: string, name?: string }} opts
+ * @returns {Promise<'keep'|'delete'>}
+ */
+export function promptPinnedShortcutIssue(opts) {
+    const dialog = els.pinnedMissingDialog;
+    const title = opts?.title || 'Pinned item changed';
+    const message =
+        opts?.message ||
+        'This pinned shortcut may have been moved or renamed in Google Drive.';
+    const name = String(opts?.name || '').trim();
+
+    if (!dialog) {
+        const keep = window.confirm(`${message}\n\nKeep this shortcut?`);
+        return Promise.resolve(keep ? 'keep' : 'delete');
+    }
+
+    if (els.pinnedMissingTitle) els.pinnedMissingTitle.textContent = title;
+    if (els.pinnedMissingMessage) els.pinnedMissingMessage.textContent = message;
+    if (els.pinnedMissingName) {
+        if (name) {
+            els.pinnedMissingName.hidden = false;
+            els.pinnedMissingName.textContent = name;
+        } else {
+            els.pinnedMissingName.hidden = true;
+            els.pinnedMissingName.textContent = '';
+        }
+    }
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            resolve(dialog.returnValue === 'delete' ? 'delete' : 'keep');
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'keep';
         dialog.showModal();
     });
 }

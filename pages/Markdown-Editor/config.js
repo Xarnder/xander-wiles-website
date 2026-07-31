@@ -38,6 +38,10 @@ export const RECENT_FILES_MAX = 5;
 export const RECENT_FILES_MOBILE = 3;
 export const RECENT_FILES_DESKTOP = 5;
 
+/** Pinned Drive files and folders (Pinned tab). */
+export const PINNED_ITEMS_KEY = 'md-editor:pinnedItems';
+export const PINNED_ITEMS_MAX = 40;
+
 /** Preview mode Contents panel: '1' open, '0' collapsed */
 export const PREVIEW_TOC_OPEN_KEY = 'md-editor:previewTocOpen';
 export const PREVIEW_TOC_OPEN_DEFAULT = true;

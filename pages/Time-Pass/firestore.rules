@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isValidColor() {
+      return request.resource.data.color in [
+        '#3cf0ff', '#5b8cff', '#a78bfa', '#f472b6', '#fb923c',
+        '#facc15', '#4ade80', '#2dd4bf', '#f87171', '#94a3b8'
+      ];
+    }
+
+    function isValidFrequency() {
+      return request.resource.data.recurrence.frequency in
+        ['none', 'daily', 'weekly', 'monthly', 'yearly'];
+    }
+
+    function isValidEvent() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['id', 'name', 'date', 'color', 'units', 'recurrence'])
+        && d.name is string
+        && d.name.size() > 0
+        && d.name.size() <= 80
+        && d.date is string
+        && d.units is list
+        && d.units.size() > 0
+        && d.units.size() <= 8
+        && isValidColor()
+        && d.recurrence.keys().hasAll(['frequency'])
+        && isValidFrequency();
+    }
+
+    match /users/{userId}/events/{eventId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidEvent()
+        && request.resource.data.id == eventId;
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/settings/app {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

@@ -195,6 +195,7 @@ textarea {
 .app-shell[data-ui-mirrored='true'] .panel-header h2,
 .app-shell[data-ui-mirrored='true'] .modal-header h2,
 .app-shell[data-ui-mirrored='true'] .modal-message,
+.app-shell[data-ui-mirrored='true'] .modal-fix,
 .app-shell[data-ui-mirrored='true'] .error-banner,
 .app-shell[data-ui-mirrored='true'] .loading-bar > span,
 .app-shell[data-ui-mirrored='true'] .settings-section-label,
@@ -1169,6 +1170,23 @@ html[data-theme='light'] .modal-footer {
   font-size: 1.02rem;
   color: var(--text);
   font-weight: 500;
+}
+
+.modal-fix {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  line-height: 1.55;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--accent-soft, rgba(255, 170, 80, 0.12));
+  border: 1px solid rgba(255, 170, 80, 0.28);
+}
+
+html[data-theme='light'] .modal-fix {
+  background: rgba(200, 110, 30, 0.1);
+  border-color: rgba(180, 90, 20, 0.22);
 }
 
 .modal-tone-danger .modal-header h2 {
