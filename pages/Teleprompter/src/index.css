@@ -1338,6 +1338,62 @@ html[data-theme='light'] .modal-fix {
   color: var(--text);
 }
 
+.recording-download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.recording-convert {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.recording-convert-meter {
+  height: 0.7rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-soft);
+}
+
+html[data-theme='light'] .recording-convert-meter {
+  background: rgba(80, 40, 10, 0.08);
+}
+
+.recording-convert-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-gold));
+  box-shadow: 0 0 12px rgba(255, 150, 50, 0.35);
+  transition: width 160ms ease;
+}
+
+.recording-convert-fill.is-indeterminate {
+  width: 40%;
+  animation: convertIndeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes convertIndeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+
+.recording-convert-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
 .recording-review-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1385,12 +1441,13 @@ html[data-theme='light'] .modal-fix {
 }
 
 .camera-preview {
-  position: fixed;
-  z-index: 40;
-  right: max(0.75rem, env(safe-area-inset-right, 0px));
-  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-  width: min(42vw, 11.5rem);
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  width: min(28vw, 11.5rem);
+  max-height: min(70dvh, 22rem);
   aspect-ratio: 3 / 4;
+  align-self: flex-start;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.28);
@@ -1399,11 +1456,6 @@ html[data-theme='light'] .modal-fix {
     0 0 0 1px rgba(0, 0, 0, 0.2);
   background: #0a0a0a;
   pointer-events: none;
-}
-
-.app-shell[data-chrome-dock='bottom'] .camera-preview {
-  bottom: auto;
-  top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 
 .camera-preview.is-recording {
@@ -2183,8 +2235,33 @@ html[data-theme='light'] .settings-grid input[type='range']::-webkit-slider-runn
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
   justify-content: center;
+  gap: 0;
   padding: 0.65rem 0.65rem 0.75rem;
+}
+
+.stage-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.stage[data-recording-preview='true'] {
+  gap: 0.65rem;
+}
+
+.stage[data-recording-preview='true'] .stage-main {
+  flex: 1 1 auto;
+}
+
+.stage[data-recording-preview='true'] .script-view,
+.stage[data-recording-preview='true'] .script-editor-page,
+.stage[data-recording-preview='true'] .howto-page {
+  width: 100%;
 }
 
 .script-view {
@@ -2513,8 +2590,22 @@ html[data-bold-script='true'] .script-focus-word {
     font-size: 0.78rem;
   }
 
+  .stage[data-recording-preview='true'] {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .stage[data-recording-preview='true'] .camera-preview {
+    order: -1;
+    width: min(42vw, 8.5rem);
+    max-height: min(28dvh, 11rem);
+    align-self: flex-end;
+  }
+
   .camera-preview {
-    width: min(38vw, 9.5rem);
+    width: min(32vw, 9.5rem);
+    align-self: flex-start;
+    max-height: min(42dvh, 16rem);
   }
 
   .controls-top {
@@ -2798,13 +2889,12 @@ html[data-bold-script='true'] .script-focus-word {
   }
 
   .camera-preview {
-    width: min(34vw, 7.75rem);
-    right: max(0.45rem, env(safe-area-inset-right, 0px));
-    bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+    width: min(36vw, 7.5rem);
+    max-height: min(24dvh, 9.5rem);
   }
 
-  .app-shell[data-chrome-dock='bottom'] .camera-preview {
-    top: max(0.45rem, env(safe-area-inset-top, 0px));
+  .stage[data-recording-preview='true'] {
+    gap: 0.4rem;
   }
 
   .script-view[data-scroll-anchor='top'] .script-pad-top {

@@ -45,9 +45,11 @@ export function HowToUse({ onClose }: HowToUseProps) {
             Turn on <strong>Record</strong> anytime to capture camera video
             (independent of Start / Pause), or press <kbd>V</kbd>. Tap{' '}
             <strong>Stop</strong> to finish the take — a review opens for
-            preview, Share, and Download. Use <strong>Keep for later</strong> to
-            hold the take (a <strong>Take</strong> button reopens it), or
-            Discard after confirming.
+            preview, Share, and Download. Download can keep the original format
+            or convert to MP4 (with a progress screen). Use{' '}
+            <strong>Keep for later</strong> to hold the take (a{' '}
+            <strong>Take</strong> button reopens it), or Discard after
+            confirming.
           </li>
           <li>
             Press <strong>Start</strong> for voice-follow scrolling (and allow

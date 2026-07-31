@@ -357,42 +357,47 @@ export default function App() {
         onResetSettings={tp.resetSettings}
       />
 
-      <main className="stage">
-        {howToOpen ? (
-          <HowToUse onClose={() => setHowToOpen(false)} />
-        ) : editorOpen ? (
-          <ScriptEditor
-            script={tp.script}
-            onChange={tp.setScript}
-            onClose={() => setEditorOpen(false)}
-          />
-        ) : (
-          <ScriptView
-            script={tp.script}
-            words={tp.scriptWords}
-            cursor={tp.cursor}
-            alignState={tp.alignState}
-            fontSize={tp.settings.fontSize}
-            lineWidth={tp.settings.lineWidth}
-            mirror={tp.settings.mirror}
-            preserveBreaks={tp.settings.preserveBreaks}
-            sentenceBreak={tp.settings.sentenceBreak}
-            displayMode={tp.settings.displayMode}
-            showCursorHighlight={tp.settings.showCursorHighlight}
-            scrollAnchor={tp.settings.scrollAnchor}
-            onSeek={tp.seekTo}
-            containerRef={tp.containerRef}
-            registerWordRef={tp.registerWordRef}
-          />
-        )}
-      </main>
+      <main
+        className="stage"
+        data-recording-preview={previewStream ? 'true' : undefined}
+      >
+        <div className="stage-main">
+          {howToOpen ? (
+            <HowToUse onClose={() => setHowToOpen(false)} />
+          ) : editorOpen ? (
+            <ScriptEditor
+              script={tp.script}
+              onChange={tp.setScript}
+              onClose={() => setEditorOpen(false)}
+            />
+          ) : (
+            <ScriptView
+              script={tp.script}
+              words={tp.scriptWords}
+              cursor={tp.cursor}
+              alignState={tp.alignState}
+              fontSize={tp.settings.fontSize}
+              lineWidth={tp.settings.lineWidth}
+              mirror={tp.settings.mirror}
+              preserveBreaks={tp.settings.preserveBreaks}
+              sentenceBreak={tp.settings.sentenceBreak}
+              displayMode={tp.settings.displayMode}
+              showCursorHighlight={tp.settings.showCursorHighlight}
+              scrollAnchor={tp.settings.scrollAnchor}
+              onSeek={tp.seekTo}
+              containerRef={tp.containerRef}
+              registerWordRef={tp.registerWordRef}
+            />
+          )}
+        </div>
 
-      <CameraPreview
-        stream={previewStream}
-        mirror={facingMode === 'user'}
-        recording={tp.speech.recordingActive}
-        recordingStartedAt={tp.speech.recordingStartedAt}
-      />
+        <CameraPreview
+          stream={previewStream}
+          mirror={facingMode === 'user'}
+          recording={tp.speech.recordingActive}
+          recordingStartedAt={tp.speech.recordingStartedAt}
+        />
+      </main>
 
       <AlertModal
         open={tp.speech.error != null}

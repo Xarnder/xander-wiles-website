@@ -355,9 +355,12 @@ export async function shareRecordingBlob(
   blob: Blob,
   filename: string,
 ): Promise<void> {
-  const file = new File([blob], filename, {
-    type: blob.type || 'video/mp4',
-  })
+  const type =
+    blob.type || (filename.endsWith('.webm') ? 'video/webm' : 'video/mp4')
+  const file =
+    blob instanceof File
+      ? blob
+      : new File([blob], filename, { type, lastModified: Date.now() })
   const nav = navigator as Navigator & {
     canShare?: (data: ShareData) => boolean
   }
@@ -380,6 +383,71 @@ export async function shareRecordingBlob(
   await nav.share(data)
 }
 
+function mimeForDownload(blob: Blob, filename: string): string {
+  if (blob.type) return blob.type
+  if (/\.webm$/i.test(filename)) return 'video/webm'
+  if (/\.mp4$/i.test(filename)) return 'video/mp4'
+  return 'video/mp4'
+}
+
+function toDownloadFile(blob: Blob, filename: string): File {
+  const type = mimeForDownload(blob, filename)
+  if (blob instanceof File && blob.name === filename && blob.type === type) {
+    return blob
+  }
+  return new File([blob], filename, { type, lastModified: Date.now() })
+}
+
+async function downloadViaSavePicker(file: File): Promise<boolean> {
+  const w = window as Window & {
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string
+      types?: Array<{
+        description?: string
+        accept: Record<string, string[]>
+      }>
+    }) => Promise<FileSystemFileHandle>
+  }
+  if (typeof w.showSaveFilePicker !== 'function') return false
+
+  const ext = `.${extensionForMime(file.type) || 'mp4'}`
+  try {
+    const handle = await w.showSaveFilePicker({
+      suggestedName: file.name,
+      types: [
+        {
+          description: 'Video',
+          accept: { [file.type || 'video/mp4']: [ext] },
+        },
+      ],
+    })
+    const writable = await handle.createWritable()
+    await writable.write(file)
+    await writable.close()
+    return true
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    return false
+  }
+}
+
+function downloadViaAnchor(file: File): void {
+  const url = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  a.rel = 'noopener'
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+}
+
+/**
+ * Robust download: Save-As picker when available, then anchor download,
+ * then open-in-tab fallback for stubborn mobile browsers.
+ */
 export async function downloadRecordingBlob(
   blob: Blob,
   filename: string,
@@ -390,19 +458,31 @@ export async function downloadRecordingBlob(
       'InvalidStateError',
     )
   }
-  const url = URL.createObjectURL(blob)
+
+  const file = toDownloadFile(blob, filename)
+
   try {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.rel = 'noopener'
-    a.style.display = 'none'
-    document.body.appendChild(a)
-    // Safari needs the element in the document before click.
-    a.click()
-    a.remove()
-  } finally {
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    if (await downloadViaSavePicker(file)) return
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+  }
+
+  try {
+    downloadViaAnchor(file)
+    return
+  } catch {
+    // fall through
+  }
+
+  // iOS / in-app browsers sometimes ignore download= — open the blob instead.
+  const url = URL.createObjectURL(file)
+  const opened = window.open(url, '_blank', 'noopener')
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+  if (!opened) {
+    throw new DOMException(
+      'Could not start the download. Try Share to Files/Photos, or allow pop-ups.',
+      'NetworkError',
+    )
   }
 }
 

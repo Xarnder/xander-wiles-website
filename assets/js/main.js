@@ -43,9 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
             hiddenSection.style.display = isHidden ? 'block' : 'none';
             toggleButton.textContent = isHidden ? 'Hide Hidden Test Pages' : 'Show Hidden Test Pages';
 
-            // Optional: Scroll to the section when opening
-            if (isHidden) {
-                // hiddenSection.scrollIntoView({ behavior: 'smooth' });
+            if (typeof applyPageCardSearch === 'function') {
+                applyPageCardSearch();
             }
         });
     }
@@ -58,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshJumpTargets = () => {
         if (!jumpBar) return;
-        const jumpLinks = Array.from(jumpBar.querySelectorAll('.section-jump-link:not([hidden])'));
+        const jumpLinks = Array.from(jumpBar.querySelectorAll('.section-jump-link:not([hidden]):not(.is-search-hidden)'));
         sectionIds = jumpLinks.map((link) => link.dataset.section).filter(Boolean);
         sections = sectionIds
             .map((id) => document.getElementById(id))
@@ -110,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (jumpBar) {
         jumpBar.addEventListener('click', (event) => {
             const link = event.target.closest('.section-jump-link');
-            if (!link || link.hidden) return;
+            if (!link || link.hidden || link.classList.contains('is-search-hidden')) return;
             const target = document.getElementById(link.dataset.section);
             if (!target) return;
             event.preventDefault();
@@ -142,6 +141,321 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             updateActiveFromScroll();
         }
+    }
+
+    // --- Page card search (sticky jump bar) ---
+    const searchInput = document.getElementById('page-card-search');
+    const searchClear = document.getElementById('page-card-search-clear');
+    const searchStatus = document.getElementById('page-card-search-status');
+    const searchRoot = document.querySelector('.section-jump-search');
+    let searchSessionActive = false;
+    let searchAllowBlur = false;
+    let searchApplyQueued = false;
+    let lastSearchQuery = '';
+
+    const normalizeSearchText = (value) => String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .replace(/[^a-z0-9/#.\s_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const getSearchTokens = (query) => normalizeSearchText(query).split(' ').filter(Boolean);
+
+    const getSearchableCards = () => Array.from(document.querySelectorAll('main a.page-card[href]')).filter((card) => {
+        if (card.closest('#recent-editor')) return false;
+        return true;
+    });
+
+    const isCardAvailableForSearch = (card) => {
+        const hiddenRoot = card.closest('#hidden-test-pages');
+        if (!hiddenRoot) return true;
+        return window.getComputedStyle(hiddenRoot).display !== 'none';
+    };
+
+    const cardSearchHaystack = (card) => {
+        const title = card.querySelector('h3')?.textContent || '';
+        const description = card.querySelector('p:not(.recent-meta)')?.textContent || '';
+        const href = card.getAttribute('href') || '';
+        return normalizeSearchText(`${title} ${description} ${href}`);
+    };
+
+    const cardMatchesSearch = (card, tokens) => {
+        if (!tokens.length) return true;
+        const haystack = cardSearchHaystack(card);
+        return tokens.every((token) => haystack.includes(token));
+    };
+
+    const sectionIdForCard = (card) => {
+        if (card.closest('#recent-pages-grid') || card.closest('#recent-section')) return 'recent';
+        if (card.closest('.best-pages-grid')) return 'featured';
+        if (card.closest('.hero-side-stack')) return 'featured';
+        const grid = card.closest('.page-grid');
+        if (!grid) return null;
+        let prev = grid.previousElementSibling;
+        while (prev && !prev.classList?.contains('section-title') && prev.id !== 'recent') {
+            prev = prev.previousElementSibling;
+        }
+        if (prev?.id) return prev.id;
+        return null;
+    };
+
+    const keepSearchFocus = () => {
+        if (!searchInput || !searchSessionActive || searchAllowBlur) return;
+        if (document.activeElement === searchInput) return;
+        searchInput.focus({ preventScroll: true });
+    };
+
+    const endSearchSession = ({ clear = false, blur = true } = {}) => {
+        searchSessionActive = false;
+        searchAllowBlur = true;
+        if (clear && searchInput) {
+            searchInput.value = '';
+            applyPageCardSearch('');
+        }
+        if (blur && searchInput) searchInput.blur();
+        requestAnimationFrame(() => {
+            searchAllowBlur = false;
+        });
+    };
+
+    const applyPageCardSearch = (rawQuery = searchInput ? searchInput.value : '') => {
+        if (!searchInput) return;
+
+        const query = String(rawQuery);
+        lastSearchQuery = query;
+        const tokens = getSearchTokens(query);
+        const isSearching = tokens.length > 0;
+        document.body.classList.toggle('is-page-searching', isSearching);
+
+        if (searchClear) searchClear.hidden = !query;
+
+        const cards = getSearchableCards();
+        const matchedBySection = new Map();
+        const matchedHrefs = new Set();
+
+        cards.forEach((card) => {
+            const available = isCardAvailableForSearch(card);
+            const matches = available && cardMatchesSearch(card, tokens);
+            card.classList.toggle('is-search-hidden', isSearching && !matches);
+            if (matches) {
+                const href = card.getAttribute('href') || '';
+                matchedHrefs.add(href);
+                const sectionId = sectionIdForCard(card);
+                if (sectionId) matchedBySection.set(sectionId, true);
+            }
+        });
+
+        const matchCount = matchedHrefs.size;
+
+        // Hide section titles / grids with no visible matches while searching
+        document.querySelectorAll('main .section-title').forEach((title) => {
+            if (!isSearching) {
+                title.classList.remove('is-search-hidden');
+                return;
+            }
+            const sectionId = title.id;
+            const hasMatch = sectionId ? matchedBySection.has(sectionId) : false;
+            title.classList.toggle('is-search-hidden', !hasMatch);
+        });
+
+        document.querySelectorAll('main .page-grid').forEach((grid) => {
+            if (!isSearching) {
+                grid.classList.remove('is-search-hidden');
+                return;
+            }
+            const hasVisibleCard = Array.from(grid.querySelectorAll('a.page-card[href]'))
+                .some((card) => !card.classList.contains('is-search-hidden'));
+            grid.classList.toggle('is-search-hidden', !hasVisibleCard);
+        });
+
+        const recentSectionEl = document.getElementById('recent-section');
+        if (recentSectionEl) {
+            if (!isSearching) {
+                recentSectionEl.classList.remove('is-search-hidden');
+            } else {
+                const hasRecentMatch = matchedBySection.has('recent');
+                recentSectionEl.classList.toggle('is-search-hidden', !hasRecentMatch);
+            }
+        }
+
+        if (jumpBar) {
+            jumpBar.querySelectorAll('.section-jump-link').forEach((link) => {
+                if (!isSearching) {
+                    link.classList.remove('is-search-hidden');
+                    return;
+                }
+                const sectionId = link.dataset.section;
+                if (sectionId === 'contact') {
+                    link.classList.add('is-search-hidden');
+                    return;
+                }
+                link.classList.toggle('is-search-hidden', !matchedBySection.has(sectionId));
+            });
+        }
+
+        if (searchStatus) {
+            if (!isSearching) {
+                searchStatus.hidden = true;
+                searchStatus.textContent = '';
+                searchStatus.classList.remove('is-empty');
+            } else if (matchCount === 0) {
+                searchStatus.hidden = false;
+                searchStatus.textContent = 'No pages matched that search.';
+                searchStatus.classList.add('is-empty');
+            } else {
+                searchStatus.hidden = false;
+                searchStatus.textContent = `${matchCount} page${matchCount === 1 ? '' : 's'} matched. Press Esc when done.`;
+                searchStatus.classList.remove('is-empty');
+            }
+        }
+
+        refreshJumpTargets();
+        updateActiveFromScroll();
+
+        // Filtering uses classes only — restore focus if anything stole it
+        if (searchSessionActive) {
+            keepSearchFocus();
+        }
+    };
+
+    const queuePageCardSearch = () => {
+        if (searchApplyQueued) return;
+        searchApplyQueued = true;
+        requestAnimationFrame(() => {
+            searchApplyQueued = false;
+            applyPageCardSearch();
+        });
+    };
+
+    const openFirstSearchMatch = () => {
+        const first = getSearchableCards().find((card) => (
+            isCardAvailableForSearch(card) && !card.classList.contains('is-search-hidden')
+        ));
+        if (!first) return false;
+        searchAllowBlur = true;
+        searchSessionActive = false;
+        first.click();
+        return true;
+    };
+
+    if (searchInput) {
+        searchInput.addEventListener('focus', () => {
+            searchSessionActive = true;
+            searchAllowBlur = false;
+            document.body.classList.add('is-page-searching-focus');
+        });
+
+        searchInput.addEventListener('blur', () => {
+            document.body.classList.remove('is-page-searching-focus');
+            if (!searchSessionActive || searchAllowBlur) return;
+            if (!searchInput.value.trim()) {
+                searchSessionActive = false;
+                return;
+            }
+            // Keep typing focus until the user explicitly finishes
+            requestAnimationFrame(keepSearchFocus);
+        });
+
+        searchInput.addEventListener('input', () => {
+            searchSessionActive = true;
+            queuePageCardSearch();
+        });
+
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                endSearchSession({ clear: true, blur: true });
+                return;
+            }
+            if (event.key === 'Enter') {
+                const tokens = getSearchTokens(searchInput.value);
+                if (!tokens.length) return;
+                event.preventDefault();
+                openFirstSearchMatch();
+            }
+        });
+
+        if (searchClear) {
+            searchClear.addEventListener('mousedown', (event) => {
+                // Keep focus on input when clearing
+                event.preventDefault();
+            });
+            searchClear.addEventListener('click', () => {
+                searchInput.value = '';
+                applyPageCardSearch('');
+                searchSessionActive = true;
+                searchInput.focus({ preventScroll: true });
+            });
+        }
+
+        // Soft focus lock: while searching, clicks outside results return to the input
+        document.addEventListener('pointerdown', (event) => {
+            if (!searchSessionActive || !searchInput.value.trim()) return;
+
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            if (searchRoot && searchRoot.contains(target)) return;
+
+            // Allow opening a visible result or using jump links / controls
+            if (target.closest('a.page-card:not(.is-search-hidden)')) {
+                searchAllowBlur = true;
+                searchSessionActive = false;
+                return;
+            }
+            if (target.closest('.section-jump-link:not(.is-search-hidden)')) {
+                searchAllowBlur = true;
+                // Keep filter, release focus so scrolling works
+                searchSessionActive = false;
+                return;
+            }
+            if (target.closest('#toggle-hidden-pages') || target.closest('#recent-editor')) {
+                searchAllowBlur = true;
+                searchSessionActive = false;
+                return;
+            }
+
+            // Non-result click: keep the session; blur handler will restore focus
+        }, true);
+
+        // Keyboard shortcut: / or Cmd/Ctrl+K
+        document.addEventListener('keydown', (event) => {
+            const tag = event.target instanceof Element ? event.target.tagName : '';
+            const isTypingField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+                || (event.target instanceof HTMLElement && event.target.isContentEditable);
+
+            if ((event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                searchSessionActive = true;
+                searchInput.focus({ preventScroll: true });
+                searchInput.select();
+                return;
+            }
+
+            if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingField) {
+                event.preventDefault();
+                searchSessionActive = true;
+                searchInput.focus({ preventScroll: true });
+            }
+        });
+
+        // Re-apply when dynamic cards (recent / playlists) change
+        const searchObserver = new MutationObserver(() => {
+            if (!lastSearchQuery.trim() && !searchSessionActive) return;
+            queuePageCardSearch();
+        });
+        const observeTargets = [
+            document.getElementById('recent-pages-grid'),
+            document.getElementById('homepage-playlist-grid'),
+            document.getElementById('hidden-test-pages')
+        ].filter(Boolean);
+        observeTargets.forEach((node) => {
+            searchObserver.observe(node, { childList: true, subtree: true, characterData: true });
+        });
+
+        applyPageCardSearch('');
     }
 
     // --- Recent pages (local cache) ---
@@ -280,6 +594,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (recentJumpLink) recentJumpLink.hidden = true;
             refreshJumpTargets();
             updateActiveFromScroll();
+            if (typeof applyPageCardSearch === 'function') {
+                applyPageCardSearch();
+            }
             return;
         }
 
@@ -315,6 +632,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (recentJumpLink) recentJumpLink.hidden = false;
         refreshJumpTargets();
         updateActiveFromScroll();
+        if (typeof applyPageCardSearch === 'function') {
+            applyPageCardSearch();
+        }
     };
 
     if (recentApi) {

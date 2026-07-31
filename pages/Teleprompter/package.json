@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@moonshine-ai/moonshine-js": "^0.1.29",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

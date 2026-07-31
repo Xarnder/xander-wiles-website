@@ -26,6 +26,8 @@ export interface RecordingResult {
   mimeType: string
   filename: string
   recordedAt: number
+  /** Wall-clock length of the take (ms) while the recorder was active. */
+  elapsedMs: number
 }
 
 export interface SpeechStreamState {
@@ -222,60 +224,105 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     }
 
     const startedAt = recordingStartedAtRef.current
+    const apple = isAppleMobile()
+
     const promise = new Promise<RecordingResult | null>((resolve) => {
       let settled = false
+      let stopSeen = false
+      let settleTimer: number | null = null
+      let hardTimer: number | null = null
+      let stopDelayTimer: number | null = null
+
+      const clearTimers = () => {
+        if (settleTimer != null) window.clearTimeout(settleTimer)
+        if (hardTimer != null) window.clearTimeout(hardTimer)
+        if (stopDelayTimer != null) window.clearTimeout(stopDelayTimer)
+        settleTimer = null
+        hardTimer = null
+        stopDelayTimer = null
+      }
+
+      const buildResult = (): RecordingResult | null => {
+        const mimeType =
+          recorder.mimeType || recordingMimeRef.current || 'video/mp4'
+        const chunks = chunksRef.current.slice()
+        if (!chunks.length) return null
+        const blob = new Blob(chunks, { type: mimeType })
+        const elapsedMs = startedAt != null ? Date.now() - startedAt : 0
+        const tooSmall =
+          blob.size < 64 || (blob.size < 1024 && elapsedMs < 350)
+        if (tooSmall) return null
+        return {
+          blob,
+          mimeType,
+          filename: makeRecordingFilename(mimeType),
+          recordedAt: Date.now(),
+          elapsedMs,
+        }
+      }
+
       const finish = () => {
         if (settled) return
         settled = true
-        const mimeType =
-          recorder.mimeType || recordingMimeRef.current || 'video/mp4'
-        const chunks = chunksRef.current
+        clearTimers()
+        const result = buildResult()
         chunksRef.current = []
         recorderRef.current = null
         setRecordingActive(false)
         recordingActiveRef.current = false
         setRecordingStartedAt(null)
         recordingStartedAtRef.current = null
-
-        if (!chunks.length) {
-          resolve(null)
-          return
-        }
-        const blob = new Blob(chunks, { type: mimeType })
-        const elapsedMs = startedAt != null ? Date.now() - startedAt : 0
-        // Reject empty / near-empty captures; allow very short takes that still
-        // produced a real container once recording ran for a moment.
-        const tooSmall =
-          blob.size < 64 || (blob.size < 1024 && elapsedMs < 350)
-        if (tooSmall) {
-          resolve(null)
-          return
-        }
-        resolve({
-          blob,
-          mimeType,
-          filename: makeRecordingFilename(mimeType),
-          recordedAt: Date.now(),
-        })
+        resolve(result)
       }
 
-      recorder.onstop = finish
+      /** Safari often delivers the final dataavailable slightly after onstop. */
+      const scheduleSettle = (delayMs: number) => {
+        if (settled) return
+        if (settleTimer != null) window.clearTimeout(settleTimer)
+        settleTimer = window.setTimeout(finish, delayMs)
+      }
+
+      // Keep collecting until we settle — including late final chunks.
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunksRef.current.push(event.data)
+        }
+        if (stopSeen) {
+          scheduleSettle(apple ? 350 : 120)
+        }
+      }
+
+      recorder.onstop = () => {
+        stopSeen = true
+        // Wait for a possible trailing dataavailable before assembling the file.
+        scheduleSettle(apple ? 400 : 150)
+      }
+
+      // Flush any buffered media, then stop after a short delay so the flush
+      // can land before stop() closes the container.
       try {
-        if (typeof recorder.requestData === 'function') {
+        if (recorder.state === 'recording' && typeof recorder.requestData === 'function') {
           recorder.requestData()
         }
       } catch {
         // ignore
       }
-      window.setTimeout(() => {
+
+      stopDelayTimer = window.setTimeout(() => {
         try {
-          if (recorder.state !== 'inactive') recorder.stop()
-          else finish()
+          if (recorder.state !== 'inactive') {
+            recorder.stop()
+          } else {
+            stopSeen = true
+            scheduleSettle(apple ? 200 : 80)
+          }
         } catch {
-          finish()
+          stopSeen = true
+          scheduleSettle(80)
         }
-      }, isAppleMobile() ? 120 : 0)
-      window.setTimeout(finish, 4000)
+      }, apple ? 320 : 80)
+
+      hardTimer = window.setTimeout(finish, 8000)
     })
 
     stopPromiseRef.current = promise
@@ -348,19 +395,18 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         void stopRecordingRef.current()
       }
 
+      // Avoid timeslices on Apple — sliced MP4 often truncates or lacks a full
+      // moov for download. A single container on stop is the reliable path.
+      // Elsewhere, prefer no timeslice too so Stop always yields a complete file.
       try {
-        recorder.start(1000)
-      } catch {
-        try {
-          recorder.start()
-        } catch (err) {
-          throw err instanceof Error
-            ? err
-            : new DOMException(
-                'MediaRecorder.start failed on this device.',
-                'NotSupportedError',
-              )
-        }
+        recorder.start()
+      } catch (err) {
+        throw err instanceof Error
+          ? err
+          : new DOMException(
+              'MediaRecorder.start failed on this device.',
+              'NotSupportedError',
+            )
       }
 
       if (recorder.state !== 'recording' && recorder.state !== 'paused') {
@@ -738,6 +784,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       const expectFile = Boolean(
         recorderRef.current && recorderRef.current.state !== 'inactive',
       )
+      // Keep camera tracks live until the recorder has fully flushed.
       const recorded = await stopRecorder()
 
       if (recorded) {
@@ -751,6 +798,9 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
           'record',
         )
       }
+
+      // Brief pause so the encoder can release before we tear down tracks.
+      await new Promise<void>((r) => window.setTimeout(r, 60))
 
       if (listeningRef.current) {
         stopVideoTracks()

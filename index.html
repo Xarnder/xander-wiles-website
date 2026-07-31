@@ -143,6 +143,18 @@
         </div>
 
         <nav class="section-jump-bar" aria-label="Page sections">
+            <div class="section-jump-search" role="search">
+                <label class="visually-hidden" for="page-card-search">Search pages</label>
+                <input id="page-card-search" class="section-jump-search-input" type="search"
+                    placeholder="Search pages…" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                    aria-controls="page-card-search-status" aria-describedby="page-card-search-hint">
+                <button type="button" id="page-card-search-clear" class="section-jump-search-clear" hidden
+                    aria-label="Clear search">×</button>
+                <span id="page-card-search-hint" class="visually-hidden">Press Escape when finished. Use / or
+                    Command+K to focus search.</span>
+            </div>
+            <p id="page-card-search-status" class="section-jump-search-status" role="status" aria-live="polite"
+                hidden></p>
             <div class="section-jump-bar-inner">
                 <a href="#recent" class="section-jump-link" data-section="recent" hidden>Recent</a>
                 <a href="#featured" class="section-jump-link" data-section="featured">Featured</a>

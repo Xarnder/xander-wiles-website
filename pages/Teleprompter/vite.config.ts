@@ -94,7 +94,10 @@ export default defineConfig({
     }),
   ],
   optimizeDeps: {
-    exclude: ['@moonshine-ai/moonshine-js'],
+    exclude: ['@moonshine-ai/moonshine-js', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
+  worker: {
+    format: 'es',
   },
   build: {
     chunkSizeWarningLimit: 3000,
