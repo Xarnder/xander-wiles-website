@@ -1,6 +1,21 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
 import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
 import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
+import {
+    BUDGET_MAX_DIVISIONS,
+    BUDGET_MIN_PERCENT,
+    canAddDivision,
+    computeAmounts,
+    describeBoundary,
+    describeSlicePath,
+    getBoundaryPercents,
+    getDivisionColor,
+    getSliceMidAngle,
+    percentsToAngles,
+    percentToAngle,
+    angleToPoint,
+    sanitizeBudgetSnapMode
+} from './budgeting.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -257,7 +272,23 @@ export const DOM = {
     saveSpActionBtn: document.getElementById('save-sp-action-btn'),
     savingPotsWidget: document.getElementById('widget-saving-pots'),
     spWidgetContent: document.getElementById('sp-widget-content'),
-    spWidgetScopeLabel: document.getElementById('sp-widget-scope-label')
+    spWidgetScopeLabel: document.getElementById('sp-widget-scope-label'),
+
+    viewBudgetingBtn: document.getElementById('view-budgeting-btn'),
+    budgetingView: document.getElementById('budgeting-view'),
+    budgetTotalInput: document.getElementById('budget-total-input'),
+    budgetPieHost: document.getElementById('budget-pie-host'),
+    budgetPieHint: document.getElementById('budget-pie-hint'),
+    budgetSnapModes: document.querySelector('.budget-snap-modes'),
+    budgetSnapModeButtons: document.querySelectorAll('.budget-snap-mode-btn'),
+    budgetBarChart: document.getElementById('budget-bar-chart'),
+    budgetDivisionList: document.getElementById('budget-division-list'),
+    budgetAddDivisionBtn: document.getElementById('budget-add-division-btn'),
+    budgetEqualizeBtn: document.getElementById('budget-equalize-btn'),
+    budgetExportFormats: document.querySelector('.budget-export-formats'),
+    budgetExportFormatButtons: document.querySelectorAll('.budget-export-format-btn'),
+    budgetExportBtn: document.getElementById('budget-export-btn'),
+    budgetSumNote: document.getElementById('budget-sum-note')
 };
 
 export function showAlert(title, message) {
@@ -320,6 +351,10 @@ export function updateCurrencyDisplays() {
             <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
         `;
         renderLiveMoneyCounter(0, false);
+    }
+
+    if (DOM.budgetingView && !DOM.budgetingView.classList.contains('hidden')) {
+        renderBudgetingView();
     }
 }
 
@@ -3873,4 +3908,612 @@ export function renderSavedTimeCostItems() {
             }
         });
     });
+}
+
+const BUDGET_PIE_VIEWBOX = 320;
+const BUDGET_PIE_RADIUS = 130;
+let budgetPieResizeObserver = null;
+
+function formatBudgetMoney(amount) {
+    return `${state.currentCurrency}${roundMoney(amount).toFixed(2)}`;
+}
+
+function syncBudgetTotalInput() {
+    if (!DOM.budgetTotalInput) return;
+    if (document.activeElement === DOM.budgetTotalInput) return;
+    const total = Number(state.budgetPlan?.totalAmount) || 0;
+    DOM.budgetTotalInput.value = total > 0 || state.budgetPlanHydrated ? String(total) : '';
+}
+
+export function renderBudgetPie(options = {}) {
+    if (!DOM.budgetPieHost) return;
+
+    const divisions = state.budgetPlan?.divisions || [];
+    const skipFocus = options.skipFocus === true;
+    const focusedBoundary = skipFocus ? null : options.focusedBoundaryIndex;
+    const size = BUDGET_PIE_VIEWBOX;
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = BUDGET_PIE_RADIUS;
+
+    if (divisions.length === 0) {
+        DOM.budgetPieHost.innerHTML = `<p class="loading-text">Add a division to see the pie chart.</p>`;
+        if (DOM.budgetPieHint) {
+            DOM.budgetPieHint.textContent = 'Add divisions to start budgeting.';
+        }
+        return;
+    }
+
+    const existingSvg = DOM.budgetPieHost.querySelector('.budget-pie-svg');
+    const canPatch = options.patch === true
+        && existingSvg
+        && existingSvg.querySelectorAll('.budget-pie-slice').length === divisions.length
+        && existingSvg.querySelectorAll('.budget-pie-handle').length === (divisions.length >= 2 ? divisions.length : 0);
+
+    if (canPatch) {
+        patchBudgetPieGeometry(existingSvg, divisions, cx, cy, radius);
+        return;
+    }
+
+    const slices = percentsToAngles(divisions);
+    const slicePaths = slices.map((slice, index) => {
+        const color = getDivisionColor(index);
+        const path = describeSlicePath(cx, cy, radius, slice.startAngle, slice.endAngle);
+        const label = escapeHtml(divisions[index]?.name || `Division ${index + 1}`);
+        return `<path class="budget-pie-slice" data-division-id="${escapeHtml(divisions[index].id)}" d="${path}" fill="${color}" stroke="rgba(7, 9, 19, 0.55)" stroke-width="2"><title>${label}</title></path>`;
+    }).join('');
+
+    let handles = '';
+    if (divisions.length >= 2) {
+        const boundaries = getBoundaryPercents(divisions);
+        handles = boundaries.map((boundary) => {
+            const percent = boundary.boundaryIndex === divisions.length - 1 && Math.abs(boundary.percent - 100) < 0.0001
+                ? 0
+                : boundary.percent;
+            const angle = percentToAngle(percent % 100);
+            const point = angleToPoint(cx, cy, radius, angle);
+            const label = escapeHtml(describeBoundary(divisions, boundary.boundaryIndex));
+            const leftPct = divisions[boundary.leftIndex]?.percentage ?? 0;
+            const handleColor = getDivisionColor(boundary.leftIndex);
+            return `
+                <circle
+                    class="budget-pie-handle"
+                    tabindex="0"
+                    role="slider"
+                    aria-label="${label}"
+                    aria-valuemin="${BUDGET_MIN_PERCENT}"
+                    aria-valuemax="${100 - BUDGET_MIN_PERCENT}"
+                    aria-valuenow="${Math.round(leftPct)}"
+                    data-boundary-index="${boundary.boundaryIndex}"
+                    cx="${point.x}"
+                    cy="${point.y}"
+                    r="13"
+                    fill="${handleColor}"
+                    stroke="rgba(255, 255, 255, 0.92)"
+                ></circle>
+            `;
+        }).join('');
+    }
+
+    DOM.budgetPieHost.innerHTML = `
+        <svg class="budget-pie-svg" viewBox="0 0 ${size} ${size}" width="100%" height="100%" role="img" aria-label="Budget allocation pie chart">
+            <g class="budget-pie-slices">${slicePaths}</g>
+            <g class="budget-pie-handles">${handles}</g>
+        </svg>
+    `;
+
+    if (DOM.budgetPieHint) {
+        DOM.budgetPieHint.textContent = divisions.length < 2
+            ? 'Add another division to unlock drag handles on the pie.'
+            : 'Drag the handles on the pie edge to adjust shares.';
+    }
+
+    if (focusedBoundary != null && Number.isFinite(focusedBoundary)) {
+        const handle = DOM.budgetPieHost.querySelector(`.budget-pie-handle[data-boundary-index="${focusedBoundary}"]`);
+        handle?.focus({ preventScroll: true });
+    }
+}
+
+function patchBudgetPieGeometry(svg, divisions, cx, cy, radius) {
+    const slices = percentsToAngles(divisions);
+    const sliceNodes = svg.querySelectorAll('.budget-pie-slice');
+    slices.forEach((slice, index) => {
+        const node = sliceNodes[index];
+        if (!node) return;
+        node.setAttribute('d', describeSlicePath(cx, cy, radius, slice.startAngle, slice.endAngle));
+        node.setAttribute('fill', getDivisionColor(index));
+    });
+
+    if (divisions.length < 2) return;
+
+    const boundaries = getBoundaryPercents(divisions);
+    boundaries.forEach((boundary) => {
+        const handle = svg.querySelector(`.budget-pie-handle[data-boundary-index="${boundary.boundaryIndex}"]`);
+        if (!handle) return;
+        const percent = boundary.boundaryIndex === divisions.length - 1 && Math.abs(boundary.percent - 100) < 0.0001
+            ? 0
+            : boundary.percent;
+        const angle = percentToAngle(percent % 100);
+        const point = angleToPoint(cx, cy, radius, angle);
+        handle.setAttribute('cx', String(point.x));
+        handle.setAttribute('cy', String(point.y));
+        handle.setAttribute('fill', getDivisionColor(boundary.leftIndex));
+        const leftPct = divisions[boundary.leftIndex]?.percentage ?? 0;
+        handle.setAttribute('aria-valuenow', String(Math.round(leftPct)));
+        handle.setAttribute('aria-label', describeBoundary(divisions, boundary.boundaryIndex));
+    });
+}
+
+export function renderBudgetDivisionListAmountsOnly() {
+    if (!DOM.budgetDivisionList) return;
+    const divisions = state.budgetPlan?.divisions || [];
+    const amounts = computeAmounts(state.budgetPlan?.totalAmount, divisions);
+
+    divisions.forEach((division, index) => {
+        const row = DOM.budgetDivisionList.querySelector(`[data-division-id="${division.id}"]`);
+        if (!row) return;
+        const pctInput = row.querySelector('.budget-pct-input');
+        const amountEl = row.querySelector('.budget-division-amount');
+        if (pctInput && document.activeElement !== pctInput) {
+            pctInput.value = String(Math.round(division.percentage * 100) / 100);
+        }
+        if (amountEl) {
+            amountEl.textContent = formatBudgetMoney(amounts[index] ?? 0);
+        }
+    });
+
+    if (DOM.budgetSumNote) {
+        const sum = divisions.reduce((total, division) => total + (Number(division.percentage) || 0), 0);
+        DOM.budgetSumNote.textContent = `${divisions.length} division${divisions.length === 1 ? '' : 's'} · ${sum.toFixed(2)}% total · min ${BUDGET_MIN_PERCENT}% each · max ${BUDGET_MAX_DIVISIONS}`;
+    }
+
+    renderBudgetBarChart({ patch: true });
+}
+
+export function renderBudgetBarChart(options = {}) {
+    if (!DOM.budgetBarChart) return;
+
+    const divisions = state.budgetPlan?.divisions || [];
+    const amounts = computeAmounts(state.budgetPlan?.totalAmount, divisions);
+
+    if (!divisions.length) {
+        DOM.budgetBarChart.innerHTML = `<p class="loading-text">Add a division to see the bar chart.</p>`;
+        return;
+    }
+
+    const maxPercent = Math.max(...divisions.map((d) => Number(d.percentage) || 0), BUDGET_MIN_PERCENT);
+    const existingBars = DOM.budgetBarChart.querySelectorAll('.budget-bar-col');
+    const canPatch = options.patch === true && existingBars.length === divisions.length;
+
+    if (canPatch) {
+        divisions.forEach((division, index) => {
+            const col = existingBars[index];
+            if (!col) return;
+            const pct = Number(division.percentage) || 0;
+            const heightPct = Math.max((pct / maxPercent) * 100, 2);
+            const fill = col.querySelector('.budget-bar-fill');
+            const value = col.querySelector('.budget-bar-value');
+            const label = col.querySelector('.budget-bar-label');
+            const amount = col.querySelector('.budget-bar-amount');
+            if (fill) {
+                fill.style.height = `${heightPct}%`;
+                fill.style.background = getDivisionColor(index);
+            }
+            if (value) value.textContent = `${(Math.round(pct * 100) / 100)}%`;
+            if (label) label.textContent = division.name || `Division ${index + 1}`;
+            if (amount) amount.textContent = formatBudgetMoney(amounts[index] ?? 0);
+            col.setAttribute('title', `${division.name}: ${pct}% · ${formatBudgetMoney(amounts[index] ?? 0)}`);
+        });
+        return;
+    }
+
+    DOM.budgetBarChart.innerHTML = `
+        <div class="budget-bar-chart-inner">
+            ${divisions.map((division, index) => {
+                const pct = Number(division.percentage) || 0;
+                const heightPct = Math.max((pct / maxPercent) * 100, 2);
+                const color = getDivisionColor(index);
+                const name = escapeHtml(division.name || `Division ${index + 1}`);
+                const pctLabel = Math.round(pct * 100) / 100;
+                const money = formatBudgetMoney(amounts[index] ?? 0);
+                return `
+                    <div class="budget-bar-col" data-division-id="${escapeHtml(division.id)}" title="${name}: ${pctLabel}% · ${escapeHtml(money)}">
+                        <div class="budget-bar-track">
+                            <div class="budget-bar-fill" style="height:${heightPct}%; background:${color};"></div>
+                        </div>
+                        <span class="budget-bar-value">${pctLabel}%</span>
+                        <span class="budget-bar-amount">${escapeHtml(money)}</span>
+                        <span class="budget-bar-label">${name}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+export function renderBudgetDivisionList() {
+    if (!DOM.budgetDivisionList) return;
+
+    const divisions = state.budgetPlan?.divisions || [];
+    const amounts = computeAmounts(state.budgetPlan?.totalAmount, divisions);
+    const canAdd = canAddDivision(divisions);
+    const canRemove = divisions.length > 1;
+
+    if (DOM.budgetAddDivisionBtn) {
+        DOM.budgetAddDivisionBtn.disabled = !canAdd;
+        DOM.budgetAddDivisionBtn.title = canAdd
+            ? 'Add a division'
+            : `Maximum ${BUDGET_MAX_DIVISIONS} divisions, or not enough room above ${BUDGET_MIN_PERCENT}%`;
+    }
+
+    if (!divisions.length) {
+        DOM.budgetDivisionList.innerHTML = `<p class="loading-text">No divisions yet.</p>`;
+    } else {
+        DOM.budgetDivisionList.innerHTML = divisions.map((division, index) => {
+            const color = getDivisionColor(index);
+            const amount = amounts[index] ?? 0;
+            const safeId = escapeHtml(division.id);
+            const safeName = escapeHtml(division.name);
+            const pctDisplay = Number.isFinite(division.percentage)
+                ? (Math.round(division.percentage * 100) / 100)
+                : BUDGET_MIN_PERCENT;
+            return `
+                <div class="budget-division-row" data-division-id="${safeId}">
+                    <span class="budget-division-swatch" style="background:${color}" aria-hidden="true"></span>
+                    <div class="budget-division-fields">
+                        <div class="budget-name-field">
+                            <label class="budget-field-label" for="budget-name-${safeId}">Name</label>
+                            <input type="text" id="budget-name-${safeId}" class="budget-name-input" data-id="${safeId}" value="${safeName}" maxlength="60" placeholder="Division name">
+                        </div>
+                        <div class="budget-pct-field">
+                            <label class="budget-field-label" for="budget-pct-${safeId}">Share</label>
+                            <div class="budget-pct-row">
+                                <input type="number" id="budget-pct-${safeId}" class="budget-pct-input" data-id="${safeId}" min="${BUDGET_MIN_PERCENT}" max="${100 - BUDGET_MIN_PERCENT}" step="1" value="${pctDisplay}">
+                                <span class="budget-pct-suffix">%</span>
+                            </div>
+                        </div>
+                        <p class="budget-division-amount">${formatBudgetMoney(amount)}</p>
+                    </div>
+                    <button type="button" class="btn-text budget-delete-btn" data-id="${safeId}" ${canRemove ? '' : 'disabled'} title="Remove division" aria-label="Remove ${safeName}">×</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (DOM.budgetSumNote) {
+        const sum = divisions.reduce((total, division) => total + (Number(division.percentage) || 0), 0);
+        DOM.budgetSumNote.textContent = `${divisions.length} division${divisions.length === 1 ? '' : 's'} · ${sum.toFixed(2)}% total · min ${BUDGET_MIN_PERCENT}% each · max ${BUDGET_MAX_DIVISIONS}`;
+    }
+}
+
+function syncBudgetSnapModeButtons() {
+    if (!DOM.budgetSnapModeButtons?.length) return;
+    const mode = sanitizeBudgetSnapMode(state.budgetSnapMode);
+    DOM.budgetSnapModeButtons.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.snap === mode);
+        btn.setAttribute('aria-pressed', btn.dataset.snap === mode ? 'true' : 'false');
+    });
+}
+
+export function renderBudgetingView(options = {}) {
+    if (!DOM.budgetingView) return;
+    syncBudgetTotalInput();
+    syncBudgetSnapModeButtons();
+    renderBudgetDivisionList();
+    renderBudgetPie(options);
+    renderBudgetBarChart(options.patch ? { patch: true } : {});
+
+    if (!budgetPieResizeObserver && typeof ResizeObserver !== 'undefined' && DOM.budgetPieHost) {
+        let frame = null;
+        budgetPieResizeObserver = new ResizeObserver(() => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                if (DOM.budgetingView && !DOM.budgetingView.classList.contains('hidden')) {
+                    renderBudgetPie({ skipFocus: true });
+                }
+            });
+        });
+        budgetPieResizeObserver.observe(DOM.budgetPieHost);
+    }
+}
+
+export function getBudgetPieGeometry() {
+    if (!DOM.budgetPieHost) return null;
+    const svg = DOM.budgetPieHost.querySelector('.budget-pie-svg');
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+        svg,
+        rect,
+        cx: rect.left + rect.width / 2,
+        cy: rect.top + rect.height / 2,
+        scaleX: BUDGET_PIE_VIEWBOX / rect.width,
+        scaleY: BUDGET_PIE_VIEWBOX / rect.height
+    };
+}
+
+export function clientPointToBudgetAngle(clientX, clientY) {
+    const geometry = getBudgetPieGeometry();
+    if (!geometry) return null;
+    return Math.atan2(clientY - geometry.cy, clientX - geometry.cx);
+}
+
+function formatBudgetExportMoney(amount) {
+    return `${state.currentCurrency}${roundMoney(amount).toFixed(2)}`;
+}
+
+function formatBudgetExportPercent(pct) {
+    const value = Number(pct) || 0;
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
+function getBudgetPieExportFilename(format) {
+    const date = new Date().toISOString().slice(0, 10);
+    const extension = format === 'jpeg' ? 'jpg' : 'png';
+    return `work-tracker-budget-pie-${date}.${extension}`;
+}
+
+function downloadBudgetExportCanvas(canvas, format) {
+    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpeg' ? 0.95 : undefined;
+    const filename = getBudgetPieExportFilename(format);
+
+    // Prefer data URL download so no blob: fetch goes through a service worker.
+    try {
+        const dataUrl = canvas.toDataURL(mimeType, quality);
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return Promise.resolve();
+    } catch (error) {
+        // Fallback for rare toDataURL size limits
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(error || new Error('Could not create image file.'));
+                    return;
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                resolve();
+            }, mimeType, quality);
+        });
+    }
+}
+
+/**
+ * Render a labeled budget pie + legend to an offscreen canvas (no network / html2canvas).
+ */
+export function createBudgetPieExportCanvas(plan = state.budgetPlan) {
+    const divisions = plan?.divisions || [];
+    if (!divisions.length) {
+        throw new Error('Add at least one division before exporting.');
+    }
+
+    const totalAmount = Math.max(Number(plan?.totalAmount) || 0, 0);
+    const amounts = computeAmounts(totalAmount, divisions);
+    const slices = percentsToAngles(divisions);
+
+    const width = 1600;
+    const height = 1100;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas is not available in this browser.');
+
+    // Background
+    ctx.fillStyle = '#070913';
+    ctx.fillRect(0, 0, width, height);
+
+    // Soft accent glow
+    const glow = ctx.createRadialGradient(420, 520, 40, 420, 520, 420);
+    glow.addColorStop(0, 'rgba(0, 212, 255, 0.16)');
+    glow.addColorStop(1, 'rgba(0, 212, 255, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 900, height);
+
+    // Title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 44px Outfit, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Budget Allocation', 64, 48);
+
+    ctx.fillStyle = '#aab4be';
+    ctx.font = '500 22px Outfit, sans-serif';
+    ctx.fillText(`Total  ${formatBudgetExportMoney(totalAmount)}`, 64, 108);
+
+    // Pie
+    const cx = 420;
+    const cy = 560;
+    const radius = 270;
+
+    slices.forEach((slice, index) => {
+        const color = getDivisionColor(index);
+        let delta = slice.endAngle - slice.startAngle;
+        if (delta < 0) delta += 2 * Math.PI;
+        if (delta <= 0) return;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, slice.startAngle, slice.endAngle, false);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(7, 9, 19, 0.65)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    });
+
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Callout labels for larger slices
+    const minCalloutPercent = 8;
+    slices.forEach((slice, index) => {
+        const pct = Number(divisions[index]?.percentage) || 0;
+        if (pct < minCalloutPercent) return;
+
+        const mid = getSliceMidAngle(slice.startAngle, slice.endAngle);
+        const inner = angleToPoint(cx, cy, radius * 0.82, mid);
+        const elbow = angleToPoint(cx, cy, radius + 28, mid);
+        const onRight = Math.cos(mid) >= 0;
+        const labelX = elbow.x + (onRight ? 18 : -18);
+
+        ctx.beginPath();
+        ctx.moveTo(inner.x, inner.y);
+        ctx.lineTo(elbow.x, elbow.y);
+        ctx.lineTo(labelX, elbow.y);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        const name = divisions[index]?.name || `Division ${index + 1}`;
+        const line1 = name.length > 22 ? `${name.slice(0, 21)}…` : name;
+        const line2 = `${formatBudgetExportPercent(pct)}  ·  ${formatBudgetExportMoney(amounts[index] ?? 0)}`;
+
+        ctx.textAlign = onRight ? 'left' : 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 18px Outfit, sans-serif';
+        ctx.fillText(line1, labelX, elbow.y - 2);
+
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#aab4be';
+        ctx.font = '500 16px Outfit, sans-serif';
+        ctx.fillText(line2, labelX, elbow.y + 4);
+    });
+
+    // Legend panel
+    const legendX = 860;
+    let legendY = 180;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 26px Outfit, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Divisions', legendX, legendY);
+    legendY += 44;
+
+    const rowHeight = Math.min(56, Math.max(36, Math.floor(720 / Math.max(divisions.length, 1))));
+
+    divisions.forEach((division, index) => {
+        const color = getDivisionColor(index);
+        const pct = Number(division.percentage) || 0;
+        const amount = amounts[index] ?? 0;
+        const name = division.name || `Division ${index + 1}`;
+
+        // Row card
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+        roundRectPath(ctx, legendX, legendY, 660, rowHeight - 8, 12);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Swatch
+        ctx.beginPath();
+        ctx.arc(legendX + 24, legendY + (rowHeight - 8) / 2, 9, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        const textY = legendY + (rowHeight - 8) / 2;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 20px Outfit, sans-serif';
+        const nameMax = 280;
+        let displayName = name;
+        while (displayName.length > 3 && ctx.measureText(displayName).width > nameMax) {
+            displayName = `${displayName.slice(0, -2)}…`;
+        }
+        ctx.fillText(displayName, legendX + 48, textY);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#00d4ff';
+        ctx.font = '700 20px Outfit, sans-serif';
+        ctx.fillText(formatBudgetExportPercent(pct), legendX + 430, textY);
+
+        ctx.fillStyle = '#00e676';
+        ctx.font = '600 20px Outfit, sans-serif';
+        ctx.fillText(formatBudgetExportMoney(amount), legendX + 630, textY);
+
+        legendY += rowHeight;
+    });
+
+    // Footer
+    const exportedAt = new Date().toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(170, 180, 190, 0.85)';
+    ctx.font = '500 16px Outfit, sans-serif';
+    ctx.fillText(`Work Tracker  ·  Exported ${exportedAt}`, 64, height - 36);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(`${divisions.length} division${divisions.length === 1 ? '' : 's'}  ·  100%`, width - 64, height - 36);
+
+    return canvas;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+}
+
+export async function exportBudgetPieChart(format = 'png', button = null) {
+    const originalText = button?.textContent;
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Exporting...';
+    }
+
+    try {
+        if (document.fonts?.ready) {
+            await Promise.race([
+                document.fonts.ready,
+                new Promise((resolve) => setTimeout(resolve, 800))
+            ]);
+        }
+        const canvas = createBudgetPieExportCanvas(state.budgetPlan);
+        await downloadBudgetExportCanvas(canvas, format === 'jpeg' ? 'jpeg' : 'png');
+    } catch (error) {
+        console.error('Debug: Budget pie export failed', error);
+        await showAlert('Export Error', error?.message || 'Could not export the pie chart. Please try again.');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalText || 'Export pie chart';
+        }
+    }
 }

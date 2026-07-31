@@ -2,7 +2,7 @@ import { signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstati
 import { auth, provider } from './config.js';
 import { state } from './state.js';
 import { DOM, showAlert } from './ui.js';
-import { loadHistory, loadPercentageCuts, addCustomSession, loadTimeCostItems, loadTimeCostSettings, loadBreaks, loadSavingPotSettings } from './api.js';
+import { loadHistory, loadPercentageCuts, addCustomSession, loadTimeCostItems, loadTimeCostSettings, loadBreaks, loadSavingPotSettings, loadBudgetingSettings } from './api.js';
 import { checkRestorableSession } from './timer.js';
 
 export function setupAuth() {
@@ -46,6 +46,7 @@ export function setupAuth() {
             loadTimeCostItems();
             loadTimeCostSettings();
             loadSavingPotSettings();
+            loadBudgetingSettings();
             checkRestorableSession();
         } else {
             state.currentUser = null;

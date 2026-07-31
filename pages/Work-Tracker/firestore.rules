@@ -24,9 +24,12 @@ service cloud.firestore {
         && request.resource.data.rate >= 0
         && request.resource.data.earnings is number
         && request.resource.data.earnings >= 0
-        && (!('company' in request.resource.data) || request.resource.data.company is string)
-        && (!('project' in request.resource.data) || request.resource.data.project is string)
-        && (!('focused' in request.resource.data) || request.resource.data.focused is bool);
+        && (!('company' in request.resource.data)
+            || request.resource.data.company is string)
+        && (!('project' in request.resource.data)
+            || request.resource.data.project is string)
+        && (!('focused' in request.resource.data)
+            || request.resource.data.focused is bool);
     }
 
     function isValidBreak() {
@@ -45,6 +48,14 @@ service cloud.firestore {
             || (request.resource.data.savedAmount is number
                 && request.resource.data.savedAmount >= 0
                 && request.resource.data.savedAmount <= request.resource.data.cost));
+    }
+
+    function isValidBudgetingSettings() {
+      return request.resource.data.totalAmount is number
+        && request.resource.data.totalAmount >= 0
+        && request.resource.data.divisions is list
+        && request.resource.data.divisions.size() >= 1
+        && request.resource.data.divisions.size() <= 16;
     }
 
     match /users/{userId} {
@@ -68,7 +79,10 @@ service cloud.firestore {
       }
 
       match /settings/{settingId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && (
+          settingId != 'budgeting' || isValidBudgetingSettings()
+        );
       }
     }
   }

@@ -84,6 +84,7 @@
             <div class="view-switcher">
                 <button id="view-dashboard-btn" class="btn-outline active">Dashboard</button>
                 <button id="view-time-cost-btn" class="btn-outline">Time Cost</button>
+                <button id="view-budgeting-btn" class="btn-outline">Budgeting</button>
                 <button id="view-settings-btn" class="btn-outline">Settings</button>
             </div>
 
@@ -620,6 +621,66 @@
                     </div>
 
                     <button id="tc-save-btn" class="btn-primary" style="margin-top: 20px; width: 100%;">Save Item</button>
+                </section>
+            </div>
+
+            <!-- Budgeting View -->
+            <div id="budgeting-view" class="hidden">
+                <section class="card budgeting-widget">
+                    <h2 class="widget-title">Budgeting</h2>
+                    <p class="budgeting-intro">
+                        Split a total amount across divisions. Drag the points on the pie, or type a percentage below.
+                    </p>
+
+                    <div class="input-group budgeting-total-group">
+                        <label for="budget-total-input">Total budget (<span class="currency-symbol">£</span>)</label>
+                        <input type="number" id="budget-total-input" min="0" step="0.01" placeholder="e.g. 10000" inputmode="decimal">
+                    </div>
+
+                    <div class="budgeting-layout">
+                        <div class="budgeting-pie-panel">
+                            <div id="budget-pie-host" class="budget-pie-host" aria-label="Budget pie chart"></div>
+                            <p class="budgeting-pie-hint" id="budget-pie-hint">Drag the handles on the pie edge to adjust shares.</p>
+                            <div class="budgeting-snap-control">
+                                <span class="budget-field-label" id="budget-snap-label">Snap handles</span>
+                                <div class="budget-snap-modes" role="group" aria-labelledby="budget-snap-label">
+                                    <button type="button" class="budget-snap-mode-btn" data-snap="off">Off</button>
+                                    <button type="button" class="budget-snap-mode-btn" data-snap="1">1%</button>
+                                    <button type="button" class="budget-snap-mode-btn active" data-snap="5">5%</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="budgeting-list-panel">
+                            <div class="budgeting-list-header">
+                                <h3 class="budgeting-list-title">Divisions</h3>
+                                <button type="button" id="budget-add-division-btn" class="btn-outline btn-small">Add division</button>
+                            </div>
+                            <div id="budget-division-list" class="budget-division-list" aria-live="polite">
+                                <!-- Division rows injected by ui.js -->
+                            </div>
+                            <p class="budgeting-sum-note" id="budget-sum-note"></p>
+                        </div>
+                    </div>
+
+                    <div class="budgeting-bar-section">
+                        <h3 class="budgeting-list-title">Division bar chart</h3>
+                        <div id="budget-bar-chart" class="budget-bar-chart" role="img" aria-label="Budget divisions as a bar chart"></div>
+                    </div>
+
+                    <div class="budgeting-actions">
+                        <button type="button" id="budget-equalize-btn" class="btn-outline">Reset to even split</button>
+                        <div class="budget-export-group">
+                            <span class="budget-field-label" id="budget-export-format-label">Export format</span>
+                            <div class="budget-export-controls">
+                                <div class="budget-export-formats" role="group" aria-labelledby="budget-export-format-label">
+                                    <button type="button" class="budget-export-format-btn active" data-format="png" aria-pressed="true">PNG</button>
+                                    <button type="button" class="budget-export-format-btn" data-format="jpeg" aria-pressed="false">JPEG</button>
+                                </div>
+                                <button type="button" id="budget-export-btn" class="btn-outline">Export pie chart</button>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             </div>
 

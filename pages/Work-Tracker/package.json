@@ -2,6 +2,6 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test js/savingPots.test.js"
+    "test": "node --test js/savingPots.test.js js/budgeting.test.js"
   }
 }

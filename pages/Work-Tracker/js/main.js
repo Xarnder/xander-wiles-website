@@ -37,7 +37,13 @@ import {
     updateTimerStartDurationPreview,
     updateSessionModalDurationPreview,
     updateBreakModalDurationPreviews,
-    clearBreakModalDurationPreviews
+    clearBreakModalDurationPreviews,
+    renderBudgetingView,
+    renderBudgetPie,
+    clientPointToBudgetAngle,
+    renderBudgetDivisionListAmountsOnly,
+    exportBudgetPieChart,
+    showConfirm
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -75,12 +81,27 @@ import {
     updateCalendarEditMode,
     getBreaksViewDate,
     setBreaksViewDate,
-    shiftBreaksViewDate
+    shiftBreaksViewDate,
+    updateBudgetPlan,
+    updateBudgetSnapMode
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot } from './api.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings } from './api.js';
 import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
+import {
+    BUDGET_MIN_PERCENT,
+    addDivision,
+    applyBoundaryDrag,
+    applyTypedPercentage,
+    equalizeDivisions,
+    getSnapOptionsForMode,
+    percentToAngle,
+    removeDivision,
+    renameDivision
+} from './budgeting.js';
 
 let percentageCutsSaveTimeout = null;
+let budgetingSaveTimeout = null;
+let budgetDragState = null;
 
 function schedulePercentageCutsAutosave() {
     updatePercentageCuts(getPercentageCutsFromWidget());
@@ -94,6 +115,43 @@ function schedulePercentageCutsAutosave() {
     percentageCutsSaveTimeout = setTimeout(() => {
         savePercentageCuts(state.percentageCuts, { silent: true });
     }, 1200);
+}
+
+function scheduleBudgetingAutosave() {
+    clearTimeout(budgetingSaveTimeout);
+    budgetingSaveTimeout = setTimeout(() => {
+        saveBudgetingSettings(state.budgetPlan, { silent: true });
+    }, 800);
+}
+
+function applyBudgetPlanAndRender(plan, renderOptions = {}) {
+    updateBudgetPlan(plan);
+    renderBudgetingView(renderOptions);
+    scheduleBudgetingAutosave();
+}
+
+function setActiveView(viewName) {
+    const views = {
+        dashboard: DOM.dashboardView,
+        timeCost: DOM.timeCostView,
+        budgeting: DOM.budgetingView,
+        settings: DOM.settingsView
+    };
+    const buttons = {
+        dashboard: DOM.viewDashboardBtn,
+        timeCost: DOM.viewTimeCostBtn,
+        budgeting: DOM.viewBudgetingBtn,
+        settings: DOM.viewSettingsBtn
+    };
+
+    Object.entries(views).forEach(([name, el]) => {
+        if (!el) return;
+        el.classList.toggle('hidden', name !== viewName);
+    });
+    Object.entries(buttons).forEach(([name, el]) => {
+        if (!el) return;
+        el.classList.toggle('active', name === viewName);
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -191,33 +249,252 @@ document.addEventListener('DOMContentLoaded', () => {
     // View Switcher Events
     if (DOM.viewDashboardBtn && DOM.viewTimeCostBtn && DOM.viewSettingsBtn) {
         DOM.viewDashboardBtn.addEventListener('click', () => {
-            DOM.viewDashboardBtn.classList.add('active');
-            DOM.viewTimeCostBtn.classList.remove('active');
-            DOM.viewSettingsBtn.classList.remove('active');
-            DOM.dashboardView.classList.remove('hidden');
-            DOM.timeCostView.classList.add('hidden');
-            DOM.settingsView.classList.add('hidden');
+            setActiveView('dashboard');
         });
 
         DOM.viewTimeCostBtn.addEventListener('click', () => {
-            DOM.viewTimeCostBtn.classList.add('active');
-            DOM.viewDashboardBtn.classList.remove('active');
-            DOM.viewSettingsBtn.classList.remove('active');
-            DOM.timeCostView.classList.remove('hidden');
-            DOM.dashboardView.classList.add('hidden');
-            DOM.settingsView.classList.add('hidden');
-            renderTimeCostBreakdown(); // Initialize
-            renderSavedTimeCostItems(); // Initialize
+            setActiveView('timeCost');
+            renderTimeCostBreakdown();
+            renderSavedTimeCostItems();
         });
 
+        if (DOM.viewBudgetingBtn) {
+            DOM.viewBudgetingBtn.addEventListener('click', () => {
+                setActiveView('budgeting');
+                renderBudgetingView();
+            });
+        }
+
         DOM.viewSettingsBtn.addEventListener('click', () => {
-            DOM.viewSettingsBtn.classList.add('active');
-            DOM.viewDashboardBtn.classList.remove('active');
-            DOM.viewTimeCostBtn.classList.remove('active');
-            DOM.settingsView.classList.remove('hidden');
-            DOM.dashboardView.classList.add('hidden');
-            DOM.timeCostView.classList.add('hidden');
-            initSettingsView(); // Initialize
+            setActiveView('settings');
+            initSettingsView();
+        });
+    }
+
+    // Budgeting events
+    if (DOM.budgetSnapModes) {
+        DOM.budgetSnapModes.addEventListener('click', (event) => {
+            const btn = event.target.closest('.budget-snap-mode-btn');
+            if (!btn || !btn.dataset.snap) return;
+            updateBudgetSnapMode(btn.dataset.snap);
+            renderBudgetingView({ skipFocus: true });
+        });
+    }
+
+    if (DOM.budgetTotalInput) {
+        DOM.budgetTotalInput.addEventListener('input', () => {
+            const raw = DOM.budgetTotalInput.value.trim();
+            const parsed = raw === '' ? 0 : Number(raw);
+            const totalAmount = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+            applyBudgetPlanAndRender({
+                ...state.budgetPlan,
+                totalAmount
+            }, { skipFocus: true });
+        });
+    }
+
+    if (DOM.budgetAddDivisionBtn) {
+        DOM.budgetAddDivisionBtn.addEventListener('click', async () => {
+            const result = addDivision(state.budgetPlan.divisions, 'New');
+            if (result.error) {
+                await showAlert('Cannot Add Division', result.error);
+                return;
+            }
+            applyBudgetPlanAndRender({
+                ...state.budgetPlan,
+                divisions: result.divisions
+            });
+        });
+    }
+
+    if (DOM.budgetEqualizeBtn) {
+        DOM.budgetEqualizeBtn.addEventListener('click', async () => {
+            const count = state.budgetPlan?.divisions?.length || 0;
+            if (count < 1) return;
+
+            const confirmed = await showConfirm(
+                'Reset to even split',
+                `Make all ${count} division${count === 1 ? '' : 's'} equal? This will overwrite your current percentage split.`
+            );
+            if (!confirmed) return;
+
+            const result = equalizeDivisions(state.budgetPlan.divisions);
+            if (result.error) {
+                await showAlert('Cannot Equalize', result.error);
+                return;
+            }
+            applyBudgetPlanAndRender({
+                ...state.budgetPlan,
+                divisions: result.divisions
+            });
+        });
+    }
+
+    if (DOM.budgetExportFormats) {
+        DOM.budgetExportFormats.addEventListener('click', (event) => {
+            const btn = event.target.closest('.budget-export-format-btn');
+            if (!btn) return;
+            DOM.budgetExportFormatButtons.forEach((el) => {
+                const active = el === btn;
+                el.classList.toggle('active', active);
+                el.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        });
+    }
+
+    if (DOM.budgetExportBtn) {
+        DOM.budgetExportBtn.addEventListener('click', () => {
+            const active = DOM.budgetExportFormats?.querySelector('.budget-export-format-btn.active');
+            const format = active?.dataset?.format === 'jpeg' ? 'jpeg' : 'png';
+            exportBudgetPieChart(format, DOM.budgetExportBtn);
+        });
+    }
+
+    if (DOM.budgetDivisionList) {
+        DOM.budgetDivisionList.addEventListener('change', async (event) => {
+            const nameInput = event.target.closest('.budget-name-input');
+            const pctInput = event.target.closest('.budget-pct-input');
+
+            if (nameInput) {
+                const result = renameDivision(state.budgetPlan.divisions, nameInput.dataset.id, nameInput.value);
+                if (result.error) {
+                    await showAlert('Invalid Name', result.error);
+                    renderBudgetingView({ skipFocus: true });
+                    return;
+                }
+                applyBudgetPlanAndRender({
+                    ...state.budgetPlan,
+                    divisions: result.divisions
+                }, { skipFocus: true });
+                return;
+            }
+
+            if (pctInput) {
+                const result = applyTypedPercentage(
+                    state.budgetPlan.divisions,
+                    pctInput.dataset.id,
+                    pctInput.value
+                );
+                if (!result.applied) {
+                    await showAlert('Invalid Percentage', result.error || 'Could not update percentage.');
+                    renderBudgetingView({ skipFocus: true });
+                    return;
+                }
+                applyBudgetPlanAndRender({
+                    ...state.budgetPlan,
+                    divisions: result.divisions
+                }, { skipFocus: true });
+                if (result.error) {
+                    await showAlert('Percentage Adjusted', result.error);
+                }
+            }
+        });
+
+        DOM.budgetDivisionList.addEventListener('click', async (event) => {
+            const deleteBtn = event.target.closest('.budget-delete-btn');
+            if (!deleteBtn || deleteBtn.disabled) return;
+
+            const division = state.budgetPlan.divisions.find((item) => item.id === deleteBtn.dataset.id);
+            const label = division?.name ? `"${division.name}"` : 'this division';
+            const confirmed = await showConfirm(
+                'Remove Division',
+                `Remove ${label}? Its share will be added to the largest remaining division.`
+            );
+            if (!confirmed) return;
+
+            const result = removeDivision(state.budgetPlan.divisions, deleteBtn.dataset.id);
+            if (result.error) {
+                await showAlert('Cannot Remove', result.error);
+                return;
+            }
+            applyBudgetPlanAndRender({
+                ...state.budgetPlan,
+                divisions: result.divisions
+            });
+        });
+    }
+
+    function endBudgetDrag() {
+        if (!budgetDragState) return;
+        budgetDragState = null;
+        if (DOM.budgetPieHost) {
+            DOM.budgetPieHost.classList.remove('is-dragging');
+        }
+        scheduleBudgetingAutosave();
+    }
+
+    function onBudgetPointerMove(event) {
+        if (!budgetDragState) return;
+        const angle = clientPointToBudgetAngle(event.clientX, event.clientY);
+        if (angle == null) return;
+        const nextDivisions = applyBoundaryDrag(
+            state.budgetPlan.divisions,
+            budgetDragState.boundaryIndex,
+            angle,
+            getSnapOptionsForMode(state.budgetSnapMode)
+        );
+        updateBudgetPlan({
+            ...state.budgetPlan,
+            divisions: nextDivisions
+        });
+        renderBudgetPie({ patch: true, skipFocus: true });
+        renderBudgetDivisionListAmountsOnly();
+    }
+
+    if (DOM.budgetPieHost) {
+        DOM.budgetPieHost.addEventListener('pointerdown', (event) => {
+            const handle = event.target.closest('.budget-pie-handle');
+            if (!handle) return;
+            event.preventDefault();
+            const boundaryIndex = Number(handle.dataset.boundaryIndex);
+            if (!Number.isFinite(boundaryIndex)) return;
+            budgetDragState = { boundaryIndex, pointerId: event.pointerId };
+            DOM.budgetPieHost.classList.add('is-dragging');
+            handle.setPointerCapture?.(event.pointerId);
+            handle.focus({ preventScroll: true });
+        });
+
+        DOM.budgetPieHost.addEventListener('pointermove', onBudgetPointerMove);
+        DOM.budgetPieHost.addEventListener('pointerup', endBudgetDrag);
+        DOM.budgetPieHost.addEventListener('pointercancel', endBudgetDrag);
+
+        DOM.budgetPieHost.addEventListener('keydown', (event) => {
+            const handle = event.target.closest('.budget-pie-handle');
+            if (!handle) return;
+            const boundaryIndex = Number(handle.dataset.boundaryIndex);
+            if (!Number.isFinite(boundaryIndex)) return;
+
+            const snapOptions = getSnapOptionsForMode(state.budgetSnapMode);
+            const step = snapOptions.snap
+                ? snapOptions.snapStep
+                : (event.shiftKey ? 5 : 1);
+            let delta = 0;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowUp') delta = step;
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') delta = -step;
+            if (!delta) return;
+
+            event.preventDefault();
+            const divisions = state.budgetPlan.divisions;
+            const left = divisions[boundaryIndex];
+            if (!left) return;
+
+            const rightIndex = (boundaryIndex + 1) % divisions.length;
+            const pairTotal = left.percentage + divisions[rightIndex].percentage;
+            const maxLeft = pairTotal - BUDGET_MIN_PERCENT;
+            const nextLeft = Math.min(Math.max(left.percentage + delta, BUDGET_MIN_PERCENT), maxLeft);
+            const anglePercent = divisions
+                .slice(0, boundaryIndex)
+                .reduce((sum, item) => sum + item.percentage, 0) + nextLeft;
+            const nextDivisions = applyBoundaryDrag(
+                divisions,
+                boundaryIndex,
+                percentToAngle(anglePercent % 100),
+                snapOptions
+            );
+            applyBudgetPlanAndRender({
+                ...state.budgetPlan,
+                divisions: nextDivisions
+            }, { focusedBoundaryIndex: boundaryIndex });
         });
     }
 

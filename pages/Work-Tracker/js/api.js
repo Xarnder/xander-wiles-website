@@ -1,6 +1,6 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
 import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
 import {
@@ -12,6 +12,7 @@ import {
     getItemSavedAmount,
     roundMoney
 } from './savingPots.js';
+import { createSeedBudgetPlan, sanitizeBudgetPlan, validateBudgetPlan } from './budgeting.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -19,6 +20,22 @@ function getPercentageCutsRef() {
 
 function getSavingPotSettingsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "savingPots");
+}
+
+function getBudgetingSettingsRef() {
+    return doc(db, "users", state.currentUser.uid, "settings", "budgeting");
+}
+
+function serializeBudgetPlan(plan) {
+    const sanitized = sanitizeBudgetPlan(plan);
+    return {
+        totalAmount: sanitized.totalAmount,
+        divisions: sanitized.divisions.map((division) => ({
+            id: division.id,
+            name: division.name,
+            percentage: division.percentage
+        }))
+    };
 }
 
 function serializePercentageCuts(cuts) {
@@ -407,6 +424,87 @@ export function loadSavingPotSettings() {
         }
     }, (error) => {
         console.error("Debug: Saving pot settings snapshot error", error);
+    });
+}
+
+export async function saveBudgetingSettings(plan, options = {}) {
+    const silent = options.silent === true;
+
+    if (!state.currentUser) {
+        if (!silent) {
+            showAlert("Not Signed In", "Please sign in before saving your budget.");
+        }
+        return false;
+    }
+
+    const previous = { ...state.budgetPlan, divisions: [...(state.budgetPlan.divisions || [])] };
+    const sanitized = updateBudgetPlan(plan);
+    const validation = validateBudgetPlan(sanitized);
+    if (!validation.ok) {
+        updateBudgetPlan(previous);
+        if (!silent) {
+            showAlert("Invalid Budget", validation.error || "Could not save budget.");
+        }
+        return false;
+    }
+
+    try {
+        await setDoc(getBudgetingSettingsRef(), {
+            ...serializeBudgetPlan(sanitized),
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        console.log("Debug: Budgeting settings saved to Firebase");
+        return true;
+    } catch (e) {
+        console.error("Debug: Error saving budgeting settings: ", e);
+        updateBudgetPlan(previous);
+        import('./ui.js').then((module) => module.renderBudgetingView?.());
+        if (!silent) {
+            showAlert("Save Error", "Error saving budget! Please check your internet connection.");
+        }
+        return false;
+    }
+}
+
+export function loadBudgetingSettings() {
+    if (!state.currentUser) return;
+
+    const settingsRef = getBudgetingSettingsRef();
+
+    onSnapshot(settingsRef, async (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            updateBudgetPlan({
+                totalAmount: data.totalAmount,
+                divisions: data.divisions
+            });
+            import('./ui.js').then((module) => {
+                if (typeof module.renderBudgetingView === 'function') {
+                    module.renderBudgetingView();
+                }
+            });
+            console.log("Debug: Budgeting settings updated from Firebase");
+            return;
+        }
+
+        const seed = createSeedBudgetPlan();
+        updateBudgetPlan(seed);
+        try {
+            await setDoc(settingsRef, {
+                ...serializeBudgetPlan(seed),
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            console.log("Debug: Seed budgeting settings written to Firebase");
+        } catch (e) {
+            console.error("Debug: Error seeding budgeting settings: ", e);
+        }
+        import('./ui.js').then((module) => {
+            if (typeof module.renderBudgetingView === 'function') {
+                module.renderBudgetingView();
+            }
+        });
+    }, (error) => {
+        console.error("Debug: Budgeting settings snapshot error", error);
     });
 }
 

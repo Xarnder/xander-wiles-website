@@ -98,7 +98,6 @@ declare module '$env/static/private' {
 	export const TERM_PROGRAM: string;
 	export const GOOGLE_APPLICATION_CREDENTIALS: string;
 	export const VITE_FIREBASE_APP_ID: string;
-	export const SECURITYSESSIONID: string;
 	export const GIT_ASKPASS: string;
 	export const PWD: string;
 	export const NODE: string;
@@ -107,7 +106,6 @@ declare module '$env/static/private' {
 	export const TERM_PROGRAM_VERSION: string;
 	export const VSCODE_GIT_ASKPASS_MAIN: string;
 	export const npm_package_version: string;
-	export const LaunchInstanceID: string;
 }
 
 /**
@@ -146,14 +144,14 @@ declare module '$env/static/private' {
 declare module '$env/static/public' {
 	export const PUBLIC_HOME_DESIGN_FIREBASE_PROJECT_ID: string;
 	export const PUBLIC_WORK_FIREBASE_APP_ID: string;
+	export const PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_STORY_FIREBASE_APP_ID: string;
 	export const PUBLIC_STORY_FIREBASE_API_KEY: string;
 	export const PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_API_KEY: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
-	export const PUBLIC_STORY_FIREBASE_APP_ID: string;
-	export const PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
 	export const PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 	export const PUBLIC_STORY_FIREBASE_PROJECT_ID: string;
@@ -297,7 +295,6 @@ declare module '$env/dynamic/private' {
 		TERM_PROGRAM: string;
 		GOOGLE_APPLICATION_CREDENTIALS: string;
 		VITE_FIREBASE_APP_ID: string;
-		SECURITYSESSIONID: string;
 		GIT_ASKPASS: string;
 		PWD: string;
 		NODE: string;
@@ -306,7 +303,6 @@ declare module '$env/dynamic/private' {
 		TERM_PROGRAM_VERSION: string;
 		VSCODE_GIT_ASKPASS_MAIN: string;
 		npm_package_version: string;
-		LaunchInstanceID: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;
 	}
@@ -364,14 +360,14 @@ declare module '$env/dynamic/public' {
 	export const env: {
 		PUBLIC_HOME_DESIGN_FIREBASE_PROJECT_ID: string;
 		PUBLIC_WORK_FIREBASE_APP_ID: string;
+		PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_STORY_FIREBASE_APP_ID: string;
 		PUBLIC_STORY_FIREBASE_API_KEY: string;
 		PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_API_KEY: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
-		PUBLIC_STORY_FIREBASE_APP_ID: string;
-		PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
 		PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 		PUBLIC_STORY_FIREBASE_PROJECT_ID: string;

@@ -1,3 +1,5 @@
+import { createSeedBudgetPlan, sanitizeBudgetPlan, sanitizeBudgetSnapMode, BUDGET_SNAP_MODES } from './budgeting.js';
+
 const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
@@ -201,6 +203,17 @@ function loadSavingPotPoolScope() {
     return ALLOWED_SAVING_POT_POOL_SCOPES.has(saved) ? saved : 'all_time';
 }
 
+function loadBudgetSnapMode() {
+    const savedMode = localStorage.getItem('work_tracker_budget_snap_mode');
+    if (savedMode != null) {
+        return sanitizeBudgetSnapMode(savedMode);
+    }
+    // Migrate previous boolean toggle (default was snap-to-5% on).
+    const legacy = localStorage.getItem('work_tracker_budget_snap_to_five');
+    if (legacy === 'false') return BUDGET_SNAP_MODES.OFF;
+    return BUDGET_SNAP_MODES.FIVE;
+}
+
 export const state = {
     currentUser: null,
     timerInterval: null,
@@ -265,7 +278,10 @@ export const state = {
     csvExportPeriodFrom: localStorage.getItem('work_tracker_csv_export_from') || '',
     csvExportPeriodTo: localStorage.getItem('work_tracker_csv_export_to') || '',
     csvExportCompany: localStorage.getItem('work_tracker_csv_export_company') || '',
-    savingPotPoolScope: loadSavingPotPoolScope()
+    savingPotPoolScope: loadSavingPotPoolScope(),
+    budgetPlan: createSeedBudgetPlan(),
+    budgetPlanHydrated: false,
+    budgetSnapMode: loadBudgetSnapMode()
 };
 
 export function updateCurrency(newCurrency) {
@@ -467,6 +483,18 @@ export function updateSavingPotPoolScope(scope) {
     state.savingPotPoolScope = ALLOWED_SAVING_POT_POOL_SCOPES.has(scope) ? scope : 'all_time';
     localStorage.setItem('work_tracker_saving_pot_pool_scope', state.savingPotPoolScope);
     return state.savingPotPoolScope;
+}
+
+export function updateBudgetPlan(plan) {
+    state.budgetPlan = sanitizeBudgetPlan(plan);
+    state.budgetPlanHydrated = true;
+    return state.budgetPlan;
+}
+
+export function updateBudgetSnapMode(mode) {
+    state.budgetSnapMode = sanitizeBudgetSnapMode(mode);
+    localStorage.setItem('work_tracker_budget_snap_mode', state.budgetSnapMode);
+    return state.budgetSnapMode;
 }
 
 export function updateCalendarEditMode(mode) {
