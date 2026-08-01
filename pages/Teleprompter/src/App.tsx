@@ -513,10 +513,12 @@ export default function App() {
           recording={tp.speech.recordingActive}
           recordingStartedAt={tp.speech.recordingStartedAt}
           fillColumn={
+            compactChrome ||
             tp.settings.cameraPreviewFill ||
             tp.settings.cameraPreviewSize === 'fullscreen'
           }
           footer={
+            compactChrome ||
             tp.settings.cameraPreviewFill ||
             tp.settings.cameraPreviewSize === 'fullscreen' ? undefined : (
               <ScriptStats

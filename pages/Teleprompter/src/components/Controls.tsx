@@ -290,6 +290,7 @@ export function Controls({
   const [resetSettingsOpen, setResetSettingsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>('script')
+  const [advancedSettings, setAdvancedSettings] = useState(false)
   const mobileChromeRef = useRef<HTMLDivElement>(null)
   const isLiveScroll = status === 'listening' && alignState === 'tracking'
   const isHoldingOffScript = status === 'listening' && alignState === 'off_script'
@@ -356,7 +357,7 @@ export function Controls({
   }, [settingsOpen, editorOpen, howToOpen])
 
   useEffect(() => {
-    if (!settingsOpen) return
+    if (!settingsOpen || !advancedSettings) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       const target = e.target
@@ -380,7 +381,13 @@ export function Controls({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, settingsTab])
+  }, [settingsOpen, settingsTab, advancedSettings])
+
+  useEffect(() => {
+    if (!settingsOpen || !advancedSettings) return
+    const active = document.getElementById(`settings-tab-${settingsTab}`)
+    active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [settingsOpen, advancedSettings, settingsTab])
 
   const runAndCloseMenu = (fn: () => void) => {
     setMenuOpen(false)
@@ -559,39 +566,246 @@ export function Controls({
         </button>
       </div>
 
-      <div
-        className="settings-tabs"
-        role="tablist"
-        aria-label="Settings categories"
-      >
-        {SETTINGS_TABS.map((tab) => {
-          const selected = settingsTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`settings-tab-${tab.id}`}
-              aria-selected={selected}
-              aria-controls={`settings-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              className={`settings-tab${selected ? ' is-active' : ''}`}
-              onClick={() => setSettingsTab(tab.id)}
-            >
-              <span className="btn-label">{tab.label}</span>
-            </button>
-          )
-        })}
+      <div className="settings-mode-bar">
+        <label className="toggle settings-mode-toggle">
+          <input
+            type="checkbox"
+            checked={advancedSettings}
+            onChange={(e) => setAdvancedSettings(e.target.checked)}
+          />
+          <span>Advanced settings</span>
+        </label>
+        {!advancedSettings ? (
+          <p className="settings-hint settings-mode-hint">
+            Common options only. Turn on Advanced for fine-tuning.
+          </p>
+        ) : null}
       </div>
+
+      {advancedSettings ? (
+        <div
+          className="settings-tabs"
+          role="tablist"
+          aria-label="Settings categories"
+        >
+          {SETTINGS_TABS.map((tab) => {
+            const selected = settingsTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`settings-tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls={`settings-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                className={`settings-tab${selected ? ' is-active' : ''}`}
+                onClick={() => setSettingsTab(tab.id)}
+              >
+                <span className="btn-label">{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       <div className="settings-panel-body">
         <div
           className="settings-grid"
-          role="tabpanel"
-          id={`settings-panel-${settingsTab}`}
-          aria-labelledby={`settings-tab-${settingsTab}`}
+          role={advancedSettings ? 'tabpanel' : undefined}
+          id={
+            advancedSettings ? `settings-panel-${settingsTab}` : 'settings-panel-simple'
+          }
+          aria-labelledby={
+            advancedSettings ? `settings-tab-${settingsTab}` : undefined
+          }
+          aria-label={advancedSettings ? undefined : 'Simple settings'}
         >
-          {settingsTab === 'script' ? (
+          {!advancedSettings ? (
+            <>
+              <p className="settings-section-label">Script</p>
+              <SliderField
+                label="Font size"
+                valueLabel={`${settings.fontSize}px`}
+                min={FONT_SIZE_MIN}
+                max={FONT_SIZE_MAX}
+                value={settings.fontSize}
+                onChange={(fontSize) => onUpdateSettings({ fontSize })}
+                onReset={() => resetSlider('fontSize')}
+                isDefault={settings.fontSize === DEFAULT_SETTINGS.fontSize}
+              />
+              <SliderField
+                label="Line width"
+                valueLabel={`${settings.lineWidth}ch`}
+                min={LINE_WIDTH_MIN}
+                max={LINE_WIDTH_MAX}
+                value={settings.lineWidth}
+                onChange={(lineWidth) => onUpdateSettings({ lineWidth })}
+                onReset={() => resetSlider('lineWidth')}
+                isDefault={settings.lineWidth === DEFAULT_SETTINGS.lineWidth}
+              />
+              <label className="settings-mic">
+                <span>Display mode</span>
+                <select
+                  value={settings.displayMode}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      displayMode: e.target.value as DisplayMode,
+                    })
+                  }
+                >
+                  <option value="script">Full script</option>
+                  <option value="one_word">One word (prev + next faded)</option>
+                  <option value="two_word">Two words (said + next)</option>
+                </select>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.mirror}
+                  onChange={(e) =>
+                    onUpdateSettings({ mirror: e.target.checked })
+                  }
+                />
+                <span>Script mirror</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.boldText}
+                  onChange={(e) =>
+                    onUpdateSettings({ boldText: e.target.checked })
+                  }
+                />
+                <span>Bold text</span>
+              </label>
+
+              <p className="settings-section-label">Look</p>
+              <label
+                className={`toggle${settings.oledMode || compactChrome ? ' is-disabled' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.darkMode || compactChrome}
+                  disabled={settings.oledMode || compactChrome}
+                  onChange={(e) =>
+                    onUpdateSettings({ darkMode: e.target.checked })
+                  }
+                />
+                <span>Dark mode</span>
+              </label>
+              <label className={`toggle${compactChrome ? ' is-disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={settings.oledMode || compactChrome}
+                  disabled={compactChrome}
+                  onChange={(e) =>
+                    onUpdateSettings({ oledMode: e.target.checked })
+                  }
+                />
+                <span>OLED black mode</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.chromeBottom}
+                  onChange={(e) =>
+                    onUpdateSettings({ chromeBottom: e.target.checked })
+                  }
+                />
+                <span>Controls at bottom</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.compactMode}
+                  onChange={(e) =>
+                    onUpdateSettings({ compactMode: e.target.checked })
+                  }
+                />
+                <span>Compact mode</span>
+              </label>
+
+              <p className="settings-section-label">Speech &amp; camera</p>
+              <label className="settings-mic">
+                <span>Microphone</span>
+                <select
+                  value={deviceId ?? ''}
+                  onChange={(e) => onDeviceChange(e.target.value)}
+                >
+                  {devices.length === 0 && (
+                    <option value="">Default microphone</option>
+                  )}
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="settings-mic">
+                <span>Camera (when Record is on)</span>
+                <select
+                  value={facingMode}
+                  onChange={(e) =>
+                    onFacingModeChange(e.target.value as FacingMode)
+                  }
+                  disabled={
+                    !recordingSupported || recordingActive || recordingBusy
+                  }
+                >
+                  <option value="user">Front camera</option>
+                  <option value="environment">Back camera</option>
+                </select>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.askRecordOnStart}
+                  onChange={(e) =>
+                    onUpdateSettings({ askRecordOnStart: e.target.checked })
+                  }
+                />
+                <span>Ask to record when starting</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.showStats}
+                  onChange={(e) =>
+                    onUpdateSettings({ showStats: e.target.checked })
+                  }
+                />
+                <span>Show stats</span>
+              </label>
+
+              <p className="settings-section-label">Model</p>
+              <p className="settings-hint settings-hint-span">
+                Download or refresh the on-device speech model. Your script and
+                microphone choice are kept when you reset settings.
+              </p>
+              <div className="settings-model-actions">
+                <button
+                  type="button"
+                  className="btn settings-preload"
+                  onClick={onPreload}
+                >
+                  <BtnLabel>
+                    {modelReady ? 'Reload model' : 'Preload model'}
+                  </BtnLabel>
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => setResetSettingsOpen(true)}
+                >
+                  <BtnLabel>Reset settings</BtnLabel>
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {advancedSettings && settingsTab === 'script' ? (
             <>
               <SliderField
                 label="Font size"
@@ -769,7 +983,7 @@ export function Controls({
             </>
           ) : null}
 
-          {settingsTab === 'look' ? (
+          {advancedSettings && settingsTab === 'look' ? (
             <>
               <label className="toggle">
                 <input
@@ -812,8 +1026,9 @@ export function Controls({
                 <span>Compact mode</span>
               </label>
               <p className="settings-hint settings-hint-span">
-                Sticky Start / Record / menu chrome. Also turns on automatically
-                on small screens and phone landscape.
+                Sticky Start / Record / menu chrome. On phones in portrait the
+                bar spans the full width so the script stays readable; also
+                turns on automatically on small screens and phone landscape.
               </p>
               <label
                 className={`toggle${settings.oledMode || compactChrome ? ' is-disabled' : ''}`}
@@ -861,7 +1076,7 @@ export function Controls({
             </>
           ) : null}
 
-          {settingsTab === 'speech' ? (
+          {advancedSettings && settingsTab === 'speech' ? (
             <>
               <SliderField
                 label="Match confidence"
@@ -989,7 +1204,7 @@ export function Controls({
             </>
           ) : null}
 
-          {settingsTab === 'camera' ? (
+          {advancedSettings && settingsTab === 'camera' ? (
             <>
               <label className="settings-mic">
                 <span>Camera (when Record is on)</span>
@@ -1034,9 +1249,11 @@ export function Controls({
                     })
                   }
                 >
-                  <option value="quarter">Quarter of screen</option>
-                  <option value="half">Half of screen</option>
-                  <option value="three_quarters">Three quarters</option>
+                  <option value="quarter">Quarter (top on phones)</option>
+                  <option value="half">Half (top on phones)</option>
+                  <option value="three_quarters">
+                    Three quarters (top on phones)
+                  </option>
                   <option value="fullscreen">
                     Full screen (under script)
                   </option>
@@ -1088,9 +1305,11 @@ export function Controls({
               <p className="settings-hint settings-hint-span">
                 Off (default): camera keeps the recording aspect ratio at full
                 column width, with progress stats underneath. On: camera
-                stretches to fill the whole preview column. Full screen size
-                fills under the script; use brightness to control the dark tint.
-                Preview mirror Auto flips the front camera like a selfie view.
+                stretches to fill the whole preview column. On phones in
+                portrait, the camera sits above the script — quarter / half /
+                three quarters set that top band; full screen fills under the
+                script with brightness controlling the dark tint. Preview mirror
+                Auto flips the front camera like a selfie view.
               </p>
               <label className="settings-mic">
                 <span>Recording resolution</span>
@@ -1121,7 +1340,7 @@ export function Controls({
             </>
           ) : null}
 
-          {settingsTab === 'stats' ? (
+          {advancedSettings && settingsTab === 'stats' ? (
             <>
               <label className="toggle">
                 <input
@@ -1227,7 +1446,7 @@ export function Controls({
             </>
           ) : null}
 
-          {settingsTab === 'model' ? (
+          {advancedSettings && settingsTab === 'model' ? (
             <>
               <p className="settings-hint settings-hint-span">
                 Download or refresh the on-device speech model, or restore every

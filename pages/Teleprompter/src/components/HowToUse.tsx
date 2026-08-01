@@ -186,6 +186,11 @@ export function HowToUse({ onClose }: HowToUseProps) {
         <h3>Useful settings</h3>
         <ul className="howto-list">
           <li>
+            Settings opens in a simple view (font, display mode, mic, camera,
+            theme). Turn on <strong>Advanced settings</strong> for the options
+            below.
+          </li>
+          <li>
             <strong>Match confidence</strong> — higher = stricter matching (fewer
             false jumps); lower = more forgiving.
           </li>
