@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <link rel="icon" href="favicon.png" type="image/png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    <title>Real Time Rocket Lander Game</title>
+    <title>Rocket Lander</title>
     
     <!-- 1. Link to SHARED CSS FIRST (for layout, nav, etc.) -->
     <!-- The ../../ goes up two directories to the root to find the assets folder -->
@@ -21,14 +21,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head>
-<body class="game-active">
+<body>
     <div class="background-overlay"></div>
     <div class="floating-shapes">
         <div class="shape shape-1"></div>
         <div class="shape shape-2"></div>
     </div>
 
-    <div id="main-nav-placeholder"></div> 
+    <div id="main-nav-placeholder"></div>
 
 
 
@@ -40,8 +40,13 @@
              <div class="card-content">
                 <h2 id="welcome-title">Welcome, Captain!</h2>
                 <p>Enter your name and aim for the landing pad.</p>
+                <div class="start-actions start-actions-top">
+                    <button type="button" id="start-button" class="modern-button primary">Start Mission</button>
+                    <button type="button" id="mute-button-start" class="modern-button ghost" aria-pressed="false" title="Toggle sound">Sound On</button>
+                </div>
+                <p class="start-hint">Press <strong>Enter</strong> to launch</p>
                 <div class="start-input-group">
-                     <input type="text" id="name-input" placeholder="Player 1 Name">
+                     <input type="text" id="name-input" placeholder="Player 1 Name" maxlength="20" autocomplete="nickname" enterkeyhint="go">
                 </div>
                 <div class="player-toggle">
                     <label for="player-mode-toggle" class="toggle-label active" id="label-single">Single Player</label>
@@ -52,7 +57,7 @@
                     <label for="player-mode-toggle" class="toggle-label" id="label-multi">Multiplayer</label>
                 </div>
                 <div class="player-toggle">
-                    <label class="toggle-label active">Hard Mode</label>
+                    <label class="toggle-label active" for="hard-mode-toggle">Hard Mode</label>
                     <label class="toggle-switch">
                         <input type="checkbox" id="hard-mode-toggle" checked>
                         <span class="slider"></span>
@@ -60,65 +65,97 @@
                 </div>
                 <div class="player-toggle fuel-group">
                     <label for="fuel-input" class="toggle-label active">Initial Fuel (kg):</label>
-                    <input type="number" id="fuel-input" value="100" min="10" max="1000">
+                    <input type="number" id="fuel-input" value="100" min="10" max="1000" step="10" inputmode="numeric">
                 </div>
                 <div class="start-input-group" id="player2-input-container">
-                     <input type="text" id="name-input-p2" placeholder="Player 2 Name">
+                     <input type="text" id="name-input-p2" placeholder="Player 2 Name" maxlength="20" autocomplete="off" enterkeyhint="go">
                 </div>
                 <p id="high-score-display" class="high-score-text">High Score: 0</p>
-                <button id="start-button" class="modern-button primary">Start Mission</button>
             </div>
         </div>
 
         <main id="game-screen" class="glass-card">
             <div id="game-area">
                 <canvas id="gameview" width="600" height="400"></canvas>
-                <!-- Single Player Fuel Message -->
+
+                <div id="stats-display" class="stats-overlay" aria-live="polite"></div>
+
+                <div class="game-toolbar">
+                    <button type="button" id="pause-button" class="toolbar-button" aria-label="Pause" title="Pause (Esc)">❚❚</button>
+                    <button type="button" id="mute-button" class="toolbar-button" aria-label="Mute" aria-pressed="false" title="Toggle sound">♪</button>
+                    <button type="button" id="help-button" class="toolbar-button" aria-label="Show controls" aria-expanded="false" aria-controls="help-panel" title="Controls">?</button>
+                    <button type="button" id="menu-button" class="toolbar-button" aria-label="Quit to menu" title="Quit to menu">⌂</button>
+                </div>
+
+                <div id="help-panel" class="help-panel" role="dialog" aria-label="Controls and instructions" hidden>
+                    <div class="help-panel-header">
+                        <h3>Controls</h3>
+                        <button type="button" id="help-close" class="help-close" aria-label="Close">×</button>
+                    </div>
+                    <p id="instruction-p1" class="instruction-text"></p>
+                    <p id="instruction-p2" class="instruction-text"></p>
+                    <p id="pad-size-info" class="instruction-text"></p>
+                </div>
+
+                <div id="pause-overlay" class="modal-overlay" hidden>
+                    <div class="modal-card glass-card" role="dialog" aria-labelledby="pause-title" aria-modal="true">
+                        <h2 id="pause-title">Paused</h2>
+                        <p class="modal-copy">Mission on hold</p>
+                        <div class="modal-actions">
+                            <button type="button" id="resume-button" class="modern-button primary">Resume</button>
+                            <button type="button" id="quit-button" class="modern-button ghost">Quit to Menu</button>
+                        </div>
+                        <p class="pause-hint modal-hint">Press <strong>Esc</strong> to resume</p>
+                    </div>
+                </div>
+
+                <div id="confirm-modal" class="modal-overlay" hidden>
+                    <div class="modal-card glass-card" role="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" aria-modal="true">
+                        <h2 id="confirm-title">Return to Menu?</h2>
+                        <p id="confirm-text" class="modal-copy">Current mission will be abandoned.</p>
+                        <div class="modal-actions">
+                            <button type="button" id="confirm-cancel" class="modern-button ghost">Keep Flying</button>
+                            <button type="button" id="confirm-ok" class="modern-button primary">Go Home</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="out-of-fuel-message">OUT OF FUEL</div>
-                <!-- Multiplayer Fuel Messages -->
                 <div id="out-of-fuel-p1" class="out-of-fuel-multi">P1 OUT OF FUEL</div>
                 <div id="out-of-fuel-p2" class="out-of-fuel-multi">P2 OUT OF FUEL</div>
-                 <!-- Touch Controls -->
+
                 <div id="touch-controls-container">
-                    <!-- Single Player Controls -->
+                    <div id="touch-thrust-zone" aria-hidden="true"></div>
                     <div id="touch-controls-single">
-                        <div class="touch-group-left">
-                            <div class="touch-button" id="touch-sp-left"><span>⟵</span></div>
-                            <div class="touch-button" id="touch-sp-right"><span>⟶</span></div>
-                        </div>
-                        <div class="touch-group-right">
-                            <div class="touch-button" id="touch-sp-thrust"><span>🚀</span></div>
+                        <div class="touch-group-strafe">
+                            <div class="touch-button" id="touch-sp-left" aria-label="Strafe left"><span class="touch-icon touch-icon-left"></span></div>
+                            <div class="touch-button" id="touch-sp-right" aria-label="Strafe right"><span class="touch-icon touch-icon-right"></span></div>
                         </div>
                     </div>
-                    <!-- Multiplayer Controls -->
                     <div id="touch-controls-multi">
-                        <div class="touch-group-left">
-                            <div class="touch-button p1" id="touch-p1-left"><span>⟵</span></div>
-                            <div class="touch-button p1" id="touch-p1-thrust"><span>🚀</span></div>
-                            <div class="touch-button p1" id="touch-p1-right"><span>⟶</span></div>
+                        <div class="touch-group-strafe p1-strafe">
+                            <div class="touch-button p1" id="touch-p1-left" aria-label="P1 strafe left"><span class="touch-icon touch-icon-left"></span></div>
+                            <div class="touch-button p1" id="touch-p1-right" aria-label="P1 strafe right"><span class="touch-icon touch-icon-right"></span></div>
                         </div>
-                        <div class="touch-group-right">
-                            <div class="touch-button p2" id="touch-p2-left"><span>⟵</span></div>
-                            <div class="touch-button p2" id="touch-p2-thrust"><span>🚀</span></div>
-                            <div class="touch-button p2" id="touch-p2-right"><span>⟶</span></div>
+                        <div class="touch-group-strafe p2-strafe">
+                            <div class="touch-button p2" id="touch-p2-left" aria-label="P2 strafe left"><span class="touch-icon touch-icon-left"></span></div>
+                            <div class="touch-button p2" id="touch-p2-right" aria-label="P2 strafe right"><span class="touch-icon touch-icon-right"></span></div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div id="hud">
-                <div id="stats-display" class="glass-element">
-                    <!-- Stats will be populated by JS -->
+
+                <div id="message-area" class="modal-overlay">
+                    <div class="modal-card glass-card message-card" role="dialog" aria-labelledby="message-title" aria-describedby="message-text" aria-modal="true">
+                        <h2 id="message-title"></h2>
+                        <p id="message-text" class="modal-copy"></p>
+                        <div id="message-stats"></div>
+                        <div class="modal-actions end-actions">
+                            <button type="button" id="menu-end-button" class="modern-button ghost">Menu</button>
+                            <button type="button" id="play-again-button" class="modern-button primary">Play Again</button>
+                        </div>
+                        <p id="restart-hint" class="restart-hint modal-hint">Press <strong>Enter</strong> to play again</p>
+                    </div>
                 </div>
-            </div>
-            <p id="instruction-p1" class="instruction-text"></p>
-            <p id="instruction-p2" class="instruction-text"></p>
-            <p id="pad-size-info" class="instruction-text"></p>
-            
-            <div id="message-area" class="glass-card">
-                <h2 id="message-title"></h2>
-                <p id="message-text"></p>
-                <div id="message-stats"></div>
-                <button id="play-again-button" class="modern-button primary">Play Again</button>
             </div>
         </main>
     </div>

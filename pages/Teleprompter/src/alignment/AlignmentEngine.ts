@@ -103,6 +103,17 @@ export class AlignmentEngine {
     this.config.allowJumpBack = enabled
   }
 
+  setSpokenWindow(words: number): void {
+    this.config.spokenWindow = Math.max(3, Math.min(40, Math.round(words)))
+  }
+
+  setBacktrackWordCount(words: number): void {
+    this.config.backtrackWordCount = Math.max(
+      1,
+      Math.min(30, Math.round(words)),
+    )
+  }
+
   /**
    * Feed a spoken transcript chunk (partial or committed). Uses only a recent
    * window of spoken words and searches a bounded window around the cursor.

@@ -112,3 +112,20 @@ export function IconFlip({ className, title }: IconProps) {
     </svg>
   )
 }
+
+export function IconMenu({ className, title }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <path
+        fill="currentColor"
+        d="M3.25 6.25a.75.75 0 0 1 .75-.75h16a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm0 5.75a.75.75 0 0 1 .75-.75h16a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Zm.75 5a.75.75 0 0 0 0 1.5h16a.75.75 0 0 0 0-1.5H4Z"
+      />
+    </svg>
+  )
+}

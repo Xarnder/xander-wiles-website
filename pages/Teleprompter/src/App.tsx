@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CameraPreview } from './components/CameraPreview'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
-import { AlertModal } from './components/Modal'
+import { AlertModal, StartChoiceModal } from './components/Modal'
 import { RecordingReviewModal } from './components/RecordingReviewModal'
 import { ReplaceRecordingModal } from './components/ReplaceRecordingModal'
 import { ScriptEditor } from './components/ScriptEditor'
+import { ScriptStats } from './components/ScriptStats'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
 import { useTeleprompter } from './hooks/useTeleprompter'
 import { useWakeLock } from './hooks/useWakeLock'
-import {
-  isMediaRecorderSupported,
-  type FacingMode,
-} from './media/platform'
+import { isMediaRecorderSupported } from './media/platform'
+
+/** Matches the previous CSS compact breakpoints (phone + phone landscape). */
+const COMPACT_MQ =
+  '(max-width: 720px), (orientation: landscape) and (max-height: 500px)'
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -26,13 +28,31 @@ function isTypingTarget(target: EventTarget | null): boolean {
   )
 }
 
+function useAutoCompact(): boolean {
+  const [autoCompact, setAutoCompact] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false
+    return window.matchMedia(COMPACT_MQ).matches
+  })
+
+  useEffect(() => {
+    const mq = window.matchMedia(COMPACT_MQ)
+    const onChange = () => setAutoCompact(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  return autoCompact
+}
+
 export default function App() {
-  const [facingMode, setFacingMode] = useState<FacingMode>('user')
   const [reviewOpen, setReviewOpen] = useState(false)
   const [replaceOpen, setReplaceOpen] = useState(false)
+  const [startChoiceOpen, setStartChoiceOpen] = useState(false)
   const lastRecordingAtRef = useRef<number | null>(null)
+  const autoCompact = useAutoCompact()
 
-  const tp = useTeleprompter({ facingMode })
+  const tp = useTeleprompter({ autoCompact })
   const {
     devices,
     selectedDeviceId,
@@ -43,9 +63,15 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [howToOpen, setHowToOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const compactChrome = tp.compactLayout
 
   const isListening = tp.speech.status === 'listening'
-  useWakeLock(isListening)
+  useWakeLock(isListening && tp.settings.wakeLock)
+  const facingMode = tp.settings.facingMode
+  const previewMirror =
+    tp.settings.cameraPreviewMirror === 'auto'
+      ? facingMode === 'user'
+      : tp.settings.cameraPreviewMirror === 'on'
 
   // Open review whenever a new take finishes.
   useEffect(() => {
@@ -69,7 +95,8 @@ export default function App() {
   }, [selectedDeviceId, tp.setDeviceId])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = tp.settings.oledMode
+    const useOled = compactChrome || tp.settings.oledMode
+    document.documentElement.dataset.theme = useOled
       ? 'oled'
       : tp.settings.darkMode
         ? 'dark'
@@ -77,7 +104,18 @@ export default function App() {
     document.documentElement.dataset.boldScript = tp.settings.boldText
       ? 'true'
       : 'false'
-  }, [tp.settings.darkMode, tp.settings.oledMode, tp.settings.boldText])
+    if (tp.settings.uiMirror) {
+      document.documentElement.dataset.uiMirrored = 'true'
+    } else {
+      delete document.documentElement.dataset.uiMirrored
+    }
+  }, [
+    compactChrome,
+    tp.settings.darkMode,
+    tp.settings.oledMode,
+    tp.settings.boldText,
+    tp.settings.uiMirror,
+  ])
 
   useEffect(() => {
     if (tp.speech.status === 'listening') {
@@ -111,8 +149,43 @@ export default function App() {
 
   const startSession = useCallback(() => {
     closePanels()
+    setStartChoiceOpen(false)
     void tp.start()
   }, [closePanels, tp])
+
+  const requestStart = useCallback(() => {
+    const recordingSupported =
+      tp.speech.recordingSupported && isMediaRecorderSupported()
+    if (
+      tp.settings.askRecordOnStart &&
+      recordingSupported &&
+      !tp.speech.recordingActive
+    ) {
+      closePanels()
+      setStartChoiceOpen(true)
+      return
+    }
+    startSession()
+  }, [
+    closePanels,
+    startSession,
+    tp.settings.askRecordOnStart,
+    tp.speech.recordingActive,
+    tp.speech.recordingSupported,
+  ])
+
+  const startScriptOnly = useCallback(() => {
+    startSession()
+  }, [startSession])
+
+  const startWithRecording = useCallback(() => {
+    startSession()
+    if (tp.speech.recordingBusy || tp.speech.recordingActive) return
+    if (tp.speech.recordingResult) {
+      tp.speech.clearRecordingResult()
+    }
+    void tp.speech.startRecording()
+  }, [startSession, tp.speech])
 
   const dismissSpeechError = useCallback(() => {
     tp.speech.clearError()
@@ -131,8 +204,8 @@ export default function App() {
       }
       return
     }
-    void startSession()
-  }, [startSession, tp.speech])
+    void requestStart()
+  }, [requestStart, tp.speech])
 
   const toggleRecording = useCallback(() => {
     if (tp.speech.recordingBusy) return
@@ -145,8 +218,16 @@ export default function App() {
       setReplaceOpen(true)
       return
     }
+    // Starting a take also starts script follow/scroll (unless disabled).
+    if (
+      tp.settings.recordStartsFollow &&
+      tp.speech.status !== 'listening'
+    ) {
+      closePanels()
+      void tp.start()
+    }
     void tp.speech.startRecording()
-  }, [tp.speech])
+  }, [closePanels, tp])
 
   const closeReview = useCallback(() => {
     setReviewOpen(false)
@@ -169,8 +250,15 @@ export default function App() {
     setReplaceOpen(false)
     setReviewOpen(false)
     tp.speech.clearRecordingResult()
+    if (
+      tp.settings.recordStartsFollow &&
+      tp.speech.status !== 'listening'
+    ) {
+      closePanels()
+      void tp.start()
+    }
     void tp.speech.startRecording()
-  }, [tp.speech])
+  }, [closePanels, tp])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -184,6 +272,11 @@ export default function App() {
         if (replaceOpen) {
           e.preventDefault()
           setReplaceOpen(false)
+          return
+        }
+        if (startChoiceOpen) {
+          e.preventDefault()
+          setStartChoiceOpen(false)
           return
         }
         if (reviewOpen) {
@@ -209,7 +302,7 @@ export default function App() {
         case ' ':
           e.preventDefault()
           if (isListening) tp.pause()
-          else void startSession()
+          else void requestStart()
           break
         case 'r':
         case 'R':
@@ -243,7 +336,7 @@ export default function App() {
         case 'v':
         case 'V':
           e.preventDefault()
-          if (reviewOpen || replaceOpen) break
+          if (reviewOpen || replaceOpen || startChoiceOpen) break
           toggleRecording()
           break
         case 'ArrowLeft':
@@ -278,8 +371,9 @@ export default function App() {
     isListening,
     replaceOpen,
     reviewOpen,
+    requestStart,
     settingsOpen,
-    startSession,
+    startChoiceOpen,
     toggleFullscreen,
     toggleRecording,
     tp,
@@ -298,6 +392,7 @@ export default function App() {
       data-ui-mirrored={tp.settings.uiMirror ? 'true' : undefined}
       data-chrome-dock={tp.settings.chromeBottom ? 'bottom' : 'top'}
       data-ui-scale={tp.settings.largeControls ? 'large' : undefined}
+      data-compact={compactChrome ? 'true' : undefined}
     >
       <div className="atmosphere" aria-hidden>
         <span className="glow-orb glow-orb-a" />
@@ -319,12 +414,13 @@ export default function App() {
         progress={tp.progress}
         wpm={tp.wpm}
         isFullscreen={isFullscreen}
+        compactChrome={compactChrome}
         recordingActive={tp.speech.recordingActive}
         recordingBusy={tp.speech.recordingBusy}
         hasRecordingTake={tp.speech.recordingResult != null}
         recordingSupported={tp.speech.recordingSupported && isMediaRecorderSupported()}
         facingMode={facingMode}
-        onStart={startSession}
+        onStart={requestStart}
         onPause={tp.pause}
         onReset={tp.reset}
         onPreload={() => void tp.speech.preload()}
@@ -350,7 +446,7 @@ export default function App() {
         onToggleFullscreen={() => void toggleFullscreen()}
         onToggleRecording={toggleRecording}
         onReviewTake={openReviewTake}
-        onFacingModeChange={setFacingMode}
+        onFacingModeChange={(mode) => tp.updateSettings({ facingMode: mode })}
         onNudge={tp.nudge}
         onNudgeSentence={tp.nudgeSentence}
         onUpdateSettings={tp.updateSettings}
@@ -360,6 +456,24 @@ export default function App() {
       <main
         className="stage"
         data-recording-preview={previewStream ? 'true' : undefined}
+        data-preview-side={
+          previewStream ? tp.settings.cameraPreviewSide : undefined
+        }
+        data-preview-size={
+          previewStream ? tp.settings.cameraPreviewSize : undefined
+        }
+        data-preview-fill={
+          previewStream && tp.settings.cameraPreviewFill ? 'true' : undefined
+        }
+        style={
+          previewStream && tp.settings.cameraPreviewSize === 'fullscreen'
+            ? ({
+                ['--preview-dim']: String(
+                  (100 - tp.settings.cameraPreviewBrightness) / 100,
+                ),
+              } as CSSProperties)
+            : undefined
+        }
       >
         <div className="stage-main">
           {howToOpen ? (
@@ -378,12 +492,14 @@ export default function App() {
               alignState={tp.alignState}
               fontSize={tp.settings.fontSize}
               lineWidth={tp.settings.lineWidth}
+              lineHeight={tp.settings.lineHeight}
+              pastWordDim={tp.settings.pastWordDim}
               mirror={tp.settings.mirror}
               preserveBreaks={tp.settings.preserveBreaks}
               sentenceBreak={tp.settings.sentenceBreak}
               displayMode={tp.settings.displayMode}
               showCursorHighlight={tp.settings.showCursorHighlight}
-              scrollAnchor={tp.settings.scrollAnchor}
+              scrollAnchor={tp.effectiveScrollAnchor}
               onSeek={tp.seekTo}
               containerRef={tp.containerRef}
               registerWordRef={tp.registerWordRef}
@@ -393,11 +509,37 @@ export default function App() {
 
         <CameraPreview
           stream={previewStream}
-          mirror={facingMode === 'user'}
+          mirror={previewMirror}
           recording={tp.speech.recordingActive}
           recordingStartedAt={tp.speech.recordingStartedAt}
+          fillColumn={
+            tp.settings.cameraPreviewFill ||
+            tp.settings.cameraPreviewSize === 'fullscreen'
+          }
+          footer={
+            tp.settings.cameraPreviewFill ||
+            tp.settings.cameraPreviewSize === 'fullscreen' ? undefined : (
+              <ScriptStats
+                progress={tp.progress}
+                wpm={tp.wpm}
+                confidence={tp.confidence}
+                settings={tp.settings}
+                stacked
+              />
+            )
+          }
         />
       </main>
+
+      <StartChoiceModal
+        open={startChoiceOpen}
+        recordingSupported={
+          tp.speech.recordingSupported && isMediaRecorderSupported()
+        }
+        onCancel={() => setStartChoiceOpen(false)}
+        onStartScriptOnly={startScriptOnly}
+        onStartWithRecording={startWithRecording}
+      />
 
       <AlertModal
         open={tp.speech.error != null}

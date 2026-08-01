@@ -587,6 +587,16 @@ body {
     align-items: center;
     justify-content: center;
     padding: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.btn-icon img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    pointer-events: none;
+    filter: brightness(0) invert(1);
 }
 
 /* Modern Inputs */
@@ -698,6 +708,12 @@ body {
     overflow-wrap: break-word;
 }
 
+/* Hide top-left stats on mobile unless explicitly enabled */
+.touch-device:not(.show-mobile-stats) #dev-info,
+.touch-device:not(.show-mobile-stats) #debug-overlay {
+    display: none !important;
+}
+
 .touch-device #touch-controls {
     display: block !important;
 }
@@ -749,19 +765,31 @@ body {
 
 #tc-actions {
     position: absolute;
-    bottom: 30px; right: 30px;
+    bottom: 30px;
+    right: 30px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
+    grid-template-columns: repeat(2, 64px);
+    grid-template-rows: repeat(2, 64px);
+    gap: 14px;
+    place-items: center;
+    justify-content: center;
+    align-content: center;
     pointer-events: auto;
 }
 
+#tc-actions .tc-btn {
+    width: 64px;
+    height: 64px;
+    margin: 0;
+}
+
 .tc-btn {
+    width: 64px;
+    height: 64px;
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.15);
     color: white;
-    font-size: 24px;
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 4px 15px rgba(0,0,0,0.2);
@@ -772,6 +800,16 @@ body {
     transition: background 0.1s, transform 0.1s;
     user-select: none;
     -webkit-user-select: none;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.tc-btn img {
+    width: 52%;
+    height: 52%;
+    object-fit: contain;
+    pointer-events: none;
+    filter: brightness(0) invert(1);
 }
 
 .tc-btn:active, .tc-btn.active {
@@ -781,12 +819,10 @@ body {
 
 .tc-btn-large {
     width: 70px; height: 70px;
-    font-size: 32px;
 }
 
 .tc-btn-small {
     width: 55px; height: 55px;
-    font-size: 24px;
 }
 
 .tc-top-right {

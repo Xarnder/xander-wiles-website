@@ -254,6 +254,27 @@ export class UIManager {
             }, { signal: this.abortController.signal });
         }
 
+        const mobileStatsToggle = document.getElementById('mobile-stats-toggle');
+        if (mobileStatsToggle) {
+            const saved = localStorage.getItem('arkonhex_show_mobile_stats') === 'true';
+            mobileStatsToggle.checked = saved;
+            document.body.classList.toggle('show-mobile-stats', saved);
+            mobileStatsToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                document.body.classList.toggle('show-mobile-stats', enabled);
+                localStorage.setItem('arkonhex_show_mobile_stats', String(enabled));
+            }, { signal: this.abortController.signal });
+        }
+
+        const autoJumpToggle = document.getElementById('auto-jump-toggle');
+        if (autoJumpToggle) {
+            autoJumpToggle.checked = this.playerSystem.autoJump;
+            autoJumpToggle.addEventListener('change', (e) => {
+                this.playerSystem.autoJump = e.target.checked;
+                localStorage.setItem('arkonhex_auto_jump', String(e.target.checked));
+            }, { signal: this.abortController.signal });
+        }
+
         const shadowResSelect = document.getElementById('shadow-res-select');
         if (shadowResSelect) {
             shadowResSelect.addEventListener('change', (e) => {
@@ -872,9 +893,9 @@ export class UIManager {
 
             // Rename button
             const renameBtn = document.createElement('button');
-            renameBtn.textContent = '✏';
+            renameBtn.innerHTML = '<img src="../../assets/SVGs/edit.svg" alt="Rename" style="width:14px;height:14px;filter:brightness(0) invert(1);pointer-events:none;">';
             renameBtn.title = 'Rename';
-            renameBtn.style.cssText = 'background:none; border:1px solid rgba(255,255,255,0.2); color:white; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
+            renameBtn.style.cssText = 'background:none; border:1px solid rgba(255,255,255,0.2); color:white; border-radius:4px; padding:4px 8px; cursor:pointer; display:flex; align-items:center; justify-content:center;';
             renameBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const newName = prompt('Rename waypoint:', wp.name);
@@ -887,7 +908,7 @@ export class UIManager {
 
             // Toggle visibility button
             const toggleBtn = document.createElement('button');
-            toggleBtn.textContent = wp.visible ? '👁' : '👁‍🗨';
+            toggleBtn.textContent = wp.visible ? 'Hide' : 'Show';
             toggleBtn.title = wp.visible ? 'Hide' : 'Show';
             toggleBtn.style.cssText = 'background:none; border:1px solid rgba(255,255,255,0.2); color:white; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
             toggleBtn.addEventListener('click', async (e) => {
@@ -899,9 +920,9 @@ export class UIManager {
 
             // Delete button
             const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '🗑';
+            deleteBtn.innerHTML = '&times;';
             deleteBtn.title = 'Delete';
-            deleteBtn.style.cssText = 'background:none; border:1px solid rgba(255,100,100,0.3); color:#ff6b6b; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
+            deleteBtn.style.cssText = 'background:none; border:1px solid rgba(255,100,100,0.3); color:#ff6b6b; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:1.1rem; line-height:1;';
             deleteBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 await wm.deleteWaypoint(wp.id);

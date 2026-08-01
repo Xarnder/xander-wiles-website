@@ -19,14 +19,14 @@ There is **no build step**, no bundler, and no Node server. It runs directly via
 
 ## 2. Phase Numbering Convention ⚠️
 
-All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 42** (performance pass: half-resolution GTAO, instanced/event-driven clouds, local interaction raycasts, lower hot-path allocation, functional distant LOD, and finer time-sliced world generation/meshing).
+All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 43** (auto-jump for one-block steps with settings toggle; mobile stats panel hidden by default; touch control SVG icons and 2×2 action grid).
 
 **When you add a new feature or fix, always:**
-1. Name it **Phase 43**, then **Phase 44**, etc. — never reset or repeat numbers.
+1. Name it **Phase 44**, then **Phase 45**, etc. — never reset or repeat numbers.
 2. Record it in the conversation walkthrough or any documentation you maintain.
 3. Keep this file updated with the current highest phase number.
 
-> **Current highest phase: 42**
+> **Current highest phase: 43**
 
 ---
 

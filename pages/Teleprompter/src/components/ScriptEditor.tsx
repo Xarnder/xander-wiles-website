@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { BtnLabel } from './BtnLabel'
 import { AlertModal, ConfirmModal } from './Modal'
 import { IconClose } from './icons'
 
@@ -101,10 +102,10 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
           />
         </label>
         <button type="button" className="btn" onClick={() => void copyScript()}>
-          {copied ? 'Copied' : 'Copy'}
+          <BtnLabel>{copied ? 'Copied' : 'Copy'}</BtnLabel>
         </button>
         <button type="button" className="btn" onClick={downloadScript}>
-          Download
+          <BtnLabel>Download</BtnLabel>
         </button>
         <button
           type="button"
@@ -113,7 +114,7 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
             if (script.trim()) setClearOpen(true)
           }}
         >
-          Clear
+          <BtnLabel>Clear</BtnLabel>
         </button>
       </div>
 

@@ -56,8 +56,8 @@
             <div id="height-bar-fill"></div>
         </div>
         <div id="smooth-tool-icon"
-            style="display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 3px solid #00cec9; border-radius: 8px; align-items: center; justify-content: center; font-size: 32px; box-shadow: 0 0 15px rgba(0, 206, 201, 0.5); z-index: 100;">
-            ⛏️
+            style="display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 3px solid #00cec9; border-radius: 8px; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0, 206, 201, 0.5); z-index: 100;">
+            <img src="../../assets/SVGs/break.svg" alt="Smooth Tool" style="width: 36px; height: 36px; filter: brightness(0) invert(1);">
         </div>
         <div id="smooth-tool-display"
             style="display: none; position: absolute; bottom: 119px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 5px; font-weight: bold; pointer-events: none; z-index: 100;">
@@ -67,8 +67,7 @@
         <div id="castle-compass"
             style="display: none; position: absolute; bottom: 20px; left: calc(50% + 230px); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%; align-items: center; justify-content: center; z-index: 100; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
             <div id="castle-compass-arrow"
-                style="font-size: 32px; transition: transform 0.1s linear; transform-origin: center center;">
-                🧭
+                style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 28px solid #ff6b6b; transition: transform 0.1s linear; transform-origin: center 70%;">
             </div>
         </div>
 
@@ -114,7 +113,7 @@
                         &#x2190; Back
                     </button>
                     <button id="import-world-btn" class="btn-pill btn-outline-blue">
-                        &#x1F4E5; Import World
+                        Import World
                     </button>
                 </div>
                 <input type="file" id="world-import-input" accept=".arkonhex" style="display: none;">
@@ -304,6 +303,14 @@
                         <input type="range" id="repeat-delay-slider" min="50" max="500" step="25" value="150">
                         <p style="font-size:0.8em; color: #888888; margin-top:5px;">How fast blocks repeatedly
                             break/place.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                        <label>Auto Jump: <input type="checkbox" id="auto-jump-toggle" checked></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Automatically jump onto one-block-high steps while walking.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Show Stats Panel (Mobile): <input type="checkbox" id="mobile-stats-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Show FPS, coords, and debug info in the top-left on touch devices.</p>
                     </div>
                 </div>
 

@@ -15,6 +15,10 @@ interface ScriptViewProps {
   alignState: AlignmentState
   fontSize: number
   lineWidth: number
+  /** 0 = auto from font size; otherwise unitless line-height. */
+  lineHeight?: number
+  /** Past-word opacity percent (15–80). */
+  pastWordDim?: number
   mirror: boolean
   preserveBreaks: boolean
   sentenceBreak: SentenceBreakMode
@@ -217,6 +221,8 @@ export function ScriptView({
   alignState,
   fontSize,
   lineWidth,
+  lineHeight = 0,
+  pastWordDim = 38,
   mirror,
   preserveBreaks,
   sentenceBreak,
@@ -245,8 +251,11 @@ export function ScriptView({
 
   const scriptScale =
     fontSize >= 96 ? 'xxl' : fontSize >= 72 ? 'xl' : fontSize >= 48 ? 'lg' : 'md'
-  const lineHeight =
+  const autoLineHeight =
     fontSize >= 96 ? 1.28 : fontSize >= 72 ? 1.34 : fontSize >= 48 ? 1.45 : 1.6
+  const effectiveLineHeight =
+    lineHeight > 0 ? lineHeight : autoLineHeight
+  const pastOpacity = Math.min(0.8, Math.max(0.15, pastWordDim / 100))
 
   return (
     <div
@@ -258,7 +267,8 @@ export function ScriptView({
       style={{
         fontSize: `${fontSize}px`,
         maxWidth: `${lineWidth}ch`,
-        lineHeight,
+        lineHeight: effectiveLineHeight,
+        ['--past-word-opacity' as string]: String(pastOpacity),
       }}
       aria-live="off"
     >

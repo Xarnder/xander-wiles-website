@@ -14,11 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageTitle = document.getElementById('message-title');
     const messageText = document.getElementById('message-text');
     const playAgainButton = document.getElementById('play-again-button');
+    const menuEndButton = document.getElementById('menu-end-button');
     const padSizeInfo = document.getElementById('pad-size-info');
     const outOfFuelMessage = document.getElementById('out-of-fuel-message');
     const outOfFuelP1 = document.getElementById('out-of-fuel-p1');
     const outOfFuelP2 = document.getElementById('out-of-fuel-p2');
     const messageStats = document.getElementById('message-stats');
+    const restartHint = document.getElementById('restart-hint');
 
     // Multiplayer UI Elements
     const playerModeToggle = document.getElementById('player-mode-toggle');
@@ -28,8 +30,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const labelMulti = document.getElementById('label-multi');
     const instructionP1 = document.getElementById('instruction-p1');
     const instructionP2 = document.getElementById('instruction-p2');
+    const helpButton = document.getElementById('help-button');
+    const helpPanel = document.getElementById('help-panel');
+    const helpClose = document.getElementById('help-close');
     const hardModeToggle = document.getElementById('hard-mode-toggle');
     const fuelInput = document.getElementById('fuel-input');
+    const muteButton = document.getElementById('mute-button');
+    const muteButtonStart = document.getElementById('mute-button-start');
+    const pauseButton = document.getElementById('pause-button');
+    const menuButton = document.getElementById('menu-button');
+    const pauseOverlay = document.getElementById('pause-overlay');
+    const resumeButton = document.getElementById('resume-button');
+    const quitButton = document.getElementById('quit-button');
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmOk = document.getElementById('confirm-ok');
+    const confirmCancel = document.getElementById('confirm-cancel');
+    const confirmTitle = document.getElementById('confirm-title');
+    const confirmText = document.getElementById('confirm-text');
+    let confirmResolver = null;
 
     // --- Touch Control Elements ---
     const touchControlsContainer = document.getElementById('touch-controls-container');
@@ -48,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
     successSound.volume = 0.7;
     const crashSound = new Audio('audio/boom.mp3');
     crashSound.volume = 0.7;
+    const allAudio = [thrustSound, gameMusic, successSound, crashSound];
+
+    function playAudio(audio) {
+        if (isMuted) return;
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+    }
 
     // --- Game Configuration ---
     const settings = {
@@ -57,15 +84,33 @@ document.addEventListener('DOMContentLoaded', () => {
         GRAVITY_PULL: 0.03, THRUST_POWER: 0.1, FUEL_CONSUMPTION_RATE: 0.25,
         THRUST_POWER_X: 0.05,
         FUEL_CONSUMPTION_RATE_X: 0.05,
-        // FIX 1: Increase max pad width percentage for a more generous max size.
         MAX_PAD_WIDTH_PERCENT: 0.20, 
     };
     const HIGH_SCORE_KEY = 'rocketLanderHighScore';
     const FUEL_KEY = 'rocketLanderInitialFuel';
+    const NAME_KEY = 'rocketLanderName';
+    const NAME_P2_KEY = 'rocketLanderNameP2';
+    const MUTE_KEY = 'rocketLanderMuted';
+    const HARD_MODE_KEY = 'rocketLanderHardMode';
+    const MODE_KEY = 'rocketLanderMultiplayer';
 
-    // Load saved fuel
+    // Restore saved preferences
     const savedFuel = localStorage.getItem(FUEL_KEY);
     if (savedFuel) fuelInput.value = savedFuel;
+    const savedName = localStorage.getItem(NAME_KEY);
+    if (savedName) nameInput.value = savedName;
+    const savedNameP2 = localStorage.getItem(NAME_P2_KEY);
+    if (savedNameP2) nameInputP2.value = savedNameP2;
+    if (localStorage.getItem(HARD_MODE_KEY) !== null) {
+        hardModeToggle.checked = localStorage.getItem(HARD_MODE_KEY) === '1';
+    }
+    if (localStorage.getItem(MODE_KEY) === '1') {
+        playerModeToggle.checked = true;
+    }
+
+    let isMuted = localStorage.getItem(MUTE_KEY) === '1';
+    let isPaused = false;
+    let pausedByVisibility = false;
 
     // --- Starfield ---
     let stars = [];
@@ -106,60 +151,312 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Input Listeners ---
     window.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName) || '';
+        const typing = tag === 'INPUT' || tag === 'TEXTAREA';
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (confirmModal && !confirmModal.hidden) {
+                closeConfirm(false);
+                return;
+            }
+            if (messageArea.classList.contains('visible')) return;
+            if (helpPanel && !helpPanel.hidden) { setHelpOpen(false); return; }
+            if (body.classList.contains('game-active') && state.players && !state.isGameOver) {
+                togglePause();
+            }
+            return;
+        }
+
         if (messageArea.classList.contains('visible')) {
             if (e.key === 'Enter') { e.preventDefault(); restartGame(); return; }
             if ((e.key === ' ' || e.code === 'Space') && spaceRestartEnabled) { e.preventDefault(); restartGame(); return; }
+            return;
         }
-        if (state.players && !state.isGameOver) { keysPressed[e.key] = true; }
+
+        if (typing) return;
+
+        if (!body.classList.contains('game-active') && e.key === 'Enter') {
+            e.preventDefault();
+            startGame();
+            return;
+        }
+
+        if (isPaused) return;
+        if (state.players && !state.isGameOver) {
+            keysPressed[e.key] = true;
+            if (e.key === ' ' || e.code === 'Space') e.preventDefault();
+        }
     });
     window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
+
+    function applyMuteState() {
+        allAudio.forEach(a => { a.muted = isMuted; });
+        const label = isMuted ? 'Sound Off' : 'Sound On';
+        const icon = isMuted ? '🔇' : '♪';
+        if (muteButtonStart) {
+            muteButtonStart.textContent = label;
+            muteButtonStart.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
+            muteButtonStart.classList.toggle('is-muted', isMuted);
+        }
+        if (muteButton) {
+            muteButton.textContent = icon;
+            muteButton.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
+            muteButton.classList.toggle('is-muted', isMuted);
+            muteButton.setAttribute('aria-label', isMuted ? 'Unmute' : 'Mute');
+        }
+        localStorage.setItem(MUTE_KEY, isMuted ? '1' : '0');
+        if (isMuted) {
+            thrustSound.pause();
+        }
+    }
+
+    function toggleMute() {
+        isMuted = !isMuted;
+        applyMuteState();
+    }
+
+    function setPaused(paused) {
+        if (!body.classList.contains('game-active') || !state.players || state.isGameOver) return;
+        if (messageArea.classList.contains('visible')) return;
+        isPaused = paused;
+        pauseOverlay.hidden = !paused;
+        if (paused) {
+            thrustSound.pause();
+            gameMusic.pause();
+            clearThrustTouches();
+            keysPressed = {};
+            if (isTouchDevice) touchControlsContainer.style.display = 'none';
+            setHelpOpen(false);
+        } else {
+            lastTime = 0;
+            if (!isMuted) playAudio(gameMusic);
+            if (isTouchDevice) touchControlsContainer.style.display = 'flex';
+        }
+        pauseButton.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+        pauseButton.textContent = paused ? '▶' : '❚❚';
+    }
+
+    function togglePause() {
+        setPaused(!isPaused);
+    }
+
+    function quitToMenu() {
+        isPaused = false;
+        pauseOverlay.hidden = true;
+        if (confirmModal) confirmModal.hidden = true;
+        confirmResolver = null;
+        pausedByVisibility = false;
+        clearTimeout(restartTimer);
+        spaceRestartEnabled = false;
+        showStartScreen();
+    }
+
+    function showConfirmModal({ title, text, confirmLabel = 'Go Home', cancelLabel = 'Keep Flying' } = {}) {
+        return new Promise((resolve) => {
+            if (confirmResolver) confirmResolver(false);
+            confirmResolver = resolve;
+            if (confirmTitle) confirmTitle.textContent = title || 'Return to Menu?';
+            if (confirmText) confirmText.textContent = text || 'Current mission will be abandoned.';
+            if (confirmOk) confirmOk.textContent = confirmLabel;
+            if (confirmCancel) confirmCancel.textContent = cancelLabel;
+            thrustSound.pause();
+            gameMusic.pause();
+            keysPressed = {};
+            clearThrustTouches();
+            lastTime = 0;
+            confirmModal.hidden = false;
+            confirmOk.focus();
+        });
+    }
+
+    function closeConfirm(result) {
+        if (confirmModal) confirmModal.hidden = true;
+        if (!result && body.classList.contains('game-active') && !isPaused && !isMuted && state.players && !state.isGameOver && !(helpPanel && !helpPanel.hidden)) {
+            lastTime = 0;
+            playAudio(gameMusic);
+        }
+        if (confirmResolver) {
+            const resolve = confirmResolver;
+            confirmResolver = null;
+            resolve(!!result);
+        }
+    }
+
+    async function requestQuitToMenu() {
+        if (messageArea.classList.contains('visible')) {
+            quitToMenu();
+            return;
+        }
+        const confirmed = await showConfirmModal({
+            title: 'Return to Menu?',
+            text: 'Current mission will be abandoned.',
+            confirmLabel: 'Go Home',
+            cancelLabel: 'Keep Flying'
+        });
+        if (confirmed) quitToMenu();
+    }
     
     // Touch Controls Logic
     function mapTouchToKey(element, key) {
+        if (!element) return;
         element.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             keysPressed[key] = true;
         }, { passive: false });
 
         element.addEventListener('touchend', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             keysPressed[key] = false;
         });
 
         element.addEventListener('touchcancel', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             keysPressed[key] = false;
         });
     }
 
+    const touchThrustZone = document.getElementById('touch-thrust-zone');
+    const activeThrustTouches = new Set();
+    const thrustTouchSides = new Map();
+
+    function setThrustFromTouches() {
+        if (isMultiplayer) {
+            let p1 = false;
+            let p2 = false;
+            for (const id of activeThrustTouches) {
+                const side = thrustTouchSides.get(id);
+                if (side === 'p1') p1 = true;
+                if (side === 'p2') p2 = true;
+            }
+            keysPressed['w'] = p1;
+            keysPressed['ArrowUp'] = p2;
+        } else {
+            const thrusting = activeThrustTouches.size > 0;
+            keysPressed['w'] = thrusting;
+            keysPressed['ArrowUp'] = thrusting;
+            keysPressed[' '] = thrusting;
+        }
+    }
+
+    function clearThrustTouches() {
+        activeThrustTouches.clear();
+        thrustTouchSides.clear();
+        keysPressed['w'] = false;
+        keysPressed['ArrowUp'] = false;
+        keysPressed[' '] = false;
+    }
+
     if (isTouchDevice) {
-        // Single Player
         mapTouchToKey(document.getElementById('touch-sp-left'), 'a');
         mapTouchToKey(document.getElementById('touch-sp-right'), 'd');
-        mapTouchToKey(document.getElementById('touch-sp-thrust'), 'w');
-        // Multiplayer P1
         mapTouchToKey(document.getElementById('touch-p1-left'), 'a');
         mapTouchToKey(document.getElementById('touch-p1-right'), 'd');
-        mapTouchToKey(document.getElementById('touch-p1-thrust'), 'w');
-        // Multiplayer P2
         mapTouchToKey(document.getElementById('touch-p2-left'), 'ArrowLeft');
         mapTouchToKey(document.getElementById('touch-p2-right'), 'ArrowRight');
-        mapTouchToKey(document.getElementById('touch-p2-thrust'), 'ArrowUp');
+
+        const onThrustStart = (e) => {
+            if (messageArea.classList.contains('visible') || (helpPanel && !helpPanel.hidden)) return;
+            e.preventDefault();
+            const rect = touchThrustZone.getBoundingClientRect();
+            for (const touch of e.changedTouches) {
+                activeThrustTouches.add(touch.identifier);
+                if (isMultiplayer) {
+                    const localX = touch.clientX - rect.left;
+                    thrustTouchSides.set(touch.identifier, localX < rect.width / 2 ? 'p1' : 'p2');
+                }
+            }
+            setThrustFromTouches();
+        };
+
+        const onThrustEnd = (e) => {
+            for (const touch of e.changedTouches) {
+                activeThrustTouches.delete(touch.identifier);
+                thrustTouchSides.delete(touch.identifier);
+            }
+            setThrustFromTouches();
+        };
+
+        touchThrustZone.addEventListener('touchstart', onThrustStart, { passive: false });
+        touchThrustZone.addEventListener('touchend', onThrustEnd, { passive: false });
+        touchThrustZone.addEventListener('touchcancel', onThrustEnd, { passive: false });
     }
 
     // --- UI Logic ---
+    function setHelpOpen(open) {
+        if (!helpPanel || !helpButton) return;
+        helpPanel.hidden = !open;
+        helpButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+        helpButton.setAttribute('aria-label', open ? 'Hide controls' : 'Show controls');
+        if (open) {
+            thrustSound.pause();
+            gameMusic.pause();
+            keysPressed = {};
+            clearThrustTouches();
+            lastTime = 0;
+        } else if (body.classList.contains('game-active') && !isPaused && !isMuted && state.players && !state.isGameOver) {
+            lastTime = 0;
+            playAudio(gameMusic);
+        }
+    }
+
+    function isGameplayFrozen() {
+        return isPaused
+            || (helpPanel && !helpPanel.hidden)
+            || messageArea.classList.contains('visible')
+            || (confirmModal && !confirmModal.hidden);
+    }
+
+    function syncPlayerModeUI() {
+        isMultiplayer = playerModeToggle.checked;
+        if (isMultiplayer) {
+            welcomeTitle.textContent = 'Welcome, Captains!';
+            player2InputContainer.style.display = 'block';
+            labelMulti.classList.add('active');
+            labelSingle.classList.remove('active');
+            highScoreDisplay.style.display = 'none';
+        } else {
+            welcomeTitle.textContent = 'Welcome, Captain!';
+            player2InputContainer.style.display = 'none';
+            labelMulti.classList.remove('active');
+            labelSingle.classList.add('active');
+            highScoreDisplay.style.display = 'block';
+        }
+        localStorage.setItem(MODE_KEY, isMultiplayer ? '1' : '0');
+    }
+
+    function clampFuelInput() {
+        let v = parseFloat(fuelInput.value);
+        if (Number.isNaN(v)) v = settings.initialCoal;
+        v = Math.max(10, Math.min(1000, Math.round(v)));
+        fuelInput.value = v;
+        localStorage.setItem(FUEL_KEY, v);
+        return v;
+    }
+
     function showStartScreen() {
         body.classList.remove('game-active');
         gameScreen.style.display = 'none';
         startScreen.style.display = 'block';
         messageArea.classList.remove('visible', 'success', 'crash');
+        isPaused = false;
+        pauseOverlay.hidden = true;
+        if (confirmModal) confirmModal.hidden = true;
+        confirmResolver = null;
+        setHelpOpen(false);
         if (isTouchDevice) {
             touchControlsContainer.style.display = 'none';
+            clearThrustTouches();
         }
         if (gameLoopId) { cancelAnimationFrame(gameLoopId); gameLoopId = null; }
         gameMusic.pause();
         gameMusic.currentTime = 0;
+        thrustSound.pause();
         displayHighScore();
+        syncPlayerModeUI();
     }
     
     function restartGame() { startGame(); }
@@ -174,8 +471,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const padWidth = minPadWidth + Math.random() * Math.max(0, (maxPadWidth - minPadWidth));
         const padX = Math.random() * (canvas.width - padWidth);
 
-        const initialFuel = parseFloat(fuelInput.value) || settings.initialCoal;
-        localStorage.setItem(FUEL_KEY, initialFuel);
+        const initialFuel = clampFuelInput();
+        localStorage.setItem(NAME_KEY, nameInput.value.trim());
+        localStorage.setItem(NAME_P2_KEY, nameInputP2.value.trim());
+        localStorage.setItem(HARD_MODE_KEY, hardModeToggle.checked ? '1' : '0');
 
         state = { 
             landingPadX: padX, 
@@ -189,6 +488,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ufos: [],
             nextUfoSpawn: Date.now() + 3000
         };
+
+        settings.initialCoal = initialFuel;
 
         const createPlayer = (name, startX, controls, finColor, noseColor) => ({
             name: name || "Anonymous", height: settings.initialHeight, speed: 0, coal: initialFuel,
@@ -250,6 +551,11 @@ document.addEventListener('DOMContentLoaded', () => {
         isMultiplayer = playerModeToggle.checked;
         clearTimeout(restartTimer);
         spaceRestartEnabled = false;
+        isPaused = false;
+        pausedByVisibility = false;
+        pauseOverlay.hidden = true;
+        pauseButton.textContent = '❚❚';
+        pauseButton.setAttribute('aria-label', 'Pause');
         
         body.classList.add('game-active');
         startScreen.style.display = 'none';
@@ -260,11 +566,8 @@ document.addEventListener('DOMContentLoaded', () => {
         outOfFuelP2.classList.remove('visible');
         gameScreen.style.display = 'flex';
 
-        // FIX 2: Resize the canvas BEFORE resetting the state to ensure all calculations use the correct screen dimensions.
-        resizeCanvas(); 
-        resetGameState();
-
         if (isTouchDevice) {
+            clearThrustTouches();
             touchControlsContainer.style.display = 'flex';
             if (isMultiplayer) {
                 touchControlsSingle.style.display = 'none';
@@ -275,24 +578,40 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        if (gameLoopId) cancelAnimationFrame(gameLoopId);
-        lastTime = 0;
-        gameLoopId = requestAnimationFrame(gameLoop);
+        setHelpOpen(false);
+        localStorage.setItem(MODE_KEY, isMultiplayer ? '1' : '0');
+        localStorage.setItem(HARD_MODE_KEY, hardModeToggle.checked ? '1' : '0');
 
         const hSpeedRule = `Max H-Speed: <strong>${settings.maxHSpeedForSafeLanding} m/s</strong>.`;
         const vSpeedRule = `Max V-Speed: <strong>${settings.maxVSpeedForSafeLanding} m/s</strong>.`;
-        
         if (isMultiplayer) {
-            instructionP1.innerHTML = `<strong>${state.players[0].name} (P1):</strong> Use <strong>W A D</strong> to fly.`;
-            instructionP2.innerHTML = `<strong>${state.players[1].name} (P2):</strong> Use <strong>← ↑ →</strong> to fly. Land on the pad with ${vSpeedRule} ${hSpeedRule}`;
-        } else {
-            instructionP1.innerHTML = 'Use <strong> W / ↑ </strong> for main thruster. Use <strong> A/D </strong> or <strong> ←/→ </strong> for side thrusters.';
+            const p1Name = nameInput.value || 'Player 1';
+            const p2Name = nameInputP2.value || 'Player 2';
+            instructionP1.innerHTML = `<strong>${p1Name} (P1):</strong> <strong>W</strong> thrust, <strong>A</strong> / <strong>D</strong> strafe.`;
+            instructionP2.innerHTML = `<strong>${p2Name} (P2):</strong> <strong>↑</strong> thrust, <strong>←</strong> / <strong>→</strong> strafe.<br>Land with ${vSpeedRule} ${hSpeedRule}`;
+        } else if (isTouchDevice) {
+            instructionP1.innerHTML = 'Hold anywhere on the <strong>right ⅔</strong> of the screen to thrust. Use the arrow buttons on the left to strafe.';
             instructionP2.innerHTML = `Land on the pad. ${vSpeedRule} ${hSpeedRule}`;
+        } else {
+            instructionP1.innerHTML = 'Main thrust: <strong>W</strong> / <strong>↑</strong> / <strong>Space</strong>. Strafe: <strong>A</strong> / <strong>D</strong> or <strong>←</strong> / <strong>→</strong>.';
+            instructionP2.innerHTML = `Land on the pad. ${vSpeedRule} ${hSpeedRule}<br><strong>Esc</strong> pauses.`;
         }
+        padSizeInfo.innerHTML = 'Landing Pad Size: <strong>—</strong>';
 
-        padSizeInfo.innerHTML = `Landing Pad Size: <strong>${state.landingPadWidth.toFixed(0)}m</strong>`;
-        gameMusic.currentTime = 0;
-        gameMusic.play();
+        if (gameLoopId) cancelAnimationFrame(gameLoopId);
+
+        // Double rAF: wait until flex layout has applied final play-area size
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                resizeCanvas();
+                resetGameState();
+                padSizeInfo.innerHTML = `Landing Pad Size: <strong>${state.landingPadWidth.toFixed(0)}m</strong>`;
+                lastTime = 0;
+                gameLoopId = requestAnimationFrame(gameLoop);
+                gameMusic.currentTime = 0;
+                playAudio(gameMusic);
+            });
+        });
     }
 
     function handlePlayerLanding(player) {
@@ -311,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.winnerDeclared = true;
                 state.winner = player;
                 player.isLanded = true;
-                successSound.currentTime = 0; successSound.play();
+                successSound.currentTime = 0; playAudio(successSound);
                 player.isLanding = true;
                 player.finalShockwaveWidth = canvas.width * 0.8;
                 state.players.forEach(p => { if (p !== player) p.coal = 0; });
@@ -327,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else { // Single Player
             state.isGameOver = true;
             if (isSuccess) {
-                successSound.currentTime = 0; successSound.play();
+                successSound.currentTime = 0; playAudio(successSound);
                 player.isLanded = true; player.isLanding = true;
                 player.finalShockwaveWidth = canvas.width * 0.8;
                 const score = Math.round(player.coal * 10 + (settings.maxVSpeedForSafeLanding - player.speed) * 500);
@@ -349,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function crashPlayer(player, y) {
         if (player.isCrashed || player.isLanded) return;
-        crashSound.currentTime = 0; crashSound.play();
+        crashSound.currentTime = 0; playAudio(crashSound);
         player.isCrashed = true;
         player.isExploding = true;
         player.explosionAlpha = 1;
@@ -360,7 +679,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function showEndGameMessage(title, text, type, player) {
         if (isTouchDevice) {
             touchControlsContainer.style.display = 'none';
+            clearThrustTouches();
         }
+        isPaused = false;
+        pauseOverlay.hidden = true;
         thrustSound.pause();
         messageArea.classList.remove('success', 'crash');
         messageArea.classList.add(type);
@@ -368,29 +690,43 @@ document.addEventListener('DOMContentLoaded', () => {
         messageText.textContent = text;
 
         if (player) {
+            const vSafe = player.speed <= settings.maxVSpeedForSafeLanding;
+            const hSafe = Math.abs(player.speedX) <= settings.maxHSpeedForSafeLanding;
+            const highScore = getHighScore();
             messageStats.innerHTML = `
                 <p class="message-stats-label">${player.name}'s Final Stats:</p>
-                <div><span>Final V-Speed:</span> <strong>${player.speed.toFixed(2)} m/s</strong></div>
-                <div><span>Final H-Speed:</span> <strong>${player.speedX.toFixed(2)} m/s</strong></div>
+                <div><span>Final V-Speed:</span> <strong class="${vSafe ? 'stat-ok' : 'stat-danger'}">${player.speed.toFixed(2)} m/s</strong> <span>(max ${settings.maxVSpeedForSafeLanding})</span></div>
+                <div><span>Final H-Speed:</span> <strong class="${hSafe ? 'stat-ok' : 'stat-danger'}">${player.speedX.toFixed(2)} m/s</strong> <span>(max ±${settings.maxHSpeedForSafeLanding})</span></div>
                 <div><span>Fuel Remaining:</span> <strong>${Math.max(0, player.coal).toFixed(0)} kg</strong></div>
+                ${!isMultiplayer ? `<div><span>High Score:</span> <strong>${highScore.toLocaleString()}</strong></div>` : ''}
             `;
             messageStats.classList.add('visible');
         } else {
             messageStats.classList.remove('visible');
         }
 
-        restartTimer = setTimeout(() => { spaceRestartEnabled = true; }, 5000);
-        setTimeout(() => { messageArea.classList.add('visible'); }, isMultiplayer ? 2000 : 500);
+        if (restartHint) {
+            restartHint.innerHTML = isTouchDevice
+                ? 'Tap <strong>Play Again</strong> for another try'
+                : 'Press <strong>Enter</strong> to play again';
+        }
+
+        spaceRestartEnabled = true;
+        clearTimeout(restartTimer);
+        setTimeout(() => { messageArea.classList.add('visible'); }, isMultiplayer ? 2000 : 400);
     }
 
     function gameLoop(timestamp) {
         if (!state.players) return;
         
         if (!lastTime) lastTime = timestamp;
-        const dt = Math.min((timestamp - lastTime) / 16.666, 4); // Normalize to 60fps (16.666ms per frame). Cap at 4x to prevent physics glitches.
+        const dt = Math.min((timestamp - lastTime) / 16.666, 4);
         lastTime = timestamp;
+
+        const frozen = isGameplayFrozen();
         
         state.players.forEach(player => {
+            if (frozen) return;
             if (player.isExploding && player.explosionAlpha > 0) {
                 if (player.explosionRadius < player.finalExplosionRadius) player.explosionRadius += 2 * dt;
                 else player.explosionAlpha -= 0.02 * dt;
@@ -398,7 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (player.isLanding && player.landingShockwaveWidth < player.finalShockwaveWidth) player.landingShockwaveWidth += 25 * dt;
         });
 
-        if (!state.isGameOver) {
+        if (!state.isGameOver && !frozen) {
             let anyThrusting = false;
             state.players.forEach((player, index) => {
                 if (player.isLanded || player.isCrashed) return;
@@ -431,12 +767,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (player.height <= 0) { player.height = 0; handlePlayerLanding(player); }
             });
 
-            if (anyThrusting && thrustSound.paused) thrustSound.play();
-            else if (!anyThrusting && !thrustSound.paused) thrustSound.pause();
+            if (anyThrusting && thrustSound.paused && !isMuted) playAudio(thrustSound);
+            else if ((!anyThrusting || isMuted) && !thrustSound.paused) thrustSound.pause();
+        } else if (frozen) {
+            thrustSound.pause();
         }
         
         // UFO Logic
-        if (state.isHardMode && !state.isGameOver) {
+        if (state.isHardMode && !state.isGameOver && !frozen) {
             const now = Date.now();
             if (now > state.nextUfoSpawn && state.ufos.length < 3) {
                 const fromLeft = Math.random() > 0.5;
@@ -497,23 +835,40 @@ document.addEventListener('DOMContentLoaded', () => {
         gameLoopId = requestAnimationFrame(gameLoop);
     }
 
+    function speedClass(value, maxSafe, absolute = false) {
+        const v = absolute ? Math.abs(value) : value;
+        if (v > maxSafe) return 'stat-danger';
+        if (v > maxSafe * 0.7) return 'stat-warn';
+        return 'stat-ok';
+    }
+
+    function formatStatLine(p) {
+        const hClass = speedClass(p.speedX, settings.maxHSpeedForSafeLanding, true);
+        const vClass = speedClass(p.speed, settings.maxVSpeedForSafeLanding);
+        const fuelClass = p.coal <= settings.initialCoal * 0.2 ? 'stat-danger' : (p.coal <= settings.initialCoal * 0.4 ? 'stat-warn' : '');
+        return `
+            <span>H</span><strong class="${hClass}">${p.speedX.toFixed(1)}</strong>
+            <span>V</span><strong class="${vClass}">${p.speed.toFixed(1)}</strong>
+            <span>Alt</span>${p.height.toFixed(0)}
+            <span>Fuel</span><strong class="${fuelClass}">${Math.max(0, p.coal).toFixed(0)}</strong>
+        `;
+    }
+
     function updateHUD() {
         if (!state.players || state.players.length === 0) return;
         if (isMultiplayer) {
             statsDisplay.innerHTML = state.players.map(p => `
                 <div class="player-stats">
-                    <div class="player-name" style="color: ${p.finColor}; text-shadow: 0 0 5px ${p.finColor};">${p.name}</div>
-                    <div class="stats-line">
-                        <span>H-Spd:</span>${p.speedX.toFixed(1)}
-                        <span>V-Spd:</span>${p.speed.toFixed(1)}
-                        <span>Height:</span>${p.height.toFixed(0)}
-                        <span>Fuel:</span>${Math.max(0, p.coal).toFixed(0)}
-                    </div>
+                    <div class="player-name" style="color: ${p.finColor};">${p.name}</div>
+                    <div class="stats-line">${formatStatLine(p)}</div>
                 </div>
-            `).join('<div class="hud-separator"></div>');
+            `).join('');
         } else {
             const p = state.players[0];
-            statsDisplay.innerHTML = `<span>H-Speed:</span> ${p.speedX.toFixed(1)}m/s <span>Height:</span> ${p.height.toFixed(0)}m <span>V-Speed:</span> ${p.speed.toFixed(1)}m/s <span>Fuel:</span> ${p.coal.toFixed(0)}kg`;
+            const hClass = speedClass(p.speedX, settings.maxHSpeedForSafeLanding, true);
+            const vClass = speedClass(p.speed, settings.maxVSpeedForSafeLanding);
+            const fuelClass = p.coal <= settings.initialCoal * 0.2 ? 'stat-danger' : (p.coal <= settings.initialCoal * 0.4 ? 'stat-warn' : '');
+            statsDisplay.innerHTML = `<span>H-Speed</span> <strong class="${hClass}">${p.speedX.toFixed(1)}</strong>m/s <span>Height</span> ${p.height.toFixed(0)}m <span>V-Speed</span> <strong class="${vClass}">${p.speed.toFixed(1)}</strong>m/s <span>Fuel</span> <strong class="${fuelClass}">${Math.max(0, p.coal).toFixed(0)}</strong>kg`;
         }
     }
 
@@ -661,66 +1016,124 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const fuelBarWidth = Math.min(canvas.width * 0.25, 180);
-        const fuelBarHeight = 20;
+        const fuelBarHeight = 10;
+        const fuelBarY = 48;
+        const fuelColorFor = (ratio, fallback) => {
+            if (ratio <= 0.2) return '#ef4444';
+            if (ratio <= 0.4) return '#f59e0b';
+            return fallback;
+        };
         if (state.players && state.players.length > 0) {
             if (isMultiplayer) {
                 if (state.players.length === 2) {
-                    const p1 = state.players[0]; const p1x = 20; const p1y = 20;
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p1x, p1y, fuelBarWidth, fuelBarHeight);
-                    const p1CurrentFuelWidth = (p1.coal / settings.initialCoal) * fuelBarWidth;
-                    ctx.fillStyle = p1.finColor; ctx.fillRect(p1x, p1y, p1CurrentFuelWidth > 0 ? p1CurrentFuelWidth : 0, fuelBarHeight);
-                    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p1x, p1y, fuelBarWidth, fuelBarHeight);
-                    const p2 = state.players[1]; const p2x = canvas.width - fuelBarWidth - 20; const p2y = 20;
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p2x, p2y, fuelBarWidth, fuelBarHeight);
-                    const p2CurrentFuelWidth = (p2.coal / settings.initialCoal) * fuelBarWidth;
-                    ctx.fillStyle = p2.finColor; ctx.fillRect(p2x, p2y, p2CurrentFuelWidth > 0 ? p2CurrentFuelWidth : 0, fuelBarHeight);
-                    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p2x, p2y, fuelBarWidth, fuelBarHeight);
+                    const p1 = state.players[0]; const p1x = 20;
+                    const p1Ratio = Math.max(0, p1.coal / settings.initialCoal);
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p1x, fuelBarY, fuelBarWidth, fuelBarHeight);
+                    ctx.fillStyle = fuelColorFor(p1Ratio, p1.finColor); ctx.fillRect(p1x, fuelBarY, p1Ratio * fuelBarWidth, fuelBarHeight);
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p1x, fuelBarY, fuelBarWidth, fuelBarHeight);
+                    const p2 = state.players[1]; const p2x = canvas.width - fuelBarWidth - 20;
+                    const p2Ratio = Math.max(0, p2.coal / settings.initialCoal);
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p2x, fuelBarY, fuelBarWidth, fuelBarHeight);
+                    ctx.fillStyle = fuelColorFor(p2Ratio, p2.finColor); ctx.fillRect(p2x, fuelBarY, p2Ratio * fuelBarWidth, fuelBarHeight);
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p2x, fuelBarY, fuelBarWidth, fuelBarHeight);
                 }
             } else { 
-                const p1 = state.players[0]; const p1x = 20; const p1y = 20;
-                ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p1x, p1y, fuelBarWidth, fuelBarHeight);
-                const p1CurrentFuelWidth = (p1.coal / settings.initialCoal) * fuelBarWidth;
-                ctx.fillStyle = "rgb(245, 158, 11)"; ctx.fillRect(p1x, p1y, p1CurrentFuelWidth > 0 ? p1CurrentFuelWidth : 0, fuelBarHeight);
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p1x, p1y, fuelBarWidth, fuelBarHeight);
+                const p1 = state.players[0]; const p1x = 20;
+                const p1Ratio = Math.max(0, p1.coal / settings.initialCoal);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(p1x, fuelBarY, fuelBarWidth, fuelBarHeight);
+                ctx.fillStyle = fuelColorFor(p1Ratio, "rgb(245, 158, 11)"); ctx.fillRect(p1x, fuelBarY, p1Ratio * fuelBarWidth, fuelBarHeight);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.strokeRect(p1x, fuelBarY, fuelBarWidth, fuelBarHeight);
             }
         }
     }
 
     function resizeCanvas() {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-        generateStars();
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        // clientWidth/Height are the content box — matches what absolute canvas fills
+        const displayWidth = Math.max(1, Math.round(parent.clientWidth));
+        const displayHeight = Math.max(1, Math.round(parent.clientHeight));
+
+        // Keep backing-store pixels 1:1 with CSS pixels so nothing stretches/squashes
+        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+            generateStars();
+        }
+
         if (!gameLoopId || (state.players && state.isGameOver)) {
             // This check might need adjustment if it causes issues, but it's for resizing the end screen correctly.
-            if (!state.players) resetGameState(); 
+            if (!state.players) resetGameState();
             draw();
         }
+    }
+
+    // Keep buffer size locked to the play area whenever layout changes (HUD, nav, orientation, etc.)
+    const gameArea = canvas.parentElement;
+    if (typeof ResizeObserver !== 'undefined' && gameArea) {
+        const playAreaObserver = new ResizeObserver(() => {
+            resizeCanvas();
+        });
+        playAreaObserver.observe(gameArea);
     }
     
     // --- Initial Setup ---
     window.addEventListener('resize', resizeCanvas);
-    startButton.addEventListener('click', startGame);
-    playAgainButton.addEventListener('click', restartGame);
-    playerModeToggle.addEventListener('change', () => {
-        isMultiplayer = playerModeToggle.checked;
-        if (isMultiplayer) {
-            welcomeTitle.textContent = 'Welcome, Captains!';
-            player2InputContainer.style.display = 'block';
-            labelMulti.classList.add('active');
-            labelSingle.classList.remove('active');
-            highScoreDisplay.style.display = 'none';
-        } else {
-            welcomeTitle.textContent = 'Welcome, Captain!';
-            player2InputContainer.style.display = 'none';
-            labelMulti.classList.remove('active');
-            labelSingle.classList.add('active');
-            highScoreDisplay.style.display = 'block';
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', resizeCanvas);
+    }
+    helpButton.addEventListener('click', () => {
+        setHelpOpen(helpPanel.hidden);
+    });
+    helpClose.addEventListener('click', () => setHelpOpen(false));
+    muteButton.addEventListener('click', toggleMute);
+    muteButtonStart.addEventListener('click', toggleMute);
+    pauseButton.addEventListener('click', () => {
+        if (messageArea.classList.contains('visible')) return;
+        togglePause();
+    });
+    resumeButton.addEventListener('click', () => setPaused(false));
+    quitButton.addEventListener('click', requestQuitToMenu);
+    menuButton.addEventListener('click', requestQuitToMenu);
+    menuEndButton.addEventListener('click', quitToMenu);
+    confirmOk.addEventListener('click', () => closeConfirm(true));
+    confirmCancel.addEventListener('click', () => closeConfirm(false));
+    confirmModal.addEventListener('click', (e) => {
+        if (e.target === confirmModal) closeConfirm(false);
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!body.classList.contains('game-active') || !state.players || state.isGameOver) return;
+        if (document.hidden) {
+            if (!isPaused && !(helpPanel && !helpPanel.hidden)) {
+                pausedByVisibility = true;
+                setPaused(true);
+            }
+        } else if (pausedByVisibility) {
+            pausedByVisibility = false;
+            setPaused(false);
         }
     });
-    
+    nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startGame(); }
+    });
+    nameInputP2.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startGame(); }
+    });
+    fuelInput.addEventListener('change', clampFuelInput);
+    fuelInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); clampFuelInput(); startGame(); }
+    });
+    hardModeToggle.addEventListener('change', () => {
+        localStorage.setItem(HARD_MODE_KEY, hardModeToggle.checked ? '1' : '0');
+    });
+    startButton.addEventListener('click', startGame);
+    playAgainButton.addEventListener('click', restartGame);
+    playerModeToggle.addEventListener('change', syncPlayerModeUI);
+
+    applyMuteState();
     showStartScreen();
-    player2InputContainer.style.display = 'none';
-    labelMulti.classList.remove('active');
-    labelSingle.classList.add('active');
+    if (!isTouchDevice) {
+        setTimeout(() => nameInput.focus(), 50);
+    }
 });

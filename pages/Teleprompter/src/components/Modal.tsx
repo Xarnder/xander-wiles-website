@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { BtnLabel } from './BtnLabel'
 import { IconClose } from './icons'
 
 interface ModalProps {
@@ -54,7 +56,7 @@ export function Modal({
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
       className="modal-root"
       role="presentation"
@@ -87,7 +89,8 @@ export function Modal({
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -122,14 +125,14 @@ export function ConfirmModal({
       footer={
         <>
           <button type="button" className="btn ghost" onClick={onCancel}>
-            {cancelLabel}
+            <BtnLabel>{cancelLabel}</BtnLabel>
           </button>
           <button
             type="button"
             className={`btn ${tone === 'danger' ? 'danger' : 'primary'}`}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            <BtnLabel>{confirmLabel}</BtnLabel>
           </button>
         </>
       }
@@ -174,21 +177,89 @@ export function AlertModal({
         hasAction ? (
           <>
             <button type="button" className="btn ghost" onClick={onClose}>
-              {dismissLabel === 'OK' ? 'Dismiss' : dismissLabel}
+              <BtnLabel>
+                {dismissLabel === 'OK' ? 'Dismiss' : dismissLabel}
+              </BtnLabel>
             </button>
             <button type="button" className="btn primary" onClick={onAction}>
-              {actionLabel}
+              <BtnLabel>{actionLabel}</BtnLabel>
             </button>
           </>
         ) : (
           <button type="button" className="btn primary" onClick={onClose}>
-            {dismissLabel}
+            <BtnLabel>{dismissLabel}</BtnLabel>
           </button>
         )
       }
     >
       <p className="modal-message">{message}</p>
       {fix ? <p className="modal-fix">{fix}</p> : null}
+    </Modal>
+  )
+}
+
+interface StartChoiceModalProps {
+  open: boolean
+  recordingSupported: boolean
+  onStartScriptOnly: () => void
+  onStartWithRecording: () => void
+  onCancel: () => void
+}
+
+/** Ask whether Start should also begin camera recording. */
+export function StartChoiceModal({
+  open,
+  recordingSupported,
+  onStartScriptOnly,
+  onStartWithRecording,
+  onCancel,
+}: StartChoiceModalProps) {
+  return (
+    <Modal
+      open={open}
+      title="Start session"
+      onClose={onCancel}
+      size="sm"
+      footer={
+        <div className="start-choice-actions">
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={onCancel}
+          >
+            <BtnLabel>Cancel</BtnLabel>
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={onStartScriptOnly}
+          >
+            <BtnLabel>Script only</BtnLabel>
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={onStartWithRecording}
+            disabled={!recordingSupported}
+            title={
+              recordingSupported
+                ? 'Start following the script and begin camera recording'
+                : 'Video recording is not supported in this browser'
+            }
+          >
+            <BtnLabel>Start + Record</BtnLabel>
+          </button>
+        </div>
+      }
+    >
+      <p className="modal-message">
+        Do you want to start camera recording as well, or only start following
+        the script?
+      </p>
+      <p className="modal-fix">
+        You can turn this prompt off in Settings. Record stays available anytime
+        from the Record button.
+      </p>
     </Modal>
   )
 }

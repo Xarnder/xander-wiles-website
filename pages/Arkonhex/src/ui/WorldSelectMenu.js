@@ -175,9 +175,9 @@ export class WorldSelectMenu {
                 </div>
                 <div class="world-actions" style="align-items: center;">
                     <button class="world-play-btn btn-pill btn-primary" style="padding: 6px 18px; font-size: 0.85rem;">Play</button>
-                    <button class="world-download-btn btn-icon btn-outline-blue" title="Download world">⬇</button>
-                    <button class="world-rename-btn btn-icon btn-outline" title="Rename world">✏</button>
-                    <button class="world-delete-btn btn-icon btn-outline-red" title="Delete world">🗑</button>
+                    <button class="world-download-btn btn-icon btn-outline-blue" title="Download world"><img src="../../assets/SVGs/Down-ArrowIcons.svg" alt="Download"></button>
+                    <button class="world-rename-btn btn-icon btn-outline" title="Rename world"><img src="../../assets/SVGs/edit.svg" alt="Rename"></button>
+                    <button class="world-delete-btn btn-icon btn-outline-red" title="Delete world">&times;</button>
                 </div>
             `;
 
@@ -191,16 +191,16 @@ export class WorldSelectMenu {
             entry.querySelector('.world-download-btn').addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const btn = e.currentTarget;
-                const prevText = btn.textContent;
-                btn.textContent = '⏳';
+                const prevHTML = btn.innerHTML;
+                btn.textContent = '...';
                 btn.disabled = true;
                 try {
                     await exportWorld(world.id);
-                    btn.textContent = '✅';
-                    setTimeout(() => { btn.textContent = prevText; btn.disabled = false; }, 2000);
+                    btn.textContent = 'OK';
+                    setTimeout(() => { btn.innerHTML = prevHTML; btn.disabled = false; }, 2000);
                 } catch (err) {
                     alert('Export failed: ' + err.message);
-                    btn.textContent = prevText;
+                    btn.innerHTML = prevHTML;
                     btn.disabled = false;
                 }
             });

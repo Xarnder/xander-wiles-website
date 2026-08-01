@@ -119,9 +119,261 @@ const batchStatusSelect = document.getElementById('batch-status-select');
 const statusToggle = document.getElementById('status-toggle');
 const genreInput = document.getElementById('genre-input');
 const editGenreInput = document.getElementById('edit-genre-input');
-const genreDatalist = document.getElementById('genre-list');
 const editImdbScore = document.getElementById('edit-imdb-score');
 const editRtScore = document.getElementById('edit-rt-score');
+
+// Cached unique genres for the custom combobox (datalist is unreliable on iOS)
+let cachedGenres = [];
+const genreComboboxes = [];
+
+function getUniqueGenres() {
+    const genres = new Set();
+    cachedWatches.forEach(w => {
+        if (w.genre) genres.add(w.genre.trim());
+    });
+    return Array.from(genres).sort((a, b) => a.localeCompare(b));
+}
+
+function createGenreCombobox(input) {
+    if (!input) return null;
+    const wrap = input.closest('.genre-combobox');
+    if (!wrap) return null;
+
+    const list = wrap.querySelector('.genre-combobox-list');
+    const toggle = wrap.querySelector('.genre-combobox-toggle');
+    if (!list || !toggle) return null;
+
+    // Portaling the list to body avoids iOS/modal overflow clipping of position:fixed
+    if (list.parentElement !== document.body) {
+        document.body.appendChild(list);
+    }
+
+    let isOpen = false;
+    let activeIndex = -1;
+
+    function getFiltered() {
+        const q = input.value.trim().toLowerCase();
+        if (!q) return cachedGenres.slice();
+        return cachedGenres.filter(g => g.toLowerCase().includes(q));
+    }
+
+    function positionList() {
+        const rect = input.getBoundingClientRect();
+        const gap = 4;
+        const vv = window.visualViewport;
+        const viewportHeight = vv ? vv.height : window.innerHeight;
+        const viewportOffsetTop = vv ? vv.offsetTop : 0;
+        const viewportBottom = viewportOffsetTop + viewportHeight;
+
+        const maxH = Math.min(220, viewportHeight * 0.4);
+        const spaceBelow = viewportBottom - rect.bottom - gap;
+        const spaceAbove = rect.top - viewportOffsetTop - gap;
+        const openUp = spaceBelow < Math.min(maxH, 140) && spaceAbove > spaceBelow;
+        const height = Math.min(maxH, openUp ? spaceAbove : spaceBelow, 220);
+        const width = Math.max(rect.width, 140);
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+
+        list.style.left = `${left}px`;
+        list.style.width = `${width}px`;
+        list.style.maxHeight = `${Math.max(80, height)}px`;
+
+        if (openUp) {
+            list.style.top = 'auto';
+            list.style.bottom = `${window.innerHeight - rect.top + gap}px`;
+        } else {
+            list.style.bottom = 'auto';
+            list.style.top = `${rect.bottom + gap}px`;
+        }
+    }
+
+    function renderOptions() {
+        const filtered = getFiltered();
+
+        list.innerHTML = '';
+        if (filtered.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'genre-combobox-empty';
+            empty.textContent = cachedGenres.length === 0 ? 'Type a new genre' : 'No matching genres';
+            list.appendChild(empty);
+            activeIndex = -1;
+            return;
+        }
+
+        filtered.forEach((genre, i) => {
+            const li = document.createElement('li');
+            li.className = 'genre-combobox-option';
+            li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
+            li.dataset.value = genre;
+            li.textContent = genre;
+
+            // pointerdown + preventDefault avoids iOS blur-before-select race
+            li.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                selectGenre(genre);
+            });
+
+            list.appendChild(li);
+        });
+
+        if (activeIndex >= filtered.length) activeIndex = filtered.length - 1;
+        highlightActive();
+    }
+
+    function highlightActive() {
+        const options = list.querySelectorAll('.genre-combobox-option');
+        options.forEach((opt, i) => {
+            opt.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
+            if (i === activeIndex) {
+                opt.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function open() {
+        if (isOpen) {
+            positionList();
+            renderOptions();
+            return;
+        }
+        isOpen = true;
+        wrap.classList.add('open');
+        list.classList.remove('hidden');
+        input.setAttribute('aria-expanded', 'true');
+        activeIndex = -1;
+        positionList();
+        renderOptions();
+    }
+
+    function close() {
+        if (!isOpen) return;
+        isOpen = false;
+        wrap.classList.remove('open');
+        list.classList.add('hidden');
+        input.setAttribute('aria-expanded', 'false');
+        activeIndex = -1;
+    }
+
+    function selectGenre(genre) {
+        input.value = genre;
+        close();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function onToggle(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isOpen) {
+            close();
+        } else {
+            // Open without forcing focus — keeps the iOS keyboard closed so the list stays visible
+            open();
+        }
+    }
+
+    toggle.addEventListener('pointerdown', (e) => {
+        // Prevent input blur before toggle runs
+        e.preventDefault();
+        onToggle(e);
+    });
+
+    input.addEventListener('focus', () => {
+        open();
+    });
+
+    input.addEventListener('input', () => {
+        if (!isOpen) open();
+        else {
+            activeIndex = -1;
+            positionList();
+            renderOptions();
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        const filtered = getFiltered();
+
+        if (e.key === 'ArrowDown') {
+            if (!isOpen) open();
+            if (filtered.length === 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            activeIndex = activeIndex < filtered.length - 1 ? activeIndex + 1 : 0;
+            renderOptions();
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            if (!isOpen) open();
+            if (filtered.length === 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            activeIndex = activeIndex > 0 ? activeIndex - 1 : filtered.length - 1;
+            renderOptions();
+            return;
+        }
+        if (e.key === 'Enter' && isOpen && activeIndex >= 0 && filtered[activeIndex]) {
+            e.preventDefault();
+            e.stopPropagation();
+            selectGenre(filtered[activeIndex]);
+            return;
+        }
+        if (e.key === 'Escape' && isOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+        }
+    });
+
+    // Close when tapping outside
+    document.addEventListener('pointerdown', (e) => {
+        if (!isOpen) return;
+        if (wrap.contains(e.target) || list.contains(e.target)) return;
+        close();
+    }, true);
+
+    window.addEventListener('resize', () => {
+        if (isOpen) positionList();
+    }, { passive: true });
+
+    // Reposition while scrolling (modal scroll, page scroll)
+    window.addEventListener('scroll', () => {
+        if (isOpen) positionList();
+    }, true);
+
+    // iOS keyboard open/close changes the visual viewport
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            if (isOpen) positionList();
+        }, { passive: true });
+        window.visualViewport.addEventListener('scroll', () => {
+            if (isOpen) positionList();
+        }, { passive: true });
+    }
+
+    return {
+        refresh() {
+            if (isOpen) renderOptions();
+        },
+        close,
+        isOpen: () => isOpen,
+        input
+    };
+}
+
+function updateGenreDatalist() {
+    cachedGenres = getUniqueGenres();
+    genreComboboxes.forEach(cb => cb.refresh());
+}
+
+// Init genre pickers (replaces native datalist, which is broken on iOS Safari/Chrome)
+[genreInput, editGenreInput].forEach(input => {
+    const cb = createGenreCombobox(input);
+    if (cb) genreComboboxes.push(cb);
+});
+
+function closeAllGenreComboboxes() {
+    genreComboboxes.forEach(cb => cb.close());
+}
 
 // Quick Sort Elements
 const quickSortBtn = document.getElementById('quick-sort-btn');
@@ -733,6 +985,7 @@ function showConfirm(title, message, onConfirm, onCancel) {
 
 // Edit Modal Logic
 closeEditModalBtn.addEventListener('click', () => {
+    closeAllGenreComboboxes();
     editModal.classList.add('hidden');
     isQuickSortMode = false;
     isTitleFixMode = false;
@@ -1721,17 +1974,6 @@ function loadData() {
     });
 }
 
-function updateGenreDatalist() {
-    if (!genreDatalist) return;
-    const genres = new Set();
-    cachedWatches.forEach(w => {
-        if (w.genre) genres.add(w.genre.trim());
-    });
-
-    const sortedGenres = Array.from(genres).sort();
-    genreDatalist.innerHTML = sortedGenres.map(g => `<option value="${g}">`).join('');
-}
-
 let currentRenderId = null;
 
 function renderAllCards() {
@@ -2329,8 +2571,14 @@ function initSortable(el) {
 
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
+    const genrePickerOpen = genreComboboxes.some(cb => cb.isOpen());
+
     // 1. ESC to close modals
     if (e.key === 'Escape') {
+        if (genrePickerOpen) {
+            closeAllGenreComboboxes();
+            return;
+        }
         const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
         openModals.forEach(m => m.classList.add('hidden'));
 
@@ -2364,7 +2612,7 @@ window.addEventListener('keydown', (e) => {
     }
 
     // 4. Quick Sort Navigation Arrows
-    if (isQuickSortMode && !editModal.classList.contains('hidden')) {
+    if (isQuickSortMode && !editModal.classList.contains('hidden') && !genrePickerOpen) {
         const isTextInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
         const isSelect = document.activeElement.tagName === 'SELECT';
         const shortcutsEnabled = enableShortcutsToggle ? enableShortcutsToggle.checked : true;

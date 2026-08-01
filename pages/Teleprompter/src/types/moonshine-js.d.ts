@@ -34,6 +34,14 @@ declare module '@moonshine-ai/moonshine-js' {
     PlatformUnsupported: string
   }
 
+  export class MoonshineModel {
+    constructor(modelURL: string, precision?: string)
+    loadModel(): Promise<void>
+    generate(audio: Float32Array): Promise<string | undefined>
+    isLoaded(): boolean
+    isLoading(): boolean
+  }
+
   export class Transcriber {
     callbacks: TranscriberCallbacks
     isActive: boolean

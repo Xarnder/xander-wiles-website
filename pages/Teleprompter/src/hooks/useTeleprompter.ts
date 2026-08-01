@@ -19,10 +19,26 @@ export const FONT_SIZE_MIN = 18
 export const FONT_SIZE_MAX = 128
 export const LINE_WIDTH_MIN = 8
 export const LINE_WIDTH_MAX = 140
+/** 0 = automatic leading from font size; otherwise unitless line-height. */
+export const LINE_HEIGHT_MIN = 1.1
+export const LINE_HEIGHT_MAX = 2.0
+export const SPOKEN_WINDOW_MIN = 5
+export const SPOKEN_WINDOW_MAX = 20
+export const BACKTRACK_MIN = 2
+export const BACKTRACK_MAX = 15
+export const PAST_WORD_DIM_MIN = 15
+export const PAST_WORD_DIM_MAX = 80
+
+export type CameraPreviewMirrorMode = 'auto' | 'on' | 'off'
 
 export interface TeleprompterSettings {
   fontSize: number
   lineWidth: number
+  /**
+   * Script line-height. 0 = automatic (scaled with font size);
+   * otherwise a unitless multiplier (1.1–2.0).
+   */
+  lineHeight: number
   /** Horizontally flip script text only (beam-splitter / glass). */
   mirror: boolean
   /** Flip chrome text/icons horizontally without rearranging layout. */
@@ -31,6 +47,8 @@ export interface TeleprompterSettings {
   chromeBottom: boolean
   /** Larger, chunkier chrome controls for iPad / touch. */
   largeControls: boolean
+  /** Force the compact sticky Start/Record/menu chrome on any screen size. */
+  compactMode: boolean
   darkMode: boolean
   /** Pure black background + pure white text (OLED-friendly). */
   oledMode: boolean
@@ -57,14 +75,46 @@ export interface TeleprompterSettings {
   /** Show the current-word highlight (and past-word dimming). */
   showCursorHighlight: boolean
   /**
+   * Opacity of already-spoken words (15–80%). Lower = more faded past text.
+   */
+  pastWordDim: number
+  /**
    * When true, re-speaking earlier script can rewind the cursor.
    * When false, alignment only searches at/ahead of the current position.
    */
   allowJumpBack: boolean
+  /** How many earlier words must rematch before jump-back rewinds. */
+  backtrackWordCount: number
+  /** Recent spoken-word window used for fingerprint matching. */
+  spokenWindow: number
   /** Where the live cursor sits in the viewport while scrolling. */
   scrollAnchor: ScrollAnchorMode
+  /** Preferred camera facing for recording. */
+  facingMode: FacingMode
   /** Camera recording resolution (16:9). */
   videoResolution: VideoResolution
+  /** Side of the script where the live camera preview sits while recording. */
+  cameraPreviewSide: 'left' | 'right'
+  /** How much of the stage width the live camera preview uses. */
+  cameraPreviewSize: 'quarter' | 'half' | 'three_quarters' | 'fullscreen'
+  /**
+   * Fullscreen preview brightness (1–100). Higher = brighter camera / less dark tint.
+   * Only used when cameraPreviewSize is fullscreen.
+   */
+  cameraPreviewBrightness: number
+  /** Stretch the camera to fill the whole preview column (cover crop). */
+  cameraPreviewFill: boolean
+  /**
+   * Mirror the live camera preview. Auto mirrors front camera only
+   * (does not change the recorded file).
+   */
+  cameraPreviewMirror: CameraPreviewMirrorMode
+  /** Ask whether to also start camera recording when pressing Start. */
+  askRecordOnStart: boolean
+  /** When starting Record, also start voice-follow if it isn’t already running. */
+  recordStartsFollow: boolean
+  /** Keep the screen awake while voice-follow is listening. */
+  wakeLock: boolean
   /** Master switch — hide the entire stats strip when false. */
   showStats: boolean
   showProgressBar: boolean
@@ -73,15 +123,19 @@ export interface TeleprompterSettings {
   showWordsSaid: boolean
   showWordsRemaining: boolean
   showWordsTotal: boolean
+  /** Show live alignment confidence in the stats strip. */
+  showConfidence: boolean
 }
 
 export const DEFAULT_SETTINGS: TeleprompterSettings = {
   fontSize: 36,
   lineWidth: 42,
+  lineHeight: 0,
   mirror: false,
   uiMirror: false,
   chromeBottom: false,
   largeControls: false,
+  compactMode: false,
   darkMode: true,
   oledMode: false,
   boldText: false,
@@ -92,9 +146,21 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   displayMode: 'script',
   cursorOffset: 0,
   showCursorHighlight: true,
+  pastWordDim: 38,
   allowJumpBack: true,
+  backtrackWordCount: 5,
+  spokenWindow: 10,
   scrollAnchor: 'hybrid',
+  facingMode: 'user',
   videoResolution: 'max',
+  cameraPreviewSide: 'left',
+  cameraPreviewSize: 'quarter',
+  cameraPreviewBrightness: 50,
+  cameraPreviewFill: false,
+  cameraPreviewMirror: 'auto',
+  askRecordOnStart: true,
+  recordStartsFollow: true,
+  wakeLock: true,
   showStats: true,
   showProgressBar: true,
   showPercent: true,
@@ -102,6 +168,7 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   showWordsSaid: true,
   showWordsRemaining: true,
   showWordsTotal: true,
+  showConfidence: false,
 }
 
 const SETTINGS_STORAGE_KEY = 'voice-follow-settings'
@@ -134,6 +201,54 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
   const videoResolution: VideoResolution = isVideoResolution(p.videoResolution)
     ? p.videoResolution
     : DEFAULT_SETTINGS.videoResolution
+  const cameraPreviewSide =
+    p.cameraPreviewSide === 'left' || p.cameraPreviewSide === 'right'
+      ? p.cameraPreviewSide
+      : DEFAULT_SETTINGS.cameraPreviewSide
+  const cameraPreviewSize =
+    p.cameraPreviewSize === 'quarter' ||
+    p.cameraPreviewSize === 'half' ||
+    p.cameraPreviewSize === 'three_quarters' ||
+    p.cameraPreviewSize === 'fullscreen'
+      ? p.cameraPreviewSize
+      : DEFAULT_SETTINGS.cameraPreviewSize
+  const cameraPreviewBrightness = clamp(
+    typeof p.cameraPreviewBrightness === 'number'
+      ? Math.round(p.cameraPreviewBrightness)
+      : DEFAULT_SETTINGS.cameraPreviewBrightness,
+    1,
+    100,
+  )
+  const cameraPreviewFill =
+    typeof p.cameraPreviewFill === 'boolean'
+      ? p.cameraPreviewFill
+      : DEFAULT_SETTINGS.cameraPreviewFill
+  const askRecordOnStart =
+    typeof p.askRecordOnStart === 'boolean'
+      ? p.askRecordOnStart
+      : DEFAULT_SETTINGS.askRecordOnStart
+  const recordStartsFollow =
+    typeof p.recordStartsFollow === 'boolean'
+      ? p.recordStartsFollow
+      : DEFAULT_SETTINGS.recordStartsFollow
+  const wakeLock =
+    typeof p.wakeLock === 'boolean' ? p.wakeLock : DEFAULT_SETTINGS.wakeLock
+  const cameraPreviewMirror =
+    p.cameraPreviewMirror === 'auto' ||
+    p.cameraPreviewMirror === 'on' ||
+    p.cameraPreviewMirror === 'off'
+      ? p.cameraPreviewMirror
+      : DEFAULT_SETTINGS.cameraPreviewMirror
+  const facingMode: FacingMode =
+    p.facingMode === 'user' || p.facingMode === 'environment'
+      ? p.facingMode
+      : DEFAULT_SETTINGS.facingMode
+  const rawLineHeight =
+    typeof p.lineHeight === 'number' ? p.lineHeight : DEFAULT_SETTINGS.lineHeight
+  const lineHeight =
+    rawLineHeight <= 0
+      ? 0
+      : clamp(rawLineHeight, LINE_HEIGHT_MIN, LINE_HEIGHT_MAX)
 
   return {
     fontSize: clamp(
@@ -146,6 +261,7 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       LINE_WIDTH_MIN,
       LINE_WIDTH_MAX,
     ),
+    lineHeight,
     mirror: typeof p.mirror === 'boolean' ? p.mirror : DEFAULT_SETTINGS.mirror,
     uiMirror:
       typeof p.uiMirror === 'boolean' ? p.uiMirror : DEFAULT_SETTINGS.uiMirror,
@@ -157,6 +273,10 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.largeControls === 'boolean'
         ? p.largeControls
         : DEFAULT_SETTINGS.largeControls,
+    compactMode:
+      typeof p.compactMode === 'boolean'
+        ? p.compactMode
+        : DEFAULT_SETTINGS.compactMode,
     darkMode:
       typeof p.darkMode === 'boolean' ? p.darkMode : DEFAULT_SETTINGS.darkMode,
     oledMode:
@@ -184,6 +304,14 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
     sentenceBreak,
     displayMode,
     videoResolution,
+    cameraPreviewSide,
+    cameraPreviewSize,
+    cameraPreviewBrightness,
+    cameraPreviewFill,
+    cameraPreviewMirror,
+    askRecordOnStart,
+    recordStartsFollow,
+    wakeLock,
     cursorOffset: clamp(
       typeof p.cursorOffset === 'number'
         ? Math.round(p.cursorOffset)
@@ -199,7 +327,29 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.allowJumpBack === 'boolean'
         ? p.allowJumpBack
         : DEFAULT_SETTINGS.allowJumpBack,
+    backtrackWordCount: clamp(
+      typeof p.backtrackWordCount === 'number'
+        ? Math.round(p.backtrackWordCount)
+        : DEFAULT_SETTINGS.backtrackWordCount,
+      BACKTRACK_MIN,
+      BACKTRACK_MAX,
+    ),
+    spokenWindow: clamp(
+      typeof p.spokenWindow === 'number'
+        ? Math.round(p.spokenWindow)
+        : DEFAULT_SETTINGS.spokenWindow,
+      SPOKEN_WINDOW_MIN,
+      SPOKEN_WINDOW_MAX,
+    ),
+    pastWordDim: clamp(
+      typeof p.pastWordDim === 'number'
+        ? Math.round(p.pastWordDim)
+        : DEFAULT_SETTINGS.pastWordDim,
+      PAST_WORD_DIM_MIN,
+      PAST_WORD_DIM_MAX,
+    ),
     scrollAnchor,
+    facingMode,
     showStats:
       typeof p.showStats === 'boolean' ? p.showStats : DEFAULT_SETTINGS.showStats,
     showProgressBar:
@@ -224,6 +374,10 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.showWordsTotal === 'boolean'
         ? p.showWordsTotal
         : DEFAULT_SETTINGS.showWordsTotal,
+    showConfidence:
+      typeof p.showConfidence === 'boolean'
+        ? p.showConfidence
+        : DEFAULT_SETTINGS.showConfidence,
   }
 }
 
@@ -281,11 +435,15 @@ function persistDeviceId(deviceId: string | null): void {
 }
 
 export interface UseTeleprompterOptions {
-  facingMode?: FacingMode
+  /**
+   * Media-query compact breakpoint (phone / phone landscape).
+   * Combined with settings.compactMode to force keep-at-top scroll.
+   */
+  autoCompact?: boolean
 }
 
 export function useTeleprompter(options: UseTeleprompterOptions = {}) {
-  const { facingMode = 'user' } = options
+  const { autoCompact = false } = options
   const [script, setScriptState] = useState(loadStoredScript)
   const [settings, setSettings] = useState<TeleprompterSettings>(loadStoredSettings)
   const [cursor, setCursor] = useState(0)
@@ -335,10 +493,18 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     setDeviceIdState(id)
   }, [])
 
+  const compactLayout = settings.compactMode || autoCompact
+  // Compact layouts default to top unless the user picked another anchor.
+  const effectiveScrollAnchor: ScrollAnchorMode = compactLayout
+    ? settings.scrollAnchor === 'hybrid'
+      ? 'top'
+      : settings.scrollAnchor
+    : settings.scrollAnchor
+
   const { setCursor: scrollToCursor, jumpToWord, reset: resetScroll } =
     useScrollController(containerRef, {
       sensitivity: settings.scrollSensitivity,
-      anchorMode: settings.scrollAnchor,
+      anchorMode: effectiveScrollAnchor,
       active: liveScroll,
     })
 
@@ -346,6 +512,8 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     const engine = new AlignmentEngine(script, {
       confidenceThreshold: thresholdRef.current,
       allowJumpBack: allowJumpBackRef.current,
+      spokenWindow: settings.spokenWindow,
+      backtrackWordCount: settings.backtrackWordCount,
     })
     engineRef.current = engine
     committedWordsRef.current = []
@@ -428,6 +596,14 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
   }, [settings.allowJumpBack])
 
   useEffect(() => {
+    engineRef.current?.setSpokenWindow(settings.spokenWindow)
+  }, [settings.spokenWindow])
+
+  useEffect(() => {
+    engineRef.current?.setBacktrackWordCount(settings.backtrackWordCount)
+  }, [settings.backtrackWordCount])
+
+  useEffect(() => {
     const detected = engineRef.current?.getSnapshot().cursor ?? 0
     setCursor(applyCursorOffset(detected))
   }, [applyCursorOffset])
@@ -496,7 +672,7 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     clearRecordingResult,
   } = useSpeechStream({
     deviceId,
-    facingMode,
+    facingMode: settings.facingMode,
     videoResolution: settings.videoResolution,
     onPartial,
     onCommitted,
@@ -616,7 +792,15 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     if (!liveScroll) return
     const wordEl = wordRefs.current.get(cursor) ?? null
     scrollToCursor(cursor, wordEl)
-  }, [cursor, liveScroll, scrollToCursor, settings.fontSize, settings.lineWidth, settings.cursorOffset, settings.scrollAnchor])
+  }, [
+    cursor,
+    liveScroll,
+    scrollToCursor,
+    settings.fontSize,
+    settings.lineWidth,
+    settings.cursorOffset,
+    effectiveScrollAnchor,
+  ])
 
   const progress = useMemo(() => {
     const total = scriptWords.length
@@ -667,6 +851,10 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     start,
     pause,
     reset,
+    /** Compact chrome active (manual setting or small-screen breakpoint). */
+    compactLayout,
+    /** Scroll anchor forced by layout: top in compact, hybrid on wide screens. */
+    effectiveScrollAnchor,
     speech: {
       status,
       partialTranscript,

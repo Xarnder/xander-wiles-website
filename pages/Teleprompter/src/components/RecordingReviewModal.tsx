@@ -11,6 +11,7 @@ import {
   transcodeRecordingToMp4,
 } from '../media/transcodeMp4'
 import { ConfirmModal, Modal } from './Modal'
+import { BtnLabel } from './BtnLabel'
 
 interface RecordingReviewModalProps {
   open: boolean
@@ -249,7 +250,7 @@ export function RecordingReviewModal({
               onClick={() => setConfirmDiscard(true)}
               disabled={reviewBlocked}
             >
-              Discard
+              <BtnLabel>Discard</BtnLabel>
             </button>
             <div className="recording-review-primary">
               <button
@@ -258,7 +259,7 @@ export function RecordingReviewModal({
                 onClick={onClose}
                 disabled={reviewBlocked}
               >
-                Keep for later
+                <BtnLabel>Keep for later</BtnLabel>
               </button>
               {shareAvailable ? (
                 <button
@@ -267,7 +268,7 @@ export function RecordingReviewModal({
                   onClick={() => void onShare()}
                   disabled={reviewBlocked}
                 >
-                  {busy === 'share' ? 'Sharing…' : 'Share'}
+                  <BtnLabel>{busy === 'share' ? 'Sharing…' : 'Share'}</BtnLabel>
                 </button>
               ) : null}
               <button
@@ -279,7 +280,9 @@ export function RecordingReviewModal({
                 }}
                 disabled={reviewBlocked}
               >
-                {busy === 'download' ? 'Downloading…' : 'Download'}
+                <BtnLabel>
+                  {busy === 'download' ? 'Downloading…' : 'Download'}
+                </BtnLabel>
               </button>
             </div>
           </div>
@@ -358,7 +361,7 @@ export function RecordingReviewModal({
               className="btn ghost"
               onClick={() => setDownloadOpen(false)}
             >
-              Cancel
+              <BtnLabel>Cancel</BtnLabel>
             </button>
             {alreadyMp4 ? (
               <button
@@ -366,7 +369,7 @@ export function RecordingReviewModal({
                 className="btn primary"
                 onClick={() => void downloadOriginal()}
               >
-                Download MP4
+                <BtnLabel>Download MP4</BtnLabel>
               </button>
             ) : (
               <>
@@ -375,14 +378,14 @@ export function RecordingReviewModal({
                   className="btn"
                   onClick={() => void downloadOriginal()}
                 >
-                  Download {formatLabel}
+                  <BtnLabel>Download {formatLabel}</BtnLabel>
                 </button>
                 <button
                   type="button"
                   className="btn primary"
                   onClick={() => void downloadAsMp4()}
                 >
-                  Convert to MP4
+                  <BtnLabel>Convert to MP4</BtnLabel>
                 </button>
               </>
             )}
@@ -410,7 +413,7 @@ export function RecordingReviewModal({
         footer={
           <div className="recording-download-actions">
             <button type="button" className="btn ghost" onClick={cancelConvert}>
-              Cancel
+              <BtnLabel>Cancel</BtnLabel>
             </button>
           </div>
         }

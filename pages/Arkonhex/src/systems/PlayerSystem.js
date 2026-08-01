@@ -19,6 +19,7 @@ export class PlayerSystem {
         this.jumpForce = 12;
         this.playerHeight = 1.8;
         this.playerRadius = 0.4;
+        this.autoJump = localStorage.getItem('arkonhex_auto_jump') !== 'false'; // default on
 
         this.isFlying = false;
         this.isNoclip = false;
@@ -160,6 +161,70 @@ export class PlayerSystem {
         this.pitchObject.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitchObject.rotation.x));
     }
 
+    /**
+     * True when movement is blocked by a roughly one-block-high step with clear landing space.
+     * Samples several distances and slight lateral offsets so approach angle/speed stay reliable.
+     */
+    canAutoJump(moveDir) {
+        const feetY = this.position.y;
+        const maxStep = 0.62; // Physics already auto-steps bumps up to ~0.61
+        const maxAutoJumpRise = 1.05;
+        const distances = [this.playerRadius + 0.2, this.playerRadius + 0.55, this.playerRadius + 0.9];
+        const lateral = 0.28;
+        const rightX = -moveDir.z;
+        const rightZ = moveDir.x;
+
+        for (const dist of distances) {
+            for (const side of [0, -lateral, lateral]) {
+                const ax = this.position.x + moveDir.x * dist + rightX * side;
+                const az = this.position.z + moveDir.z * dist + rightZ * side;
+                if (this.isOneBlockStepAt(ax, az, feetY, maxStep, maxAutoJumpRise)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    isOneBlockStepAt(x, z, feetY, maxStep, maxRise) {
+        // Scan cells whose tops could form a ~1-block rise (handles partial hex heights).
+        const lowY = Math.floor(feetY + maxStep + 0.01);
+        const highY = Math.floor(feetY + maxRise);
+        if (highY < lowY) return false;
+
+        for (let y = lowY; y <= highY; y++) {
+            const stepId = this.physics.getBlockAt(x, y, z);
+            if (!stepId || !this.physics.isSolid(stepId)) continue;
+
+            const stepTop = y + this.physics.getBlockHeightAt(x, y, z);
+            const rise = stepTop - feetY;
+            if (rise <= maxStep || rise > maxRise) continue;
+
+            // Landing footprint must fit the player (shin through head)
+            const bodyBottom = stepTop + 0.05;
+            const bodyTop = stepTop + this.playerHeight - 0.05;
+            let blocked = false;
+            for (let by = Math.floor(bodyBottom); by <= Math.floor(bodyTop); by++) {
+                if (by <= y) continue;
+                const id = this.physics.getBlockAt(x, by, z);
+                if (id && this.physics.isSolid(id)) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (blocked) continue;
+
+            // Need room to start the jump from the current column
+            const headClearY = Math.floor(feetY + this.playerHeight + 0.15);
+            const headId = this.physics.getBlockAt(this.position.x, headClearY, this.position.z);
+            if (headId && this.physics.isSolid(headId)) return false;
+
+            return true;
+        }
+
+        return false;
+    }
+
     updateMovement(delta) {
         // Calculate forward and right vectors based on yaw
         const forward = this.forwardVector.set(0, 0, -1).applyQuaternion(this.yawObject.quaternion);
@@ -199,10 +264,14 @@ export class PlayerSystem {
             this.isNoclip = !this.isNoclip;
         }
 
-        // Jump
-        if (this.input.isKeyDown('Space') && this.onGround && !this.isFlying) {
-            this.velocity.y = this.jumpForce;
-            this.onGround = false;
+        // Jump (manual or auto-jump onto a one-block step)
+        if (this.onGround && !this.isFlying) {
+            const wantsJump = this.input.isKeyDown('Space');
+            const shouldAutoJump = this.autoJump && !wantsJump && moveDir.lengthSq() > 0 && this.canAutoJump(moveDir);
+            if (wantsJump || shouldAutoJump) {
+                this.velocity.y = this.jumpForce;
+                this.onGround = false;
+            }
         }
 
         const isSprinting = this.input.isKeyDown('ShiftLeft');

@@ -37,6 +37,8 @@
 
 html {
     background-color: var(--bg);
+    /* Disable double-tap zoom on touch devices; pinch-zoom still works */
+    touch-action: manipulation;
 }
 
 body {
@@ -46,6 +48,7 @@ body {
     margin: 0;
     overflow-x: hidden;
     min-height: 100vh;
+    touch-action: manipulation;
     background-image:
         radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 100% 100%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
@@ -551,6 +554,121 @@ select:focus {
     border-color: var(--accent);
     background: rgba(255, 255, 255, 0.08);
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+/* --- Genre Combobox (iOS-safe replacement for datalist) --- */
+.genre-combobox {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    flex: 1;
+}
+
+.genre-combobox input[type="text"] {
+    width: 100%;
+    padding-right: 36px;
+    flex: 1;
+    min-width: 0;
+}
+
+.genre-combobox-toggle {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    margin: 0;
+    border: none !important;
+    border-radius: 10px;
+    background: transparent !important;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: none !important;
+    overflow: visible;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: inherit;
+}
+
+.genre-combobox-toggle:hover,
+.genre-combobox-toggle:focus-visible {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    box-shadow: none;
+}
+
+.genre-combobox-toggle:active {
+    filter: none;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.genre-combobox-toggle svg {
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+    transition: transform 0.2s ease;
+}
+
+.genre-combobox.open .genre-combobox-toggle svg {
+    transform: rotate(180deg);
+}
+
+.genre-combobox-list {
+    position: fixed;
+    z-index: 10050;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    max-height: min(220px, 40vh);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    background: rgba(12, 12, 18, 0.98);
+    border: 1px solid var(--border-bright);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.genre-combobox-list.hidden {
+    display: none !important;
+}
+
+.genre-combobox-option {
+    padding: 12px 14px;
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.genre-combobox-option:hover,
+.genre-combobox-option[aria-selected="true"] {
+    background: rgba(59, 130, 246, 0.25);
+    color: #fff;
+}
+
+.genre-combobox-empty {
+    padding: 12px 14px;
+    color: var(--text-dim);
+    font-size: 13px;
+    pointer-events: none;
 }
 
 /* --- Slider Styling --- */

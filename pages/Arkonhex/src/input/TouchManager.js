@@ -52,12 +52,12 @@ export class TouchManager {
                 </div>
                 <div id="tc-look-zone"></div>
                 <div id="tc-actions">
-                    <button id="tc-btn-jump" class="tc-btn tc-btn-small">⬆️</button>
-                    <button id="tc-btn-fly" class="tc-btn tc-btn-small">✈️</button>
-                    <button id="tc-btn-break" class="tc-btn tc-btn-large">⛏️</button>
-                    <button id="tc-btn-place" class="tc-btn tc-btn-large">🧱</button>
+                    <button id="tc-btn-jump" class="tc-btn" aria-label="Jump"><img src="../../assets/SVGs/jump.svg" alt=""></button>
+                    <button id="tc-btn-fly" class="tc-btn" aria-label="Fly"><img src="../../assets/SVGs/fly.svg" alt=""></button>
+                    <button id="tc-btn-break" class="tc-btn" aria-label="Break"><img src="../../assets/SVGs/break.svg" alt=""></button>
+                    <button id="tc-btn-place" class="tc-btn" aria-label="Place"><img src="../../assets/SVGs/hex-place.svg" alt=""></button>
                 </div>
-                <button id="tc-btn-menu" class="tc-btn tc-btn-small tc-top-right">⏸️</button>
+                <button id="tc-btn-menu" class="tc-btn tc-btn-small tc-top-right" aria-label="Pause"><img src="../../assets/SVGs/pause.svg" alt=""></button>
             </div>
         `;
         uiLayer.insertAdjacentHTML('beforeend', touchHtml);

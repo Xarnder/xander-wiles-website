@@ -132,7 +132,8 @@ html[data-theme='oled'] .script-word {
 }
 
 html[data-theme='oled'] .script-word.is-past {
-  color: rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+  opacity: var(--past-word-opacity, 0.32);
 }
 
 
@@ -186,31 +187,64 @@ textarea {
   padding-left: env(safe-area-inset-left, 0px);
 }
 
-/* UI mirror: flip text/icons in chrome only — layout positions stay put. */
-.app-shell[data-ui-mirrored='true'] .brand-name,
-.app-shell[data-ui-mirrored='true'] .brand-mark,
-.app-shell[data-ui-mirrored='true'] .mode-badge,
-.app-shell[data-ui-mirrored='true'] .btn,
-.app-shell[data-ui-mirrored='true'] .stat-chip,
-.app-shell[data-ui-mirrored='true'] .panel-header h2,
-.app-shell[data-ui-mirrored='true'] .modal-header h2,
-.app-shell[data-ui-mirrored='true'] .modal-message,
-.app-shell[data-ui-mirrored='true'] .modal-fix,
-.app-shell[data-ui-mirrored='true'] .error-banner,
-.app-shell[data-ui-mirrored='true'] .loading-bar > span,
-.app-shell[data-ui-mirrored='true'] .settings-section-label,
-.app-shell[data-ui-mirrored='true'] .settings-hint,
-.app-shell[data-ui-mirrored='true'] .settings-grid .toggle > span,
-.app-shell[data-ui-mirrored='true'] .slider-field-header > span,
-.app-shell[data-ui-mirrored='true'] .slider-field-meta em,
-.app-shell[data-ui-mirrored='true'] .settings-grid select,
-.app-shell[data-ui-mirrored='true'] .settings-mic > span,
-.app-shell[data-ui-mirrored='true'] .confidence-readout,
-.app-shell[data-ui-mirrored='true'] .howto-page h2,
-.app-shell[data-ui-mirrored='true'] .howto-page h3,
-.app-shell[data-ui-mirrored='true'] .howto-lead,
-.app-shell[data-ui-mirrored='true'] .file-import {
+/* UI mirror: flip text/icons in chrome only — layout positions stay put.
+   Uses html + .app-shell flags so portaled settings/modals are included.
+   Flip leaf nodes only — never the <button> itself (WebKit often skips
+   transforming native button label text). */
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .brand-name,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .brand-mark,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .mode-badge,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .btn-label,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .btn-icon,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .record-btn-dot,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .stat-chip,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .panel-header h2,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-panel-header h2,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-tab .btn-label,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .modal-header h2,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .modal-message,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .modal-form,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .error-banner,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .loading-bar > span,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-section-label,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-hint,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-grid .toggle > span,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .slider-field-header > span,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .slider-field-meta em,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-grid select,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .settings-mic > span,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .confidence-readout,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-page h2,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-page h3,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-lead,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-body p,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-steps,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-list,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .howto-flow-step,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .file-import,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .editor-stats,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-review-filename,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-review-stats,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-review-hint,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-review-error,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-review-notice,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .recording-convert-hint,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .replace-recording-name,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .camera-preview-rec,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .camera-preview-pill,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .camera-preview-meter-label {
+  display: inline-block;
   transform: scaleX(-1);
+}
+
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .mode-badge,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .stat-chip,
+:is(html[data-ui-mirrored='true'], .app-shell[data-ui-mirrored='true']) .file-import {
+  display: inline-flex;
+}
+
+.btn-label {
+  display: inline-block;
 }
 
 /* Dock the whole controls chrome as a footer for easier reach. */
@@ -381,6 +415,15 @@ textarea {
   z-index: 5;
 }
 
+.controls-desktop {
+  display: block;
+  min-width: 0;
+}
+
+.controls-mobile {
+  display: none;
+}
+
 .controls-main {
   display: flex;
   align-items: stretch;
@@ -426,6 +469,41 @@ textarea {
   border-radius: calc(var(--radius) - 2px);
 }
 
+.btn.record-btn {
+  background: #2a1a12;
+  border-color: rgba(255, 200, 120, 0.4);
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='light'] .btn.record-btn {
+  background: #fff8f0;
+  border-color: rgba(80, 40, 10, 0.28);
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(80, 40, 10, 0.12);
+}
+
+html[data-theme='oled'] .btn.record-btn {
+  background: #111111;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.btn.record-btn:hover {
+  background: #3a2418;
+  border-color: rgba(255, 200, 120, 0.55);
+  filter: none;
+}
+
+html[data-theme='light'] .btn.record-btn:hover {
+  background: #fff0e0;
+  filter: none;
+}
+
+html[data-theme='oled'] .btn.record-btn:hover {
+  background: #1a1a1a;
+  filter: none;
+}
+
 .record-btn-dot {
   width: 0.55rem;
   height: 0.55rem;
@@ -440,8 +518,44 @@ textarea {
   box-shadow: 0 0 10px rgba(255, 70, 90, 0.75);
 }
 
+.btn.record-btn.active,
+.btn.record-btn.is-recording {
+  background: #3a1418;
+  border-color: rgba(255, 90, 110, 0.65);
+  box-shadow:
+    0 0 16px rgba(255, 70, 90, 0.28),
+    0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='light'] .btn.record-btn.active,
+html[data-theme='light'] .btn.record-btn.is-recording {
+  background: #ffe8ea;
+  border-color: rgba(201, 68, 82, 0.55);
+}
+
+html[data-theme='oled'] .btn.record-btn.active,
+html[data-theme='oled'] .btn.record-btn.is-recording {
+  background: #1a080a;
+}
+
 .record-btn.is-recording {
   border-color: rgba(255, 90, 110, 0.55);
+}
+
+.btn.record-btn.has-take:not(.is-recording) {
+  background: #2e1c0e;
+  border-color: rgba(255, 170, 80, 0.55);
+  box-shadow:
+    0 0 14px rgba(255, 150, 60, 0.28),
+    0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='light'] .btn.record-btn.has-take:not(.is-recording) {
+  background: #fff3e4;
+}
+
+html[data-theme='oled'] .btn.record-btn.has-take:not(.is-recording) {
+  background: #14100a;
 }
 
 .record-btn.has-take {
@@ -1049,7 +1163,7 @@ html[data-theme='light'] .progress-percent {
 }
 
 .app-shell[data-ui-scale='large'] .settings-panel-body {
-  max-height: min(80dvh, calc(100svh - 9.5rem));
+  max-height: none;
   padding: 1rem 1.1rem 1.25rem;
 }
 
@@ -1253,6 +1367,59 @@ html[data-theme='light'] .modal-footer {
   border: 1px solid rgba(255, 170, 80, 0.28);
 }
 
+.start-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.start-choice-actions .btn {
+  min-height: 2.4rem;
+}
+
+/* Portaled modals — responsive on all screen sizes (not nested under .app-shell). */
+@media (max-width: 720px), (orientation: landscape) and (max-height: 500px) {
+  .modal-root {
+    padding: 0.75rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    align-items: end;
+  }
+
+  .modal-card,
+  .modal-card.modal-sm,
+  .modal-card.modal-lg {
+    width: min(100%, 28rem);
+    max-height: min(88dvh, 88svh);
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+    min-height: 2.6rem;
+  }
+
+  .modal-footer .confidence-readout {
+    margin-left: 0;
+  }
+
+  .start-choice-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .start-choice-actions .btn {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+}
+
 html[data-theme='light'] .modal-fix {
   background: rgba(200, 110, 30, 0.1);
   border-color: rgba(180, 90, 20, 0.22);
@@ -1398,7 +1565,7 @@ html[data-theme='light'] .recording-convert-meter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 0.55rem;
   width: 100%;
 }
@@ -1406,12 +1573,18 @@ html[data-theme='light'] .recording-convert-meter {
 .recording-review-primary {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
   gap: 0.45rem;
-  margin-left: auto;
+  margin-left: 0;
 }
 
-.recording-review-primary .btn {
+.recording-review-primary .btn,
+.recording-review-discard {
   min-width: 6.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .replace-recording-actions {
@@ -1456,6 +1629,225 @@ html[data-theme='light'] .recording-convert-meter {
     0 0 0 1px rgba(0, 0, 0, 0.2);
   background: #0a0a0a;
   pointer-events: none;
+}
+
+/* Recording rail: sized column; video keeps capture aspect; stats fill the rest. */
+.preview-rail {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+.stage[data-recording-preview='true'] .preview-rail {
+  width: 25%;
+  flex: 0 0 25%;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='quarter'] .preview-rail {
+  width: 25%;
+  flex: 0 0 25%;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='half'] .preview-rail {
+  width: 50%;
+  flex: 0 0 50%;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='three_quarters'] .preview-rail {
+  width: 75%;
+  flex: 0 0 75%;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] {
+  position: relative;
+  display: grid;
+  grid-template: 1fr / 1fr;
+  gap: 0;
+  align-items: stretch;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .stage-main,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .preview-rail {
+  grid-area: 1 / 1;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .preview-rail {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  flex: none;
+  order: unset;
+  gap: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .preview-rail.is-fill .camera-preview,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .camera-preview {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .camera-preview-video {
+  object-fit: cover;
+}
+
+/* Dark tint over the fullscreen camera so script text stays readable.
+   Opacity comes from --preview-dim (1 − brightness/100). Default brightness 50% → 0.5. */
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .preview-rail::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: rgba(0, 0, 0, var(--preview-dim, 0.5));
+  pointer-events: none;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .stage-main {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .script-view,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .script-editor-page,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .howto-page {
+  background: transparent;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .script-view::before,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .script-editor-page::before,
+.stage[data-recording-preview='true'][data-preview-size='fullscreen'] .howto-page::before {
+  display: none;
+}
+
+.stage[data-recording-preview='true'][data-preview-side='left'] .preview-rail {
+  order: -1;
+}
+
+.stage[data-recording-preview='true'][data-preview-side='right'] .preview-rail {
+  order: 1;
+}
+
+.preview-rail .camera-preview {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  aspect-ratio: var(--preview-aspect, 16 / 9);
+  flex: 0 0 auto;
+  align-self: stretch;
+  border-radius: calc(var(--radius) - 4px);
+}
+
+.preview-rail .camera-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.preview-rail.is-fill {
+  gap: 0;
+}
+
+.preview-rail.is-fill .camera-preview {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  align-self: stretch;
+  border-radius: var(--radius);
+}
+
+.preview-rail.is-fill .camera-preview-video {
+  object-fit: cover;
+}
+
+.preview-rail-stats {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.65rem 0.7rem 0.75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--glass-strong);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-glass);
+  backdrop-filter: blur(var(--blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
+  pointer-events: auto;
+}
+
+html[data-theme='oled'] .preview-rail-stats {
+  background: #000000;
+  box-shadow: none;
+}
+
+.preview-rail-stats .stats-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.preview-rail-stats .stats-strip.is-empty {
+  display: none;
+}
+
+.preview-rail-stats .progress-readout {
+  order: 0;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.preview-rail-stats .stat-chips {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.preview-rail-stats .stats-strip.is-stacked .stat-chips {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.preview-rail-stats .stats-strip.is-stacked .stat-chip {
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.78rem;
+  border-radius: 12px;
+}
+
+.preview-rail-stats .stats-strip.is-stacked .stat-chip em {
+  font-size: 1.05rem;
 }
 
 .camera-preview.is-recording {
@@ -1988,9 +2380,11 @@ html[data-theme='light'] .recording-convert-meter {
   flex-direction: column;
   padding: 0;
   z-index: 4;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   width: 100%;
+  height: 100%;
   box-sizing: border-box;
   border: 1px solid var(--border-soft);
   border-radius: calc(var(--radius) - 4px);
@@ -1998,18 +2392,118 @@ html[data-theme='light'] .recording-convert-meter {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* Grow chrome to fill the shell when settings are open so the panel can be full height. */
+.controls:has(.settings-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.controls:has(.settings-panel) .controls-desktop {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell:has(.settings-panel) .stage {
+  display: none;
+}
+
+.settings-panel-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem 0.55rem;
+  border-bottom: 1px solid var(--border-soft);
+  flex: 0 0 auto;
+}
+
+.settings-panel-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-close-btn {
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  padding: 0.4rem;
+}
+
 .settings-panel-body {
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
-  max-height: min(78dvh, calc(100svh - 8rem));
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: auto;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  padding: 0.9rem 1rem 1.15rem;
+  padding: 0.85rem 1rem 1rem;
   scroll-padding-block: 0.75rem;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  padding: 0.55rem 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.settings-tab {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.38rem 0.78rem;
+  min-height: 2rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-tab.is-active {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: rgba(255, 160, 70, 0.55);
+  box-shadow: 0 0 12px rgba(255, 140, 50, 0.22);
+}
+
+html[data-theme='light'] .settings-tab:hover {
+  background: rgba(80, 40, 10, 0.06);
+}
+
+.settings-hint-span {
+  grid-column: 1 / -1;
 }
 
 .settings-grid {
@@ -2124,11 +2618,32 @@ html[data-theme='light'] .recording-convert-meter {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  padding-bottom: 0.15rem;
+  margin-top: 0;
+  padding: 0.75rem 1rem 0.9rem;
   border-top: 1px solid var(--border-soft);
   min-width: 0;
+  flex: 0 0 auto;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme='light'] .settings-footer {
+  background: rgba(80, 40, 10, 0.04);
+}
+
+.settings-model-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.75rem;
+  grid-column: 1 / -1;
+}
+
+.settings-model-actions .btn {
+  min-width: 8.5rem;
+  min-height: 2.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-preload {
@@ -2252,16 +2767,22 @@ html[data-theme='light'] .settings-grid input[type='range']::-webkit-slider-runn
 
 .stage[data-recording-preview='true'] {
   gap: 0.65rem;
+  align-items: stretch;
 }
 
 .stage[data-recording-preview='true'] .stage-main {
   flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .stage[data-recording-preview='true'] .script-view,
 .stage[data-recording-preview='true'] .script-editor-page,
 .stage[data-recording-preview='true'] .howto-page {
   width: 100%;
+  height: 100%;
+  max-width: none;
 }
 
 .script-view {
@@ -2510,13 +3031,15 @@ html[data-bold-script='true'] .script-focus-word {
   color: var(--text);
   transition:
     color 180ms ease,
+    opacity 180ms ease,
     background-color 180ms ease,
     box-shadow 180ms ease;
   border-radius: 0.2em;
 }
 
 .script-word.is-past {
-  color: var(--text-past);
+  color: var(--text);
+  opacity: var(--past-word-opacity, 0.38);
 }
 
 .script-word.is-seekable {
@@ -2557,293 +3080,505 @@ html[data-bold-script='true'] .script-focus-word {
   }
 }
 
-@media (max-width: 720px) {
-  .controls {
-    padding: 0.35rem 0.55rem calc(0.4rem + env(safe-area-inset-bottom, 0px) * 0);
-    border-radius: 0 0 14px 14px;
+/* Compact chrome: sticky Start/Record/menu. Enabled via data-compact on
+   .app-shell (manual setting and/or auto matchMedia in App.tsx). */
+.app-shell[data-compact='true'] .controls-desktop {
+    display: none;
   }
 
-  .app-shell[data-chrome-dock='bottom'] .controls {
-    border-radius: 14px 14px 0 0;
-    padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+.app-shell[data-compact='true'] .controls-mobile {
+    display: block;
+    pointer-events: auto;
   }
 
-  .controls-main {
-    gap: 0.4rem;
+.app-shell[data-compact='true'] .controls {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    left: auto;
+    bottom: auto;
+    width: auto;
+    max-width: calc(100% - 0.7rem);
+    flex: 0 0 auto;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    z-index: 30;
+    pointer-events: none;
+    overflow: visible;
+    /* Avoid a fixed-position containing block so settings/modals can go fullscreen. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
   }
 
-  .controls-start .start-btn {
-    min-width: 4.5rem;
-    padding: 0.65rem 0.75rem;
-    font-size: 0.85rem;
+html[data-theme='oled'] .app-shell[data-compact='true'] .controls {
+    background: transparent;
+    box-shadow: none;
+    border-color: transparent;
   }
 
-  .controls-start .record-btn {
-    min-width: 4.25rem;
-    padding: 0.55rem 0.55rem;
+html[data-theme='oled'] .app-shell[data-compact='true'] .mobile-sticky,
+html[data-theme='oled'] .app-shell[data-compact='true'] .mobile-menu {
+    background: #000000;
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: none;
+  }
+
+.app-shell[data-compact='true'] .controls::before {
+    display: none;
+  }
+
+/* Footer-dock is a desktop chrome option — keep mobile cluster top-right. */
+
+.app-shell[data-compact='true'][data-chrome-dock='bottom'] .controls {
+    order: unset;
+    border-radius: 0;
+    padding-bottom: 0;
+    display: block;
+  }
+
+.app-shell[data-compact='true'][data-chrome-dock='bottom'] .stage {
+    order: unset;
+  }
+
+.app-shell[data-compact='true'][data-chrome-dock='bottom'] .settings-panel,
+.app-shell[data-compact='true'][data-chrome-dock='bottom'] .error-banner,
+.app-shell[data-compact='true'][data-chrome-dock='bottom'] .loading-bar {
+    order: unset;
+  }
+
+.app-shell[data-compact='true'] .mobile-sticky {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0.3rem;
+    padding: 0.28rem;
+    border-radius: 999px;
+    background: var(--glass-strong);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-glass);
+    backdrop-filter: blur(var(--blur)) saturate(1.35);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(1.35);
+    pointer-events: auto;
+  }
+
+.app-shell[data-compact='true'] .mobile-chrome-btn {
+    min-height: 2.35rem;
+    min-width: 0;
+    padding: 0.4rem 0.7rem;
     font-size: 0.78rem;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
   }
 
-  .controls-start .record-take-btn {
-    min-width: 3.25rem;
-    padding: 0.55rem 0.45rem;
-    font-size: 0.78rem;
-  }
-
-  .stage[data-recording-preview='true'] {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .stage[data-recording-preview='true'] .camera-preview {
-    order: -1;
-    width: min(42vw, 8.5rem);
-    max-height: min(28dvh, 11rem);
-    align-self: flex-end;
-  }
-
-  .camera-preview {
-    width: min(32vw, 9.5rem);
-    align-self: flex-start;
-    max-height: min(42dvh, 16rem);
-  }
-
-  .controls-top {
-    gap: 0.4rem 0.5rem;
-  }
-
-  .brand-name {
+.app-shell[data-compact='true'] .mobile-sticky .start-btn {
+    min-width: 3.85rem;
+    padding-inline: 0.75rem;
     font-size: 0.8rem;
-    max-width: 42vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
-  .mode-badge {
-    max-width: 42vw;
-    overflow: hidden;
+.app-shell[data-compact='true'] .mobile-sticky .record-btn {
+    min-width: 4.1rem;
+    gap: 0.3rem;
+    font-weight: 650;
   }
 
-  .mode-badge .mode-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
+.app-shell[data-compact='true'] .mobile-menu-btn {
+    width: 2.35rem;
+    min-width: 2.35rem;
+    padding: 0.4rem;
+    justify-content: center;
   }
 
-  .controls-top .primary-actions {
+.app-shell[data-compact='true'] .mobile-menu-btn .btn-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu {
+    pointer-events: auto;
+    margin-top: 0.4rem;
+    width: min(18.5rem, calc(100vw - 1.1rem));
+    max-height: min(70dvh, calc(100svh - 5.5rem));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.65rem;
+    border-radius: 16px;
+    background: #1a100c;
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-glass);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-left: auto;
+  }
+
+html[data-theme='light'] .app-shell[data-compact='true'] .mobile-menu {
+    background: #fbf6ef;
+  }
+
+html[data-theme='oled'] .app-shell[data-compact='true'] .mobile-menu {
+    background: #000000;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu .mode-badge {
+    align-self: stretch;
+    justify-content: center;
+    max-width: none;
     width: 100%;
-    margin-left: 0;
-    justify-content: stretch;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu .mode-badge .mode-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.35rem;
   }
 
-  .primary-actions .btn {
+.app-shell[data-compact='true'] .mobile-menu-actions .btn {
     width: 100%;
     min-height: 2.4rem;
-    padding-inline: 0.4rem;
+    padding-inline: 0.45rem;
     font-size: 0.78rem;
+    justify-content: center;
   }
 
-  .app-shell[data-ui-scale='large'] .primary-actions .btn {
-    min-height: 3rem;
-    font-size: 0.95rem;
-    padding-inline: 0.5rem;
-  }
-
-  .app-shell[data-ui-scale='large'] .controls-start .start-btn {
-    min-width: 5.25rem;
-    font-size: 1.05rem;
-  }
-
-  .app-shell[data-ui-scale='large'] .nudge-btn.icon-btn {
-    min-height: 3rem;
-  }
-
-  .control-row.secondary-actions {
+.app-shell[data-compact='true'] .mobile-menu-stats {
+    display: flex;
+    flex-direction: column;
     gap: 0.4rem;
   }
 
-  .stat-chips {
+.app-shell[data-compact='true'] .mobile-menu-stats .stats-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu-stats .progress-readout {
+    order: 0;
+    flex: 0 0 auto;
+  }
+
+.app-shell[data-compact='true'] .mobile-menu-stats .stat-chips {
     width: 100%;
   }
 
-  .nudge-group {
+.app-shell[data-compact='true'] .mobile-menu-nudge .nudge-group {
     width: 100%;
     margin-left: 0;
     justify-content: space-between;
   }
 
-  .nudge-btn.icon-btn {
+.app-shell[data-compact='true'] .mobile-menu-nudge .nudge-btn.icon-btn {
     flex: 1 1 0;
     min-height: 2.4rem;
     min-width: 0;
   }
 
-  .nudge-btn .btn-icon {
+.app-shell[data-compact='true'] .mobile-menu-nudge .nudge-btn .btn-icon {
     width: 1rem;
     height: 1rem;
   }
 
-  .settings-panel {
-    margin-top: 0.4rem;
+.app-shell[data-compact='true'][data-ui-scale='large'] .mobile-chrome-btn {
+    min-height: 2.75rem;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.85rem;
   }
 
-  .settings-panel-body {
-    max-height: min(68dvh, calc(100svh - 9.5rem));
-    padding: 0.8rem 0.85rem 1rem;
+.app-shell[data-compact='true'][data-ui-scale='large'] .mobile-menu-btn {
+    width: 2.75rem;
+    min-width: 2.75rem;
   }
 
-  .settings-grid {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+.app-shell[data-compact='true'][data-ui-scale='large'] .mobile-menu-actions .btn,
+.app-shell[data-compact='true'][data-ui-scale='large'] .mobile-menu-nudge .nudge-btn.icon-btn {
+    min-height: 2.85rem;
+    font-size: 0.9rem;
   }
 
-  .settings-grid select,
-  .settings-grid .toggle {
-    min-height: 2.4rem;
+/* Sticky float clearance so script lines wrap around the top-right cluster. */
+
+.app-shell[data-compact='true'] .script-view:not(.script-focus) .script-text::before {
+    content: '';
+    float: right;
+    position: sticky;
+    top: 0.35rem;
+    width: min(12.75rem, 58vw);
+    height: 3.15rem;
+    margin: 0 0 0.35rem 0.55rem;
+    shape-outside: margin-box;
+    pointer-events: none;
   }
 
-  .settings-footer {
-    flex-direction: column;
-    align-items: stretch;
+/* Script mirror flips the float — use left so it still clears the visual top-right. */
+
+.app-shell[data-compact='true'] .script-view[data-mirrored='true']:not(.script-focus) .script-text::before {
+    float: left;
+    margin: 0 0.55rem 0.35rem 0;
   }
 
-  .settings-footer .btn {
-    width: 100%;
-    min-height: 2.4rem;
+.app-shell[data-compact='true'][data-ui-scale='large'] .script-view:not(.script-focus) .script-text::before {
+    width: min(14.5rem, 62vw);
+    height: 3.55rem;
   }
 
-  .confidence-readout {
-    white-space: normal;
-    text-align: center;
+.app-shell[data-compact='true'] .script-editor-page,
+.app-shell[data-compact='true'] .howto-page {
+    padding: 3.6rem 0.75rem 0.85rem;
+    border-radius: 14px;
   }
 
-  .stage {
+.app-shell[data-compact='true'][data-ui-scale='large'] .script-editor-page,
+.app-shell[data-compact='true'][data-ui-scale='large'] .howto-page {
+    padding-top: 4rem;
+  }
+
+.app-shell[data-compact='true'] .loading-bar {
+    pointer-events: auto;
+    position: fixed;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
+    margin: 0;
+    padding: 0.55rem 0.7rem;
+    border-radius: 12px;
+    background: var(--glass-strong);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-glass);
+    z-index: 28;
+  }
+
+.settings-panel.is-compact-sheet {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  z-index: 100;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  background: var(--bg-deep);
+}
+
+html[data-theme='light'] .settings-panel.is-compact-sheet {
+  background: var(--bg-mid);
+}
+
+html[data-theme='oled'] .settings-panel.is-compact-sheet {
+  background: #000000;
+}
+
+.settings-panel.is-compact-sheet .settings-panel-header {
+  display: flex;
+}
+
+.settings-panel.is-compact-sheet .settings-tabs {
+  padding-inline: 0.65rem;
+}
+
+.settings-panel.is-compact-sheet .settings-tab {
+  min-height: 2.25rem;
+  padding-inline: 0.85rem;
+  font-size: 0.82rem;
+}
+
+.settings-panel.is-compact-sheet .settings-panel-body {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0.8rem 0.85rem 1rem;
+}
+
+.settings-panel.is-compact-sheet .settings-grid {
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.settings-panel.is-compact-sheet .settings-grid select,
+.settings-panel.is-compact-sheet .settings-grid .toggle {
+  min-height: 2.4rem;
+}
+
+.settings-panel.is-compact-sheet .settings-model-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings-panel.is-compact-sheet .settings-model-actions .btn {
+  width: 100%;
+  min-height: 2.6rem;
+}
+
+.settings-panel.is-compact-sheet .confidence-readout {
+  white-space: normal;
+  text-align: center;
+}
+
+.app-shell[data-compact='true'] .stage {
     padding: 0.4rem 0.4rem 0.5rem;
   }
 
-  .script-view {
+.app-shell[data-compact='true'] .stage[data-recording-preview='true'] {
+    flex-direction: row;
+    gap: 0.45rem;
+  }
+
+.app-shell[data-compact='true'] .preview-rail .camera-preview {
+    max-height: none;
+  }
+
+.app-shell[data-compact='true'] .camera-preview {
+    width: min(32vw, 9.5rem);
+    align-self: flex-start;
+    max-height: min(42dvh, 16rem);
+  }
+
+.app-shell[data-compact='true'] .script-view {
     padding-inline: 0.7rem;
     border-radius: 14px;
-    /* Improve touch scrolling on iOS */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
 
-  .script-view[data-script-scale='xl'],
-  .script-view[data-script-scale='xxl'] {
+.app-shell[data-compact='true'] .script-view[data-script-scale='xl'],
+.app-shell[data-compact='true'] .script-view[data-script-scale='xxl'] {
     padding-inline: 0.45rem;
   }
 
-  .script-view[data-script-scale='xxl'] {
+.app-shell[data-compact='true'] .script-view[data-script-scale='xxl'] {
     padding-block: 0.15rem;
   }
 
-  .script-view.script-focus {
+.app-shell[data-compact='true'] .script-view.script-focus {
     padding: 0.35rem 0.4rem;
   }
 
-  .script-focus[data-focus-mode='one_word'] .script-focus-word.is-current,
-  .script-focus[data-focus-mode='two_word'] .script-focus-word.is-current {
+.app-shell[data-compact='true'] .script-focus[data-focus-mode='one_word'] .script-focus-word.is-current,
+.app-shell[data-compact='true'] .script-focus[data-focus-mode='two_word'] .script-focus-word.is-current {
     font-size: calc(min(32vw, 24dvh, 8.5rem) * var(--focus-scale, 1));
   }
 
-  .script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor {
+.app-shell[data-compact='true'] .script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor {
     font-size: calc(min(12vw, 7dvh, 2.6rem) * var(--focus-scale, 1));
   }
 
-  .script-focus[data-focus-mode='two_word'] .script-focus-word.is-past {
+.app-shell[data-compact='true'] .script-focus[data-focus-mode='two_word'] .script-focus-word.is-past {
     font-size: calc(min(16vw, 10dvh, 3.6rem) * var(--focus-scale, 1));
   }
 
-  .script-editor-page,
-  .howto-page {
-    padding: 0.75rem 0.75rem 0.85rem;
-    border-radius: 14px;
-  }
-
-  .script-editor-toolbar {
+.app-shell[data-compact='true'] .script-editor-toolbar {
     gap: 0.45rem;
   }
 
-  .script-editor-toolbar .btn,
-  .file-import.glass-upload {
+.app-shell[data-compact='true'] .script-editor-toolbar .btn,
+.app-shell[data-compact='true'] .file-import.glass-upload {
     min-height: 2.4rem;
   }
 
-  .file-import.glass-upload {
+.app-shell[data-compact='true'] .file-import.glass-upload {
     flex-wrap: wrap;
     max-width: 100%;
   }
 
-  .modal-root {
+.app-shell[data-compact='true'] .modal-root {
     padding: 0.75rem;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
 
-  .modal-card,
-  .modal-card.modal-sm,
-  .modal-card.modal-lg {
+.app-shell[data-compact='true'] .modal-card,
+.app-shell[data-compact='true'] .modal-card.modal-sm,
+.app-shell[data-compact='true'] .modal-card.modal-lg {
     width: min(100%, 28rem);
     max-height: min(88dvh, 88svh);
   }
 
-  .modal-footer {
+.app-shell[data-compact='true'] .modal-footer {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .modal-footer .btn {
+.app-shell[data-compact='true'] .modal-footer .btn {
     width: 100%;
     min-height: 2.4rem;
   }
 
-  .modal-footer .confidence-readout {
+.app-shell[data-compact='true'] .modal-footer .confidence-readout {
     margin-left: 0;
   }
 
-  .recording-review-player {
+.app-shell[data-compact='true'] .recording-review-player {
     max-height: min(48dvh, 24rem);
     aspect-ratio: 3 / 4;
   }
 
-  .recording-review-actions {
+.app-shell[data-compact='true'] .recording-review-actions {
     flex-direction: column-reverse;
-    align-items: stretch;
+    align-items: center;
   }
 
-  .recording-review-primary {
+.app-shell[data-compact='true'] .recording-review-primary {
     width: 100%;
     margin-left: 0;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    justify-items: stretch;
   }
 
-  .recording-review-primary .btn,
-  .recording-review-discard {
-    width: 100%;
+.app-shell[data-compact='true'] .recording-review-primary .btn,
+.app-shell[data-compact='true'] .recording-review-discard {
+    width: min(100%, 22rem);
     min-height: 2.6rem;
+    margin-inline: auto;
   }
 
-  .recording-review-primary:has(> .btn:only-child) {
+.app-shell[data-compact='true'] .recording-review-primary:has(> .btn:only-child) {
     grid-template-columns: 1fr;
   }
 
-  .recording-review-primary {
-    grid-template-columns: 1fr;
-  }
-
-  .replace-recording-actions {
+.app-shell[data-compact='true'] .replace-recording-actions {
     flex-direction: column-reverse;
     align-items: stretch;
   }
 
-  .replace-recording-actions .btn {
+.app-shell[data-compact='true'] .replace-recording-actions .btn {
     width: 100%;
     min-height: 2.6rem;
   }
-}
+
 
 @media (orientation: landscape) and (max-height: 500px) {
   .brand-sub {
@@ -2891,6 +3626,12 @@ html[data-bold-script='true'] .script-focus-word {
   .camera-preview {
     width: min(36vw, 7.5rem);
     max-height: min(24dvh, 9.5rem);
+  }
+
+  .preview-rail .camera-preview {
+    width: 100%;
+    max-height: none;
+    aspect-ratio: var(--preview-aspect, 16 / 9);
   }
 
   .stage[data-recording-preview='true'] {

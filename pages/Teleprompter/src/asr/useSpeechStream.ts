@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { patchMoonshineGenerate } from './moonshinePatch'
 import {
   classifySpeechError,
   type SpeechErrorInfo,
@@ -445,6 +446,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     if (moonshineRef.current) return moonshineRef.current
     try {
       const mod = await import('@moonshine-ai/moonshine-js')
+      patchMoonshineGenerate(mod)
       moonshineRef.current = mod
       return mod
     } catch (err) {

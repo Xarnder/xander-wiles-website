@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { RecordingResult } from '../asr/useSpeechStream'
 import { downloadRecordingBlob } from '../media/platform'
 import { Modal } from './Modal'
+import { BtnLabel } from './BtnLabel'
 
 interface ReplaceRecordingModalProps {
   open: boolean
@@ -69,7 +70,7 @@ export function ReplaceRecordingModal({
             onClick={onCancel}
             disabled={busy}
           >
-            Cancel
+            <BtnLabel>Cancel</BtnLabel>
           </button>
           {onReviewOld ? (
             <button
@@ -78,7 +79,7 @@ export function ReplaceRecordingModal({
               onClick={onReviewOld}
               disabled={busy}
             >
-              Review old
+              <BtnLabel>Review old</BtnLabel>
             </button>
           ) : null}
           <button
@@ -87,7 +88,7 @@ export function ReplaceRecordingModal({
             onClick={() => void onDownload()}
             disabled={busy}
           >
-            {busy ? 'Downloading…' : 'Download old'}
+            <BtnLabel>{busy ? 'Downloading…' : 'Download old'}</BtnLabel>
           </button>
           <button
             type="button"
@@ -95,7 +96,7 @@ export function ReplaceRecordingModal({
             onClick={onConfirmReplace}
             disabled={busy}
           >
-            Clear & record
+            <BtnLabel>Clear & record</BtnLabel>
           </button>
         </div>
       }
