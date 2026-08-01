@@ -883,8 +883,24 @@ svg.nav-item-icon {
 }
 
 .contact-icon {
-    font-size: 2.5rem;
-    line-height: 1;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.contact-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.page-icon-link {
+    object-fit: contain;
+    filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .contact-content h3 {

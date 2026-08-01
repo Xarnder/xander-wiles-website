@@ -636,17 +636,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const href = escapeHtml(item.href);
             const meta = escapeHtml(formatRecentTime(item.visitedAt));
             const icon = resolveDisplayIcon(item);
+            const LINK_ICON = '/assets/SVGs/link.svg';
             const isImageIcon = typeof icon === 'string' && (
                 icon.startsWith('/') ||
                 icon.startsWith('http') ||
                 icon.startsWith('data:') ||
                 /\.(png|jpg|jpeg|svg|webp|avif|gif|ico)$/i.test(icon)
             );
-            const iconHtml = isImageIcon
-                ? `<img src="${escapeHtml(icon)}" class="page-icon" alt="" loading="lazy">`
-                : icon
-                    ? `<span class="page-icon" style="font-size: 2.4rem; display:flex; align-items:center; justify-content:center;">${escapeHtml(icon)}</span>`
-                    : `<img src="${escapeHtml(recentApi.guessIconFromPath(item.href))}" class="page-icon" alt="" loading="lazy">`;
+            const iconSrc = isImageIcon
+                ? icon
+                : (recentApi.guessIconFromPath(item.href) || LINK_ICON);
+            const iconClass = iconSrc === LINK_ICON || iconSrc.endsWith('/link.svg')
+                ? 'page-icon page-icon-link'
+                : 'page-icon';
+            const iconHtml = `<img src="${escapeHtml(iconSrc)}" class="${iconClass}" alt="" loading="lazy">`;
 
             return `
                 <a href="${href}" class="page-card glass-card" data-recent-card="true">
@@ -692,6 +695,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return recentApi.readRecent().some((item) => recentApi.normalizeHref(item.href) === normalized);
     };
 
+    const LINK_ICON = '/assets/SVGs/link.svg';
+
     const renderIconHtml = (icon) => {
         const resolved = icon || '';
         const isImageIcon = typeof resolved === 'string' && (
@@ -700,13 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
             resolved.startsWith('data:') ||
             /\.(png|jpg|jpeg|svg|webp|avif|gif|ico)$/i.test(resolved)
         );
-        if (isImageIcon) {
-            return `<img src="${escapeHtml(resolved)}" class="page-icon recent-editor-icon" alt="" loading="lazy">`;
-        }
-        if (resolved) {
-            return `<span class="recent-editor-emoji">${escapeHtml(resolved)}</span>`;
-        }
-        return `<span class="recent-editor-emoji">📄</span>`;
+        const src = isImageIcon ? resolved : LINK_ICON;
+        const iconClass = src === LINK_ICON || src.endsWith('/link.svg')
+            ? 'page-icon recent-editor-icon page-icon-link'
+            : 'page-icon recent-editor-icon';
+        return `<img src="${escapeHtml(src)}" class="${iconClass}" alt="" loading="lazy">`;
     };
 
     const renderEditorCurrent = () => {
