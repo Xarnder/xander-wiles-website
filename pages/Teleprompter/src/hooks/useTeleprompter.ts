@@ -30,6 +30,36 @@ export const PAST_WORD_DIM_MIN = 15
 export const PAST_WORD_DIM_MAX = 80
 
 export type CameraPreviewMirrorMode = 'auto' | 'on' | 'off'
+/**
+ * Camera preview layout size.
+ * `auto` → fullscreen under the script on slim portrait phones;
+ * quarter beside/above the script on wider layouts.
+ */
+export type CameraPreviewSize =
+  | 'auto'
+  | 'quarter'
+  | 'half'
+  | 'three_quarters'
+  | 'fullscreen'
+
+/** Resolve stored preview size for the current viewport. */
+export function resolveCameraPreviewSize(
+  size: CameraPreviewSize,
+  slimPortrait: boolean,
+): Exclude<CameraPreviewSize, 'auto'> {
+  if (size === 'auto') return slimPortrait ? 'fullscreen' : 'quarter'
+  return size
+}
+
+export function isCameraPreviewSize(value: unknown): value is CameraPreviewSize {
+  return (
+    value === 'auto' ||
+    value === 'quarter' ||
+    value === 'half' ||
+    value === 'three_quarters' ||
+    value === 'fullscreen'
+  )
+}
 
 export interface TeleprompterSettings {
   fontSize: number
@@ -95,11 +125,14 @@ export interface TeleprompterSettings {
   videoResolution: VideoResolution
   /** Side of the script where the live camera preview sits while recording. */
   cameraPreviewSide: 'left' | 'right'
-  /** How much of the stage width the live camera preview uses. */
-  cameraPreviewSize: 'quarter' | 'half' | 'three_quarters' | 'fullscreen'
+  /**
+   * How much of the stage the live camera preview uses.
+   * `auto` defaults to fullscreen on slim vertical phones, quarter elsewhere.
+   */
+  cameraPreviewSize: CameraPreviewSize
   /**
    * Fullscreen preview brightness (1–100). Higher = brighter camera / less dark tint.
-   * Only used when cameraPreviewSize is fullscreen.
+   * Only used when the resolved preview size is fullscreen.
    */
   cameraPreviewBrightness: number
   /** Stretch the camera to fill the whole preview column (cover crop). */
@@ -152,9 +185,11 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   spokenWindow: 10,
   scrollAnchor: 'hybrid',
   facingMode: 'user',
-  videoResolution: 'max',
+  // 720p/30 is the reliable sustained-recording default on mobile. Higher
+  // resolutions remain available in Advanced → Camera.
+  videoResolution: '720p',
   cameraPreviewSide: 'left',
-  cameraPreviewSize: 'quarter',
+  cameraPreviewSize: 'auto',
   cameraPreviewBrightness: 50,
   cameraPreviewFill: false,
   cameraPreviewMirror: 'auto',
@@ -172,6 +207,9 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
 }
 
 const SETTINGS_STORAGE_KEY = 'voice-follow-settings'
+const SETTINGS_PREVIEW_AUTO_MIGRATION_KEY = 'voice-follow-preview-auto-v1'
+const SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY =
+  'voice-follow-reliable-video-v1'
 const SCRIPT_STORAGE_KEY = 'voice-follow-script'
 const DEVICE_STORAGE_KEY = 'voice-follow-mic'
 
@@ -205,13 +243,9 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
     p.cameraPreviewSide === 'left' || p.cameraPreviewSide === 'right'
       ? p.cameraPreviewSide
       : DEFAULT_SETTINGS.cameraPreviewSide
-  const cameraPreviewSize =
-    p.cameraPreviewSize === 'quarter' ||
-    p.cameraPreviewSize === 'half' ||
-    p.cameraPreviewSize === 'three_quarters' ||
-    p.cameraPreviewSize === 'fullscreen'
-      ? p.cameraPreviewSize
-      : DEFAULT_SETTINGS.cameraPreviewSize
+  const cameraPreviewSize = isCameraPreviewSize(p.cameraPreviewSize)
+    ? p.cameraPreviewSize
+    : DEFAULT_SETTINGS.cameraPreviewSize
   const cameraPreviewBrightness = clamp(
     typeof p.cameraPreviewBrightness === 'number'
       ? Math.round(p.cameraPreviewBrightness)
@@ -384,8 +418,68 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
 function loadStoredSettings(): TeleprompterSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (!raw) return { ...DEFAULT_SETTINGS }
-    return sanitizeSettings(JSON.parse(raw) as unknown)
+    if (!raw) {
+      // A fresh install already has the new defaults. Mark migrations now so
+      // an explicit first-session choice is never mistaken for an old default.
+      try {
+        localStorage.setItem(SETTINGS_PREVIEW_AUTO_MIGRATION_KEY, '1')
+        localStorage.setItem(SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY, '1')
+      } catch {
+        // ignore migration-marker failures
+      }
+      return { ...DEFAULT_SETTINGS }
+    }
+    const parsed = JSON.parse(raw) as unknown
+    let settings = sanitizeSettings(parsed)
+    let settingsChanged = false
+    const rawObj =
+      parsed && typeof parsed === 'object'
+        ? (parsed as Partial<TeleprompterSettings>)
+        : null
+
+    // One-time: previous default was `quarter`. Promote untouched installs to
+    // `auto` so slim portrait phones get fullscreen preview by default.
+    // Explicit later choices of `quarter` are left alone (migration flag set).
+    try {
+      const migrated = localStorage.getItem(SETTINGS_PREVIEW_AUTO_MIGRATION_KEY)
+      if (!migrated) {
+        localStorage.setItem(SETTINGS_PREVIEW_AUTO_MIGRATION_KEY, '1')
+        if (
+          rawObj &&
+          (rawObj.cameraPreviewSize === 'quarter' ||
+            rawObj.cameraPreviewSize == null)
+        ) {
+          settings = { ...settings, cameraPreviewSize: 'auto' }
+          settingsChanged = true
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
+
+    // One-time: old installs inherited the former "Full sensor" default, which
+    // can request 4K/60 and stall video during long takes. Move that untouched
+    // default to the sustained-recording 720p preset.
+    try {
+      const migrated = localStorage.getItem(
+        SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY,
+      )
+      if (!migrated) {
+        localStorage.setItem(SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY, '1')
+        if (
+          rawObj &&
+          (rawObj.videoResolution === 'max' || rawObj.videoResolution == null)
+        ) {
+          settings = { ...settings, videoResolution: '720p' }
+          settingsChanged = true
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
+
+    if (settingsChanged) persistSettings(settings)
+    return settings
   } catch {
     return { ...DEFAULT_SETTINGS }
   }

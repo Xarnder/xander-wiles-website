@@ -42,6 +42,50 @@ export function pickRecorderMimeType(): string | undefined {
   })
 }
 
+/** Ten-second segments keep long recordings out of one huge encoder buffer. */
+export const RECORDER_TIMESLICE_MS = 10_000
+
+type RecorderOptionsWithKeyframes = MediaRecorderOptions & {
+  videoKeyFrameIntervalDuration?: number
+}
+
+/**
+ * Conservative recorder options for sustained A/V capture.
+ *
+ * The previous unbounded encoder settings could overwhelm mobile hardware:
+ * audio continued while video stopped producing frames. Explicit bitrates and
+ * regular keyframes keep the video encoder and MP4/WebM muxer moving.
+ */
+export function recorderOptionsCandidates(
+  stream: MediaStream,
+  mimeType?: string,
+): RecorderOptionsWithKeyframes[] {
+  const settings = stream.getVideoTracks()[0]?.getSettings()
+  const width = settings?.width ?? 1280
+  const height = settings?.height ?? 720
+  const pixels = width * height
+  const videoBitsPerSecond =
+    pixels > 1920 * 1080
+      ? 8_000_000
+      : pixels > 1280 * 720
+        ? 4_500_000
+        : 2_500_000
+
+  const bounded: RecorderOptionsWithKeyframes = {
+    ...(mimeType ? { mimeType } : {}),
+    audioBitsPerSecond: 128_000,
+    videoBitsPerSecond,
+    // Chromium's MP4 muxer can only flush on a keyframe. Browsers that do not
+    // support this option ignore it or fall through to the next candidate.
+    videoKeyFrameIntervalDuration: RECORDER_TIMESLICE_MS,
+  }
+
+  const candidates: RecorderOptionsWithKeyframes[] = [bounded]
+  if (mimeType) candidates.push({ mimeType })
+  candidates.push({})
+  return candidates
+}
+
 export function requireSecureContextForRecording(): void {
   if (typeof window === 'undefined') return
   if (window.isSecureContext) return
@@ -180,7 +224,7 @@ export const VIDEO_RESOLUTION_OPTIONS: ReadonlyArray<{
 }> = [
   {
     id: 'max',
-    label: 'Full sensor (16:9)',
+    label: 'Full sensor (16:9) · short takes',
     width: null,
     height: null,
   },
@@ -198,7 +242,7 @@ export const VIDEO_RESOLUTION_OPTIONS: ReadonlyArray<{
   },
   {
     id: '720p',
-    label: '720p · 1280×720',
+    label: '720p · reliable long takes',
     width: 1280,
     height: 720,
   },
@@ -229,10 +273,12 @@ function videoConstraintsForResolution(
   resolution: VideoResolution,
   relaxed: boolean,
 ): MediaTrackConstraints {
+  const apple = isAppleMobile()
   if (relaxed) {
     return {
       facingMode,
       aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: 30, max: 30 },
     }
   }
 
@@ -242,12 +288,16 @@ function videoConstraintsForResolution(
 
   // Full sensor / max: ask for the highest 16:9 the device will give.
   if (!width || !height) {
+    // Unbounded 4K capture is a common cause of long-take encoder stalls on
+    // iPhone/iPad. Keep "max" useful there, but cap it at reliable 1080p.
+    const maxWidth = apple ? 1920 : 3840
+    const maxHeight = apple ? 1080 : 2160
     return {
       facingMode: { ideal: facingMode },
       aspectRatio: { ideal: 16 / 9 },
-      width: { ideal: 3840, max: 4096 },
-      height: { ideal: 2160, max: 2160 },
-      frameRate: { ideal: 30, max: 60 },
+      width: { ideal: maxWidth, max: maxWidth },
+      height: { ideal: maxHeight, max: maxHeight },
+      frameRate: { ideal: 30, max: 30 },
     }
   }
 
@@ -256,7 +306,7 @@ function videoConstraintsForResolution(
     aspectRatio: { ideal: 16 / 9 },
     width: { ideal: width },
     height: { ideal: height },
-    frameRate: { ideal: 30, max: 60 },
+    frameRate: { ideal: 30, max: 30 },
   }
 }
 

@@ -16,6 +16,7 @@ import {
   SPOKEN_WINDOW_MAX,
   SPOKEN_WINDOW_MIN,
   type CameraPreviewMirrorMode,
+  type CameraPreviewSize,
   type DisplayMode,
   type ScrollAnchorMode,
   type TeleprompterSettings,
@@ -1241,14 +1242,13 @@ export function Controls({
                   value={settings.cameraPreviewSize}
                   onChange={(e) =>
                     onUpdateSettings({
-                      cameraPreviewSize: e.target.value as
-                        | 'quarter'
-                        | 'half'
-                        | 'three_quarters'
-                        | 'fullscreen',
+                      cameraPreviewSize: e.target.value as CameraPreviewSize,
                     })
                   }
                 >
+                  <option value="auto">
+                    Auto (fullscreen on vertical phones)
+                  </option>
                   <option value="quarter">Quarter (top on phones)</option>
                   <option value="half">Half (top on phones)</option>
                   <option value="three_quarters">
@@ -1259,7 +1259,8 @@ export function Controls({
                   </option>
                 </select>
               </label>
-              {settings.cameraPreviewSize === 'fullscreen' ? (
+              {settings.cameraPreviewSize === 'fullscreen' ||
+              settings.cameraPreviewSize === 'auto' ? (
                 <SliderField
                   label="Camera preview brightness"
                   valueLabel={`${settings.cameraPreviewBrightness}%`}
@@ -1305,11 +1306,13 @@ export function Controls({
               <p className="settings-hint settings-hint-span">
                 Off (default): camera keeps the recording aspect ratio at full
                 column width, with progress stats underneath. On: camera
-                stretches to fill the whole preview column. On phones in
-                portrait, the camera sits above the script — quarter / half /
-                three quarters set that top band; full screen fills under the
-                script with brightness controlling the dark tint. Preview mirror
-                Auto flips the front camera like a selfie view.
+                stretches to fill the whole preview column. Auto uses full
+                screen under the script on slim vertical phones, and a quarter
+                panel on wider layouts. Quarter / half / three quarters set a
+                top band on portrait phones (or a side panel on landscape).
+                Full screen always fills under the script; brightness controls
+                the dark tint. Preview mirror Auto flips the front camera like
+                a selfie view.
               </p>
               <label className="settings-mic">
                 <span>Recording resolution</span>

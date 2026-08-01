@@ -135,17 +135,17 @@ export function classifySpeechError(
   }
 
   if (
-    /empty video|recorder did not|recording failed|stopped during recording|mediarecorder\.start|track ended|track is disabled/i.test(
+    /empty video|recorder did not|recording failed|recording stopped|stopped during recording|stopped sending video|went into the background|mediarecorder\.start|track ended|track is disabled/i.test(
       message,
     )
   ) {
     return {
       kind: 'microphone',
-      title: 'Recording failed',
+      title: 'Recording stopped',
       message:
         message ||
         'The camera recording could not be saved. This is often an iPhone permission or backgrounding issue.',
-      fix: 'In iPhone Settings → Safari (or Chrome) allow Camera and Microphone. Keep the app open while recording, then tap Stop to save. Try again.',
+      fix: 'Keep the app visible and the screen awake during the take. Close other camera apps, then try again. The usable part recorded before the camera stopped is still kept when possible.',
       summary: message || 'Camera recording failed.',
     }
   }

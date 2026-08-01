@@ -11,6 +11,8 @@ import {
   isAppleMobile,
   isMediaRecorderSupported,
   pickRecorderMimeType,
+  recorderOptionsCandidates,
+  RECORDER_TIMESLICE_MS,
   requireSecureContextForRecording,
   resetAudioSession,
   warmCaptureTracks,
@@ -94,7 +96,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     modelId = 'model/tiny',
     deviceId = null,
     facingMode = 'user',
-    videoResolution = 'max',
+    videoResolution = '720p',
     onPartial,
     onCommitted,
   } = options
@@ -134,6 +136,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const stopPromiseRef = useRef<Promise<RecordingResult | null> | null>(null)
   const recordingStartedAtRef = useRef<number | null>(null)
   const stopRecordingRef = useRef<() => Promise<void>>(async () => {})
+  const recorderHealthTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     onPartialRef.current = onPartial
@@ -209,12 +212,20 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     setCaptureStream(null)
   }, [])
 
+  const clearRecorderHealthTimer = useCallback(() => {
+    if (recorderHealthTimerRef.current != null) {
+      window.clearInterval(recorderHealthTimerRef.current)
+      recorderHealthTimerRef.current = null
+    }
+  }, [])
+
   const stopRecorder = useCallback(async (): Promise<RecordingResult | null> => {
     if (stopPromiseRef.current) {
       return stopPromiseRef.current
     }
 
     const recorder = recorderRef.current
+    clearRecorderHealthTimer()
     if (!recorder || recorder.state === 'inactive') {
       recorderRef.current = null
       setRecordingActive(false)
@@ -232,15 +243,12 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       let stopSeen = false
       let settleTimer: number | null = null
       let hardTimer: number | null = null
-      let stopDelayTimer: number | null = null
 
       const clearTimers = () => {
         if (settleTimer != null) window.clearTimeout(settleTimer)
         if (hardTimer != null) window.clearTimeout(hardTimer)
-        if (stopDelayTimer != null) window.clearTimeout(stopDelayTimer)
         settleTimer = null
         hardTimer = null
-        stopDelayTimer = null
       }
 
       const buildResult = (): RecordingResult | null => {
@@ -299,31 +307,22 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         scheduleSettle(apple ? 400 : 150)
       }
 
-      // Flush any buffered media, then stop after a short delay so the flush
-      // can land before stop() closes the container.
+      // stop() itself must emit the final dataavailable before onstop. Do not
+      // requestData() first: forcing a separate final MP4 fragment has caused
+      // long Safari recordings to end with audio but a frozen video timeline.
       try {
-        if (recorder.state === 'recording' && typeof recorder.requestData === 'function') {
-          recorder.requestData()
+        if (recorder.state !== 'inactive') {
+          recorder.stop()
+        } else {
+          stopSeen = true
+          scheduleSettle(apple ? 250 : 100)
         }
       } catch {
-        // ignore
+        stopSeen = true
+        scheduleSettle(100)
       }
 
-      stopDelayTimer = window.setTimeout(() => {
-        try {
-          if (recorder.state !== 'inactive') {
-            recorder.stop()
-          } else {
-            stopSeen = true
-            scheduleSettle(apple ? 200 : 80)
-          }
-        } catch {
-          stopSeen = true
-          scheduleSettle(80)
-        }
-      }, apple ? 320 : 80)
-
-      hardTimer = window.setTimeout(finish, 8000)
+      hardTimer = window.setTimeout(finish, 12_000)
     })
 
     stopPromiseRef.current = promise
@@ -332,7 +331,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     } finally {
       stopPromiseRef.current = null
     }
-  }, [])
+  }, [clearRecorderHealthTimer])
 
   const startRecorder = useCallback(
     (stream: MediaStream) => {
@@ -344,18 +343,14 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       }
 
       const mimeType = pickRecorderMimeType()
-      const attempts: Array<MediaRecorderOptions | undefined> = mimeType
-        ? [{ mimeType }, undefined]
-        : [undefined]
+      const attempts = recorderOptionsCandidates(stream, mimeType)
 
       let recorder: MediaRecorder | null = null
       let lastError: unknown = null
 
       for (const options of attempts) {
         try {
-          recorder = options
-            ? new MediaRecorder(stream, options)
-            : new MediaRecorder(stream)
+          recorder = new MediaRecorder(stream, options)
           break
         } catch (err) {
           lastError = err
@@ -374,14 +369,20 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
 
       recordingMimeRef.current = recorder.mimeType || mimeType || 'video/mp4'
       chunksRef.current = []
+      let lastChunkAt = Date.now()
+      let lastFlushRequestAt = 0
+      let videoMutedAt: number | null = null
 
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           chunksRef.current.push(event.data)
+          lastChunkAt = Date.now()
+          lastFlushRequestAt = 0
         }
       }
 
       recorder.onerror = () => {
+        clearRecorderHealthTimer()
         setRecordingActive(false)
         recordingActiveRef.current = false
         setRecordingStartedAt(null)
@@ -396,11 +397,12 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         void stopRecordingRef.current()
       }
 
-      // Avoid timeslices on Apple — sliced MP4 often truncates or lacks a full
-      // moov for download. A single container on stop is the reliable path.
-      // Elsewhere, prefer no timeslice too so Stop always yields a complete file.
+      // Long recordings must be segmented. A single growing encoder/container
+      // buffer can exhaust mobile resources: audio keeps flowing while video
+      // stops producing frames. Ten-second chunks are long enough for MP4
+      // keyframes and short enough to keep sustained capture bounded.
       try {
-        recorder.start()
+        recorder.start(RECORDER_TIMESLICE_MS)
       } catch (err) {
         throw err instanceof Error
           ? err
@@ -424,8 +426,70 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       setRecordingActive(true)
       recordingActiveRef.current = true
 
+      clearRecorderHealthTimer()
+      recorderHealthTimerRef.current = window.setInterval(() => {
+        if (recorderRef.current !== recorder || recorder.state === 'inactive') {
+          clearRecorderHealthTimer()
+          return
+        }
+
+        const videoTrack = stream.getVideoTracks()[0]
+        const cameraUnavailable =
+          !videoTrack ||
+          videoTrack.readyState === 'ended' ||
+          !videoTrack.enabled
+
+        if (cameraUnavailable) {
+          clearRecorderHealthTimer()
+          reportError(
+            new Error(
+              'The camera stopped during recording. The take was stopped immediately so it does not save a long frozen-video section.',
+            ),
+            'runtime',
+            'record',
+          )
+          void stopRecordingRef.current()
+          return
+        }
+
+        if (videoTrack.muted) {
+          videoMutedAt ??= Date.now()
+          if (Date.now() - videoMutedAt >= 4_000) {
+            clearRecorderHealthTimer()
+            reportError(
+              new Error(
+                'The camera stopped sending video frames. The take was stopped to preserve the usable audio and video recorded so far.',
+              ),
+              'runtime',
+              'record',
+            )
+            void stopRecordingRef.current()
+            return
+          }
+        } else {
+          videoMutedAt = null
+        }
+
+        // A timeslice is advisory. If a browser misses two slices, ask it to
+        // flush at the next keyframe instead of letting one buffer grow forever.
+        const now = Date.now()
+        if (
+          recorder.state === 'recording' &&
+          now - lastChunkAt > RECORDER_TIMESLICE_MS * 2.5 &&
+          now - lastFlushRequestAt > RECORDER_TIMESLICE_MS
+        ) {
+          try {
+            recorder.requestData()
+            lastFlushRequestAt = now
+          } catch {
+            // The track checks above still protect against silent camera loss.
+          }
+        }
+      }, 1_000)
+
       const onTrackEnded = () => {
         if (recorderRef.current !== recorder) return
+        clearRecorderHealthTimer()
         reportError(
           new Error(
             'Camera or microphone stopped during recording. Keep the app open and avoid switching away mid-take.',
@@ -439,7 +503,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         track.addEventListener('ended', onTrackEnded, { once: true })
       }
     },
-    [reportError],
+    [clearRecorderHealthTimer, reportError],
   )
 
   const loadMoonshine = useCallback(async () => {
@@ -835,8 +899,30 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [recordingActive])
 
+  // iOS suspends camera frames when Safari/Chrome is backgrounded but may keep
+  // muxing audio. Stop immediately so the saved take cannot acquire a long
+  // frozen-video tail.
+  useEffect(() => {
+    if (!recordingActive || !isAppleMobile()) return
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') return
+      reportError(
+        new Error(
+          'Recording stopped because the app went into the background. Keep it visible during a take so the camera keeps sending video frames.',
+        ),
+        'runtime',
+        'record',
+      )
+      void stopRecordingRef.current()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [recordingActive, reportError])
+
   useEffect(() => {
     return () => {
+      clearRecorderHealthTimer()
       try {
         recorderRef.current?.stop()
       } catch {
@@ -850,7 +936,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
       stopTracks()
       resetAudioSession()
     }
-  }, [stopTracks])
+  }, [clearRecorderHealthTimer, stopTracks])
 
   return {
     status,

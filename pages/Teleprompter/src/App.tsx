@@ -9,13 +9,19 @@ import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptStats } from './components/ScriptStats'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
-import { useTeleprompter } from './hooks/useTeleprompter'
+import {
+  resolveCameraPreviewSize,
+  useTeleprompter,
+} from './hooks/useTeleprompter'
 import { useWakeLock } from './hooks/useWakeLock'
 import { isMediaRecorderSupported } from './media/platform'
 
 /** Matches the previous CSS compact breakpoints (phone + phone landscape). */
 const COMPACT_MQ =
   '(max-width: 720px), (orientation: landscape) and (max-height: 500px)'
+
+/** Slim portrait phones — camera preview `auto` resolves to fullscreen here. */
+const SLIM_PORTRAIT_MQ = '(max-width: 720px) and (orientation: portrait)'
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -28,21 +34,29 @@ function isTypingTarget(target: EventTarget | null): boolean {
   )
 }
 
-function useAutoCompact(): boolean {
-  const [autoCompact, setAutoCompact] = useState(() => {
+function useMatchMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false
-    return window.matchMedia(COMPACT_MQ).matches
+    return window.matchMedia(query).matches
   })
 
   useEffect(() => {
-    const mq = window.matchMedia(COMPACT_MQ)
-    const onChange = () => setAutoCompact(mq.matches)
+    const mq = window.matchMedia(query)
+    const onChange = () => setMatches(mq.matches)
     onChange()
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
-  }, [])
+  }, [query])
 
-  return autoCompact
+  return matches
+}
+
+function useAutoCompact(): boolean {
+  return useMatchMedia(COMPACT_MQ)
+}
+
+function useSlimPortrait(): boolean {
+  return useMatchMedia(SLIM_PORTRAIT_MQ)
 }
 
 export default function App() {
@@ -51,6 +65,7 @@ export default function App() {
   const [startChoiceOpen, setStartChoiceOpen] = useState(false)
   const lastRecordingAtRef = useRef<number | null>(null)
   const autoCompact = useAutoCompact()
+  const slimPortrait = useSlimPortrait()
 
   const tp = useTeleprompter({ autoCompact })
   const {
@@ -64,6 +79,11 @@ export default function App() {
   const [howToOpen, setHowToOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const compactChrome = tp.compactLayout
+  const cameraPreviewSize = resolveCameraPreviewSize(
+    tp.settings.cameraPreviewSize,
+    slimPortrait,
+  )
+  const cameraPreviewFullscreen = cameraPreviewSize === 'fullscreen'
 
   const isListening = tp.speech.status === 'listening'
   useWakeLock(isListening && tp.settings.wakeLock)
@@ -459,14 +479,12 @@ export default function App() {
         data-preview-side={
           previewStream ? tp.settings.cameraPreviewSide : undefined
         }
-        data-preview-size={
-          previewStream ? tp.settings.cameraPreviewSize : undefined
-        }
+        data-preview-size={previewStream ? cameraPreviewSize : undefined}
         data-preview-fill={
           previewStream && tp.settings.cameraPreviewFill ? 'true' : undefined
         }
         style={
-          previewStream && tp.settings.cameraPreviewSize === 'fullscreen'
+          previewStream && cameraPreviewFullscreen
             ? ({
                 ['--preview-dim']: String(
                   (100 - tp.settings.cameraPreviewBrightness) / 100,
@@ -515,12 +533,12 @@ export default function App() {
           fillColumn={
             compactChrome ||
             tp.settings.cameraPreviewFill ||
-            tp.settings.cameraPreviewSize === 'fullscreen'
+            cameraPreviewFullscreen
           }
           footer={
             compactChrome ||
             tp.settings.cameraPreviewFill ||
-            tp.settings.cameraPreviewSize === 'fullscreen' ? undefined : (
+            cameraPreviewFullscreen ? undefined : (
               <ScriptStats
                 progress={tp.progress}
                 wpm={tp.wpm}
