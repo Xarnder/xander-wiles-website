@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Xander Wiles</title>
 
     <!-- Theme-aware SVG icons (modern browsers) -->
@@ -84,64 +84,6 @@
     <div id="main-nav-placeholder"></div>
 
     <main class="app-container">
-        <div class="top-section-grid">
-            <div class="hero-card glass-card">
-                <div class="profile-picture-wrapper">
-                    <picture>
-                        <!-- The browser tries to load this AVIF file first -->
-                        <source srcset="assets/images/xander Correted Edited V2.avif" type="image/avif">
-
-                        <!-- If it can't, it tries this WebP file next -->
-                        <source srcset="assets/images/Xander Corrected Edited V2.webp" type="image/webp">
-
-                        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
-                        <img src="assets/images/Xander Corrected Edited V2.png" alt="A profile picture of Xander Wiles"
-                            class="profile-picture" width="300" height="300" loading="lazy">
-                    </picture>
-                </div>
-                <h1>Hi, I'm Xander</h1>
-                <p class="hero-contact">contact me at <a
-                        href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
-                <p>Select a game or page from the navigation menu below to get started. All projects are built with
-                    passion
-                    and a lot of JavaScript.</p>
-            </div>
-
-            <!-- Stacked Side Cards -->
-            <div class="hero-side-stack">
-                <a href="/pages/To-Do-List/" class="page-card glass-card top-feature-card">
-                    <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon"
-                        loading="lazy">
-                    <h3>To Do List</h3>
-                    <p>Manage tasks with drag-and-drop & linked lists.</p>
-                </a>
-
-                <div class="about-card glass-card">
-                    <h3>About Me</h3>
-                    <p class="tagline">"Curious. Ambitious. Technology Lover."</p>
-                    <p class="bio-text">
-                        Hi, I'm <strong>Xander</strong>. I'm a 23-year-old software engineer and artist from the UK.
-                        I hold a degree in Computer Animation and Masters in
-                        <strong>Artificial
-                            Intelligence</strong>.
-                    </p>
-                    <p class="bio-text">
-                        I love bringing ideas to life, whether that’s coding up a new web app, designing a game, or
-                        training an AI Model. When I’m not at the keyboard, you’ll find me with my Lumix S5 in hand or
-                        adding
-                        to my journal, which recently hit over 1,000 entries!
-                    </p>
-                    <div class="interests-tags">
-                        <span class="tag">AI & Tech</span>
-                        <span class="tag">Art</span>
-                        <span class="tag">Cello</span>
-                        <a href="/pages/journal/" class="tag">Daily Journal</a>
-                    </div>
-                    <a href="/pages/About/" class="glow-button about-glow-button">Learn More About Me</a>
-                </div>
-            </div>
-        </div>
-
         <nav class="section-jump-bar" aria-label="Page sections">
             <div class="section-jump-search" role="search">
                 <label class="visually-hidden" for="page-card-search">Search pages</label>
@@ -166,6 +108,69 @@
                 <a href="#contact" class="section-jump-link" data-section="contact">Contact</a>
             </div>
         </nav>
+
+        <div class="top-section-grid">
+            <div class="hero-card glass-card">
+                <div class="profile-picture-wrapper">
+                    <picture>
+                        <!-- The browser tries to load this AVIF file first -->
+                        <source srcset="assets/images/xander Correted Edited V2.avif" type="image/avif">
+
+                        <!-- If it can't, it tries this WebP file next -->
+                        <source srcset="assets/images/Xander Corrected Edited V2.webp" type="image/webp">
+
+                        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+                        <img src="assets/images/Xander Corrected Edited V2.png" alt="A profile picture of Xander Wiles"
+                            class="profile-picture" width="300" height="300" loading="lazy">
+                    </picture>
+                </div>
+                <h1>Hi, I'm Xander</h1>
+                <p class="hero-contact">contact me at <a
+                        href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
+                <p>Select a game or page from the navigation menu above to get started. All projects are built with
+                    passion
+                    and a lot of JavaScript.</p>
+            </div>
+
+            <!-- Stacked Side Cards -->
+            <div class="hero-side-stack">
+                <a href="/pages/To-Do-List/" class="page-card glass-card top-feature-card">
+                    <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon"
+                        loading="lazy">
+                    <h3>To Do List</h3>
+                    <p>Manage tasks with drag-and-drop & linked lists.</p>
+                </a>
+
+                <div class="about-card glass-card">
+                    <div class="about-card-heading">
+                        <img class="about-card-icon" src="/favicon-dark.svg" alt="" width="40" height="40" decoding="async">
+                        <h3>About Me</h3>
+                    </div>
+                    <p class="tagline">"Curious. Ambitious. Technology Lover."</p>
+                    <p class="bio-text">
+                        Hi, I'm <strong>Xander</strong>. I'm a <span data-xw-age>24</span>-year-old software engineer and artist from the UK.
+                        I hold a degree in Computer Animation and Masters in
+                        <strong>Artificial
+                            Intelligence</strong>.
+                    </p>
+                    <p class="bio-text">
+                        I love bringing ideas to life, whether that’s coding up a new web app, designing a game, or
+                        training an AI Model. When I’m not at the keyboard, you’ll find me with my <span
+                            data-xw-camera>Canon R6 Mark II</span> in hand or
+                        adding
+                        to my journal, which has <span data-xw-journal-count>1,231</span> entries!
+                    </p>
+                    <div class="interests-tags">
+                        <span class="tag">AI & Tech</span>
+                        <span class="tag">Art</span>
+                        <span class="tag">Cello</span>
+                        <a href="/pages/journal/" class="tag">Daily Journal</a>
+                        <a href="/pages/video-portfolio/" class="tag">Video Portfolio</a>
+                    </div>
+                    <a href="/pages/About/" class="glow-button about-glow-button">Learn More About Me</a>
+                </div>
+            </div>
+        </div>
 
         <!-- === Recent (from local cache) === -->
         <section id="recent-section" class="recent-section" hidden>
@@ -252,6 +257,11 @@
                 <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
                 <h3>To Do List</h3>
                 <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
+            </a>
+            <a href="/pages/Time-Pass/" class="page-card glass-card">
+                <img src="/pages/Time-Pass/favicon-dark.svg" class="page-icon" alt="Time Pass Icon" loading="lazy">
+                <h3>Time Pass</h3>
+                <p>Track time until and since the moments that matter.</p>
             </a>
             <a href="/pages/Story-Manager/" class="page-card glass-card">
                 <img src="/pages/Story-Manager/favicon-dark.svg" class="page-icon" alt="Story Manager Icon"
@@ -550,11 +560,6 @@
                 <h3>Countdown</h3>
                 <p>A mystery countdown — and beyond.</p>
             </a>
-            <a href="/pages/Time-Pass/" class="page-card glass-card">
-                <img src="/pages/Time-Pass/favicon-dark.svg" class="page-icon" alt="Time Pass Icon" loading="lazy">
-                <h3>Time Pass</h3>
-                <p>Track time until and since the moments that matter.</p>
-            </a>
             <a href="/pages/AI-Coding-Guidance/" class="page-card glass-card special-ai-coding-guidance-card">
                 <img src="/pages/AI-Coding-Guidance/favicon-dark.svg" class="page-icon" alt="AI Coding Guidance Icon"
                     loading="lazy">
@@ -851,6 +856,7 @@
     <script src="/assets/js/recent-pages.js"></script>
     <script src="assets/js/particle-background.js"></script>
     <script src="assets/js/main.js"></script>
+    <script src="/assets/js/age.js"></script>
     <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
 </body>
 

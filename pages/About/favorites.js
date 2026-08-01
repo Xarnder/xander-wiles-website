@@ -136,7 +136,7 @@ function createEducationCard() {
             <h2>Education</h2>
             <p>My academic background bridges the gap between structured algorithms and boundless imagination.</p>
             <ul class="list-items">
-                <li><strong>MSc Artificial Intelligence</strong> <span style="opacity: 0.6; margin-left: 8px;">(Current/Recent)</span></li>
+                <li><strong>MSc Artificial Intelligence</strong> <span style="opacity: 0.6; margin-left: 8px;">(Graduated)</span></li>
                 <li><strong>BA Computer Animation</strong> <span style="opacity: 0.6; margin-left: 8px;">(Graduated)</span></li>
             </ul>
         </div>

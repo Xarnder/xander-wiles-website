@@ -102,6 +102,60 @@ body {
     padding: 2.5rem;
 }
 
+.about-page-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.about-page-heading h2 {
+    margin: 0;
+}
+
+.about-page-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.card-about .about-tagline {
+    color: rgba(255, 255, 255, 0.92);
+    font-family: 'Outfit', var(--theme-font);
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin-bottom: 1.25rem;
+}
+
+.card-about p strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.about-interest-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 1.75rem;
+}
+
+.about-interest-tags .tag-pill {
+    margin: 0;
+}
+
+a.tag-pill-link {
+    color: #fff;
+    text-decoration: none;
+}
+
+a.tag-pill-link:hover {
+    border-color: rgba(187, 119, 255, 0.7);
+    background: rgba(187, 119, 255, 0.18);
+    color: #fff;
+}
+
 .card-education, .card-hobbies {
     grid-column: span 6;
     padding: 2rem;

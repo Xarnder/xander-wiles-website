@@ -1924,10 +1924,6 @@ input:checked+.slider:before {
 
 /* iOS Standalone Mode Optimization */
 @media (display-mode: standalone) {
-    #main-nav-placeholder {
-        display: none !important;
-    }
-
     body {
         padding-top: env(safe-area-inset-top);
     }

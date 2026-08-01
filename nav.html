@@ -1,39 +1,261 @@
-<!-- FILE: nav.html -->
-<header class="xw-main-nav-header">
+<header class="xw-main-nav-header" data-site-header>
     <div class="header-content">
-        <a href="/" class="logo">
-            <img src="/favicon-dark.svg" alt="Logo">
-            Xander Wiles
+        <a href="/" class="logo" aria-label="Xander Wiles — home">
+            <img src="/favicon-dark.svg" alt="" width="32" height="32">
+            <span>Xander Wiles</span>
         </a>
-        <nav class="main-nav">
-            <button class="nav-toggle" aria-label="toggle navigation" aria-expanded="false">
-                <img src="/assets/icons/hamburger-menu-icon.svg" alt="" class="icon-menu">
-                <img src="/assets/icons/close-icon.svg" alt="" class="icon-close">
-            </button>
+
+        <nav id="xw-site-nav" class="main-nav" aria-label="Primary navigation">
+            <div class="nav-panel-heading">
+                <span>Explore</span>
+                <span class="nav-panel-hint">Choose a category or page</span>
+            </div>
+
             <ul class="nav-links">
-                <li><a href="/">Home</a></li>
-                <li><a href="https://www.shoutitoutgame.com">Shout It Out!</a></li>
-                <li><a href="/pages/Akensile/">Akensile</a></li>
-                <li><a href="/games/rocket-lander/">Rocket Lander</a></li>
-                <!-- <li><a href="/pages/To-Do-List/">To Do List</a></li> -->
-                <!-- <li><a href="/pages/ultimate-christmas-playlist/">Ultimate Christmas Playlist</a></li> -->
-                <li><a href="/pages/Group-Availability/">When To Hang</a></li>
-                <li><a href="/pages/Poster_Gen/">Poster Maker</a></li>
-                <!-- <li><a href="/pages/z-image-turbo-sveltekit/">Z-Image Turbo</a></li> -->
-                <li>
-                    <a href="/pages/video-portfolio/" class="nav-button-glow">
-                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M15 10L19 7V17L15 14V17H5V7H15V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Video Portfolio
-                    </a>
+                <li class="nav-top-level">
+                    <a href="/" class="nav-top-link">Home</a>
                 </li>
-                <!-- <li><a href="/pages/Batch_Image_Manger/">Batch Image Manger</a></li> -->
-                <!-- <li><a href="/pages/Compare_Images/">Compare Images Tool</a></li> -->
 
-                <!-- <li><a href="/pages/About/">About</a></li> -->
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-featured-menu">
+                        <span>Featured</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-featured-menu" class="nav-dropdown" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Highlights</span>
+                                <span class="nav-dropdown-title">Featured projects</span>
+                            </div>
+                            <a href="/#featured" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="https://www.shoutitoutgame.com" data-external><img class="nav-item-icon" src="/pages/Shout-It-Out/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Shout It Out!</span><span
+                                        aria-hidden="true">↗</span></a></li>
+                            <li><a href="/pages/3d-Model-Viewer/"><img class="nav-item-icon" src="/pages/3d-Model-Viewer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">3D Model Viewer</span></a></li>
+                            <li><a href="/games/rocket-lander/"><img class="nav-item-icon" src="/games/rocket-lander/favicon.png" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Rocket Lander 2</span></a></li>
+                            <li><a href="/pages/Prompt-Manager/"><img class="nav-item-icon" src="/pages/Prompt-Manager/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Prompt Manager</span></a></li>
+                            <li><a href="/pages/Arkonhex/"><img class="nav-item-icon" src="/pages/Arkonhex/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Arkonhex</span></a></li>
+                            <li><a href="/pages/life-counter-extension/"><img class="nav-item-icon" src="/pages/life-counter-extension/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Your Life in Weeks</span></a></li>
+                            <li><a href="/pages/tax_bracket_visualizer/"><img class="nav-item-icon" src="/pages/tax_bracket_visualizer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Tax Bracket Visualiser</span></a></li>
+                            <li><a href="/pages/FOV-Screen-Calculator/"><img class="nav-item-icon" src="/pages/FOV-Screen-Calculator/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">FOV Screen Calculator</span></a></li>
+                        </ul>
+                    </div>
+                </li>
 
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-utilities-menu">
+                        <span>Utilities</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-utilities-menu" class="nav-dropdown nav-dropdown-wide" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Tools</span>
+                                <span class="nav-dropdown-title">Utilities &amp; productivity</span>
+                            </div>
+                            <a href="/#utilities" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="/pages/Watch-Later/"><img class="nav-item-icon" src="/pages/Watch-Later/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Watch Later</span></a></li>
+                            <li><a href="/pages/Work-Tracker/"><img class="nav-item-icon" src="/pages/Work-Tracker/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Work Tracker</span></a></li>
+                            <li><a href="/pages/To-Do-List/"><img class="nav-item-icon" src="/pages/To-Do-List/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">To Do List</span></a></li>
+                            <li><a href="/pages/Time-Pass/"><img class="nav-item-icon" src="/pages/Time-Pass/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Time Pass</span></a></li>
+                            <li><a href="/pages/Story-Manager/"><img class="nav-item-icon" src="/pages/Story-Manager/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Story Manager</span></a></li>
+                            <li><a href="/pages/Local-AI/"><img class="nav-item-icon" src="/pages/Local-AI/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Local AI</span></a></li>
+                            <li><a href="/pages/Teleprompter/"><img class="nav-item-icon" src="/pages/Teleprompter/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Teleprompter Flow</span></a></li>
+                            <li><a href="/pages/z-image-turbo-sveltekit/"><img class="nav-item-icon" src="/pages/Local-AI/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Z-Image Turbo</span></a></li>
+                            <li><a href="/pages/Table_Extractor/"><img class="nav-item-icon" src="/pages/Table_Extractor/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Table Extractor</span></a></li>
+                            <li><a href="/pages/WhatsAppViewer/"><img class="nav-item-icon" src="/pages/WhatsAppViewer/favicon.png" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">WhatsApp Chat Viewer</span></a></li>
+                            <li><a href="/pages/ringtone-trimmer/"><img class="nav-item-icon" src="/pages/ringtone-trimmer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Ringtone Trimmer</span></a></li>
+                            <li><a href="/pages/Timeline_Generator/"><img class="nav-item-icon" src="/pages/Timeline_Generator/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Timeline Generator</span></a></li>
+                            <li><a href="/pages/Flashcard_App/"><img class="nav-item-icon" src="/pages/Flashcard_App/favicon.png" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Flashcard App</span></a></li>
+                            <li><a href="/pages/Ratio_Calculator/"><img class="nav-item-icon" src="/pages/Ratio_Calculator/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Ratio Calculator</span></a></li>
+                            <li><a href="/pages/Text-Compactor/"><img class="nav-item-icon" src="/pages/Text-Compactor/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Text Compactor</span></a></li>
+                            <li><a href="/pages/Markdown-Editor/"><img class="nav-item-icon" src="/pages/Markdown-Editor/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Markdown Editor</span></a></li>
+                            <li><a href="/pages/ultimate-christmas-playlist/"><img class="nav-item-icon" src="/pages/ultimate-christmas-playlist/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Ultimate Christmas Playlist</span></a></li>
+                            <li><a href="/pages/Essential_Items/"><img class="nav-item-icon" src="/pages/Essential_Items/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Essential Items Checklist</span></a></li>
+                            <li><a href="/pages/midi-editor/"><img class="nav-item-icon" src="/pages/midi-editor/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">MIDI Editor</span></a></li>
+                            <li><a href="/pages/Youtube-Link-Extractor/"><img class="nav-item-icon" src="/pages/Youtube-Link-Extractor/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">YouTube Link Extractor</span></a></li>
+                            <li><a href="/pages/PDF-Manger/"><img class="nav-item-icon" src="/pages/PDF-Manger/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">PDF Manager</span></a></li>
+                            <li><a href="/pages/Image_To_PDF_Converter/"><img class="nav-item-icon" src="/pages/Image_To_PDF_Converter/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Lossless Image to PDF</span></a></li>
+                            <li><a href="/pages/Story-Weaver-Canvas/"><img class="nav-item-icon" src="/pages/Story-Weaver-Canvas/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Story Weaver Canvas</span></a></li>
+                            <li><a href="/pages/Steganography/"><img class="nav-item-icon" src="/pages/Steganography/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Steganography</span></a></li>
+                            <li><a href="/pages/html-pdf-converter/"><img class="nav-item-icon" src="/pages/html-pdf-converter/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">HTML/ASP to PDF</span></a></li>
+                            <li><a href="/pages/pdf-compare/"><img class="nav-item-icon" src="/pages/pdf-compare/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">PDF Compare</span></a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-images-menu">
+                        <span>Images</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-images-menu" class="nav-dropdown" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Create</span>
+                                <span class="nav-dropdown-title">Image &amp; graphics tools</span>
+                            </div>
+                            <a href="/#images" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="/pages/Poster_Gen/"><img class="nav-item-icon" src="/pages/Poster_Gen/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Poster Maker</span></a></li>
+                            <li><a href="/pages/Icon_Maker/"><img class="nav-item-icon" src="/pages/Icon_Maker/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Icon Maker</span></a></li>
+                            <li><a href="/pages/Batch_Image_Manger/"><img class="nav-item-icon" src="/pages/Batch_Image_Manger/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Batch Image Manager</span></a></li>
+                            <li><a href="/pages/Compare_Images/"><img class="nav-item-icon" src="/pages/Compare_Images/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Compare Images</span></a></li>
+                            <li><a href="/pages/replace_region/"><img class="nav-item-icon" src="/pages/replace_region/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Replace Image Region</span></a></li>
+                            <li><a href="/pages/image_align_tool/"><img class="nav-item-icon" src="/pages/image_align_tool/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Image Align Tool</span></a></li>
+                            <li><a href="/pages/360_image_viewer/"><img class="nav-item-icon" src="/pages/360_image_viewer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">360 Image Viewer</span></a></li>
+                            <li><a href="/pages/XR_Viewer/"><img class="nav-item-icon" src="/pages/XR_Viewer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">AR Viewer</span></a></li>
+                            <li><a href="/pages/Face-Tool/"><img class="nav-item-icon" src="/pages/Face-Tool/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Face Tool</span></a></li>
+                            <li><a href="/pages/colour-pro/"><img class="nav-item-icon" src="/pages/colour-pro/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Colour Pro</span></a></li>
+                            <li><a href="/pages/image-divider/"><img class="nav-item-icon" src="/pages/image-divider/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Image Divider</span></a></li>
+                            <li><a href="/pages/inpainting/"><img class="nav-item-icon" src="/pages/inpainting/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Inpainting</span></a></li>
+                            <li><a href="/pages/Video-Audio-Manger/"><img class="nav-item-icon" src="/pages/Video-Audio-Manger/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Video &amp; Audio Manager</span></a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-games-menu">
+                        <span>Games</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-games-menu" class="nav-dropdown" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Play</span>
+                                <span class="nav-dropdown-title">Games &amp; experiments</span>
+                            </div>
+                            <a href="/#games" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="/pages/Fighter-Jet/"><img class="nav-item-icon" src="/pages/Fighter-Jet/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Viper Strike</span></a></li>
+                            <li><a href="/pages/3D-Game/"><img class="nav-item-icon" src="/pages/3D-Game/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">3D Game</span></a></li>
+                            <li><a href="/pages/Machine-Learning-Explanation/"><img class="nav-item-icon" src="/pages/Machine-Learning-Explanation/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Machine Learning Toy</span></a></li>
+                            <li><a href="/pages/word-game/"><img class="nav-item-icon" src="/pages/word-game/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Word Game</span></a></li>
+                            <li><a href="/games/original-rocket-lander/"><img class="nav-item-icon" src="/games/original-rocket-lander/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Original Rocket Lander (2012)</span></a></li>
+                            <li><a href="/pages/Sensory-Experience/"><img class="nav-item-icon" src="/pages/Sensory-Experience/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Sensory Experience</span></a></li>
+                            <li><a href="/pages/Puzzle-Game/"><img class="nav-item-icon" src="/pages/Puzzle-Game/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Puzzle Game</span></a></li>
+                            <li><a href="/pages/voxelizer/"><img class="nav-item-icon" src="/pages/voxelizer/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Voxelizer</span></a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-guides-menu">
+                        <span>Guides</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-guides-menu" class="nav-dropdown" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Discover</span>
+                                <span class="nav-dropdown-title">Guides, demos &amp; more</span>
+                            </div>
+                            <a href="/#guides" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="/pages/Countdown/"><img class="nav-item-icon" src="/pages/Countdown/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Countdown</span></a></li>
+                            <li><a href="/pages/AI-Coding-Guidance/"><img class="nav-item-icon" src="/pages/AI-Coding-Guidance/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">AI Coding Guidance</span></a></li>
+                            <li><a href="/pages/Akensile/"><img class="nav-item-icon" src="/pages/Akensile/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Akensile</span></a></li>
+                            <li><a href="/pages/Balanced-Life/"><img class="nav-item-icon" src="/pages/Balanced-Life/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Balanced Life</span></a></li>
+                            <li><a href="/pages/Hypnagogia/"><img class="nav-item-icon" src="/pages/Hypnagogia/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Hypnagogia</span></a></li>
+                            <li><a href="/pages/Docker_Guide/"><img class="nav-item-icon" src="/pages/Docker_Guide/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Docker Guide</span></a></li>
+                            <li><a href="/pages/web_dev_sever/"><img class="nav-item-icon" src="/pages/web_dev_sever/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Web Dev Server Setup</span></a></li>
+                            <li><a href="/pages/Siewli/"><img class="nav-item-icon" src="/pages/Siewli/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Siewli Kok Memorial</span></a></li>
+                            <li><a href="/pages/Gaussian_Splatting/"><img class="nav-item-icon" src="/pages/Gaussian_Splatting/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Gaussian Splatting Explainer</span></a></li>
+                            <li><a href="/pages/Alignment_Game/"><img class="nav-item-icon" src="/pages/Alignment_Game/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Alignment Game</span></a></li>
+                            <li><a href="/pages/Convolution-Calculator/"><img class="nav-item-icon" src="/pages/Convolution-Calculator/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Convolution Calculator</span></a></li>
+                            <li><a href="/pages/PDF-Question-Answer-Tool/"><img class="nav-item-icon" src="/pages/PDF-Question-Answer-Tool/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">PDF Question Answer Tool</span></a></li>
+                            <li><a href="http://www.akensile.com/" data-external><img class="nav-item-icon" src="/assets/icons/akensile/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Legacy Akensile Site</span><span
+                                        aria-hidden="true">↗</span></a></li>
+                            <li><a href="/pages/auto-hide-chrome-extension/"><img class="nav-item-icon" src="/pages/auto-hide-chrome-extension/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Auto Hide Chrome Extension</span></a></li>
+                            <li><a href="/pages/Full-Page-Screenshot/"><img class="nav-item-icon" src="/pages/Full-Page-Screenshot/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Full Page Screenshot Extension</span></a></li>
+                            <li><a href="/pages/journal/"><img class="nav-item-icon" src="/pages/journal/favicon-dark.svg" alt="" width="18" height="18" loading="lazy" decoding="async"><span class="nav-item-label">Daily Journal</span></a></li>
+                            <li><a href="/pages/video-portfolio/"><svg class="nav-item-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10L19 7V17L15 14V17H5V7H15V10Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-item-label">Video Portfolio</span></a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-top-level nav-has-dropdown">
+                    <button class="nav-disclosure" type="button" aria-expanded="false"
+                        aria-controls="nav-playlists-menu">
+                        <span>Playlists</span>
+                        <svg class="nav-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </button>
+                    <div id="nav-playlists-menu" class="nav-dropdown" hidden>
+                        <div class="nav-dropdown-header">
+                            <div>
+                                <span class="nav-eyebrow">Listen</span>
+                                <span class="nav-dropdown-title">Music playlists</span>
+                            </div>
+                            <a href="/#playlists" class="nav-view-all">View section</a>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li><a href="/pages/Music_Playlists/?id=energetic-music"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">⚡️</span><span class="nav-item-label">Energetic Music</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=royal-shadows"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">👑</span><span class="nav-item-label">Royal Shadows</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=chill-vibes-music"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">😎</span><span class="nav-item-label">Chill Vibes Music</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=feel-good-songs"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎷</span><span class="nav-item-label">Feel Good Songs</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=sad-songs"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">😔</span><span class="nav-item-label">Sad Songs</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=best-musical-songs"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎭</span><span class="nav-item-label">Best Musical Songs</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=christmas-music"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎅</span><span class="nav-item-label">Christmas Music</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=classic-for-friends"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎶</span><span class="nav-item-label">Classic for Friends</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=great-piano-tunes"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎹</span><span class="nav-item-label">Great Piano Tunes</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=halloween"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎃</span><span class="nav-item-label">Halloween</span></a></li>
+                            <li><a href="/pages/Music_Playlists/?id=play-this-to-fall-in-love"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">❤️</span><span class="nav-item-label">Play This to Fall in Love</span></a>
+                            </li>
+                            <li><a href="/pages/Music_Playlists/?id=pop-best-of-the-best"><span class="nav-item-icon nav-item-icon-emoji" aria-hidden="true">🎤</span><span class="nav-item-label">Pop: Best of the Best</span></a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-top-level">
+                    <a href="/pages/About/" class="nav-top-link">About</a>
+                </li>
+                <li class="nav-top-level">
+                    <a href="/#contact" class="nav-top-link nav-contact-link">Contact</a>
+                </li>
             </ul>
         </nav>
+
+        <div class="nav-header-actions">
+            <button type="button" class="nav-search-trigger" data-nav-search aria-label="Search pages">
+                <svg class="nav-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                    <path d="m20 20-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round"></path>
+                </svg>
+                <span class="nav-search-label">Search</span>
+            </button>
+            <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="xw-site-nav"
+                aria-expanded="false">
+                <span class="nav-toggle-icon" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+        </div>
     </div>
+    <button class="nav-backdrop" type="button" tabindex="-1" aria-hidden="true" aria-label="Close navigation"></button>
 </header>

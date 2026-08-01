@@ -91,6 +91,10 @@
         try {
             const url = new URL(href, global.location.origin);
             if (url.origin !== global.location.origin) return '';
+            // About uses the main site favicon (no per-page icon).
+            if (/^\/pages\/About\/?$/i.test(url.pathname)) {
+                return '/favicon-dark.svg';
+            }
             const base = url.pathname.endsWith('/')
                 ? url.pathname
                 : url.pathname.replace(/\/[^/]*$/, '/');

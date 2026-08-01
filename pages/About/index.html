@@ -6,18 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About Me | Xander Wiles</title>
 
-    <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="../../favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
-    <link rel="icon" href="../../favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="../../favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <!-- Theme-aware SVG icons (same as homepage) -->
+    <link rel="icon" href="/favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
     <!-- Fallback PNG icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="../../favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 
     <!-- Other essential links -->
-    <link rel="manifest" href="../../site.webmanifest">
+    <link rel="manifest" href="/site.webmanifest">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 
@@ -59,8 +59,38 @@
                     Artist</p>
             </div>
 
+            <section class="glass-panel card-about" aria-labelledby="about-me-heading">
+                <div class="about-page-heading">
+                    <img class="about-page-icon" src="/favicon-dark.svg" alt="" width="40" height="40" decoding="async">
+                    <h2 id="about-me-heading">About Me</h2>
+                </div>
+                <p class="about-tagline">Curious. Ambitious. Technology lover.</p>
+                <p>
+                    I was brought up in Surrey, a quiet starting point for someone who
+                    ended up deep into code, cameras, and AI experiments.
+                </p>
+                <p>
+                    I'm a <span data-xw-age>24</span>-year-old software engineer and artist based in the UK. I studied Computer Animation for my
+                    undergraduate degree, then went on to complete a Masters in
+                    <strong>Artificial Intelligence</strong>. 
+                </p>
+                <p>
+                    Most days you'll find me turning ideas into working projects: web apps, games, tools, or AI
+                    experiments. Away from the screen, I'm usually out with my <span data-xw-camera>Canon R6 Mark
+                        II</span>, socialsing with friends, or writing
+                    in my journal, which has <span data-xw-journal-count>1,231</span> entries.
+                </p>
+                <div class="about-interest-tags">
+                    <span class="tag-pill">AI &amp; Tech</span>
+                    <span class="tag-pill">Art</span>
+                    <span class="tag-pill">Cello</span>
+                    <span class="tag-pill">Photography</span>
+                    <a href="/pages/journal/" class="tag-pill tag-pill-link">Daily Journal</a>
+                    <a href="/pages/video-portfolio/" class="tag-pill tag-pill-link">Video Portfolio</a>
+                </div>
+            </section>
 
-            <!-- Education -->
+            <!-- Education / Favorites -->
             <!-- Masonry Favorites Section -->
             <div id="favorites-grid" style="grid-column: span 12;">
                 <div id="fav-col-1" class="fav-column"></div>
@@ -85,6 +115,7 @@
         </div>
     </main>
 
+    <script src="../../assets/js/age.js"></script>
     <script src="../../assets/js/nav-loader.js"></script>
     <script src="favorites.js"></script>
     <script>

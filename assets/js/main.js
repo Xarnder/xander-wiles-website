@@ -165,6 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getSearchableCards = () => Array.from(document.querySelectorAll('main a.page-card[href]')).filter((card) => {
         if (card.closest('#recent-editor')) return false;
+        if (card.closest('#recent-section')) return false;
+        if (card.closest('.top-section-grid')) return false;
         return true;
     });
 
@@ -227,9 +229,20 @@ document.addEventListener('DOMContentLoaded', () => {
         lastSearchQuery = query;
         const tokens = getSearchTokens(query);
         const isSearching = tokens.length > 0;
+        const wasSearching = document.body.classList.contains('is-page-searching');
         document.body.classList.toggle('is-page-searching', isSearching);
 
         if (searchClear) searchClear.hidden = !query;
+
+        const topSectionGrid = document.querySelector('main .top-section-grid');
+        if (topSectionGrid) {
+            topSectionGrid.classList.toggle('is-search-hidden', isSearching);
+        }
+
+        const recentSectionEl = document.getElementById('recent-section');
+        if (recentSectionEl) {
+            recentSectionEl.classList.toggle('is-search-hidden', isSearching);
+        }
 
         const cards = getSearchableCards();
         const matchedBySection = new Map();
@@ -256,6 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const sectionId = title.id;
+            if (sectionId === 'recent') {
+                title.classList.add('is-search-hidden');
+                return;
+            }
             const hasMatch = sectionId ? matchedBySection.has(sectionId) : false;
             title.classList.toggle('is-search-hidden', !hasMatch);
         });
@@ -265,20 +282,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 grid.classList.remove('is-search-hidden');
                 return;
             }
+            if (grid.closest('#recent-section') || grid.closest('.top-section-grid')) {
+                grid.classList.add('is-search-hidden');
+                return;
+            }
             const hasVisibleCard = Array.from(grid.querySelectorAll('a.page-card[href]'))
                 .some((card) => !card.classList.contains('is-search-hidden'));
             grid.classList.toggle('is-search-hidden', !hasVisibleCard);
         });
-
-        const recentSectionEl = document.getElementById('recent-section');
-        if (recentSectionEl) {
-            if (!isSearching) {
-                recentSectionEl.classList.remove('is-search-hidden');
-            } else {
-                const hasRecentMatch = matchedBySection.has('recent');
-                recentSectionEl.classList.toggle('is-search-hidden', !hasRecentMatch);
-            }
-        }
 
         if (jumpBar) {
             jumpBar.querySelectorAll('.section-jump-link').forEach((link) => {
@@ -287,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 const sectionId = link.dataset.section;
-                if (sectionId === 'contact') {
+                if (sectionId === 'contact' || sectionId === 'recent') {
                     link.classList.add('is-search-hidden');
                     return;
                 }
@@ -313,6 +324,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         refreshJumpTargets();
         updateActiveFromScroll();
+
+        // Bring results up under the search bar when a search starts
+        if (isSearching && !wasSearching && jumpBar) {
+            requestAnimationFrame(() => {
+                jumpBar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
 
         // Filtering uses classes only — restore focus if anything stole it
         if (searchSessionActive) {
@@ -440,6 +458,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 searchInput.focus({ preventScroll: true });
             }
         });
+
+        // Nav search button / deep-link focus
+        document.addEventListener('xw:focus-page-search', () => {
+            searchSessionActive = true;
+        });
+
+        if (location.hash === '#page-card-search') {
+            searchSessionActive = true;
+            window.requestAnimationFrame(() => {
+                searchInput.focus({ preventScroll: true });
+            });
+        }
 
         // Re-apply when dynamic cards (recent / playlists) change
         const searchObserver = new MutationObserver(() => {
