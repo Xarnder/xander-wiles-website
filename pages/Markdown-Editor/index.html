@@ -70,9 +70,31 @@
                 if (gap < 0) gap = 0;
                 if (gap > 80) gap = 80;
                 document.documentElement.style.setProperty('--pwa-top-gap', gap + 'px');
-                var bottomRaw = localStorage.getItem('md-editor:pwaBottomOffset');
+                var bottomKey = 'md-editor:pwaBottomOffset';
+                var bottomMigratedKey = 'md-editor:pwaBottomAsInset';
+                var bottomRaw = localStorage.getItem(bottomKey);
                 var bottom = parseInt(bottomRaw, 10);
-                if (!Number.isFinite(bottom)) bottom = 0;
+                var bottomMigrated = localStorage.getItem(bottomMigratedKey) === '1';
+                var safeBottom = 0;
+                try {
+                    var probeB = document.createElement('div');
+                    probeB.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px);';
+                    document.documentElement.appendChild(probeB);
+                    safeBottom = Math.round(parseFloat(window.getComputedStyle(probeB).paddingBottom) || 0);
+                    probeB.remove();
+                } catch (e4) { safeBottom = 0; }
+                if (!bottomMigrated) {
+                    // Old slider pulled the nav with negative bottom (got clipped by .app).
+                    // Convert to an inset: remaining home-indicator clearance.
+                    if (!Number.isFinite(bottom)) bottom = safeBottom;
+                    else bottom = Math.max(0, safeBottom - bottom);
+                    try {
+                        localStorage.setItem(bottomKey, String(bottom));
+                        localStorage.setItem(bottomMigratedKey, '1');
+                    } catch (e5) { /* ignore */ }
+                } else if (!Number.isFinite(bottom)) {
+                    bottom = safeBottom > 0 ? safeBottom : 0;
+                }
                 if (bottom < 0) bottom = 0;
                 if (bottom > 80) bottom = 80;
                 document.documentElement.style.setProperty('--pwa-bottom-offset', bottom + 'px');
@@ -212,7 +234,7 @@
                                 <span id="pref-pwa-bottom-offset-value" class="settings-slider-value" aria-live="polite">0px</span>
                             </span>
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Pull the bottom nav down to fill empty space under the app on Home Screen. Increase until the gap under the tab bar is gone.</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Space under the tab bar (home indicator area). 0 puts the nav at the bottom of the screen — same idea as Status bar spacing.</p>
                         <label class="settings-pref settings-pref--slider" for="pref-preview-font-scale">
                             <span class="settings-pref-label">Preview text size</span>
                             <span class="settings-slider-wrap">
@@ -271,6 +293,7 @@
                 </div>
             </section>
         </main>
+    </div>
 
         <nav id="nav-bar" class="nav-bar" aria-label="App navigation" hidden>
             <div id="nav-actions" class="nav-actions" hidden>
@@ -341,7 +364,6 @@
                 </button>
             </div>
         </nav>
-    </div>
 
     <dialog id="unsaved-dialog" class="dialog">
         <form method="dialog" class="dialog-body">

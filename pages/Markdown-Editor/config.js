@@ -79,10 +79,12 @@ export const PWA_TOP_GAP_MIN = 0;
 export const PWA_TOP_GAP_MAX = 80;
 
 /**
- * Shift the bottom nav / app chrome downward into empty Home Screen space (px).
- * Higher values pull the bar down to fill the wasted gap under the nav.
+ * Bottom inset under the tab bar in Home Screen / PWA (px).
+ * Replaces iOS safe-area-inset-bottom — 0 sits the nav flush with the screen bottom.
  */
 export const PWA_BOTTOM_OFFSET_KEY = 'md-editor:pwaBottomOffset';
+/** One-time: old values pulled the nav with negative bottom (got clipped); now stores inset. */
+export const PWA_BOTTOM_OFFSET_MIGRATED_KEY = 'md-editor:pwaBottomAsInset';
 export const PWA_BOTTOM_OFFSET_DEFAULT = 0;
 export const PWA_BOTTOM_OFFSET_MIN = 0;
 export const PWA_BOTTOM_OFFSET_MAX = 80;

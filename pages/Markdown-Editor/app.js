@@ -19,6 +19,7 @@ import {
     PWA_TOP_GAP_MIN,
     PWA_TOP_GAP_MAX,
     PWA_BOTTOM_OFFSET_KEY,
+    PWA_BOTTOM_OFFSET_MIGRATED_KEY,
     PWA_BOTTOM_OFFSET_DEFAULT,
     PWA_BOTTOM_OFFSET_MIN,
     PWA_BOTTOM_OFFSET_MAX,
@@ -120,6 +121,7 @@ import {
     setLoadMoreVisible,
     setLoadMoreBusy,
     setStatus,
+    showEditorToast,
     setUpEnabled,
     showView,
     syncEditorChrome,
@@ -339,10 +341,43 @@ function clampPwaBottomOffset(value) {
     return Math.max(PWA_BOTTOM_OFFSET_MIN, Math.min(PWA_BOTTOM_OFFSET_MAX, n));
 }
 
+function measureSafeBottomPx() {
+    try {
+        const probe = document.createElement('div');
+        probe.style.cssText =
+            'position:absolute;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px);';
+        document.documentElement.appendChild(probe);
+        const px = Math.round(parseFloat(getComputedStyle(probe).paddingBottom) || 0);
+        probe.remove();
+        return Math.max(0, px);
+    } catch {
+        return 0;
+    }
+}
+
 function readPwaBottomOffset() {
     try {
         const raw = localStorage.getItem(PWA_BOTTOM_OFFSET_KEY);
-        if (raw == null || raw === '') return PWA_BOTTOM_OFFSET_DEFAULT;
+        const migrated = localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1';
+        if (!migrated) {
+            const safe = measureSafeBottomPx();
+            const pull = raw == null || raw === '' ? 0 : Number(raw);
+            // Old values pulled the nav down; convert to remaining bottom inset.
+            const inset = clampPwaBottomOffset(
+                Number.isFinite(pull) ? Math.max(0, safe - pull) : safe
+            );
+            try {
+                localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(inset));
+                localStorage.setItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY, '1');
+            } catch {
+                // ignore
+            }
+            return inset;
+        }
+        if (raw == null || raw === '') {
+            const safe = measureSafeBottomPx();
+            return clampPwaBottomOffset(safe > 0 ? safe : PWA_BOTTOM_OFFSET_DEFAULT);
+        }
         return clampPwaBottomOffset(raw);
     } catch {
         return PWA_BOTTOM_OFFSET_DEFAULT;
@@ -353,6 +388,7 @@ function writePwaBottomOffset(offsetPx) {
     const n = clampPwaBottomOffset(offsetPx);
     try {
         localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(n));
+        localStorage.setItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY, '1');
     } catch {
         // ignore
     }
@@ -524,9 +560,16 @@ function applyCloudSettings(cloud) {
         }
 
         if (cloud.pwaBottomOffset != null) {
-            const n = clampPwaBottomOffset(cloud.pwaBottomOffset);
+            let n = clampPwaBottomOffset(cloud.pwaBottomOffset);
+            const alreadyInset = localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1';
+            if (!alreadyInset) {
+                const safe = measureSafeBottomPx();
+                // Pre-migration cloud values were "pull down" amounts.
+                n = clampPwaBottomOffset(Math.max(0, safe - n));
+            }
             try {
                 localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(n));
+                localStorage.setItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY, '1');
             } catch {
                 // ignore
             }
@@ -1218,10 +1261,17 @@ function setupEditorForOpenFile() {
         renderStructuredEditor();
     }
     syncEditorChrome(state.editor);
+    setStatus('');
     if (repaired) {
-        setStatus('Repaired list data — Save to persist fixes.', 'warn');
+        showEditorToast('Repaired list data — Save to persist fixes.', 'warn', {
+            key: 'repaired',
+            durationMs: 3200,
+        });
     } else if (state.documentModel?.hasValidList && !readViewMode(state.editor.fileId)) {
-        setStatus('Opened in Preview mode (lists detected).', 'ok');
+        showEditorToast('Opened in Preview mode', 'ok', {
+            key: 'opened-preview',
+            durationMs: 2200,
+        });
     }
 }
 

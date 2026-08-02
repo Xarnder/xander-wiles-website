@@ -50,7 +50,7 @@ html[data-theme="blue"] {
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     /* Total Home Screen status-bar clearance (settings slider; replaces safe-area top). */
     --pwa-top-gap: 0px;
-    /* Pull bottom nav down into empty Home Screen space (settings slider). */
+    /* Bottom inset under the tab bar (settings slider; replaces safe-area bottom). */
     --pwa-bottom-offset: 0px;
     /* Preview / List body text scale (1 = default 1.02rem). */
     --preview-font-scale: 1;
@@ -212,10 +212,8 @@ body {
     margin: 0 auto;
     --app-top-pad: calc(12px + var(--safe-top));
     padding: var(--app-top-pad) 14px 0;
-    /* Leave room for fixed bottom nav (+ mobile path dock); bottom offset reclaims PWA gap. */
-    padding-bottom: calc(
-        var(--nav-offset, 88px) - var(--pwa-bottom-offset, 0px) + var(--path-dock-offset, 0px) + 12px
-    );
+    /* Leave room for fixed bottom nav (+ mobile path dock) */
+    padding-bottom: calc(var(--nav-offset, 88px) + var(--path-dock-offset, 0px) + 12px);
     overflow: hidden;
 }
 
@@ -293,7 +291,7 @@ body {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: calc(-1 * var(--pwa-bottom-offset, 0px));
+    bottom: 0;
     top: auto;
     z-index: 30;
     width: 100%;
@@ -301,10 +299,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    /* Safe-area padding keeps tab hit targets above the home indicator;
-       the nav background itself must still paint to the physical bottom.
-       --pwa-bottom-offset pulls the whole bar down into empty Home Screen space. */
-    padding: 8px 12px calc(8px + var(--safe-bottom));
+    /* Bottom inset is fully controlled by Settings (replaces safe-area-inset-bottom). */
+    padding: 8px 12px calc(8px + var(--pwa-bottom-offset, 0px));
     background: var(--bg-nav);
     border-top: 1px solid var(--border);
     backdrop-filter: blur(14px);
@@ -577,7 +573,7 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
         z-index: 29;
         width: calc(100% - 28px);
         max-width: 692px;
-        bottom: calc(var(--nav-offset, 88px) - var(--pwa-bottom-offset, 0px) + 6px);
+        bottom: calc(var(--nav-offset, 88px) + 6px);
         margin: 0;
         background: var(--bg-nav);
         backdrop-filter: blur(14px);
@@ -2145,7 +2141,7 @@ html[data-theme="light"] .editor::selection {
 /* Keep Done / + Item chrome visible; only the item list scrolls. */
 .mdlist-block--editing {
     max-height: calc(
-        100dvh - var(--app-top-pad) - (var(--nav-offset, 88px) - var(--pwa-bottom-offset, 0px)) - var(--path-dock-offset, 0px) - 10.5rem
+        100dvh - var(--app-top-pad) - var(--nav-offset, 88px) - var(--path-dock-offset, 0px) - 10.5rem
     );
     min-height: 0;
 }
@@ -2557,7 +2553,7 @@ html[data-theme="light"] .editor::selection {
 
 .mdplain-block--editing {
     max-height: calc(
-        100dvh - var(--app-top-pad) - (var(--nav-offset, 88px) - var(--pwa-bottom-offset, 0px)) - var(--path-dock-offset, 0px) - 10.5rem
+        100dvh - var(--app-top-pad) - var(--nav-offset, 88px) - var(--path-dock-offset, 0px) - 10.5rem
     );
     min-height: 0;
 }
