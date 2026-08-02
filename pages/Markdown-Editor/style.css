@@ -166,8 +166,7 @@ html[data-theme="light"] {
 
 html {
     height: 100%;
-    /* iOS Safari / home-screen PWA: fill the real WebView, not just 100dvh */
-    height: -webkit-fill-available;
+    min-height: 100dvh;
 }
 
 html,
@@ -175,7 +174,6 @@ body {
     margin: 0;
     min-height: 100%;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
     background:
         radial-gradient(1200px 600px at 10% -10%, var(--glow-a), transparent 60%),
         radial-gradient(900px 500px at 100% 0%, var(--glow-b), transparent 55%),
@@ -187,7 +185,6 @@ body {
 
 body {
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
 }
 
 .sr-only {
@@ -205,9 +202,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
     height: 100dvh;
-    height: -webkit-fill-available;
     max-width: 720px;
     margin: 0 auto;
     --app-top-pad: calc(12px + var(--safe-top));
@@ -311,58 +306,58 @@ body {
     -webkit-backdrop-filter: blur(14px);
 }
 
-/*
- * iOS home-screen / installed PWA: 100dvh often undershoots the WebView,
- * leaving an empty strip under the fixed nav. Fill the real available height
- * so the shell and bottom nav reach the physical screen edge.
- */
+/* Standalone uses a JS-measured physical screen height. On iOS,
+   -webkit-fill-available excludes the lower system region and clips fixed UI. */
 @media (display-mode: standalone),
        (display-mode: fullscreen),
        (display-mode: minimal-ui) {
     html,
     body {
-        height: 100%;
-        height: 100vh;
-        height: -webkit-fill-available;
-        min-height: 100%;
-        min-height: -webkit-fill-available;
-        overflow: visible;
+        height: var(--pwa-screen-height, 100dvh);
+        min-height: var(--pwa-screen-height, 100dvh);
+        overflow: hidden;
     }
 
     .app {
-        height: 100%;
-        height: 100vh;
-        height: -webkit-fill-available;
-        min-height: 100%;
-        min-height: -webkit-fill-available;
+        height: var(--pwa-screen-height, 100dvh);
+        min-height: var(--pwa-screen-height, 100dvh);
         /* Status bar clearance is fully controlled by the Settings slider. */
         --app-top-pad: var(--pwa-top-gap);
         padding-top: var(--app-top-pad);
         overflow: hidden;
+    }
+
+    body {
+        position: relative;
+    }
+
+    .nav-bar {
+        position: absolute;
     }
 }
 
 /* Older iOS: display-mode media query can miss; class set in index.html */
 html.is-standalone,
 html.is-standalone body {
-    height: 100%;
-    height: 100vh;
-    height: -webkit-fill-available;
-    min-height: 100%;
-    min-height: -webkit-fill-available;
-    /* Allow the nav to paint into empty space below the layout when bottom-offset is negative. */
-    overflow: visible;
+    height: var(--pwa-screen-height, 100dvh);
+    min-height: var(--pwa-screen-height, 100dvh);
+    overflow: hidden;
 }
 
 html.is-standalone .app {
-    height: 100%;
-    height: 100vh;
-    height: -webkit-fill-available;
-    min-height: 100%;
-    min-height: -webkit-fill-available;
+    height: var(--pwa-screen-height, 100dvh);
+    min-height: var(--pwa-screen-height, 100dvh);
     --app-top-pad: var(--pwa-top-gap);
     padding-top: var(--app-top-pad);
     overflow: hidden;
+}
+
+html.is-standalone body {
+    position: relative;
+}
+
+html.is-standalone .nav-bar {
+    position: absolute;
 }
 
 .nav-actions {

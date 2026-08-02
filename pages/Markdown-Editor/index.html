@@ -43,7 +43,28 @@
                     || window.matchMedia('(display-mode: standalone)').matches
                     || window.matchMedia('(display-mode: fullscreen)').matches
                     || window.matchMedia('(display-mode: minimal-ui)').matches;
-                if (standalone) document.documentElement.classList.add('is-standalone');
+                if (standalone) {
+                    document.documentElement.classList.add('is-standalone');
+                    var setPwaScreenHeight = function () {
+                        var viewportHeight = Math.max(
+                            window.innerHeight || 0,
+                            document.documentElement.clientHeight || 0
+                        );
+                        var screenHeight = Number(window.screen && window.screen.height) || 0;
+                        var fullHeight = Math.max(viewportHeight, screenHeight);
+                        if (fullHeight > 0) {
+                            document.documentElement.style.setProperty(
+                                '--pwa-screen-height',
+                                Math.round(fullHeight) + 'px'
+                            );
+                        }
+                    };
+                    setPwaScreenHeight();
+                    window.addEventListener('resize', setPwaScreenHeight, { passive: true });
+                    window.addEventListener('orientationchange', function () {
+                        window.setTimeout(setPwaScreenHeight, 120);
+                    }, { passive: true });
+                }
                 var gapKey = 'md-editor:pwaTopGap';
                 var gapMigratedKey = 'md-editor:pwaTopGapAsTotal';
                 var gapRaw = localStorage.getItem(gapKey);
