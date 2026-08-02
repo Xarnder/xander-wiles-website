@@ -79,14 +79,14 @@ export const PWA_TOP_GAP_MIN = 0;
 export const PWA_TOP_GAP_MAX = 80;
 
 /**
- * Bottom inset under the tab bar in Home Screen / PWA (px).
- * Replaces iOS safe-area-inset-bottom — 0 sits the nav flush with the screen bottom.
+ * Bottom edge of the tab bar relative to the screen bottom (px).
+ * 0 = flush, positive = lifted, negative = pushed further down into empty PWA space.
  */
 export const PWA_BOTTOM_OFFSET_KEY = 'md-editor:pwaBottomOffset';
-/** One-time: old values pulled the nav with negative bottom (got clipped); now stores inset. */
+/** One-time: old pull-down / inset semantics → current bottom-edge value. */
 export const PWA_BOTTOM_OFFSET_MIGRATED_KEY = 'md-editor:pwaBottomAsInset';
 export const PWA_BOTTOM_OFFSET_DEFAULT = 0;
-export const PWA_BOTTOM_OFFSET_MIN = 0;
+export const PWA_BOTTOM_OFFSET_MIN = -80;
 export const PWA_BOTTOM_OFFSET_MAX = 80;
 
 /** Preview / List body text size as percent of default (100 = 1.02rem). */

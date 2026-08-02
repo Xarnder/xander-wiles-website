@@ -95,7 +95,7 @@
                 } else if (!Number.isFinite(bottom)) {
                     bottom = safeBottom > 0 ? safeBottom : 0;
                 }
-                if (bottom < 0) bottom = 0;
+                if (bottom < -80) bottom = -80;
                 if (bottom > 80) bottom = 80;
                 document.documentElement.style.setProperty('--pwa-bottom-offset', bottom + 'px');
                 var scaleRaw = localStorage.getItem('md-editor:previewFontScale');
@@ -230,11 +230,11 @@
                         <label class="settings-pref settings-pref--slider" for="pref-pwa-bottom-offset">
                             <span class="settings-pref-label">Bottom edge position</span>
                             <span class="settings-slider-wrap">
-                                <input id="pref-pwa-bottom-offset" class="settings-slider" type="range" min="0" max="80" step="1" value="0" aria-valuemin="0" aria-valuemax="80" aria-valuenow="0">
+                                <input id="pref-pwa-bottom-offset" class="settings-slider" type="range" min="-80" max="80" step="1" value="0" aria-valuemin="-80" aria-valuemax="80" aria-valuenow="0">
                                 <span id="pref-pwa-bottom-offset-value" class="settings-slider-value" aria-live="polite">0px</span>
                             </span>
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Space under the tab bar (home indicator area). 0 puts the nav at the bottom of the screen — same idea as Status bar spacing.</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Where the tab bar sits. 0 is flush with the screen bottom; negative pushes it further down into empty space; positive lifts it up.</p>
                         <label class="settings-pref settings-pref--slider" for="pref-preview-font-scale">
                             <span class="settings-pref-label">Preview text size</span>
                             <span class="settings-slider-wrap">

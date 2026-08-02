@@ -650,11 +650,11 @@ export function syncPwaTopGapControl(gapPx) {
 }
 
 /**
- * Pull the bottom nav down into empty Home Screen space and sync the control.
+ * Set tab bar bottom edge (px from screen bottom; negative pushes further down).
  * @param {number} offsetPx
  */
 export function applyPwaBottomOffset(offsetPx) {
-    const n = Math.max(0, Math.min(80, Math.round(Number(offsetPx) || 0)));
+    const n = Math.max(-80, Math.min(80, Math.round(Number(offsetPx) || 0)));
     document.documentElement.style.setProperty('--pwa-bottom-offset', `${n}px`);
     if (els.prefPwaBottomOffset) {
         els.prefPwaBottomOffset.value = String(n);
