@@ -50,6 +50,39 @@ export const PREVIEW_TOC_OPEN_DEFAULT = true;
 export const PREVIEW_TOC_STICKY_KEY = 'md-editor:previewTocSticky';
 export const PREVIEW_TOC_STICKY_DEFAULT = false;
 
+/**
+ * List item stripe styling for custom + normal lists.
+ * 'normal' | 'zebra' | 'spectrum'
+ */
+export const LIST_STRIPE_KEY = 'md-editor:listStripe';
+export const LIST_STRIPE_DEFAULT = 'normal';
+export const LIST_STRIPE_VALUES = new Set(['normal', 'zebra', 'spectrum']);
+
+/**
+ * List item layout for stripe modes.
+ * 'segmented' = each item is its own container (backgrounds)
+ * 'continuous' = one flowing list; stripe modes tint text colour instead
+ */
+export const LIST_LAYOUT_KEY = 'md-editor:listLayout';
+export const LIST_LAYOUT_DEFAULT = 'segmented';
+export const LIST_LAYOUT_VALUES = new Set(['segmented', 'continuous']);
+
+/** Extra top inset below the iOS status bar in Home Screen / PWA mode (px). */
+export const PWA_TOP_GAP_KEY = 'md-editor:pwaTopGap';
+export const PWA_TOP_GAP_DEFAULT = 8;
+export const PWA_TOP_GAP_MIN = 0;
+export const PWA_TOP_GAP_MAX = 48;
+
+/** Preview / List body text size as percent of default (100 = 1.02rem). */
+export const PREVIEW_FONT_SCALE_KEY = 'md-editor:previewFontScale';
+export const PREVIEW_FONT_SCALE_DEFAULT = 100;
+export const PREVIEW_FONT_SCALE_MIN = 75;
+export const PREVIEW_FONT_SCALE_MAX = 150;
+
+/** Hidden Drive appData settings file (synced across devices). */
+export const SETTINGS_CLOUD_FILE_NAME = 'md-editor-settings.json';
+export const SETTINGS_CLOUD_VERSION = 1;
+
 export const PAGE_SIZE = 50;
 export const LARGE_FILE_BYTES = 2 * 1024 * 1024;
 

@@ -7,6 +7,7 @@ export function bindUi() {
     els.app = document.getElementById('app');
     els.status = document.getElementById('status');
     els.viewTitle = document.getElementById('view-title');
+    els.editorFileTitle = document.getElementById('editor-file-title');
     els.navBar = document.getElementById('nav-bar');
     els.navActions = document.getElementById('nav-actions');
     els.navActionsFinder = document.getElementById('nav-actions-finder');
@@ -61,14 +62,20 @@ export function bindUi() {
     els.prefMdOrderDesktop = document.getElementById('pref-md-order-desktop');
     els.prefTheme = document.getElementById('pref-theme');
     els.prefTocSticky = document.getElementById('pref-toc-sticky');
+    els.prefPwaTopGap = document.getElementById('pref-pwa-top-gap');
+    els.prefPwaTopGapValue = document.getElementById('pref-pwa-top-gap-value');
+    els.prefPreviewFontScale = document.getElementById('pref-preview-font-scale');
+    els.prefPreviewFontScaleValue = document.getElementById('pref-preview-font-scale-value');
+    els.prefListStripe = document.getElementById('pref-list-stripe');
+    els.prefListLayoutSegmented = document.getElementById('pref-list-layout-segmented');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
-    els.dirtyLabel = document.getElementById('dirty-label');
     els.editor = document.getElementById('editor');
     els.viewModeBar = document.getElementById('view-mode-bar');
     els.modeList = document.getElementById('mode-list');
     els.modePreview = document.getElementById('mode-preview');
     els.modeRaw = document.getElementById('mode-raw');
+    els.editorToast = document.getElementById('editor-toast');
     els.listsRoot = document.getElementById('lists-root');
     els.listsStatus = document.getElementById('lists-status');
     els.markdownPreview = document.getElementById('markdown-preview');
@@ -113,6 +120,94 @@ export function setStatus(message, kind = '') {
     if (kind === 'error') els.status.classList.add('is-error');
     if (kind === 'ok') els.status.classList.add('is-ok');
     if (kind === 'warn') els.status.classList.add('is-warn');
+}
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let editorToastTimer = null;
+/** @type {string} */
+let editorToastKey = '';
+/** Last save-state toast key announced (avoids re-showing after auto-hide). */
+let editorSaveToastKey = '';
+
+/**
+ * Small toast under the List/Preview/Raw selector (save / dirty / errors while editing).
+ * @param {string} message
+ * @param {'' | 'ok' | 'warn' | 'error'} [kind]
+ * @param {{ sticky?: boolean, key?: string, durationMs?: number }} [options]
+ */
+export function showEditorToast(message, kind = '', options = {}) {
+    if (!els.editorToast) return;
+    const key = options.key ?? message;
+    const sticky = Boolean(options.sticky);
+    const durationMs = Number.isFinite(options.durationMs) ? options.durationMs : 2200;
+
+    if (key && key === editorToastKey && els.editorToast.classList.contains('is-visible')) {
+        if (sticky) return;
+        if (editorToastTimer) clearTimeout(editorToastTimer);
+        editorToastTimer = setTimeout(() => hideEditorToast(), durationMs);
+        return;
+    }
+
+    editorToastKey = key;
+    if (editorToastTimer) {
+        clearTimeout(editorToastTimer);
+        editorToastTimer = null;
+    }
+
+    els.editorToast.textContent = message || '';
+    els.editorToast.classList.remove('is-ok', 'is-warn', 'is-error', 'is-visible');
+    if (kind === 'ok') els.editorToast.classList.add('is-ok');
+    if (kind === 'warn') els.editorToast.classList.add('is-warn');
+    if (kind === 'error') els.editorToast.classList.add('is-error');
+
+    if (!message) {
+        els.editorToast.hidden = true;
+        editorToastKey = '';
+        return;
+    }
+
+    els.editorToast.hidden = false;
+    requestAnimationFrame(() => {
+        els.editorToast?.classList.add('is-visible');
+    });
+
+    if (!sticky) {
+        editorToastTimer = setTimeout(() => hideEditorToast(), durationMs);
+    }
+}
+
+export function hideEditorToast() {
+    if (editorToastTimer) {
+        clearTimeout(editorToastTimer);
+        editorToastTimer = null;
+    }
+    editorToastKey = '';
+    if (!els.editorToast) return;
+    els.editorToast.classList.remove('is-visible', 'is-ok', 'is-warn', 'is-error');
+    els.editorToast.hidden = true;
+    els.editorToast.textContent = '';
+}
+
+/**
+ * Announce editor save/dirty state once per transition (toast under mode bar).
+ * @param {string} key
+ * @param {string} message
+ * @param {'' | 'ok' | 'warn' | 'error'} [kind]
+ * @param {{ sticky?: boolean, durationMs?: number }} [options]
+ */
+function announceEditorSaveToast(key, message, kind = '', options = {}) {
+    setStatus('');
+    if (key === editorSaveToastKey) {
+        if (options.sticky && editorToastKey === key) return;
+        if (!options.sticky) return;
+    }
+    editorSaveToastKey = key;
+    showEditorToast(message, kind, { ...options, key });
+}
+
+function resetEditorSaveToast() {
+    editorSaveToastKey = '';
+    hideEditorToast();
 }
 
 function setActiveTab(mode) {
@@ -199,6 +294,7 @@ export function showView(name, options = {}) {
         if (els.navActionsEditor) els.navActionsEditor.hidden = true;
         if (els.finderPathBar) els.finderPathBar.hidden = true;
         els.viewTitle.textContent = 'Markdown Editor';
+        if (els.app) els.app.classList.remove('is-editing-doc');
         syncNavLayout();
         return;
     }
@@ -208,6 +304,10 @@ export function showView(name, options = {}) {
     syncNavActions(name, { hasOpenFile });
     if (els.finderPathBar) els.finderPathBar.hidden = name !== 'finder';
     syncNavLayout();
+
+    if (name !== 'editor' && els.app) {
+        els.app.classList.remove('is-editing-doc');
+    }
 
     if (name === 'pinned') {
         els.viewTitle.textContent = 'Pinned';
@@ -235,12 +335,14 @@ export function showView(name, options = {}) {
             if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
             if (els.editorSearchBar) els.editorSearchBar.hidden = true;
             els.viewTitle.textContent = 'Opening…';
+            if (els.app) els.app.classList.remove('is-editing-doc');
         } else {
             els.editorEmpty.hidden = hasOpenFile;
             els.editorActive.hidden = !hasOpenFile;
             els.btnSave.hidden = !hasOpenFile;
             if (!hasOpenFile) {
                 els.viewTitle.textContent = 'Edit';
+                if (els.app) els.app.classList.remove('is-editing-doc');
                 setStatus('Open a file from Pinned or Finder');
             }
         }
@@ -525,6 +627,78 @@ export function syncTocStickyControl(sticky) {
     }
 }
 
+/**
+ * Apply Home Screen status-bar gap and sync the settings control.
+ * @param {number} gapPx
+ */
+export function applyPwaTopGap(gapPx) {
+    const n = Math.max(0, Math.min(48, Math.round(Number(gapPx) || 0)));
+    document.documentElement.style.setProperty('--pwa-top-gap', `${n}px`);
+    if (els.prefPwaTopGap) {
+        els.prefPwaTopGap.value = String(n);
+        els.prefPwaTopGap.setAttribute('aria-valuenow', String(n));
+    }
+    if (els.prefPwaTopGapValue) {
+        els.prefPwaTopGapValue.textContent = `${n}px`;
+    }
+}
+
+export function syncPwaTopGapControl(gapPx) {
+    applyPwaTopGap(gapPx);
+}
+
+/**
+ * Apply Preview/List body text scale (percent of default) and sync the control.
+ * @param {number} percent
+ */
+export function applyPreviewFontScale(percent) {
+    const n = Math.max(75, Math.min(150, Math.round(Number(percent) || 100)));
+    document.documentElement.style.setProperty('--preview-font-scale', String(n / 100));
+    if (els.prefPreviewFontScale) {
+        els.prefPreviewFontScale.value = String(n);
+        els.prefPreviewFontScale.setAttribute('aria-valuenow', String(n));
+    }
+    if (els.prefPreviewFontScaleValue) {
+        els.prefPreviewFontScaleValue.textContent = `${n}%`;
+    }
+}
+
+export function syncPreviewFontScaleControl(percent) {
+    applyPreviewFontScale(percent);
+}
+
+/**
+ * Apply list item stripe mode for custom + normal lists.
+ * @param {'normal' | 'zebra' | 'spectrum' | string} mode
+ */
+export function applyListStripe(mode) {
+    const next = mode === 'zebra' || mode === 'spectrum' ? mode : 'normal';
+    document.documentElement.setAttribute('data-list-stripe', next);
+    if (els.prefListStripe) {
+        els.prefListStripe.value = next;
+    }
+}
+
+export function syncListStripeControl(mode) {
+    applyListStripe(mode);
+}
+
+/**
+ * Apply list layout: segmented containers vs continuous flowing list.
+ * @param {'segmented' | 'continuous' | string} layout
+ */
+export function applyListLayout(layout) {
+    const next = layout === 'continuous' ? 'continuous' : 'segmented';
+    document.documentElement.setAttribute('data-list-layout', next);
+    if (els.prefListLayoutSegmented) {
+        els.prefListLayoutSegmented.checked = next === 'segmented';
+    }
+}
+
+export function syncListLayoutControl(layout) {
+    applyListLayout(layout);
+}
+
 function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
     const section = document.createElement('section');
     section.className = `file-group file-group--${kind}`;
@@ -629,6 +803,11 @@ export function displayNoteTitle(name) {
 export function syncEditorChrome(state) {
     const title = displayNoteTitle(state.fileName);
     const fullName = state.fileName || '';
+    const editingDoc = Boolean(state.fileId && els.viewEditor && !els.viewEditor.hidden);
+
+    if (els.app) {
+        els.app.classList.toggle('is-editing-doc', editingDoc && state.status !== 'loading');
+    }
 
     if (state.status === 'loading') {
         setEditorLoading(true, fullName);
@@ -645,9 +824,14 @@ export function syncEditorChrome(state) {
 
     if (state.fileId) {
         if (!els.viewEditor.hidden) {
-            els.viewTitle.textContent = title;
-            els.viewTitle.title = fullName || title;
-            els.viewTitle.classList.add('view-title--doc');
+            // Top strip stays compact; file name lives under the mode selector.
+            els.viewTitle.textContent = 'Edit';
+            els.viewTitle.classList.remove('view-title--doc');
+            els.viewTitle.removeAttribute('title');
+            if (els.editorFileTitle) {
+                els.editorFileTitle.textContent = title;
+                els.editorFileTitle.title = fullName || title;
+            }
             syncNavActions('editor', { hasOpenFile: true });
         }
         els.editorEmpty.hidden = true;
@@ -660,6 +844,10 @@ export function syncEditorChrome(state) {
     } else {
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
+        if (els.editorFileTitle) {
+            els.editorFileTitle.textContent = '';
+            els.editorFileTitle.removeAttribute('title');
+        }
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnImportList) els.btnImportList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
@@ -670,15 +858,27 @@ export function syncEditorChrome(state) {
         }
         if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
-    els.dirtyLabel.hidden = !state.dirty;
-    els.btnSave.disabled = state.status === 'saving' || !state.dirty;
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
     els.btnRenameCurrent.hidden = !state.fileId;
-    els.btnRenameCurrent.disabled = state.status === 'saving';
-    if (els.btnInsertList) els.btnInsertList.disabled = state.status === 'saving' || !state.fileId;
-    if (els.btnImportList) els.btnImportList.disabled = state.status === 'saving' || !state.fileId;
-    if (els.btnClickEdit) els.btnClickEdit.disabled = state.status === 'saving' || !state.fileId;
-    if (els.btnEditorSearch) els.btnEditorSearch.disabled = state.status === 'saving' || !state.fileId;
+    // Disabled state is owned by syncEditorActionLocks in app.js when a
+    // cancelable Edit action is active; otherwise apply the base rules here.
+    const actionLocked = Boolean(els.app?.classList.contains('is-action-locked'));
+    const activeAction = els.app?.dataset.activeEditorAction || '';
+    const baseDisabled = state.status === 'saving' || !state.fileId;
+    const setActionDisabled = (btn, key, fallbackDisabled) => {
+        if (!btn) return;
+        if (actionLocked) {
+            btn.disabled = key !== activeAction;
+            return;
+        }
+        btn.disabled = fallbackDisabled;
+    };
+    setActionDisabled(els.btnSave, 'save', baseDisabled || !state.dirty);
+    setActionDisabled(els.btnRenameCurrent, 'rename', baseDisabled);
+    setActionDisabled(els.btnInsertList, 'insert-list', baseDisabled);
+    setActionDisabled(els.btnImportList, 'import-list', baseDisabled);
+    setActionDisabled(els.btnClickEdit, 'click-edit', baseDisabled);
+    setActionDisabled(els.btnEditorSearch, 'search', baseDisabled);
 
     if (els.tabEditor) {
         els.tabEditor.classList.toggle('has-dirty', Boolean(state.dirty && state.fileId));
@@ -694,19 +894,25 @@ export function syncEditorChrome(state) {
         return;
     }
 
+    // Keep the top strip clear while editing; save/dirty feedback is a toast under the mode bar.
     if (state.status === 'saving') {
-        setStatus('Saving…');
+        announceEditorSaveToast('saving', 'Saving…', '', { sticky: true });
     } else if (state.status === 'saved' && !state.dirty) {
-        setStatus('Saved', 'ok');
+        announceEditorSaveToast('saved', 'Saved', 'ok', { durationMs: 2000 });
     } else if (state.status === 'dirty') {
-        // Dirty state is shown via #dirty-label — don't repeat in the status bar
-        setStatus('');
+        announceEditorSaveToast('dirty', 'Unsaved', 'warn', { durationMs: 2200 });
     } else if (state.status === 'error') {
-        setStatus(state.errorMessage || 'Error', 'error');
+        announceEditorSaveToast(`error:${state.errorMessage || 'Error'}`, state.errorMessage || 'Error', 'error', {
+            durationMs: 3600,
+        });
     } else if (state.status === 'loading') {
-        setStatus('Loading…');
+        setStatus('');
+        resetEditorSaveToast();
     } else {
         setStatus('');
+        if (editorSaveToastKey === 'saving' || editorSaveToastKey === 'dirty') {
+            resetEditorSaveToast();
+        }
     }
 }
 

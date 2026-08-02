@@ -1,11 +1,9 @@
-const CACHE_NAME = 'taskmaster-todo-v76';
+const CACHE_NAME = 'taskmaster-todo-v83';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './style.css',
-    '/assets/css/style.css',
-    '/assets/js/nav-loader.js',
     './main.js',
     './api.js',
     './store.js',

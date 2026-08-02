@@ -107,11 +107,6 @@
     box-sizing: border-box;
 }
 
-/* Hide site-wide header by default - Toggled via Settings */
-#main-nav-placeholder {
-    display: none;
-}
-
 /* ===================================================================
    LOADING ANIMATION
    =================================================================== */
@@ -965,12 +960,6 @@ body {
     box-sizing: border-box;
 }
 
-#main-nav-placeholder {
-    flex-shrink: 0;
-    position: relative;
-    z-index: 2001;
-}
-
 .app-wrapper {
     position: relative;
     z-index: 1;
@@ -1515,6 +1504,7 @@ body {
     overflow-x: auto;
     overflow-y: hidden;
     padding: 10px 20px;
+    padding-top: var(--list-top-gap, 10px);
     align-items: flex-start;
     box-sizing: border-box;
 }
@@ -2829,10 +2819,6 @@ body.settings-page-open .app-wrapper {
     pointer-events: none;
 }
 
-body.settings-page-open #main-nav-placeholder {
-    display: none !important;
-}
-
 body.settings-page-open .sync-pill,
 body.settings-page-open #sync-console {
     display: none !important;
@@ -2867,7 +2853,8 @@ body.settings-page-open #sync-console {
     .settings-page-content > #kanban-labels-settings,
     .settings-page-content > .sync-info-menu-item,
     .settings-page-content > .app-version-menu-item,
-    .settings-page-content > .tags-settings-section {
+    .settings-page-content > .tags-settings-section,
+    .settings-page-content > .settings-slider-block {
         grid-column: 1 / -1;
     }
 }
@@ -2888,6 +2875,18 @@ body.settings-page-open #sync-console {
     .settings-page-content {
         padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0px));
         gap: 10px;
+    }
+
+    .settings-page-content > * {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .menu-action-item,
+    .dropdown-item-toggle {
+        max-width: 100%;
+        box-sizing: border-box;
     }
 }
 
@@ -2937,6 +2936,118 @@ body.settings-page-open #sync-console {
     border-radius: 8px;
     background: oklch(0 0 0 / 0.2);
     border: 1px solid var(--glass-border);
+}
+
+.settings-slider-block {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    flex-shrink: 0;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.settings-slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.settings-slider-header > span:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.settings-slider-block .kanban-labels-hint {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-slider-track {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 2px;
+    box-sizing: border-box;
+}
+
+.settings-slider {
+    display: block;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    box-sizing: border-box;
+    accent-color: var(--accent-blue);
+}
+
+.settings-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: oklch(1 0 0 / 0.18);
+}
+
+.settings-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -8px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    border: 2px solid oklch(1 0 0 / 0.85);
+    box-shadow: 0 1px 4px oklch(0 0 0 / 0.35);
+}
+
+.settings-slider::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: oklch(1 0 0 / 0.18);
+}
+
+.settings-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    border: 2px solid oklch(1 0 0 / 0.85);
+    box-shadow: 0 1px 4px oklch(0 0 0 / 0.35);
+}
+
+[data-theme="light"] .settings-slider::-webkit-slider-runnable-track,
+[data-theme="light"] .settings-slider::-moz-range-track {
+    background: oklch(0 0 0 / 0.12);
+}
+
+.settings-slider-value {
+    flex: 0 0 auto;
+    min-width: 2.75rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: var(--text-secondary);
 }
 
 [data-theme="light"] .dropdown-item-toggle {
@@ -3556,7 +3667,7 @@ input:checked+.slider-small:before {
         .app-header {
             position: fixed !important;
             top: auto !important;
-            bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: var(--tool-panel-bottom-offset, 8px) !important;
             left: 8px !important;
             right: 8px !important;
             margin: 0 !important;
@@ -3621,12 +3732,8 @@ input:checked+.slider-small:before {
             order: 2 !important;
         }
 
-        .header-row-1 {
-            order: 2 !important;
-        }
-
         .header-row-meta {
-            order: 3 !important;
+            order: 2 !important;
             width: 100% !important;
             justify-content: stretch !important;
             gap: 6px !important;
@@ -3639,8 +3746,13 @@ input:checked+.slider-small:before {
         }
 
         .header-action-slots {
-            order: 4 !important;
+            order: 3 !important;
             width: 100% !important;
+        }
+
+        /* Board selector + stats sit at the bottom of the dock */
+        .header-row-1 {
+            order: 4 !important;
         }
 
         /* Dynamic equal slots — column count from JS (--slot-cols) */
@@ -3962,6 +4074,7 @@ input:checked+.slider-small:before {
         /* Adjust main container to fill more height */
         .board-container {
             /* Fallback matches prior magic number; JS sets --slim-bottom-clearance from measured header */
+            padding-top: var(--list-top-gap, 10px) !important;
             padding-bottom: var(--slim-bottom-clearance, 200px) !important;
             height: 100% !important;
             align-items: stretch !important;
@@ -4740,15 +4853,15 @@ button.tags-settings-swatch.is-selected {
         order: 2;
     }
 
-    .header-row-1 {
+    .header-row-meta {
         order: 2;
     }
 
-    .header-row-meta {
+    .header-action-slots {
         order: 3;
     }
 
-    .header-action-slots {
+    .header-row-1 {
         order: 4;
     }
 

@@ -32,11 +32,12 @@ import {
 } from './markdown.js';
 import { confirmDeleteList } from './ui.js';
 import { PREVIEW_TOC_OPEN_DEFAULT, PREVIEW_TOC_OPEN_KEY, PREVIEW_TOC_STICKY_DEFAULT, PREVIEW_TOC_STICKY_KEY } from './config.js';
+import { notifySettingsDirty } from './settings-sync.js';
 
 /** Persist which LLM-note disclosures are expanded across list re-renders. */
 const expandedAgentNotes = new Set();
 
-function readPreviewTocOpen() {
+export function readPreviewTocOpen() {
     try {
         const raw = localStorage.getItem(PREVIEW_TOC_OPEN_KEY);
         if (raw === '0') return false;
@@ -47,12 +48,13 @@ function readPreviewTocOpen() {
     return PREVIEW_TOC_OPEN_DEFAULT;
 }
 
-function writePreviewTocOpen(open) {
+export function writePreviewTocOpen(open) {
     try {
         localStorage.setItem(PREVIEW_TOC_OPEN_KEY, open ? '1' : '0');
     } catch {
         // ignore
     }
+    notifySettingsDirty();
 }
 
 export function readPreviewTocSticky() {
@@ -72,6 +74,7 @@ export function writePreviewTocSticky(sticky) {
     } catch {
         // ignore
     }
+    notifySettingsDirty();
 }
 
 /**

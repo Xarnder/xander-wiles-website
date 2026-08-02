@@ -35,7 +35,10 @@ export const state = {
             tags: [{ ...DEFAULT_MISC_TAG }],
             activeTagId: MISC_TAG_ID,
             tagDisplayMode: 'glow',
-            mobileFeaturedHeaderBtn: 'multi-edit'
+            mobileFeaturedHeaderBtn: 'multi-edit',
+            listBottomGap: 12,
+            listTopGap: 10,
+            toolPanelBottomOffset: 8
         },
         listOrder: [],
         boards: [],
@@ -110,7 +113,10 @@ export function resetState() {
             tags: [{ ...DEFAULT_MISC_TAG }],
             activeTagId: MISC_TAG_ID,
             tagDisplayMode: 'glow',
-            mobileFeaturedHeaderBtn: 'multi-edit'
+            mobileFeaturedHeaderBtn: 'multi-edit',
+            listBottomGap: 12,
+            listTopGap: 10,
+            toolPanelBottomOffset: 8
         },
         listOrder: [],
         boards: [],

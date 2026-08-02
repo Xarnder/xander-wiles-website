@@ -38,6 +38,25 @@
             } catch (e) {
                 document.documentElement.setAttribute('data-theme', 'blue');
             }
+            try {
+                var standalone = window.navigator.standalone === true
+                    || window.matchMedia('(display-mode: standalone)').matches
+                    || window.matchMedia('(display-mode: fullscreen)').matches
+                    || window.matchMedia('(display-mode: minimal-ui)').matches;
+                if (standalone) document.documentElement.classList.add('is-standalone');
+                var gapRaw = localStorage.getItem('md-editor:pwaTopGap');
+                var gap = parseInt(gapRaw, 10);
+                if (!Number.isFinite(gap)) gap = 8;
+                if (gap < 0) gap = 0;
+                if (gap > 48) gap = 48;
+                document.documentElement.style.setProperty('--pwa-top-gap', gap + 'px');
+                var scaleRaw = localStorage.getItem('md-editor:previewFontScale');
+                var scale = parseInt(scaleRaw, 10);
+                if (!Number.isFinite(scale)) scale = 100;
+                if (scale < 75) scale = 75;
+                if (scale > 150) scale = 150;
+                document.documentElement.style.setProperty('--preview-font-scale', String(scale / 100));
+            } catch (e) { /* ignore */ }
         })();
     </script>
 
@@ -107,40 +126,24 @@
                     </div>
                 </div>
                 <div id="editor-active" class="editor-active" hidden>
-                    <div class="editor-meta">
-                        <div class="editor-meta-main">
-                            <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                    <div class="view-mode-dock">
+                        <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
+                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
+                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
+                            <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
                         </div>
-                        <button type="button" id="btn-editor-search" class="btn btn-ghost btn-small editor-search-toggle" hidden aria-expanded="false" aria-controls="editor-search-bar" title="Search in file (⌘/Ctrl+F)">Search</button>
+                        <p id="editor-toast" class="editor-toast" hidden role="status" aria-live="polite"></p>
                     </div>
-                    <div id="editor-search-bar" class="editor-search-bar" hidden aria-hidden="true" role="search" aria-label="Find in markdown">
-                        <label class="sr-only" for="editor-search-input">Find</label>
-                        <input id="editor-search-input" class="editor-search-input" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Find in file…">
-                        <div class="editor-search-controls">
-                            <span id="editor-search-count" class="editor-search-count" aria-live="polite"></span>
-                            <label class="editor-search-opt" title="Match case">
-                                <input id="editor-search-case" type="checkbox">
-                                <span>Aa</span>
-                            </label>
-                            <label class="editor-search-opt" title="Whole word">
-                                <input id="editor-search-word" type="checkbox">
-                                <span>W</span>
-                            </label>
-                            <button type="button" id="editor-search-prev" class="btn btn-ghost btn-small editor-search-nav" aria-label="Previous match" title="Previous (Shift+Enter)">↑</button>
-                            <button type="button" id="editor-search-next" class="btn btn-ghost btn-small editor-search-nav" aria-label="Next match" title="Next (Enter)">↓</button>
-                            <button type="button" id="editor-search-close" class="btn btn-ghost btn-small editor-search-close" aria-label="Close search" title="Close (Esc)">✕</button>
+                    <div class="editor-scroll">
+                        <div class="editor-file-heading">
+                            <h2 id="editor-file-title" class="editor-file-title"></h2>
                         </div>
+                        <p id="lists-status" class="lists-status" hidden></p>
+                        <div id="lists-root" class="lists-root" hidden></div>
+                        <article id="markdown-preview" class="md-preview" hidden aria-label="Markdown preview"></article>
+                        <label class="sr-only" for="editor">Markdown content</label>
+                        <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
                     </div>
-                    <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
-                        <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
-                        <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
-                        <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
-                    </div>
-                    <p id="lists-status" class="lists-status" hidden></p>
-                    <div id="lists-root" class="lists-root" hidden></div>
-                    <article id="markdown-preview" class="md-preview" hidden aria-label="Markdown preview"></article>
-                    <label class="sr-only" for="editor">Markdown content</label>
-                    <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
                 </div>
             </section>
 
@@ -154,7 +157,7 @@
                     </div>
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Appearance</h3>
-                        <p class="settings-prefs-lede">Choose a color theme for the editor.</p>
+                        <p class="settings-prefs-lede">Choose a color theme for the editor. Settings sync to your Google account (Drive app data) after sign-in.</p>
                         <label class="settings-pref">
                             <span class="settings-pref-label">Theme</span>
                             <select id="pref-theme" class="settings-select">
@@ -168,6 +171,36 @@
                             <input id="pref-toc-sticky" class="settings-toggle" type="checkbox">
                         </label>
                         <p class="settings-prefs-lede settings-prefs-lede--tight">When off, the Contents panel scrolls with the page. When on, it stays pinned at the top while you scroll.</p>
+                        <label class="settings-pref settings-pref--slider" for="pref-pwa-top-gap">
+                            <span class="settings-pref-label">Status bar spacing</span>
+                            <span class="settings-slider-wrap">
+                                <input id="pref-pwa-top-gap" class="settings-slider" type="range" min="0" max="48" step="1" value="8" aria-valuemin="0" aria-valuemax="48" aria-valuenow="8">
+                                <span id="pref-pwa-top-gap-value" class="settings-slider-value" aria-live="polite">8px</span>
+                            </span>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Extra space under the iPhone status bar in the Home Screen app (on top of the system safe area).</p>
+                        <label class="settings-pref settings-pref--slider" for="pref-preview-font-scale">
+                            <span class="settings-pref-label">Preview text size</span>
+                            <span class="settings-slider-wrap">
+                                <input id="pref-preview-font-scale" class="settings-slider" type="range" min="75" max="150" step="5" value="100" aria-valuemin="75" aria-valuemax="150" aria-valuenow="100">
+                                <span id="pref-preview-font-scale-value" class="settings-slider-value" aria-live="polite">100%</span>
+                            </span>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Font size for Preview and List content in Edit. 100% is the default.</p>
+                        <label class="settings-pref">
+                            <span class="settings-pref-label">List item stripes</span>
+                            <select id="pref-list-stripe" class="settings-select">
+                                <option value="normal">Normal</option>
+                                <option value="zebra">Alternating grey</option>
+                                <option value="spectrum">16-colour cycle</option>
+                            </select>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Highlight where each bullet starts and ends in custom and normal lists (Preview and List modes).</p>
+                        <label class="settings-pref settings-pref--toggle">
+                            <span class="settings-pref-label">Segmented list items</span>
+                            <input id="pref-list-layout-segmented" class="settings-toggle" type="checkbox" checked>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">On: each item is its own container (background stripes). Off: the list stays continuous and stripe modes change text colour instead.</p>
                     </div>
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Finder layout</h3>
@@ -207,6 +240,24 @@
 
         <nav id="nav-bar" class="nav-bar" aria-label="App navigation" hidden>
             <div id="nav-actions" class="nav-actions" hidden>
+                <div id="editor-search-bar" class="editor-search-bar" hidden aria-hidden="true" role="search" aria-label="Find in markdown">
+                    <label class="sr-only" for="editor-search-input">Find</label>
+                    <input id="editor-search-input" class="editor-search-input" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Find in file…">
+                    <div class="editor-search-controls">
+                        <span id="editor-search-count" class="editor-search-count" aria-live="polite"></span>
+                        <label class="editor-search-opt" title="Match case">
+                            <input id="editor-search-case" type="checkbox">
+                            <span>Aa</span>
+                        </label>
+                        <label class="editor-search-opt" title="Whole word">
+                            <input id="editor-search-word" type="checkbox">
+                            <span>W</span>
+                        </label>
+                        <button type="button" id="editor-search-prev" class="btn btn-ghost btn-small editor-search-nav" aria-label="Previous match" title="Previous (Shift+Enter)">↑</button>
+                        <button type="button" id="editor-search-next" class="btn btn-ghost btn-small editor-search-nav" aria-label="Next match" title="Next (Enter)">↓</button>
+                        <button type="button" id="editor-search-close" class="btn btn-ghost btn-small editor-search-close" aria-label="Close search" title="Close (Esc)">✕</button>
+                    </div>
+                </div>
                 <div id="nav-actions-finder" class="nav-actions-panel" hidden>
                     <div class="browse-mode-row" role="group" aria-label="Browse location">
                         <button type="button" id="btn-mode-folders" class="btn btn-ghost btn-mode is-active">My Drive</button>
@@ -220,11 +271,24 @@
                     </div>
                 </div>
                 <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
-                    <button type="button" id="btn-import-list" class="btn btn-ghost" hidden title="Import a list JSON from To-Do List or Story Manager" aria-label="Import list JSON">Import</button>
-                    <button type="button" id="btn-click-edit" class="btn btn-ghost" hidden>Edit here</button>
-                    <button type="button" id="btn-insert-list" class="btn btn-ghost" hidden>+ List</button>
-                    <button type="button" id="btn-rename-current" class="btn btn-ghost" hidden>Rename</button>
-                    <button type="button" id="btn-save" class="btn btn-primary btn-save" hidden>Save</button>
+                    <button type="button" id="btn-editor-search" class="btn btn-ghost btn-icon" hidden aria-expanded="false" aria-controls="editor-search-bar" title="Search in file (⌘/Ctrl+F)" aria-label="Search in file">
+                        <span class="nav-action-icon nav-action-icon--search" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-import-list" class="btn btn-ghost btn-icon" hidden title="Import a list JSON from To-Do List or Story Manager" aria-label="Import list JSON">
+                        <span class="nav-action-icon nav-action-icon--import" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-click-edit" class="btn btn-ghost btn-icon" hidden title="Edit here" aria-label="Click text in Preview to edit in Raw">
+                        <span class="nav-action-icon nav-action-icon--edit" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-insert-list" class="btn btn-ghost btn-icon" hidden title="Add list" aria-label="Add ranked list">
+                        <span class="nav-action-icon nav-action-icon--add-list" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-rename-current" class="btn btn-ghost btn-icon" hidden title="Rename" aria-label="Rename file">
+                        <span class="nav-action-icon nav-action-icon--rename" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-save" class="btn btn-primary btn-save btn-icon" hidden title="Save" aria-label="Save">
+                        <span class="nav-action-icon nav-action-icon--save" aria-hidden="true"></span>
+                    </button>
                     <input id="import-list-file" class="sr-only" type="file" accept="application/json,.json" hidden>
                 </div>
             </div>

@@ -328,9 +328,10 @@ export function scrollHitIntoView(el, container) {
  * @param {() => HTMLElement|null|undefined} [options.getHighlightRoot] — Preview/List content root
  * @param {() => boolean} options.isActive — editor view with a file open
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
+ * @param {() => void} [options.onLayout] — called when the find bar opens/closes (nav height)
  */
 export function createEditorSearch(options) {
-    const { getEls, getText, getViewMode, getHighlightRoot, isActive, onStatus } = options;
+    const { getEls, getText, getViewMode, getHighlightRoot, isActive, onStatus, onLayout } = options;
 
     /** @type {SearchMatch[]} */
     let matches = [];
@@ -525,6 +526,7 @@ export function createEditorSearch(options) {
                 e.editorSearchInput.select();
             });
         }
+        onLayout?.();
     }
 
     function close({ restoreFocus = true } = {}) {
@@ -540,6 +542,7 @@ export function createEditorSearch(options) {
         activeIndex = -1;
         lastQuery = '';
         updateCountLabel();
+        onLayout?.();
         if (restoreFocus && e.editor && !e.editor.hidden) {
             try {
                 e.editor.focus({ preventScroll: true });

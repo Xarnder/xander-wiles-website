@@ -966,25 +966,77 @@ function applyStaticLayouts() {
     });
 }
 
+export const LIST_BOTTOM_GAP_MIN = 0;
+export const LIST_BOTTOM_GAP_MAX = 48;
+export const DEFAULT_LIST_BOTTOM_GAP = 12;
+
+export function clampListBottomGap(value) {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isFinite(n)) return DEFAULT_LIST_BOTTOM_GAP;
+    return Math.min(LIST_BOTTOM_GAP_MAX, Math.max(LIST_BOTTOM_GAP_MIN, n));
+}
+
+export function getListBottomGap() {
+    return clampListBottomGap(state.appData.settings?.listBottomGap);
+}
+
+export const LIST_TOP_GAP_MIN = 0;
+export const LIST_TOP_GAP_MAX = 48;
+export const DEFAULT_LIST_TOP_GAP = 10;
+
+export function clampListTopGap(value) {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isFinite(n)) return DEFAULT_LIST_TOP_GAP;
+    return Math.min(LIST_TOP_GAP_MAX, Math.max(LIST_TOP_GAP_MIN, n));
+}
+
+export function getListTopGap() {
+    return clampListTopGap(state.appData.settings?.listTopGap);
+}
+
+export function applyListTopGap() {
+    document.documentElement.style.setProperty('--list-top-gap', `${getListTopGap()}px`);
+}
+
+export const TOOL_PANEL_BOTTOM_OFFSET_MIN = 0;
+export const TOOL_PANEL_BOTTOM_OFFSET_MAX = 48;
+export const DEFAULT_TOOL_PANEL_BOTTOM_OFFSET = 8;
+
+export function clampToolPanelBottomOffset(value) {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isFinite(n)) return DEFAULT_TOOL_PANEL_BOTTOM_OFFSET;
+    return Math.min(TOOL_PANEL_BOTTOM_OFFSET_MAX, Math.max(TOOL_PANEL_BOTTOM_OFFSET_MIN, n));
+}
+
+export function getToolPanelBottomOffset() {
+    return clampToolPanelBottomOffset(state.appData.settings?.toolPanelBottomOffset);
+}
+
 /**
  * Slim mobile: measure the fixed bottom tool panel (including multi-select row when visible)
  * and set --slim-bottom-clearance so lists clear it. Same for normal + Kanban.
  */
 export function layoutSlimChrome() {
     layoutMobileHeaderSlots();
+    applyListTopGap();
 
     const root = document.documentElement;
     if (!window.matchMedia('(max-width: 500px)').matches) {
         root.style.removeProperty('--slim-bottom-clearance');
+        root.style.removeProperty('--tool-panel-bottom-offset');
         return;
     }
+
+    const offset = getToolPanelBottomOffset();
+    root.style.setProperty('--tool-panel-bottom-offset', `${offset}px`);
 
     const header = document.querySelector('.app-header');
     if (!header) return;
 
-    // After layout: distance from header top to viewport bottom (+ gap)
+    // After layout: distance from header top to viewport bottom (+ user gap)
     const top = header.getBoundingClientRect().top;
-    const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + 12);
+    const gap = getListBottomGap();
+    const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + gap);
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
 }
 

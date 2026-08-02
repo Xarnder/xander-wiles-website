@@ -123,6 +123,8 @@ function closeSettingsPage() {
     el.classList.add('hidden');
     el.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('settings-page-open');
+    flushPendingLayoutSettings();
+    requestAnimationFrame(() => UI.layoutSlimChrome());
 }
 
 // GLOBAL ERROR HANDLER FOR DEBUGGING
@@ -621,7 +623,6 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
-            if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
             if (document.getElementById('ai-summary-on-cards-toggle')) document.getElementById('ai-summary-on-cards-toggle').checked = !!state.appData.settings.aiSummaryOnCards;
@@ -629,15 +630,16 @@ function setupFirestoreListeners(uid) {
             if (featuredHeaderSelect) {
                 featuredHeaderSelect.value = UI.getMobileFeaturedHeaderBtn();
             }
+            syncListTopGapUI();
+            syncListBottomGapUI();
+            syncToolPanelBottomOffsetUI();
+            requestAnimationFrame(() => UI.layoutSlimChrome());
             syncKanbanLabelsUI();
             if (typeof UI.syncTagDisplayModeUI === 'function') UI.syncTagDisplayModeUI();
             if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('auto-add-time-input')) {
                 document.getElementById('auto-add-time-input').value = state.appData.settings.autoAddIdleTime !== undefined ? state.appData.settings.autoAddIdleTime : 30;
-            }
-            if (document.getElementById('main-nav-placeholder')) {
-                document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
             }
 
             // Sync Fancy Speed
@@ -940,12 +942,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     setupSettingListener('add-bottom-toggle', 'addTaskLocation', true, (checked) => checked ? 'bottom' : 'top');
-    setupSettingListener('show-site-header-toggle', 'showSiteHeader', true, (checked) => {
-        if (document.getElementById('main-nav-placeholder')) {
-            document.getElementById('main-nav-placeholder').style.display = checked ? 'block' : 'none';
-        }
-        return checked;
-    });
     setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
     setupSettingListener('mobile-featured-header-btn', 'mobileFeaturedHeaderBtn', false, (val) => {
         const valid = UI.MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === val);
@@ -954,6 +950,26 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(() => UI.layoutSlimChrome());
         return next;
     });
+
+    bindCloudLayoutSlider('list-top-gap-slider', {
+        key: 'listTopGap',
+        clamp: UI.clampListTopGap,
+        sync: syncListTopGapUI,
+        apply: () => UI.applyListTopGap()
+    });
+    bindCloudLayoutSlider('list-bottom-gap-slider', {
+        key: 'listBottomGap',
+        clamp: UI.clampListBottomGap,
+        sync: syncListBottomGapUI,
+        apply: () => requestAnimationFrame(() => UI.layoutSlimChrome())
+    });
+    bindCloudLayoutSlider('tool-panel-bottom-offset-slider', {
+        key: 'toolPanelBottomOffset',
+        clamp: UI.clampToolPanelBottomOffset,
+        sync: syncToolPanelBottomOffsetUI,
+        apply: () => requestAnimationFrame(() => UI.layoutSlimChrome())
+    });
+
     setupSettingListener('work-tools-toggle', 'workToolsEnabled', true, (checked) => {
         state.appData.settings.workToolsEnabled = checked;
         if (!checked) {
@@ -2121,6 +2137,99 @@ function syncKanbanLabelsUI() {
         input.value = value;
         input.placeholder = DEFAULT_KANBAN_LABELS[stage];
     });
+}
+
+function syncListTopGapUI(forcedValue) {
+    const slider = document.getElementById('list-top-gap-slider');
+    const label = document.getElementById('list-top-gap-value');
+    const gap = forcedValue !== undefined ? UI.clampListTopGap(forcedValue) : UI.getListTopGap();
+    if (slider && document.activeElement !== slider) {
+        slider.value = String(gap);
+        slider.setAttribute('aria-valuenow', String(gap));
+    } else if (slider) {
+        slider.setAttribute('aria-valuenow', String(gap));
+    }
+    if (label) label.textContent = `${gap}px`;
+    UI.applyListTopGap();
+}
+
+function syncListBottomGapUI(forcedValue) {
+    const slider = document.getElementById('list-bottom-gap-slider');
+    const label = document.getElementById('list-bottom-gap-value');
+    const gap = forcedValue !== undefined ? UI.clampListBottomGap(forcedValue) : UI.getListBottomGap();
+    if (slider && document.activeElement !== slider) {
+        slider.value = String(gap);
+        slider.setAttribute('aria-valuenow', String(gap));
+    } else if (slider) {
+        slider.setAttribute('aria-valuenow', String(gap));
+    }
+    if (label) label.textContent = `${gap}px`;
+}
+
+function syncToolPanelBottomOffsetUI(forcedValue) {
+    const slider = document.getElementById('tool-panel-bottom-offset-slider');
+    const label = document.getElementById('tool-panel-bottom-offset-value');
+    const offset = forcedValue !== undefined
+        ? UI.clampToolPanelBottomOffset(forcedValue)
+        : UI.getToolPanelBottomOffset();
+    if (slider && document.activeElement !== slider) {
+        slider.value = String(offset);
+        slider.setAttribute('aria-valuenow', String(offset));
+    } else if (slider) {
+        slider.setAttribute('aria-valuenow', String(offset));
+    }
+    if (label) label.textContent = `${offset}px`;
+}
+
+/** Pending layout slider values waiting for a debounced Firestore write. */
+const pendingLayoutSettings = new Map();
+let layoutSettingsSaveTimer = null;
+
+function queueLayoutSettingSave(key, value) {
+    pendingLayoutSettings.set(key, value);
+    if (layoutSettingsSaveTimer) clearTimeout(layoutSettingsSaveTimer);
+    layoutSettingsSaveTimer = setTimeout(() => flushPendingLayoutSettings(), 280);
+}
+
+function flushPendingLayoutSettings() {
+    if (layoutSettingsSaveTimer) {
+        clearTimeout(layoutSettingsSaveTimer);
+        layoutSettingsSaveTimer = null;
+    }
+    if (!pendingLayoutSettings.size || !state.currentUser) {
+        pendingLayoutSettings.clear();
+        return;
+    }
+    pendingLayoutSettings.forEach((value, key) => {
+        state.appData.settings[key] = value;
+        API.updateSetting(key, value);
+    });
+    pendingLayoutSettings.clear();
+}
+
+/**
+ * Bind a layout range slider so local UI updates immediately and the value
+ * is written to Firestore (debounced on input, flushed on change / settings close).
+ */
+function bindCloudLayoutSlider(elementId, { key, clamp, sync, apply }) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const applyValue = (raw, { persistImmediate = false } = {}) => {
+        const next = clamp(raw);
+        state.appData.settings[key] = next;
+        sync(next);
+        if (typeof apply === 'function') apply(next);
+        if (persistImmediate) {
+            pendingLayoutSettings.delete(key);
+            if (state.currentUser) API.updateSetting(key, next);
+        } else {
+            queueLayoutSettingSave(key, next);
+        }
+    };
+
+    el.oninput = (e) => applyValue(e.target.value);
+    el.onchange = (e) => applyValue(e.target.value, { persistImmediate: true });
 }
 
 function triggerBackupDownload() {

@@ -347,3 +347,69 @@ export async function listChildFolders(parentId = ROOT_FOLDER_ID) {
         nextPageToken: result.nextPageToken || null,
     };
 }
+
+/**
+ * Find a file in the private Drive appDataFolder by exact name.
+ * @param {string} name
+ * @returns {Promise<{ id: string, name: string } | null>}
+ */
+export async function findAppDataFile(name) {
+    const safeName = String(name || '').replace(/'/g, "\\'");
+    const params = new URLSearchParams({
+        q: `name = '${safeName}' and trashed = false`,
+        spaces: 'appDataFolder',
+        pageSize: '1',
+        fields: 'files(id, name)',
+    });
+    const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
+    const data = await response.json();
+    const file = (data.files || [])[0];
+    return file?.id ? { id: file.id, name: file.name || name } : null;
+}
+
+/**
+ * Create a JSON (or text) file in the Drive appDataFolder.
+ * @param {string} name
+ * @param {string} content
+ * @param {string} [mimeType]
+ */
+export async function createAppDataFile(name, content = '', mimeType = 'application/json') {
+    const fileName = String(name || '').trim() || 'settings.json';
+    const metadata = {
+        name: fileName,
+        mimeType: mimeType || 'application/json',
+        parents: ['appDataFolder'],
+    };
+    const boundary = 'mdeditor_appdata_boundary';
+    const body =
+        `--${boundary}\r\n` +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        `${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Type: ${mimeType || 'application/json'}; charset=UTF-8\r\n\r\n` +
+        `${content}\r\n` +
+        `--${boundary}--`;
+
+    const response = await driveFetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,modifiedTime',
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': `multipart/related; boundary=${boundary}`,
+            },
+            body,
+        }
+    );
+    return response.json();
+}
+
+/**
+ * Find or create the app settings JSON in appDataFolder.
+ * @param {string} name
+ * @param {string} [initialContent]
+ */
+export async function ensureAppDataFile(name, initialContent = '{}') {
+    const existing = await findAppDataFile(name);
+    if (existing) return existing;
+    return createAppDataFile(name, initialContent, 'application/json');
+}

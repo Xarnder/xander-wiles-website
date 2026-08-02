@@ -13,6 +13,22 @@ import {
     THEME_DEFAULT,
     THEME_VALUES,
     THEME_META_COLORS,
+    PWA_TOP_GAP_KEY,
+    PWA_TOP_GAP_DEFAULT,
+    PWA_TOP_GAP_MIN,
+    PWA_TOP_GAP_MAX,
+    PREVIEW_FONT_SCALE_KEY,
+    PREVIEW_FONT_SCALE_DEFAULT,
+    PREVIEW_FONT_SCALE_MIN,
+    PREVIEW_FONT_SCALE_MAX,
+    LIST_STRIPE_KEY,
+    LIST_STRIPE_DEFAULT,
+    LIST_STRIPE_VALUES,
+    LIST_LAYOUT_KEY,
+    LIST_LAYOUT_DEFAULT,
+    LIST_LAYOUT_VALUES,
+    PREVIEW_TOC_OPEN_KEY,
+    PREVIEW_TOC_STICKY_KEY,
     RECENT_FILES_KEY,
     RECENT_FILES_MAX,
     PINNED_ITEMS_KEY,
@@ -58,7 +74,14 @@ import {
     serializeDocument,
 } from './lists.js';
 import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
-import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
+import {
+    flushCloudSettingsSave,
+    pullCloudSettings,
+    resetCloudSettingsState,
+    scheduleCloudSettingsSave,
+    withCloudApplyGuard,
+} from './settings-sync.js';
 import {
     getTextareaViewportOffset,
     getVisiblePreviewBlock,
@@ -99,6 +122,14 @@ import {
     syncNavLayout,
     syncThemeControl,
     syncTocStickyControl,
+    applyPwaTopGap,
+    syncPwaTopGapControl,
+    applyPreviewFontScale,
+    syncPreviewFontScaleControl,
+    applyListStripe,
+    syncListStripeControl,
+    applyListLayout,
+    syncListLayoutControl,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
@@ -196,6 +227,7 @@ function writeFinderLayoutPrefs(prefs) {
     } catch {
         // ignore
     }
+    queueSettingsCloudSync();
 }
 
 function applySavedFinderLayout() {
@@ -221,12 +253,277 @@ function writeTheme(theme) {
     } catch {
         // ignore
     }
+    queueSettingsCloudSync();
 }
 
 function applySavedTheme() {
     const theme = readTheme();
     applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
     syncThemeControl(theme);
+}
+
+function clampPwaTopGap(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return PWA_TOP_GAP_DEFAULT;
+    return Math.max(PWA_TOP_GAP_MIN, Math.min(PWA_TOP_GAP_MAX, n));
+}
+
+function readPwaTopGap() {
+    try {
+        const raw = localStorage.getItem(PWA_TOP_GAP_KEY);
+        if (raw == null || raw === '') return PWA_TOP_GAP_DEFAULT;
+        return clampPwaTopGap(raw);
+    } catch {
+        return PWA_TOP_GAP_DEFAULT;
+    }
+}
+
+function writePwaTopGap(gapPx) {
+    const n = clampPwaTopGap(gapPx);
+    try {
+        localStorage.setItem(PWA_TOP_GAP_KEY, String(n));
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return n;
+}
+
+function applySavedPwaTopGap() {
+    syncPwaTopGapControl(readPwaTopGap());
+}
+
+function clampPreviewFontScale(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return PREVIEW_FONT_SCALE_DEFAULT;
+    return Math.max(PREVIEW_FONT_SCALE_MIN, Math.min(PREVIEW_FONT_SCALE_MAX, n));
+}
+
+function readPreviewFontScale() {
+    try {
+        const raw = localStorage.getItem(PREVIEW_FONT_SCALE_KEY);
+        if (raw == null || raw === '') return PREVIEW_FONT_SCALE_DEFAULT;
+        return clampPreviewFontScale(raw);
+    } catch {
+        return PREVIEW_FONT_SCALE_DEFAULT;
+    }
+}
+
+function writePreviewFontScale(percent) {
+    const n = clampPreviewFontScale(percent);
+    try {
+        localStorage.setItem(PREVIEW_FONT_SCALE_KEY, String(n));
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return n;
+}
+
+function applySavedPreviewFontScale() {
+    syncPreviewFontScaleControl(readPreviewFontScale());
+}
+
+function readListStripe() {
+    try {
+        const raw = localStorage.getItem(LIST_STRIPE_KEY);
+        if (LIST_STRIPE_VALUES.has(raw)) return raw;
+    } catch {
+        // ignore
+    }
+    return LIST_STRIPE_DEFAULT;
+}
+
+function writeListStripe(mode) {
+    const next = LIST_STRIPE_VALUES.has(mode) ? mode : LIST_STRIPE_DEFAULT;
+    try {
+        localStorage.setItem(LIST_STRIPE_KEY, next);
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedListStripe() {
+    syncListStripeControl(readListStripe());
+}
+
+function readListLayout() {
+    try {
+        const raw = localStorage.getItem(LIST_LAYOUT_KEY);
+        if (LIST_LAYOUT_VALUES.has(raw)) return raw;
+    } catch {
+        // ignore
+    }
+    return LIST_LAYOUT_DEFAULT;
+}
+
+function writeListLayout(layout) {
+    const next = LIST_LAYOUT_VALUES.has(layout) ? layout : LIST_LAYOUT_DEFAULT;
+    try {
+        localStorage.setItem(LIST_LAYOUT_KEY, next);
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedListLayout() {
+    syncListLayoutControl(readListLayout());
+}
+
+function buildSettingsSnapshot() {
+    return {
+        theme: readTheme(),
+        previewTocSticky: readPreviewTocSticky(),
+        previewTocOpen: readPreviewTocOpen(),
+        pwaTopGap: readPwaTopGap(),
+        previewFontScale: readPreviewFontScale(),
+        listStripe: readListStripe(),
+        listLayout: readListLayout(),
+        finderMdOrder: readFinderLayoutPrefs(),
+        pinnedItems: readPinnedItems(),
+    };
+}
+
+function queueSettingsCloudSync() {
+    if (!isSignedIn()) return;
+    scheduleCloudSettingsSave(buildSettingsSnapshot, {
+        onError: (err) => {
+            console.warn('[md-editor] settings cloud save failed', err);
+        },
+    });
+}
+
+/**
+ * Apply a cloud settings blob to localStorage + live UI (without re-pushing).
+ * @param {import('./settings-sync.js').CloudSettings | object} cloud
+ */
+function applyCloudSettings(cloud) {
+    if (!cloud || typeof cloud !== 'object') return;
+
+    withCloudApplyGuard(() => {
+        if (THEME_VALUES.has(cloud.theme)) {
+            try {
+                localStorage.setItem(THEME_KEY, cloud.theme);
+            } catch {
+                // ignore
+            }
+            applyTheme(cloud.theme, {
+                metaColor: THEME_META_COLORS[cloud.theme] || THEME_META_COLORS.blue,
+            });
+            syncThemeControl(cloud.theme);
+        }
+
+        if (typeof cloud.previewTocSticky === 'boolean') {
+            try {
+                localStorage.setItem(PREVIEW_TOC_STICKY_KEY, cloud.previewTocSticky ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            syncTocStickyControl(cloud.previewTocSticky);
+        }
+
+        if (typeof cloud.previewTocOpen === 'boolean') {
+            try {
+                localStorage.setItem(PREVIEW_TOC_OPEN_KEY, cloud.previewTocOpen ? '1' : '0');
+            } catch {
+                // ignore
+            }
+        }
+
+        if (cloud.pwaTopGap != null) {
+            const n = clampPwaTopGap(cloud.pwaTopGap);
+            try {
+                localStorage.setItem(PWA_TOP_GAP_KEY, String(n));
+            } catch {
+                // ignore
+            }
+            syncPwaTopGapControl(n);
+        }
+
+        if (cloud.previewFontScale != null) {
+            const n = clampPreviewFontScale(cloud.previewFontScale);
+            try {
+                localStorage.setItem(PREVIEW_FONT_SCALE_KEY, String(n));
+            } catch {
+                // ignore
+            }
+            syncPreviewFontScaleControl(n);
+        }
+
+        if (LIST_STRIPE_VALUES.has(cloud.listStripe)) {
+            try {
+                localStorage.setItem(LIST_STRIPE_KEY, cloud.listStripe);
+            } catch {
+                // ignore
+            }
+            syncListStripeControl(cloud.listStripe);
+        }
+
+        if (LIST_LAYOUT_VALUES.has(cloud.listLayout)) {
+            try {
+                localStorage.setItem(LIST_LAYOUT_KEY, cloud.listLayout);
+            } catch {
+                // ignore
+            }
+            syncListLayoutControl(cloud.listLayout);
+        }
+
+        if (cloud.finderMdOrder && typeof cloud.finderMdOrder === 'object') {
+            const next = {
+                mobile:
+                    cloud.finderMdOrder.mobile === 'top' || cloud.finderMdOrder.mobile === 'bottom'
+                        ? cloud.finderMdOrder.mobile
+                        : readFinderLayoutPrefs().mobile,
+                desktop:
+                    cloud.finderMdOrder.desktop === 'top' || cloud.finderMdOrder.desktop === 'bottom'
+                        ? cloud.finderMdOrder.desktop
+                        : readFinderLayoutPrefs().desktop,
+            };
+            try {
+                localStorage.setItem(FINDER_MD_ORDER_MOBILE_KEY, next.mobile);
+                localStorage.setItem(FINDER_MD_ORDER_DESKTOP_KEY, next.desktop);
+            } catch {
+                // ignore
+            }
+            applyFinderLayoutPrefs(next);
+            syncFinderLayoutControls(next);
+        }
+
+        if (Array.isArray(cloud.pinnedItems)) {
+            const normalized = cloud.pinnedItems
+                .filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+                .map((entry) => ({
+                    id: entry.id,
+                    name: entry.name || 'Untitled.md',
+                    mimeType: entry.mimeType || 'text/markdown',
+                    parentId: typeof entry.parentId === 'string' ? entry.parentId : '',
+                    pinnedAt: Number(entry.pinnedAt) || 0,
+                }))
+                .sort((a, b) => b.pinnedAt - a.pinnedAt)
+                .slice(0, PINNED_ITEMS_MAX);
+            try {
+                localStorage.setItem(PINNED_ITEMS_KEY, JSON.stringify(normalized));
+            } catch {
+                // ignore
+            }
+        }
+    });
+}
+
+async function syncSettingsFromCloud() {
+    if (!isSignedIn()) return;
+    try {
+        const { settings, created } = await pullCloudSettings(buildSettingsSnapshot);
+        if (!created) {
+            applyCloudSettings(settings);
+        }
+    } catch (err) {
+        console.warn('[md-editor] settings cloud load failed', err);
+    }
 }
 
 function readRecentFiles() {
@@ -318,6 +615,7 @@ function writePinnedItems(entries) {
     } catch {
         // ignore
     }
+    queueSettingsCloudSync();
 }
 
 function isPinned(fileId) {
@@ -523,23 +821,73 @@ function renderStructuredEditor(extra = {}) {
     }
 }
 
+function getEditorActionMode() {
+    if (state.viewMode !== 'preview') return null;
+    if (state.clickEdit) return 'click-edit';
+    if (state.placingList && state.pendingImportList) return 'import-list';
+    if (state.placingList) return 'insert-list';
+    return null;
+}
+
+/** Grey out / disable sibling actions while one cancelable mode is active. */
+function syncEditorActionLocks() {
+    const els = getEls();
+    const mode = getEditorActionMode();
+    const locked = Boolean(mode);
+    const saving = state.editor.status === 'saving';
+    const hasFile = Boolean(state.editor.fileId);
+    const baseDisabled = saving || !hasFile;
+
+    if (els.navActionsEditor) {
+        els.navActionsEditor.classList.toggle('is-action-locked', locked);
+    }
+    if (els.app) {
+        if (mode) els.app.dataset.activeEditorAction = mode;
+        else delete els.app.dataset.activeEditorAction;
+        els.app.classList.toggle('is-action-locked', locked);
+    }
+
+    const entries = [
+        [els.btnEditorSearch, 'search'],
+        [els.btnImportList, 'import-list'],
+        [els.btnClickEdit, 'click-edit'],
+        [els.btnInsertList, 'insert-list'],
+        [els.btnRenameCurrent, 'rename'],
+        [els.btnSave, 'save'],
+    ];
+
+    for (const [btn, key] of entries) {
+        if (!btn) continue;
+        const isActive = mode === key;
+        btn.classList.toggle('is-active-action', isActive);
+        if (locked) {
+            btn.disabled = !isActive;
+        } else if (key === 'save') {
+            btn.disabled = baseDisabled || !state.editor.dirty;
+        } else {
+            btn.disabled = baseDisabled;
+        }
+    }
+}
+
 function syncInsertListButton() {
     const els = getEls();
     if (!els.btnInsertList) return;
     const placing = state.viewMode === 'preview' && state.placingList && !state.pendingImportList;
-    els.btnInsertList.textContent = placing ? 'Cancel' : '+ List';
+    els.btnInsertList.title = placing ? 'Cancel' : 'Add list';
     els.btnInsertList.setAttribute(
         'aria-label',
         placing ? 'Cancel placing list' : 'Add ranked list'
     );
     els.btnInsertList.classList.toggle('btn-insert-list--cancel', placing);
+    syncEditorActionLocks();
 }
 
 function syncImportListButton() {
     const els = getEls();
     if (!els.btnImportList) return;
     const placingImport = state.viewMode === 'preview' && state.placingList && Boolean(state.pendingImportList);
-    els.btnImportList.textContent = placingImport ? 'Cancel' : 'Import';
+    els.btnImportList.title = placingImport ? 'Cancel' : 'Import list';
     els.btnImportList.setAttribute(
         'aria-label',
         placingImport
@@ -548,21 +896,28 @@ function syncImportListButton() {
     );
     els.btnImportList.classList.toggle('btn-click-edit--active', placingImport);
     els.btnImportList.hidden = !state.editor.fileId;
-    els.btnImportList.disabled = state.editor.status === 'saving' || !state.editor.fileId;
+    syncEditorActionLocks();
 }
 
 function syncClickEditButton() {
     const els = getEls();
     if (!els.btnClickEdit) return;
     const picking = state.viewMode === 'preview' && state.clickEdit;
-    els.btnClickEdit.textContent = picking ? 'Cancel' : 'Edit here';
+    els.btnClickEdit.title = picking ? 'Cancel' : 'Edit here';
     els.btnClickEdit.setAttribute(
         'aria-label',
         picking ? 'Cancel click-to-edit' : 'Click text in Preview to edit in Raw'
     );
     els.btnClickEdit.classList.toggle('btn-click-edit--active', picking);
     els.btnClickEdit.hidden = !state.editor.fileId;
-    els.btnClickEdit.disabled = state.editor.status === 'saving' || !state.editor.fileId;
+
+    const icon = els.btnClickEdit.querySelector('.nav-action-icon');
+    if (icon) {
+        icon.classList.toggle('nav-action-icon--edit', !picking);
+        icon.classList.toggle('nav-action-icon--cross', picking);
+    }
+
+    syncEditorActionLocks();
 }
 
 /**
@@ -1653,8 +2008,14 @@ async function signIn() {
     }
 }
 
-function signOut() {
+async function signOut() {
     if (state.editor.dirty && !confirmLeaveUnsaved()) return;
+    try {
+        await flushCloudSettingsSave(buildSettingsSnapshot);
+    } catch {
+        // ignore
+    }
+    resetCloudSettingsState();
     clearToken();
     state.editor = createEditorState();
     state.files = [];
@@ -1678,6 +2039,8 @@ function signOut() {
 async function afterSignedIn() {
     setStatus('');
     state.browseMode = 'folder';
+
+    await syncSettingsFromCloud();
 
     const remembered = readRememberedFolder();
     if (remembered && remembered !== ROOT_FOLDER_ID) {
@@ -1729,6 +2092,10 @@ function wireEvents() {
             return Boolean(state.editor.fileId && nodes.viewEditor && !nodes.viewEditor.hidden);
         },
         onStatus: setStatus,
+        onLayout: () => {
+            // Find bar lives in the bottom nav — remeasure padding when it opens/closes.
+            requestAnimationFrame(() => syncNavLayout());
+        },
     });
     editorSearch.bind();
 
@@ -1821,6 +2188,10 @@ function wireEvents() {
     applyFinderLayoutPrefs(prefs);
     syncFinderLayoutControls(prefs);
     applySavedTheme();
+    applySavedPwaTopGap();
+    applySavedPreviewFontScale();
+    applySavedListStripe();
+    applySavedListLayout();
     syncTocStickyControl(readPreviewTocSticky());
     if (els.prefTheme) {
         els.prefTheme.addEventListener('change', () => {
@@ -1838,6 +2209,57 @@ function wireEvents() {
             }
             setStatus(
                 els.prefTocSticky.checked ? 'Contents will stay sticky' : 'Contents will scroll with the page',
+                'ok'
+            );
+        });
+    }
+    if (els.prefPwaTopGap) {
+        const onGapInput = () => {
+            const n = writePwaTopGap(els.prefPwaTopGap.value);
+            applyPwaTopGap(n);
+        };
+        els.prefPwaTopGap.addEventListener('input', onGapInput);
+        els.prefPwaTopGap.addEventListener('change', () => {
+            const n = writePwaTopGap(els.prefPwaTopGap.value);
+            applyPwaTopGap(n);
+            setStatus(`Status bar spacing set to ${n}px`, 'ok');
+        });
+    }
+    if (els.prefPreviewFontScale) {
+        const onScaleInput = () => {
+            const n = writePreviewFontScale(els.prefPreviewFontScale.value);
+            applyPreviewFontScale(n);
+        };
+        els.prefPreviewFontScale.addEventListener('input', onScaleInput);
+        els.prefPreviewFontScale.addEventListener('change', () => {
+            const n = writePreviewFontScale(els.prefPreviewFontScale.value);
+            applyPreviewFontScale(n);
+            setStatus(`Preview text size set to ${n}%`, 'ok');
+        });
+    }
+    if (els.prefListStripe) {
+        els.prefListStripe.addEventListener('change', () => {
+            const mode = writeListStripe(els.prefListStripe.value);
+            applyListStripe(mode);
+            const label =
+                mode === 'zebra'
+                    ? 'Alternating grey list stripes'
+                    : mode === 'spectrum'
+                      ? '16-colour list stripes'
+                      : 'Normal list styling';
+            setStatus(`${label} saved`, 'ok');
+        });
+    }
+    if (els.prefListLayoutSegmented) {
+        els.prefListLayoutSegmented.addEventListener('change', () => {
+            const layout = writeListLayout(
+                els.prefListLayoutSegmented.checked ? 'segmented' : 'continuous'
+            );
+            applyListLayout(layout);
+            setStatus(
+                layout === 'segmented'
+                    ? 'Segmented list containers on'
+                    : 'Continuous list with text colour stripes',
                 'ok'
             );
         });
@@ -1928,6 +2350,10 @@ function wireEvents() {
     window.addEventListener('resize', () => {
         syncNavLayout();
     });
+
+    window.addEventListener('md-editor:settings-changed', () => {
+        queueSettingsCloudSync();
+    });
 }
 
 async function boot() {
@@ -1935,6 +2361,8 @@ async function boot() {
     wireEvents();
     applySavedFinderLayout();
     applySavedTheme();
+    applySavedListStripe();
+    applySavedListLayout();
     registerServiceWorker();
 
     if (!isConfigured()) {
