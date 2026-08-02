@@ -26,6 +26,7 @@ let applyingCloud = false;
  *   previewTocSticky?: boolean,
  *   previewTocOpen?: boolean,
  *   pwaTopGap?: number,
+ *   pwaBottomOffset?: number,
  *   previewFontScale?: number,
  *   listStripe?: string,
  *   listLayout?: string,

@@ -67,11 +67,25 @@ export const LIST_LAYOUT_KEY = 'md-editor:listLayout';
 export const LIST_LAYOUT_DEFAULT = 'segmented';
 export const LIST_LAYOUT_VALUES = new Set(['segmented', 'continuous']);
 
-/** Extra top inset below the iOS status bar in Home Screen / PWA mode (px). */
+/**
+ * Total top inset for Home Screen / PWA (px) — replaces iOS safe-area-inset-top.
+ * Slider is the full status-bar clearance (0 = flush with the top of the screen).
+ */
 export const PWA_TOP_GAP_KEY = 'md-editor:pwaTopGap';
-export const PWA_TOP_GAP_DEFAULT = 8;
+/** One-time: old values were EXTRA on top of safe-area; now the key stores the total. */
+export const PWA_TOP_GAP_MIGRATED_KEY = 'md-editor:pwaTopGapAsTotal';
+export const PWA_TOP_GAP_DEFAULT = 0;
 export const PWA_TOP_GAP_MIN = 0;
-export const PWA_TOP_GAP_MAX = 48;
+export const PWA_TOP_GAP_MAX = 80;
+
+/**
+ * Shift the bottom nav / app chrome downward into empty Home Screen space (px).
+ * Higher values pull the bar down to fill the wasted gap under the nav.
+ */
+export const PWA_BOTTOM_OFFSET_KEY = 'md-editor:pwaBottomOffset';
+export const PWA_BOTTOM_OFFSET_DEFAULT = 0;
+export const PWA_BOTTOM_OFFSET_MIN = 0;
+export const PWA_BOTTOM_OFFSET_MAX = 80;
 
 /** Preview / List body text size as percent of default (100 = 1.02rem). */
 export const PREVIEW_FONT_SCALE_KEY = 'md-editor:previewFontScale';

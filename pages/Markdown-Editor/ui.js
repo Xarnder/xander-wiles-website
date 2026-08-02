@@ -64,6 +64,8 @@ export function bindUi() {
     els.prefTocSticky = document.getElementById('pref-toc-sticky');
     els.prefPwaTopGap = document.getElementById('pref-pwa-top-gap');
     els.prefPwaTopGapValue = document.getElementById('pref-pwa-top-gap-value');
+    els.prefPwaBottomOffset = document.getElementById('pref-pwa-bottom-offset');
+    els.prefPwaBottomOffsetValue = document.getElementById('pref-pwa-bottom-offset-value');
     els.prefPreviewFontScale = document.getElementById('pref-preview-font-scale');
     els.prefPreviewFontScaleValue = document.getElementById('pref-preview-font-scale-value');
     els.prefListStripe = document.getElementById('pref-list-stripe');
@@ -628,11 +630,11 @@ export function syncTocStickyControl(sticky) {
 }
 
 /**
- * Apply Home Screen status-bar gap and sync the settings control.
+ * Apply Home Screen status-bar clearance (total top inset) and sync the control.
  * @param {number} gapPx
  */
 export function applyPwaTopGap(gapPx) {
-    const n = Math.max(0, Math.min(48, Math.round(Number(gapPx) || 0)));
+    const n = Math.max(0, Math.min(80, Math.round(Number(gapPx) || 0)));
     document.documentElement.style.setProperty('--pwa-top-gap', `${n}px`);
     if (els.prefPwaTopGap) {
         els.prefPwaTopGap.value = String(n);
@@ -645,6 +647,27 @@ export function applyPwaTopGap(gapPx) {
 
 export function syncPwaTopGapControl(gapPx) {
     applyPwaTopGap(gapPx);
+}
+
+/**
+ * Pull the bottom nav down into empty Home Screen space and sync the control.
+ * @param {number} offsetPx
+ */
+export function applyPwaBottomOffset(offsetPx) {
+    const n = Math.max(0, Math.min(80, Math.round(Number(offsetPx) || 0)));
+    document.documentElement.style.setProperty('--pwa-bottom-offset', `${n}px`);
+    if (els.prefPwaBottomOffset) {
+        els.prefPwaBottomOffset.value = String(n);
+        els.prefPwaBottomOffset.setAttribute('aria-valuenow', String(n));
+    }
+    if (els.prefPwaBottomOffsetValue) {
+        els.prefPwaBottomOffsetValue.textContent = `${n}px`;
+    }
+    syncNavLayout();
+}
+
+export function syncPwaBottomOffsetControl(offsetPx) {
+    applyPwaBottomOffset(offsetPx);
 }
 
 /**

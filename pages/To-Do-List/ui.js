@@ -966,8 +966,8 @@ function applyStaticLayouts() {
     });
 }
 
-export const LIST_BOTTOM_GAP_MIN = 0;
-export const LIST_BOTTOM_GAP_MAX = 48;
+export const LIST_BOTTOM_GAP_MIN = -64;
+export const LIST_BOTTOM_GAP_MAX = 64;
 export const DEFAULT_LIST_BOTTOM_GAP = 12;
 
 export function clampListBottomGap(value) {
@@ -980,8 +980,8 @@ export function getListBottomGap() {
     return clampListBottomGap(state.appData.settings?.listBottomGap);
 }
 
-export const LIST_TOP_GAP_MIN = 0;
-export const LIST_TOP_GAP_MAX = 48;
+export const LIST_TOP_GAP_MIN = -64;
+export const LIST_TOP_GAP_MAX = 64;
 export const DEFAULT_LIST_TOP_GAP = 10;
 
 export function clampListTopGap(value) {
@@ -995,11 +995,15 @@ export function getListTopGap() {
 }
 
 export function applyListTopGap() {
-    document.documentElement.style.setProperty('--list-top-gap', `${getListTopGap()}px`);
+    const gap = getListTopGap();
+    const root = document.documentElement;
+    // Padding can't be negative — pull upward with margin when below 0.
+    root.style.setProperty('--list-top-gap', `${Math.max(0, gap)}px`);
+    root.style.setProperty('--list-top-pull', `${Math.min(0, gap)}px`);
 }
 
-export const TOOL_PANEL_BOTTOM_OFFSET_MIN = 0;
-export const TOOL_PANEL_BOTTOM_OFFSET_MAX = 48;
+export const TOOL_PANEL_BOTTOM_OFFSET_MIN = -64;
+export const TOOL_PANEL_BOTTOM_OFFSET_MAX = 64;
 export const DEFAULT_TOOL_PANEL_BOTTOM_OFFSET = 8;
 
 export function clampToolPanelBottomOffset(value) {
@@ -1033,10 +1037,10 @@ export function layoutSlimChrome() {
     const header = document.querySelector('.app-header');
     if (!header) return;
 
-    // After layout: distance from header top to viewport bottom (+ user gap)
+    // Distance from header top to viewport bottom, plus user gap (may be negative to tuck under).
     const top = header.getBoundingClientRect().top;
     const gap = getListBottomGap();
-    const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + gap);
+    const clearance = Math.max(0, Math.ceil(window.innerHeight - top) + gap);
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
 }
 

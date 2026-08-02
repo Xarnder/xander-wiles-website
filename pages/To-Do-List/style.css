@@ -1505,6 +1505,7 @@ body {
     overflow-y: hidden;
     padding: 10px 20px;
     padding-top: var(--list-top-gap, 10px);
+    margin-top: var(--list-top-pull, 0px);
     align-items: flex-start;
     box-sizing: border-box;
 }
@@ -3042,7 +3043,7 @@ body.settings-page-open #sync-console {
 
 .settings-slider-value {
     flex: 0 0 auto;
-    min-width: 2.75rem;
+    min-width: 3.25rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-size: 0.9rem;
@@ -4075,6 +4076,7 @@ input:checked+.slider-small:before {
         .board-container {
             /* Fallback matches prior magic number; JS sets --slim-bottom-clearance from measured header */
             padding-top: var(--list-top-gap, 10px) !important;
+            margin-top: var(--list-top-pull, 0px) !important;
             padding-bottom: var(--slim-bottom-clearance, 200px) !important;
             height: 100% !important;
             align-items: stretch !important;

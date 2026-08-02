@@ -299,10 +299,10 @@
                         <span><i class="ph ph-arrow-line-up"></i> List Top Gap</span>
                         <span id="list-top-gap-value" class="settings-slider-value" aria-live="polite">10px</span>
                     </div>
-                    <p class="kanban-labels-hint" style="margin: 0;">Extra space above the lists. Raise this in PWA if the iOS status bar overlaps content.</p>
+                    <p class="kanban-labels-hint" style="margin: 0;">Extra space above the lists (−64 to 64). Negative pulls content up under the status bar area.</p>
                     <div class="settings-slider-track">
-                        <input id="list-top-gap-slider" class="settings-slider" type="range" min="0" max="48" step="1" value="10"
-                            aria-valuemin="0" aria-valuemax="48" aria-valuenow="10" aria-label="List top gap">
+                        <input id="list-top-gap-slider" class="settings-slider" type="range" min="-64" max="64" step="1" value="10"
+                            aria-valuemin="-64" aria-valuemax="64" aria-valuenow="10" aria-label="List top gap">
                     </div>
                 </div>
 
@@ -311,10 +311,10 @@
                         <span><i class="ph ph-arrows-vertical"></i> List Bottom Gap</span>
                         <span id="list-bottom-gap-value" class="settings-slider-value" aria-live="polite">12px</span>
                     </div>
-                    <p class="kanban-labels-hint" style="margin: 0;">On phones, space between the bottom of lists and the tool panel. 0 is tight.</p>
+                    <p class="kanban-labels-hint" style="margin: 0;">Space between lists and the tool panel (−64 to 64). Negative tucks lists closer under the panel.</p>
                     <div class="settings-slider-track">
-                        <input id="list-bottom-gap-slider" class="settings-slider" type="range" min="0" max="48" step="1" value="12"
-                            aria-valuemin="0" aria-valuemax="48" aria-valuenow="12" aria-label="List bottom gap">
+                        <input id="list-bottom-gap-slider" class="settings-slider" type="range" min="-64" max="64" step="1" value="12"
+                            aria-valuemin="-64" aria-valuemax="64" aria-valuenow="12" aria-label="List bottom gap">
                     </div>
                 </div>
 
@@ -323,10 +323,10 @@
                         <span><i class="ph ph-dock-bottom"></i> Tool Panel Bottom Offset</span>
                         <span id="tool-panel-bottom-offset-value" class="settings-slider-value" aria-live="polite">8px</span>
                     </div>
-                    <p class="kanban-labels-hint" style="margin: 0;">On phones / PWA, how far the tool panel sits above the bottom of the screen. Lower reclaims empty space.</p>
+                    <p class="kanban-labels-hint" style="margin: 0;">How far the tool panel sits above the screen bottom (−64 to 64). Negative sinks it lower.</p>
                     <div class="settings-slider-track">
-                        <input id="tool-panel-bottom-offset-slider" class="settings-slider" type="range" min="0" max="48" step="1" value="8"
-                            aria-valuemin="0" aria-valuemax="48" aria-valuenow="8" aria-label="Tool panel bottom offset">
+                        <input id="tool-panel-bottom-offset-slider" class="settings-slider" type="range" min="-64" max="64" step="1" value="8"
+                            aria-valuemin="-64" aria-valuemax="64" aria-valuenow="8" aria-label="Tool panel bottom offset">
                     </div>
                 </div>
 

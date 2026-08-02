@@ -14,9 +14,14 @@ import {
     THEME_VALUES,
     THEME_META_COLORS,
     PWA_TOP_GAP_KEY,
+    PWA_TOP_GAP_MIGRATED_KEY,
     PWA_TOP_GAP_DEFAULT,
     PWA_TOP_GAP_MIN,
     PWA_TOP_GAP_MAX,
+    PWA_BOTTOM_OFFSET_KEY,
+    PWA_BOTTOM_OFFSET_DEFAULT,
+    PWA_BOTTOM_OFFSET_MIN,
+    PWA_BOTTOM_OFFSET_MAX,
     PREVIEW_FONT_SCALE_KEY,
     PREVIEW_FONT_SCALE_DEFAULT,
     PREVIEW_FONT_SCALE_MIN,
@@ -124,6 +129,8 @@ import {
     syncTocStickyControl,
     applyPwaTopGap,
     syncPwaTopGapControl,
+    applyPwaBottomOffset,
+    syncPwaBottomOffsetControl,
     applyPreviewFontScale,
     syncPreviewFontScaleControl,
     applyListStripe,
@@ -268,10 +275,42 @@ function clampPwaTopGap(value) {
     return Math.max(PWA_TOP_GAP_MIN, Math.min(PWA_TOP_GAP_MAX, n));
 }
 
+function measureSafeTopPx() {
+    try {
+        const probe = document.createElement('div');
+        probe.style.cssText =
+            'position:absolute;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);';
+        document.documentElement.appendChild(probe);
+        const px = Math.round(parseFloat(getComputedStyle(probe).paddingTop) || 0);
+        probe.remove();
+        return Math.max(0, px);
+    } catch {
+        return 0;
+    }
+}
+
 function readPwaTopGap() {
     try {
         const raw = localStorage.getItem(PWA_TOP_GAP_KEY);
-        if (raw == null || raw === '') return PWA_TOP_GAP_DEFAULT;
+        const migrated = localStorage.getItem(PWA_TOP_GAP_MIGRATED_KEY) === '1';
+        if (!migrated) {
+            const safe = measureSafeTopPx();
+            const total =
+                raw == null || raw === ''
+                    ? clampPwaTopGap(safe + 8)
+                    : clampPwaTopGap(Number(raw) + safe);
+            try {
+                localStorage.setItem(PWA_TOP_GAP_KEY, String(total));
+                localStorage.setItem(PWA_TOP_GAP_MIGRATED_KEY, '1');
+            } catch {
+                // ignore
+            }
+            return total;
+        }
+        if (raw == null || raw === '') {
+            const safe = measureSafeTopPx();
+            return clampPwaTopGap(safe > 0 ? safe : PWA_TOP_GAP_DEFAULT);
+        }
         return clampPwaTopGap(raw);
     } catch {
         return PWA_TOP_GAP_DEFAULT;
@@ -282,6 +321,7 @@ function writePwaTopGap(gapPx) {
     const n = clampPwaTopGap(gapPx);
     try {
         localStorage.setItem(PWA_TOP_GAP_KEY, String(n));
+        localStorage.setItem(PWA_TOP_GAP_MIGRATED_KEY, '1');
     } catch {
         // ignore
     }
@@ -291,6 +331,37 @@ function writePwaTopGap(gapPx) {
 
 function applySavedPwaTopGap() {
     syncPwaTopGapControl(readPwaTopGap());
+}
+
+function clampPwaBottomOffset(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return PWA_BOTTOM_OFFSET_DEFAULT;
+    return Math.max(PWA_BOTTOM_OFFSET_MIN, Math.min(PWA_BOTTOM_OFFSET_MAX, n));
+}
+
+function readPwaBottomOffset() {
+    try {
+        const raw = localStorage.getItem(PWA_BOTTOM_OFFSET_KEY);
+        if (raw == null || raw === '') return PWA_BOTTOM_OFFSET_DEFAULT;
+        return clampPwaBottomOffset(raw);
+    } catch {
+        return PWA_BOTTOM_OFFSET_DEFAULT;
+    }
+}
+
+function writePwaBottomOffset(offsetPx) {
+    const n = clampPwaBottomOffset(offsetPx);
+    try {
+        localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(n));
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return n;
+}
+
+function applySavedPwaBottomOffset() {
+    syncPwaBottomOffsetControl(readPwaBottomOffset());
 }
 
 function clampPreviewFontScale(value) {
@@ -380,6 +451,7 @@ function buildSettingsSnapshot() {
         previewTocSticky: readPreviewTocSticky(),
         previewTocOpen: readPreviewTocOpen(),
         pwaTopGap: readPwaTopGap(),
+        pwaBottomOffset: readPwaBottomOffset(),
         previewFontScale: readPreviewFontScale(),
         listStripe: readListStripe(),
         listLayout: readListLayout(),
@@ -435,13 +507,30 @@ function applyCloudSettings(cloud) {
         }
 
         if (cloud.pwaTopGap != null) {
-            const n = clampPwaTopGap(cloud.pwaTopGap);
+            let n = clampPwaTopGap(cloud.pwaTopGap);
+            const alreadyTotal = localStorage.getItem(PWA_TOP_GAP_MIGRATED_KEY) === '1';
+            if (!alreadyTotal) {
+                const safe = measureSafeTopPx();
+                // Pre-migration cloud values were EXTRA on top of safe-area.
+                if (n < safe) n = clampPwaTopGap(n + safe);
+            }
             try {
                 localStorage.setItem(PWA_TOP_GAP_KEY, String(n));
+                localStorage.setItem(PWA_TOP_GAP_MIGRATED_KEY, '1');
             } catch {
                 // ignore
             }
             syncPwaTopGapControl(n);
+        }
+
+        if (cloud.pwaBottomOffset != null) {
+            const n = clampPwaBottomOffset(cloud.pwaBottomOffset);
+            try {
+                localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(n));
+            } catch {
+                // ignore
+            }
+            syncPwaBottomOffsetControl(n);
         }
 
         if (cloud.previewFontScale != null) {
@@ -2189,6 +2278,7 @@ function wireEvents() {
     syncFinderLayoutControls(prefs);
     applySavedTheme();
     applySavedPwaTopGap();
+    applySavedPwaBottomOffset();
     applySavedPreviewFontScale();
     applySavedListStripe();
     applySavedListLayout();
@@ -2223,6 +2313,18 @@ function wireEvents() {
             const n = writePwaTopGap(els.prefPwaTopGap.value);
             applyPwaTopGap(n);
             setStatus(`Status bar spacing set to ${n}px`, 'ok');
+        });
+    }
+    if (els.prefPwaBottomOffset) {
+        const onBottomInput = () => {
+            const n = writePwaBottomOffset(els.prefPwaBottomOffset.value);
+            applyPwaBottomOffset(n);
+        };
+        els.prefPwaBottomOffset.addEventListener('input', onBottomInput);
+        els.prefPwaBottomOffset.addEventListener('change', () => {
+            const n = writePwaBottomOffset(els.prefPwaBottomOffset.value);
+            applyPwaBottomOffset(n);
+            setStatus(`Bottom edge set to ${n}px`, 'ok');
         });
     }
     if (els.prefPreviewFontScale) {

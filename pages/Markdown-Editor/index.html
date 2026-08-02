@@ -44,12 +44,38 @@
                     || window.matchMedia('(display-mode: fullscreen)').matches
                     || window.matchMedia('(display-mode: minimal-ui)').matches;
                 if (standalone) document.documentElement.classList.add('is-standalone');
-                var gapRaw = localStorage.getItem('md-editor:pwaTopGap');
+                var gapKey = 'md-editor:pwaTopGap';
+                var gapMigratedKey = 'md-editor:pwaTopGapAsTotal';
+                var gapRaw = localStorage.getItem(gapKey);
                 var gap = parseInt(gapRaw, 10);
-                if (!Number.isFinite(gap)) gap = 8;
+                var gapMigrated = localStorage.getItem(gapMigratedKey) === '1';
+                var safeTop = 0;
+                try {
+                    var probe = document.createElement('div');
+                    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);';
+                    document.documentElement.appendChild(probe);
+                    safeTop = Math.round(parseFloat(window.getComputedStyle(probe).paddingTop) || 0);
+                    probe.remove();
+                } catch (e2) { safeTop = 0; }
+                if (!gapMigrated) {
+                    if (!Number.isFinite(gap)) gap = safeTop + 8;
+                    else gap = gap + safeTop;
+                    try {
+                        localStorage.setItem(gapKey, String(gap));
+                        localStorage.setItem(gapMigratedKey, '1');
+                    } catch (e3) { /* ignore */ }
+                } else if (!Number.isFinite(gap)) {
+                    gap = safeTop > 0 ? safeTop : 0;
+                }
                 if (gap < 0) gap = 0;
-                if (gap > 48) gap = 48;
+                if (gap > 80) gap = 80;
                 document.documentElement.style.setProperty('--pwa-top-gap', gap + 'px');
+                var bottomRaw = localStorage.getItem('md-editor:pwaBottomOffset');
+                var bottom = parseInt(bottomRaw, 10);
+                if (!Number.isFinite(bottom)) bottom = 0;
+                if (bottom < 0) bottom = 0;
+                if (bottom > 80) bottom = 80;
+                document.documentElement.style.setProperty('--pwa-bottom-offset', bottom + 'px');
                 var scaleRaw = localStorage.getItem('md-editor:previewFontScale');
                 var scale = parseInt(scaleRaw, 10);
                 if (!Number.isFinite(scale)) scale = 100;
@@ -174,11 +200,19 @@
                         <label class="settings-pref settings-pref--slider" for="pref-pwa-top-gap">
                             <span class="settings-pref-label">Status bar spacing</span>
                             <span class="settings-slider-wrap">
-                                <input id="pref-pwa-top-gap" class="settings-slider" type="range" min="0" max="48" step="1" value="8" aria-valuemin="0" aria-valuemax="48" aria-valuenow="8">
-                                <span id="pref-pwa-top-gap-value" class="settings-slider-value" aria-live="polite">8px</span>
+                                <input id="pref-pwa-top-gap" class="settings-slider" type="range" min="0" max="80" step="1" value="0" aria-valuemin="0" aria-valuemax="80" aria-valuenow="0">
+                                <span id="pref-pwa-top-gap-value" class="settings-slider-value" aria-live="polite">0px</span>
                             </span>
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Extra space under the iPhone status bar in the Home Screen app (on top of the system safe area).</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Total space reserved for the iPhone status bar in the Home Screen app. 0 puts content at the top of the screen.</p>
+                        <label class="settings-pref settings-pref--slider" for="pref-pwa-bottom-offset">
+                            <span class="settings-pref-label">Bottom edge position</span>
+                            <span class="settings-slider-wrap">
+                                <input id="pref-pwa-bottom-offset" class="settings-slider" type="range" min="0" max="80" step="1" value="0" aria-valuemin="0" aria-valuemax="80" aria-valuenow="0">
+                                <span id="pref-pwa-bottom-offset-value" class="settings-slider-value" aria-live="polite">0px</span>
+                            </span>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Pull the bottom nav down to fill empty space under the app on Home Screen. Increase until the gap under the tab bar is gone.</p>
                         <label class="settings-pref settings-pref--slider" for="pref-preview-font-scale">
                             <span class="settings-pref-label">Preview text size</span>
                             <span class="settings-slider-wrap">
