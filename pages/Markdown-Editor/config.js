@@ -74,7 +74,7 @@ export const LIST_LAYOUT_VALUES = new Set(['segmented', 'continuous']);
 export const PWA_TOP_GAP_KEY = 'md-editor:pwaTopGap';
 /** One-time: old values were EXTRA on top of safe-area; now the key stores the total. */
 export const PWA_TOP_GAP_MIGRATED_KEY = 'md-editor:pwaTopGapAsTotal';
-export const PWA_TOP_GAP_DEFAULT = 0;
+export const PWA_TOP_GAP_DEFAULT = 57;
 export const PWA_TOP_GAP_MIN = 0;
 export const PWA_TOP_GAP_MAX = 80;
 
@@ -85,7 +85,7 @@ export const PWA_TOP_GAP_MAX = 80;
 export const PWA_BOTTOM_OFFSET_KEY = 'md-editor:pwaBottomOffset';
 /** One-time: old pull-down / inset semantics → current bottom-edge value. */
 export const PWA_BOTTOM_OFFSET_MIGRATED_KEY = 'md-editor:pwaBottomAsInset';
-export const PWA_BOTTOM_OFFSET_DEFAULT = 0;
+export const PWA_BOTTOM_OFFSET_DEFAULT = 25;
 export const PWA_BOTTOM_OFFSET_MIN = -80;
 export const PWA_BOTTOM_OFFSET_MAX = 80;
 

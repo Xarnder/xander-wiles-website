@@ -299,7 +299,7 @@ function readPwaTopGap() {
             const safe = measureSafeTopPx();
             const total =
                 raw == null || raw === ''
-                    ? clampPwaTopGap(safe + 8)
+                    ? clampPwaTopGap(PWA_TOP_GAP_DEFAULT)
                     : clampPwaTopGap(Number(raw) + safe);
             try {
                 localStorage.setItem(PWA_TOP_GAP_KEY, String(total));
@@ -310,8 +310,7 @@ function readPwaTopGap() {
             return total;
         }
         if (raw == null || raw === '') {
-            const safe = measureSafeTopPx();
-            return clampPwaTopGap(safe > 0 ? safe : PWA_TOP_GAP_DEFAULT);
+            return clampPwaTopGap(PWA_TOP_GAP_DEFAULT);
         }
         return clampPwaTopGap(raw);
     } catch {
@@ -361,10 +360,12 @@ function readPwaBottomOffset() {
         const migrated = localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1';
         if (!migrated) {
             const safe = measureSafeBottomPx();
-            const pull = raw == null || raw === '' ? 0 : Number(raw);
+            const pull = raw == null || raw === '' ? null : Number(raw);
             // Old values pulled the nav down; convert to remaining bottom inset.
             const inset = clampPwaBottomOffset(
-                Number.isFinite(pull) ? Math.max(0, safe - pull) : safe
+                pull == null || !Number.isFinite(pull)
+                    ? PWA_BOTTOM_OFFSET_DEFAULT
+                    : Math.max(0, safe - pull)
             );
             try {
                 localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(inset));
@@ -375,8 +376,7 @@ function readPwaBottomOffset() {
             return inset;
         }
         if (raw == null || raw === '') {
-            const safe = measureSafeBottomPx();
-            return clampPwaBottomOffset(safe > 0 ? safe : PWA_BOTTOM_OFFSET_DEFAULT);
+            return clampPwaBottomOffset(PWA_BOTTOM_OFFSET_DEFAULT);
         }
         return clampPwaBottomOffset(raw);
     } catch {
@@ -2172,7 +2172,7 @@ async function signOut() {
     state.parseWarnings = [];
     editorSearch?.close({ restoreFocus: false });
     showView('login');
-    setStatus('Signed out');
+    setStatus('');
 }
 
 async function afterSignedIn() {
@@ -2532,7 +2532,7 @@ async function boot() {
     }
 
     showView('login');
-    setStatus('Sign in to continue');
+    setStatus('');
 }
 
 boot();

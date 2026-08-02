@@ -11,15 +11,9 @@
     <meta name="apple-mobile-web-app-title" content="MD Editor">
     <base href="/pages/Markdown-Editor/">
 
-    <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
-    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <!-- Fallback PNG icons -->
+    <!-- Use this app's favicon explicitly; the version refreshes stale browser caches. -->
+    <link rel="icon" href="/pages/Markdown-Editor/favicon.ico?v=20260802" type="image/x-icon">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 
     <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
@@ -79,14 +73,14 @@
                     probe.remove();
                 } catch (e2) { safeTop = 0; }
                 if (!gapMigrated) {
-                    if (!Number.isFinite(gap)) gap = safeTop + 8;
+                    if (!Number.isFinite(gap)) gap = 57;
                     else gap = gap + safeTop;
                     try {
                         localStorage.setItem(gapKey, String(gap));
                         localStorage.setItem(gapMigratedKey, '1');
                     } catch (e3) { /* ignore */ }
                 } else if (!Number.isFinite(gap)) {
-                    gap = safeTop > 0 ? safeTop : 0;
+                    gap = 57;
                 }
                 if (gap < 0) gap = 0;
                 if (gap > 80) gap = 80;
@@ -107,14 +101,14 @@
                 if (!bottomMigrated) {
                     // Old slider pulled the nav with negative bottom (got clipped by .app).
                     // Convert to an inset: remaining home-indicator clearance.
-                    if (!Number.isFinite(bottom)) bottom = safeBottom;
+                    if (!Number.isFinite(bottom)) bottom = 25;
                     else bottom = Math.max(0, safeBottom - bottom);
                     try {
                         localStorage.setItem(bottomKey, String(bottom));
                         localStorage.setItem(bottomMigratedKey, '1');
                     } catch (e5) { /* ignore */ }
                 } else if (!Number.isFinite(bottom)) {
-                    bottom = safeBottom > 0 ? safeBottom : 0;
+                    bottom = 25;
                 }
                 if (bottom < -80) bottom = -80;
                 if (bottom > 80) bottom = 80;
@@ -153,11 +147,30 @@
         </div>
 
         <main id="main" class="main">
-            <section id="view-login" class="view" hidden>
+            <section id="view-login" class="view view-login" hidden>
+                <div class="login-stage" aria-hidden="true">
+                    <div class="login-aurora"></div>
+                    <div class="login-orb login-orb--a"></div>
+                    <div class="login-orb login-orb--b"></div>
+                    <div class="login-orb login-orb--c"></div>
+                    <div class="login-vignette"></div>
+                </div>
                 <div class="login-card">
-                    <p class="brand">Markdown Editor</p>
-                    <p class="lede">Sign in with Google to browse Drive and edit your <code>.md</code> files.</p>
-                    <button type="button" id="btn-sign-in" class="btn btn-primary btn-large">Sign in with Google</button>
+                    <div class="login-mark" aria-hidden="true">
+                        <svg class="login-mark-icon" viewBox="0 0 471 290" fill="currentColor">
+                            <path d="M437 290H34a34 34 0 0 1-34-34V34A34 34 0 0 1 34 0h403a34 34 0 0 1 34 34v222a34 34 0 0 1-34 34ZM34 23a11 11 0 0 0-11 11v222a11 11 0 0 0 11 11h403a11 11 0 0 0 11-11V34a11 11 0 0 0-11-11Z"/>
+                            <path d="M68 222V68h45l45 57 46-57h45v154h-45V134l-46 56-45-56v88Zm283 0-68-75h45V68h45v79h46Z"/>
+                        </svg>
+                    </div>
+                    <button type="button" id="btn-sign-in" class="btn btn-login">
+                        <svg class="btn-login-google" viewBox="0 0 48 48" aria-hidden="true">
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                        </svg>
+                        <span>Sign in with Google</span>
+                    </button>
                     <p id="config-error" class="error-text" hidden></p>
                 </div>
             </section>
@@ -243,16 +256,16 @@
                         <label class="settings-pref settings-pref--slider" for="pref-pwa-top-gap">
                             <span class="settings-pref-label">Status bar spacing</span>
                             <span class="settings-slider-wrap">
-                                <input id="pref-pwa-top-gap" class="settings-slider" type="range" min="0" max="80" step="1" value="0" aria-valuemin="0" aria-valuemax="80" aria-valuenow="0">
-                                <span id="pref-pwa-top-gap-value" class="settings-slider-value" aria-live="polite">0px</span>
+                                <input id="pref-pwa-top-gap" class="settings-slider" type="range" min="0" max="80" step="1" value="57" aria-valuemin="0" aria-valuemax="80" aria-valuenow="57">
+                                <span id="pref-pwa-top-gap-value" class="settings-slider-value" aria-live="polite">57px</span>
                             </span>
                         </label>
                         <p class="settings-prefs-lede settings-prefs-lede--tight">Total space reserved for the iPhone status bar in the Home Screen app. 0 puts content at the top of the screen.</p>
                         <label class="settings-pref settings-pref--slider" for="pref-pwa-bottom-offset">
                             <span class="settings-pref-label">Bottom edge position</span>
                             <span class="settings-slider-wrap">
-                                <input id="pref-pwa-bottom-offset" class="settings-slider" type="range" min="-80" max="80" step="1" value="0" aria-valuemin="-80" aria-valuemax="80" aria-valuenow="0">
-                                <span id="pref-pwa-bottom-offset-value" class="settings-slider-value" aria-live="polite">0px</span>
+                                <input id="pref-pwa-bottom-offset" class="settings-slider" type="range" min="-80" max="80" step="1" value="25" aria-valuemin="-80" aria-valuemax="80" aria-valuenow="25">
+                                <span id="pref-pwa-bottom-offset-value" class="settings-slider-value" aria-live="polite">25px</span>
                             </span>
                         </label>
                         <p class="settings-prefs-lede settings-prefs-lede--tight">Where the tab bar sits. 0 is flush with the screen bottom; negative pushes it further down into empty space; positive lifts it up.</p>

@@ -295,12 +295,17 @@ export function showView(name, options = {}) {
         if (els.navActionsFinder) els.navActionsFinder.hidden = true;
         if (els.navActionsEditor) els.navActionsEditor.hidden = true;
         if (els.finderPathBar) els.finderPathBar.hidden = true;
-        els.viewTitle.textContent = 'Markdown Editor';
-        if (els.app) els.app.classList.remove('is-editing-doc');
+        els.viewTitle.textContent = '';
+        setStatus('');
+        if (els.app) {
+            els.app.classList.add('is-login');
+            els.app.classList.remove('is-editing-doc');
+        }
         syncNavLayout();
         return;
     }
 
+    if (els.app) els.app.classList.remove('is-login');
     els.navBar.hidden = false;
     setActiveTab(name);
     syncNavActions(name, { hasOpenFile });

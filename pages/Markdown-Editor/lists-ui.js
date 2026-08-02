@@ -37,6 +37,9 @@ import { notifySettingsDirty } from './settings-sync.js';
 /** Persist which LLM-note disclosures are expanded across list re-renders. */
 const expandedAgentNotes = new Set();
 
+/** Active plain-list single-item mini editor closer (preview). */
+let closeActivePlainMiniEditor = null;
+
 export function readPreviewTocOpen() {
     try {
         const raw = localStorage.getItem(PREVIEW_TOC_OPEN_KEY);
@@ -92,6 +95,9 @@ export function writePreviewTocSticky(sticky) {
  * @param {(payload: { segIndex: number, localLine: number, prefix: string }) => void} [options.onEditSpot]
  */
 export function renderListsUi(root, options) {
+    if (typeof closeActivePlainMiniEditor === 'function') {
+        closeActivePlainMiniEditor({ abandon: true });
+    }
     const {
         mode,
         doc,
@@ -914,12 +920,16 @@ function mutatePlainListInSegment({
     if (!target) return;
     mutator(target);
     commitPlainBlocks(seg, blocks);
-    if (!seg._editingPlainLists) seg._editingPlainLists = {};
-    seg._editingPlainLists[listIndex] = true;
+    // Mini single-item edits stay in preview; full editor opts in explicitly.
+    if (!opts.stayInView) {
+        if (!seg._editingPlainLists) seg._editingPlainLists = {};
+        seg._editingPlainLists[listIndex] = true;
+    }
     const nextOpts = {
         ...changeOpts(doc, opts),
         editingPlainLists: collectEditingPlainLists(doc),
     };
+    delete nextOpts.stayInView;
     // Keep the in-memory segment (and item ids) so typing/reorder stay stable.
     if (!opts.skipRender) {
         nextOpts.soft = true;
@@ -955,13 +965,19 @@ function renderPlainListBlock({
 
     if (!editing) {
         wrap.appendChild(renderPlainListViewHeader(block, seg, listIndex, doc, onChange));
-        const viewItems = renderPlainListViewItems(block);
-        viewItems.style.cursor = 'pointer';
-        viewItems.title = 'Tap to edit and reorder';
-        viewItems.addEventListener('click', () => {
-            if (!seg._editingPlainLists) seg._editingPlainLists = {};
-            seg._editingPlainLists[listIndex] = true;
-            onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
+        const viewItems = renderPlainListViewItems(block, {
+            onItemLongPress: (item, li) => {
+                openPlainItemMiniEditor({
+                    li,
+                    item,
+                    block,
+                    seg,
+                    segIndex,
+                    listIndex,
+                    doc,
+                    onChange,
+                });
+            },
         });
         wrap.appendChild(viewItems);
         return wrap;
@@ -1108,12 +1124,341 @@ function renderPlainListViewHeader(block, seg, listIndex, doc, onChange) {
     return header;
 }
 
-function renderPlainListViewItems(block) {
+const PLAIN_LIST_LONG_PRESS_MS = 500;
+const PLAIN_LIST_LONG_PRESS_MOVE_PX = 10;
+
+/**
+ * Long-press on an element; cancels if the pointer moves too far (scroll/drag).
+ * @param {HTMLElement} el
+ * @param {(event: PointerEvent) => void} onLongPress
+ */
+function attachLongPress(el, onLongPress) {
+    let timer = null;
+    let startX = 0;
+    let startY = 0;
+    let pressed = false;
+    let fired = false;
+
+    const clearTimer = () => {
+        if (timer != null) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    };
+
+    const endPress = () => {
+        clearTimer();
+        pressed = false;
+        el.classList.remove('is-long-pressing');
+    };
+
+    el.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (el.classList.contains('mdplain-view-item--mini-editing')) return;
+        pressed = true;
+        fired = false;
+        startX = event.clientX;
+        startY = event.clientY;
+        el.classList.add('is-long-pressing');
+        clearTimer();
+        timer = window.setTimeout(() => {
+            timer = null;
+            if (!pressed) return;
+            fired = true;
+            el.classList.remove('is-long-pressing');
+            onLongPress(event);
+        }, PLAIN_LIST_LONG_PRESS_MS);
+    });
+
+    el.addEventListener('pointermove', (event) => {
+        if (!pressed || timer == null) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        if (dx * dx + dy * dy > PLAIN_LIST_LONG_PRESS_MOVE_PX * PLAIN_LIST_LONG_PRESS_MOVE_PX) {
+            endPress();
+        }
+    });
+
+    el.addEventListener('pointerup', endPress);
+    el.addEventListener('pointercancel', endPress);
+
+    el.addEventListener(
+        'click',
+        (event) => {
+            if (!fired) return;
+            event.preventDefault();
+            event.stopPropagation();
+            fired = false;
+        },
+        true
+    );
+
+    el.addEventListener('contextmenu', (event) => {
+        // Suppress native menus that conflict with long-press-to-edit.
+        if (fired || pressed || timer != null) {
+            event.preventDefault();
+        }
+    });
+}
+
+/**
+ * Inline mini editor for one plain-list item (preview stays open).
+ * @param {object} args
+ */
+function openPlainItemMiniEditor({
+    li,
+    item,
+    block,
+    seg,
+    segIndex,
+    listIndex,
+    doc,
+    onChange,
+}) {
+    if (!li || li.classList.contains('mdplain-view-item--mini-editing')) return;
+
+    if (typeof closeActivePlainMiniEditor === 'function') {
+        // Commit prior item without rebuilding the whole preview (keeps this `li` alive).
+        closeActivePlainMiniEditor({ commit: true, deferRefresh: true });
+    }
+
+    const snapshot = {
+        text: item.text || '',
+        checked: item.checked === true || item.checked === false ? item.checked : null,
+    };
+    const isTask = snapshot.checked !== null || Boolean(block.task);
+
+    const mutateItem = (mutator, opts = {}) => {
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const target = (listBlock.items || []).find((it) => it.id === item.id);
+                if (!target) return;
+                mutator(target, listBlock);
+            },
+            opts: { stayInView: true, ...opts },
+        });
+    };
+
+    let closed = false;
+    const cleanupOutside = () => {
+        document.removeEventListener('pointerdown', onOutsidePointerDown, true);
+        document.removeEventListener('keydown', onDocKeyDown, true);
+    };
+
+    const paintViewItem = (text, checked) => {
+        li.classList.remove('mdplain-view-item--mini-editing');
+        li.title = 'Long-press to edit this item';
+        li.replaceChildren();
+        if (checked === true || checked === false) {
+            const label = document.createElement('label');
+            label.className = 'mdplain-task-label';
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.disabled = true;
+            box.checked = Boolean(checked);
+            const span = document.createElement('span');
+            span.textContent = text || 'Untitled item';
+            label.append(box, span);
+            li.appendChild(label);
+        } else {
+            const textEl = document.createElement('span');
+            textEl.className = 'mdplain-view-text';
+            textEl.textContent = text || 'Untitled item';
+            li.appendChild(textEl);
+        }
+    };
+
+    const finish = ({ commit = true, deleted = false, deferRefresh = false, abandon = false } = {}) => {
+        if (closed) return;
+        closed = true;
+        if (closeActivePlainMiniEditor === closeFn) closeActivePlainMiniEditor = null;
+        cleanupOutside();
+        if (abandon) return;
+
+        if (deleted) {
+            mutatePlainListInSegment({
+                seg,
+                segIndex,
+                listIndex,
+                doc,
+                onChange,
+                mutator: (listBlock) => {
+                    listBlock.items = (listBlock.items || []).filter((it) => it.id !== item.id);
+                },
+                opts: { stayInView: true },
+            });
+            return;
+        }
+
+        if (!commit) {
+            mutateItem(
+                (target, listBlock) => {
+                    target.text = snapshot.text;
+                    if (snapshot.checked !== null) {
+                        target.checked = snapshot.checked;
+                        listBlock.task = true;
+                    }
+                },
+                deferRefresh ? { skipRender: true } : {}
+            );
+            if (deferRefresh) {
+                paintViewItem(snapshot.text, snapshot.checked);
+            }
+            return;
+        }
+
+        const nextText = textInput.value;
+        const nextChecked = checkInput
+            ? checkInput.checked
+            : snapshot.checked !== null
+              ? snapshot.checked
+              : null;
+        mutateItem(
+            (target, listBlock) => {
+                target.text = nextText;
+                if (checkInput) {
+                    target.checked = checkInput.checked;
+                    listBlock.task = true;
+                }
+            },
+            deferRefresh ? { skipRender: true } : {}
+        );
+        if (deferRefresh) {
+            paintViewItem(nextText, nextChecked);
+        }
+    };
+
+    const closeFn = (opts) => finish(opts);
+    closeActivePlainMiniEditor = closeFn;
+
+    li.classList.add('mdplain-view-item--mini-editing');
+    li.title = '';
+    li.replaceChildren();
+
+    const editor = document.createElement('div');
+    editor.className = 'mdplain-mini-editor';
+
+    let checkInput = null;
+    if (isTask) {
+        const checkRow = document.createElement('label');
+        checkRow.className = 'mdplain-mini-check';
+        checkInput = document.createElement('input');
+        checkInput.type = 'checkbox';
+        checkInput.className = 'mdplain-check';
+        checkInput.checked = Boolean(item.checked);
+        checkInput.setAttribute('aria-label', 'Completed');
+        checkInput.addEventListener('change', () => {
+            mutateItem(
+                (target, listBlock) => {
+                    target.checked = checkInput.checked;
+                    listBlock.task = true;
+                },
+                { skipRender: true }
+            );
+        });
+        const checkLabel = document.createElement('span');
+        checkLabel.textContent = 'Done';
+        checkRow.append(checkInput, checkLabel);
+        editor.appendChild(checkRow);
+    }
+
+    const textInput = document.createElement('textarea');
+    textInput.className = 'mdplain-mini-text';
+    textInput.rows = 2;
+    textInput.value = item.text || '';
+    textInput.placeholder = 'Item text';
+    textInput.setAttribute('aria-label', 'Edit list item');
+    textInput.spellcheck = true;
+
+    const syncHeight = () => {
+        textInput.style.height = '0px';
+        const maxPx = Math.round(window.innerHeight * 0.35);
+        textInput.style.height = `${Math.max(44, Math.min(textInput.scrollHeight, maxPx))}px`;
+    };
+
+    textInput.addEventListener('input', () => {
+        mutateItem((target) => {
+            target.text = textInput.value;
+        }, { skipRender: true });
+        syncHeight();
+    });
+
+    textInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            finish({ commit: false });
+            return;
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            finish({ commit: true });
+        }
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'mdplain-mini-actions';
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-ghost btn-small';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    delBtn.addEventListener('click', () => {
+        if (!window.confirm('Delete this list item?')) return;
+        finish({ deleted: true });
+    });
+
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'btn btn-primary btn-small';
+    doneBtn.textContent = 'Done';
+    doneBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    doneBtn.addEventListener('click', () => finish({ commit: true }));
+
+    actions.append(delBtn, doneBtn);
+    editor.append(textInput, actions);
+    li.appendChild(editor);
+
+    function onOutsidePointerDown(event) {
+        if (li.contains(/** @type {Node} */ (event.target))) return;
+        finish({ commit: true });
+    }
+
+    function onDocKeyDown(event) {
+        if (event.key === 'Escape' && !closed) {
+            event.preventDefault();
+            finish({ commit: false });
+        }
+    }
+
+    // Defer so the long-press pointerup / click does not immediately close.
+    requestAnimationFrame(() => {
+        if (closed) return;
+        document.addEventListener('pointerdown', onOutsidePointerDown, true);
+        document.addEventListener('keydown', onDocKeyDown, true);
+        syncHeight();
+        textInput.focus();
+        textInput.select();
+    });
+}
+
+/**
+ * @param {object} block
+ * @param {{ onItemLongPress?: (item: object, li: HTMLElement) => void }} [options]
+ */
+function renderPlainListViewItems(block, options = {}) {
+    const { onItemLongPress } = options;
     const tag = block.ordered ? 'ol' : 'ul';
     const listEl = document.createElement(tag);
     listEl.className = 'mdplain-view-items';
     if (block.task) listEl.classList.add('mdplain-view-items--task');
     listEl.setAttribute('role', 'list');
+    listEl.title = typeof onItemLongPress === 'function' ? 'Long-press an item to edit' : '';
 
     const items = block.items || [];
     if (!items.length) {
@@ -1127,7 +1472,12 @@ function renderPlainListViewItems(block) {
     for (const item of items) {
         const li = document.createElement('li');
         li.className = 'mdplain-view-item';
+        li.dataset.plainItemId = item.id;
         li.setAttribute('role', 'listitem');
+        if (typeof onItemLongPress === 'function') {
+            li.title = 'Long-press to edit this item';
+            attachLongPress(li, () => onItemLongPress(item, li));
+        }
 
         if (item.checked === true || item.checked === false) {
             const label = document.createElement('label');
