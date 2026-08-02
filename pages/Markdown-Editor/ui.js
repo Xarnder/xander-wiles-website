@@ -76,6 +76,7 @@ export function bindUi() {
     els.viewModeBar = document.getElementById('view-mode-bar');
     els.modeList = document.getElementById('mode-list');
     els.modePreview = document.getElementById('mode-preview');
+    els.modeContents = document.getElementById('mode-contents');
     els.modeRaw = document.getElementById('mode-raw');
     els.editorToast = document.getElementById('editor-toast');
     els.listsRoot = document.getElementById('lists-root');
@@ -109,6 +110,8 @@ export function bindUi() {
     els.nameDialogConfirm = document.getElementById('name-dialog-confirm');
     els.deleteListDialog = document.getElementById('delete-list-dialog');
     els.deleteListDialogName = document.getElementById('delete-list-dialog-name');
+    els.deleteListItemDialog = document.getElementById('delete-list-item-dialog');
+    els.deleteListItemDialogName = document.getElementById('delete-list-item-dialog-name');
     return els;
 }
 
@@ -949,6 +952,7 @@ export function setViewModeUi(mode) {
     const buttons = [
         [els.modeList, 'list'],
         [els.modePreview, 'preview'],
+        [els.modeContents, 'contents'],
         [els.modeRaw, 'raw'],
     ];
     for (const [btn, name] of buttons) {
@@ -960,7 +964,7 @@ export function setViewModeUi(mode) {
 }
 
 /**
- * @param {'list' | 'preview' | 'raw'} mode
+ * @param {'list' | 'preview' | 'contents' | 'raw'} mode
  * @param {{ hasFile?: boolean }} [options]
  */
 export function applyEditorDisplayMode(mode, options = {}) {
@@ -979,7 +983,7 @@ export function applyEditorDisplayMode(mode, options = {}) {
     if (els.viewModeBar) els.viewModeBar.hidden = false;
     setViewModeUi(mode);
 
-    const structured = mode === 'list' || mode === 'preview';
+    const structured = mode === 'list' || mode === 'preview' || mode === 'contents';
     if (els.listsRoot) els.listsRoot.hidden = !structured;
     if (els.markdownPreview) els.markdownPreview.hidden = true;
     els.editor.hidden = mode !== 'raw';
@@ -1019,6 +1023,41 @@ export function confirmDeleteList(listTitle) {
     if (nameEl) {
         nameEl.hidden = false;
         nameEl.textContent = title;
+    }
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            resolve(dialog.returnValue === 'delete');
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+    });
+}
+
+/**
+ * Confirm deleting a single list item (custom or plain).
+ * @param {string} [itemText]
+ * @returns {Promise<boolean>}
+ */
+export function confirmDeleteListItem(itemText) {
+    const dialog = els.deleteListItemDialog;
+    const nameEl = els.deleteListItemDialogName;
+    const label = String(itemText || '').trim();
+
+    if (!dialog) {
+        return Promise.resolve(window.confirm('Delete this list item?'));
+    }
+
+    if (nameEl) {
+        if (label) {
+            nameEl.hidden = false;
+            nameEl.textContent = label.length > 120 ? `${label.slice(0, 117)}…` : label;
+        } else {
+            nameEl.hidden = true;
+            nameEl.textContent = '';
+        }
     }
 
     return new Promise((resolve) => {

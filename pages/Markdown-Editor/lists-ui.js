@@ -30,7 +30,7 @@ import {
     renderMarkdown,
     splitMarkdownBlocks,
 } from './markdown.js';
-import { confirmDeleteList } from './ui.js';
+import { confirmDeleteList, confirmDeleteListItem } from './ui.js';
 import { PREVIEW_TOC_OPEN_DEFAULT, PREVIEW_TOC_OPEN_KEY, PREVIEW_TOC_STICKY_DEFAULT, PREVIEW_TOC_STICKY_KEY } from './config.js';
 import { notifySettingsDirty } from './settings-sync.js';
 
@@ -83,16 +83,18 @@ export function writePreviewTocSticky(sticky) {
 /**
  * @param {HTMLElement} root
  * @param {object} options
- * @param {'list' | 'preview'} options.mode
+ * @param {'list' | 'preview' | 'contents'} options.mode
  * @param {object} options.doc
  * @param {(doc: object, opts?: object) => void} options.onChange
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
  * @param {string} [options.focusItemId]
  * @param {string} [options.focusPlainItemId]
+ * @param {string} [options.focusTocId]
  * @param {boolean} [options.placingList]
  * @param {object | null} [options.pendingImportList] — when placing, insert this list instead of an empty one
  * @param {boolean} [options.clickEdit]
  * @param {(payload: { segIndex: number, localLine: number, prefix: string }) => void} [options.onEditSpot]
+ * @param {(tocId: string) => void} [options.onContentsSelect]
  */
 export function renderListsUi(root, options) {
     if (typeof closeActivePlainMiniEditor === 'function') {
@@ -105,10 +107,12 @@ export function renderListsUi(root, options) {
         onStatus,
         focusItemId,
         focusPlainItemId,
+        focusTocId = null,
         placingList = false,
         pendingImportList = null,
         clickEdit = false,
         onEditSpot = null,
+        onContentsSelect = null,
     } = options;
     const scrollTop = root.scrollTop;
     const plainListScroll = capturePlainListScroll(root);
@@ -116,6 +120,7 @@ export function renderListsUi(root, options) {
     const rootMods = [];
     if (placingList) rootMods.push('lists-root--placing');
     if (clickEdit) rootMods.push('lists-root--click-edit');
+    if (mode === 'contents') rootMods.push('lists-root--contents');
     root.className = ['lists-root', ...rootMods].join(' ');
     const place = (target) => placeListAt(doc, onChange, target, pendingImportList);
 
@@ -124,11 +129,21 @@ export function renderListsUi(root, options) {
     const validLists = (doc.segments || []).filter((s) => s.type === 'mdlist' && s.list);
     const errorLists = (doc.segments || []).filter((s) => s.type === 'mdlist' && !s.list);
 
-    if (errorLists.length) {
+    if (errorLists.length && mode !== 'contents') {
         const warn = document.createElement('p');
         warn.className = 'lists-warning';
         warn.textContent = `${errorLists.length} custom list block(s) could not be parsed. Switch to Raw to edit the markdown.`;
         root.appendChild(warn);
+    }
+
+    if (mode === 'contents') {
+        root.appendChild(
+            renderContentsView(doc, {
+                onSelect: typeof onContentsSelect === 'function' ? onContentsSelect : null,
+            })
+        );
+        restoreScroll(root, scrollTop, plainListScroll);
+        return;
     }
 
     if (mode === 'list') {
@@ -182,16 +197,6 @@ export function renderListsUi(root, options) {
     }
 
     // Preview — same layout while placing / click-editing; selection UI is layered on top
-    const outline = placingList || clickEdit ? [] : buildPreviewOutline(doc);
-    let tocMount = null;
-    if (outline.length) {
-        tocMount = document.createElement('div');
-        tocMount.className = readPreviewTocSticky()
-            ? 'preview-toc-mount preview-toc-mount--sticky'
-            : 'preview-toc-mount';
-        root.appendChild(tocMount);
-    }
-
     for (let segIndex = 0; segIndex < (doc.segments || []).length; segIndex += 1) {
         const seg = doc.segments[segIndex];
         if (seg.type === 'markdown') {
@@ -235,10 +240,6 @@ export function renderListsUi(root, options) {
         }
     }
 
-    if (tocMount && outline.length) {
-        tocMount.appendChild(renderPreviewToc(outline, root));
-    }
-
     if (placingList) {
         const hasPlaceable =
             root.querySelector('.md-preview--segment [data-md-line], .mdlist-stack[data-place-seg]') !=
@@ -268,33 +269,18 @@ export function renderListsUi(root, options) {
         );
     } else if (clickEdit) {
         onStatus?.('Tap the text you want to edit — Raw opens at that spot.', 'ok');
-    } else if (!validLists.length && !errorLists.length) {
-        const hint = document.createElement('div');
-        hint.className = 'lists-empty';
-        const p = document.createElement('p');
-        p.className = 'lists-empty-hint';
-        p.textContent = 'No custom lists yet.';
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-primary';
-        btn.textContent = 'Add list';
-        btn.addEventListener('click', () => {
-            onChange(doc, { soft: true, placingList: true, ...changeOpts(doc) });
-        });
-        hint.append(p, btn);
-        root.appendChild(hint);
-    } else {
-        const addList = document.createElement('button');
-        addList.type = 'button';
-        addList.className = 'btn btn-ghost btn-block';
-        addList.textContent = '+ Add list';
-        addList.addEventListener('click', () => {
-            onChange(doc, { soft: true, placingList: true, ...changeOpts(doc) });
-        });
-        root.appendChild(addList);
     }
 
-    restoreScroll(root, scrollTop, plainListScroll);
+    if (focusTocId) {
+        // Prefer jump target over restoring prior Preview scroll.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                jumpToTocTarget(root, focusTocId);
+            });
+        });
+    } else {
+        restoreScroll(root, scrollTop, plainListScroll);
+    }
     focusItem(root, focusItemId);
     focusPlainItem(root, focusPlainItemId);
 }
@@ -654,57 +640,63 @@ function buildPreviewOutline(doc) {
     return items;
 }
 
-function renderPreviewToc(outline, root) {
-    const details = document.createElement('details');
-    details.className = 'preview-toc';
-    details.open = readPreviewTocOpen();
-    details.addEventListener('toggle', () => {
-        writePreviewTocOpen(details.open);
-    });
+/**
+ * Full-page Contents view (fourth editor mode).
+ * @param {object} doc
+ * @param {{ onSelect?: ((tocId: string) => void) | null }} [options]
+ */
+function renderContentsView(doc, options = {}) {
+    const { onSelect = null } = options;
+    const outline = buildPreviewOutline(doc);
+    const wrap = document.createElement('div');
+    wrap.className = 'contents-view';
 
-    const summary = document.createElement('summary');
-    summary.className = 'preview-toc-summary';
-
-    const title = document.createElement('span');
-    title.className = 'preview-toc-title';
-    title.textContent = 'Contents';
-
-    const meta = document.createElement('span');
-    meta.className = 'preview-toc-meta';
+    const header = document.createElement('div');
+    header.className = 'contents-view-header';
+    const heading = document.createElement('h2');
+    heading.className = 'contents-view-title';
+    heading.textContent = 'Contents';
+    const meta = document.createElement('p');
+    meta.className = 'contents-view-meta';
     const n = outline.length;
-    meta.textContent = `${n} section${n === 1 ? '' : 's'}`;
+    meta.textContent = n
+        ? `${n} section${n === 1 ? '' : 's'}`
+        : 'No headings or custom lists in this file yet.';
+    header.append(heading, meta);
+    wrap.appendChild(header);
 
-    const hint = document.createElement('span');
-    hint.className = 'preview-toc-hint';
-    hint.textContent = details.open ? 'Collapse' : 'Expand';
-    details.addEventListener('toggle', () => {
-        hint.textContent = details.open ? 'Collapse' : 'Expand';
-    });
-
-    summary.append(title, meta, hint);
-    details.appendChild(summary);
+    if (!outline.length) {
+        const empty = document.createElement('p');
+        empty.className = 'contents-view-empty';
+        empty.textContent = 'Add headings in Raw or Preview to build a table of contents.';
+        wrap.appendChild(empty);
+        return wrap;
+    }
 
     const nav = document.createElement('nav');
-    nav.className = 'preview-toc-nav';
+    nav.className = 'contents-view-nav';
     nav.setAttribute('aria-label', 'Document contents');
 
     const list = document.createElement('ol');
-    list.className = 'preview-toc-list';
+    list.className = 'contents-view-list';
 
     for (const item of outline) {
         const li = document.createElement('li');
-        li.className = 'preview-toc-item';
+        li.className = 'contents-view-item';
         li.dataset.level = String(item.level);
         li.style.setProperty('--toc-level', String(Math.max(0, item.level - 1)));
 
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'preview-toc-link';
-        if (item.kind === 'list') btn.classList.add('preview-toc-link--list');
+        btn.className = 'contents-view-link';
+        if (item.kind === 'list') btn.classList.add('contents-view-link--list');
         btn.textContent = item.title;
-        btn.title = item.kind === 'list' ? `Jump to list: ${item.title}` : `Jump to ${item.title}`;
+        btn.title =
+            item.kind === 'list'
+                ? `Open Preview at list: ${item.title}`
+                : `Open Preview at ${item.title}`;
         btn.addEventListener('click', () => {
-            jumpToTocTarget(root, item.id);
+            if (typeof onSelect === 'function') onSelect(item.id);
         });
 
         li.appendChild(btn);
@@ -712,8 +704,8 @@ function renderPreviewToc(outline, root) {
     }
 
     nav.appendChild(list);
-    details.appendChild(nav);
-    return details;
+    wrap.appendChild(nav);
+    return wrap;
 }
 
 function jumpToTocTarget(root, id) {
@@ -748,136 +740,88 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
     const focusPlainItemId = options.focusPlainItemId || null;
     const wrap = document.createElement('div');
     wrap.className = 'mixed-markdown-wrap';
-    const editing = Boolean(seg._editing) && !placingList && !clickEdit;
+    // Whole-section Edit lives in Raw / Edit here — never inline in Preview.
+    seg._editing = false;
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'mixed-md-toolbar';
-    const label = document.createElement('span');
-    label.className = 'mixed-md-label';
-    label.textContent = 'Markdown';
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'btn btn-ghost btn-small';
-    toggle.textContent = editing ? 'Done' : 'Edit';
-    toggle.disabled = placingList || clickEdit;
-    if (!placingList && !clickEdit) {
-        toggle.addEventListener('click', () => {
-            if (editing) {
-                seg._editing = false;
-            } else {
-                seg._editing = true;
-                // Whole-section raw edit exits structured plain-list edit
-                seg._editingPlainLists = {};
-                seg._plainBlocks = null;
-                seg._plainBlocksSource = null;
-            }
-            onChange(doc, {
-                soft: true,
-                tagFilters: collectTagFilters(doc),
-                editingListIds: collectEditingLists(doc),
-                editingPlainLists: collectEditingPlainLists(doc),
-            });
-        });
+    const sourceText = stripMdlistAgentNotes(seg.text || '');
+    if (!sourceText.trim()) {
+        const preview = document.createElement('div');
+        preview.className = 'md-preview md-preview--segment';
+        preview.dataset.segIndex = String(segIndex);
+        preview.innerHTML = '<p class="md-empty">Empty markdown section.</p>';
+        wrap.appendChild(preview);
+        return wrap;
     }
-    toolbar.append(label, toggle);
-    wrap.appendChild(toolbar);
 
-    if (editing) {
-        const fieldId = `mixed-md-${segIndex}`;
-        const ta = document.createElement('textarea');
-        ta.id = fieldId;
-        ta.className = 'mixed-markdown-editor';
-        ta.value = seg.text || '';
-        ta.spellcheck = true;
-        ta.rows = Math.min(18, Math.max(4, (seg.text || '').split('\n').length + 1));
-        ta.addEventListener('input', () => {
-            seg.text = ta.value;
-            onChange(doc, {
-                skipRender: true,
-                tagFilters: collectTagFilters(doc),
-                editingListIds: collectEditingLists(doc),
-                editingPlainLists: collectEditingPlainLists(doc),
-            });
-        });
-        wrap.appendChild(ta);
-        requestAnimationFrame(() => ta.focus());
-    } else {
-        const sourceText = stripMdlistAgentNotes(seg.text || '');
-        if (!sourceText.trim()) {
-            const preview = document.createElement('div');
-            preview.className = 'md-preview md-preview--segment';
-            preview.dataset.segIndex = String(segIndex);
-            preview.innerHTML = '<p class="md-empty">Empty markdown section — tap Edit to write.</p>';
-            wrap.appendChild(preview);
-        } else if (placingList || clickEdit) {
-            // Placement / click-edit need a single preview tree with data-md-line anchors
-            const preview = document.createElement('div');
-            preview.className = 'md-preview md-preview--segment';
-            preview.dataset.segIndex = String(segIndex);
-            preview.innerHTML = renderMarkdown(sourceText);
-            assignHeadingTocIds(preview, segIndex);
-            wrap.appendChild(preview);
-            if (placingList && listsRoot) {
-                enableMarkdownPlaceTargets(
-                    preview,
+    if (placingList || clickEdit) {
+        // Placement / click-edit need a single preview tree with data-md-line anchors
+        const preview = document.createElement('div');
+        preview.className = 'md-preview md-preview--segment';
+        preview.dataset.segIndex = String(segIndex);
+        preview.innerHTML = renderMarkdown(sourceText);
+        assignHeadingTocIds(preview, segIndex);
+        wrap.appendChild(preview);
+        if (placingList && listsRoot) {
+            enableMarkdownPlaceTargets(
+                preview,
+                segIndex,
+                sourceText,
+                doc,
+                onChange,
+                listsRoot,
+                pendingImportList
+            );
+        } else if (clickEdit && typeof onEditSpot === 'function') {
+            enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
+        }
+        return wrap;
+    }
+
+    const blocks = getCachedPlainBlocks(seg);
+    // Prefer cached blocks when segment text still matches (edit session)
+    const editingMap = seg._editingPlainLists || {};
+    let plainListIndex = 0;
+    let renderedAny = false;
+
+    for (const block of blocks) {
+        if (block.type === 'plainlist') {
+            const listIndex = plainListIndex;
+            plainListIndex += 1;
+            wrap.appendChild(
+                renderPlainListBlock({
+                    block,
+                    listIndex,
+                    seg,
                     segIndex,
-                    sourceText,
                     doc,
                     onChange,
-                    listsRoot,
-                    pendingImportList
-                );
-            } else if (clickEdit && typeof onEditSpot === 'function') {
-                enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
-            }
-        } else {
-            const blocks = getCachedPlainBlocks(seg);
-            // Prefer cached blocks when segment text still matches (edit session)
-            const editingMap = seg._editingPlainLists || {};
-            let plainListIndex = 0;
-            let renderedAny = false;
-
-            for (const block of blocks) {
-                if (block.type === 'plainlist') {
-                    const listIndex = plainListIndex;
-                    plainListIndex += 1;
-                    wrap.appendChild(
-                        renderPlainListBlock({
-                            block,
-                            listIndex,
-                            seg,
-                            segIndex,
-                            doc,
-                            onChange,
-                            editing: Boolean(editingMap[listIndex]),
-                            focusPlainItemId,
-                        })
-                    );
-                    renderedAny = true;
-                    continue;
-                }
-
-                const prose = block.text || '';
-                if (!prose.trim()) continue;
-                const preview = document.createElement('div');
-                preview.className = 'md-preview md-preview--segment md-preview--prose-chunk';
-                preview.dataset.segIndex = String(segIndex);
-                preview.innerHTML = renderMarkdown(prose, {
-                    lineOffset: Math.max(0, (block.startLine || 1) - 1),
-                });
-                assignHeadingTocIds(preview, segIndex);
-                wrap.appendChild(preview);
-                renderedAny = true;
-            }
-
-            if (!renderedAny) {
-                const preview = document.createElement('div');
-                preview.className = 'md-preview md-preview--segment';
-                preview.dataset.segIndex = String(segIndex);
-                preview.innerHTML = '<p class="md-empty">Empty markdown section — tap Edit to write.</p>';
-                wrap.appendChild(preview);
-            }
+                    editing: Boolean(editingMap[listIndex]),
+                    focusPlainItemId,
+                })
+            );
+            renderedAny = true;
+            continue;
         }
+
+        const prose = block.text || '';
+        if (!prose.trim()) continue;
+        const preview = document.createElement('div');
+        preview.className = 'md-preview md-preview--segment md-preview--prose-chunk';
+        preview.dataset.segIndex = String(segIndex);
+        preview.innerHTML = renderMarkdown(prose, {
+            lineOffset: Math.max(0, (block.startLine || 1) - 1),
+        });
+        assignHeadingTocIds(preview, segIndex);
+        wrap.appendChild(preview);
+        renderedAny = true;
+    }
+
+    if (!renderedAny) {
+        const preview = document.createElement('div');
+        preview.className = 'md-preview md-preview--segment';
+        preview.dataset.segIndex = String(segIndex);
+        preview.innerHTML = '<p class="md-empty">Empty markdown section.</p>';
+        wrap.appendChild(preview);
     }
 
     return wrap;
@@ -1408,8 +1352,9 @@ function openPlainItemMiniEditor({
     delBtn.className = 'btn btn-ghost btn-small';
     delBtn.textContent = 'Delete';
     delBtn.addEventListener('mousedown', (event) => event.preventDefault());
-    delBtn.addEventListener('click', () => {
-        if (!window.confirm('Delete this list item?')) return;
+    delBtn.addEventListener('click', async () => {
+        const ok = await confirmDeleteListItem(textInput.value || item.text);
+        if (!ok) return;
         finish({ deleted: true });
     });
 
@@ -1426,11 +1371,13 @@ function openPlainItemMiniEditor({
 
     function onOutsidePointerDown(event) {
         if (li.contains(/** @type {Node} */ (event.target))) return;
+        if (event.target instanceof Element && event.target.closest('dialog')) return;
         finish({ commit: true });
     }
 
     function onDocKeyDown(event) {
         if (event.key === 'Escape' && !closed) {
+            if (document.querySelector('dialog[open]')) return;
             event.preventDefault();
             finish({ commit: false });
         }
@@ -1642,8 +1589,9 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     delBtn.type = 'button';
     delBtn.className = 'btn btn-ghost btn-small mdlist-delete';
     delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', () => {
-        if (!window.confirm('Delete this list item?')) return;
+    delBtn.addEventListener('click', async () => {
+        const ok = await confirmDeleteListItem(textInput.value || item.text);
+        if (!ok) return;
         onMutate((listBlock) => {
             listBlock.items = (listBlock.items || []).filter((it) => it.id !== item.id);
         });
@@ -2213,8 +2161,9 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
     delBtn.type = 'button';
     delBtn.className = 'btn btn-ghost btn-small mdlist-delete';
     delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', () => {
-        if (!window.confirm('Delete this list item?')) return;
+    delBtn.addEventListener('click', async () => {
+        const ok = await confirmDeleteListItem(textInput.value || item.text);
+        if (!ok) return;
         onMutate(() => deleteItem(list, item.id));
     });
 

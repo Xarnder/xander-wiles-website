@@ -80,7 +80,7 @@ import {
     serializeDocument,
 } from './lists.js';
 import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
-import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocOpen, readPreviewTocSticky, renderListsUi } from './lists-ui.js';
 import {
     flushCloudSettingsSave,
     pullCloudSettings,
@@ -128,7 +128,6 @@ import {
     syncFinderLayoutControls,
     syncNavLayout,
     syncThemeControl,
-    syncTocStickyControl,
     applyPwaTopGap,
     syncPwaTopGapControl,
     applyPwaBottomOffset,
@@ -142,7 +141,7 @@ import {
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
-const VIEW_MODES = new Set(['list', 'preview', 'raw']);
+const VIEW_MODES = new Set(['list', 'preview', 'contents', 'raw']);
 const LEGACY_VIEW_MODES = {
     custom: 'list',
     mixed: 'preview',
@@ -157,7 +156,7 @@ const state = {
     nextPageToken: null,
     loadingFolder: false,
     editor: createEditorState(),
-    viewMode: 'raw', // 'list' | 'preview' | 'raw'
+    viewMode: 'raw', // 'list' | 'preview' | 'contents' | 'raw'
     documentModel: null,
     tagFilters: {},
     editingListIds: {},
@@ -531,7 +530,6 @@ function applyCloudSettings(cloud) {
             } catch {
                 // ignore
             }
-            syncTocStickyControl(cloud.previewTocSticky);
         }
 
         if (typeof cloud.previewTocOpen === 'boolean') {
@@ -859,7 +857,11 @@ function flushCurrentEditorContent() {
     if (!state.editor.fileId) return;
     if (state.viewMode === 'raw') {
         setEditorText(state.editor, els.editor.value);
-    } else if (state.viewMode === 'list' || state.viewMode === 'preview') {
+    } else if (
+        state.viewMode === 'list' ||
+        state.viewMode === 'preview' ||
+        state.viewMode === 'contents'
+    ) {
         if (state.documentModel) {
             const serialized = serializeDocument(state.documentModel);
             setEditorText(state.editor, serialized);
@@ -871,15 +873,25 @@ function flushCurrentEditorContent() {
 function renderStructuredEditor(extra = {}) {
     const els = getEls();
     if (!state.documentModel || !els.listsRoot) return;
+    const structuredMode =
+        state.viewMode === 'list'
+            ? 'list'
+            : state.viewMode === 'contents'
+              ? 'contents'
+              : 'preview';
     renderListsUi(els.listsRoot, {
-        mode: state.viewMode === 'list' ? 'list' : 'preview',
+        mode: structuredMode,
         doc: state.documentModel,
         focusItemId: extra.focusItemId || null,
         focusPlainItemId: extra.focusPlainItemId || null,
+        focusTocId: extra.focusTocId || null,
         placingList: state.viewMode === 'preview' && state.placingList,
         pendingImportList: state.viewMode === 'preview' && state.placingList ? state.pendingImportList : null,
         clickEdit: state.viewMode === 'preview' && state.clickEdit,
         onEditSpot: (payload) => jumpToRawAtPreviewSpot(payload),
+        onContentsSelect: (tocId) => {
+            applyViewMode('preview', { persist: true, focusTocId: tocId });
+        },
         onStatus: (msg, kind) => setStatus(msg, kind),
         onChange: (doc, opts = {}) => {
             if (typeof opts.placingList === 'boolean') {
@@ -1099,6 +1111,7 @@ function applyViewMode(mode, {
     focusLine: focusLineOpt = null,
     selectWord = false,
     focusEditor = false,
+    focusTocId = null,
 } = {}) {
     if (!VIEW_MODES.has(mode)) mode = 'raw';
     const els = getEls();
@@ -1155,7 +1168,11 @@ function applyViewMode(mode, {
     // Leaving editable surfaces: flush first
     if (state.viewMode === 'raw' || reparseFromTextarea) {
         setEditorText(state.editor, els.editor.value);
-    } else if (state.viewMode === 'list' || state.viewMode === 'preview') {
+    } else if (
+        state.viewMode === 'list' ||
+        state.viewMode === 'preview' ||
+        state.viewMode === 'contents'
+    ) {
         if (state.documentModel) {
             const serialized = serializeDocument(state.documentModel);
             setEditorText(state.editor, serialized);
@@ -1163,7 +1180,7 @@ function applyViewMode(mode, {
         }
     }
 
-    if (mode === 'list' || mode === 'preview') {
+    if (mode === 'list' || mode === 'preview' || mode === 'contents') {
         refreshDocumentModelFromText(state.editor.editorContent);
         if (pendingPreviewOffset != null && state.documentModel) {
             previewAnchor = previewAnchorFromOffset(state.documentModel, pendingPreviewOffset);
@@ -1210,11 +1227,11 @@ function applyViewMode(mode, {
         return;
     }
 
-    renderStructuredEditor();
+    renderStructuredEditor({ focusTocId: focusTocId || null });
     syncNavLayout();
     syncImportListButton();
     syncClickEditButton();
-    if (previewAnchor && els.listsRoot) {
+    if (previewAnchor && els.listsRoot && !focusTocId) {
         // After lists-ui restoreScroll rAF, place the matching Preview block in view.
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -1978,7 +1995,11 @@ function showAppView(name, extra = {}) {
     showView(name, { hasOpenFile: hasOpenFile(), ...extra });
     if (name === 'editor' && hasOpenFile() && !extra.loading) {
         applyEditorDisplayMode(state.viewMode, { hasFile: true });
-        if (state.viewMode === 'list' || state.viewMode === 'preview') {
+        if (
+            state.viewMode === 'list' ||
+            state.viewMode === 'preview' ||
+            state.viewMode === 'contents'
+        ) {
             renderStructuredEditor();
         }
         syncNavLayout();
@@ -2332,25 +2353,12 @@ function wireEvents() {
     applySavedPreviewFontScale();
     applySavedListStripe();
     applySavedListLayout();
-    syncTocStickyControl(readPreviewTocSticky());
     if (els.prefTheme) {
         els.prefTheme.addEventListener('change', () => {
             const theme = THEME_VALUES.has(els.prefTheme.value) ? els.prefTheme.value : THEME_DEFAULT;
             writeTheme(theme);
             applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
             setStatus('Theme saved', 'ok');
-        });
-    }
-    if (els.prefTocSticky) {
-        els.prefTocSticky.addEventListener('change', () => {
-            writePreviewTocSticky(Boolean(els.prefTocSticky.checked));
-            if (state.viewMode === 'preview' && state.documentModel) {
-                renderStructuredEditor();
-            }
-            setStatus(
-                els.prefTocSticky.checked ? 'Contents will stay sticky' : 'Contents will scroll with the page',
-                'ok'
-            );
         });
     }
     if (els.prefPwaTopGap) {
@@ -2461,7 +2469,7 @@ function wireEvents() {
         syncEditorChrome(state.editor);
     });
 
-    const modeButtons = [els.modeList, els.modePreview, els.modeRaw];
+    const modeButtons = [els.modeList, els.modePreview, els.modeContents, els.modeRaw];
     for (const btn of modeButtons) {
         if (!btn) continue;
         btn.addEventListener('click', () => {

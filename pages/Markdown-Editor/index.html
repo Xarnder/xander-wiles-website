@@ -212,6 +212,7 @@
                         <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
                             <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
                             <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
+                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="contents" id="mode-contents">Contents</button>
                             <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
                         </div>
                         <p id="editor-toast" class="editor-toast" hidden role="status" aria-live="polite"></p>
@@ -248,11 +249,6 @@
                                 <option value="light">Light</option>
                             </select>
                         </label>
-                        <label class="settings-pref settings-pref--toggle">
-                            <span class="settings-pref-label">Sticky Contents in Preview</span>
-                            <input id="pref-toc-sticky" class="settings-toggle" type="checkbox">
-                        </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">When off, the Contents panel scrolls with the page. When on, it stays pinned at the top while you scroll.</p>
                         <label class="settings-pref settings-pref--slider" for="pref-pwa-top-gap">
                             <span class="settings-pref-label">Status bar spacing</span>
                             <span class="settings-slider-wrap">
@@ -475,6 +471,18 @@
             <div class="dialog-actions">
                 <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
                 <button type="submit" value="delete" class="btn btn-danger">Delete list</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="delete-list-item-dialog" class="dialog dialog--danger">
+        <form method="dialog" class="dialog-body">
+            <h2>Delete item?</h2>
+            <p>This removes the item from the list.</p>
+            <p id="delete-list-item-dialog-name" class="dialog-emphasis" hidden></p>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" value="delete" class="btn btn-danger">Delete item</button>
             </div>
         </form>
     </dialog>
