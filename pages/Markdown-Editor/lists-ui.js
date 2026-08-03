@@ -31,7 +31,14 @@ import {
     splitMarkdownBlocks,
 } from './markdown.js';
 import { confirmDeleteList, confirmDeleteListItem } from './ui.js';
-import { PREVIEW_TOC_OPEN_DEFAULT, PREVIEW_TOC_OPEN_KEY, PREVIEW_TOC_STICKY_DEFAULT, PREVIEW_TOC_STICKY_KEY } from './config.js';
+import {
+    DOUBLE_TAP_COPY_DEFAULT,
+    DOUBLE_TAP_COPY_KEY,
+    PREVIEW_TOC_OPEN_DEFAULT,
+    PREVIEW_TOC_OPEN_KEY,
+    PREVIEW_TOC_STICKY_DEFAULT,
+    PREVIEW_TOC_STICKY_KEY,
+} from './config.js';
 import { notifySettingsDirty } from './settings-sync.js';
 
 /** Persist which LLM-note disclosures are expanded across list re-renders. */
@@ -39,6 +46,187 @@ const expandedAgentNotes = new Set();
 
 /** Active plain-list single-item mini editor closer (preview). */
 let closeActivePlainMiniEditor = null;
+
+const DOUBLE_TAP_MS = 320;
+const DOUBLE_TAP_MOVE_PX = 14;
+
+export function readDoubleTapCopyEnabled() {
+    try {
+        const raw = localStorage.getItem(DOUBLE_TAP_COPY_KEY);
+        if (raw === '0') return false;
+        if (raw === '1') return true;
+    } catch {
+        // ignore
+    }
+    return DOUBLE_TAP_COPY_DEFAULT;
+}
+
+/**
+ * @param {boolean} enabled
+ * @returns {boolean}
+ */
+export function writeDoubleTapCopyEnabled(enabled) {
+    const next = Boolean(enabled);
+    try {
+        localStorage.setItem(DOUBLE_TAP_COPY_KEY, next ? '1' : '0');
+    } catch {
+        // ignore
+    }
+    notifySettingsDirty();
+    return next;
+}
+
+/**
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
+async function copyTextToClipboard(text) {
+    const value = String(text ?? '');
+    if (!value) return false;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(value);
+            return true;
+        }
+    } catch {
+        // fall through
+    }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * @param {string} text
+ * @param {(msg: string, kind?: string) => void} [onStatus]
+ * @param {string} [okMessage]
+ */
+async function copyWithStatus(text, onStatus, okMessage = 'Copied') {
+    const ok = await copyTextToClipboard(text);
+    onStatus?.(ok ? okMessage : 'Copy failed', ok ? 'ok' : 'error');
+    return ok;
+}
+
+function formatMdlistItemClipboard(item) {
+    const text = String(item?.text || '').trim();
+    const tags = Array.isArray(item?.tags) ? item.tags.filter(Boolean) : [];
+    if (!tags.length) return text;
+    return text ? `${text} (${tags.join(', ')})` : tags.join(', ');
+}
+
+function formatMdlistClipboard(list) {
+    const title = String(list?.title || 'Untitled list').trim() || 'Untitled list';
+    const lines = (list?.items || []).map((item, index) => {
+        const body = formatMdlistItemClipboard(item) || 'Untitled item';
+        return `${index + 1}. ${body}`;
+    });
+    return [title, ...lines].join('\n');
+}
+
+function formatPlainItemClipboard(item, block) {
+    const text = String(item?.text || '').trim();
+    const isTask =
+        Boolean(block?.task) || item?.checked === true || item?.checked === false;
+    if (isTask) {
+        return `${item?.checked ? '[x]' : '[ ]'} ${text}`.trim();
+    }
+    return text;
+}
+
+function formatPlainListClipboard(block) {
+    const items = block?.items || [];
+    return items
+        .map((item, index) => {
+            const text = String(item?.text || '').trim() || 'Untitled item';
+            if (block.task || item?.checked === true || item?.checked === false) {
+                return `- [${item?.checked ? 'x' : ' '}] ${text}`;
+            }
+            if (block.ordered) return `${index + 1}. ${text}`;
+            return `- ${text}`;
+        })
+        .join('\n');
+}
+
+function createListAddItemButton() {
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'mdlist-add-btn';
+    addBtn.setAttribute('aria-label', 'Add item');
+    addBtn.title = 'Add item';
+    const icon = document.createElement('span');
+    icon.className = 'mdlist-add-btn-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    addBtn.appendChild(icon);
+    return addBtn;
+}
+
+function createListCopyButton({ label = 'Copy list', title = 'Copy list' } = {}) {
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'mdlist-copy-btn';
+    copyBtn.setAttribute('aria-label', label);
+    copyBtn.title = title;
+    const icon = document.createElement('span');
+    icon.className = 'mdlist-copy-btn-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    copyBtn.appendChild(icon);
+    return copyBtn;
+}
+
+/**
+ * Double-tap (or double-click) to copy item text. Respects settings toggle.
+ * @param {HTMLElement} el
+ * @param {() => string} getText
+ * @param {(msg: string, kind?: string) => void} [onStatus]
+ */
+function attachDoubleTapCopy(el, getText, onStatus) {
+    let lastTapAt = 0;
+    let lastX = 0;
+    let lastY = 0;
+
+    el.addEventListener('pointerup', (event) => {
+        if (!readDoubleTapCopyEnabled()) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (el.classList.contains('mdplain-view-item--mini-editing')) return;
+        if (el.closest('.lists-root--click-edit, .lists-root--placing')) return;
+
+        const now = Date.now();
+        const dt = now - lastTapAt;
+        const dx = event.clientX - lastX;
+        const dy = event.clientY - lastY;
+        const near =
+            dx * dx + dy * dy <= DOUBLE_TAP_MOVE_PX * DOUBLE_TAP_MOVE_PX;
+
+        if (lastTapAt && dt > 0 && dt <= DOUBLE_TAP_MS && near) {
+            lastTapAt = 0;
+            event.preventDefault();
+            event.stopPropagation();
+            const text = String(getText() || '').trim();
+            if (!text) {
+                onStatus?.('Nothing to copy', 'warn');
+                return;
+            }
+            copyWithStatus(text, onStatus, 'Item copied');
+            return;
+        }
+
+        lastTapAt = now;
+        lastX = event.clientX;
+        lastY = event.clientY;
+    });
+}
 
 export function readPreviewTocOpen() {
     try {
@@ -89,6 +277,7 @@ export function writePreviewTocSticky(sticky) {
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
  * @param {string} [options.focusItemId]
  * @param {string} [options.focusPlainItemId]
+ * @param {string} [options.openMiniPlainItemId] — after render, open mini editor for this plain item
  * @param {string} [options.focusTocId]
  * @param {boolean} [options.placingList]
  * @param {object | null} [options.pendingImportList] — when placing, insert this list instead of an empty one
@@ -107,6 +296,7 @@ export function renderListsUi(root, options) {
         onStatus,
         focusItemId,
         focusPlainItemId,
+        openMiniPlainItemId = null,
         focusTocId = null,
         placingList = false,
         pendingImportList = null,
@@ -208,6 +398,8 @@ export function renderListsUi(root, options) {
                     pendingImportList,
                     root,
                     focusPlainItemId,
+                    openMiniPlainItemId,
+                    onStatus,
                 })
             );
             continue;
@@ -738,6 +930,7 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
     const pendingImportList = options.pendingImportList || null;
     const listsRoot = options.root || null;
     const focusPlainItemId = options.focusPlainItemId || null;
+    const openMiniPlainItemId = options.openMiniPlainItemId || null;
     const wrap = document.createElement('div');
     wrap.className = 'mixed-markdown-wrap';
     // Whole-section Edit lives in Raw / Edit here — never inline in Preview.
@@ -795,8 +988,10 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
                     segIndex,
                     doc,
                     onChange,
+                    onStatus: options.onStatus,
                     editing: Boolean(editingMap[listIndex]),
                     focusPlainItemId,
+                    openMiniPlainItemId,
                 })
             );
             renderedAny = true;
@@ -895,8 +1090,10 @@ function renderPlainListBlock({
     segIndex,
     doc,
     onChange,
+    onStatus,
     editing,
     focusPlainItemId,
+    openMiniPlainItemId = null,
 }) {
     const wrap = document.createElement('section');
     wrap.className = editing
@@ -908,8 +1105,11 @@ function renderPlainListBlock({
     wrap.setAttribute('data-md-line', String(block.startLine || 1));
 
     if (!editing) {
-        wrap.appendChild(renderPlainListViewHeader(block, seg, listIndex, doc, onChange));
+        wrap.appendChild(
+            renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChange, onStatus)
+        );
         const viewItems = renderPlainListViewItems(block, {
+            onStatus,
             onItemLongPress: (item, li) => {
                 openPlainItemMiniEditor({
                     li,
@@ -920,10 +1120,34 @@ function renderPlainListBlock({
                     listIndex,
                     doc,
                     onChange,
+                    onStatus,
                 });
             },
         });
         wrap.appendChild(viewItems);
+        if (openMiniPlainItemId) {
+            const item = (block.items || []).find((it) => it.id === openMiniPlainItemId);
+            const li =
+                item &&
+                viewItems.querySelector(
+                    `[data-plain-item-id="${CSS.escape(openMiniPlainItemId)}"]`
+                );
+            if (item && li) {
+                requestAnimationFrame(() => {
+                    openPlainItemMiniEditor({
+                        li,
+                        item,
+                        block,
+                        seg,
+                        segIndex,
+                        listIndex,
+                        doc,
+                        onChange,
+                        onStatus,
+                    });
+                });
+            }
+        }
         return wrap;
     }
 
@@ -1034,7 +1258,7 @@ function renderPlainListBlock({
     return wrap;
 }
 
-function renderPlainListViewHeader(block, seg, listIndex, doc, onChange) {
+function renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChange, onStatus) {
     const header = document.createElement('div');
     header.className = 'mdplain-header';
 
@@ -1050,6 +1274,45 @@ function renderPlainListViewHeader(block, seg, listIndex, doc, onChange) {
     const n = (block.items || []).length;
     count.textContent = `${n} item${n === 1 ? '' : 's'}`;
 
+    const actions = document.createElement('div');
+    actions.className = 'mdlist-header-actions';
+
+    const addBtn = createListAddItemButton();
+    addBtn.addEventListener('click', () => {
+        const newId = createId('pli');
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const sample = listBlock.items?.[0];
+                listBlock.items.push({
+                    id: newId,
+                    text: '',
+                    checked: listBlock.task ? false : null,
+                    marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
+                    indent: sample?.indent || '',
+                });
+            },
+            opts: { stayInView: true, openMiniPlainItemId: newId },
+        });
+    });
+
+    const copyBtn = createListCopyButton({
+        label: 'Copy list',
+        title: 'Copy entire list',
+    });
+    copyBtn.addEventListener('click', () => {
+        const text = formatPlainListClipboard(block);
+        if (!text.trim()) {
+            onStatus?.('Nothing to copy', 'warn');
+            return;
+        }
+        copyWithStatus(text, onStatus, 'List copied');
+    });
+
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'mdlist-edit-btn';
@@ -1063,7 +1326,8 @@ function renderPlainListViewHeader(block, seg, listIndex, doc, onChange) {
         onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
     });
 
-    titleRow.append(title, count, editBtn);
+    actions.append(addBtn, copyBtn, editBtn);
+    titleRow.append(title, count, actions);
     header.appendChild(titleRow);
     return header;
 }
@@ -1158,6 +1422,7 @@ function openPlainItemMiniEditor({
     listIndex,
     doc,
     onChange,
+    onStatus,
 }) {
     if (!li || li.classList.contains('mdplain-view-item--mini-editing')) return;
 
@@ -1347,6 +1612,31 @@ function openPlainItemMiniEditor({
     const actions = document.createElement('div');
     actions.className = 'mdplain-mini-actions';
 
+    const copyBtn = createListCopyButton({
+        label: 'Copy item',
+        title: 'Copy this item',
+    });
+    copyBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    copyBtn.addEventListener('click', () => {
+        const text = formatPlainItemClipboard(
+            {
+                ...item,
+                text: textInput.value,
+                checked: checkInput
+                    ? checkInput.checked
+                    : item.checked === true || item.checked === false
+                      ? item.checked
+                      : null,
+            },
+            block
+        );
+        if (!String(text || '').trim()) {
+            onStatus?.('Nothing to copy', 'warn');
+            return;
+        }
+        copyWithStatus(text, onStatus, 'Item copied');
+    });
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn-ghost btn-small';
@@ -1365,7 +1655,7 @@ function openPlainItemMiniEditor({
     doneBtn.addEventListener('mousedown', (event) => event.preventDefault());
     doneBtn.addEventListener('click', () => finish({ commit: true }));
 
-    actions.append(delBtn, doneBtn);
+    actions.append(copyBtn, delBtn, doneBtn);
     editor.append(textInput, actions);
     li.appendChild(editor);
 
@@ -1396,10 +1686,10 @@ function openPlainItemMiniEditor({
 
 /**
  * @param {object} block
- * @param {{ onItemLongPress?: (item: object, li: HTMLElement) => void }} [options]
+ * @param {{ onItemLongPress?: (item: object, li: HTMLElement) => void, onStatus?: Function }} [options]
  */
 function renderPlainListViewItems(block, options = {}) {
-    const { onItemLongPress } = options;
+    const { onItemLongPress, onStatus } = options;
     const tag = block.ordered ? 'ol' : 'ul';
     const listEl = document.createElement(tag);
     listEl.className = 'mdplain-view-items';
@@ -1422,9 +1712,12 @@ function renderPlainListViewItems(block, options = {}) {
         li.dataset.plainItemId = item.id;
         li.setAttribute('role', 'listitem');
         if (typeof onItemLongPress === 'function') {
-            li.title = 'Long-press to edit this item';
+            li.title = 'Long-press to edit this item · Double-tap to copy';
             attachLongPress(li, () => onItemLongPress(item, li));
+        } else {
+            li.title = 'Double-tap to copy';
         }
+        attachDoubleTapCopy(li, () => formatPlainItemClipboard(item, block), onStatus);
 
         if (item.checked === true || item.checked === false) {
             const label = document.createElement('label');
@@ -1697,8 +1990,8 @@ function renderListBlock(seg, doc, onChange, onStatus, focusItemId) {
     wrap.dataset.listId = list.id;
 
     if (!editing) {
-        wrap.appendChild(renderListViewHeader(seg, doc, onChange));
-        wrap.appendChild(renderListViewItems(list));
+        wrap.appendChild(renderListViewHeader(seg, doc, onChange, onStatus));
+        wrap.appendChild(renderListViewItems(list, onStatus));
         return wrap;
     }
 
@@ -1863,7 +2156,7 @@ async function requestDeleteList(seg, doc, onChange, onStatus) {
     onStatus?.('List deleted', 'ok');
 }
 
-function renderListViewHeader(seg, doc, onChange) {
+function renderListViewHeader(seg, doc, onChange, onStatus) {
     const list = seg.list;
     const header = document.createElement('div');
     header.className = 'mdlist-header';
@@ -1880,6 +2173,29 @@ function renderListViewHeader(seg, doc, onChange) {
     const n = (list.items || []).length;
     count.textContent = `${n} item${n === 1 ? '' : 's'}`;
 
+    const actions = document.createElement('div');
+    actions.className = 'mdlist-header-actions';
+
+    const addBtn = createListAddItemButton();
+    addBtn.addEventListener('click', () => {
+        const item = addItem(list, '');
+        seg._editing = true;
+        onChange(doc, changeOpts(doc, { soft: true, focusItemId: item.id }));
+    });
+
+    const copyBtn = createListCopyButton({
+        label: 'Copy list',
+        title: 'Copy entire list',
+    });
+    copyBtn.addEventListener('click', () => {
+        const text = formatMdlistClipboard(list);
+        if (!String(text || '').trim()) {
+            onStatus?.('Nothing to copy', 'warn');
+            return;
+        }
+        copyWithStatus(text, onStatus, 'List copied');
+    });
+
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'mdlist-edit-btn';
@@ -1892,12 +2208,13 @@ function renderListViewHeader(seg, doc, onChange) {
         onChange(doc, changeOpts(doc, { soft: true }));
     });
 
-    titleRow.append(title, count, editBtn);
+    actions.append(addBtn, copyBtn, editBtn);
+    titleRow.append(title, count, actions);
     header.appendChild(titleRow);
     return header;
 }
 
-function renderListViewItems(list) {
+function renderListViewItems(list, onStatus) {
     const ul = document.createElement('ul');
     ul.className = 'mdlist-items mdlist-items--view';
     ul.setAttribute('role', 'list');
@@ -1915,6 +2232,7 @@ function renderListViewItems(list) {
         const li = document.createElement('li');
         li.className = 'mdlist-view-item';
         li.setAttribute('role', 'listitem');
+        li.title = 'Double-tap to copy';
 
         const rank = document.createElement('span');
         rank.className = 'mdlist-rank';
@@ -1936,6 +2254,8 @@ function renderListViewItems(list) {
             tagsEl.textContent = tags.join(' · ');
             body.appendChild(tagsEl);
         }
+
+        attachDoubleTapCopy(li, () => formatMdlistItemClipboard(item), onStatus);
 
         li.append(rank, body);
         ul.appendChild(li);

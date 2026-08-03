@@ -1,5 +1,13 @@
 import { isFolder, isMarkdownCandidate, sortDriveEntries } from './drive.js';
-import { ROOT_FOLDER_ID, ROOT_FOLDER_NAME } from './config.js';
+import {
+    ROOT_FOLDER_ID,
+    ROOT_FOLDER_NAME,
+    FINDER_SORT_DEFAULT,
+    FINDER_SORT_OPTIONS,
+    FINDER_SORT_VALUES,
+    OPENED_FILES_DAY_MS,
+    OPENED_FILES_WEEK_MS,
+} from './config.js';
 
 const els = {};
 
@@ -28,10 +36,19 @@ export function bindUi() {
     els.btnModeSearch = document.getElementById('btn-mode-search');
     els.btnNewNote = document.getElementById('btn-new-note');
     els.btnNewFolder = document.getElementById('btn-new-folder');
-    els.btnRenameCurrent = document.getElementById('btn-rename-current');
+    els.btnFinderSort = document.getElementById('btn-finder-sort');
+    els.btnFinderSortLabel = els.btnFinderSort?.querySelector('.btn-finder-sort-label') || null;
+    els.finderSortDialog = document.getElementById('finder-sort-dialog');
+    els.finderSortOptions = document.getElementById('finder-sort-options');
+    els.btnEditorMore = document.getElementById('btn-editor-more');
     els.btnInsertList = document.getElementById('btn-insert-list');
-    els.btnImportList = document.getElementById('btn-import-list');
     els.importListFile = document.getElementById('import-list-file');
+    els.editorMoreDialog = document.getElementById('editor-more-dialog');
+    els.editorMoreName = document.getElementById('editor-more-name');
+    els.editorMoreStats = document.getElementById('editor-more-stats');
+    els.editorMorePin = document.getElementById('editor-more-pin');
+    els.editorMoreImport = document.getElementById('editor-more-import');
+    els.editorMoreRename = document.getElementById('editor-more-rename');
     els.btnClickEdit = document.getElementById('btn-click-edit');
     els.btnGoFinder = document.getElementById('btn-go-finder');
     els.createActions = document.getElementById('create-actions');
@@ -70,6 +87,8 @@ export function bindUi() {
     els.prefPreviewFontScaleValue = document.getElementById('pref-preview-font-scale-value');
     els.prefListStripe = document.getElementById('pref-list-stripe');
     els.prefListLayoutSegmented = document.getElementById('pref-list-layout-segmented');
+    els.prefDefaultEditView = document.getElementById('pref-default-edit-view');
+    els.prefDoubleTapCopy = document.getElementById('pref-double-tap-copy');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
     els.editor = document.getElementById('editor');
@@ -268,13 +287,18 @@ export function syncNavLayout() {
 function syncNavActions(mode, options = {}) {
     const hasOpenFile = Boolean(options.hasOpenFile);
     const showFinder = mode === 'finder';
+    const showPinned = mode === 'pinned';
+    const showFinderChrome = showFinder || showPinned;
     const showEditor = mode === 'editor' && hasOpenFile;
 
-    if (els.navActionsFinder) els.navActionsFinder.hidden = !showFinder;
+    if (els.navActionsFinder) {
+        els.navActionsFinder.hidden = !showFinderChrome;
+        els.navActionsFinder.classList.toggle('is-pinned-only', showPinned);
+    }
     if (els.navActionsEditor) els.navActionsEditor.hidden = !showEditor;
 
     if (els.navActions) {
-        els.navActions.hidden = !(showFinder || showEditor);
+        els.navActions.hidden = !(showFinderChrome || showEditor);
     }
 
     syncNavLayout();
@@ -296,7 +320,10 @@ export function showView(name, options = {}) {
     if (name === 'login') {
         els.navBar.hidden = true;
         if (els.navActions) els.navActions.hidden = true;
-        if (els.navActionsFinder) els.navActionsFinder.hidden = true;
+        if (els.navActionsFinder) {
+            els.navActionsFinder.hidden = true;
+            els.navActionsFinder.classList.remove('is-pinned-only');
+        }
         if (els.navActionsEditor) els.navActionsEditor.hidden = true;
         if (els.finderPathBar) els.finderPathBar.hidden = true;
         els.viewTitle.textContent = '';
@@ -341,8 +368,8 @@ export function showView(name, options = {}) {
             els.editorActive.hidden = true;
             els.btnSave.hidden = true;
             if (els.btnInsertList) els.btnInsertList.hidden = true;
-            if (els.btnImportList) els.btnImportList.hidden = true;
             if (els.btnClickEdit) els.btnClickEdit.hidden = true;
+            if (els.btnEditorMore) els.btnEditorMore.hidden = true;
             if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
             if (els.editorSearchBar) els.editorSearchBar.hidden = true;
             els.viewTitle.textContent = 'Opening…';
@@ -383,9 +410,8 @@ export function setEditorLoading(loading, fileName = '') {
         els.viewTitle.removeAttribute('title');
         if (els.btnSave) els.btnSave.hidden = true;
         if (els.btnInsertList) els.btnInsertList.hidden = true;
-        if (els.btnImportList) els.btnImportList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
-        if (els.btnRenameCurrent) els.btnRenameCurrent.hidden = true;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = true;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
         if (els.editorSearchBar) els.editorSearchBar.hidden = true;
     }
@@ -480,11 +506,28 @@ export function setBrowseEmptyMessage(message) {
     els.browseEmpty.textContent = message;
 }
 
-export function renderFileList(files, { onOpen, onMenu, recent = [], scrollToMarkdown = false }) {
+export function renderFileList(
+    files,
+    {
+        onOpen,
+        onMenu,
+        recent = [],
+        scrollToMarkdown = false,
+        sortMode = FINDER_SORT_DEFAULT,
+        openedAtById = null,
+    } = {}
+) {
     els.fileList.replaceChildren();
-    const sorted = sortDriveEntries(files || []);
+    const mode = FINDER_SORT_VALUES.has(sortMode) ? sortMode : FINDER_SORT_DEFAULT;
+    const sorted = sortDriveEntries(files || [], mode);
     const recentFiles = Array.isArray(recent) ? recent.slice(0, 5) : [];
     els.browseEmpty.hidden = sorted.length > 0 || recentFiles.length > 0;
+    const openedMap =
+        openedAtById instanceof Map
+            ? openedAtById
+            : openedAtById && typeof openedAtById === 'object'
+              ? new Map(Object.entries(openedAtById).map(([id, ts]) => [id, Number(ts) || 0]))
+              : new Map();
 
     if (recentFiles.length) {
         els.fileList.appendChild(
@@ -494,6 +537,7 @@ export function renderFileList(files, { onOpen, onMenu, recent = [], scrollToMar
                 files: recentFiles,
                 onOpen,
                 onMenu,
+                openedAtById: openedMap,
             })
         );
     }
@@ -509,6 +553,7 @@ export function renderFileList(files, { onOpen, onMenu, recent = [], scrollToMar
                 files: folders,
                 onOpen,
                 onMenu,
+                openedAtById: openedMap,
             })
         );
     }
@@ -521,6 +566,7 @@ export function renderFileList(files, { onOpen, onMenu, recent = [], scrollToMar
                 files: notes,
                 onOpen,
                 onMenu,
+                openedAtById: openedMap,
             })
         );
     }
@@ -731,7 +777,38 @@ export function syncListLayoutControl(layout) {
     applyListLayout(layout);
 }
 
-function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
+/**
+ * @param {string} mode
+ */
+export function syncDefaultEditViewControl(mode) {
+    if (els.prefDefaultEditView && mode) {
+        els.prefDefaultEditView.value = mode;
+    }
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function syncDoubleTapCopyControl(enabled) {
+    if (els.prefDoubleTapCopy) {
+        els.prefDoubleTapCopy.checked = Boolean(enabled);
+    }
+}
+
+/**
+ * @param {number} openedAt
+ * @returns {'day' | 'week' | null}
+ */
+function openedRecencyTier(openedAt) {
+    const ts = Number(openedAt) || 0;
+    if (!ts) return null;
+    const age = Date.now() - ts;
+    if (age <= OPENED_FILES_DAY_MS) return 'day';
+    if (age <= OPENED_FILES_WEEK_MS) return 'week';
+    return null;
+}
+
+function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = null }) {
     const section = document.createElement('section');
     section.className = `file-group file-group--${kind}`;
     section.setAttribute('aria-label', title);
@@ -744,6 +821,8 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
     const list = document.createElement('div');
     list.className = 'file-group-list';
     list.setAttribute('role', 'list');
+
+    const openedMap = openedAtById instanceof Map ? openedAtById : null;
 
     for (const file of files) {
         const folder = isFolder(file);
@@ -773,11 +852,30 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
         img.decoding = 'async';
         icon.appendChild(img);
 
+        const label = document.createElement('span');
+        label.className = 'file-row-label';
+
         const name = document.createElement('span');
         name.className = 'file-row-name';
         name.textContent = file.name || '(unnamed)';
+        label.appendChild(name);
 
-        openBtn.append(icon, name);
+        if (!folder && file?.id && openedMap) {
+            const openedAt = openedMap.get(file.id) || file.openedAt || 0;
+            const tier = openedRecencyTier(openedAt);
+            if (tier) {
+                const dot = document.createElement('span');
+                dot.className = `file-row-opened-dot file-row-opened-dot--${tier}`;
+                dot.title = tier === 'day' ? 'Opened in the last 24 hours' : 'Opened in the last week';
+                dot.setAttribute(
+                    'aria-label',
+                    tier === 'day' ? 'Opened in the last 24 hours' : 'Opened in the last week'
+                );
+                label.appendChild(dot);
+            }
+        }
+
+        openBtn.append(icon, label);
         openBtn.addEventListener('click', () => onOpen(file));
 
         const menuBtn = document.createElement('button');
@@ -870,8 +968,8 @@ export function syncEditorChrome(state) {
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
         if (els.btnInsertList) els.btnInsertList.hidden = false;
-        if (els.btnImportList) els.btnImportList.hidden = false;
         if (els.btnClickEdit) els.btnClickEdit.hidden = false;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = false;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = false;
     } else {
         els.viewTitle.classList.remove('view-title--doc');
@@ -881,8 +979,8 @@ export function syncEditorChrome(state) {
             els.editorFileTitle.removeAttribute('title');
         }
         if (els.btnInsertList) els.btnInsertList.hidden = true;
-        if (els.btnImportList) els.btnImportList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = true;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
         if (els.editorSearchBar) {
             els.editorSearchBar.hidden = true;
@@ -891,7 +989,7 @@ export function syncEditorChrome(state) {
         if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
-    els.btnRenameCurrent.hidden = !state.fileId;
+    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId;
     // Disabled state is owned by syncEditorActionLocks in app.js when a
     // cancelable Edit action is active; otherwise apply the base rules here.
     const actionLocked = Boolean(els.app?.classList.contains('is-action-locked'));
@@ -906,9 +1004,8 @@ export function syncEditorChrome(state) {
         btn.disabled = fallbackDisabled;
     };
     setActionDisabled(els.btnSave, 'save', baseDisabled || !state.dirty);
-    setActionDisabled(els.btnRenameCurrent, 'rename', baseDisabled);
+    setActionDisabled(els.btnEditorMore, 'import-list', baseDisabled);
     setActionDisabled(els.btnInsertList, 'insert-list', baseDisabled);
-    setActionDisabled(els.btnImportList, 'import-list', baseDisabled);
     setActionDisabled(els.btnClickEdit, 'click-edit', baseDisabled);
     setActionDisabled(els.btnEditorSearch, 'search', baseDisabled);
 
@@ -1094,6 +1191,125 @@ export function promptUnsavedChanges(dialogEl) {
         dialogEl.addEventListener('close', onClose);
         dialogEl.returnValue = 'cancel';
         dialogEl.showModal();
+    });
+}
+
+/**
+ * Update the Finder Sort button label to match the active mode.
+ * @param {string} sortMode
+ */
+export function syncFinderSortControl(sortMode) {
+    const mode = FINDER_SORT_VALUES.has(sortMode) ? sortMode : FINDER_SORT_DEFAULT;
+    const option = FINDER_SORT_OPTIONS.find((o) => o.value === mode);
+    const label = option?.label || 'Sort';
+    if (els.btnFinderSortLabel) els.btnFinderSortLabel.textContent = label;
+    if (els.btnFinderSort) {
+        els.btnFinderSort.title = `Sort: ${label}`;
+        els.btnFinderSort.setAttribute('aria-label', `Sort files: ${label}`);
+    }
+}
+
+/**
+ * Prompt for Finder sort order.
+ * @param {string} [current]
+ * @returns {Promise<string|null>} selected sort mode, or null if cancelled
+ */
+export function promptFinderSort(current = FINDER_SORT_DEFAULT) {
+    const dialog = els.finderSortDialog;
+    const list = els.finderSortOptions;
+    if (!dialog || !list) return Promise.resolve(null);
+
+    const active = FINDER_SORT_VALUES.has(current) ? current : FINDER_SORT_DEFAULT;
+    list.replaceChildren();
+    for (const option of FINDER_SORT_OPTIONS) {
+        const btn = document.createElement('button');
+        btn.type = 'submit';
+        btn.value = option.value;
+        btn.className = 'btn btn-ghost btn-block item-action-btn';
+        if (option.value === active) {
+            btn.classList.add('is-selected');
+            btn.setAttribute('aria-current', 'true');
+        }
+        btn.textContent = option.label;
+        list.appendChild(btn);
+    }
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            const value = dialog.returnValue;
+            if (FINDER_SORT_VALUES.has(value)) resolve(value);
+            else resolve(null);
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+    });
+}
+
+/**
+ * Render key/value stats in the Edit burger menu.
+ * @param {Array<{ label: string, value: string, pending?: boolean }> | null | undefined} rows
+ */
+export function fillEditorMoreStats(rows) {
+    const root = els.editorMoreStats;
+    if (!root) return;
+    root.replaceChildren();
+    if (!Array.isArray(rows) || !rows.length) {
+        root.hidden = true;
+        return;
+    }
+    root.hidden = false;
+    for (const row of rows) {
+        if (!row?.label) continue;
+        const label = document.createElement('span');
+        label.className = 'editor-more-stats-label';
+        label.textContent = row.label;
+        const value = document.createElement('span');
+        value.className = 'editor-more-stats-value';
+        if (row.pending) value.classList.add('is-pending');
+        value.textContent = row.value == null || row.value === '' ? '—' : String(row.value);
+        root.append(label, value);
+    }
+}
+
+/**
+ * Action sheet for the Edit toolbar burger menu.
+ * @param {{ fileName?: string, isPinned?: boolean, stats?: Array<{ label: string, value: string, pending?: boolean }> }} [options]
+ * @returns {Promise<'rename'|'pin'|'unpin'|null>}
+ */
+export function promptEditorMoreMenu(options = {}) {
+    const dialog = els.editorMoreDialog;
+    if (!dialog) return Promise.resolve(null);
+
+    const pinned = Boolean(options.isPinned);
+    const name = String(options.fileName || '').trim();
+    if (els.editorMoreName) {
+        if (name) {
+            els.editorMoreName.hidden = false;
+            els.editorMoreName.textContent = name;
+        } else {
+            els.editorMoreName.hidden = true;
+            els.editorMoreName.textContent = '';
+        }
+    }
+    fillEditorMoreStats(options.stats);
+    if (els.editorMorePin) {
+        els.editorMorePin.value = pinned ? 'unpin' : 'pin';
+        els.editorMorePin.textContent = pinned ? 'Unpin' : 'Pin';
+    }
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            const value = dialog.returnValue;
+            if (value === 'rename' || value === 'pin' || value === 'unpin') {
+                resolve(value);
+            } else resolve(null);
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
     });
 }
 

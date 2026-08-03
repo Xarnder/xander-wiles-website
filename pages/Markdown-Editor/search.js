@@ -168,7 +168,7 @@ function shouldSkipHighlightNode(node) {
     if (!el || typeof el.closest !== 'function') return true;
     if (
         el.closest(
-            'script, style, noscript, textarea, input, select, button, option, .preview-toc, .contents-view-header, .list-place-picker, .mdlist-actions, .mdlist-filter, .mdlist-edit-btn, .lists-empty, .editor-search-bar'
+            'script, style, noscript, textarea, input, select, button, option, .preview-toc, .contents-view-header, .list-place-picker, .mdlist-actions, .mdlist-filter, .mdlist-edit-btn, .mdlist-add-btn, .lists-empty, .editor-search-bar'
         )
     ) {
         return true;

@@ -49,6 +49,8 @@ html {
   overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Prevent iOS rubber-band overscroll, which glitches CSS-mask icons */
+  overscroll-behavior-y: none;
 }
 
 html,
@@ -68,6 +70,7 @@ body {
   width: 100%;
   overflow-x: clip;
   padding-bottom: var(--safe-bottom);
+  overscroll-behavior-y: none;
 }
 
 button,

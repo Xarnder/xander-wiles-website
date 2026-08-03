@@ -210,9 +210,9 @@
                 <div id="editor-active" class="editor-active" hidden>
                     <div class="view-mode-dock">
                         <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
+                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="contents" id="mode-contents">Contents</button>
                             <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
                             <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
-                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="contents" id="mode-contents">Contents</button>
                             <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
                         </div>
                         <p id="editor-toast" class="editor-toast" hidden role="status" aria-live="polite"></p>
@@ -287,6 +287,21 @@
                             <input id="pref-list-layout-segmented" class="settings-toggle" type="checkbox" checked>
                         </label>
                         <p class="settings-prefs-lede settings-prefs-lede--tight">On: each item is its own container (uniform fill in Normal; coloured stripes in other modes). Off: the list stays continuous and stripe modes change text colour instead.</p>
+                        <label class="settings-pref">
+                            <span class="settings-pref-label">Default edit view</span>
+                            <select id="pref-default-edit-view" class="settings-select">
+                                <option value="contents">Contents</option>
+                                <option value="list">List</option>
+                                <option value="preview" selected>Preview</option>
+                                <option value="raw">Raw</option>
+                            </select>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Used the first time you open a markdown file in Edit. After that, the last mode for that file is remembered.</p>
+                        <label class="settings-pref settings-pref--toggle">
+                            <span class="settings-pref-label">Double-tap item to copy</span>
+                            <input id="pref-double-tap-copy" class="settings-toggle" type="checkbox" checked>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Quickly double-tap a list item in Preview or List to copy that item’s text. Turn off if it interferes with scrolling or selection.</p>
                     </div>
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Finder layout</h3>
@@ -351,6 +366,9 @@
                         <button type="button" id="btn-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
                     </div>
                     <div class="finder-actions">
+                        <button type="button" id="btn-finder-sort" class="btn btn-ghost btn-finder-sort" aria-haspopup="dialog" aria-controls="finder-sort-dialog" title="Sort files" aria-label="Sort files">
+                            <span class="btn-finder-sort-label">Sort</span>
+                        </button>
                         <div id="create-actions" class="create-actions" hidden>
                             <button type="button" id="btn-new-note" class="btn btn-primary">+ Note</button>
                             <button type="button" id="btn-new-folder" class="btn btn-ghost">+ Folder</button>
@@ -361,17 +379,14 @@
                     <button type="button" id="btn-editor-search" class="btn btn-ghost btn-icon" hidden aria-expanded="false" aria-controls="editor-search-bar" title="Search in file (⌘/Ctrl+F)" aria-label="Search in file">
                         <span class="nav-action-icon nav-action-icon--search" aria-hidden="true"></span>
                     </button>
-                    <button type="button" id="btn-import-list" class="btn btn-ghost btn-icon" hidden title="Import a list JSON from To-Do List or Story Manager" aria-label="Import list JSON">
-                        <span class="nav-action-icon nav-action-icon--import" aria-hidden="true"></span>
-                    </button>
                     <button type="button" id="btn-click-edit" class="btn btn-ghost btn-icon" hidden title="Edit here" aria-label="Click text in Preview to edit in Raw">
                         <span class="nav-action-icon nav-action-icon--edit" aria-hidden="true"></span>
                     </button>
                     <button type="button" id="btn-insert-list" class="btn btn-ghost btn-icon" hidden title="Add list" aria-label="Add ranked list">
                         <span class="nav-action-icon nav-action-icon--add-list" aria-hidden="true"></span>
                     </button>
-                    <button type="button" id="btn-rename-current" class="btn btn-ghost btn-icon" hidden title="Rename" aria-label="Rename file">
-                        <span class="nav-action-icon nav-action-icon--rename" aria-hidden="true"></span>
+                    <button type="button" id="btn-editor-more" class="btn btn-ghost btn-icon" hidden aria-haspopup="dialog" aria-controls="editor-more-dialog" title="More" aria-label="More file actions">
+                        <span class="nav-action-icon nav-action-icon--menu" aria-hidden="true"></span>
                     </button>
                     <button type="button" id="btn-save" class="btn btn-primary btn-save btn-icon" hidden title="Save" aria-label="Save">
                         <span class="nav-action-icon nav-action-icon--save" aria-hidden="true"></span>
@@ -418,6 +433,19 @@
         </form>
     </dialog>
 
+    <dialog id="finder-sort-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2>Sort by</h2>
+            <p class="dialog-hint">Folders stay grouped above markdown notes.</p>
+            <div id="finder-sort-options" class="item-actions-list" role="group" aria-label="Sort order">
+                <!-- filled by ui.js -->
+            </div>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="item-actions-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
             <h2 id="item-actions-title">Actions</h2>
@@ -427,6 +455,20 @@
                 <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
                 <button type="submit" value="download" id="item-action-download" class="btn btn-ghost btn-block item-action-btn">Download</button>
+                <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="editor-more-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2>File</h2>
+            <p id="editor-more-name" class="dialog-hint"></p>
+            <div id="editor-more-stats" class="editor-more-stats" hidden aria-live="polite"></div>
+            <div class="item-actions-list">
+                <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
+                <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
+                <button type="submit" value="pin" id="editor-more-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
                 <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
             </div>
         </form>

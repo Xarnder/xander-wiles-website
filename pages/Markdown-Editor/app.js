@@ -9,6 +9,10 @@ import {
     FINDER_MD_ORDER_DESKTOP_KEY,
     FINDER_MD_ORDER_MOBILE_DEFAULT,
     FINDER_MD_ORDER_DESKTOP_DEFAULT,
+    FINDER_SORT_KEY,
+    FINDER_SORT_DEFAULT,
+    FINDER_SORT_VALUES,
+    FINDER_SORT_OPTIONS,
     THEME_KEY,
     THEME_DEFAULT,
     THEME_VALUES,
@@ -33,10 +37,18 @@ import {
     LIST_LAYOUT_KEY,
     LIST_LAYOUT_DEFAULT,
     LIST_LAYOUT_VALUES,
+    DEFAULT_EDIT_VIEW_KEY,
+    DEFAULT_EDIT_VIEW_DEFAULT,
+    DEFAULT_EDIT_VIEW_VALUES,
+    DEFAULT_EDIT_VIEW_OPTIONS,
+    DOUBLE_TAP_COPY_KEY,
     PREVIEW_TOC_OPEN_KEY,
     PREVIEW_TOC_STICKY_KEY,
     RECENT_FILES_KEY,
     RECENT_FILES_MAX,
+    OPENED_FILES_KEY,
+    OPENED_FILES_MAX,
+    OPENED_FILES_WEEK_MS,
     PINNED_ITEMS_KEY,
     PINNED_ITEMS_MAX,
 } from './config.js';
@@ -59,6 +71,7 @@ import {
     moveDriveItem,
     renameDriveItem,
     searchMarkdownFiles,
+    sortDriveEntries,
     updateFileContent,
 } from './drive.js';
 import {
@@ -79,9 +92,10 @@ import {
     parseDocument,
     previewAnchorFromOffset,
     serializeDocument,
+    stripMdlistAgentNotes,
 } from './lists.js';
 import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
-import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocOpen, readPreviewTocSticky, renderListsUi } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writeDoubleTapCopyEnabled } from './lists-ui.js';
 import {
     flushCloudSettingsSave,
     pullCloudSettings,
@@ -90,11 +104,13 @@ import {
     withCloudApplyGuard,
 } from './settings-sync.js';
 import {
+    extractMarkdownHeadings,
     getTextareaViewportOffset,
     getVisiblePreviewBlock,
     scrollListsRootToAnchor,
     scrollTextareaToLine,
     scrollTextareaToOffset,
+    splitMarkdownBlocks,
 } from './markdown.js';
 import { createEditorSearch } from './search.js';
 import {
@@ -106,6 +122,9 @@ import {
     getEls,
     promptForName,
     promptItemActions,
+    promptEditorMoreMenu,
+    fillEditorMoreStats,
+    promptFinderSort,
     promptMoveDestination,
     promptPinnedShortcutIssue,
     promptUnsavedChanges,
@@ -139,6 +158,9 @@ import {
     syncListStripeControl,
     applyListLayout,
     syncListLayoutControl,
+    syncDefaultEditViewControl,
+    syncDoubleTapCopyControl,
+    syncFinderSortControl,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
@@ -243,6 +265,31 @@ function applySavedFinderLayout() {
     const prefs = readFinderLayoutPrefs();
     applyFinderLayoutPrefs(prefs);
     syncFinderLayoutControls(prefs);
+}
+
+function readFinderSort() {
+    try {
+        const raw = localStorage.getItem(FINDER_SORT_KEY);
+        if (FINDER_SORT_VALUES.has(raw)) return raw;
+    } catch {
+        // ignore
+    }
+    return FINDER_SORT_DEFAULT;
+}
+
+function writeFinderSort(mode) {
+    const next = FINDER_SORT_VALUES.has(mode) ? mode : FINDER_SORT_DEFAULT;
+    try {
+        localStorage.setItem(FINDER_SORT_KEY, next);
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedFinderSort() {
+    syncFinderSortControl(readFinderSort());
 }
 
 function readTheme() {
@@ -481,6 +528,35 @@ function applySavedListLayout() {
     syncListLayoutControl(readListLayout());
 }
 
+function readDefaultEditView() {
+    try {
+        const raw = localStorage.getItem(DEFAULT_EDIT_VIEW_KEY);
+        if (DEFAULT_EDIT_VIEW_VALUES.has(raw)) return raw;
+    } catch {
+        // ignore
+    }
+    return DEFAULT_EDIT_VIEW_DEFAULT;
+}
+
+function writeDefaultEditView(mode) {
+    const next = DEFAULT_EDIT_VIEW_VALUES.has(mode) ? mode : DEFAULT_EDIT_VIEW_DEFAULT;
+    try {
+        localStorage.setItem(DEFAULT_EDIT_VIEW_KEY, next);
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedDefaultEditView() {
+    syncDefaultEditViewControl(readDefaultEditView());
+}
+
+function applySavedDoubleTapCopy() {
+    syncDoubleTapCopyControl(readDoubleTapCopyEnabled());
+}
+
 function buildSettingsSnapshot() {
     return {
         theme: readTheme(),
@@ -491,8 +567,12 @@ function buildSettingsSnapshot() {
         previewFontScale: readPreviewFontScale(),
         listStripe: readListStripe(),
         listLayout: readListLayout(),
+        defaultEditView: readDefaultEditView(),
+        doubleTapCopy: readDoubleTapCopyEnabled(),
         finderMdOrder: readFinderLayoutPrefs(),
+        finderSort: readFinderSort(),
         pinnedItems: readPinnedItems(),
+        openedFiles: openedFilesSnapshot(),
     };
 }
 
@@ -603,6 +683,24 @@ function applyCloudSettings(cloud) {
             syncListLayoutControl(cloud.listLayout);
         }
 
+        if (DEFAULT_EDIT_VIEW_VALUES.has(cloud.defaultEditView)) {
+            try {
+                localStorage.setItem(DEFAULT_EDIT_VIEW_KEY, cloud.defaultEditView);
+            } catch {
+                // ignore
+            }
+            syncDefaultEditViewControl(cloud.defaultEditView);
+        }
+
+        if (typeof cloud.doubleTapCopy === 'boolean') {
+            try {
+                localStorage.setItem(DOUBLE_TAP_COPY_KEY, cloud.doubleTapCopy ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            syncDoubleTapCopyControl(cloud.doubleTapCopy);
+        }
+
         if (cloud.finderMdOrder && typeof cloud.finderMdOrder === 'object') {
             const next = {
                 mobile:
@@ -624,6 +722,15 @@ function applyCloudSettings(cloud) {
             syncFinderLayoutControls(next);
         }
 
+        if (FINDER_SORT_VALUES.has(cloud.finderSort)) {
+            try {
+                localStorage.setItem(FINDER_SORT_KEY, cloud.finderSort);
+            } catch {
+                // ignore
+            }
+            syncFinderSortControl(cloud.finderSort);
+        }
+
         if (Array.isArray(cloud.pinnedItems)) {
             const normalized = cloud.pinnedItems
                 .filter((entry) => entry && typeof entry.id === 'string' && entry.id)
@@ -642,6 +749,23 @@ function applyCloudSettings(cloud) {
                 // ignore
             }
         }
+
+        if (
+            cloud.openedFiles &&
+            typeof cloud.openedFiles === 'object' &&
+            !Array.isArray(cloud.openedFiles)
+        ) {
+            const cutoff = Date.now() - OPENED_FILES_WEEK_MS;
+            const merged = readOpenedFilesMap();
+            for (const [id, openedAt] of Object.entries(cloud.openedFiles)) {
+                if (!id) continue;
+                const ts = Number(openedAt) || 0;
+                if (ts < cutoff) continue;
+                const prev = merged.get(String(id)) || 0;
+                if (ts > prev) merged.set(String(id), ts);
+            }
+            writeOpenedFilesMap(merged);
+        }
     });
 }
 
@@ -652,6 +776,8 @@ async function syncSettingsFromCloud() {
         if (!created) {
             applyCloudSettings(settings);
         }
+        // Push so local-only fields (e.g. openedFiles) join an existing cloud blob.
+        queueSettingsCloudSync();
     } catch (err) {
         console.warn('[md-editor] settings cloud load failed', err);
     }
@@ -686,8 +812,72 @@ function writeRecentFiles(entries) {
     }
 }
 
+/**
+ * Map of file id → last openedAt (ms) for opens within the past week.
+ * @returns {Map<string, number>}
+ */
+function readOpenedFilesMap() {
+    const map = new Map();
+    const cutoff = Date.now() - OPENED_FILES_WEEK_MS;
+    try {
+        const raw = localStorage.getItem(OPENED_FILES_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                for (const [id, openedAt] of Object.entries(parsed)) {
+                    const ts = Number(openedAt) || 0;
+                    if (!id || ts < cutoff) continue;
+                    map.set(String(id), ts);
+                }
+            }
+        }
+    } catch {
+        // ignore
+    }
+    // Include the short Recent list so existing opens still show dots.
+    for (const entry of readRecentFiles()) {
+        if (!entry?.id) continue;
+        const ts = Number(entry.openedAt) || 0;
+        if (ts < cutoff) continue;
+        const prev = map.get(entry.id) || 0;
+        if (ts > prev) map.set(entry.id, ts);
+    }
+    return map;
+}
+
+function writeOpenedFilesMap(map) {
+    const cutoff = Date.now() - OPENED_FILES_WEEK_MS;
+    const entries = [...map.entries()]
+        .filter(([, openedAt]) => openedAt >= cutoff)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, OPENED_FILES_MAX);
+    const obj = {};
+    for (const [id, openedAt] of entries) obj[id] = openedAt;
+    try {
+        localStorage.setItem(OPENED_FILES_KEY, JSON.stringify(obj));
+    } catch {
+        // ignore
+    }
+}
+
+/** Plain object for settings cloud snapshot (id → openedAt). */
+function openedFilesSnapshot() {
+    const obj = {};
+    for (const [id, openedAt] of readOpenedFilesMap()) obj[id] = openedAt;
+    return obj;
+}
+
+function rememberOpenedFile(fileId) {
+    if (!fileId) return;
+    const map = readOpenedFilesMap();
+    map.set(String(fileId), Date.now());
+    writeOpenedFilesMap(map);
+    queueSettingsCloudSync();
+}
+
 function rememberRecentFile(file) {
     if (!file?.id) return;
+    rememberOpenedFile(file.id);
     const next = [
         {
             id: file.id,
@@ -774,10 +964,14 @@ function pinItem(file, { switchToPinned = true } = {}) {
     }
 }
 
+/** @type {Map<string, object>} */
+const pinnedMetaCache = new Map();
+
 function unpinItem(fileId, { refresh = true } = {}) {
     if (!fileId) return;
     const next = readPinnedItems().filter((entry) => entry.id !== fileId);
     writePinnedItems(next);
+    pinnedMetaCache.delete(fileId);
     if (refresh) renderPinnedView();
 }
 
@@ -793,27 +987,68 @@ function updatePinnedItem(fileId, patch = {}) {
         changed = true;
     }
     if (changed) writePinnedItems(entries);
+    pinnedMetaCache.delete(fileId);
 }
 
-function renderPinnedView() {
-    renderPinnedList(readPinnedItems(), {
+/**
+ * Merge live Drive metadata so pinned sort matches Finder (dates/size).
+ * @param {object[]} items
+ * @returns {Promise<object[]>}
+ */
+async function enrichPinnedItemsForSort(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return [];
+
+    return Promise.all(
+        list.map(async (entry) => {
+            let meta = pinnedMetaCache.get(entry.id);
+            if (!meta && isSignedIn()) {
+                try {
+                    meta = await getFileMetadata(entry.id);
+                    if (meta?.id) pinnedMetaCache.set(entry.id, meta);
+                } catch {
+                    meta = null;
+                }
+            }
+            const pinIso = entry.pinnedAt ? new Date(entry.pinnedAt).toISOString() : '';
+            return {
+                ...entry,
+                name: meta?.name || entry.name,
+                mimeType: meta?.mimeType || entry.mimeType,
+                modifiedTime: meta?.modifiedTime || pinIso,
+                createdTime: meta?.createdTime || pinIso,
+                size: meta?.size ?? 0,
+            };
+        })
+    );
+}
+
+async function renderPinnedView() {
+    const items = readPinnedItems();
+    const handlers = {
         onOpen: handleOpenPinnedEntry,
         onMenu: handlePinnedItemMenu,
-    });
+    };
+    const sortMode = readFinderSort();
+    // Instant pass using pin time / name, then refine with Drive metadata.
+    const localPrepared = items.map((entry) => ({
+        ...entry,
+        modifiedTime: entry.pinnedAt || 0,
+        createdTime: entry.pinnedAt || 0,
+        size: 0,
+    }));
+    renderPinnedList(sortDriveEntries(localPrepared, sortMode), handlers);
+
+    const enriched = await enrichPinnedItemsForSort(items);
+    const elsNow = getEls();
+    if (elsNow.viewPinned?.hidden) return;
+    renderPinnedList(sortDriveEntries(enriched, readFinderSort()), handlers);
 }
 
 function showPinnedView() {
     showAppView('pinned');
-    renderPinnedView();
+    renderPinnedView().catch(() => {});
     setStatus(readPinnedItems().length ? '' : 'Pin notes or folders from Finder');
-}
-
-function isMyDriveRoot() {
-    return (
-        state.browseMode === 'folder' &&
-        state.folderStack.length === 1 &&
-        currentFolder()?.id === ROOT_FOLDER_ID
-    );
 }
 
 function writeViewMode(fileId, mode) {
@@ -825,10 +1060,10 @@ function writeViewMode(fileId, mode) {
     }
 }
 
-function resolveInitialViewMode(fileId, hasValidList) {
+function resolveInitialViewMode(fileId) {
     const saved = readViewMode(fileId);
     if (saved) return saved;
-    return hasValidList ? 'preview' : 'raw';
+    return readDefaultEditView();
 }
 
 function refreshDocumentModelFromText(text) {
@@ -885,6 +1120,7 @@ function renderStructuredEditor(extra = {}) {
         doc: state.documentModel,
         focusItemId: extra.focusItemId || null,
         focusPlainItemId: extra.focusPlainItemId || null,
+        openMiniPlainItemId: extra.openMiniPlainItemId || null,
         focusTocId: extra.focusTocId || null,
         placingList: state.viewMode === 'preview' && state.placingList,
         pendingImportList: state.viewMode === 'preview' && state.placingList ? state.pendingImportList : null,
@@ -936,6 +1172,7 @@ function renderStructuredEditor(extra = {}) {
                 renderStructuredEditor({
                     focusItemId: opts.focusItemId,
                     focusPlainItemId: opts.focusPlainItemId,
+                    openMiniPlainItemId: opts.openMiniPlainItemId,
                 });
                 return;
             }
@@ -954,6 +1191,7 @@ function renderStructuredEditor(extra = {}) {
             renderStructuredEditor({
                 focusItemId: opts.focusItemId,
                 focusPlainItemId: opts.focusPlainItemId,
+                openMiniPlainItemId: opts.openMiniPlainItemId,
             });
         },
     });
@@ -994,10 +1232,9 @@ function syncEditorActionLocks() {
 
     const entries = [
         [els.btnEditorSearch, 'search'],
-        [els.btnImportList, 'import-list'],
         [els.btnClickEdit, 'click-edit'],
         [els.btnInsertList, 'insert-list'],
-        [els.btnRenameCurrent, 'rename'],
+        [els.btnEditorMore, 'import-list'],
         [els.btnSave, 'save'],
     ];
 
@@ -1030,17 +1267,22 @@ function syncInsertListButton() {
 
 function syncImportListButton() {
     const els = getEls();
-    if (!els.btnImportList) return;
+    if (!els.btnEditorMore) return;
     const placingImport = state.viewMode === 'preview' && state.placingList && Boolean(state.pendingImportList);
-    els.btnImportList.title = placingImport ? 'Cancel' : 'Import list';
-    els.btnImportList.setAttribute(
+    els.btnEditorMore.title = placingImport ? 'Cancel' : 'More';
+    els.btnEditorMore.setAttribute(
         'aria-label',
-        placingImport
-            ? 'Cancel importing list'
-            : 'Import list JSON from To-Do List or Story Manager'
+        placingImport ? 'Cancel importing list' : 'More file actions'
     );
-    els.btnImportList.classList.toggle('btn-click-edit--active', placingImport);
-    els.btnImportList.hidden = !state.editor.fileId;
+    els.btnEditorMore.classList.toggle('btn-editor-more--cancel', placingImport);
+    els.btnEditorMore.hidden = !state.editor.fileId;
+
+    const icon = els.btnEditorMore.querySelector('.nav-action-icon');
+    if (icon) {
+        icon.classList.toggle('nav-action-icon--menu', !placingImport);
+        icon.classList.toggle('nav-action-icon--cross', placingImport);
+    }
+
     syncEditorActionLocks();
 }
 
@@ -1264,10 +1506,7 @@ function setupEditorForOpenFile() {
         refreshDocumentModelFromText(serialized);
     }
 
-    state.viewMode = resolveInitialViewMode(
-        state.editor.fileId,
-        Boolean(state.documentModel?.hasValidList)
-    );
+    state.viewMode = resolveInitialViewMode(state.editor.fileId);
 
     applyEditorDisplayMode(state.viewMode, { hasFile: true });
     if (state.viewMode === 'list' || state.viewMode === 'preview') showParseWarnings();
@@ -1285,9 +1524,12 @@ function setupEditorForOpenFile() {
             key: 'repaired',
             durationMs: 3200,
         });
-    } else if (state.documentModel?.hasValidList && !readViewMode(state.editor.fileId)) {
-        showEditorToast('Opened in Preview mode', 'ok', {
-            key: 'opened-preview',
+    } else if (!readViewMode(state.editor.fileId)) {
+        const label =
+            DEFAULT_EDIT_VIEW_OPTIONS.find((o) => o.value === state.viewMode)?.label ||
+            state.viewMode;
+        showEditorToast(`Opened in ${label}`, 'ok', {
+            key: 'opened-default-view',
             durationMs: 2200,
         });
     }
@@ -1320,8 +1562,10 @@ function renderCurrentFileList({ scrollToMarkdown = false } = {}) {
     renderFileList(state.files, {
         onOpen: handleOpenEntry,
         onMenu: handleItemMenu,
-        recent: isMyDriveRoot() ? readRecentFiles() : [],
+        recent: readRecentFiles(),
         scrollToMarkdown,
+        sortMode: readFinderSort(),
+        openedAtById: readOpenedFilesMap(),
     });
 }
 
@@ -1354,7 +1598,7 @@ async function loadBrowse(reset = true) {
             return;
         }
         const result = await fetchVisiblePage(
-            (token) => listFolder(folder.id, token),
+            (token) => listFolder(folder.id, token, { sortMode: readFinderSort() }),
             pageToken
         );
         if (reset) {
@@ -1399,7 +1643,7 @@ async function loadSearch(reset = true) {
             return;
         }
         const result = await fetchVisiblePage(
-            (token) => searchMarkdownFiles(state.searchQuery, token),
+            (token) => searchMarkdownFiles(state.searchQuery, token, { sortMode: readFinderSort() }),
             pageToken
         );
         if (reset) {
@@ -1465,7 +1709,7 @@ async function loadComputers(reset = true) {
             return;
         }
         const result = await fetchVisiblePage(
-            (token) => listFolder(folder.id, token),
+            (token) => listFolder(folder.id, token, { sortMode: readFinderSort() }),
             pageToken
         );
         if (reset) {
@@ -1798,7 +2042,7 @@ async function handleRenameEntry(file) {
         }
         if (!folder) updateRecentFileName(file.id, updated.name);
         updatePinnedItem(file.id, { name: updated.name });
-        if (idx >= 0 || (!folder && isMyDriveRoot())) {
+        if (idx >= 0 || !folder) {
             renderCurrentFileList();
         }
         // Keep folder stack labels in sync if renaming current path folder
@@ -1869,6 +2113,175 @@ async function handleRenameCurrentFile() {
         name: state.editor.fileName,
         mimeType: state.editor.mimeType || 'text/markdown',
     });
+}
+
+function handlePinCurrentFile() {
+    if (!state.editor.fileId) return;
+    const folder = currentFolder();
+    const file = {
+        id: state.editor.fileId,
+        name: state.editor.fileName,
+        mimeType: state.editor.mimeType || 'text/markdown',
+        parents: folder?.id && folder.id !== COMPUTERS_ROOT.id ? [folder.id] : undefined,
+    };
+    if (isPinned(file.id)) {
+        unpinItem(file.id, { refresh: false });
+        setStatus(`Unpinned ${file.name || 'file'}`, 'ok');
+    } else {
+        pinItem(file, { switchToPinned: false });
+    }
+}
+
+async function handleEditorMoreMenu() {
+    if (!state.editor.fileId) return;
+    if (state.viewMode === 'preview' && state.placingList && state.pendingImportList) {
+        cancelListPlacement();
+        return;
+    }
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const metaPromise = getFileMetadata(state.editor.fileId)
+        .then((meta) => ({
+            createdTime: meta?.createdTime || null,
+            modifiedTime: meta?.modifiedTime || null,
+            size: meta?.size != null ? Number(meta.size) : null,
+        }))
+        .catch(() => null);
+
+    metaPromise.then((meta) => {
+        const elsNow = getEls();
+        if (!meta || !elsNow.editorMoreDialog?.open) return;
+        fillEditorMoreStats(buildEditorFileStatRows({ meta }));
+    });
+
+    const action = await promptEditorMoreMenu({
+        fileName: state.editor.fileName,
+        isPinned: isPinned(state.editor.fileId),
+        stats: buildEditorFileStatRows({ metaPending: true }),
+    });
+    if (!action) return;
+
+    if (action === 'rename') {
+        await handleRenameCurrentFile();
+        return;
+    }
+    if (action === 'pin' || action === 'unpin') {
+        handlePinCurrentFile();
+    }
+}
+
+function formatStatNumber(n) {
+    return Number(n || 0).toLocaleString();
+}
+
+function formatStatBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '—';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatStatDate(iso) {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    try {
+        return date.toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        });
+    } catch {
+        return date.toLocaleString();
+    }
+}
+
+function countWordsInText(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+}
+
+/**
+ * @param {{ meta?: { createdTime?: string|null, modifiedTime?: string|null, size?: number|null } | null, metaPending?: boolean }} [options]
+ * @returns {Array<{ label: string, value: string, pending?: boolean }>}
+ */
+function buildEditorFileStatRows(options = {}) {
+    const text = String(state.editor.editorContent || '');
+    const doc = state.documentModel;
+    const meta = options.meta || null;
+    const metaPending = Boolean(options.metaPending) && !meta;
+
+    const characters = text.length;
+    const charactersNoSpace = text.replace(/\s/g, '').length;
+    const words = countWordsInText(text);
+    const lines = text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length;
+    const contentBytes = new TextEncoder().encode(text).length;
+
+    let customLists = 0;
+    let customItems = 0;
+    let plainLists = 0;
+    let plainItems = 0;
+    let headings = 0;
+
+    for (const seg of doc?.segments || []) {
+        if (seg.type === 'mdlist' && seg.list) {
+            customLists += 1;
+            customItems += (seg.list.items || []).length;
+            continue;
+        }
+        if (seg.type !== 'markdown') continue;
+        const source = stripMdlistAgentNotes(seg.text || '');
+        headings += extractMarkdownHeadings(source).length;
+        for (const block of splitMarkdownBlocks(source)) {
+            if (block.type !== 'plainlist') continue;
+            plainLists += 1;
+            plainItems += (block.items || []).length;
+        }
+    }
+
+    const totalLists = customLists + plainLists;
+    const totalItems = customItems + plainItems;
+    const readingMinutes = words === 0 ? 0 : Math.max(1, Math.ceil(words / 200));
+
+    return [
+        { label: 'Characters', value: formatStatNumber(characters) },
+        { label: 'Characters (no spaces)', value: formatStatNumber(charactersNoSpace) },
+        { label: 'Words', value: formatStatNumber(words) },
+        { label: 'Lines', value: formatStatNumber(lines) },
+        { label: 'Reading time', value: words === 0 ? '—' : `~${readingMinutes} min` },
+        { label: 'Headings', value: formatStatNumber(headings) },
+        {
+            label: 'Lists',
+            value:
+                totalLists === 0
+                    ? '0'
+                    : `${formatStatNumber(totalLists)} (${formatStatNumber(customLists)} custom · ${formatStatNumber(plainLists)} normal)`,
+        },
+        { label: 'List items', value: formatStatNumber(totalItems) },
+        { label: 'Content size', value: formatStatBytes(contentBytes) },
+        {
+            label: 'Drive size',
+            value: metaPending ? 'Loading…' : formatStatBytes(meta?.size),
+            pending: metaPending,
+        },
+        {
+            label: 'Created',
+            value: metaPending ? 'Loading…' : formatStatDate(meta?.createdTime),
+            pending: metaPending,
+        },
+        {
+            label: 'Last edited',
+            value: metaPending ? 'Loading…' : formatStatDate(meta?.modifiedTime),
+            pending: metaPending,
+        },
+        {
+            label: 'Unsaved changes',
+            value: state.editor.dirty ? 'Yes' : 'No',
+        },
+    ];
 }
 
 function importXanderListFromText(text) {
@@ -2177,6 +2590,7 @@ async function signOut() {
         // ignore
     }
     resetCloudSettingsState();
+    pinnedMetaCache.clear();
     clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
     state.files = [];
@@ -2312,27 +2726,48 @@ function wireEvents() {
     els.btnNewFolder.addEventListener('click', () => {
         handleCreateFolder();
     });
-    els.btnRenameCurrent.addEventListener('click', () => {
-        handleRenameCurrentFile();
-    });
-    if (els.btnInsertList) {
-        els.btnInsertList.addEventListener('click', () => {
-            insertRankedList();
+    if (els.btnFinderSort) {
+        els.btnFinderSort.addEventListener('click', async () => {
+            const current = readFinderSort();
+            const next = await promptFinderSort(current);
+            if (!next || next === current) return;
+            const mode = writeFinderSort(next);
+            syncFinderSortControl(mode);
+            const label =
+                FINDER_SORT_OPTIONS.find((o) => o.value === mode)?.label || mode;
+            setStatus(`Sorted by ${label}`, 'ok');
+            const elsNow = getEls();
+            if (elsNow.viewPinned && !elsNow.viewPinned.hidden) {
+                await renderPinnedView();
+            } else {
+                await refreshBrowse(true);
+            }
         });
     }
-    if (els.btnImportList && els.importListFile) {
-        els.btnImportList.addEventListener('click', () => {
+    if (els.btnEditorMore) {
+        els.btnEditorMore.addEventListener('click', () => {
+            handleEditorMoreMenu();
+        });
+    }
+    if (els.editorMoreImport && els.importListFile) {
+        // Keep file-picker open in the same user gesture as the menu tap.
+        els.editorMoreImport.addEventListener('click', () => {
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
             if (!hasOpenFile()) {
                 setStatus('Open a markdown file first', 'warn');
-                return;
-            }
-            if (state.viewMode === 'preview' && state.placingList && state.pendingImportList) {
-                cancelListPlacement();
                 return;
             }
             els.importListFile.value = '';
             els.importListFile.click();
         });
+    }
+    if (els.btnInsertList) {
+        els.btnInsertList.addEventListener('click', () => {
+            insertRankedList();
+        });
+    }
+    if (els.importListFile) {
         els.importListFile.addEventListener('change', () => {
             const file = els.importListFile.files?.[0];
             handleImportListFile(file);
@@ -2354,6 +2789,9 @@ function wireEvents() {
     applySavedPreviewFontScale();
     applySavedListStripe();
     applySavedListLayout();
+    applySavedDefaultEditView();
+    applySavedDoubleTapCopy();
+    applySavedFinderSort();
     if (els.prefTheme) {
         els.prefTheme.addEventListener('change', () => {
             const theme = THEME_VALUES.has(els.prefTheme.value) ? els.prefTheme.value : THEME_DEFAULT;
@@ -2421,6 +2859,25 @@ function wireEvents() {
                 layout === 'segmented'
                     ? 'Segmented list containers on'
                     : 'Continuous list with text colour stripes',
+                'ok'
+            );
+        });
+    }
+    if (els.prefDefaultEditView) {
+        els.prefDefaultEditView.addEventListener('change', () => {
+            const mode = writeDefaultEditView(els.prefDefaultEditView.value);
+            syncDefaultEditViewControl(mode);
+            const label =
+                DEFAULT_EDIT_VIEW_OPTIONS.find((o) => o.value === mode)?.label || mode;
+            setStatus(`Default edit view: ${label}`, 'ok');
+        });
+    }
+    if (els.prefDoubleTapCopy) {
+        els.prefDoubleTapCopy.addEventListener('change', () => {
+            const enabled = writeDoubleTapCopyEnabled(els.prefDoubleTapCopy.checked);
+            syncDoubleTapCopyControl(enabled);
+            setStatus(
+                enabled ? 'Double-tap copy on' : 'Double-tap copy off',
                 'ok'
             );
         });
@@ -2524,6 +2981,9 @@ async function boot() {
     applySavedTheme();
     applySavedListStripe();
     applySavedListLayout();
+    applySavedDefaultEditView();
+    applySavedDoubleTapCopy();
+    applySavedFinderSort();
     registerServiceWorker();
 
     if (!isConfigured()) {

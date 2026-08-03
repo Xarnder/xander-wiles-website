@@ -353,10 +353,13 @@ setUIHandlers({
     URL.revokeObjectURL(url);
     toast('Export downloaded', 'success');
   },
-  onImport: async (events) => {
-    const replace = window.confirm(
-      'Replace all existing events with the import?\n\nOK = replace\nCancel = merge (add/update by id)'
-    );
+  onImport: async (events, opts = {}) => {
+    const replace =
+      typeof opts.replace === 'boolean'
+        ? opts.replace
+        : window.confirm(
+            'Replace all existing events with the import?\n\nOK = replace\nCancel = merge (add/update by id)'
+          );
     try {
       const n = await importEvents(state.user.uid, events, {
         replace,

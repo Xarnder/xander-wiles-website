@@ -22,6 +22,25 @@ export const FINDER_MD_ORDER_DESKTOP_KEY = 'md-editor:finderMdOrder:desktop';
 export const FINDER_MD_ORDER_MOBILE_DEFAULT = 'bottom';
 export const FINDER_MD_ORDER_DESKTOP_DEFAULT = 'top';
 
+/**
+ * Finder list sort order.
+ * Folders stay grouped above markdown; this sorts within each group.
+ */
+export const FINDER_SORT_KEY = 'md-editor:finderSort';
+export const FINDER_SORT_DEFAULT = 'name-asc';
+/** @type {readonly { value: string, label: string }[]} */
+export const FINDER_SORT_OPTIONS = Object.freeze([
+    { value: 'modified-desc', label: 'Last updated' },
+    { value: 'modified-asc', label: 'Oldest updated' },
+    { value: 'created-desc', label: 'Newest created' },
+    { value: 'created-asc', label: 'Oldest created' },
+    { value: 'name-asc', label: 'Name A–Z' },
+    { value: 'name-desc', label: 'Name Z–A' },
+    { value: 'size-desc', label: 'Largest first' },
+    { value: 'size-asc', label: 'Smallest first' },
+]);
+export const FINDER_SORT_VALUES = new Set(FINDER_SORT_OPTIONS.map((o) => o.value));
+
 /** App color theme: 'blue' | 'oled' | 'light' */
 export const THEME_KEY = 'md-editor:theme';
 export const THEME_DEFAULT = 'blue';
@@ -32,11 +51,20 @@ export const THEME_META_COLORS = {
     light: '#e8ecf4',
 };
 
-/** Recently opened markdown files (Finder root). */
+/** Recently opened markdown files (shown at top of Finder in any folder). */
 export const RECENT_FILES_KEY = 'md-editor:recentFiles';
 export const RECENT_FILES_MAX = 5;
 export const RECENT_FILES_MOBILE = 3;
 export const RECENT_FILES_DESKTOP = 5;
+
+/**
+ * Last-opened timestamps for Finder indicator dots (id → openedAt ms).
+ * Pruned to the last week; capped so localStorage stays small.
+ */
+export const OPENED_FILES_KEY = 'md-editor:openedFiles';
+export const OPENED_FILES_MAX = 200;
+export const OPENED_FILES_DAY_MS = 24 * 60 * 60 * 1000;
+export const OPENED_FILES_WEEK_MS = 7 * OPENED_FILES_DAY_MS;
 
 /** Pinned Drive files and folders (Pinned tab). */
 export const PINNED_ITEMS_KEY = 'md-editor:pinnedItems';
@@ -67,6 +95,30 @@ export const LIST_STRIPE_VALUES = new Set(['normal', 'zebra', 'spectrum']);
 export const LIST_LAYOUT_KEY = 'md-editor:listLayout';
 export const LIST_LAYOUT_DEFAULT = 'segmented';
 export const LIST_LAYOUT_VALUES = new Set(['segmented', 'continuous']);
+
+/**
+ * Default Edit sub-view when opening a markdown file with no per-file mode saved.
+ * 'contents' | 'list' | 'preview' | 'raw'
+ */
+export const DEFAULT_EDIT_VIEW_KEY = 'md-editor:defaultEditView';
+export const DEFAULT_EDIT_VIEW_DEFAULT = 'preview';
+/** @type {readonly { value: string, label: string }[]} */
+export const DEFAULT_EDIT_VIEW_OPTIONS = Object.freeze([
+    { value: 'contents', label: 'Contents' },
+    { value: 'list', label: 'List' },
+    { value: 'preview', label: 'Preview' },
+    { value: 'raw', label: 'Raw' },
+]);
+export const DEFAULT_EDIT_VIEW_VALUES = new Set(
+    DEFAULT_EDIT_VIEW_OPTIONS.map((o) => o.value)
+);
+
+/**
+ * Double-tap a list item in Preview/List to copy its text.
+ * '1' on (default), '0' off
+ */
+export const DOUBLE_TAP_COPY_KEY = 'md-editor:doubleTapCopy';
+export const DOUBLE_TAP_COPY_DEFAULT = true;
 
 /**
  * Total top inset for Home Screen / PWA (px) — replaces iOS safe-area-inset-top.

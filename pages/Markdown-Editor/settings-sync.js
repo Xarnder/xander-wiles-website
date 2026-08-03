@@ -30,8 +30,12 @@ let applyingCloud = false;
  *   previewFontScale?: number,
  *   listStripe?: string,
  *   listLayout?: string,
+ *   defaultEditView?: string,
+ *   doubleTapCopy?: boolean,
  *   finderMdOrder?: { mobile?: string, desktop?: string },
+ *   finderSort?: string,
  *   pinnedItems?: object[],
+ *   openedFiles?: Record<string, number>,
  * }} CloudSettings
  */
 
@@ -116,8 +120,21 @@ export async function pullCloudSettings(getLocalSnapshot) {
             previewTocOpen: parsed.previewTocOpen,
             pwaTopGap: parsed.pwaTopGap,
             previewFontScale: parsed.previewFontScale,
+            listStripe: parsed.listStripe,
+            listLayout: parsed.listLayout,
+            defaultEditView: parsed.defaultEditView,
+            doubleTapCopy:
+                typeof parsed.doubleTapCopy === 'boolean' ? parsed.doubleTapCopy : undefined,
+            pwaBottomOffset: parsed.pwaBottomOffset,
             finderMdOrder: parsed.finderMdOrder,
+            finderSort: parsed.finderSort,
             pinnedItems: Array.isArray(parsed.pinnedItems) ? parsed.pinnedItems : undefined,
+            openedFiles:
+                parsed.openedFiles &&
+                typeof parsed.openedFiles === 'object' &&
+                !Array.isArray(parsed.openedFiles)
+                    ? parsed.openedFiles
+                    : undefined,
         };
 
         // If cloud is empty of prefs, seed from local.
@@ -126,8 +143,14 @@ export async function pullCloudSettings(getLocalSnapshot) {
             cloud.previewTocSticky != null ||
             cloud.pwaTopGap != null ||
             cloud.previewFontScale != null ||
+            cloud.listStripe != null ||
+            cloud.listLayout != null ||
+            cloud.defaultEditView != null ||
+            cloud.doubleTapCopy != null ||
             cloud.finderMdOrder != null ||
-            cloud.pinnedItems != null;
+            cloud.finderSort != null ||
+            cloud.pinnedItems != null ||
+            cloud.openedFiles != null;
         if (!hasPrefs) {
             await updateFileContent(file.id, seed, 'application/json');
             return { settings: local, created: true };

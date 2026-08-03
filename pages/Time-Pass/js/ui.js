@@ -51,9 +51,28 @@ import {
 } from './calculator.js';
 import { THEMES } from './theme.js';
 import { SORT_OPTIONS, normalizeSort, vmStatBlocks } from './filters.js';
+import {
+  parseCsv,
+  guessColumnMap,
+  rowsToEvents,
+  previewMappedRows,
+} from './csv-import.js';
 
 const LAST_COLOR_KEY = 'time-pass:last-color';
 const FILTERS_OPEN_KEY = 'time-pass:filters-open';
+
+/** Prompt users can paste into an AI with a photo/list to get a Time Pass–ready CSV. */
+const CSV_AI_PROMPT = `Turn this image or list into a CSV I can import into Time Pass.
+
+Rules:
+- Output CSV only (no markdown fences, no commentary).
+- Header row exactly: Title,Date,Time
+- Column 1 (Title): event name / title
+- Column 2 (Date): date of the event as YYYY-MM-DD (example: 2026-08-03)
+- Column 3 (Time): time of the event as HH:mm in 24-hour clock (example: 14:30). If no time is known, leave the Time cell empty.
+- One event per row. Escape titles that contain commas by wrapping them in double quotes.
+- If a date is approximate, pick the best exact calendar day and still use YYYY-MM-DD.
+- Do not invent events that are not in the source.`;
 
 let calcDraft = defaultCalculatorDraft();
 
@@ -306,14 +325,6 @@ export function renderChrome() {
         className: 'btn btn-ghost',
         text: 'Settings',
         onClick: () => setView('settings'),
-      })
-    );
-    actions.appendChild(
-      el('button', {
-        type: 'button',
-        className: 'btn btn-ghost',
-        text: 'Sign out',
-        onClick: () => handlers.onSignOut(),
       })
     );
   }
@@ -1015,12 +1026,54 @@ function renderSettingsPage() {
             handlers.onImport(events);
           } catch (err) {
             toast(`Import failed: ${err.message}`, 'error');
+          } finally {
+            e.target.value = '';
           }
         },
       })
     );
     row.appendChild(fileLabel);
+
+    const csvLabel = el('label', { className: 'file-glass', text: 'Import CSV' });
+    csvLabel.appendChild(
+      el('input', {
+        type: 'file',
+        accept: 'text/csv,.csv,text/plain',
+        onChange: async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const parsed = parseCsv(text);
+            openCsvImportModal(parsed, file.name);
+          } catch (err) {
+            toast(`CSV import failed: ${err.message}`, 'error');
+          } finally {
+            e.target.value = '';
+          }
+        },
+      })
+    );
+    row.appendChild(csvLabel);
+    row.appendChild(
+      el('button', {
+        type: 'button',
+        className: 'btn btn-ghost',
+        text: 'Copy AI prompt',
+        title: 'Copy a prompt you can paste into ChatGPT / Claude with a photo or list',
+        onClick: async () => {
+          const ok = await copyText(CSV_AI_PROMPT);
+          toast(ok ? 'AI prompt copied' : 'Could not copy', ok ? 'success' : 'error');
+        },
+      })
+    );
     data.appendChild(row);
+    data.appendChild(
+      el('p', {
+        className: 'settings-muted',
+        text: 'Tip: copy the AI prompt, paste it with a photo or messy list, then Import CSV the reply.',
+      })
+    );
   } else {
     data.appendChild(
       el('p', {
@@ -2183,4 +2236,238 @@ function confirmDeleteCategory(categoryName, eventCount) {
   backdrop.appendChild(modal);
   document.getElementById('modal-root').replaceChildren(backdrop);
   trapFocus(modal);
+}
+
+function openCsvImportModal(parsed, fileName = 'file.csv') {
+  lastFocus = document.activeElement;
+  const map = guessColumnMap(parsed.headers);
+
+  const backdrop = el('div', {
+    className: 'modal-backdrop',
+    role: 'presentation',
+    onClick: (e) => {
+      if (e.target === backdrop) closeModal();
+    },
+  });
+  const modal = el('div', {
+    className: 'modal glass modal--csv',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'csv-import-title',
+  });
+
+  modal.appendChild(el('h2', { id: 'csv-import-title', text: 'Import CSV' }));
+  modal.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: `${fileName} · ${parsed.rows.length} row${parsed.rows.length === 1 ? '' : 's'} · map columns, then import.`,
+    })
+  );
+
+  const form = el('form', { className: 'form-grid' });
+
+  function columnSelect(labelText, key, includeNone = false) {
+    const field = el('div', { className: 'field' });
+    field.appendChild(el('label', { text: labelText }));
+    const select = el('select', {
+      name: key,
+      onChange: (e) => {
+        map[key] = e.target.value;
+        refreshPreview();
+      },
+    });
+    if (includeNone) {
+      select.appendChild(el('option', { value: '', text: 'None (optional)' }));
+    }
+    for (const h of parsed.headers) {
+      select.appendChild(
+        el('option', {
+          value: h,
+          text: h,
+          selected: map[key] === h,
+        })
+      );
+    }
+    if (!includeNone && !map[key] && parsed.headers[0]) {
+      map[key] = parsed.headers[0];
+      select.value = map[key];
+    }
+    field.appendChild(select);
+    return field;
+  }
+
+  form.appendChild(columnSelect('Title / event name column', 'title'));
+  form.appendChild(columnSelect('Date of event column', 'date'));
+  form.appendChild(columnSelect('Time of event column', 'time', true));
+
+  const orderField = el('div', { className: 'field' });
+  orderField.appendChild(el('label', { text: 'Ambiguous date order (e.g. 03/08/2026)' }));
+  const orderSelect = el('select', {
+    name: 'dateOrder',
+    onChange: (e) => {
+      map.dateOrder = e.target.value;
+      refreshPreview();
+    },
+  });
+  for (const [value, label] of [
+    ['auto', 'Auto (prefer day/month/year when unclear)'],
+    ['dmy', 'Day / Month / Year'],
+    ['mdy', 'Month / Day / Year'],
+    ['ymd', 'Year / Month / Day'],
+  ]) {
+    orderSelect.appendChild(
+      el('option', {
+        value,
+        text: label,
+        selected: (map.dateOrder || 'auto') === value,
+      })
+    );
+  }
+  orderField.appendChild(orderSelect);
+  orderField.appendChild(
+    el('p', {
+      className: 'field-hint',
+      text: 'Also accepts ISO (2026-08-03), 3 Aug 2026, Excel serials, and times like 14:30 or 2:30 PM. Time can live in the date column.',
+    })
+  );
+  form.appendChild(orderField);
+
+  const previewWrap = el('div', { className: 'csv-preview' });
+  const previewTitle = el('h3', { className: 'csv-preview-title', text: 'Preview' });
+  const previewMeta = el('p', { className: 'settings-muted csv-preview-meta' });
+  const previewTable = el('div', { className: 'csv-preview-table', role: 'table' });
+  previewWrap.appendChild(previewTitle);
+  previewWrap.appendChild(previewMeta);
+  previewWrap.appendChild(previewTable);
+  form.appendChild(previewWrap);
+
+  function refreshPreview() {
+    const preview = previewMappedRows(parsed.rows, map, 6);
+    let built;
+    try {
+      built = rowsToEvents(parsed.rows, {
+        title: map.title,
+        date: map.date,
+        time: map.time || '',
+        dateOrder: map.dateOrder || 'auto',
+      });
+    } catch {
+      built = { events: [], errors: parsed.rows.map((_, i) => ({ line: i + 2, error: 'Incomplete mapping' })) };
+    }
+    previewMeta.textContent = `${built.events.length} ready · ${built.errors.length} skipped/errors`;
+
+    previewTable.replaceChildren();
+    const head = el('div', { className: 'csv-preview-row csv-preview-row--head', role: 'row' });
+    for (const label of ['Title', 'Date', 'Time', 'Status']) {
+      head.appendChild(el('span', { role: 'columnheader', text: label }));
+    }
+    previewTable.appendChild(head);
+
+    for (const row of preview) {
+      const line = el('div', {
+        className: `csv-preview-row${row.error ? ' is-error' : ''}`,
+        role: 'row',
+      });
+      line.appendChild(el('span', { role: 'cell', text: row.name }));
+      line.appendChild(el('span', { role: 'cell', text: row.date || row.rawDate || '—' }));
+      line.appendChild(
+        el('span', {
+          role: 'cell',
+          text: row.time || (row.error ? '—' : row.rawTime || '—'),
+        })
+      );
+      line.appendChild(
+        el('span', {
+          role: 'cell',
+          className: row.error ? 'csv-preview-status is-bad' : 'csv-preview-status is-ok',
+          text: row.error || 'OK',
+        })
+      );
+      previewTable.appendChild(line);
+    }
+  }
+
+  refreshPreview();
+
+  const actions = el('div', { className: 'modal-actions modal-actions--edit' });
+  const secondary = el('div', { className: 'modal-actions-secondary' });
+  secondary.appendChild(
+    el('button', {
+      type: 'button',
+      className: 'btn btn-ghost',
+      text: 'Cancel',
+      onClick: () => closeModal(),
+    })
+  );
+  actions.appendChild(secondary);
+
+  const primary = el('div', { className: 'modal-actions-primary' });
+  primary.appendChild(
+    el('button', {
+      type: 'button',
+      className: 'btn btn-ghost',
+      text: 'Merge import',
+      onClick: () => submitImport(false),
+    })
+  );
+  primary.appendChild(
+    el('button', {
+      type: 'button',
+      className: 'btn',
+      text: 'Replace all',
+      onClick: () => submitImport(true),
+    })
+  );
+  actions.appendChild(primary);
+  form.appendChild(actions);
+
+  function submitImport(replace) {
+    let built;
+    try {
+      built = rowsToEvents(parsed.rows, {
+        title: map.title,
+        date: map.date,
+        time: map.time || '',
+        dateOrder: map.dateOrder || 'auto',
+      });
+    } catch (err) {
+      toast(err.message || 'Could not map CSV', 'error');
+      return;
+    }
+
+    if (!built.events.length) {
+      toast(
+        built.errors.length
+          ? `No valid rows to import (${built.errors.length} failed).`
+          : 'No events found in CSV.',
+        'error'
+      );
+      return;
+    }
+
+    if (replace) {
+      const ok = window.confirm(
+        `Replace all existing events with ${built.events.length} from this CSV? This cannot be undone.`
+      );
+      if (!ok) return;
+    } else if (built.errors.length > 0) {
+      const ok = window.confirm(
+        `Merge ${built.events.length} events? ${built.errors.length} row${built.errors.length === 1 ? '' : 's'} will be skipped.`
+      );
+      if (!ok) return;
+    }
+
+    closeModal();
+    handlers.onImport(built.events, { replace, fromCsv: true });
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitImport(false);
+  });
+
+  modal.appendChild(form);
+  backdrop.appendChild(modal);
+  document.getElementById('modal-root').replaceChildren(backdrop);
+  trapFocus(modal, form.querySelector('select'));
 }

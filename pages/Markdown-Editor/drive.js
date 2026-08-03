@@ -56,29 +56,86 @@ export function isMarkdownCandidate(file) {
     return name.endsWith('.md') || name.endsWith('.markdown');
 }
 
-/** Folders first, then markdown, then other — alphabetical within each group. */
-export function sortDriveEntries(files) {
+/** Folders first, then markdown, then other — sorted within each group by `sortMode`. */
+export function sortDriveEntries(files, sortMode = 'name-asc') {
+    const mode = typeof sortMode === 'string' ? sortMode : 'name-asc';
     const rank = (file) => {
         if (isFolder(file)) return 0;
         if (isMarkdownCandidate(file)) return 1;
         return 2;
     };
-    return [...files].sort((a, b) => {
-        const diff = rank(a) - rank(b);
-        if (diff !== 0) return diff;
-        return String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+    const nameCmp = (a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), undefined, {
             sensitivity: 'base',
             numeric: true,
         });
+    const toMs = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        return Date.parse(value || '') || 0;
+    };
+    const timeCmp = (key, dir) => (a, b) => {
+        const ta = toMs(a?.[key]);
+        const tb = toMs(b?.[key]);
+        if (ta !== tb) return dir === 'desc' ? tb - ta : ta - tb;
+        return nameCmp(a, b);
+    };
+    const sizeCmp = (dir) => (a, b) => {
+        const sa = Number(a?.size) || 0;
+        const sb = Number(b?.size) || 0;
+        if (sa !== sb) return dir === 'desc' ? sb - sa : sa - sb;
+        return nameCmp(a, b);
+    };
+
+    /** @type {(a: object, b: object) => number} */
+    let within = nameCmp;
+    if (mode === 'name-desc') within = (a, b) => nameCmp(b, a);
+    else if (mode === 'modified-desc') within = timeCmp('modifiedTime', 'desc');
+    else if (mode === 'modified-asc') within = timeCmp('modifiedTime', 'asc');
+    else if (mode === 'created-desc') within = timeCmp('createdTime', 'desc');
+    else if (mode === 'created-asc') within = timeCmp('createdTime', 'asc');
+    else if (mode === 'size-desc') within = sizeCmp('desc');
+    else if (mode === 'size-asc') within = sizeCmp('asc');
+
+    return [...files].sort((a, b) => {
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+        return within(a, b);
     });
+}
+
+/** Map UI sort mode → Drive `orderBy` (folders still first). */
+export function driveOrderByForSort(sortMode = 'name-asc') {
+    switch (sortMode) {
+        case 'name-desc':
+            return 'folder,name_natural desc';
+        case 'modified-desc':
+            return 'folder,modifiedTime desc';
+        case 'modified-asc':
+            return 'folder,modifiedTime';
+        case 'created-desc':
+            return 'folder,createdTime desc';
+        case 'created-asc':
+            return 'folder,createdTime';
+        case 'size-desc':
+            return 'folder,quotaBytesUsed desc';
+        case 'size-asc':
+            return 'folder,quotaBytesUsed';
+        case 'name-asc':
+        default:
+            return 'folder,name_natural';
+    }
 }
 
 /**
  * List folders and markdown files in a folder.
  * Query is scoped to folders + markdown candidates so pagination matches what the UI shows.
+ * @param {string} [folderId]
+ * @param {string|null} [pageToken]
+ * @param {{ sortMode?: string }} [options]
  * @returns {Promise<{ files: object[], nextPageToken: string|null }>}
  */
-export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null) {
+export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, options = {}) {
+    const sortMode = options.sortMode || 'name-asc';
     const parent = folderId || ROOT_FOLDER_ID;
     const safeParent = parent.replace(/'/g, "\\'");
     const q = [
@@ -91,15 +148,16 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null) {
         spaces: 'drive',
         corpora: 'user',
         pageSize: String(PAGE_SIZE),
-        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size)',
-        orderBy: 'folder,name_natural',
+        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, createdTime, size)',
+        orderBy: driveOrderByForSort(sortMode),
     });
     if (pageToken) params.set('pageToken', pageToken);
 
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
     const files = sortDriveEntries(
-        (data.files || []).filter((f) => isFolder(f) || isMarkdownCandidate(f))
+        (data.files || []).filter((f) => isFolder(f) || isMarkdownCandidate(f)),
+        sortMode
     );
     return {
         files,
@@ -137,9 +195,12 @@ export async function fetchVisiblePage(fetchPage, startToken, options = {}) {
  * Search markdown files across the signed-in user's entire Drive
  * (includes My Drive and typically Mac "Computers" sync locations).
  * @param {string} [nameQuery] optional name filter (without requiring .md)
+ * @param {string|null} [pageToken]
+ * @param {{ sortMode?: string }} [options]
  * @returns {Promise<{ files: object[], nextPageToken: string|null }>}
  */
-export async function searchMarkdownFiles(nameQuery = '', pageToken = null) {
+export async function searchMarkdownFiles(nameQuery = '', pageToken = null, options = {}) {
+    const sortMode = options.sortMode || 'modified-desc';
     // Broad server query; tighten client-side with isMarkdownCandidate.
     const parts = ['trashed = false', "mimeType != 'application/vnd.google-apps.folder'"];
     const trimmed = (nameQuery || '').trim();
@@ -151,19 +212,25 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null) {
         parts.push("(mimeType = 'text/markdown' or name contains '.md')");
     }
 
+    // Search has no folders in results — drop the folder key from orderBy.
+    const orderBy = driveOrderByForSort(sortMode).replace(/^folder,/, '') || 'modifiedTime desc';
+
     const params = new URLSearchParams({
         q: parts.join(' and '),
         spaces: 'drive',
         corpora: 'user',
         pageSize: String(PAGE_SIZE),
-        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size, parents)',
-        orderBy: 'modifiedTime desc',
+        fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, createdTime, size, parents)',
+        orderBy,
     });
     if (pageToken) params.set('pageToken', pageToken);
 
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
-    const files = sortDriveEntries((data.files || []).filter((f) => isMarkdownCandidate(f)));
+    const files = sortDriveEntries(
+        (data.files || []).filter((f) => isMarkdownCandidate(f)),
+        sortMode
+    );
     return {
         files,
         nextPageToken: data.nextPageToken || null,
@@ -186,7 +253,7 @@ export async function listComputerRootFolders() {
             spaces: 'drive',
             corpora: 'user',
             pageSize: '100',
-            fields: 'nextPageToken, files(id, name, mimeType, parents, capabilities, ownedByMe)',
+            fields: 'nextPageToken, files(id, name, mimeType, parents, capabilities, ownedByMe, modifiedTime, createdTime, size)',
         });
         if (pageToken) params.set('pageToken', pageToken);
 
@@ -206,13 +273,16 @@ export async function listComputerRootFolders() {
     const byId = new Map();
     for (const f of found) byId.set(f.id, f);
     return Array.from(byId.values()).sort((a, b) =>
-        String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+        String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+            sensitivity: 'base',
+            numeric: true,
+        })
     );
 }
 
 export async function getFileMetadata(fileId) {
     const params = new URLSearchParams({
-        fields: 'id,name,mimeType,modifiedTime,size,parents',
+        fields: 'id,name,mimeType,modifiedTime,createdTime,size,parents',
     });
     const response = await driveFetch(
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`

@@ -441,6 +441,11 @@ html.is-standalone .nav-bar {
     mask: url('./Assets/SVGs/rename.svg') center / contain no-repeat;
 }
 
+.nav-action-icon--menu {
+    -webkit-mask: url('./Assets/SVGs/menu.svg') center / contain no-repeat;
+    mask: url('./Assets/SVGs/menu.svg') center / contain no-repeat;
+}
+
 .nav-action-icon--save {
     width: 17px;
     height: 17px;
@@ -552,6 +557,40 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
 
 .finder-actions .create-actions {
     flex: 1 1 auto;
+}
+
+/* Pinned tab: reuse Finder action strip, but only show Sort. */
+.nav-actions-finder.is-pinned-only .browse-mode-row,
+.nav-actions-finder.is-pinned-only .create-actions {
+    display: none;
+}
+
+.nav-actions-finder.is-pinned-only .finder-actions {
+    width: 100%;
+}
+
+.btn-finder-sort {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.85rem;
+    font-weight: 650;
+}
+
+.btn-finder-sort-label {
+    display: inline-block;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+.item-action-btn.is-selected {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--accent-active-ring);
 }
 
 .finder-path-bar {
@@ -741,14 +780,14 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
         -webkit-backdrop-filter: blur(12px);
     }
 
-    /* Edit mode switcher stays as a centred chip; preview/list use full width */
+    /* Mode switcher is mobile-first; hide on wide screens (nav chrome is enough) */
     .view-mode-dock {
         align-items: center;
         width: 100%;
     }
 
     .view-mode-bar {
-        max-width: var(--desktop-chrome-width);
+        display: none !important;
     }
 }
 
@@ -1662,6 +1701,36 @@ html[data-theme="oled"] .file-group--pinned-markdown {
     font-size: 0.9rem;
 }
 
+.editor-more-stats {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 16px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated, var(--bg-input));
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.editor-more-stats-label {
+    color: var(--text-muted);
+    min-width: 0;
+}
+
+.editor-more-stats-value {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.editor-more-stats-value.is-pending {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 .name-input {
     width: 100%;
     min-height: 48px;
@@ -1695,6 +1764,59 @@ html[data-theme="oled"] .file-group--pinned-markdown {
     display: block;
 }
 
+.file-row-label {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-row-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.file-row-opened-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.file-row-opened-dot--day {
+    background: #f0c674;
+}
+
+.file-row-opened-dot--week {
+    background: #5b9fff;
+}
+
+html[data-theme="light"] .file-row-opened-dot {
+    box-shadow: 0 0 0 1px rgba(20, 32, 56, 0.14);
+}
+
+html[data-theme="light"] .file-row-opened-dot--day {
+    background: #d4a017;
+}
+
+html[data-theme="light"] .file-row-opened-dot--week {
+    background: #2f6fdb;
+}
+
+html[data-theme="oled"] .file-row-opened-dot--day {
+    background: #e0c060;
+}
+
+html[data-theme="oled"] .file-row-opened-dot--week {
+    background: #c8c8c8;
+}
+
 .file-row--folder .file-row-icon img {
     filter: invert(0.88) brightness(0.95);
     opacity: 0.9;
@@ -1714,15 +1836,6 @@ html[data-theme="light"] .file-row--markdown .file-row-icon img {
     /* Dark blue so markdown icons read clearly on light surfaces */
     filter: invert(28%) sepia(70%) saturate(1400%) hue-rotate(200deg) brightness(0.85);
     opacity: 1;
-}
-
-.file-row-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 500;
 }
 
 .empty-state {
@@ -2098,14 +2211,16 @@ html[data-theme="light"] .editor::selection {
 }
 
 .btn-click-edit--active,
-.btn-insert-list--cancel {
+.btn-insert-list--cancel,
+.btn-editor-more--cancel {
     background: var(--accent-row);
     border-color: var(--accent-border);
     color: var(--text);
 }
 
 .nav-actions-editor.is-action-locked .btn.is-active-action.btn-click-edit--active,
-.nav-actions-editor.is-action-locked .btn.is-active-action.btn-insert-list--cancel {
+.nav-actions-editor.is-action-locked .btn.is-active-action.btn-insert-list--cancel,
+.nav-actions-editor.is-action-locked .btn.is-active-action.btn-editor-more--cancel {
     color: var(--danger);
     background: var(--cancel-action-bg);
     border-color: var(--cancel-action-border);
@@ -2547,6 +2662,13 @@ html[data-theme="light"] .editor::selection {
     gap: 8px;
 }
 
+.mdlist-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
 .mdlist-title-row .btn {
     flex-shrink: 0;
     border-radius: 6px;
@@ -2609,7 +2731,9 @@ html[data-theme="light"] .editor::selection {
     overflow-wrap: anywhere;
 }
 
-.mdlist-edit-btn {
+.mdlist-edit-btn,
+.mdlist-add-btn,
+.mdlist-copy-btn {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -2626,13 +2750,34 @@ html[data-theme="light"] .editor::selection {
 }
 
 .mdlist-edit-btn:hover,
-.mdlist-edit-btn:focus-visible {
+.mdlist-edit-btn:focus-visible,
+.mdlist-add-btn:hover,
+.mdlist-add-btn:focus-visible,
+.mdlist-copy-btn:hover,
+.mdlist-copy-btn:focus-visible {
     color: var(--accent);
     border-color: var(--accent-border);
 }
 
-.mdlist-edit-btn:active {
+.mdlist-edit-btn:active,
+.mdlist-add-btn:active,
+.mdlist-copy-btn:active {
     transform: scale(0.96);
+}
+
+.mdlist-add-btn-icon,
+.mdlist-copy-btn-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    background: currentColor;
+    -webkit-mask: url('./Assets/SVGs/add-square.svg') center / contain no-repeat;
+    mask: url('./Assets/SVGs/add-square.svg') center / contain no-repeat;
+}
+
+.mdlist-copy-btn-icon {
+    -webkit-mask-image: url('./Assets/SVGs/copy.svg');
+    mask-image: url('./Assets/SVGs/copy.svg');
 }
 
 .mdlist-block--view {
@@ -3049,7 +3194,12 @@ html[data-theme="light"] .editor::selection {
 .mdplain-mini-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 8px;
+}
+
+.mdplain-mini-actions .mdlist-copy-btn {
+    margin-right: auto;
 }
 
 .mdplain-view-text {
