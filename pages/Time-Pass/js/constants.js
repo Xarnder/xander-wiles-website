@@ -12,7 +12,7 @@ export const ALL_UNITS = [
 ];
 
 /** Default units for newly created events (per-event only; Q12). */
-export const DEFAULT_UNITS = [...ALL_UNITS];
+export const DEFAULT_UNITS = ALL_UNITS.filter((u) => u !== 'decades');
 
 export const COLOR_PALETTE = [
   '#3cf0ff',

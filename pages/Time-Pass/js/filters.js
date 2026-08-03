@@ -174,6 +174,32 @@ function compareName(a, b) {
   });
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Whether an event opts out of the “This week’s events” pin. */
+export function isExcludedFromThisWeek(event) {
+  if (event?.excludeFromThisWeek === true) return true;
+  if (event?.excludeFromThisWeek === false) return false;
+  const freq = event?.recurrence?.frequency || 'none';
+  return freq === 'daily' || freq === 'weekly';
+}
+
+/** Next occurrence falls within the next 7 days and is not opted out. */
+export function isThisWeekVm(vm, nowMs = Date.now()) {
+  if (!vm || isExcludedFromThisWeek(vm.event)) return false;
+  const next = vm.sortKeyUpcoming;
+  return next != null && next >= nowMs && next < nowMs + WEEK_MS;
+}
+
+export function pickThisWeekVms(vms, nowMs = Date.now()) {
+  return vms
+    .filter((vm) => isThisWeekVm(vm, nowMs))
+    .sort(
+      (a, b) =>
+        (a.sortKeyUpcoming ?? 0) - (b.sortKeyUpcoming ?? 0) || compareName(a, b)
+    );
+}
+
 function sortFlat(vms, sort, nowMs) {
   const list = [...vms];
   switch (normalizeSort(sort)) {
@@ -252,7 +278,11 @@ export function buildFilteredSortedList(events, filters, nowMs) {
 
 export function buildFilteredSortedSections(events, filters, nowMs) {
   const vms = events.map((e) => toViewModel(e, nowMs));
-  return sortViewModels(filterViewModels(vms, filters), filters?.sort, nowMs);
+  const sorted = sortViewModels(filterViewModels(vms, filters), filters?.sort, nowMs);
+  return {
+    ...sorted,
+    thisWeek: pickThisWeekVms(sorted.all, nowMs),
+  };
 }
 
 export function listNeedsSecondTick(vms) {

@@ -638,6 +638,11 @@ html[data-theme="light"] .filter-family-subhint {
   grid-column: 1 / -1;
 }
 
+.section-heading--this-week {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
 .relative-cue {
   display: inline-block;
   margin-left: 0.45rem;
@@ -738,7 +743,8 @@ html[data-theme="light"] .filter-family-subhint {
 
 .event-card.is-compact .event-title {
   font-size: 0.9rem;
-  line-height: 1.2;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .event-card.is-compact .direction-row {
@@ -789,13 +795,16 @@ html[data-theme="light"] .filter-family-subhint {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.25;
+  white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
+  hyphens: auto;
 }
 
 .event-title-block {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  overflow: visible;
 }
 
 .event-meta {
@@ -807,6 +816,7 @@ html[data-theme="light"] .filter-family-subhint {
 .event-actions {
   display: flex;
   gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .chip-with-icon {
@@ -1778,6 +1788,140 @@ html[data-theme="light"] .theme-option {
   font-size: 0.85rem;
 }
 
+.multi-select-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.75rem;
+  margin: 0 0 var(--space-sm);
+  padding: 0.55rem 0.7rem;
+  position: sticky;
+  top: 0.35rem;
+  z-index: 12;
+}
+
+.multi-select-bar[hidden] {
+  display: none !important;
+}
+
+.multi-select-bar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.multi-select-bar-copy strong {
+  font-size: 0.92rem;
+}
+
+.multi-select-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.event-card.is-selectable {
+  cursor: pointer;
+}
+
+.event-card.is-selectable:hover {
+  border-color: color-mix(in srgb, var(--event-color, var(--accent)) 70%, #fff);
+}
+
+.event-card.is-selected {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 65%, transparent),
+    0 0 22px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.event-select {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.15rem 0.15rem 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.event-card.is-compact .event-select {
+  margin-top: 0.05rem;
+}
+
+.modal--multi-edit {
+  width: min(560px, 100%);
+}
+
+.multi-edit-color-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.multi-edit-locked {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.multi-edit-locked-label {
+  margin: 0 0 0.35rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.multi-edit-title-list {
+  list-style: none;
+  margin: 0 0 0.35rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: min(40dvh, 14rem);
+  overflow: auto;
+}
+
+.multi-edit-title-list li {
+  margin: 0;
+  padding: 0.2rem 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.multi-edit-title-list li:last-child {
+  border-bottom: none;
+}
+
+html[data-theme='light'] .multi-edit-locked {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+html[data-theme='light'] .multi-edit-title-list li {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme='light'] .event-card.is-selected {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 8px 22px rgba(15, 23, 42, 0.12);
+}
+
 .modal--csv {
   width: min(640px, 100%);
 }
@@ -2523,13 +2667,20 @@ input[type="range"]::-webkit-slider-runnable-track {
   .filters-drawer-summary .density-toggle {
     width: 36px;
     height: 36px;
+    order: 3;
+  }
+
+  .filters-drawer-summary > .chip:not(.chip--clear) {
+    flex-shrink: 0;
     order: 2;
+    min-height: 36px;
+    align-items: center;
   }
 
   .filters-drawer:not(.is-open) .filters-drawer-summary > .chip--clear {
     display: inline-flex;
     align-items: center;
-    order: 3;
+    order: 4;
   }
 
   .filters-drawer.is-open .filters-drawer-summary > .chip--clear {

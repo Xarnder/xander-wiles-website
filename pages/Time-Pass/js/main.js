@@ -2,6 +2,7 @@ import { initAuth, signInWithGoogle, signOutUser } from './auth.js';
 import {
   createEvent,
   updateEvent,
+  batchUpdateEvents,
   deleteEvent,
   deleteCategory,
   subscribeEvents,
@@ -23,7 +24,7 @@ import {
   setView,
   needsSecondTick,
 } from './store.js';
-import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY } from './categories.js';
+import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded } from './categories.js';
 import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal } from './ui.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
@@ -262,9 +263,15 @@ setUIHandlers({
   },
   onAdd: async (payload) => {
     try {
-      const { _categories, ...eventPayload } = payload;
+      const { _categories, ...rest } = payload;
+      const applied = applyBirthdayCategoryIfNeeded(
+        rest.name,
+        rest.category,
+        _categories || state.settings.categories
+      );
+      const eventPayload = { ...rest, category: applied.category };
       await createEvent(state.user.uid, eventPayload, state.events.length);
-      await syncCategoriesAfterEvent(eventPayload.category, _categories);
+      await syncCategoriesAfterEvent(eventPayload.category, applied.categories);
       if (state.events.length + 1 === SOFT_EVENT_CAP) {
         toast(`Soft limit of ${SOFT_EVENT_CAP} events reached.`, 'info');
       }
@@ -281,6 +288,19 @@ setUIHandlers({
       toast('Event saved', 'success');
     } catch (err) {
       toast(err.message, 'error');
+    }
+  },
+  onBatchEdit: async (ids, patch, meta = {}) => {
+    const { _categories, colorById } = meta;
+    try {
+      const n = await batchUpdateEvents(state.user.uid, ids, patch, state.events, { colorById });
+      if (Object.prototype.hasOwnProperty.call(patch, 'category')) {
+        await syncCategoriesAfterEvent(patch.category, _categories);
+      }
+      toast(`Updated ${n} event${n === 1 ? '' : 's'}`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+      throw err;
     }
   },
   onDelete: async (id) => {
@@ -335,6 +355,7 @@ setUIHandlers({
         showSinceLast: event.showSinceLast !== false,
         showSinceFirst: event.showSinceFirst !== false,
         showCycleProgress: event.showCycleProgress !== false,
+        excludeFromThisWeek: event.excludeFromThisWeek,
       };
       await createEvent(state.user.uid, payload, state.events.length);
       toast('Event duplicated', 'success');

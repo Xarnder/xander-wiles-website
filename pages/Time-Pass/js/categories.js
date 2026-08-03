@@ -3,6 +3,7 @@
  */
 
 export const DEFAULT_CATEGORY = 'Misc';
+export const BIRTHDAY_CATEGORY = 'Birthday';
 export const CATEGORY_MAX = 40;
 /** Sentinel value in <select> for “create new category”. */
 export const NEW_CATEGORY_VALUE = '__tp_new_category__';
@@ -13,6 +14,43 @@ export function normalizeCategoryName(raw) {
     .replace(/\s+/g, ' ');
   if (!s) return DEFAULT_CATEGORY;
   return s.slice(0, CATEGORY_MAX);
+}
+
+/** True when the event title mentions birth / birthday(s). */
+export function titleSuggestsBirthday(name) {
+  const s = String(name || '');
+  return /\bbirthdays?\b/i.test(s) || /\bbirth\b/i.test(s);
+}
+
+/**
+ * Prefer an existing Birthday / Birthdays category (any casing);
+ * otherwise return the canonical "Birthday" label.
+ */
+export function resolveBirthdayCategory(categories) {
+  const cats = normalizeCategories(categories);
+  const existing = cats.find((c) => {
+    const key = c.toLowerCase();
+    return key === 'birthday' || key === 'birthdays';
+  });
+  return existing || BIRTHDAY_CATEGORY;
+}
+
+/**
+ * For new events: if the title looks like a birthday, assign Birthday
+ * (or the user's existing birthday category).
+ */
+export function applyBirthdayCategoryIfNeeded(name, category, categories) {
+  if (!titleSuggestsBirthday(name)) {
+    return {
+      category: normalizeCategoryName(category),
+      categories: normalizeCategories(categories),
+    };
+  }
+  const birthday = resolveBirthdayCategory(categories);
+  return {
+    category: birthday,
+    categories: normalizeCategories([...(categories || []), birthday]),
+  };
 }
 
 /** Misc first, then A–Z; case-insensitive unique. */

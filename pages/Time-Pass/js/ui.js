@@ -5,6 +5,7 @@ import {
   HARD_EVENT_CAP,
   SOFT_EVENT_CAP,
   getBrowserTimeZone,
+  normalizeUnits,
   unitLabel,
 } from './constants.js';
 import {
@@ -24,6 +25,9 @@ import {
   normalizeCategories,
   normalizeCategoryName,
   resolveEventCategory,
+  titleSuggestsBirthday,
+  resolveBirthdayCategory,
+  applyBirthdayCategoryIfNeeded,
 } from './categories.js';
 import {
   formatUnitValue,
@@ -94,6 +98,7 @@ let handlers = {
   onSignOut: () => {},
   onAdd: () => {},
   onEdit: () => {},
+  onBatchEdit: async () => {},
   onDelete: () => {},
   onDuplicate: () => {},
   onFilters: () => {},
@@ -105,6 +110,50 @@ let handlers = {
 
 let lastFocus = null;
 let editingId = null;
+
+/** Multi-select / multi-edit (list view, signed-in only). */
+let multiSelectMode = false;
+const selectedEventIds = new Set();
+
+function pruneSelection() {
+  const living = new Set(state.events.map((e) => e.id));
+  for (const id of [...selectedEventIds]) {
+    if (!living.has(id)) selectedEventIds.delete(id);
+  }
+}
+
+function setMultiSelectMode(on) {
+  multiSelectMode = Boolean(on) && state.mode === 'signed-in' && state.view === 'list';
+  if (!multiSelectMode) selectedEventIds.clear();
+  document.body.classList.toggle('is-multi-select', multiSelectMode);
+  renderToolbar(Date.now());
+  renderList(Date.now());
+}
+
+function toggleEventSelected(id, force) {
+  if (!id || !multiSelectMode) return;
+  const next = force === undefined ? !selectedEventIds.has(id) : Boolean(force);
+  if (next) selectedEventIds.add(id);
+  else selectedEventIds.delete(id);
+  renderMultiSelectBar();
+  const card = document.querySelector(`.event-card[data-id="${CSS.escape(id)}"]`);
+  if (card) {
+    const on = selectedEventIds.has(id);
+    card.classList.toggle('is-selected', on);
+    const cb = card.querySelector('.event-select');
+    if (cb) cb.checked = on;
+  }
+}
+
+function selectVisibleEvents(vms) {
+  for (const vm of vms) selectedEventIds.add(vm.event.id);
+  renderList(Date.now());
+}
+
+function clearSelection() {
+  selectedEventIds.clear();
+  renderList(Date.now());
+}
 
 export function setUIHandlers(h) {
   handlers = { ...handlers, ...h };
@@ -563,6 +612,19 @@ export function renderToolbar(nowMs = Date.now()) {
     toggle,
     densityToggle,
   ]);
+
+  if (state.mode === 'signed-in') {
+    const selectToggle = el('button', {
+      type: 'button',
+      className: `chip${multiSelectMode ? ' is-active' : ''}`,
+      text: multiSelectMode ? 'Done' : 'Select',
+      'aria-pressed': multiSelectMode,
+      title: multiSelectMode ? 'Exit multi-select' : 'Select events to multi-edit',
+      onClick: () => setMultiSelectMode(!multiSelectMode),
+    });
+    collapsedBar.appendChild(selectToggle);
+  }
+
   if (filtersActive) {
     collapsedBar.appendChild(
       el('button', {
@@ -704,13 +766,30 @@ function renderCard(vm, readOnly) {
   const { event, primary, secondary, sinceFirst, cycleProgress } = vm;
   const fullColour = Boolean(state.settings.fullColourCards);
   const compact = state.settings.cardDensity === 'compact';
+  const selecting = multiSelectMode && !readOnly;
+  const selected = selecting && selectedEventIds.has(event.id);
   const li = el('li', {
-    className: `event-card glass${fullColour ? ' is-full-colour' : ''}${compact ? ' is-compact' : ''}`,
+    className: `event-card glass${fullColour ? ' is-full-colour' : ''}${compact ? ' is-compact' : ''}${
+      selecting ? ' is-selectable' : ''
+    }${selected ? ' is-selected' : ''}`,
     style: `--event-color: ${event.color}`,
     'data-id': event.id,
   });
 
   const head = el('div', { className: 'event-card-head' });
+
+  if (selecting) {
+    const check = el('input', {
+      type: 'checkbox',
+      className: 'event-select',
+      checked: selected,
+      'aria-label': `Select ${event.name}`,
+      onClick: (e) => e.stopPropagation(),
+      onChange: (e) => toggleEventSelected(event.id, e.target.checked),
+    });
+    head.appendChild(check);
+  }
+
   const titleBlock = el('div', { className: 'event-title-block' });
   titleBlock.appendChild(el('h2', { className: 'event-title', text: event.name }));
   if (!compact) {
@@ -718,7 +797,7 @@ function renderCard(vm, readOnly) {
   }
   head.appendChild(titleBlock);
 
-  if (!readOnly) {
+  if (!readOnly && !selecting) {
     const actions = el('div', { className: 'event-actions' });
     actions.appendChild(
       iconButton({
@@ -738,6 +817,13 @@ function renderCard(vm, readOnly) {
       })
     );
     head.appendChild(actions);
+  }
+
+  if (selecting) {
+    li.addEventListener('click', (e) => {
+      if (e.target.closest('button, a, input, label')) return;
+      toggleEventSelected(event.id);
+    });
   }
 
   li.appendChild(head);
@@ -779,28 +865,46 @@ function renderSyncBanner() {
 function buildListItems(nowMs, readOnly) {
   const f = state.settings.filters;
   const sections = getViewSections(nowMs);
+  const thisWeek = sections.thisWeek || [];
+  const thisWeekIds = new Set(thisWeek.map((vm) => vm.event.id));
+
+  // Avoid duplicate cards: week pin owns those events for this render.
+  const upcoming = (sections.upcoming || []).filter((vm) => !thisWeekIds.has(vm.event.id));
+  const past = (sections.past || []).filter((vm) => !thisWeekIds.has(vm.event.id));
+  const all = (sections.all || []).filter((vm) => !thisWeekIds.has(vm.event.id));
+
   const showSectionHeaders =
     f.direction === 'all' &&
     normalizeSort(f.sort) === 'smart' &&
-    sections.upcoming.length > 0 &&
-    sections.past.length > 0;
+    upcoming.length > 0 &&
+    past.length > 0;
 
   const items = [];
 
+  if (thisWeek.length) {
+    items.push(
+      el('li', {
+        className: 'section-heading section-heading--this-week',
+        text: "This week's events",
+      })
+    );
+    items.push(...thisWeek.map((vm) => renderCard(vm, readOnly)));
+  }
+
   if (showSectionHeaders) {
-    if (sections.upcoming.length) {
+    if (upcoming.length) {
       items.push(el('li', { className: 'section-heading', text: 'Upcoming' }));
-      items.push(...sections.upcoming.map((vm) => renderCard(vm, readOnly)));
+      items.push(...upcoming.map((vm) => renderCard(vm, readOnly)));
     }
-    if (sections.past.length) {
+    if (past.length) {
       items.push(el('li', { className: 'section-heading', text: 'Past' }));
-      items.push(...sections.past.map((vm) => renderCard(vm, readOnly)));
+      items.push(...past.map((vm) => renderCard(vm, readOnly)));
     }
     return items;
   }
 
-  const vms = sections.all.length ? sections.all : getViewList(nowMs);
-  return vms.map((vm) => renderCard(vm, readOnly));
+  items.push(...all.map((vm) => renderCard(vm, readOnly)));
+  return items;
 }
 
 export function renderList(nowMs = Date.now()) {
@@ -808,7 +912,15 @@ export function renderList(nowMs = Date.now()) {
   const empty = document.getElementById('empty-state');
   if (!list || !empty) return;
 
+  if (state.mode !== 'signed-in' || state.view !== 'list') {
+    multiSelectMode = false;
+    selectedEventIds.clear();
+    document.body.classList.remove('is-multi-select');
+  }
+  pruneSelection();
+
   renderSyncBanner();
+  renderMultiSelectBar();
 
   const readOnly = state.mode === 'guest';
   const items = buildListItems(nowMs, readOnly);
@@ -846,6 +958,64 @@ export function renderList(nowMs = Date.now()) {
     empty.hidden = true;
     empty.replaceChildren();
   }
+}
+
+function renderMultiSelectBar() {
+  const bar = document.getElementById('multi-select-bar');
+  if (!bar) return;
+
+  const show = multiSelectMode && state.mode === 'signed-in' && state.view === 'list';
+  bar.hidden = !show;
+  if (!show) {
+    bar.replaceChildren();
+    return;
+  }
+
+  pruneSelection();
+  const vms = getViewList(Date.now());
+  const visibleIds = vms.map((vm) => vm.event.id);
+  const count = selectedEventIds.size;
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedEventIds.has(id));
+
+  bar.replaceChildren(
+    el('div', { className: 'multi-select-bar-copy' }, [
+      el('strong', { text: `${count} selected` }),
+      el('span', {
+        className: 'settings-muted',
+        text: 'Edit colour, units, category & recurrence — titles and dates stay put.',
+      }),
+    ]),
+    el('div', { className: 'multi-select-bar-actions' }, [
+      el('button', {
+        type: 'button',
+        className: 'btn btn-ghost',
+        text: allVisibleSelected ? 'Clear visible' : 'Select visible',
+        onClick: () => {
+          if (allVisibleSelected) {
+            for (const id of visibleIds) selectedEventIds.delete(id);
+            renderList(Date.now());
+          } else {
+            selectVisibleEvents(vms);
+          }
+        },
+      }),
+      el('button', {
+        type: 'button',
+        className: 'btn btn-ghost',
+        text: 'Clear',
+        disabled: count === 0,
+        onClick: () => clearSelection(),
+      }),
+      el('button', {
+        type: 'button',
+        className: 'btn',
+        text: 'Edit selected',
+        disabled: count === 0,
+        onClick: () => openMultiEditModal([...selectedEventIds]),
+      }),
+    ])
+  );
 }
 
 function renderShortcutsSection() {
@@ -1583,6 +1753,12 @@ export function renderAll(nowMs = Date.now()) {
   document.body.classList.toggle('is-settings-view', isSettings);
   document.body.classList.toggle('is-calculator-view', isCalculator);
 
+  if (isSettings || isCalculator || state.mode !== 'signed-in') {
+    multiSelectMode = false;
+    selectedEventIds.clear();
+    document.body.classList.remove('is-multi-select');
+  }
+
   renderChrome();
 
   if (isSettings) {
@@ -1747,6 +1923,14 @@ function ensureTzDatalist() {
   return datalist;
 }
 
+function defaultExcludeFromThisWeek(event) {
+  if (!event) return false;
+  if (event.excludeFromThisWeek === true) return true;
+  if (event.excludeFromThisWeek === false) return false;
+  const freq = event.recurrence?.frequency || 'none';
+  return freq === 'daily' || freq === 'weekly';
+}
+
 export function openEventModal(event) {
   if (state.mode === 'guest') {
     toast('Sign in to create or edit events.', 'info');
@@ -1779,6 +1963,7 @@ export function openEventModal(event) {
     showSinceFirst: event?.showSinceFirst !== false,
     showCycleProgress: event?.showCycleProgress !== false,
     category: resolveEventCategory(event, getCategories()),
+    excludeFromThisWeek: defaultExcludeFromThisWeek(event),
   };
 
   const backdrop = el('div', {
@@ -1831,6 +2016,7 @@ export function openEventModal(event) {
 
   let modalCategories = [...getCategories()];
   let selectedCategory = draft.category;
+  let categoryTouched = false;
 
   const categorySelect = el('select', {
     className: 'category-select',
@@ -1871,7 +2057,18 @@ export function openEventModal(event) {
   };
   rebuildCategoryOptions();
 
+  const applyBirthdaySuggestion = () => {
+    if (isEdit || categoryTouched) return;
+    if (!titleSuggestsBirthday(nameInput.value)) return;
+    const birthday = resolveBirthdayCategory(modalCategories);
+    modalCategories = normalizeCategories([...modalCategories, birthday]);
+    selectedCategory = birthday;
+    newCategoryWrap.hidden = true;
+    rebuildCategoryOptions();
+  };
+
   categorySelect.addEventListener('change', () => {
+    categoryTouched = true;
     if (categorySelect.value === NEW_CATEGORY_VALUE) {
       newCategoryWrap.hidden = false;
       newCategoryInput.value = '';
@@ -1889,6 +2086,7 @@ export function openEventModal(event) {
       return;
     }
     const name = normalizeCategoryName(raw);
+    categoryTouched = true;
     modalCategories = normalizeCategories([...modalCategories, name]);
     selectedCategory = modalCategories.find((c) => categoriesEqual(c, name)) || name;
     newCategoryWrap.hidden = true;
@@ -1910,10 +2108,15 @@ export function openEventModal(event) {
       newCategoryWrap,
       el('p', {
         className: 'field-hint',
-        text: 'Required. Pick an existing category or add a new one. Default is Misc.',
+        text: isEdit
+          ? 'Required. Pick an existing category or add a new one. Default is Misc.'
+          : 'Required. Titles with Birth / Birthday auto-select the Birthday category.',
       }),
     ])
   );
+
+  nameInput.addEventListener('input', applyBirthdaySuggestion);
+  applyBirthdaySuggestion();
 
   const dateInput = el('input', { type: 'date', name: 'date', required: true, value: draft.date });
   const dateQuick = el('div', { className: 'date-quick', role: 'group', 'aria-label': 'Quick dates' });
@@ -2028,6 +2231,23 @@ export function openEventModal(event) {
   }
   form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Recurrence' }), freqSelect]));
 
+  const excludeThisWeekToggle = el('input', {
+    type: 'checkbox',
+    checked: draft.excludeFromThisWeek,
+  });
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('div', { className: 'checkbox-row' }, [
+        excludeThisWeekToggle,
+        el('label', { text: "Don't include in This week's events" }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: 'Hides this event from the This week pin (next 7 days). Daily and weekly recurrence turn this on automatically.',
+      }),
+    ])
+  );
+
   const sinceLastToggle = el('input', {
     type: 'checkbox',
     checked: draft.showSinceLast,
@@ -2077,7 +2297,18 @@ export function openEventModal(event) {
       cycleToggle.checked = true;
     }
   };
-  freqSelect.addEventListener('change', syncSinceVisibility);
+
+  const syncExcludeFromThisWeek = () => {
+    const freq = freqSelect.value;
+    if (freq === 'daily' || freq === 'weekly') {
+      excludeThisWeekToggle.checked = true;
+    }
+  };
+
+  freqSelect.addEventListener('change', () => {
+    syncSinceVisibility();
+    syncExcludeFromThisWeek();
+  });
 
   const actions = el('div', {
     className: `modal-actions${isEdit ? ' modal-actions--edit' : ''}`,
@@ -2122,6 +2353,24 @@ export function openEventModal(event) {
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    let category =
+      categorySelect.value === NEW_CATEGORY_VALUE
+        ? normalizeCategoryName(newCategoryInput.value)
+        : selectedCategory || DEFAULT_CATEGORY;
+    let catsForSave = modalCategories;
+
+    if (!isEdit) {
+      const applied = applyBirthdayCategoryIfNeeded(nameInput.value, category, catsForSave);
+      // Auto-assign Birthday unless the user explicitly picked another category.
+      if (titleSuggestsBirthday(nameInput.value) && !categoryTouched) {
+        category = applied.category;
+        catsForSave = applied.categories;
+      } else if (titleSuggestsBirthday(nameInput.value) && categoryTouched) {
+        // Still ensure Birthday exists in settings list if they kept/chose it
+        catsForSave = normalizeCategories([...catsForSave, category]);
+      }
+    }
+
     const payload = {
       name: nameInput.value,
       date: dateInput.value,
@@ -2129,15 +2378,13 @@ export function openEventModal(event) {
       timeZone: tzInput.value.trim() || null,
       color: selectedColor,
       units: [...draft.units],
-      category:
-        categorySelect.value === NEW_CATEGORY_VALUE
-          ? normalizeCategoryName(newCategoryInput.value)
-          : selectedCategory || DEFAULT_CATEGORY,
+      category,
       recurrence: { frequency: freqSelect.value },
       showSinceLast: freqSelect.value === 'none' ? true : sinceLastToggle.checked,
       showSinceFirst: freqSelect.value === 'none' ? true : sinceFirstToggle.checked,
       showCycleProgress: freqSelect.value === 'none' ? true : cycleToggle.checked,
-      _categories: modalCategories,
+      excludeFromThisWeek: excludeThisWeekToggle.checked,
+      _categories: catsForSave,
     };
     const saveAsEdit = isEdit;
     const eventId = editingId;
@@ -2470,4 +2717,542 @@ function openCsvImportModal(parsed, fileName = 'file.csv') {
   backdrop.appendChild(modal);
   document.getElementById('modal-root').replaceChildren(backdrop);
   trapFocus(modal, form.querySelector('select'));
+}
+
+function unitsEqual(a, b) {
+  const aa = normalizeUnits(a).slice().sort();
+  const bb = normalizeUnits(b).slice().sort();
+  if (aa.length !== bb.length) return false;
+  return aa.every((u, i) => u === bb[i]);
+}
+
+function sharedOrMixed(values, equalFn = (x, y) => x === y) {
+  if (!values.length) return { mixed: false, value: null };
+  const first = values[0];
+  for (let i = 1; i < values.length; i++) {
+    if (!equalFn(first, values[i])) return { mixed: true, value: null };
+  }
+  return { mixed: false, value: first };
+}
+
+/** Shuffle palette colours across events; prefer uniqueness when selection fits the palette. */
+function assignRandomColorsToEvents(events) {
+  const colorById = {};
+  if (!events.length) return colorById;
+
+  if (events.length <= COLOR_PALETTE.length) {
+    const shuffled = [...COLOR_PALETTE];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    events.forEach((ev, i) => {
+      colorById[ev.id] = shuffled[i];
+    });
+    return colorById;
+  }
+
+  for (const ev of events) {
+    const avoid = ev.color;
+    const pool = COLOR_PALETTE.filter((c) => c !== avoid);
+    const list = pool.length ? pool : COLOR_PALETTE;
+    colorById[ev.id] = list[Math.floor(Math.random() * list.length)];
+  }
+  return colorById;
+}
+
+function openMultiEditModal(ids) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  const events = uniqueIds
+    .map((id) => state.events.find((e) => e.id === id))
+    .filter(Boolean);
+
+  if (!events.length) {
+    toast('No events selected.', 'info');
+    return;
+  }
+  if (state.mode !== 'signed-in') {
+    toast('Sign in to multi-edit events.', 'info');
+    return;
+  }
+
+  lastFocus = document.activeElement;
+
+  const sharedColor = sharedOrMixed(events.map((e) => e.color));
+  const sharedUnits = sharedOrMixed(
+    events.map((e) => normalizeUnits(e.units)),
+    unitsEqual
+  );
+  const sharedCategory = sharedOrMixed(
+    events.map((e) => resolveEventCategory(e, getCategories())),
+    categoriesEqual
+  );
+  const sharedFreq = sharedOrMixed(
+    events.map((e) => e.recurrence?.frequency || 'none')
+  );
+  const sharedSinceLast = sharedOrMixed(events.map((e) => e.showSinceLast !== false));
+  const sharedSinceFirst = sharedOrMixed(events.map((e) => e.showSinceFirst !== false));
+  const sharedCycle = sharedOrMixed(events.map((e) => e.showCycleProgress !== false));
+
+  const dirty = {
+    color: false,
+    randomColors: false,
+    units: false,
+    category: false,
+    frequency: false,
+    showSinceLast: false,
+    showSinceFirst: false,
+    showCycleProgress: false,
+  };
+
+  const draft = {
+    color: sharedColor.mixed ? null : sharedColor.value || COLOR_PALETTE[0],
+    units: new Set(sharedUnits.mixed ? DEFAULT_UNITS : sharedUnits.value || DEFAULT_UNITS),
+    category: sharedCategory.mixed ? null : sharedCategory.value || DEFAULT_CATEGORY,
+    frequency: sharedFreq.mixed ? '' : sharedFreq.value || 'none',
+    showSinceLast: sharedSinceLast.mixed ? true : sharedSinceLast.value !== false,
+    showSinceFirst: sharedSinceFirst.mixed ? true : sharedSinceFirst.value !== false,
+    showCycleProgress: sharedCycle.mixed ? true : sharedCycle.value !== false,
+  };
+
+  let modalCategories = [...getCategories()];
+  let selectedCategory = draft.category || DEFAULT_CATEGORY;
+
+  const backdrop = el('div', {
+    className: 'modal-backdrop',
+    role: 'presentation',
+    onClick: (e) => {
+      if (e.target === backdrop) closeModal();
+    },
+  });
+  const modal = el('div', {
+    className: 'modal glass modal--multi-edit',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'multi-edit-title',
+  });
+
+  modal.appendChild(
+    el('h2', {
+      id: 'multi-edit-title',
+      text: `Edit ${events.length} event${events.length === 1 ? '' : 's'}`,
+    })
+  );
+  modal.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: 'Titles and dates are locked. Only fields you change are applied to every selected event.',
+    })
+  );
+
+  const locked = el('div', { className: 'multi-edit-locked', 'aria-label': 'Locked fields' });
+  locked.appendChild(el('p', { className: 'multi-edit-locked-label', text: 'Titles (unchanged)' }));
+  const titleList = el('ul', { className: 'multi-edit-title-list' });
+  for (const ev of events) {
+    titleList.appendChild(el('li', { text: ev.name || '(untitled)' }));
+  }
+  locked.appendChild(titleList);
+  locked.appendChild(
+    el('p', {
+      className: 'field-hint',
+      text: 'Each event keeps its own title, date, time, and timezone.',
+    })
+  );
+  modal.appendChild(locked);
+
+  const form = el('form', { className: 'form-grid' });
+
+  // —— Category ——
+  const categorySelect = el('select', {
+    className: 'category-select',
+    name: 'category',
+    'aria-label': 'Category',
+  });
+  const newCategoryWrap = el('div', { className: 'category-new-row', hidden: true });
+  const newCategoryInput = el('input', {
+    type: 'text',
+    className: 'category-new-input',
+    maxlength: '40',
+    placeholder: 'New category name',
+    autocomplete: 'off',
+    'aria-label': 'New category name',
+  });
+  const addCategoryBtn = el('button', { type: 'button', className: 'btn btn-ghost', text: 'Add' });
+  newCategoryWrap.appendChild(newCategoryInput);
+  newCategoryWrap.appendChild(addCategoryBtn);
+
+  const rebuildCategoryOptions = () => {
+    categorySelect.replaceChildren();
+    if (sharedCategory.mixed && !dirty.category) {
+      categorySelect.appendChild(
+        el('option', { value: '', text: 'Mixed — keep each event’s category', selected: true })
+      );
+    }
+    for (const cat of modalCategories) {
+      const opt = el('option', { value: cat, text: cat });
+      if (dirty.category && categoriesEqual(cat, selectedCategory)) opt.selected = true;
+      else if (!sharedCategory.mixed && !dirty.category && categoriesEqual(cat, selectedCategory)) {
+        opt.selected = true;
+      }
+      categorySelect.appendChild(opt);
+    }
+    categorySelect.appendChild(
+      el('option', { value: NEW_CATEGORY_VALUE, text: '+ New category…' })
+    );
+  };
+  rebuildCategoryOptions();
+
+  categorySelect.addEventListener('change', () => {
+    if (categorySelect.value === NEW_CATEGORY_VALUE) {
+      newCategoryWrap.hidden = false;
+      newCategoryInput.value = '';
+      requestAnimationFrame(() => newCategoryInput.focus());
+      return;
+    }
+    newCategoryWrap.hidden = true;
+    if (!categorySelect.value) {
+      dirty.category = false;
+      return;
+    }
+    dirty.category = true;
+    selectedCategory = categorySelect.value;
+    // Drop the mixed placeholder once user picks a real category
+    if (categorySelect.querySelector('option[value=""]')) rebuildCategoryOptions();
+  });
+
+  const commitNewCategory = () => {
+    const raw = String(newCategoryInput.value || '').trim();
+    if (!raw) {
+      toast('Enter a category name.', 'info');
+      return;
+    }
+    const name = normalizeCategoryName(raw);
+    modalCategories = normalizeCategories([...modalCategories, name]);
+    selectedCategory = modalCategories.find((c) => categoriesEqual(c, name)) || name;
+    dirty.category = true;
+    newCategoryWrap.hidden = true;
+    newCategoryInput.value = '';
+    rebuildCategoryOptions();
+  };
+  addCategoryBtn.addEventListener('click', commitNewCategory);
+  newCategoryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitNewCategory();
+    }
+  });
+
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('label', { text: 'Category' }),
+      el('div', { className: 'category-select-wrap' }, [categorySelect]),
+      newCategoryWrap,
+      el('p', {
+        className: 'field-hint',
+        text: sharedCategory.mixed
+          ? 'Selected events use different categories. Pick one to apply to all, or leave Mixed.'
+          : 'Applied to every selected event when changed.',
+      }),
+    ])
+  );
+
+  // —— Colour ——
+  const palette = el('div', { className: 'palette-grid', role: 'group', 'aria-label': 'Colour' });
+  const colorHint = el('p', {
+    className: 'field-hint',
+    text: sharedColor.mixed
+      ? 'Mixed colours — tap a swatch to apply one colour to all, or assign random colours.'
+      : 'Tap a swatch to change colour for all selected events, or assign random colours.',
+  });
+
+  const clearSwatchActive = () => {
+    palette.querySelectorAll('.swatch').forEach((n) => {
+      n.classList.remove('is-active');
+      n.setAttribute('aria-pressed', 'false');
+    });
+  };
+
+  COLOR_PALETTE.forEach((c) => {
+    const active = !sharedColor.mixed && draft.color === c;
+    const sw = el('button', {
+      type: 'button',
+      className: `swatch${active ? ' is-active' : ''}`,
+      style: `background:${c}`,
+      'data-color': c,
+      'aria-label': `Colour ${c}`,
+      'aria-pressed': active,
+      onClick: () => {
+        dirty.color = true;
+        dirty.randomColors = false;
+        draft.color = c;
+        palette.querySelectorAll('.swatch').forEach((n) => {
+          const on = n.getAttribute('data-color') === draft.color;
+          n.classList.toggle('is-active', on);
+          n.setAttribute('aria-pressed', String(on));
+        });
+        colorHint.textContent = 'One colour will be applied to all selected events.';
+      },
+    });
+    palette.appendChild(sw);
+  });
+
+  const randomColorBtn = el('button', {
+    type: 'button',
+    className: 'btn btn-ghost',
+    text: 'Assign random colours',
+    onClick: () => {
+      dirty.randomColors = true;
+      dirty.color = false;
+      draft.color = null;
+      clearSwatchActive();
+      colorHint.textContent =
+        'Each selected event will get its own random palette colour when you save.';
+    },
+  });
+
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('label', { text: 'Colour' }),
+      palette,
+      el('div', { className: 'multi-edit-color-actions' }, [randomColorBtn]),
+      colorHint,
+    ])
+  );
+
+  // —— Units ——
+  const unitsGrid = el('div', { className: 'units-grid', role: 'group', 'aria-label': 'Units' });
+  const unitsHint = el('p', {
+    className: 'field-hint',
+    text: sharedUnits.mixed
+      ? 'Mixed units — adjust toggles to set the same unit set on all selected events.'
+      : 'Toggle units to show on every selected event.',
+  });
+  ALL_UNITS.forEach((u) => {
+    const on = draft.units.has(u) && !sharedUnits.mixed;
+    const btn = el('button', {
+      type: 'button',
+      className: `unit-toggle${on ? ' is-active' : ''}`,
+      text: u,
+      'aria-pressed': on,
+      onClick: () => {
+        if (!dirty.units && sharedUnits.mixed) {
+          // First edit from mixed: start from none selected, then apply this toggle
+          draft.units = new Set();
+        }
+        dirty.units = true;
+        if (draft.units.has(u)) {
+          if (draft.units.size <= 1) return;
+          draft.units.delete(u);
+        } else {
+          draft.units.add(u);
+        }
+        unitsGrid.querySelectorAll('.unit-toggle').forEach((n, i) => {
+          const unit = ALL_UNITS[i];
+          const active = draft.units.has(unit);
+          n.classList.toggle('is-active', active);
+          n.setAttribute('aria-pressed', String(active));
+        });
+        unitsHint.textContent = 'Units will be applied to all selected events.';
+      },
+    });
+    unitsGrid.appendChild(btn);
+  });
+  // If shared, reflect shared set; if mixed, leave all inactive until first edit
+  if (!sharedUnits.mixed) {
+    unitsGrid.querySelectorAll('.unit-toggle').forEach((n, i) => {
+      const unit = ALL_UNITS[i];
+      const active = draft.units.has(unit);
+      n.classList.toggle('is-active', active);
+      n.setAttribute('aria-pressed', String(active));
+    });
+  }
+  form.appendChild(
+    el('div', { className: 'field' }, [el('label', { text: 'Units to show' }), unitsGrid, unitsHint])
+  );
+
+  // —— Recurrence ——
+  const freqSelect = el('select', { name: 'frequency', 'aria-label': 'Recurrence' });
+  if (sharedFreq.mixed) {
+    freqSelect.appendChild(
+      el('option', { value: '', text: 'Mixed — keep each event’s recurrence', selected: true })
+    );
+  }
+  for (const [value, label] of [
+    ['none', 'One-time'],
+    ['daily', 'Every day'],
+    ['weekly', 'Every Monday'],
+    ['monthly', 'Every month'],
+    ['yearly', 'Every year'],
+  ]) {
+    const opt = el('option', { value, text: label });
+    if (!sharedFreq.mixed && value === draft.frequency) opt.selected = true;
+    freqSelect.appendChild(opt);
+  }
+
+  const sinceLastToggle = el('input', { type: 'checkbox', checked: draft.showSinceLast });
+  const sinceFirstToggle = el('input', { type: 'checkbox', checked: draft.showSinceFirst });
+  const cycleToggle = el('input', { type: 'checkbox', checked: draft.showCycleProgress });
+
+  if (sharedSinceLast.mixed) sinceLastToggle.indeterminate = true;
+  if (sharedSinceFirst.mixed) sinceFirstToggle.indeterminate = true;
+  if (sharedCycle.mixed) cycleToggle.indeterminate = true;
+
+  const sinceField = el(
+    'div',
+    {
+      className: 'field field--since-opts',
+      hidden: true,
+    },
+    [
+      el('label', { text: 'Recurring stats' }),
+      el('div', { className: 'checkbox-row' }, [
+        cycleToggle,
+        el('label', { text: 'Show progress through current cycle' }),
+      ]),
+      el('div', { className: 'checkbox-row' }, [
+        sinceLastToggle,
+        el('label', { text: 'Show time since last occurrence' }),
+      ]),
+      el('div', { className: 'checkbox-row' }, [
+        sinceFirstToggle,
+        el('label', { text: 'Show time since first occurrence' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: 'Only applied when you change them (or when you switch recurrence).',
+      }),
+    ]
+  );
+
+  const syncSinceVisibility = () => {
+    const freq = dirty.frequency ? freqSelect.value : draft.frequency;
+    const show =
+      (dirty.frequency && freq && freq !== 'none') ||
+      (!dirty.frequency && !sharedFreq.mixed && draft.frequency !== 'none') ||
+      (!dirty.frequency && sharedFreq.mixed);
+    sinceField.hidden = !show || (dirty.frequency && freq === 'none');
+    if (dirty.frequency && freq === 'none') {
+      sinceLastToggle.checked = true;
+      sinceFirstToggle.checked = true;
+      cycleToggle.checked = true;
+      sinceLastToggle.indeterminate = false;
+      sinceFirstToggle.indeterminate = false;
+      cycleToggle.indeterminate = false;
+    }
+  };
+
+  freqSelect.addEventListener('change', () => {
+    if (!freqSelect.value) {
+      dirty.frequency = false;
+      draft.frequency = '';
+    } else {
+      dirty.frequency = true;
+      draft.frequency = freqSelect.value;
+    }
+    syncSinceVisibility();
+  });
+
+  sinceLastToggle.addEventListener('change', () => {
+    dirty.showSinceLast = true;
+    sinceLastToggle.indeterminate = false;
+    draft.showSinceLast = sinceLastToggle.checked;
+  });
+  sinceFirstToggle.addEventListener('change', () => {
+    dirty.showSinceFirst = true;
+    sinceFirstToggle.indeterminate = false;
+    draft.showSinceFirst = sinceFirstToggle.checked;
+  });
+  cycleToggle.addEventListener('change', () => {
+    dirty.showCycleProgress = true;
+    cycleToggle.indeterminate = false;
+    draft.showCycleProgress = cycleToggle.checked;
+  });
+
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('label', { text: 'Recurrence' }),
+      freqSelect,
+      el('p', {
+        className: 'field-hint',
+        text: sharedFreq.mixed
+          ? 'Selected events recur differently. Choose a frequency to apply to all, or leave Mixed.'
+          : 'Change how often these events repeat.',
+      }),
+    ])
+  );
+  form.appendChild(sinceField);
+  syncSinceVisibility();
+
+  const actions = el('div', { className: 'modal-actions' });
+  actions.appendChild(
+    el('button', {
+      type: 'button',
+      className: 'btn btn-ghost',
+      text: 'Cancel',
+      onClick: () => closeModal(),
+    })
+  );
+  const saveBtn = el('button', {
+    type: 'submit',
+    className: 'btn',
+    text: `Save to ${events.length} event${events.length === 1 ? '' : 's'}`,
+  });
+  actions.appendChild(saveBtn);
+  form.appendChild(actions);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const patch = {};
+    let colorById = null;
+
+    if (dirty.randomColors) {
+      colorById = assignRandomColorsToEvents(events);
+    } else if (dirty.color && draft.color) {
+      patch.color = draft.color;
+    }
+
+    if (dirty.units) patch.units = [...draft.units];
+    if (dirty.category) {
+      patch.category =
+        categorySelect.value === NEW_CATEGORY_VALUE
+          ? normalizeCategoryName(newCategoryInput.value)
+          : selectedCategory || DEFAULT_CATEGORY;
+    }
+    if (dirty.frequency && freqSelect.value) {
+      patch.recurrence = { frequency: freqSelect.value };
+    }
+    if (dirty.showSinceLast) patch.showSinceLast = sinceLastToggle.checked;
+    if (dirty.showSinceFirst) patch.showSinceFirst = sinceFirstToggle.checked;
+    if (dirty.showCycleProgress) patch.showCycleProgress = cycleToggle.checked;
+
+    // Switching to one-time forces show* defaults via API; still mark them if frequency dirty.
+    if (dirty.frequency && freqSelect.value === 'none') {
+      patch.showSinceLast = true;
+      patch.showSinceFirst = true;
+      patch.showCycleProgress = true;
+    }
+
+    if (!Object.keys(patch).length && !colorById) {
+      toast('Change at least one field to save.', 'info');
+      return;
+    }
+
+    saveBtn.disabled = true;
+    try {
+      await handlers.onBatchEdit(events.map((ev) => ev.id), patch, {
+        _categories: modalCategories,
+        colorById,
+      });
+      closeModal();
+      selectedEventIds.clear();
+      setMultiSelectMode(false);
+    } catch {
+      saveBtn.disabled = false;
+    }
+  });
+
+  modal.appendChild(form);
+  backdrop.appendChild(modal);
+  document.getElementById('modal-root').replaceChildren(backdrop);
+  trapFocus(modal, categorySelect);
 }

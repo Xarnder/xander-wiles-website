@@ -77,6 +77,12 @@ export function validateEventInput(raw) {
   const showCycleProgress = frequency === 'none' ? true : raw.showCycleProgress !== false;
   const category = normalizeCategoryName(raw.category);
 
+  /** Skip “This week’s events” pin. Default on for daily/weekly when unset. */
+  let excludeFromThisWeek;
+  if (raw.excludeFromThisWeek === true) excludeFromThisWeek = true;
+  else if (raw.excludeFromThisWeek === false) excludeFromThisWeek = false;
+  else excludeFromThisWeek = frequency === 'daily' || frequency === 'weekly';
+
   return {
     ok: true,
     value: {
@@ -91,6 +97,7 @@ export function validateEventInput(raw) {
       showSinceFirst,
       showCycleProgress,
       category,
+      excludeFromThisWeek,
     },
   };
 }
@@ -207,6 +214,162 @@ export async function updateEvent(uid, eventId, raw) {
   };
   await updateDoc(doc(eventsCol(uid), eventId), payload);
   return payload;
+}
+
+/**
+ * Multi-edit: patch only allowed fields on many events.
+ * Never writes name, date, time, timeZone, id, or createdAt.
+ * `patch` may include: color, units, category, recurrence, showSinceLast,
+ * showSinceFirst, showCycleProgress.
+ * Optional `options.colorById` maps event id → palette colour (overrides patch.color per event).
+ */
+export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [], options = {}) {
+  assertConfigured();
+  if (!uid) throw new Error('Not signed in.');
+  if (!Array.isArray(eventIds) || !eventIds.length) {
+    throw new Error('Select at least one event.');
+  }
+
+  const colorById =
+    options.colorById && typeof options.colorById === 'object' ? options.colorById : null;
+  if (colorById) {
+    for (const [id, color] of Object.entries(colorById)) {
+      if (!isValidColor(color)) {
+        throw new Error(`Invalid colour for event ${id}.`);
+      }
+    }
+  }
+
+  const byId = new Map((existingEvents || []).map((e) => [e.id, e]));
+  const safe = sanitizeMultiEditPatch(patch);
+  const hasShared = Object.keys(safe).length > 0;
+  const hasPerColor = Boolean(colorById && Object.keys(colorById).length);
+  if (!hasShared && !hasPerColor) {
+    throw new Error('Change at least one field before saving.');
+  }
+
+  const now = new Date().toISOString();
+  const writes = [];
+
+  for (const id of eventIds) {
+    const existing = byId.get(id);
+    if (!existing) {
+      throw new Error(`Event missing locally (${id}). Refresh and try again.`);
+    }
+
+    const eventSafe = { ...safe };
+    if (colorById && Object.prototype.hasOwnProperty.call(colorById, id)) {
+      eventSafe.color = colorById[id];
+    }
+
+    // Identity fields always come from the stored event — never from the patch.
+    const merged = {
+      name: existing.name,
+      date: existing.date,
+      time: existing.time ?? null,
+      timeZone: existing.timeZone ?? null,
+      color: existing.color,
+      units: existing.units,
+      category: existing.category,
+      recurrence: existing.recurrence || { frequency: 'none' },
+      showSinceLast: existing.showSinceLast !== false,
+      showSinceFirst: existing.showSinceFirst !== false,
+      showCycleProgress: existing.showCycleProgress !== false,
+      excludeFromThisWeek: existing.excludeFromThisWeek,
+      ...eventSafe,
+    };
+
+    const checked = validateEventInput(merged);
+    if (!checked.ok) {
+      throw new Error(`“${existing.name || id}”: ${checked.error}`);
+    }
+
+    const v = checked.value;
+    const firestorePatch = {
+      updatedAt: now,
+    };
+    if ('color' in eventSafe) firestorePatch.color = v.color;
+    if ('units' in eventSafe) firestorePatch.units = v.units;
+    if ('category' in eventSafe) firestorePatch.category = v.category;
+    if ('recurrence' in eventSafe) firestorePatch.recurrence = v.recurrence;
+    if ('showSinceLast' in eventSafe || 'recurrence' in eventSafe) {
+      firestorePatch.showSinceLast = v.showSinceLast;
+    }
+    if ('showSinceFirst' in eventSafe || 'recurrence' in eventSafe) {
+      firestorePatch.showSinceFirst = v.showSinceFirst;
+    }
+    if ('showCycleProgress' in eventSafe || 'recurrence' in eventSafe) {
+      firestorePatch.showCycleProgress = v.showCycleProgress;
+    }
+    if ('excludeFromThisWeek' in eventSafe) {
+      firestorePatch.excludeFromThisWeek = v.excludeFromThisWeek;
+    }
+    // When frequency becomes daily/weekly and exclude wasn't explicitly patched, default on.
+    if (
+      'recurrence' in eventSafe &&
+      !('excludeFromThisWeek' in eventSafe) &&
+      (v.recurrence?.frequency === 'daily' || v.recurrence?.frequency === 'weekly')
+    ) {
+      firestorePatch.excludeFromThisWeek = true;
+    }
+
+    // When switching to one-time, always clear recurring stats flags to defaults.
+    if (eventSafe.recurrence?.frequency === 'none') {
+      firestorePatch.showSinceLast = true;
+      firestorePatch.showSinceFirst = true;
+      firestorePatch.showCycleProgress = true;
+    }
+
+    writes.push({ id, data: firestorePatch });
+  }
+
+  for (let i = 0; i < writes.length; i += 400) {
+    const chunk = writes.slice(i, i + 400);
+    const batch = writeBatch(db);
+    for (const op of chunk) {
+      batch.update(doc(eventsCol(uid), op.id), op.data);
+    }
+    await batch.commit();
+  }
+
+  return writes.length;
+}
+
+/** Strip identity / unknown keys from a multi-edit patch. */
+export function sanitizeMultiEditPatch(patch = {}) {
+  const out = {};
+  if (!patch || typeof patch !== 'object') return out;
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'color')) {
+    if (!isValidColor(patch.color)) throw new Error('Colour must be from the palette.');
+    out.color = patch.color;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'units')) {
+    out.units = normalizeUnits(patch.units);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'category')) {
+    out.category = normalizeCategoryName(patch.category);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'recurrence')) {
+    const frequency = patch.recurrence?.frequency || 'none';
+    if (!RECURRENCE_FREQUENCIES.includes(frequency)) {
+      throw new Error('Invalid recurrence.');
+    }
+    out.recurrence = { frequency };
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'showSinceLast')) {
+    out.showSinceLast = patch.showSinceLast !== false;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'showSinceFirst')) {
+    out.showSinceFirst = patch.showSinceFirst !== false;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'showCycleProgress')) {
+    out.showCycleProgress = patch.showCycleProgress !== false;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'excludeFromThisWeek')) {
+    out.excludeFromThisWeek = patch.excludeFromThisWeek === true;
+  }
+  return out;
 }
 
 export async function deleteEvent(uid, eventId) {
@@ -390,6 +553,7 @@ export function exportPayload(events, settings) {
       showSinceLast: e.showSinceLast !== false,
       showSinceFirst: e.showSinceFirst !== false,
       showCycleProgress: e.showCycleProgress !== false,
+      excludeFromThisWeek: e.excludeFromThisWeek === true,
       createdAt: e.createdAt || null,
       updatedAt: e.updatedAt || null,
     })),
