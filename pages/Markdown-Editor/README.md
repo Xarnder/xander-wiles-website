@@ -58,7 +58,7 @@ Rules locked for v1:
 | Auth | **Google Identity Services** token client (`google.accounts.oauth2.initTokenClient`) — **not** Firebase |
 | Scope | `https://www.googleapis.com/auth/drive` |
 | Why this scope | Needed for an **in-app folder browser** over existing files. `drive.file` alone cannot list arbitrary My Drive trees. This is a personal, testing-mode OAuth app. |
-| Token storage | Access token kept in **memory** only; re-prompt on expiry / 401 |
+| Token storage | Access token cached in **localStorage** until expiry (~1h); silent GIS refresh on reopen; full consent only when needed |
 | Allowlist | None in-app — rely on OAuth **Testing** mode + test users |
 
 No client secret is used in the browser. Never commit secrets.

@@ -317,7 +317,7 @@ Google Drive
 
 - **Client ID** = “which Google Cloud app is asking”
 - **Consent screen** = “what permissions, and who can use it in Testing”
-- **Access token** = temporary key; not stored in Firebase, not saved forever in localStorage
+- **Access token** = temporary key (~1 hour); cached locally until expiry, then silently refreshed while you’re still signed into Google
 - **Drive API** = list folders, download file text, upload saved text
 
 ---

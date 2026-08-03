@@ -44,6 +44,7 @@ import {
     clearToken,
     isSignedIn,
     requestAccessToken,
+    tryRestoreSession,
 } from './auth.js';
 import {
     createFolder,
@@ -2176,7 +2177,7 @@ async function signOut() {
         // ignore
     }
     resetCloudSettingsState();
-    clearToken();
+    clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
     state.files = [];
     state.browseMode = 'folder';
@@ -2540,6 +2541,13 @@ async function boot() {
     }
 
     showView('login');
+    setStatus('Restoring session…');
+    const restored = await tryRestoreSession();
+    if (restored) {
+        await afterSignedIn();
+        return;
+    }
+
     setStatus('');
 }
 

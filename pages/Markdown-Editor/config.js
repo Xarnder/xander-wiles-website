@@ -60,7 +60,8 @@ export const LIST_STRIPE_VALUES = new Set(['normal', 'zebra', 'spectrum']);
 
 /**
  * List item layout for stripe modes.
- * 'segmented' = each item is its own container (backgrounds)
+ * 'segmented' = each item is its own container (uniform fill for normal;
+ *   alternating/spectrum backgrounds for stripe modes)
  * 'continuous' = one flowing list; stripe modes tint text colour instead
  */
 export const LIST_LAYOUT_KEY = 'md-editor:listLayout';
@@ -98,6 +99,11 @@ export const PREVIEW_FONT_SCALE_MAX = 150;
 /** Hidden Drive appData settings file (synced across devices). */
 export const SETTINGS_CLOUD_FILE_NAME = 'md-editor-settings.json';
 export const SETTINGS_CLOUD_VERSION = 1;
+
+/** Short-lived Drive access token cache (localStorage; expires ~1h). */
+export const OAUTH_SESSION_KEY = 'md-editor:oauthSession';
+/** Prefer auto-restore on next open after a successful sign-in. */
+export const REMEMBER_SIGNIN_KEY = 'md-editor:rememberSignIn';
 
 export const PAGE_SIZE = 50;
 export const LARGE_FILE_BYTES = 2 * 1024 * 1024;

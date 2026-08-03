@@ -5,7 +5,15 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const GOOGLE_NATIVE_PREFIX = 'application/vnd.google-apps.';
 
 async function driveFetch(url, options = {}, retried = false) {
-    const token = getAccessToken();
+    let token = getAccessToken();
+    if (!token && !retried) {
+        try {
+            await refreshAccessToken();
+            token = getAccessToken();
+        } catch {
+            // fall through to Not signed in
+        }
+    }
     if (!token) {
         throw new Error('Not signed in');
     }

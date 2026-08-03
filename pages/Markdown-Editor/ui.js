@@ -136,6 +136,7 @@ let editorSaveToastKey = '';
 
 /**
  * Small toast under the List/Preview/Raw selector (save / dirty / errors while editing).
+ * Laid out in-flow below the mode bar so it is never tucked behind the toolbar.
  * @param {string} message
  * @param {'' | 'ok' | 'warn' | 'error'} [kind]
  * @param {{ sticky?: boolean, key?: string, durationMs?: number }} [options]
@@ -715,7 +716,7 @@ export function syncListStripeControl(mode) {
 }
 
 /**
- * Apply list layout: segmented containers vs continuous flowing list.
+ * Apply list layout: segmented containers (uniform or striped) vs continuous flowing list.
  * @param {'segmented' | 'continuous' | string} layout
  */
 export function applyListLayout(layout) {

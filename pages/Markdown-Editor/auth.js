@@ -1,4 +1,10 @@
-import { DRIVE_SCOPE, GOOGLE_CLIENT_ID, isConfigured } from './config.js';
+import {
+    DRIVE_SCOPE,
+    GOOGLE_CLIENT_ID,
+    OAUTH_SESSION_KEY,
+    REMEMBER_SIGNIN_KEY,
+    isConfigured,
+} from './config.js';
 
 let tokenClient = null;
 let accessToken = null;
@@ -42,18 +48,90 @@ function ensureTokenClient() {
     return tokenClient;
 }
 
+function readStoredSession() {
+    try {
+        const raw = localStorage.getItem(OAUTH_SESSION_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data?.accessToken || !data?.expiresAt) return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+function persistSession() {
+    if (!accessToken || !expiresAt) return;
+    try {
+        localStorage.setItem(
+            OAUTH_SESSION_KEY,
+            JSON.stringify({ accessToken, expiresAt })
+        );
+        localStorage.setItem(REMEMBER_SIGNIN_KEY, '1');
+    } catch {
+        // private mode / quota — memory token still works for this tab
+    }
+}
+
+function clearPersistedSession() {
+    try {
+        localStorage.removeItem(OAUTH_SESSION_KEY);
+    } catch {
+        // ignore
+    }
+}
+
+function rememberSignInEnabled() {
+    try {
+        if (localStorage.getItem(REMEMBER_SIGNIN_KEY) === '1') return true;
+    } catch {
+        // ignore
+    }
+    return Boolean(readStoredSession());
+}
+
+/** Load a still-valid cached token into memory. */
+function hydrateFromStorage() {
+    const data = readStoredSession();
+    if (!data) return false;
+    if (Date.now() >= data.expiresAt - 30_000) return false;
+    accessToken = data.accessToken;
+    expiresAt = data.expiresAt;
+    return true;
+}
+
 export function getAccessToken() {
     if (accessToken && Date.now() < expiresAt - 30_000) {
         return accessToken;
     }
+    if (hydrateFromStorage()) {
+        return accessToken;
+    }
+    accessToken = null;
+    expiresAt = 0;
     return null;
 }
 
-export function clearToken() {
-    const token = accessToken;
+/**
+ * Clear in-memory + cached token. Optionally revoke with Google and forget auto-restore.
+ * @param {{ revoke?: boolean, forget?: boolean }} [options]
+ */
+export function clearToken(options = {}) {
+    const { revoke = true, forget = false } = options;
+    const token = accessToken || readStoredSession()?.accessToken || null;
     accessToken = null;
     expiresAt = 0;
-    if (token && window.google?.accounts?.oauth2) {
+    clearPersistedSession();
+
+    if (forget) {
+        try {
+            localStorage.removeItem(REMEMBER_SIGNIN_KEY);
+        } catch {
+            // ignore
+        }
+    }
+
+    if (revoke && token && window.google?.accounts?.oauth2) {
         try {
             window.google.accounts.oauth2.revoke(token, () => {});
         } catch {
@@ -83,6 +161,7 @@ export async function requestAccessToken(options = {}) {
             accessToken = response.access_token;
             const expiresIn = Number(response.expires_in || 3600);
             expiresAt = Date.now() + expiresIn * 1000;
+            persistSession();
             resolve(accessToken);
         };
 
@@ -90,7 +169,7 @@ export async function requestAccessToken(options = {}) {
             const request = {};
             if (options.prompt !== undefined) {
                 request.prompt = options.prompt;
-            } else if (!accessToken) {
+            } else if (!getAccessToken()) {
                 request.prompt = 'consent';
             }
             client.requestAccessToken(request);
@@ -103,4 +182,22 @@ export async function requestAccessToken(options = {}) {
 /** Re-auth without wiping editor state; used after 401. */
 export async function refreshAccessToken() {
     return requestAccessToken({ prompt: '' });
+}
+
+/**
+ * Restore a previous session after refresh / PWA reopen.
+ * Uses a cached token if still valid, otherwise silent GIS refresh (no consent UI).
+ * @returns {Promise<boolean>}
+ */
+export async function tryRestoreSession() {
+    if (getAccessToken()) return true;
+    if (!isConfigured()) return false;
+    if (!rememberSignInEnabled()) return false;
+
+    try {
+        await requestAccessToken({ prompt: '' });
+        return Boolean(getAccessToken());
+    } catch {
+        return false;
+    }
 }
