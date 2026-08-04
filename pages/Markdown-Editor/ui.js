@@ -2,6 +2,8 @@ import { isFolder, isMarkdownCandidate, sortDriveEntries } from './drive.js';
 import {
     ROOT_FOLDER_ID,
     ROOT_FOLDER_NAME,
+    COMPUTERS_FOLDER_ID,
+    COMPUTERS_FOLDER_NAME,
     FINDER_SORT_DEFAULT,
     FINDER_SORT_OPTIONS,
     FINDER_SORT_VALUES,
@@ -48,7 +50,20 @@ export function bindUi() {
     els.editorMoreStats = document.getElementById('editor-more-stats');
     els.editorMorePin = document.getElementById('editor-more-pin');
     els.editorMoreImport = document.getElementById('editor-more-import');
+    els.editorMoreInsertDate = document.getElementById('editor-more-insert-date');
+    els.editorMoreFillDates = document.getElementById('editor-more-fill-dates');
+    els.editorMoreShowDates = document.getElementById('editor-more-show-dates');
     els.editorMoreRename = document.getElementById('editor-more-rename');
+    els.fillDatesDialog = document.getElementById('fill-dates-dialog');
+    els.fillDatesSummary = document.getElementById('fill-dates-summary');
+    els.fillDatesSourceCreated = document.getElementById('fill-dates-source-created');
+    els.fillDatesSourceCustom = document.getElementById('fill-dates-source-custom');
+    els.fillDatesCreatedLabel = document.getElementById('fill-dates-created-label');
+    els.fillDatesCustom = document.getElementById('fill-dates-custom');
+    els.fillDatesPreview = document.getElementById('fill-dates-preview');
+    els.fillDatesError = document.getElementById('fill-dates-error');
+    els.fillDatesCancel = document.getElementById('fill-dates-cancel');
+    els.fillDatesApply = document.getElementById('fill-dates-apply');
     els.btnClickEdit = document.getElementById('btn-click-edit');
     els.btnGoFinder = document.getElementById('btn-go-finder');
     els.createActions = document.getElementById('create-actions');
@@ -98,6 +113,8 @@ export function bindUi() {
     els.modeContents = document.getElementById('mode-contents');
     els.modeRaw = document.getElementById('mode-raw');
     els.editorToast = document.getElementById('editor-toast');
+    els.autosaveBar = document.getElementById('autosave-bar');
+    els.autosaveBarFill = document.getElementById('autosave-bar-fill');
     els.listsRoot = document.getElementById('lists-root');
     els.listsStatus = document.getElementById('lists-status');
     els.markdownPreview = document.getElementById('markdown-preview');
@@ -115,6 +132,8 @@ export function bindUi() {
     els.moveDialog = document.getElementById('move-dialog');
     els.moveDialogTitle = document.getElementById('move-dialog-title');
     els.moveDialogHint = document.getElementById('move-dialog-hint');
+    els.moveModeDrive = document.getElementById('move-mode-drive');
+    els.moveModeComputers = document.getElementById('move-mode-computers');
     els.moveBtnUp = document.getElementById('move-btn-up');
     els.moveFolderPath = document.getElementById('move-folder-path');
     els.moveFolderList = document.getElementById('move-folder-list');
@@ -263,12 +282,20 @@ export function syncNavLayout() {
     els.app.classList.toggle('nav-has-actions', hasActions);
     // Measure after paint so hidden→shown height is accurate.
     requestAnimationFrame(() => {
+        const desktop = window.matchMedia('(min-width: 768px)').matches;
+        // Wide layout keeps nav/path chrome in normal flow at the top.
+        if (desktop) {
+            els.app.style.setProperty('--nav-offset', '0px');
+            els.app.style.setProperty('--path-dock-offset', '0px');
+            els.app.classList.remove('has-path-dock');
+            return;
+        }
+
         const height = els.navBar.getBoundingClientRect().height;
         els.app.style.setProperty('--nav-offset', `${Math.ceil(height)}px`);
 
-        const mobile = window.matchMedia('(max-width: 767.98px)').matches;
         const pathVisible = Boolean(els.finderPathBar && !els.finderPathBar.hidden);
-        if (mobile && pathVisible) {
+        if (pathVisible) {
             const pathHeight = Math.ceil(els.finderPathBar.getBoundingClientRect().height) + 12;
             els.app.style.setProperty('--path-dock-offset', `${Math.max(pathHeight, 52)}px`);
             els.app.classList.add('has-path-dock');
@@ -442,7 +469,7 @@ export function renderFolderPath(stack, mode = 'folder', searchQuery = '', onCru
             : 'All markdown files in this Google account';
         return;
     }
-    if (mode === 'computers' && (!stack.length || (stack.length === 1 && stack[0].id === '__computers__'))) {
+    if (mode === 'computers' && (!stack.length || (stack.length === 1 && stack[0].id === COMPUTERS_FOLDER_ID))) {
         els.folderPath.textContent = 'Computers (best-effort API list)';
         return;
     }
@@ -930,7 +957,8 @@ export function displayNoteTitle(name) {
     return raw.replace(/\.(md|markdown)$/i, '') || 'Untitled';
 }
 
-export function syncEditorChrome(state) {
+export function syncEditorChrome(state, options = {}) {
+    const quiet = Boolean(options.quiet);
     const title = displayNoteTitle(state.fileName);
     const fullName = state.fileName || '';
     const editingDoc = Boolean(state.fileId && els.viewEditor && !els.viewEditor.hidden);
@@ -1015,11 +1043,19 @@ export function syncEditorChrome(state) {
         if (label) label.textContent = state.dirty && state.fileId ? 'Edit •' : 'Edit';
     }
 
-    if (els.editor.value !== state.editorContent) {
+    // Quiet autosave must not stomp the raw textarea (resets caret) or toast loudly.
+    if (!quiet && els.editor && els.editor.value !== state.editorContent) {
         els.editor.value = state.editorContent;
     }
 
     if (els.viewEditor.hidden) {
+        return;
+    }
+
+    if (quiet) {
+        if (state.status === 'saved' && !state.dirty) {
+            announceEditorSaveToast('autosaved', 'Autosaved', 'ok', { durationMs: 1400 });
+        }
         return;
     }
 
@@ -1275,7 +1311,7 @@ export function fillEditorMoreStats(rows) {
 
 /**
  * Action sheet for the Edit toolbar burger menu.
- * @param {{ fileName?: string, isPinned?: boolean, stats?: Array<{ label: string, value: string, pending?: boolean }> }} [options]
+ * @param {{ fileName?: string, isPinned?: boolean, stats?: Array<{ label: string, value: string, pending?: boolean }>, showDates?: boolean }} [options]
  * @returns {Promise<'rename'|'pin'|'unpin'|null>}
  */
 export function promptEditorMoreMenu(options = {}) {
@@ -1298,6 +1334,7 @@ export function promptEditorMoreMenu(options = {}) {
         els.editorMorePin.value = pinned ? 'unpin' : 'pin';
         els.editorMorePin.textContent = pinned ? 'Unpin' : 'Pin';
     }
+    syncEditorMoreShowDates(Boolean(options.showDates));
 
     return new Promise((resolve) => {
         const onClose = () => {
@@ -1310,6 +1347,199 @@ export function promptEditorMoreMenu(options = {}) {
         dialog.addEventListener('close', onClose);
         dialog.returnValue = 'cancel';
         dialog.showModal();
+    });
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function syncEditorMoreShowDates(enabled) {
+    const btn = els.editorMoreShowDates;
+    if (!btn) return;
+    const on = Boolean(enabled);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.classList.toggle('is-selected', on);
+    btn.textContent = on ? 'Hide dates' : 'Show dates';
+}
+
+/**
+ * Choose a date tag to stamp onto undated list items.
+ * @param {{
+ *   missing: number,
+ *   total: number,
+ *   createdTag?: string | null,
+ *   createdLabel?: string,
+ *   defaultCustom?: string,
+ *   resolveTag: (raw: string) => string | null,
+ * }} options
+ * @returns {Promise<string | null>} canonical `{{date:…}}` or null if cancelled
+ */
+export function promptFillListDates(options) {
+    const dialog = els.fillDatesDialog;
+    if (!dialog) return Promise.resolve(null);
+
+    const missing = Math.max(0, Number(options.missing) || 0);
+    const total = Math.max(0, Number(options.total) || 0);
+    const createdTag = options.createdTag || null;
+    const createdLabel = String(options.createdLabel || '').trim();
+    const resolveTag =
+        typeof options.resolveTag === 'function' ? options.resolveTag : () => null;
+    const defaultCustom = String(options.defaultCustom || '').trim();
+
+    if (els.fillDatesSummary) {
+        els.fillDatesSummary.textContent =
+            missing > 0
+                ? `${missing} of ${total} list item${total === 1 ? '' : 's'} need a date tag. Items that already have one won’t change.`
+                : 'Every list item already has a date tag.';
+    }
+
+    const createdRadio = els.fillDatesSourceCreated;
+    const customRadio = els.fillDatesSourceCustom;
+    const customInput = els.fillDatesCustom;
+    const createdMeta = els.fillDatesCreatedLabel;
+    const preview = els.fillDatesPreview;
+    const errorEl = els.fillDatesError;
+    const applyBtn = els.fillDatesApply;
+
+    if (createdMeta) {
+        createdMeta.textContent = createdTag
+            ? createdLabel || createdTag
+            : 'Created date unavailable — use a custom date';
+    }
+    if (createdRadio) {
+        createdRadio.disabled = !createdTag;
+        createdRadio.checked = Boolean(createdTag);
+    }
+    if (customRadio) {
+        customRadio.checked = !createdTag;
+    }
+    if (customInput) {
+        customInput.value = defaultCustom;
+        customInput.disabled = Boolean(createdTag) && !(customRadio && customRadio.checked);
+    }
+    if (errorEl) {
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+    }
+    if (applyBtn) applyBtn.disabled = missing <= 0;
+
+    const selectedSource = () =>
+        customRadio?.checked || !createdTag ? 'custom' : 'created';
+
+    const syncCustomEnabled = () => {
+        const custom = selectedSource() === 'custom';
+        if (customInput) customInput.disabled = !custom;
+        if (custom && customInput && dialog.open) {
+            requestAnimationFrame(() => customInput.focus());
+        }
+    };
+
+    const syncPreview = () => {
+        if (!preview) return;
+        let tag = null;
+        if (selectedSource() === 'created') {
+            tag = createdTag;
+        } else {
+            tag = resolveTag(customInput?.value || '');
+        }
+        if (tag) {
+            preview.textContent = `Will use ${tag}`;
+            preview.hidden = false;
+            if (errorEl && errorEl.dataset.kind === 'parse') {
+                errorEl.hidden = true;
+                errorEl.textContent = '';
+                delete errorEl.dataset.kind;
+            }
+        } else {
+            preview.textContent = selectedSource() === 'custom'
+                ? 'Enter a valid date to continue'
+                : '';
+            preview.hidden = !preview.textContent;
+        }
+        return tag;
+    };
+
+    syncCustomEnabled();
+    syncPreview();
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (dialog.open) dialog.close();
+            resolve(value);
+        };
+
+        const onSourceChange = () => {
+            syncCustomEnabled();
+            syncPreview();
+        };
+
+        const onCustomInput = () => {
+            syncPreview();
+        };
+
+        const onCancel = () => finish(null);
+
+        const onApply = () => {
+            if (missing <= 0) {
+                finish(null);
+                return;
+            }
+            let tag = null;
+            if (selectedSource() === 'created') {
+                tag = createdTag;
+                if (!tag) {
+                    if (errorEl) {
+                        errorEl.hidden = false;
+                        errorEl.dataset.kind = 'parse';
+                        errorEl.textContent = 'File created date is unavailable. Enter a custom date.';
+                    }
+                    if (customRadio) customRadio.checked = true;
+                    syncCustomEnabled();
+                    return;
+                }
+            } else {
+                tag = resolveTag(customInput?.value || '');
+                if (!tag) {
+                    if (errorEl) {
+                        errorEl.hidden = false;
+                        errorEl.dataset.kind = 'parse';
+                        errorEl.textContent =
+                            'Couldn’t parse that date. Try YYYY-MM-DD, 3 Aug 2026, or today.';
+                    }
+                    customInput?.focus();
+                    return;
+                }
+            }
+            finish(tag);
+        };
+
+        const onDialogCancel = (event) => {
+            event.preventDefault();
+            finish(null);
+        };
+
+        const cleanup = () => {
+            createdRadio?.removeEventListener('change', onSourceChange);
+            customRadio?.removeEventListener('change', onSourceChange);
+            customInput?.removeEventListener('input', onCustomInput);
+            els.fillDatesCancel?.removeEventListener('click', onCancel);
+            applyBtn?.removeEventListener('click', onApply);
+            dialog.removeEventListener('cancel', onDialogCancel);
+        };
+
+        createdRadio?.addEventListener('change', onSourceChange);
+        customRadio?.addEventListener('change', onSourceChange);
+        customInput?.addEventListener('input', onCustomInput);
+        els.fillDatesCancel?.addEventListener('click', onCancel);
+        applyBtn?.addEventListener('click', onApply);
+        dialog.addEventListener('cancel', onDialogCancel);
+
+        dialog.showModal();
+        syncCustomEnabled();
     });
 }
 
@@ -1402,17 +1632,49 @@ export function promptPinnedShortcutIssue(opts) {
 }
 
 /**
- * Folder picker for Move.
- * @param {{ item: object, currentParentId: string, listFolders: (parentId: string) => Promise<object[]> }} options
+ * Folder picker for Move (My Drive + Computers).
+ * @param {{
+ *   item: object,
+ *   currentParentId: string,
+ *   listFolders: (parentId: string) => Promise<object[]>,
+ *   listComputerRoots?: () => Promise<object[]>,
+ *   initialMode?: 'folder' | 'computers',
+ *   initialStack?: Array<{ id: string, name: string }>,
+ * }} options
  * @returns {Promise<{ folderId: string, folderName: string }|null>}
  */
 export function promptMoveDestination(options) {
-    const { item, currentParentId, listFolders } = options;
+    const { item, currentParentId, listFolders, listComputerRoots, initialMode, initialStack } =
+        options;
     const dialog = els.moveDialog;
     if (!dialog || typeof listFolders !== 'function') return Promise.resolve(null);
 
     const movingFolder = isFolder(item);
-    const stack = [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }];
+    const hasComputers = typeof listComputerRoots === 'function';
+    let mode = initialMode === 'computers' && hasComputers ? 'computers' : 'folder';
+
+    const driveRoot = () => [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }];
+    const computersRoot = () => [{ id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME }];
+
+    const normalizeStack = (frames, forMode) => {
+        const list = Array.isArray(frames)
+            ? frames
+                  .filter((f) => f && f.id)
+                  .map((f) => ({ id: String(f.id), name: String(f.name || 'Folder') }))
+            : [];
+        if (forMode === 'computers') {
+            if (!list.length || list[0].id !== COMPUTERS_FOLDER_ID) {
+                return computersRoot();
+            }
+            return list;
+        }
+        if (!list.length || list[0].id === COMPUTERS_FOLDER_ID) {
+            return driveRoot();
+        }
+        return list;
+    };
+
+    let stack = normalizeStack(initialStack, mode);
     let loading = false;
 
     if (els.moveDialogTitle) {
@@ -1423,23 +1685,54 @@ export function promptMoveDestination(options) {
             ? 'Open a folder or choose Move here. You can’t move a folder into itself.'
             : 'Open a folder or choose Move here.';
     }
+    if (els.moveModeDrive) els.moveModeDrive.hidden = false;
+    if (els.moveModeComputers) els.moveModeComputers.hidden = !hasComputers;
 
     const current = () => stack[stack.length - 1];
+    const atVirtualComputersRoot = () =>
+        mode === 'computers' && stack.length === 1 && current().id === COMPUTERS_FOLDER_ID;
+
+    const syncModeButtons = () => {
+        if (els.moveModeDrive) {
+            els.moveModeDrive.classList.toggle('is-active', mode === 'folder');
+            els.moveModeDrive.setAttribute('aria-pressed', mode === 'folder' ? 'true' : 'false');
+        }
+        if (els.moveModeComputers) {
+            els.moveModeComputers.classList.toggle('is-active', mode === 'computers');
+            els.moveModeComputers.setAttribute(
+                'aria-pressed',
+                mode === 'computers' ? 'true' : 'false'
+            );
+        }
+    };
 
     const syncChrome = () => {
-        const atRoot = stack.length <= 1;
+        const atSectionRoot = stack.length <= 1;
         if (els.moveBtnUp) {
-            els.moveBtnUp.hidden = atRoot;
-            els.moveBtnUp.disabled = atRoot || loading;
+            els.moveBtnUp.hidden = atSectionRoot;
+            els.moveBtnUp.disabled = atSectionRoot || loading;
         }
         if (els.moveFolderPath) {
             els.moveFolderPath.textContent = stack.map((f) => f.name).join(' / ');
         }
         const sameParent = current().id === currentParentId;
+        const cannotPlaceHere = atVirtualComputersRoot();
         if (els.moveBtnHere) {
-            els.moveBtnHere.disabled = loading || sameParent;
-            els.moveBtnHere.title = sameParent ? 'Already in this folder' : 'Move here';
+            els.moveBtnHere.disabled = loading || sameParent || cannotPlaceHere;
+            if (cannotPlaceHere) {
+                els.moveBtnHere.title = 'Open a computer folder first';
+            } else if (sameParent) {
+                els.moveBtnHere.title = 'Already in this folder';
+            } else {
+                els.moveBtnHere.title = 'Move here';
+            }
         }
+        if (els.moveEmpty) {
+            els.moveEmpty.textContent = atVirtualComputersRoot()
+                ? 'No computer folders found.'
+                : 'No subfolders here.';
+        }
+        syncModeButtons();
     };
 
     const renderFolders = (folders) => {
@@ -1471,12 +1764,19 @@ export function promptMoveDestination(options) {
             els.moveFolderList.replaceChildren();
             const loadingRow = document.createElement('p');
             loadingRow.className = 'move-loading';
-            loadingRow.textContent = 'Loading folders…';
+            loadingRow.textContent = atVirtualComputersRoot()
+                ? 'Loading computers…'
+                : 'Loading folders…';
             els.moveFolderList.appendChild(loadingRow);
         }
         if (els.moveEmpty) els.moveEmpty.hidden = true;
         try {
-            const folders = await listFolders(current().id);
+            let folders;
+            if (atVirtualComputersRoot()) {
+                folders = await listComputerRoots();
+            } else {
+                folders = await listFolders(current().id);
+            }
             renderFolders(folders);
         } catch (err) {
             if (els.moveFolderList) {
@@ -1492,11 +1792,24 @@ export function promptMoveDestination(options) {
         }
     };
 
+    const switchMode = (nextMode) => {
+        if (!hasComputers && nextMode === 'computers') return;
+        if (nextMode !== 'folder' && nextMode !== 'computers') return;
+        if (nextMode === mode || loading) return;
+        mode = nextMode;
+        stack = nextMode === 'computers' ? computersRoot() : driveRoot();
+        load();
+    };
+
     return new Promise((resolve) => {
         const cleanup = () => {
             if (els.moveBtnCancel) els.moveBtnCancel.removeEventListener('click', onCancel);
             if (els.moveBtnHere) els.moveBtnHere.removeEventListener('click', onConfirm);
             if (els.moveBtnUp) els.moveBtnUp.removeEventListener('click', onUp);
+            if (els.moveModeDrive) els.moveModeDrive.removeEventListener('click', onModeDrive);
+            if (els.moveModeComputers) {
+                els.moveModeComputers.removeEventListener('click', onModeComputers);
+            }
             dialog.removeEventListener('cancel', onCancel);
         };
 
@@ -1513,6 +1826,7 @@ export function promptMoveDestination(options) {
 
         const onConfirm = () => {
             if (els.moveBtnHere?.disabled) return;
+            if (atVirtualComputersRoot()) return;
             finish({ folderId: current().id, folderName: current().name });
         };
 
@@ -1522,9 +1836,16 @@ export function promptMoveDestination(options) {
             load();
         };
 
+        const onModeDrive = () => switchMode('folder');
+        const onModeComputers = () => switchMode('computers');
+
         if (els.moveBtnCancel) els.moveBtnCancel.addEventListener('click', onCancel);
         if (els.moveBtnHere) els.moveBtnHere.addEventListener('click', onConfirm);
         if (els.moveBtnUp) els.moveBtnUp.addEventListener('click', onUp);
+        if (els.moveModeDrive) els.moveModeDrive.addEventListener('click', onModeDrive);
+        if (els.moveModeComputers) {
+            els.moveModeComputers.addEventListener('click', onModeComputers);
+        }
         dialog.addEventListener('cancel', onCancel);
 
         dialog.showModal();

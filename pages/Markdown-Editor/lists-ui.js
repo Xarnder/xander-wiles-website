@@ -30,6 +30,17 @@ import {
     renderMarkdown,
     splitMarkdownBlocks,
 } from './markdown.js';
+import {
+    commitMiniEditListItemText,
+    extractDateTag,
+    focusItemTextInput,
+    formatDateTagLabel,
+    formatDateTagsForPlainText,
+    listItemBodyForEdit,
+    previewMiniEditDateTag,
+    readShowDatesEnabled,
+    stampNewItemText,
+} from './dates.js';
 import { confirmDeleteList, confirmDeleteListItem } from './ui.js';
 import {
     DOUBLE_TAP_COPY_DEFAULT,
@@ -159,17 +170,32 @@ function formatPlainListClipboard(block) {
         .join('\n');
 }
 
-function createListAddItemButton() {
+function createListAddItemButton({ position = 'bottom' } = {}) {
+    const atTop = position === 'top';
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
-    addBtn.className = 'mdlist-add-btn';
-    addBtn.setAttribute('aria-label', 'Add item');
-    addBtn.title = 'Add item';
-    const icon = document.createElement('span');
-    icon.className = 'mdlist-add-btn-icon';
-    icon.setAttribute('aria-hidden', 'true');
-    addBtn.appendChild(icon);
+    addBtn.className = `mdlist-add-btn mdlist-add-btn--${atTop ? 'top' : 'bottom'}`;
+    addBtn.setAttribute('aria-label', atTop ? 'Add item at top' : 'Add item at bottom');
+    addBtn.title = atTop ? 'Add item at top' : 'Add item at bottom';
+    const addIcon = document.createElement('span');
+    addIcon.className = 'mdlist-add-btn-icon';
+    addIcon.setAttribute('aria-hidden', 'true');
+    const arrowIcon = document.createElement('span');
+    arrowIcon.className = `mdlist-add-btn-arrow mdlist-add-btn-arrow--${atTop ? 'up' : 'down'}`;
+    arrowIcon.setAttribute('aria-hidden', 'true');
+    addBtn.append(addIcon, arrowIcon);
     return addBtn;
+}
+
+function createBlankPlainListItem(listBlock) {
+    const sample = listBlock.items?.[0];
+    return {
+        id: createId('pli'),
+        text: stampNewItemText(''),
+        checked: listBlock.task ? false : null,
+        marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
+        indent: sample?.indent || '',
+    };
 }
 
 function createListCopyButton({ label = 'Copy list', title = 'Copy list' } = {}) {
@@ -470,6 +496,8 @@ export function renderListsUi(root, options) {
                 jumpToTocTarget(root, focusTocId);
             });
         });
+    } else if (openMiniPlainItemId || focusItemId || focusPlainItemId) {
+        // New/focused item handlers scroll the target into view — don't snap back.
     } else {
         restoreScroll(root, scrollTop, plainListScroll);
     }
@@ -951,7 +979,9 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
         const preview = document.createElement('div');
         preview.className = 'md-preview md-preview--segment';
         preview.dataset.segIndex = String(segIndex);
-        preview.innerHTML = renderMarkdown(sourceText);
+        preview.innerHTML = renderMarkdown(sourceText, {
+            showDates: readShowDatesEnabled(),
+        });
         assignHeadingTocIds(preview, segIndex);
         wrap.appendChild(preview);
         if (placingList && listsRoot) {
@@ -1005,6 +1035,7 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
         preview.dataset.segIndex = String(segIndex);
         preview.innerHTML = renderMarkdown(prose, {
             lineOffset: Math.max(0, (block.startLine || 1) - 1),
+            showDates: readShowDatesEnabled(),
         });
         assignHeadingTocIds(preview, segIndex);
         wrap.appendChild(preview);
@@ -1243,7 +1274,7 @@ function renderPlainListBlock({
                 const sample = listBlock.items[0];
                 listBlock.items.push({
                     id: newId,
-                    text: '',
+                    text: stampNewItemText(''),
                     checked: listBlock.task ? false : null,
                     marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
                     indent: sample?.indent || '',
@@ -1277,8 +1308,8 @@ function renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChang
     const actions = document.createElement('div');
     actions.className = 'mdlist-header-actions';
 
-    const addBtn = createListAddItemButton();
-    addBtn.addEventListener('click', () => {
+    const addTopBtn = createListAddItemButton({ position: 'top' });
+    addTopBtn.addEventListener('click', () => {
         const newId = createId('pli');
         mutatePlainListInSegment({
             seg,
@@ -1287,14 +1318,29 @@ function renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChang
             doc,
             onChange,
             mutator: (listBlock) => {
-                const sample = listBlock.items?.[0];
-                listBlock.items.push({
-                    id: newId,
-                    text: '',
-                    checked: listBlock.task ? false : null,
-                    marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
-                    indent: sample?.indent || '',
-                });
+                if (!Array.isArray(listBlock.items)) listBlock.items = [];
+                const item = createBlankPlainListItem(listBlock);
+                item.id = newId;
+                listBlock.items.unshift(item);
+            },
+            opts: { stayInView: true, openMiniPlainItemId: newId },
+        });
+    });
+
+    const addBottomBtn = createListAddItemButton({ position: 'bottom' });
+    addBottomBtn.addEventListener('click', () => {
+        const newId = createId('pli');
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                if (!Array.isArray(listBlock.items)) listBlock.items = [];
+                const item = createBlankPlainListItem(listBlock);
+                item.id = newId;
+                listBlock.items.push(item);
             },
             opts: { stayInView: true, openMiniPlainItemId: newId },
         });
@@ -1326,7 +1372,7 @@ function renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChang
         onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
     });
 
-    actions.append(addBtn, copyBtn, editBtn);
+    actions.append(addTopBtn, addBottomBtn, copyBtn, editBtn);
     titleRow.append(title, count, actions);
     header.appendChild(titleRow);
     return header;
@@ -1410,9 +1456,35 @@ function attachLongPress(el, onLongPress) {
 }
 
 /**
- * Inline mini editor for one plain-list item (preview stays open).
- * @param {object} args
+ * Fill a list-item label node. When Show dates is on, the date is a separate
+ * styled chip so it doesn’t read as normal body text.
+ * @param {HTMLElement} el
+ * @param {string} text
  */
+function fillListItemLabel(el, text) {
+    el.replaceChildren();
+    const raw = String(text ?? '');
+    if (!readShowDatesEnabled()) {
+        const shown = formatDateTagsForPlainText(raw, false).trim();
+        el.textContent = shown || 'Untitled item';
+        return;
+    }
+    const body = listItemBodyForEdit(raw).trim();
+    const label = formatDateTagLabel(extractDateTag(raw));
+    if (!body && !label) {
+        el.textContent = 'Untitled item';
+        return;
+    }
+    if (body) el.appendChild(document.createTextNode(body));
+    if (label) {
+        if (body) el.appendChild(document.createTextNode('\u00a0'));
+        const mark = document.createElement('time');
+        mark.className = 'md-date-tag';
+        mark.textContent = label;
+        el.appendChild(mark);
+    }
+}
+
 function openPlainItemMiniEditor({
     li,
     item,
@@ -1471,13 +1543,13 @@ function openPlainItemMiniEditor({
             box.disabled = true;
             box.checked = Boolean(checked);
             const span = document.createElement('span');
-            span.textContent = text || 'Untitled item';
+            fillListItemLabel(span, text);
             label.append(box, span);
             li.appendChild(label);
         } else {
             const textEl = document.createElement('span');
             textEl.className = 'mdplain-view-text';
-            textEl.textContent = text || 'Untitled item';
+            fillListItemLabel(textEl, text);
             li.appendChild(textEl);
         }
     };
@@ -1521,7 +1593,7 @@ function openPlainItemMiniEditor({
             return;
         }
 
-        const nextText = textInput.value;
+        const nextText = commitMiniEditListItemText(snapshot.text, textInput.value);
         const nextChecked = checkInput
             ? checkInput.checked
             : snapshot.checked !== null
@@ -1579,7 +1651,7 @@ function openPlainItemMiniEditor({
     const textInput = document.createElement('textarea');
     textInput.className = 'mdplain-mini-text';
     textInput.rows = 2;
-    textInput.value = item.text || '';
+    textInput.value = listItemBodyForEdit(item.text || '');
     textInput.placeholder = 'Item text';
     textInput.setAttribute('aria-label', 'Edit list item');
     textInput.spellcheck = true;
@@ -1590,10 +1662,35 @@ function openPlainItemMiniEditor({
         textInput.style.height = `${Math.max(44, Math.min(textInput.scrollHeight, maxPx))}px`;
     };
 
+    /** @type {HTMLElement | null} */
+    let dateMeta = null;
+    const showDates = readShowDatesEnabled();
+    if (showDates) {
+        dateMeta = document.createElement('div');
+        dateMeta.className = 'mdplain-mini-date';
+        dateMeta.setAttribute('aria-live', 'polite');
+    }
+
+    const syncDateMeta = () => {
+        if (!dateMeta) return;
+        const tag = previewMiniEditDateTag(snapshot.text, textInput.value);
+        const label = formatDateTagLabel(tag);
+        if (label) {
+            dateMeta.hidden = false;
+            dateMeta.textContent = label;
+            dateMeta.title = tag || '';
+        } else {
+            dateMeta.hidden = true;
+            dateMeta.textContent = '';
+            dateMeta.removeAttribute('title');
+        }
+    };
+
     textInput.addEventListener('input', () => {
         mutateItem((target) => {
-            target.text = textInput.value;
+            target.text = commitMiniEditListItemText(snapshot.text, textInput.value);
         }, { skipRender: true });
+        syncDateMeta();
         syncHeight();
     });
 
@@ -1621,7 +1718,7 @@ function openPlainItemMiniEditor({
         const text = formatPlainItemClipboard(
             {
                 ...item,
-                text: textInput.value,
+                text: commitMiniEditListItemText(snapshot.text, textInput.value),
                 checked: checkInput
                     ? checkInput.checked
                     : item.checked === true || item.checked === false
@@ -1656,7 +1753,12 @@ function openPlainItemMiniEditor({
     doneBtn.addEventListener('click', () => finish({ commit: true }));
 
     actions.append(copyBtn, delBtn, doneBtn);
-    editor.append(textInput, actions);
+    editor.appendChild(textInput);
+    if (dateMeta) {
+        syncDateMeta();
+        editor.appendChild(dateMeta);
+    }
+    editor.appendChild(actions);
     li.appendChild(editor);
 
     function onOutsidePointerDown(event) {
@@ -1679,8 +1781,12 @@ function openPlainItemMiniEditor({
         document.addEventListener('pointerdown', onOutsidePointerDown, true);
         document.addEventListener('keydown', onDocKeyDown, true);
         syncHeight();
-        textInput.focus();
-        textInput.select();
+        focusItemTextInput(textInput);
+        // Second frame: layout has the expanded mini editor height.
+        requestAnimationFrame(() => {
+            if (closed) return;
+            scrollListTargetIntoView(editor);
+        });
     });
 }
 
@@ -1727,13 +1833,13 @@ function renderPlainListViewItems(block, options = {}) {
             box.disabled = true;
             box.checked = Boolean(item.checked);
             const span = document.createElement('span');
-            span.textContent = item.text || 'Untitled item';
+            fillListItemLabel(span, item.text);
             label.append(box, span);
             li.appendChild(label);
         } else {
             const text = document.createElement('span');
             text.className = 'mdplain-view-text';
-            text.textContent = item.text || 'Untitled item';
+            fillListItemLabel(text, item.text);
             li.appendChild(text);
         }
         listEl.appendChild(li);
@@ -1797,7 +1903,8 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     const textInput = document.createElement('textarea');
     textInput.rows = 1;
     textInput.className = 'mdlist-text';
-    textInput.value = item.text || '';
+    const originalText = item.text || '';
+    textInput.value = listItemBodyForEdit(originalText);
     textInput.placeholder = 'Item text';
     textInput.setAttribute('aria-label', 'Item text');
 
@@ -1820,7 +1927,7 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     textInput.addEventListener('input', () => {
         onMutate((listBlock) => {
             const target = (listBlock.items || []).find((it) => it.id === item.id);
-            if (target) target.text = textInput.value;
+            if (target) target.text = commitMiniEditListItemText(originalText, textInput.value);
         }, { skipRender: true });
         syncTextHeight();
     });
@@ -1834,7 +1941,7 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
                 const sample = listBlock.items[from] || listBlock.items[0];
                 const nextItem = {
                     id: newId,
-                    text: '',
+                    text: stampNewItemText(''),
                     checked: listBlock.task ? false : null,
                     marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
                     indent: sample?.indent || '',
@@ -1909,25 +2016,44 @@ function assignHeadingTocIds(previewEl, segIndex) {
 function focusItem(root, focusItemId) {
     if (!focusItemId) return;
     requestAnimationFrame(() => {
-        const input = root.querySelector(`[data-item-id="${CSS.escape(focusItemId)}"] .mdlist-text`);
-        if (input) {
-            input.focus();
-            input.select();
-        }
+        const row = root.querySelector(`[data-item-id="${CSS.escape(focusItemId)}"]`);
+        const input = row?.querySelector('.mdlist-text');
+        focusItemTextInput(input);
+        requestAnimationFrame(() => {
+            scrollListTargetIntoView(row || input);
+        });
     });
 }
 
 function focusPlainItem(root, focusPlainItemId) {
     if (!focusPlainItemId) return;
     requestAnimationFrame(() => {
-        const input = root.querySelector(
-            `[data-plain-item-id="${CSS.escape(focusPlainItemId)}"] .mdlist-text`
+        const row = root.querySelector(
+            `[data-plain-item-id="${CSS.escape(focusPlainItemId)}"]`
         );
-        if (input) {
-            input.focus();
-            input.select();
-        }
+        const input = row?.querySelector('.mdlist-text');
+        focusItemTextInput(input);
+        requestAnimationFrame(() => {
+            scrollListTargetIntoView(row || input);
+        });
     });
+}
+
+/**
+ * Bring a newly added / focused list row (or mini editor) into view.
+ * @param {Element | null | undefined} el
+ */
+function scrollListTargetIntoView(el) {
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    try {
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+    } catch {
+        try {
+            el.scrollIntoView(true);
+        } catch {
+            // ignore
+        }
+    }
 }
 
 function ensureEditingForFocus(doc, focusItemId) {
@@ -2176,9 +2302,16 @@ function renderListViewHeader(seg, doc, onChange, onStatus) {
     const actions = document.createElement('div');
     actions.className = 'mdlist-header-actions';
 
-    const addBtn = createListAddItemButton();
-    addBtn.addEventListener('click', () => {
-        const item = addItem(list, '');
+    const addTopBtn = createListAddItemButton({ position: 'top' });
+    addTopBtn.addEventListener('click', () => {
+        const item = addItem(list, '', { position: 'top' });
+        seg._editing = true;
+        onChange(doc, changeOpts(doc, { soft: true, focusItemId: item.id }));
+    });
+
+    const addBottomBtn = createListAddItemButton({ position: 'bottom' });
+    addBottomBtn.addEventListener('click', () => {
+        const item = addItem(list, '', { position: 'bottom' });
         seg._editing = true;
         onChange(doc, changeOpts(doc, { soft: true, focusItemId: item.id }));
     });
@@ -2208,7 +2341,7 @@ function renderListViewHeader(seg, doc, onChange, onStatus) {
         onChange(doc, changeOpts(doc, { soft: true }));
     });
 
-    actions.append(addBtn, copyBtn, editBtn);
+    actions.append(addTopBtn, addBottomBtn, copyBtn, editBtn);
     titleRow.append(title, count, actions);
     header.appendChild(titleRow);
     return header;
@@ -2243,7 +2376,7 @@ function renderListViewItems(list, onStatus) {
 
         const text = document.createElement('span');
         text.className = 'mdlist-view-text';
-        text.textContent = item.text || 'Untitled item';
+        fillListItemLabel(text, item.text);
 
         body.appendChild(text);
 
@@ -2373,7 +2506,8 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
     const textInput = document.createElement('textarea');
     textInput.rows = 1;
     textInput.className = 'mdlist-text';
-    textInput.value = item.text || '';
+    const originalText = item.text || '';
+    textInput.value = listItemBodyForEdit(originalText);
     textInput.placeholder = 'Item text';
     textInput.setAttribute('aria-label', 'Item text');
 
@@ -2394,7 +2528,9 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
         requestAnimationFrame(syncTextHeight);
     });
     textInput.addEventListener('input', () => {
-        onMutate(() => setItemText(list, item.id, textInput.value), { skipRender: true });
+        onMutate(() => setItemText(list, item.id, commitMiniEditListItemText(originalText, textInput.value)), {
+            skipRender: true,
+        });
         syncTextHeight();
     });
     textInput.addEventListener('blur', syncTextHeight);

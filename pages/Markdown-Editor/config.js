@@ -12,6 +12,10 @@ export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 export const ROOT_FOLDER_ID = 'root';
 export const ROOT_FOLDER_NAME = 'My Drive';
 
+/** Virtual root for Finder / Move “Computers” browsing (not a real Drive id). */
+export const COMPUTERS_FOLDER_ID = '__computers__';
+export const COMPUTERS_FOLDER_NAME = 'Computers';
+
 export const LAST_FOLDER_KEY = 'md-editor:lastFolderId';
 export const DRAFT_KEY_PREFIX = 'md-editor:draft:';
 export const VIEW_MODE_KEY_PREFIX = 'md-editor:viewMode:';
@@ -119,6 +123,13 @@ export const DEFAULT_EDIT_VIEW_VALUES = new Set(
  */
 export const DOUBLE_TAP_COPY_KEY = 'md-editor:doubleTapCopy';
 export const DOUBLE_TAP_COPY_DEFAULT = true;
+
+/**
+ * Show {{date:…}} tags in Preview / List.
+ * '1' on, '0' off (default — tags stay in Raw only).
+ */
+export const SHOW_DATES_KEY = 'md-editor:showDates';
+export const SHOW_DATES_DEFAULT = false;
 
 /**
  * Total top inset for Home Screen / PWA (px) — replaces iOS safe-area-inset-top.

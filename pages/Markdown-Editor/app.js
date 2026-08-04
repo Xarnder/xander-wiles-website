@@ -4,6 +4,8 @@ import {
     LARGE_FILE_BYTES,
     ROOT_FOLDER_ID,
     ROOT_FOLDER_NAME,
+    COMPUTERS_FOLDER_ID,
+    COMPUTERS_FOLDER_NAME,
     VIEW_MODE_KEY_PREFIX,
     FINDER_MD_ORDER_MOBILE_KEY,
     FINDER_MD_ORDER_DESKTOP_KEY,
@@ -42,6 +44,7 @@ import {
     DEFAULT_EDIT_VIEW_VALUES,
     DEFAULT_EDIT_VIEW_OPTIONS,
     DOUBLE_TAP_COPY_KEY,
+    SHOW_DATES_KEY,
     PREVIEW_TOC_OPEN_KEY,
     PREVIEW_TOC_STICKY_KEY,
     RECENT_FILES_KEY,
@@ -80,6 +83,7 @@ import {
     createEditorState,
     markError,
     markSaved,
+    applySavedBaseline,
     markSaving,
     promptRestoreDraft,
     readDraft,
@@ -88,6 +92,8 @@ import {
 import {
     addItem,
     appendEmptyList,
+    countItemsMissingDates,
+    fillMissingListDates,
     offsetFromPreviewAnchor,
     parseDocument,
     previewAnchorFromOffset,
@@ -95,6 +101,15 @@ import {
     stripMdlistAgentNotes,
 } from './lists.js';
 import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
+import {
+    buildDateTag,
+    buildDateTagFromCreatedTime,
+    formatDateTagLabel,
+    insertDateTagAt,
+    readShowDatesEnabled,
+    resolveDateTagInput,
+    writeShowDatesEnabled,
+} from './dates.js';
 import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writeDoubleTapCopyEnabled } from './lists-ui.js';
 import {
     flushCloudSettingsSave,
@@ -123,6 +138,7 @@ import {
     promptForName,
     promptItemActions,
     promptEditorMoreMenu,
+    promptFillListDates,
     fillEditorMoreStats,
     promptFinderSort,
     promptMoveDestination,
@@ -144,7 +160,7 @@ import {
     showEditorToast,
     setUpEnabled,
     showView,
-    syncEditorChrome,
+    syncEditorChrome as syncEditorChromeUi,
     syncFinderLayoutControls,
     syncNavLayout,
     syncThemeControl,
@@ -160,16 +176,19 @@ import {
     syncListLayoutControl,
     syncDefaultEditViewControl,
     syncDoubleTapCopyControl,
+    syncEditorMoreShowDates,
     syncFinderSortControl,
 } from './ui.js';
 
-const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
+const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
 const VIEW_MODES = new Set(['list', 'preview', 'contents', 'raw']);
 const LEGACY_VIEW_MODES = {
     custom: 'list',
     mixed: 'preview',
     standard: 'raw',
 };
+/** Idle time after last edit before Drive autosave. */
+const AUTOSAVE_IDLE_MS = 10_000;
 
 const state = {
     browseMode: 'folder', // 'folder' | 'search' | 'computers'
@@ -193,6 +212,178 @@ const state = {
 
 /** @type {ReturnType<typeof createEditorSearch> | null} */
 let editorSearch = null;
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let autosaveTimer = null;
+/** @type {number | null} */
+let autosaveRaf = null;
+let autosaveStartedAt = 0;
+let autosaveInFlight = false;
+/** Content fingerprint used to detect real edits vs chrome-only syncs. */
+let autosaveContentFingerprint = null;
+/** Timestamp of last local content change (ms). */
+let lastEditorEditAt = 0;
+
+function syncEditorChrome(ed = state.editor, options = {}) {
+    syncEditorChromeUi(ed, options);
+    if (!options.quiet) syncAutosaveFromEditorState();
+    else if (options.syncAutosave) syncAutosaveFromEditorState();
+}
+
+function noteEditorContentEdited() {
+    lastEditorEditAt = Date.now();
+}
+
+/**
+ * True when the user is mid-edit in a text field (Raw textarea or list inputs).
+ * Autosave should stay in the background and must not rebuild that DOM.
+ */
+function isEditorTextFieldFocused() {
+    const els = getEls();
+    if (!els.viewEditor || els.viewEditor.hidden) return false;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return false;
+    if (active === els.editor) return true;
+    if (els.listsRoot?.contains(active)) {
+        const tag = active.tagName;
+        if (tag === 'TEXTAREA' || tag === 'INPUT') return true;
+        if (active.isContentEditable) return true;
+    }
+    return false;
+}
+
+function stopAutosaveCountdown() {
+    if (autosaveTimer != null) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+    }
+    if (autosaveRaf != null) {
+        cancelAnimationFrame(autosaveRaf);
+        autosaveRaf = null;
+    }
+    autosaveStartedAt = 0;
+    const els = getEls();
+    const bar = els.autosaveBar;
+    const fill = els.autosaveBarFill;
+    if (bar) {
+        bar.hidden = true;
+        bar.setAttribute('aria-hidden', 'true');
+        bar.setAttribute('aria-valuenow', '0');
+    }
+    if (fill) fill.style.transform = 'scaleX(0)';
+}
+
+function paintAutosaveBar(remainingRatio) {
+    const els = getEls();
+    const bar = els.autosaveBar;
+    const fill = els.autosaveBarFill;
+    if (!bar || !fill) return;
+    const ratio = Math.max(0, Math.min(1, Number(remainingRatio) || 0));
+    const secsLeft = Math.ceil((ratio * AUTOSAVE_IDLE_MS) / 1000);
+    bar.hidden = false;
+    bar.setAttribute('aria-hidden', 'false');
+    bar.setAttribute('aria-valuenow', String(secsLeft));
+    bar.setAttribute(
+        'aria-valuetext',
+        `${secsLeft} second${secsLeft === 1 ? '' : 's'} until autosave`
+    );
+    fill.style.transform = `scaleX(${ratio})`;
+}
+
+function tickAutosaveBar() {
+    autosaveRaf = null;
+    if (!autosaveStartedAt || autosaveTimer == null) return;
+    const elapsed = Date.now() - autosaveStartedAt;
+    const remaining = Math.max(0, 1 - elapsed / AUTOSAVE_IDLE_MS);
+    paintAutosaveBar(remaining);
+    if (remaining > 0) {
+        autosaveRaf = requestAnimationFrame(tickAutosaveBar);
+    }
+}
+
+function startAutosaveCountdown() {
+    if (autosaveTimer != null) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+    }
+    if (autosaveRaf != null) {
+        cancelAnimationFrame(autosaveRaf);
+        autosaveRaf = null;
+    }
+    autosaveStartedAt = Date.now();
+    paintAutosaveBar(1);
+    autosaveTimer = setTimeout(() => {
+        autosaveTimer = null;
+        runAutosave();
+    }, AUTOSAVE_IDLE_MS);
+    autosaveRaf = requestAnimationFrame(tickAutosaveBar);
+}
+
+function syncAutosaveFromEditorState() {
+    const ed = state.editor;
+    const els = getEls();
+    const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
+
+    if (
+        !ed?.fileId ||
+        !ed.dirty ||
+        ed.status === 'saving' ||
+        ed.status === 'loading' ||
+        autosaveInFlight ||
+        !editorVisible
+    ) {
+        if (!ed?.dirty || ed?.status === 'saving' || ed?.status === 'loading' || !ed?.fileId) {
+            autosaveContentFingerprint = ed?.editorContent ?? null;
+        }
+        stopAutosaveCountdown();
+        return;
+    }
+
+    const fingerprint = ed.editorContent;
+    if (fingerprint !== autosaveContentFingerprint) {
+        autosaveContentFingerprint = fingerprint;
+        noteEditorContentEdited();
+        startAutosaveCountdown();
+        return;
+    }
+
+    if (autosaveTimer == null && !autosaveInFlight) {
+        startAutosaveCountdown();
+    }
+}
+
+async function runAutosave() {
+    const ed = state.editor;
+    if (autosaveInFlight) return;
+    const els = getEls();
+    const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
+    if (!ed?.fileId || !ed.dirty || ed.status === 'saving' || !editorVisible) {
+        stopAutosaveCountdown();
+        return;
+    }
+
+    // Still typing / just typed — wait for another full idle window.
+    const idleFor = Date.now() - lastEditorEditAt;
+    if (idleFor < AUTOSAVE_IDLE_MS) {
+        startAutosaveCountdown();
+        return;
+    }
+
+    if (els.autosaveBar) {
+        els.autosaveBar.setAttribute('aria-valuetext', 'Autosaving');
+    }
+    if (els.autosaveBarFill) {
+        els.autosaveBarFill.style.transform = 'scaleX(0)';
+    }
+
+    autosaveInFlight = true;
+    try {
+        await saveCurrentFile({ autosave: true });
+    } finally {
+        autosaveInFlight = false;
+        syncAutosaveFromEditorState();
+    }
+}
 
 function currentFolder() {
     return state.folderStack[state.folderStack.length - 1];
@@ -569,6 +760,7 @@ function buildSettingsSnapshot() {
         listLayout: readListLayout(),
         defaultEditView: readDefaultEditView(),
         doubleTapCopy: readDoubleTapCopyEnabled(),
+        showDates: readShowDatesEnabled(),
         finderMdOrder: readFinderLayoutPrefs(),
         finderSort: readFinderSort(),
         pinnedItems: readPinnedItems(),
@@ -699,6 +891,18 @@ function applyCloudSettings(cloud) {
                 // ignore
             }
             syncDoubleTapCopyControl(cloud.doubleTapCopy);
+        }
+
+        if (typeof cloud.showDates === 'boolean') {
+            try {
+                localStorage.setItem(SHOW_DATES_KEY, cloud.showDates ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            syncEditorMoreShowDates(cloud.showDates);
+            if (state.editor.fileId && state.viewMode !== 'raw') {
+                renderStructuredEditor();
+            }
         }
 
         if (cloud.finderMdOrder && typeof cloud.finderMdOrder === 'object') {
@@ -1060,7 +1264,10 @@ function writeViewMode(fileId, mode) {
     }
 }
 
-function resolveInitialViewMode(fileId) {
+function resolveInitialViewMode(fileId, { freshlyCreated = false } = {}) {
+    // Brand-new notes from Finder open in Raw so the user can start typing.
+    // That choice is not persisted — the next open uses the usual default.
+    if (freshlyCreated) return 'raw';
     const saved = readViewMode(fileId);
     if (saved) return saved;
     return readDefaultEditView();
@@ -1487,8 +1694,9 @@ function applyViewMode(mode, {
     }
 }
 
-function setupEditorForOpenFile() {
+function setupEditorForOpenFile(options = {}) {
     const els = getEls();
+    const freshlyCreated = Boolean(options.freshlyCreated);
     state.tagFilters = {};
     state.editingListIds = {};
     state.editingPlainLists = {};
@@ -1506,7 +1714,7 @@ function setupEditorForOpenFile() {
         refreshDocumentModelFromText(serialized);
     }
 
-    state.viewMode = resolveInitialViewMode(state.editor.fileId);
+    state.viewMode = resolveInitialViewMode(state.editor.fileId, { freshlyCreated });
 
     applyEditorDisplayMode(state.viewMode, { hasFile: true });
     if (state.viewMode === 'list' || state.viewMode === 'preview') showParseWarnings();
@@ -1523,6 +1731,11 @@ function setupEditorForOpenFile() {
         showEditorToast('Repaired list data — Save to persist fixes.', 'warn', {
             key: 'repaired',
             durationMs: 3200,
+        });
+    } else if (freshlyCreated) {
+        showEditorToast('Opened in Raw', 'ok', {
+            key: 'opened-new-raw',
+            durationMs: 2200,
         });
     } else if (!readViewMode(state.editor.fileId)) {
         const label =
@@ -1956,13 +2169,26 @@ async function handleMoveEntry(file) {
     const destination = await promptMoveDestination({
         item: file,
         currentParentId,
+        initialMode: state.browseMode === 'computers' ? 'computers' : 'folder',
+        initialStack:
+            state.browseMode === 'computers' || state.browseMode === 'folder'
+                ? state.folderStack.map((frame) => ({
+                      id: frame.id,
+                      name: frame.name || 'Folder',
+                  }))
+                : undefined,
         listFolders: async (parentId) => {
             const result = await listChildFolders(parentId);
             return result.folders || [];
         },
+        listComputerRoots: () => listComputerRootFolders(),
     });
     if (!destination) {
         setStatus('');
+        return;
+    }
+    if (destination.folderId === COMPUTERS_FOLDER_ID) {
+        setStatus('Open a computer folder before moving here', 'warn');
         return;
     }
     if (destination.folderId === currentParentId) {
@@ -2079,7 +2305,7 @@ async function handleCreateNote() {
     try {
         const created = await createMarkdownFile(parent.id, name, `# ${name.replace(/\.md$/i, '')}\n\n`);
         setStatus(`Created ${created.name}`, 'ok');
-        await openMarkdownFile(created);
+        await openMarkdownFile(created, { freshlyCreated: true });
     } catch (err) {
         setStatus(err.message || 'Could not create note', 'error');
     }
@@ -2160,6 +2386,7 @@ async function handleEditorMoreMenu() {
         fileName: state.editor.fileName,
         isPinned: isPinned(state.editor.fileId),
         stats: buildEditorFileStatRows({ metaPending: true }),
+        showDates: readShowDatesEnabled(),
     });
     if (!action) return;
 
@@ -2401,6 +2628,135 @@ function toggleClickEdit() {
     setStatus('Tap text to edit in Raw, or Cancel', 'ok');
 }
 
+function toggleShowDates() {
+    const next = writeShowDatesEnabled(!readShowDatesEnabled());
+    syncEditorMoreShowDates(next);
+    queueSettingsCloudSync();
+    if (state.editor.fileId && state.viewMode !== 'raw') {
+        renderStructuredEditor();
+    }
+    setStatus(next ? 'Dates visible in Preview' : 'Dates hidden in Preview', 'ok');
+}
+
+function insertDateTagIntoEditor() {
+    if (!state.editor.fileId) {
+        setStatus('Open a markdown file first', 'warn');
+        return;
+    }
+
+    flushCurrentEditorContent();
+    const els = getEls();
+    const tag = buildDateTag();
+
+    if (state.viewMode === 'raw' && els.editor) {
+        const start = Number(els.editor.selectionStart) || 0;
+        const end = Number(els.editor.selectionEnd) || start;
+        const { text, caret } = insertDateTagAt(els.editor.value, start, end, tag);
+        setEditorText(state.editor, text);
+        els.editor.value = text;
+        try {
+            els.editor.focus();
+            els.editor.setSelectionRange(caret, caret);
+        } catch {
+            // ignore
+        }
+        syncEditorChrome(state.editor);
+        setStatus('Inserted date tag', 'ok');
+        return;
+    }
+
+    refreshDocumentModelFromText(state.editor.editorContent);
+    const current = state.editor.editorContent || '';
+    const needsNl = current.length > 0 && !current.endsWith('\n');
+    const next = `${current}${needsNl ? '\n' : ''}${tag}\n`;
+    setEditorText(state.editor, next);
+    els.editor.value = next;
+    refreshDocumentModelFromText(next);
+    if (state.viewMode === 'list' || state.viewMode === 'preview' || state.viewMode === 'contents') {
+        applyEditingLists(state.documentModel, state.editingListIds);
+        applyTagFilters(state.documentModel, state.tagFilters);
+        renderStructuredEditor();
+    }
+    syncEditorChrome(state.editor);
+    setStatus('Inserted date tag (end of file)', 'ok');
+}
+
+async function fillMissingListDatesFromMenu() {
+    if (!state.editor.fileId) {
+        setStatus('Open a markdown file first', 'warn');
+        return;
+    }
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const counts = countItemsMissingDates(state.documentModel);
+    if (!counts.missing) {
+        setStatus('All list items already have date tags', 'ok');
+        showEditorToast('All list items already have dates', 'ok', {
+            key: 'fill-dates-none',
+            durationMs: 2200,
+        });
+        return;
+    }
+
+    let createdTime = null;
+    try {
+        const meta = await getFileMetadata(state.editor.fileId);
+        createdTime = meta?.createdTime || null;
+    } catch {
+        createdTime = null;
+    }
+
+    const createdTag = buildDateTagFromCreatedTime(createdTime);
+    const createdLabel = createdTag
+        ? `${formatDateTagLabel(createdTag) || createdTag} (${createdTag})`
+        : '';
+
+    const tag = await promptFillListDates({
+        missing: counts.missing,
+        total: counts.total,
+        createdTag,
+        createdLabel,
+        defaultCustom: buildDateTag().replace(/^\{\{\s*date\s*:\s*/i, '').replace(/\s*\}\}$/, ''),
+        resolveTag: resolveDateTagInput,
+    });
+    if (!tag) return;
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const result = fillMissingListDates(state.documentModel, tag);
+    if (!result.filled) {
+        setStatus('No list items needed a date tag', 'ok');
+        return;
+    }
+
+    const serialized = serializeDocument(state.documentModel);
+    const els = getEls();
+    setEditorText(state.editor, serialized);
+    els.editor.value = serialized;
+    refreshDocumentModelFromText(serialized);
+    applyEditingLists(state.documentModel, state.editingListIds);
+    applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+    applyTagFilters(state.documentModel, state.tagFilters);
+
+    if (state.viewMode === 'raw') {
+        // textarea already updated
+    } else if (
+        state.viewMode === 'list' ||
+        state.viewMode === 'preview' ||
+        state.viewMode === 'contents'
+    ) {
+        renderStructuredEditor();
+    }
+
+    syncEditorChrome(state.editor);
+    const msg = `Added dates to ${result.filled} item${result.filled === 1 ? '' : 's'}`;
+    setStatus(msg, 'ok');
+    showEditorToast(msg, 'ok', { key: 'fill-dates-done', durationMs: 2600 });
+}
+
 function hasOpenFile() {
     return Boolean(state.editor.fileId);
 }
@@ -2420,7 +2776,7 @@ function showAppView(name, extra = {}) {
     }
 }
 
-async function openMarkdownFile(file) {
+async function openMarkdownFile(file, options = {}) {
     flushCurrentEditorContent();
     if (
         state.editor.fileId &&
@@ -2479,7 +2835,7 @@ async function openMarkdownFile(file) {
         setEditorLoading(false);
         showAppView('editor');
         syncEditorChrome(state.editor);
-        setupEditorForOpenFile();
+        setupEditorForOpenFile({ freshlyCreated: Boolean(options.freshlyCreated) });
     } catch (err) {
         setEditorLoading(false);
         markError(state.editor, err.message || 'Failed to open file');
@@ -2492,33 +2848,53 @@ async function openMarkdownFile(file) {
     }
 }
 
-async function saveCurrentFile() {
+async function saveCurrentFile(options = {}) {
+    const autosave = Boolean(options.autosave);
     const ed = state.editor;
-    const els = getEls();
     if (!ed.fileId) return;
 
+    // Snapshot before upload so later keystrokes aren't treated as already saved.
     flushCurrentEditorContent();
+    const snapshot = ed.editorContent;
     if (!ed.dirty) {
-        setStatus('Already saved', 'ok');
+        if (!autosave) setStatus('Already saved', 'ok');
+        stopAutosaveCountdown();
         return;
     }
 
-    markSaving(ed);
-    syncEditorChrome(ed);
+    stopAutosaveCountdown();
+
+    if (autosave) {
+        // Background save: no "Saving…" chrome, no list re-render, no textarea stomping.
+    } else {
+        markSaving(ed);
+        syncEditorChrome(ed);
+    }
 
     try {
-        await updateFileContent(ed.fileId, ed.editorContent, ed.mimeType || 'text/markdown');
-        markSaved(ed);
+        await updateFileContent(ed.fileId, snapshot, ed.mimeType || 'text/markdown');
+        applySavedBaseline(ed, snapshot);
+        autosaveContentFingerprint = snapshot;
+
+        if (autosave) {
+            // Keep focus / caret / open mini-editors intact.
+            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+            if (!ed.dirty) setStatus('Autosaved', 'ok');
+            return;
+        }
+
         syncEditorChrome(ed);
         refreshDocumentModelFromText(ed.editorContent);
         applyTagFilters(state.documentModel, state.tagFilters);
         applyEditingLists(state.documentModel, state.editingListIds);
-        if (state.viewMode !== 'raw') renderStructuredEditor();
+        if (state.viewMode !== 'raw' && !isEditorTextFieldFocused()) {
+            renderStructuredEditor();
+        }
     } catch (err) {
         markError(ed, err.message || 'Save failed');
         ed.dirty = ed.editorContent !== ed.originalContent;
         if (ed.dirty) ed.status = 'error';
-        syncEditorChrome(ed);
+        syncEditorChrome(ed, autosave ? { quiet: true, syncAutosave: true } : {});
         setStatus(ed.errorMessage, 'error');
     }
 }
@@ -2553,6 +2929,7 @@ async function switchAppMode(mode) {
         state.placingList = false;
         state.pendingImportList = null;
         state.clickEdit = false;
+        stopAutosaveCountdown();
     }
 
     if (mode === 'pinned') {
@@ -2760,6 +3137,25 @@ function wireEvents() {
             }
             els.importListFile.value = '';
             els.importListFile.click();
+        });
+    }
+    if (els.editorMoreInsertDate) {
+        els.editorMoreInsertDate.addEventListener('click', () => {
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
+            insertDateTagIntoEditor();
+        });
+    }
+    if (els.editorMoreFillDates) {
+        els.editorMoreFillDates.addEventListener('click', () => {
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
+            fillMissingListDatesFromMenu();
+        });
+    }
+    if (els.editorMoreShowDates) {
+        els.editorMoreShowDates.addEventListener('click', () => {
+            toggleShowDates();
         });
     }
     if (els.btnInsertList) {

@@ -3,6 +3,9 @@
  * Syntax: fenced ```mdlist with JSON body (version 1).
  */
 
+import { commitListItemText, extractDateTag, listItemBodyForEdit, stampNewItemText } from './dates.js';
+import { joinMarkdownBlocks, splitMarkdownBlocks } from './markdown.js';
+
 const MDLIST_INFO = /^mdlist\s*$/i;
 const MAX_BLOCK_CHARS = 500_000;
 
@@ -644,23 +647,121 @@ export function setItemTags(list, itemId, tags) {
     );
 }
 
-export function addItem(list, text = 'New item') {
-    const items = list.items || [];
-    const used = usedScores(items);
-    let score = items.length + 1;
-    while (used.has(score)) score += 1;
+export function addItem(list, text = 'New item', { position = 'bottom' } = {}) {
+    const sorted = sortItemsByScore(list.items || []);
     const item = {
         id: createId('item'),
-        text: String(text ?? 'New item'),
-        score,
+        text: stampNewItemText(text ?? 'New item'),
         tags: [],
     };
-    list.items = sortItemsByScore([...items, item]);
+    const ordered = position === 'top' ? [item, ...sorted] : [...sorted, item];
+    list.items = rerankScoresInOrder(ordered);
     return item;
 }
 
 export function deleteItem(list, itemId) {
     list.items = (list.items || []).filter((it) => it.id !== itemId);
+}
+
+/**
+ * Count list items (custom + plain) that have no `{{date:…}}` tag yet.
+ * @param {{ segments?: Array<object> }} doc
+ * @returns {{ missing: number, total: number, customMissing: number, plainMissing: number }}
+ */
+export function countItemsMissingDates(doc) {
+    let missing = 0;
+    let total = 0;
+    let customMissing = 0;
+    let plainMissing = 0;
+
+    for (const seg of doc?.segments || []) {
+        if (seg.type === 'mdlist' && seg.list) {
+            for (const item of seg.list.items || []) {
+                total += 1;
+                if (!extractDateTag(item.text)) {
+                    missing += 1;
+                    customMissing += 1;
+                }
+            }
+            continue;
+        }
+        if (seg.type !== 'markdown') continue;
+        const blocks = splitMarkdownBlocks(stripMdlistAgentNotes(seg.text || ''));
+        for (const block of blocks) {
+            if (block.type !== 'plainlist') continue;
+            for (const item of block.items || []) {
+                total += 1;
+                if (!extractDateTag(item.text)) {
+                    missing += 1;
+                    plainMissing += 1;
+                }
+            }
+        }
+    }
+
+    return { missing, total, customMissing, plainMissing };
+}
+
+/**
+ * Attach `tag` to every list item that does not already have a date tag.
+ * Mutates the document model in place.
+ * @param {{ segments?: Array<object> }} doc
+ * @param {string} tag canonical `{{date:…}}`
+ * @returns {{ filled: number, skipped: number, listsTouched: number }}
+ */
+export function fillMissingListDates(doc, tag) {
+    const stamp = String(tag || '').trim();
+    if (!stamp || !extractDateTag(stamp)) {
+        return { filled: 0, skipped: 0, listsTouched: 0 };
+    }
+
+    let filled = 0;
+    let skipped = 0;
+    let listsTouched = 0;
+
+    for (const seg of doc?.segments || []) {
+        if (seg.type === 'mdlist' && seg.list) {
+            let touched = false;
+            for (const item of seg.list.items || []) {
+                if (extractDateTag(item.text)) {
+                    skipped += 1;
+                    continue;
+                }
+                item.text = commitListItemText(listItemBodyForEdit(item.text), stamp);
+                filled += 1;
+                touched = true;
+            }
+            if (touched) listsTouched += 1;
+            continue;
+        }
+        if (seg.type !== 'markdown') continue;
+
+        const source = stripMdlistAgentNotes(seg.text || '');
+        const blocks = splitMarkdownBlocks(source);
+        let changed = false;
+        for (const block of blocks) {
+            if (block.type !== 'plainlist') continue;
+            let listTouched = false;
+            for (const item of block.items || []) {
+                if (extractDateTag(item.text)) {
+                    skipped += 1;
+                    continue;
+                }
+                item.text = commitListItemText(listItemBodyForEdit(item.text), stamp);
+                filled += 1;
+                listTouched = true;
+                changed = true;
+            }
+            if (listTouched) listsTouched += 1;
+        }
+        if (changed) {
+            seg.text = joinMarkdownBlocks(blocks);
+            delete seg._plainBlocks;
+            delete seg._plainBlocksSource;
+        }
+    }
+
+    return { filled, skipped, listsTouched };
 }
 
 function mergeAdjacentMarkdown(segments) {

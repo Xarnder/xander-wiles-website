@@ -90,6 +90,23 @@ export function markSaved(state) {
     if (state.fileId) clearDraft(state.fileId);
 }
 
+/**
+ * Apply a successfully uploaded baseline without clobbering newer local edits.
+ * @param {ReturnType<typeof createEditorState>} state
+ * @param {string} savedText — exact payload that was written to Drive
+ */
+export function applySavedBaseline(state, savedText) {
+    const baseline = String(savedText ?? '');
+    state.originalContent = baseline;
+    state.dirty = state.editorContent !== baseline;
+    state.status = state.dirty ? 'dirty' : 'saved';
+    state.errorMessage = '';
+    if (state.fileId) {
+        if (state.dirty) writeDraft(state.fileId, state.editorContent, state.fileName);
+        else clearDraft(state.fileId);
+    }
+}
+
 export function markError(state, message) {
     state.status = 'error';
     state.errorMessage = message || 'Something went wrong';

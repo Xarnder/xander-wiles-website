@@ -32,6 +32,7 @@ let applyingCloud = false;
  *   listLayout?: string,
  *   defaultEditView?: string,
  *   doubleTapCopy?: boolean,
+ *   showDates?: boolean,
  *   finderMdOrder?: { mobile?: string, desktop?: string },
  *   finderSort?: string,
  *   pinnedItems?: object[],

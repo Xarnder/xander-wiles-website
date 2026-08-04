@@ -3,6 +3,12 @@
  * Escapes raw HTML; only emits tags we generate.
  */
 
+import {
+    DATE_TAG_LINE_RE,
+    dateTagRe,
+    renderDateTagHtml,
+} from './dates.js';
+
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 export function escapeHtml(text) {
@@ -85,8 +91,26 @@ function sanitizeUrl(url) {
     return '';
 }
 
-function renderInline(text) {
+/**
+ * @param {string} text
+ * @param {{ showDates?: boolean }} [options]
+ */
+function renderInline(text, options = {}) {
+    const showDates = Boolean(options.showDates);
     let s = String(text ?? '');
+
+    /** @type {string[]} */
+    const dateSlots = [];
+    s = s.replace(dateTagRe(), (_, rawInner) => {
+        const token = `\u0000DATE${dateSlots.length}\u0000`;
+        if (showDates) {
+            dateSlots.push(renderDateTagHtml(rawInner, escapeHtml, { block: false }));
+        } else {
+            dateSlots.push('');
+        }
+        return token;
+    });
+
     // Escape first, then apply markdown tokens via placeholders
     s = escapeHtml(s);
 
@@ -127,6 +151,15 @@ function renderInline(text) {
 
     // Strikethrough ~~
     s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+    for (let i = 0; i < dateSlots.length; i += 1) {
+        s = s.split(`\u0000DATE${i}\u0000`).join(dateSlots[i]);
+    }
+
+    // Clean leftover spaces where hidden date tags were removed
+    if (!showDates && dateSlots.length) {
+        s = s.replace(/ {2,}/g, ' ').replace(/^ +| +$/g, '');
+    }
 
     return s;
 }
@@ -368,11 +401,13 @@ export function movePlainListItem(items, fromIndex, toIndex) {
 
 /**
  * @param {string} markdown
- * @param {{ lineOffset?: number }} [options]
+ * @param {{ lineOffset?: number, showDates?: boolean }} [options]
  * @returns {string} sanitized HTML
  */
 export function renderMarkdown(markdown, options = {}) {
     const lineOffset = Number(options.lineOffset) || 0;
+    const showDates = Boolean(options.showDates);
+    const inlineOpts = { showDates };
     // Drop HTML comments (including mdlist agent notes) from preview surfaces.
     const src = String(markdown ?? '')
         .replace(/\r\n?/g, '\n')
@@ -396,8 +431,9 @@ export function renderMarkdown(markdown, options = {}) {
         if (!text) return;
         const html = text
             .split('\n')
-            .map((line) => renderInline(line.replace(/ {2}$/, '')))
+            .map((line) => renderInline(line.replace(/ {2}$/, ''), inlineOpts))
             .join('<br>\n');
+        if (!html.replace(/<br>\n?/g, '').trim()) return;
         out.push(withSourceLine(`<p>${html}</p>`, startLine));
     };
 
@@ -430,12 +466,24 @@ export function renderMarkdown(markdown, options = {}) {
             continue;
         }
 
+        // Standalone date tag line — hidden unless Show dates is on
+        const dateLine = trimmed.match(DATE_TAG_LINE_RE);
+        if (dateLine) {
+            flushParagraph();
+            if (showDates) {
+                const html = renderDateTagHtml(dateLine[1], escapeHtml, { block: true });
+                out.push(withSourceLine(`<p class="md-date-block">${html}</p>`, lineNo));
+            }
+            i += 1;
+            continue;
+        }
+
         // ATX headings
         const heading = trimmed.match(/^(#{1,6})\s+(.+?)(?:\s+#*)?$/);
         if (heading) {
             flushParagraph();
             const level = heading[1].length;
-            out.push(withSourceLine(`<h${level}>${renderInline(heading[2])}</h${level}>`, lineNo));
+            out.push(withSourceLine(`<h${level}>${renderInline(heading[2], inlineOpts)}</h${level}>`, lineNo));
             i += 1;
             continue;
         }
@@ -443,14 +491,14 @@ export function renderMarkdown(markdown, options = {}) {
         // Setext headings
         if (i + 1 < lines.length && trimmed && /^=+\s*$/.test(lines[i + 1].trim())) {
             flushParagraph();
-            out.push(withSourceLine(`<h1>${renderInline(trimmed)}</h1>`, lineNo));
+            out.push(withSourceLine(`<h1>${renderInline(trimmed, inlineOpts)}</h1>`, lineNo));
             i += 2;
             continue;
         }
         if (i + 1 < lines.length && trimmed && /^-+\s*$/.test(lines[i + 1].trim()) && !isHr(lines[i + 1])) {
             if (/^-+$/.test(lines[i + 1].trim()) && lines[i + 1].trim().length >= 2) {
                 flushParagraph();
-                out.push(withSourceLine(`<h2>${renderInline(trimmed)}</h2>`, lineNo));
+                out.push(withSourceLine(`<h2>${renderInline(trimmed, inlineOpts)}</h2>`, lineNo));
                 i += 2;
                 continue;
             }
@@ -477,7 +525,7 @@ export function renderMarkdown(markdown, options = {}) {
                 quoteLines.push(q);
                 i += 1;
             }
-            const inner = renderMarkdown(quoteLines.join('\n'));
+            const inner = renderMarkdown(quoteLines.join('\n'), { showDates });
             out.push(withSourceLine(`<blockquote>${inner}</blockquote>`, startLine));
             continue;
         }
@@ -509,7 +557,7 @@ export function renderMarkdown(markdown, options = {}) {
             const th = headerCells
                 .map((c, idx) => {
                     const a = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
-                    return `<th${a}>${renderInline(c)}</th>`;
+                    return `<th${a}>${renderInline(c, inlineOpts)}</th>`;
                 })
                 .join('');
             const body = rows
@@ -517,7 +565,7 @@ export function renderMarkdown(markdown, options = {}) {
                     const tds = headerCells
                         .map((_, idx) => {
                             const a = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
-                            return `<td${a}>${renderInline(row[idx] ?? '')}</td>`;
+                            return `<td${a}>${renderInline(row[idx] ?? '', inlineOpts)}</td>`;
                         })
                         .join('');
                     return `<tr>${tds}</tr>`;
@@ -569,11 +617,11 @@ export function renderMarkdown(markdown, options = {}) {
                 .map((it) => {
                     if (it.task) {
                         const checked = it.checked ? ' checked' : '';
-                        return `<li class="md-task"><label><input type="checkbox" disabled${checked}> <span>${renderInline(it.text)}</span></label></li>`;
+                        return `<li class="md-task"><label><input type="checkbox" disabled${checked}> <span>${renderInline(it.text, inlineOpts)}</span></label></li>`;
                     }
                     const html = it.text
                         .split('\n')
-                        .map((part) => renderInline(part))
+                        .map((part) => renderInline(part, inlineOpts))
                         .join('<br>\n');
                     return `<li>${html}</li>`;
                 })
@@ -609,7 +657,7 @@ export function renderMarkdown(markdown, options = {}) {
     }
 
     flushParagraph();
-    return out.join('\n');
+    return out.join('\n') || '<p class="md-empty">Nothing to preview yet.</p>';
 }
 
 /**
@@ -934,8 +982,9 @@ export function getTextareaFocusLine(textarea) {
  * Render into an element (replaces children).
  * @param {HTMLElement} el
  * @param {string} markdown
+ * @param {{ showDates?: boolean }} [options]
  */
-export function renderMarkdownInto(el, markdown) {
+export function renderMarkdownInto(el, markdown, options = {}) {
     if (!el) return;
-    el.innerHTML = renderMarkdown(markdown);
+    el.innerHTML = renderMarkdown(markdown, options);
 }

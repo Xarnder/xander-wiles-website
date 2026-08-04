@@ -14,6 +14,7 @@ Live path: `/pages/Markdown-Editor/`
 7. Save back to the **same** Drive file
 8. Shows loading / dirty / saving / saved / error status
 9. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
+10. **Autosaves** to Drive after **10 seconds** of inactivity (slim countdown bar under the mode switcher)
 
 ## Custom lists (`mdlist`)
 
@@ -35,6 +36,25 @@ You can embed ranked lists inside a `.md` file using a fenced JSON block:
 ````
 
 Each valid list is saved with that HTML comment immediately above the fence so Cursor / Codex / other agents can extend the list without breaking the schema. The comment is hidden in Preview / Mixed rendering.
+
+### Hidden date tags
+
+Insert metadata dates that stay in the file source but stay out of Preview by default:
+
+```markdown
+{{date:2026-08-03}}
+Meeting notes for {{date:3 Aug 2026}}
+```
+
+| Surface | Behavior |
+|---------|----------|
+| **Raw** | Always shows the `{{date:…}}` tag |
+| **Preview / List prose** | Hidden unless **Show dates** is on in the Edit ⋮ menu |
+| **Fill missing list dates…** | Stamps undated list items (normal + custom) with the file’s created date or a custom date you enter |
+| **Insert date** | Adds today’s tag (`{{date:YYYY-MM-DD}}`) at the caret (Raw) or end of file |
+| **New list items** | Custom (`mdlist`) and normal markdown list items automatically get today’s tag appended |
+
+Inner values are smart-parsed (ISO, day/month/year, named months, `today` / `yesterday` / `tomorrow`).
 
 | Mode | Behavior |
 |------|----------|

@@ -216,6 +216,19 @@
                             <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
                         </div>
                         <p id="editor-toast" class="editor-toast" hidden role="status" aria-live="polite"></p>
+                        <div
+                            id="autosave-bar"
+                            class="autosave-bar"
+                            hidden
+                            role="progressbar"
+                            aria-label="Time until autosave"
+                            aria-valuemin="0"
+                            aria-valuemax="10"
+                            aria-valuenow="10"
+                            aria-hidden="true"
+                        >
+                            <div id="autosave-bar-fill" class="autosave-bar-fill"></div>
+                        </div>
                     </div>
                     <div class="editor-scroll">
                         <div class="editor-file-heading">
@@ -330,6 +343,8 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
+                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime.</li>
+                        <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
                         <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder — Pinned opens first after sign-in.</li>
@@ -338,7 +353,6 @@
                 </div>
             </section>
         </main>
-    </div>
 
         <nav id="nav-bar" class="nav-bar" aria-label="App navigation" hidden>
             <div id="nav-actions" class="nav-actions" hidden>
@@ -409,6 +423,7 @@
                 </button>
             </div>
         </nav>
+    </div>
 
     <dialog id="unsaved-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
@@ -466,12 +481,51 @@
             <p id="editor-more-name" class="dialog-hint"></p>
             <div id="editor-more-stats" class="editor-more-stats" hidden aria-live="polite"></div>
             <div class="item-actions-list">
+                <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
+                <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
+                <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
                 <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
                 <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="pin" id="editor-more-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
                 <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="fill-dates-dialog" class="dialog">
+        <div class="dialog-body">
+            <h2>Fill missing list dates</h2>
+            <p id="fill-dates-summary" class="dialog-hint">
+                Add a hidden date tag to list items that don’t have one yet. Items that already have a date are left alone.
+            </p>
+            <fieldset class="fill-dates-fieldset">
+                <legend class="sr-only">Date source</legend>
+                <label class="fill-dates-option">
+                    <input type="radio" name="fill-dates-source" id="fill-dates-source-created" value="created" checked>
+                    <span class="fill-dates-option-body">
+                        <span class="fill-dates-option-title">File created date</span>
+                        <span id="fill-dates-created-label" class="fill-dates-option-meta">Loading…</span>
+                    </span>
+                </label>
+                <label class="fill-dates-option">
+                    <input type="radio" name="fill-dates-source" id="fill-dates-source-custom" value="custom">
+                    <span class="fill-dates-option-body">
+                        <span class="fill-dates-option-title">Custom date</span>
+                        <span class="fill-dates-option-meta">ISO, 3 Aug 2026, today, …</span>
+                    </span>
+                </label>
+            </fieldset>
+            <label class="fill-dates-custom-label" for="fill-dates-custom">
+                Custom date
+                <input id="fill-dates-custom" class="fill-dates-custom-input" type="text" autocomplete="off" spellcheck="false" placeholder="2026-08-03 or 3 Aug 2026" disabled>
+            </label>
+            <p id="fill-dates-preview" class="fill-dates-preview" aria-live="polite"></p>
+            <p id="fill-dates-error" class="fill-dates-error" hidden role="alert"></p>
+            <div class="dialog-actions">
+                <button type="button" id="fill-dates-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="button" id="fill-dates-apply" class="btn btn-primary">Fill dates</button>
+            </div>
+        </div>
     </dialog>
 
     <dialog id="pinned-missing-dialog" class="dialog dialog--warn">
@@ -490,6 +544,10 @@
         <div class="dialog-body">
             <h2 id="move-dialog-title">Move</h2>
             <p id="move-dialog-hint" class="dialog-hint">Choose a destination folder, then tap Move here.</p>
+            <div id="move-mode-bar" class="move-mode-bar" role="group" aria-label="Drive section">
+                <button type="button" id="move-mode-drive" class="btn btn-ghost btn-mode is-active">My Drive</button>
+                <button type="button" id="move-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
+            </div>
             <div class="move-path-bar">
                 <button type="button" id="move-btn-up" class="finder-up-btn" hidden aria-label="Go up one folder" title="Up">
                     <span class="finder-up-icon" aria-hidden="true"></span>
