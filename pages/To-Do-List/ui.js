@@ -12,7 +12,7 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor } from './api.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -41,6 +41,7 @@ const syncStatusText = document.getElementById('sync-status-text');
 let aiPanelInitialized = false;
 let tagColorSwapSourceId = null;
 let aiPanelTaskId = null;
+let tagsSettingsSortable = null;
 
 const TAG_FILTER_DEBOUNCE_MS = 280;
 const debouncedRenderBoardForTagFilter = debounce(() => {
@@ -110,6 +111,46 @@ function clearTagFilter(options = {}) {
 }
 
 // --- RENDERING HELPERS ---
+
+/**
+ * Keep boardOrder in sync with existing boards: drop deleted ids, append new ones.
+ */
+export function normalizeBoardOrder(boards, boardOrder) {
+    const boardList = Array.isArray(boards) ? boards : [];
+    const ids = new Set(boardList.map((b) => b?.id).filter(Boolean));
+    const order = Array.isArray(boardOrder)
+        ? boardOrder.filter((id) => id && ids.has(id))
+        : [];
+    const seen = new Set(order);
+
+    const missing = boardList
+        .filter((b) => b?.id && !seen.has(b.id))
+        .sort((a, b) => {
+            const byCreated = (a.createdAt || 0) - (b.createdAt || 0);
+            if (byCreated !== 0) return byCreated;
+            return String(a.title || '').localeCompare(String(b.title || ''));
+        })
+        .map((b) => b.id);
+
+    return [...order, ...missing];
+}
+
+export function syncBoardOrderInMemory() {
+    const next = normalizeBoardOrder(
+        state.appData.boards,
+        state.appData.settings?.boardOrder
+    );
+    if (!state.appData.settings) state.appData.settings = {};
+    state.appData.settings.boardOrder = next;
+    return next;
+}
+
+export function getSortedBoards() {
+    const boards = state.appData.boards || [];
+    const order = normalizeBoardOrder(boards, state.appData.settings?.boardOrder);
+    const map = new Map(boards.map((b) => [b.id, b]));
+    return order.map((id) => map.get(id)).filter(Boolean);
+}
 
 export function getSortedListObjects() {
     if (!state.appData.rawLists) return [];
@@ -824,7 +865,7 @@ export function renderBoardManager() {
     const allLists = state.appData.rawLists || [];
     const listMap = new Map(allLists.map(l => [l.id, l]));
 
-    const allAppBoards = state.appData.boards || [];
+    const allAppBoards = getSortedBoards();
     console.log("Rendering Board Manager with boards:", allAppBoards);
 
     container.innerHTML = allAppBoards.map(b => {
@@ -873,7 +914,7 @@ export function renderDefaultBoardSelect() {
     const select = document.getElementById('default-board-select');
     if (!select) return;
 
-    const boards = state.appData.boards;
+    const boards = getSortedBoards();
     const defaultBoardId = state.appData.settings.defaultBoardId || '';
 
     let html = `<option value="">None (Last Used)</option>`;
@@ -897,17 +938,12 @@ export function renderGroupedListSelect(select, includeNewListOption = false) {
         select.appendChild(newListOpt);
     }
 
-    const boards = state.appData.boards;
     const rawLists = state.appData.rawLists || [];
     const listMap = new Map(rawLists.map(l => [l.id, l]));
     const assignedListIds = new Set();
 
-    // Group lists by board, prioritizing the current board
-    const sortedBoards = [...state.appData.boards].sort((a, b) => {
-        if (a.id === state.appData.currentBoardId) return -1;
-        if (b.id === state.appData.currentBoardId) return 1;
-        return 0;
-    });
+    // Group lists by board using the user's board order
+    const sortedBoards = getSortedBoards();
 
     sortedBoards.forEach(board => {
         const group = document.createElement('optgroup');
@@ -1258,19 +1294,56 @@ export function renderTagsSettingsPanel() {
         if (sourceTag) {
             hintEl.textContent = `Swap: tap another tag's colour to trade with "${sourceTag.name}", or pick a free colour below. Tap again to cancel.`;
         } else {
-            hintEl.textContent = 'Tap a colour circle to swap it with another tag. Misc has no colour.';
+            hintEl.textContent = 'Drag to reorder categories (used when grouping a list). Tap a colour circle to swap it. Misc has no colour.';
         }
     }
 
+    if (tagsSettingsSortable) {
+        tagsSettingsSortable.destroy();
+        tagsSettingsSortable = null;
+    }
+
     list.innerHTML = '';
-    tags.forEach((tag) => {
+    tags.forEach((tag, index) => {
         const row = document.createElement('div');
         row.className = 'tags-settings-item';
+        row.dataset.tagId = tag.id;
         if (tagColorSwapSourceId && tag.id === tagColorSwapSourceId) {
             row.classList.add('is-color-swap-source');
         } else if (tagColorSwapSourceId && !isMiscTag(tag.id)) {
             row.classList.add('is-color-swap-target');
         }
+
+        const dragHandle = document.createElement('button');
+        dragHandle.type = 'button';
+        dragHandle.className = 'icon-btn tags-settings-drag-handle';
+        dragHandle.title = 'Drag to reorder';
+        dragHandle.setAttribute('aria-label', `Reorder ${tag.name}`);
+        dragHandle.innerHTML = '<i class="ph ph-dots-six-vertical"></i>';
+
+        const moveControls = document.createElement('div');
+        moveControls.className = 'tags-settings-move';
+
+        const moveUp = document.createElement('button');
+        moveUp.type = 'button';
+        moveUp.className = 'icon-btn tags-settings-move-btn';
+        moveUp.title = 'Move up';
+        moveUp.setAttribute('aria-label', `Move ${tag.name} up`);
+        moveUp.innerHTML = '<i class="ph ph-caret-up"></i>';
+        moveUp.disabled = index === 0;
+        moveUp.onclick = () => moveTagInSettings(tag.id, -1);
+
+        const moveDown = document.createElement('button');
+        moveDown.type = 'button';
+        moveDown.className = 'icon-btn tags-settings-move-btn';
+        moveDown.title = 'Move down';
+        moveDown.setAttribute('aria-label', `Move ${tag.name} down`);
+        moveDown.innerHTML = '<i class="ph ph-caret-down"></i>';
+        moveDown.disabled = index === tags.length - 1;
+        moveDown.onclick = () => moveTagInSettings(tag.id, 1);
+
+        moveControls.appendChild(moveUp);
+        moveControls.appendChild(moveDown);
 
         const swatch = document.createElement(isMiscTag(tag.id) ? 'span' : 'button');
         swatch.className = 'tags-settings-swatch';
@@ -1293,12 +1366,15 @@ export function renderTagsSettingsPanel() {
             };
         }
 
+        row.appendChild(dragHandle);
+        row.appendChild(swatch);
+
         if (isMiscTag(tag.id)) {
             const name = document.createElement('span');
             name.className = 'tags-settings-name';
             name.textContent = tag.name;
-            row.appendChild(swatch);
             row.appendChild(name);
+            row.appendChild(moveControls);
         } else {
             const input = document.createElement('input');
             input.type = 'text';
@@ -1313,19 +1389,35 @@ export function renderTagsSettingsPanel() {
             deleteBtn.type = 'button';
             deleteBtn.className = 'icon-btn danger tags-settings-delete';
             deleteBtn.title = 'Delete tag';
+            deleteBtn.setAttribute('aria-label', `Delete ${tag.name}`);
             deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
             deleteBtn.onclick = () => {
                 if (typeof window.confirmDeleteTag === 'function') {
                     window.confirmDeleteTag(tag.id, tag.name);
                 }
             };
-            row.appendChild(swatch);
             row.appendChild(input);
+            row.appendChild(moveControls);
             row.appendChild(deleteBtn);
         }
 
         list.appendChild(row);
     });
+
+    if (typeof Sortable !== 'undefined' && tags.length > 1) {
+        tagsSettingsSortable = new Sortable(list, {
+            animation: 150,
+            handle: '.tags-settings-drag-handle',
+            draggable: '.tags-settings-item',
+            forceFallback: true,
+            fallbackOnBody: true,
+            delay: 120,
+            delayOnTouchOnly: true,
+            onEnd: () => {
+                persistTagsSettingsOrder();
+            }
+        });
+    }
 
     if (freeColorsEl) {
         freeColorsEl.innerHTML = '';
@@ -1362,6 +1454,45 @@ export function renderTagsSettingsPanel() {
     if (addForm && addForm.classList.contains('hidden') === false && !canAddMoreTags(tags)) {
         addForm.classList.add('hidden');
     }
+}
+
+function getTagsSettingsOrderedIds() {
+    const list = document.getElementById('tags-settings-list');
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('.tags-settings-item'))
+        .map((row) => row.dataset.tagId)
+        .filter(Boolean);
+}
+
+function persistTagsSettingsOrder() {
+    const orderedIds = getTagsSettingsOrderedIds();
+    if (orderedIds.length === 0) return;
+    reorderTags(orderedIds).then((ok) => {
+        if (!ok) {
+            renderTagsSettingsPanel();
+            return;
+        }
+        renderTagModeBar();
+    });
+}
+
+function moveTagInSettings(tagId, delta) {
+    const ensured = ensureDefaultTags(state.appData.settings);
+    const tags = sortTags(ensured.tags);
+    const index = tags.findIndex((t) => t.id === tagId);
+    if (index < 0) return;
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= tags.length) return;
+
+    const orderedIds = tags.map((t) => t.id);
+    const [moved] = orderedIds.splice(index, 1);
+    orderedIds.splice(nextIndex, 0, moved);
+
+    reorderTags(orderedIds).then((ok) => {
+        if (!ok) return;
+        renderTagsSettingsPanel();
+        renderTagModeBar();
+    });
 }
 
 function handleTagColorSwatchClick(tagId) {
@@ -1402,6 +1533,13 @@ export function syncTagDisplayModeUI() {
     const fillBtn = document.getElementById('tag-display-fill-btn');
     if (glowBtn) glowBtn.classList.toggle('active', mode === TAG_DISPLAY_MODE_GLOW);
     if (fillBtn) fillBtn.classList.toggle('active', mode === TAG_DISPLAY_MODE_FILL);
+}
+
+export function groupListByTag(listId) {
+    return groupListTasksByTag(listId).then((ok) => {
+        if (ok) renderBoard();
+        return ok;
+    });
 }
 
 export function initTagsSettingsUI() {
@@ -1508,6 +1646,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
              ${kanbanBtn}
+             <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag"><i class="ph ph-stack"></i></button>
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
               <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
               <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
@@ -3253,17 +3392,12 @@ export function openQuickMoveModal(options = {}) {
             : 'Select a destination list to move items to.';
     }
 
-    const boards = state.appData.boards;
     const rawLists = state.appData.rawLists || [];
     const listMap = new Map(rawLists.map(l => [l.id, l]));
     const assignedListIds = new Set();
 
-    // Sort boards, current first
-    const sortedBoards = [...state.appData.boards].sort((a, b) => {
-        if (a.id === state.appData.currentBoardId) return -1;
-        if (b.id === state.appData.currentBoardId) return 1;
-        return 0;
-    });
+    // Boards in the user's chosen order (Settings → Reorder Boards)
+    const sortedBoards = getSortedBoards();
 
     sortedBoards.forEach(board => {
         if (board.listOrder && board.listOrder.length > 0) {
@@ -3590,6 +3724,295 @@ export async function saveMobileReorder() {
     }
 }
 
+// --- BOARD REORDER ---
+let boardReorderSortableInstance = null;
+let boardReorderSaveInFlight = false;
+let boardReorderEscapeHandler = null;
+
+function destroyBoardReorderSortable() {
+    if (boardReorderSortableInstance) {
+        try {
+            boardReorderSortableInstance.destroy();
+        } catch (_) { /* already gone */ }
+        boardReorderSortableInstance = null;
+    }
+}
+
+function readBoardReorderIdsFromDom(container) {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.board-reorder-item'))
+        .filter((el) => (
+            !el.classList.contains('sortable-ghost')
+            && !el.classList.contains('sortable-fallback')
+            && !el.classList.contains('sortable-drag')
+        ))
+        .map((el) => el.dataset.boardId)
+        .filter(Boolean);
+}
+
+/**
+ * Build a complete, de-duplicated board order from the DOM, reconciled
+ * against the live board set (handles mid-session create/delete).
+ */
+function reconcileBoardOrderFromDom(domIds, knownIds) {
+    const known = new Set(knownIds);
+    const seen = new Set();
+    const cleaned = [];
+
+    (domIds || []).forEach((id) => {
+        if (!id || !known.has(id) || seen.has(id)) return;
+        seen.add(id);
+        cleaned.push(id);
+    });
+
+    (knownIds || []).forEach((id) => {
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        cleaned.push(id);
+    });
+
+    return cleaned;
+}
+
+function refreshBoardReorderMoveButtons(container) {
+    if (!container) return;
+    const items = Array.from(container.querySelectorAll('.board-reorder-item'));
+    items.forEach((item, index) => {
+        const up = item.querySelector('[data-board-move="-1"]');
+        const down = item.querySelector('[data-board-move="1"]');
+        if (up) up.disabled = index === 0;
+        if (down) down.disabled = index === items.length - 1;
+    });
+}
+
+function moveBoardReorderItem(boardId, delta) {
+    const container = document.getElementById('board-reorder-list-container');
+    if (!container || boardReorderSaveInFlight) return;
+
+    const items = Array.from(container.querySelectorAll('.board-reorder-item'));
+    const index = items.findIndex((el) => el.dataset.boardId === boardId);
+    if (index < 0) return;
+
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+
+    const item = items[index];
+    const target = items[nextIndex];
+    if (delta < 0) {
+        container.insertBefore(item, target);
+    } else {
+        container.insertBefore(item, target.nextSibling);
+    }
+    refreshBoardReorderMoveButtons(container);
+}
+
+export function closeBoardReorderModal() {
+    if (boardReorderSaveInFlight) return;
+    const modal = document.getElementById('board-reorder-modal-overlay');
+    if (modal) modal.classList.add('hidden');
+    destroyBoardReorderSortable();
+    document.body.classList.remove('board-reorder-open');
+    if (boardReorderEscapeHandler) {
+        document.removeEventListener('keydown', boardReorderEscapeHandler);
+        boardReorderEscapeHandler = null;
+    }
+    const saveBtn = document.getElementById('save-board-reorder-btn');
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Order';
+    }
+}
+
+export function openBoardReorderModal() {
+    const modal = document.getElementById('board-reorder-modal-overlay');
+    const container = document.getElementById('board-reorder-list-container');
+    if (!modal || !container) return;
+    if (!state.currentUser) {
+        showToast('Sign in to reorder boards.', 'warning');
+        return;
+    }
+
+    syncBoardOrderInMemory();
+    const boards = getSortedBoards();
+
+    if (boards.length === 0) {
+        showToast('No boards to reorder.', 'info');
+        return;
+    }
+    if (boards.length === 1) {
+        showToast('Add another board before reordering.', 'info');
+        return;
+    }
+
+    destroyBoardReorderSortable();
+    container.innerHTML = '';
+
+    boards.forEach((board, index) => {
+        const item = document.createElement('div');
+        item.className = 'mobile-reorder-list-item board-reorder-item';
+        item.dataset.boardId = board.id;
+        item.setAttribute('role', 'listitem');
+
+        const isCurrent = board.id === state.appData.currentBoardId;
+        const plainTitle = String(board.title || 'Untitled');
+
+        const handle = document.createElement('i');
+        handle.className = 'ph ph-dots-six-vertical board-reorder-handle';
+        handle.setAttribute('aria-hidden', 'true');
+
+        const titleEl = document.createElement('span');
+        titleEl.className = 'board-reorder-title-text';
+        titleEl.textContent = plainTitle;
+        if (isCurrent) {
+            const mark = document.createElement('em');
+            mark.textContent = ' (Current)';
+            titleEl.appendChild(mark);
+        }
+
+        const moveControls = document.createElement('div');
+        moveControls.className = 'board-reorder-move';
+
+        const moveUp = document.createElement('button');
+        moveUp.type = 'button';
+        moveUp.className = 'icon-btn board-reorder-move-btn';
+        moveUp.setAttribute('data-board-move', '-1');
+        moveUp.title = 'Move up';
+        moveUp.setAttribute('aria-label', `Move ${plainTitle} up`);
+        moveUp.disabled = index === 0;
+        moveUp.innerHTML = '<i class="ph ph-caret-up"></i>';
+        moveUp.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            moveBoardReorderItem(board.id, -1);
+        });
+
+        const moveDown = document.createElement('button');
+        moveDown.type = 'button';
+        moveDown.className = 'icon-btn board-reorder-move-btn';
+        moveDown.setAttribute('data-board-move', '1');
+        moveDown.title = 'Move down';
+        moveDown.setAttribute('aria-label', `Move ${plainTitle} down`);
+        moveDown.disabled = index === boards.length - 1;
+        moveDown.innerHTML = '<i class="ph ph-caret-down"></i>';
+        moveDown.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            moveBoardReorderItem(board.id, 1);
+        });
+
+        moveControls.appendChild(moveUp);
+        moveControls.appendChild(moveDown);
+        item.appendChild(handle);
+        item.appendChild(titleEl);
+        item.appendChild(moveControls);
+        container.appendChild(item);
+    });
+
+    if (typeof Sortable !== 'undefined') {
+        boardReorderSortableInstance = new Sortable(container, {
+            disabled: false,
+            animation: 150,
+            handle: '.board-reorder-handle, .board-reorder-title-text',
+            draggable: '.board-reorder-item',
+            filter: '.board-reorder-move-btn',
+            preventOnFilter: true,
+            forceFallback: true,
+            fallbackOnBody: true,
+            swapThreshold: 0.65,
+            delay: 180,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 4,
+            fallbackTolerance: 4,
+            scroll: true,
+            bubbleScroll: true,
+            onEnd: () => refreshBoardReorderMoveButtons(container)
+        });
+    }
+
+    document.body.classList.add('board-reorder-open');
+    modal.classList.remove('hidden');
+
+    if (boardReorderEscapeHandler) {
+        document.removeEventListener('keydown', boardReorderEscapeHandler);
+    }
+    boardReorderEscapeHandler = (e) => {
+        if (e.key === 'Escape' && !boardReorderSaveInFlight) {
+            closeBoardReorderModal();
+        }
+    };
+    document.addEventListener('keydown', boardReorderEscapeHandler);
+
+    const saveBtn = document.getElementById('save-board-reorder-btn');
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        requestAnimationFrame(() => saveBtn.focus({ preventScroll: true }));
+    }
+}
+
+export async function saveBoardReorder() {
+    const container = document.getElementById('board-reorder-list-container');
+    const modal = document.getElementById('board-reorder-modal-overlay');
+    const saveBtn = document.getElementById('save-board-reorder-btn');
+    if (!container || !modal || !state.currentUser) return;
+    if (boardReorderSaveInFlight) return;
+
+    const knownIds = (state.appData.boards || []).map((b) => b.id).filter(Boolean);
+    if (knownIds.length < 2) {
+        showToast('Add another board before reordering.', 'info');
+        closeBoardReorderModal();
+        return;
+    }
+
+    const domIds = readBoardReorderIdsFromDom(container);
+    const newOrder = reconcileBoardOrderFromDom(domIds, knownIds);
+
+    if (newOrder.length !== knownIds.length || new Set(newOrder).size !== knownIds.length) {
+        showToast("Couldn't read board order from the list. Try again.", 'warning');
+        return;
+    }
+
+    const previousOrder = normalizeBoardOrder(
+        state.appData.boards,
+        state.appData.settings?.boardOrder
+    );
+    const unchanged = previousOrder.length === newOrder.length
+        && previousOrder.every((id, i) => id === newOrder[i]);
+    if (unchanged) {
+        closeBoardReorderModal();
+        showToast('Board order unchanged.', 'info');
+        return;
+    }
+
+    boardReorderSaveInFlight = true;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+    }
+
+    try {
+        // Write directly so failures reject (updateSetting swallows errors).
+        await updateDoc(doc(db, 'users', state.currentUser.uid), {
+            'settings.boardOrder': newOrder
+        });
+
+        state.appData.settings.boardOrder = [...newOrder];
+        boardReorderSaveInFlight = false;
+        closeBoardReorderModal();
+        renderBoardManager();
+        renderDefaultBoardSelect();
+        renderBoardToggle();
+        showToast('Boards reordered', 'success');
+    } catch (e) {
+        handleSyncError(e);
+        showToast("Couldn't save board order. Check your connection and try again.", 'warning');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Order';
+        }
+        boardReorderSaveInFlight = false;
+    }
+}
+
 // --- QUICK TAG WALKTHROUGH ---
 let quickTagSession = null;
 
@@ -3780,7 +4203,7 @@ export function openEditListModal(listId) {
 
     // Populate Boards Select
     boardSelect.innerHTML = '<option value="" disabled selected>Select Board...</option>';
-    state.appData.boards.forEach(board => {
+    getSortedBoards().forEach(board => {
         const option = document.createElement('option');
         option.value = board.id;
         option.textContent = board.title;

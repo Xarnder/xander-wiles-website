@@ -115,6 +115,56 @@ export function sortTags(tags) {
     return [...tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
+/**
+ * Reassign `order` from an ordered list of tag ids (settings drag / move).
+ * Unknown ids are ignored; any tags missing from orderedIds are appended.
+ */
+export function applyTagOrder(tags, orderedIds) {
+    const current = sortTags(Array.isArray(tags) ? tags : []);
+    const byId = new Map(current.map((tag) => [tag.id, tag]));
+    const seen = new Set();
+    const next = [];
+
+    (Array.isArray(orderedIds) ? orderedIds : []).forEach((id) => {
+        if (!id || seen.has(id) || !byId.has(id)) return;
+        seen.add(id);
+        next.push({ ...byId.get(id), order: next.length });
+    });
+
+    current.forEach((tag) => {
+        if (seen.has(tag.id)) return;
+        next.push({ ...tag, order: next.length });
+    });
+
+    return { ok: true, tags: next };
+}
+
+/**
+ * Stable-group task ids by tag category order from settings.
+ * Relative order within the same tag is preserved.
+ */
+export function groupTaskIdsByTag(taskIds, tasks, tags) {
+    const sortedTagIds = sortTags(tags || []).map((t) => t.id);
+    const orderIndex = new Map(sortedTagIds.map((id, i) => [id, i]));
+    const fallback = sortedTagIds.length;
+
+    const decorated = (Array.isArray(taskIds) ? taskIds : []).map((id, originalIndex) => {
+        const tagId = resolveTaskTagId(tasks?.[id]);
+        return {
+            id,
+            tagOrder: orderIndex.has(tagId) ? orderIndex.get(tagId) : fallback,
+            originalIndex
+        };
+    });
+
+    decorated.sort((a, b) => {
+        if (a.tagOrder !== b.tagOrder) return a.tagOrder - b.tagOrder;
+        return a.originalIndex - b.originalIndex;
+    });
+
+    return decorated.map((d) => d.id);
+}
+
 export function getTagsById(tags) {
     const map = {};
     (tags || []).forEach((tag) => {

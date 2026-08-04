@@ -21,7 +21,9 @@ import {
     sortTags,
     getTagsById,
     swapTagGlowColors,
-    assignTagGlowColor
+    assignTagGlowColor,
+    applyTagOrder,
+    groupTaskIdsByTag
 } from './tags.js';
 
 // --- API ACTIONS ---
@@ -383,6 +385,14 @@ export function addNewBoard(title = "New Board") {
     return setDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), newBoard)
         .then(() => {
             state.appData.boards.push({ id: boardId, ...newBoard });
+            const prev = Array.isArray(state.appData.settings.boardOrder)
+                ? state.appData.settings.boardOrder.filter(Boolean)
+                : [];
+            const nextOrder = prev.includes(boardId) ? prev : [...prev, boardId];
+            state.appData.settings.boardOrder = nextOrder;
+            return updateSetting('boardOrder', nextOrder);
+        })
+        .then(() => {
             switchBoard(boardId);
             showToast("New Board Created!", "success");
         }).catch(e => handleSyncError(e));
@@ -495,7 +505,17 @@ export function deleteBoard(boardId) {
     // Delete board document
     batch.delete(doc(db, "users", state.currentUser.uid, "boards", boardId));
 
+    const nextBoardOrder = (Array.isArray(state.appData.settings.boardOrder)
+        ? state.appData.settings.boardOrder
+        : []
+    ).filter((id) => id && id !== boardId);
+    state.appData.settings.boardOrder = nextBoardOrder;
+    batch.update(doc(db, "users", state.currentUser.uid), {
+        'settings.boardOrder': nextBoardOrder
+    });
+
     return batch.commit().then(() => {
+        state.appData.boards = state.appData.boards.filter((b) => b.id !== boardId);
         showToast(`Board deleted. Lists moved to ${targetBoard.title}`, "success");
         if (state.appData.currentBoardId === boardId) {
             switchBoard(targetBoard.id);
@@ -603,6 +623,72 @@ export function swapTagColors(tagIdA, tagIdB) {
         showToast('Colours swapped.', 'success');
         return true;
     });
+}
+
+export function reorderTags(orderedIds) {
+    const current = ensureDefaultTags(state.appData.settings);
+    const result = applyTagOrder(current.tags, orderedIds);
+    if (!result.ok) {
+        showToast(result.error || 'Could not reorder tags.', 'warning');
+        return Promise.resolve(false);
+    }
+
+    const unchanged = result.tags.length === current.tags.length
+        && result.tags.every((tag, i) => tag.id === current.tags[i]?.id && tag.order === current.tags[i]?.order);
+    if (unchanged) return Promise.resolve(true);
+
+    state.appData.settings.tags = result.tags;
+    return updateSetting('tags', result.tags).then(() => true);
+}
+
+/**
+ * Rewrite a list's taskIds so tasks with the same tag sit together,
+ * following the tag order from Settings.
+ */
+export function groupListTasksByTag(listId) {
+    if (!state.currentUser || !listId || listId === 'orphan-archive') {
+        return Promise.resolve(false);
+    }
+
+    const list = state.appData.rawLists.find((l) => l.id === listId);
+    if (!list || !Array.isArray(list.taskIds) || list.taskIds.length < 2) {
+        showToast('Not enough tasks to group.', 'info');
+        return Promise.resolve(false);
+    }
+
+    const tags = ensureDefaultTags(state.appData.settings).tags;
+    const nextIds = groupTaskIdsByTag(list.taskIds, state.appData.tasks, tags);
+    const sameOrder = nextIds.length === list.taskIds.length
+        && nextIds.every((id, i) => id === list.taskIds[i]);
+    if (sameOrder) {
+        showToast('Already grouped by tag.', 'info');
+        return Promise.resolve(true);
+    }
+
+    list.taskIds = nextIds;
+    const sortedList = state.appData.lists?.find((l) => l.id === listId);
+    if (sortedList) sortedList.taskIds = nextIds;
+
+    const writes = [
+        updateDoc(doc(db, 'users', state.currentUser.uid, 'lists', listId), { taskIds: nextIds })
+    ];
+
+    if (state.appData.settings.sortMode !== 'custom') {
+        state.appData.settings.sortMode = 'custom';
+        const sortSelect = document.getElementById('sort-select');
+        if (sortSelect) sortSelect.value = 'custom';
+        writes.push(updateSetting('sortMode', 'custom'));
+    }
+
+    return Promise.all(writes)
+        .then(() => {
+            showToast('Grouped by tag.', 'success');
+            return true;
+        })
+        .catch((e) => {
+            handleSyncError(e);
+            return false;
+        });
 }
 
 export function setTagColor(tagId, glowColor) {

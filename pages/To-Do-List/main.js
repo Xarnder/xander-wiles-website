@@ -343,6 +343,7 @@ window.closeQuickTagWalkthrough = UI.closeQuickTagWalkthrough;
 window.goBackQuickTagStep = UI.goBackQuickTagStep;
 window.openBoardManager = UI.openBoardManager;
 window.clearCompletedInList = API.clearCompletedInList;
+window.groupListByTag = UI.groupListByTag;
 window.showConfirmModal = showConfirmModal;
 window.triggerSingleListCSVExport = triggerSingleListCSVExport;
 window.triggerSingleListJSONExport = triggerSingleListJSONExport;
@@ -566,6 +567,12 @@ function setupFirestoreListeners(uid) {
         if (docSnap.exists()) {
             const data = docSnap.data();
             state.appData.settings = { ...state.appData.settings, ...data.settings };
+            if (!Array.isArray(state.appData.settings.boardOrder)) {
+                state.appData.settings.boardOrder = [];
+            }
+            if ((state.appData.boards || []).length > 0) {
+                UI.syncBoardOrderInMemory();
+            }
             const ensuredTags = ensureDefaultTags(state.appData.settings);
             state.appData.settings.tags = ensuredTags.tags;
             state.appData.settings.activeTagId = ensuredTags.activeTagId;
@@ -605,10 +612,11 @@ function setupFirestoreListeners(uid) {
             // But we keep this for backwards compatibility if needed.
             if (!state.appData.currentBoardId && state.appData.boards.length > 0) {
                 const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
+                const sortedBoards = UI.getSortedBoards();
                 if (lastBoard && state.appData.boards.find(b => b.id === lastBoard)) {
                     state.appData.currentBoardId = lastBoard;
                 } else {
-                    state.appData.currentBoardId = state.appData.boards[0].id;
+                    state.appData.currentBoardId = (sortedBoards[0] || state.appData.boards[0]).id;
                 }
             }
             if (state.appData.settings.theme) {
@@ -690,6 +698,7 @@ function setupFirestoreListeners(uid) {
         const boards = [];
         snapshot.forEach(doc => boards.push({ id: doc.id, ...doc.data() }));
         state.appData.boards = boards;
+        UI.syncBoardOrderInMemory();
 
         // Migration logic: If user doc has listOrder but boards collection is empty
         if (boards.length === 0 && state.appData.listOrder.length > 0) {
@@ -708,14 +717,15 @@ function setupFirestoreListeners(uid) {
         if (!state.appData.currentBoardId && boards.length > 0) {
             const defaultBoardId = state.appData.settings.defaultBoardId;
             const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
+            const sortedBoards = UI.getSortedBoards();
 
-            // Priority: 1. Default Board Setting, 2. Last Used (LocalStorage), 3. First Board
+            // Priority: 1. Default Board Setting, 2. Last Used (LocalStorage), 3. First in board order
             if (defaultBoardId && boards.find(b => b.id === defaultBoardId)) {
                 state.appData.currentBoardId = defaultBoardId;
             } else if (lastBoard && boards.find(b => b.id === lastBoard)) {
                 state.appData.currentBoardId = lastBoard;
             } else {
-                state.appData.currentBoardId = boards[0].id;
+                state.appData.currentBoardId = (sortedBoards[0] || boards[0]).id;
             }
         }
 
@@ -807,6 +817,28 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('close-mobile-reorder-btn').onclick = () => document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
     document.getElementById('save-mobile-reorder-btn').onclick = UI.saveMobileReorder;
+
+    const reorderBoardsBtn = document.getElementById('reorder-boards-btn');
+    if (reorderBoardsBtn) {
+        reorderBoardsBtn.onclick = () => {
+            UI.openBoardReorderModal();
+            closeSettingsPage();
+        };
+    }
+    const closeBoardReorderBtn = document.getElementById('close-board-reorder-btn');
+    if (closeBoardReorderBtn) {
+        closeBoardReorderBtn.onclick = () => UI.closeBoardReorderModal();
+    }
+    const saveBoardReorderBtn = document.getElementById('save-board-reorder-btn');
+    if (saveBoardReorderBtn) {
+        saveBoardReorderBtn.onclick = () => UI.saveBoardReorder();
+    }
+    const boardReorderOverlay = document.getElementById('board-reorder-modal-overlay');
+    if (boardReorderOverlay) {
+        boardReorderOverlay.addEventListener('click', (e) => {
+            if (e.target === boardReorderOverlay) UI.closeBoardReorderModal();
+        });
+    }
 
     // Network Status Listeners
     window.addEventListener('online', UI.updateSyncUI);

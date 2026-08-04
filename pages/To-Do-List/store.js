@@ -38,7 +38,8 @@ export const state = {
             mobileFeaturedHeaderBtn: 'multi-edit',
             listBottomGap: 12,
             listTopGap: 10,
-            toolPanelBottomOffset: 8
+            toolPanelBottomOffset: 8,
+            boardOrder: []
         },
         listOrder: [],
         boards: [],
@@ -116,7 +117,8 @@ export function resetState() {
             mobileFeaturedHeaderBtn: 'multi-edit',
             listBottomGap: 12,
             listTopGap: 10,
-            toolPanelBottomOffset: 8
+            toolPanelBottomOffset: 8,
+            boardOrder: []
         },
         listOrder: [],
         boards: [],

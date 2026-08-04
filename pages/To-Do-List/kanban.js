@@ -213,6 +213,9 @@ export function renderKanbanFocus(boardContainer, list) {
                     aria-label="List title">
             </div>
             <div class="kanban-focus-bar-right">
+                <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">
+                    <i class="ph ph-stack"></i>
+                </button>
                 <button type="button" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List">
                     <i class="ph ph-check-square-offset"></i>
                 </button>

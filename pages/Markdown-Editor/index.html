@@ -508,20 +508,24 @@
         </form>
     </dialog>
 
-    <dialog id="editor-more-dialog" class="dialog">
-        <form method="dialog" class="dialog-body">
-            <h2>File</h2>
-            <p id="editor-more-name" class="dialog-hint"></p>
-            <div id="editor-more-stats" class="editor-more-stats" hidden aria-live="polite"></div>
-            <div class="item-actions-list">
-                <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
-                <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
-                <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
-                <button type="button" id="editor-more-autosave-off" class="btn btn-ghost btn-block item-action-btn">Turn off autosave</button>
-                <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
-                <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
-                <button type="submit" value="pin" id="editor-more-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
-                <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
+    <dialog id="editor-more-dialog" class="dialog dialog--editor-more">
+        <form method="dialog" class="dialog-body editor-more-body">
+            <div class="editor-more-scroll">
+                <h2>File</h2>
+                <p id="editor-more-name" class="dialog-hint"></p>
+                <div id="editor-more-stats" class="editor-more-stats" hidden aria-live="polite"></div>
+                <div class="item-actions-list">
+                    <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
+                    <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
+                    <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
+                    <button type="button" id="editor-more-autosave-off" class="btn btn-ghost btn-block item-action-btn">Turn off autosave</button>
+                    <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
+                    <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
+                    <button type="submit" value="pin" id="editor-more-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
+                </div>
+            </div>
+            <div class="editor-more-footer">
+                <button type="submit" value="cancel" class="btn btn-primary btn-block editor-more-close" formnovalidate>Close</button>
             </div>
         </form>
     </dialog>

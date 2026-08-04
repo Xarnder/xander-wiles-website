@@ -213,7 +213,10 @@
                     <i class="ph ph-sun"></i> Change Theme
                 </button>
                 <button id="mobile-reorder-lists-btn" class="menu-action-item" title="Reorder Lists">
-                    <i class="ph ph-arrows-down-up"></i> Reorder Lists (Mobile)
+                    <i class="ph ph-arrows-down-up"></i> Reorder Lists
+                </button>
+                <button id="reorder-boards-btn" class="menu-action-item" title="Reorder Boards">
+                    <i class="ph ph-squares-four"></i> Reorder Boards
                 </button>
                 <button id="time-automation-help-btn" class="menu-action-item" title="Time Automation Help">
                     <i class="ph ph-question"></i> Time Automation Help
@@ -352,7 +355,7 @@
                             <i class="ph ph-question"></i>
                         </button>
                     </div>
-                    <p id="tags-settings-hint" class="tags-settings-hint">Tap a colour circle to swap it with another tag. Misc has no colour. Press a selected tag again on the board to filter.</p>
+                    <p id="tags-settings-hint" class="tags-settings-hint">Drag to reorder categories (used when grouping a list). Tap a colour circle to swap it. Misc has no colour. Press a selected tag again on the board to filter.</p>
                     <div class="tags-display-mode" style="cursor: default;">
                         <span class="tags-display-mode-label">Tag style on cards</span>
                         <div class="toggle-group tags-display-mode-toggle">
@@ -922,6 +925,25 @@
         </div>
     </div>
 
+    <!-- REORDER BOARDS MODAL -->
+    <div id="board-reorder-modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="board-reorder-title">
+        <div class="modal glass-panel board-reorder-modal">
+            <div class="modal-header-row">
+                <h2 id="board-reorder-title">Reorder Boards</h2>
+                <button id="close-board-reorder-btn" class="icon-btn-large" type="button" aria-label="Close">&times;</button>
+            </div>
+            <p class="board-reorder-help">
+                Drag a row, or use the arrows, to set board order. This order is used when switching boards and moving tasks.
+            </p>
+            <div id="board-reorder-list-container" class="board-reorder-list" aria-label="Board order list">
+                <!-- Board items injected here -->
+            </div>
+            <div class="modal-actions-bar board-reorder-actions">
+                <button id="save-board-reorder-btn" class="btn primary full-width" type="button">Save Order</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ARCHIVED TASK ACTION MODAL -->
     <div id="archived-task-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel confirm-box">
@@ -1178,7 +1200,11 @@
                             <li>Press the filtering tag <strong>a third time</strong>, or</li>
                             <li>Press <strong>any other</strong> tag (that also switches Tag Mode).</li>
                         </ul>
-                        <p class="features-help-tip"><strong>Note:</strong> Filtering is temporary for this session — it is not saved. Manage tag names and colours under <strong>Task Tags</strong> in Settings.</p>
+                        <h4>Group a list by tag</h4>
+                        <p>Tap the <strong>stack</strong> button at the top of a list to pull matching tags together (e.g. all Work tasks). Order follows the tag order in Settings.</p>
+                        <h4>Reorder tag categories</h4>
+                        <p>In <strong>Settings → Task Tags</strong>, drag the handle or use the up/down arrows to change category order. That order is what Group by tag uses.</p>
+                        <p class="features-help-tip"><strong>Note:</strong> Filtering is temporary for this session — it is not saved. Manage tag names, colours, and order under <strong>Task Tags</strong> in Settings.</p>
                     </div>
                 </details>
 
@@ -1260,6 +1286,7 @@
                     <div class="features-help-content">
                         <ul>
                             <li>Use the board control in the header to switch or manage boards. Each board has its own list order.</li>
+                            <li>Settings → <strong>Reorder Boards</strong> sets the order for Manage Boards, Default Board, and move-to-board pickers.</li>
                             <li>Settings → <strong>Default Board</strong> chooses what opens on load (empty = last used).</li>
                             <li>Deleting a board can leave orphan lists — use <strong>Rescue Orphan Lists</strong> in Manage Boards to move them onto Main.</li>
                         </ul>
