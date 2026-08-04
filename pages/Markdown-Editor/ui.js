@@ -53,6 +53,7 @@ export function bindUi() {
     els.editorMoreInsertDate = document.getElementById('editor-more-insert-date');
     els.editorMoreFillDates = document.getElementById('editor-more-fill-dates');
     els.editorMoreShowDates = document.getElementById('editor-more-show-dates');
+    els.editorMoreAutosaveOff = document.getElementById('editor-more-autosave-off');
     els.editorMoreRename = document.getElementById('editor-more-rename');
     els.fillDatesDialog = document.getElementById('fill-dates-dialog');
     els.fillDatesSummary = document.getElementById('fill-dates-summary');
@@ -67,6 +68,8 @@ export function bindUi() {
     els.btnClickEdit = document.getElementById('btn-click-edit');
     els.btnGoFinder = document.getElementById('btn-go-finder');
     els.createActions = document.getElementById('create-actions');
+    els.folderFilterForm = document.getElementById('folder-filter-form');
+    els.folderFilterInput = document.getElementById('folder-filter-input');
     els.searchForm = document.getElementById('search-form');
     els.searchInput = document.getElementById('search-input');
     els.configError = document.getElementById('config-error');
@@ -106,13 +109,15 @@ export function bindUi() {
     els.prefDoubleTapCopy = document.getElementById('pref-double-tap-copy');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
+    els.finderLoading = document.getElementById('finder-loading');
+    els.finderLoadingTitle = document.getElementById('finder-loading-title');
     els.editor = document.getElementById('editor');
     els.viewModeBar = document.getElementById('view-mode-bar');
     els.modeList = document.getElementById('mode-list');
     els.modePreview = document.getElementById('mode-preview');
     els.modeContents = document.getElementById('mode-contents');
     els.modeRaw = document.getElementById('mode-raw');
-    els.editorToast = document.getElementById('editor-toast');
+    els.appToast = document.getElementById('app-toast');
     els.autosaveBar = document.getElementById('autosave-bar');
     els.autosaveBarFill = document.getElementById('autosave-bar-fill');
     els.listsRoot = document.getElementById('lists-root');
@@ -166,74 +171,117 @@ export function setStatus(message, kind = '') {
 }
 
 /** @type {ReturnType<typeof setTimeout> | null} */
-let editorToastTimer = null;
+let toastTimer = null;
 /** @type {string} */
-let editorToastKey = '';
+let toastKey = '';
+/** Guards against stale rAF show animations after hide/replace. */
+let toastShowToken = 0;
 /** Last save-state toast key announced (avoids re-showing after auto-hide). */
 let editorSaveToastKey = '';
 
 /**
- * Small toast under the List/Preview/Raw selector (save / dirty / errors while editing).
- * Laid out in-flow below the mode bar so it is never tucked behind the toolbar.
+ * Resolve the single overlay toast host (always out of document flow).
+ * @returns {HTMLElement | null}
+ */
+function resolveToastEl() {
+    if (els.appToast?.isConnected) return els.appToast;
+    const el = document.getElementById('app-toast');
+    if (el) els.appToast = el;
+    return el;
+}
+
+/**
+ * App-wide overlay toast. Never shifts layout; works in Finder, Edit, and Settings.
  * @param {string} message
  * @param {'' | 'ok' | 'warn' | 'error'} [kind]
  * @param {{ sticky?: boolean, key?: string, durationMs?: number }} [options]
  */
-export function showEditorToast(message, kind = '', options = {}) {
-    if (!els.editorToast) return;
+export function showToast(message, kind = '', options = {}) {
+    const el = resolveToastEl();
+    if (!el) return;
+
     const key = options.key ?? message;
     const sticky = Boolean(options.sticky);
     const durationMs = Number.isFinite(options.durationMs) ? options.durationMs : 2200;
+    const text = String(message || '');
 
-    if (key && key === editorToastKey && els.editorToast.classList.contains('is-visible')) {
+    if (!text) {
+        hideToast();
+        return;
+    }
+
+    // Same sticky/key already showing — just refresh the auto-hide timer.
+    if (key && key === toastKey && el.classList.contains('is-visible') && !el.hidden) {
         if (sticky) return;
-        if (editorToastTimer) clearTimeout(editorToastTimer);
-        editorToastTimer = setTimeout(() => hideEditorToast(), durationMs);
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => hideToast(), durationMs);
         return;
     }
 
-    editorToastKey = key;
-    if (editorToastTimer) {
-        clearTimeout(editorToastTimer);
-        editorToastTimer = null;
+    toastKey = key;
+    const token = ++toastShowToken;
+    if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = null;
     }
 
-    els.editorToast.textContent = message || '';
-    els.editorToast.classList.remove('is-ok', 'is-warn', 'is-error', 'is-visible');
-    if (kind === 'ok') els.editorToast.classList.add('is-ok');
-    if (kind === 'warn') els.editorToast.classList.add('is-warn');
-    if (kind === 'error') els.editorToast.classList.add('is-error');
+    el.textContent = text;
+    el.classList.remove('is-ok', 'is-warn', 'is-error', 'is-visible');
+    if (kind === 'ok') el.classList.add('is-ok');
+    if (kind === 'warn') el.classList.add('is-warn');
+    if (kind === 'error') el.classList.add('is-error');
 
-    if (!message) {
-        els.editorToast.hidden = true;
-        editorToastKey = '';
-        return;
-    }
-
-    els.editorToast.hidden = false;
+    el.hidden = false;
+    // Restart enter transition even when replacing an already-visible toast.
+    void el.offsetWidth;
     requestAnimationFrame(() => {
-        els.editorToast?.classList.add('is-visible');
+        if (token !== toastShowToken) return;
+        if (el.hidden) return;
+        el.classList.add('is-visible');
     });
 
     if (!sticky) {
-        editorToastTimer = setTimeout(() => hideEditorToast(), durationMs);
+        toastTimer = setTimeout(() => {
+            if (token !== toastShowToken) return;
+            hideToast();
+        }, durationMs);
     }
+}
+
+export function hideToast() {
+    toastShowToken += 1;
+    if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = null;
+    }
+    toastKey = '';
+    const el = resolveToastEl();
+    if (!el) return;
+    el.classList.remove('is-visible', 'is-ok', 'is-warn', 'is-error');
+    el.hidden = true;
+    el.textContent = '';
+}
+
+/** @deprecated Prefer {@link showToast}; kept as an alias for existing call sites. */
+export function showEditorToast(message, kind = '', options = {}) {
+    showToast(message, kind, options);
+}
+
+/** @deprecated Prefer {@link showToast}; kept as an alias for existing call sites. */
+export function showAppToast(message, kind = '', options = {}) {
+    showToast(message, kind, options);
 }
 
 export function hideEditorToast() {
-    if (editorToastTimer) {
-        clearTimeout(editorToastTimer);
-        editorToastTimer = null;
-    }
-    editorToastKey = '';
-    if (!els.editorToast) return;
-    els.editorToast.classList.remove('is-visible', 'is-ok', 'is-warn', 'is-error');
-    els.editorToast.hidden = true;
-    els.editorToast.textContent = '';
+    hideToast();
+}
+
+export function hideAppToast() {
+    hideToast();
 }
 
 /**
- * Announce editor save/dirty state once per transition (toast under mode bar).
+ * Announce editor save/dirty state once per transition.
  * @param {string} key
  * @param {string} message
  * @param {'' | 'ok' | 'warn' | 'error'} [kind]
@@ -242,16 +290,16 @@ export function hideEditorToast() {
 function announceEditorSaveToast(key, message, kind = '', options = {}) {
     setStatus('');
     if (key === editorSaveToastKey) {
-        if (options.sticky && editorToastKey === key) return;
+        if (options.sticky && toastKey === key) return;
         if (!options.sticky) return;
     }
     editorSaveToastKey = key;
-    showEditorToast(message, kind, { ...options, key });
+    showToast(message, kind, { ...options, key });
 }
 
 function resetEditorSaveToast() {
     editorSaveToastKey = '';
-    hideEditorToast();
+    hideToast();
 }
 
 function setActiveTab(mode) {
@@ -514,6 +562,7 @@ export function setBrowseModeUi(mode) {
     els.btnModeFolders.classList.toggle('is-active', mode === 'folder');
     els.btnModeComputers.classList.toggle('is-active', isComputers);
     els.searchForm.hidden = !isSearch;
+    if (els.folderFilterForm) els.folderFilterForm.hidden = isSearch;
     // My Drive / Computers toggles stay visible; search is entered from Settings.
     els.btnModeFolders.hidden = false;
     els.btnModeComputers.hidden = false;
@@ -531,6 +580,34 @@ export function setCreateActionsVisible(visible) {
 
 export function setBrowseEmptyMessage(message) {
     els.browseEmpty.textContent = message;
+}
+
+/**
+ * Show/hide the Finder loading panel (animated bar). Hides the file list while busy.
+ * @param {boolean} visible
+ * @param {string} [message]
+ */
+export function setFinderLoading(visible, message = 'Loading…') {
+    const show = Boolean(visible);
+    if (els.finderLoadingTitle && message) {
+        els.finderLoadingTitle.textContent = message;
+    }
+    if (els.finderLoading) {
+        els.finderLoading.hidden = !show;
+        els.finderLoading.setAttribute('aria-busy', show ? 'true' : 'false');
+        const bar = els.finderLoading.querySelector('.loading-bar');
+        if (bar) {
+            bar.setAttribute('aria-label', message || 'Loading');
+            bar.setAttribute('aria-valuetext', message || 'Loading');
+        }
+    }
+    if (els.fileList) els.fileList.classList.toggle('is-loading-hidden', show);
+    if (els.btnLoadMore) els.btnLoadMore.classList.toggle('is-loading-hidden', show);
+    if (els.browseEmpty) {
+        els.browseEmpty.classList.toggle('is-loading-hidden', show);
+        if (show) els.browseEmpty.hidden = true;
+    }
+    if (show && els.fileList) els.fileList.replaceChildren();
 }
 
 export function renderFileList(
@@ -1059,7 +1136,7 @@ export function syncEditorChrome(state, options = {}) {
         return;
     }
 
-    // Keep the top strip clear while editing; save/dirty feedback is a toast under the mode bar.
+    // Keep the top strip clear while editing; save/dirty feedback uses the overlay toast.
     if (state.status === 'saving') {
         announceEditorSaveToast('saving', 'Saving…', '', { sticky: true });
     } else if (state.status === 'saved' && !state.dirty) {
@@ -1134,10 +1211,6 @@ export function setListsStatus(message, kind = 'warn') {
     els.listsStatus.textContent = message;
     els.listsStatus.classList.toggle('is-error', kind === 'error');
     els.listsStatus.classList.toggle('is-warn', kind === 'warn');
-}
-
-export function confirmLeaveUnsaved() {
-    return window.confirm('You have unsaved changes. Discard them?');
 }
 
 /**
@@ -1311,7 +1384,7 @@ export function fillEditorMoreStats(rows) {
 
 /**
  * Action sheet for the Edit toolbar burger menu.
- * @param {{ fileName?: string, isPinned?: boolean, stats?: Array<{ label: string, value: string, pending?: boolean }>, showDates?: boolean }} [options]
+ * @param {{ fileName?: string, isPinned?: boolean, stats?: Array<{ label: string, value: string, pending?: boolean }>, showDates?: boolean, autosaveEnabled?: boolean }} [options]
  * @returns {Promise<'rename'|'pin'|'unpin'|null>}
  */
 export function promptEditorMoreMenu(options = {}) {
@@ -1335,6 +1408,7 @@ export function promptEditorMoreMenu(options = {}) {
         els.editorMorePin.textContent = pinned ? 'Unpin' : 'Pin';
     }
     syncEditorMoreShowDates(Boolean(options.showDates));
+    syncEditorMoreAutosaveOff(options.autosaveEnabled !== false);
 
     return new Promise((resolve) => {
         const onClose = () => {
@@ -1360,6 +1434,19 @@ export function syncEditorMoreShowDates(enabled) {
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     btn.classList.toggle('is-selected', on);
     btn.textContent = on ? 'Hide dates' : 'Show dates';
+}
+
+/**
+ * Reflect whether session autosave is still on (off until the file is reopened).
+ * @param {boolean} enabled
+ */
+export function syncEditorMoreAutosaveOff(enabled) {
+    const btn = els.editorMoreAutosaveOff;
+    if (!btn) return;
+    const on = Boolean(enabled);
+    btn.disabled = !on;
+    btn.textContent = on ? 'Turn off autosave' : 'Autosave off';
+    btn.setAttribute('aria-disabled', on ? 'false' : 'true');
 }
 
 /**
@@ -1762,11 +1849,24 @@ export function promptMoveDestination(options) {
         syncChrome();
         if (els.moveFolderList) {
             els.moveFolderList.replaceChildren();
-            const loadingRow = document.createElement('p');
+            const loadingRow = document.createElement('div');
             loadingRow.className = 'move-loading';
-            loadingRow.textContent = atVirtualComputersRoot()
-                ? 'Loading computers…'
+            loadingRow.setAttribute('aria-live', 'polite');
+            loadingRow.setAttribute('aria-busy', 'true');
+            const label = document.createElement('p');
+            label.className = 'move-loading-label';
+            label.textContent = atVirtualComputersRoot()
+                ? 'Looking for Computers in Google Drive…'
                 : 'Loading folders…';
+            const bar = document.createElement('div');
+            bar.className = 'loading-bar';
+            bar.setAttribute('role', 'progressbar');
+            bar.setAttribute('aria-label', label.textContent);
+            bar.setAttribute('aria-valuetext', label.textContent);
+            const fill = document.createElement('div');
+            fill.className = 'loading-bar-fill';
+            bar.appendChild(fill);
+            loadingRow.append(label, bar);
             els.moveFolderList.appendChild(loadingRow);
         }
         if (els.moveEmpty) els.moveEmpty.hidden = true;

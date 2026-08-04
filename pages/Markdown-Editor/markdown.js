@@ -92,10 +92,11 @@ function sanitizeUrl(url) {
 }
 
 /**
+ * Inline markdown → safe HTML (bold, italic, links, dates, etc.).
  * @param {string} text
  * @param {{ showDates?: boolean }} [options]
  */
-function renderInline(text, options = {}) {
+export function renderInline(text, options = {}) {
     const showDates = Boolean(options.showDates);
     let s = String(text ?? '');
 

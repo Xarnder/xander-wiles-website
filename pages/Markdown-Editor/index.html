@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Markdown Editor</title>
     <meta name="description" content="Edit Markdown files from Google Drive on your phone.">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -121,6 +121,16 @@
                 document.documentElement.style.setProperty('--preview-font-scale', String(scale / 100));
             } catch (e) { /* ignore */ }
         })();
+        /* Disable pinch / gesture zoom (Safari ignores user-scalable in some cases). */
+        (function () {
+            var block = function (event) { event.preventDefault(); };
+            document.addEventListener('gesturestart', block, { passive: false });
+            document.addEventListener('gesturechange', block, { passive: false });
+            document.addEventListener('gestureend', block, { passive: false });
+            document.addEventListener('touchmove', function (event) {
+                if (event.touches && event.touches.length > 1) event.preventDefault();
+            }, { passive: false });
+        })();
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -183,11 +193,33 @@
             </section>
 
             <section id="view-finder" class="view" hidden>
+                <form id="folder-filter-form" class="folder-filter-form" role="search">
+                    <label class="sr-only" for="folder-filter-input">Filter files in this folder</label>
+                    <div class="folder-filter-field">
+                        <span class="folder-filter-icon" aria-hidden="true"></span>
+                        <input
+                            id="folder-filter-input"
+                            class="folder-filter-input"
+                            type="search"
+                            placeholder="Filter in this folder…"
+                            enterkeyhint="search"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                        >
+                    </div>
+                </form>
                 <form id="search-form" class="search-form" hidden>
                     <label class="sr-only" for="search-input">Search markdown file names</label>
                     <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
                     <button type="submit" class="btn btn-primary">Search</button>
                 </form>
+                <div id="finder-loading" class="finder-loading" hidden aria-live="polite" aria-busy="true">
+                    <p id="finder-loading-title" class="finder-loading-title">Looking for Computers…</p>
+                    <div class="loading-bar" role="progressbar" aria-label="Loading" aria-valuetext="Loading">
+                        <div class="loading-bar-fill"></div>
+                    </div>
+                </div>
                 <div id="file-list" class="file-list" data-md-mobile="bottom" data-md-desktop="top" role="list"></div>
                 <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
                 <p id="browse-empty" class="empty-state" hidden>No folders or markdown files here.</p>
@@ -215,7 +247,6 @@
                             <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
                             <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
                         </div>
-                        <p id="editor-toast" class="editor-toast" hidden role="status" aria-live="polite"></p>
                         <div
                             id="autosave-bar"
                             class="autosave-bar"
@@ -423,12 +454,14 @@
                 </button>
             </div>
         </nav>
+        <!-- Single overlay toast host — never in document flow, never shifts UI -->
+        <div id="app-toast" class="app-toast" hidden role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
 
     <dialog id="unsaved-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
             <h2>Unsaved changes</h2>
-            <p>You haven’t saved this file yet. Save your changes before leaving Edit?</p>
+            <p>You haven’t saved this file yet. Save your changes before continuing?</p>
             <div class="dialog-actions dialog-actions--triple">
                 <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
                 <button type="submit" value="discard" class="btn btn-ghost">Don’t save</button>
@@ -484,6 +517,7 @@
                 <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
                 <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
                 <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
+                <button type="button" id="editor-more-autosave-off" class="btn btn-ghost btn-block item-action-btn">Turn off autosave</button>
                 <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
                 <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="pin" id="editor-more-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>

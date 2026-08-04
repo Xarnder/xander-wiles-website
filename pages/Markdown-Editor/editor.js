@@ -4,6 +4,15 @@ function draftKey(fileId) {
     return `${DRAFT_KEY_PREFIX}${fileId}`;
 }
 
+/** Normalize line endings so Drive CRLF vs editor LF is not treated as an edit. */
+export function normalizeEditorText(text) {
+    return String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+export function textsEqual(a, b) {
+    return normalizeEditorText(a) === normalizeEditorText(b);
+}
+
 export function readDraft(fileId) {
     try {
         const raw = localStorage.getItem(draftKey(fileId));
@@ -56,16 +65,32 @@ export function applyLoadedContent(state, { fileId, fileName, mimeType, content 
     state.fileId = fileId;
     state.fileName = fileName;
     state.mimeType = mimeType || 'text/markdown';
-    state.originalContent = content;
-    state.editorContent = content;
+    const text = normalizeEditorText(content);
+    state.originalContent = text;
+    state.editorContent = text;
     state.dirty = false;
     state.status = 'idle';
     state.errorMessage = '';
 }
 
+/**
+ * Quietly adopt `text` as both the buffer and the clean baseline.
+ * Used after parse/serialize canonicalization so Preview/List flush is not a false edit.
+ */
+export function rebaseEditorBaseline(state, text) {
+    const next = normalizeEditorText(text);
+    state.originalContent = next;
+    state.editorContent = next;
+    state.dirty = false;
+    state.status = 'saved';
+    state.errorMessage = '';
+    if (state.fileId) clearDraft(state.fileId);
+}
+
 export function setEditorText(state, text) {
-    state.editorContent = text;
-    state.dirty = text !== state.originalContent;
+    const next = String(text ?? '');
+    state.editorContent = next;
+    state.dirty = !textsEqual(next, state.originalContent);
     if (state.dirty) {
         state.status = 'dirty';
         if (state.fileId) {
@@ -98,7 +123,7 @@ export function markSaved(state) {
 export function applySavedBaseline(state, savedText) {
     const baseline = String(savedText ?? '');
     state.originalContent = baseline;
-    state.dirty = state.editorContent !== baseline;
+    state.dirty = !textsEqual(state.editorContent, baseline);
     state.status = state.dirty ? 'dirty' : 'saved';
     state.errorMessage = '';
     if (state.fileId) {

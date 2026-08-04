@@ -87,7 +87,9 @@ import {
     markSaving,
     promptRestoreDraft,
     readDraft,
+    rebaseEditorBaseline,
     setEditorText,
+    textsEqual,
 } from './editor.js';
 import {
     addItem,
@@ -110,7 +112,7 @@ import {
     resolveDateTagInput,
     writeShowDatesEnabled,
 } from './dates.js';
-import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writeDoubleTapCopyEnabled } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyReorderingLists, applyReorderingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writeDoubleTapCopyEnabled } from './lists-ui.js';
 import {
     flushCloudSettingsSave,
     pullCloudSettings,
@@ -133,7 +135,6 @@ import {
     applyFinderLayoutPrefs,
     applyTheme,
     bindUi,
-    confirmLeaveUnsaved,
     getEls,
     promptForName,
     promptItemActions,
@@ -149,6 +150,7 @@ import {
     renderFolderPath,
     scrollFinderToMarkdownSection,
     setBrowseEmptyMessage,
+    setFinderLoading,
     setBrowseModeUi,
     setConfigError,
     setCreateActionsVisible,
@@ -157,6 +159,7 @@ import {
     setLoadMoreVisible,
     setLoadMoreBusy,
     setStatus,
+    showAppToast,
     showEditorToast,
     setUpEnabled,
     showView,
@@ -193,6 +196,8 @@ const AUTOSAVE_IDLE_MS = 10_000;
 const state = {
     browseMode: 'folder', // 'folder' | 'search' | 'computers'
     searchQuery: '',
+    /** Client-side name filter for the current folder list (not Drive-wide). */
+    folderFilter: '',
     folderStack: [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }],
     files: [],
     nextPageToken: null,
@@ -203,6 +208,8 @@ const state = {
     tagFilters: {},
     editingListIds: {},
     editingPlainLists: {},
+    reorderingListIds: {},
+    reorderingPlainLists: {},
     placingList: false,
     /** @type {object | null} */
     pendingImportList: null,
@@ -223,6 +230,8 @@ let autosaveInFlight = false;
 let autosaveContentFingerprint = null;
 /** Timestamp of last local content change (ms). */
 let lastEditorEditAt = 0;
+/** Session flag — off via burger menu; always re-enabled when opening a markdown file. */
+let autosaveEnabled = true;
 
 function syncEditorChrome(ed = state.editor, options = {}) {
     syncEditorChromeUi(ed, options);
@@ -302,6 +311,10 @@ function tickAutosaveBar() {
 }
 
 function startAutosaveCountdown() {
+    if (!autosaveEnabled) {
+        stopAutosaveCountdown();
+        return;
+    }
     if (autosaveTimer != null) {
         clearTimeout(autosaveTimer);
         autosaveTimer = null;
@@ -325,6 +338,7 @@ function syncAutosaveFromEditorState() {
     const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
 
     if (
+        !autosaveEnabled ||
         !ed?.fileId ||
         !ed.dirty ||
         ed.status === 'saving' ||
@@ -354,7 +368,7 @@ function syncAutosaveFromEditorState() {
 
 async function runAutosave() {
     const ed = state.editor;
-    if (autosaveInFlight) return;
+    if (!autosaveEnabled || autosaveInFlight) return;
     const els = getEls();
     const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
     if (!ed?.fileId || !ed.dirty || ed.status === 'saving' || !editorVisible) {
@@ -1148,7 +1162,7 @@ function isPinned(fileId) {
     return readPinnedItems().some((entry) => entry.id === fileId);
 }
 
-function pinItem(file, { switchToPinned = true } = {}) {
+function pinItem(file) {
     if (!file?.id) return;
     const parentId = normalizeParentId(file.parents);
     const next = [
@@ -1162,10 +1176,10 @@ function pinItem(file, { switchToPinned = true } = {}) {
         ...readPinnedItems().filter((entry) => entry.id !== file.id),
     ].slice(0, PINNED_ITEMS_MAX);
     writePinnedItems(next);
-    setStatus(`Pinned ${file.name || 'item'}`, 'ok');
-    if (switchToPinned) {
-        showPinnedView();
-    }
+    const name = file.name || (isFolder(file) ? 'folder' : 'note');
+    const kindLabel = isFolder(file) ? 'directory' : 'markdown';
+    setStatus('');
+    showAppToast(`Pinned ${kindLabel} “${name}”`, 'ok', { key: `pin:${file.id}` });
 }
 
 /** @type {Map<string, object>} */
@@ -1278,6 +1292,8 @@ function refreshDocumentModelFromText(text) {
     applyTagFilters(parsed, state.tagFilters);
     applyEditingLists(parsed, state.editingListIds);
     applyEditingPlainLists(parsed, state.editingPlainLists);
+    applyReorderingLists(parsed, state.reorderingListIds);
+    applyReorderingPlainLists(parsed, state.reorderingPlainLists);
     state.documentModel = parsed;
     state.parseWarnings = parsed.warnings || [];
     return parsed;
@@ -1352,6 +1368,8 @@ function renderStructuredEditor(extra = {}) {
             if (opts.tagFilters) state.tagFilters = opts.tagFilters;
             if (opts.editingListIds) state.editingListIds = opts.editingListIds;
             if (opts.editingPlainLists) state.editingPlainLists = opts.editingPlainLists;
+            if (opts.reorderingListIds) state.reorderingListIds = opts.reorderingListIds;
+            if (opts.reorderingPlainLists) state.reorderingPlainLists = opts.reorderingPlainLists;
             if (opts.focusItemId) {
                 for (const seg of doc.segments || []) {
                     if (
@@ -1360,7 +1378,9 @@ function renderStructuredEditor(extra = {}) {
                         (seg.list.items || []).some((item) => item.id === opts.focusItemId)
                     ) {
                         state.editingListIds = { ...state.editingListIds, [seg.list.id]: true };
+                        state.reorderingListIds = { ...state.reorderingListIds, [seg.list.id]: false };
                         seg._editing = true;
+                        seg._reordering = false;
                         break;
                     }
                 }
@@ -1368,6 +1388,8 @@ function renderStructuredEditor(extra = {}) {
             applyTagFilters(doc, state.tagFilters);
             applyEditingLists(doc, state.editingListIds);
             applyEditingPlainLists(doc, state.editingPlainLists);
+            applyReorderingLists(doc, state.reorderingListIds);
+            applyReorderingPlainLists(doc, state.reorderingPlainLists);
             state.documentModel = doc;
             if (opts.soft) {
                 if (opts.persist) {
@@ -1394,6 +1416,8 @@ function renderStructuredEditor(extra = {}) {
             applyTagFilters(state.documentModel, state.tagFilters);
             applyEditingLists(state.documentModel, state.editingListIds);
             applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+            applyReorderingLists(state.documentModel, state.reorderingListIds);
+            applyReorderingPlainLists(state.documentModel, state.reorderingPlainLists);
             showParseWarnings();
             renderStructuredEditor({
                 focusItemId: opts.focusItemId,
@@ -1697,9 +1721,12 @@ function applyViewMode(mode, {
 function setupEditorForOpenFile(options = {}) {
     const els = getEls();
     const freshlyCreated = Boolean(options.freshlyCreated);
+    autosaveEnabled = true;
     state.tagFilters = {};
     state.editingListIds = {};
     state.editingPlainLists = {};
+    state.reorderingListIds = {};
+    state.reorderingPlainLists = {};
     state.placingList = false;
     state.pendingImportList = null;
     state.clickEdit = false;
@@ -1707,8 +1734,26 @@ function setupEditorForOpenFile(options = {}) {
     refreshDocumentModelFromText(state.editor.editorContent);
 
     const repaired = (state.documentModel.segments || []).some((s) => s.repaired);
+    const serialized = serializeDocument(state.documentModel);
     if (repaired) {
-        const serialized = serializeDocument(state.documentModel);
+        // Real structural fixes — mark dirty so the user can save them.
+        setEditorText(state.editor, serialized);
+        els.editor.value = serialized;
+        refreshDocumentModelFromText(serialized);
+    } else if (
+        !state.editor.dirty &&
+        !textsEqual(serialized, state.editor.originalContent)
+    ) {
+        // Parse→serialize often changes whitespace/JSON formatting without a user edit.
+        // Rebase the clean baseline so Preview/List flush does not look "unsaved".
+        // Skip when already dirty (e.g. restored draft) so we don't clear real edits.
+        rebaseEditorBaseline(state.editor, serialized);
+        els.editor.value = serialized;
+        refreshDocumentModelFromText(serialized);
+    } else if (
+        state.editor.dirty &&
+        !textsEqual(serialized, state.editor.editorContent)
+    ) {
         setEditorText(state.editor, serialized);
         els.editor.value = serialized;
         refreshDocumentModelFromText(serialized);
@@ -1771,12 +1816,35 @@ function updateCreateActions() {
     setCreateActionsVisible(canCreateInCurrentLocation());
 }
 
+function clearFolderFilter() {
+    state.folderFilter = '';
+    const els = getEls();
+    if (els.folderFilterInput) els.folderFilterInput.value = '';
+}
+
 function renderCurrentFileList({ scrollToMarkdown = false } = {}) {
-    renderFileList(state.files, {
+    const query = String(state.folderFilter || '').trim();
+    const filtering =
+        Boolean(query) && (state.browseMode === 'folder' || state.browseMode === 'computers');
+    const needle = query.toLowerCase();
+    const files = filtering
+        ? state.files.filter((file) => String(file?.name || '').toLowerCase().includes(needle))
+        : state.files;
+
+    if (filtering) {
+        setBrowseEmptyMessage(
+            state.nextPageToken
+                ? `No matches for “${query}” in loaded items — try Load more.`
+                : `No matches for “${query}” in this folder.`
+        );
+    }
+
+    renderFileList(files, {
         onOpen: handleOpenEntry,
         onMenu: handleItemMenu,
-        recent: readRecentFiles(),
-        scrollToMarkdown,
+        // Hide global Recent while filtering so results stay folder-scoped.
+        recent: filtering ? [] : readRecentFiles(),
+        scrollToMarkdown: filtering ? false : scrollToMarkdown,
         sortMode: readFinderSort(),
         openedAtById: readOpenedFilesMap(),
     });
@@ -1791,6 +1859,8 @@ async function jumpToFolderCrumb(index) {
 async function loadBrowse(reset = true) {
     const folder = currentFolder();
     state.loadingFolder = true;
+    if (reset) clearFolderFilter();
+    setFinderLoading(false);
     setBrowseModeUi('folder');
     setStatus(reset ? 'Loading folder…' : 'Loading more…');
     setUpEnabled(state.folderStack.length > 1);
@@ -1838,6 +1908,8 @@ async function loadBrowse(reset = true) {
 
 async function loadSearch(reset = true) {
     state.loadingFolder = true;
+    if (reset) clearFolderFilter();
+    setFinderLoading(false);
     setBrowseModeUi('search');
     setUpEnabled(false);
     updateCreateActions();
@@ -1883,6 +1955,7 @@ async function loadSearch(reset = true) {
 
 async function loadComputers(reset = true) {
     state.loadingFolder = true;
+    if (reset) clearFolderFilter();
     setBrowseModeUi('computers');
     setBrowseEmptyMessage(
         'No Computers folders found via the API (Google limits this). Reliable fix: in drive.google.com → Computers → move your notes folder into My Drive, then use My Drive here.'
@@ -1896,10 +1969,15 @@ async function loadComputers(reset = true) {
         if (atComputersRoot) {
             setUpEnabled(false);
             renderFolderPath(state.folderStack, 'computers', '', jumpToFolderCrumb);
+            setLoadMoreVisible(false);
             setStatus('Looking for Computers folders…');
+            setFinderLoading(true, 'Looking for Computers in Google Drive…');
             const computers = await listComputerRootFolders();
+            // User may have switched away while the slow Computers scan ran.
+            if (state.browseMode !== 'computers') return;
             state.files = computers;
             state.nextPageToken = null;
+            setFinderLoading(false);
             renderCurrentFileList({ scrollToMarkdown: true });
             setLoadMoreVisible(false);
             setStatus(
@@ -1910,6 +1988,7 @@ async function loadComputers(reset = true) {
             return;
         }
 
+        setFinderLoading(false);
         const folder = currentFolder();
         setUpEnabled(true);
         renderFolderPath(state.folderStack, 'computers', '', jumpToFolderCrumb);
@@ -1925,6 +2004,7 @@ async function loadComputers(reset = true) {
             (token) => listFolder(folder.id, token, { sortMode: readFinderSort() }),
             pageToken
         );
+        if (state.browseMode !== 'computers') return;
         if (reset) {
             state.files = result.files;
         } else {
@@ -1935,11 +2015,13 @@ async function loadComputers(reset = true) {
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(state.files.length ? '' : 'No folders or markdown files here.');
     } catch (err) {
+        setFinderLoading(false);
         setStatus(err.message || 'Failed to load Computers', 'error');
         setLoadMoreVisible(Boolean(state.nextPageToken));
     } finally {
         state.loadingFolder = false;
         setLoadMoreBusy(false);
+        if (state.browseMode !== 'computers') setFinderLoading(false);
     }
 }
 
@@ -2016,7 +2098,8 @@ async function handleItemMenu(file) {
     }
     if (action === 'unpin') {
         unpinItem(file.id, { refresh: false });
-        setStatus(`Unpinned ${file.name || 'item'}`, 'ok');
+        setStatus('');
+        showAppToast(`Unpinned “${file.name || 'item'}”`, 'ok', { key: `unpin:${file.id}` });
         return;
     }
     if (action === 'rename') {
@@ -2352,9 +2435,10 @@ function handlePinCurrentFile() {
     };
     if (isPinned(file.id)) {
         unpinItem(file.id, { refresh: false });
-        setStatus(`Unpinned ${file.name || 'file'}`, 'ok');
+        setStatus('');
+        showAppToast(`Unpinned “${file.name || 'file'}”`, 'ok', { key: `unpin:${file.id}` });
     } else {
-        pinItem(file, { switchToPinned: false });
+        pinItem(file);
     }
 }
 
@@ -2387,6 +2471,7 @@ async function handleEditorMoreMenu() {
         isPinned: isPinned(state.editor.fileId),
         stats: buildEditorFileStatRows({ metaPending: true }),
         showDates: readShowDatesEnabled(),
+        autosaveEnabled,
     });
     if (!action) return;
 
@@ -2739,6 +2824,8 @@ async function fillMissingListDatesFromMenu() {
     refreshDocumentModelFromText(serialized);
     applyEditingLists(state.documentModel, state.editingListIds);
     applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+    applyReorderingLists(state.documentModel, state.reorderingListIds);
+    applyReorderingPlainLists(state.documentModel, state.reorderingPlainLists);
     applyTagFilters(state.documentModel, state.tagFilters);
 
     if (state.viewMode === 'raw') {
@@ -2777,17 +2864,25 @@ function showAppView(name, extra = {}) {
 }
 
 async function openMarkdownFile(file, options = {}) {
-    flushCurrentEditorContent();
+    const els = getEls();
+    // Only flush when we might need to warn — flushing Preview/List through
+    // serialize used to mark clean files dirty (format drift vs Drive text).
     if (
         state.editor.fileId &&
-        state.editor.fileId !== file.id &&
-        state.editor.dirty &&
-        !confirmLeaveUnsaved()
+        state.editor.fileId !== file.id
     ) {
-        return;
+        if (state.editor.dirty) flushCurrentEditorContent();
+        else if (state.viewMode === 'raw') flushCurrentEditorContent();
+        if (state.editor.dirty) {
+            const choice = await promptUnsavedChanges(els.unsavedDialog);
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
+                await saveCurrentFile();
+                if (state.editor.dirty) return;
+            }
+        }
     }
 
-    const els = getEls();
     state.editor.status = 'loading';
     showAppView('editor', { loading: true });
     setEditorLoading(true, file.name || 'Markdown file');
@@ -2823,7 +2918,7 @@ async function openMarkdownFile(file, options = {}) {
         });
 
         const draft = readDraft(meta.id);
-        if (draft && draft.text !== content) {
+        if (draft && !textsEqual(draft.text, content)) {
             const choice = await promptRestoreDraft(els.draftDialog);
             if (choice === 'restore') {
                 setEditorText(state.editor, draft.text);
@@ -2857,7 +2952,12 @@ async function saveCurrentFile(options = {}) {
     flushCurrentEditorContent();
     const snapshot = ed.editorContent;
     if (!ed.dirty) {
-        if (!autosave) setStatus('Already saved', 'ok');
+        if (!autosave) {
+            showEditorToast('Already saved', 'ok', {
+                key: 'already-saved',
+                durationMs: 1600,
+            });
+        }
         stopAutosaveCountdown();
         return;
     }
@@ -2878,8 +2978,8 @@ async function saveCurrentFile(options = {}) {
 
         if (autosave) {
             // Keep focus / caret / open mini-editors intact.
+            // Toast comes from quiet syncEditorChrome — do not set the top status strip.
             syncEditorChrome(ed, { quiet: true, syncAutosave: true });
-            if (!ed.dirty) setStatus('Autosaved', 'ok');
             return;
         }
 
@@ -2892,10 +2992,17 @@ async function saveCurrentFile(options = {}) {
         }
     } catch (err) {
         markError(ed, err.message || 'Save failed');
-        ed.dirty = ed.editorContent !== ed.originalContent;
+        ed.dirty = !textsEqual(ed.editorContent, ed.originalContent);
         if (ed.dirty) ed.status = 'error';
-        syncEditorChrome(ed, autosave ? { quiet: true, syncAutosave: true } : {});
-        setStatus(ed.errorMessage, 'error');
+        if (autosave) {
+            showEditorToast(ed.errorMessage || 'Autosave failed', 'error', {
+                key: 'autosave-error',
+                durationMs: 3600,
+            });
+            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+        } else {
+            syncEditorChrome(ed);
+        }
     }
 }
 
@@ -2960,7 +3067,15 @@ async function signIn() {
 }
 
 async function signOut() {
-    if (state.editor.dirty && !confirmLeaveUnsaved()) return;
+    if (state.editor.dirty) {
+        flushCurrentEditorContent();
+        const choice = await promptUnsavedChanges(getEls().unsavedDialog);
+        if (choice === 'cancel') return;
+        if (choice === 'save') {
+            await saveCurrentFile();
+            if (state.editor.dirty) return;
+        }
+    }
     try {
         await flushCloudSettingsSave(buildSettingsSnapshot);
     } catch {
@@ -2978,6 +3093,8 @@ async function signOut() {
     state.tagFilters = {};
     state.editingListIds = {};
     state.editingPlainLists = {};
+    state.reorderingListIds = {};
+    state.reorderingPlainLists = {};
     state.placingList = false;
     state.pendingImportList = null;
     state.clickEdit = false;
@@ -3158,6 +3275,19 @@ function wireEvents() {
             toggleShowDates();
         });
     }
+    if (els.editorMoreAutosaveOff) {
+        els.editorMoreAutosaveOff.addEventListener('click', () => {
+            if (!autosaveEnabled || els.editorMoreAutosaveOff.disabled) return;
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
+            autosaveEnabled = false;
+            stopAutosaveCountdown();
+            showEditorToast('Autosave off — tap Save when ready. Reopen the file to turn it back on.', 'warn', {
+                key: 'autosave-off',
+                durationMs: 3200,
+            });
+        });
+    }
     if (els.btnInsertList) {
         els.btnInsertList.addEventListener('click', () => {
             insertRankedList();
@@ -3309,6 +3439,19 @@ function wireEvents() {
         state.searchQuery = els.searchInput.value || '';
         loadSearch(true);
     });
+    if (els.folderFilterForm) {
+        els.folderFilterForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            els.folderFilterInput?.blur();
+        });
+    }
+    if (els.folderFilterInput) {
+        els.folderFilterInput.addEventListener('input', () => {
+            if (state.browseMode === 'search') return;
+            state.folderFilter = els.folderFilterInput.value || '';
+            renderCurrentFileList();
+        });
+    }
     els.nameForm.addEventListener('submit', (event) => {
         // Let method="dialog" close; block empty confirm
         const submitter = event.submitter;
