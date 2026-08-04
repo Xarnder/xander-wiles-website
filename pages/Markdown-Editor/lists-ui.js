@@ -32,6 +32,7 @@ import {
     plainListDepthFromIndent,
     plainListIndentForDepth,
     plainListInsertIndexAfterSubtree,
+    plainListOrderedDisplayNumber,
     renderInline,
     renderMarkdown,
     setPlainListItemDepth,
@@ -1182,6 +1183,20 @@ function plainListKindLabel(block) {
     return 'Bullet list';
 }
 
+function plainListDisplayTitle(block) {
+    const titled = String(block?.title || '').trim();
+    return titled || plainListKindLabel(block);
+}
+
+function applyPlainListTitleEl(titleEl, block, segIndex) {
+    titleEl.textContent = plainListDisplayTitle(block);
+    const titleLine = Number(block?.titleLine);
+    if (block?.title && Number.isFinite(titleLine) && titleLine > 0) {
+        titleEl.id = `toc-s${segIndex}-l${titleLine}`;
+        titleEl.dataset.mdLine = String(titleLine);
+    }
+}
+
 function renderPlainListBlock({
     block,
     listIndex,
@@ -1279,7 +1294,7 @@ function renderPlainListBlock({
 
     const title = document.createElement('h3');
     title.className = 'mdplain-title';
-    title.textContent = plainListKindLabel(block);
+    applyPlainListTitleEl(title, block, segIndex);
 
     const count = document.createElement('span');
     count.className = 'mdlist-count';
@@ -1396,7 +1411,7 @@ function renderPlainListViewHeader(
 
     const title = document.createElement('h3');
     title.className = 'mdplain-title';
-    title.textContent = plainListKindLabel(block);
+    applyPlainListTitleEl(title, block, segIndex);
 
     const count = document.createElement('span');
     count.className = 'mdlist-count';
@@ -1776,23 +1791,14 @@ function openPlainItemMiniEditor({
         li.replaceChildren();
         const main = document.createElement('div');
         main.className = 'mdplain-view-item-main';
-        if (checked === true || checked === false) {
-            const label = document.createElement('label');
-            label.className = 'mdplain-task-label';
-            const box = document.createElement('input');
-            box.type = 'checkbox';
-            box.disabled = true;
-            box.checked = Boolean(checked);
-            const span = document.createElement('span');
-            fillListItemLabel(span, text);
-            label.append(box, span);
-            main.appendChild(label);
-        } else {
-            const textEl = document.createElement('span');
-            textEl.className = 'mdplain-view-text';
-            fillListItemLabel(textEl, text);
-            main.appendChild(textEl);
-        }
+        const viewItem = {
+            ...item,
+            text,
+            checked: checked === true || checked === false ? checked : item.checked,
+        };
+        appendPlainViewItemBody(main, viewItem, block, {
+            orderedNumber: plainViewOrderedNumberForItem(block, item.id),
+        });
         li.appendChild(main);
         if (nest) li.appendChild(nest);
     };
@@ -2266,8 +2272,17 @@ function isSegmentedListLayout() {
  * @param {object} item
  * @param {object} block
  * @param {HTMLElement} host
+ * @param {{ orderedNumber?: number | null }} [flags]
  */
-function appendPlainViewItemBody(host, item, block) {
+function appendPlainViewItemBody(host, item, block, flags = {}) {
+    const orderedNumber = flags.orderedNumber;
+    if (orderedNumber != null && Number.isFinite(orderedNumber)) {
+        const num = document.createElement('span');
+        num.className = 'mdplain-view-num';
+        num.textContent = `${Math.max(1, Math.floor(orderedNumber))}.`;
+        num.setAttribute('aria-hidden', 'true');
+        host.appendChild(num);
+    }
     if (item.checked === true || item.checked === false) {
         const label = document.createElement('label');
         label.className = 'mdplain-task-label';
@@ -2287,16 +2302,28 @@ function appendPlainViewItemBody(host, item, block) {
     }
 }
 
+function plainViewOrderedNumberForItem(block, itemId) {
+    if (!block?.ordered || block.task) return null;
+    const items = block.items || [];
+    const index = items.findIndex((it) => it.id === itemId);
+    if (index < 0) return null;
+    return plainListOrderedDisplayNumber(items, index);
+}
+
 /**
  * @param {{ item: object, depth: number, children: Array<object> }} node
  * @param {object} block
  * @param {{ onItemLongPress?: Function, onStatus?: Function }} options
- * @param {{ nestChildren?: boolean }} [flags]
+ * @param {{ nestChildren?: boolean, orderedNumber?: number | null }} [flags]
  */
 function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
     const { onItemLongPress, onStatus } = options;
     const nestChildren = Boolean(flags.nestChildren);
     const item = node.item;
+    const orderedNumber =
+        flags.orderedNumber != null
+            ? flags.orderedNumber
+            : plainViewOrderedNumberForItem(block, item.id);
     const li = document.createElement('li');
     li.className = 'mdplain-view-item';
     li.dataset.plainItemId = item.id;
@@ -2314,19 +2341,23 @@ function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
 
     const main = document.createElement('div');
     main.className = 'mdplain-view-item-main';
-    appendPlainViewItemBody(main, item, block);
+    appendPlainViewItemBody(main, item, block, { orderedNumber });
     li.appendChild(main);
 
     if (nestChildren && node.children.length) {
-        const nest = document.createElement('ul');
+        const nest = document.createElement(block.ordered ? 'ol' : 'ul');
         nest.className = 'mdplain-view-nest';
+        if (block.ordered) nest.classList.add('mdplain-view-nest--ordered');
         nest.dataset.depth = String(node.depth + 1);
         nest.setAttribute('role', 'list');
-        for (const child of node.children) {
+        node.children.forEach((child, siblingIndex) => {
             nest.appendChild(
-                renderPlainViewItemNode(child, block, options, { nestChildren: true })
+                renderPlainViewItemNode(child, block, options, {
+                    nestChildren: true,
+                    orderedNumber: block.ordered ? siblingIndex + 1 : null,
+                })
             );
-        }
+        });
         li.appendChild(nest);
     }
 
@@ -2343,6 +2374,7 @@ function renderPlainListViewItems(block, options = {}) {
     const listEl = document.createElement(tag);
     listEl.className = 'mdplain-view-items';
     if (block.task) listEl.classList.add('mdplain-view-items--task');
+    if (block.ordered) listEl.classList.add('mdplain-view-items--ordered');
     listEl.setAttribute('role', 'list');
     listEl.title = typeof onItemLongPress === 'function' ? 'Long-press an item to edit' : '';
 
@@ -2359,16 +2391,19 @@ function renderPlainListViewItems(block, options = {}) {
     if (segmented) {
         listEl.classList.add('mdplain-view-items--tree');
         const tree = buildPlainItemTree(items);
-        for (const node of tree) {
+        tree.forEach((node, siblingIndex) => {
             listEl.appendChild(
-                renderPlainViewItemNode(node, block, options, { nestChildren: true })
+                renderPlainViewItemNode(node, block, options, {
+                    nestChildren: true,
+                    orderedNumber: block.ordered ? siblingIndex + 1 : null,
+                })
             );
-        }
+        });
         return listEl;
     }
 
     // Continuous: flat list — nest depth is shown via text colour, not padding.
-    for (const item of items) {
+    items.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'mdplain-view-item';
         li.dataset.plainItemId = item.id;
@@ -2386,10 +2421,14 @@ function renderPlainListViewItems(block, options = {}) {
 
         const main = document.createElement('div');
         main.className = 'mdplain-view-item-main';
-        appendPlainViewItemBody(main, item, block);
+        appendPlainViewItemBody(main, item, block, {
+            orderedNumber: block.ordered
+                ? plainListOrderedDisplayNumber(items, index)
+                : null,
+        });
         li.appendChild(main);
         listEl.appendChild(li);
-    }
+    });
 
     return listEl;
 }

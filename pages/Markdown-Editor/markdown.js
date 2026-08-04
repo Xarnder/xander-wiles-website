@@ -256,6 +256,26 @@ export function setPlainListItemDepth(item, depth) {
 }
 
 /**
+ * 1-based ordered number for a flat plain-list item among siblings at the same depth.
+ * Matches serializePlainList numbering (restarts under each parent).
+ * @param {Array<{ indent?: string }>} items
+ * @param {number} index
+ * @returns {number}
+ */
+export function plainListOrderedDisplayNumber(items, index) {
+    const list = items || [];
+    if (index < 0 || index >= list.length) return 1;
+    const depth = plainListDepthFromIndent(list[index].indent);
+    let n = 0;
+    for (let i = 0; i <= index; i += 1) {
+        const d = plainListDepthFromIndent(list[i].indent);
+        if (d < depth) n = 0;
+        else if (d === depth) n += 1;
+    }
+    return Math.max(1, n);
+}
+
+/**
  * Index after `parentIndex` and any contiguous deeper descendants.
  * @param {Array<{ indent?: string }>} items
  * @param {number} parentIndex
@@ -338,8 +358,61 @@ function parsePlainListAt(lines, start) {
 }
 
 /**
+ * @param {string} line
+ * @returns {{ level: number, title: string } | null}
+ */
+function parseAtxHeadingLine(line) {
+    const trimmed = String(line ?? '').trim();
+    const atx = trimmed.match(/^(#{1,6})\s+(.+?)(?:\s+#*)?$/);
+    if (!atx) return null;
+    const title = plainHeadingText(atx[2]);
+    if (!title) return null;
+    return { level: atx[1].length, title };
+}
+
+/**
+ * If the prose block ending just before a list ends with an ATX heading
+ * (optional blank lines after it), peel that heading into list-title metadata
+ * so Preview can show it as the list title instead of rendering it twice.
+ * @param {Array<object>} blocks
+ * @returns {{ title: string, titleLevel: number, titleLine: number } | null}
+ */
+function peelTrailingListTitle(blocks) {
+    if (!blocks.length) return null;
+    const prev = blocks[blocks.length - 1];
+    if (!prev || prev.type !== 'markdown') return null;
+
+    const lines = String(prev.text ?? '').split('\n');
+    let end = lines.length - 1;
+    while (end >= 0 && !lines[end].trim()) end -= 1;
+    if (end < 0) return null;
+
+    const heading = parseAtxHeadingLine(lines[end]);
+    if (!heading) return null;
+
+    const titleLine = (Number(prev.startLine) || 1) + end;
+    const kept = lines.slice(0, end);
+    while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
+
+    if (!kept.length) {
+        blocks.pop();
+    } else {
+        // Keep a trailing blank so join leaves space before the list title heading.
+        prev.text = `${kept.join('\n')}\n`;
+        prev.end = (Number(prev.start) || 0) + kept.length;
+    }
+
+    return {
+        title: heading.title,
+        titleLevel: heading.level,
+        titleLine,
+    };
+}
+
+/**
  * Split markdown into prose chunks and detectable plain lists (ul/ol/task).
  * Fenced code is kept inside prose so list-looking lines in code are ignored.
+ * A heading on the line(s) immediately above a list becomes that list's title.
  * @param {string} markdown
  * @returns {Array<object>}
  */
@@ -385,6 +458,12 @@ export function splitMarkdownBlocks(markdown) {
         const list = parsePlainListAt(lines, i);
         if (list) {
             flushProse(i);
+            const peeled = peelTrailingListTitle(blocks);
+            if (peeled) {
+                list.title = peeled.title;
+                list.titleLevel = peeled.titleLevel;
+                list.titleLine = peeled.titleLine;
+            }
             blocks.push(list);
             i = list.end;
             proseStart = i;
@@ -401,6 +480,7 @@ export function splitMarkdownBlocks(markdown) {
 /**
  * Serialize a plain list block back to markdown lines.
  * Per-item markers are preserved; ordered numbers restart per depth among siblings.
+ * When the list has a peeled heading title, emit that ATX heading above the items.
  * @param {object} block
  * @returns {string}
  */
@@ -442,7 +522,12 @@ export function serializePlainList(block) {
             .join('\n');
         return cont ? `${head}\n${cont}` : head;
     });
-    return lines.join('\n');
+    const body = lines.join('\n');
+    const title = String(block?.title || '').trim();
+    if (!title) return body;
+    const level = Math.max(1, Math.min(6, Number(block.titleLevel) || 2));
+    const heading = `${'#'.repeat(level)} ${title}`;
+    return body ? `${heading}\n\n${body}` : heading;
 }
 
 /**

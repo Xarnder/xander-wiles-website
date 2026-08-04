@@ -2989,9 +2989,36 @@ html[data-theme="light"] .autosave-bar-fill {
 }
 
 .mdlist-title-row {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
     gap: 8px;
+    column-gap: 10px;
+}
+
+@media (max-width: 420px) {
+    .mdlist-title-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "title title"
+            "count actions";
+    }
+
+    .mdlist-title-row > .mdplain-title,
+    .mdlist-title-row > .mdlist-title,
+    .mdlist-title-row > .mdlist-title-input {
+        grid-area: title;
+    }
+
+    .mdlist-title-row > .mdlist-count {
+        grid-area: count;
+        justify-self: start;
+    }
+
+    .mdlist-title-row > .mdlist-header-actions,
+    .mdlist-title-row > .btn {
+        grid-area: actions;
+    }
 }
 
 .mdlist-header-actions {
@@ -2999,6 +3026,8 @@ html[data-theme="light"] .autosave-bar-fill {
     align-items: center;
     gap: 4px;
     flex: 0 0 auto;
+    justify-self: end;
+    align-self: center;
 }
 
 .mdlist-title-row .btn {
@@ -3007,11 +3036,14 @@ html[data-theme="light"] .autosave-bar-fill {
     min-height: 32px;
     padding: 0.25rem 0.7rem;
     white-space: nowrap;
+    justify-self: end;
+    align-self: center;
 }
 
 .mdlist-title-input {
-    flex: 1;
     min-width: 0;
+    width: 100%;
+    max-width: 100%;
     min-height: 44px;
     border-radius: 10px;
     border: 1px solid var(--border);
@@ -3028,6 +3060,9 @@ html[data-theme="light"] .autosave-bar-fill {
     color: var(--text-muted);
     font-size: 0.8rem;
     font-weight: 600;
+    white-space: nowrap;
+    align-self: center;
+    justify-self: end;
 }
 
 .mdlist-filter {
@@ -3055,12 +3090,13 @@ html[data-theme="light"] .autosave-bar-fill {
 
 .mdlist-title {
     margin: 0;
-    flex: 1;
     min-width: 0;
+    max-width: 100%;
     font-size: 1.1rem;
     font-weight: 700;
     line-height: 1.3;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .mdlist-edit-btn,
@@ -3546,12 +3582,14 @@ html[data-theme="light"] .autosave-bar-fill {
 
 .mdplain-title {
     margin: 0;
-    flex: 1;
     min-width: 0;
+    max-width: 100%;
     font-size: 0.95rem;
     font-weight: 700;
     line-height: 1.3;
     color: var(--ok);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .mdplain-hint {
@@ -3566,6 +3604,12 @@ html[data-theme="light"] .autosave-bar-fill {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.mdplain-view-items--ordered {
+    /* Numbers are rendered as inline markers (flex kills native ol markers). */
+    padding-left: 0;
+    list-style: none;
 }
 
 .mdplain-view-items--task {
@@ -3588,6 +3632,25 @@ html[data-theme="light"] .autosave-bar-fill {
 }
 
 .mdplain-view-item-main {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45em;
+}
+
+.mdplain-view-num {
+    flex: 0 0 auto;
+    min-width: 1.35em;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1.45;
+    user-select: none;
+}
+
+.mdplain-view-item-main > .mdplain-view-text,
+.mdplain-view-item-main > .mdplain-task-label {
+    flex: 1 1 auto;
     min-width: 0;
 }
 
@@ -4130,12 +4193,27 @@ html[data-theme="light"] .md-preview pre.md-code code {
     padding-left: 1.4em;
 }
 
+.md-preview ol {
+    list-style: decimal;
+}
+
+.md-preview ul {
+    list-style: disc;
+}
+
 .md-preview li > ul,
 .md-preview li > ol,
 .md-preview .md-preview-nest {
     margin: 0.45em 0 0.35em;
     padding-left: 0;
     list-style: none;
+}
+
+/* Nested ordered lists keep numbers (depth chips are for bullets only). */
+.md-preview li > ol,
+.md-preview ol.md-preview-nest {
+    list-style: decimal;
+    padding-left: 1.5em;
 }
 
 .md-preview li {
@@ -4146,6 +4224,15 @@ html[data-theme="light"] .md-preview pre.md-code code {
 .md-preview li.md-li-nested {
     color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
     list-style: none;
+}
+
+.md-preview ol > li.md-li-nested {
+    list-style: decimal;
+}
+
+.md-preview ol > li.md-li-nested::before {
+    content: none;
+    display: none;
 }
 
 .md-preview li.md-li-depth-2 {
@@ -4244,6 +4331,11 @@ html[data-list-layout="segmented"] .md-preview .md-preview-nest > li {
     border-radius: 7px;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
     list-style: none;
+}
+
+html[data-list-layout="segmented"] .md-preview ol.md-preview-nest > li {
+    list-style: decimal;
+    list-style-position: inside;
 }
 
 html[data-list-layout="segmented"] .md-preview li.md-li-depth-1,
