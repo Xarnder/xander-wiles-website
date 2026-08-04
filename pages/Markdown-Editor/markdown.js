@@ -193,6 +193,9 @@ function withSourceLine(html, lineNum) {
 
 const PLAIN_LIST_ITEM_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
+/** Max nesting depth for plain markdown lists (0 = top-level). */
+export const PLAIN_LIST_MAX_DEPTH = 4;
+
 function plainListId(prefix = 'pli') {
     try {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -205,11 +208,73 @@ function plainListId(prefix = 'pli') {
 }
 
 function isOrderedListMarker(marker) {
-    return /^\d+[.)]$/.test(marker);
+    return /^\d+[.)]$/.test(String(marker || ''));
+}
+
+/**
+ * Expand tabs (width 4) and count leading spaces in an indent string.
+ * @param {string} indent
+ * @returns {number}
+ */
+export function plainListIndentWidth(indent) {
+    const raw = String(indent ?? '');
+    let width = 0;
+    for (const ch of raw) {
+        if (ch === '\t') width += 4;
+        else if (ch === ' ') width += 1;
+        else break;
+    }
+    return width;
+}
+
+/**
+ * @param {string} indent
+ * @returns {number} 0…PLAIN_LIST_MAX_DEPTH
+ */
+export function plainListDepthFromIndent(indent) {
+    const depth = Math.floor(plainListIndentWidth(indent) / 2);
+    return Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, depth));
+}
+
+/**
+ * @param {number} depth
+ * @returns {string}
+ */
+export function plainListIndentForDepth(depth) {
+    const d = Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, Number(depth) || 0));
+    return '  '.repeat(d);
+}
+
+/**
+ * Write a canonical 2-space indent onto a plain-list item.
+ * @param {{ indent?: string }} item
+ * @param {number} depth
+ */
+export function setPlainListItemDepth(item, depth) {
+    if (!item || typeof item !== 'object') return;
+    item.indent = plainListIndentForDepth(depth);
+}
+
+/**
+ * Index after `parentIndex` and any contiguous deeper descendants.
+ * @param {Array<{ indent?: string }>} items
+ * @param {number} parentIndex
+ * @returns {number}
+ */
+export function plainListInsertIndexAfterSubtree(items, parentIndex) {
+    const list = items || [];
+    if (parentIndex < 0 || parentIndex >= list.length) return list.length;
+    const parentDepth = plainListDepthFromIndent(list[parentIndex].indent);
+    let i = parentIndex + 1;
+    while (i < list.length && plainListDepthFromIndent(list[i].indent) > parentDepth) {
+        i += 1;
+    }
+    return i;
 }
 
 /**
  * Parse one plain markdown list starting at `start` (skips fenced code via caller).
+ * Nested items (any marker type) stay in the same block; indent is canonicalized.
  * @param {string[]} lines
  * @param {number} start
  */
@@ -233,9 +298,10 @@ function parsePlainListAt(lines, start) {
             }
             break;
         }
-        if (isOrderedListMarker(m[2]) !== ordered) break;
 
         const rest = m[3];
+        const depth = plainListDepthFromIndent(m[1]);
+        const indent = plainListIndentForDepth(depth);
         const task = rest.match(/^\[([ xX])\]\s+(.*)$/);
         if (task) {
             hasTask = true;
@@ -244,7 +310,7 @@ function parsePlainListAt(lines, start) {
                 text: task[2],
                 checked: task[1].toLowerCase() === 'x',
                 marker: m[2],
-                indent: m[1],
+                indent,
             });
         } else {
             items.push({
@@ -252,7 +318,7 @@ function parsePlainListAt(lines, start) {
                 text: rest,
                 checked: null,
                 marker: m[2],
-                indent: m[1],
+                indent,
             });
         }
         i += 1;
@@ -334,21 +400,33 @@ export function splitMarkdownBlocks(markdown) {
 
 /**
  * Serialize a plain list block back to markdown lines.
+ * Per-item markers are preserved; ordered numbers restart per depth among siblings.
  * @param {object} block
  * @returns {string}
  */
 export function serializePlainList(block) {
     const items = Array.isArray(block?.items) ? block.items : [];
-    const ordered = Boolean(block?.ordered);
-    const lines = items.map((item, index) => {
-        const indent = typeof item.indent === 'string' ? item.indent : '';
+    /** @type {Record<number, number>} */
+    const orderedCounters = {};
+    const lines = items.map((item) => {
+        const depth = plainListDepthFromIndent(item.indent);
+        const indent = plainListIndentForDepth(depth);
+        // Drop deeper counters when leaving a nest; reset this depth when switching marker kind.
+        for (const key of Object.keys(orderedCounters)) {
+            if (Number(key) > depth) delete orderedCounters[key];
+        }
+
+        const wantOrdered = isOrderedListMarker(item.marker);
         let marker;
-        if (ordered) {
+        if (wantOrdered) {
+            orderedCounters[depth] = (orderedCounters[depth] || 0) + 1;
             const close = String(item.marker || '1.').endsWith(')') ? ')' : '.';
-            marker = `${index + 1}${close}`;
+            marker = `${orderedCounters[depth]}${close}`;
         } else {
+            orderedCounters[depth] = 0;
             marker = item.marker && /^[-*+]$/.test(item.marker) ? item.marker : '-';
         }
+
         const textLines = String(item.text ?? '').split('\n');
         const first = textLines[0] ?? '';
         let head;
@@ -398,6 +476,93 @@ export function movePlainListItem(items, fromIndex, toIndex) {
     const [item] = next.splice(fromIndex, 1);
     next.splice(toIndex, 0, item);
     return next;
+}
+
+/**
+ * @param {{ task?: boolean, checked?: boolean, text?: string, depth?: number, children?: object[] }} node
+ * @param {{ showDates?: boolean }} inlineOpts
+ * @returns {string}
+ */
+function renderPreviewListItemHtml(node, inlineOpts) {
+    const depth = Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, Number(node.depth) || 0));
+    let body;
+    if (node.task) {
+        const checked = node.checked ? ' checked' : '';
+        body = `<label><input type="checkbox" disabled${checked}> <span>${renderInline(node.text || '', inlineOpts)}</span></label>`;
+    } else {
+        body = String(node.text || '')
+            .split('\n')
+            .map((part) => renderInline(part, inlineOpts))
+            .join('<br>\n');
+    }
+    const kids = renderPreviewListForest(node.children || [], inlineOpts, { nested: true });
+    const classes = [`md-li-depth-${depth}`];
+    if (node.task) classes.push('md-task');
+    if (depth > 0) classes.push('md-li-nested');
+    return `<li class="${classes.join(' ')}" data-depth="${depth}">${body}${kids}</li>`;
+}
+
+/**
+ * Render a forest of list nodes, grouping consecutive siblings by ordered/unordered.
+ * @param {Array<object>} nodes
+ * @param {{ showDates?: boolean }} inlineOpts
+ * @param {{ nested?: boolean }} [flags]
+ * @returns {string}
+ */
+function renderPreviewListForest(nodes, inlineOpts, flags = {}) {
+    if (!nodes?.length) return '';
+    const nested = Boolean(flags.nested);
+    let html = '';
+    let i = 0;
+    while (i < nodes.length) {
+        const ordered = Boolean(nodes[i].ordered);
+        const group = [];
+        while (i < nodes.length && Boolean(nodes[i].ordered) === ordered) {
+            group.push(nodes[i]);
+            i += 1;
+        }
+        const tag = ordered ? 'ol' : 'ul';
+        const classes = [];
+        if (nested) classes.push('md-preview-nest');
+        if (group.some((n) => n.task)) classes.push('md-task-list');
+        const cls = classes.length ? ` class="${classes.join(' ')}"` : '';
+        const depthAttr = nested
+            ? ` data-depth="${Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, Number(group[0]?.depth) || 1))}"`
+            : '';
+        html += `<${tag}${cls}${depthAttr}>`;
+        for (const node of group) {
+            html += renderPreviewListItemHtml(node, inlineOpts);
+        }
+        html += `</${tag}>`;
+    }
+    return html;
+}
+
+/**
+ * Build a nesting tree from flat list items with depth.
+ * @param {Array<{ depth: number, ordered: boolean, task: boolean, checked?: boolean, text: string }>} flat
+ * @returns {Array<object>}
+ */
+function buildPreviewListTree(flat) {
+    const root = { depth: -1, children: [] };
+    const stack = [root];
+    for (const item of flat) {
+        const depth = Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, Number(item.depth) || 0));
+        while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+            stack.pop();
+        }
+        const node = {
+            depth,
+            ordered: Boolean(item.ordered),
+            task: Boolean(item.task),
+            checked: item.checked,
+            text: item.text || '',
+            children: [],
+        };
+        stack[stack.length - 1].children.push(node);
+        stack.push(node);
+    }
+    return root.children;
 }
 
 /**
@@ -581,53 +746,47 @@ export function renderMarkdown(markdown, options = {}) {
             continue;
         }
 
-        // Lists (ul / ol / task)
-        const listMatch = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        // Lists (ul / ol / task) — nested by indent depth
+        const listMatch = line.match(PLAIN_LIST_ITEM_RE);
         if (listMatch) {
             flushParagraph();
             const startLine = lineNo;
-            const items = [];
-            let ordered = /^\d+[.)]/.test(listMatch[2]);
+            /** @type {Array<{ depth: number, ordered: boolean, task: boolean, checked?: boolean, text: string }>} */
+            const flat = [];
             while (i < lines.length) {
-                const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+                const m = lines[i].match(PLAIN_LIST_ITEM_RE);
                 if (!m) {
-                    if (items.length && /^\s{2,}\S/.test(lines[i]) && lines[i].trim()) {
-                        items[items.length - 1].text += `\n${lines[i].trim()}`;
+                    if (flat.length && /^\s{2,}\S/.test(lines[i]) && lines[i].trim()) {
+                        flat[flat.length - 1].text += `\n${lines[i].trim()}`;
                         i += 1;
                         continue;
                     }
                     break;
                 }
-                ordered = /^\d+[.)]/.test(m[2]);
                 const rest = m[3];
                 const task = rest.match(/^\[([ xX])\]\s+(.*)$/);
+                const depth = plainListDepthFromIndent(m[1]);
                 if (task) {
-                    items.push({
+                    flat.push({
+                        depth,
+                        ordered: isOrderedListMarker(m[2]),
                         task: true,
                         checked: task[1].toLowerCase() === 'x',
                         text: task[2],
                     });
                 } else {
-                    items.push({ task: false, text: rest });
+                    flat.push({
+                        depth,
+                        ordered: isOrderedListMarker(m[2]),
+                        task: false,
+                        text: rest,
+                    });
                 }
                 i += 1;
             }
-            const tag = ordered ? 'ol' : 'ul';
-            const cls = items.some((it) => it.task) ? ' class="md-task-list"' : '';
-            const lis = items
-                .map((it) => {
-                    if (it.task) {
-                        const checked = it.checked ? ' checked' : '';
-                        return `<li class="md-task"><label><input type="checkbox" disabled${checked}> <span>${renderInline(it.text, inlineOpts)}</span></label></li>`;
-                    }
-                    const html = it.text
-                        .split('\n')
-                        .map((part) => renderInline(part, inlineOpts))
-                        .join('<br>\n');
-                    return `<li>${html}</li>`;
-                })
-                .join('');
-            out.push(withSourceLine(`<${tag}${cls}>${lis}</${tag}>`, startLine));
+            const tree = buildPreviewListTree(flat);
+            const html = renderPreviewListForest(tree, inlineOpts);
+            if (html) out.push(withSourceLine(html, startLine));
             continue;
         }
 

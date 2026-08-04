@@ -3381,6 +3381,14 @@ function wireEvents() {
                 els.prefListLayoutSegmented.checked ? 'segmented' : 'continuous'
             );
             applyListLayout(layout);
+            if (
+                hasOpenFile() &&
+                (state.viewMode === 'list' ||
+                    state.viewMode === 'preview' ||
+                    state.viewMode === 'contents')
+            ) {
+                renderStructuredEditor();
+            }
             setStatus(
                 layout === 'segmented'
                     ? 'Segmented list containers on'

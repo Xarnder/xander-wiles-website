@@ -3573,13 +3573,126 @@ html[data-theme="light"] .autosave-bar-fill {
     padding-left: 0;
 }
 
+.mdplain-view-items--tree {
+    list-style: none;
+    padding-left: 0;
+}
+
 .mdplain-view-item {
     line-height: 1.45;
     overflow-wrap: anywhere;
     border-radius: 6px;
-    transition: background-color 0.15s ease, transform 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
     -webkit-touch-callout: none;
     touch-action: manipulation;
+}
+
+.mdplain-view-item-main {
+    min-width: 0;
+}
+
+/* Nest depth via colour (no horizontal indent — room is tight on phone). */
+.mdplain-view-item--nested,
+.mdplain-view-item[data-depth="1"],
+.mdplain-item--nested,
+.mdplain-item[data-depth="1"] {
+    color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+}
+
+.mdplain-view-item[data-depth="2"],
+.mdplain-item[data-depth="2"] {
+    color: color-mix(in srgb, var(--text) 55%, var(--text-muted));
+}
+
+.mdplain-view-item[data-depth="3"],
+.mdplain-item[data-depth="3"] {
+    color: color-mix(in srgb, var(--text) 42%, var(--text-muted));
+}
+
+.mdplain-view-item[data-depth="4"],
+.mdplain-item[data-depth="4"] {
+    color: var(--text-muted);
+}
+
+.mdplain-view-item--nested .mdplain-view-text,
+.mdplain-view-item--nested .mdplain-task-label,
+.mdplain-view-item[data-depth] .mdplain-view-text,
+.mdplain-view-item[data-depth] .mdplain-task-label {
+    color: inherit;
+}
+
+/* Segmented: nested items live inside the parent card as sub-containers.
+   Up to 5 shells: top-level card + depth levels 1–4. Darker = deeper. */
+html[data-list-layout="segmented"] {
+    --nest-shell-1: color-mix(in srgb, #000 18%, var(--bg-elevated, #1a2230));
+    --nest-shell-2: color-mix(in srgb, #000 32%, var(--bg-elevated, #1a2230));
+    --nest-shell-3: color-mix(in srgb, #000 46%, var(--bg-elevated, #1a2230));
+    --nest-shell-4: color-mix(in srgb, #000 58%, var(--bg-elevated, #1a2230));
+}
+
+html[data-theme="light"][data-list-layout="segmented"] {
+    --nest-shell-1: color-mix(in srgb, #000 6%, var(--list-stripe-uniform, #e8ecf2));
+    --nest-shell-2: color-mix(in srgb, #000 12%, var(--list-stripe-uniform, #e8ecf2));
+    --nest-shell-3: color-mix(in srgb, #000 18%, var(--list-stripe-uniform, #e8ecf2));
+    --nest-shell-4: color-mix(in srgb, #000 26%, var(--list-stripe-uniform, #e8ecf2));
+}
+
+html[data-theme="oled"][data-list-layout="segmented"] {
+    --nest-shell-1: #141414;
+    --nest-shell-2: #0f0f0f;
+    --nest-shell-3: #0a0a0a;
+    --nest-shell-4: #050505;
+}
+
+.mdplain-view-nest {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, #000 8%, transparent);
+}
+
+html[data-theme="light"] .mdplain-view-nest {
+    background: color-mix(in srgb, #000 4%, transparent);
+}
+
+html[data-list-layout="segmented"] .mdplain-view-nest > .mdplain-view-item {
+    margin: 0;
+    padding: 7px 9px;
+    border-radius: 7px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    box-shadow: none;
+}
+
+html[data-list-layout="segmented"] .mdplain-view-nest > .mdplain-view-item[data-depth="1"],
+html[data-list-layout="segmented"][data-list-stripe="normal"] .mdplain-view-nest > .mdplain-view-item[data-depth="1"],
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .mdplain-view-nest > .mdplain-view-item[data-depth="1"],
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .mdplain-view-nest > .mdplain-view-item[data-depth="1"] {
+    background: var(--nest-shell-1) !important;
+}
+
+html[data-list-layout="segmented"] .mdplain-view-nest > .mdplain-view-item[data-depth="2"],
+html[data-list-layout="segmented"][data-list-stripe="normal"] .mdplain-view-nest > .mdplain-view-item[data-depth="2"],
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .mdplain-view-nest > .mdplain-view-item[data-depth="2"],
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .mdplain-view-nest > .mdplain-view-item[data-depth="2"] {
+    background: var(--nest-shell-2) !important;
+}
+
+html[data-list-layout="segmented"] .mdplain-view-nest > .mdplain-view-item[data-depth="3"],
+html[data-list-layout="segmented"][data-list-stripe="normal"] .mdplain-view-nest > .mdplain-view-item[data-depth="3"],
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .mdplain-view-nest > .mdplain-view-item[data-depth="3"],
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .mdplain-view-nest > .mdplain-view-item[data-depth="3"] {
+    background: var(--nest-shell-3) !important;
+}
+
+html[data-list-layout="segmented"] .mdplain-view-nest > .mdplain-view-item[data-depth="4"],
+html[data-list-layout="segmented"][data-list-stripe="normal"] .mdplain-view-nest > .mdplain-view-item[data-depth="4"],
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .mdplain-view-nest > .mdplain-view-item[data-depth="4"],
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .mdplain-view-nest > .mdplain-view-item[data-depth="4"] {
+    background: var(--nest-shell-4) !important;
 }
 
 .mdplain-view-item.is-long-pressing {
@@ -3587,10 +3700,29 @@ html[data-theme="light"] .autosave-bar-fill {
     transform: scale(0.985);
 }
 
+/* Continuous: depth still shown via text colour */
+html[data-list-layout="continuous"] .mdplain-view-item--nested[data-depth="1"],
+html[data-list-layout="continuous"] .mdplain-item--nested[data-depth="1"] {
+    color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .mdplain-view-item--nested[data-depth="2"],
+html[data-list-layout="continuous"] .mdplain-item--nested[data-depth="2"] {
+    color: color-mix(in srgb, var(--text) 55%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .mdplain-view-item--nested[data-depth="3"],
+html[data-list-layout="continuous"] .mdplain-item--nested[data-depth="3"] {
+    color: color-mix(in srgb, var(--text) 42%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .mdplain-view-item--nested[data-depth="4"],
+html[data-list-layout="continuous"] .mdplain-item--nested[data-depth="4"] {
+    color: var(--text-muted);
+}
+
 .mdplain-view-item--mini-editing {
     list-style: none;
-    margin-left: -1.25rem;
-    padding-left: 0;
 }
 
 .mdplain-view-items--task .mdplain-view-item--mini-editing {
@@ -3606,6 +3738,45 @@ html[data-theme="light"] .autosave-bar-fill {
     border-radius: var(--radius);
     background: var(--bg-elevated);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.mdplain-mini-editor--nested {
+    border-color: color-mix(in srgb, var(--accent-border) 55%, var(--border));
+}
+
+.mdplain-mini-level {
+    align-self: flex-start;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    padding: 0 0.45rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    user-select: none;
+}
+
+.mdplain-mini-editor--nested .mdplain-mini-text {
+    color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+}
+
+.mdplain-mini-editor--nested[data-depth="2"] .mdplain-mini-text {
+    color: color-mix(in srgb, var(--text) 55%, var(--text-muted));
+}
+
+.mdplain-mini-editor--nested[data-depth="3"] .mdplain-mini-text {
+    color: color-mix(in srgb, var(--text) 42%, var(--text-muted));
+}
+
+.mdplain-mini-editor--nested[data-depth="4"] .mdplain-mini-text {
+    color: var(--text-muted);
 }
 
 .mdplain-mini-check {
@@ -3658,7 +3829,7 @@ html[data-theme="light"] .autosave-bar-fill {
 }
 
 .mdplain-view-text {
-    color: var(--text);
+    color: inherit;
 }
 
 .mdplain-task-label {
@@ -3959,8 +4130,148 @@ html[data-theme="light"] .md-preview pre.md-code code {
     padding-left: 1.4em;
 }
 
+.md-preview li > ul,
+.md-preview li > ol,
+.md-preview .md-preview-nest {
+    margin: 0.45em 0 0.35em;
+    padding-left: 0;
+    list-style: none;
+}
+
 .md-preview li {
     margin: 0.35em 0;
+}
+
+/* Depth cue in Preview (max 4): colour + level chip — not horizontal indent. */
+.md-preview li.md-li-nested {
+    color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+    list-style: none;
+}
+
+.md-preview li.md-li-depth-2 {
+    color: color-mix(in srgb, var(--text) 55%, var(--text-muted));
+}
+
+.md-preview li.md-li-depth-3 {
+    color: color-mix(in srgb, var(--text) 42%, var(--text-muted));
+}
+
+.md-preview li.md-li-depth-4 {
+    color: var(--text-muted);
+}
+
+html[data-list-layout="continuous"] .md-preview li.md-li-depth-1 {
+    color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .md-preview li.md-li-depth-2 {
+    color: color-mix(in srgb, var(--text) 55%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .md-preview li.md-li-depth-3 {
+    color: color-mix(in srgb, var(--text) 42%, var(--text-muted));
+}
+
+html[data-list-layout="continuous"] .md-preview li.md-li-depth-4 {
+    color: var(--text-muted);
+}
+
+.md-preview li.md-li-nested > :not(ul):not(ol) {
+    color: inherit;
+}
+
+.md-preview li.md-li-nested::before {
+    content: attr(data-depth);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35em;
+    height: 1.35em;
+    margin-right: 0.45em;
+    padding: 0 0.3em;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated, var(--bg));
+    color: var(--text-muted);
+    font-size: 0.72em;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    vertical-align: 0.15em;
+}
+
+.md-preview li.md-task.md-li-nested::before {
+    margin-top: 0.2em;
+    vertical-align: top;
+}
+
+.md-preview li.md-task.md-li-nested {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0;
+}
+
+.md-preview li.md-task.md-li-nested > label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.md-preview li.md-task.md-li-nested > .md-preview-nest {
+    flex: 1 1 100%;
+}
+
+/* Segmented Preview: each nest level is its own shell (up to 5: root + 1–4).
+   Darker background = deeper. Overrides zebra/spectrum so depth stays readable. */
+html[data-list-layout="segmented"] .md-preview .md-preview-nest {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, #000 8%, transparent);
+    list-style: none;
+}
+
+html[data-theme="light"][data-list-layout="segmented"] .md-preview .md-preview-nest {
+    background: color-mix(in srgb, #000 4%, transparent);
+}
+
+html[data-list-layout="segmented"] .md-preview .md-preview-nest > li {
+    margin: 0;
+    padding: 7px 9px;
+    border-radius: 7px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    list-style: none;
+}
+
+html[data-list-layout="segmented"] .md-preview li.md-li-depth-1,
+html[data-list-layout="segmented"][data-list-stripe="normal"] .md-preview li.md-li-depth-1,
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .md-preview li.md-li-depth-1,
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.md-li-depth-1 {
+    background: var(--nest-shell-1) !important;
+}
+
+html[data-list-layout="segmented"] .md-preview li.md-li-depth-2,
+html[data-list-layout="segmented"][data-list-stripe="normal"] .md-preview li.md-li-depth-2,
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .md-preview li.md-li-depth-2,
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.md-li-depth-2 {
+    background: var(--nest-shell-2) !important;
+}
+
+html[data-list-layout="segmented"] .md-preview li.md-li-depth-3,
+html[data-list-layout="segmented"][data-list-stripe="normal"] .md-preview li.md-li-depth-3,
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .md-preview li.md-li-depth-3,
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.md-li-depth-3 {
+    background: var(--nest-shell-3) !important;
+}
+
+html[data-list-layout="segmented"] .md-preview li.md-li-depth-4,
+html[data-list-layout="segmented"][data-list-stripe="normal"] .md-preview li.md-li-depth-4,
+html[data-list-layout="segmented"][data-list-stripe="zebra"] .md-preview li.md-li-depth-4,
+html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.md-li-depth-4 {
+    background: var(--nest-shell-4) !important;
 }
 
 .md-preview ul.md-task-list {
@@ -3968,8 +4279,16 @@ html[data-theme="light"] .md-preview pre.md-code code {
     padding-left: 0;
 }
 
+.md-preview li > ul.md-task-list {
+    padding-left: 0;
+}
+
 .md-preview li.md-task {
     display: block;
+}
+
+.md-preview li.md-task.md-li-nested {
+    display: flex;
 }
 
 .md-preview li.md-task label {

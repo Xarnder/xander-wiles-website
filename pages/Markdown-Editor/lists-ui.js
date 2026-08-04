@@ -28,8 +28,13 @@ import {
     extractMarkdownHeadings,
     joinMarkdownBlocks,
     movePlainListItem,
+    PLAIN_LIST_MAX_DEPTH,
+    plainListDepthFromIndent,
+    plainListIndentForDepth,
+    plainListInsertIndexAfterSubtree,
     renderInline,
     renderMarkdown,
+    setPlainListItemDepth,
     splitMarkdownBlocks,
 } from './markdown.js';
 import {
@@ -208,8 +213,18 @@ function createBlankPlainListItem(listBlock) {
         text: stampNewItemText(''),
         checked: listBlock.task ? false : null,
         marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
-        indent: sample?.indent || '',
+        indent: plainListIndentForDepth(plainListDepthFromIndent(sample?.indent || '')),
     };
+}
+
+/**
+ * Ensure a plain-list item has a `{{date:…}}` tag (same as new top-level items).
+ * Idempotent when a tag is already present.
+ * @param {{ text?: string }} item
+ */
+function ensurePlainItemDateTag(item) {
+    if (!item || typeof item !== 'object') return;
+    item.text = stampNewItemText(item.text || '');
 }
 
 function createListCopyButton({ label = 'Copy list', title = 'Copy list' } = {}) {
@@ -273,6 +288,11 @@ function attachDoubleTapCopy(el, getText, onStatus) {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (el.classList.contains('mdplain-view-item--mini-editing')) return;
         if (el.closest('.lists-root--click-edit, .lists-root--placing')) return;
+        // Nested tree: only the nearest item owns the double-tap.
+        if (event.target instanceof Element) {
+            const nearest = event.target.closest('.mdplain-view-item');
+            if (nearest && nearest !== el) return;
+        }
 
         const now = Date.now();
         const dt = now - lastTapAt;
@@ -1346,7 +1366,7 @@ function renderPlainListBlock({
                     text: stampNewItemText(''),
                     checked: listBlock.task ? false : null,
                     marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
-                    indent: sample?.indent || '',
+                    indent: plainListIndentForDepth(plainListDepthFromIndent(sample?.indent || '')),
                 });
             },
             opts: { focusPlainItemId: newId },
@@ -1510,6 +1530,9 @@ function renderPlainListReorderItems({ block, listIndex, seg, segIndex, doc, onC
         const li = document.createElement('li');
         li.className = 'mdlist-item mdlist-reorder-item mdplain-item';
         li.dataset.plainItemId = item.id;
+        const depth = plainListDepthFromIndent(item.indent);
+        li.dataset.depth = String(depth);
+        if (depth > 0) li.classList.add('mdplain-item--nested');
         li.setAttribute('role', 'listitem');
 
         const rank = document.createElement('span');
@@ -1563,6 +1586,7 @@ const PLAIN_LIST_LONG_PRESS_MOVE_PX = 10;
 
 /**
  * Long-press on an element; cancels if the pointer moves too far (scroll/drag).
+ * Ignores events that belong to a nested `.mdplain-view-item` (tree layout).
  * @param {HTMLElement} el
  * @param {(event: PointerEvent) => void} onLongPress
  */
@@ -1586,9 +1610,20 @@ function attachLongPress(el, onLongPress) {
         el.classList.remove('is-long-pressing');
     };
 
+    /** True when this `el` is the item that owns the event (not an ancestor). */
+    const isOwnerItem = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return true;
+        const nearest = target.closest('.mdplain-view-item');
+        return !nearest || nearest === el;
+    };
+
     el.addEventListener('pointerdown', (event) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (el.classList.contains('mdplain-view-item--mini-editing')) return;
+        if (!isOwnerItem(event)) return;
+        // Keep ancestor items from starting their own long-press on the same gesture.
+        event.stopPropagation();
         pressed = true;
         fired = false;
         startX = event.clientX;
@@ -1733,7 +1768,14 @@ function openPlainItemMiniEditor({
     const paintViewItem = (text, checked) => {
         li.classList.remove('mdplain-view-item--mini-editing');
         li.title = 'Long-press to edit this item';
+        const depth = plainListDepthFromIndent(item.indent);
+        li.dataset.depth = String(depth);
+        li.classList.toggle('mdplain-view-item--nested', depth > 0);
+        // Keep nested sublists; only replace the main label row.
+        const nest = li.querySelector(':scope > .mdplain-view-nest');
         li.replaceChildren();
+        const main = document.createElement('div');
+        main.className = 'mdplain-view-item-main';
         if (checked === true || checked === false) {
             const label = document.createElement('label');
             label.className = 'mdplain-task-label';
@@ -1744,13 +1786,15 @@ function openPlainItemMiniEditor({
             const span = document.createElement('span');
             fillListItemLabel(span, text);
             label.append(box, span);
-            li.appendChild(label);
+            main.appendChild(label);
         } else {
             const textEl = document.createElement('span');
             textEl.className = 'mdplain-view-text';
             fillListItemLabel(textEl, text);
-            li.appendChild(textEl);
+            main.appendChild(textEl);
         }
+        li.appendChild(main);
+        if (nest) li.appendChild(nest);
     };
 
     const finish = ({ commit = true, deleted = false, deferRefresh = false, abandon = false } = {}) => {
@@ -1818,10 +1862,16 @@ function openPlainItemMiniEditor({
 
     li.classList.add('mdplain-view-item--mini-editing');
     li.title = '';
+    const preservedNest = li.querySelector(':scope > .mdplain-view-nest');
     li.replaceChildren();
 
     const editor = document.createElement('div');
     editor.className = 'mdplain-mini-editor';
+    const miniDepth = plainListDepthFromIndent(item.indent);
+    if (miniDepth > 0) {
+        editor.classList.add('mdplain-mini-editor--nested');
+        editor.dataset.depth = String(miniDepth);
+    }
 
     let checkInput = null;
     if (isTask) {
@@ -1937,6 +1987,18 @@ function openPlainItemMiniEditor({
     const itemCount = (block.items || []).length;
     const atTop = itemIndex <= 0;
     const atBottom = itemIndex < 0 || itemIndex >= itemCount - 1;
+    const currentDepth = plainListDepthFromIndent(item.indent);
+    const canAddNested = currentDepth < PLAIN_LIST_MAX_DEPTH;
+    const canIndent = currentDepth < PLAIN_LIST_MAX_DEPTH;
+    const canOutdent = currentDepth > 1;
+
+    const commitCurrentFields = (target, listBlock) => {
+        target.text = commitMiniEditListItemText(snapshot.text, textInput.value);
+        if (checkInput) {
+            target.checked = checkInput.checked;
+            listBlock.task = true;
+        }
+    };
 
     const moveToEdge = (edge) => {
         if (closed) return;
@@ -1958,15 +2020,79 @@ function openPlainItemMiniEditor({
                 const idx = (listBlock.items || []).findIndex((it) => it.id === item.id);
                 if (idx < 0) return;
                 const target = listBlock.items[idx];
-                target.text = commitMiniEditListItemText(snapshot.text, textInput.value);
-                if (checkInput) {
-                    target.checked = checkInput.checked;
-                    listBlock.task = true;
-                }
+                commitCurrentFields(target, listBlock);
                 const toIndex = edge === 'top' ? 0 : listBlock.items.length - 1;
                 listBlock.items = movePlainListItem(listBlock.items, idx, toIndex);
             },
             opts: { stayInView: true, openMiniPlainItemId: item.id },
+        });
+    };
+
+    const changeDepth = (nextDepth) => {
+        if (closed) return;
+        // Outdent floor is 1; Indent may raise a top-level item to depth 1+.
+        const depth = Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, nextDepth));
+        if (depth < 1 && currentDepth >= 1) return; // never promote nested → top via Outdent
+        if (depth === currentDepth) return;
+
+        closed = true;
+        if (closeActivePlainMiniEditor === closeFn) closeActivePlainMiniEditor = null;
+        cleanupOutside();
+
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const idx = (listBlock.items || []).findIndex((it) => it.id === item.id);
+                if (idx < 0) return;
+                const target = listBlock.items[idx];
+                commitCurrentFields(target, listBlock);
+                setPlainListItemDepth(target, depth);
+                // Nesting via Indent should carry the same date-tag behavior as new items.
+                if (depth > currentDepth) ensurePlainItemDateTag(target);
+            },
+            opts: { stayInView: true, openMiniPlainItemId: item.id },
+        });
+    };
+
+    const addNestedItem = () => {
+        if (closed || !canAddNested) return;
+        const childDepth = Math.min(currentDepth + 1, PLAIN_LIST_MAX_DEPTH);
+        const newId = createId('pli');
+
+        closed = true;
+        if (closeActivePlainMiniEditor === closeFn) closeActivePlainMiniEditor = null;
+        cleanupOutside();
+
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const idx = (listBlock.items || []).findIndex((it) => it.id === item.id);
+                if (idx < 0) return;
+                const target = listBlock.items[idx];
+                commitCurrentFields(target, listBlock);
+                const insertAt = plainListInsertIndexAfterSubtree(listBlock.items, idx);
+                const child = {
+                    id: newId,
+                    text: stampNewItemText(''),
+                    checked:
+                        listBlock.task || target.checked === true || target.checked === false
+                            ? false
+                            : null,
+                    marker: target.marker && /^[-*+]$/.test(target.marker) ? target.marker : '-',
+                    indent: plainListIndentForDepth(childDepth),
+                };
+                ensurePlainItemDateTag(child);
+                listBlock.items.splice(insertAt, 0, child);
+            },
+            opts: { stayInView: true, openMiniPlainItemId: newId },
         });
     };
 
@@ -1990,6 +2116,42 @@ function openPlainItemMiniEditor({
     toBottomBtn.addEventListener('mousedown', (event) => event.preventDefault());
     toBottomBtn.addEventListener('click', () => moveToEdge('bottom'));
 
+    const addNestedBtn = document.createElement('button');
+    addNestedBtn.type = 'button';
+    addNestedBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
+    addNestedBtn.textContent = 'Add nested';
+    addNestedBtn.setAttribute('aria-label', 'Add a nested list item under this one');
+    addNestedBtn.title = currentDepth >= PLAIN_LIST_MAX_DEPTH
+        ? 'Already at max nest depth'
+        : 'Add nested item';
+    addNestedBtn.disabled = !canAddNested;
+    addNestedBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    addNestedBtn.addEventListener('click', () => addNestedItem());
+
+    const indentBtn = document.createElement('button');
+    indentBtn.type = 'button';
+    indentBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
+    indentBtn.textContent = 'Indent';
+    indentBtn.setAttribute('aria-label', 'Indent item one level');
+    indentBtn.title = canIndent ? 'Indent one level' : 'Already at max nest depth';
+    indentBtn.disabled = !canIndent;
+    indentBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    indentBtn.addEventListener('click', () => changeDepth(currentDepth + 1));
+
+    const outdentBtn = document.createElement('button');
+    outdentBtn.type = 'button';
+    outdentBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
+    outdentBtn.textContent = 'Outdent';
+    outdentBtn.setAttribute('aria-label', 'Outdent item one level');
+    outdentBtn.title = currentDepth <= 1
+        ? currentDepth === 0
+            ? 'Top-level items cannot outdent'
+            : 'Already at minimum nest depth'
+        : 'Outdent one level';
+    outdentBtn.disabled = !canOutdent;
+    outdentBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    outdentBtn.addEventListener('click', () => changeDepth(currentDepth - 1));
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn-ghost btn-small';
@@ -2008,7 +2170,23 @@ function openPlainItemMiniEditor({
     doneBtn.addEventListener('mousedown', (event) => event.preventDefault());
     doneBtn.addEventListener('click', () => finish({ commit: true }));
 
-    actions.append(copyBtn, toTopBtn, toBottomBtn, delBtn, doneBtn);
+    const actionBtns = [copyBtn, addNestedBtn, indentBtn, outdentBtn];
+    // Nested items stay under their parent — list-edge moves don’t apply.
+    if (currentDepth === 0) {
+        actionBtns.push(toTopBtn, toBottomBtn);
+    }
+    actionBtns.push(delBtn, doneBtn);
+    actions.append(...actionBtns);
+
+    if (currentDepth > 0) {
+        const levelBadge = document.createElement('div');
+        levelBadge.className = 'mdplain-mini-level';
+        levelBadge.textContent = String(currentDepth);
+        levelBadge.title = `Indent level ${currentDepth} of ${PLAIN_LIST_MAX_DEPTH}`;
+        levelBadge.setAttribute('aria-label', `Indent level ${currentDepth}`);
+        editor.insertBefore(levelBadge, editor.firstChild);
+    }
+
     editor.appendChild(textInput);
     if (dateMeta) {
         syncDateMeta();
@@ -2016,10 +2194,24 @@ function openPlainItemMiniEditor({
     }
     editor.appendChild(actions);
     li.appendChild(editor);
+    if (preservedNest) li.appendChild(preservedNest);
 
     function onOutsidePointerDown(event) {
-        if (li.contains(/** @type {Node} */ (event.target))) return;
-        if (event.target instanceof Element && event.target.closest('dialog')) return;
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        // Clicks inside this item (including its mini editor) stay here.
+        if (li.contains(target)) return;
+        if (target instanceof Element && target.closest('dialog')) return;
+        // Another nested item under the same parent — let that item take over;
+        // don't treat it as a blur that then races with its long-press.
+        if (
+            target instanceof Element &&
+            target.closest('.mdplain-view-item') &&
+            target.closest('.mdplain-view-items')
+        ) {
+            finish({ commit: true, deferRefresh: true });
+            return;
+        }
         finish({ commit: true });
     }
 
@@ -2047,6 +2239,101 @@ function openPlainItemMiniEditor({
 }
 
 /**
+ * Build a depth tree from flat plain-list items.
+ * @param {Array<object>} items
+ * @returns {Array<{ item: object, depth: number, children: Array<object> }>}
+ */
+function buildPlainItemTree(items) {
+    const root = { depth: -1, children: [], item: null };
+    const stack = [root];
+    for (const item of items || []) {
+        const depth = plainListDepthFromIndent(item.indent);
+        while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+            stack.pop();
+        }
+        const node = { item, depth, children: [] };
+        stack[stack.length - 1].children.push(node);
+        stack.push(node);
+    }
+    return root.children;
+}
+
+function isSegmentedListLayout() {
+    return document.documentElement.getAttribute('data-list-layout') !== 'continuous';
+}
+
+/**
+ * @param {object} item
+ * @param {object} block
+ * @param {HTMLElement} host
+ */
+function appendPlainViewItemBody(host, item, block) {
+    if (item.checked === true || item.checked === false) {
+        const label = document.createElement('label');
+        label.className = 'mdplain-task-label';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.disabled = true;
+        box.checked = Boolean(item.checked);
+        const span = document.createElement('span');
+        fillListItemLabel(span, item.text);
+        label.append(box, span);
+        host.appendChild(label);
+    } else {
+        const text = document.createElement('span');
+        text.className = 'mdplain-view-text';
+        fillListItemLabel(text, item.text);
+        host.appendChild(text);
+    }
+}
+
+/**
+ * @param {{ item: object, depth: number, children: Array<object> }} node
+ * @param {object} block
+ * @param {{ onItemLongPress?: Function, onStatus?: Function }} options
+ * @param {{ nestChildren?: boolean }} [flags]
+ */
+function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
+    const { onItemLongPress, onStatus } = options;
+    const nestChildren = Boolean(flags.nestChildren);
+    const item = node.item;
+    const li = document.createElement('li');
+    li.className = 'mdplain-view-item';
+    li.dataset.plainItemId = item.id;
+    li.dataset.depth = String(node.depth);
+    if (node.depth > 0) li.classList.add('mdplain-view-item--nested');
+    li.setAttribute('role', 'listitem');
+
+    if (typeof onItemLongPress === 'function') {
+        li.title = 'Long-press to edit this item · Double-tap to copy';
+        attachLongPress(li, () => onItemLongPress(item, li));
+    } else {
+        li.title = 'Double-tap to copy';
+    }
+    attachDoubleTapCopy(li, () => formatPlainItemClipboard(item, block), onStatus);
+
+    const main = document.createElement('div');
+    main.className = 'mdplain-view-item-main';
+    appendPlainViewItemBody(main, item, block);
+    li.appendChild(main);
+
+    if (nestChildren && node.children.length) {
+        const nest = document.createElement('ul');
+        nest.className = 'mdplain-view-nest';
+        nest.dataset.depth = String(node.depth + 1);
+        nest.setAttribute('role', 'list');
+        for (const child of node.children) {
+            nest.appendChild(
+                renderPlainViewItemNode(child, block, options, { nestChildren: true })
+            );
+        }
+        li.appendChild(nest);
+    }
+
+    return li;
+}
+
+/**
  * @param {object} block
  * @param {{ onItemLongPress?: (item: object, li: HTMLElement) => void, onStatus?: Function }} [options]
  */
@@ -2068,10 +2355,26 @@ function renderPlainListViewItems(block, options = {}) {
         return listEl;
     }
 
+    const segmented = isSegmentedListLayout();
+    if (segmented) {
+        listEl.classList.add('mdplain-view-items--tree');
+        const tree = buildPlainItemTree(items);
+        for (const node of tree) {
+            listEl.appendChild(
+                renderPlainViewItemNode(node, block, options, { nestChildren: true })
+            );
+        }
+        return listEl;
+    }
+
+    // Continuous: flat list — nest depth is shown via text colour, not padding.
     for (const item of items) {
         const li = document.createElement('li');
         li.className = 'mdplain-view-item';
         li.dataset.plainItemId = item.id;
+        const depth = plainListDepthFromIndent(item.indent);
+        li.dataset.depth = String(depth);
+        if (depth > 0) li.classList.add('mdplain-view-item--nested');
         li.setAttribute('role', 'listitem');
         if (typeof onItemLongPress === 'function') {
             li.title = 'Long-press to edit this item · Double-tap to copy';
@@ -2081,23 +2384,10 @@ function renderPlainListViewItems(block, options = {}) {
         }
         attachDoubleTapCopy(li, () => formatPlainItemClipboard(item, block), onStatus);
 
-        if (item.checked === true || item.checked === false) {
-            const label = document.createElement('label');
-            label.className = 'mdplain-task-label';
-            const box = document.createElement('input');
-            box.type = 'checkbox';
-            box.disabled = true;
-            box.checked = Boolean(item.checked);
-            const span = document.createElement('span');
-            fillListItemLabel(span, item.text);
-            label.append(box, span);
-            li.appendChild(label);
-        } else {
-            const text = document.createElement('span');
-            text.className = 'mdplain-view-text';
-            fillListItemLabel(text, item.text);
-            li.appendChild(text);
-        }
+        const main = document.createElement('div');
+        main.className = 'mdplain-view-item-main';
+        appendPlainViewItemBody(main, item, block);
+        li.appendChild(main);
         listEl.appendChild(li);
     }
 
@@ -2108,6 +2398,9 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     const li = document.createElement('li');
     li.className = 'mdlist-item mdplain-item';
     li.dataset.plainItemId = item.id;
+    const depth = plainListDepthFromIndent(item.indent);
+    li.dataset.depth = String(depth);
+    if (depth > 0) li.classList.add('mdplain-item--nested');
     li.setAttribute('role', 'listitem');
 
     const rank = document.createElement('span');
@@ -2200,7 +2493,7 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
                     text: stampNewItemText(''),
                     checked: listBlock.task ? false : null,
                     marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
-                    indent: sample?.indent || '',
+                    indent: plainListIndentForDepth(plainListDepthFromIndent(sample?.indent || '')),
                 };
                 const at = from >= 0 ? from + 1 : listBlock.items.length;
                 listBlock.items.splice(at, 0, nextItem);

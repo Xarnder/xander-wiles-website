@@ -3912,7 +3912,8 @@ export function openBoardReorderModal() {
         boardReorderSortableInstance = new Sortable(container, {
             disabled: false,
             animation: 150,
-            handle: '.board-reorder-handle, .board-reorder-title-text',
+            // Drag only from the handle so the rest of the row can scroll on touch
+            handle: '.board-reorder-handle',
             draggable: '.board-reorder-item',
             filter: '.board-reorder-move-btn',
             preventOnFilter: true,
