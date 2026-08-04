@@ -683,14 +683,22 @@
                     grid.innerHTML = ''; // Clear spinner
 
                     // Only show first 12 on home page to keep it clean
-                    const LINK_ICON = '/assets/SVGs/link.svg';
+                    const isImageIcon = (icon) =>
+                        icon.startsWith('/') || icon.startsWith('http') ||
+                        /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
+
                     playlists.slice(0, 12).forEach(p => {
                         const card = document.createElement('a');
                         card.href = `/pages/Music_Playlists/?id=${p.id}`;
                         card.className = 'page-card glass-card';
 
+                        const icon = p.icon || '🎵';
+                        const iconHtml = isImageIcon(icon)
+                            ? `<img src="${icon}" class="page-icon" alt="" loading="lazy">`
+                            : `<span class="page-icon page-icon-emoji" aria-hidden="true">${icon}</span>`;
+
                         card.innerHTML = `
-                            <img src="${LINK_ICON}" class="page-icon page-icon-link" alt="" loading="lazy">
+                            ${iconHtml}
                             <h3 class="playlist-card-title">Loading...</h3>
                             <p>${p.description}</p>
                         `;

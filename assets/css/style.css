@@ -852,6 +852,14 @@ svg.nav-item-icon {
     grid-row: 1 / -1;
 }
 
+.page-icon-emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
 .support-links-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
