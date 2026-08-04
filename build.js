@@ -17,6 +17,7 @@ const journalSrc = path.join(rootDir, 'pages', 'journal');
 const zImageSrc = path.join(rootDir, 'pages', 'z-image-turbo-sveltekit');
 const fighterJetSrc = path.join(rootDir, 'pages', 'Fighter-Jet');
 const teleprompterSrc = path.join(rootDir, 'pages', 'Teleprompter');
+const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -69,6 +70,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Teleprompter') ||
                 rel.startsWith(path.join('pages', 'Teleprompter') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Tax-Helper') ||
+                rel.startsWith(path.join('pages', 'Tax-Helper') + path.sep)
             ) {
                 return false;
             }
@@ -196,12 +203,44 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
     }
 }
 
+// 8. Build and Inject Tax-Helper (SvelteKit)
+console.log('Building Tax-Helper App...');
+try {
+    process.chdir(taxHelperSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build Tax-Helper:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Tax-Helper build...');
+const taxHelperDest = path.join(deployOut, 'pages', 'Tax-Helper');
+fs.mkdirSync(taxHelperDest, { recursive: true });
+
+const taxHelperDist = path.join(taxHelperSrc, 'dist');
+if (fs.existsSync(taxHelperDist)) {
+    fs.cpSync(taxHelperDist, taxHelperDest, { recursive: true });
+} else {
+    console.error('Tax-Helper dist folder not found!');
+    process.exit(1);
+}
+
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(taxHelperSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(taxHelperDest, name));
+    }
+}
+
 const rootServeJson = path.join(rootDir, 'serve.json');
 if (fs.existsSync(rootServeJson)) {
     fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
 }
 
-// 8. Replace Environment Variables in Static Files
+// 9. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {
