@@ -18,6 +18,7 @@ const zImageSrc = path.join(rootDir, 'pages', 'z-image-turbo-sveltekit');
 const fighterJetSrc = path.join(rootDir, 'pages', 'Fighter-Jet');
 const teleprompterSrc = path.join(rootDir, 'pages', 'Teleprompter');
 const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
+const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -76,6 +77,19 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Tax-Helper') ||
                 rel.startsWith(path.join('pages', 'Tax-Helper') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Logo-Demo') ||
+                rel.startsWith(path.join('pages', 'Logo-Demo') + path.sep)
+            ) {
+                return false;
+            }
+            // Incomplete leftover folder (space in name) — never ship source/node_modules
+            if (
+                rel === path.join('pages', 'Logo Demo') ||
+                rel.startsWith(path.join('pages', 'Logo Demo') + path.sep)
             ) {
                 return false;
             }
@@ -235,12 +249,44 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
     }
 }
 
+// 9. Build and Inject Logo-Demo (Vite + Svelte)
+console.log('Building Logo-Demo App...');
+try {
+    process.chdir(logoDemoSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build Logo-Demo:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Logo-Demo build...');
+const logoDemoDest = path.join(deployOut, 'pages', 'Logo-Demo');
+fs.mkdirSync(logoDemoDest, { recursive: true });
+
+const logoDemoDist = path.join(logoDemoSrc, 'dist');
+if (fs.existsSync(logoDemoDist)) {
+    fs.cpSync(logoDemoDist, logoDemoDest, { recursive: true });
+} else {
+    console.error('Logo-Demo dist folder not found!');
+    process.exit(1);
+}
+
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(logoDemoSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(logoDemoDest, name));
+    }
+}
+
 const rootServeJson = path.join(rootDir, 'serve.json');
 if (fs.existsSync(rootServeJson)) {
     fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
 }
 
-// 9. Replace Environment Variables in Static Files
+// 10. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

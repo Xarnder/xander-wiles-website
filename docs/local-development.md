@@ -14,7 +14,8 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 |------|----------|------------------------|
 | **Static page** | To-Do List, Countdown, Local-AI | Root `npm run dev` → open `/pages/<name>/` |
 | **Vite app** (React) | Journal, Teleprompter | `cd pages/<app>` → `npm run dev` |
-| **SvelteKit app** | Fighter-Jet, Z-Image Turbo | `cd pages/<app>` → `npm run dev` |
+| **Vite app** (Svelte) | Logo-Demo | `cd pages/<app>` → `npm run dev` |
+| **SvelteKit app** | Fighter-Jet, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
 | **Full site** (nav + built apps) | Homepage → Journal link, etc. | `npm run build` → `npm run preview` |
 
 Root `npm run dev` is **`npx serve .`** — it only serves files on disk. It does **not** compile TypeScript/JSX or run Vite. Opening a Vite app’s source `index.html` that way will look **blank** (browser tries to load `/src/main.tsx` and fails).
@@ -31,6 +32,7 @@ Bundled apps are **built in `build.js`** and copied into `deploy_out/pages/...`.
 | **To-Do List** | `pages/To-Do-List/` | `npm run dev` | `http://localhost:3000/pages/To-Do-List/` |
 | **Journal** | `pages/journal/` | `cd pages/journal && npm install && npm run dev` | `http://localhost:5173/pages/journal/` |
 | **Teleprompter** | `pages/Teleprompter/` | `cd pages/Teleprompter && npm install && npm run dev` | `http://localhost:5173/pages/Teleprompter/` |
+| **Logo Demo** | `pages/Logo-Demo/` | `cd pages/Logo-Demo && npm install && npm run dev` | `http://localhost:5173/pages/Logo-Demo/` |
 | **Fighter-Jet** | `pages/Fighter-Jet/` | `cd pages/Fighter-Jet && npm install && npm run dev` | Vite prints URL (often `http://localhost:5173/`) |
 | **Z-Image Turbo** | `pages/z-image-turbo-sveltekit/` | `cd pages/z-image-turbo-sveltekit && npm install && npm run dev` | Vite prints URL |
 
