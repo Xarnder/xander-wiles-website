@@ -151,6 +151,37 @@ export function formatDateTagLabel(tag) {
 }
 
 /**
+ * Local calendar `YYYY-MM-DD` for an `<input type="date">`, or null.
+ * @param {string | null | undefined} tag
+ * @returns {string | null}
+ */
+export function dateTagToIsoDate(tag) {
+    if (!tag) return null;
+    const match = dateTagRe().exec(String(tag));
+    if (!match) return null;
+    const parsed = parseSmartDate(match[1]);
+    if (!parsed?.date || Number.isNaN(parsed.date.getTime())) return null;
+    const d = parsed.date;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+/**
+ * Build a canonical tag from a `YYYY-MM-DD` string (local calendar day).
+ * @param {string} isoDate
+ * @returns {string | null}
+ */
+export function buildDateTagFromIsoDate(isoDate) {
+    const raw = String(isoDate ?? '').trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!m) return null;
+    const date = makeLocalDate(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return date ? buildDateTag(date) : null;
+}
+
+/**
  * Commit a mini-edit (or list-row edit): refresh the date tag to today only when
  * the visible item body actually changed. Accidental open/close keeps the old date.
  * @param {string} previousFullText

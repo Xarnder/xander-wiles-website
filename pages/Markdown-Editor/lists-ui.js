@@ -39,6 +39,7 @@ import {
     splitMarkdownBlocks,
 } from './markdown.js';
 import {
+    commitListItemText,
     commitMiniEditListItemText,
     extractDateTag,
     focusItemTextInput,
@@ -49,7 +50,7 @@ import {
     readShowDatesEnabled,
     stampNewItemText,
 } from './dates.js';
-import { confirmDeleteList, confirmDeleteListItem, showEditorToast } from './ui.js';
+import { confirmDeleteList, confirmDeleteListItem, promptEditItemDate, showEditorToast } from './ui.js';
 import {
     DOUBLE_TAP_COPY_DEFAULT,
     DOUBLE_TAP_COPY_KEY,
@@ -239,6 +240,23 @@ function createListCopyButton({ label = 'Copy list', title = 'Copy list' } = {})
     icon.setAttribute('aria-hidden', 'true');
     copyBtn.appendChild(icon);
     return copyBtn;
+}
+
+/**
+ * Compact icon-only control for the plain-list mini editor toolbar.
+ * @param {{ icon: string, label: string, title?: string }} options
+ */
+function createMiniIconButton({ icon, label, title = label }) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `mdplain-mini-icon-btn mdplain-mini-icon-btn--${icon}`;
+    btn.setAttribute('aria-label', label);
+    btn.title = title;
+    const iconEl = document.createElement('span');
+    iconEl.className = `mdplain-mini-icon-btn-icon mdplain-mini-icon-btn-icon--${icon}`;
+    iconEl.setAttribute('aria-hidden', 'true');
+    btn.appendChild(iconEl);
+    return btn;
 }
 
 /**
@@ -1686,6 +1704,110 @@ function attachLongPress(el, onLongPress) {
 }
 
 /**
+ * Long-press helper for compact chips/controls (e.g. mini-editor date).
+ * Mobile-safe: suppresses callouts/context menus and cancels on drag.
+ * @param {HTMLElement} el
+ * @param {(event: PointerEvent) => void} onLongPress
+ */
+function attachChipLongPress(el, onLongPress) {
+    let timer = null;
+    let startX = 0;
+    let startY = 0;
+    let pressed = false;
+    let fired = false;
+    /** @type {number | null} */
+    let activePointerId = null;
+
+    const clearTimer = () => {
+        if (timer != null) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    };
+
+    const endPress = () => {
+        clearTimer();
+        pressed = false;
+        activePointerId = null;
+        el.classList.remove('is-long-pressing');
+    };
+
+    el.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (el.hidden) return;
+        event.preventDefault();
+        event.stopPropagation();
+        pressed = true;
+        fired = false;
+        activePointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        el.classList.add('is-long-pressing');
+        try {
+            el.setPointerCapture(event.pointerId);
+        } catch {
+            // ignore
+        }
+        clearTimer();
+        timer = window.setTimeout(() => {
+            timer = null;
+            if (!pressed) return;
+            fired = true;
+            el.classList.remove('is-long-pressing');
+            try {
+                if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                    navigator.vibrate(12);
+                }
+            } catch {
+                // ignore
+            }
+            onLongPress(event);
+        }, PLAIN_LIST_LONG_PRESS_MS);
+    });
+
+    el.addEventListener('pointermove', (event) => {
+        if (!pressed || timer == null) return;
+        if (activePointerId != null && event.pointerId !== activePointerId) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        if (dx * dx + dy * dy > PLAIN_LIST_LONG_PRESS_MOVE_PX * PLAIN_LIST_LONG_PRESS_MOVE_PX) {
+            endPress();
+        }
+    });
+
+    const release = (event) => {
+        if (activePointerId != null && event.pointerId !== activePointerId) return;
+        try {
+            if (el.hasPointerCapture?.(event.pointerId)) {
+                el.releasePointerCapture(event.pointerId);
+            }
+        } catch {
+            // ignore
+        }
+        endPress();
+    };
+
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('lostpointercapture', endPress);
+
+    el.addEventListener(
+        'click',
+        (event) => {
+            if (!fired) return;
+            event.preventDefault();
+            event.stopPropagation();
+            fired = false;
+        },
+        true
+    );
+
+    el.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+    });
+}
+
+/**
  * Inline markdown HTML for a list-item body (dates handled separately).
  * @param {string} bodyText
  * @returns {string}
@@ -1775,6 +1897,9 @@ function openPlainItemMiniEditor({
     };
 
     let closed = false;
+    /** When set, preserves an explicitly picked date for the rest of this edit. */
+    let lockedDateTag = null;
+
     const cleanupOutside = () => {
         document.removeEventListener('pointerdown', onOutsidePointerDown, true);
         document.removeEventListener('keydown', onDocKeyDown, true);
@@ -1842,7 +1967,9 @@ function openPlainItemMiniEditor({
             return;
         }
 
-        const nextText = commitMiniEditListItemText(snapshot.text, textInput.value);
+        const nextText = lockedDateTag
+            ? commitListItemText(textInput.value, lockedDateTag)
+            : commitMiniEditListItemText(snapshot.text, textInput.value);
         const nextChecked = checkInput
             ? checkInput.checked
             : snapshot.checked !== null
@@ -1924,26 +2051,75 @@ function openPlainItemMiniEditor({
         dateMeta = document.createElement('div');
         dateMeta.className = 'mdplain-mini-date';
         dateMeta.setAttribute('aria-live', 'polite');
+        dateMeta.setAttribute('role', 'button');
+        dateMeta.tabIndex = 0;
+        dateMeta.title = 'Long-press to change date';
+        dateMeta.setAttribute('aria-label', 'Item date. Long-press to change.');
     }
+
+    const commitEditorText = () => {
+        if (lockedDateTag) {
+            return commitListItemText(textInput.value, lockedDateTag);
+        }
+        return commitMiniEditListItemText(snapshot.text, textInput.value);
+    };
+
+    const currentDateTag = () =>
+        lockedDateTag || previewMiniEditDateTag(snapshot.text, textInput.value);
 
     const syncDateMeta = () => {
         if (!dateMeta) return;
-        const tag = previewMiniEditDateTag(snapshot.text, textInput.value);
+        const tag = currentDateTag();
         const label = formatDateTagLabel(tag);
         if (label) {
             dateMeta.hidden = false;
             dateMeta.textContent = label;
-            dateMeta.title = tag || '';
+            dateMeta.title = `${tag || ''}\nLong-press to change date`.trim();
+            dateMeta.setAttribute('aria-label', `Item date ${label}. Long-press to change.`);
         } else {
             dateMeta.hidden = true;
             dateMeta.textContent = '';
-            dateMeta.removeAttribute('title');
+            dateMeta.title = 'Long-press to change date';
+            dateMeta.setAttribute('aria-label', 'Item date. Long-press to change.');
         }
     };
 
+    const applyDateTag = (tag) => {
+        if (!tag || closed) return;
+        lockedDateTag = tag;
+        mutateItem((target) => {
+            target.text = commitListItemText(textInput.value, lockedDateTag);
+        }, { skipRender: true });
+        syncDateMeta();
+    };
+
+    const openDatePicker = async () => {
+        if (closed || !dateMeta || dateMeta.hidden) return;
+        const nextTag = await promptEditItemDate(currentDateTag());
+        if (closed) return;
+        if (nextTag) applyDateTag(nextTag);
+        try {
+            textInput.focus({ preventScroll: true });
+        } catch {
+            textInput.focus();
+        }
+    };
+
+    if (dateMeta) {
+        attachChipLongPress(dateMeta, () => {
+            openDatePicker();
+        });
+        dateMeta.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openDatePicker();
+            }
+        });
+    }
+
     textInput.addEventListener('input', () => {
         mutateItem((target) => {
-            target.text = commitMiniEditListItemText(snapshot.text, textInput.value);
+            target.text = commitEditorText();
         }, { skipRender: true });
         syncDateMeta();
         syncHeight();
@@ -1962,7 +2138,13 @@ function openPlainItemMiniEditor({
     });
 
     const actions = document.createElement('div');
-    actions.className = 'mdplain-mini-actions';
+    actions.className = 'mdplain-mini-toolbar';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'mdplain-mini-actions mdplain-mini-actions--top';
+
+    const toolsRow = document.createElement('div');
+    toolsRow.className = 'mdplain-mini-actions mdplain-mini-actions--tools';
 
     const copyBtn = createListCopyButton({
         label: 'Copy item',
@@ -1973,7 +2155,7 @@ function openPlainItemMiniEditor({
         const text = formatPlainItemClipboard(
             {
                 ...item,
-                text: commitMiniEditListItemText(snapshot.text, textInput.value),
+                text: commitEditorText(),
                 checked: checkInput
                     ? checkInput.checked
                     : item.checked === true || item.checked === false
@@ -1996,10 +2178,10 @@ function openPlainItemMiniEditor({
     const currentDepth = plainListDepthFromIndent(item.indent);
     const canAddNested = currentDepth < PLAIN_LIST_MAX_DEPTH;
     const canIndent = currentDepth < PLAIN_LIST_MAX_DEPTH;
-    const canOutdent = currentDepth > 1;
+    const canOutdent = currentDepth > 0;
 
     const commitCurrentFields = (target, listBlock) => {
-        target.text = commitMiniEditListItemText(snapshot.text, textInput.value);
+        target.text = commitEditorText();
         if (checkInput) {
             target.checked = checkInput.checked;
             listBlock.task = true;
@@ -2036,9 +2218,7 @@ function openPlainItemMiniEditor({
 
     const changeDepth = (nextDepth) => {
         if (closed) return;
-        // Outdent floor is 1; Indent may raise a top-level item to depth 1+.
         const depth = Math.max(0, Math.min(PLAIN_LIST_MAX_DEPTH, nextDepth));
-        if (depth < 1 && currentDepth >= 1) return; // never promote nested → top via Outdent
         if (depth === currentDepth) return;
 
         closed = true;
@@ -2102,66 +2282,60 @@ function openPlainItemMiniEditor({
         });
     };
 
-    const toTopBtn = document.createElement('button');
-    toTopBtn.type = 'button';
-    toTopBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
-    toTopBtn.textContent = 'To top';
-    toTopBtn.setAttribute('aria-label', 'Move item to top of list');
-    toTopBtn.title = 'Move to top';
+    const toTopBtn = createMiniIconButton({
+        icon: 'top',
+        label: 'Move item to top of list',
+        title: 'Move to top',
+    });
     toTopBtn.disabled = atTop;
     toTopBtn.addEventListener('mousedown', (event) => event.preventDefault());
     toTopBtn.addEventListener('click', () => moveToEdge('top'));
 
-    const toBottomBtn = document.createElement('button');
-    toBottomBtn.type = 'button';
-    toBottomBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
-    toBottomBtn.textContent = 'To bottom';
-    toBottomBtn.setAttribute('aria-label', 'Move item to bottom of list');
-    toBottomBtn.title = 'Move to bottom';
+    const toBottomBtn = createMiniIconButton({
+        icon: 'bottom',
+        label: 'Move item to bottom of list',
+        title: 'Move to bottom',
+    });
     toBottomBtn.disabled = atBottom;
     toBottomBtn.addEventListener('mousedown', (event) => event.preventDefault());
     toBottomBtn.addEventListener('click', () => moveToEdge('bottom'));
 
-    const addNestedBtn = document.createElement('button');
-    addNestedBtn.type = 'button';
-    addNestedBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
-    addNestedBtn.textContent = 'Add nested';
-    addNestedBtn.setAttribute('aria-label', 'Add a nested list item under this one');
-    addNestedBtn.title = currentDepth >= PLAIN_LIST_MAX_DEPTH
-        ? 'Already at max nest depth'
-        : 'Add nested item';
+    const addNestedBtn = createMiniIconButton({
+        icon: 'add',
+        label: 'Add a nested list item under this one',
+        title: currentDepth >= PLAIN_LIST_MAX_DEPTH
+            ? 'Already at max nest depth'
+            : 'Add nested item',
+    });
     addNestedBtn.disabled = !canAddNested;
     addNestedBtn.addEventListener('mousedown', (event) => event.preventDefault());
     addNestedBtn.addEventListener('click', () => addNestedItem());
 
-    const indentBtn = document.createElement('button');
-    indentBtn.type = 'button';
-    indentBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
-    indentBtn.textContent = 'Indent';
-    indentBtn.setAttribute('aria-label', 'Indent item one level');
-    indentBtn.title = canIndent ? 'Indent one level' : 'Already at max nest depth';
+    const indentBtn = createMiniIconButton({
+        icon: 'indent',
+        label: 'Indent item one level',
+        title: canIndent ? 'Indent one level' : 'Already at max nest depth',
+    });
     indentBtn.disabled = !canIndent;
     indentBtn.addEventListener('mousedown', (event) => event.preventDefault());
     indentBtn.addEventListener('click', () => changeDepth(currentDepth + 1));
 
-    const outdentBtn = document.createElement('button');
-    outdentBtn.type = 'button';
-    outdentBtn.className = 'btn btn-ghost btn-small mdplain-mini-move-btn';
-    outdentBtn.textContent = 'Outdent';
-    outdentBtn.setAttribute('aria-label', 'Outdent item one level');
-    outdentBtn.title = currentDepth <= 1
-        ? currentDepth === 0
-            ? 'Top-level items cannot outdent'
-            : 'Already at minimum nest depth'
-        : 'Outdent one level';
+    const outdentBtn = createMiniIconButton({
+        icon: 'outdent',
+        label: 'Outdent item one level',
+        title: currentDepth <= 0
+            ? 'Already at top level'
+            : 'Outdent one level',
+    });
     outdentBtn.disabled = !canOutdent;
     outdentBtn.addEventListener('mousedown', (event) => event.preventDefault());
     outdentBtn.addEventListener('click', () => changeDepth(currentDepth - 1));
 
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'btn btn-ghost btn-small';
-    delBtn.textContent = 'Delete';
+    const delBtn = createMiniIconButton({
+        icon: 'delete',
+        label: 'Delete item',
+        title: 'Delete item',
+    });
     delBtn.addEventListener('mousedown', (event) => event.preventDefault());
     delBtn.addEventListener('click', async () => {
         const ok = await confirmDeleteListItem(textInput.value || item.text);
@@ -2171,18 +2345,25 @@ function openPlainItemMiniEditor({
 
     const doneBtn = document.createElement('button');
     doneBtn.type = 'button';
-    doneBtn.className = 'btn btn-primary btn-small';
+    doneBtn.className = 'btn btn-primary btn-small mdplain-mini-done-btn';
     doneBtn.textContent = 'Done';
     doneBtn.addEventListener('mousedown', (event) => event.preventDefault());
     doneBtn.addEventListener('click', () => finish({ commit: true }));
 
-    const actionBtns = [copyBtn, addNestedBtn, indentBtn, outdentBtn];
+    if (dateMeta) {
+        syncDateMeta();
+        topRow.appendChild(dateMeta);
+    }
+    topRow.append(copyBtn, doneBtn);
+
+    const toolBtns = [addNestedBtn, indentBtn, outdentBtn];
     // Nested items stay under their parent — list-edge moves don’t apply.
     if (currentDepth === 0) {
-        actionBtns.push(toTopBtn, toBottomBtn);
+        toolBtns.push(toTopBtn, toBottomBtn);
     }
-    actionBtns.push(delBtn, doneBtn);
-    actions.append(...actionBtns);
+    toolBtns.push(delBtn);
+    toolsRow.append(...toolBtns);
+    actions.append(topRow, toolsRow);
 
     if (currentDepth > 0) {
         const levelBadge = document.createElement('div');
@@ -2194,10 +2375,6 @@ function openPlainItemMiniEditor({
     }
 
     editor.appendChild(textInput);
-    if (dateMeta) {
-        syncDateMeta();
-        editor.appendChild(dateMeta);
-    }
     editor.appendChild(actions);
     li.appendChild(editor);
     if (preservedNest) li.appendChild(preservedNest);

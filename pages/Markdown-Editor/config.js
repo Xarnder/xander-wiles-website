@@ -129,7 +129,7 @@ export const DOUBLE_TAP_COPY_DEFAULT = true;
  * '1' on, '0' off (default — tags stay in Raw only).
  */
 export const SHOW_DATES_KEY = 'md-editor:showDates';
-export const SHOW_DATES_DEFAULT = false;
+export const SHOW_DATES_DEFAULT = true;
 
 /**
  * Total top inset for Home Screen / PWA (px) — replaces iOS safe-area-inset-top.

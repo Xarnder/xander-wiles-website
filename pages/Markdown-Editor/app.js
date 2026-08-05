@@ -62,19 +62,24 @@ import {
     tryRestoreSession,
 } from './auth.js';
 import {
+    copyDriveFile,
     createFolder,
     createMarkdownFile,
+    findItemsByNameInFolder,
     getFileContent,
     getFileMetadata,
     isFolder,
+    isMarkdownCandidate,
     listChildFolders,
     listComputerRootFolders,
     listFolder,
     fetchVisiblePage,
     moveDriveItem,
+    normalizeMarkdownFileName,
     renameDriveItem,
     searchMarkdownFiles,
     sortDriveEntries,
+    suggestCopyFileName,
     updateFileContent,
 } from './drive.js';
 import {
@@ -2106,6 +2111,10 @@ async function handleItemMenu(file) {
         await handleRenameEntry(file);
         return;
     }
+    if (action === 'copy') {
+        await handleCopyEntry(file);
+        return;
+    }
     if (action === 'move') {
         await handleMoveEntry(file);
         return;
@@ -2126,6 +2135,10 @@ async function handlePinnedItemMenu(file) {
     if (action === 'rename') {
         await handleRenameEntry(file);
         renderPinnedView();
+        return;
+    }
+    if (action === 'copy') {
+        await handleCopyEntry(file);
         return;
     }
     if (action === 'move') {
@@ -2327,16 +2340,251 @@ async function handleDownloadEntry(file) {
     }
 }
 
+/**
+ * Collect sibling names in a folder (local list + Drive exact-name lookups as needed).
+ * @param {string} parentId
+ * @returns {Promise<string[]>}
+ */
+async function collectSiblingNames(parentId) {
+    const names = [];
+    const folder = currentFolder();
+    if (folder?.id && folder.id === parentId && Array.isArray(state.files)) {
+        for (const entry of state.files) {
+            if (entry?.name) names.push(entry.name);
+        }
+    }
+    return names;
+}
+
+/**
+ * True when another item in `parentId` already uses this name.
+ * @param {string} parentId
+ * @param {string} name
+ * @param {{ ignoreId?: string, isMarkdown?: boolean, localOnly?: boolean }} [options]
+ */
+async function nameConflictsInFolder(parentId, name, options = {}) {
+    const ignoreId = options.ignoreId || '';
+    const isMarkdown = Boolean(options.isMarkdown);
+    const localOnly = Boolean(options.localOnly);
+    const candidate = isMarkdown
+        ? normalizeMarkdownFileName(name)
+        : String(name || '').trim().toLowerCase();
+    if (!candidate) return { conflict: true, displayName: name };
+
+    // Fast path: current Finder listing
+    if (Array.isArray(state.files)) {
+        const folder = currentFolder();
+        if (folder?.id === parentId) {
+            for (const entry of state.files) {
+                if (!entry?.id || entry.id === ignoreId) continue;
+                const entryName = isMarkdown
+                    ? normalizeMarkdownFileName(entry.name || '')
+                    : String(entry.name || '').trim().toLowerCase();
+                if (entryName && entryName === candidate) {
+                    return { conflict: true, displayName: entry.name || name };
+                }
+            }
+        }
+    }
+
+    if (localOnly) return { conflict: false, displayName: name };
+
+    // Drive truth (catches unloaded pages / other clients)
+    const trimmed = String(name || '').trim();
+    const exactName = isMarkdown
+        ? trimmed.toLowerCase().endsWith('.md') || trimmed.toLowerCase().endsWith('.markdown')
+            ? trimmed
+            : `${trimmed}.md`
+        : trimmed;
+
+    try {
+        const matches = await findItemsByNameInFolder(parentId, exactName);
+        const hit = matches.find((item) => item.id && item.id !== ignoreId);
+        if (hit) return { conflict: true, displayName: hit.name || exactName };
+
+        // Markdown may be stored with/without checking alternate extension spelling
+        if (isMarkdown) {
+            const alt =
+                exactName.toLowerCase().endsWith('.markdown')
+                    ? `${exactName.slice(0, -9)}.md`
+                    : exactName.toLowerCase().endsWith('.md')
+                      ? `${exactName.slice(0, -3)}.markdown`
+                      : null;
+            if (alt && alt !== exactName) {
+                const altMatches = await findItemsByNameInFolder(parentId, alt);
+                const altHit = altMatches.find((item) => item.id && item.id !== ignoreId);
+                if (altHit) return { conflict: true, displayName: altHit.name || alt };
+            }
+        }
+    } catch {
+        // If lookup fails, still block when local list says conflict; otherwise allow.
+    }
+
+    return { conflict: false, displayName: exactName };
+}
+
+/**
+ * @param {string} parentId
+ * @param {{ ignoreId?: string, isMarkdown?: boolean }} [options]
+ * @returns {(rawName: string, opts?: { localOnly?: boolean }) => Promise<string | null>}
+ */
+function makeUniqueNameValidator(parentId, options = {}) {
+    const isMarkdown = Boolean(options.isMarkdown);
+    return async (rawName, opts = {}) => {
+        const trimmed = String(rawName || '').trim();
+        if (!trimmed) return 'Name cannot be empty.';
+        const result = await nameConflictsInFolder(parentId, trimmed, {
+            ...options,
+            localOnly: Boolean(opts.localOnly),
+        });
+        if (result.conflict) {
+            const kind = isMarkdown ? 'markdown file' : 'item';
+            return `A ${kind} named “${result.displayName}” already exists in this folder. Choose a different name.`;
+        }
+        return null;
+    };
+}
+
+async function handleCopyEntry(file) {
+    if (isFolder(file) || !isMarkdownCandidate(file)) return;
+
+    setStatus('Preparing copy…');
+    let parentId = normalizeParentId(file.parents);
+    let source = file;
+    try {
+        if (!parentId) {
+            const meta = await getFileMetadata(file.id);
+            source = { ...file, ...meta };
+            parentId = normalizeParentId(meta.parents);
+        }
+        if (!parentId) {
+            const folder = currentFolder();
+            if (folder?.id && folder.id !== COMPUTERS_ROOT?.id) parentId = folder.id;
+        }
+        if (!parentId) {
+            setStatus('Could not find a folder to place the copy', 'error');
+            return;
+        }
+
+        const localNames = await collectSiblingNames(parentId);
+        const suggested = suggestCopyFileName(source.name || 'Untitled.md', localNames);
+
+        // Ensure suggested name isn’t already taken on Drive either
+        let copyName = suggested;
+        {
+            let guard = 0;
+            while (guard < 50) {
+                const check = await nameConflictsInFolder(parentId, copyName, { isMarkdown: true });
+                if (!check.conflict) break;
+                localNames.push(copyName);
+                copyName = suggestCopyFileName(source.name || 'Untitled.md', localNames);
+                guard += 1;
+            }
+        }
+
+        setStatus('Copying…');
+        const copied = await copyDriveFile(source.id, { name: copyName, parentId });
+
+        const viewingSameFolder = currentFolder()?.id === parentId;
+        if (viewingSameFolder) {
+            state.files = [copied, ...state.files.filter((f) => f.id !== copied.id)];
+            state.files = sortDriveEntries(state.files, readFinderSort());
+            renderCurrentFileList();
+        }
+
+        setStatus('');
+        const name = await promptForName({
+            title: 'Name copy',
+            hint: 'Every file in this folder needs a unique name.',
+            confirmLabel: 'Save copy',
+            initialValue: copied.name || copyName,
+            selectStem: true,
+            validate: makeUniqueNameValidator(parentId, {
+                ignoreId: copied.id,
+                isMarkdown: true,
+            }),
+        });
+
+        if (!name) {
+            setStatus(`Copied as ${copied.name}`, 'ok');
+            showAppToast(`Copied “${copied.name}”`, 'ok', { key: `copy:${copied.id}` });
+            if (!viewingSameFolder) await refreshBrowse(true);
+            return;
+        }
+
+        const normalizedTarget = normalizeMarkdownFileName(name);
+        const normalizedCurrent = normalizeMarkdownFileName(copied.name || '');
+        if (normalizedTarget === normalizedCurrent) {
+            setStatus(`Copied as ${copied.name}`, 'ok');
+            showAppToast(`Copied “${copied.name}”`, 'ok', { key: `copy:${copied.id}` });
+            if (!viewingSameFolder) await refreshBrowse(true);
+            return;
+        }
+
+        setStatus('Renaming copy…');
+        const updated = await renameDriveItem(copied.id, name, { isMarkdown: true });
+        const idx = state.files.findIndex((f) => f.id === copied.id);
+        if (idx >= 0) {
+            state.files[idx] = { ...state.files[idx], name: updated.name };
+            state.files = sortDriveEntries(state.files, readFinderSort());
+            renderCurrentFileList();
+        } else if (!viewingSameFolder) {
+            await refreshBrowse(true);
+        }
+        setStatus(`Copied as ${updated.name}`, 'ok');
+        showAppToast(`Copied “${updated.name}”`, 'ok', { key: `copy:${updated.id}` });
+    } catch (err) {
+        setStatus(err.message || 'Copy failed', 'error');
+    }
+}
+
 async function handleRenameEntry(file) {
     const folder = isFolder(file);
+    let parentId = normalizeParentId(file.parents) || currentFolder()?.id || '';
+    if (!parentId) {
+        try {
+            const meta = await getFileMetadata(file.id);
+            parentId = normalizeParentId(meta.parents);
+        } catch {
+            // keep empty — validation will be best-effort via local list only
+        }
+    }
+
     const name = await promptForName({
         title: folder ? 'Rename folder' : 'Rename note',
-        hint: folder ? 'Folder name' : 'We’ll keep the .md ending for notes.',
+        hint: folder
+            ? 'Folder names in this location must be unique.'
+            : 'We’ll keep the .md ending for notes. Names must be unique in this folder.',
         confirmLabel: 'Rename',
         initialValue: file.name || '',
         selectStem: !folder,
+        validate: parentId
+            ? makeUniqueNameValidator(parentId, {
+                  ignoreId: file.id,
+                  isMarkdown: !folder,
+              })
+            : async (raw) => {
+                  const trimmed = String(raw || '').trim();
+                  if (!trimmed) return 'Name cannot be empty.';
+                  return null;
+              },
     });
     if (!name || name === file.name) return;
+
+    // Extra guard before Drive call
+    if (parentId) {
+        const conflict = await nameConflictsInFolder(parentId, name, {
+            ignoreId: file.id,
+            isMarkdown: !folder,
+        });
+        if (conflict.conflict) {
+            setStatus(
+                `A file named “${conflict.displayName}” already exists. Choose a different name.`,
+                'error'
+            );
+            return;
+        }
+    }
 
     setStatus('Renaming…');
     try {
@@ -2377,12 +2625,22 @@ async function handleCreateNote() {
     const parent = currentFolder();
     const name = await promptForName({
         title: 'New note',
-        hint: 'Name your markdown file. .md is added automatically if missing.',
+        hint: 'Name your markdown file. Names must be unique; .md is added if missing.',
         confirmLabel: 'Create',
         initialValue: 'Untitled.md',
         selectStem: true,
+        validate: makeUniqueNameValidator(parent.id, { isMarkdown: true }),
     });
     if (!name) return;
+
+    const conflict = await nameConflictsInFolder(parent.id, name, { isMarkdown: true });
+    if (conflict.conflict) {
+        setStatus(
+            `A file named “${conflict.displayName}” already exists. Choose a different name.`,
+            'error'
+        );
+        return;
+    }
 
     setStatus('Creating note…');
     try {
@@ -2399,11 +2657,21 @@ async function handleCreateFolder() {
     const parent = currentFolder();
     const name = await promptForName({
         title: 'New folder',
-        hint: 'Created inside the folder you’re viewing now.',
+        hint: 'Created inside the folder you’re viewing now. Names must be unique.',
         confirmLabel: 'Create',
         initialValue: 'New folder',
+        validate: makeUniqueNameValidator(parent.id, { isMarkdown: false }),
     });
     if (!name) return;
+
+    const conflict = await nameConflictsInFolder(parent.id, name, { isMarkdown: false });
+    if (conflict.conflict) {
+        setStatus(
+            `A folder named “${conflict.displayName}” already exists. Choose a different name.`,
+            'error'
+        );
+        return;
+    }
 
     setStatus('Creating folder…');
     try {

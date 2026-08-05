@@ -322,6 +322,102 @@ function ensureMdExtension(name) {
     return `${trimmed}.md`;
 }
 
+/**
+ * Normalize a markdown note name for uniqueness checks (case-insensitive).
+ * @param {string} name
+ * @returns {string}
+ */
+export function normalizeMarkdownFileName(name) {
+    return ensureMdExtension(name).toLowerCase();
+}
+
+/**
+ * Suggest a unique “Copy of …” name given existing sibling names.
+ * @param {string} originalName
+ * @param {Iterable<string>} existingNames
+ * @returns {string}
+ */
+export function suggestCopyFileName(originalName, existingNames = []) {
+    const ensured = ensureMdExtension(originalName || 'Untitled.md');
+    const lower = ensured.toLowerCase();
+    const ext = lower.endsWith('.markdown') ? '.markdown' : '.md';
+    const stem = ensured.slice(0, ensured.length - ext.length);
+    const taken = new Set(
+        [...existingNames].map((n) => normalizeMarkdownFileName(String(n || ''))).filter(Boolean)
+    );
+
+    let candidate = `Copy of ${stem}${ext}`;
+    let n = 2;
+    while (taken.has(normalizeMarkdownFileName(candidate))) {
+        candidate = `Copy of ${stem} (${n})${ext}`;
+        n += 1;
+    }
+    return candidate;
+}
+
+/**
+ * Find files/folders in a parent with an exact name (Drive may allow duplicates;
+ * we treat any match as a collision).
+ * @param {string} parentId
+ * @param {string} name
+ * @returns {Promise<Array<{ id: string, name: string, mimeType?: string }>>}
+ */
+export async function findItemsByNameInFolder(parentId, name) {
+    const folderId = parentId || ROOT_FOLDER_ID;
+    const safeName = String(name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    if (!safeName) return [];
+
+    /** @type {Array<{ id: string, name: string, mimeType?: string }>} */
+    const found = [];
+    let pageToken = null;
+    do {
+        const params = new URLSearchParams({
+            q: `'${folderId}' in parents and name = '${safeName}' and trashed = false`,
+            spaces: 'drive',
+            pageSize: '50',
+            fields: 'nextPageToken, files(id, name, mimeType)',
+            supportsAllDrives: 'true',
+            includeItemsFromAllDrives: 'true',
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+        const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
+        const data = await response.json();
+        for (const file of data.files || []) {
+            if (file?.id) found.push(file);
+        }
+        pageToken = data.nextPageToken || null;
+    } while (pageToken);
+
+    return found;
+}
+
+/**
+ * Server-side copy of a Drive file into the same (or specified) folder.
+ * @param {string} fileId
+ * @param {{ name: string, parentId?: string }} options
+ */
+export async function copyDriveFile(fileId, { name, parentId } = {}) {
+    const fileName = ensureMdExtension(name || 'Copy.md');
+    /** @type {{ name: string, parents?: string[] }} */
+    const body = { name: fileName };
+    if (parentId) body.parents = [parentId];
+
+    const params = new URLSearchParams({
+        fields: 'id,name,mimeType,modifiedTime,createdTime,size,parents',
+        supportsAllDrives: 'true',
+    });
+
+    const response = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/copy?${params}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }
+    );
+    return response.json();
+}
+
 /** Create an empty markdown file in a folder. */
 export async function createMarkdownFile(parentId, name, content = '') {
     const fileName = ensureMdExtension(name);

@@ -10,6 +10,12 @@ import {
     OPENED_FILES_DAY_MS,
     OPENED_FILES_WEEK_MS,
 } from './config.js';
+import {
+    buildDateTag,
+    buildDateTagFromIsoDate,
+    dateTagToIsoDate,
+    resolveDateTagInput,
+} from './dates.js';
 
 const els = {};
 
@@ -129,6 +135,7 @@ export function bindUi() {
     els.itemActionsTitle = document.getElementById('item-actions-title');
     els.itemActionsName = document.getElementById('item-actions-name');
     els.itemActionPin = document.getElementById('item-action-pin');
+    els.itemActionCopy = document.getElementById('item-action-copy');
     els.itemActionDownload = document.getElementById('item-action-download');
     els.pinnedMissingDialog = document.getElementById('pinned-missing-dialog');
     els.pinnedMissingTitle = document.getElementById('pinned-missing-title');
@@ -149,12 +156,18 @@ export function bindUi() {
     els.nameForm = document.getElementById('name-form');
     els.nameDialogTitle = document.getElementById('name-dialog-title');
     els.nameDialogHint = document.getElementById('name-dialog-hint');
+    els.nameDialogWarning = document.getElementById('name-dialog-warning');
     els.nameInput = document.getElementById('name-input');
     els.nameDialogConfirm = document.getElementById('name-dialog-confirm');
     els.deleteListDialog = document.getElementById('delete-list-dialog');
     els.deleteListDialogName = document.getElementById('delete-list-dialog-name');
     els.deleteListItemDialog = document.getElementById('delete-list-item-dialog');
     els.deleteListItemDialogName = document.getElementById('delete-list-item-dialog-name');
+    els.editItemDateDialog = document.getElementById('edit-item-date-dialog');
+    els.editItemDateForm = document.getElementById('edit-item-date-form');
+    els.editItemDateInput = document.getElementById('edit-item-date-input');
+    els.editItemDateError = document.getElementById('edit-item-date-error');
+    els.editItemDateApply = document.getElementById('edit-item-date-apply');
     return els;
 }
 
@@ -1279,6 +1292,92 @@ export function confirmDeleteListItem(itemText) {
 }
 
 /**
+ * Prompt to change a list item’s `{{date:…}}` tag via a native date picker.
+ * Returns the new canonical tag, or null if cancelled / invalid.
+ * @param {string | null | undefined} currentTag
+ * @returns {Promise<string | null>}
+ */
+export function promptEditItemDate(currentTag) {
+    const dialog = els.editItemDateDialog;
+    const input = els.editItemDateInput;
+    const errorEl = els.editItemDateError;
+
+    const fallbackPrompt = () => {
+        const initial =
+            dateTagToIsoDate(currentTag) ||
+            dateTagToIsoDate(buildDateTag()) ||
+            '';
+        const raw = window.prompt('Date (YYYY-MM-DD)', initial);
+        if (raw == null) return Promise.resolve(null);
+        return Promise.resolve(buildDateTagFromIsoDate(raw) || resolveDateTagInput(raw));
+    };
+
+    if (!dialog || !input) return fallbackPrompt();
+
+    const initial =
+        dateTagToIsoDate(currentTag) ||
+        dateTagToIsoDate(buildDateTag()) ||
+        '';
+    input.value = initial;
+    if (errorEl) {
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+    }
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            input.removeEventListener('invalid', onInvalid);
+
+            if (dialog.returnValue !== 'apply') {
+                resolve(null);
+                return;
+            }
+
+            const tag = buildDateTagFromIsoDate(input.value);
+            if (!tag) {
+                resolve(null);
+                return;
+            }
+            resolve(tag);
+        };
+
+        const onInvalid = (event) => {
+            event.preventDefault();
+            if (errorEl) {
+                errorEl.hidden = false;
+                errorEl.textContent = 'Enter a valid date.';
+            }
+        };
+
+        input.addEventListener('invalid', onInvalid);
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+
+        // Open the OS date UI when supported (keeps the gesture chain on mobile).
+        requestAnimationFrame(() => {
+            try {
+                input.focus({ preventScroll: true });
+            } catch {
+                try {
+                    input.focus();
+                } catch {
+                    // ignore
+                }
+            }
+            try {
+                if (typeof input.showPicker === 'function') {
+                    input.showPicker();
+                }
+            } catch {
+                // Not available or blocked — user can tap the field.
+            }
+        });
+    });
+}
+
+/**
  * Prompt when leaving Edit with unsaved changes.
  * @returns {Promise<'save'|'discard'|'cancel'>}
  */
@@ -1634,7 +1733,7 @@ export function promptFillListDates(options) {
  * Action sheet for a Finder / Pinned row.
  * @param {object} file
  * @param {{ isPinned?: boolean }} [options]
- * @returns {Promise<'pin'|'unpin'|'rename'|'move'|'download'|null>}
+ * @returns {Promise<'pin'|'unpin'|'copy'|'rename'|'move'|'download'|null>}
  */
 export function promptItemActions(file, options = {}) {
     const dialog = els.itemActionsDialog;
@@ -1643,6 +1742,7 @@ export function promptItemActions(file, options = {}) {
     const folder = isFolder(file);
     const pinned = Boolean(options.isPinned);
     const canDownload = !folder && isMarkdownCandidate(file);
+    const canCopy = !folder && isMarkdownCandidate(file);
     if (els.itemActionsTitle) {
         els.itemActionsTitle.textContent = folder ? 'Folder actions' : 'Markdown actions';
     }
@@ -1655,6 +1755,7 @@ export function promptItemActions(file, options = {}) {
         els.itemActionPin.value = pinned ? 'unpin' : 'pin';
         els.itemActionPin.textContent = pinned ? 'Unpin' : 'Pin';
     }
+    if (els.itemActionCopy) els.itemActionCopy.hidden = !canCopy;
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;
 
     return new Promise((resolve) => {
@@ -1664,6 +1765,7 @@ export function promptItemActions(file, options = {}) {
             if (
                 value === 'pin' ||
                 value === 'unpin' ||
+                value === 'copy' ||
                 value === 'rename' ||
                 value === 'move' ||
                 value === 'download'
@@ -1955,7 +2057,14 @@ export function promptMoveDestination(options) {
 
 /**
  * Prompt for a name. Returns trimmed string or null if cancelled.
- * @param {{ title: string, hint?: string, confirmLabel?: string, initialValue?: string, selectStem?: boolean }} options
+ * @param {{
+ *   title: string,
+ *   hint?: string,
+ *   confirmLabel?: string,
+ *   initialValue?: string,
+ *   selectStem?: boolean,
+ *   validate?: (name: string, opts?: { localOnly?: boolean }) => string | null | undefined | Promise<string | null | undefined>,
+ * }} options
  */
 export function promptForName(options) {
     const {
@@ -1964,35 +2073,140 @@ export function promptForName(options) {
         confirmLabel = 'Save',
         initialValue = '',
         selectStem = false,
+        validate = null,
     } = options;
 
     return new Promise((resolve) => {
+        const dialog = els.nameDialog;
+        const form = els.nameForm;
+        const input = els.nameInput;
+        const warning = els.nameDialogWarning;
+        const confirmBtn = els.nameDialogConfirm;
+
         els.nameDialogTitle.textContent = title;
         els.nameDialogHint.textContent = hint;
         els.nameDialogHint.hidden = !hint;
-        els.nameDialogConfirm.textContent = confirmLabel;
-        els.nameInput.value = initialValue;
+        if (confirmBtn) confirmBtn.textContent = confirmLabel;
+        input.value = initialValue;
+        if (warning) {
+            warning.hidden = true;
+            warning.textContent = '';
+        }
+        if (confirmBtn) confirmBtn.disabled = false;
+
+        let validating = false;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        let inputTimer = null;
+        let inputToken = 0;
+
+        const setWarning = (message) => {
+            if (!warning) return;
+            const text = String(message || '').trim();
+            if (text) {
+                warning.hidden = false;
+                warning.textContent = text;
+            } else {
+                warning.hidden = true;
+                warning.textContent = '';
+            }
+        };
+
+        const runValidate = async ({ localOnly = false } = {}) => {
+            if (typeof validate !== 'function') {
+                setWarning('');
+                if (confirmBtn) confirmBtn.disabled = false;
+                return null;
+            }
+            const value = input.value.trim();
+            if (!value) {
+                setWarning('');
+                if (confirmBtn) confirmBtn.disabled = true;
+                return 'Name cannot be empty.';
+            }
+            validating = true;
+            try {
+                const message = await validate(value, { localOnly });
+                const err = message ? String(message) : '';
+                setWarning(err);
+                if (confirmBtn) confirmBtn.disabled = Boolean(err);
+                return err || null;
+            } catch (err) {
+                const message = err?.message || 'Could not validate name.';
+                setWarning(message);
+                if (confirmBtn) confirmBtn.disabled = true;
+                return message;
+            } finally {
+                validating = false;
+            }
+        };
+
+        const onInput = () => {
+            // Instant local feedback, then a debounced full check.
+            runValidate({ localOnly: true });
+            if (typeof validate !== 'function') return;
+            inputToken += 1;
+            const token = inputToken;
+            if (inputTimer) clearTimeout(inputTimer);
+            inputTimer = setTimeout(() => {
+                if (token !== inputToken) return;
+                runValidate({ localOnly: false });
+            }, 300);
+        };
+
+        const onSubmit = async (event) => {
+            const submitter = event.submitter;
+            const intent =
+                (submitter && 'value' in submitter && submitter.value) || dialog.returnValue;
+
+            if (intent !== 'confirm') return;
+
+            event.preventDefault();
+            if (validating) return;
+            if (inputTimer) {
+                clearTimeout(inputTimer);
+                inputTimer = null;
+            }
+            const err = await runValidate({ localOnly: false });
+            if (err) {
+                try {
+                    input.focus({ preventScroll: true });
+                } catch {
+                    input.focus();
+                }
+                return;
+            }
+            dialog.returnValue = 'confirm';
+            dialog.close();
+        };
 
         const onClose = () => {
-            els.nameDialog.removeEventListener('close', onClose);
-            if (els.nameDialog.returnValue === 'confirm') {
-                const value = els.nameInput.value.trim();
+            dialog.removeEventListener('close', onClose);
+            form?.removeEventListener('submit', onSubmit);
+            input.removeEventListener('input', onInput);
+            if (inputTimer) clearTimeout(inputTimer);
+            if (dialog.returnValue === 'confirm') {
+                const value = input.value.trim();
                 resolve(value || null);
             } else {
                 resolve(null);
             }
         };
 
-        els.nameDialog.addEventListener('close', onClose);
-        els.nameDialog.returnValue = 'cancel';
-        els.nameDialog.showModal();
+        form?.addEventListener('submit', onSubmit);
+        input.addEventListener('input', onInput);
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
         requestAnimationFrame(() => {
-            els.nameInput.focus();
+            input.focus();
             if (selectStem && initialValue.toLowerCase().endsWith('.md')) {
-                els.nameInput.setSelectionRange(0, initialValue.length - 3);
+                input.setSelectionRange(0, initialValue.length - 3);
+            } else if (selectStem && initialValue.toLowerCase().endsWith('.markdown')) {
+                input.setSelectionRange(0, initialValue.length - 9);
             } else {
-                els.nameInput.select();
+                input.select();
             }
+            runValidate({ localOnly: true });
         });
     });
 }
