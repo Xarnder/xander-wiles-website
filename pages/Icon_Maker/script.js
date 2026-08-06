@@ -527,34 +527,69 @@ document.addEventListener('DOMContentLoaded', () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(inputSvgStr, "image/svg+xml");
 
-        // Helper to process color
+        const isPaintServer = (colorStr) => {
+            if (!colorStr) return false;
+            const t = colorStr.trim().toLowerCase();
+            return t.startsWith('url(') || t === 'currentcolor' || t === 'context-fill' || t === 'context-stroke';
+        };
+
         const processColor = (colorStr) => {
             if (!colorStr || colorStr === 'none' || colorStr === 'transparent') return colorStr;
+            // Keep gradient / pattern / currentColor references intact
+            if (isPaintServer(colorStr)) return colorStr;
             const rgba = parseColorToRgb(colorStr);
-            if (!rgba) return colorStr; // return original if parse fails
+            if (!rgba) return colorStr;
             return createDarkModeColor(rgba.r, rgba.g, rgba.b, rgba.a);
         };
 
-        // Select shapes
-        const elements = doc.querySelectorAll('path, circle, rect, polygon, polyline, ellipse, line, text, g');
+        const processCssText = (cssText) => cssText.replace(
+            /(fill|stroke|stop-color)\s*:\s*([^;"}]+)/gi,
+            (_, prop, c) => `${prop}:${processColor(c.trim())}`
+        );
+
+        // Classes that define fill (including gradient urls) — don't force black→white over them
+        const classesWithFill = new Set();
+        doc.querySelectorAll('style').forEach(styleEl => {
+            const css = styleEl.textContent || '';
+            const ruleRegex = /\.([a-zA-Z0-9_-]+)\s*\{([^}]*)\}/g;
+            let match;
+            while ((match = ruleRegex.exec(css)) !== null) {
+                if (/\bfill\s*:/i.test(match[2])) classesWithFill.add(match[1]);
+            }
+            styleEl.textContent = processCssText(css);
+        });
+
+        // Recolor gradient stops so url(#…) fills keep working under dark mode
+        doc.querySelectorAll('stop').forEach(stop => {
+            const stopColor = stop.getAttribute('stop-color');
+            if (stopColor) stop.setAttribute('stop-color', processColor(stopColor));
+
+            const style = stop.getAttribute('style');
+            if (style) stop.setAttribute('style', processCssText(style));
+        });
+
+        const elementHasClassFill = (el) => {
+            const classAttr = el.getAttribute('class');
+            if (!classAttr) return false;
+            return classAttr.split(/\s+/).some(c => classesWithFill.has(c));
+        };
+
+        const elements = doc.querySelectorAll('path, circle, rect, polygon, polyline, ellipse, line, text, tspan, g');
 
         elements.forEach(el => {
             const fill = el.getAttribute('fill');
             const stroke = el.getAttribute('stroke');
             const style = el.getAttribute('style');
 
-            // 1. Handle Explicit Fills
+            // 1. Handle Explicit Fills (leave url(#gradient) paint servers alone)
             if (fill && fill !== 'none') {
                 el.setAttribute('fill', processColor(fill));
             }
-            // 2. Handle Implicit Black Fills (No fill attribute = Black)
-            else if (!fill && !style?.includes('fill') && el.tagName !== 'g') {
-                // If it has no fill, SVG defaults to black.
-                // We must force it to white for Dark Mode, UNLESS it's a stroked line.
-                // If it has no stroke, or stroke is none, it's likely a filled shape.
+            // 2. Implicit black fills — skip when CSS class (or gradient) already supplies fill
+            else if (!fill && !style?.includes('fill') && el.tagName !== 'g' && !elementHasClassFill(el)) {
                 const hasStroke = stroke && stroke !== 'none';
                 if (!hasStroke) {
-                    el.setAttribute('fill', '#ffffff'); // Force white invert
+                    el.setAttribute('fill', '#ffffff');
                 }
             }
 
@@ -562,11 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stroke && stroke !== 'none') el.setAttribute('stroke', processColor(stroke));
 
             // 4. Handle Inline Styles
-            if (style) {
-                let newStyle = style.replace(/fill:\s*([^;"]+)/g, (m, c) => `fill:${processColor(c)}`);
-                newStyle = newStyle.replace(/stroke:\s*([^;"]+)/g, (m, c) => `stroke:${processColor(c)}`);
-                el.setAttribute('style', newStyle);
-            }
+            if (style) el.setAttribute('style', processCssText(style));
         });
 
         return new XMLSerializer().serializeToString(doc);
@@ -575,6 +606,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Color Math Helpers ---
     function parseColorToRgb(str) {
         str = str.trim();
+        if (!str || /^url\(/i.test(str) || str.toLowerCase() === 'currentcolor') return null;
+
         // Use browser's internal parser via Canvas
         ctxParser.fillStyle = str;
         let computed = ctxParser.fillStyle; // returns #rrggbb or rgba()
@@ -599,6 +632,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     a = parseFloat(parts[3]);
                 }
             }
+        } else {
+            return null;
         }
         return { r, g, b, a };
     }
@@ -1572,7 +1607,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 darkSvgString = injectSquircle(baseDarkSvgString, squircleColor);
             } else {
                 const parsed = parseColorToRgb(squircleColor);
-                const darkSquircleColor = createDarkModeColor(parsed.r, parsed.g, parsed.b, parsed.a);
+                const darkSquircleColor = parsed
+                    ? createDarkModeColor(parsed.r, parsed.g, parsed.b, parsed.a)
+                    : squircleColor;
                 darkSvgString = injectSquircle(baseDarkSvgString, darkSquircleColor);
             }
         } else {

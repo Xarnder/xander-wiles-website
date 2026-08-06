@@ -362,6 +362,7 @@ setUIHandlers({
         showSinceFirst: event.showSinceFirst !== false,
         showCycleProgress: event.showCycleProgress !== false,
         excludeFromThisWeek: event.excludeFromThisWeek,
+        emoji: event.emoji || null,
       };
       await createEvent(state.user.uid, payload, state.events.length);
       toast('Event duplicated', 'success');

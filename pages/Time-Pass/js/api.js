@@ -32,6 +32,7 @@ import {
   normalizeCategories,
   normalizeCategoryName,
 } from './categories.js';
+import { normalizeEventEmoji } from './emoji-from-title.js';
 
 function eventsCol(uid) {
   return collection(db, 'users', uid, 'events');
@@ -78,6 +79,7 @@ export function validateEventInput(raw) {
   const showSinceFirst = frequency === 'none' ? true : raw.showSinceFirst !== false;
   const showCycleProgress = frequency === 'none' ? true : raw.showCycleProgress !== false;
   const category = normalizeCategoryName(raw.category);
+  const emoji = normalizeEventEmoji(raw.emoji);
 
   /** Skip “This week’s events” pin. Default on for daily/weekly when unset. */
   let excludeFromThisWeek;
@@ -99,6 +101,7 @@ export function validateEventInput(raw) {
       showSinceFirst,
       showCycleProgress,
       category,
+      emoji,
       excludeFromThisWeek,
     },
   };
@@ -275,6 +278,7 @@ export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [
       color: existing.color,
       units: existing.units,
       category: existing.category,
+      emoji: existing.emoji ?? null,
       recurrence: existing.recurrence || { frequency: 'none' },
       showSinceLast: existing.showSinceLast !== false,
       showSinceFirst: existing.showSinceFirst !== false,
@@ -562,6 +566,7 @@ export function exportPayload(events, settings) {
       color: e.color,
       units: normalizeUnits(e.units),
       category: normalizeCategoryName(e.category),
+      emoji: normalizeEventEmoji(e.emoji),
       recurrence: { frequency: e.recurrence?.frequency || 'none' },
       showSinceLast: e.showSinceLast !== false,
       showSinceFirst: e.showSinceFirst !== false,

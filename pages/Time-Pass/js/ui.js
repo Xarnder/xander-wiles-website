@@ -33,6 +33,7 @@ import {
   resolveBirthdayCategory,
   applyBirthdayCategoryIfNeeded,
 } from './categories.js';
+import { resolveEventEmoji, emojiPickerChoices, normalizeEventEmoji } from './emoji-from-title.js';
 import {
   formatUnitValue,
   recurrenceLabel,
@@ -110,22 +111,48 @@ function processSvgMarkup(svgText) {
   return String(svgText || '')
     .replace(/<\?xml[^>]*\?>/gi, '')
     .replace(/<!DOCTYPE[^>]*>/gi, '')
-    .replace(/\s(width|height)="[^"]*"/gi, '')
-    .replace(/\sstyle="[^"]*"/gi, '')
-    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
-    .replace(
-      /<(path|polygon|rect|circle|ellipse)\b(?![^>]*\bfill=)/gi,
-      '<$1 fill="currentColor"'
-    )
-    .replace(/\.st0\{[^}]*\}/g, '.st0{fill:currentColor;fill-rule:evenodd;clip-rule:evenodd;}')
-    .replace(/\.cls-1\{[^}]*\}/g, '.cls-1{fill:currentColor;fill-rule:evenodd;}')
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, '')
     .replace(/<svg\b([^>]*)>/i, (m, attrs) => {
-      let next = attrs;
+      let next = attrs
+        .replace(/\s(width|height)="[^"]*"/gi, '')
+        .replace(/\s(width|height)='[^']*'/gi, '');
       if (!/\bfill=/i.test(next)) next += ' fill="currentColor"';
       if (!/\baria-hidden=/i.test(next)) next += ' aria-hidden="true"';
       if (!/\bfocusable=/i.test(next)) next += ' focusable="false"';
       return `<svg${next}>`;
     })
+    // Lift paint styles to attributes before dropping style= (stroke icons need this)
+    .replace(/\sstyle="([^"]*)"/gi, (_, style) => {
+      const props = {};
+      for (const part of String(style).split(';')) {
+        const idx = part.indexOf(':');
+        if (idx < 0) continue;
+        const key = part.slice(0, idx).trim().toLowerCase();
+        const val = part.slice(idx + 1).trim();
+        if (key && val) props[key] = val;
+      }
+      let attrs = '';
+      for (const key of [
+        'fill',
+        'stroke',
+        'stroke-width',
+        'stroke-linecap',
+        'stroke-linejoin',
+        'fill-rule',
+        'clip-rule',
+      ]) {
+        if (props[key]) attrs += ` ${key}="${props[key]}"`;
+      }
+      return attrs;
+    })
+    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
+    .replace(/stroke="(?!none)[^"]*"/gi, 'stroke="currentColor"')
+    .replace(
+      /<(path|polygon|rect|circle|ellipse)\b(?![^>]*\bfill=)(?![^>]*\bstroke=)/gi,
+      '<$1 fill="currentColor"'
+    )
+    .replace(/\.st0\{[^}]*\}/g, '.st0{fill:currentColor;fill-rule:evenodd;clip-rule:evenodd;}')
+    .replace(/\.cls-1\{[^}]*\}/g, '.cls-1{fill:currentColor;fill-rule:evenodd;}')
     .trim();
 }
 
@@ -994,8 +1021,20 @@ function renderCard(vm, readOnly, { thisWeek = false } = {}) {
     });
   }
 
-  li.appendChild(head);
-  li.appendChild(renderDirectionRow(primary, compact, event));
+  const lead = el('div', { className: 'event-card-lead' });
+  lead.appendChild(
+    el('span', {
+      className: 'event-emoji',
+      text: resolveEventEmoji(event),
+      'aria-hidden': 'true',
+    })
+  );
+  const leadBody = el('div', { className: 'event-card-lead-body' });
+  leadBody.appendChild(head);
+  leadBody.appendChild(renderDirectionRow(primary, compact, event));
+  lead.appendChild(leadBody);
+  li.appendChild(lead);
+
   if (!compact) {
     li.appendChild(renderUnitRow(primary.parts, primary.visibleUnits));
   }
@@ -1089,7 +1128,7 @@ function cardShapeKey(vm, readOnly, thisWeek = false) {
   const selecting = multiSelectMode && !readOnly;
   const blocks = vmStatBlocks(vm);
   return [
-    compact ? 'c-date' : 'e',
+    compact ? 'c-date-em2' : 'e-em2',
     state.settings.fullColourCards ? '1' : '0',
     selecting ? 's' : 'n',
     readOnly ? 'r' : 'w',
@@ -1133,6 +1172,12 @@ function patchCardInPlace(card, vm) {
 
   const title = card.querySelector('.event-title');
   if (title && title.textContent !== vm.event.name) title.textContent = vm.event.name;
+
+  const emojiEl = card.querySelector('.event-emoji');
+  if (emojiEl) {
+    const nextEmoji = resolveEventEmoji(vm.event);
+    if (emojiEl.textContent !== nextEmoji) emojiEl.textContent = nextEmoji;
+  }
 
   const meta = card.querySelector('.event-meta');
   if (meta) {
@@ -2360,6 +2405,8 @@ export function openEventModal(event) {
     showCycleProgress: event?.showCycleProgress !== false,
     category: resolveEventCategory(event, getCategories()),
     excludeFromThisWeek: defaultExcludeFromThisWeek(event),
+    /** null = auto from title; string = manual override */
+    emoji: normalizeEventEmoji(event?.emoji),
   };
 
   const backdrop = el('div', {
@@ -2398,7 +2445,8 @@ export function openEventModal(event) {
     }
   }
 
-  const form = el('form', { className: 'form-grid' });
+  const form = el('form', { className: 'modal-form' });
+  const body = el('div', { className: 'form-grid modal-scroll' });
 
   const nameInput = el('input', {
     type: 'text',
@@ -2408,7 +2456,152 @@ export function openEventModal(event) {
     value: draft.name,
     autocomplete: 'off',
   });
-  form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Name' }), nameInput]));
+  body.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Name' }), nameInput]));
+
+  let selectedEmoji = draft.emoji; // null = auto
+  const emojiPreview = el('span', {
+    className: 'emoji-picker-preview',
+    text: resolveEventEmoji(draft.name, selectedEmoji),
+    'aria-hidden': 'true',
+  });
+  const emojiModeHint = el('span', {
+    className: 'emoji-picker-mode',
+    text: selectedEmoji ? 'Custom' : 'Auto from title',
+  });
+  const emojiPanel = el('div', {
+    className: 'emoji-picker-panel',
+    id: 'emoji-picker-panel',
+    hidden: selectedEmoji == null,
+  });
+  const emojiInput = el('input', {
+    type: 'text',
+    className: 'emoji-picker-input',
+    name: 'emoji-custom',
+    maxlength: '16',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    inputmode: 'text',
+    enterkeyhint: 'done',
+    placeholder: 'Type or paste any emoji…',
+    'aria-label': 'Type or paste a custom emoji',
+    value: selectedEmoji || '',
+  });
+  const emojiGrid = el('div', {
+    className: 'emoji-picker-grid',
+    role: 'group',
+    'aria-label': 'Suggested emojis',
+  });
+  const emojiHint = el('p', {
+    className: 'field-hint',
+    text: '',
+  });
+
+  const refreshEmojiUi = ({ syncInput = true } = {}) => {
+    const manual = selectedEmoji != null;
+    emojiPreview.textContent = resolveEventEmoji(nameInput.value, selectedEmoji);
+    emojiModeHint.textContent = manual ? 'Custom' : 'Auto from title';
+    emojiPanel.hidden = !manual;
+    emojiPanel.setAttribute('aria-hidden', String(!manual));
+    emojiHint.textContent = manual
+      ? 'Type or paste any emoji, tap a suggestion, or Auto to follow the title again.'
+      : 'Auto picks from the title. Tap Choose to type or pick a custom emoji.';
+    if (syncInput && document.activeElement !== emojiInput) {
+      emojiInput.value = selectedEmoji || '';
+    }
+    emojiGrid.querySelectorAll('.emoji-swatch').forEach((btn) => {
+      const value = btn.getAttribute('data-emoji');
+      const active = manual && value === selectedEmoji;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    autoEmojiBtn.classList.toggle('is-active', !manual);
+    autoEmojiBtn.setAttribute('aria-pressed', String(!manual));
+    chooseEmojiBtn.classList.toggle('is-active', manual);
+    chooseEmojiBtn.setAttribute('aria-pressed', String(manual));
+    chooseEmojiBtn.setAttribute('aria-expanded', String(manual));
+  };
+
+  const autoEmojiBtn = el('button', {
+    type: 'button',
+    className: `chip emoji-auto-btn${selectedEmoji == null ? ' is-active' : ''}`,
+    text: 'Auto',
+    title: 'Match emoji from the event title',
+    'aria-pressed': selectedEmoji == null,
+    onClick: () => {
+      selectedEmoji = null;
+      refreshEmojiUi();
+    },
+  });
+
+  const chooseEmojiBtn = el('button', {
+    type: 'button',
+    className: `chip emoji-choose-btn${selectedEmoji != null ? ' is-active' : ''}`,
+    text: 'Choose',
+    title: 'Type or pick a custom emoji',
+    'aria-pressed': selectedEmoji != null,
+    'aria-expanded': selectedEmoji != null,
+    'aria-controls': 'emoji-picker-panel',
+    onClick: () => {
+      if (selectedEmoji == null) {
+        selectedEmoji = resolveEventEmoji(nameInput.value, null);
+      }
+      refreshEmojiUi();
+      requestAnimationFrame(() => {
+        emojiInput.focus();
+        emojiInput.select();
+      });
+    },
+  });
+
+  emojiInput.addEventListener('input', () => {
+    const next = normalizeEventEmoji(emojiInput.value);
+    if (!next) {
+      // Empty field stays in manual mode with the last pick until they hit Auto,
+      // but don't clear selectedEmoji to empty string — keep preview on last valid
+      // or fall back to current auto while typing.
+      if (!String(emojiInput.value || '').trim()) {
+        selectedEmoji = resolveEventEmoji(nameInput.value, null);
+        refreshEmojiUi({ syncInput: false });
+      }
+      return;
+    }
+    selectedEmoji = next;
+    refreshEmojiUi({ syncInput: false });
+  });
+
+  for (const emo of emojiPickerChoices()) {
+    emojiGrid.appendChild(
+      el('button', {
+        type: 'button',
+        className: `emoji-swatch${selectedEmoji === emo ? ' is-active' : ''}`,
+        text: emo,
+        'data-emoji': emo,
+        'aria-label': `Emoji ${emo}`,
+        'aria-pressed': selectedEmoji === emo,
+        onClick: () => {
+          selectedEmoji = emo;
+          refreshEmojiUi();
+        },
+      })
+    );
+  }
+
+  emojiPanel.appendChild(emojiInput);
+  emojiPanel.appendChild(emojiGrid);
+
+  body.appendChild(
+    el('div', { className: 'field' }, [
+      el('label', { text: 'Emoji' }),
+      el('div', { className: 'emoji-picker-head' }, [
+        emojiPreview,
+        emojiModeHint,
+        autoEmojiBtn,
+        chooseEmojiBtn,
+      ]),
+      emojiPanel,
+      emojiHint,
+    ])
+  );
 
   let modalCategories = [...getCategories()];
   let selectedCategory = draft.category;
@@ -2497,7 +2690,7 @@ export function openEventModal(event) {
     }
   });
 
-  form.appendChild(
+  body.appendChild(
     el('div', { className: 'field' }, [
       el('label', { text: 'Category' }),
       el('div', { className: 'category-select-wrap' }, [categorySelect]),
@@ -2511,8 +2704,13 @@ export function openEventModal(event) {
     ])
   );
 
-  nameInput.addEventListener('input', applyBirthdaySuggestion);
+  nameInput.addEventListener('input', () => {
+    applyBirthdaySuggestion();
+    if (selectedEmoji == null) refreshEmojiUi();
+    else emojiPreview.textContent = resolveEventEmoji(nameInput.value, selectedEmoji);
+  });
   applyBirthdaySuggestion();
+  refreshEmojiUi();
 
   const dateInput = el('input', { type: 'date', name: 'date', required: true, value: draft.date });
   const dateQuick = el('div', { className: 'date-quick', role: 'group', 'aria-label': 'Quick dates' });
@@ -2533,7 +2731,7 @@ export function openEventModal(event) {
       })
     );
   }
-  form.appendChild(
+  body.appendChild(
     el('div', { className: 'field' }, [el('label', { text: 'Date' }), dateQuick, dateInput])
   );
 
@@ -2551,7 +2749,7 @@ export function openEventModal(event) {
       if (!e.target.checked) timeInput.value = '';
     },
   });
-  form.appendChild(
+  body.appendChild(
     el('div', { className: 'field' }, [
       el('div', { className: 'checkbox-row' }, [timeToggle, el('label', { text: 'Include specific time' })]),
       timeInput,
@@ -2566,7 +2764,7 @@ export function openEventModal(event) {
     value: draft.timeZone,
     autocomplete: 'off',
   });
-  form.appendChild(
+  body.appendChild(
     el('div', { className: 'field' }, [el('label', { text: 'Timezone (IANA, optional)' }), tzInput])
   );
 
@@ -2591,7 +2789,7 @@ export function openEventModal(event) {
     });
     palette.appendChild(sw);
   });
-  form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Colour' }), palette]));
+  body.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Colour' }), palette]));
 
   const unitsGrid = el('div', { className: 'units-grid', role: 'group', 'aria-label': 'Units' });
   ALL_UNITS.forEach((u) => {
@@ -2611,7 +2809,7 @@ export function openEventModal(event) {
     });
     unitsGrid.appendChild(btn);
   });
-  form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Units to show' }), unitsGrid]));
+  body.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Units to show' }), unitsGrid]));
 
   const freqSelect = el('select', { name: 'frequency' });
   for (const [value, label] of [
@@ -2625,13 +2823,13 @@ export function openEventModal(event) {
     if (value === draft.frequency) opt.selected = true;
     freqSelect.appendChild(opt);
   }
-  form.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Recurrence' }), freqSelect]));
+  body.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Recurrence' }), freqSelect]));
 
   const excludeThisWeekToggle = el('input', {
     type: 'checkbox',
     checked: draft.excludeFromThisWeek,
   });
-  form.appendChild(
+  body.appendChild(
     el('div', { className: 'field' }, [
       el('div', { className: 'checkbox-row' }, [
         excludeThisWeekToggle,
@@ -2682,7 +2880,7 @@ export function openEventModal(event) {
       }),
     ]
   );
-  form.appendChild(sinceField);
+  body.appendChild(sinceField);
 
   const syncSinceVisibility = () => {
     const recurring = freqSelect.value !== 'none';
@@ -2745,6 +2943,7 @@ export function openEventModal(event) {
   );
   primary.appendChild(el('button', { type: 'submit', className: 'btn', text: isEdit ? 'Save' : 'Create' }));
   actions.appendChild(primary);
+  form.appendChild(body);
   form.appendChild(actions);
 
   form.addEventListener('submit', (e) => {
@@ -2780,6 +2979,7 @@ export function openEventModal(event) {
       showSinceFirst: freqSelect.value === 'none' ? true : sinceFirstToggle.checked,
       showCycleProgress: freqSelect.value === 'none' ? true : cycleToggle.checked,
       excludeFromThisWeek: excludeThisWeekToggle.checked,
+      emoji: selectedEmoji,
       _categories: catsForSave,
     };
     const saveAsEdit = isEdit;
