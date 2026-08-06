@@ -25,7 +25,7 @@ import {
   needsSecondTick,
 } from './store.js';
 import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded } from './categories.js';
-import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal } from './ui.js';
+import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal, preloadIcons } from './ui.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
 import { COLOR_PALETTE, DEFAULT_UNITS, SOFT_EVENT_CAP } from './constants.js';
@@ -455,6 +455,11 @@ document.addEventListener('visibilitychange', () => {
 
 async function boot() {
   applyTheme(state.settings?.theme || readStoredTheme());
+  try {
+    await preloadIcons();
+  } catch (err) {
+    console.warn('Icon preload failed', err);
+  }
   renderAll(Date.now());
   scheduleTick();
   setupKeyboardShortcuts();

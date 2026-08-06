@@ -99,12 +99,27 @@ export function setFirebaseReady(ready) {
 }
 
 export function setEvents(events) {
-  state.events = Array.isArray(events) ? events : [];
+  const next = Array.isArray(events) ? events : [];
+  // Skip identical snapshots (Firestore can re-emit) — avoids pointless UI work while scrolling.
+  if (eventsFingerprint(state.events) === eventsFingerprint(next)) {
+    state.events = next;
+    return;
+  }
+  state.events = next;
   state.settings = {
     ...state.settings,
     categories: mergeCategoriesFromEvents(state.settings.categories, state.events),
   };
   notify();
+}
+
+function eventsFingerprint(events) {
+  if (!Array.isArray(events) || !events.length) return String(events?.length || 0);
+  let out = String(events.length);
+  for (const e of events) {
+    out += `|${e?.id || ''}:${e?.updatedAt || e?.updated || e?.name || ''}:${e?.date || ''}:${e?.time || ''}`;
+  }
+  return out;
 }
 
 export function setSettings(settings) {

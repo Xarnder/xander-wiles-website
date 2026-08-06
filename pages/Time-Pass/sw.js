@@ -1,4 +1,4 @@
-const CACHE_NAME = 'time-pass-v44';
+const CACHE_NAME = 'time-pass-v46';
 const OWNED_PREFIX = 'time-pass-';
 const ASSETS = [
   './',

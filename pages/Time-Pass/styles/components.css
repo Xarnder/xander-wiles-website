@@ -719,7 +719,10 @@ html[data-theme="light"] .filter-family-subhint {
   transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
   border: 1.5px solid var(--event-color, var(--accent));
   background-image: none;
-  background: var(--glass-bg);
+  /* Opaque enough without backdrop-filter (blur + mask icons flicker on mobile scroll) */
+  background: color-mix(in srgb, var(--bg-1) 88%, var(--glass-bg-strong));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   min-width: 0;
   max-width: 100%;
@@ -846,18 +849,28 @@ html[data-theme="light"] .filter-family-subhint {
 }
 
 .ui-icon {
-  display: inline-block;
+  display: inline-grid;
+  place-items: center;
   width: 0.95rem;
   height: 0.95rem;
   flex-shrink: 0;
-  background-color: currentColor;
-  -webkit-mask: var(--ui-icon) center / contain no-repeat;
-  mask: var(--ui-icon) center / contain no-repeat;
-  /* Own compositor layer — stops iOS overscroll mask flicker */
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  color: inherit;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.ui-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: currentColor;
+}
+
+.ui-icon path,
+.ui-icon polygon,
+.ui-icon rect,
+.ui-icon circle {
+  fill: currentColor;
 }
 
 .chip .ui-icon {
@@ -1495,19 +1508,12 @@ body.is-calculator-view .main {
 .calc-alts-chevron {
   width: 0.85rem;
   height: 0.85rem;
-  background-color: var(--accent);
-  -webkit-mask: url('/assets/SVGs/Down-ArrowIcons.svg') center / contain no-repeat;
-  mask: url('/assets/SVGs/Down-ArrowIcons.svg') center / contain no-repeat;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  color: var(--accent);
   transition: transform 0.2s ease;
 }
 
 .calc-alts.is-open .calc-alts-chevron {
-  -webkit-transform: translateZ(0) rotate(180deg);
-  transform: translateZ(0) rotate(180deg);
+  transform: rotate(180deg);
 }
 
 .calc-alts-list {
@@ -2631,19 +2637,12 @@ input[type="range"]::-webkit-slider-runnable-track {
     width: 0.85rem;
     height: 0.85rem;
     flex-shrink: 0;
-    background-color: currentColor;
-    -webkit-mask: url('/assets/SVGs/Down-ArrowIcons.svg') center / contain no-repeat;
-    mask: url('/assets/SVGs/Down-ArrowIcons.svg') center / contain no-repeat;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
+    color: currentColor;
     transition: transform 0.2s ease;
   }
 
   .filters-drawer.is-open .filters-drawer-chevron {
-    -webkit-transform: translateZ(0) rotate(180deg);
-    transform: translateZ(0) rotate(180deg);
+    transform: rotate(180deg);
   }
 
   .filters-drawer:not(.is-open) .filters-drawer-body {

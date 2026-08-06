@@ -80,7 +80,7 @@ Rules:
 
 let calcDraft = defaultCalculatorDraft();
 
-/** Site-root paths for themeable mask icons (assets/SVGs + close). */
+/** Site-root paths for themeable icons (inlined as SVG — CSS masks flicker on mobile scroll). */
 const ICON_URLS = {
   edit: '/assets/SVGs/edit.svg',
   duplicate: '/assets/SVGs/duplicate.svg',
@@ -91,7 +91,78 @@ const ICON_URLS = {
   back: '/assets/SVGs/Left-ArrowIcons.svg',
   home: '/assets/SVGs/home.svg',
   plus: '/assets/SVGs/plus-icon.svg',
+  down: '/assets/SVGs/Down-ArrowIcons.svg',
 };
+
+/** @type {Map<string, string>} */
+const iconSvgCache = new Map();
+/** @type {Map<string, Promise<string|null>>} */
+const iconFetchPromises = new Map();
+
+let chromeSig = '';
+let toolbarSig = '';
+
+function processSvgMarkup(svgText) {
+  return String(svgText || '')
+    .replace(/<\?xml[^>]*\?>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/\s(width|height)="[^"]*"/gi, '')
+    .replace(/\sstyle="[^"]*"/gi, '')
+    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
+    .replace(
+      /<(path|polygon|rect|circle|ellipse)\b(?![^>]*\bfill=)/gi,
+      '<$1 fill="currentColor"'
+    )
+    .replace(/\.st0\{[^}]*\}/g, '.st0{fill:currentColor;fill-rule:evenodd;clip-rule:evenodd;}')
+    .replace(/\.cls-1\{[^}]*\}/g, '.cls-1{fill:currentColor;fill-rule:evenodd;}')
+    .replace(/<svg\b([^>]*)>/i, (m, attrs) => {
+      let next = attrs;
+      if (!/\bfill=/i.test(next)) next += ' fill="currentColor"';
+      if (!/\baria-hidden=/i.test(next)) next += ' aria-hidden="true"';
+      if (!/\bfocusable=/i.test(next)) next += ' focusable="false"';
+      return `<svg${next}>`;
+    })
+    .trim();
+}
+
+function ensureIconSvg(name) {
+  if (iconSvgCache.has(name)) return Promise.resolve(iconSvgCache.get(name));
+  if (iconFetchPromises.has(name)) return iconFetchPromises.get(name);
+  const url = ICON_URLS[name];
+  if (!url) return Promise.resolve(null);
+  const p = fetch(url)
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+    .then((text) => {
+      const processed = processSvgMarkup(text);
+      iconSvgCache.set(name, processed);
+      document.querySelectorAll(`.ui-icon--${name}`).forEach((node) => {
+        if (!node.querySelector('svg')) node.innerHTML = processed;
+      });
+      return processed;
+    })
+    .catch((err) => {
+      console.warn('Icon load failed', name, err);
+      iconFetchPromises.delete(name);
+      return null;
+    });
+  iconFetchPromises.set(name, p);
+  return p;
+}
+
+/** Prefetch all UI icons so first paint uses inline SVG (no CSS-mask flicker). */
+export function preloadIcons() {
+  return Promise.all(Object.keys(ICON_URLS).map((name) => ensureIconSvg(name)));
+}
+
+function hydrateHomeIcon() {
+  const home = document.querySelector('.home-escape .ui-icon--home');
+  if (!home || home.querySelector('svg')) return;
+  const svg = iconSvgCache.get('home');
+  if (svg) {
+    home.removeAttribute('style');
+    home.innerHTML = svg;
+  }
+}
 
 let handlers = {
   onSignIn: () => {},
@@ -181,13 +252,19 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-function uiIcon(name) {
-  const url = ICON_URLS[name];
+function uiIcon(name, extraClass = '') {
   const node = el('span', {
-    className: `ui-icon ui-icon--${name}`,
+    className: `ui-icon ui-icon--${name}${extraClass ? ` ${extraClass}` : ''}`.trim(),
     'aria-hidden': 'true',
   });
-  if (url) node.style.setProperty('--ui-icon', `url("${url}")`);
+  const cached = iconSvgCache.get(name);
+  if (cached) {
+    node.innerHTML = cached;
+  } else {
+    ensureIconSvg(name).then((svg) => {
+      if (svg && node.isConnected && !node.querySelector('svg')) node.innerHTML = svg;
+    });
+  }
   return node;
 }
 
@@ -277,10 +354,43 @@ export function renderChrome() {
   const actions = document.getElementById('header-actions');
   const banner = document.getElementById('preview-banner');
   if (!actions) return;
+
+  hydrateHomeIcon();
+
+  const sig = [
+    state.view,
+    state.mode,
+    state.user?.uid || '',
+    state.user?.displayName || '',
+    state.user?.email || '',
+    calcDraft.tool || '',
+    isFirebaseConfigured ? '1' : '0',
+  ].join('|');
+
+  const updateBrand = () => {
+    if (!brandSub) return;
+    if (state.view === 'settings') brandSub.textContent = 'Settings';
+    else if (state.view === 'calculator') {
+      brandSub.textContent =
+        calcDraft.tool === 'offset' ? 'Add or subtract' : 'Date to date';
+    } else if (state.mode === 'guest') {
+      brandSub.textContent = isFirebaseConfigured
+        ? 'Preview — sign in to save'
+        : 'Preview — configure Firebase to sign in';
+    } else {
+      brandSub.textContent = state.user?.displayName || state.user?.email || 'Signed in';
+    }
+  };
+
+  if (sig === chromeSig && actions.childElementCount > 0) {
+    updateBrand();
+    return;
+  }
+  chromeSig = sig;
   actions.replaceChildren();
 
   if (state.view === 'settings') {
-    if (brandSub) brandSub.textContent = 'Settings';
+    updateBrand();
     if (banner) banner.hidden = true;
     actions.appendChild(
       buttonWithIcon({
@@ -294,10 +404,7 @@ export function renderChrome() {
   }
 
   if (state.view === 'calculator') {
-    if (brandSub) {
-      brandSub.textContent =
-        calcDraft.tool === 'offset' ? 'Add or subtract' : 'Date to date';
-    }
+    updateBrand();
     if (banner) banner.hidden = true;
     actions.appendChild(
       buttonWithIcon({
@@ -326,11 +433,7 @@ export function renderChrome() {
   });
 
   if (state.mode === 'guest') {
-    if (brandSub) {
-      brandSub.textContent = isFirebaseConfigured
-        ? 'Preview — sign in to save'
-        : 'Preview — configure Firebase to sign in';
-    }
+    updateBrand();
     if (banner) {
       banner.hidden = false;
       banner.replaceChildren(
@@ -357,7 +460,7 @@ export function renderChrome() {
       })
     );
   } else {
-    if (brandSub) brandSub.textContent = state.user?.displayName || state.user?.email || 'Signed in';
+    updateBrand();
     if (banner) banner.hidden = true;
     actions.appendChild(
       iconButton({
@@ -396,6 +499,31 @@ export function renderToolbar(nowMs = Date.now()) {
   const f = state.settings.filters;
   const density = state.settings.cardDensity === 'compact' ? 'compact' : 'expanded';
   const filtersActive = filtersAreActive();
+  const shownEarly = getViewList(nowMs).length;
+  const totalEarly = state.events.length;
+  const drawerOpenEarly = getFiltersDrawerOpen();
+  const nextToolbarSig = [
+    state.mode,
+    density,
+    multiSelectMode ? '1' : '0',
+    drawerOpenEarly ? '1' : '0',
+    filtersActive ? '1' : '0',
+    f.direction,
+    f.recurring,
+    f.sort,
+    f.category || 'all',
+    f.query || '',
+    String(shownEarly),
+    String(totalEarly),
+    getCategories().join('\0'),
+  ].join('|');
+
+  // Skip wipe-rebuild on sync ticks when filters/chrome are unchanged (keeps icons stable).
+  if (!restoreSearch && nextToolbarSig === toolbarSig && toolbar.childElementCount > 0) {
+    toolbar.classList.toggle('has-active-filters', filtersActive);
+    return;
+  }
+  toolbarSig = nextToolbarSig;
 
   toolbar.classList.toggle('has-active-filters', filtersActive);
 
@@ -604,7 +732,7 @@ export function renderToolbar(nowMs = Date.now()) {
     [
       el('span', { text: drawerOpen ? 'Hide filters' : 'Filters' }),
       toggleMeta,
-      el('span', { className: 'filters-drawer-chevron', 'aria-hidden': 'true' }),
+      uiIcon('down', 'filters-drawer-chevron'),
     ]
   );
 
@@ -768,13 +896,16 @@ function renderCard(vm, readOnly) {
   const compact = state.settings.cardDensity === 'compact';
   const selecting = multiSelectMode && !readOnly;
   const selected = selecting && selectedEventIds.has(event.id);
+  const eventId = event.id;
   const li = el('li', {
     className: `event-card glass${fullColour ? ' is-full-colour' : ''}${compact ? ' is-compact' : ''}${
       selecting ? ' is-selectable' : ''
     }${selected ? ' is-selected' : ''}`,
     style: `--event-color: ${event.color}`,
-    'data-id': event.id,
+    'data-id': eventId,
   });
+  li._tpVm = vm;
+  li.dataset.shapeKey = cardShapeKey(vm, readOnly);
 
   const head = el('div', { className: 'event-card-head' });
 
@@ -785,7 +916,7 @@ function renderCard(vm, readOnly) {
       checked: selected,
       'aria-label': `Select ${event.name}`,
       onClick: (e) => e.stopPropagation(),
-      onChange: (e) => toggleEventSelected(event.id, e.target.checked),
+      onChange: (e) => toggleEventSelected(eventId, e.target.checked),
     });
     head.appendChild(check);
   }
@@ -803,7 +934,10 @@ function renderCard(vm, readOnly) {
       iconButton({
         icon: 'edit',
         label: `Edit ${event.name}`,
-        onClick: () => openEventModal(event),
+        onClick: () => {
+          const live = state.events.find((e) => e.id === eventId);
+          openEventModal(live || li._tpVm?.event || null);
+        },
       })
     );
     actions.appendChild(
@@ -811,7 +945,9 @@ function renderCard(vm, readOnly) {
         icon: 'copy',
         label: `Copy summary for ${event.name}`,
         onClick: async () => {
-          const ok = await copyText(buildCopySummary(vm));
+          const liveVm = li._tpVm;
+          if (!liveVm) return;
+          const ok = await copyText(buildCopySummary(liveVm));
           toast(ok ? 'Copied to clipboard' : 'Could not copy', ok ? 'success' : 'error');
         },
       })
@@ -822,7 +958,7 @@ function renderCard(vm, readOnly) {
   if (selecting) {
     li.addEventListener('click', (e) => {
       if (e.target.closest('button, a, input, label')) return;
-      toggleEventSelected(event.id);
+      toggleEventSelected(eventId);
     });
   }
 
@@ -862,13 +998,16 @@ function renderSyncBanner() {
   }
 }
 
-function buildListItems(nowMs, readOnly) {
+/**
+ * Display entries matching DOM order (this-week pin, then sections / remainder).
+ * @returns {Array<{type:'heading', key:string, text:string}|{type:'card', id:string, vm:object}>}
+ */
+function getDisplayEntries(nowMs = Date.now()) {
   const f = state.settings.filters;
   const sections = getViewSections(nowMs);
   const thisWeek = sections.thisWeek || [];
   const thisWeekIds = new Set(thisWeek.map((vm) => vm.event.id));
 
-  // Avoid duplicate cards: week pin owns those events for this render.
   const upcoming = (sections.upcoming || []).filter((vm) => !thisWeekIds.has(vm.event.id));
   const past = (sections.past || []).filter((vm) => !thisWeekIds.has(vm.event.id));
   const all = (sections.all || []).filter((vm) => !thisWeekIds.has(vm.event.id));
@@ -879,32 +1018,213 @@ function buildListItems(nowMs, readOnly) {
     upcoming.length > 0 &&
     past.length > 0;
 
-  const items = [];
+  const entries = [];
 
   if (thisWeek.length) {
-    items.push(
-      el('li', {
-        className: 'section-heading section-heading--this-week',
-        text: "This week's events",
-      })
-    );
-    items.push(...thisWeek.map((vm) => renderCard(vm, readOnly)));
+    entries.push({
+      type: 'heading',
+      key: 'this-week',
+      text: "This week's events",
+    });
+    for (const vm of thisWeek) entries.push({ type: 'card', id: vm.event.id, vm });
   }
 
   if (showSectionHeaders) {
     if (upcoming.length) {
-      items.push(el('li', { className: 'section-heading', text: 'Upcoming' }));
-      items.push(...upcoming.map((vm) => renderCard(vm, readOnly)));
+      entries.push({ type: 'heading', key: 'upcoming', text: 'Upcoming' });
+      for (const vm of upcoming) entries.push({ type: 'card', id: vm.event.id, vm });
     }
     if (past.length) {
-      items.push(el('li', { className: 'section-heading', text: 'Past' }));
-      items.push(...past.map((vm) => renderCard(vm, readOnly)));
+      entries.push({ type: 'heading', key: 'past', text: 'Past' });
+      for (const vm of past) entries.push({ type: 'card', id: vm.event.id, vm });
     }
-    return items;
+    return entries;
   }
 
-  items.push(...all.map((vm) => renderCard(vm, readOnly)));
-  return items;
+  for (const vm of all) entries.push({ type: 'card', id: vm.event.id, vm });
+  return entries;
+}
+
+function getDisplayVms(nowMs = Date.now()) {
+  return getDisplayEntries(nowMs)
+    .filter((e) => e.type === 'card')
+    .map((e) => e.vm);
+}
+
+/** Structural fingerprint — changing this recreates that card (icons included). */
+function cardShapeKey(vm, readOnly) {
+  const compact = state.settings.cardDensity === 'compact';
+  const selecting = multiSelectMode && !readOnly;
+  const blocks = vmStatBlocks(vm);
+  return [
+    compact ? 'c' : 'e',
+    state.settings.fullColourCards ? '1' : '0',
+    selecting ? 's' : 'n',
+    readOnly ? 'r' : 'w',
+    vm.secondary ? 'sec' : '',
+    vm.sinceFirst ? 'sf' : '',
+    vm.cycleProgress && !compact ? 'cp' : '',
+    blocks.map((b) => (b.visibleUnits || []).join(',')).join(';'),
+  ].join('|');
+}
+
+function patchCardDigits(card, vm) {
+  const rows = card.querySelectorAll('.unit-row');
+  const blocks = vmStatBlocks(vm);
+  blocks.forEach((block, bi) => {
+    const row = rows[bi];
+    if (!row) return;
+    const pills = row.querySelectorAll('.unit-pill');
+    block.visibleUnits.forEach((u, ui) => {
+      const pill = pills[ui];
+      if (!pill) return;
+      const valueEl = pill.querySelector('.value');
+      const labelEl = pill.querySelector('.label');
+      const v = block.parts[u] || 0;
+      const nextVal = formatUnitValue(u, v);
+      if (valueEl && valueEl.textContent !== nextVal) valueEl.textContent = nextVal;
+      const nextLabel = unitLabel(u, v);
+      if (labelEl && labelEl.textContent !== nextLabel) labelEl.textContent = nextLabel;
+    });
+  });
+  patchRelativeCues(card, vm);
+}
+
+/** Update mutable card fields without recreating icon buttons. */
+function patchCardInPlace(card, vm) {
+  card._tpVm = vm;
+  const color = vm.event.color || '';
+  if (card.style.getPropertyValue('--event-color') !== color) {
+    card.style.setProperty('--event-color', color);
+  }
+
+  const title = card.querySelector('.event-title');
+  if (title && title.textContent !== vm.event.name) title.textContent = vm.event.name;
+
+  const meta = card.querySelector('.event-meta');
+  if (meta) {
+    const nextMeta = buildEventMeta(vm.event);
+    if (meta.textContent !== nextMeta) meta.textContent = nextMeta;
+  }
+
+  const editBtn = card.querySelector('.event-actions button[aria-label^="Edit "]');
+  if (editBtn) {
+    const label = `Edit ${vm.event.name}`;
+    if (editBtn.getAttribute('aria-label') !== label) {
+      editBtn.setAttribute('aria-label', label);
+      editBtn.title = label;
+    }
+  }
+  const copyBtn = card.querySelector('.event-actions button[aria-label^="Copy summary"]');
+  if (copyBtn) {
+    const label = `Copy summary for ${vm.event.name}`;
+    if (copyBtn.getAttribute('aria-label') !== label) {
+      copyBtn.setAttribute('aria-label', label);
+      copyBtn.title = label;
+    }
+  }
+
+  const check = card.querySelector('.event-select');
+  if (check) {
+    const label = `Select ${vm.event.name}`;
+    if (check.getAttribute('aria-label') !== label) check.setAttribute('aria-label', label);
+    const selected = selectedEventIds.has(vm.event.id);
+    if (check.checked !== selected) check.checked = selected;
+    card.classList.toggle('is-selected', selected);
+  }
+
+  patchCardDigits(card, vm);
+}
+
+/**
+ * Reuse existing card/heading nodes; move with insertBefore.
+ * Never wipe the list — preserves scroll and keeps icon SVG nodes alive.
+ */
+function reconcileEventList(list, nowMs, readOnly) {
+  const entries = getDisplayEntries(nowMs);
+  const existingCards = new Map();
+  const existingHeadings = new Map();
+
+  for (const child of [...list.children]) {
+    if (child.classList?.contains('event-card')) {
+      const id = child.getAttribute('data-id');
+      if (id) existingCards.set(id, child);
+    } else if (child.classList?.contains('section-heading')) {
+      const key = child.getAttribute('data-section-key') || child.textContent;
+      if (key) existingHeadings.set(key, child);
+    }
+  }
+
+  const nextNodes = [];
+
+  for (const entry of entries) {
+    if (entry.type === 'heading') {
+      let heading = existingHeadings.get(entry.key);
+      if (heading) {
+        existingHeadings.delete(entry.key);
+        if (heading.textContent !== entry.text) heading.textContent = entry.text;
+        heading.setAttribute('data-section-key', entry.key);
+        heading.className =
+          entry.key === 'this-week'
+            ? 'section-heading section-heading--this-week'
+            : 'section-heading';
+      } else {
+        heading = el('li', {
+          className:
+            entry.key === 'this-week'
+              ? 'section-heading section-heading--this-week'
+              : 'section-heading',
+          'data-section-key': entry.key,
+          text: entry.text,
+        });
+      }
+      nextNodes.push(heading);
+      continue;
+    }
+
+    const shape = cardShapeKey(entry.vm, readOnly);
+    let card = existingCards.get(entry.id);
+    if (card && card.dataset.shapeKey === shape) {
+      existingCards.delete(entry.id);
+      patchCardInPlace(card, entry.vm);
+    } else {
+      // Shape changed or new — create fresh card; old node (if any) is dropped.
+      existingCards.delete(entry.id);
+      card = renderCard(entry.vm, readOnly);
+    }
+    nextNodes.push(card);
+  }
+
+  let orderChanged = nextNodes.length !== list.childElementCount;
+  if (!orderChanged) {
+    for (let i = 0; i < nextNodes.length; i++) {
+      if (list.children[i] !== nextNodes[i]) {
+        orderChanged = true;
+        break;
+      }
+    }
+  }
+
+  if (orderChanged) {
+    const scrollEl = document.scrollingElement || document.documentElement;
+    const scrollY = scrollEl ? scrollEl.scrollTop : window.scrollY || 0;
+    for (let i = 0; i < nextNodes.length; i++) {
+      const want = nextNodes[i];
+      if (list.children[i] !== want) {
+        list.insertBefore(want, list.children[i] || null);
+      }
+    }
+    while (list.childElementCount > nextNodes.length) {
+      list.removeChild(list.lastElementChild);
+    }
+    restoreScrollY(scrollY);
+  }
+}
+
+function restoreScrollY(y) {
+  const scrollEl = document.scrollingElement || document.documentElement;
+  if (scrollEl) scrollEl.scrollTop = y;
+  if (typeof window.scrollTo === 'function') window.scrollTo(0, y);
 }
 
 export function renderList(nowMs = Date.now()) {
@@ -923,12 +1243,11 @@ export function renderList(nowMs = Date.now()) {
   renderMultiSelectBar();
 
   const readOnly = state.mode === 'guest';
-  const items = buildListItems(nowMs, readOnly);
-  const vms = getViewList(nowMs);
+  const vms = getDisplayVms(nowMs);
   const compact = state.settings.cardDensity === 'compact';
 
   list.classList.toggle('is-compact', compact);
-  list.replaceChildren(...items);
+  reconcileEventList(list, nowMs, readOnly);
 
   if (!vms.length) {
     empty.hidden = false;
@@ -1530,7 +1849,7 @@ function renderSpanCalculator() {
         },
         [
           el('span', { text: 'Alternative time units' }),
-          el('span', { className: 'calc-alts-chevron', 'aria-hidden': 'true' }),
+          uiIcon('down', 'calc-alts-chevron'),
         ]
       )
     );
@@ -1842,43 +2161,32 @@ export function patchListDigits(nowMs = Date.now()) {
   const list = document.getElementById('event-list');
   if (!list) return;
 
-  const vms = getViewList(nowMs);
+  const entries = getDisplayEntries(nowMs);
   const cards = [...list.querySelectorAll('.event-card[data-id]')];
+  const cardEntries = entries.filter((e) => e.type === 'card');
+  const cardById = new Map(cards.map((c) => [c.getAttribute('data-id'), c]));
 
-  if (cards.length !== vms.length) {
-    renderList(nowMs);
+  // Same ids in same order → patch digits only (no DOM structural work).
+  const sameSet =
+    cards.length === cardEntries.length &&
+    cardEntries.every((e, i) => cards[i]?.getAttribute('data-id') === e.id);
+
+  if (sameSet) {
+    for (const entry of cardEntries) {
+      const card = cardById.get(entry.id);
+      if (!card) continue;
+      // Shape drift (units appeared/disappeared) → reconcile that card only via list pass.
+      if (card.dataset.shapeKey !== cardShapeKey(entry.vm, state.mode === 'guest')) {
+        reconcileEventList(list, nowMs, state.mode === 'guest');
+        return;
+      }
+      patchCardInPlace(card, entry.vm);
+    }
     return;
   }
 
-  for (let i = 0; i < vms.length; i++) {
-    const vm = vms[i];
-    const card = cards[i];
-    if (!card || card.getAttribute('data-id') !== vm.event.id) {
-      renderList(nowMs);
-      return;
-    }
-
-    const rows = card.querySelectorAll('.unit-row');
-    const blocks = vmStatBlocks(vm);
-    blocks.forEach((block, bi) => {
-      const row = rows[bi];
-      if (!row) return;
-      const pills = row.querySelectorAll('.unit-pill');
-      block.visibleUnits.forEach((u, ui) => {
-        const pill = pills[ui];
-        if (!pill) return;
-        const valueEl = pill.querySelector('.value');
-        const labelEl = pill.querySelector('.label');
-        const v = block.parts[u] || 0;
-        const nextVal = formatUnitValue(u, v);
-        if (valueEl && valueEl.textContent !== nextVal) valueEl.textContent = nextVal;
-        const nextLabel = unitLabel(u, v);
-        if (labelEl && labelEl.textContent !== nextLabel) labelEl.textContent = nextLabel;
-      });
-    });
-
-    patchRelativeCues(card, vm);
-  }
+  // Order/membership changed (e.g. this-week boundary) — move/reuse nodes, never wipe.
+  reconcileEventList(list, nowMs, state.mode === 'guest');
 }
 
 function closeModal() {
