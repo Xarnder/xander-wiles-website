@@ -82,28 +82,49 @@ export function formatAppTimestamp(value) {
   }
 }
 
-/** Compact relative phrasing from primary view model */
-export function formatRelativeCue(primary) {
+function joinUnitPhrases(bits) {
+  if (!bits.length) return '';
+  if (bits.length === 1) return bits[0];
+  if (bits.length === 2) return `${bits[0]} and ${bits[1]}`;
+  return `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
+}
+
+/**
+ * Relative phrasing from a stat block.
+ * @param {object} primary
+ * @param {{ maxUnits?: number }} [opts] — how many leading visible units to include (compact often uses 2+)
+ */
+export function formatRelativeCue(primary, { maxUnits = 1 } = {}) {
   if (!primary) return '';
   const { direction, parts, visibleUnits } = primary;
-  const top = visibleUnits?.[0];
-  if (!top) return direction === 'until' ? 'now' : 'just now';
-  const v = parts[top] || 0;
-  const label = unitLabel(top, v);
-  if (direction === 'until') {
-    if (v === 0 && visibleUnits.length > 1) {
-      const t2 = visibleUnits[1];
-      const v2 = parts[t2] || 0;
-      return `in ${v2} ${unitLabel(t2, v2)}`;
-    }
-    return v === 0 ? 'now' : `in ${v} ${label}`;
+  const units = Array.isArray(visibleUnits) ? visibleUnits : [];
+  if (!units.length) return direction === 'until' ? 'now' : 'just now';
+
+  const limit = Math.max(1, Math.min(Math.floor(Number(maxUnits) || 1), units.length));
+  const picked = [];
+  for (const u of units) {
+    const v = parts[u] || 0;
+    // Skip a leading zero when smaller units remain (all-zero edge uses last unit).
+    if (picked.length === 0 && v === 0 && units.length > 1) continue;
+    picked.push({ u, v });
+    if (picked.length >= limit) break;
   }
-  if (v === 0 && visibleUnits.length > 1) {
-    const t2 = visibleUnits[1];
-    const v2 = parts[t2] || 0;
-    return `${v2} ${unitLabel(t2, v2)} ago`;
+
+  if (!picked.length) {
+    const u = units[units.length - 1];
+    picked.push({ u, v: parts[u] || 0 });
   }
-  return v === 0 ? 'just now' : `${v} ${label} ago`;
+
+  if (picked.every(({ v }) => v === 0)) {
+    return direction === 'until' ? 'now' : 'just now';
+  }
+
+  const phrase = joinUnitPhrases(
+    picked.map(({ u, v }) => `${formatUnitValue(u, v)} ${unitLabel(u, v)}`)
+  );
+
+  if (direction === 'until') return `in ${phrase}`;
+  return `${phrase} ago`;
 }
 
 export function buildCopySummary(vm) {

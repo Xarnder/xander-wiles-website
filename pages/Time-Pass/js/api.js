@@ -16,12 +16,14 @@ import {
 import { db, isFirebaseConfigured } from '../firebase-config.js';
 import {
   COLOR_PALETTE,
+  COMPACT_CUE_UNITS_DEFAULT,
   DEFAULT_UNITS,
   HARD_EVENT_CAP,
   NAME_MAX,
   RECURRENCE_FREQUENCIES,
   SCHEMA_VERSION,
   isValidColor,
+  normalizeCompactCueUnits,
   normalizeUnits,
 } from './constants.js';
 import {
@@ -129,6 +131,7 @@ export function subscribeSettings(uid, onData, onError) {
           hasSeededDemo: false,
           fullColourCards: false,
           cardDensity: 'expanded',
+          compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
           theme: 'atmosphere',
           categories: [DEFAULT_CATEGORY],
           filters: {
@@ -157,6 +160,7 @@ export async function ensureSettings(uid, partial = {}) {
       hasSeededDemo: false,
       fullColourCards: false,
       cardDensity: 'expanded',
+      compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
       theme: 'atmosphere',
       categories: [DEFAULT_CATEGORY],
       filters: {
@@ -421,6 +425,9 @@ export async function deleteCategory(uid, categoryName, events, settings) {
     hasSeededDemo: Boolean(settings?.hasSeededDemo),
     fullColourCards: Boolean(settings?.fullColourCards),
     cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+    compactCueUnits: normalizeCompactCueUnits(
+      settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+    ),
     theme:
       settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
         ? settings.theme
@@ -450,6 +457,9 @@ export async function seedEventsIfNeeded(uid, events, settings) {
       hasSeededDemo: true,
       fullColourCards: Boolean(settings?.fullColourCards),
       cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+      compactCueUnits: normalizeCompactCueUnits(
+        settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+      ),
       theme:
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
           ? settings.theme
@@ -535,6 +545,9 @@ export function exportPayload(events, settings) {
       categories: normalizeCategories(settings?.categories),
       fullColourCards: Boolean(settings?.fullColourCards),
       cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+      compactCueUnits: normalizeCompactCueUnits(
+        settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+      ),
       theme:
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
           ? settings.theme

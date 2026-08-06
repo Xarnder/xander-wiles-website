@@ -113,6 +113,7 @@ function persistSettingsSoon(extra = {}) {
         hasSeededDemo: state.settings.hasSeededDemo,
         fullColourCards: state.settings.fullColourCards,
         cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
+        compactCueUnits: state.settings.compactCueUnits,
         theme: state.settings.theme,
         categories: normalizeCategories(state.settings.categories),
         ...extra,
@@ -139,6 +140,7 @@ async function syncCategoriesAfterEvent(category, modalCategories) {
       hasSeededDemo: state.settings.hasSeededDemo,
       fullColourCards: state.settings.fullColourCards,
       cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
+      compactCueUnits: state.settings.compactCueUnits,
       theme: state.settings.theme,
     });
   }
@@ -246,6 +248,10 @@ setUIHandlers({
               : state.settings.cardDensity === 'compact'
                 ? 'compact'
                 : 'expanded',
+          compactCueUnits:
+            partial.compactCueUnits !== undefined
+              ? partial.compactCueUnits
+              : state.settings.compactCueUnits,
           theme: partial.theme !== undefined ? partial.theme : state.settings.theme,
           ...partial,
           categories: normalizeCategories(

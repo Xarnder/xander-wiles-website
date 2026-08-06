@@ -1,10 +1,14 @@
 import {
   ALL_UNITS,
   COLOR_PALETTE,
+  COMPACT_CUE_UNITS_DEFAULT,
+  COMPACT_CUE_UNITS_MAX,
+  COMPACT_CUE_UNITS_MIN,
   DEFAULT_UNITS,
   HARD_EVENT_CAP,
   SOFT_EVENT_CAP,
   getBrowserTimeZone,
+  normalizeCompactCueUnits,
   normalizeUnits,
   unitLabel,
 } from './constants.js';
@@ -341,6 +345,13 @@ function buildEventMeta(event) {
   bits.push(resolveEventCategory(event, state.settings.categories));
   bits.push(recurrenceLabel(event.recurrence?.frequency || 'none'));
   bits.push(formatTzShort(event.timeZone || getBrowserTimeZone()));
+  return bits.join(' · ');
+}
+
+/** Compact cards: date (+ time) shown on the primary stat row. */
+function buildCompactEventDate(event) {
+  const bits = [formatDisplayDate(event.date)];
+  if (event.time) bits.push(formatDisplayTime(event.time));
   return bits.join(' · ');
 }
 
@@ -803,6 +814,17 @@ export function renderToolbar(nowMs = Date.now()) {
 }
 
 
+function cueMaxUnits(compact) {
+  if (!compact) return 1;
+  return normalizeCompactCueUnits(
+    state.settings.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+  );
+}
+
+function formatBlockCue(block, compact = false) {
+  return formatRelativeCue(block, { maxUnits: cueMaxUnits(compact) });
+}
+
 function renderUnitRow(parts, visibleUnits) {
   const row = el('div', { className: 'unit-row' });
   for (const u of visibleUnits) {
@@ -817,8 +839,10 @@ function renderUnitRow(parts, visibleUnits) {
   return row;
 }
 
-function renderDirectionRow(block, compact = false) {
-  const row = el('div', { className: 'direction-row' });
+function renderDirectionRow(block, compact = false, event = null) {
+  const row = el('div', {
+    className: `direction-row${compact && event ? ' direction-row--with-date' : ''}`,
+  });
   if (!compact) {
     row.appendChild(
       el('span', {
@@ -827,7 +851,15 @@ function renderDirectionRow(block, compact = false) {
       })
     );
   }
-  row.appendChild(el('span', { className: 'relative-cue', text: formatRelativeCue(block) }));
+  row.appendChild(el('span', { className: 'relative-cue', text: formatBlockCue(block, compact) }));
+  if (compact && event) {
+    row.appendChild(
+      el('span', {
+        className: 'event-date-inline',
+        text: buildCompactEventDate(event),
+      })
+    );
+  }
   return row;
 }
 
@@ -837,7 +869,7 @@ function renderStatExtra(block, label, compact) {
   if (!compact) {
     secRow.appendChild(el('span', { className: 'direction-tag', text: label }));
   }
-  secRow.appendChild(el('span', { className: 'relative-cue', text: formatRelativeCue(block) }));
+  secRow.appendChild(el('span', { className: 'relative-cue', text: formatBlockCue(block, compact) }));
   sec.appendChild(secRow);
   if (!compact) {
     sec.appendChild(renderUnitRow(block.parts, block.visibleUnits));
@@ -890,7 +922,7 @@ function renderCycleProgress(progress, compact) {
   return wrap;
 }
 
-function renderCard(vm, readOnly) {
+function renderCard(vm, readOnly, { thisWeek = false } = {}) {
   const { event, primary, secondary, sinceFirst, cycleProgress } = vm;
   const fullColour = Boolean(state.settings.fullColourCards);
   const compact = state.settings.cardDensity === 'compact';
@@ -899,13 +931,13 @@ function renderCard(vm, readOnly) {
   const eventId = event.id;
   const li = el('li', {
     className: `event-card glass${fullColour ? ' is-full-colour' : ''}${compact ? ' is-compact' : ''}${
-      selecting ? ' is-selectable' : ''
-    }${selected ? ' is-selected' : ''}`,
+      thisWeek ? ' is-this-week' : ''
+    }${selecting ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`,
     style: `--event-color: ${event.color}`,
     'data-id': eventId,
   });
   li._tpVm = vm;
-  li.dataset.shapeKey = cardShapeKey(vm, readOnly);
+  li.dataset.shapeKey = cardShapeKey(vm, readOnly, thisWeek);
 
   const head = el('div', { className: 'event-card-head' });
 
@@ -963,7 +995,7 @@ function renderCard(vm, readOnly) {
   }
 
   li.appendChild(head);
-  li.appendChild(renderDirectionRow(primary, compact));
+  li.appendChild(renderDirectionRow(primary, compact, event));
   if (!compact) {
     li.appendChild(renderUnitRow(primary.parts, primary.visibleUnits));
   }
@@ -1026,22 +1058,22 @@ function getDisplayEntries(nowMs = Date.now()) {
       key: 'this-week',
       text: "This week's events",
     });
-    for (const vm of thisWeek) entries.push({ type: 'card', id: vm.event.id, vm });
+    for (const vm of thisWeek) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: true });
   }
 
   if (showSectionHeaders) {
     if (upcoming.length) {
       entries.push({ type: 'heading', key: 'upcoming', text: 'Upcoming' });
-      for (const vm of upcoming) entries.push({ type: 'card', id: vm.event.id, vm });
+      for (const vm of upcoming) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
     }
     if (past.length) {
       entries.push({ type: 'heading', key: 'past', text: 'Past' });
-      for (const vm of past) entries.push({ type: 'card', id: vm.event.id, vm });
+      for (const vm of past) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
     }
     return entries;
   }
 
-  for (const vm of all) entries.push({ type: 'card', id: vm.event.id, vm });
+  for (const vm of all) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
   return entries;
 }
 
@@ -1052,15 +1084,16 @@ function getDisplayVms(nowMs = Date.now()) {
 }
 
 /** Structural fingerprint — changing this recreates that card (icons included). */
-function cardShapeKey(vm, readOnly) {
+function cardShapeKey(vm, readOnly, thisWeek = false) {
   const compact = state.settings.cardDensity === 'compact';
   const selecting = multiSelectMode && !readOnly;
   const blocks = vmStatBlocks(vm);
   return [
-    compact ? 'c' : 'e',
+    compact ? 'c-date' : 'e',
     state.settings.fullColourCards ? '1' : '0',
     selecting ? 's' : 'n',
     readOnly ? 'r' : 'w',
+    thisWeek ? 'tw' : '',
     vm.secondary ? 'sec' : '',
     vm.sinceFirst ? 'sf' : '',
     vm.cycleProgress && !compact ? 'cp' : '',
@@ -1105,6 +1138,12 @@ function patchCardInPlace(card, vm) {
   if (meta) {
     const nextMeta = buildEventMeta(vm.event);
     if (meta.textContent !== nextMeta) meta.textContent = nextMeta;
+  }
+
+  const dateInline = card.querySelector('.event-date-inline');
+  if (dateInline) {
+    const nextDate = buildCompactEventDate(vm.event);
+    if (dateInline.textContent !== nextDate) dateInline.textContent = nextDate;
   }
 
   const editBtn = card.querySelector('.event-actions button[aria-label^="Edit "]');
@@ -1182,7 +1221,7 @@ function reconcileEventList(list, nowMs, readOnly) {
       continue;
     }
 
-    const shape = cardShapeKey(entry.vm, readOnly);
+    const shape = cardShapeKey(entry.vm, readOnly, Boolean(entry.thisWeek));
     let card = existingCards.get(entry.id);
     if (card && card.dataset.shapeKey === shape) {
       existingCards.delete(entry.id);
@@ -1190,7 +1229,7 @@ function reconcileEventList(list, nowMs, readOnly) {
     } else {
       // Shape changed or new — create fresh card; old node (if any) is dropped.
       existingCards.delete(entry.id);
-      card = renderCard(entry.vm, readOnly);
+      card = renderCard(entry.vm, readOnly, { thisWeek: Boolean(entry.thisWeek) });
     }
     nextNodes.push(card);
   }
@@ -1445,6 +1484,52 @@ function renderSettingsPage() {
   toggleRow.appendChild(toggle);
   toggleRow.appendChild(toggleCopy);
   appearance.appendChild(toggleRow);
+
+  appearance.appendChild(
+    el('p', { className: 'settings-toggle-title', text: 'Compact cue detail' })
+  );
+  appearance.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: 'In compact view, relative cues show this many leading units (e.g. “5 months and 2 weeks”). Default is 2.',
+    })
+  );
+
+  const cueUnits = normalizeCompactCueUnits(
+    state.settings.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+  );
+  const cueGroup = el('div', {
+    className: 'chip-group chip-group--exclusive',
+    role: 'radiogroup',
+    'aria-label': 'Compact cue units',
+  });
+  for (let n = COMPACT_CUE_UNITS_MIN; n <= COMPACT_CUE_UNITS_MAX; n++) {
+    const active = cueUnits === n;
+    cueGroup.appendChild(
+      el('button', {
+        type: 'button',
+        className: `chip${active ? ' is-active' : ''}`,
+        role: 'radio',
+        'aria-checked': active,
+        text: String(n),
+        title: n === 1 ? '1 unit' : `${n} units`,
+        onClick: async () => {
+          if (cueUnits === n) return;
+          patchSettings({ compactCueUnits: n });
+          try {
+            await handlers.onSaveSettings({ compactCueUnits: n });
+            toast(
+              n === 1 ? 'Compact cues show 1 unit' : `Compact cues show ${n} units`,
+              'success'
+            );
+          } catch (err) {
+            toast(err.message || 'Could not save setting', 'error');
+          }
+        },
+      })
+    );
+  }
+  appearance.appendChild(cueGroup);
 
   const densityNote = el('p', {
     className: 'settings-muted',
@@ -2136,7 +2221,7 @@ function patchRelativeCues(card, vm) {
   blocks.forEach((block, i) => {
     const cueEl = cues[i];
     if (!cueEl) return;
-    const next = formatRelativeCue(block);
+    const next = formatBlockCue(block, state.settings.cardDensity === 'compact');
     if (cueEl.textContent !== next) cueEl.textContent = next;
   });
 
@@ -2176,7 +2261,10 @@ export function patchListDigits(nowMs = Date.now()) {
       const card = cardById.get(entry.id);
       if (!card) continue;
       // Shape drift (units appeared/disappeared) → reconcile that card only via list pass.
-      if (card.dataset.shapeKey !== cardShapeKey(entry.vm, state.mode === 'guest')) {
+      if (
+        card.dataset.shapeKey !==
+        cardShapeKey(entry.vm, state.mode === 'guest', Boolean(entry.thisWeek))
+      ) {
         reconcileEventList(list, nowMs, state.mode === 'guest');
         return;
       }

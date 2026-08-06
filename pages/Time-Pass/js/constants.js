@@ -35,6 +35,17 @@ export const HARD_EVENT_CAP = 250;
 
 export const SCHEMA_VERSION = 1;
 
+/** How many leading units compact cues show (settings; default 2). */
+export const COMPACT_CUE_UNITS_MIN = 1;
+export const COMPACT_CUE_UNITS_MAX = 5;
+export const COMPACT_CUE_UNITS_DEFAULT = 2;
+
+export function normalizeCompactCueUnits(value) {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return COMPACT_CUE_UNITS_DEFAULT;
+  return Math.min(COMPACT_CUE_UNITS_MAX, Math.max(COMPACT_CUE_UNITS_MIN, n));
+}
+
 export const UNIT_LABELS = {
   decades: ['decade', 'decades'],
   years: ['year', 'years'],

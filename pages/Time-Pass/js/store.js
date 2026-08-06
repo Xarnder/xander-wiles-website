@@ -12,6 +12,7 @@ import {
   normalizeCategories,
   normalizeCategoryName,
 } from './categories.js';
+import { COMPACT_CUE_UNITS_DEFAULT, normalizeCompactCueUnits } from './constants.js';
 
 const listeners = new Set();
 
@@ -22,6 +23,8 @@ export function defaultSettings() {
     fullColourCards: false,
     /** 'expanded' = unit pills; 'compact' = cue-only smaller cards */
     cardDensity: 'expanded',
+    /** How many leading units compact relative cues show (1–5, default 2). */
+    compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
     /** 'atmosphere' | 'oled' | 'light' */
     theme: 'atmosphere',
     categories: [DEFAULT_CATEGORY],
@@ -149,6 +152,9 @@ export function setSettings(settings) {
     categories,
     fullColourCards: Boolean(settings?.fullColourCards),
     cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+    compactCueUnits: normalizeCompactCueUnits(
+      settings?.compactCueUnits ?? base.compactCueUnits
+    ),
     theme: normalizeTheme(settings?.theme ?? readStoredTheme()),
   };
   applyTheme(state.settings.theme);
@@ -174,6 +180,9 @@ export function patchSettings(partial) {
   if (partial.theme !== undefined) next.theme = normalizeTheme(partial.theme);
   if (partial.categories !== undefined) {
     next.categories = normalizeCategories(partial.categories);
+  }
+  if (partial.compactCueUnits !== undefined) {
+    next.compactCueUnits = normalizeCompactCueUnits(partial.compactCueUnits);
   }
   state.settings = next;
   if (partial.theme !== undefined) applyTheme(state.settings.theme);

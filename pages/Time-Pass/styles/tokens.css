@@ -198,6 +198,55 @@ html[data-theme="light"] .event-card {
   background: #ffffff;
 }
 
+html[data-theme="light"] .event-card.is-this-week {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
+    0 0 16px color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent),
+    0 0 28px color-mix(in srgb, var(--event-color, var(--accent)) 22%, transparent),
+    0 8px 24px rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .event-card.is-this-week.is-compact {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
+    0 0 12px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
+    0 0 22px color-mix(in srgb, var(--event-color, var(--accent)) 18%, transparent),
+    0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .app-header,
+html[data-theme="light"] body:not(.is-settings-view):not(.is-calculator-view) .toolbar {
+  background: rgba(255, 255, 255, 0.94);
+  background-image: none;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 640px) {
+  html[data-theme="light"] .app-header,
+  html[data-theme="light"] body:not(.is-settings-view):not(.is-calculator-view) .toolbar,
+  html[data-theme="light"] body.is-multi-select:not(.is-settings-view):not(.is-calculator-view) .multi-select-bar {
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.1);
+  }
+
+  html[data-theme="light"] body.is-multi-select:not(.is-settings-view):not(.is-calculator-view) .multi-select-bar {
+    background: rgba(255, 255, 255, 0.96);
+    background-image: none;
+  }
+}
+
+html[data-theme="oled"] .app-header,
+html[data-theme="oled"] body:not(.is-settings-view):not(.is-calculator-view) .toolbar {
+  background: #0a0a0a;
+  background-image: none;
+  box-shadow: none;
+}
+
+html[data-theme="oled"] body.is-multi-select:not(.is-settings-view):not(.is-calculator-view) .multi-select-bar {
+  background: #0a0a0a;
+  background-image: none;
+  box-shadow: none;
+}
+
 html[data-theme="light"] .event-card.is-full-colour {
   background: color-mix(in srgb, var(--event-color, var(--accent)) 24%, #ffffff);
 }
