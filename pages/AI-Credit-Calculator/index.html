@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Credit Cost Calculator</title>
+    <meta name="description"
+        content="Convert AI credit packs into real money. See what a task costs and how many runs you get.">
+
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#0a0618" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#0a0618" media="(prefers-color-scheme: light)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="orb orb-1" aria-hidden="true"></div>
+    <div class="orb orb-2" aria-hidden="true"></div>
+    <div class="orb orb-3" aria-hidden="true"></div>
+
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="page">
+        <header class="hero glass-panel">
+            <p class="eyebrow">AI billing decoder</p>
+            <h1>Credit Cost Calculator</h1>
+            <p class="lede">
+                AI services price in credits — this turns your pack into real money so you know what each task
+                actually costs.
+            </p>
+        </header>
+
+        <section class="layout">
+            <form class="glass-panel inputs" id="creditForm" novalidate>
+                <h2>Your pack</h2>
+
+                <div class="field-row">
+                    <div class="field currency-field">
+                        <label for="amountPaid">Amount paid</label>
+                        <div class="money-input">
+                            <select id="currency" aria-label="Currency">
+                                <option value="GBP" selected>£</option>
+                                <option value="USD">$</option>
+                                <option value="EUR">€</option>
+                            </select>
+                            <input type="number" id="amountPaid" min="0" step="any" inputmode="decimal"
+                                placeholder="20.00" value="20" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="creditsBought">Credits you got</label>
+                        <input type="number" id="creditsBought" min="0" step="any" inputmode="decimal"
+                            placeholder="1000" value="1000" required>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="taskCredits">Credits this task used</label>
+                    <input type="number" id="taskCredits" min="0" step="any" inputmode="decimal"
+                        placeholder="25" value="25" required>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-neon">Calculate</button>
+                    <button type="button" class="btn-glass" id="saveInputsBtn">Save inputs</button>
+                </div>
+            </form>
+
+            <div class="results glass-panel" id="results" aria-live="polite">
+                <h2>What it costs</h2>
+
+                <div class="stat-grid">
+                    <article class="stat glass-inset">
+                        <p class="stat-label">This task costs</p>
+                        <p class="stat-value" id="taskCost">—</p>
+                    </article>
+
+                    <article class="stat glass-inset">
+                        <p class="stat-label">Runs from this pack</p>
+                        <p class="stat-value" id="runsPossible">—</p>
+                    </article>
+
+                    <article class="stat glass-inset">
+                        <p class="stat-label">Cost of 1 credit</p>
+                        <p class="stat-value" id="pricePerCredit">—</p>
+                    </article>
+
+                    <article class="stat glass-inset">
+                        <p class="stat-label" id="creditsPerUnitLabel">Credits per £1</p>
+                        <p class="stat-value" id="creditsPerUnit">—</p>
+                    </article>
+
+                    <article class="stat glass-inset">
+                        <p class="stat-label">Left after 1 run</p>
+                        <p class="stat-value" id="creditsLeftOne">—</p>
+                    </article>
+
+                    <article class="stat glass-inset">
+                        <p class="stat-label">Left after all possible runs</p>
+                        <p class="stat-value" id="creditsLeftAll">—</p>
+                    </article>
+                </div>
+
+                <p class="summary" id="summary">
+                    Enter your pack details to see the real cost of a task.
+                </p>
+            </div>
+        </section>
+
+        <section class="history glass-panel" aria-labelledby="history-heading">
+            <div class="history-header">
+                <div>
+                    <h2 id="history-heading">Saved inputs</h2>
+                    <p class="history-note">Stored in this browser’s local cache only.</p>
+                </div>
+                <button type="button" class="btn-glass btn-glass-small" id="clearHistoryBtn" hidden>
+                    Clear all
+                </button>
+            </div>
+
+            <div class="table-wrap">
+                <table class="history-table" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th scope="col">Paid</th>
+                            <th scope="col">Credits</th>
+                            <th scope="col">Task</th>
+                            <th scope="col">Saved</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+                <p class="history-empty" id="historyEmpty">No saved packs yet. Hit Save inputs to keep one.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
