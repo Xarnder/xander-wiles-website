@@ -28,7 +28,11 @@
   --font-brand: clamp(0.92rem, 0.78rem + 0.7vw, 1.2rem);
   --font-title: clamp(1.05rem, 0.95rem + 0.55vw, 1.3rem);
   --font-cue: clamp(0.62rem, 0.55rem + 0.25vw, 0.72rem);
-  --card-min: clamp(15.5rem, 42vw, 20rem);
+  /*
+   * Expanded cards: wide enough for emoji indent + a full 7-unit pill row
+   * (…MINUTES / SECONDS). auto-fill drops columns before pills wrap.
+   */
+  --card-min: 38rem;
   --card-min-compact: clamp(11.5rem, 34vw, 15rem);
   --main-max: 1280px;
   --calc-max: 40rem;

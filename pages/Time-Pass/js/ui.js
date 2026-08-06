@@ -1311,6 +1311,76 @@ function restoreScrollY(y) {
   if (typeof window.scrollTo === 'function') window.scrollTo(0, y);
 }
 
+/** Floor so short cues (e.g. "now") don't collapse cards uncomfortably. */
+const COMPACT_CARD_MIN_FLOOR_REM = 11.5;
+
+let compactColumnMinRaf = 0;
+
+/**
+ * Size compact grid columns from the longest on-screen stat row
+ * (relative cue, and cue + date on the primary row).
+ */
+function syncCompactColumnMin(list) {
+  if (!list) return;
+  if (!list.classList.contains('is-compact')) {
+    list.style.removeProperty('--card-min-compact');
+    return;
+  }
+
+  const sample = list.querySelector('.event-card.is-compact');
+  if (!sample) {
+    list.style.removeProperty('--card-min-compact');
+    return;
+  }
+
+  let maxBody = 0;
+  for (const card of list.querySelectorAll('.event-card.is-compact')) {
+    for (const row of card.querySelectorAll('.direction-row')) {
+      const cue = row.querySelector('.relative-cue');
+      if (!cue) continue;
+      const date = row.querySelector('.event-date-inline');
+      const gap = date ? parseFloat(getComputedStyle(row).columnGap || getComputedStyle(row).gap) || 0 : 0;
+      const need = cue.scrollWidth + (date ? date.scrollWidth + gap : 0);
+      if (need > maxBody) maxBody = need;
+    }
+  }
+
+  const pad =
+    (parseFloat(getComputedStyle(sample).paddingLeft) || 0) +
+    (parseFloat(getComputedStyle(sample).paddingRight) || 0);
+  const emoji = sample.querySelector('.event-emoji');
+  const emojiW = emoji ? emoji.getBoundingClientRect().width : 0;
+  const lead = sample.querySelector('.event-card-lead');
+  const leadGap = lead ? parseFloat(getComputedStyle(lead).columnGap || getComputedStyle(lead).gap) || 0 : 0;
+  const select = sample.querySelector('.event-select');
+  const selectW = select
+    ? select.getBoundingClientRect().width +
+      (parseFloat(getComputedStyle(select).marginLeft) || 0) +
+      (parseFloat(getComputedStyle(select).marginRight) || 0)
+    : 0;
+
+  const rootFs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const floor = COMPACT_CARD_MIN_FLOOR_REM * rootFs;
+  const minPx = Math.ceil(Math.max(floor, pad + selectW + emojiW + leadGap + maxBody));
+  const next = `${minPx}px`;
+  if (list.style.getPropertyValue('--card-min-compact') !== next) {
+    list.style.setProperty('--card-min-compact', next);
+  }
+}
+
+function scheduleCompactColumnMin(list = document.getElementById('event-list')) {
+  if (!list) return;
+  if (compactColumnMinRaf) cancelAnimationFrame(compactColumnMinRaf);
+  compactColumnMinRaf = requestAnimationFrame(() => {
+    compactColumnMinRaf = 0;
+    syncCompactColumnMin(list);
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => scheduleCompactColumnMin());
+}
+
 export function renderList(nowMs = Date.now()) {
   const list = document.getElementById('event-list');
   const empty = document.getElementById('empty-state');
@@ -1331,7 +1401,9 @@ export function renderList(nowMs = Date.now()) {
   const compact = state.settings.cardDensity === 'compact';
 
   list.classList.toggle('is-compact', compact);
+  if (!compact) list.style.removeProperty('--card-min-compact');
   reconcileEventList(list, nowMs, readOnly);
+  scheduleCompactColumnMin(list);
 
   if (!vms.length) {
     empty.hidden = false;
@@ -2311,15 +2383,18 @@ export function patchListDigits(nowMs = Date.now()) {
         cardShapeKey(entry.vm, state.mode === 'guest', Boolean(entry.thisWeek))
       ) {
         reconcileEventList(list, nowMs, state.mode === 'guest');
+        scheduleCompactColumnMin(list);
         return;
       }
       patchCardInPlace(card, entry.vm);
     }
+    scheduleCompactColumnMin(list);
     return;
   }
 
   // Order/membership changed (e.g. this-week boundary) — move/reuse nodes, never wipe.
   reconcileEventList(list, nowMs, state.mode === 'guest');
+  scheduleCompactColumnMin(list);
 }
 
 function closeModal() {

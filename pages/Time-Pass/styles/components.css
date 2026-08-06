@@ -659,7 +659,7 @@ html[data-theme="light"] .filter-family-subhint {
   display: inline-block;
   margin-left: 0.45rem;
   padding: 0.1rem 0.4rem;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent);
   color: var(--text);
   background: color-mix(in srgb, var(--event-color, var(--accent)) 16%, transparent);
@@ -715,7 +715,7 @@ html[data-theme="light"] .filter-family-subhint {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-min)), 1fr));
   gap: var(--space-sm);
-  align-items: start;
+  align-items: stretch;
   width: 100%;
   min-width: 0;
 }
@@ -803,6 +803,7 @@ html[data-theme="light"] .filter-family-subhint {
 
 .event-card.is-compact .direction-row {
   margin-top: 0.2rem;
+  flex-wrap: nowrap;
 }
 
 .event-card.is-compact .direction-row--with-date {
@@ -820,8 +821,11 @@ html[data-theme="light"] .filter-family-subhint {
   margin-left: 0;
   font-size: 0.72rem;
   padding: 0.08rem 0.35rem;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .event-card.is-compact .event-date-inline {
@@ -1124,19 +1128,22 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
 
 .unit-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.4rem;
   margin-top: 0.5rem;
+  min-width: 0;
 }
 
 .unit-pill {
-  min-width: clamp(2.6rem, 8vw, 3.4rem);
-  padding: 0.35rem 0.45rem;
-  border-radius: 10px;
+  min-width: max-content;
+  padding: 0.35rem 0.5rem;
+  border-radius: 3px;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.08);
   text-align: center;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .unit-pill .value {
@@ -1145,6 +1152,9 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .unit-pill .label {
@@ -1154,6 +1164,9 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin-top: 0.05rem;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .secondary-block {
@@ -3251,7 +3264,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   .unit-pill {
     min-width: 2.6rem;
     padding: 0.2rem 0.28rem;
-    border-radius: 8px;
+    border-radius: 3px;
   }
 
   .unit-pill .value {
@@ -3402,11 +3415,10 @@ input[type="range"]::-webkit-slider-runnable-track {
   }
 }
 
-/* Large screens — breathe a little more */
+/* Large screens — breathe a little more (column count still driven by --card-min) */
 @media (min-width: 1100px) {
   :root {
-    --card-min: 19rem;
-    --card-min-compact: 14.5rem;
+    --card-min-compact: 15rem;
   }
 
   .event-list {
@@ -3415,6 +3427,17 @@ input[type="range"]::-webkit-slider-runnable-track {
 
   .calculator-page {
     max-width: min(var(--calc-max), 92%);
+  }
+}
+
+/* Narrow / mobile cards: allow pills to wrap when a single column is still tight */
+@media (max-width: 640px) {
+  .unit-row {
+    flex-wrap: wrap;
+  }
+
+  .unit-pill {
+    flex: 0 1 auto;
   }
 }
 
