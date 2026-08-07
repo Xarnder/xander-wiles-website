@@ -11,6 +11,8 @@
 		selectionLooksLikeFolder,
 	} from './lib/customLogos'
 	import ReorderMenu from './lib/ReorderMenu.svelte'
+	import ColourPanel from './lib/ColourPanel.svelte'
+	import CatalogPanel from './lib/CatalogPanel.svelte'
 
 	const SCALE_MIN = 0.5
 	const SCALE_MAX = 2
@@ -19,6 +21,11 @@
 	let orderedLogos = $state<Logo[]>(loadOrderFromStorage())
 	let currentIndex = $state(0)
 	let reorderOpen = $state(false)
+	let colourPanelOpen = $state(false)
+	let colourPanel = $state<{ exportBrandPdf: () => Promise<void> } | undefined>()
+	let exportBusy = $state(false)
+	let exportError = $state('')
+	let catalogOpen = $state(false)
 	let companyName = $state('Sylenze')
 	let selectedFont = $state(fonts[0].id)
 	let swapped = $state(false)
@@ -37,6 +44,9 @@
 	const fontFamily = $derived(
 		fonts.find((f) => f.id === selectedFont)?.family ?? fonts[0].family,
 	)
+	const fontName = $derived(
+		fonts.find((f) => f.id === selectedFont)?.name ?? fonts[0].name,
+	)
 	const counterLabel = $derived(
 		orderedLogos.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${orderedLogos.length}`,
 	)
@@ -48,6 +58,10 @@
 	const whiteNameColor = $derived(
 		useSvgColors && svgColors ? svgColors.darkest : undefined,
 	)
+	/** PDF / export: colour used on light backgrounds (white panel). */
+	const textColorOnLight = $derived(whiteNameColor ?? '#121212')
+	/** PDF / export: colour used on dark backgrounds (black panel). */
+	const textColorOnDark = $derived(blackNameColor ?? '#ffffff')
 
 	$effect(() => {
 		if (!useSvgColors) {
@@ -158,7 +172,7 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (reorderOpen) return
+		if (reorderOpen || colourPanelOpen || catalogOpen) return
 
 		const target = event.target
 		if (
@@ -175,6 +189,45 @@
 		} else if (event.key === 'ArrowRight') {
 			event.preventDefault()
 			next()
+		}
+	}
+
+	function closeAllSheets() {
+		reorderOpen = false
+		colourPanelOpen = false
+		catalogOpen = false
+	}
+
+	function openReorder() {
+		closeAllSheets()
+		reorderOpen = true
+	}
+
+	function openColourPanel() {
+		closeAllSheets()
+		colourPanelOpen = true
+	}
+
+	function openCatalog() {
+		closeAllSheets()
+		catalogOpen = true
+	}
+
+	function selectFromCatalog(logoId: string) {
+		const idx = orderedLogos.findIndex((l) => l.id === logoId)
+		if (idx >= 0) currentIndex = idx
+	}
+
+	async function exportPdfFromToolbar() {
+		if (!currentLogo || exportBusy) return
+		exportBusy = true
+		exportError = ''
+		try {
+			await colourPanel?.exportBrandPdf()
+		} catch (err: unknown) {
+			exportError = err instanceof Error ? err.message : 'Export failed'
+		} finally {
+			exportBusy = false
 		}
 	}
 </script>
@@ -251,12 +304,44 @@
 			<button
 				type="button"
 				class="btn btn-text"
-				onclick={() => (reorderOpen = true)}
+				onclick={openReorder}
 				aria-haspopup="dialog"
 				aria-expanded={reorderOpen}
 			>
 				Reorder
 			</button>
+			<button
+				type="button"
+				class="btn btn-text"
+				onclick={openCatalog}
+				aria-haspopup="dialog"
+				aria-expanded={catalogOpen}
+				aria-controls="catalog-panel"
+			>
+				Catalog
+			</button>
+			<button
+				type="button"
+				class="btn btn-text"
+				onclick={openColourPanel}
+				aria-haspopup="dialog"
+				aria-expanded={colourPanelOpen}
+				aria-controls="colour-panel"
+			>
+				Colours
+			</button>
+			<button
+				type="button"
+				class="btn btn-export"
+				onclick={exportPdfFromToolbar}
+				disabled={!currentLogo || exportBusy}
+				title="Export brand colour presentation PDF"
+			>
+				{exportBusy ? 'Exporting…' : 'Export PDF'}
+			</button>
+			{#if exportError}
+				<span class="export-error" role="alert">{exportError}</span>
+			{/if}
 			<button
 				type="button"
 				class="btn btn-text"
@@ -391,6 +476,24 @@
 	</footer>
 
 	<ReorderMenu bind:open={reorderOpen} logos={orderedLogos} onapply={applyOrder} />
+	<CatalogPanel
+		bind:open={catalogOpen}
+		logos={orderedLogos}
+		currentId={currentLogo?.id}
+		onselect={selectFromCatalog}
+	/>
+	<ColourPanel
+		bind:this={colourPanel}
+		bind:open={colourPanelOpen}
+		logo={currentLogo}
+		companyName={companyName}
+		{fontName}
+		{fontFamily}
+		{logoScale}
+		{textScale}
+		{textColorOnLight}
+		{textColorOnDark}
+	/>
 </div>
 
 <style>
@@ -612,6 +715,42 @@
 		width: auto;
 		padding: 0 0.75rem;
 		font-size: 0.8125rem;
+	}
+
+	.btn.btn-export {
+		width: auto;
+		height: 2.35rem;
+		padding: 0 1rem;
+		margin-left: 0.25rem;
+		background: #f3f3f3;
+		color: #111;
+		border: 1px solid #ffffff;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
+	.btn.btn-export:hover:not(:disabled) {
+		background: #ffffff;
+		border-color: #ffffff;
+	}
+
+	.btn.btn-export:active:not(:disabled) {
+		background: #e4e4e4;
+	}
+
+	.btn.btn-export:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.export-error {
+		color: #e88;
+		font-size: 0.75rem;
+		max-width: 12rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.counter {
