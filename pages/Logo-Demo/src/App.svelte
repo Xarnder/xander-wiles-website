@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition'
 	import type { Logo } from './lib/logos'
-	import { fonts, googleFontsHref } from './lib/fonts'
+	import { fonts, googleFontsHref, type Font } from './lib/fonts'
+	import {
+		loadCustomFontFile,
+		revokeCustomFont,
+		type CustomFont,
+	} from './lib/customFonts'
 	import { extractSvgColors, type SvgColorPair } from './lib/svgColors'
 	import { loadOrderFromStorage, saveOrderToStorage } from './lib/logoOrder'
 	import {
@@ -28,6 +33,9 @@
 	let catalogOpen = $state(false)
 	let companyName = $state('Sylenze')
 	let selectedFont = $state(fonts[0].id)
+	let customFonts = $state.raw<CustomFont[]>([])
+	let fontStatus = $state('')
+	let fontBusy = $state(false)
 	let swapped = $state(false)
 	let logoScale = $state(1)
 	let textScale = $state(1)
@@ -37,15 +45,17 @@
 	let customStatus = $state('')
 	let folderInput: HTMLInputElement | undefined = $state()
 	let filesInput: HTMLInputElement | undefined = $state()
+	let fontInput: HTMLInputElement | undefined = $state()
 
 	type ScaleTarget = 'logo' | 'text'
 
+	const availableFonts = $derived<Font[]>([...customFonts, ...fonts])
 	const currentLogo = $derived(orderedLogos[currentIndex] ?? orderedLogos[0])
 	const fontFamily = $derived(
-		fonts.find((f) => f.id === selectedFont)?.family ?? fonts[0].family,
+		availableFonts.find((f) => f.id === selectedFont)?.family ?? fonts[0].family,
 	)
 	const fontName = $derived(
-		fonts.find((f) => f.id === selectedFont)?.name ?? fonts[0].name,
+		availableFonts.find((f) => f.id === selectedFont)?.name ?? fonts[0].name,
 	)
 	const counterLabel = $derived(
 		orderedLogos.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${orderedLogos.length}`,
@@ -125,6 +135,36 @@
 		if (!(target instanceof HTMLInputElement)) return
 		applyCustomLogos(target.files)
 		target.value = ''
+	}
+
+	async function handleFontUpload(event: Event) {
+		const target = event.currentTarget
+		if (!(target instanceof HTMLInputElement)) return
+		const file = target.files?.[0]
+		target.value = ''
+		if (!file || fontBusy) return
+
+		fontBusy = true
+		fontStatus = ''
+		try {
+			const loaded = await loadCustomFontFile(file)
+			customFonts = [loaded, ...customFonts]
+			selectedFont = loaded.id
+			fontStatus = `Loaded ${loaded.name}`
+		} catch (err: unknown) {
+			fontStatus = err instanceof Error ? err.message : 'Font upload failed'
+		} finally {
+			fontBusy = false
+		}
+	}
+
+	function removeSelectedCustomFont() {
+		const current = customFonts.find((f) => f.id === selectedFont)
+		if (!current) return
+		revokeCustomFont(current)
+		customFonts = customFonts.filter((f) => f.id !== current.id)
+		selectedFont = fonts[0].id
+		fontStatus = ''
 	}
 
 	function resetDemos() {
@@ -395,11 +435,50 @@
 			<label class="field">
 				<span class="field-label">Font</span>
 				<select bind:value={selectedFont} style:font-family={fontFamily}>
-					{#each fonts as font (font.id)}
-						<option value={font.id} style="font-family: {font.family}">{font.name}</option>
+					{#each availableFonts as font (font.id)}
+						<option value={font.id} style="font-family: {font.family}">
+							{font.custom ? `Custom · ${font.name}` : font.name}
+						</option>
 					{/each}
 				</select>
+				<button
+					type="button"
+					class="btn btn-text"
+					onclick={() => fontInput?.click()}
+					disabled={fontBusy}
+					title="Upload a .woff2, .woff, .ttf, or .otf font"
+				>
+					{fontBusy ? 'Loading…' : 'Upload font'}
+				</button>
+				{#if customFonts.some((f) => f.id === selectedFont)}
+					<button
+						type="button"
+						class="btn btn-text"
+						onclick={removeSelectedCustomFont}
+						title="Remove this uploaded font"
+					>
+						Remove
+					</button>
+				{/if}
+				<input
+					bind:this={fontInput}
+					class="file-input"
+					type="file"
+					accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf"
+					onchange={handleFontUpload}
+					aria-hidden="true"
+					tabindex="-1"
+				/>
 			</label>
+			{#if fontStatus}
+				<span
+					class="font-status"
+					class:font-status-error={fontStatus.includes('Could') || fontStatus.includes('Use a') || fontStatus.includes('too large') || fontStatus.includes('empty') || fontStatus.includes('failed')}
+					aria-live="polite"
+				>
+					{fontStatus}
+				</span>
+			{/if}
 
 			<div class="field scale-field">
 				<span class="field-label">Logo</span>
@@ -764,6 +843,19 @@
 		color: #888;
 		font-size: 0.75rem;
 		white-space: nowrap;
+	}
+
+	.font-status {
+		color: #8a8;
+		font-size: 0.75rem;
+		white-space: nowrap;
+		max-width: 14rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.font-status-error {
+		color: #e88;
 	}
 
 	.file-input {

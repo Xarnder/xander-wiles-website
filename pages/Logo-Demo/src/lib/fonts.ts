@@ -2,7 +2,9 @@ export type Font = {
 	id: string
 	name: string
 	family: string
-	category: 'sans' | 'serif' | 'display' | 'mono'
+	category: 'sans' | 'serif' | 'display' | 'mono' | 'custom'
+	/** Present when loaded from a user-uploaded file. */
+	custom?: boolean
 }
 
 export const fonts: Font[] = [

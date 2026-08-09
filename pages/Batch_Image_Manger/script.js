@@ -24,6 +24,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const fontSizeValueSpan = document.getElementById('font-size-value');
     const textColorPicker = document.getElementById('text-color-picker');
     const autoScaleToggle = document.getElementById('auto-scale-toggle');
+    const relativeSizeToggle = document.getElementById('relative-size-toggle');
+    const fontSizeUnitSpan = document.getElementById('font-size-unit');
+    const headerHeightUnitSpan = document.getElementById('header-height-unit');
+    const textOffsetUnitSpan = document.getElementById('text-offset-unit');
+    const RELATIVE_SIZE_REFERENCE_WIDTH = 1000;
+
+    // Sequence number controls
+    const addNumbersToggle = document.getElementById('add-numbers-toggle');
+    const numberOptionsWrapper = document.getElementById('number-options-wrapper');
+    const numberCornerSelect = document.getElementById('number-corner-select');
+    const numberOffsetSlider = document.getElementById('number-offset-slider');
+    const numberOffsetValueSpan = document.getElementById('number-offset-value');
+    const numberOffsetUnitSpan = document.getElementById('number-offset-unit');
+    const numberSizeSlider = document.getElementById('number-size-slider');
+    const numberSizeValueSpan = document.getElementById('number-size-value');
+    const numberSizeUnitSpan = document.getElementById('number-size-unit');
+    const numberStartInput = document.getElementById('number-start-input');
+    const numberColorPicker = document.getElementById('number-color-picker');
 
     // Lightweight Image Editor Controls
     const exposureSlider = document.getElementById('exposure-slider');
@@ -329,7 +347,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const allControls = [
         titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker,
         bgColorPicker, positionToggle, addTitleToggle, filenameSpacingSelect,
-        textPositionSlider, textOffsetSlider, autoScaleToggle,
+        textPositionSlider, textOffsetSlider, autoScaleToggle, relativeSizeToggle,
+        addNumbersToggle, numberCornerSelect, numberOffsetSlider, numberSizeSlider,
+        numberStartInput, numberColorPicker,
         exposureSlider, brightnessSlider, contrastSlider, saturationSlider,
         hueSlider, warmthSlider, grayscaleSlider, sepiaSlider, blurSlider
     ];
@@ -760,11 +780,24 @@ document.addEventListener('DOMContentLoaded', () => {
         headerHeightValueSpan.textContent = headerHeightSlider.value;
         textPositionValueSpan.textContent = textPositionSlider.value;
         textOffsetValueSpan.textContent = textOffsetSlider.value;
+        numberOffsetValueSpan.textContent = numberOffsetSlider.value;
+        numberSizeValueSpan.textContent = numberSizeSlider.value;
+        updateSizeUnitLabels();
         updateAdjustmentLabels();
 
         updateControlVisibility();
         updateTitleControlState();
+        updateNumberControlState();
         renderPreview();
+    }
+
+    function updateSizeUnitLabels() {
+        const unit = relativeSizeToggle.checked ? ' rel' : 'px';
+        fontSizeUnitSpan.textContent = unit;
+        headerHeightUnitSpan.textContent = unit;
+        textOffsetUnitSpan.textContent = unit;
+        numberOffsetUnitSpan.textContent = unit;
+        numberSizeUnitSpan.textContent = unit;
     }
 
     function updateControlVisibility() {
@@ -784,6 +817,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateTitleControlState() {
         titleOptionsWrapper.classList.toggle('disabled', !addTitleToggle.checked);
+    }
+
+    function updateNumberControlState() {
+        numberOptionsWrapper.classList.toggle('disabled', !addNumbersToggle.checked);
     }
 
     function formatTitle(filename) {
@@ -820,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return file;
         }
 
-        await drawImageWithTitle(processCtx, file, imageTitles[index], options);
+        await drawImageWithTitle(processCtx, file, imageTitles[index], options, index);
         const blob = await new Promise(resolve => processCtx.canvas.toBlob(resolve, format, quality));
         if (!blob) throw new Error(`Failed to create blob for ${file.name}`);
         return blob;
@@ -913,7 +950,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.restore();
     }
 
-    async function drawImageWithTitle(ctx, imageFile, title, options) {
+    async function drawImageWithTitle(ctx, imageFile, title, options, sequenceIndex = 0) {
         const drawableFile = await prepareFileForCanvas(imageFile);
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -924,77 +961,92 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imgW = img.naturalWidth || img.width || 512;
                 const imgH = img.naturalHeight || img.height || 512;
 
-                if (!options.addTitle) {
-                    ctx.canvas.width = imgW;
-                    ctx.canvas.height = imgH;
-                    drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
-                    URL.revokeObjectURL(url); // Clean up
-                    return resolve();
+                let sizeScale = 1;
+                if (options.relativeSize) {
+                    sizeScale = imgW / RELATIVE_SIZE_REFERENCE_WIDTH;
                 }
 
+                const titleActive = !!options.addTitle;
                 let headerHeight = 0;
-                if (options.mode === 'add-space' || options.mode === 'bleed') {
-                    headerHeight = options.headerHeight;
+                if (titleActive && (options.mode === 'add-space' || options.mode === 'bleed')) {
+                    headerHeight = Math.max(1, Math.round(options.headerHeight * sizeScale));
                 }
 
                 ctx.canvas.width = imgW;
-                ctx.canvas.height = (options.mode === 'add-space') ? imgH + headerHeight : imgH;
+                ctx.canvas.height = (titleActive && options.mode === 'add-space') ? imgH + headerHeight : imgH;
 
-                if (options.mode === 'add-space') {
-                    const isBelow = options.position === 'below';
-                    const imageY = isBelow ? 0 : headerHeight;
-                    const headerY = isBelow ? imgH : 0;
-                    ctx.fillStyle = options.bgColor;
-                    ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-                    drawAdjustedImage(ctx, img, 0, imageY, imgW, imgH, options.adjustments);
-                } else {
+                if (!titleActive) {
                     drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
-                    if (options.mode === 'bleed') {
+                } else {
+                    const scaledTextOffset = options.textOffset * sizeScale;
+                    const scaledFontSize = Math.max(1, options.fontSize * sizeScale);
+
+                    if (options.mode === 'add-space') {
+                        const isBelow = options.position === 'below';
+                        const imageY = isBelow ? 0 : headerHeight;
+                        const headerY = isBelow ? imgH : 0;
+                        ctx.fillStyle = options.bgColor;
+                        ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
+                        drawAdjustedImage(ctx, img, 0, imageY, imgW, imgH, options.adjustments);
+                    } else {
+                        drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
+                        if (options.mode === 'bleed') {
+                            const isBelow = options.position === 'below';
+                            const rectY = isBelow ? imgH - headerHeight : 0;
+                            ctx.fillStyle = options.bgColor;
+                            ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
+                        }
+                    }
+
+                    let finalFontSize = scaledFontSize;
+                    if (options.autoScale) {
+                        const maxW = ctx.canvas.width * 0.9;
+                        let testSize = scaledFontSize;
+                        ctx.font = `bold ${testSize}px Inter, sans-serif`;
+                        while (ctx.measureText(title).width > maxW && testSize > 10) {
+                            testSize -= 2;
+                            ctx.font = `bold ${testSize}px Inter, sans-serif`;
+                        }
+                        finalFontSize = testSize;
+                    }
+
+                    ctx.font = `bold ${finalFontSize}px Inter, sans-serif`;
+                    ctx.fillStyle = options.textColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    if (options.mode === 'overlay') {
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                        ctx.shadowBlur = 8 * sizeScale;
+                    }
+
+                    let textY;
+                    if (options.mode === 'overlay') {
+                        textY = ctx.canvas.height * (options.textYPercent / 100);
+                    } else if (options.mode === 'add-space') {
+                        const isBelow = options.position === 'below';
+                        const headerY = isBelow ? imgH : 0;
+                        textY = headerY + (headerHeight / 2);
+                    } else { // bleed
                         const isBelow = options.position === 'below';
                         const rectY = isBelow ? imgH - headerHeight : 0;
-                        ctx.fillStyle = options.bgColor;
-                        ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
+                        textY = rectY + (headerHeight / 2) + scaledTextOffset;
                     }
+
+                    ctx.fillText(title, ctx.canvas.width / 2, textY);
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
                 }
 
-                let finalFontSize = options.fontSize;
-                if (options.autoScale) {
-                    const maxW = ctx.canvas.width * 0.9;
-                    let testSize = options.fontSize;
-                    ctx.font = `bold ${testSize}px Inter, sans-serif`;
-                    while (ctx.measureText(title).width > maxW && testSize > 10) {
-                        testSize -= 2;
-                        ctx.font = `bold ${testSize}px Inter, sans-serif`;
-                    }
-                    finalFontSize = testSize;
+                if (options.addNumbers) {
+                    drawSequenceNumber(ctx, options, sequenceIndex, {
+                        imgW,
+                        imgH,
+                        headerHeight,
+                        sizeScale,
+                        titleActive
+                    });
                 }
-
-                ctx.font = `bold ${finalFontSize}px Inter, sans-serif`;
-                ctx.fillStyle = options.textColor;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-
-                if (options.mode === 'overlay') {
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                    ctx.shadowBlur = 8;
-                }
-
-                let textY;
-                if (options.mode === 'overlay') {
-                    textY = ctx.canvas.height * (options.textYPercent / 100);
-                } else if (options.mode === 'add-space') {
-                    const isBelow = options.position === 'below';
-                    const headerY = isBelow ? imgH : 0;
-                    textY = headerY + (headerHeight / 2);
-                } else { // bleed
-                    const isBelow = options.position === 'below';
-                    const rectY = isBelow ? imgH - headerHeight : 0;
-                    textY = rectY + (headerHeight / 2) + options.textOffset;
-                }
-
-                ctx.fillText(title, ctx.canvas.width / 2, textY);
-                ctx.shadowColor = 'transparent';
-                ctx.shadowBlur = 0;
 
                 URL.revokeObjectURL(url); // Clean up memory
                 resolve();
@@ -1010,6 +1062,57 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function drawSequenceNumber(ctx, options, sequenceIndex, layout) {
+        const { imgH, headerHeight, sizeScale, titleActive } = layout;
+        const canvasW = ctx.canvas.width;
+        const canvasH = ctx.canvas.height;
+        const offset = Math.max(0, options.numberOffset * sizeScale);
+        const fontSize = Math.max(1, options.numberSize * sizeScale);
+        const numberText = String((options.numberStart || 1) + sequenceIndex);
+        const corner = options.numberCorner || 'bottom-left';
+        const isTop = corner.startsWith('top');
+        const isLeft = corner.endsWith('left');
+
+        const clearsTitleBand = titleActive && headerHeight > 0;
+        const titleAbove = clearsTitleBand && options.position === 'above';
+        const titleBelow = clearsTitleBand && options.position === 'below';
+
+        let x;
+        let y;
+
+        if (isLeft) {
+            x = offset;
+            ctx.textAlign = 'left';
+        } else {
+            x = canvasW - offset;
+            ctx.textAlign = 'right';
+        }
+
+        if (isTop) {
+            ctx.textBaseline = 'top';
+            y = titleAbove ? (headerHeight + offset) : offset;
+        } else {
+            ctx.textBaseline = 'bottom';
+            if (titleBelow) {
+                // Sit above the title band (add-space extension or bleed overlay)
+                const bandTop = options.mode === 'add-space'
+                    ? imgH
+                    : (canvasH - headerHeight);
+                y = bandTop - offset;
+            } else {
+                y = canvasH - offset;
+            }
+        }
+
+        ctx.save();
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        ctx.fillStyle = options.numberColor || '#FFFFFF';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+        ctx.shadowBlur = 6 * sizeScale;
+        ctx.fillText(numberText, x, y);
+        ctx.restore();
+    }
+
     function updateUIForCurrentIndex() {
         if (imageFiles.length === 0) return;
         imageCounter.textContent = `${currentIndex + 1} / ${imageFiles.length}`;
@@ -1021,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function renderPreview() {
         if (imageFiles.length === 0) return;
         try {
-            await drawImageWithTitle(previewCtx, imageFiles[currentIndex], imageTitles[currentIndex], getTitleOptionsFromUI());
+            await drawImageWithTitle(previewCtx, imageFiles[currentIndex], imageTitles[currentIndex], getTitleOptionsFromUI(), currentIndex);
         } catch (error) {
             showStatus(exportStatus, `Error: ${error.message}`, true);
         }
@@ -1552,8 +1655,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalImages = filteredIndices.length;
 
             const processedImages = await Promise.all(
-                filteredIndices.map(async i => {
-                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
+                filteredIndices.map(async (i, seq) => {
+                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions, seq);
 
                     // Update Progress
                     completedCount++;
@@ -1679,8 +1782,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalImages = filteredIndices.length;
 
             const processedImages = await Promise.all(
-                filteredIndices.map(async i => {
-                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
+                filteredIndices.map(async (i, seq) => {
+                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions, seq);
 
                     // Update Progress
                     completedCount++;
@@ -1861,7 +1964,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const sourceOptions = getTitleOptionsFromUI();
                 sourceOptions.addTitle = applyTitles;
-                const sourceImage = await getProcessedImage(imageFiles[i], imageTitles[i], sourceOptions);
+                const sourceImage = await getProcessedImage(imageFiles[i], imageTitles[i], sourceOptions, i);
 
                 let targetWidth, targetHeight;
                 if (resizeMode === 'megapixels') {
@@ -2280,7 +2383,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const sourceOptions = getTitleOptionsFromUI();
                     sourceOptions.addTitle = applyTitles;
-                    const sourceImage = await getProcessedImage(imageFiles[i], imageTitles[i], sourceOptions);
+                    const sourceImage = await getProcessedImage(imageFiles[i], imageTitles[i], sourceOptions, i);
 
                     const target = computeUpscaleTargetSize(sourceImage.width, sourceImage.height);
                     setUpscaleImageProgress(
@@ -2978,14 +3081,21 @@ document.addEventListener('DOMContentLoaded', () => {
             textYPercent: parseInt(textPositionSlider.value, 10),
             textOffset: parseInt(textOffsetSlider.value, 10),
             autoScale: autoScaleToggle.checked,
+            relativeSize: relativeSizeToggle.checked,
+            addNumbers: addNumbersToggle.checked,
+            numberCorner: numberCornerSelect.value,
+            numberOffset: parseInt(numberOffsetSlider.value, 10),
+            numberSize: parseInt(numberSizeSlider.value, 10),
+            numberStart: parseInt(numberStartInput.value, 10) || 1,
+            numberColor: numberColorPicker.value,
             adjustments: getImageAdjustmentsFromUI()
         };
     }
 
-    async function getProcessedImage(file, title, options) {
+    async function getProcessedImage(file, title, options, sequenceIndex = 0) {
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
-        await drawImageWithTitle(tempCtx, file, title, options);
+        await drawImageWithTitle(tempCtx, file, title, options, sequenceIndex);
         const finalImage = new Image();
         finalImage.src = tempCanvas.toDataURL();
         await new Promise(r => finalImage.onload = r);

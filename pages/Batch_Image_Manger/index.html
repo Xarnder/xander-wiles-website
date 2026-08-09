@@ -117,7 +117,7 @@
                                 </select>
                             </div>
                             <div class="control-group">
-                                <label for="font-size-slider">Size: <span id="font-size-value">40</span>px</label>
+                                <label for="font-size-slider">Size: <span id="font-size-value">40</span><span id="font-size-unit">px</span></label>
                                 <input type="range" id="font-size-slider" min="10" max="400" value="40" step="1" />
                             </div>
                             <div class="control-group">
@@ -131,11 +131,11 @@
                             <!-- Height/Pos Controls -->
                             <div class="control-group" id="header-height-group">
                                 <label for="header-height-slider">Area: <span
-                                        id="header-height-value">60</span>px</label>
+                                        id="header-height-value">60</span><span id="header-height-unit">px</span></label>
                                 <input type="range" id="header-height-slider" min="20" max="200" value="60" step="1" />
                             </div>
                             <div class="control-group" id="text-offset-group">
-                                <label for="text-offset-slider">Offset: <span id="text-offset-value">0</span>px</label>
+                                <label for="text-offset-slider">Offset: <span id="text-offset-value">0</span><span id="text-offset-unit">px</span></label>
                                 <input type="range" id="text-offset-slider" min="-50" max="50" value="0" step="1" />
                             </div>
                             <div class="control-group hidden" id="text-pos-group">
@@ -155,6 +155,48 @@
                                     <span class="toggle-knob"></span>
                                     Auto-Fit
                                 </label>
+                            </div>
+                            <div class="control-group">
+                                <label for="relative-size-toggle" class="checkbox-label toggle-switch" title="Scale title size and add-space area with each image's width so they look the same across different resolutions (base: 1000px wide)">
+                                    <input type="checkbox" id="relative-size-toggle" />
+                                    <span class="toggle-knob"></span>
+                                    Relative Size
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="add-numbers-toggle" class="checkbox-label toggle-switch">
+                                <input type="checkbox" id="add-numbers-toggle" />
+                                <span class="toggle-knob"></span>
+                                Add Numbers
+                            </label>
+                        </div>
+                        <div id="number-options-wrapper" class="disabled">
+                            <div class="control-group">
+                                <label for="number-corner-select">Corner</label>
+                                <select id="number-corner-select">
+                                    <option value="top-left">Top Left</option>
+                                    <option value="top-right">Top Right</option>
+                                    <option value="bottom-left" selected>Bottom Left</option>
+                                    <option value="bottom-right">Bottom Right</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label for="number-offset-slider">Num Offset: <span id="number-offset-value">20</span><span id="number-offset-unit">px</span></label>
+                                <input type="range" id="number-offset-slider" min="0" max="200" value="20" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label for="number-size-slider">Num Size: <span id="number-size-value">32</span><span id="number-size-unit">px</span></label>
+                                <input type="range" id="number-size-slider" min="10" max="200" value="32" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label for="number-start-input">Start #</label>
+                                <input type="number" id="number-start-input" value="1" min="0" style="width: 70px;" />
+                            </div>
+                            <div class="control-group">
+                                <label for="number-color-picker">Num Color</label>
+                                <input type="color" id="number-color-picker" value="#FFFFFF" />
                             </div>
                         </div>
                     </div>

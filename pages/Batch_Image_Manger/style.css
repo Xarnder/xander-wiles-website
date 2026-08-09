@@ -466,6 +466,19 @@ input:focus {
     pointer-events: none;
 }
 
+#number-options-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    transition: opacity 0.3s ease;
+}
+
+#number-options-wrapper.disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
 /* Buttons */
 .final-export-buttons {
     display: flex;
