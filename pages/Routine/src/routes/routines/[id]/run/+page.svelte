@@ -298,6 +298,11 @@
 		box-sizing: border-box;
 	}
 
+	.run.force-landscape {
+		/* Paired with app.css rotate fallback — never keep portrait dvh min-height. */
+		min-height: 0;
+	}
+
 	.chrome {
 		display: flex;
 		align-items: center;

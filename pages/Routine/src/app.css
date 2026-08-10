@@ -176,6 +176,9 @@ img {
 /*
  * Force-landscape CSS fallback when Screen Orientation lock is unavailable
  * (common in mobile Safari). Applies only while the device is still portrait.
+ *
+ * Important: override the run screen's min-height: 100dvh — otherwise content is
+ * taller than the rotated 100dvw box and the action buttons are clipped.
  */
 @media (orientation: portrait) {
 	html.routine-force-landscape,
@@ -192,15 +195,25 @@ img {
 		left: 100%;
 		width: 100dvh;
 		height: 100dvw;
+		min-height: 0;
+		max-height: 100dvw;
 		max-width: none;
 		margin: 0;
 		transform: rotate(90deg);
 		transform-origin: top left;
 		z-index: 40;
 		overflow: hidden;
+		box-sizing: border-box;
 		/* Swap safe-area roles after rotation */
-		padding: calc(0.55rem + var(--safe-left)) calc(0.85rem + var(--safe-top))
-			calc(0.75rem + var(--safe-right)) calc(0.85rem + var(--safe-bottom));
+		padding: calc(0.45rem + var(--safe-left)) calc(0.7rem + var(--safe-top))
+			calc(0.55rem + var(--safe-right)) calc(0.7rem + var(--safe-bottom));
+		gap: 0.4rem;
+	}
+
+	/* Button row uses 28dvh in normal layout — that is the long portrait axis and
+	   overflows the short rotated height. Size against the rotated box instead. */
+	html.routine-force-landscape .run.force-landscape .controls {
+		grid-template-rows: minmax(0, 1fr) minmax(5.75rem, 42%);
 	}
 }
 
