@@ -47,7 +47,6 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let confirmExit = $state(false);
-	let direction = $state(1);
 
 	$effect(() => {
 		const routineId = id;
@@ -139,19 +138,16 @@
 	}
 
 	function complete() {
-		direction = 1;
 		completeAndNext();
 		maybeCelebrate();
 	}
 
 	function skip() {
-		direction = 1;
 		skipAndNext();
 		maybeCelebrate();
 	}
 
 	function back() {
-		direction = -1;
 		backOne();
 	}
 
@@ -262,7 +258,7 @@
 				onexit={requestExit}
 			>
 				{#snippet lead()}
-					<RoutineTaskSlide task={activeTask} {direction} {priorStatus} />
+					<RoutineTaskSlide task={activeTask} {priorStatus} />
 				{/snippet}
 			</RoutineControls>
 		</div>
