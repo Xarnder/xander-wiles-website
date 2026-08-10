@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidRoutine() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'tasks', 'sortOrder', 'createdAt', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 120
+        && data.sortOrder is number
+        && data.createdAt is string
+        && data.updatedAt is string
+        && data.tasks is list
+        && data.tasks.size() <= 100
+        && (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 1000))
+        && (!('icon' in data) || data.icon == null || (data.icon is string && data.icon.size() <= 16));
+    }
+
+    match /users/{userId}/routines/{routineId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidRoutine();
+      allow delete: if isOwner(userId);
+    }
+  }
+}

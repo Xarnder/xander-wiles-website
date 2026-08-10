@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0c1714" />
+		<meta name="description" content="Create and run step-by-step routines on your phone." />
+		<link rel="icon" href="%sveltekit.assets%/favicon-dark.svg" />
+		<script>
+			try {
+				var stored = localStorage.getItem('routine-theme');
+				var colors = { dark: '#0c1714', oled: '#000000', light: '#e8f4f1' };
+				if (stored === 'light' || stored === 'dark' || stored === 'oled') {
+					document.documentElement.dataset.theme = stored;
+					var meta = document.querySelector('meta[name="theme-color"]');
+					if (meta) meta.setAttribute('content', colors[stored]);
+				}
+			} catch (e) {}
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

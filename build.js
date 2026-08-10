@@ -19,6 +19,7 @@ const fighterJetSrc = path.join(rootDir, 'pages', 'Fighter-Jet');
 const teleprompterSrc = path.join(rootDir, 'pages', 'Teleprompter');
 const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
+const routineSrc = path.join(rootDir, 'pages', 'Routine');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -83,6 +84,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Logo-Demo') ||
                 rel.startsWith(path.join('pages', 'Logo-Demo') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Routine') ||
+                rel.startsWith(path.join('pages', 'Routine') + path.sep)
             ) {
                 return false;
             }
@@ -281,12 +288,44 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
     }
 }
 
+// 10. Build and Inject Routine (SvelteKit SPA)
+console.log('Building Routine App...');
+try {
+    process.chdir(routineSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build Routine:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Routine build...');
+const routineDest = path.join(deployOut, 'pages', 'Routine');
+fs.mkdirSync(routineDest, { recursive: true });
+
+const routineDist = path.join(routineSrc, 'dist');
+if (fs.existsSync(routineDist)) {
+    fs.cpSync(routineDist, routineDest, { recursive: true });
+} else {
+    console.error('Routine dist folder not found!');
+    process.exit(1);
+}
+
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(routineSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(routineDest, name));
+    }
+}
+
 const rootServeJson = path.join(rootDir, 'serve.json');
 if (fs.existsSync(rootServeJson)) {
     fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
 }
 
-// 10. Replace Environment Variables in Static Files
+// 11. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

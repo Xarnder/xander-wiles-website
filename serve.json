@@ -1,6 +1,10 @@
 {
     "rewrites": [
         {
+            "source": "/pages/Routine/(.*)",
+            "destination": "/pages/Routine/200.html"
+        },
+        {
             "source": "/pages/journal/(.*)",
             "destination": "/pages/journal/index.html"
         }

@@ -1,0 +1,10 @@
+dist
+.svelte-kit
+node_modules
+build
+package
+playwright-report
+test-results
+docs
+*.md
+firebase.json
