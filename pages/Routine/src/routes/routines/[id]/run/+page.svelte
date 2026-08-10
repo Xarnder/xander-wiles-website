@@ -28,7 +28,9 @@
 	} from '$lib/stores/run.svelte';
 	import type { Routine } from '$lib/types/routine';
 	import { hapticCelebrate } from '$lib/utils/haptics';
+	import { lockLandscape, unlockOrientation } from '$lib/utils/orientation';
 	import { releaseWakeLock, requestWakeLock } from '$lib/utils/wake-lock';
+	import { isForceLandscape } from '$lib/stores/preferences.svelte';
 
 	const status = $derived(getAuthStatus());
 	const id = $derived(page.params.id ?? '');
@@ -96,6 +98,35 @@
 		};
 	});
 
+	$effect(() => {
+		const force = isForceLandscape();
+		const running = session?.phase === 'running';
+		if (!force || !running) {
+			unlockOrientation();
+			document.documentElement.classList.remove('routine-force-landscape');
+			return;
+		}
+
+		document.documentElement.classList.add('routine-force-landscape');
+		void lockLandscape();
+
+		const reacquire = () => {
+			if (document.visibilityState === 'visible' && getRunSession()?.phase === 'running') {
+				void lockLandscape();
+			}
+		};
+		document.addEventListener('visibilitychange', reacquire);
+
+		return () => {
+			document.removeEventListener('visibilitychange', reacquire);
+			unlockOrientation();
+			document.documentElement.classList.remove('routine-force-landscape');
+		};
+	});
+
+	const forceLandscapeRun = $derived(
+		isForceLandscape() && session?.phase === 'running'
+	);
 	const progress = $derived.by(() => {
 		if (!session || session.tasks.length === 0) return 0;
 		const done = Object.values(session.statuses).filter((value) => value !== 'pending').length;
@@ -199,7 +230,11 @@
 		onagain={runAgain}
 	/>
 {:else if session && activeTask}
-	<section class="run" data-testid="run-screen">
+	<section
+		class={['run', forceLandscapeRun && 'force-landscape']}
+		data-testid="run-screen"
+		data-force-landscape={forceLandscapeRun ? 'true' : 'false'}
+	>
 		<header class="chrome">
 			<div class="chrome-left">
 				<button type="button" class="exit-link" onclick={requestExit}>Exit</button>
@@ -231,18 +266,18 @@
 				{/snippet}
 			</RoutineControls>
 		</div>
+
+		<ConfirmDialog
+			open={confirmExit}
+			title="Exit routine?"
+			message="This clears your current run progress."
+			confirmLabel="Exit"
+			danger
+			onconfirm={exitNow}
+			oncancel={() => (confirmExit = false)}
+		/>
 	</section>
 {/if}
-
-<ConfirmDialog
-	open={confirmExit}
-	title="Exit routine?"
-	message="This clears your current run progress."
-	confirmLabel="Exit"
-	danger
-	onconfirm={exitNow}
-	oncancel={() => (confirmExit = false)}
-/>
 
 <style>
 	.pad {

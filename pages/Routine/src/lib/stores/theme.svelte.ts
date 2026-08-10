@@ -64,8 +64,8 @@ function readStoredTheme(): Theme | null {
 
 function applyTheme(next: Theme): void {
 	document.documentElement.dataset.theme = next;
-	const meta = document.querySelector('meta[name="theme-color"]');
-	if (meta) {
+	const metas = document.querySelectorAll('meta[name="theme-color"]');
+	for (const meta of metas) {
 		meta.setAttribute('content', THEME_COLORS[next]);
 	}
 }

@@ -3,17 +3,44 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<meta name="theme-color" content="#0c1714" />
 		<meta name="description" content="Create and run step-by-step routines on your phone." />
-		<link rel="icon" href="%sveltekit.assets%/favicon-dark.svg" />
+
+		<!-- Theme-aware SVG icons (modern browsers) -->
+		<link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="any" />
+		<!-- Fallback for older browsers -->
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/favicon-light.svg"
+			type="image/svg+xml"
+			media="(prefers-color-scheme: light)"
+		/>
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/favicon-dark.svg"
+			type="image/svg+xml"
+			media="(prefers-color-scheme: dark)"
+		/>
+
+		<!-- Fallback PNG icons -->
+		<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/favicon-32x32.png" />
+		<link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/favicon-16x16.png" />
+
+		<!-- Other essential links -->
+		<link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
+		<meta name="theme-color" content="#e8f4f1" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0c1714" media="(prefers-color-scheme: dark)" />
+
 		<script>
 			try {
 				var stored = localStorage.getItem('routine-theme');
 				var colors = { dark: '#0c1714', oled: '#000000', light: '#e8f4f1' };
 				if (stored === 'light' || stored === 'dark' || stored === 'oled') {
 					document.documentElement.dataset.theme = stored;
-					var meta = document.querySelector('meta[name="theme-color"]');
-					if (meta) meta.setAttribute('content', colors[stored]);
+					var metas = document.querySelectorAll('meta[name="theme-color"]');
+					for (var i = 0; i < metas.length; i++) {
+						metas[i].setAttribute('content', colors[stored]);
+					}
 				}
 			} catch (e) {}
 		</script>
