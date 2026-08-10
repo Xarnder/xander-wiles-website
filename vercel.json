@@ -1,14 +1,19 @@
 {
     "version": 2,
+    "framework": null,
     "buildCommand": "node build.js",
     "outputDirectory": "deploy_out",
     "rewrites": [
         {
-            "source": "/pages/Routine/(.*)",
+            "source": "/pages/Routine",
+            "destination": "/pages/Routine/index.html"
+        },
+        {
+            "source": "/pages/Routine/:path*",
             "destination": "/pages/Routine/200.html"
         },
         {
-            "source": "/pages/journal/(.*)",
+            "source": "/pages/journal/:path*",
             "destination": "/pages/journal/index.html"
         },
         {

@@ -21,6 +21,22 @@ const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
 const routineSrc = path.join(rootDir, 'pages', 'Routine');
 
+/** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
+const nestedBuildEnv = {
+    ...process.env,
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+    HUSKY: '0',
+};
+
+function npmInstallAndBuild(appSrc, label) {
+    process.chdir(appSrc);
+    // Prefer install over ci across the monorepo — several apps have drifted lockfiles;
+    // install still respects package-lock when present and is what prior Vercel deploys used.
+    console.log(`  [${label}] npm install`);
+    execSync('npm install --no-audit --no-fund', { stdio: 'inherit', env: nestedBuildEnv });
+    execSync('npm run build', { stdio: 'inherit', env: nestedBuildEnv });
+}
+
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
 if (fs.existsSync(deployOut)) {
@@ -38,7 +54,23 @@ fs.writeFileSync(
 // 2. Copy Everything (The Global Site)
 console.log('Copying global site...');
 const items = fs.readdirSync(rootDir);
-const excludeList = ['.git', 'node_modules', 'deploy_out', '.DS_Store', '.env', '.env.local', 'package.json', 'package-lock.json', 'build.js', '.gitignore'];
+const excludeList = [
+    '.git',
+    'node_modules',
+    'deploy_out',
+    '.DS_Store',
+    '.env',
+    '.env.local',
+    'package.json',
+    'package-lock.json',
+    'build.js',
+    '.gitignore',
+    // Keep project-root vercel.json for the build; do not ship it inside outputDirectory
+    // (avoids nested outputDirectory/buildCommand confusion on Vercel).
+    'vercel.json',
+    // Never publish local credentials / service accounts
+    'secrets',
+];
 
 for (const item of items) {
     if (excludeList.includes(item)) {
@@ -101,6 +133,14 @@ for (const item of items) {
                 return false;
             }
             if (sourcePath.includes('.env')) return false;
+            if (
+                rel === 'secrets' ||
+                rel.startsWith('secrets' + path.sep) ||
+                sourcePath.includes(`${path.sep}secrets${path.sep}`) ||
+                sourcePath.endsWith(`${path.sep}secrets`)
+            ) {
+                return false;
+            }
             return true;
         }
     });
@@ -109,10 +149,7 @@ for (const item of items) {
 // 3. Build and Inject the Journal
 console.log('Building Journal App...');
 try {
-    process.chdir(journalSrc);
-    // Use full path to npm if needed, but standard 'npm' should work in Vercel
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(journalSrc, 'journal');
 } catch (error) {
     console.error('Failed to build journal:', error);
     process.exit(1);
@@ -136,9 +173,7 @@ if (fs.existsSync(journalDist)) {
 // 5. Build and Inject Z-Image-Turbo SvelteKit app
 console.log('Building Z-Image-Turbo App...');
 try {
-    process.chdir(zImageSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(zImageSrc, 'z-image-turbo');
 } catch (error) {
     console.error('Failed to build z-image-turbo-sveltekit:', error);
     process.exit(1);
@@ -169,9 +204,7 @@ if (fs.existsSync(fighterJetModelSrc)) {
 
 console.log('Building Fighter-Jet (Viper Strike)...');
 try {
-    process.chdir(fighterJetSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(fighterJetSrc, 'Fighter-Jet');
 } catch (error) {
     console.error('Failed to build Fighter-Jet:', error);
     process.exit(1);
@@ -194,9 +227,7 @@ if (fs.existsSync(fighterJetDist)) {
 // 7. Build and Inject Teleprompter (Vite + React)
 console.log('Building Teleprompter App...');
 try {
-    process.chdir(teleprompterSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(teleprompterSrc, 'Teleprompter');
 } catch (error) {
     console.error('Failed to build Teleprompter:', error);
     process.exit(1);
@@ -227,9 +258,7 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
 // 8. Build and Inject Tax-Helper (SvelteKit)
 console.log('Building Tax-Helper App...');
 try {
-    process.chdir(taxHelperSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(taxHelperSrc, 'Tax-Helper');
 } catch (error) {
     console.error('Failed to build Tax-Helper:', error);
     process.exit(1);
@@ -259,9 +288,7 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
 // 9. Build and Inject Logo-Demo (Vite + Svelte)
 console.log('Building Logo-Demo App...');
 try {
-    process.chdir(logoDemoSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(logoDemoSrc, 'Logo-Demo');
 } catch (error) {
     console.error('Failed to build Logo-Demo:', error);
     process.exit(1);
@@ -291,9 +318,7 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
 // 10. Build and Inject Routine (SvelteKit SPA)
 console.log('Building Routine App...');
 try {
-    process.chdir(routineSrc);
-    execSync('npm install', { stdio: 'inherit' });
-    execSync('npm run build', { stdio: 'inherit' });
+    npmInstallAndBuild(routineSrc, 'Routine');
 } catch (error) {
     console.error('Failed to build Routine:', error);
     process.exit(1);
@@ -320,9 +345,9 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
     }
 }
 
-const rootServeJson = path.join(rootDir, 'serve.json');
-if (fs.existsSync(rootServeJson)) {
-    fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
+if (!fs.existsSync(path.join(routineDest, '200.html'))) {
+    console.error('Routine SPA fallback 200.html missing after build — check adapter-static fallback config.');
+    process.exit(1);
 }
 
 // 11. Replace Environment Variables in Static Files
@@ -389,9 +414,16 @@ function injectEnvVars(filePath) {
 
 processDirectory(deployOut);
 
-fs.writeFileSync(
-    path.join(deployOut, 'serve.json'),
-    JSON.stringify({ cleanUrls: true }, null, 2)
-);
+// Local `npx serve deploy_out` reads serve.json from the output root.
+// Keep SPA rewrites (do not overwrite with cleanUrls-only).
+const rootServeJson = path.join(rootDir, 'serve.json');
+if (fs.existsSync(rootServeJson)) {
+    fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
+} else {
+    fs.writeFileSync(
+        path.join(deployOut, 'serve.json'),
+        JSON.stringify({ cleanUrls: true }, null, 2)
+    );
+}
 
 console.log('Build complete! Result is in deploy_out');
