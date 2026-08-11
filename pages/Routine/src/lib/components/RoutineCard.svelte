@@ -67,8 +67,10 @@
 					class="start-btn"
 					onclick={onstartFresh}
 					data-testid={`start-fresh-${routine.id}`}
+					aria-label="Start fresh"
 				>
-					Start fresh
+					<span class="label-full">Start fresh</span>
+					<span class="label-short">Fresh</span>
 				</button>
 				<button
 					type="button"
@@ -76,11 +78,13 @@
 					onclick={onstartFromLast}
 					disabled={!canContinue}
 					data-testid={`start-from-last-${routine.id}`}
+					aria-label="Start from last completion"
 					title={canContinue
 						? 'Resume with tasks completed last cycle still marked done'
 						: 'Finish a cycle first to unlock'}
 				>
-					From last
+					<span class="label-full">From last</span>
+					<span class="label-short">Last</span>
 				</button>
 			</div>
 		{:else}
@@ -94,13 +98,15 @@
 
 <style>
 	.routine-card {
+		container-type: inline-size;
+		container-name: routine-card;
 		display: grid;
 		grid-template-columns: auto auto minmax(0, 1fr) auto;
 		gap: 0;
 		padding: 0;
 		align-items: stretch;
 		overflow: hidden;
-		min-height: 5.5rem;
+		min-height: 5rem;
 	}
 
 	.routine-card.no-drag {
@@ -116,7 +122,7 @@
 		border: none;
 		background: transparent;
 		color: var(--muted);
-		min-width: 1.85rem;
+		min-width: 1.65rem;
 		padding: 0;
 		cursor: grab;
 		font-size: 0.95rem;
@@ -126,29 +132,29 @@
 
 	.icon {
 		box-sizing: border-box;
-		width: 4.35rem;
+		width: clamp(2.6rem, 10cqi, 4.35rem);
 		min-height: calc(100% - 1.1rem);
 		align-self: center;
-		margin: 0.55rem 0 0.55rem 0.35rem;
+		margin: 0.5rem 0 0.5rem 0.3rem;
 		display: grid;
 		place-items: center;
 		background: var(--accent-soft);
-		font-size: 2.75rem;
+		font-size: clamp(1.4rem, 6cqi, 2.75rem);
 		line-height: 1;
-		padding: 0.15rem;
-		border-radius: 1rem;
+		padding: 0.1rem;
+		border-radius: 0.9rem;
 		border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
 	}
 
 	.routine-card.no-drag .icon {
-		margin-left: 0.55rem;
+		margin-left: 0.5rem;
 	}
 
 	.copy {
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		padding: 0.7rem 0.7rem 0.7rem 0.65rem;
+		padding: 0.55rem 0.45rem 0.55rem 0.5rem;
 	}
 
 	.title-hit {
@@ -160,18 +166,26 @@
 		color: inherit;
 		text-decoration: none;
 		width: 100%;
+		min-width: 0;
 	}
 
 	.copy h2 {
 		margin: 0;
-		font-size: 1.25rem;
+		font-size: clamp(0.98rem, 2.4cqi + 0.55rem, 1.25rem);
 		font-family: var(--font-display);
 		color: var(--ink);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.copy p {
-		margin: 0.2rem 0 0;
+		margin: 0.15rem 0 0;
 		color: var(--muted);
+		font-size: clamp(0.78rem, 1.5cqi + 0.45rem, 1rem);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.actions {
@@ -180,8 +194,8 @@
 		align-items: stretch;
 		justify-self: end;
 		height: 100%;
-		gap: 0.4rem;
-		padding: 0.55rem 0.6rem 0.55rem 0.35rem;
+		gap: 0.35rem;
+		padding: 0.5rem 0.55rem 0.5rem 0.25rem;
 		box-sizing: border-box;
 	}
 
@@ -191,14 +205,14 @@
 		align-items: stretch;
 		gap: 0.35rem;
 		height: 100%;
-		min-width: 11.5rem;
+		width: 11.25rem;
 	}
 
 	.start-btn,
 	.edit-btn {
 		height: 100%;
 		min-height: 100%;
-		border-radius: 1rem;
+		border-radius: 0.95rem;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -217,9 +231,13 @@
 		font-size: 0.86rem;
 		font-weight: 700;
 		cursor: pointer;
-		padding: 0.35rem 0.55rem;
+		padding: 0.35rem 0.5rem;
 		box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 26%, transparent);
 		white-space: normal;
+	}
+
+	.label-short {
+		display: none;
 	}
 
 	.start-btn.start-from-last {
@@ -242,6 +260,7 @@
 		color: var(--accent-strong);
 		box-shadow: none;
 		font-size: 1.05rem;
+		min-width: 5.75rem;
 	}
 
 	.start-btn:not(:disabled):active,
@@ -254,9 +273,70 @@
 		background: var(--surface-strong);
 		color: var(--ink-soft);
 		font-weight: 600;
-		font-size: 0.92rem;
-		padding: 0 0.75rem;
+		font-size: 0.9rem;
+		padding: 0 0.7rem;
 		white-space: nowrap;
-		min-width: 4.25rem;
+		min-width: 3.75rem;
+	}
+
+	/* Slim phones: shrink icon / title first, keep start buttons chunky. */
+	@container routine-card (max-width: 440px) {
+		.icon {
+			width: 2.55rem;
+			font-size: 1.45rem;
+		}
+
+		.label-full {
+			display: none;
+		}
+
+		.label-short {
+			display: inline;
+		}
+
+		.start-stack {
+			width: 9.5rem;
+		}
+
+		.start-btn {
+			font-size: 0.84rem;
+			box-shadow: none;
+			padding: 0.4rem 0.45rem;
+		}
+
+		.edit-btn {
+			min-width: 3.35rem;
+			padding: 0 0.55rem;
+		}
+	}
+
+	@container routine-card (max-width: 360px) {
+		.icon {
+			width: 2.25rem;
+			font-size: 1.25rem;
+			margin-left: 0.2rem;
+		}
+
+		.drag-handle {
+			min-width: 1.2rem;
+		}
+
+		.copy {
+			padding-inline: 0.35rem;
+		}
+
+		.start-stack {
+			width: 8.5rem;
+		}
+
+		.start-btn {
+			font-size: 0.8rem;
+		}
+
+		.edit-btn {
+			min-width: 3.1rem;
+			padding: 0 0.45rem;
+			font-size: 0.82rem;
+		}
 	}
 </style>

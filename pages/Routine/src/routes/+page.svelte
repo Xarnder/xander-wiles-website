@@ -93,7 +93,9 @@
 			<h1>Your routines</h1>
 			<p>Start fresh, or pick up from last cycle’s completions.</p>
 		</div>
-		<button type="button" class="btn btn-ghost" onclick={() => signOutUser()}>Sign Out</button>
+		<button type="button" class="btn btn-ghost sign-out-btn" onclick={() => signOutUser()}
+			>Sign Out</button
+		>
 	</header>
 
 	{#if storedRun}
@@ -153,6 +155,11 @@
 		font-size: 0.78rem;
 	}
 
+	.sign-out-btn {
+		flex-shrink: 0;
+		align-self: flex-start;
+	}
+
 	.toolbar {
 		margin-bottom: 1rem;
 	}
@@ -160,5 +167,15 @@
 	.toolbar a {
 		text-decoration: none;
 		display: inline-flex;
+	}
+
+	@media (max-width: 640px) {
+		.sign-out-btn {
+			min-height: 2rem;
+			padding: 0.28rem 0.65rem;
+			font-size: 0.72rem;
+			font-weight: 600;
+			border-radius: 999px;
+		}
 	}
 </style>
