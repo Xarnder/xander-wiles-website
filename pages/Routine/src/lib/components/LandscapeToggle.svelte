@@ -1,10 +1,11 @@
 <script lang="ts">
-	import {
-		isForceLandscape,
-		toggleForceLandscape
-	} from '$lib/stores/preferences.svelte';
+	import { base } from '$app/paths';
+	import { isForceLandscape, toggleForceLandscape } from '$lib/stores/preferences.svelte';
 
 	const on = $derived(isForceLandscape());
+
+	const horizontalIcon = `${base}/icons/rotate-horizontal.svg`;
+	const verticalIcon = `${base}/icons/rotate-vertical.svg`;
 </script>
 
 <button
@@ -20,7 +21,11 @@
 		: 'Runs allow any orientation (tap to force landscape)'}
 	data-testid="landscape-toggle"
 >
-	<span class="icon" aria-hidden="true">{on ? '⛶' : '↕'}</span>
+	<span
+		class="icon"
+		aria-hidden="true"
+		style:--icon-url={on ? `url('${horizontalIcon}')` : `url('${verticalIcon}')`}
+	></span>
 	<span class="text">{on ? 'Landscape' : 'Any rotate'}</span>
 </button>
 
@@ -35,7 +40,7 @@
 		padding: 0 0.9rem;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.45rem;
 		font-weight: 600;
 		cursor: pointer;
 		touch-action: manipulation;
@@ -53,8 +58,12 @@
 	}
 
 	.icon {
-		font-size: 1rem;
-		line-height: 1;
+		width: 1.15rem;
+		height: 1.15rem;
+		flex: 0 0 auto;
+		background-color: currentColor;
+		-webkit-mask: var(--icon-url) center / contain no-repeat;
+		mask: var(--icon-url) center / contain no-repeat;
 	}
 
 	.text {

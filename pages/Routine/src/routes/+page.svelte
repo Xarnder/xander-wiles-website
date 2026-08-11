@@ -7,7 +7,7 @@
 	import SetupRequired from '$lib/components/SetupRequired.svelte';
 	import SignInGate from '$lib/components/SignInGate.svelte';
 	import { signOutUser } from '$lib/firebase/auth';
-	import { getAuthStatus, getAuthUser } from '$lib/stores/auth.svelte';
+	import { getAuthStatus } from '$lib/stores/auth.svelte';
 	import { getRoutines, getRoutinesLoading, reorderRoutines } from '$lib/stores/routines.svelte';
 	import { discardStoredRun, peekStoredRun, startRun } from '$lib/stores/run.svelte';
 	import { moveItem } from '$lib/utils/order';
@@ -16,7 +16,6 @@
 	let error = $state<string | null>(null);
 
 	const status = $derived(getAuthStatus());
-	const user = $derived(getAuthUser());
 	const routines = $derived(getRoutines());
 	const loading = $derived(getRoutinesLoading());
 	const storedRun = $derived(peekStoredRun());
@@ -84,9 +83,7 @@
 			<h1>Your routines</h1>
 			<p>Tap Start to begin. Edit stays out of the way.</p>
 		</div>
-		<button type="button" class="btn btn-ghost" onclick={() => signOutUser()}>
-			Sign out{user?.displayName ? ` (${user.displayName.split(' ')[0]})` : ''}
-		</button>
+		<button type="button" class="btn btn-ghost" onclick={() => signOutUser()}>Sign Out</button>
 	</header>
 
 	{#if storedRun}

@@ -167,10 +167,39 @@ img {
 
 .theme-chrome {
 	display: flex;
-	justify-content: flex-end;
+	align-items: center;
+	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 0.5rem;
+	gap: 0.5rem 0.75rem;
 	margin-bottom: 0.85rem;
+}
+
+.theme-chrome-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-left: auto;
+}
+
+.user-chip {
+	margin: 0;
+	min-width: 0;
+	max-width: min(58vw, 16rem);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.78rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--muted);
+	line-height: 1.2;
+}
+
+.user-chip-spacer {
+	display: block;
+	min-width: 0;
+	flex: 1 1 auto;
 }
 
 /*

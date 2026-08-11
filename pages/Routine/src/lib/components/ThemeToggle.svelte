@@ -4,10 +4,10 @@
 	const theme = $derived(getTheme());
 	const next = $derived(getNextTheme(theme));
 
-	const labels: Record<Theme, { icon: string; text: string; action: string }> = {
-		dark: { icon: '◑', text: 'Dark', action: 'Switch to OLED black mode' },
-		oled: { icon: '●', text: 'OLED', action: 'Switch to light mode' },
-		light: { icon: '☀', text: 'Light', action: 'Switch to dark mode' }
+	const labels: Record<Theme, { text: string; action: string }> = {
+		dark: { text: 'Dark', action: 'Switch to OLED black mode' },
+		oled: { text: 'OLED', action: 'Switch to light mode' },
+		light: { text: 'Light', action: 'Switch to dark mode' }
 	};
 
 	const current = $derived(labels[theme]);
@@ -22,8 +22,7 @@
 	title={`${current.action} (now ${current.text})`}
 	data-testid="theme-toggle"
 >
-	<span aria-hidden="true">{upcoming.icon}</span>
-	<span class="text">{upcoming.text}</span>
+	{upcoming.text}
 </button>
 
 <style>
@@ -31,13 +30,13 @@
 		appearance: none;
 		border: 1px solid var(--line);
 		background: var(--surface);
-		color: var(--ink);
+		color: var(--ink-soft);
 		border-radius: 999px;
 		min-height: 2.5rem;
 		padding: 0 0.9rem;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
+		font-size: 0.9rem;
 		font-weight: 600;
 		cursor: pointer;
 		touch-action: manipulation;
@@ -46,10 +45,5 @@
 
 	.theme-toggle:active {
 		transform: scale(0.98);
-	}
-
-	.text {
-		font-size: 0.9rem;
-		color: var(--ink-soft);
 	}
 </style>

@@ -35,12 +35,12 @@
 		{#each summary.results as result (result.taskId)}
 			<li class={result.status}>
 				<span class="mark" aria-hidden="true">
-					{result.status === 'completed' ? '✓' : '○'}
+					{result.status === 'completed' ? '✓' : '–'}
 				</span>
 				<span>
 					<strong>{result.title}</strong>
 					<small>
-						{result.status === 'completed' ? 'Completed' : 'Skipped / Not completed'}
+						{result.status === 'completed' ? 'Completed' : 'Skipped'}
 					</small>
 				</span>
 			</li>
@@ -150,12 +150,18 @@
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.7rem;
-		align-items: start;
+		align-items: center;
 		background: var(--surface);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		padding: 0.85rem 0.95rem;
 		color: var(--ink);
+	}
+
+	.results li.skipped,
+	.results li.pending {
+		background: var(--danger-soft);
+		border: 1.5px solid var(--danger);
 	}
 
 	.mark {
@@ -174,8 +180,8 @@
 
 	.skipped .mark,
 	.pending .mark {
-		background: var(--mark-muted);
-		color: var(--muted);
+		background: color-mix(in srgb, #fff 18%, transparent);
+		color: #fff;
 	}
 
 	li strong {
@@ -183,8 +189,19 @@
 		color: var(--ink);
 	}
 
+	li.skipped strong,
+	li.pending strong {
+		color: #fff;
+	}
+
 	li small {
 		color: var(--muted);
+	}
+
+	li.skipped small,
+	li.pending small {
+		color: color-mix(in srgb, #fff 78%, transparent);
+		font-weight: 600;
 	}
 
 	.actions {

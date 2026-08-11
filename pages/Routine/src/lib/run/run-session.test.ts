@@ -64,7 +64,8 @@ describe('run-session', () => {
 		expect(summary.completed).toBe(2);
 		expect(summary.skipped).toBe(1);
 		expect(summary.percentComplete).toBe(67);
-		expect(summary.results.map((r) => r.status)).toEqual(['completed', 'skipped', 'completed']);
+		expect(summary.results.map((r) => r.status)).toEqual(['skipped', 'completed', 'completed']);
+		expect(summary.results.map((r) => r.taskId)).toEqual(['t2', 't1', 't3']);
 	});
 
 	it('handles a single-task routine', () => {
