@@ -69,25 +69,30 @@
 
 <style>
 	.summary {
-		min-height: 100dvh;
-		padding: calc(1.2rem + var(--safe-top)) calc(1rem + var(--safe-right))
-			calc(1.2rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
+		height: 100dvh;
+		max-height: 100dvh;
+		padding: calc(1.2rem + var(--safe-top)) calc(1rem + var(--safe-right)) 0
+			calc(1rem + var(--safe-left));
 		display: flex;
 		flex-direction: column;
 		width: min(720px, 100%);
 		margin: 0 auto;
+		box-sizing: border-box;
+		overflow: hidden;
 	}
 
 	.top-bar {
 		display: flex;
 		justify-content: flex-end;
 		margin-bottom: 0.5rem;
+		flex-shrink: 0;
 	}
 
 	.celebrate {
 		display: grid;
 		place-items: center;
 		margin-bottom: 0.6rem;
+		flex-shrink: 0;
 	}
 
 	.badge {
@@ -123,27 +128,33 @@
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: var(--accent-strong);
+		flex-shrink: 0;
 	}
 
 	h1 {
 		margin: 0.35rem 0 0.55rem;
 		font-family: var(--font-display);
 		font-size: clamp(1.9rem, 6vw, 2.5rem);
+		flex-shrink: 0;
 	}
 
 	.stats {
 		margin: 0 0 1rem;
 		color: var(--ink-soft);
+		flex-shrink: 0;
 	}
 
 	.results {
 		list-style: none;
 		margin: 0;
-		padding: 0;
+		padding: 0 0 0.5rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.55rem;
-		flex: 1;
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.results li {
@@ -205,9 +216,16 @@
 	}
 
 	.actions {
+		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 0.55rem;
-		margin-top: 1rem;
+		padding: 0.85rem 0 calc(1.1rem + var(--safe-bottom));
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--bg-end) 0%, transparent),
+			var(--bg-end) 0.65rem,
+			var(--bg-end)
+		);
 	}
 </style>
