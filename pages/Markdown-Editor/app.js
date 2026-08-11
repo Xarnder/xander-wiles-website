@@ -135,6 +135,7 @@ import {
     splitMarkdownBlocks,
 } from './markdown.js';
 import { createEditorSearch } from './search.js';
+import { createEditHistory } from './history.js';
 import {
     applyEditorDisplayMode,
     applyFinderLayoutPrefs,
@@ -186,6 +187,7 @@ import {
     syncDoubleTapCopyControl,
     syncEditorMoreShowDates,
     syncFinderSortControl,
+    syncUndoRedoButtons,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
@@ -197,6 +199,8 @@ const LEGACY_VIEW_MODES = {
 };
 /** Idle time after last edit before Drive autosave. */
 const AUTOSAVE_IDLE_MS = 10_000;
+
+const editHistory = createEditHistory();
 
 const state = {
     browseMode: 'folder', // 'folder' | 'search' | 'computers'
@@ -242,6 +246,112 @@ function syncEditorChrome(ed = state.editor, options = {}) {
     syncEditorChromeUi(ed, options);
     if (!options.quiet) syncAutosaveFromEditorState();
     else if (options.syncAutosave) syncAutosaveFromEditorState();
+    syncEditHistoryButtons(ed);
+}
+
+function syncEditHistoryButtons(ed = state.editor) {
+    const forceDisabled = ed.status === 'saving' || ed.status === 'loading' || !ed.fileId;
+    syncUndoRedoButtons({
+        canUndo: editHistory.canUndo(),
+        canRedo: editHistory.canRedo(),
+        forceDisabled,
+    });
+}
+
+function readEditorSelection() {
+    const els = getEls();
+    if (state.viewMode === 'raw' && els.editor) {
+        return {
+            selectionStart: Number(els.editor.selectionStart) || 0,
+            selectionEnd: Number(els.editor.selectionEnd) || 0,
+        };
+    }
+    return { selectionStart: 0, selectionEnd: 0 };
+}
+
+function getEditorBufferText() {
+    const els = getEls();
+    if (state.viewMode === 'raw' && els.editor) return els.editor.value;
+    return state.editor.editorContent;
+}
+
+/**
+ * Checkpoint before a user-driven buffer change. Safe to call often — coalesces.
+ * @param {string} [text]
+ */
+function noteUserEditBoundary(text) {
+    const value = text != null ? String(text) : getEditorBufferText();
+    editHistory.beforeEdit(value, readEditorSelection());
+}
+
+/**
+ * Apply an undo/redo snapshot into the open editor without recording history.
+ * @param {{ text: string, selectionStart?: number, selectionEnd?: number }} entry
+ */
+function applyHistorySnapshot(entry) {
+    if (!entry || !state.editor.fileId) return;
+    const text = String(entry.text ?? '');
+    const els = getEls();
+    editHistory.suspend();
+    try {
+        setEditorText(state.editor, text);
+        if (els.editor) {
+            els.editor.value = text;
+            if (state.viewMode === 'raw') {
+                const start = Math.max(0, Math.min(Number(entry.selectionStart) || 0, text.length));
+                const end = Math.max(
+                    start,
+                    Math.min(Number(entry.selectionEnd) || start, text.length)
+                );
+                try {
+                    els.editor.focus();
+                    els.editor.setSelectionRange(start, end);
+                } catch {
+                    // ignore
+                }
+            }
+        }
+        editHistory.syncMirror(text);
+        if (state.viewMode !== 'raw') {
+            refreshDocumentModelFromText(text);
+            applyTagFilters(state.documentModel, state.tagFilters);
+            applyEditingLists(state.documentModel, state.editingListIds);
+            applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+            applyReorderingLists(state.documentModel, state.reorderingListIds);
+            applyReorderingPlainLists(state.documentModel, state.reorderingPlainLists);
+            showParseWarnings();
+            renderStructuredEditor();
+        }
+        syncEditorChrome(state.editor);
+    } finally {
+        editHistory.resume();
+    }
+}
+
+function performEditorUndo() {
+    if (!state.editor.fileId) return false;
+    flushCurrentEditorContent();
+    const current = state.editor.editorContent;
+    const entry = editHistory.undo(current, readEditorSelection());
+    if (!entry) {
+        syncEditHistoryButtons();
+        return false;
+    }
+    applyHistorySnapshot(entry);
+    return true;
+}
+
+function performEditorRedo() {
+    if (!state.editor.fileId) return false;
+    flushCurrentEditorContent();
+    const current = state.editor.editorContent;
+    const entry = editHistory.redo(current, readEditorSelection());
+    if (!entry) {
+        syncEditHistoryButtons();
+        return false;
+    }
+    applyHistorySnapshot(entry);
+    return true;
 }
 
 function noteEditorContentEdited() {
@@ -1399,9 +1509,13 @@ function renderStructuredEditor(extra = {}) {
             if (opts.soft) {
                 if (opts.persist) {
                     const serialized = serializeDocument(doc);
-                    setEditorText(state.editor, serialized);
-                    els.editor.value = serialized;
-                    syncEditorChrome(state.editor);
+                    if (!textsEqual(serialized, state.editor.editorContent)) {
+                        noteUserEditBoundary(state.editor.editorContent);
+                        setEditorText(state.editor, serialized);
+                        els.editor.value = serialized;
+                        editHistory.touch(serialized);
+                        syncEditorChrome(state.editor);
+                    }
                 }
                 renderStructuredEditor({
                     focusItemId: opts.focusItemId,
@@ -1411,9 +1525,17 @@ function renderStructuredEditor(extra = {}) {
                 return;
             }
             const serialized = serializeDocument(doc);
-            setEditorText(state.editor, serialized);
-            els.editor.value = serialized;
-            syncEditorChrome(state.editor);
+            if (!textsEqual(serialized, state.editor.editorContent)) {
+                noteUserEditBoundary(state.editor.editorContent);
+                setEditorText(state.editor, serialized);
+                els.editor.value = serialized;
+                editHistory.touch(serialized);
+                syncEditorChrome(state.editor);
+            } else {
+                setEditorText(state.editor, serialized);
+                els.editor.value = serialized;
+                syncEditorChrome(state.editor);
+            }
             if (opts.skipRender) {
                 return;
             }
@@ -1467,6 +1589,8 @@ function syncEditorActionLocks() {
     }
 
     const entries = [
+        [els.btnUndo, 'undo'],
+        [els.btnRedo, 'redo'],
         [els.btnEditorSearch, 'search'],
         [els.btnClickEdit, 'click-edit'],
         [els.btnInsertList, 'insert-list'],
@@ -1482,6 +1606,10 @@ function syncEditorActionLocks() {
             btn.disabled = !isActive;
         } else if (key === 'save') {
             btn.disabled = baseDisabled || !state.editor.dirty;
+        } else if (key === 'undo') {
+            btn.disabled = baseDisabled || !editHistory.canUndo();
+        } else if (key === 'redo') {
+            btn.disabled = baseDisabled || !editHistory.canRedo();
         } else {
             btn.disabled = baseDisabled;
         }
@@ -1763,6 +1891,9 @@ function setupEditorForOpenFile(options = {}) {
         els.editor.value = serialized;
         refreshDocumentModelFromText(serialized);
     }
+
+    // Fresh undo stack for this file — never cleared by autosave / Save.
+    editHistory.reset(state.editor.editorContent);
 
     state.viewMode = resolveInitialViewMode(state.editor.fileId, { freshlyCreated });
 
@@ -3004,9 +3135,11 @@ function insertDateTagIntoEditor() {
     if (state.viewMode === 'raw' && els.editor) {
         const start = Number(els.editor.selectionStart) || 0;
         const end = Number(els.editor.selectionEnd) || start;
+        noteUserEditBoundary(els.editor.value);
         const { text, caret } = insertDateTagAt(els.editor.value, start, end, tag);
         setEditorText(state.editor, text);
         els.editor.value = text;
+        editHistory.touch(text);
         try {
             els.editor.focus();
             els.editor.setSelectionRange(caret, caret);
@@ -3022,8 +3155,10 @@ function insertDateTagIntoEditor() {
     const current = state.editor.editorContent || '';
     const needsNl = current.length > 0 && !current.endsWith('\n');
     const next = `${current}${needsNl ? '\n' : ''}${tag}\n`;
+    noteUserEditBoundary(current);
     setEditorText(state.editor, next);
     els.editor.value = next;
+    editHistory.touch(next);
     refreshDocumentModelFromText(next);
     if (state.viewMode === 'list' || state.viewMode === 'preview' || state.viewMode === 'contents') {
         applyEditingLists(state.documentModel, state.editingListIds);
@@ -3087,8 +3222,10 @@ async function fillMissingListDatesFromMenu() {
 
     const serialized = serializeDocument(state.documentModel);
     const els = getEls();
+    noteUserEditBoundary(state.editor.editorContent);
     setEditorText(state.editor, serialized);
     els.editor.value = serialized;
+    editHistory.touch(serialized);
     refreshDocumentModelFromText(serialized);
     applyEditingLists(state.documentModel, state.editingListIds);
     applyEditingPlainLists(state.documentModel, state.editingPlainLists);
@@ -3231,6 +3368,9 @@ async function saveCurrentFile(options = {}) {
     }
 
     stopAutosaveCountdown();
+    // Close typing coalesce so the next edit after save is its own undo step.
+    // Do not reset the undo stack — recovery after accidental delete depends on it.
+    editHistory.closeGroup();
 
     if (autosave) {
         // Background save: no "Saving…" chrome, no list re-render, no textarea stomping.
@@ -3737,10 +3877,32 @@ function wireEvents() {
         }
     });
 
+    els.editor.addEventListener('beforeinput', () => {
+        if (!state.editor.fileId) return;
+        noteUserEditBoundary(els.editor.value);
+    });
+
     els.editor.addEventListener('input', () => {
+        // Fallback when beforeinput did not fire (some mobile keyboards).
+        editHistory.beforeEditFromMirror(els.editor.value, {
+            selectionStart: Number(els.editor.selectionStart) || 0,
+            selectionEnd: Number(els.editor.selectionEnd) || 0,
+        });
         setEditorText(state.editor, els.editor.value);
+        editHistory.touch(els.editor.value);
         syncEditorChrome(state.editor);
     });
+
+    if (els.btnUndo) {
+        els.btnUndo.addEventListener('click', () => {
+            performEditorUndo();
+        });
+    }
+    if (els.btnRedo) {
+        els.btnRedo.addEventListener('click', () => {
+            performEditorRedo();
+        });
+    }
 
     const modeButtons = [els.modeList, els.modePreview, els.modeContents, els.modeRaw];
     for (const btn of modeButtons) {
@@ -3760,6 +3922,43 @@ function wireEvents() {
         if ((event.metaKey || event.ctrlKey) && key === 's') {
             event.preventDefault();
             if (hasOpenFile()) saveCurrentFile();
+            return;
+        }
+        if ((event.metaKey || event.ctrlKey) && key === 'z') {
+            // Own the undo stack so autosave cannot strand the user without recovery.
+            const target = event.target;
+            const inAppEditor = hasOpenFile() && els.viewEditor && !els.viewEditor.hidden;
+            if (!inAppEditor) return;
+            // Let native undo work inside list mini-inputs; document undo for Raw / chrome.
+            if (
+                target instanceof HTMLElement &&
+                els.listsRoot?.contains(target) &&
+                (target.tagName === 'TEXTAREA' ||
+                    target.tagName === 'INPUT' ||
+                    target.isContentEditable)
+            ) {
+                return;
+            }
+            event.preventDefault();
+            if (event.shiftKey) performEditorRedo();
+            else performEditorUndo();
+            return;
+        }
+        if ((event.metaKey || event.ctrlKey) && key === 'y') {
+            const inAppEditor = hasOpenFile() && els.viewEditor && !els.viewEditor.hidden;
+            if (!inAppEditor) return;
+            const target = event.target;
+            if (
+                target instanceof HTMLElement &&
+                els.listsRoot?.contains(target) &&
+                (target.tagName === 'TEXTAREA' ||
+                    target.tagName === 'INPUT' ||
+                    target.isContentEditable)
+            ) {
+                return;
+            }
+            event.preventDefault();
+            performEditorRedo();
         }
     });
 

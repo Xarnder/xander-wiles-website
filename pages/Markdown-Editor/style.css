@@ -470,6 +470,11 @@ html.is-standalone .nav-bar {
     justify-content: center;
 }
 
+.nav-actions-editor .btn-undo,
+.nav-actions-editor .btn-redo {
+    flex: 0.85 1 0;
+}
+
 .nav-actions-editor .btn-save {
     flex: 1 1 0;
     min-height: 32px;
@@ -520,6 +525,16 @@ html.is-standalone .nav-bar {
 .nav-action-icon--menu {
     -webkit-mask: url('./Assets/SVGs/menu.svg') center / contain no-repeat;
     mask: url('./Assets/SVGs/menu.svg') center / contain no-repeat;
+}
+
+.nav-action-icon--undo {
+    -webkit-mask: url('./Assets/SVGs/undo.svg') center / contain no-repeat;
+    mask: url('./Assets/SVGs/undo.svg') center / contain no-repeat;
+}
+
+.nav-action-icon--redo {
+    -webkit-mask: url('./Assets/SVGs/redo.svg') center / contain no-repeat;
+    mask: url('./Assets/SVGs/redo.svg') center / contain no-repeat;
 }
 
 .nav-action-icon--save {

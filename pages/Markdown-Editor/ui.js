@@ -38,6 +38,8 @@ export function bindUi() {
     els.btnSignIn = document.getElementById('btn-sign-in');
     els.btnSignOut = document.getElementById('btn-sign-out');
     els.btnSave = document.getElementById('btn-save');
+    els.btnUndo = document.getElementById('btn-undo');
+    els.btnRedo = document.getElementById('btn-redo');
     els.btnLoadMore = document.getElementById('btn-load-more');
     els.btnModeFolders = document.getElementById('btn-mode-folders');
     els.btnModeComputers = document.getElementById('btn-mode-computers');
@@ -455,6 +457,8 @@ export function showView(name, options = {}) {
             els.editorEmpty.hidden = true;
             els.editorActive.hidden = true;
             els.btnSave.hidden = true;
+            if (els.btnUndo) els.btnUndo.hidden = true;
+            if (els.btnRedo) els.btnRedo.hidden = true;
             if (els.btnInsertList) els.btnInsertList.hidden = true;
             if (els.btnClickEdit) els.btnClickEdit.hidden = true;
             if (els.btnEditorMore) els.btnEditorMore.hidden = true;
@@ -466,6 +470,8 @@ export function showView(name, options = {}) {
             els.editorEmpty.hidden = hasOpenFile;
             els.editorActive.hidden = !hasOpenFile;
             els.btnSave.hidden = !hasOpenFile;
+            if (els.btnUndo) els.btnUndo.hidden = !hasOpenFile;
+            if (els.btnRedo) els.btnRedo.hidden = !hasOpenFile;
             if (!hasOpenFile) {
                 els.viewTitle.textContent = 'Edit';
                 if (els.app) els.app.classList.remove('is-editing-doc');
@@ -497,6 +503,8 @@ export function setEditorLoading(loading, fileName = '') {
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
         if (els.btnSave) els.btnSave.hidden = true;
+        if (els.btnUndo) els.btnUndo.hidden = true;
+        if (els.btnRedo) els.btnRedo.hidden = true;
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
         if (els.btnEditorMore) els.btnEditorMore.hidden = true;
@@ -1085,6 +1093,8 @@ export function syncEditorChrome(state, options = {}) {
         els.editorEmpty.hidden = true;
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
+        if (els.btnUndo) els.btnUndo.hidden = false;
+        if (els.btnRedo) els.btnRedo.hidden = false;
         if (els.btnInsertList) els.btnInsertList.hidden = false;
         if (els.btnClickEdit) els.btnClickEdit.hidden = false;
         if (els.btnEditorMore) els.btnEditorMore.hidden = false;
@@ -1096,6 +1106,8 @@ export function syncEditorChrome(state, options = {}) {
             els.editorFileTitle.textContent = '';
             els.editorFileTitle.removeAttribute('title');
         }
+        if (els.btnUndo) els.btnUndo.hidden = true;
+        if (els.btnRedo) els.btnRedo.hidden = true;
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
         if (els.btnEditorMore) els.btnEditorMore.hidden = true;
@@ -1126,6 +1138,12 @@ export function syncEditorChrome(state, options = {}) {
     setActionDisabled(els.btnInsertList, 'insert-list', baseDisabled);
     setActionDisabled(els.btnClickEdit, 'click-edit', baseDisabled);
     setActionDisabled(els.btnEditorSearch, 'search', baseDisabled);
+    // Undo/redo enabled state is owned by syncUndoRedoButtons in app.js
+    // (needs history stack); only force-disable while action-locked / saving.
+    if (actionLocked || baseDisabled) {
+        setActionDisabled(els.btnUndo, 'undo', true);
+        setActionDisabled(els.btnRedo, 'redo', true);
+    }
 
     if (els.tabEditor) {
         els.tabEditor.classList.toggle('has-dirty', Boolean(state.dirty && state.fileId));
@@ -1168,6 +1186,21 @@ export function syncEditorChrome(state, options = {}) {
         if (editorSaveToastKey === 'saving' || editorSaveToastKey === 'dirty') {
             resetEditorSaveToast();
         }
+    }
+}
+
+/**
+ * Enable/disable Undo & Redo from the edit-history stack.
+ * @param {{ canUndo?: boolean, canRedo?: boolean, forceDisabled?: boolean }} [options]
+ */
+export function syncUndoRedoButtons(options = {}) {
+    const actionLocked = Boolean(els.app?.classList.contains('is-action-locked'));
+    const forceDisabled = Boolean(options.forceDisabled) || actionLocked;
+    if (els.btnUndo) {
+        els.btnUndo.disabled = forceDisabled || !options.canUndo;
+    }
+    if (els.btnRedo) {
+        els.btnRedo.disabled = forceDisabled || !options.canRedo;
     }
 }
 

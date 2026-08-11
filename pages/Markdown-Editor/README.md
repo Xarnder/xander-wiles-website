@@ -15,6 +15,7 @@ Live path: `/pages/Markdown-Editor/`
 8. Shows loading / dirty / saving / saved / error status
 9. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
 10. **Autosaves** to Drive after **10 seconds** of inactivity (slim countdown bar under the mode switcher)
+11. **Undo / Redo** survive autosave — Edit toolbar buttons (mobile) plus ⌘/Ctrl+Z and ⌘/Ctrl+Shift+Z / Ctrl+Y
 
 ## Custom lists (`mdlist`)
 

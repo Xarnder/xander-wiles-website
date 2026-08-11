@@ -12,7 +12,7 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 
 | Kind | Examples | Fastest local workflow |
 |------|----------|------------------------|
-| **Static page** | To-Do List, Countdown, Local-AI | Root `npm run dev` → open `/pages/<name>/` |
+| **Static page** | To-Do List, Countdown, Local-AI, Markdown-Editor | Root `npm run dev` → open `/pages/<name>/` |
 | **Vite app** (React) | Journal, Teleprompter | `cd pages/<app>` → `npm run dev` |
 | **Vite app** (Svelte) | Logo-Demo | `cd pages/<app>` → `npm run dev` |
 | **SvelteKit app** | Fighter-Jet, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
@@ -30,6 +30,7 @@ Bundled apps are **built in `build.js`** and copied into `deploy_out/pages/...`.
 |-----|--------|------------------|----------------------|
 | **Homepage** | `/` | `npm run dev` | `http://localhost:3000/` |
 | **To-Do List** | `pages/To-Do-List/` | `npm run dev` | `http://localhost:3000/pages/To-Do-List/` |
+| **Markdown-Editor** | `pages/Markdown-Editor/` | `npm run dev` | `http://localhost:3000/pages/Markdown-Editor/` |
 | **Journal** | `pages/journal/` | `cd pages/journal && npm install && npm run dev` | `http://localhost:5173/pages/journal/` |
 | **Teleprompter** | `pages/Teleprompter/` | `cd pages/Teleprompter && npm install && npm run dev` | `http://localhost:5173/pages/Teleprompter/` |
 | **Logo Demo** | `pages/Logo-Demo/` | `cd pages/Logo-Demo && npm install && npm run dev` | `http://localhost:5173/pages/Logo-Demo/` |
@@ -47,7 +48,7 @@ Then open `http://localhost:3000/` (or the port `serve` prints). Use homepage ca
 
 ---
 
-## 1. Static pages (To-Do List, utilities, games, etc.)
+## 1. Static pages (To-Do List, Markdown-Editor, utilities, games, etc.)
 
 Most folders under `pages/` are plain HTML/CSS/JS. No install in the page folder required.
 
@@ -60,11 +61,22 @@ npm run dev
 
 - Homepage: `http://localhost:3000/`
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
+- Markdown-Editor: `http://localhost:3000/pages/Markdown-Editor/`
 - Any other static tool: `http://localhost:3000/pages/<Folder-Name>/`
 
 Many pages load shared assets from `/assets/` and the nav from `/nav.html` — those work automatically when you serve from the **repo root**, not when you open `index.html` as a `file://` URL.
 
 **Firebase / API keys:** Some static apps read config that `build.js` injects from `.env.local` at **build** time. For day-to-day UI work, `npm run dev` on the repo root is usually enough; for auth or live backend behavior, use a full **`npm run build`** preview (see below) with `.env.local` populated (see `.env.example`).
+
+**Markdown-Editor (Google Drive auth):** Root `npm run dev` serves the UI without env injection. To test sign-in / Drive, put `PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID` in `.env.local`, then:
+
+```bash
+npm run build
+npm run preview
+# open http://localhost:3000/pages/Markdown-Editor/
+```
+
+Setup details: `pages/Markdown-Editor/README.md` and `pages/Markdown-Editor/GOOGLE-CLOUD-SETUP.md`.
 
 ---
 
@@ -140,6 +152,7 @@ npm run preview    # same as: npx serve deploy_out
 - Teleprompter: `http://localhost:3000/pages/Teleprompter/`
 - Journal: `http://localhost:3000/pages/journal/`
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
+- Markdown-Editor: `http://localhost:3000/pages/Markdown-Editor/`
 
 Click through the homepage grid and the loaded nav bar to verify links and “recent pages” behavior.
 

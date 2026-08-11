@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v114';
+const CACHE_NAME = 'md-editor-shell-v115';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -36,7 +36,10 @@ const ASSETS = [
     './Assets/SVGs/rename.svg',
     './Assets/SVGs/menu.svg',
     './Assets/SVGs/save.svg',
+    './Assets/SVGs/undo.svg',
+    './Assets/SVGs/redo.svg',
     './Assets/SVGs/cross.svg',
+    './history.js',
 ];
 
 self.addEventListener('install', (event) => {

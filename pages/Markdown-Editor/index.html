@@ -374,7 +374,7 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
-                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime.</li>
+                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
@@ -421,6 +421,12 @@
                     </div>
                 </div>
                 <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
+                    <button type="button" id="btn-undo" class="btn btn-ghost btn-icon btn-undo" hidden title="Undo (⌘/Ctrl+Z)" aria-label="Undo" disabled>
+                        <span class="nav-action-icon nav-action-icon--undo" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="btn-redo" class="btn btn-ghost btn-icon btn-redo" hidden title="Redo (⌘/Ctrl+Shift+Z)" aria-label="Redo" disabled>
+                        <span class="nav-action-icon nav-action-icon--redo" aria-hidden="true"></span>
+                    </button>
                     <button type="button" id="btn-editor-search" class="btn btn-ghost btn-icon" hidden aria-expanded="false" aria-controls="editor-search-bar" title="Search in file (⌘/Ctrl+F)" aria-label="Search in file">
                         <span class="nav-action-icon nav-action-icon--search" aria-hidden="true"></span>
                     </button>
