@@ -24,7 +24,7 @@ test('core routine journey', async ({ page }) => {
 	await expect(page.getByTestId('routine-list')).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Morning Flow' })).toBeVisible();
 
-	await page.getByRole('button', { name: /Start Morning Flow/i }).click();
+	await page.getByRole('button', { name: /Start Morning Flow fresh/i }).click();
 	await expect(page.getByTestId('run-screen')).toBeVisible();
 	await expect(page.getByTestId('progress-text')).toHaveText('Task 1 of 3');
 	await expect(page.getByRole('heading', { name: 'Water' })).toBeVisible();

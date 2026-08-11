@@ -26,6 +26,7 @@
 		skipAndNext,
 		startRun
 	} from '$lib/stores/run.svelte';
+	import { getProgressPercent } from '$lib/run/run-session';
 	import type { Routine } from '$lib/types/routine';
 	import { hapticCelebrate } from '$lib/utils/haptics';
 	import { lockLandscape, unlockOrientation } from '$lib/utils/orientation';
@@ -126,12 +127,7 @@
 	const forceLandscapeRun = $derived(
 		isForceLandscape() && session?.phase === 'running'
 	);
-	const progress = $derived.by(() => {
-		if (!session || session.tasks.length === 0) return 0;
-		const done = Object.values(session.statuses).filter((value) => value !== 'pending').length;
-		if (session.phase === 'summary') return 100;
-		return Math.round((done / session.tasks.length) * 100);
-	});
+	const progress = $derived(session ? getProgressPercent(session) : 0);
 
 	function maybeCelebrate() {
 		if (getRunSession()?.phase === 'summary') hapticCelebrate();

@@ -9,7 +9,13 @@
 	import { signOutUser } from '$lib/firebase/auth';
 	import { getAuthStatus } from '$lib/stores/auth.svelte';
 	import { getRoutines, getRoutinesLoading, reorderRoutines } from '$lib/stores/routines.svelte';
-	import { discardStoredRun, peekStoredRun, startRun } from '$lib/stores/run.svelte';
+	import {
+		discardStoredRun,
+		peekStoredRun,
+		routineCanContinueFromLast,
+		startRun
+	} from '$lib/stores/run.svelte';
+	import type { StartMode } from '$lib/run/run-session';
 	import { moveItem } from '$lib/utils/order';
 
 	let dragIndex = $state<number | null>(null);
@@ -20,15 +26,19 @@
 	const loading = $derived(getRoutinesLoading());
 	const storedRun = $derived(peekStoredRun());
 
-	function startRoutine(id: string) {
+	function startRoutine(id: string, mode: StartMode = 'fresh') {
 		const routine = routines.find((item) => item.id === id);
 		if (!routine) return;
 		if (routine.tasks.length === 0) {
 			error = 'Add at least one task before starting this routine.';
 			return;
 		}
+		if (mode === 'continue' && !routineCanContinueFromLast(routine)) {
+			error = 'No previous cycle to continue from yet.';
+			return;
+		}
 		error = null;
-		startRun(routine);
+		startRun(routine, mode);
 		void goto(resolve('/routines/[id]/run', { id: routine.id }));
 	}
 
@@ -81,7 +91,7 @@
 		<div>
 			<p class="brand">Routine Manager</p>
 			<h1>Your routines</h1>
-			<p>Tap Start to begin. Edit stays out of the way.</p>
+			<p>Start fresh, or pick up from last cycle’s completions.</p>
 		</div>
 		<button type="button" class="btn btn-ghost" onclick={() => signOutUser()}>Sign Out</button>
 	</header>
@@ -121,9 +131,11 @@
 				<div data-routine-index={index}>
 					<RoutineCard
 						{routine}
+						canContinue={routineCanContinueFromLast(routine)}
 						dragging={dragIndex === index}
 						ondragstart={(event) => onDragStart(index, event)}
-						onstart={() => startRoutine(routine.id)}
+						onstartFresh={() => startRoutine(routine.id, 'fresh')}
+						onstartFromLast={() => startRoutine(routine.id, 'continue')}
 					/>
 				</div>
 			{/each}

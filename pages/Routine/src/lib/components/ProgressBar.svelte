@@ -63,7 +63,7 @@
 
 	.percent {
 		flex: 0 0 auto;
-		min-width: 3.25ch;
+		min-width: 4.5ch;
 		text-align: right;
 		color: var(--ink);
 		font-size: 0.95rem;

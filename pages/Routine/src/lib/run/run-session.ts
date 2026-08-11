@@ -5,19 +5,33 @@ function sortedTasks(tasks: RoutineTask[]): RoutineTask[] {
 	return [...tasks].sort((a, b) => a.order - b.order);
 }
 
-export function createRunSession(routine: Routine): RunSession {
+export type StartMode = 'fresh' | 'continue';
+
+/**
+ * @param preCompletedIds — task ids to mark completed up front (continue-from-last).
+ * Starts at the first task that is not already completed.
+ */
+export function createRunSession(
+	routine: Routine,
+	preCompletedIds: Iterable<string> = []
+): RunSession {
 	const tasks = sortedTasks(routine.tasks);
+	const preCompleted = new Set(preCompletedIds);
 	const statuses: Record<string, TaskStatus> = {};
 	for (const task of tasks) {
-		statuses[task.id] = 'pending';
+		statuses[task.id] = preCompleted.has(task.id) ? 'completed' : 'pending';
 	}
+
+	const firstPending = tasks.findIndex((task) => statuses[task.id] !== 'completed');
+	const allDone = tasks.length > 0 && firstPending === -1;
+
 	return {
 		routineId: routine.id,
 		routineName: routine.name,
 		tasks,
 		statuses,
-		currentIndex: 0,
-		phase: tasks.length === 0 ? 'summary' : 'running'
+		currentIndex: allDone ? Math.max(0, tasks.length - 1) : Math.max(0, firstPending),
+		phase: tasks.length === 0 || allDone ? 'summary' : 'running'
 	};
 }
 
@@ -27,7 +41,22 @@ export function getCurrentTask(session: RunSession): RoutineTask | null {
 }
 
 export function hasProgress(session: RunSession): boolean {
-	return Object.values(session.statuses).some((status) => status !== 'pending');
+	return session.tasks.some((task) => session.statuses[task.id] !== 'pending');
+}
+
+/** Share of tasks no longer pending (0–100). Summary is always 100. */
+export function getProgressPercent(session: RunSession): number {
+	if (session.tasks.length === 0) return 0;
+	if (session.phase === 'summary') return 100;
+	const done = session.tasks.filter((task) => session.statuses[task.id] !== 'pending').length;
+	return Math.round((done / session.tasks.length) * 100);
+}
+
+function nextPendingIndex(session: RunSession, statuses: Record<string, TaskStatus>, afterIndex: number): number {
+	for (let i = afterIndex + 1; i < session.tasks.length; i++) {
+		if (statuses[session.tasks[i].id] === 'pending') return i;
+	}
+	return -1;
 }
 
 function advanceAfterStatus(session: RunSession, status: 'completed' | 'skipped'): RunSession {
@@ -35,9 +64,9 @@ function advanceAfterStatus(session: RunSession, status: 'completed' | 'skipped'
 	if (!current || session.phase !== 'running') return session;
 
 	const statuses = { ...session.statuses, [current.id]: status };
-	const nextIndex = session.currentIndex + 1;
+	const nextIndex = nextPendingIndex(session, statuses, session.currentIndex);
 
-	if (nextIndex >= session.tasks.length) {
+	if (nextIndex === -1) {
 		return {
 			...session,
 			statuses,

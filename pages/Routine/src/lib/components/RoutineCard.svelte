@@ -4,12 +4,16 @@
 
 	let {
 		routine,
-		onstart,
+		canContinue = false,
+		onstartFresh,
+		onstartFromLast,
 		ondragstart,
 		dragging = false
 	}: {
 		routine: Routine;
-		onstart: () => void;
+		canContinue?: boolean;
+		onstartFresh: () => void;
+		onstartFromLast: () => void;
 		ondragstart?: (event: PointerEvent) => void;
 		dragging?: boolean;
 	} = $props();
@@ -38,8 +42,8 @@
 			<button
 				type="button"
 				class="title-hit"
-				onclick={onstart}
-				aria-label={`Start ${routine.name}`}
+				onclick={onstartFresh}
+				aria-label={`Start ${routine.name} fresh`}
 			>
 				<h2>{routine.name}</h2>
 				<p>
@@ -57,11 +61,30 @@
 
 	<div class="actions">
 		{#if canStart}
-			<button type="button" class="start-btn" onclick={onstart} data-testid={`start-${routine.id}`}>
-				Start
-			</button>
+			<div class="start-stack">
+				<button
+					type="button"
+					class="start-btn"
+					onclick={onstartFresh}
+					data-testid={`start-fresh-${routine.id}`}
+				>
+					Start fresh
+				</button>
+				<button
+					type="button"
+					class="start-btn start-from-last"
+					onclick={onstartFromLast}
+					disabled={!canContinue}
+					data-testid={`start-from-last-${routine.id}`}
+					title={canContinue
+						? 'Resume with tasks completed last cycle still marked done'
+						: 'Finish a cycle first to unlock'}
+				>
+					From last
+				</button>
+			</div>
 		{:else}
-			<a class="start-btn add-tasks" href={editHref} data-testid={`start-${routine.id}`}
+			<a class="start-btn add-tasks" href={editHref} data-testid={`start-fresh-${routine.id}`}
 				>Add tasks</a
 			>
 		{/if}
@@ -153,14 +176,22 @@
 
 	.actions {
 		display: grid;
-		grid-template-columns: 1.65fr 1fr;
+		grid-template-columns: auto auto;
 		align-items: stretch;
 		justify-self: end;
 		height: 100%;
-		min-width: 10rem;
 		gap: 0.4rem;
 		padding: 0.55rem 0.6rem 0.55rem 0.35rem;
 		box-sizing: border-box;
+	}
+
+	.start-stack {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		align-items: stretch;
+		gap: 0.35rem;
+		height: 100%;
+		min-width: 11.5rem;
 	}
 
 	.start-btn,
@@ -173,7 +204,8 @@
 		justify-content: center;
 		text-decoration: none;
 		touch-action: manipulation;
-		white-space: nowrap;
+		text-align: center;
+		line-height: 1.15;
 	}
 
 	.start-btn {
@@ -182,20 +214,37 @@
 		width: 100%;
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 1.05rem;
+		font-size: 0.86rem;
 		font-weight: 700;
 		cursor: pointer;
-		padding: 0 0.9rem;
+		padding: 0.35rem 0.55rem;
 		box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 26%, transparent);
+		white-space: normal;
+	}
+
+	.start-btn.start-from-last {
+		background: var(--surface-strong);
+		color: var(--accent-strong);
+		border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+		box-shadow: none;
+		font-weight: 600;
+	}
+
+	.start-btn.start-from-last:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+		color: var(--muted);
+		border-color: var(--line);
 	}
 
 	.start-btn.add-tasks {
 		background: var(--accent-soft);
 		color: var(--accent-strong);
 		box-shadow: none;
+		font-size: 1.05rem;
 	}
 
-	.start-btn:active,
+	.start-btn:not(:disabled):active,
 	.edit-btn:active {
 		transform: scale(0.985);
 	}
@@ -207,5 +256,7 @@
 		font-weight: 600;
 		font-size: 0.92rem;
 		padding: 0 0.75rem;
+		white-space: nowrap;
+		min-width: 4.25rem;
 	}
 </style>

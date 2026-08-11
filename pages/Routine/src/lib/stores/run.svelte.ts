@@ -5,9 +5,15 @@ import {
 	getCurrentTask,
 	goBack,
 	hasProgress,
-	skipCurrent
+	skipCurrent,
+	type StartMode
 } from '$lib/run/run-session';
 import { deriveSummary } from '$lib/run/summary';
+import {
+	canContinueFromLastCycle,
+	getContinuableCompletedIds,
+	saveLastCycle
+} from '$lib/run/last-cycle';
 import type { Routine } from '$lib/types/routine';
 import type { RunSession, RoutineSummaryStats } from '$lib/types/run';
 
@@ -15,6 +21,7 @@ const STORAGE_KEY = 'routine-active-run';
 
 let session: RunSession | null = $state(null);
 let storageEpoch = $state(0);
+let lastCycleEpoch = $state(0);
 let transitionLock = false;
 
 function persist(): void {
@@ -23,6 +30,10 @@ function persist(): void {
 		sessionStorage.removeItem(STORAGE_KEY);
 	} else {
 		sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+		if (session.phase === 'summary') {
+			saveLastCycle(session.routineId, session.statuses);
+			lastCycleEpoch += 1;
+		}
 	}
 	storageEpoch += 1;
 }
@@ -49,11 +60,19 @@ export function runCanGoBack(): boolean {
 	return session ? canGoBack(session) : false;
 }
 
-export function startRun(routine: Routine): void {
+/** Reactive peek for library cards — bumps when a cycle is saved. */
+export function routineCanContinueFromLast(routine: Routine): boolean {
+	void lastCycleEpoch;
+	return canContinueFromLastCycle(routine);
+}
+
+export function startRun(routine: Routine, mode: StartMode = 'fresh'): void {
 	if (routine.tasks.length === 0) {
 		throw new Error('This routine has no tasks.');
 	}
-	session = createRunSession(routine);
+	const preCompleted =
+		mode === 'continue' ? getContinuableCompletedIds(routine) : [];
+	session = createRunSession(routine, preCompleted);
 	persist();
 }
 
@@ -151,5 +170,5 @@ export function backOne(): void {
 }
 
 export function restartRun(routine: Routine): void {
-	startRun(routine);
+	startRun(routine, 'fresh');
 }
