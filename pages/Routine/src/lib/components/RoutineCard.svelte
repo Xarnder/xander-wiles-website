@@ -24,20 +24,7 @@
 </script>
 
 <article class={['card', 'routine-card', dragging && 'dragging', !ondragstart && 'no-drag']}>
-	{#if ondragstart}
-		<button
-			type="button"
-			class="drag-handle"
-			aria-label={`Reorder ${routine.name}`}
-			onpointerdown={ondragstart}
-		>
-			⋮⋮
-		</button>
-	{/if}
-
-	<div class="icon" aria-hidden="true">{routine.icon || '✓'}</div>
-
-	<div class="copy">
+	<div class="title-row">
 		{#if canStart}
 			<button
 				type="button"
@@ -46,53 +33,72 @@
 				aria-label={`Start ${routine.name} fresh`}
 			>
 				<h2>{routine.name}</h2>
-				<p>
-					{taskCount}
-					{taskCount === 1 ? 'task' : 'tasks'}
-				</p>
 			</button>
 		{:else}
 			<a class="title-hit" href={editHref} aria-label={`Add tasks to ${routine.name}`}>
 				<h2>{routine.name}</h2>
-				<p>0 tasks · add tasks to start</p>
 			</a>
 		{/if}
 	</div>
 
-	<div class="actions">
-		{#if canStart}
-			<div class="start-stack">
-				<button
-					type="button"
-					class="start-btn"
-					onclick={onstartFresh}
-					data-testid={`start-fresh-${routine.id}`}
-					aria-label="Start fresh"
-				>
-					<span class="label-full">Start fresh</span>
-					<span class="label-short">Fresh</span>
-				</button>
-				<button
-					type="button"
-					class="start-btn start-from-last"
-					onclick={onstartFromLast}
-					disabled={!canContinue}
-					data-testid={`start-from-last-${routine.id}`}
-					aria-label="Start from last completion"
-					title={canContinue
-						? 'Resume with tasks completed last cycle still marked done'
-						: 'Finish a cycle first to unlock'}
-				>
-					<span class="label-full">From last</span>
-					<span class="label-short">Last</span>
-				</button>
-			</div>
-		{:else}
-			<a class="start-btn add-tasks" href={editHref} data-testid={`start-fresh-${routine.id}`}
-				>Add tasks</a
+	<div class="body-row">
+		{#if ondragstart}
+			<button
+				type="button"
+				class="drag-handle"
+				aria-label={`Reorder ${routine.name}`}
+				onpointerdown={ondragstart}
 			>
+				⋮⋮
+			</button>
 		{/if}
-		<a class="edit-btn" href={editHref}>Edit</a>
+
+		<div class="icon" aria-hidden="true">{routine.icon || '✓'}</div>
+
+		<p class="meta">
+			{#if canStart}
+				{taskCount}
+				{taskCount === 1 ? 'task' : 'tasks'}
+			{:else}
+				0 tasks · add tasks to start
+			{/if}
+		</p>
+
+		<div class="actions">
+			{#if canStart}
+				<div class="start-stack">
+					<button
+						type="button"
+						class="start-btn"
+						onclick={onstartFresh}
+						data-testid={`start-fresh-${routine.id}`}
+						aria-label="Start fresh"
+					>
+						<span class="label-full">Start fresh</span>
+						<span class="label-short">Fresh</span>
+					</button>
+					<button
+						type="button"
+						class="start-btn start-from-last"
+						onclick={onstartFromLast}
+						disabled={!canContinue}
+						data-testid={`start-from-last-${routine.id}`}
+						aria-label="Start from last completion"
+						title={canContinue
+							? 'Resume with tasks completed last cycle still marked done'
+							: 'Finish a cycle first to unlock'}
+					>
+						<span class="label-full">From last</span>
+						<span class="label-short">Last</span>
+					</button>
+				</div>
+			{:else}
+				<a class="start-btn add-tasks" href={editHref} data-testid={`start-fresh-${routine.id}`}
+					>Add tasks</a
+				>
+			{/if}
+			<a class="edit-btn" href={editHref}>Edit</a>
+		</div>
 	</div>
 </article>
 
@@ -100,17 +106,13 @@
 	.routine-card {
 		container-type: inline-size;
 		container-name: routine-card;
-		display: grid;
-		grid-template-columns: auto auto minmax(0, 1fr) auto;
-		gap: 0;
-		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 0.55rem 0.55rem 0.5rem;
 		align-items: stretch;
-		overflow: hidden;
-		min-height: 5rem;
-	}
-
-	.routine-card.no-drag {
-		grid-template-columns: auto minmax(0, 1fr) auto;
+		overflow: visible;
+		min-height: 0;
 	}
 
 	.routine-card.dragging {
@@ -118,43 +120,9 @@
 		transform: scale(0.99);
 	}
 
-	.drag-handle {
-		border: none;
-		background: transparent;
-		color: var(--muted);
-		min-width: 1.65rem;
-		padding: 0;
-		cursor: grab;
-		font-size: 0.95rem;
-		letter-spacing: -0.12em;
-		align-self: stretch;
-	}
-
-	.icon {
-		box-sizing: border-box;
-		width: clamp(2.6rem, 10cqi, 4.35rem);
-		min-height: calc(100% - 1.1rem);
-		align-self: center;
-		margin: 0.5rem 0 0.5rem 0.3rem;
-		display: grid;
-		place-items: center;
-		background: var(--accent-soft);
-		font-size: clamp(1.4rem, 6cqi, 2.75rem);
-		line-height: 1;
-		padding: 0.1rem;
-		border-radius: 0.9rem;
-		border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
-	}
-
-	.routine-card.no-drag .icon {
-		margin-left: 0.5rem;
-	}
-
-	.copy {
+	.title-row {
+		width: 100%;
 		min-width: 0;
-		display: flex;
-		align-items: center;
-		padding: 0.55rem 0.45rem 0.55rem 0.5rem;
 	}
 
 	.title-hit {
@@ -165,37 +133,76 @@
 		cursor: pointer;
 		color: inherit;
 		text-decoration: none;
+		display: block;
 		width: 100%;
 		min-width: 0;
 	}
 
-	.copy h2 {
+	.title-row h2 {
 		margin: 0;
-		font-size: clamp(0.98rem, 2.4cqi + 0.55rem, 1.25rem);
+		font-size: clamp(1.15rem, 2.8cqi + 0.65rem, 1.45rem);
 		font-family: var(--font-display);
 		color: var(--ink);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+		white-space: normal;
 	}
 
-	.copy p {
-		margin: 0.15rem 0 0;
+	.body-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-width: 0;
+		width: 100%;
+	}
+
+	.drag-handle {
+		border: none;
+		background: transparent;
+		color: var(--muted);
+		min-width: 1.65rem;
+		flex-shrink: 0;
+		padding: 0;
+		align-self: stretch;
+		cursor: grab;
+		font-size: 0.95rem;
+		letter-spacing: -0.12em;
+	}
+
+	.icon {
+		box-sizing: border-box;
+		width: clamp(2.6rem, 10cqi, 3.5rem);
+		aspect-ratio: 1;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		background: var(--accent-soft);
+		font-size: clamp(1.25rem, 5cqi, 1.85rem);
+		line-height: 1;
+		padding: 0.1rem;
+		border-radius: 0.9rem;
+		border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+	}
+
+	.meta {
+		margin: 0;
 		color: var(--muted);
 		font-size: clamp(0.78rem, 1.5cqi + 0.45rem, 1rem);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		line-height: 1.3;
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 
 	.actions {
 		display: grid;
 		grid-template-columns: auto auto;
 		align-items: stretch;
-		justify-self: end;
-		height: 100%;
+		flex-shrink: 0;
+		margin-left: auto;
 		gap: 0.35rem;
-		padding: 0.5rem 0.55rem 0.5rem 0.25rem;
 		box-sizing: border-box;
 	}
 
@@ -204,14 +211,12 @@
 		grid-template-columns: 1fr 1fr;
 		align-items: stretch;
 		gap: 0.35rem;
-		height: 100%;
 		width: 11.25rem;
 	}
 
 	.start-btn,
 	.edit-btn {
-		height: 100%;
-		min-height: 100%;
+		min-height: 2.75rem;
 		border-radius: 0.95rem;
 		display: inline-flex;
 		align-items: center;
@@ -279,7 +284,7 @@
 		min-width: 3.75rem;
 	}
 
-	/* Slim phones: shrink icon / title first, keep start buttons chunky. */
+	/* Slim phones: shrink icon / meta first, keep start buttons chunky. */
 	@container routine-card (max-width: 440px) {
 		.icon {
 			width: 2.55rem;
@@ -314,15 +319,10 @@
 		.icon {
 			width: 2.25rem;
 			font-size: 1.25rem;
-			margin-left: 0.2rem;
 		}
 
 		.drag-handle {
 			min-width: 1.2rem;
-		}
-
-		.copy {
-			padding-inline: 0.35rem;
 		}
 
 		.start-stack {
