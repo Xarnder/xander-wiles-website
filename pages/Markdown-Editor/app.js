@@ -89,12 +89,15 @@ import {
     markError,
     markSaved,
     applySavedBaseline,
+    applyDriveVersionMeta,
     markSaving,
     promptRestoreDraft,
     readDraft,
     rebaseEditorBaseline,
     setEditorText,
     textsEqual,
+    normalizeEditorText,
+    writeDraft,
 } from './editor.js';
 import {
     addItem,
@@ -136,12 +139,29 @@ import {
 } from './markdown.js';
 import { createEditorSearch } from './search.js';
 import { createEditHistory } from './history.js';
+import { getRevisionContent, listAllRevisions, protectRevision } from './revisions.js';
+import {
+    DESTRUCTIVE_AUTOSAVE_DEFER_MS,
+    isDestructiveChange,
+} from './destructive.js';
+import {
+    enrichRevisionsWithMeta,
+    pruneSafetyRevisions,
+    upsertRevisionMeta,
+} from './revision-meta.js';
 import {
     applyEditorDisplayMode,
     applyFinderLayoutPrefs,
     applyTheme,
     bindUi,
+    closeHistoryDialog,
+    closeHistoryPreviewDialog,
+    formatRevisionTime,
     getEls,
+    openHistoryDialog,
+    openHistoryPreviewDialog,
+    promptConflictDialog,
+    promptConflictReview,
     promptForName,
     promptItemActions,
     promptEditorMoreMenu,
@@ -149,11 +169,14 @@ import {
     fillEditorMoreStats,
     promptFinderSort,
     promptMoveDestination,
+    promptNameVersion,
     promptPinnedShortcutIssue,
+    promptRestoreRevision,
     promptUnsavedChanges,
     renderFileList,
     renderPinnedList,
     renderFolderPath,
+    renderVersionHistoryList,
     scrollFinderToMarkdownSection,
     setBrowseEmptyMessage,
     setFinderLoading,
@@ -161,6 +184,8 @@ import {
     setConfigError,
     setCreateActionsVisible,
     setEditorLoading,
+    setHistoryPreviewStatus,
+    setHistoryStatus,
     setListsStatus,
     setLoadMoreVisible,
     setLoadMoreBusy,
@@ -199,6 +224,8 @@ const LEGACY_VIEW_MODES = {
 };
 /** Idle time after last edit before Drive autosave. */
 const AUTOSAVE_IDLE_MS = 10_000;
+/** Cap listed Drive revisions in the History UI. */
+const HISTORY_MAX_REVISIONS = 100;
 
 const editHistory = createEditHistory();
 
@@ -235,6 +262,25 @@ let autosaveTimer = null;
 let autosaveRaf = null;
 let autosaveStartedAt = 0;
 let autosaveInFlight = false;
+/** Blocks autosave while a History restore upload is running. */
+let restoreInFlight = false;
+/** Serializes Drive content writes (save / restore / conflict overwrite). */
+let driveWriteChain = Promise.resolve();
+/** @type {Promise<void> | null} */
+let conflictResolveInFlight = null;
+/** @type {import('./revisions.js').DocumentRevision | null} */
+let historyPreviewRevision = null;
+/** @type {string} */
+let historyPreviewContent = '';
+/** Soft-defer autosave until this timestamp after a destructive edit. */
+let destructiveAutosaveDeferUntil = 0;
+/** Fingerprint we already toasted a large-change warning for. */
+let destructiveWarnedFingerprint = null;
+/**
+ * Pending remote conflict payloads (preserved until resolved).
+ * @type {{ localContent: string, driveContent: string, driveVersion: string | number | null, headRevisionId: string | null, fileId: string } | null}
+ */
+let pendingConflict = null;
 /** Content fingerprint used to detect real edits vs chrome-only syncs. */
 let autosaveContentFingerprint = null;
 /** Timestamp of last local content change (ms). */
@@ -242,15 +288,55 @@ let lastEditorEditAt = 0;
 /** Session flag — off via burger menu; always re-enabled when opening a markdown file. */
 let autosaveEnabled = true;
 
+function isDriveWriteBusy() {
+    return autosaveInFlight || restoreInFlight;
+}
+
+/**
+ * Run exclusive Drive content mutations in order.
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function enqueueDriveWrite(fn) {
+    const run = driveWriteChain.then(fn, fn);
+    driveWriteChain = run.then(
+        () => undefined,
+        () => undefined
+    );
+    return run;
+}
+
+async function waitForDriveWritesIdle() {
+    stopAutosaveCountdown();
+    const started = Date.now();
+    while (isDriveWriteBusy() && Date.now() - started < 45_000) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    await driveWriteChain.catch(() => undefined);
+}
+
 function syncEditorChrome(ed = state.editor, options = {}) {
     syncEditorChromeUi(ed, options);
+    const els = getEls();
+    if (
+        els.btnSave &&
+        isDriveWriteBusy() &&
+        !els.app?.classList.contains('is-action-locked')
+    ) {
+        els.btnSave.disabled = true;
+    }
     if (!options.quiet) syncAutosaveFromEditorState();
     else if (options.syncAutosave) syncAutosaveFromEditorState();
     syncEditHistoryButtons(ed);
 }
 
 function syncEditHistoryButtons(ed = state.editor) {
-    const forceDisabled = ed.status === 'saving' || ed.status === 'loading' || !ed.fileId;
+    const forceDisabled =
+        ed.status === 'saving' ||
+        ed.status === 'loading' ||
+        !ed.fileId ||
+        isDriveWriteBusy();
     syncUndoRedoButtons({
         canUndo: editHistory.canUndo(),
         canRedo: editHistory.canRedo(),
@@ -356,6 +442,38 @@ function performEditorRedo() {
 
 function noteEditorContentEdited() {
     lastEditorEditAt = Date.now();
+    const ed = state.editor;
+    if (!ed?.fileId) return;
+    if (pendingConflict) {
+        // Keep conflict local payload fresh so Keep-mine doesn't wipe later typing.
+        pendingConflict = {
+            ...pendingConflict,
+            localContent: ed.editorContent,
+            fileId: ed.fileId,
+        };
+        writeDraft(ed.fileId, ed.editorContent, ed.fileName);
+    }
+    if (isDestructiveChange(ed.originalContent, ed.editorContent)) {
+        const fp = ed.editorContent;
+        destructiveAutosaveDeferUntil = Date.now() + DESTRUCTIVE_AUTOSAVE_DEFER_MS;
+        if (destructiveWarnedFingerprint !== fp) {
+            destructiveWarnedFingerprint = fp;
+            showEditorToast('Large change — Undo available · autosave delayed', 'warn', {
+                key: 'destructive-defer',
+                durationMs: 2800,
+            });
+        }
+    } else {
+        destructiveAutosaveDeferUntil = 0;
+        destructiveWarnedFingerprint = null;
+    }
+}
+
+function msUntilAutosaveAllowed() {
+    const sinceEdit = Date.now() - lastEditorEditAt;
+    const idleLeft = Math.max(0, AUTOSAVE_IDLE_MS - sinceEdit);
+    const deferLeft = Math.max(0, destructiveAutosaveDeferUntil - Date.now());
+    return Math.max(idleLeft, deferLeft);
 }
 
 /**
@@ -397,13 +515,13 @@ function stopAutosaveCountdown() {
     if (fill) fill.style.transform = 'scaleX(0)';
 }
 
-function paintAutosaveBar(remainingRatio) {
+function paintAutosaveBar(remainingRatio, idleMs = AUTOSAVE_IDLE_MS) {
     const els = getEls();
     const bar = els.autosaveBar;
     const fill = els.autosaveBarFill;
     if (!bar || !fill) return;
     const ratio = Math.max(0, Math.min(1, Number(remainingRatio) || 0));
-    const secsLeft = Math.ceil((ratio * AUTOSAVE_IDLE_MS) / 1000);
+    const secsLeft = Math.ceil((ratio * idleMs) / 1000);
     bar.hidden = false;
     bar.setAttribute('aria-hidden', 'false');
     bar.setAttribute('aria-valuenow', String(secsLeft));
@@ -417,10 +535,11 @@ function paintAutosaveBar(remainingRatio) {
 function tickAutosaveBar() {
     autosaveRaf = null;
     if (!autosaveStartedAt || autosaveTimer == null) return;
-    const elapsed = Date.now() - autosaveStartedAt;
-    const remaining = Math.max(0, 1 - elapsed / AUTOSAVE_IDLE_MS);
-    paintAutosaveBar(remaining);
-    if (remaining > 0) {
+    const delayLeft = msUntilAutosaveAllowed();
+    const idleMs = Math.max(delayLeft, AUTOSAVE_IDLE_MS, 1);
+    const remaining = Math.max(0, delayLeft / idleMs);
+    paintAutosaveBar(remaining, idleMs);
+    if (delayLeft > 0) {
         autosaveRaf = requestAnimationFrame(tickAutosaveBar);
     }
 }
@@ -438,12 +557,14 @@ function startAutosaveCountdown() {
         cancelAnimationFrame(autosaveRaf);
         autosaveRaf = null;
     }
-    autosaveStartedAt = Date.now();
-    paintAutosaveBar(1);
+    const delayMs = Math.max(50, msUntilAutosaveAllowed());
+    const idleMs = Math.max(delayMs, AUTOSAVE_IDLE_MS);
+    autosaveStartedAt = Date.now() - (idleMs - delayMs);
+    paintAutosaveBar(delayMs / idleMs, idleMs);
     autosaveTimer = setTimeout(() => {
         autosaveTimer = null;
         runAutosave();
-    }, AUTOSAVE_IDLE_MS);
+    }, delayMs);
     autosaveRaf = requestAnimationFrame(tickAutosaveBar);
 }
 
@@ -458,7 +579,10 @@ function syncAutosaveFromEditorState() {
         !ed.dirty ||
         ed.status === 'saving' ||
         ed.status === 'loading' ||
+        ed.status === 'conflict' ||
+        pendingConflict ||
         autosaveInFlight ||
+        restoreInFlight ||
         !editorVisible
     ) {
         if (!ed?.dirty || ed?.status === 'saving' || ed?.status === 'loading' || !ed?.fileId) {
@@ -483,17 +607,22 @@ function syncAutosaveFromEditorState() {
 
 async function runAutosave() {
     const ed = state.editor;
-    if (!autosaveEnabled || autosaveInFlight) return;
+    if (!autosaveEnabled || autosaveInFlight || restoreInFlight || pendingConflict) return;
     const els = getEls();
     const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
-    if (!ed?.fileId || !ed.dirty || ed.status === 'saving' || !editorVisible) {
+    if (
+        !ed?.fileId ||
+        !ed.dirty ||
+        ed.status === 'saving' ||
+        ed.status === 'conflict' ||
+        !editorVisible
+    ) {
         stopAutosaveCountdown();
         return;
     }
 
-    // Still typing / just typed — wait for another full idle window.
-    const idleFor = Date.now() - lastEditorEditAt;
-    if (idleFor < AUTOSAVE_IDLE_MS) {
+    // Still typing / just typed / destructive defer — wait.
+    if (msUntilAutosaveAllowed() > 0) {
         startAutosaveCountdown();
         return;
     }
@@ -1430,7 +1559,7 @@ function flushCurrentEditorContent() {
     const els = getEls();
     if (!state.editor.fileId) return;
     if (state.viewMode === 'raw') {
-        setEditorText(state.editor, els.editor.value);
+        adoptEditorBuffer(els.editor.value, { userEdit: true });
     } else if (
         state.viewMode === 'list' ||
         state.viewMode === 'preview' ||
@@ -1438,10 +1567,37 @@ function flushCurrentEditorContent() {
     ) {
         if (state.documentModel) {
             const serialized = serializeDocument(state.documentModel);
-            setEditorText(state.editor, serialized);
-            els.editor.value = serialized;
+            // Structured flush often only changes JSON/whitespace formatting.
+            // If the file was clean, rebase instead of faking an unsaved edit.
+            adoptEditorBuffer(serialized, { userEdit: state.editor.dirty });
+            els.editor.value = state.editor.editorContent;
         }
     }
+}
+
+/**
+ * Apply buffer text without false "Unsaved" from parse→serialize drift.
+ * @param {string} text
+ * @param {{ userEdit?: boolean }} [options]
+ * @returns {boolean} true when editorContent changed
+ */
+function adoptEditorBuffer(text, options = {}) {
+    const userEdit = Boolean(options.userEdit);
+    const next = normalizeEditorText(text);
+    if (textsEqual(next, state.editor.editorContent)) {
+        return false;
+    }
+    if (userEdit) {
+        setEditorText(state.editor, next);
+        return true;
+    }
+    // Non-user flush (mode switch / chrome): format-only drift while clean → rebase.
+    if (!state.editor.dirty) {
+        rebaseEditorBaseline(state.editor, next);
+        return true;
+    }
+    setEditorText(state.editor, next);
+    return true;
 }
 
 function renderStructuredEditor(extra = {}) {
@@ -1531,11 +1687,8 @@ function renderStructuredEditor(extra = {}) {
                 els.editor.value = serialized;
                 editHistory.touch(serialized);
                 syncEditorChrome(state.editor);
-            } else {
-                setEditorText(state.editor, serialized);
-                els.editor.value = serialized;
-                syncEditorChrome(state.editor);
             }
+            // Identical serialize → do not setEditorText/sync (avoids Saved/Unsaved toast spam).
             if (opts.skipRender) {
                 return;
             }
@@ -1774,7 +1927,7 @@ function applyViewMode(mode, {
 
     // Leaving editable surfaces: flush first
     if (state.viewMode === 'raw' || reparseFromTextarea) {
-        setEditorText(state.editor, els.editor.value);
+        adoptEditorBuffer(els.editor.value, { userEdit: true });
     } else if (
         state.viewMode === 'list' ||
         state.viewMode === 'preview' ||
@@ -1782,8 +1935,8 @@ function applyViewMode(mode, {
     ) {
         if (state.documentModel) {
             const serialized = serializeDocument(state.documentModel);
-            setEditorText(state.editor, serialized);
-            els.editor.value = serialized;
+            adoptEditorBuffer(serialized, { userEdit: state.editor.dirty });
+            els.editor.value = state.editor.editorContent;
         }
     }
 
@@ -1906,7 +2059,7 @@ function setupEditorForOpenFile(options = {}) {
     } else {
         renderStructuredEditor();
     }
-    syncEditorChrome(state.editor);
+    syncEditorChrome(state.editor, { quiet: true });
     setStatus('');
     if (repaired) {
         showEditorToast('Repaired list data — Save to persist fixes.', 'warn', {
@@ -2883,6 +3036,303 @@ async function handleEditorMoreMenu() {
     }
 }
 
+/**
+ * Wait until Drive writes settle (History restore must not race them).
+ */
+async function waitForAutosaveIdle() {
+    await waitForDriveWritesIdle();
+}
+
+function revisionMetaLine(rev) {
+    const parts = [formatRevisionTime(rev?.modifiedTime)];
+    if (rev?.isCurrent) parts.push('Current');
+    else if (rev?.keepForever) parts.push('Protected');
+    const size = Number(rev?.size);
+    if (Number.isFinite(size) && size >= 0) {
+        if (size < 1024) parts.push(`${size} B`);
+        else if (size < 1024 * 1024) parts.push(`${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`);
+        else parts.push(`${(size / (1024 * 1024)).toFixed(1)} MB`);
+    }
+    return parts.filter(Boolean).join(' · ');
+}
+
+async function refreshVersionHistoryList() {
+    const fileId = state.editor.fileId;
+    if (!fileId) return;
+
+    setHistoryStatus('Loading revisions…');
+    renderVersionHistoryList([]);
+
+    try {
+        const { revisions, truncated } = await listAllRevisions(fileId, {
+            maxRevisions: HISTORY_MAX_REVISIONS,
+        });
+        try {
+            await enrichRevisionsWithMeta(fileId, revisions);
+        } catch (metaErr) {
+            console.warn('[md-editor] revision meta enrich failed', metaErr);
+        }
+        setHistoryStatus(
+            revisions.length
+                ? `${revisions.length} revision${revisions.length === 1 ? '' : 's'}`
+                : ''
+        );
+        renderVersionHistoryList(revisions, {
+            truncated,
+            onPreview: (rev) => {
+                previewDriveRevision(rev);
+            },
+            onRestore: (rev) => {
+                restoreDriveRevision(rev);
+            },
+        });
+    } catch (err) {
+        setHistoryStatus(err.message || 'Could not load version history', 'error');
+        renderVersionHistoryList([]);
+    }
+}
+
+async function openVersionHistory() {
+    if (!state.editor.fileId) {
+        setStatus('Open a markdown file first', 'warn');
+        return;
+    }
+    openHistoryDialog();
+    await refreshVersionHistoryList();
+}
+
+async function nameCurrentVersion() {
+    const ed = state.editor;
+    if (!ed.fileId) {
+        setStatus('Open a markdown file first', 'warn');
+        return;
+    }
+
+    if (ed.dirty) {
+        flushCurrentEditorContent();
+        await saveCurrentFile();
+        if (ed.dirty) {
+            setStatus('Save the file before naming a version', 'warn');
+            return;
+        }
+    }
+
+    const label = await promptNameVersion();
+    if (!label) return;
+
+    setStatus('Naming version…');
+    try {
+        // Always refresh head from Drive — cached headRevisionId can be stale.
+        const meta = await getFileMetadata(ed.fileId);
+        const headId = meta?.headRevisionId ? String(meta.headRevisionId) : null;
+        applyDriveVersionMeta(ed, {
+            version: meta?.version,
+            headRevisionId: headId,
+        });
+        if (!headId) {
+            throw new Error('Could not find the current Drive revision');
+        }
+
+        await protectRevision(ed.fileId, headId);
+        await upsertRevisionMeta({
+            fileId: ed.fileId,
+            revisionId: headId,
+            type: 'named',
+            label,
+            createdAt: new Date().toISOString(),
+        });
+
+        // Best-effort retention for automatic safety pins (never touches named).
+        pruneSafetyRevisions(ed.fileId).catch((err) => {
+            console.warn('[md-editor] safety prune failed', err);
+        });
+
+        setStatus(`Named version “${label}”`, 'ok');
+        showEditorToast(`Named “${label}”`, 'ok', { key: 'named-version', durationMs: 2400 });
+    } catch (err) {
+        setStatus(err.message || 'Could not name version', 'error');
+    }
+}
+
+/**
+ * @param {import('./revisions.js').DocumentRevision} rev
+ */
+async function previewDriveRevision(rev) {
+    if (!state.editor.fileId || !rev?.id) return;
+
+    historyPreviewRevision = rev;
+    historyPreviewContent = '';
+    openHistoryPreviewDialog({
+        title: rev.isCurrent ? 'Current version' : 'Version preview',
+        meta: revisionMetaLine(rev),
+        content: '',
+        busy: true,
+        canRestore: !rev.isCurrent,
+    });
+
+    try {
+        if (!rev.isCurrent && !rev.keepForever) {
+            setHistoryPreviewStatus('Protecting revision so Drive can download it…');
+        }
+        const result = await getRevisionContent(state.editor.fileId, rev.id, {
+            isCurrent: Boolean(rev.isCurrent),
+            keepForever: Boolean(rev.keepForever),
+        });
+        historyPreviewContent = result.content;
+        if (result.protected) {
+            rev.keepForever = true;
+            if (!rev.isCurrent) rev.type = 'safety';
+        }
+        openHistoryPreviewDialog({
+            title: rev.isCurrent ? 'Current version' : 'Version preview',
+            meta: revisionMetaLine(rev),
+            content: result.content,
+            busy: false,
+            canRestore: !rev.isCurrent,
+        });
+    } catch (err) {
+        openHistoryPreviewDialog({
+            title: 'Version preview',
+            meta: revisionMetaLine(rev),
+            content: '',
+            busy: false,
+            canRestore: !rev.isCurrent,
+            error: err.message || 'Could not load this revision',
+        });
+    }
+}
+
+/**
+ * @param {import('./revisions.js').DocumentRevision} rev
+ * @param {{ content?: string }} [options]
+ */
+async function restoreDriveRevision(rev, options = {}) {
+    const ed = state.editor;
+    if (!ed.fileId || !rev?.id) return;
+    if (rev.isCurrent) {
+        showEditorToast('Already the current version', 'ok', {
+            key: 'history-current',
+            durationMs: 1800,
+        });
+        return;
+    }
+
+    flushCurrentEditorContent();
+    const meta = revisionMetaLine(rev);
+    const dirtyNote = ed.dirty ? ' Unsaved local edits in the editor will be replaced.' : '';
+    const ok = await promptRestoreRevision(`${meta}.${dirtyNote}`);
+    if (!ok) return;
+
+    await waitForDriveWritesIdle();
+    if (isDriveWriteBusy()) {
+        setStatus('Wait for the current save to finish, then try Restore again', 'warn');
+        return;
+    }
+
+    const fileId = ed.fileId;
+    const mimeType = ed.mimeType || 'text/markdown';
+
+    await enqueueDriveWrite(async () => {
+        if (state.editor.fileId !== fileId) return;
+        restoreInFlight = true;
+        stopAutosaveCountdown();
+        markSaving(ed);
+        syncEditorChrome(ed);
+        setStatus('Restoring version…');
+        setHistoryStatus('Restoring…');
+
+        try {
+            let content = options.content;
+            if (typeof content !== 'string') {
+                const result = await getRevisionContent(fileId, rev.id, {
+                    isCurrent: false,
+                    keepForever: Boolean(rev.keepForever),
+                });
+                content = result.content;
+                if (result.protected) {
+                    rev.keepForever = true;
+                    rev.type = 'safety';
+                }
+            }
+
+            if (state.editor.fileId !== fileId) return;
+
+            // Pin the pre-restore head so the previous current version remains downloadable.
+            try {
+                const metaNow = await getFileMetadata(fileId);
+                const headId = metaNow?.headRevisionId ? String(metaNow.headRevisionId) : '';
+                if (headId && headId !== rev.id) {
+                    await protectRevision(fileId, headId);
+                    await upsertRevisionMeta({
+                        fileId,
+                        revisionId: headId,
+                        type: 'safety',
+                        label: 'Before restore',
+                        createdAt: new Date().toISOString(),
+                    });
+                }
+            } catch (pinErr) {
+                console.warn('[md-editor] could not protect current head before restore', pinErr);
+            }
+
+            if (state.editor.fileId !== fileId) return;
+
+            const savedMeta = await updateFileContent(fileId, content, mimeType);
+            if (state.editor.fileId !== fileId) return;
+
+            const els = getEls();
+            applyLoadedContent(ed, {
+                fileId,
+                fileName: ed.fileName,
+                mimeType,
+                content,
+                driveVersion: savedMeta?.version ?? null,
+                headRevisionId: savedMeta?.headRevisionId
+                    ? String(savedMeta.headRevisionId)
+                    : null,
+            });
+            ed.status = 'saved';
+            if (els.editor) els.editor.value = ed.editorContent;
+            editHistory.reset(ed.editorContent);
+            clearDraft(fileId);
+            autosaveContentFingerprint = ed.editorContent;
+            pendingConflict = null;
+
+            refreshDocumentModelFromText(ed.editorContent);
+            applyTagFilters(state.documentModel, state.tagFilters);
+            applyEditingLists(state.documentModel, state.editingListIds);
+            applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+
+            closeHistoryPreviewDialog();
+            syncEditorChrome(ed);
+            if (state.viewMode !== 'raw') {
+                renderStructuredEditor();
+            }
+
+            setStatus('Restored earlier version', 'ok');
+            showEditorToast('Restored earlier version', 'ok', {
+                key: 'history-restored',
+                durationMs: 2400,
+            });
+
+            if (getEls().historyDialog?.open) {
+                await refreshVersionHistoryList();
+            }
+        } catch (err) {
+            if (state.editor.fileId !== fileId) return;
+            markError(ed, err.message || 'Restore failed');
+            ed.dirty = !textsEqual(ed.editorContent, ed.originalContent);
+            if (ed.dirty) ed.status = 'error';
+            syncEditorChrome(ed);
+            setStatus(ed.errorMessage || 'Restore failed', 'error');
+            setHistoryStatus(ed.errorMessage || 'Restore failed', 'error');
+        } finally {
+            restoreInFlight = false;
+            syncAutosaveFromEditorState();
+        }
+    });
+}
+
 function formatStatNumber(n) {
     return Number(n || 0).toLocaleString();
 }
@@ -3270,14 +3720,17 @@ function showAppView(name, extra = {}) {
 
 async function openMarkdownFile(file, options = {}) {
     const els = getEls();
+    // Finish any in-flight Drive write before switching file identity.
+    if (state.editor.fileId && state.editor.fileId !== file.id) {
+        await waitForDriveWritesIdle();
+    }
     // Only flush when we might need to warn — flushing Preview/List through
     // serialize used to mark clean files dirty (format drift vs Drive text).
     if (
         state.editor.fileId &&
         state.editor.fileId !== file.id
     ) {
-        if (state.editor.dirty) flushCurrentEditorContent();
-        else if (state.viewMode === 'raw') flushCurrentEditorContent();
+        flushCurrentEditorContent();
         if (state.editor.dirty) {
             const choice = await promptUnsavedChanges(els.unsavedDialog);
             if (choice === 'cancel') return;
@@ -3315,7 +3768,12 @@ async function openMarkdownFile(file, options = {}) {
             fileName: meta.name,
             mimeType: meta.mimeType,
             content,
+            driveVersion: meta.version ?? null,
+            headRevisionId: meta.headRevisionId ? String(meta.headRevisionId) : null,
         });
+        pendingConflict = null;
+        destructiveAutosaveDeferUntil = 0;
+        destructiveWarnedFingerprint = null;
         rememberRecentFile({
             id: meta.id,
             name: meta.name,
@@ -3350,13 +3808,41 @@ async function openMarkdownFile(file, options = {}) {
 
 async function saveCurrentFile(options = {}) {
     const autosave = Boolean(options.autosave);
+    const skipConflictCheck = Boolean(options.skipConflictCheck);
+
+    if (!autosave && pendingConflict && !skipConflictCheck) {
+        await resolvePendingConflict();
+        return;
+    }
+
+    await enqueueDriveWrite(() => saveCurrentFileExclusive(options));
+
+    // Conflict detected during exclusive save — resolve outside the write lock.
+    if (!autosave && pendingConflict && !skipConflictCheck) {
+        await resolvePendingConflict();
+    }
+}
+
+/**
+ * Exclusive Drive save body — always entered via enqueueDriveWrite.
+ * @param {{ autosave?: boolean, skipConflictCheck?: boolean, force?: boolean }} [options]
+ */
+async function saveCurrentFileExclusive(options = {}) {
+    const autosave = Boolean(options.autosave);
+    const skipConflictCheck = Boolean(options.skipConflictCheck);
     const ed = state.editor;
     if (!ed.fileId) return;
+    if (restoreInFlight) return;
 
-    // Snapshot before upload so later keystrokes aren't treated as already saved.
+    // Snapshot identity + bytes so a later file switch cannot redirect this write.
     flushCurrentEditorContent();
+    const fileId = ed.fileId;
+    const mimeType = ed.mimeType || 'text/markdown';
     const snapshot = ed.editorContent;
-    if (!ed.dirty) {
+    const baselineAtStart = ed.originalContent;
+    let expectedVersion = ed.driveVersion;
+
+    if (!ed.dirty && !options.force) {
         if (!autosave) {
             showEditorToast('Already saved', 'ok', {
                 key: 'already-saved',
@@ -3368,25 +3854,230 @@ async function saveCurrentFile(options = {}) {
     }
 
     stopAutosaveCountdown();
-    // Close typing coalesce so the next edit after save is its own undo step.
-    // Do not reset the undo stack — recovery after accidental delete depends on it.
     editHistory.closeGroup();
 
-    if (autosave) {
-        // Background save: no "Saving…" chrome, no list re-render, no textarea stomping.
-    } else {
+    if (!autosave) {
         markSaving(ed);
         syncEditorChrome(ed);
     }
 
+    const stillSameFile = () => state.editor.fileId === fileId;
+
     try {
-        await updateFileContent(ed.fileId, snapshot, ed.mimeType || 'text/markdown');
+        if (!skipConflictCheck && expectedVersion != null && expectedVersion !== '') {
+            const remoteMeta = await getFileMetadata(fileId);
+            if (!stillSameFile()) return;
+            const remoteVersion =
+                remoteMeta?.version != null && remoteMeta.version !== ''
+                    ? remoteMeta.version
+                    : null;
+            if (
+                remoteVersion != null &&
+                String(remoteVersion) !== String(expectedVersion)
+            ) {
+                const driveContent = await getFileContent(fileId);
+                if (!stillSameFile()) return;
+                if (!textsEqual(driveContent, snapshot)) {
+                    pendingConflict = {
+                        fileId,
+                        localContent: stillSameFile()
+                            ? state.editor.editorContent || snapshot
+                            : snapshot,
+                        driveContent,
+                        driveVersion: remoteVersion,
+                        headRevisionId: remoteMeta?.headRevisionId
+                            ? String(remoteMeta.headRevisionId)
+                            : null,
+                    };
+                    writeDraft(fileId, pendingConflict.localContent, ed.fileName);
+                    if (stillSameFile()) {
+                        ed.status = 'conflict';
+                        ed.errorMessage = 'Changed elsewhere';
+                    }
+                    if (autosave) {
+                        showEditorToast('Changed elsewhere — tap Save to resolve', 'warn', {
+                            key: 'conflict',
+                            durationMs: 4000,
+                        });
+                        if (stillSameFile()) {
+                            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+                        }
+                        setStatus('Changed elsewhere', 'warn');
+                        return;
+                    }
+                    if (stillSameFile()) syncEditorChrome(ed);
+                    // resolvePendingConflict runs outside this exclusive lock via saveCurrentFile.
+                    return;
+                }
+                // Same text — adopt remote version and continue.
+                expectedVersion = remoteVersion;
+                if (stillSameFile()) {
+                    applyDriveVersionMeta(ed, {
+                        version: remoteVersion,
+                        headRevisionId: remoteMeta?.headRevisionId || null,
+                    });
+                }
+            }
+        }
+
+        // Before uploading a destructive edit, pin the current Drive head.
+        if (isDestructiveChange(baselineAtStart, snapshot)) {
+            let headId = stillSameFile() ? ed.headRevisionId : null;
+            try {
+                const meta = await getFileMetadata(fileId);
+                if (!stillSameFile()) return;
+                headId = meta?.headRevisionId ? String(meta.headRevisionId) : headId;
+                expectedVersion =
+                    meta?.version != null && meta.version !== ''
+                        ? meta.version
+                        : expectedVersion;
+                if (stillSameFile()) {
+                    applyDriveVersionMeta(ed, {
+                        version: meta?.version,
+                        headRevisionId: headId,
+                    });
+                }
+            } catch {
+                // keep cached head if any
+            }
+
+            if (headId) {
+                try {
+                    await protectRevision(fileId, headId);
+                    await upsertRevisionMeta({
+                        fileId,
+                        revisionId: headId,
+                        type: 'safety',
+                        label: 'Before large change',
+                        createdAt: new Date().toISOString(),
+                    });
+                    pruneSafetyRevisions(fileId).catch((err) => {
+                        console.warn('[md-editor] safety prune failed', err);
+                    });
+                } catch (pinErr) {
+                    console.warn('[md-editor] safety pin before destructive save failed', pinErr);
+                    if (autosave) {
+                        if (stillSameFile()) {
+                            ed.status = 'dirty';
+                            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+                        }
+                        showEditorToast(
+                            'Autosave blocked — could not protect previous version. Tap Save.',
+                            'warn',
+                            { key: 'destructive-pin-fail', durationMs: 4000 }
+                        );
+                        return;
+                    }
+                    const proceed = window.confirm(
+                        'Could not protect the previous version on Drive before saving this large change. Save anyway?'
+                    );
+                    if (!proceed) {
+                        if (stillSameFile()) {
+                            ed.status = 'dirty';
+                            syncEditorChrome(ed);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Final version recheck immediately before upload (shrinks TOCTOU window).
+        if (!skipConflictCheck && expectedVersion != null && expectedVersion !== '') {
+            const preMeta = await getFileMetadata(fileId);
+            if (!stillSameFile()) return;
+            const preVersion =
+                preMeta?.version != null && preMeta.version !== '' ? preMeta.version : null;
+            if (preVersion != null && String(preVersion) !== String(expectedVersion)) {
+                const driveContent = await getFileContent(fileId);
+                if (!stillSameFile()) return;
+                if (!textsEqual(driveContent, snapshot)) {
+                    pendingConflict = {
+                        fileId,
+                        localContent: state.editor.editorContent || snapshot,
+                        driveContent,
+                        driveVersion: preVersion,
+                        headRevisionId: preMeta?.headRevisionId
+                            ? String(preMeta.headRevisionId)
+                            : null,
+                    };
+                    writeDraft(fileId, pendingConflict.localContent, ed.fileName);
+                    if (stillSameFile()) {
+                        ed.status = 'conflict';
+                        ed.errorMessage = 'Changed elsewhere';
+                        syncEditorChrome(ed);
+                    }
+                    if (!autosave) {
+                        if (stillSameFile()) syncEditorChrome(ed);
+                        // Outer saveCurrentFile will call resolvePendingConflict.
+                        return;
+                    }
+                    showEditorToast('Changed elsewhere — tap Save to resolve', 'warn', {
+                        key: 'conflict',
+                        durationMs: 4000,
+                    });
+                    return;
+                }
+                expectedVersion = preVersion;
+                if (stillSameFile()) {
+                    applyDriveVersionMeta(ed, {
+                        version: preVersion,
+                        headRevisionId: preMeta?.headRevisionId || null,
+                    });
+                }
+            }
+        }
+
+        if (!stillSameFile()) return;
+
+        const savedMeta = await updateFileContent(fileId, snapshot, mimeType);
+        if (!stillSameFile()) return;
+
         applySavedBaseline(ed, snapshot);
-        autosaveContentFingerprint = snapshot;
+        let nextVersion = savedMeta?.version;
+        let nextHead = savedMeta?.headRevisionId ? String(savedMeta.headRevisionId) : null;
+        if (nextVersion == null || nextVersion === '' || !nextHead) {
+            try {
+                const refreshed = await getFileMetadata(fileId);
+                if (stillSameFile()) {
+                    if (nextVersion == null || nextVersion === '') nextVersion = refreshed?.version;
+                    if (!nextHead && refreshed?.headRevisionId) {
+                        nextHead = String(refreshed.headRevisionId);
+                    }
+                }
+            } catch {
+                // keep whatever upload returned
+            }
+        }
+        if (stillSameFile()) {
+            applyDriveVersionMeta(ed, {
+                version: nextVersion,
+                headRevisionId: nextHead,
+            });
+            // Align baseline to canonical serialize so Preview/List flush stays clean.
+            try {
+                refreshDocumentModelFromText(ed.editorContent);
+                if (state.documentModel) {
+                    const canonical = serializeDocument(state.documentModel);
+                    if (
+                        !ed.dirty &&
+                        !textsEqual(canonical, ed.originalContent)
+                    ) {
+                        rebaseEditorBaseline(ed, canonical);
+                        const elsCanon = getEls();
+                        if (elsCanon.editor) elsCanon.editor.value = canonical;
+                    }
+                }
+            } catch {
+                // ignore canonicalize failures
+            }
+        }
+        autosaveContentFingerprint = ed.editorContent;
+        destructiveAutosaveDeferUntil = 0;
+        destructiveWarnedFingerprint = null;
+        if (pendingConflict?.fileId === fileId) pendingConflict = null;
 
         if (autosave) {
-            // Keep focus / caret / open mini-editors intact.
-            // Toast comes from quiet syncEditorChrome — do not set the top status strip.
             syncEditorChrome(ed, { quiet: true, syncAutosave: true });
             return;
         }
@@ -3399,6 +4090,7 @@ async function saveCurrentFile(options = {}) {
             renderStructuredEditor();
         }
     } catch (err) {
+        if (!stillSameFile()) return;
         markError(ed, err.message || 'Save failed');
         ed.dirty = !textsEqual(ed.editorContent, ed.originalContent);
         if (ed.dirty) ed.status = 'error';
@@ -3412,6 +4104,92 @@ async function saveCurrentFile(options = {}) {
             syncEditorChrome(ed);
         }
     }
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function resolvePendingConflict() {
+    if (conflictResolveInFlight) return conflictResolveInFlight;
+    conflictResolveInFlight = (async () => {
+        const conflict = pendingConflict;
+        const ed = state.editor;
+        if (!conflict || !ed.fileId || conflict.fileId !== ed.fileId) return;
+
+        flushCurrentEditorContent();
+        const liveLocal = ed.editorContent || conflict.localContent;
+
+        let choice = await promptConflictDialog();
+        if (choice === 'review') {
+            choice = await promptConflictReview({
+                localText: liveLocal,
+                driveText: conflict.driveContent,
+            });
+        }
+        if (!choice) {
+            ed.status = 'conflict';
+            syncEditorChrome(ed);
+            setStatus('Conflict unresolved — your edits are kept locally', 'warn');
+            return;
+        }
+
+        if (choice === 'use-drive') {
+            const els = getEls();
+            applyLoadedContent(ed, {
+                fileId: ed.fileId,
+                fileName: ed.fileName,
+                mimeType: ed.mimeType || 'text/markdown',
+                content: conflict.driveContent,
+                driveVersion: conflict.driveVersion,
+                headRevisionId: conflict.headRevisionId,
+            });
+            if (els.editor) els.editor.value = ed.editorContent;
+            editHistory.reset(ed.editorContent);
+            clearDraft(ed.fileId);
+            pendingConflict = null;
+            autosaveContentFingerprint = ed.editorContent;
+            refreshDocumentModelFromText(ed.editorContent);
+            syncEditorChrome(ed);
+            if (state.viewMode !== 'raw') renderStructuredEditor();
+            setStatus('Loaded Drive version', 'ok');
+            showEditorToast('Using Drive version', 'ok', {
+                key: 'conflict-drive',
+                durationMs: 2200,
+            });
+            return;
+        }
+
+        // keep-mine: upload live local text after adopting remote version token.
+        applyDriveVersionMeta(ed, {
+            version: conflict.driveVersion,
+            headRevisionId: conflict.headRevisionId,
+        });
+        setEditorText(ed, liveLocal);
+        const els = getEls();
+        if (els.editor) els.editor.value = liveLocal;
+        writeDraft(ed.fileId, liveLocal, ed.fileName);
+
+        try {
+            await saveCurrentFile({ skipConflictCheck: true, force: true });
+            if (state.editor.fileId === conflict.fileId && state.editor.status !== 'error') {
+                pendingConflict = null;
+                setStatus('Kept your version on Drive', 'ok');
+                showEditorToast('Kept your version', 'ok', {
+                    key: 'conflict-mine',
+                    durationMs: 2200,
+                });
+            } else if (state.editor.fileId === conflict.fileId) {
+                ed.status = 'conflict';
+                setStatus('Could not keep your version — try Save again', 'error');
+            }
+        } catch {
+            ed.status = 'conflict';
+            setStatus('Could not keep your version — try Save again', 'error');
+        }
+    })().finally(() => {
+        conflictResolveInFlight = null;
+    });
+    return conflictResolveInFlight;
 }
 
 /**
@@ -3430,13 +4208,16 @@ async function switchAppMode(mode) {
 
     const els = getEls();
     const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
-    if (leavingEditor && hasOpenFile() && state.editor.dirty) {
+    if (leavingEditor && hasOpenFile()) {
         flushCurrentEditorContent();
-        const choice = await promptUnsavedChanges(els.unsavedDialog);
-        if (choice === 'cancel') return;
-        if (choice === 'save') {
-            await saveCurrentFile();
-            if (state.editor.dirty) return;
+        // Format-only drift should have been rebased by flush; only warn on real edits.
+        if (state.editor.dirty) {
+            const choice = await promptUnsavedChanges(els.unsavedDialog);
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
+                await saveCurrentFile();
+                if (state.editor.dirty) return;
+            }
         }
     }
 
@@ -3475,8 +4256,10 @@ async function signIn() {
 }
 
 async function signOut() {
-    if (state.editor.dirty) {
+    if (state.editor.fileId) {
         flushCurrentEditorContent();
+    }
+    if (state.editor.dirty) {
         const choice = await promptUnsavedChanges(getEls().unsavedDialog);
         if (choice === 'cancel') return;
         if (choice === 'save') {
@@ -3693,6 +4476,53 @@ function wireEvents() {
             showEditorToast('Autosave off — tap Save when ready. Reopen the file to turn it back on.', 'warn', {
                 key: 'autosave-off',
                 durationMs: 3200,
+            });
+        });
+    }
+    if (els.editorMoreHistory) {
+        els.editorMoreHistory.addEventListener('click', () => {
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
+            openVersionHistory();
+        });
+    }
+    if (els.editorMoreNameVersion) {
+        els.editorMoreNameVersion.addEventListener('click', () => {
+            const dialog = els.editorMoreDialog;
+            if (dialog?.open) dialog.close('cancel');
+            nameCurrentVersion();
+        });
+    }
+    if (els.historyClose) {
+        els.historyClose.addEventListener('click', () => {
+            closeHistoryDialog();
+        });
+    }
+    if (els.historyPreviewClose) {
+        els.historyPreviewClose.addEventListener('click', () => {
+            closeHistoryPreviewDialog();
+        });
+    }
+    if (els.historyPreviewCopy) {
+        els.historyPreviewCopy.addEventListener('click', async () => {
+            const text = historyPreviewContent || els.historyPreviewText?.textContent || '';
+            if (!text) {
+                setHistoryPreviewStatus('Nothing to copy yet', 'error');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                setHistoryPreviewStatus('Copied to clipboard');
+            } catch {
+                setHistoryPreviewStatus('Could not copy — select text manually', 'error');
+            }
+        });
+    }
+    if (els.historyPreviewRestore) {
+        els.historyPreviewRestore.addEventListener('click', () => {
+            if (!historyPreviewRevision || historyPreviewRevision.isCurrent) return;
+            restoreDriveRevision(historyPreviewRevision, {
+                content: historyPreviewContent || undefined,
             });
         });
     }
@@ -3970,12 +4800,9 @@ function wireEvents() {
     });
 
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden' && state.editor.dirty && state.editor.fileId) {
-            if (state.viewMode === 'raw') {
-                setEditorText(state.editor, els.editor.value);
-            } else if (state.documentModel) {
-                setEditorText(state.editor, serializeDocument(state.documentModel));
-            }
+        if (document.visibilityState === 'hidden' && state.editor.fileId) {
+            // Persist buffer/draft; don't invent dirty from format-only serialize.
+            flushCurrentEditorContent();
         }
     });
 

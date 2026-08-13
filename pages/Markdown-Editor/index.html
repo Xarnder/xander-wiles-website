@@ -374,7 +374,7 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
-                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave.</li>
+                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
@@ -524,6 +524,8 @@
                     <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
                     <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
                     <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
+                    <button type="button" id="editor-more-history" class="btn btn-ghost btn-block item-action-btn">Version history</button>
+                    <button type="button" id="editor-more-name-version" class="btn btn-ghost btn-block item-action-btn">Name this version…</button>
                     <button type="button" id="editor-more-autosave-off" class="btn btn-ghost btn-block item-action-btn">Turn off autosave</button>
                     <button type="button" id="editor-more-import" class="btn btn-ghost btn-block item-action-btn">Import list</button>
                     <button type="submit" value="rename" id="editor-more-rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
@@ -658,6 +660,100 @@
             <div class="dialog-actions">
                 <button type="submit" value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
                 <button type="submit" value="confirm" class="btn btn-primary" id="name-dialog-confirm">Save</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="history-dialog" class="dialog dialog--history">
+        <div class="dialog-body history-body">
+            <div class="history-header">
+                <h2>Version history</h2>
+                <p class="dialog-hint">
+                    Drive keeps earlier uploads of this file. Preview does not change the file.
+                    Restore uploads that text as a <strong>new</strong> current version (older ones stay in history).
+                </p>
+            </div>
+            <p id="history-status" class="history-status" hidden role="status"></p>
+            <div id="history-list" class="history-list" role="list"></div>
+            <div class="history-footer">
+                <button type="button" id="history-close" class="btn btn-primary btn-block">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="history-preview-dialog" class="dialog dialog--history-preview">
+        <div class="dialog-body history-preview-body">
+            <div class="history-preview-header">
+                <h2 id="history-preview-title">Version preview</h2>
+                <p id="history-preview-meta" class="dialog-hint"></p>
+            </div>
+            <p id="history-preview-status" class="history-status" hidden role="status"></p>
+            <pre id="history-preview-text" class="history-preview-text" tabindex="0"></pre>
+            <div class="history-preview-actions">
+                <button type="button" id="history-preview-copy" class="btn btn-ghost">Copy text</button>
+                <button type="button" id="history-preview-restore" class="btn btn-primary">Restore…</button>
+                <button type="button" id="history-preview-close" class="btn btn-ghost">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="history-restore-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2>Restore this version?</h2>
+            <p>
+                The selected text becomes the new current file on Drive.
+                Your current version stays in history so you can undo the restore later.
+            </p>
+            <p id="history-restore-meta" class="dialog-hint"></p>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" value="restore" class="btn btn-primary">Restore</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="conflict-dialog" class="dialog dialog--warn">
+        <form method="dialog" class="dialog-body">
+            <h2>Changed elsewhere</h2>
+            <p>
+                This document was updated in another tab or device since you opened it.
+                Choose which version to keep — both are preserved until you decide.
+            </p>
+            <div class="dialog-actions dialog-actions--triple">
+                <button type="submit" value="review" class="btn btn-ghost">Review</button>
+                <button type="submit" value="use-drive" class="btn btn-ghost">Use Drive version</button>
+                <button type="submit" value="keep-mine" class="btn btn-primary">Keep my version</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="conflict-review-dialog" class="dialog dialog--history-preview">
+        <div class="dialog-body history-preview-body">
+            <div class="history-preview-header">
+                <h2>Review both versions</h2>
+                <p class="dialog-hint">Your editor text is on top; Drive’s version is below. Copy what you need, then choose.</p>
+            </div>
+            <label class="conflict-review-label" for="conflict-review-local">Your version</label>
+            <pre id="conflict-review-local" class="history-preview-text conflict-review-pane" tabindex="0"></pre>
+            <label class="conflict-review-label" for="conflict-review-drive">Drive version</label>
+            <pre id="conflict-review-drive" class="history-preview-text conflict-review-pane" tabindex="0"></pre>
+            <div class="history-preview-actions">
+                <button type="button" id="conflict-review-keep-mine" class="btn btn-primary">Keep my version</button>
+                <button type="button" id="conflict-review-use-drive" class="btn btn-ghost">Use Drive version</button>
+                <button type="button" id="conflict-review-close" class="btn btn-ghost">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="name-version-dialog" class="dialog">
+        <form method="dialog" id="name-version-form" class="dialog-body">
+            <h2>Name this version</h2>
+            <p class="dialog-hint">Protects the current Drive revision so it stays in history (e.g. “Before rewrite”).</p>
+            <label class="sr-only" for="name-version-input">Version name</label>
+            <input id="name-version-input" class="name-input" type="text" autocomplete="off" maxlength="80" placeholder="First complete draft" required>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
+                <button type="submit" value="confirm" class="btn btn-primary">Save name</button>
             </div>
         </form>
     </dialog>

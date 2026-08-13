@@ -163,6 +163,10 @@ export const PREVIEW_FONT_SCALE_MAX = 150;
 export const SETTINGS_CLOUD_FILE_NAME = 'md-editor-settings.json';
 export const SETTINGS_CLOUD_VERSION = 1;
 
+/** AppData JSON for named / safety revision labels. */
+export const REVISION_META_FILE_NAME = 'md-editor-revision-meta.json';
+export const REVISION_META_VERSION = 1;
+
 /** Short-lived Drive access token cache (localStorage; expires ~1h). */
 export const OAUTH_SESSION_KEY = 'md-editor:oauthSession';
 /** Prefer auto-restore on next open after a successful sign-in. */

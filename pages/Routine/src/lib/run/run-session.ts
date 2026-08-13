@@ -52,14 +52,25 @@ export function getProgressPercent(session: RunSession): number {
 	return Math.round((done / session.tasks.length) * 100);
 }
 
-function nextPendingIndex(session: RunSession, statuses: Record<string, TaskStatus>, afterIndex: number): number {
-	for (let i = afterIndex + 1; i < session.tasks.length; i++) {
+/** Next pending task after `afterIndex`, wrapping around. */
+function nextPendingIndex(
+	session: RunSession,
+	statuses: Record<string, TaskStatus>,
+	afterIndex: number
+): number {
+	const n = session.tasks.length;
+	if (n === 0) return -1;
+	for (let step = 1; step <= n; step++) {
+		const i = (afterIndex + step) % n;
 		if (statuses[session.tasks[i].id] === 'pending') return i;
 	}
 	return -1;
 }
 
-function advanceAfterStatus(session: RunSession, status: 'completed' | 'skipped'): RunSession {
+function advanceAfterStatus(
+	session: RunSession,
+	status: 'completed' | 'later' | 'skipped'
+): RunSession {
 	const current = session.tasks[session.currentIndex];
 	if (!current || session.phase !== 'running') return session;
 
@@ -87,8 +98,18 @@ export function completeCurrent(session: RunSession): RunSession {
 	return advanceAfterStatus(session, 'completed');
 }
 
-export function skipCurrent(session: RunSession): RunSession {
+/** Drop the current task from today's obligations (does not come back this run). */
+export function notTodayCurrent(session: RunSession): RunSession {
 	return advanceAfterStatus(session, 'skipped');
+}
+
+export function canDeferCurrent(session: RunSession): boolean {
+	return session.phase === 'running';
+}
+
+/** Mark the current task Later — still to do, but not in this pass. */
+export function laterCurrent(session: RunSession): RunSession {
+	return advanceAfterStatus(session, 'later');
 }
 
 export function goBack(session: RunSession): RunSession {

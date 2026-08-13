@@ -26,6 +26,8 @@ test('core routine journey', async ({ page }) => {
 
 	await page.getByRole('button', { name: /Start Morning Flow fresh/i }).click();
 	await expect(page.getByTestId('run-screen')).toBeVisible();
+	await expect(page.getByTestId('later-task')).toBeVisible();
+	await expect(page.getByTestId('not-today-task')).toBeVisible();
 	await expect(page.getByTestId('progress-text')).toHaveText('Task 1 of 3');
 	await expect(page.getByRole('heading', { name: 'Water' })).toBeVisible();
 
@@ -38,14 +40,16 @@ test('core routine journey', async ({ page }) => {
 	await page.getByTestId('back-task').click();
 	await expect(page.getByRole('heading', { name: 'Stretch' })).toBeVisible();
 
-	// Change the previous Complete into Skip
-	await page.getByTestId('skip-task').click();
+	// Change the previous Complete into Not Today
+	await page.getByTestId('not-today-task').click();
 	await expect(page.getByRole('heading', { name: 'Plan day' })).toBeVisible();
 
 	await page.getByTestId('complete-task').click();
 	await expect(page.getByTestId('routine-summary')).toBeVisible();
-	await expect(page.getByTestId('summary-stats')).toContainText('2');
-	await expect(page.getByTestId('summary-stats')).toContainText('completed');
-	await expect(page.getByTestId('summary-stats')).toContainText('1');
-	await expect(page.getByTestId('summary-stats')).toContainText('skipped');
+	await expect(page.getByTestId('summary-complete')).toContainText('2');
+	await expect(page.getByTestId('summary-complete')).toContainText('Complete');
+	await expect(page.getByTestId('summary-later')).toContainText('0');
+	await expect(page.getByTestId('summary-later')).toContainText('Later');
+	await expect(page.getByTestId('summary-not-today')).toContainText('1');
+	await expect(page.getByTestId('summary-not-today')).toContainText('Not Today');
 });

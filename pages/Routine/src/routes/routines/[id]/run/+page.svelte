@@ -20,10 +20,12 @@
 		getRunSession,
 		getRunSummary,
 		restartRun,
+		laterAndNext,
+		notTodayAndNext,
 		restoreRunFromStorage,
+		runCanDefer,
 		runCanGoBack,
 		runHasProgress,
-		skipAndNext,
 		startRun
 	} from '$lib/stores/run.svelte';
 	import { getProgressPercent } from '$lib/run/run-session';
@@ -39,10 +41,10 @@
 	const summary = $derived(getRunSummary());
 	const activeTask = $derived(getActiveTask());
 	const canBack = $derived(runCanGoBack());
+	const canLater = $derived(runCanDefer());
 	const priorStatus = $derived(
 		session && activeTask ? (session.statuses[activeTask.id] ?? 'pending') : 'pending'
 	);
-	const revisiting = $derived(priorStatus === 'completed' || priorStatus === 'skipped');
 
 	let routine = $state<Routine | null>(null);
 	let loading = $state(true);
@@ -138,8 +140,12 @@
 		maybeCelebrate();
 	}
 
-	function skip() {
-		skipAndNext();
+	function later() {
+		laterAndNext();
+	}
+
+	function notToday() {
+		notTodayAndNext();
 		maybeCelebrate();
 	}
 
@@ -182,9 +188,14 @@
 			complete();
 			return;
 		}
-		if (key === 's' || key === 'S') {
+		if (key === 'l' || key === 'L') {
 			event.preventDefault();
-			skip();
+			if (canLater) later();
+			return;
+		}
+		if (key === 'n' || key === 'N') {
+			event.preventDefault();
+			notToday();
 			return;
 		}
 		if (key === 'Backspace' || key === 'ArrowLeft') {
@@ -246,10 +257,11 @@
 		<div class="stage">
 			<RoutineControls
 				{canBack}
-				{revisiting}
+				{canLater}
 				showHints={session.currentIndex === 0}
 				oncomplete={complete}
-				onskip={skip}
+				onlater={later}
+				onnottoday={notToday}
 				onback={back}
 				onexit={requestExit}
 			>

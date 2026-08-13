@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	createRunSession,
 	completeCurrent,
-	skipCurrent,
+	notTodayCurrent,
+	laterCurrent,
+	canDeferCurrent,
 	goBack,
 	canGoBack,
 	getProgressPercent
@@ -36,9 +38,9 @@ describe('run-session', () => {
 		expect(session.phase).toBe('running');
 	});
 
-	it('skips a task and advances', () => {
+	it('marks a task not today and advances', () => {
 		let session = createRunSession(makeRoutine(tasks));
-		session = skipCurrent(session);
+		session = notTodayCurrent(session);
 		expect(session.statuses.t1).toBe('skipped');
 		expect(session.currentIndex).toBe(1);
 	});
@@ -56,7 +58,7 @@ describe('run-session', () => {
 		let session = createRunSession(makeRoutine(tasks));
 		session = completeCurrent(session);
 		session = goBack(session);
-		session = skipCurrent(session);
+		session = notTodayCurrent(session);
 		expect(session.statuses.t1).toBe('skipped');
 		expect(session.currentIndex).toBe(1);
 	});
@@ -64,15 +66,16 @@ describe('run-session', () => {
 	it('moves to summary after the final task', () => {
 		let session = createRunSession(makeRoutine(tasks));
 		session = completeCurrent(session);
-		session = skipCurrent(session);
+		session = notTodayCurrent(session);
 		session = completeCurrent(session);
 		expect(session.phase).toBe('summary');
 		const summary = deriveSummary(session);
 		expect(summary.completed).toBe(2);
+		expect(summary.later).toBe(0);
 		expect(summary.skipped).toBe(1);
 		expect(summary.percentComplete).toBe(67);
-		expect(summary.results.map((r) => r.status)).toEqual(['skipped', 'completed', 'completed']);
-		expect(summary.results.map((r) => r.taskId)).toEqual(['t2', 't1', 't3']);
+		expect(summary.results.map((r) => r.status)).toEqual(['completed', 'completed', 'skipped']);
+		expect(summary.results.map((r) => r.taskId)).toEqual(['t1', 't3', 't2']);
 	});
 
 	it('handles a single-task routine', () => {
@@ -124,5 +127,64 @@ describe('run-session', () => {
 		expect(session.phase).toBe('running');
 		expect(session.currentIndex).toBe(3); // t4, skipping completed t3
 		expect(getProgressPercent(session)).toBe(75);
+	});
+
+	it('defers a task as later and finishes the rest without coming back', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		session = laterCurrent(session);
+		expect(session.statuses.t1).toBe('later');
+		expect(session.currentIndex).toBe(1);
+		expect(getProgressPercent(session)).toBe(33);
+
+		session = completeCurrent(session);
+		expect(session.statuses.t2).toBe('completed');
+		expect(session.currentIndex).toBe(2);
+
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+		const summary = deriveSummary(session);
+		expect(summary.completed).toBe(2);
+		expect(summary.later).toBe(1);
+		expect(summary.skipped).toBe(0);
+		expect(summary.results.map((r) => r.status)).toEqual(['later', 'completed', 'completed']);
+		expect(summary.results.map((r) => r.taskId)).toEqual(['t1', 't2', 't3']);
+	});
+
+	it('can mark every remaining task later and still reach summary', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		session = laterCurrent(session);
+		session = laterCurrent(session);
+		session = laterCurrent(session);
+		expect(session.phase).toBe('summary');
+		expect(session.statuses).toEqual({ t1: 'later', t2: 'later', t3: 'later' });
+		expect(deriveSummary(session).later).toBe(3);
+	});
+
+	it('marks the last remaining task later and opens summary', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		expect(session.currentIndex).toBe(2);
+		expect(canDeferCurrent(session)).toBe(true);
+		session = laterCurrent(session);
+		expect(session.phase).toBe('summary');
+		expect(session.statuses.t3).toBe('later');
+		expect(deriveSummary(session).later).toBe(1);
+	});
+
+	it('keeps later tasks off this pass after a not-today in between', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		session = laterCurrent(session);
+		session = notTodayCurrent(session);
+		expect(session.statuses.t2).toBe('skipped');
+		expect(session.currentIndex).toBe(2);
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+		const summary = deriveSummary(session);
+		expect(summary.later).toBe(1);
+		expect(summary.skipped).toBe(1);
+		expect(summary.completed).toBe(1);
+		expect(summary.results.map((r) => r.status)).toEqual(['later', 'completed', 'skipped']);
+		expect(summary.results.map((r) => r.taskId)).toEqual(['t1', 't3', 't2']);
 	});
 });

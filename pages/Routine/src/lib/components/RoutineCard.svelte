@@ -5,6 +5,7 @@
 	let {
 		routine,
 		canContinue = false,
+		lastPercent = null,
 		onstartFresh,
 		onstartFromLast,
 		ondragstart,
@@ -12,6 +13,7 @@
 	}: {
 		routine: Routine;
 		canContinue?: boolean;
+		lastPercent?: number | null;
 		onstartFresh: () => void;
 		onstartFromLast: () => void;
 		ondragstart?: (event: PointerEvent) => void;
@@ -38,6 +40,15 @@
 			<a class="title-hit" href={editHref} aria-label={`Add tasks to ${routine.name}`}>
 				<h2>{routine.name}</h2>
 			</a>
+		{/if}
+		{#if lastPercent !== null}
+			<p
+				class="last-percent"
+				data-testid={`last-percent-${routine.id}`}
+				aria-label={`Last run ${lastPercent}% complete`}
+			>
+				{lastPercent}%
+			</p>
 		{/if}
 	</div>
 
@@ -123,6 +134,9 @@
 	.title-row {
 		width: 100%;
 		min-width: 0;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.55rem;
 	}
 
 	.title-hit {
@@ -134,8 +148,19 @@
 		color: inherit;
 		text-decoration: none;
 		display: block;
-		width: 100%;
 		min-width: 0;
+		flex: 1 1 auto;
+	}
+
+	.last-percent {
+		margin: 0;
+		flex-shrink: 0;
+		padding-top: 0.18rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		color: var(--muted);
+		line-height: 1.2;
 	}
 
 	.title-row h2 {

@@ -16,6 +16,12 @@ Live path: `/pages/Markdown-Editor/`
 9. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
 10. **Autosaves** to Drive after **10 seconds** of inactivity (slim countdown bar under the mode switcher)
 11. **Undo / Redo** survive autosave — Edit toolbar buttons (mobile) plus ⌘/Ctrl+Z and ⌘/Ctrl+Shift+Z / Ctrl+Y
+12. **Version history** — Edit ⋮ → Version history lists Drive revisions; Preview (read-only) or Restore (uploads that text as a **new** current version; older revisions stay available)
+13. **Large-change guard** — big deletes/replacements delay autosave and pin the previous Drive head before upload
+14. **Conflict check** — if Drive’s file version changed elsewhere, Save asks Keep mine / Use Drive / Review
+15. **Named versions** — Edit ⋮ → Name this version… protects the current revision with a label in History
+
+**Undo vs History:** Undo/Redo cover mistakes in the current tab. Version history covers earlier cloud uploads after reload or after a bad autosave.
 
 ## Custom lists (`mdlist`)
 

@@ -29,6 +29,7 @@
 	let showBatchPaste = $state(false);
 	let batchText = $state('');
 	let batchMessage = $state<string | null>(null);
+	let compactOverview = $state(false);
 	let focusTaskId = $state<string | null>(null);
 	let nameInput = $state<HTMLInputElement | null>(null);
 	let baseline = $state('');
@@ -64,6 +65,7 @@
 	}
 
 	async function addTask() {
+		compactOverview = false;
 		const next: RoutineTask = {
 			id: createId(),
 			title: '',
@@ -207,6 +209,7 @@
 		batchMessage = `Added ${imported.length} task${imported.length === 1 ? '' : 's'}.`;
 		batchText = '';
 		showBatchPaste = false;
+		compactOverview = false;
 		focusTaskId = imported[imported.length - 1]?.id ?? null;
 		await tick();
 	}
@@ -261,7 +264,19 @@
 	</div>
 
 	<div class="tasks-header">
-		<h2>Tasks</h2>
+		<div class="tasks-heading">
+			<h2>Tasks</h2>
+			<button
+				type="button"
+				class={['overview-toggle', compactOverview && 'is-on']}
+				onclick={() => (compactOverview = !compactOverview)}
+				aria-pressed={compactOverview}
+				title={compactOverview ? 'Show full task editor' : 'Show compact numbered list'}
+				data-testid="task-overview-toggle"
+			>
+				Overview
+			</button>
+		</div>
 		<div class="task-actions">
 			<button type="button" class="btn btn-ghost" onclick={openBatchPaste} data-testid="batch-paste"
 				>Paste list</button
@@ -306,29 +321,42 @@
 		<p class="muted">Add at least one task before you can run this routine.</p>
 	{/if}
 
-	<div
-		class={['stack', 'task-list', dragIndex !== null && 'is-dragging']}
-		data-testid="task-list"
-		bind:this={taskListEl}
-	>
-		{#each routine.tasks as task, index (task.id)}
-			<div data-task-index={index}>
-				<TaskEditorRow
-					{task}
-					{index}
-					autofocus={focusTaskId === task.id}
-					dragging={dragIndex === index}
-					isFirst={index === 0}
-					isLast={index === routine.tasks.length - 1}
-					ondragstart={(event) => onDragStart(index, event)}
-					onmoveup={() => moveTask(index, index - 1)}
-					onmovedown={() => moveTask(index, index + 1)}
-					ondelete={() => deleteTask(index)}
-					onupdate={(patch) => updateTask(index, patch)}
-				/>
-			</div>
-		{/each}
-	</div>
+	{#if compactOverview && routine.tasks.length > 0}
+		<ol class="overview-list" data-testid="task-overview">
+			{#each routine.tasks as task, index (task.id)}
+				<li>
+					<span class="overview-num">{index + 1}.</span>
+					<span class={['overview-title', !task.title.trim() && 'untitled']}>
+						{task.title.trim() || 'Untitled task'}
+					</span>
+				</li>
+			{/each}
+		</ol>
+	{:else}
+		<div
+			class={['stack', 'task-list', dragIndex !== null && 'is-dragging']}
+			data-testid="task-list"
+			bind:this={taskListEl}
+		>
+			{#each routine.tasks as task, index (task.id)}
+				<div data-task-index={index}>
+					<TaskEditorRow
+						{task}
+						{index}
+						autofocus={focusTaskId === task.id}
+						dragging={dragIndex === index}
+						isFirst={index === 0}
+						isLast={index === routine.tasks.length - 1}
+						ondragstart={(event) => onDragStart(index, event)}
+						onmoveup={() => moveTask(index, index - 1)}
+						onmovedown={() => moveTask(index, index + 1)}
+						ondelete={() => deleteTask(index)}
+						onupdate={(patch) => updateTask(index, patch)}
+					/>
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	{#if error}
 		<p class="error-banner" role="alert">{error}</p>
@@ -373,6 +401,74 @@
 		font-family: var(--font-display);
 		font-size: 1.35rem;
 		color: var(--ink);
+	}
+
+	.tasks-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+
+	.overview-toggle {
+		appearance: none;
+		border: 1px solid var(--line);
+		background: var(--surface);
+		color: var(--ink-soft);
+		border-radius: 999px;
+		min-height: 2.1rem;
+		padding: 0 0.75rem;
+		font-size: 0.82rem;
+		font-weight: 700;
+		cursor: pointer;
+		touch-action: manipulation;
+	}
+
+	.overview-toggle.is-on {
+		border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+		background: var(--accent-soft);
+		color: var(--accent-strong);
+	}
+
+	.overview-list {
+		list-style: none;
+		margin: 0;
+		padding: 0.45rem 0.85rem;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+	}
+
+	.overview-list li {
+		display: grid;
+		grid-template-columns: 1.85rem minmax(0, 1fr);
+		gap: 0.35rem;
+		align-items: baseline;
+		padding: 0.28rem 0;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.95rem;
+		line-height: 1.35;
+	}
+
+	.overview-list li:last-child {
+		border-bottom: none;
+	}
+
+	.overview-num {
+		color: var(--muted);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.overview-title {
+		color: var(--ink);
+		overflow-wrap: anywhere;
+	}
+
+	.overview-title.untitled {
+		color: var(--muted);
+		font-style: italic;
 	}
 
 	.task-actions {

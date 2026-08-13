@@ -2,7 +2,7 @@
 
 **Feature cycle:** 2026-08-11  
 **Repo path:** `pages/Markdown-Editor/`  
-**Status:** Research / options brief (no implementation yet)  
+**Status:** Research complete — implementation plan in [`01-brief.md`](./01-brief.md) / [`02-questions-and-decisions.md`](./02-questions-and-decisions.md) / [`03-technical-plan.md`](./03-technical-plan.md)  
 **Related:** idle autosave (10s) + manual Save + local drafts in `app.js` / `editor.js`
 
 ---

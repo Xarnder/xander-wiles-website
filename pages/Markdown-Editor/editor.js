@@ -58,10 +58,14 @@ export function createEditorState() {
         dirty: false,
         status: 'idle',
         errorMessage: '',
+        /** @type {string | number | null} Drive files.version at last load/successful save */
+        driveVersion: null,
+        /** @type {string | null} */
+        headRevisionId: null,
     };
 }
 
-export function applyLoadedContent(state, { fileId, fileName, mimeType, content }) {
+export function applyLoadedContent(state, { fileId, fileName, mimeType, content, driveVersion = null, headRevisionId = null }) {
     state.fileId = fileId;
     state.fileName = fileName;
     state.mimeType = mimeType || 'text/markdown';
@@ -71,6 +75,23 @@ export function applyLoadedContent(state, { fileId, fileName, mimeType, content 
     state.dirty = false;
     state.status = 'idle';
     state.errorMessage = '';
+    state.driveVersion = driveVersion != null && driveVersion !== '' ? driveVersion : null;
+    state.headRevisionId = headRevisionId ? String(headRevisionId) : null;
+}
+
+/**
+ * Record Drive version metadata after a successful write or conflict resolution.
+ * @param {ReturnType<typeof createEditorState>} state
+ * @param {{ version?: string | number | null, headRevisionId?: string | null }} meta
+ */
+export function applyDriveVersionMeta(state, meta = {}) {
+    if ('version' in meta) {
+        state.driveVersion =
+            meta.version != null && meta.version !== '' ? meta.version : null;
+    }
+    if ('headRevisionId' in meta) {
+        state.headRevisionId = meta.headRevisionId ? String(meta.headRevisionId) : null;
+    }
 }
 
 /**
@@ -82,22 +103,33 @@ export function rebaseEditorBaseline(state, text) {
     state.originalContent = next;
     state.editorContent = next;
     state.dirty = false;
-    state.status = 'saved';
+    // Prefer idle over 'saved' so chrome does not toast "Saved" for format-only rebases.
+    state.status = 'idle';
     state.errorMessage = '';
     if (state.fileId) clearDraft(state.fileId);
 }
 
 export function setEditorText(state, text) {
-    const next = String(text ?? '');
+    const next = normalizeEditorText(text);
     state.editorContent = next;
     state.dirty = !textsEqual(next, state.originalContent);
     if (state.dirty) {
         state.status = 'dirty';
         if (state.fileId) {
-            writeDraft(state.fileId, text, state.fileName);
+            writeDraft(state.fileId, next, state.fileName);
         }
     } else {
-        state.status = 'saved';
+        // Stay idle if we were idle; only announce "saved" after a real dirty/saving/error cycle.
+        if (
+            state.status === 'dirty' ||
+            state.status === 'saving' ||
+            state.status === 'error' ||
+            state.status === 'conflict'
+        ) {
+            state.status = 'saved';
+        } else if (state.status !== 'saved') {
+            state.status = 'idle';
+        }
         if (state.fileId) clearDraft(state.fileId);
     }
 }

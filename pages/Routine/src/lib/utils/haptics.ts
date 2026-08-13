@@ -12,8 +12,12 @@ export function hapticComplete(): void {
 	haptic(16);
 }
 
-export function hapticSkip(): void {
+export function hapticLater(): void {
 	haptic(8);
+}
+
+export function hapticNotToday(): void {
+	haptic(10);
 }
 
 export function hapticCelebrate(): void {

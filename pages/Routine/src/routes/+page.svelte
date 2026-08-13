@@ -13,6 +13,7 @@
 		discardStoredRun,
 		peekStoredRun,
 		routineCanContinueFromLast,
+		routineLastCyclePercent,
 		startRun
 	} from '$lib/stores/run.svelte';
 	import type { StartMode } from '$lib/run/run-session';
@@ -134,6 +135,7 @@
 					<RoutineCard
 						{routine}
 						canContinue={routineCanContinueFromLast(routine)}
+						lastPercent={routineLastCyclePercent(routine)}
 						dragging={dragIndex === index}
 						ondragstart={(event) => onDragStart(index, event)}
 						onstartFresh={() => startRoutine(routine.id, 'fresh')}

@@ -13,10 +13,12 @@
 
 	const statusLabel = $derived(
 		priorStatus === 'completed'
-			? 'Previously completed'
-			: priorStatus === 'skipped'
-				? 'Previously skipped'
-				: null
+			? 'Previously complete'
+			: priorStatus === 'later'
+				? 'Previously later'
+				: priorStatus === 'skipped'
+					? 'Previously not today'
+					: null
 	);
 
 	/** Lowest readable display size (rem) — scroll only if still overflowing here. */
@@ -159,7 +161,7 @@
 	<p class="eyebrow">Current task</p>
 	{#if statusLabel}
 		<p
-			class={['status-chip', priorStatus === 'completed' ? 'done' : 'skipped']}
+			class={['status-chip', priorStatus]}
 			data-testid="prior-status"
 		>
 			{statusLabel}
@@ -203,14 +205,21 @@
 		border: 1px solid var(--line);
 	}
 
-	.status-chip.done {
+	.status-chip.completed {
 		background: var(--accent-soft);
 		color: var(--accent-strong);
 	}
 
+	.status-chip.later {
+		background: var(--later);
+		color: var(--on-later);
+		border-color: transparent;
+	}
+
 	.status-chip.skipped {
-		background: var(--mark-muted);
-		color: var(--muted);
+		background: var(--not-today);
+		color: var(--on-not-today);
+		border-color: transparent;
 	}
 
 	h1 {

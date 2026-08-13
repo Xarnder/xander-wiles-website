@@ -1,9 +1,15 @@
-import type { RunSession, RoutineSummaryStats, RunTaskResult } from '$lib/types/run';
+import type { RunSession, RoutineSummaryStats, RunTaskResult, TaskStatus } from '$lib/types/run';
+
+export function statusCaption(status: TaskStatus): 'Complete' | 'Later' | 'Not Today' {
+	if (status === 'completed') return 'Complete';
+	if (status === 'later' || status === 'pending') return 'Later';
+	return 'Not Today';
+}
 
 function resultPriority(status: RunTaskResult['status']): number {
-	// Skipped / not-completed first so they stand out at the top of the summary list.
-	if (status === 'skipped' || status === 'pending') return 0;
-	return 1;
+	if (status === 'later' || status === 'pending') return 0;
+	if (status === 'completed') return 1;
+	return 2;
 }
 
 export function deriveSummary(session: RunSession): RoutineSummaryStats {
@@ -25,15 +31,15 @@ export function deriveSummary(session: RunSession): RoutineSummaryStats {
 
 	const results = ranked.map((entry) => entry.result);
 	const completed = results.filter((r) => r.status === 'completed').length;
+	const later = results.filter((r) => r.status === 'later' || r.status === 'pending').length;
 	const skipped = results.filter((r) => r.status === 'skipped').length;
-	const pending = results.filter((r) => r.status === 'pending').length;
 	const total = results.length;
 	const percentComplete = total === 0 ? 0 : Math.round((completed / total) * 100);
 
 	return {
 		completed,
+		later,
 		skipped,
-		pending,
 		total,
 		percentComplete,
 		results

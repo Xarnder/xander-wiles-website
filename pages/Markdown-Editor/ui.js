@@ -62,7 +62,33 @@ export function bindUi() {
     els.editorMoreFillDates = document.getElementById('editor-more-fill-dates');
     els.editorMoreShowDates = document.getElementById('editor-more-show-dates');
     els.editorMoreAutosaveOff = document.getElementById('editor-more-autosave-off');
+    els.editorMoreHistory = document.getElementById('editor-more-history');
+    els.editorMoreNameVersion = document.getElementById('editor-more-name-version');
     els.editorMoreRename = document.getElementById('editor-more-rename');
+    els.historyDialog = document.getElementById('history-dialog');
+    els.historyStatus = document.getElementById('history-status');
+    els.historyList = document.getElementById('history-list');
+    els.historyClose = document.getElementById('history-close');
+    els.historyPreviewDialog = document.getElementById('history-preview-dialog');
+    els.historyPreviewTitle = document.getElementById('history-preview-title');
+    els.historyPreviewMeta = document.getElementById('history-preview-meta');
+    els.historyPreviewStatus = document.getElementById('history-preview-status');
+    els.historyPreviewText = document.getElementById('history-preview-text');
+    els.historyPreviewCopy = document.getElementById('history-preview-copy');
+    els.historyPreviewRestore = document.getElementById('history-preview-restore');
+    els.historyPreviewClose = document.getElementById('history-preview-close');
+    els.historyRestoreDialog = document.getElementById('history-restore-dialog');
+    els.historyRestoreMeta = document.getElementById('history-restore-meta');
+    els.conflictDialog = document.getElementById('conflict-dialog');
+    els.conflictReviewDialog = document.getElementById('conflict-review-dialog');
+    els.conflictReviewLocal = document.getElementById('conflict-review-local');
+    els.conflictReviewDrive = document.getElementById('conflict-review-drive');
+    els.conflictReviewKeepMine = document.getElementById('conflict-review-keep-mine');
+    els.conflictReviewUseDrive = document.getElementById('conflict-review-use-drive');
+    els.conflictReviewClose = document.getElementById('conflict-review-close');
+    els.nameVersionDialog = document.getElementById('name-version-dialog');
+    els.nameVersionForm = document.getElementById('name-version-form');
+    els.nameVersionInput = document.getElementById('name-version-input');
     els.fillDatesDialog = document.getElementById('fill-dates-dialog');
     els.fillDatesSummary = document.getElementById('fill-dates-summary');
     els.fillDatesSourceCreated = document.getElementById('fill-dates-source-created');
@@ -1174,6 +1200,8 @@ export function syncEditorChrome(state, options = {}) {
         announceEditorSaveToast('saved', 'Saved', 'ok', { durationMs: 2000 });
     } else if (state.status === 'dirty') {
         announceEditorSaveToast('dirty', 'Unsaved', 'warn', { durationMs: 2200 });
+    } else if (state.status === 'conflict') {
+        announceEditorSaveToast('conflict', 'Changed elsewhere', 'warn', { durationMs: 3600 });
     } else if (state.status === 'error') {
         announceEditorSaveToast(`error:${state.errorMessage || 'Error'}`, state.errorMessage || 'Error', 'error', {
             durationMs: 3600,
@@ -2242,4 +2270,408 @@ export function promptForName(options) {
             runValidate({ localOnly: true });
         });
     });
+}
+
+/**
+ * @param {string | null | undefined} iso
+ * @returns {string}
+ */
+export function formatRevisionTime(iso) {
+    if (!iso) return 'Unknown time';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return 'Unknown time';
+    try {
+        return date.toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        });
+    } catch {
+        return date.toLocaleString();
+    }
+}
+
+/**
+ * @param {number | undefined} bytes
+ * @returns {string}
+ */
+function formatRevisionBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * @param {string} message
+ * @param {'info' | 'error'} [kind]
+ */
+export function setHistoryStatus(message, kind = 'info') {
+    const el = els.historyStatus;
+    if (!el) return;
+    if (!message) {
+        el.hidden = true;
+        el.textContent = '';
+        el.classList.remove('is-error');
+        return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+    el.classList.toggle('is-error', kind === 'error');
+}
+
+/**
+ * @param {string} message
+ * @param {'info' | 'error'} [kind]
+ */
+export function setHistoryPreviewStatus(message, kind = 'info') {
+    const el = els.historyPreviewStatus;
+    if (!el) return;
+    if (!message) {
+        el.hidden = true;
+        el.textContent = '';
+        el.classList.remove('is-error');
+        return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+    el.classList.toggle('is-error', kind === 'error');
+}
+
+/**
+ * @param {import('./revisions.js').DocumentRevision[]} revisions
+ * @param {{ onPreview?: (rev: import('./revisions.js').DocumentRevision) => void, onRestore?: (rev: import('./revisions.js').DocumentRevision) => void, truncated?: boolean }} [options]
+ */
+export function renderVersionHistoryList(revisions, options = {}) {
+    const root = els.historyList;
+    if (!root) return;
+    root.replaceChildren();
+
+    const list = Array.isArray(revisions) ? revisions : [];
+    if (!list.length) {
+        const empty = document.createElement('p');
+        empty.className = 'history-empty';
+        empty.textContent = 'No revisions found for this file yet. Edit and save once to create history.';
+        root.append(empty);
+        return;
+    }
+
+    for (const rev of list) {
+        const item = document.createElement('article');
+        item.className = 'history-item';
+        item.setAttribute('role', 'listitem');
+        if (rev.isCurrent) item.classList.add('is-current');
+        item.dataset.revisionId = rev.id;
+
+        const top = document.createElement('div');
+        top.className = 'history-item-top';
+
+        const time = document.createElement('div');
+        time.className = 'history-item-time';
+        time.textContent = formatRevisionTime(rev.modifiedTime);
+
+        const badges = document.createElement('div');
+        badges.className = 'history-item-badges';
+        if (rev.isCurrent) {
+            const badge = document.createElement('span');
+            badge.className = 'history-badge history-badge--current';
+            badge.textContent = 'Current';
+            badges.append(badge);
+        }
+        if (rev.type === 'named') {
+            const badge = document.createElement('span');
+            badge.className = 'history-badge history-badge--named';
+            badge.textContent = 'Named';
+            badges.append(badge);
+        } else if (rev.keepForever && !rev.isCurrent) {
+            const badge = document.createElement('span');
+            badge.className = 'history-badge history-badge--protected';
+            badge.textContent = rev.type === 'safety' ? 'Safety' : 'Protected';
+            badges.append(badge);
+        } else if (!rev.isCurrent) {
+            const badge = document.createElement('span');
+            badge.className = 'history-badge';
+            badge.textContent = 'Automatic';
+            badges.append(badge);
+        }
+
+        top.append(time, badges);
+
+        const metaParts = [];
+        if (rev.label) metaParts.push(rev.label);
+        const sizeLabel = formatRevisionBytes(rev.size);
+        if (sizeLabel) metaParts.push(sizeLabel);
+        const meta = document.createElement('p');
+        meta.className = 'history-item-meta';
+        meta.textContent = metaParts.length ? metaParts.join(' · ') : `Revision ${rev.id}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'history-item-actions';
+
+        const previewBtn = document.createElement('button');
+        previewBtn.type = 'button';
+        previewBtn.className = 'btn btn-ghost';
+        previewBtn.textContent = 'Preview';
+        previewBtn.addEventListener('click', () => options.onPreview?.(rev));
+
+        actions.append(previewBtn);
+
+        if (!rev.isCurrent) {
+            const restoreBtn = document.createElement('button');
+            restoreBtn.type = 'button';
+            restoreBtn.className = 'btn btn-primary';
+            restoreBtn.textContent = 'Restore…';
+            restoreBtn.addEventListener('click', () => options.onRestore?.(rev));
+            actions.append(restoreBtn);
+        }
+
+        item.append(top, meta, actions);
+        root.append(item);
+    }
+
+    if (options.truncated) {
+        const note = document.createElement('p');
+        note.className = 'history-item-meta';
+        note.style.padding = '4px 8px';
+        note.textContent = 'Showing the most recent revisions. Older ones may still exist on Drive.';
+        root.append(note);
+    }
+}
+
+/**
+ * Open the version history dialog (caller fills list / status).
+ */
+export function openHistoryDialog() {
+    const dialog = els.historyDialog;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+}
+
+export function closeHistoryDialog() {
+    const dialog = els.historyDialog;
+    if (dialog?.open) dialog.close();
+}
+
+/**
+ * @param {{ title?: string, meta?: string, content?: string, busy?: boolean, error?: string, canRestore?: boolean }} [options]
+ */
+export function openHistoryPreviewDialog(options = {}) {
+    const dialog = els.historyPreviewDialog;
+    if (!dialog) return;
+
+    if (els.historyPreviewTitle) {
+        els.historyPreviewTitle.textContent = options.title || 'Version preview';
+    }
+    if (els.historyPreviewMeta) {
+        els.historyPreviewMeta.textContent = options.meta || '';
+    }
+    if (els.historyPreviewText) {
+        els.historyPreviewText.textContent =
+            options.content == null ? '' : String(options.content);
+    }
+    setHistoryPreviewStatus(
+        options.error || (options.busy ? 'Loading…' : ''),
+        options.error ? 'error' : 'info'
+    );
+    const canRestore = options.canRestore !== false;
+    if (els.historyPreviewCopy) els.historyPreviewCopy.disabled = Boolean(options.busy);
+    if (els.historyPreviewRestore) {
+        els.historyPreviewRestore.disabled = Boolean(options.busy) || !canRestore;
+        els.historyPreviewRestore.hidden = options.canRestore === false;
+    }
+
+    if (!dialog.open) dialog.showModal();
+}
+
+export function closeHistoryPreviewDialog() {
+    const dialog = els.historyPreviewDialog;
+    if (dialog?.open) dialog.close();
+}
+
+/**
+ * @param {string} [meta]
+ * @returns {Promise<boolean>}
+ */
+export function promptRestoreRevision(meta = '') {
+    const dialog = els.historyRestoreDialog;
+    if (!dialog) {
+        return Promise.resolve(window.confirm('Restore this version?'));
+    }
+    if (els.historyRestoreMeta) {
+        els.historyRestoreMeta.textContent = meta || '';
+        els.historyRestoreMeta.hidden = !meta;
+    }
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            resolve(dialog.returnValue === 'restore');
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+    });
+}
+
+/** @type {Promise<'keep-mine'|'use-drive'|'review'|null> | null} */
+let conflictDialogInFlight = null;
+/** @type {Promise<'keep-mine'|'use-drive'|null> | null} */
+let conflictReviewInFlight = null;
+/** @type {Promise<string|null> | null} */
+let nameVersionInFlight = null;
+
+/**
+ * @returns {Promise<'keep-mine'|'use-drive'|'review'|null>}
+ */
+export function promptConflictDialog() {
+    if (conflictDialogInFlight) return conflictDialogInFlight;
+    const dialog = els.conflictDialog;
+    if (!dialog) {
+        const keep = window.confirm(
+            'This document changed elsewhere. OK = keep your version, Cancel = use Drive.'
+        );
+        return Promise.resolve(keep ? 'keep-mine' : 'use-drive');
+    }
+    if (dialog.open) {
+        try {
+            dialog.close('cancel');
+        } catch {
+            // ignore
+        }
+    }
+    conflictDialogInFlight = new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            conflictDialogInFlight = null;
+            const value = dialog.returnValue;
+            if (value === 'keep-mine' || value === 'use-drive' || value === 'review') {
+                resolve(value);
+            } else resolve(null);
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        try {
+            dialog.showModal();
+        } catch (err) {
+            dialog.removeEventListener('close', onClose);
+            conflictDialogInFlight = null;
+            resolve(null);
+        }
+    });
+    return conflictDialogInFlight;
+}
+
+/**
+ * @param {{ localText: string, driveText: string }} options
+ * @returns {Promise<'keep-mine'|'use-drive'|null>}
+ */
+export function promptConflictReview(options) {
+    if (conflictReviewInFlight) return conflictReviewInFlight;
+    const dialog = els.conflictReviewDialog;
+    if (!dialog) return Promise.resolve(null);
+
+    if (els.conflictReviewLocal) els.conflictReviewLocal.textContent = options.localText || '';
+    if (els.conflictReviewDrive) els.conflictReviewDrive.textContent = options.driveText || '';
+
+    if (dialog.open) {
+        try {
+            dialog.close();
+        } catch {
+            // ignore
+        }
+    }
+
+    conflictReviewInFlight = new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            conflictReviewInFlight = null;
+            if (dialog.open) {
+                try {
+                    dialog.close();
+                } catch {
+                    // ignore
+                }
+            }
+            resolve(value);
+        };
+        const onKeep = () => finish('keep-mine');
+        const onDrive = () => finish('use-drive');
+        const onCloseBtn = () => finish(null);
+        const onDialogClose = () => finish(null);
+        const cleanup = () => {
+            els.conflictReviewKeepMine?.removeEventListener('click', onKeep);
+            els.conflictReviewUseDrive?.removeEventListener('click', onDrive);
+            els.conflictReviewClose?.removeEventListener('click', onCloseBtn);
+            dialog.removeEventListener('close', onDialogClose);
+        };
+        els.conflictReviewKeepMine?.addEventListener('click', onKeep);
+        els.conflictReviewUseDrive?.addEventListener('click', onDrive);
+        els.conflictReviewClose?.addEventListener('click', onCloseBtn);
+        dialog.addEventListener('close', onDialogClose);
+        try {
+            dialog.showModal();
+        } catch {
+            cleanup();
+            conflictReviewInFlight = null;
+            resolve(null);
+        }
+    });
+    return conflictReviewInFlight;
+}
+
+/**
+ * @returns {Promise<string|null>}
+ */
+export function promptNameVersion() {
+    if (nameVersionInFlight) return nameVersionInFlight;
+    const dialog = els.nameVersionDialog;
+    const form = els.nameVersionForm;
+    const input = els.nameVersionInput;
+    if (!dialog || !input) {
+        const name = window.prompt('Name this version');
+        return Promise.resolve(name && name.trim() ? name.trim() : null);
+    }
+
+    if (dialog.open) {
+        try {
+            dialog.close('cancel');
+        } catch {
+            // ignore
+        }
+    }
+
+    input.value = '';
+    nameVersionInFlight = new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            form?.removeEventListener('submit', onSubmit);
+            nameVersionInFlight = null;
+            if (dialog.returnValue === 'confirm') {
+                const value = input.value.trim();
+                resolve(value || null);
+            } else resolve(null);
+        };
+        const onSubmit = (event) => {
+            if (event.submitter?.value === 'cancel') return;
+            if (!input.value.trim()) {
+                event.preventDefault();
+                input.focus();
+            }
+        };
+        form?.addEventListener('submit', onSubmit);
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        try {
+            dialog.showModal();
+            requestAnimationFrame(() => input.focus());
+        } catch {
+            form?.removeEventListener('submit', onSubmit);
+            dialog.removeEventListener('close', onClose);
+            nameVersionInFlight = null;
+            resolve(null);
+        }
+    });
+    return nameVersionInFlight;
 }

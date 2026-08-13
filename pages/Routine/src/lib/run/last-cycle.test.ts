@@ -3,6 +3,7 @@ import {
 	canContinueFromLastCycle,
 	getContinuableCompletedIds,
 	getLastCycle,
+	getLastCyclePercent,
 	saveLastCycle
 } from './last-cycle';
 import type { Routine } from '$lib/types/routine';
@@ -54,6 +55,27 @@ describe('last-cycle', () => {
 			t3: 'completed'
 		});
 		expect(getLastCycle('r1')?.completedTaskIds).toEqual(['t1', 't3']);
+		expect(getLastCycle('r1')?.percentComplete).toBe(67);
+		expect(getLastCyclePercent(routine)).toBe(67);
+	});
+
+	it('returns null percent when there is no last cycle', () => {
+		expect(getLastCyclePercent(routine)).toBeNull();
+	});
+
+	it('stores 0% when nothing was completed', () => {
+		saveLastCycle('r1', { t1: 'later', t2: 'skipped', t3: 'later' });
+		expect(getLastCyclePercent(routine)).toBe(0);
+	});
+
+	it('falls back to current tasks when an older record has no percent', () => {
+		store.set(
+			'routine-last-cycles',
+			JSON.stringify({
+				r1: { completedTaskIds: ['t1'], updatedAt: '2026-01-01T00:00:00.000Z' }
+			})
+		);
+		expect(getLastCyclePercent(routine)).toBe(33);
 	});
 
 	it('filters out deleted tasks', () => {

@@ -1,6 +1,6 @@
 import type { RoutineTask } from './routine';
 
-export type TaskStatus = 'pending' | 'completed' | 'skipped';
+export type TaskStatus = 'pending' | 'completed' | 'later' | 'skipped';
 
 export interface RunTaskResult {
 	taskId: string;
@@ -20,8 +20,8 @@ export interface RunSession {
 
 export interface RoutineSummaryStats {
 	completed: number;
+	later: number;
 	skipped: number;
-	pending: number;
 	total: number;
 	percentComplete: number;
 	results: RunTaskResult[];

@@ -1,26 +1,28 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import { hapticComplete, hapticSkip } from '$lib/utils/haptics';
+	import { hapticComplete, hapticLater, hapticNotToday } from '$lib/utils/haptics';
 
 	let {
 		canBack = false,
-		revisiting = false,
+		canLater = true,
 		showHints = false,
 		lead,
 		oncomplete,
-		onskip,
+		onlater,
+		onnottoday,
 		onback,
 		onexit
 	}: {
 		canBack?: boolean;
-		revisiting?: boolean;
+		canLater?: boolean;
 		/** Keyboard shortcut tips — caller should only enable on the first task. */
 		showHints?: boolean;
 		/** Optional content above the action corners (usually the current task). */
 		lead?: Snippet;
 		oncomplete: () => void;
-		onskip: () => void;
+		onlater: () => void;
+		onnottoday: () => void;
 		onback: () => void;
 		onexit: () => void;
 	} = $props();
@@ -51,9 +53,15 @@
 		oncomplete();
 	}
 
-	function skip() {
-		hapticSkip();
-		onskip();
+	function later() {
+		if (!canLater) return;
+		hapticLater();
+		onlater();
+	}
+
+	function notToday() {
+		hapticNotToday();
+		onnottoday();
 	}
 </script>
 
@@ -65,8 +73,24 @@
 	{/if}
 
 	<div class="secondary">
-		<button type="button" class="btn skip" onclick={skip} data-testid="skip-task">
-			{revisiting ? 'Skip instead' : 'Skip'}
+		<button
+			type="button"
+			class="btn later"
+			onclick={later}
+			disabled={!canLater}
+			title="Come back to this after the other remaining tasks"
+			data-testid="later-task"
+		>
+			Later
+		</button>
+		<button
+			type="button"
+			class="btn not-today"
+			onclick={notToday}
+			title="Remove this from today's list"
+			data-testid="not-today-task"
+		>
+			Not Today
 		</button>
 		<button
 			type="button"
@@ -78,7 +102,7 @@
 		<button type="button" class="btn exit" onclick={onexit} data-testid="exit-run">Exit</button>
 		{#if hintsVisible}
 			<p class="hint" data-testid="keyboard-hints" aria-hidden="true">
-				Space complete · S skip · ← back · Esc exit
+				Space complete · L later · N not today · ← back · Esc exit
 			</p>
 		{/if}
 	</div>
@@ -175,7 +199,8 @@
 			0 0 0 5px color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 
-	.skip,
+	.later,
+	.not-today,
 	.back,
 	.exit {
 		width: 100%;
@@ -185,16 +210,32 @@
 		font-weight: 700;
 		cursor: pointer;
 		touch-action: manipulation;
-		font-size: clamp(0.88rem, 2.3vw, 1.05rem);
+		font-size: clamp(0.82rem, 2.2vw, 1.02rem);
+		line-height: 1.2;
+		text-align: center;
+		padding: 0.35rem 0.4rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
-	.skip {
-		grid-column: 1 / -1;
+	.later {
+		grid-column: 1;
 		grid-row: 1;
-		background: var(--accent-soft);
-		color: var(--accent-strong);
+		background: var(--later);
+		color: var(--on-later);
 		border: none;
-		font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+		font-size: clamp(0.9rem, 2.4vw, 1.1rem);
+	}
+
+	.not-today {
+		grid-column: 2;
+		grid-row: 1;
+		background: var(--not-today);
+		color: var(--on-not-today);
+		border: none;
+		font-weight: 700;
+		font-size: clamp(0.9rem, 2.4vw, 1.1rem);
 	}
 
 	.back {
@@ -215,13 +256,15 @@
 		font-weight: 600;
 	}
 
+	.later:disabled,
 	.back:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
 
 	.complete:active,
-	.skip:active,
+	.later:active,
+	.not-today:active,
 	.back:active,
 	.exit:active {
 		transform: scale(0.985);
@@ -235,10 +278,10 @@
 		margin: 0;
 		text-align: left;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: 0.72rem;
 		letter-spacing: 0.01em;
 		pointer-events: none;
-		white-space: nowrap;
+		line-height: 1.35;
 	}
 
 	@media (pointer: coarse), (hover: none) {

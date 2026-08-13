@@ -4,7 +4,8 @@ import { getAccessToken, refreshAccessToken } from './auth.js';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const GOOGLE_NATIVE_PREFIX = 'application/vnd.google-apps.';
 
-async function driveFetch(url, options = {}, retried = false) {
+/** Shared Drive HTTP helper (auth + 401 refresh). Used by revisions.js too. */
+export async function driveFetch(url, options = {}, retried = false) {
     let token = getAccessToken();
     if (!token && !retried) {
         try {
@@ -282,7 +283,7 @@ export async function listComputerRootFolders() {
 
 export async function getFileMetadata(fileId) {
     const params = new URLSearchParams({
-        fields: 'id,name,mimeType,modifiedTime,createdTime,size,parents',
+        fields: 'id,name,mimeType,modifiedTime,createdTime,size,parents,headRevisionId,version',
     });
     const response = await driveFetch(
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`
@@ -299,10 +300,15 @@ export async function getFileContent(fileId) {
 
 /**
  * Last-write-wins content update for an existing file.
+ * @returns {Promise<{ id?: string, version?: string | number, headRevisionId?: string, modifiedTime?: string }>}
  */
 export async function updateFileContent(fileId, text, mimeType = 'text/markdown') {
+    const params = new URLSearchParams({
+        uploadType: 'media',
+        fields: 'id,version,headRevisionId,modifiedTime',
+    });
     const response = await driveFetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media`,
+        `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?${params}`,
         {
             method: 'PATCH',
             headers: {

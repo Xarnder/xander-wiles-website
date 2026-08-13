@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { scale } from 'svelte/transition';
 	import ThemeToggle from './ThemeToggle.svelte';
+	import { statusCaption } from '$lib/run/summary';
 	import type { RoutineSummaryStats } from '$lib/types/run';
 
 	let {
@@ -14,34 +15,50 @@
 		onfinish: () => void;
 		onagain: () => void;
 	} = $props();
+
+	function resultClass(status: RoutineSummaryStats['results'][number]['status']): string {
+		if (status === 'pending') return 'later';
+		return status;
+	}
+
+	function resultMark(status: RoutineSummaryStats['results'][number]['status']): string {
+		if (status === 'completed') return '✓';
+		if (status === 'later' || status === 'pending') return '→';
+		return '–';
+	}
 </script>
 
 <section class="summary" data-testid="routine-summary">
 	<div class="top-bar">
 		<ThemeToggle />
 	</div>
-	<div class="celebrate" in:scale={{ duration: 280, start: 0.86 }}>
-		<div class="badge" aria-hidden="true">✓</div>
+	<div class="intro">
+		<div class="celebrate" in:scale={{ duration: 280, start: 0.86 }}>
+			<div class="badge" aria-hidden="true">✓</div>
+		</div>
+		<p class="eyebrow">Routine complete</p>
+		<h1>{routineName}</h1>
+		<p class="stats" data-testid="summary-stats">
+			<span class="stat completed" data-testid="summary-complete">
+				<strong>{summary.completed}</strong> Complete
+			</span>
+			<span class="stat later" data-testid="summary-later">
+				<strong>{summary.later}</strong> Later
+			</span>
+			<span class="stat skipped" data-testid="summary-not-today">
+				<strong>{summary.skipped}</strong> Not Today
+			</span>
+		</p>
+		<p class="percent">{summary.percentComplete}%</p>
 	</div>
-	<p class="eyebrow">Routine complete</p>
-	<h1>{routineName}</h1>
-	<p class="stats" data-testid="summary-stats">
-		<strong>{summary.completed}</strong> completed ·
-		<strong>{summary.skipped}</strong> skipped ·
-		<strong>{summary.percentComplete}%</strong>
-	</p>
 
 	<ul class="results">
 		{#each summary.results as result (result.taskId)}
-			<li class={result.status}>
-				<span class="mark" aria-hidden="true">
-					{result.status === 'completed' ? '✓' : '–'}
-				</span>
+			<li class={resultClass(result.status)}>
+				<span class="mark" aria-hidden="true">{resultMark(result.status)}</span>
 				<span>
 					<strong>{result.title}</strong>
-					<small>
-						{result.status === 'completed' ? 'Completed' : 'Skipped'}
-					</small>
+					<small>{statusCaption(result.status)}</small>
 				</span>
 			</li>
 		{/each}
@@ -71,6 +88,8 @@
 	.summary {
 		height: 100dvh;
 		max-height: 100dvh;
+		height: 100svh;
+		max-height: 100svh;
 		padding: calc(1.2rem + var(--safe-top)) calc(1rem + var(--safe-right)) 0
 			calc(1rem + var(--safe-left));
 		display: flex;
@@ -79,6 +98,10 @@
 		margin: 0 auto;
 		box-sizing: border-box;
 		overflow: hidden;
+	}
+
+	.intro {
+		flex-shrink: 0;
 	}
 
 	.top-bar {
@@ -139,8 +162,47 @@
 	}
 
 	.stats {
-		margin: 0 0 1rem;
-		color: var(--ink-soft);
+		margin: 0 0 0.45rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		flex-shrink: 0;
+	}
+
+	.stat {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.3rem;
+		padding: 0.32rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.82rem;
+		font-weight: 700;
+	}
+
+	.stat strong {
+		font-size: 1rem;
+	}
+
+	.stat.completed {
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+
+	.stat.later {
+		background: var(--later);
+		color: var(--on-later);
+	}
+
+	.stat.skipped {
+		background: var(--not-today);
+		color: var(--on-not-today);
+	}
+
+	.percent {
+		margin: 0 0 0.85rem;
+		color: var(--muted);
+		font-size: 0.88rem;
+		font-weight: 600;
 		flex-shrink: 0;
 	}
 
@@ -154,7 +216,9 @@
 		flex: 1 1 auto;
 		min-height: 0;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 		-webkit-overflow-scrolling: touch;
+		touch-action: pan-y;
 	}
 
 	.results li {
@@ -162,17 +226,26 @@
 		grid-template-columns: auto 1fr;
 		gap: 0.7rem;
 		align-items: center;
-		background: var(--surface);
-		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		padding: 0.85rem 0.95rem;
+	}
+
+	.results li.completed {
+		background: var(--accent-soft);
+		border: 1.5px solid var(--accent);
 		color: var(--ink);
 	}
 
-	.results li.skipped,
-	.results li.pending {
-		background: var(--danger-soft);
-		border: 1.5px solid var(--danger);
+	.results li.later {
+		background: var(--later);
+		border: 1.5px solid color-mix(in srgb, var(--later) 70%, #fff);
+		color: var(--on-later);
+	}
+
+	.results li.skipped {
+		background: var(--not-today);
+		border: 1.5px solid color-mix(in srgb, var(--not-today) 70%, #fff);
+		color: var(--on-not-today);
 	}
 
 	.mark {
@@ -185,34 +258,40 @@
 	}
 
 	.completed .mark {
-		background: var(--accent-soft);
-		color: var(--accent-strong);
+		background: var(--accent);
+		color: var(--on-accent);
 	}
 
-	.skipped .mark,
-	.pending .mark {
+	.later .mark,
+	.skipped .mark {
 		background: color-mix(in srgb, #fff 18%, transparent);
 		color: #fff;
 	}
 
 	li strong {
 		display: block;
+	}
+
+	li.completed strong {
 		color: var(--ink);
 	}
 
-	li.skipped strong,
-	li.pending strong {
+	li.later strong,
+	li.skipped strong {
 		color: #fff;
 	}
 
 	li small {
-		color: var(--muted);
+		font-weight: 600;
 	}
 
-	li.skipped small,
-	li.pending small {
+	li.completed small {
+		color: var(--accent-strong);
+	}
+
+	li.later small,
+	li.skipped small {
 		color: color-mix(in srgb, #fff 78%, transparent);
-		font-weight: 600;
 	}
 
 	.actions {
@@ -227,5 +306,100 @@
 			var(--bg-end) 0.65rem,
 			var(--bg-end)
 		);
+	}
+
+	@media (orientation: landscape) and (max-height: 640px) {
+		.summary {
+			display: grid;
+			grid-template-columns: minmax(13.5rem, 36%) minmax(0, 1fr);
+			grid-template-rows: auto minmax(0, 1fr) auto;
+			grid-template-areas:
+				'top top'
+				'intro results'
+				'actions results';
+			align-content: stretch;
+			width: 100%;
+			max-width: none;
+			column-gap: 0.85rem;
+			row-gap: 0.4rem;
+			padding: calc(0.4rem + var(--safe-top)) calc(0.75rem + var(--safe-right))
+				calc(0.45rem + var(--safe-bottom)) calc(0.75rem + var(--safe-left));
+		}
+
+		.top-bar {
+			grid-area: top;
+			margin-bottom: 0;
+		}
+
+		.intro {
+			grid-area: intro;
+			min-height: 0;
+			overflow: auto;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		.celebrate {
+			display: none;
+		}
+
+		.eyebrow {
+			font-size: 0.7rem;
+		}
+
+		h1 {
+			margin: 0.15rem 0 0.4rem;
+			font-size: clamp(1.2rem, 3.6vw, 1.8rem);
+		}
+
+		.stats {
+			margin-bottom: 0.3rem;
+		}
+
+		.stat {
+			padding: 0.22rem 0.55rem;
+			font-size: 0.75rem;
+		}
+
+		.stat strong {
+			font-size: 0.88rem;
+		}
+
+		.percent {
+			margin: 0;
+			font-size: 0.8rem;
+		}
+
+		.results {
+			grid-area: results;
+			min-height: 0;
+			height: 100%;
+			overflow-y: auto;
+			padding: 0;
+			gap: 0.4rem;
+		}
+
+		.results li {
+			padding: 0.5rem 0.7rem;
+			gap: 0.5rem;
+		}
+
+		.actions {
+			grid-area: actions;
+			flex-direction: row;
+			align-items: stretch;
+			gap: 0.45rem;
+			padding: 0.2rem 0 0;
+			background: none;
+		}
+
+		.actions .btn {
+			width: auto;
+			flex: 1 1 0;
+			min-height: 2.55rem;
+			font-size: 0.86rem;
+			padding: 0.4rem 0.55rem;
+		}
 	}
 </style>

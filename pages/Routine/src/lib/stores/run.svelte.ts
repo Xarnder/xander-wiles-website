@@ -1,17 +1,20 @@
 import {
+	canDeferCurrent,
 	canGoBack,
 	completeCurrent,
 	createRunSession,
 	getCurrentTask,
 	goBack,
 	hasProgress,
-	skipCurrent,
+	laterCurrent,
+	notTodayCurrent,
 	type StartMode
 } from '$lib/run/run-session';
 import { deriveSummary } from '$lib/run/summary';
 import {
 	canContinueFromLastCycle,
 	getContinuableCompletedIds,
+	getLastCyclePercent,
 	saveLastCycle
 } from '$lib/run/last-cycle';
 import type { Routine } from '$lib/types/routine';
@@ -60,10 +63,20 @@ export function runCanGoBack(): boolean {
 	return session ? canGoBack(session) : false;
 }
 
+export function runCanDefer(): boolean {
+	return session ? canDeferCurrent(session) : false;
+}
+
 /** Reactive peek for library cards — bumps when a cycle is saved. */
 export function routineCanContinueFromLast(routine: Routine): boolean {
 	void lastCycleEpoch;
 	return canContinueFromLastCycle(routine);
+}
+
+/** Last finished run’s completion percent, or null when there isn’t one. */
+export function routineLastCyclePercent(routine: Routine): number | null {
+	void lastCycleEpoch;
+	return getLastCyclePercent(routine);
 }
 
 export function startRun(routine: Routine, mode: StartMode = 'fresh'): void {
@@ -142,7 +155,7 @@ function withLock(fn: () => void): void {
 	fn();
 	persist();
 	// Unlock on the next macrotask so a double-tap in the same gesture is ignored,
-	// but the following intentional Complete/Skip (e.g. Playwright) is not dropped.
+	// but the following intentional Complete / Later / Not Today (e.g. Playwright) is not dropped.
 	window.setTimeout(() => {
 		transitionLock = false;
 	}, 0);
@@ -155,10 +168,17 @@ export function completeAndNext(): void {
 	});
 }
 
-export function skipAndNext(): void {
+export function laterAndNext(): void {
 	withLock(() => {
 		if (!session) return;
-		session = skipCurrent(session);
+		session = laterCurrent(session);
+	});
+}
+
+export function notTodayAndNext(): void {
+	withLock(() => {
+		if (!session) return;
+		session = notTodayCurrent(session);
 	});
 }
 
