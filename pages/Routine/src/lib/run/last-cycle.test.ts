@@ -3,6 +3,7 @@ import {
 	canContinueFromLastCycle,
 	getLastCycle,
 	getLastCyclePercent,
+	getLastCycleSegments,
 	getOmittedTaskIds,
 	saveLastCycle
 } from './last-cycle';
@@ -56,6 +57,7 @@ describe('last-cycle', () => {
 		});
 		expect(getLastCycle('r1')?.completedTaskIds).toEqual(['t1', 't3']);
 		expect(getLastCycle('r1')?.skippedTaskIds).toEqual(['t2']);
+		expect(getLastCycle('r1')?.laterTaskIds).toEqual([]);
 		expect(getLastCyclePercent(routine)).toBe(67);
 	});
 
@@ -97,7 +99,41 @@ describe('last-cycle', () => {
 		saveLastCycle('r1', { t3: 'completed' });
 		expect(getLastCycle('r1')?.completedTaskIds).toEqual(['t1', 't3']);
 		expect(getLastCycle('r1')?.skippedTaskIds).toEqual(['t2']);
+		expect(getLastCycle('r1')?.laterTaskIds).toEqual([]);
 		expect(getLastCyclePercent(routine)).toBe(67);
 		expect(canContinueFromLastCycle(routine)).toBe(false);
+	});
+
+	it('builds a stacked last-cycle bar from saved statuses', () => {
+		saveLastCycle('r1', { t1: 'completed', t2: 'skipped', t3: 'later' });
+		const segments = getLastCycleSegments(routine);
+		expect(segments).toMatchObject({
+			completed: 1,
+			later: 1,
+			skipped: 1,
+			pending: 0,
+			resolvedPercent: 33
+		});
+		expect(
+			(segments?.percents.completed ?? 0) +
+				(segments?.percents.later ?? 0) +
+				(segments?.percents.skipped ?? 0) +
+				(segments?.percents.pending ?? 0)
+		).toBe(100);
+	});
+
+	it('infers later leftover on older records without laterTaskIds', () => {
+		store.set(
+			'routine-last-cycles',
+			JSON.stringify({
+				r1: { completedTaskIds: ['t1'], skippedTaskIds: ['t2'], updatedAt: '2026-01-01T00:00:00.000Z' }
+			})
+		);
+		expect(getLastCycleSegments(routine)).toMatchObject({
+			completed: 1,
+			skipped: 1,
+			later: 1,
+			pending: 0
+		});
 	});
 });

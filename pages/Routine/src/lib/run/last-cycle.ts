@@ -1,11 +1,13 @@
 import type { Routine } from '$lib/types/routine';
-import type { TaskStatus } from '$lib/types/run';
+import type { ProgressSegments, TaskStatus } from '$lib/types/run';
+import { buildProgressSegments } from './run-session';
 
 const STORAGE_KEY = 'routine-last-cycles';
 
 export type LastCycleRecord = {
 	completedTaskIds: string[];
 	skippedTaskIds?: string[];
+	laterTaskIds?: string[];
 	updatedAt: string;
 	percentComplete?: number;
 };
@@ -52,20 +54,22 @@ export function saveLastCycle(
 	const previous = getLastCycle(routineId);
 	const completed = new Set(previous?.completedTaskIds ?? []);
 	const skipped = new Set(previous?.skippedTaskIds ?? []);
+	const later = new Set(previous?.laterTaskIds ?? []);
 
 	for (const [taskId, status] of Object.entries(statuses)) {
 		completed.delete(taskId);
 		skipped.delete(taskId);
+		later.delete(taskId);
 		if (status === 'completed') completed.add(taskId);
-		if (status === 'skipped') skipped.add(taskId);
+		else if (status === 'skipped') skipped.add(taskId);
+		else if (status === 'later' || status === 'pending') later.add(taskId);
 	}
 
 	const completedTaskIds = [...completed];
 	const skippedTaskIds = [...skipped];
+	const laterTaskIds = [...later];
 	const resolved = completedTaskIds.length + skippedTaskIds.length;
-	const laterHere = Object.values(statuses).filter(
-		(status) => status === 'later' || status === 'pending'
-	).length;
+	const laterHere = laterTaskIds.length;
 	const total = resolved + laterHere;
 	const percentComplete = total === 0 ? 0 : Math.round((completedTaskIds.length / total) * 100);
 
@@ -73,6 +77,7 @@ export function saveLastCycle(
 	map[routineId] = {
 		completedTaskIds,
 		skippedTaskIds,
+		laterTaskIds,
 		percentComplete,
 		updatedAt: new Date().toISOString()
 	};
@@ -93,6 +98,42 @@ export function getLastCyclePercent(routine: Routine): number | null {
 	const living = new Set(routine.tasks.map((task) => task.id));
 	const completed = uniqueLiving(record.completedTaskIds, living).length;
 	return Math.round((completed / routine.tasks.length) * 100);
+}
+
+/** Last-run stacked breakdown, or null if this routine has never been finished. */
+export function getLastCycleSegments(routine: Routine): ProgressSegments | null {
+	const record = getLastCycle(routine.id);
+	if (!record) return null;
+
+	const living = new Set(routine.tasks.map((task) => task.id));
+	const completedIds = new Set(uniqueLiving(record.completedTaskIds, living));
+	const skippedIds = new Set(
+		uniqueLiving(record.skippedTaskIds ?? [], living).filter((id) => !completedIds.has(id))
+	);
+
+	const leftover = [...living].filter((id) => !completedIds.has(id) && !skippedIds.has(id));
+	const laterIds =
+		record.laterTaskIds === undefined
+			? leftover
+			: uniqueLiving(record.laterTaskIds, living).filter(
+					(id) => !completedIds.has(id) && !skippedIds.has(id)
+				);
+	const laterSet = new Set(laterIds);
+	const pending = leftover.filter((id) => !laterSet.has(id)).length;
+
+	const completed = completedIds.size;
+	const total = living.size;
+	const resolvedPercent = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+	return buildProgressSegments(
+		{
+			completed,
+			later: laterSet.size,
+			skipped: skippedIds.size,
+			pending
+		},
+		resolvedPercent
+	);
 }
 
 /** Completed + not-today task ids from the last cycle that still exist. */

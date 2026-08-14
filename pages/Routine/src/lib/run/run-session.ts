@@ -1,11 +1,11 @@
 import type { Routine, RoutineTask } from '$lib/types/routine';
-import type { RunSession, TaskStatus } from '$lib/types/run';
+import type { ProgressSegments, RunSession, StartMode, TaskStatus } from '$lib/types/run';
 
 function sortedTasks(tasks: RoutineTask[]): RoutineTask[] {
 	return [...tasks].sort((a, b) => a.order - b.order);
 }
 
-export type StartMode = 'fresh' | 'continue';
+export type { StartMode } from '$lib/types/run';
 
 /**
  * @param omitIds — task ids left out of this run (completed / not today last cycle).
@@ -13,7 +13,8 @@ export type StartMode = 'fresh' | 'continue';
  */
 export function createRunSession(
 	routine: Routine,
-	omitIds: Iterable<string> = []
+	omitIds: Iterable<string> = [],
+	startMode: StartMode = 'fresh'
 ): RunSession {
 	const omitted = new Set(omitIds);
 	const tasks = sortedTasks(routine.tasks).filter((task) => !omitted.has(task.id));
@@ -28,7 +29,9 @@ export function createRunSession(
 		tasks,
 		statuses,
 		currentIndex: 0,
-		phase: tasks.length === 0 ? 'summary' : 'running'
+		phase: tasks.length === 0 ? 'summary' : 'running',
+		startMode,
+		recordedStatStatuses: null
 	};
 }
 
@@ -41,12 +44,91 @@ export function hasProgress(session: RunSession): boolean {
 	return session.tasks.some((task) => session.statuses[task.id] !== 'pending');
 }
 
+/**
+ * Largest-remainder percents so slices always sum to 100 (or all 0 when empty).
+ * Zero-count slices stay 0 and never receive leftover points.
+ */
+export function distributePercents(counts: number[]): number[] {
+	const total = counts.reduce((sum, n) => sum + Math.max(0, n), 0);
+	if (total <= 0) return counts.map(() => 0);
+
+	const raw = counts.map((n) => (Math.max(0, n) / total) * 100);
+	const floors = raw.map((n) => Math.floor(n));
+	let leftover = 100 - floors.reduce((sum, n) => sum + n, 0);
+
+	const order = raw
+		.map((n, i) => ({ i, frac: n - Math.floor(n), count: counts[i] ?? 0 }))
+		.filter((entry) => entry.count > 0)
+		.sort((a, b) => b.frac - a.frac || a.i - b.i);
+
+	const result = [...floors];
+	for (let k = 0; k < leftover && k < order.length; k++) {
+		result[order[k]!.i] += 1;
+	}
+	return result;
+}
+
+export function buildProgressSegments(
+	counts: {
+		completed: number;
+		later: number;
+		skipped: number;
+		pending: number;
+	},
+	resolvedPercent?: number
+): ProgressSegments {
+	const { completed, later, skipped, pending } = counts;
+	const total = completed + later + skipped + pending;
+	const [completedPct, laterPct, skippedPct, pendingPct] = distributePercents([
+		completed,
+		later,
+		skipped,
+		pending
+	]);
+	const resolved =
+		resolvedPercent ??
+		(total === 0 ? 0 : Math.round(((total - pending) / total) * 100));
+
+	return {
+		total,
+		pending,
+		completed,
+		later,
+		skipped,
+		percents: {
+			completed: completedPct ?? 0,
+			later: laterPct ?? 0,
+			skipped: skippedPct ?? 0,
+			pending: pendingPct ?? 0
+		},
+		resolvedPercent: resolved
+	};
+}
+
+export function getProgressSegments(session: RunSession): ProgressSegments {
+	let pending = 0;
+	let completed = 0;
+	let later = 0;
+	let skipped = 0;
+
+	for (const task of session.tasks) {
+		const status = session.statuses[task.id] ?? 'pending';
+		if (status === 'completed') completed += 1;
+		else if (status === 'later') later += 1;
+		else if (status === 'skipped') skipped += 1;
+		else pending += 1;
+	}
+
+	const total = session.tasks.length;
+	const resolved =
+		total === 0 ? 0 : session.phase === 'summary' ? 100 : Math.round(((total - pending) / total) * 100);
+
+	return buildProgressSegments({ completed, later, skipped, pending }, resolved);
+}
+
 /** Share of tasks no longer pending (0–100). Summary is always 100. */
 export function getProgressPercent(session: RunSession): number {
-	if (session.tasks.length === 0) return 0;
-	if (session.phase === 'summary') return 100;
-	const done = session.tasks.filter((task) => session.statuses[task.id] !== 'pending').length;
-	return Math.round((done / session.tasks.length) * 100);
+	return getProgressSegments(session).resolvedPercent;
 }
 
 /** Next pending task after `afterIndex`, wrapping around. */

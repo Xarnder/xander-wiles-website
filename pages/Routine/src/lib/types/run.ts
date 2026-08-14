@@ -1,6 +1,7 @@
 import type { RoutineTask } from './routine';
 
 export type TaskStatus = 'pending' | 'completed' | 'later' | 'skipped';
+export type StartMode = 'fresh' | 'continue';
 
 export interface RunTaskResult {
 	taskId: string;
@@ -16,6 +17,9 @@ export interface RunSession {
 	statuses: Record<string, TaskStatus>;
 	currentIndex: number;
 	phase: 'running' | 'summary';
+	startMode?: StartMode;
+	/** Last statuses already written to first-pass stats, if any. */
+	recordedStatStatuses?: Record<string, TaskStatus> | null;
 }
 
 export interface RoutineSummaryStats {
@@ -25,4 +29,20 @@ export interface RoutineSummaryStats {
 	total: number;
 	percentComplete: number;
 	results: RunTaskResult[];
+}
+
+/** Live stacked-bar shares for a run. Percents always sum to 100 (or 0). */
+export interface ProgressSegments {
+	total: number;
+	pending: number;
+	completed: number;
+	later: number;
+	skipped: number;
+	percents: {
+		pending: number;
+		completed: number;
+		later: number;
+		skipped: number;
+	};
+	resolvedPercent: number;
 }

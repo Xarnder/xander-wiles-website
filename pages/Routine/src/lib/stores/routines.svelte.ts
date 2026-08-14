@@ -1,4 +1,5 @@
 import { getRoutinesRepository } from '$lib/data';
+import { clearRoutineTaskStats } from '$lib/run/task-stats';
 import type { Routine } from '$lib/types/routine';
 import { getAuthUser } from './auth.svelte';
 
@@ -66,6 +67,7 @@ export async function deleteRoutine(id: string): Promise<void> {
 	if (!user) throw new Error('You must be signed in to delete routines.');
 	error = null;
 	await getRoutinesRepository().remove(user.uid, id);
+	clearRoutineTaskStats(id);
 }
 
 export async function reorderRoutines(orderedIds: string[]): Promise<void> {

@@ -28,7 +28,7 @@
 		runHasProgress,
 		startRun
 	} from '$lib/stores/run.svelte';
-	import { getProgressPercent } from '$lib/run/run-session';
+	import { getProgressSegments } from '$lib/run/run-session';
 	import type { Routine } from '$lib/types/routine';
 	import { hapticCelebrate } from '$lib/utils/haptics';
 	import { lockLandscape, unlockOrientation } from '$lib/utils/orientation';
@@ -129,7 +129,7 @@
 	const forceLandscapeRun = $derived(
 		isForceLandscape() && session?.phase === 'running'
 	);
-	const progress = $derived(session ? getProgressPercent(session) : 0);
+	const progress = $derived(session ? getProgressSegments(session) : null);
 
 	function maybeCelebrate() {
 		if (getRunSession()?.phase === 'summary') hapticCelebrate();
@@ -247,11 +247,13 @@
 		</header>
 
 		<div class="progress-wrap">
-			<ProgressBar
-				value={progress}
-				label="Routine progress"
-				detail={`Task ${session.currentIndex + 1} of ${session.tasks.length}`}
-			/>
+			{#if progress}
+				<ProgressBar
+					segments={progress}
+					label="Routine progress"
+					detail={`Task ${session.currentIndex + 1} of ${session.tasks.length}`}
+				/>
+			{/if}
 		</div>
 
 		<div class="stage">

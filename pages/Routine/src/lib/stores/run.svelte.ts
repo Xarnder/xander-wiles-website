@@ -14,11 +14,13 @@ import { deriveSummary } from '$lib/run/summary';
 import {
 	canContinueFromLastCycle,
 	getLastCyclePercent,
+	getLastCycleSegments,
 	getOmittedTaskIds,
 	saveLastCycle
 } from '$lib/run/last-cycle';
 import type { Routine } from '$lib/types/routine';
-import type { RunSession, RoutineSummaryStats } from '$lib/types/run';
+import type { ProgressSegments, RunSession, RoutineSummaryStats } from '$lib/types/run';
+import { recordFreshCycleStats } from '$lib/run/task-stats';
 
 const STORAGE_KEY = 'routine-active-run';
 
@@ -35,6 +37,18 @@ function persist(): void {
 		sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 		if (session.phase === 'summary') {
 			saveLastCycle(session.routineId, session.statuses);
+			if (session.startMode !== 'continue') {
+				recordFreshCycleStats(
+					session.routineId,
+					session.statuses,
+					session.recordedStatStatuses
+				);
+				session = {
+					...session,
+					recordedStatStatuses: { ...session.statuses }
+				};
+				sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+			}
 			lastCycleEpoch += 1;
 		}
 	}
@@ -79,12 +93,18 @@ export function routineLastCyclePercent(routine: Routine): number | null {
 	return getLastCyclePercent(routine);
 }
 
+/** Last finished run’s stacked status bar, or null when there isn’t one. */
+export function routineLastCycleSegments(routine: Routine): ProgressSegments | null {
+	void lastCycleEpoch;
+	return getLastCycleSegments(routine);
+}
+
 export function startRun(routine: Routine, mode: StartMode = 'fresh'): void {
 	if (routine.tasks.length === 0) {
 		throw new Error('This routine has no tasks.');
 	}
 	const omitIds = mode === 'continue' ? getOmittedTaskIds(routine) : [];
-	session = createRunSession(routine, omitIds);
+	session = createRunSession(routine, omitIds, mode);
 	persist();
 }
 

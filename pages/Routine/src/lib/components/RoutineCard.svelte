@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import type { Routine } from '$lib/types/routine';
+	import type { ProgressSegments } from '$lib/types/run';
 
 	let {
 		routine,
 		canContinue = false,
 		lastPercent = null,
+		lastSegments = null,
 		onstartFresh,
 		onstartFromLast,
 		ondragstart,
@@ -14,6 +17,7 @@
 		routine: Routine;
 		canContinue?: boolean;
 		lastPercent?: number | null;
+		lastSegments?: ProgressSegments | null;
 		onstartFresh: () => void;
 		onstartFromLast: () => void;
 		ondragstart?: (event: PointerEvent) => void;
@@ -111,6 +115,17 @@
 			<a class="edit-btn" href={editHref}>Edit</a>
 		</div>
 	</div>
+
+	{#if lastSegments}
+		<div class="last-cycle" data-testid={`last-cycle-bar-${routine.id}`}>
+			<ProgressBar
+				segments={lastSegments}
+				label="Last cycle"
+				compact
+				showPercent={false}
+			/>
+		</div>
+	{/if}
 </article>
 
 <style>
@@ -180,6 +195,12 @@
 		gap: 0.35rem;
 		min-width: 0;
 		width: 100%;
+	}
+
+	.last-cycle {
+		width: 100%;
+		min-width: 0;
+		padding: 0.05rem 0.1rem 0.1rem;
 	}
 
 	.drag-handle {

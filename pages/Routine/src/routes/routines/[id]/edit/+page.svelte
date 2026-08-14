@@ -180,6 +180,13 @@
 			<p>Update tasks and order, then save.</p>
 		</div>
 		<div class="header-actions">
+			<a
+				class="btn btn-secondary"
+				href={resolve('/routines/[id]/stats', { id: routine.id })}
+				data-testid="routine-stats"
+			>
+				Stats
+			</a>
 			<button
 				type="button"
 				class="btn btn-secondary"

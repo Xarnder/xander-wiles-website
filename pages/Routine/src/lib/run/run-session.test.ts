@@ -7,7 +7,9 @@ import {
 	canDeferCurrent,
 	goBack,
 	canGoBack,
-	getProgressPercent
+	getProgressPercent,
+	getProgressSegments,
+	distributePercents
 } from './run-session';
 import { deriveSummary } from './summary';
 import type { Routine, RoutineTask } from '$lib/types/routine';
@@ -192,5 +194,63 @@ describe('run-session', () => {
 		expect(summary.completed).toBe(1);
 		expect(summary.results.map((r) => r.status)).toEqual(['later', 'completed', 'skipped']);
 		expect(summary.results.map((r) => r.taskId)).toEqual(['t1', 't3', 't2']);
+	});
+
+	it('distributes percents with largest remainder so they sum to 100', () => {
+		expect(distributePercents([1, 1, 1])).toEqual([34, 33, 33]);
+		expect(distributePercents([1, 2])).toEqual([33, 67]);
+		expect(distributePercents([0, 0, 0, 3])).toEqual([0, 0, 0, 100]);
+		expect(distributePercents([0, 0, 0, 0])).toEqual([0, 0, 0, 0]);
+		expect(distributePercents([1, 1, 1, 0]).reduce((sum, n) => sum + n, 0)).toBe(100);
+	});
+
+	it('grows stacked progress segments as statuses change', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		let segments = getProgressSegments(session);
+		expect(segments).toMatchObject({
+			completed: 0,
+			later: 0,
+			skipped: 0,
+			pending: 3,
+			resolvedPercent: 0
+		});
+		expect(segments.percents).toEqual({
+			completed: 0,
+			later: 0,
+			skipped: 0,
+			pending: 100
+		});
+
+		session = completeCurrent(session);
+		segments = getProgressSegments(session);
+		expect(segments.completed).toBe(1);
+		expect(segments.pending).toBe(2);
+		expect(segments.percents.completed).toBe(33);
+		expect(segments.percents.pending).toBe(67);
+		expect(segments.resolvedPercent).toBe(33);
+
+		session = laterCurrent(session);
+		segments = getProgressSegments(session);
+		expect(segments).toMatchObject({ completed: 1, later: 1, skipped: 0, pending: 1 });
+		expect(segments.percents.completed + segments.percents.later + segments.percents.pending).toBe(
+			100
+		);
+
+		session = notTodayCurrent(session);
+		segments = getProgressSegments(session);
+		expect(segments).toMatchObject({
+			completed: 1,
+			later: 1,
+			skipped: 1,
+			pending: 0,
+			resolvedPercent: 100
+		});
+		expect(
+			segments.percents.completed +
+				segments.percents.later +
+				segments.percents.skipped +
+				segments.percents.pending
+		).toBe(100);
+		expect(segments.percents.pending).toBe(0);
 	});
 });
