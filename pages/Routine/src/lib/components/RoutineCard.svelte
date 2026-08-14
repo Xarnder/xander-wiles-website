@@ -96,7 +96,7 @@
 						data-testid={`start-from-last-${routine.id}`}
 						aria-label="Start from last completion"
 						title={canContinue
-							? 'Resume with tasks completed last cycle still marked done'
+							? 'Run leftover tasks — completed and not today are left out'
 							: 'Finish a cycle first to unlock'}
 					>
 						<span class="label-full">From last</span>

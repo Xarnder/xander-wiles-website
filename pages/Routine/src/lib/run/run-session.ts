@@ -8,30 +8,27 @@ function sortedTasks(tasks: RoutineTask[]): RoutineTask[] {
 export type StartMode = 'fresh' | 'continue';
 
 /**
- * @param preCompletedIds — task ids to mark completed up front (continue-from-last).
- * Starts at the first task that is not already completed.
+ * @param omitIds — task ids left out of this run (completed / not today last cycle).
+ * Remaining tasks start pending. Empty leftover list opens summary.
  */
 export function createRunSession(
 	routine: Routine,
-	preCompletedIds: Iterable<string> = []
+	omitIds: Iterable<string> = []
 ): RunSession {
-	const tasks = sortedTasks(routine.tasks);
-	const preCompleted = new Set(preCompletedIds);
+	const omitted = new Set(omitIds);
+	const tasks = sortedTasks(routine.tasks).filter((task) => !omitted.has(task.id));
 	const statuses: Record<string, TaskStatus> = {};
 	for (const task of tasks) {
-		statuses[task.id] = preCompleted.has(task.id) ? 'completed' : 'pending';
+		statuses[task.id] = 'pending';
 	}
-
-	const firstPending = tasks.findIndex((task) => statuses[task.id] !== 'completed');
-	const allDone = tasks.length > 0 && firstPending === -1;
 
 	return {
 		routineId: routine.id,
 		routineName: routine.name,
 		tasks,
 		statuses,
-		currentIndex: allDone ? Math.max(0, tasks.length - 1) : Math.max(0, firstPending),
-		phase: tasks.length === 0 || allDone ? 'summary' : 'running'
+		currentIndex: 0,
+		phase: tasks.length === 0 ? 'summary' : 'running'
 	};
 }
 

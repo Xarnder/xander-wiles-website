@@ -43,6 +43,61 @@ document.addEventListener('DOMContentLoaded', () => {
     const numberStartInput = document.getElementById('number-start-input');
     const numberColorPicker = document.getElementById('number-color-picker');
 
+    // Padding controls
+    const addPaddingToggle = document.getElementById('add-padding-toggle');
+    const paddingOptionsWrapper = document.getElementById('padding-options-wrapper');
+    const paddingModeSelect = document.getElementById('padding-mode-select');
+    const paddingAbsoluteGroup = document.getElementById('padding-absolute-group');
+    const paddingRelativeGroup = document.getElementById('padding-relative-group');
+    const paddingPxSlider = document.getElementById('padding-px-slider');
+    const paddingPxInput = document.getElementById('padding-px-input');
+    const paddingPxValue = document.getElementById('padding-px-value');
+    const paddingPercentSlider = document.getElementById('padding-percent-slider');
+    const paddingPercentInput = document.getElementById('padding-percent-input');
+    const paddingPercentValue = document.getElementById('padding-percent-value');
+    const paddingColorPicker = document.getElementById('padding-color-picker');
+    const paddingAlphaToggle = document.getElementById('padding-alpha-toggle');
+    const paddingHint = document.getElementById('padding-hint');
+    const paddingFormatWarning = document.getElementById('padding-format-warning');
+    const fitAspectToggle = document.getElementById('fit-aspect-toggle');
+    const aspectOptionsWrapper = document.getElementById('aspect-options-wrapper');
+    const paddingFillWrapper = document.getElementById('padding-fill-wrapper');
+    const paddingAspectCustomGroup = document.getElementById('padding-aspect-custom-group');
+    const paddingAspectSelect = document.getElementById('padding-aspect-select');
+    const paddingAspectWInput = document.getElementById('padding-aspect-w');
+    const paddingAspectHInput = document.getElementById('padding-aspect-h');
+    const paddingPreviewWrap = document.getElementById('padding-preview-wrap');
+    const paddingPreviewCanvas = document.getElementById('padding-preview-canvas');
+    const paddingPreviewCaption = document.getElementById('padding-preview-caption');
+    const paddingPreviewCounter = document.getElementById('padding-preview-counter');
+    const paddingPrevBtn = document.getElementById('padding-prev-btn');
+    const paddingNextBtn = document.getElementById('padding-next-btn');
+    const paddingPreviewCtx = paddingPreviewCanvas.getContext('2d');
+    let paddingPreviewToken = 0;
+
+    const fillAlphaToggle = document.getElementById('fill-alpha-toggle');
+    const fillAlphaOptionsWrapper = document.getElementById('fill-alpha-options-wrapper');
+    const fillAlphaColorPicker = document.getElementById('fill-alpha-color-picker');
+    const fillAlphaPresetBtns = document.querySelectorAll('.fill-alpha-preset-btn');
+
+    const squircleToggle = document.getElementById('squircle-toggle');
+    const squircleOptionsWrapper = document.getElementById('squircle-options-wrapper');
+    const squircleShapeSelect = document.getElementById('squircle-shape-select');
+    const squircleColorPicker = document.getElementById('squircle-color-picker');
+    const squircleInnerSlider = document.getElementById('squircle-inner-slider');
+    const squircleInnerValue = document.getElementById('squircle-inner-value');
+    const squircleOuterSlider = document.getElementById('squircle-outer-slider');
+    const squircleOuterValue = document.getElementById('squircle-outer-value');
+    const squircleShapePreview = document.getElementById('squircle-shape-preview');
+    const squircleShapePreviewCtx = squircleShapePreview.getContext('2d');
+    const squirclePresetBtns = document.querySelectorAll('.squircle-preset-btn');
+    const SQUIRCLE_SVG_URLS = [
+        '/assets/SVGs/Perfect%20SquircleIcons.svg',
+        '../../assets/SVGs/Perfect%20SquircleIcons.svg'
+    ];
+    let squircleSvgText = null;
+    const squircleImageCache = new Map();
+
     // Lightweight Image Editor Controls
     const exposureSlider = document.getElementById('exposure-slider');
     const exposureValue = document.getElementById('exposure-value');
@@ -350,12 +405,31 @@ document.addEventListener('DOMContentLoaded', () => {
         textPositionSlider, textOffsetSlider, autoScaleToggle, relativeSizeToggle,
         addNumbersToggle, numberCornerSelect, numberOffsetSlider, numberSizeSlider,
         numberStartInput, numberColorPicker,
+        addPaddingToggle, paddingModeSelect, paddingPxSlider, paddingPxInput,
+        paddingPercentSlider, paddingPercentInput, paddingColorPicker, paddingAlphaToggle,
+        fitAspectToggle, paddingAspectSelect, paddingAspectWInput, paddingAspectHInput,
+        fillAlphaToggle, fillAlphaColorPicker,
+        squircleToggle, squircleShapeSelect, squircleColorPicker, squircleInnerSlider, squircleOuterSlider,
         exposureSlider, brightnessSlider, contrastSlider, saturationSlider,
         hueSlider, warmthSlider, grayscaleSlider, sepiaSlider, blurSlider
     ];
     allControls.forEach(el => el.addEventListener('input', handleControlsChange));
     resetAdjustmentsBtn.addEventListener('click', resetImageAdjustments);
     resetAdjustmentBtns.forEach(btn => btn.addEventListener('click', resetSingleImageAdjustment));
+    fillAlphaPresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            fillAlphaToggle.checked = true;
+            fillAlphaColorPicker.value = btn.dataset.alphaBg;
+            handleControlsChange();
+        });
+    });
+    squirclePresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            squircleToggle.checked = true;
+            squircleColorPicker.value = btn.dataset.squircleColor;
+            handleControlsChange();
+        });
+    });
 
     // New Format Listeners
     exportFormatSelect.addEventListener('change', () => {
@@ -363,6 +437,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const hideQuality = format === 'image/png' || format === 'original' || format === 'image/svg+xml';
         mainQualityWrapper.classList.toggle('hidden', hideQuality);
         updateNamingUI();
+        updatePaddingControlState();
+        if (addPaddingToggle.checked || fitAspectToggle.checked || fillAlphaToggle.checked || squircleToggle.checked) renderPreview();
     });
     mainQualitySlider.addEventListener('input', () => {
         mainQualityValue.textContent = mainQualitySlider.value;
@@ -377,6 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Navigation
     prevBtn.addEventListener('click', navigatePrev);
     nextBtn.addEventListener('click', navigateNext);
+    paddingPrevBtn.addEventListener('click', navigatePrev);
+    paddingNextBtn.addEventListener('click', navigateNext);
     titleInput.addEventListener('input', handleTitleChange);
     document.addEventListener('keydown', handleKeyPress);
 
@@ -520,6 +598,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAdjustmentLabels();
     updateColourMatchLabels();
     updateColourComparisonSlider();
+    updatePaddingControlState();
+    updateSquircleControlState();
 
 
     // --- Functions ---
@@ -536,6 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Separate Images/SVGs and PDFs (extension check covers empty/odd MIME types like text/xml for SVG)
         imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
+        sortImageFiles(imageFiles);
         originalImageFiles = [...imageFiles]; // Store originals
         pdfFiles = files.filter(file => file.type === 'application/pdf' || pdfRegex.test(file.name));
 
@@ -615,24 +696,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function getUploadSortPath(file) {
+        return (file.webkitRelativePath || file.name || '').toLowerCase();
+    }
+
+    function getUploadFolderPath(file) {
+        const relative = (file && file.webkitRelativePath) || '';
+        if (!relative) return '(Root)';
+        const parts = relative.split(/[/\\]/).filter((part) => part && part !== '.' && part !== '..');
+        if (parts.length <= 2) return '(Root)';
+        const subfolder = parts.slice(1, -1).join('/');
+        return subfolder || '(Root)';
+    }
+
+    function sortImageFiles(files) {
+        files.sort((a, b) => getUploadSortPath(a).localeCompare(getUploadSortPath(b), undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        }));
+    }
+
+    function sortFolderList(folders) {
+        const rest = folders
+            .filter((folder) => folder !== '(Root)')
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        return ['(Root)', ...rest];
+    }
+
+    function addFolderToAvailable(folderName) {
+        if (folderName && !availableFolders.includes(folderName)) {
+            availableFolders.push(folderName);
+        }
+    }
+
     function prepImages(showEditor = true) {
-        imageFiles.sort((a, b) => a.name.localeCompare(b.name));
+        sortImageFiles(imageFiles);
         imageFiles.forEach(file => {
-            // Only add if not already added (check logic later, for now we reset on upload so it's fine)
-            // But wait, if we are appending converted PDFs, we need to be careful?
-            // Actually handleDirectoryUpload resets arrays.
             imageTitles.push(formatTitle(file.name));
-            imageFolders.push("(Root)");
+            const folder = getUploadFolderPath(file);
+            imageFolders.push(folder);
+            addFolderToAvailable(folder);
         });
+        availableFolders = sortFolderList(availableFolders);
 
         if (showEditor) setupEditor();
     }
 
     function setupEditor() {
         const svgCount = imageFiles.filter(isSvgFile).length;
+        const folderCount = new Set(imageFolders.filter((folder) => folder !== '(Root)')).size;
+        const folderNote = folderCount
+            ? ` in ${folderCount} subfolder${folderCount === 1 ? '' : 's'}`
+            : '';
         const label = svgCount === imageFiles.length
-            ? `Loaded ${imageFiles.length} SVG${imageFiles.length === 1 ? '' : 's'}. Format set to Original (Rename Only) — export to ZIP with new names.`
-            : `Loaded ${imageFiles.length} file${imageFiles.length === 1 ? '' : 's'}${svgCount ? ` (${svgCount} SVG)` : ''}. You can now Upload a CSV or scroll down to customize.`;
+            ? `Loaded ${imageFiles.length} SVG${imageFiles.length === 1 ? '' : 's'}${folderNote}. Format set to Original (Rename Only) — export to ZIP with new names.`
+            : `Loaded ${imageFiles.length} file${imageFiles.length === 1 ? '' : 's'}${svgCount ? ` (${svgCount} SVG)` : ''}${folderNote}. You can now Upload a CSV or scroll down to customize.`;
         showStatus(uploadStatus, label, false);
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
@@ -699,7 +817,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     imageFiles.push(imageFile);
                     originalImageFiles.push(imageFile);
                     imageTitles.push(formatTitle(pageName));
-                    imageFolders.push("(Root)");
+                    const folder = getUploadFolderPath(file);
+                    imageFolders.push(folder);
+                    addFolderToAvailable(folder);
 
                     totalPagesConverted++;
                 }
@@ -713,6 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             setTimeout(() => {
                 pdfConversionPopup.classList.add('hidden');
+                availableFolders = sortFolderList(availableFolders);
                 setupEditor(); // Now load the editor with everything
             }, 800);
 
@@ -775,7 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus(uploadStatus, `CSV Map Applied! Matched ${matchCount} images to categories.`, false);
     }
 
-    function handleControlsChange() {
+    function handleControlsChange(e) {
         fontSizeValueSpan.textContent = fontSizeSlider.value;
         headerHeightValueSpan.textContent = headerHeightSlider.value;
         textPositionValueSpan.textContent = textPositionSlider.value;
@@ -788,6 +909,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateControlVisibility();
         updateTitleControlState();
         updateNumberControlState();
+        syncPaddingAmountInputs(e?.target);
+        updatePaddingControlState();
+        updateSquircleControlState();
         renderPreview();
     }
 
@@ -821,6 +945,505 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateNumberControlState() {
         numberOptionsWrapper.classList.toggle('disabled', !addNumbersToggle.checked);
+    }
+
+    function formatSupportsAlpha(format) {
+        return format === 'image/png' || format === 'image/webp' || format === 'image/avif';
+    }
+
+    function syncPaddingAmountInputs(source) {
+        if (source === paddingPxSlider) paddingPxInput.value = paddingPxSlider.value;
+        else if (source === paddingPxInput) paddingPxSlider.value = Math.min(Number(paddingPxSlider.max), Math.max(0, Number(paddingPxInput.value) || 0));
+        else if (source === paddingPercentSlider) paddingPercentInput.value = paddingPercentSlider.value;
+        else if (source === paddingPercentInput) paddingPercentSlider.value = Math.min(Number(paddingPercentSlider.max), Math.max(0, Number(paddingPercentInput.value) || 0));
+
+        paddingPxValue.textContent = paddingPxInput.value;
+        paddingPercentValue.textContent = paddingPercentInput.value;
+    }
+
+    function usesCanvasExpansion(options = getTitleOptionsFromUI()) {
+        return !!(options.addPadding || options.fitAspect || options.addSquircle);
+    }
+
+    function usesTransparentPadding(options = getTitleOptionsFromUI()) {
+        return !!(usesCanvasExpansion(options) && !options.paddingFlatten && (options.paddingAlpha || options.addSquircle));
+    }
+
+    function fillExpandedCanvas(ctx, options, layout) {
+        const {
+            canvasW,
+            canvasH,
+            boxX,
+            boxY,
+            boxW,
+            boxH,
+            contentTop = 0,
+            contentBottom = canvasH
+        } = layout;
+
+        if (options.paddingFlatten) {
+            ctx.fillStyle = options.paddingColor || '#FFFFFF';
+            ctx.fillRect(0, contentTop, canvasW, Math.max(0, contentBottom - contentTop));
+            return;
+        }
+
+        const fillAroundBadge = !options.paddingAlpha && (options.addPadding || options.fitAspect);
+        if (!fillAroundBadge) return;
+
+        ctx.fillStyle = options.paddingColor || '#FFFFFF';
+        if (boxY > contentTop) ctx.fillRect(0, contentTop, canvasW, boxY - contentTop);
+        const belowY = boxY + boxH;
+        if (belowY < contentBottom) ctx.fillRect(0, belowY, canvasW, contentBottom - belowY);
+        if (boxX > 0) ctx.fillRect(0, boxY, boxX, boxH);
+        const rightX = boxX + boxW;
+        if (rightX < canvasW) ctx.fillRect(rightX, boxY, canvasW - rightX, boxH);
+    }
+
+    function updatePaddingControlState() {
+        const paddingOn = addPaddingToggle.checked;
+        const aspectOn = fitAspectToggle.checked;
+        const squircleOn = squircleToggle.checked;
+        const canvasOn = paddingOn || aspectOn || squircleOn;
+
+        paddingOptionsWrapper.classList.toggle('disabled', !paddingOn);
+        aspectOptionsWrapper.classList.toggle('disabled', !aspectOn);
+        paddingFillWrapper.classList.toggle('disabled', !canvasOn);
+        fillAlphaOptionsWrapper.classList.toggle('disabled', !fillAlphaToggle.checked);
+
+        const mode = paddingModeSelect.value;
+        paddingAbsoluteGroup.classList.toggle('hidden', mode !== 'absolute');
+        paddingRelativeGroup.classList.toggle('hidden', mode !== 'relative');
+        paddingAspectCustomGroup.classList.toggle('hidden', paddingAspectSelect.value !== 'custom');
+
+        const flattenAlpha = !formatSupportsAlpha(exportFormatSelect.value) && (
+            (canvasOn && paddingAlphaToggle.checked) || squircleOn
+        );
+        paddingFormatWarning.classList.toggle('hidden', !flattenAlpha);
+
+        const showCheckerboard = formatSupportsAlpha(exportFormatSelect.value) && (
+            squircleOn || (canvasOn && paddingAlphaToggle.checked)
+        );
+        previewCanvas.classList.toggle('alpha-preview', showCheckerboard);
+        paddingPreviewCanvas.classList.toggle('alpha-preview', showCheckerboard);
+
+        paddingPxValue.textContent = paddingPxInput.value;
+        paddingPercentValue.textContent = paddingPercentInput.value;
+
+        paddingPreviewWrap.classList.toggle('hidden', !canvasOn);
+
+        if (imageFiles.length === 0) {
+            if (canvasOn) {
+                if (squircleOn) {
+                    paddingHint.textContent = 'Squircle is applied first (image padding inside the shape, squircle padding outside). Aspect ratio and extra padding then wrap the badge.';
+                } else if (aspectOn && paddingOn) {
+                    paddingHint.textContent = 'Aspect ratio is applied first, then padding is added around that result. Both use the pad colour.';
+                } else if (aspectOn) {
+                    paddingHint.textContent = 'Aspect Ratio: every image is padded to the same target ratio without cropping. Portrait can become square, 16:9, and so on.';
+                } else if (mode === 'relative') {
+                    paddingHint.textContent = 'Relative: each image gets padding as a % of its own width (left/right) and height (top/bottom).';
+                } else {
+                    paddingHint.textContent = 'Absolute: the same pixel amount is added on every side of every image.';
+                }
+            }
+            renderPaddingPreview();
+        }
+    }
+
+    function getTargetAspectRatio(options) {
+        if (options.paddingAspect === 'custom') {
+            const w = Math.max(1, Number(options.paddingAspectW) || 1);
+            const h = Math.max(1, Number(options.paddingAspectH) || 1);
+            return w / h;
+        }
+        const parts = String(options.paddingAspect || '').split(':');
+        const w = Number(parts[0]);
+        const h = Number(parts[1]);
+        if (!w || !h) return null;
+        return w / h;
+    }
+
+    function describeAspect(width, height) {
+        if (!width || !height) return '—';
+        const ratio = width / height;
+        const presets = {
+            '1:1': 1,
+            '4:5': 4 / 5,
+            '5:4': 5 / 4,
+            '3:4': 3 / 4,
+            '4:3': 4 / 3,
+            '2:3': 2 / 3,
+            '3:2': 3 / 2,
+            '9:16': 9 / 16,
+            '16:9': 16 / 9
+        };
+        const match = Object.keys(presets).find((key) => Math.abs(presets[key] - ratio) < 0.012);
+        return match ? match : `${ratio.toFixed(2)}:1`;
+    }
+
+    function getAspectPadding(imgW, imgH, options) {
+        const none = { padLeft: 0, padRight: 0, padTop: 0, padBottom: 0 };
+        if (!options.fitAspect) return none;
+        const target = getTargetAspectRatio(options);
+        if (!target) return none;
+        const current = imgW / imgH;
+        let canvasW = imgW;
+        let canvasH = imgH;
+        const epsilon = 0.0001;
+        if (current < target - epsilon) {
+            canvasW = Math.round(imgH * target);
+        } else if (current > target + epsilon) {
+            canvasH = Math.round(imgW / target);
+        }
+        const extraW = Math.max(0, canvasW - imgW);
+        const extraH = Math.max(0, canvasH - imgH);
+        const padLeft = Math.floor(extraW / 2);
+        const padTop = Math.floor(extraH / 2);
+        return {
+            padLeft,
+            padRight: extraW - padLeft,
+            padTop,
+            padBottom: extraH - padTop
+        };
+    }
+
+    function getEvenPadding(fittedW, fittedH, options) {
+        const none = { padLeft: 0, padRight: 0, padTop: 0, padBottom: 0 };
+        if (!options.addPadding) return none;
+        if (options.paddingMode === 'relative') {
+            const percent = Math.max(0, options.paddingAmount || 0) / 100;
+            const padX = Math.round(fittedW * percent);
+            const padY = Math.round(fittedH * percent);
+            return { padLeft: padX, padRight: padX, padTop: padY, padBottom: padY };
+        }
+        const px = Math.max(0, Math.round(options.paddingAmount || 0));
+        return { padLeft: px, padRight: px, padTop: px, padBottom: px };
+    }
+
+    function combinePads(a, b) {
+        return {
+            padLeft: a.padLeft + b.padLeft,
+            padRight: a.padRight + b.padRight,
+            padTop: a.padTop + b.padTop,
+            padBottom: a.padBottom + b.padBottom
+        };
+    }
+
+    function getSquircleExpansion(imgW, imgH, options) {
+        const none = { padLeft: 0, padRight: 0, padTop: 0, padBottom: 0, squircle: null };
+        if (!options.addSquircle) return none;
+        const base = Math.max(imgW, imgH, 1);
+        const inner = Math.round(base * Math.max(0, options.squircleInnerPad || 0) / 100);
+        const innerBox = base + inner * 2;
+        const outer = Math.round(innerBox * Math.max(0, options.squircleOuterPad || 0) / 100);
+        const square = innerBox + outer * 2;
+        const extraW = Math.max(0, square - imgW);
+        const extraH = Math.max(0, square - imgH);
+        const padLeft = Math.floor(extraW / 2);
+        const padTop = Math.floor(extraH / 2);
+        return {
+            padLeft,
+            padRight: extraW - padLeft,
+            padTop,
+            padBottom: extraH - padTop,
+            squircle: {
+                size: innerBox,
+                outer,
+                badgeSize: square
+            }
+        };
+    }
+
+    function getPaddingForImage(imgW, imgH, options) {
+        const squircleExp = getSquircleExpansion(imgW, imgH, options);
+        const afterSqW = imgW + squircleExp.padLeft + squircleExp.padRight;
+        const afterSqH = imgH + squircleExp.padTop + squircleExp.padBottom;
+        const aspectPad = getAspectPadding(afterSqW, afterSqH, options);
+        const afterAspectW = afterSqW + aspectPad.padLeft + aspectPad.padRight;
+        const afterAspectH = afterSqH + aspectPad.padTop + aspectPad.padBottom;
+        const evenPad = getEvenPadding(afterAspectW, afterAspectH, options);
+        const combined = combinePads(combinePads(squircleExp, aspectPad), evenPad);
+        combined.aspect = aspectPad;
+        combined.even = evenPad;
+        combined.squircle = squircleExp.squircle;
+        combined.squirclePad = squircleExp;
+        combined.badgeW = afterSqW;
+        combined.badgeH = afterSqH;
+        combined.fittedW = afterAspectW;
+        combined.fittedH = afterAspectH;
+        return combined;
+    }
+
+    function generateSquirclePath(minX, minY, w, h) {
+        const sx = w / 223.2;
+        const sy = h / 223.2;
+        const f = (val) => Number(val.toFixed(4));
+        const m_x = f(minX + 161.9 * sx);
+        const m_y = f(minY + 220.3 * sy);
+        return `M${m_x},${m_y}` +
+            `c${f(-33.53 * sx)},${f(3.88 * sy)},${f(-67.06 * sx)},${f(3.88 * sy)},${f(-100.6 * sx)},${f(0 * sy)}` +
+            `c${f(-30.6 * sx)},${f(-3.54 * sy)},${f(-54.86 * sx)},${f(-27.8 * sy)},${f(-58.4 * sx)},${f(-58.4 * sy)}` +
+            `c${f(-3.88 * sx)},${f(-33.53 * sy)},${f(-3.88 * sx)},${f(-67.06 * sy)},${f(0 * sx)},${f(-100.6 * sy)}` +
+            `C${f(minX + 6.44 * sx)},${f(minY + 30.7 * sy)},${f(minX + 30.7 * sx)},${f(minY + 6.44 * sy)},${f(minX + 61.3 * sx)},${f(minY + 2.91 * sy)}` +
+            `c${f(33.53 * sx)},${f(-3.88 * sy)},${f(67.06 * sx)},${f(-3.88 * sy)},${f(100.6 * sx)},${f(0 * sy)}` +
+            `c${f(30.6 * sx)},${f(3.54 * sy)},${f(54.86 * sx)},${f(27.8 * sy)},${f(58.4 * sx)},${f(58.4 * sy)}` +
+            `c${f(3.88 * sx)},${f(33.53 * sy)},${f(3.88 * sx)},${f(67.06 * sy)},${f(0 * sx)},${f(100.6 * sy)}` +
+            `c${f(-3.54 * sx)},${f(30.6 * sy)},${f(-27.8 * sx)},${f(54.86 * sy)},${f(-58.4 * sx)},${f(58.4 * sy)}Z`;
+    }
+
+    function drawSquirclePath(ctx, x, y, size, color) {
+        const path = new Path2D(generateSquirclePath(x, y, size, size));
+        ctx.fillStyle = color || '#8b5cf6';
+        ctx.fill(path);
+    }
+
+    async function loadSquircleSvgText() {
+        if (squircleSvgText !== null) return squircleSvgText;
+        for (const url of SQUIRCLE_SVG_URLS) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) continue;
+                squircleSvgText = await response.text();
+                if (squircleSvgText) return squircleSvgText;
+            } catch (error) {
+                // Try the next candidate path.
+            }
+        }
+        console.warn('Could not load Perfect Squircle SVG, using built-in path.');
+        squircleSvgText = '';
+        return squircleSvgText;
+    }
+
+    async function getSquircleImage(color) {
+        const key = (color || '#8b5cf6').toLowerCase();
+        if (squircleImageCache.has(key)) return squircleImageCache.get(key);
+        const svgText = await loadSquircleSvgText();
+        if (!svgText) return null;
+        const recolored = svgText
+            .replace(/#95979a/gi, color)
+            .replace(/fill:\s*#[0-9a-fA-F]{3,8}/g, `fill: ${color}`);
+        const blob = new Blob([recolored], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const image = new Image();
+        const loaded = new Promise((resolve, reject) => {
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+        });
+        image.src = url;
+        try {
+            await loaded;
+            URL.revokeObjectURL(url);
+            squircleImageCache.set(key, image);
+            return image;
+        } catch (error) {
+            URL.revokeObjectURL(url);
+            return null;
+        }
+    }
+
+    async function drawSquircleShape(ctx, x, y, size, color) {
+        const image = await getSquircleImage(color);
+        if (image) {
+            ctx.drawImage(image, x, y, size, size);
+            return;
+        }
+        drawSquirclePath(ctx, x, y, size, color);
+    }
+
+    function updateSquircleControlState() {
+        squircleOptionsWrapper.classList.toggle('disabled', !squircleToggle.checked);
+        squircleInnerValue.textContent = squircleInnerSlider.value;
+        squircleOuterValue.textContent = squircleOuterSlider.value;
+        drawSquircleShapePreview();
+    }
+
+    async function drawSquircleShapePreview() {
+        const size = squircleShapePreview.width;
+        squircleShapePreviewCtx.clearRect(0, 0, size, size);
+        fillCheckerboard(squircleShapePreviewCtx, size, size, 6);
+        await drawSquircleShape(
+            squircleShapePreviewCtx,
+            4,
+            4,
+            size - 8,
+            squircleColorPicker.value
+        );
+    }
+
+    function updatePaddingHint(imgW, imgH, pad, options) {
+        if (!paddingHint) return;
+        const padLeft = pad.padLeft || 0;
+        const padRight = pad.padRight || 0;
+        const padTop = pad.padTop || 0;
+        const padBottom = pad.padBottom || 0;
+        const outW = imgW + padLeft + padRight;
+        const outH = imgH + padTop + padBottom;
+        const usingAspect = !!options.fitAspect;
+        const usingPad = !!options.addPadding;
+        const usingSquircle = !!options.addSquircle;
+
+        if (!usingAspect && !usingPad && !usingSquircle) {
+            paddingHint.textContent = '';
+            return;
+        }
+
+        const parts = [`${imgW} × ${imgH} (${describeAspect(imgW, imgH)})`];
+        if (usingSquircle && pad.squircle) {
+            parts.push(`${pad.badgeW} × ${pad.badgeH} squircle`);
+        }
+        if (usingAspect) {
+            const fittedW = pad.fittedW || outW;
+            const fittedH = pad.fittedH || outH;
+            if (!usingSquircle || fittedW !== pad.badgeW || fittedH !== pad.badgeH) {
+                parts.push(`${fittedW} × ${fittedH} (${describeAspect(fittedW, fittedH)})`);
+            }
+        }
+        if (usingPad) {
+            const evenPx = pad.even?.padLeft || 0;
+            parts.push(options.paddingMode === 'relative' ? 'relative padding' : `+${evenPx}px each side`);
+        }
+        if (padLeft + padRight + padTop + padBottom === 0) {
+            paddingHint.textContent = usingAspect
+                ? `This image is already ${describeAspect(imgW, imgH)} — no extra canvas needed.`
+                : 'No extra canvas added for this image.';
+            return;
+        }
+        const lastSize = `${outW} × ${outH}`;
+        if (!parts[parts.length - 1].startsWith(lastSize)) {
+            parts.push(lastSize);
+        }
+        paddingHint.textContent = parts.join(' → ');
+    }
+
+    function fillCheckerboard(ctx, width, height, size = 10) {
+        ctx.fillStyle = '#16161c';
+        ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = '#2a2a32';
+        for (let y = 0; y < height; y += size) {
+            for (let x = 0; x < width; x += size) {
+                if (((x / size) + (y / size)) % 2 === 0) {
+                    ctx.fillRect(x, y, size, size);
+                }
+            }
+        }
+    }
+
+    async function renderPaddingPreview() {
+        const token = ++paddingPreviewToken;
+        if (!usesCanvasExpansion(getTitleOptionsFromUI())) {
+            paddingPreviewWrap.classList.add('hidden');
+            return;
+        }
+
+        paddingPreviewWrap.classList.remove('hidden');
+        updatePaddingPreviewNav();
+        const options = getTitleOptionsFromUI();
+        const transparentPad = usesTransparentPadding(options);
+        const sampleW = 800;
+        const sampleH = 1200;
+        let sourceImage = null;
+        let imgW = sampleW;
+        let imgH = sampleH;
+
+        if (imageFiles.length > 0) {
+            try {
+                sourceImage = await loadImage(imageFiles[currentIndex]);
+                if (token !== paddingPreviewToken) return;
+                imgW = sourceImage.naturalWidth || sourceImage.width || sampleW;
+                imgH = sourceImage.naturalHeight || sourceImage.height || sampleH;
+            } catch (error) {
+                console.error('Padding preview failed to load image', error);
+            }
+        }
+
+        const pad = getPaddingForImage(imgW, imgH, options);
+        const outW = Math.max(1, imgW + pad.padLeft + pad.padRight);
+        const outH = Math.max(1, imgH + pad.padTop + pad.padBottom);
+        const maxW = 400;
+        const maxH = 260;
+        const scale = Math.min(maxW / outW, maxH / outH, 1);
+        const canvasW = Math.max(1, Math.round(outW * scale));
+        const canvasH = Math.max(1, Math.round(outH * scale));
+        paddingPreviewCanvas.width = canvasW;
+        paddingPreviewCanvas.height = canvasH;
+
+        if (transparentPad) {
+            fillCheckerboard(paddingPreviewCtx, canvasW, canvasH);
+        }
+
+        const drawX = Math.round(pad.padLeft * scale);
+        const drawY = Math.round(pad.padTop * scale);
+        const drawW = Math.max(1, Math.round(imgW * scale));
+        const drawH = Math.max(1, Math.round(imgH * scale));
+        const squircle = pad.squircle;
+        const boxW = squircle ? Math.max(1, Math.round(squircle.badgeSize * scale)) : drawW;
+        const boxH = squircle ? Math.max(1, Math.round(squircle.badgeSize * scale)) : drawH;
+        const boxX = squircle
+            ? Math.round((pad.padLeft - (pad.squirclePad?.padLeft || 0)) * scale)
+            : drawX;
+        const boxY = squircle
+            ? Math.round((pad.padTop - (pad.squirclePad?.padTop || 0)) * scale)
+            : drawY;
+
+        fillExpandedCanvas(paddingPreviewCtx, options, {
+            canvasW,
+            canvasH,
+            boxX,
+            boxY,
+            boxW,
+            boxH
+        });
+
+        if (options.addSquircle && squircle) {
+            await drawSquircleShape(
+                paddingPreviewCtx,
+                boxX + Math.round(squircle.outer * scale),
+                boxY + Math.round(squircle.outer * scale),
+                Math.max(1, Math.round(squircle.size * scale)),
+                options.squircleColor || '#8b5cf6'
+            );
+            if (token !== paddingPreviewToken) return;
+        }
+
+        if (options.fillAlphaBackground) {
+            paddingPreviewCtx.fillStyle = options.alphaBackgroundColor || '#FFFFFF';
+            paddingPreviewCtx.fillRect(drawX, drawY, drawW, drawH);
+        }
+
+        if (sourceImage) {
+            paddingPreviewCtx.drawImage(sourceImage, drawX, drawY, drawW, drawH);
+        } else {
+            paddingPreviewCtx.fillStyle = '#3f3f46';
+            paddingPreviewCtx.fillRect(drawX, drawY, drawW, drawH);
+            paddingPreviewCtx.fillStyle = '#a1a1aa';
+            paddingPreviewCtx.font = '12px Inter, sans-serif';
+            paddingPreviewCtx.textAlign = 'center';
+            paddingPreviewCtx.textBaseline = 'middle';
+            paddingPreviewCtx.fillText('Sample portrait', drawX + drawW / 2, drawY + drawH / 2);
+        }
+
+        paddingPreviewCtx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
+        paddingPreviewCtx.lineWidth = 1;
+        paddingPreviewCtx.strokeRect(drawX + 0.5, drawY + 0.5, Math.max(0, drawW - 1), Math.max(0, drawH - 1));
+
+        if (paddingPreviewCaption) {
+            if (sourceImage) {
+                paddingPreviewCaption.textContent = `Preview: ${imgW} × ${imgH} (${describeAspect(imgW, imgH)}) → ${outW} × ${outH} (${describeAspect(outW, outH)})`;
+            } else {
+                paddingPreviewCaption.textContent = `Sample preview: ${imgW} × ${imgH} portrait → ${outW} × ${outH} (${describeAspect(outW, outH)}). Upload images to preview your batch.`;
+            }
+        }
+    }
+
+    function updatePaddingPreviewNav() {
+        const total = imageFiles.length;
+        const canNavigate = total > 1;
+        if (paddingPreviewCounter) {
+            paddingPreviewCounter.textContent = total
+                ? `${currentIndex + 1} / ${total}`
+                : '0 / 0';
+        }
+        if (paddingPrevBtn) paddingPrevBtn.disabled = !canNavigate;
+        if (paddingNextBtn) paddingNextBtn.disabled = !canNavigate;
     }
 
     function formatTitle(filename) {
@@ -957,9 +1580,17 @@ document.addEventListener('DOMContentLoaded', () => {
             // Use object URL
             const url = URL.createObjectURL(drawableFile);
 
-            img.onload = () => {
+            img.onload = async () => {
+                try {
                 const imgW = img.naturalWidth || img.width || 512;
                 const imgH = img.naturalHeight || img.height || 512;
+                const pad = getPaddingForImage(imgW, imgH, options);
+                const contentW = imgW + pad.padLeft + pad.padRight;
+                const contentH = imgH + pad.padTop + pad.padBottom;
+
+                if (ctx === previewCtx) {
+                    updatePaddingHint(imgW, imgH, pad, options);
+                }
 
                 let sizeScale = 1;
                 if (options.relativeSize) {
@@ -972,27 +1603,65 @@ document.addEventListener('DOMContentLoaded', () => {
                     headerHeight = Math.max(1, Math.round(options.headerHeight * sizeScale));
                 }
 
-                ctx.canvas.width = imgW;
-                ctx.canvas.height = (titleActive && options.mode === 'add-space') ? imgH + headerHeight : imgH;
+                ctx.canvas.width = contentW;
+                ctx.canvas.height = (titleActive && options.mode === 'add-space') ? contentH + headerHeight : contentH;
+
+                const isBelow = options.position === 'below';
+                const imageX = pad.padLeft;
+                let imageY = pad.padTop;
+                if (titleActive && options.mode === 'add-space' && !isBelow) {
+                    imageY = headerHeight + pad.padTop;
+                }
+
+                const squircle = pad.squircle;
+                const boxW = squircle ? squircle.badgeSize : imgW;
+                const boxH = squircle ? squircle.badgeSize : imgH;
+                const boxX = squircle ? imageX - (pad.squirclePad?.padLeft || 0) : imageX;
+                const boxY = squircle ? imageY - (pad.squirclePad?.padTop || 0) : imageY;
+                const contentTop = (titleActive && options.mode === 'add-space' && !isBelow) ? headerHeight : 0;
+                const contentBottom = (titleActive && options.mode === 'add-space' && isBelow) ? contentH : ctx.canvas.height;
+
+                fillExpandedCanvas(ctx, options, {
+                    canvasW: ctx.canvas.width,
+                    canvasH: ctx.canvas.height,
+                    boxX,
+                    boxY,
+                    boxW,
+                    boxH,
+                    contentTop,
+                    contentBottom
+                });
+
+                if (options.addSquircle && squircle) {
+                    await drawSquircleShape(
+                        ctx,
+                        boxX + squircle.outer,
+                        boxY + squircle.outer,
+                        squircle.size,
+                        options.squircleColor || '#8b5cf6'
+                    );
+                }
+
+                if (options.fillAlphaBackground) {
+                    ctx.fillStyle = options.alphaBackgroundColor || '#FFFFFF';
+                    ctx.fillRect(imageX, imageY, imgW, imgH);
+                }
 
                 if (!titleActive) {
-                    drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
+                    drawAdjustedImage(ctx, img, imageX, imageY, imgW, imgH, options.adjustments);
                 } else {
                     const scaledTextOffset = options.textOffset * sizeScale;
                     const scaledFontSize = Math.max(1, options.fontSize * sizeScale);
 
                     if (options.mode === 'add-space') {
-                        const isBelow = options.position === 'below';
-                        const imageY = isBelow ? 0 : headerHeight;
-                        const headerY = isBelow ? imgH : 0;
+                        const headerY = isBelow ? contentH : 0;
                         ctx.fillStyle = options.bgColor;
                         ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-                        drawAdjustedImage(ctx, img, 0, imageY, imgW, imgH, options.adjustments);
+                        drawAdjustedImage(ctx, img, imageX, imageY, imgW, imgH, options.adjustments);
                     } else {
-                        drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
+                        drawAdjustedImage(ctx, img, imageX, imageY, imgW, imgH, options.adjustments);
                         if (options.mode === 'bleed') {
-                            const isBelow = options.position === 'below';
-                            const rectY = isBelow ? imgH - headerHeight : 0;
+                            const rectY = isBelow ? ctx.canvas.height - headerHeight : 0;
                             ctx.fillStyle = options.bgColor;
                             ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
                         }
@@ -1024,12 +1693,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (options.mode === 'overlay') {
                         textY = ctx.canvas.height * (options.textYPercent / 100);
                     } else if (options.mode === 'add-space') {
-                        const isBelow = options.position === 'below';
-                        const headerY = isBelow ? imgH : 0;
+                        const headerY = isBelow ? contentH : 0;
                         textY = headerY + (headerHeight / 2);
                     } else { // bleed
-                        const isBelow = options.position === 'below';
-                        const rectY = isBelow ? imgH - headerHeight : 0;
+                        const rectY = isBelow ? ctx.canvas.height - headerHeight : 0;
                         textY = rectY + (headerHeight / 2) + scaledTextOffset;
                     }
 
@@ -1044,12 +1711,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         imgH,
                         headerHeight,
                         sizeScale,
-                        titleActive
+                        titleActive,
+                        contentH
                     });
                 }
 
                 URL.revokeObjectURL(url); // Clean up memory
                 resolve();
+                } catch (error) {
+                    URL.revokeObjectURL(url);
+                    reject(error);
+                }
             };
 
             img.onerror = (e) => {
@@ -1063,7 +1735,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawSequenceNumber(ctx, options, sequenceIndex, layout) {
-        const { imgH, headerHeight, sizeScale, titleActive } = layout;
+        const { imgH, headerHeight, sizeScale, titleActive, contentH } = layout;
         const canvasW = ctx.canvas.width;
         const canvasH = ctx.canvas.height;
         const offset = Math.max(0, options.numberOffset * sizeScale);
@@ -1076,6 +1748,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const clearsTitleBand = titleActive && headerHeight > 0;
         const titleAbove = clearsTitleBand && options.position === 'above';
         const titleBelow = clearsTitleBand && options.position === 'below';
+        const paddedContentH = contentH || imgH;
 
         let x;
         let y;
@@ -1096,7 +1769,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (titleBelow) {
                 // Sit above the title band (add-space extension or bleed overlay)
                 const bandTop = options.mode === 'add-space'
-                    ? imgH
+                    ? paddedContentH
                     : (canvasH - headerHeight);
                 y = bandTop - offset;
             } else {
@@ -1122,6 +1795,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function renderPreview() {
+        renderPaddingPreview();
         if (imageFiles.length === 0) return;
         try {
             await drawImageWithTitle(previewCtx, imageFiles[currentIndex], imageTitles[currentIndex], getTitleOptionsFromUI(), currentIndex);
@@ -1338,6 +2012,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateFolderDropdown() {
+        availableFolders = sortFolderList(availableFolders);
         folderSelect.innerHTML = '';
         availableFolders.forEach(folderName => {
             const option = document.createElement('option');
@@ -1443,7 +2118,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.draggable = true;
 
             li.innerHTML = `
-                <span style="pointer-events:none;">${file.name}</span>
+                <span style="pointer-events:none;">${file.name}${imageFolders[index] && imageFolders[index] !== '(Root)' ? ` <span style="color:var(--text-muted);">(${imageFolders[index]})</span>` : ''}</span>
                 <span style="color:var(--text-secondary); pointer-events:none;">☰</span>
             `;
 
@@ -3088,6 +3763,25 @@ document.addEventListener('DOMContentLoaded', () => {
             numberSize: parseInt(numberSizeSlider.value, 10),
             numberStart: parseInt(numberStartInput.value, 10) || 1,
             numberColor: numberColorPicker.value,
+            addPadding: addPaddingToggle.checked,
+            fitAspect: fitAspectToggle.checked,
+            paddingMode: paddingModeSelect.value,
+            paddingAmount: paddingModeSelect.value === 'relative'
+                ? (parseFloat(paddingPercentInput.value) || 0)
+                : (parseFloat(paddingPxInput.value) || 0),
+            paddingAspect: paddingAspectSelect.value,
+            paddingAspectW: parseFloat(paddingAspectWInput.value) || 1,
+            paddingAspectH: parseFloat(paddingAspectHInput.value) || 1,
+            paddingColor: paddingColorPicker.value,
+            paddingAlpha: paddingAlphaToggle.checked,
+            paddingFlatten: (paddingAlphaToggle.checked || squircleToggle.checked) && !formatSupportsAlpha(exportFormatSelect.value),
+            fillAlphaBackground: fillAlphaToggle.checked,
+            alphaBackgroundColor: fillAlphaColorPicker.value,
+            addSquircle: squircleToggle.checked,
+            squircleShape: squircleShapeSelect.value,
+            squircleColor: squircleColorPicker.value,
+            squircleInnerPad: parseFloat(squircleInnerSlider.value) || 0,
+            squircleOuterPad: parseFloat(squircleOuterSlider.value) || 0,
             adjustments: getImageAdjustmentsFromUI()
         };
     }

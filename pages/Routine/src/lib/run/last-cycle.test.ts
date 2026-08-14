@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	canContinueFromLastCycle,
-	getContinuableCompletedIds,
 	getLastCycle,
 	getLastCyclePercent,
+	getOmittedTaskIds,
 	saveLastCycle
 } from './last-cycle';
 import type { Routine } from '$lib/types/routine';
@@ -48,14 +48,14 @@ describe('last-cycle', () => {
 		store.clear();
 	});
 
-	it('saves completed ids from a finished cycle', () => {
+	it('saves completed and not-today ids from a finished cycle', () => {
 		saveLastCycle('r1', {
 			t1: 'completed',
 			t2: 'skipped',
 			t3: 'completed'
 		});
 		expect(getLastCycle('r1')?.completedTaskIds).toEqual(['t1', 't3']);
-		expect(getLastCycle('r1')?.percentComplete).toBe(67);
+		expect(getLastCycle('r1')?.skippedTaskIds).toEqual(['t2']);
 		expect(getLastCyclePercent(routine)).toBe(67);
 	});
 
@@ -78,16 +78,26 @@ describe('last-cycle', () => {
 		expect(getLastCyclePercent(routine)).toBe(33);
 	});
 
-	it('filters out deleted tasks', () => {
-		saveLastCycle('r1', { t1: 'completed', gone: 'completed', t2: 'pending' });
-		expect(getContinuableCompletedIds(routine)).toEqual(['t1']);
+	it('filters out deleted tasks from omitted ids', () => {
+		saveLastCycle('r1', { t1: 'completed', gone: 'completed', t2: 'skipped' });
+		expect(getOmittedTaskIds(routine)).toEqual(['t1', 't2']);
 	});
 
-	it('allows continue only when some work remains', () => {
+	it('allows continue only when some leftover work remains', () => {
 		expect(canContinueFromLastCycle(routine)).toBe(false);
-		saveLastCycle('r1', { t1: 'completed', t2: 'skipped', t3: 'pending' });
+		saveLastCycle('r1', { t1: 'completed', t2: 'skipped', t3: 'later' });
 		expect(canContinueFromLastCycle(routine)).toBe(true);
+		expect(getOmittedTaskIds(routine)).toEqual(['t1', 't2']);
 		saveLastCycle('r1', { t1: 'completed', t2: 'completed', t3: 'completed' });
+		expect(canContinueFromLastCycle(routine)).toBe(false);
+	});
+
+	it('merges a continue run into the previous cycle', () => {
+		saveLastCycle('r1', { t1: 'completed', t2: 'skipped', t3: 'later' });
+		saveLastCycle('r1', { t3: 'completed' });
+		expect(getLastCycle('r1')?.completedTaskIds).toEqual(['t1', 't3']);
+		expect(getLastCycle('r1')?.skippedTaskIds).toEqual(['t2']);
+		expect(getLastCyclePercent(routine)).toBe(67);
 		expect(canContinueFromLastCycle(routine)).toBe(false);
 	});
 });

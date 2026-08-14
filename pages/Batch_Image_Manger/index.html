@@ -61,7 +61,8 @@
         <section id="upload-section" class="glass-card">
             <h2>1. Upload Images & Data</h2>
             <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                Select a folder of images or SVGs. Optionally upload a CSV to auto-categorize.
+                Select a folder of images or SVGs. Subfolders are kept in the UI and in the export ZIP.
+                Optionally upload a CSV to auto-categorize.
                 For SVG rename, set Format to Original or SVG so vectors are kept.
             </p>
             <div class="setup-options">
@@ -198,6 +199,164 @@
                                 <label for="number-color-picker">Num Color</label>
                                 <input type="color" id="number-color-picker" value="#FFFFFF" />
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group-sub padding-panel">
+                        <div class="control-group">
+                            <label for="fit-aspect-toggle" class="checkbox-label toggle-switch" title="Pad each image to a target ratio first, without cropping.">
+                                <input type="checkbox" id="fit-aspect-toggle" />
+                                <span class="toggle-knob"></span>
+                                Fit Aspect Ratio
+                            </label>
+                        </div>
+                        <div id="aspect-options-wrapper" class="disabled">
+                            <div class="control-group" id="padding-aspect-group">
+                                <label for="padding-aspect-select">Target Ratio</label>
+                                <select id="padding-aspect-select">
+                                    <option value="1:1" selected>1:1 Square</option>
+                                    <option value="4:5">4:5 Portrait</option>
+                                    <option value="5:4">5:4 Landscape</option>
+                                    <option value="3:4">3:4 Portrait</option>
+                                    <option value="4:3">4:3 Landscape</option>
+                                    <option value="2:3">2:3 Portrait</option>
+                                    <option value="3:2">3:2 Landscape</option>
+                                    <option value="9:16">9:16 Vertical</option>
+                                    <option value="16:9">16:9 Widescreen</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="control-group hidden" id="padding-aspect-custom-group">
+                                <label for="padding-aspect-w">Custom W : H</label>
+                                <div class="filename-inputs">
+                                    <input type="number" id="padding-aspect-w" min="1" step="1" value="1" title="Width ratio" />
+                                    <span style="color:var(--text-muted)">:</span>
+                                    <input type="number" id="padding-aspect-h" min="1" step="1" value="1" title="Height ratio" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="control-group-divider"></div>
+
+                        <div class="control-group">
+                            <label for="add-padding-toggle" class="checkbox-label toggle-switch">
+                                <input type="checkbox" id="add-padding-toggle" />
+                                <span class="toggle-knob"></span>
+                                Add Padding
+                            </label>
+                        </div>
+                        <div id="padding-options-wrapper" class="disabled">
+                            <div class="control-group">
+                                <label for="padding-mode-select">Mode</label>
+                                <select id="padding-mode-select">
+                                    <option value="absolute" selected>Absolute (px)</option>
+                                    <option value="relative">Relative (%)</option>
+                                </select>
+                            </div>
+                            <div class="control-group" id="padding-absolute-group">
+                                <label for="padding-px-slider">Per side: <span id="padding-px-value">50</span>px</label>
+                                <input type="range" id="padding-px-slider" min="0" max="1000" value="50" step="1" />
+                                <input type="number" id="padding-px-input" min="0" max="9999" value="50" step="1" />
+                            </div>
+                            <div class="control-group hidden" id="padding-relative-group">
+                                <label for="padding-percent-slider">Per side: <span id="padding-percent-value">10</span>%</label>
+                                <input type="range" id="padding-percent-slider" min="0" max="100" value="10" step="1" />
+                                <input type="number" id="padding-percent-input" min="0" max="500" value="10" step="1" />
+                            </div>
+                        </div>
+
+                        <div id="padding-fill-wrapper" class="disabled">
+                            <div class="control-group" id="padding-color-group">
+                                <label for="padding-color-picker">Pad Colour</label>
+                                <input type="color" id="padding-color-picker" value="#FFFFFF" />
+                            </div>
+                            <div class="control-group">
+                                <label for="padding-alpha-toggle" class="checkbox-label toggle-switch" title="Fully transparent padding. Kept for PNG, WebP, and AVIF. JPEG will use the pad colour instead.">
+                                    <input type="checkbox" id="padding-alpha-toggle" />
+                                    <span class="toggle-knob"></span>
+                                    Transparent (Alpha)
+                                </label>
+                            </div>
+                            <p id="padding-hint" class="padding-hint">Aspect ratio is applied first, then padding is added around that result. Both use the pad colour.</p>
+                            <p id="padding-format-warning" class="padding-format-warning hidden">JPEG has no alpha — transparent padding and squircle corners will use the pad colour.</p>
+                            <div id="padding-preview-wrap" class="padding-preview-wrap hidden">
+                                <div class="padding-preview-nav">
+                                    <button type="button" id="padding-prev-btn" class="nav-btn" aria-label="Previous image">&larr;</button>
+                                    <div class="padding-preview-frame">
+                                        <canvas id="padding-preview-canvas"></canvas>
+                                    </div>
+                                    <button type="button" id="padding-next-btn" class="nav-btn" aria-label="Next image">&rarr;</button>
+                                </div>
+                                <p id="padding-preview-counter" class="padding-preview-counter">0 / 0</p>
+                                <p id="padding-preview-caption" class="padding-hint"></p>
+                            </div>
+                        </div>
+
+                        <div class="control-group-divider"></div>
+
+                        <div class="control-group">
+                            <label for="squircle-toggle" class="checkbox-label toggle-switch" title="Place every image on a Perfect Squircle background. Useful for logos.">
+                                <input type="checkbox" id="squircle-toggle" />
+                                <span class="toggle-knob"></span>
+                                Squircle Background
+                            </label>
+                        </div>
+                        <div id="squircle-options-wrapper" class="disabled">
+                            <div class="control-group">
+                                <label for="squircle-shape-select">Squircle</label>
+                                <select id="squircle-shape-select">
+                                    <option value="perfect" selected>Perfect Squircle</option>
+                                </select>
+                            </div>
+                            <div class="control-group squircle-swatch-group">
+                                <label>Preview</label>
+                                <canvas id="squircle-shape-preview" width="56" height="56" aria-hidden="true"></canvas>
+                            </div>
+                            <div class="control-group">
+                                <label for="squircle-color-picker">Squircle Colour</label>
+                                <input type="color" id="squircle-color-picker" value="#8b5cf6" />
+                            </div>
+                            <div class="control-group">
+                                <label>Presets</label>
+                                <div class="alpha-bg-presets">
+                                    <button type="button" class="mini-btn squircle-preset-btn" data-squircle-color="#8b5cf6">Purple</button>
+                                    <button type="button" class="mini-btn squircle-preset-btn" data-squircle-color="#FFFFFF">White</button>
+                                    <button type="button" class="mini-btn squircle-preset-btn" data-squircle-color="#000000">Black</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label for="squircle-inner-slider">Image padding: <span id="squircle-inner-value">12</span>%</label>
+                                <input type="range" id="squircle-inner-slider" min="0" max="40" value="12" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label for="squircle-outer-slider">Squircle padding: <span id="squircle-outer-value">0</span>%</label>
+                                <input type="range" id="squircle-outer-slider" min="0" max="40" value="0" step="1" />
+                            </div>
+                            <p class="padding-hint">Applied to every image. Image padding sits inside the squircle around the logo. Squircle padding sits outside the shape. Existing aspect ratio and padding still apply around the badge.</p>
+                        </div>
+
+                        <div class="control-group-divider"></div>
+
+                        <div class="control-group">
+                            <label for="fill-alpha-toggle" class="checkbox-label toggle-switch" title="Replace transparent pixels in PNG, WebP, and AVIF with a solid colour.">
+                                <input type="checkbox" id="fill-alpha-toggle" />
+                                <span class="toggle-knob"></span>
+                                Fill Alpha Background
+                            </label>
+                        </div>
+                        <div id="fill-alpha-options-wrapper" class="disabled">
+                            <div class="control-group">
+                                <label for="fill-alpha-color-picker">Background</label>
+                                <input type="color" id="fill-alpha-color-picker" value="#FFFFFF" />
+                            </div>
+                            <div class="control-group">
+                                <label>Presets</label>
+                                <div class="alpha-bg-presets">
+                                    <button type="button" class="mini-btn fill-alpha-preset-btn" data-alpha-bg="#FFFFFF">White</button>
+                                    <button type="button" class="mini-btn fill-alpha-preset-btn" data-alpha-bg="#000000">Black</button>
+                                </div>
+                            </div>
+                            <p class="padding-hint">Fills transparent pixels in PNG, WebP, and AVIF with this colour. JPEG is already opaque. Applies to every uploaded image.</p>
                         </div>
                     </div>
 

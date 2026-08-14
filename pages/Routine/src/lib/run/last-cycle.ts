@@ -5,6 +5,7 @@ const STORAGE_KEY = 'routine-last-cycles';
 
 export type LastCycleRecord = {
 	completedTaskIds: string[];
+	skippedTaskIds?: string[];
 	updatedAt: string;
 	percentComplete?: number;
 };
@@ -32,20 +33,46 @@ function writeMap(map: LastCycleMap): void {
 	}
 }
 
-/** Persist which tasks were completed in the finished cycle. */
+function uniqueLiving(ids: Iterable<string>, living: Set<string>): string[] {
+	const seen = new Set<string>();
+	for (const id of ids) {
+		if (living.has(id)) seen.add(id);
+	}
+	return [...seen];
+}
+
+/**
+ * Persist last-cycle outcomes. A continue-from-last run only includes leftover
+ * tasks, so this merges into the previous record instead of replacing it.
+ */
 export function saveLastCycle(
 	routineId: string,
 	statuses: Record<string, TaskStatus>
 ): void {
-	const completedTaskIds = Object.entries(statuses)
-		.filter(([, status]) => status === 'completed')
-		.map(([taskId]) => taskId);
-	const total = Object.keys(statuses).length;
+	const previous = getLastCycle(routineId);
+	const completed = new Set(previous?.completedTaskIds ?? []);
+	const skipped = new Set(previous?.skippedTaskIds ?? []);
+
+	for (const [taskId, status] of Object.entries(statuses)) {
+		completed.delete(taskId);
+		skipped.delete(taskId);
+		if (status === 'completed') completed.add(taskId);
+		if (status === 'skipped') skipped.add(taskId);
+	}
+
+	const completedTaskIds = [...completed];
+	const skippedTaskIds = [...skipped];
+	const resolved = completedTaskIds.length + skippedTaskIds.length;
+	const laterHere = Object.values(statuses).filter(
+		(status) => status === 'later' || status === 'pending'
+	).length;
+	const total = resolved + laterHere;
 	const percentComplete = total === 0 ? 0 : Math.round((completedTaskIds.length / total) * 100);
 
 	const map = readMap();
 	map[routineId] = {
 		completedTaskIds,
+		skippedTaskIds,
 		percentComplete,
 		updatedAt: new Date().toISOString()
 	};
@@ -62,30 +89,30 @@ export function getLastCycle(routineId: string): LastCycleRecord | null {
 export function getLastCyclePercent(routine: Routine): number | null {
 	const record = getLastCycle(routine.id);
 	if (!record) return null;
-	if (typeof record.percentComplete === 'number' && Number.isFinite(record.percentComplete)) {
-		return Math.round(Math.min(100, Math.max(0, record.percentComplete)));
-	}
 	if (routine.tasks.length === 0) return 0;
 	const living = new Set(routine.tasks.map((task) => task.id));
-	const completed = record.completedTaskIds.filter((id) => living.has(id)).length;
+	const completed = uniqueLiving(record.completedTaskIds, living).length;
 	return Math.round((completed / routine.tasks.length) * 100);
 }
 
-/** Completed task ids from the last cycle that still exist on the routine. */
-export function getContinuableCompletedIds(routine: Routine): string[] {
+/** Completed + not-today task ids from the last cycle that still exist. */
+export function getOmittedTaskIds(routine: Routine): string[] {
 	const record = getLastCycle(routine.id);
 	if (!record) return [];
 	const living = new Set(routine.tasks.map((task) => task.id));
-	return record.completedTaskIds.filter((id) => living.has(id));
+	return uniqueLiving(
+		[...record.completedTaskIds, ...(record.skippedTaskIds ?? [])],
+		living
+	);
 }
 
 /**
- * True when there is at least one remembered completion and at least one task
- * still left to do (so "from last" is useful).
+ * True when last cycle left some tasks out (completed or not today) and some
+ * leftover work remains — so "from last" is useful.
  */
 export function canContinueFromLastCycle(routine: Routine): boolean {
 	if (routine.tasks.length === 0) return false;
-	const completed = new Set(getContinuableCompletedIds(routine));
-	if (completed.size === 0) return false;
-	return routine.tasks.some((task) => !completed.has(task.id));
+	const omitted = new Set(getOmittedTaskIds(routine));
+	if (omitted.size === 0) return false;
+	return routine.tasks.some((task) => !omitted.has(task.id));
 }

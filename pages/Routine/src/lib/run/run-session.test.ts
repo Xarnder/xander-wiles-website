@@ -93,40 +93,46 @@ describe('run-session', () => {
 		expect(getProgressPercent(session)).toBe(0);
 	});
 
-	it('continues from last by pre-completing remembered tasks', () => {
+	it('continues from last by omitting completed and not-today tasks', () => {
 		const session = createRunSession(makeRoutine(tasks), ['t1', 't3']);
-		expect(session.statuses.t1).toBe('completed');
-		expect(session.statuses.t2).toBe('pending');
-		expect(session.statuses.t3).toBe('completed');
-		expect(session.currentIndex).toBe(1);
+		expect(session.tasks.map((task) => task.id)).toEqual(['t2']);
+		expect(session.statuses).toEqual({ t2: 'pending' });
+		expect(session.currentIndex).toBe(0);
 		expect(session.phase).toBe('running');
-		expect(getProgressPercent(session)).toBe(67);
+		expect(getProgressPercent(session)).toBe(0);
 	});
 
-	it('opens summary when continue marks every task done', () => {
+	it('opens summary when continue omits every task', () => {
 		const session = createRunSession(makeRoutine(tasks), ['t1', 't2', 't3']);
+		expect(session.tasks).toEqual([]);
 		expect(session.phase).toBe('summary');
-		expect(getProgressPercent(session)).toBe(100);
+		expect(getProgressPercent(session)).toBe(0);
 	});
 
-	it('skips already-completed tasks when advancing from a continue gap', () => {
-		let session = createRunSession(makeRoutine(tasks), ['t1', 't3']);
-		expect(session.currentIndex).toBe(1);
-		expect(getProgressPercent(session)).toBe(67);
+	it('runs only leftover tasks after omitting completed and skipped', () => {
+		let session = createRunSession(makeRoutine(tasks), ['t1']);
+		expect(session.tasks.map((task) => task.id)).toEqual(['t2', 't3']);
+		expect(session.currentIndex).toBe(0);
+		expect(getProgressPercent(session)).toBe(0);
 		session = completeCurrent(session);
 		expect(session.statuses.t2).toBe('completed');
+		expect(session.currentIndex).toBe(1);
+		expect(session.phase).toBe('running');
+		session = completeCurrent(session);
 		expect(session.phase).toBe('summary');
 		expect(getProgressPercent(session)).toBe(100);
 	});
 
-	it('jumps forward to the next pending after a later task was pre-completed', () => {
+	it('keeps leftover order when omitted tasks sit in the middle', () => {
 		const longer: RoutineTask[] = [...tasks, { id: 't4', title: 'Four', order: 3 }];
 		let session = createRunSession(makeRoutine(longer), ['t1', 't3']);
-		expect(session.currentIndex).toBe(1); // t2
+		expect(session.tasks.map((task) => task.id)).toEqual(['t2', 't4']);
+		expect(session.currentIndex).toBe(0);
 		session = completeCurrent(session);
 		expect(session.phase).toBe('running');
-		expect(session.currentIndex).toBe(3); // t4, skipping completed t3
-		expect(getProgressPercent(session)).toBe(75);
+		expect(session.currentIndex).toBe(1);
+		expect(session.tasks[1]?.id).toBe('t4');
+		expect(getProgressPercent(session)).toBe(50);
 	});
 
 	it('defers a task as later and finishes the rest without coming back', () => {

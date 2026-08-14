@@ -13,8 +13,8 @@ import {
 import { deriveSummary } from '$lib/run/summary';
 import {
 	canContinueFromLastCycle,
-	getContinuableCompletedIds,
 	getLastCyclePercent,
+	getOmittedTaskIds,
 	saveLastCycle
 } from '$lib/run/last-cycle';
 import type { Routine } from '$lib/types/routine';
@@ -83,9 +83,8 @@ export function startRun(routine: Routine, mode: StartMode = 'fresh'): void {
 	if (routine.tasks.length === 0) {
 		throw new Error('This routine has no tasks.');
 	}
-	const preCompleted =
-		mode === 'continue' ? getContinuableCompletedIds(routine) : [];
-	session = createRunSession(routine, preCompleted);
+	const omitIds = mode === 'continue' ? getOmittedTaskIds(routine) : [];
+	session = createRunSession(routine, omitIds);
 	persist();
 }
 

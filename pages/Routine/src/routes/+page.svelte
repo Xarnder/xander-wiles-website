@@ -92,7 +92,7 @@
 		<div>
 			<p class="brand">Routine Manager</p>
 			<h1>Your routines</h1>
-			<p>Start fresh, or pick up from last cycle’s completions.</p>
+			<p>Start fresh, or continue leftover tasks from last time.</p>
 		</div>
 		<button type="button" class="btn btn-ghost sign-out-btn" onclick={() => signOutUser()}
 			>Sign Out</button
