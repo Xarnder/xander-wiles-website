@@ -184,6 +184,11 @@ export function isExcludedFromThisWeek(event) {
   return freq === 'daily' || freq === 'weekly';
 }
 
+/** Explicit opt-out of the timeline axis (list cards still show). */
+export function isHiddenFromTimeline(event) {
+  return event?.hideFromTimeline === true;
+}
+
 /** Next occurrence falls within the next 7 days and is not opted out. */
 export function isThisWeekVm(vm, nowMs = Date.now()) {
   if (!vm || isExcludedFromThisWeek(vm.event)) return false;

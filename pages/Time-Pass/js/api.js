@@ -26,6 +26,7 @@ import {
   isValidColor,
   normalizeCompactCueUnits,
   normalizeCompactCueFormat,
+  normalizeEventsView,
   normalizeUnits,
 } from './constants.js';
 import {
@@ -95,6 +96,7 @@ export function validateEventInput(raw) {
 
   /** User pin: stay at the top of the list regardless of sort. */
   const pinned = raw.pinned === true;
+  const hideFromTimeline = raw.hideFromTimeline === true;
 
   return {
     ok: true,
@@ -113,6 +115,7 @@ export function validateEventInput(raw) {
       emoji,
       excludeFromThisWeek,
       pinned,
+      hideFromTimeline,
     },
   };
 }
@@ -148,6 +151,10 @@ function quickCategoryPersistFields(settings) {
   };
 }
 
+function eventsViewField(settings) {
+  return { eventsView: normalizeEventsView(settings?.eventsView) };
+}
+
 export function subscribeSettings(uid, onData, onError) {
   assertConfigured();
   return onSnapshot(
@@ -165,6 +172,7 @@ export function subscribeSettings(uid, onData, onError) {
           categories: [DEFAULT_CATEGORY],
           quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
           quickCategories: null,
+          eventsView: 'list',
           filters: {
             direction: 'all',
             recurring: 'all',
@@ -197,6 +205,7 @@ export async function ensureSettings(uid, partial = {}) {
       categories: [DEFAULT_CATEGORY],
       quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
       quickCategories: null,
+      eventsView: 'list',
       filters: {
         direction: 'all',
         recurring: 'all',
@@ -258,7 +267,7 @@ export async function updateEvent(uid, eventId, raw) {
  * Multi-edit: patch only allowed fields on many events.
  * Never writes name, date, time, timeZone, id, or createdAt.
  * `patch` may include: color, units, category, recurrence, showSinceLast,
- * showSinceFirst, showCycleProgress, excludeFromThisWeek, pinned.
+ * showSinceFirst, showCycleProgress, excludeFromThisWeek, pinned, hideFromTimeline.
  * Optional `options.colorById` maps event id → palette colour (overrides patch.color per event).
  */
 export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [], options = {}) {
@@ -316,6 +325,7 @@ export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [
       showCycleProgress: existing.showCycleProgress !== false,
       excludeFromThisWeek: existing.excludeFromThisWeek,
       pinned: existing.pinned === true,
+      hideFromTimeline: existing.hideFromTimeline === true,
       ...eventSafe,
     };
 
@@ -346,6 +356,9 @@ export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [
     }
     if ('pinned' in eventSafe) {
       firestorePatch.pinned = v.pinned;
+    }
+    if ('hideFromTimeline' in eventSafe) {
+      firestorePatch.hideFromTimeline = v.hideFromTimeline;
     }
     // When frequency becomes daily/weekly and exclude wasn't explicitly patched, default on.
     if (
@@ -415,6 +428,9 @@ export function sanitizeMultiEditPatch(patch = {}) {
   if (Object.prototype.hasOwnProperty.call(patch, 'pinned')) {
     out.pinned = patch.pinned === true;
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'hideFromTimeline')) {
+    out.hideFromTimeline = patch.hideFromTimeline === true;
+  }
   return out;
 }
 
@@ -482,6 +498,7 @@ export async function deleteCategory(uid, categoryName, events, settings) {
       quickCategorySlots: settings?.quickCategorySlots,
       quickCategories: settings?.quickCategories,
     }),
+    ...eventsViewField(settings),
   });
 
   return { reassigned: affected.length, categories: nextCategories };
@@ -552,6 +569,7 @@ export async function renameCategory(uid, fromName, toName, events, settings) {
       quickCategorySlots: settings?.quickCategorySlots,
       quickCategories: nextQuick,
     }),
+    ...eventsViewField(settings),
   });
 
   return {
@@ -594,6 +612,7 @@ export async function seedEventsIfNeeded(uid, events, settings) {
           : 'atmosphere',
       categories: normalizeCategories(settings?.categories),
       ...quickCategoryPersistFields(settings),
+      ...eventsViewField(settings),
       filters: settings?.filters || {
         direction: 'all',
         recurring: 'all',
@@ -685,6 +704,7 @@ export function exportPayload(events, settings) {
           ? settings.theme
           : 'atmosphere',
       ...quickCategoryPersistFields(settings),
+      ...eventsViewField(settings),
     },
     events: events.map((e) => ({
       id: e.id,
@@ -702,6 +722,7 @@ export function exportPayload(events, settings) {
       showCycleProgress: e.showCycleProgress !== false,
       excludeFromThisWeek: e.excludeFromThisWeek === true,
       pinned: e.pinned === true,
+      hideFromTimeline: e.hideFromTimeline === true,
       createdAt: e.createdAt || null,
       updatedAt: e.updatedAt || null,
     })),

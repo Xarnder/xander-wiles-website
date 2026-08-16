@@ -1,0 +1,387 @@
+/* Vertical timeline view — tokens from styles/tokens.css */
+
+.timeline-view:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: min(70dvh, 28rem);
+  width: 100%;
+}
+
+.timeline-view[hidden] {
+  display: none !important;
+}
+
+.timeline-scroller {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 16rem;
+  max-height: calc(100dvh - 11rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--glass-bg) 80%, transparent);
+  outline: none;
+}
+
+.timeline-scroller:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.timeline-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+.timeline-layer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.timeline-track {
+  position: absolute;
+  top: 0;
+  left: 1.35rem;
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.timeline-now,
+.timeline-marker,
+.timeline-gap,
+.timeline-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.timeline-now {
+  height: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.timeline-now::before {
+  content: '';
+  position: absolute;
+  left: 0.95rem;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-dim);
+}
+
+.timeline-now-label {
+  position: absolute;
+  left: 2.15rem;
+  top: -0.7rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-1) 88%, var(--glass-bg));
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.timeline-marker {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.35rem 0.6rem 0.35rem 2.35rem;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.timeline-marker::before {
+  content: '';
+  position: absolute;
+  left: 1.05rem;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--event-color, var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--event-color, var(--accent)) 55%, transparent);
+}
+
+.timeline-marker:hover,
+.timeline-marker:focus-visible {
+  color: var(--text);
+}
+
+.timeline-marker:hover::before,
+.timeline-marker:focus-visible::before {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--event-color, var(--accent)) 80%, transparent);
+}
+
+.timeline-marker-title-row,
+.timeline-marker-stack-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: min(100%, 26rem);
+}
+
+.timeline-marker-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.timeline-marker-date {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.timeline-marker.is-cluster {
+  background: color-mix(in srgb, var(--glass-bg) 88%, transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.timeline-marker.is-cluster:hover::before,
+.timeline-marker.is-cluster:focus-visible::before {
+  box-shadow:
+    0 5px 0 -1px color-mix(in srgb, var(--event-color, var(--accent)) 75%, white),
+    0 9px 0 -3px color-mix(in srgb, var(--event-color, var(--accent)) 45%, white),
+    0 0 16px color-mix(in srgb, var(--event-color, var(--accent)) 80%, transparent);
+}
+
+.timeline-marker.is-cluster .timeline-marker-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.timeline-marker-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  width: 100%;
+  max-width: min(100%, 26rem);
+}
+
+.timeline-marker-stack-item {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.timeline-marker-stack-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-marker-stack-item.is-more {
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.timeline-marker-cue {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.timeline-marker-badges {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.timeline-gap {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding-left: 2.15rem;
+  z-index: 1;
+}
+
+.timeline-gap-chip {
+  display: inline-block;
+  max-width: calc(100% - 2.5rem);
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-1) 82%, var(--glass-bg));
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-gap.is-void .timeline-gap-chip {
+  border-style: dashed;
+  color: var(--text);
+}
+
+.timeline-tick {
+  pointer-events: none;
+  height: 0;
+  z-index: 1;
+}
+
+.timeline-tick-line {
+  position: absolute;
+  left: 0.45rem;
+  right: 0.6rem;
+  top: 0;
+  height: 0;
+  border-top: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.timeline-tick.is-year .timeline-tick-line {
+  border-top-width: 2px;
+  border-top-style: solid;
+  border-top-color: color-mix(in srgb, var(--text) 42%, transparent);
+}
+
+.timeline-tick.is-month .timeline-tick-line {
+  left: 1.15rem;
+  right: 1.1rem;
+  border-top-width: 1px;
+  border-top-style: dashed;
+  border-top-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+.timeline-tick-label {
+  position: absolute;
+  left: 2.15rem;
+  top: 0.12rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.timeline-tick.is-month .timeline-tick-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+.timeline-tick-label[hidden] {
+  display: none !important;
+}
+
+.timeline-fab {
+  position: absolute;
+  right: max(0.75rem, var(--safe-right));
+  bottom: max(0.75rem, var(--safe-bottom));
+  z-index: 6;
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(60, 240, 255, 0.45);
+  background: linear-gradient(135deg, rgba(60, 240, 255, 0.22), rgba(91, 140, 255, 0.16));
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 0 16px var(--accent-dim);
+}
+
+.timeline-fab:hover {
+  border-color: var(--accent);
+}
+
+.timeline-fab[hidden] {
+  display: none !important;
+}
+
+.timeline-chooser {
+  position: absolute;
+  left: 2.2rem;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 10rem;
+  max-width: min(18rem, calc(100% - 3rem));
+  padding: 0.35rem;
+}
+
+.timeline-chooser-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  min-height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.timeline-chooser-item:hover,
+.timeline-chooser-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-now::before {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .timeline-view:not([hidden]) {
+    min-height: 12rem;
+  }
+
+  body.is-timeline-view .timeline-scroller {
+    max-height: calc(100dvh - var(--mobile-footer-stack, 7.5rem) - 1.25rem);
+    min-height: 12rem;
+    border-radius: 12px;
+  }
+
+  body.is-timeline-view .timeline-fab {
+    display: none !important;
+  }
+}

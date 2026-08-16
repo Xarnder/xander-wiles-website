@@ -35,6 +35,15 @@ export const HARD_EVENT_CAP = 250;
 
 export const SCHEMA_VERSION = 1;
 
+/** Content view: card list or vertical timeline. */
+export const EVENTS_VIEW_LIST = 'list';
+export const EVENTS_VIEW_TIMELINE = 'timeline';
+export const EVENTS_VIEW_STORAGE_KEY = 'time-pass:events-view';
+
+export function normalizeEventsView(value) {
+  return value === EVENTS_VIEW_TIMELINE ? EVENTS_VIEW_TIMELINE : EVENTS_VIEW_LIST;
+}
+
 /** How many leading units compact cues show (settings; default 2). */
 export const COMPACT_CUE_UNITS_MIN = 1;
 export const COMPACT_CUE_UNITS_MAX = 5;

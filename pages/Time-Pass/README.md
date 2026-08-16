@@ -14,6 +14,12 @@ npm run dev
 
 Open `http://localhost:3000/pages/Time-Pass/`.
 
+Layout unit tests (no browser):
+
+```bash
+node --test pages/Time-Pass/js/timeline-layout.test.js
+```
+
 Guest **read-only** sample events work without Firebase. Sign-in requires configuration below.
 
 ## Firebase setup (required for sign-in / sync)
@@ -66,6 +72,7 @@ Paths:
 - CRUD events with optional time + timezone, curated colours, per-event units
 - Live until / since; recurring daily / weekly (Monday) / monthly / yearly (next + last)
 - Filters, search, JSON export/import, PWA offline shell
+- Vertical **timeline** view (toggle from the list) with relative spacing, pinch-zoom, and jump-to-now
 
 ## Security notes
 

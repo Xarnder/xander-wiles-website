@@ -24,12 +24,15 @@ import {
   setSyncStatus,
   setView,
   needsSecondTick,
+  getLastContentView,
+  writeGuestEventsView,
 } from './store.js';
 import { normalizeCategories, normalizeCategoryName, canDeleteCategory, applyCategoryRename, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded, storedQuickCategories } from './categories.js';
-import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal, preloadIcons } from './ui.js';
+import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal, openEventCardPreview, patchEventCardPreview, preloadIcons } from './ui.js';
+import { patchTimeline, setTimelineHandlers } from './timeline-view.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
-import { COLOR_PALETTE, DEFAULT_UNITS, SOFT_EVENT_CAP } from './constants.js';
+import { COLOR_PALETTE, DEFAULT_UNITS, SOFT_EVENT_CAP, normalizeEventsView } from './constants.js';
 import { applyTheme, readStoredTheme } from './theme.js';
 
 let unsubEvents = null;
@@ -39,6 +42,7 @@ let tickTimer = null;
 let seedAttempted = false;
 let filterPersistTimer = null;
 let lastA11yMinute = -1;
+let lastTimelineLayoutMs = 0;
 
 function isBenignFirestoreError(err) {
   const code = String(err?.code || '');
@@ -70,7 +74,14 @@ function scheduleTick() {
   const delay = needsSecondTick() ? 1000 : 15000;
   tickTimer = setTimeout(() => {
     const now = Date.now();
-    patchListDigits(now);
+    if (state.view === 'timeline') {
+      const relayout = now - lastTimelineLayoutMs >= 14000;
+      patchTimeline(now, { relayout });
+      if (relayout) lastTimelineLayoutMs = now;
+    } else {
+      patchListDigits(now);
+    }
+    patchEventCardPreview(now);
     updateA11ySummary(now);
     scheduleTick();
   }, delay);
@@ -78,7 +89,7 @@ function scheduleTick() {
 
 function updateA11ySummary(nowMs) {
   const live = document.getElementById('a11y-live');
-  if (!live || state.view !== 'list') return;
+  if (!live || (state.view !== 'list' && state.view !== 'timeline')) return;
   const minute = Math.floor(nowMs / 60000);
   if (minute === lastA11yMinute) return;
   lastA11yMinute = minute;
@@ -124,6 +135,7 @@ function persistSettingsSoon(extra = {}) {
           state.settings.quickCategorySlots,
           state.settings.quickCategories
         ),
+        eventsView: normalizeEventsView(state.settings.eventsView || state.view),
         ...extra,
       });
     } catch (err) {
@@ -150,8 +162,9 @@ async function syncCategoriesAfterEvent(category, modalCategories) {
       cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
       compactCueUnits: state.settings.compactCueUnits,
       compactCueFormat: state.settings.compactCueFormat,
-      theme: state.settings.theme,
-      quickCategorySlots: state.settings.quickCategorySlots,
+          theme: state.settings.theme,
+          eventsView: normalizeEventsView(state.settings.eventsView || state.view),
+          quickCategorySlots: state.settings.quickCategorySlots,
       quickCategories: storedQuickCategories(
         next,
         state.settings.quickCategorySlots,
@@ -226,6 +239,15 @@ setUIHandlers({
     await signOutUser();
     toast('Signed out', 'success');
   },
+  onEventsView: (view) => {
+    const next = normalizeEventsView(view);
+    setView(next);
+    patchSettings({ eventsView: next });
+    if (state.mode === 'guest') writeGuestEventsView(next);
+    else persistSettingsSoon({ eventsView: next });
+    const live = document.getElementById('a11y-live');
+    if (live) live.textContent = next === 'timeline' ? 'Timeline view' : 'List view';
+  },
   onFilters: (partial) => {
     const keys = Object.keys(partial);
     const queryOnly = keys.length === 1 && keys[0] === 'query';
@@ -233,8 +255,7 @@ setUIHandlers({
     // Typing in search must not full-notify (that rebuilds the input and steals focus).
     if (queryOnly) {
       setFilters(partial, { silent: true });
-      renderToolbar(Date.now());
-      renderList(Date.now());
+      renderAll(Date.now());
       scheduleTick();
     } else {
       setFilters(partial);
@@ -288,6 +309,9 @@ setUIHandlers({
             partial.quickCategories !== undefined
               ? partial.quickCategories
               : state.settings.quickCategories
+          ),
+          eventsView: normalizeEventsView(
+            partial.eventsView !== undefined ? partial.eventsView : state.settings.eventsView
           ),
         });
       } catch (err) {
@@ -455,6 +479,7 @@ setUIHandlers({
         showSinceFirst: event.showSinceFirst !== false,
         showCycleProgress: event.showCycleProgress !== false,
         excludeFromThisWeek: event.excludeFromThisWeek,
+        hideFromTimeline: event.hideFromTimeline === true,
         emoji: event.emoji || null,
       };
       await createEvent(state.user.uid, payload, state.events.length);
@@ -493,6 +518,12 @@ setUIHandlers({
   },
 });
 
+setTimelineHandlers({
+  onOpenEvent: (event) => openEventCardPreview(event),
+  onSignIn: () => signInWithGoogle(),
+  onAdd: () => openEventModal(null),
+});
+
 function isTypingTarget(el) {
   if (!el) return false;
   const tag = el.tagName;
@@ -506,10 +537,10 @@ function setupKeyboardShortcuts() {
     const modalOpen = Boolean(document.querySelector('#modal-root .modal-backdrop'));
 
     if (e.key === 'Escape') {
-      if (modalOpen) return; // modal trap handles Esc
+      if (modalOpen) return;
       if (state.view === 'settings' || state.view === 'calculator') {
         e.preventDefault();
-        setView('list');
+        setView(getLastContentView());
       }
       return;
     }
@@ -529,26 +560,43 @@ function setupKeyboardShortcuts() {
         return;
       }
       e.preventDefault();
-      if (state.view !== 'list') setView('list');
+      if (state.view === 'settings' || state.view === 'calculator') {
+        setView(getLastContentView());
+      }
       openEventModal(null);
+      return;
+    }
+
+    if (e.key === 't' || e.key === 'T') {
+      if (state.view === 'settings' || state.view === 'calculator') return;
+      e.preventDefault();
+      const next = state.view === 'timeline' ? 'list' : 'timeline';
+      setView(next);
+      patchSettings({ eventsView: next });
+      if (state.mode === 'guest') writeGuestEventsView(next);
+      else persistSettingsSoon({ eventsView: next });
       return;
     }
 
     if (e.key === 's' || e.key === 'S') {
       e.preventDefault();
-      setView(state.view === 'settings' ? 'list' : 'settings');
+      setView(state.view === 'settings' ? getLastContentView() : 'settings');
     }
   });
 }
 
 subscribe(() => {
   renderAll(Date.now());
+  patchEventCardPreview(Date.now());
   scheduleTick();
 });
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    patchListDigits(Date.now());
+    const now = Date.now();
+    if (state.view === 'timeline') patchTimeline(now, { relayout: true });
+    else patchListDigits(now);
+    patchEventCardPreview(now);
     scheduleTick();
   }
 });

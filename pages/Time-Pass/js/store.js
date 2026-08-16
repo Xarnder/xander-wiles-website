@@ -2,8 +2,11 @@ import { createGuestDemoEvents } from './demo-events.js';
 import {
   buildFilteredSortedList,
   buildFilteredSortedSections,
+  filterViewModels,
+  isHiddenFromTimeline,
   listNeedsSecondTick,
   normalizeSort,
+  toViewModel,
 } from './filters.js';
 import { applyTheme, normalizeTheme, readStoredTheme } from './theme.js';
 import {
@@ -15,9 +18,42 @@ import {
   normalizeQuickCategorySlots,
   storedQuickCategories,
 } from './categories.js';
-import { COMPACT_CUE_UNITS_DEFAULT, COMPACT_CUE_FORMAT_DEFAULT, normalizeCompactCueUnits, normalizeCompactCueFormat } from './constants.js';
+import {
+  COMPACT_CUE_UNITS_DEFAULT,
+  COMPACT_CUE_FORMAT_DEFAULT,
+  EVENTS_VIEW_LIST,
+  EVENTS_VIEW_STORAGE_KEY,
+  normalizeCompactCueUnits,
+  normalizeCompactCueFormat,
+  normalizeEventsView,
+} from './constants.js';
 
 const listeners = new Set();
+let lastContentView = EVENTS_VIEW_LIST;
+
+export function readGuestEventsView() {
+  try {
+    return normalizeEventsView(sessionStorage.getItem(EVENTS_VIEW_STORAGE_KEY));
+  } catch {
+    return EVENTS_VIEW_LIST;
+  }
+}
+
+export function writeGuestEventsView(view) {
+  try {
+    sessionStorage.setItem(EVENTS_VIEW_STORAGE_KEY, normalizeEventsView(view));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function isContentView(view = state.view) {
+  return view === 'list' || view === 'timeline';
+}
+
+export function getLastContentView() {
+  return lastContentView === 'timeline' ? 'timeline' : 'list';
+}
 
 export function defaultSettings() {
   return {
@@ -37,6 +73,8 @@ export function defaultSettings() {
     quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
     /** Explicit picks when there are more categories than slots; null = auto. */
     quickCategories: null,
+    /** 'list' | 'timeline' */
+    eventsView: EVENTS_VIEW_LIST,
     filters: {
       direction: 'all',
       recurring: 'all',
@@ -52,7 +90,7 @@ const guestEvents = createGuestDemoEvents();
 export const state = {
   user: null,
   mode: 'guest',
-  view: 'list',
+  view: readGuestEventsView(),
   events: guestEvents,
   settings: {
     ...defaultSettings(),
@@ -66,6 +104,8 @@ export const state = {
   syncReady: true,
   syncing: false,
 };
+
+lastContentView = isContentView(state.view) ? state.view : EVENTS_VIEW_LIST;
 
 export function subscribe(fn) {
   listeners.add(fn);
@@ -86,8 +126,10 @@ export function setUser(user) {
     state.settings = {
       ...defaultSettings(),
       theme: readStoredTheme(),
+      categories: mergeCategoriesFromEvents([DEFAULT_CATEGORY], state.events),
     };
-    state.view = 'list';
+    state.view = readGuestEventsView();
+    lastContentView = isContentView(state.view) ? state.view : EVENTS_VIEW_LIST;
     state.syncReady = true;
     state.syncing = false;
     applyTheme(state.settings.theme);
@@ -100,8 +142,13 @@ export function setUser(user) {
 }
 
 export function setView(view) {
-  if (view === 'settings' || view === 'calculator') state.view = view;
-  else state.view = 'list';
+  if (view === 'settings' || view === 'calculator') {
+    if (isContentView(state.view)) lastContentView = state.view;
+    state.view = view;
+  } else {
+    state.view = normalizeEventsView(view);
+    lastContentView = state.view;
+  }
   notify();
 }
 
@@ -178,8 +225,13 @@ export function setSettings(settings) {
         ? settings.quickCategories
         : base.quickCategories
     ),
+    eventsView: normalizeEventsView(settings?.eventsView ?? base.eventsView),
   };
   applyTheme(state.settings.theme);
+  if (isContentView(state.view)) {
+    state.view = state.settings.eventsView;
+    lastContentView = state.view;
+  }
   notify();
 }
 
@@ -218,6 +270,9 @@ export function patchSettings(partial) {
       next.quickCategorySlots,
       partial.quickCategories !== undefined ? partial.quickCategories : next.quickCategories
     );
+  }
+  if (partial.eventsView !== undefined) {
+    next.eventsView = normalizeEventsView(partial.eventsView);
   }
   state.settings = next;
   if (partial.theme !== undefined) applyTheme(state.settings.theme);
@@ -261,6 +316,11 @@ export function filtersAreActive() {
     (f.category && f.category !== 'all') ||
     Boolean((f.query || '').trim())
   );
+}
+
+export function getTimelineViewModels(nowMs = Date.now()) {
+  const vms = state.events.map((e) => toViewModel(e, nowMs));
+  return filterViewModels(vms, state.settings.filters).filter((vm) => !isHiddenFromTimeline(vm.event));
 }
 
 export function getCategories() {

@@ -22,6 +22,7 @@ import {
   patchSettings,
   filtersAreActive,
   getCategories,
+  getLastContentView,
 } from './store.js';
 import {
   DEFAULT_CATEGORY,
@@ -71,13 +72,14 @@ import {
   OFFSET_UNIT_FIELDS,
 } from './calculator.js';
 import { THEMES } from './theme.js';
-import { SORT_OPTIONS, normalizeSort, vmStatBlocks, isThisWeekVm } from './filters.js';
+import { SORT_OPTIONS, normalizeSort, vmStatBlocks, isThisWeekVm, toViewModel } from './filters.js';
 import {
   parseCsv,
   guessColumnMap,
   rowsToEvents,
   previewMappedRows,
 } from './csv-import.js';
+import { hideTimelineView, jumpToNow, renderTimeline } from './timeline-view.js';
 
 const LAST_COLOR_KEY = 'time-pass:last-color';
 const FILTERS_OPEN_KEY = 'time-pass:filters-open';
@@ -222,6 +224,7 @@ let handlers = {
   onSaveSettings: async () => {},
   onDeleteCategory: async () => {},
   onRenameCategory: async () => {},
+  onEventsView: () => {},
 };
 
 let lastFocus = null;
@@ -503,6 +506,8 @@ export function renderChrome() {
     else if (state.view === 'calculator') {
       brandSub.textContent =
         calcDraft.tool === 'offset' ? 'Add or subtract' : 'Date to date';
+    } else if (state.view === 'timeline') {
+      brandSub.textContent = state.mode === 'guest' ? 'Timeline preview' : 'Timeline';
     } else if (state.mode === 'guest') {
       brandSub.textContent = isFirebaseConfigured
         ? 'Preview — sign in to save'
@@ -527,7 +532,7 @@ export function renderChrome() {
         icon: 'back',
         text: 'Back',
         className: 'btn btn-ghost',
-        onClick: () => setView('list'),
+        onClick: () => setView(getLastContentView()),
       })
     );
     return;
@@ -541,7 +546,7 @@ export function renderChrome() {
         icon: 'back',
         text: 'Events',
         className: 'btn btn-ghost',
-        onClick: () => setView('list'),
+        onClick: () => setView(getLastContentView()),
       })
     );
     actions.appendChild(
@@ -643,6 +648,7 @@ export function renderToolbar(nowMs = Date.now()) {
   );
   const nextToolbarSig = [
     state.mode,
+    state.view,
     density,
     multiSelectMode ? '1' : '0',
     drawerOpenEarly ? '1' : '0',
@@ -804,23 +810,30 @@ export function renderToolbar(nowMs = Date.now()) {
   const searchFamily = el('div', { className: 'filter-family filter-family--search' }, [
     el('div', { className: 'filter-family-head' }, [
       el('span', { className: 'filter-family-label', text: 'Search' }),
-      el('span', { className: 'filter-family-hint', text: 'Combines with When, Type, Category & Order' }),
+      el('span', {
+        className: 'filter-family-hint',
+        text:
+          state.view === 'timeline'
+            ? 'Combines with When, Type & Category'
+            : 'Combines with When, Type, Category & Order',
+      }),
     ]),
     search,
   ]);
 
+  const filterGridKids = [whenFamily, typeFamily, categoryFamily];
+  if (state.view !== 'timeline') filterGridKids.push(orderFamily);
+  filterGridKids.push(searchFamily);
+
   const filtersPanel = el('div', { className: 'filters-panel' }, [
     el('p', {
       className: 'filters-combine-note',
-      text: 'When, Type, Category, Order, and Search work together — choose one option in each group.',
+      text:
+        state.view === 'timeline'
+          ? 'When, Type, Category, and Search work together. Timeline order is always chronological.'
+          : 'When, Type, Category, Order, and Search work together — choose one option in each group.',
     }),
-    el('div', { className: 'filters-grid' }, [
-      whenFamily,
-      typeFamily,
-      categoryFamily,
-      orderFamily,
-      searchFamily,
-    ]),
+    el('div', { className: 'filters-grid' }, filterGridKids),
   ]);
 
   const shown = getViewList(nowMs).length;
@@ -880,10 +893,33 @@ export function renderToolbar(nowMs = Date.now()) {
 
   const collapsedBar = el('div', { className: 'filters-drawer-summary' }, [
     toggle,
-    densityToggle,
   ]);
+  if (state.view !== 'timeline') collapsedBar.appendChild(densityToggle);
 
-  if (state.mode === 'signed-in') {
+  const viewToggle = el('button', {
+    type: 'button',
+    className: `chip${state.view === 'timeline' ? ' is-active' : ''}`,
+    text: state.view === 'timeline' ? 'List' : 'Timeline',
+    'aria-pressed': state.view === 'timeline',
+    title: state.view === 'timeline' ? 'Switch to list' : 'Switch to timeline',
+    onClick: () => handlers.onEventsView?.(state.view === 'timeline' ? 'list' : 'timeline'),
+  });
+  collapsedBar.appendChild(viewToggle);
+
+  if (state.view === 'timeline') {
+    collapsedBar.appendChild(
+      el('button', {
+        type: 'button',
+        className: 'chip chip--now',
+        text: 'Now',
+        'aria-label': 'Jump to now',
+        title: 'Jump to now',
+        onClick: () => jumpToNow(),
+      })
+    );
+  }
+
+  if (state.mode === 'signed-in' && state.view !== 'timeline') {
     const selectToggle = el('button', {
       type: 'button',
       className: `chip${multiSelectMode ? ' is-active' : ''}`,
@@ -2715,13 +2751,18 @@ export function renderAll(nowMs = Date.now()) {
   const listView = document.getElementById('list-view');
   const settingsView = document.getElementById('settings-view');
   const calculatorView = document.getElementById('calculator-view');
+  const timelineView = document.getElementById('timeline-view');
+  const eventList = document.getElementById('event-list');
+  const empty = document.getElementById('empty-state');
   const isSettings = state.view === 'settings';
   const isCalculator = state.view === 'calculator';
+  const isTimeline = state.view === 'timeline';
 
   document.body.classList.toggle('is-settings-view', isSettings);
   document.body.classList.toggle('is-calculator-view', isCalculator);
+  document.body.classList.toggle('is-timeline-view', isTimeline);
 
-  if (isSettings || isCalculator || state.mode !== 'signed-in') {
+  if (isSettings || isCalculator || isTimeline || state.mode !== 'signed-in') {
     multiSelectMode = false;
     selectedEventIds.clear();
     document.body.classList.remove('is-multi-select');
@@ -2730,6 +2771,7 @@ export function renderAll(nowMs = Date.now()) {
   renderChrome();
 
   if (isSettings) {
+    hideTimelineView();
     if (listView) {
       listView.hidden = true;
       listView.setAttribute('aria-hidden', 'true');
@@ -2747,6 +2789,7 @@ export function renderAll(nowMs = Date.now()) {
   }
 
   if (isCalculator) {
+    hideTimelineView();
     if (listView) {
       listView.hidden = true;
       listView.setAttribute('aria-hidden', 'true');
@@ -2776,6 +2819,19 @@ export function renderAll(nowMs = Date.now()) {
     calculatorView.setAttribute('aria-hidden', 'true');
   }
   renderToolbar(nowMs);
+  if (isTimeline) {
+    if (eventList) eventList.hidden = true;
+    if (empty) empty.hidden = true;
+    if (timelineView) {
+      timelineView.hidden = false;
+      timelineView.removeAttribute('aria-hidden');
+    }
+    renderTimeline(nowMs);
+    return;
+  }
+
+  hideTimelineView();
+  if (eventList) eventList.hidden = false;
   renderList(nowMs);
 }
 
@@ -2856,6 +2912,74 @@ function closeModal() {
   if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
 }
 
+export function patchEventCardPreview(nowMs = Date.now()) {
+  const card = document.querySelector('#modal-root .event-card-preview .event-card');
+  if (!card) return;
+  const id = card.getAttribute('data-id');
+  const event = state.events.find((e) => e.id === id);
+  if (!event) {
+    closeModal();
+    return;
+  }
+  const vm = toViewModel(event, nowMs);
+  const thisWeek = isThisWeekVm(vm, nowMs);
+  const pinned = event.pinned === true;
+  const readOnly = state.mode === 'guest';
+  if (card.dataset.shapeKey !== cardShapeKey(vm, readOnly, thisWeek, pinned)) {
+    const next = renderCard(vm, readOnly, { thisWeek, pinned });
+    card.replaceWith(next);
+    return;
+  }
+  patchCardInPlace(card, vm);
+}
+
+/** Timeline tap: show the same list card; Edit on the card opens the event modal. */
+export function openEventCardPreview(event) {
+  if (!event) return;
+  const live = state.events.find((e) => e.id === event.id) || event;
+  const nowMs = Date.now();
+  const vm = toViewModel(live, nowMs);
+  const readOnly = state.mode === 'guest';
+  const thisWeek = isThisWeekVm(vm, nowMs);
+  const pinned = live.pinned === true;
+
+  lastFocus = document.activeElement;
+  editingId = null;
+
+  const backdrop = el('div', {
+    className: 'modal-backdrop event-card-preview-backdrop',
+    role: 'presentation',
+    onClick: (e) => {
+      if (e.target === backdrop) closeModal();
+    },
+  });
+  const dialog = el('div', {
+    className: 'event-card-preview',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-label': live.name || 'Event',
+  });
+  const closeBtn = iconButton({
+    icon: 'close',
+    label: 'Close',
+    className: 'icon-btn event-card-preview-close',
+    onClick: () => closeModal(),
+  });
+  const list = el('ul', { className: 'event-card-preview-list' });
+  const card = renderCard(vm, readOnly, { thisWeek, pinned });
+  const title = card.querySelector('.event-title');
+  if (title) {
+    title.id = 'event-card-preview-title';
+    dialog.setAttribute('aria-labelledby', 'event-card-preview-title');
+    dialog.removeAttribute('aria-label');
+  }
+  list.appendChild(card);
+  dialog.append(closeBtn, list);
+  backdrop.appendChild(dialog);
+  document.getElementById('modal-root').replaceChildren(backdrop);
+  trapFocus(dialog, closeBtn);
+}
+
 function trapFocus(modal, initialFocus) {
   const focusables = modal.querySelectorAll(
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -2923,7 +3047,10 @@ export function openEventModal(event) {
   }
 
   ensureTzDatalist();
-  lastFocus = document.activeElement;
+  const keepFocus = document.querySelector('#modal-root .event-card-preview')
+    ? lastFocus
+    : document.activeElement;
+  lastFocus = keepFocus && typeof keepFocus.focus === 'function' ? keepFocus : document.activeElement;
   editingId = event?.id || null;
   const isEdit = Boolean(event);
 
@@ -2944,6 +3071,7 @@ export function openEventModal(event) {
     pinned: event?.pinned === true,
     /** null = auto from title; string = manual override */
     emoji: normalizeEventEmoji(event?.emoji),
+    hideFromTimeline: event?.hideFromTimeline === true,
   };
 
   const backdrop = el('div', {
@@ -3396,6 +3524,23 @@ export function openEventModal(event) {
     ])
   );
 
+  const hideFromTimelineToggle = el('input', {
+    type: 'checkbox',
+    checked: draft.hideFromTimeline,
+  });
+  body.appendChild(
+    el('div', { className: 'field' }, [
+      el('div', { className: 'checkbox-row' }, [
+        hideFromTimelineToggle,
+        el('label', { text: 'Hide from timeline' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: 'Keeps this event in the list but off the timeline. Useful for daily events that would clutter the axis. Choosing Every day turns this on automatically.',
+      }),
+    ])
+  );
+
   const sinceLastToggle = el('input', {
     type: 'checkbox',
     checked: draft.showSinceLast,
@@ -3453,9 +3598,14 @@ export function openEventModal(event) {
     }
   };
 
+  const syncHideFromTimeline = () => {
+    if (freqSelect.value === 'daily') hideFromTimelineToggle.checked = true;
+  };
+
   freqSelect.addEventListener('change', () => {
     syncSinceVisibility();
     syncExcludeFromThisWeek();
+    syncHideFromTimeline();
   });
 
   const actions = el('div', {
@@ -3534,6 +3684,7 @@ export function openEventModal(event) {
       showCycleProgress: freqSelect.value === 'none' ? true : cycleToggle.checked,
       excludeFromThisWeek: excludeThisWeekToggle.checked,
       pinned: pinToggle.checked,
+      hideFromTimeline: hideFromTimelineToggle.checked,
       emoji: selectedEmoji,
       _categories: catsForSave,
     };
@@ -4034,6 +4185,7 @@ function openMultiEditModal(ids) {
   const sharedSinceFirst = sharedOrMixed(events.map((e) => e.showSinceFirst !== false));
   const sharedCycle = sharedOrMixed(events.map((e) => e.showCycleProgress !== false));
   const sharedPinned = sharedOrMixed(events.map((e) => e.pinned === true));
+  const sharedHideTimeline = sharedOrMixed(events.map((e) => e.hideFromTimeline === true));
 
   const dirty = {
     color: false,
@@ -4045,6 +4197,7 @@ function openMultiEditModal(ids) {
     showSinceFirst: false,
     showCycleProgress: false,
     pinned: false,
+    hideFromTimeline: false,
   };
 
   const draft = {
@@ -4056,6 +4209,7 @@ function openMultiEditModal(ids) {
     showSinceFirst: sharedSinceFirst.mixed ? true : sharedSinceFirst.value !== false,
     showCycleProgress: sharedCycle.mixed ? true : sharedCycle.value !== false,
     pinned: sharedPinned.mixed ? false : sharedPinned.value === true,
+    hideFromTimeline: sharedHideTimeline.mixed ? false : sharedHideTimeline.value === true,
   };
 
   let modalCategories = [...getCategories()];
@@ -4448,6 +4602,28 @@ function openMultiEditModal(ids) {
     ])
   );
 
+  const hideFromTimelineToggle = el('input', { type: 'checkbox', checked: draft.hideFromTimeline });
+  if (sharedHideTimeline.mixed) hideFromTimelineToggle.indeterminate = true;
+  hideFromTimelineToggle.addEventListener('change', () => {
+    dirty.hideFromTimeline = true;
+    hideFromTimelineToggle.indeterminate = false;
+    draft.hideFromTimeline = hideFromTimelineToggle.checked;
+  });
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('div', { className: 'checkbox-row' }, [
+        hideFromTimelineToggle,
+        el('label', { text: 'Hide from timeline' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: sharedHideTimeline.mixed
+          ? 'Mixed — some selected events are hidden on the timeline. Check or uncheck to apply to all.'
+          : 'Keeps these events in the list but off the timeline.',
+      }),
+    ])
+  );
+
   const actions = el('div', { className: 'modal-actions' });
   actions.appendChild(
     el('button', {
@@ -4490,6 +4666,7 @@ function openMultiEditModal(ids) {
     if (dirty.showSinceFirst) patch.showSinceFirst = sinceFirstToggle.checked;
     if (dirty.showCycleProgress) patch.showCycleProgress = cycleToggle.checked;
     if (dirty.pinned) patch.pinned = pinToggle.checked;
+    if (dirty.hideFromTimeline) patch.hideFromTimeline = hideFromTimelineToggle.checked;
 
     // Switching to one-time forces show* defaults via API; still mark them if frequency dirty.
     if (dirty.frequency && freqSelect.value === 'none') {

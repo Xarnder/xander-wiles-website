@@ -587,6 +587,10 @@ html[data-theme="light"] .filter-family-subhint {
   width: 100%;
 }
 
+.filters-drawer-summary > .chip--now {
+  display: none;
+}
+
 .quick-category-chrome {
   display: flex;
   flex-direction: row;
@@ -1454,6 +1458,19 @@ html[data-theme='light'] .cycle-progress-mark {
 body.is-settings-view #list-view,
 body.is-calculator-view #list-view {
   display: none !important;
+}
+
+body.is-timeline-view {
+  overflow: hidden;
+}
+
+body.is-timeline-view #event-list,
+body.is-timeline-view #empty-state {
+  display: none !important;
+}
+
+body.is-timeline-view .main {
+  min-height: 0;
 }
 
 body.is-calculator-view .main {
@@ -2395,6 +2412,29 @@ html[data-theme='light'] .csv-preview-row.is-error {
   display: none !important;
 }
 
+.event-card-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  width: min(28rem, 100%);
+}
+
+.event-card-preview-close {
+  align-self: flex-end;
+}
+
+.event-card-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+.event-card-preview-list .event-card {
+  width: 100%;
+}
+
 .modal input:not([type='checkbox']):not([type='range']):not([type='file']),
 .modal select,
 .modal textarea {
@@ -3319,6 +3359,13 @@ input[type="range"]::-webkit-slider-runnable-track {
     align-items: center;
   }
 
+  .filters-drawer-summary > .chip--now {
+    display: inline-flex;
+    border-color: rgba(60, 240, 255, 0.45);
+    background: linear-gradient(135deg, rgba(60, 240, 255, 0.22), rgba(91, 140, 255, 0.16));
+    font-weight: 600;
+  }
+
   .filters-drawer:not(.is-open) .filters-drawer-summary > .chip--clear {
     display: inline-flex;
     align-items: center;
@@ -3588,6 +3635,31 @@ input[type="range"]::-webkit-slider-runnable-track {
     align-items: stretch;
     place-items: unset;
     touch-action: manipulation;
+  }
+
+  .modal-backdrop.event-card-preview-backdrop {
+    display: grid;
+    place-items: center;
+    justify-content: unset;
+    align-items: unset;
+    flex-direction: unset;
+    padding:
+      max(0.75rem, var(--safe-top))
+      max(0.75rem, var(--safe-right))
+      max(0.75rem, var(--safe-bottom))
+      max(0.75rem, var(--safe-left));
+  }
+
+  .event-card-preview {
+    width: min(28rem, calc(100% - 0.5rem));
+    max-height: min(80dvh, 80svh);
+    margin: 0;
+  }
+
+  .event-card-preview-list {
+    max-height: min(70dvh, 70svh);
+    overflow: auto;
+    overscroll-behavior: contain;
   }
 
   #toast-host {
