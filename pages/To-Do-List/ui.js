@@ -4183,6 +4183,24 @@ export function closeQuickTagWalkthrough({ finished = false } = {}) {
     renderBoard();
 }
 
+/** Keep the locked automation switch in sync if another device changes it. */
+export function syncOpenEditListAutomation() {
+    const modal = document.getElementById('edit-list-modal-overlay');
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (modal.dataset.automationUnlocked === '1') return;
+
+    const list = state.appData.rawLists.find(l => l.id === modal.dataset.listId);
+    if (!list) return;
+
+    const toggle = document.getElementById('automation-enable-toggle');
+    const container = document.getElementById('automation-settings-container');
+    if (toggle) toggle.checked = !!list.timeAutomated;
+    if (container) {
+        if (list.timeAutomated) container.classList.remove('hidden');
+        else container.classList.add('hidden');
+    }
+}
+
 export function openEditListModal(listId) {
     const list = state.appData.rawLists.find(l => l.id === listId);
     if (!list) return;
@@ -4247,6 +4265,7 @@ export function openEditListModal(listId) {
     let isAutomationUnlocked = false;
     const setAutomationLockState = (unlocked) => {
         isAutomationUnlocked = unlocked;
+        modal.dataset.automationUnlocked = unlocked ? '1' : '0';
         const inputs = [pAutoToggle, pAutoTrigger, pAutoDurationVal, pAutoDurationUnit, pAutoScheduleType, pAutoScheduleTime, pAutoDestList, newSaveBtn];
         inputs.forEach(el => el.disabled = !unlocked);
         pAutoContainer.style.opacity = unlocked ? '1' : '0.5';
@@ -4263,9 +4282,26 @@ export function openEditListModal(listId) {
         pAutoContainer.classList.add('hidden');
     }
 
+    const persistAutomationPatch = (patch, successMessage) => {
+        const localList = state.appData.rawLists.find(l => l.id === listId);
+        if (localList) Object.assign(localList, patch);
+        return updateDoc(doc(db, "users", state.currentUser.uid, "lists", listId), patch)
+            .then(() => {
+                if (successMessage) showToast(successMessage, "success");
+            })
+            .catch(e => handleSyncError(e));
+    };
+
     pAutoToggle.addEventListener('change', (e) => {
-        if (e.target.checked) pAutoContainer.classList.remove('hidden');
+        const enabled = e.target.checked;
+        if (enabled) pAutoContainer.classList.remove('hidden');
         else pAutoContainer.classList.add('hidden');
+        // The switch is the only writer of timeAutomated. Save must not touch it, or a
+        // stale modal on another device can turn automation back on.
+        persistAutomationPatch(
+            { timeAutomated: enabled },
+            enabled ? "Time Automation turned on." : "Time Automation turned off."
+        );
     });
 
     pAutoTrigger.value = list.timeMoveType || 'duration';
@@ -4298,17 +4334,14 @@ export function openEditListModal(listId) {
     });
 
     newSaveBtn.onclick = () => {
-        updateDoc(doc(db, "users", state.currentUser.uid, "lists", listId), {
-            timeAutomated: pAutoToggle.checked,
+        persistAutomationPatch({
             timeMoveType: pAutoTrigger.value,
             timeDurationValue: parseInt(pAutoDurationVal.value) || 0,
             timeDurationUnit: pAutoDurationUnit.value,
             scheduleType: pAutoScheduleType.value,
             scheduleTime: pAutoScheduleTime.value,
             timeDestinationId: pAutoDestList.value || null
-        }).then(() => {
-            showToast("Automation Settings Saved!", "success");
-        }).catch(e => handleSyncError(e));
+        }, "Automation Settings Saved!");
     };
     // --- END TIME AUTOMATION UI ---
 

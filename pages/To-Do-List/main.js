@@ -748,6 +748,7 @@ function setupFirestoreListeners(uid) {
         snapshot.forEach(doc => lists.push({ id: doc.id, ...doc.data() }));
         state.appData.rawLists = lists;
         UI.renderBoard();
+        if (typeof UI.syncOpenEditListAutomation === 'function') UI.syncOpenEditListAutomation();
     }, (error) => API.handleSyncError(error)));
 
     // 3. Tasks
