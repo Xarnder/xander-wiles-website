@@ -351,6 +351,14 @@ select.category-select {
   font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
+  flex: 1 1 auto;
+}
+
+.category-manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .category-manage-lock {
@@ -358,6 +366,19 @@ select.category-select {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.category-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.category-add-row .category-new-input {
+  flex: 1 1 10rem;
+  min-width: 0;
 }
 
 .btn-sm {
@@ -719,11 +740,49 @@ html[data-theme="light"] .filter-family-subhint {
   text-transform: uppercase;
   color: var(--text-muted);
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.section-heading-label {
+  min-width: 0;
+}
+
+.section-heading-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.section-heading--pinned {
+  color: var(--text);
+  letter-spacing: 0.06em;
+  margin-top: 0.1rem;
+  margin-bottom: 0.2rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .section-heading--this-week {
   color: var(--accent);
   letter-spacing: 0.06em;
+}
+
+/* Keep This week as its own band when Pinned is above it */
+.section-heading--this-week:not(:first-child) {
+  margin-top: 1.15rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.section-heading--pinned ~ .section-heading:not(.section-heading--this-week),
+.section-heading--this-week ~ .section-heading {
+  margin-top: 1.05rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--glass-border);
 }
 
 .relative-cue {
@@ -851,6 +910,46 @@ html[data-theme="light"] .filter-family-subhint {
     0 0 18px color-mix(in srgb, var(--event-color, var(--accent)) 60%, transparent),
     0 0 32px color-mix(in srgb, var(--event-color, var(--accent)) 30%, transparent),
     0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+/* User pins: marker + filled pin control — not the This week glow */
+.event-card.is-pinned {
+  border-width: 1.5px;
+}
+
+.event-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.event-title-row .event-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.event-pin-mark {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 0.18rem;
+  color: var(--accent);
+}
+
+.event-card.is-compact .event-pin-mark {
+  width: 0.78rem;
+  height: 0.78rem;
+  margin-top: 0.12rem;
+}
+
+.event-also-week {
+  margin: 0.18rem 0 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .event-card.is-compact {
@@ -1996,6 +2095,56 @@ body.is-calculator-view .main {
 }
 
 html[data-theme="light"] .theme-option {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.cue-format-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0.25rem 0 0.55rem;
+}
+
+.cue-format-option {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.cue-format-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.cue-format-option.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-dim);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.cue-format-option-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cue-format-option-example {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+html[data-theme="light"] .cue-format-option {
   background: rgba(15, 23, 42, 0.03);
 }
 
@@ -3221,6 +3370,10 @@ input[type="range"]::-webkit-slider-runnable-track {
   .chip-group,
   .chip-group--exclusive {
     flex-wrap: wrap;
+  }
+
+  .cue-format-selector {
+    grid-template-columns: 1fr;
   }
 
   .filters {

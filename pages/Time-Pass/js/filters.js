@@ -191,6 +191,14 @@ export function isThisWeekVm(vm, nowMs = Date.now()) {
   return next != null && next >= nowMs && next < nowMs + WEEK_MS;
 }
 
+export function isPinnedEvent(event) {
+  return event?.pinned === true;
+}
+
+export function isPinnedVm(vm) {
+  return isPinnedEvent(vm?.event);
+}
+
 export function pickThisWeekVms(vms, nowMs = Date.now()) {
   return vms
     .filter((vm) => isThisWeekVm(vm, nowMs))
@@ -198,6 +206,11 @@ export function pickThisWeekVms(vms, nowMs = Date.now()) {
       (a, b) =>
         (a.sortKeyUpcoming ?? 0) - (b.sortKeyUpcoming ?? 0) || compareName(a, b)
     );
+}
+
+/** Keep the active sort among pinned events; callers lift this block above the rest. */
+export function pickPinnedVms(vms) {
+  return vms.filter(isPinnedVm);
 }
 
 function sortFlat(vms, sort, nowMs) {
@@ -281,6 +294,7 @@ export function buildFilteredSortedSections(events, filters, nowMs) {
   const sorted = sortViewModels(filterViewModels(vms, filters), filters?.sort, nowMs);
   return {
     ...sorted,
+    pinned: pickPinnedVms(sorted.all),
     thisWeek: pickThisWeekVms(sorted.all, nowMs),
   };
 }

@@ -46,6 +46,31 @@ export function normalizeCompactCueUnits(value) {
   return Math.min(COMPACT_CUE_UNITS_MAX, Math.max(COMPACT_CUE_UNITS_MIN, n));
 }
 
+/** Compact relative-cue writing style. */
+export const COMPACT_CUE_FORMAT_DEFAULT = 'words';
+export const COMPACT_CUE_FORMATS = [
+  { value: 'words', label: 'Words', hint: 'in 3 months and 1 week' },
+  { value: 'comma', label: 'Comma', hint: 'in 3 months, 1 week' },
+  { value: 'short', label: 'Short', hint: 'in 3m, 1w' },
+  { value: 'short-space', label: 'Short spaced', hint: 'in 3 m, 1 w' },
+];
+
+export function normalizeCompactCueFormat(value) {
+  if (COMPACT_CUE_FORMATS.some((f) => f.value === value)) return value;
+  return COMPACT_CUE_FORMAT_DEFAULT;
+}
+
+export const UNIT_SHORT_LABELS = {
+  decades: 'dec',
+  years: 'y',
+  months: 'm',
+  weeks: 'w',
+  days: 'd',
+  hours: 'h',
+  minutes: 'min',
+  seconds: 's',
+};
+
 export const UNIT_LABELS = {
   decades: ['decade', 'decades'],
   years: ['year', 'years'],

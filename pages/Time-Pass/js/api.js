@@ -17,6 +17,7 @@ import { db, isFirebaseConfigured } from '../firebase-config.js';
 import {
   COLOR_PALETTE,
   COMPACT_CUE_UNITS_DEFAULT,
+  COMPACT_CUE_FORMAT_DEFAULT,
   DEFAULT_UNITS,
   HARD_EVENT_CAP,
   NAME_MAX,
@@ -24,11 +25,13 @@ import {
   SCHEMA_VERSION,
   isValidColor,
   normalizeCompactCueUnits,
+  normalizeCompactCueFormat,
   normalizeUnits,
 } from './constants.js';
 import {
   DEFAULT_CATEGORY,
   DEFAULT_QUICK_CATEGORY_SLOTS,
+  applyCategoryRename,
   categoriesEqual,
   normalizeCategories,
   normalizeCategoryName,
@@ -90,6 +93,9 @@ export function validateEventInput(raw) {
   else if (raw.excludeFromThisWeek === false) excludeFromThisWeek = false;
   else excludeFromThisWeek = frequency === 'daily' || frequency === 'weekly';
 
+  /** User pin: stay at the top of the list regardless of sort. */
+  const pinned = raw.pinned === true;
+
   return {
     ok: true,
     value: {
@@ -106,6 +112,7 @@ export function validateEventInput(raw) {
       category,
       emoji,
       excludeFromThisWeek,
+      pinned,
     },
   };
 }
@@ -153,6 +160,7 @@ export function subscribeSettings(uid, onData, onError) {
           fullColourCards: false,
           cardDensity: 'expanded',
           compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
+          compactCueFormat: COMPACT_CUE_FORMAT_DEFAULT,
           theme: 'atmosphere',
           categories: [DEFAULT_CATEGORY],
           quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
@@ -184,6 +192,7 @@ export async function ensureSettings(uid, partial = {}) {
       fullColourCards: false,
       cardDensity: 'expanded',
       compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
+      compactCueFormat: COMPACT_CUE_FORMAT_DEFAULT,
       theme: 'atmosphere',
       categories: [DEFAULT_CATEGORY],
       quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
@@ -249,7 +258,7 @@ export async function updateEvent(uid, eventId, raw) {
  * Multi-edit: patch only allowed fields on many events.
  * Never writes name, date, time, timeZone, id, or createdAt.
  * `patch` may include: color, units, category, recurrence, showSinceLast,
- * showSinceFirst, showCycleProgress.
+ * showSinceFirst, showCycleProgress, excludeFromThisWeek, pinned.
  * Optional `options.colorById` maps event id → palette colour (overrides patch.color per event).
  */
 export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [], options = {}) {
@@ -306,6 +315,7 @@ export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [
       showSinceFirst: existing.showSinceFirst !== false,
       showCycleProgress: existing.showCycleProgress !== false,
       excludeFromThisWeek: existing.excludeFromThisWeek,
+      pinned: existing.pinned === true,
       ...eventSafe,
     };
 
@@ -333,6 +343,9 @@ export async function batchUpdateEvents(uid, eventIds, patch, existingEvents = [
     }
     if ('excludeFromThisWeek' in eventSafe) {
       firestorePatch.excludeFromThisWeek = v.excludeFromThisWeek;
+    }
+    if ('pinned' in eventSafe) {
+      firestorePatch.pinned = v.pinned;
     }
     // When frequency becomes daily/weekly and exclude wasn't explicitly patched, default on.
     if (
@@ -399,6 +412,9 @@ export function sanitizeMultiEditPatch(patch = {}) {
   if (Object.prototype.hasOwnProperty.call(patch, 'excludeFromThisWeek')) {
     out.excludeFromThisWeek = patch.excludeFromThisWeek === true;
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'pinned')) {
+    out.pinned = patch.pinned === true;
+  }
   return out;
 }
 
@@ -454,6 +470,9 @@ export async function deleteCategory(uid, categoryName, events, settings) {
     compactCueUnits: normalizeCompactCueUnits(
       settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
     ),
+    compactCueFormat: normalizeCompactCueFormat(
+      settings?.compactCueFormat ?? COMPACT_CUE_FORMAT_DEFAULT
+    ),
     theme:
       settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
         ? settings.theme
@@ -466,6 +485,81 @@ export async function deleteCategory(uid, categoryName, events, settings) {
   });
 
   return { reassigned: affected.length, categories: nextCategories };
+}
+
+/** Rename a category and retarget events, filters, and one-click pins. Misc cannot be renamed. */
+export async function renameCategory(uid, fromName, toName, events, settings) {
+  assertConfigured();
+  const planned = applyCategoryRename(settings?.categories, fromName, toName);
+  if (!planned.ok) throw new Error(planned.error);
+  if (planned.unchanged) {
+    return { renamed: 0, merged: false, name: planned.name, categories: planned.categories };
+  }
+
+  const from = planned.from;
+  const nextName = planned.name;
+  const nextCategories = planned.categories;
+  const affected = (Array.isArray(events) ? events : []).filter((e) =>
+    categoriesEqual(e.category || DEFAULT_CATEGORY, from)
+  );
+
+  for (let i = 0; i < affected.length; i += 400) {
+    const chunk = affected.slice(i, i + 400);
+    const batch = writeBatch(db);
+    for (const e of chunk) {
+      batch.update(doc(eventsCol(uid), e.id), {
+        category: nextName,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    await batch.commit();
+  }
+
+  const filters = { ...(settings?.filters || {}) };
+  if (filters.category && categoriesEqual(filters.category, from)) {
+    filters.category = nextName;
+  }
+
+  const prevQuick = settings?.quickCategories;
+  const nextQuick = Array.isArray(prevQuick)
+    ? prevQuick.map((c) => (categoriesEqual(c, from) ? nextName : c))
+    : prevQuick;
+
+  await saveSettings(uid, {
+    categories: nextCategories,
+    filters: {
+      direction: filters.direction || 'all',
+      recurring: filters.recurring || 'all',
+      query: filters.query || '',
+      sort: filters.sort || 'smart',
+      category: filters.category || 'all',
+    },
+    hasSeededDemo: Boolean(settings?.hasSeededDemo),
+    fullColourCards: Boolean(settings?.fullColourCards),
+    cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
+    compactCueUnits: normalizeCompactCueUnits(
+      settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+    ),
+    compactCueFormat: normalizeCompactCueFormat(
+      settings?.compactCueFormat ?? COMPACT_CUE_FORMAT_DEFAULT
+    ),
+    theme:
+      settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
+        ? settings.theme
+        : 'atmosphere',
+    ...quickCategoryPersistFields({
+      categories: nextCategories,
+      quickCategorySlots: settings?.quickCategorySlots,
+      quickCategories: nextQuick,
+    }),
+  });
+
+  return {
+    renamed: affected.length,
+    merged: planned.merged,
+    name: nextName,
+    categories: nextCategories,
+  };
 }
 
 export async function seedEventsIfNeeded(uid, events, settings) {
@@ -490,6 +584,9 @@ export async function seedEventsIfNeeded(uid, events, settings) {
       cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
       compactCueUnits: normalizeCompactCueUnits(
         settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
+      ),
+      compactCueFormat: normalizeCompactCueFormat(
+        settings?.compactCueFormat ?? COMPACT_CUE_FORMAT_DEFAULT
       ),
       theme:
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
@@ -580,6 +677,9 @@ export function exportPayload(events, settings) {
       compactCueUnits: normalizeCompactCueUnits(
         settings?.compactCueUnits ?? COMPACT_CUE_UNITS_DEFAULT
       ),
+      compactCueFormat: normalizeCompactCueFormat(
+        settings?.compactCueFormat ?? COMPACT_CUE_FORMAT_DEFAULT
+      ),
       theme:
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
           ? settings.theme
@@ -601,6 +701,7 @@ export function exportPayload(events, settings) {
       showSinceFirst: e.showSinceFirst !== false,
       showCycleProgress: e.showCycleProgress !== false,
       excludeFromThisWeek: e.excludeFromThisWeek === true,
+      pinned: e.pinned === true,
       createdAt: e.createdAt || null,
       updatedAt: e.updatedAt || null,
     })),

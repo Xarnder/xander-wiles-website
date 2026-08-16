@@ -1,4 +1,4 @@
-import { unitLabel } from './constants.js';
+import { unitLabel, UNIT_SHORT_LABELS, normalizeCompactCueFormat } from './constants.js';
 
 export function formatUnitValue(unit, value) {
   if (unit === 'hours' || unit === 'minutes' || unit === 'seconds') {
@@ -89,12 +89,29 @@ function joinUnitPhrases(bits) {
   return `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
 }
 
+function joinCuePhrases(bits, format) {
+  if (!bits.length) return '';
+  if (bits.length === 1) return bits[0];
+  if (format === 'short' || format === 'short-space' || format === 'comma') {
+    return bits.join(', ');
+  }
+  return joinUnitPhrases(bits);
+}
+
+function formatCueUnit(unit, value, format) {
+  if (format === 'short' || format === 'short-space') {
+    const abbr = UNIT_SHORT_LABELS[unit] || unit;
+    return format === 'short' ? `${value}${abbr}` : `${value} ${abbr}`;
+  }
+  return `${formatUnitValue(unit, value)} ${unitLabel(unit, value)}`;
+}
+
 /**
  * Relative phrasing from a stat block.
  * @param {object} primary
- * @param {{ maxUnits?: number }} [opts] — how many leading visible units to include (compact often uses 2+)
+ * @param {{ maxUnits?: number, format?: string }} [opts]
  */
-export function formatRelativeCue(primary, { maxUnits = 1 } = {}) {
+export function formatRelativeCue(primary, { maxUnits = 1, format = 'words' } = {}) {
   if (!primary) return '';
   const { direction, parts, visibleUnits } = primary;
   const units = Array.isArray(visibleUnits) ? visibleUnits : [];
@@ -119,8 +136,10 @@ export function formatRelativeCue(primary, { maxUnits = 1 } = {}) {
     return direction === 'until' ? 'now' : 'just now';
   }
 
-  const phrase = joinUnitPhrases(
-    picked.map(({ u, v }) => `${formatUnitValue(u, v)} ${unitLabel(u, v)}`)
+  const style = normalizeCompactCueFormat(format);
+  const phrase = joinCuePhrases(
+    picked.map(({ u, v }) => formatCueUnit(u, v, style)),
+    style
   );
 
   if (direction === 'until') return `in ${phrase}`;

@@ -99,6 +99,44 @@ export function canDeleteCategory(name) {
   return normalizeCategoryName(name) !== DEFAULT_CATEGORY;
 }
 
+export function canRenameCategory(name) {
+  return canDeleteCategory(name);
+}
+
+/**
+ * Rename a category in the settings list.
+ * Same name (different casing) updates the label; an existing target merges.
+ */
+export function applyCategoryRename(categories, fromName, toName) {
+  const from = normalizeCategoryName(fromName);
+  const trimmed = String(toName ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!trimmed) return { ok: false, error: 'Enter a category name.' };
+  const to = normalizeCategoryName(trimmed);
+
+  if (categoriesEqual(from, DEFAULT_CATEGORY)) {
+    return { ok: false, error: 'Misc cannot be renamed.' };
+  }
+
+  const cats = normalizeCategories(categories);
+  if (!cats.some((c) => categoriesEqual(c, from))) {
+    return { ok: false, error: 'Category not found.' };
+  }
+  if (from === to) {
+    return { ok: true, unchanged: true, name: from, merged: false, from, categories: cats };
+  }
+
+  const existing = cats.find((c) => categoriesEqual(c, to) && !categoriesEqual(c, from));
+  const nextName = existing || to;
+  const merged = Boolean(existing);
+  const nextCategories = merged
+    ? cats.filter((c) => !categoriesEqual(c, from))
+    : normalizeCategories(cats.map((c) => (categoriesEqual(c, from) ? nextName : c)));
+
+  return { ok: true, unchanged: false, name: nextName, merged, from, categories: nextCategories };
+}
+
 /** How many one-click category slots the header/footer bar shows. */
 export const QUICK_CATEGORY_SLOT_OPTIONS = [2, 4, 6, 8];
 export const DEFAULT_QUICK_CATEGORY_SLOTS = 4;

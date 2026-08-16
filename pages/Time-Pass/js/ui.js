@@ -4,11 +4,13 @@ import {
   COMPACT_CUE_UNITS_DEFAULT,
   COMPACT_CUE_UNITS_MAX,
   COMPACT_CUE_UNITS_MIN,
+  COMPACT_CUE_FORMATS,
   DEFAULT_UNITS,
   HARD_EVENT_CAP,
   SOFT_EVENT_CAP,
   getBrowserTimeZone,
   normalizeCompactCueUnits,
+  normalizeCompactCueFormat,
   normalizeUnits,
   unitLabel,
 } from './constants.js';
@@ -26,7 +28,10 @@ import {
   DEFAULT_QUICK_CATEGORY_SLOTS,
   NEW_CATEGORY_VALUE,
   QUICK_CATEGORY_SLOT_OPTIONS,
+  CATEGORY_MAX,
   canDeleteCategory,
+  canRenameCategory,
+  applyCategoryRename,
   categoriesEqual,
   needsQuickCategoryPick,
   normalizeCategories,
@@ -66,7 +71,7 @@ import {
   OFFSET_UNIT_FIELDS,
 } from './calculator.js';
 import { THEMES } from './theme.js';
-import { SORT_OPTIONS, normalizeSort, vmStatBlocks } from './filters.js';
+import { SORT_OPTIONS, normalizeSort, vmStatBlocks, isThisWeekVm } from './filters.js';
 import {
   parseCsv,
   guessColumnMap,
@@ -97,6 +102,7 @@ const ICON_URLS = {
   edit: '/assets/SVGs/edit.svg',
   duplicate: '/assets/SVGs/duplicate.svg',
   copy: '/assets/SVGs/copy.svg',
+  pin: '/assets/SVGs/pin.svg',
   expand: '/assets/SVGs/expand.svg',
   shrink: '/assets/SVGs/shrink.svg',
   close: '/assets/icons/close-icon.svg',
@@ -215,6 +221,7 @@ let handlers = {
   onImport: () => {},
   onSaveSettings: async () => {},
   onDeleteCategory: async () => {},
+  onRenameCategory: async () => {},
 };
 
 let lastFocus = null;
@@ -966,7 +973,12 @@ function cueMaxUnits(compact) {
 }
 
 function formatBlockCue(block, compact = false) {
-  return formatRelativeCue(block, { maxUnits: cueMaxUnits(compact) });
+  return formatRelativeCue(block, {
+    maxUnits: cueMaxUnits(compact),
+    format: compact
+      ? normalizeCompactCueFormat(state.settings.compactCueFormat)
+      : 'words',
+  });
 }
 
 function renderUnitRow(parts, visibleUnits) {
@@ -1066,22 +1078,23 @@ function renderCycleProgress(progress, compact) {
   return wrap;
 }
 
-function renderCard(vm, readOnly, { thisWeek = false } = {}) {
+function renderCard(vm, readOnly, { thisWeek = false, pinned = false } = {}) {
   const { event, primary, secondary, sinceFirst, cycleProgress } = vm;
   const fullColour = Boolean(state.settings.fullColourCards);
   const compact = state.settings.cardDensity === 'compact';
   const selecting = multiSelectMode && !readOnly;
   const selected = selecting && selectedEventIds.has(event.id);
   const eventId = event.id;
+  const isPinned = Boolean(pinned || event.pinned);
   const li = el('li', {
     className: `event-card glass${fullColour ? ' is-full-colour' : ''}${compact ? ' is-compact' : ''}${
       thisWeek ? ' is-this-week' : ''
-    }${selecting ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`,
+    }${isPinned ? ' is-pinned' : ''}${selecting ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`,
     style: `--event-color: ${event.color}`,
     'data-id': eventId,
   });
   li._tpVm = vm;
-  li.dataset.shapeKey = cardShapeKey(vm, readOnly, thisWeek);
+  li.dataset.shapeKey = cardShapeKey(vm, readOnly, thisWeek, isPinned);
 
   const head = el('div', { className: 'event-card-head' });
 
@@ -1098,7 +1111,17 @@ function renderCard(vm, readOnly, { thisWeek = false } = {}) {
   }
 
   const titleBlock = el('div', { className: 'event-title-block' });
-  titleBlock.appendChild(el('h2', { className: 'event-title', text: event.name }));
+  const titleRow = el('div', { className: 'event-title-row' });
+  if (isPinned) {
+    titleRow.appendChild(uiIcon('pin', 'event-pin-mark'));
+  }
+  titleRow.appendChild(el('h2', { className: 'event-title', text: event.name }));
+  titleBlock.appendChild(titleRow);
+  if (isPinned && isThisWeekVm(vm)) {
+    titleBlock.appendChild(
+      el('p', { className: 'event-also-week', text: 'Also this week' })
+    );
+  }
   if (!compact) {
     titleBlock.appendChild(el('p', { className: 'event-meta', text: buildEventMeta(event) }));
   }
@@ -1187,18 +1210,22 @@ function renderSyncBanner() {
 }
 
 /**
- * Display entries matching DOM order (this-week pin, then sections / remainder).
- * @returns {Array<{type:'heading', key:string, text:string}|{type:'card', id:string, vm:object}>}
+ * Display entries matching DOM order:
+ * Pinned (user) → This week (automatic, never mixed with Pinned) → remainder.
+ * An event is shown in at most one of those bands.
  */
 function getDisplayEntries(nowMs = Date.now()) {
   const f = state.settings.filters;
   const sections = getViewSections(nowMs);
-  const thisWeek = sections.thisWeek || [];
+  const pinned = sections.pinned || [];
+  const pinnedIds = new Set(pinned.map((vm) => vm.event.id));
+  const thisWeek = (sections.thisWeek || []).filter((vm) => !pinnedIds.has(vm.event.id));
   const thisWeekIds = new Set(thisWeek.map((vm) => vm.event.id));
+  const skipIds = new Set([...pinnedIds, ...thisWeekIds]);
 
-  const upcoming = (sections.upcoming || []).filter((vm) => !thisWeekIds.has(vm.event.id));
-  const past = (sections.past || []).filter((vm) => !thisWeekIds.has(vm.event.id));
-  const all = (sections.all || []).filter((vm) => !thisWeekIds.has(vm.event.id));
+  const upcoming = (sections.upcoming || []).filter((vm) => !skipIds.has(vm.event.id));
+  const past = (sections.past || []).filter((vm) => !skipIds.has(vm.event.id));
+  const all = (sections.all || []).filter((vm) => !skipIds.has(vm.event.id));
 
   const showSectionHeaders =
     f.direction === 'all' &&
@@ -1208,28 +1235,59 @@ function getDisplayEntries(nowMs = Date.now()) {
 
   const entries = [];
 
+  if (pinned.length) {
+    entries.push({
+      type: 'heading',
+      key: 'pinned',
+      text: 'Pinned',
+    });
+    for (const vm of pinned) {
+      entries.push({
+        type: 'card',
+        id: vm.event.id,
+        vm,
+        thisWeek: false,
+        pinned: true,
+      });
+    }
+  }
+
   if (thisWeek.length) {
     entries.push({
       type: 'heading',
       key: 'this-week',
       text: "This week's events",
     });
-    for (const vm of thisWeek) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: true });
+    for (const vm of thisWeek) {
+      entries.push({
+        type: 'card',
+        id: vm.event.id,
+        vm,
+        thisWeek: true,
+        pinned: false,
+      });
+    }
   }
 
   if (showSectionHeaders) {
     if (upcoming.length) {
       entries.push({ type: 'heading', key: 'upcoming', text: 'Upcoming' });
-      for (const vm of upcoming) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
+      for (const vm of upcoming) {
+        entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false, pinned: false });
+      }
     }
     if (past.length) {
       entries.push({ type: 'heading', key: 'past', text: 'Past' });
-      for (const vm of past) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
+      for (const vm of past) {
+        entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false, pinned: false });
+      }
     }
     return entries;
   }
 
-  for (const vm of all) entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false });
+  for (const vm of all) {
+    entries.push({ type: 'card', id: vm.event.id, vm, thisWeek: false, pinned: false });
+  }
   return entries;
 }
 
@@ -1240,7 +1298,7 @@ function getDisplayVms(nowMs = Date.now()) {
 }
 
 /** Structural fingerprint — changing this recreates that card (icons included). */
-function cardShapeKey(vm, readOnly, thisWeek = false) {
+function cardShapeKey(vm, readOnly, thisWeek = false, pinned = false) {
   const compact = state.settings.cardDensity === 'compact';
   const selecting = multiSelectMode && !readOnly;
   const blocks = vmStatBlocks(vm);
@@ -1250,6 +1308,8 @@ function cardShapeKey(vm, readOnly, thisWeek = false) {
     selecting ? 's' : 'n',
     readOnly ? 'r' : 'w',
     thisWeek ? 'tw' : '',
+    pinned || vm.event?.pinned ? 'pin' : '',
+    (pinned || vm.event?.pinned) && isThisWeekVm(vm) ? 'alsoTw' : '',
     vm.secondary ? 'sec' : '',
     vm.sinceFirst ? 'sf' : '',
     vm.cycleProgress && !compact ? 'cp' : '',
@@ -1334,7 +1394,49 @@ function patchCardInPlace(card, vm) {
     card.classList.toggle('is-selected', selected);
   }
 
+  card.classList.toggle('is-pinned', vm.event.pinned === true);
+
   patchCardDigits(card, vm);
+}
+
+function sectionHeadingClass(key) {
+  if (key === 'this-week') return 'section-heading section-heading--this-week';
+  if (key === 'pinned') return 'section-heading section-heading--pinned';
+  return 'section-heading';
+}
+
+function renderSectionHeading(entry) {
+  const kids = [];
+  if (entry.key === 'pinned') kids.push(uiIcon('pin', 'section-heading-icon'));
+  kids.push(el('span', { className: 'section-heading-label', text: entry.text }));
+  return el(
+    'li',
+    {
+      className: sectionHeadingClass(entry.key),
+      'data-section-key': entry.key,
+    },
+    kids
+  );
+}
+
+function patchSectionHeading(heading, entry) {
+  heading.className = sectionHeadingClass(entry.key);
+  heading.setAttribute('data-section-key', entry.key);
+  let label = heading.querySelector('.section-heading-label');
+  const icon = heading.querySelector('.section-heading-icon');
+  if (!label) {
+    heading.replaceChildren();
+    const next = renderSectionHeading(entry);
+    heading.className = next.className;
+    heading.append(...next.childNodes);
+    return;
+  }
+  if (label.textContent !== entry.text) label.textContent = entry.text;
+  if (entry.key === 'pinned' && !icon) {
+    heading.insertBefore(uiIcon('pin', 'section-heading-icon'), label);
+  } else if (entry.key !== 'pinned' && icon) {
+    icon.remove();
+  }
 }
 
 /**
@@ -1363,27 +1465,20 @@ function reconcileEventList(list, nowMs, readOnly) {
       let heading = existingHeadings.get(entry.key);
       if (heading) {
         existingHeadings.delete(entry.key);
-        if (heading.textContent !== entry.text) heading.textContent = entry.text;
-        heading.setAttribute('data-section-key', entry.key);
-        heading.className =
-          entry.key === 'this-week'
-            ? 'section-heading section-heading--this-week'
-            : 'section-heading';
+        patchSectionHeading(heading, entry);
       } else {
-        heading = el('li', {
-          className:
-            entry.key === 'this-week'
-              ? 'section-heading section-heading--this-week'
-              : 'section-heading',
-          'data-section-key': entry.key,
-          text: entry.text,
-        });
+        heading = renderSectionHeading(entry);
       }
       nextNodes.push(heading);
       continue;
     }
 
-    const shape = cardShapeKey(entry.vm, readOnly, Boolean(entry.thisWeek));
+    const shape = cardShapeKey(
+      entry.vm,
+      readOnly,
+      Boolean(entry.thisWeek),
+      Boolean(entry.pinned)
+    );
     let card = existingCards.get(entry.id);
     if (card && card.dataset.shapeKey === shape) {
       existingCards.delete(entry.id);
@@ -1391,7 +1486,10 @@ function reconcileEventList(list, nowMs, readOnly) {
     } else {
       // Shape changed or new — create fresh card; old node (if any) is dropped.
       existingCards.delete(entry.id);
-      card = renderCard(entry.vm, readOnly, { thisWeek: Boolean(entry.thisWeek) });
+      card = renderCard(entry.vm, readOnly, {
+        thisWeek: Boolean(entry.thisWeek),
+        pinned: Boolean(entry.pinned),
+      });
     }
     nextNodes.push(card);
   }
@@ -1848,7 +1946,7 @@ function renderSettingsPage() {
   appearance.appendChild(
     el('p', {
       className: 'settings-muted',
-      text: 'In compact view, relative cues show this many leading units (e.g. “5 months and 2 weeks”). Default is 2.',
+      text: 'In compact view, relative cues show this many leading units. Pair with Compact time format below. Default is 2.',
     })
   );
 
@@ -1888,6 +1986,52 @@ function renderSettingsPage() {
   }
   appearance.appendChild(cueGroup);
 
+  appearance.appendChild(
+    el('p', { className: 'settings-toggle-title', text: 'Compact time format' })
+  );
+  appearance.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: 'How compact cards write the relative cue. Expanded cards keep full words.',
+    })
+  );
+
+  const cueFormat = normalizeCompactCueFormat(state.settings.compactCueFormat);
+  const formatGroup = el('div', {
+    className: 'cue-format-selector',
+    role: 'radiogroup',
+    'aria-label': 'Compact time format',
+  });
+  for (const opt of COMPACT_CUE_FORMATS) {
+    const active = cueFormat === opt.value;
+    formatGroup.appendChild(
+      el(
+        'button',
+        {
+          type: 'button',
+          role: 'radio',
+          className: `cue-format-option${active ? ' is-active' : ''}`,
+          'aria-checked': active,
+          onClick: async () => {
+            if (cueFormat === opt.value) return;
+            patchSettings({ compactCueFormat: opt.value });
+            try {
+              await handlers.onSaveSettings({ compactCueFormat: opt.value });
+              toast(`${opt.label} format on`, 'success');
+            } catch (err) {
+              toast(err.message || 'Could not save setting', 'error');
+            }
+          },
+        },
+        [
+          el('span', { className: 'cue-format-option-label', text: opt.label }),
+          el('span', { className: 'cue-format-option-example', text: opt.hint }),
+        ]
+      )
+    );
+  }
+  appearance.appendChild(formatGroup);
+
   const densityNote = el('p', {
     className: 'settings-muted',
     text: 'Card density is controlled by the compact/expand icon in the list toolbar and syncs when signed in.',
@@ -1900,7 +2044,7 @@ function renderSettingsPage() {
   categoriesSection.appendChild(
     el('p', {
       className: 'settings-muted',
-      text: 'Every event needs a category (Misc by default). Delete a category to move its events to Misc.',
+      text: 'Every event needs a category (Misc by default). Rename a category to update every event that uses it. Delete moves those events to Misc.',
     })
   );
 
@@ -1908,25 +2052,87 @@ function renderSettingsPage() {
   for (const cat of getCategories()) {
     const row = el('li', { className: 'category-manage-row' });
     row.appendChild(el('span', { className: 'category-manage-name', text: cat }));
-    if (canDeleteCategory(cat)) {
+    if (canRenameCategory(cat) || canDeleteCategory(cat)) {
       const count = state.events.filter((e) =>
         categoriesEqual(e.category || DEFAULT_CATEGORY, cat)
       ).length;
-      row.appendChild(
-        el('button', {
-          type: 'button',
-          className: 'btn btn-danger btn-sm',
-          text: 'Delete',
-          'aria-label': `Delete category ${cat}`,
-          onClick: () => confirmDeleteCategory(cat, count),
-        })
-      );
+      const actions = el('div', { className: 'category-manage-actions' });
+      if (canRenameCategory(cat)) {
+        actions.appendChild(
+          el('button', {
+            type: 'button',
+            className: 'btn btn-ghost btn-sm',
+            text: 'Rename',
+            'aria-label': `Rename category ${cat}`,
+            onClick: () => openRenameCategoryModal(cat, count),
+          })
+        );
+      }
+      if (canDeleteCategory(cat)) {
+        actions.appendChild(
+          el('button', {
+            type: 'button',
+            className: 'btn btn-danger btn-sm',
+            text: 'Delete',
+            'aria-label': `Delete category ${cat}`,
+            onClick: () => confirmDeleteCategory(cat, count),
+          })
+        );
+      }
+      row.appendChild(actions);
     } else {
       row.appendChild(el('span', { className: 'category-manage-lock', text: 'Default' }));
     }
     catList.appendChild(row);
   }
   categoriesSection.appendChild(catList);
+
+  const addRow = el('div', { className: 'category-add-row' });
+  const addInput = el('input', {
+    type: 'text',
+    className: 'category-new-input',
+    maxlength: String(CATEGORY_MAX),
+    placeholder: 'New category name',
+    autocomplete: 'off',
+    'aria-label': 'New category name',
+  });
+  const addBtn = el('button', {
+    type: 'button',
+    className: 'btn btn-ghost btn-sm',
+    text: 'Add',
+  });
+  const commitAdd = async () => {
+    const raw = String(addInput.value || '').trim();
+    if (!raw) {
+      toast('Enter a category name.', 'info');
+      addInput.focus();
+      return;
+    }
+    const name = normalizeCategoryName(raw);
+    const prev = getCategories();
+    if (prev.some((c) => categoriesEqual(c, name))) {
+      toast(`“${name}” already exists.`, 'info');
+      return;
+    }
+    const next = normalizeCategories([...prev, name]);
+    patchSettings({ categories: next });
+    try {
+      await handlers.onSaveSettings({ categories: next });
+      toast(`Category “${name}” added`, 'success');
+    } catch (err) {
+      toast(err.message || 'Could not add category', 'error');
+    }
+  };
+  addBtn.addEventListener('click', () => commitAdd());
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitAdd();
+    }
+  });
+  addRow.appendChild(addInput);
+  addRow.appendChild(addBtn);
+  categoriesSection.appendChild(addRow);
   page.appendChild(categoriesSection);
   page.appendChild(renderQuickCategorySettings());
 
@@ -2621,7 +2827,12 @@ export function patchListDigits(nowMs = Date.now()) {
       // Shape drift (units appeared/disappeared) → reconcile that card only via list pass.
       if (
         card.dataset.shapeKey !==
-        cardShapeKey(entry.vm, state.mode === 'guest', Boolean(entry.thisWeek))
+        cardShapeKey(
+          entry.vm,
+          state.mode === 'guest',
+          Boolean(entry.thisWeek),
+          Boolean(entry.pinned)
+        )
       ) {
         reconcileEventList(list, nowMs, state.mode === 'guest');
         scheduleCompactColumnMin(list);
@@ -2730,6 +2941,7 @@ export function openEventModal(event) {
     showCycleProgress: event?.showCycleProgress !== false,
     category: resolveEventCategory(event, getCategories()),
     excludeFromThisWeek: defaultExcludeFromThisWeek(event),
+    pinned: event?.pinned === true,
     /** null = auto from title; string = manual override */
     emoji: normalizeEventEmoji(event?.emoji),
   };
@@ -3150,6 +3362,23 @@ export function openEventModal(event) {
   }
   body.appendChild(el('div', { className: 'field' }, [el('label', { text: 'Recurrence' }), freqSelect]));
 
+  const pinToggle = el('input', {
+    type: 'checkbox',
+    checked: draft.pinned,
+  });
+  body.appendChild(
+    el('div', { className: 'field' }, [
+      el('div', { className: 'checkbox-row' }, [
+        pinToggle,
+        el('label', { text: 'Pin to top' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: 'Keeps this event in Pinned at the top. This week still has its own section — pinning does not mix the two.',
+      }),
+    ])
+  );
+
   const excludeThisWeekToggle = el('input', {
     type: 'checkbox',
     checked: draft.excludeFromThisWeek,
@@ -3162,7 +3391,7 @@ export function openEventModal(event) {
       ]),
       el('p', {
         className: 'field-hint',
-        text: 'Hides this event from the This week pin (next 7 days). Daily and weekly recurrence turn this on automatically.',
+        text: 'Hides this event from the automatic This week section (next 7 days). Daily and weekly recurrence turn this on automatically. Separate from Pin to top.',
       }),
     ])
   );
@@ -3304,6 +3533,7 @@ export function openEventModal(event) {
       showSinceFirst: freqSelect.value === 'none' ? true : sinceFirstToggle.checked,
       showCycleProgress: freqSelect.value === 'none' ? true : cycleToggle.checked,
       excludeFromThisWeek: excludeThisWeekToggle.checked,
+      pinned: pinToggle.checked,
       emoji: selectedEmoji,
       _categories: catsForSave,
     };
@@ -3360,6 +3590,95 @@ function confirmDelete(event) {
   backdrop.appendChild(modal);
   document.getElementById('modal-root').replaceChildren(backdrop);
   trapFocus(modal);
+}
+
+function openRenameCategoryModal(categoryName, eventCount) {
+  lastFocus = document.activeElement;
+  const backdrop = el('div', {
+    className: 'modal-backdrop',
+    onClick: (e) => {
+      if (e.target === backdrop) closeModal();
+    },
+  });
+  const modal = el('div', {
+    className: 'modal glass',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'rename-category-title',
+  });
+  modal.appendChild(el('h2', { id: 'rename-category-title', text: 'Rename category' }));
+
+  const nameInput = el('input', {
+    type: 'text',
+    className: 'category-new-input',
+    maxlength: String(CATEGORY_MAX),
+    value: categoryName,
+    autocomplete: 'off',
+    'aria-label': 'Category name',
+  });
+  const hint = el('p', { className: 'field-hint' });
+  const refreshHint = () => {
+    const planned = applyCategoryRename(getCategories(), categoryName, nameInput.value);
+    if (!planned.ok) {
+      hint.textContent = planned.error;
+      return;
+    }
+    if (planned.unchanged) {
+      hint.textContent = 'Same name — nothing to change.';
+      return;
+    }
+    if (planned.merged) {
+      hint.textContent =
+        eventCount > 0
+          ? `This merges into “${planned.name}”. ${eventCount} event${eventCount === 1 ? '' : 's'} will move there.`
+          : `This merges into “${planned.name}”.`;
+      return;
+    }
+    hint.textContent =
+      eventCount > 0
+        ? `${eventCount} event${eventCount === 1 ? '' : 's'} will be updated.`
+        : 'No events currently use this category.';
+  };
+  refreshHint();
+  nameInput.addEventListener('input', refreshHint);
+
+  const form = el('form', { className: 'modal-form' });
+  form.appendChild(
+    el('div', { className: 'field' }, [el('label', { text: 'Name' }), nameInput, hint])
+  );
+
+  const actions = el('div', { className: 'modal-actions' });
+  actions.appendChild(
+    el('button', { type: 'button', className: 'btn btn-ghost', text: 'Cancel', onClick: () => closeModal() })
+  );
+  const saveBtn = el('button', { type: 'submit', className: 'btn', text: 'Save' });
+  actions.appendChild(saveBtn);
+  form.appendChild(actions);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const planned = applyCategoryRename(getCategories(), categoryName, nameInput.value);
+    if (!planned.ok) {
+      toast(planned.error, 'info');
+      nameInput.focus();
+      return;
+    }
+    if (planned.unchanged) {
+      closeModal();
+      return;
+    }
+    closeModal();
+    handlers.onRenameCategory(categoryName, nameInput.value);
+  });
+
+  modal.appendChild(form);
+  backdrop.appendChild(modal);
+  document.getElementById('modal-root').replaceChildren(backdrop);
+  trapFocus(modal, nameInput);
+  requestAnimationFrame(() => {
+    nameInput.focus();
+    nameInput.select();
+  });
 }
 
 function confirmDeleteCategory(categoryName, eventCount) {
@@ -3714,6 +4033,7 @@ function openMultiEditModal(ids) {
   const sharedSinceLast = sharedOrMixed(events.map((e) => e.showSinceLast !== false));
   const sharedSinceFirst = sharedOrMixed(events.map((e) => e.showSinceFirst !== false));
   const sharedCycle = sharedOrMixed(events.map((e) => e.showCycleProgress !== false));
+  const sharedPinned = sharedOrMixed(events.map((e) => e.pinned === true));
 
   const dirty = {
     color: false,
@@ -3724,6 +4044,7 @@ function openMultiEditModal(ids) {
     showSinceLast: false,
     showSinceFirst: false,
     showCycleProgress: false,
+    pinned: false,
   };
 
   const draft = {
@@ -3734,6 +4055,7 @@ function openMultiEditModal(ids) {
     showSinceLast: sharedSinceLast.mixed ? true : sharedSinceLast.value !== false,
     showSinceFirst: sharedSinceFirst.mixed ? true : sharedSinceFirst.value !== false,
     showCycleProgress: sharedCycle.mixed ? true : sharedCycle.value !== false,
+    pinned: sharedPinned.mixed ? false : sharedPinned.value === true,
   };
 
   let modalCategories = [...getCategories()];
@@ -4104,6 +4426,28 @@ function openMultiEditModal(ids) {
   form.appendChild(sinceField);
   syncSinceVisibility();
 
+  const pinToggle = el('input', { type: 'checkbox', checked: draft.pinned });
+  if (sharedPinned.mixed) pinToggle.indeterminate = true;
+  pinToggle.addEventListener('change', () => {
+    dirty.pinned = true;
+    pinToggle.indeterminate = false;
+    draft.pinned = pinToggle.checked;
+  });
+  form.appendChild(
+    el('div', { className: 'field' }, [
+      el('div', { className: 'checkbox-row' }, [
+        pinToggle,
+        el('label', { text: 'Pin to top' }),
+      ]),
+      el('p', {
+        className: 'field-hint',
+        text: sharedPinned.mixed
+          ? 'Mixed — some selected events are pinned. Check or uncheck to apply to all.'
+          : 'Pinned events live in their own section at the top, separate from This week.',
+      }),
+    ])
+  );
+
   const actions = el('div', { className: 'modal-actions' });
   actions.appendChild(
     el('button', {
@@ -4145,6 +4489,7 @@ function openMultiEditModal(ids) {
     if (dirty.showSinceLast) patch.showSinceLast = sinceLastToggle.checked;
     if (dirty.showSinceFirst) patch.showSinceFirst = sinceFirstToggle.checked;
     if (dirty.showCycleProgress) patch.showCycleProgress = cycleToggle.checked;
+    if (dirty.pinned) patch.pinned = pinToggle.checked;
 
     // Switching to one-time forces show* defaults via API; still mark them if frequency dirty.
     if (dirty.frequency && freqSelect.value === 'none') {

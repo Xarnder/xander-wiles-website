@@ -15,7 +15,7 @@ import {
   normalizeQuickCategorySlots,
   storedQuickCategories,
 } from './categories.js';
-import { COMPACT_CUE_UNITS_DEFAULT, normalizeCompactCueUnits } from './constants.js';
+import { COMPACT_CUE_UNITS_DEFAULT, COMPACT_CUE_FORMAT_DEFAULT, normalizeCompactCueUnits, normalizeCompactCueFormat } from './constants.js';
 
 const listeners = new Set();
 
@@ -28,6 +28,8 @@ export function defaultSettings() {
     cardDensity: 'expanded',
     /** How many leading units compact relative cues show (1–5, default 2). */
     compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
+    /** Compact relative cue writing: 'words' | 'comma' | 'short' | 'short-space' */
+    compactCueFormat: COMPACT_CUE_FORMAT_DEFAULT,
     /** 'atmosphere' | 'oled' | 'light' */
     theme: 'atmosphere',
     categories: [DEFAULT_CATEGORY],
@@ -127,7 +129,7 @@ function eventsFingerprint(events) {
   if (!Array.isArray(events) || !events.length) return String(events?.length || 0);
   let out = String(events.length);
   for (const e of events) {
-    out += `|${e?.id || ''}:${e?.updatedAt || e?.updated || e?.name || ''}:${e?.date || ''}:${e?.time || ''}`;
+    out += `|${e?.id || ''}:${e?.updatedAt || e?.updated || e?.name || ''}:${e?.date || ''}:${e?.time || ''}:${e?.pinned ? '1' : '0'}`;
   }
   return out;
 }
@@ -161,6 +163,9 @@ export function setSettings(settings) {
     cardDensity: settings?.cardDensity === 'compact' ? 'compact' : 'expanded',
     compactCueUnits: normalizeCompactCueUnits(
       settings?.compactCueUnits ?? base.compactCueUnits
+    ),
+    compactCueFormat: normalizeCompactCueFormat(
+      settings?.compactCueFormat ?? base.compactCueFormat
     ),
     theme: normalizeTheme(settings?.theme ?? readStoredTheme()),
     quickCategorySlots: normalizeQuickCategorySlots(
@@ -200,6 +205,9 @@ export function patchSettings(partial) {
   }
   if (partial.compactCueUnits !== undefined) {
     next.compactCueUnits = normalizeCompactCueUnits(partial.compactCueUnits);
+  }
+  if (partial.compactCueFormat !== undefined) {
+    next.compactCueFormat = normalizeCompactCueFormat(partial.compactCueFormat);
   }
   if (partial.quickCategorySlots !== undefined) {
     next.quickCategorySlots = normalizeQuickCategorySlots(partial.quickCategorySlots);

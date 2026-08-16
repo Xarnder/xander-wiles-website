@@ -5,6 +5,7 @@ import {
   batchUpdateEvents,
   deleteEvent,
   deleteCategory,
+  renameCategory,
   subscribeEvents,
   subscribeSettings,
   saveSettings,
@@ -24,7 +25,7 @@ import {
   setView,
   needsSecondTick,
 } from './store.js';
-import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded, storedQuickCategories } from './categories.js';
+import { normalizeCategories, normalizeCategoryName, canDeleteCategory, applyCategoryRename, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded, storedQuickCategories } from './categories.js';
 import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal, preloadIcons } from './ui.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
@@ -114,6 +115,7 @@ function persistSettingsSoon(extra = {}) {
         fullColourCards: state.settings.fullColourCards,
         cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
         compactCueUnits: state.settings.compactCueUnits,
+        compactCueFormat: state.settings.compactCueFormat,
         theme: state.settings.theme,
         categories: normalizeCategories(state.settings.categories),
         quickCategorySlots: state.settings.quickCategorySlots,
@@ -147,6 +149,7 @@ async function syncCategoriesAfterEvent(category, modalCategories) {
       fullColourCards: state.settings.fullColourCards,
       cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
       compactCueUnits: state.settings.compactCueUnits,
+      compactCueFormat: state.settings.compactCueFormat,
       theme: state.settings.theme,
       quickCategorySlots: state.settings.quickCategorySlots,
       quickCategories: storedQuickCategories(
@@ -264,6 +267,10 @@ setUIHandlers({
             partial.compactCueUnits !== undefined
               ? partial.compactCueUnits
               : state.settings.compactCueUnits,
+          compactCueFormat:
+            partial.compactCueFormat !== undefined
+              ? partial.compactCueFormat
+              : state.settings.compactCueFormat,
           theme: partial.theme !== undefined ? partial.theme : state.settings.theme,
           ...partial,
           categories: normalizeCategories(
@@ -369,6 +376,62 @@ setUIHandlers({
         patchSettings({ categories: nextCategories, filters, quickCategories });
       }
       toast(`Category “${name}” deleted`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  },
+  onRenameCategory: async (fromName, toName) => {
+    try {
+      if (state.user && isFirebaseConfigured) {
+        const result = await renameCategory(
+          state.user.uid,
+          fromName,
+          toName,
+          state.events,
+          state.settings
+        );
+        toast(
+          result.merged
+            ? `Merged into “${result.name}”`
+            : `Category renamed to “${result.name}”`,
+          'success'
+        );
+        return;
+      }
+
+      const planned = applyCategoryRename(state.settings.categories, fromName, toName);
+      if (!planned.ok) throw new Error(planned.error);
+      if (planned.unchanged) return;
+
+      const from = planned.from;
+      const nextName = planned.name;
+      const nextCategories = planned.categories;
+      const nextEvents = state.events.map((e) =>
+        categoriesEqual(e.category || DEFAULT_CATEGORY, from)
+          ? { ...e, category: nextName, updatedAt: new Date().toISOString() }
+          : e
+      );
+      const filters = { ...state.settings.filters };
+      if (filters.category && categoriesEqual(filters.category, from)) {
+        filters.category = nextName;
+      }
+      const prevQuick = state.settings.quickCategories;
+      const nextQuick = Array.isArray(prevQuick)
+        ? prevQuick.map((c) => (categoriesEqual(c, from) ? nextName : c))
+        : prevQuick;
+      const quickCategories = storedQuickCategories(
+        nextCategories,
+        state.settings.quickCategorySlots,
+        nextQuick
+      );
+      setEvents(nextEvents);
+      patchSettings({ categories: nextCategories, filters, quickCategories });
+      toast(
+        planned.merged
+          ? `Merged into “${nextName}”`
+          : `Category renamed to “${nextName}”`,
+        'success'
+      );
     } catch (err) {
       toast(err.message, 'error');
     }

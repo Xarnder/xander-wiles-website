@@ -1,4 +1,4 @@
-const CACHE_NAME = 'time-pass-v62';
+const CACHE_NAME = 'time-pass-v67';
 const OWNED_PREFIX = 'time-pass-';
 const ASSETS = [
   './',
@@ -33,6 +33,7 @@ const ASSETS = [
   '/assets/SVGs/edit.svg',
   '/assets/SVGs/duplicate.svg',
   '/assets/SVGs/copy.svg',
+  '/assets/SVGs/pin.svg',
   '/assets/SVGs/expand.svg',
   '/assets/SVGs/shrink.svg',
   '/assets/SVGs/Left-ArrowIcons.svg',
