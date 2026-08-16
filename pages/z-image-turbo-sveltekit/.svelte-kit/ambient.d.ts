@@ -48,6 +48,8 @@ declare module '$env/static/private' {
 	export const HUSKY: string;
 	export const OSLogRateLimit: string;
 	export const npm_config_user_agent: string;
+	export const VSCODE_GIT_ASKPASS_NODE: string;
+	export const VSCODE_GIT_IPC_HANDLE: string;
 	export const INIT_CWD: string;
 	export const SHLVL: string;
 	export const GEMINI_API_KEY: string;
@@ -55,10 +57,11 @@ declare module '$env/static/private' {
 	export const SUPABASE_URL: string;
 	export const npm_config_npm_version: string;
 	export const XPC_SERVICE_NAME: string;
-	export const npm_config_node_gyp: string;
 	export const SUPABASE_PUBLISHABLE_KEY: string;
+	export const npm_config_node_gyp: string;
 	export const LANG: string;
 	export const EDITOR: string;
+	export const VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 	export const npm_lifecycle_event: string;
 	export const LOGNAME: string;
 	export const npm_config_globalconfig: string;
@@ -71,11 +74,14 @@ declare module '$env/static/private' {
 	export const npm_package_json: string;
 	export const npm_config_userconfig: string;
 	export const PATH: string;
+	export const VSCODE_GIT_IPC_AUTH_TOKEN: string;
+	export const VITE_FIREBASE_PROJECT_ID: string;
 	export const npm_execpath: string;
 	export const npm_config_init_module: string;
 	export const __CF_USER_TEXT_ENCODING: string;
 	export const VSCODE_PROFILE_INITIALIZED: string;
 	export const SSH_AUTH_SOCK: string;
+	export const VSCODE_GIT_ASKPASS_MAIN: string;
 	export const npm_package_version: string;
 	export const HOME: string;
 	export const COMMAND_MODE: string;
@@ -83,8 +89,8 @@ declare module '$env/static/private' {
 	export const __CFBundleIdentifier: string;
 	export const USER: string;
 	export const npm_package_name: string;
-	export const ZDOTDIR: string;
 	export const SHELL: string;
+	export const ZDOTDIR: string;
 	export const npm_config_local_prefix: string;
 	export const TERM: string;
 	export const TMPDIR: string;
@@ -92,13 +98,13 @@ declare module '$env/static/private' {
 	export const VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 	export const npm_config_global_prefix: string;
 	export const COLOR: string;
-	export const VITE_FIREBASE_AUTH_DOMAIN: string;
-	export const VITE_FIREBASE_PROJECT_ID: string;
 	export const TERM_PROGRAM: string;
 	export const GOOGLE_APPLICATION_CREDENTIALS: string;
 	export const VITE_FIREBASE_APP_ID: string;
+	export const GIT_ASKPASS: string;
 	export const PWD: string;
 	export const NODE: string;
+	export const VITE_FIREBASE_AUTH_DOMAIN: string;
 	export const npm_config_cache: string;
 	export const PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: string;
 	export const TERM_PROGRAM_VERSION: string;
@@ -143,6 +149,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_TIME_PASS_FIREBASE_MESSAGING_SENDER_ID: string;
 	export const PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_STORY_FIREBASE_APP_ID: string;
@@ -185,7 +192,6 @@ declare module '$env/static/public' {
 	export const PUBLIC_TIME_PASS_FIREBASE_PROJECT_ID: string;
 	export const PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
 	export const PUBLIC_SOCIAL_FIREBASE_APP_ID: string;
-	export const PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_TODO_FIREBASE_STORAGE_BUCKET: string;
 	export const PUBLIC_TODO_FIREBASE_PROJECT_ID: string;
 }
@@ -247,6 +253,8 @@ declare module '$env/dynamic/private' {
 		HUSKY: string;
 		OSLogRateLimit: string;
 		npm_config_user_agent: string;
+		VSCODE_GIT_ASKPASS_NODE: string;
+		VSCODE_GIT_IPC_HANDLE: string;
 		INIT_CWD: string;
 		SHLVL: string;
 		GEMINI_API_KEY: string;
@@ -254,10 +262,11 @@ declare module '$env/dynamic/private' {
 		SUPABASE_URL: string;
 		npm_config_npm_version: string;
 		XPC_SERVICE_NAME: string;
-		npm_config_node_gyp: string;
 		SUPABASE_PUBLISHABLE_KEY: string;
+		npm_config_node_gyp: string;
 		LANG: string;
 		EDITOR: string;
+		VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 		npm_lifecycle_event: string;
 		LOGNAME: string;
 		npm_config_globalconfig: string;
@@ -270,11 +279,14 @@ declare module '$env/dynamic/private' {
 		npm_package_json: string;
 		npm_config_userconfig: string;
 		PATH: string;
+		VSCODE_GIT_IPC_AUTH_TOKEN: string;
+		VITE_FIREBASE_PROJECT_ID: string;
 		npm_execpath: string;
 		npm_config_init_module: string;
 		__CF_USER_TEXT_ENCODING: string;
 		VSCODE_PROFILE_INITIALIZED: string;
 		SSH_AUTH_SOCK: string;
+		VSCODE_GIT_ASKPASS_MAIN: string;
 		npm_package_version: string;
 		HOME: string;
 		COMMAND_MODE: string;
@@ -282,8 +294,8 @@ declare module '$env/dynamic/private' {
 		__CFBundleIdentifier: string;
 		USER: string;
 		npm_package_name: string;
-		ZDOTDIR: string;
 		SHELL: string;
+		ZDOTDIR: string;
 		npm_config_local_prefix: string;
 		TERM: string;
 		TMPDIR: string;
@@ -291,13 +303,13 @@ declare module '$env/dynamic/private' {
 		VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 		npm_config_global_prefix: string;
 		COLOR: string;
-		VITE_FIREBASE_AUTH_DOMAIN: string;
-		VITE_FIREBASE_PROJECT_ID: string;
 		TERM_PROGRAM: string;
 		GOOGLE_APPLICATION_CREDENTIALS: string;
 		VITE_FIREBASE_APP_ID: string;
+		GIT_ASKPASS: string;
 		PWD: string;
 		NODE: string;
+		VITE_FIREBASE_AUTH_DOMAIN: string;
 		npm_config_cache: string;
 		PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: string;
 		TERM_PROGRAM_VERSION: string;
@@ -361,6 +373,7 @@ declare module '$env/dynamic/public' {
 		PUBLIC_TIME_PASS_FIREBASE_MESSAGING_SENDER_ID: string;
 		PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_STORY_FIREBASE_APP_ID: string;
@@ -403,7 +416,6 @@ declare module '$env/dynamic/public' {
 		PUBLIC_TIME_PASS_FIREBASE_PROJECT_ID: string;
 		PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
 		PUBLIC_SOCIAL_FIREBASE_APP_ID: string;
-		PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_TODO_FIREBASE_STORAGE_BUCKET: string;
 		PUBLIC_TODO_FIREBASE_PROJECT_ID: string;
 		[key: `PUBLIC_${string}`]: string | undefined;

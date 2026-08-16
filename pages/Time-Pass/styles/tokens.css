@@ -40,6 +40,16 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+
+  --quick-cat-cols: 2;
+  --quick-cat-rows: 2;
+  --quick-cat-slot-h: 2.05rem;
+  --quick-cat-gap: 0.3rem;
+  --quick-cat-block: calc(
+    (var(--quick-cat-rows) * var(--quick-cat-slot-h)) +
+    ((var(--quick-cat-rows) - 1) * var(--quick-cat-gap)) +
+    0.35rem
+  );
 }
 
 *,

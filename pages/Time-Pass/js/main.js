@@ -24,7 +24,7 @@ import {
   setView,
   needsSecondTick,
 } from './store.js';
-import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded } from './categories.js';
+import { normalizeCategories, normalizeCategoryName, canDeleteCategory, categoriesEqual, DEFAULT_CATEGORY, applyBirthdayCategoryIfNeeded, storedQuickCategories } from './categories.js';
 import { renderAll, renderToolbar, renderList, patchListDigits, setUIHandlers, focusSearch, openEventModal, preloadIcons } from './ui.js';
 import { toast } from './format.js';
 import { isFirebaseConfigured } from '../firebase-config.js';
@@ -116,6 +116,12 @@ function persistSettingsSoon(extra = {}) {
         compactCueUnits: state.settings.compactCueUnits,
         theme: state.settings.theme,
         categories: normalizeCategories(state.settings.categories),
+        quickCategorySlots: state.settings.quickCategorySlots,
+        quickCategories: storedQuickCategories(
+          state.settings.categories,
+          state.settings.quickCategorySlots,
+          state.settings.quickCategories
+        ),
         ...extra,
       });
     } catch (err) {
@@ -142,6 +148,12 @@ async function syncCategoriesAfterEvent(category, modalCategories) {
       cardDensity: state.settings.cardDensity === 'compact' ? 'compact' : 'expanded',
       compactCueUnits: state.settings.compactCueUnits,
       theme: state.settings.theme,
+      quickCategorySlots: state.settings.quickCategorySlots,
+      quickCategories: storedQuickCategories(
+        next,
+        state.settings.quickCategorySlots,
+        state.settings.quickCategories
+      ),
     });
   }
 }
@@ -257,6 +269,19 @@ setUIHandlers({
           categories: normalizeCategories(
             partial.categories !== undefined ? partial.categories : state.settings.categories
           ),
+          quickCategorySlots:
+            partial.quickCategorySlots !== undefined
+              ? partial.quickCategorySlots
+              : state.settings.quickCategorySlots,
+          quickCategories: storedQuickCategories(
+            partial.categories !== undefined ? partial.categories : state.settings.categories,
+            partial.quickCategorySlots !== undefined
+              ? partial.quickCategorySlots
+              : state.settings.quickCategorySlots,
+            partial.quickCategories !== undefined
+              ? partial.quickCategories
+              : state.settings.quickCategories
+          ),
         });
       } catch (err) {
         if (isBenignFirestoreError(err)) {
@@ -335,8 +360,13 @@ setUIHandlers({
         if (filters.category && categoriesEqual(filters.category, name)) {
           filters.category = 'all';
         }
+        const quickCategories = storedQuickCategories(
+          nextCategories,
+          state.settings.quickCategorySlots,
+          state.settings.quickCategories
+        );
         setEvents(nextEvents);
-        patchSettings({ categories: nextCategories, filters });
+        patchSettings({ categories: nextCategories, filters, quickCategories });
       }
       toast(`Category “${name}” deleted`, 'success');
     } catch (err) {

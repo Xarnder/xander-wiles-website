@@ -12,7 +12,7 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 
 | Kind | Examples | Fastest local workflow |
 |------|----------|------------------------|
-| **Static page** | To-Do List, Countdown, Local-AI, Markdown-Editor | Root `npm run dev` → open `/pages/<name>/` |
+| **Static page** | To-Do List, Time Pass, Countdown, Markdown-Editor | Root `npm run dev` → open `/pages/<name>/` |
 | **Vite app** (React) | Journal, Teleprompter | `cd pages/<app>` → `npm run dev` |
 | **Vite app** (Svelte) | Logo-Demo | `cd pages/<app>` → `npm run dev` |
 | **SvelteKit app** | Fighter-Jet, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
@@ -30,6 +30,7 @@ Bundled apps are **built in `build.js`** and copied into `deploy_out/pages/...`.
 |-----|--------|------------------|----------------------|
 | **Homepage** | `/` | `npm run dev` | `http://localhost:3000/` |
 | **To-Do List** | `pages/To-Do-List/` | `npm run dev` | `http://localhost:3000/pages/To-Do-List/` |
+| **Time Pass** | `pages/Time-Pass/` | `npm run dev` (UI) · `npm run build` + `npm run preview` (Google sign-in) | `http://localhost:3000/pages/Time-Pass/` |
 | **Markdown-Editor** | `pages/Markdown-Editor/` | `npm run dev` | `http://localhost:3000/pages/Markdown-Editor/` |
 | **Journal** | `pages/journal/` | `cd pages/journal && npm install && npm run dev` | `http://localhost:5173/pages/journal/` |
 | **Teleprompter** | `pages/Teleprompter/` | `cd pages/Teleprompter && npm install && npm run dev` | `http://localhost:5173/pages/Teleprompter/` |
@@ -61,6 +62,7 @@ npm run dev
 
 - Homepage: `http://localhost:3000/`
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
+- Time Pass: `http://localhost:3000/pages/Time-Pass/`
 - Markdown-Editor: `http://localhost:3000/pages/Markdown-Editor/`
 - Any other static tool: `http://localhost:3000/pages/<Folder-Name>/`
 
@@ -78,9 +80,60 @@ npm run preview
 
 Setup details: `pages/Markdown-Editor/README.md` and `pages/Markdown-Editor/GOOGLE-CLOUD-SETUP.md`.
 
+**Time Pass (Google sign-in):** Same injection rule. Root `npm run dev` shows the guest (read-only) sample events, but **Sign in with Google will not work** until Firebase config is baked in. See [Time Pass](#2-time-pass-google-sign-in) below.
+
 ---
 
-## 2. Journal (Vite + React)
+## 2. Time Pass (Google sign-in)
+
+Time Pass is a **static** page (`pages/Time-Pass/`). The UI runs from root `npm run dev`; **Google login and Firestore sync** need the Time Pass Firebase web config injected by `build.js`.
+
+### UI only (guest preview)
+
+```bash
+# From repo root
+npm install
+npm run dev
+```
+
+Open **`http://localhost:3000/pages/Time-Pass/`**. You get read-only sample events. Tapping **Sign in with Google** shows “Firebase is not configured” until the steps below are done.
+
+### Sign in with Google (local)
+
+1. Copy env vars from `.env.example` into repo-root **`.env.local`** (do not commit `.env.local`):
+
+   ```
+   PUBLIC_TIME_PASS_FIREBASE_API_KEY=
+   PUBLIC_TIME_PASS_FIREBASE_AUTH_DOMAIN=
+   PUBLIC_TIME_PASS_FIREBASE_PROJECT_ID=
+   PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET=
+   PUBLIC_TIME_PASS_FIREBASE_MESSAGING_SENDER_ID=
+   PUBLIC_TIME_PASS_FIREBASE_APP_ID=
+   ```
+
+   Fill them from the Time Pass **Firebase Console → Project settings → Your apps → Web**. This is a **dedicated** Firebase project (not To-Do List / Journal).
+
+2. In that same Firebase project:
+
+   - **Authentication → Sign-in method → Google** — enable it.
+   - **Authentication → Settings → Authorized domains** — include `localhost` (and later `xanderwiles.com` / `www.xanderwiles.com` for production).
+   - **Firestore** — create the database if needed, then publish the rules in `pages/Time-Pass/firestore.rules`.
+
+3. Inject config and serve the built site (root `npm run dev` does **not** replace `process.env`):
+
+   ```bash
+   npm run build
+   npm run preview
+   # open http://localhost:3000/pages/Time-Pass/
+   ```
+
+4. Click **Sign in with Google**. Allow the popup if the browser blocks it. After a successful login, events and settings sync under your Google `uid`.
+
+Project creation, rules deploy, and optional local `window.TIME_PASS_FIREBASE_CONFIG` override: `pages/Time-Pass/README.md`.
+
+---
+
+## 3. Journal (Vite + React)
 
 ```bash
 cd pages/journal
@@ -103,7 +156,7 @@ SPA routing: `serve.json` at the repo root rewrites `/pages/journal/*` to `index
 
 ---
 
-## 3. Teleprompter (Vite + React)
+## 4. Teleprompter (Vite + React)
 
 ```bash
 cd pages/Teleprompter
@@ -125,7 +178,7 @@ Mic and on-device ASR need a **secure context** (`localhost` is fine). Use Chrom
 
 ---
 
-## 4. SvelteKit apps (Fighter-Jet, Z-Image Turbo)
+## 5. SvelteKit apps (Fighter-Jet, Z-Image Turbo)
 
 ```bash
 cd pages/Fighter-Jet   # or pages/z-image-turbo-sveltekit
@@ -137,7 +190,7 @@ Use the URL Vite prints in the terminal. These apps are built and injected into 
 
 ---
 
-## 5. Full website preview (navigation + built apps)
+## 6. Full website preview (navigation + built apps)
 
 This matches what Vercel deploys: homepage, `assets/`, nav, static pages, **and** compiled Journal / Teleprompter / Fighter-Jet / Z-Image.
 
@@ -152,6 +205,7 @@ npm run preview    # same as: npx serve deploy_out
 - Teleprompter: `http://localhost:3000/pages/Teleprompter/`
 - Journal: `http://localhost:3000/pages/journal/`
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
+- Time Pass: `http://localhost:3000/pages/Time-Pass/`
 - Markdown-Editor: `http://localhost:3000/pages/Markdown-Editor/`
 
 Click through the homepage grid and the loaded nav bar to verify links and “recent pages” behavior.
@@ -169,7 +223,7 @@ cd deploy_out && python3 -m http.server 3000
 
 ---
 
-## 6. Two-terminal workflow (common day)
+## 7. Two-terminal workflow (common day)
 
 | Terminal A | Terminal B |
 |------------|------------|
@@ -181,11 +235,14 @@ cd deploy_out && python3 -m http.server 3000
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
 | Blank page on a Vite app via root `npm run dev` | Serving raw `index.html` + `/src/...` | Use `cd pages/<app> && npm run dev` |
 | `GET /` → 404 while serving `deploy_out` | Stale/bad `.gitignore` in `deploy_out` | `npm run build` again; use `npm run preview` |
 | Journal `/pages/journal/entry/...` 404 on refresh in preview | SPA rewrite not in `deploy_out/serve.json` | Test journal with `cd pages/journal && npm run preview`, or run `npx serve deploy_out -c serve.json` from the **repo root** (root `serve.json` includes journal rewrites) |
+| Time Pass: “Firebase is not configured” on Sign in | Root `npm run dev` does not inject `.env.local` | Put `PUBLIC_TIME_PASS_FIREBASE_*` in `.env.local`, then `npm run build && npm run preview` |
+| Time Pass: `auth/unauthorized-domain` | `localhost` missing from Firebase Auth | Firebase Console → Authentication → Settings → Authorized domains → add `localhost` |
+| Time Pass: popup closes / blocked | Browser popup blocker | Allow popups for `localhost:3000`, or retry (the app falls back to redirect sign-in) |
 | Wrong folder name | Typo | **`deploy_out`**, not `depoloy_out` |

@@ -23,12 +23,19 @@ import {
 } from './store.js';
 import {
   DEFAULT_CATEGORY,
+  DEFAULT_QUICK_CATEGORY_SLOTS,
   NEW_CATEGORY_VALUE,
+  QUICK_CATEGORY_SLOT_OPTIONS,
   canDeleteCategory,
   categoriesEqual,
+  needsQuickCategoryPick,
   normalizeCategories,
   normalizeCategoryName,
+  normalizeQuickCategorySlots,
+  quickCategoryLayout,
   resolveEventCategory,
+  resolveQuickCategories,
+  storedQuickCategories,
   titleSuggestsBirthday,
   resolveBirthdayCategory,
   applyBirthdayCategoryIfNeeded,
@@ -382,6 +389,84 @@ function buildCompactEventDate(event) {
   return bits.join(' · ');
 }
 
+function applyQuickCategoryLayout(slots) {
+  const { cols, rows } = quickCategoryLayout(slots);
+  const root = document.documentElement;
+  root.style.setProperty('--quick-cat-cols', String(cols));
+  root.style.setProperty('--quick-cat-rows', String(rows));
+}
+
+async function commitQuickCategoryPrefs({ slots, pinned, toastLabel } = {}) {
+  const quickCategorySlots = normalizeQuickCategorySlots(
+    slots ?? state.settings.quickCategorySlots
+  );
+  const cats = getCategories();
+  const rawPinned = pinned !== undefined ? pinned : state.settings.quickCategories;
+  const quickCategories = storedQuickCategories(cats, quickCategorySlots, rawPinned);
+  patchSettings({ quickCategorySlots, quickCategories });
+  try {
+    await handlers.onSaveSettings({ quickCategorySlots, quickCategories });
+    if (toastLabel) toast(toastLabel, 'success');
+  } catch (err) {
+    toast(err.message || 'Could not save one-click categories', 'error');
+  }
+}
+
+function renderQuickCategoryGrid({
+  slots,
+  filled,
+  activeCategory = 'all',
+  onSelect,
+  interactive = true,
+  emptyLabel = '',
+} = {}) {
+  const n = normalizeQuickCategorySlots(slots);
+  const list = Array.isArray(filled) ? filled.slice(0, n) : [];
+  applyQuickCategoryLayout(n);
+
+  const bar = el('div', {
+    className: `quick-category-bar${interactive ? '' : ' is-preview'}`,
+    role: interactive ? 'toolbar' : 'presentation',
+    'aria-label': interactive ? 'One-click category filters' : undefined,
+  });
+
+  for (let i = 0; i < n; i++) {
+    const cat = list[i];
+    if (!cat) {
+      bar.appendChild(
+        el('span', {
+          className: 'quick-cat-slot is-empty',
+          'aria-hidden': 'true',
+          text: emptyLabel,
+        })
+      );
+      continue;
+    }
+    const isActive = activeCategory !== 'all' && categoriesEqual(cat, activeCategory);
+    if (!interactive) {
+      bar.appendChild(
+        el('span', {
+          className: `quick-cat-slot chip${isActive ? ' is-active' : ''}`,
+          text: cat,
+          title: cat,
+        })
+      );
+      continue;
+    }
+    bar.appendChild(
+      el('button', {
+        type: 'button',
+        className: `quick-cat-slot chip${isActive ? ' is-active' : ''}`,
+        text: cat,
+        title: isActive ? `${cat} — tap to show all` : `Filter by ${cat}`,
+        'aria-pressed': isActive,
+        onClick: () => onSelect?.(cat, isActive),
+      })
+    );
+  }
+  return bar;
+}
+
 function eventCountLabel(shown, total) {
   if (filtersAreActive()) return `${shown} shown · ${total} total`;
   return `${shown} event${shown === 1 ? '' : 's'}`;
@@ -540,6 +625,15 @@ export function renderToolbar(nowMs = Date.now()) {
   const shownEarly = getViewList(nowMs).length;
   const totalEarly = state.events.length;
   const drawerOpenEarly = getFiltersDrawerOpen();
+  const catsEarly = getCategories();
+  const quickSlotsEarly = normalizeQuickCategorySlots(
+    state.settings.quickCategorySlots ?? DEFAULT_QUICK_CATEGORY_SLOTS
+  );
+  const quickFilledEarly = resolveQuickCategories(
+    catsEarly,
+    quickSlotsEarly,
+    state.settings.quickCategories
+  );
   const nextToolbarSig = [
     state.mode,
     density,
@@ -553,12 +647,15 @@ export function renderToolbar(nowMs = Date.now()) {
     f.query || '',
     String(shownEarly),
     String(totalEarly),
-    getCategories().join('\0'),
+    catsEarly.join('\0'),
+    String(quickSlotsEarly),
+    quickFilledEarly.join('\0'),
   ].join('|');
 
   // Skip wipe-rebuild on sync ticks when filters/chrome are unchanged (keeps icons stable).
   if (!restoreSearch && nextToolbarSig === toolbarSig && toolbar.childElementCount > 0) {
     toolbar.classList.toggle('has-active-filters', filtersActive);
+    applyQuickCategoryLayout(quickSlotsEarly);
     return;
   }
   toolbarSig = nextToolbarSig;
@@ -809,13 +906,33 @@ export function renderToolbar(nowMs = Date.now()) {
     );
   }
 
+  const quickSlots = normalizeQuickCategorySlots(
+    state.settings.quickCategorySlots ?? DEFAULT_QUICK_CATEGORY_SLOTS
+  );
+  const quickFilled = resolveQuickCategories(
+    getCategories(),
+    quickSlots,
+    state.settings.quickCategories
+  );
+  const categoryFilterNow = f.category && f.category !== 'all' ? f.category : 'all';
+  const quickBar = renderQuickCategoryGrid({
+    slots: quickSlots,
+    filled: quickFilled,
+    activeCategory: categoryFilterNow,
+    onSelect: (cat, isActive) => {
+      handlers.onFilters({ category: isActive ? 'all' : cat });
+    },
+  });
+
+  const chrome = el('div', { className: 'quick-category-chrome' }, [collapsedBar, quickBar]);
+
   const drawer = el(
     'div',
     {
       className: `filters-drawer${drawerOpen ? ' is-open' : ''}`,
       id: 'filters-drawer',
     },
-    [collapsedBar, drawerBody]
+    [chrome, drawerBody]
   );
 
   toolbar.replaceChildren(drawer);
@@ -1512,6 +1629,129 @@ function renderShortcutsSection() {
   return section;
 }
 
+function renderQuickCategorySettings() {
+  const section = el('section', { className: 'settings-section' });
+  section.appendChild(el('h3', { text: 'One-click categories' }));
+  section.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: 'Permanent filter buttons in the header (desktop) and footer (phone). Choose 2, 4, 6, or 8 slots.',
+    })
+  );
+
+  const cats = getCategories();
+  const slots = normalizeQuickCategorySlots(
+    state.settings.quickCategorySlots ?? DEFAULT_QUICK_CATEGORY_SLOTS
+  );
+  const mustPick = needsQuickCategoryPick(cats, slots);
+  const filled = resolveQuickCategories(cats, slots, state.settings.quickCategories);
+
+  const slotGroup = el('div', {
+    className: 'chip-group chip-group--exclusive',
+    role: 'radiogroup',
+    'aria-label': 'One-click category slots',
+  });
+  for (const n of QUICK_CATEGORY_SLOT_OPTIONS) {
+    const active = slots === n;
+    slotGroup.appendChild(
+      el('button', {
+        type: 'button',
+        className: `chip${active ? ' is-active' : ''}`,
+        role: 'radio',
+        'aria-checked': active,
+        text: String(n),
+        title: n === 2 ? '2 slots' : `${n} slots`,
+        onClick: async () => {
+          if (slots === n) return;
+          await commitQuickCategoryPrefs({
+            slots: n,
+            pinned: state.settings.quickCategories,
+            toastLabel: n === 2 ? 'One-click bar shows 2 slots' : `One-click bar shows ${n} slots`,
+          });
+        },
+      })
+    );
+  }
+  section.appendChild(slotGroup);
+
+  const previewLabel = el('p', {
+    className: 'settings-toggle-title',
+    text: 'Bar preview',
+  });
+  section.appendChild(previewLabel);
+  section.appendChild(
+    renderQuickCategoryGrid({
+      slots,
+      filled,
+      interactive: false,
+    })
+  );
+
+  if (!mustPick) {
+    section.appendChild(
+      el('p', {
+        className: 'settings-muted',
+        text:
+          cats.length === 1
+            ? 'You have 1 category, so it fills the bar. Leftover slots stay empty until you add more.'
+            : `You have ${cats.length} categories and ${slots} slots, so every category is pinned automatically. Leftover slots stay empty until you add more.`,
+      })
+    );
+    return section;
+  }
+
+  section.appendChild(
+    el('p', {
+      className: 'settings-toggle-title',
+      text: 'Choose which categories stay in the bar',
+    })
+  );
+  section.appendChild(
+    el('p', {
+      className: 'settings-muted',
+      text: `You have ${cats.length} categories and ${slots} slots. Pick up to ${slots}. ${filled.length} selected.`,
+    })
+  );
+
+  const pickGroup = el('div', {
+    className: 'quick-category-picker',
+    role: 'group',
+    'aria-label': 'Pinned one-click categories',
+  });
+
+  for (const cat of cats) {
+    const selected = filled.some((c) => categoriesEqual(c, cat));
+    const atCap = filled.length >= slots && !selected;
+    pickGroup.appendChild(
+      el('button', {
+        type: 'button',
+        className: `chip quick-cat-pick${selected ? ' is-active' : ''}`,
+        'aria-pressed': selected,
+        title: atCap
+          ? `Deselect one to free a slot`
+          : selected
+            ? `Remove ${cat} from the bar`
+            : `Add ${cat} to the bar`,
+        text: cat,
+        onClick: async () => {
+          let nextPinned;
+          if (selected) {
+            nextPinned = filled.filter((c) => !categoriesEqual(c, cat));
+          } else if (filled.length >= slots) {
+            toast(`Deselect one first — ${slots} slots are full`, 'info');
+            return;
+          } else {
+            nextPinned = [...filled, cat];
+          }
+          await commitQuickCategoryPrefs({ slots, pinned: nextPinned });
+        },
+      })
+    );
+  }
+  section.appendChild(pickGroup);
+  return section;
+}
+
 function renderSettingsPage() {
   const page = document.getElementById('settings-page');
   if (!page) return;
@@ -1688,6 +1928,7 @@ function renderSettingsPage() {
   }
   categoriesSection.appendChild(catList);
   page.appendChild(categoriesSection);
+  page.appendChild(renderQuickCategorySettings());
 
   const data = el('section', { className: 'settings-section' });
   data.appendChild(el('h3', { text: 'Data' }));
@@ -2411,7 +2652,16 @@ function trapFocus(modal, initialFocus) {
   if (!focusables.length) return;
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
-  (initialFocus || first).focus();
+  const target = initialFocus || first;
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const isField = target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName);
+  // Autofocusing a <16px field (or any field on iOS) zooms the page and hides the modal.
+  if (touch && isField) {
+    if (!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+    modal.focus({ preventScroll: true });
+  } else {
+    target.focus({ preventScroll: true });
+  }
   modal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();

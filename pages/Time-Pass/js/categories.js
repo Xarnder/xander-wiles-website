@@ -98,3 +98,62 @@ export function mergeCategoriesFromEvents(categories, events) {
 export function canDeleteCategory(name) {
   return normalizeCategoryName(name) !== DEFAULT_CATEGORY;
 }
+
+/** How many one-click category slots the header/footer bar shows. */
+export const QUICK_CATEGORY_SLOT_OPTIONS = [2, 4, 6, 8];
+export const DEFAULT_QUICK_CATEGORY_SLOTS = 4;
+
+export function normalizeQuickCategorySlots(value) {
+  const n = Math.floor(Number(value));
+  if (QUICK_CATEGORY_SLOT_OPTIONS.includes(n)) return n;
+  return DEFAULT_QUICK_CATEGORY_SLOTS;
+}
+
+/** 2 slots → 2×1; 4/6/8 → 2 rows so the footer bar stays compact. */
+export function quickCategoryLayout(slots) {
+  const n = normalizeQuickCategorySlots(slots);
+  const rows = n === 2 ? 1 : 2;
+  return { slots: n, cols: n / rows, rows };
+}
+
+export function needsQuickCategoryPick(categories, slots) {
+  return normalizeCategories(categories).length > normalizeQuickCategorySlots(slots);
+}
+
+/**
+ * Categories that occupy the one-click slots.
+ * - Fewer categories than slots: use every category (leftover slots stay empty).
+ * - More categories than slots, no explicit pick (`null`/`undefined`): first N.
+ * - More categories than slots, explicit array (possibly empty): those names, capped at N.
+ */
+export function resolveQuickCategories(categories, slots, pinned) {
+  const cats = normalizeCategories(categories);
+  const n = normalizeQuickCategorySlots(slots);
+  if (cats.length <= n) return cats;
+
+  if (!Array.isArray(pinned)) return cats.slice(0, n);
+
+  const byKey = new Map(cats.map((c) => [c.toLowerCase(), c]));
+  const out = [];
+  const used = new Set();
+  for (const raw of pinned) {
+    if (out.length >= n) break;
+    const match = byKey.get(normalizeCategoryName(raw).toLowerCase());
+    if (!match || used.has(match.toLowerCase())) continue;
+    out.push(match);
+    used.add(match.toLowerCase());
+  }
+  return out;
+}
+
+/**
+ * Value to persist. `null` means auto (all categories, or first N on overflow).
+ * An array is an explicit pick — used only when there are more categories than slots.
+ */
+export function storedQuickCategories(categories, slots, pinned) {
+  const cats = normalizeCategories(categories);
+  const n = normalizeQuickCategorySlots(slots);
+  if (cats.length <= n) return null;
+  if (!Array.isArray(pinned)) return null;
+  return resolveQuickCategories(cats, n, pinned);
+}

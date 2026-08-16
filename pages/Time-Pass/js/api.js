@@ -28,9 +28,12 @@ import {
 } from './constants.js';
 import {
   DEFAULT_CATEGORY,
+  DEFAULT_QUICK_CATEGORY_SLOTS,
   categoriesEqual,
   normalizeCategories,
   normalizeCategoryName,
+  normalizeQuickCategorySlots,
+  storedQuickCategories,
 } from './categories.js';
 import { normalizeEventEmoji } from './emoji-from-title.js';
 
@@ -123,6 +126,21 @@ export function subscribeEvents(uid, onData, onError) {
   );
 }
 
+function quickCategoryPersistFields(settings) {
+  const categories = normalizeCategories(settings?.categories);
+  const quickCategorySlots = normalizeQuickCategorySlots(
+    settings?.quickCategorySlots ?? DEFAULT_QUICK_CATEGORY_SLOTS
+  );
+  return {
+    quickCategorySlots,
+    quickCategories: storedQuickCategories(
+      categories,
+      quickCategorySlots,
+      settings?.quickCategories
+    ),
+  };
+}
+
 export function subscribeSettings(uid, onData, onError) {
   assertConfigured();
   return onSnapshot(
@@ -137,6 +155,8 @@ export function subscribeSettings(uid, onData, onError) {
           compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
           theme: 'atmosphere',
           categories: [DEFAULT_CATEGORY],
+          quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
+          quickCategories: null,
           filters: {
             direction: 'all',
             recurring: 'all',
@@ -166,6 +186,8 @@ export async function ensureSettings(uid, partial = {}) {
       compactCueUnits: COMPACT_CUE_UNITS_DEFAULT,
       theme: 'atmosphere',
       categories: [DEFAULT_CATEGORY],
+      quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
+      quickCategories: null,
       filters: {
         direction: 'all',
         recurring: 'all',
@@ -436,6 +458,11 @@ export async function deleteCategory(uid, categoryName, events, settings) {
       settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
         ? settings.theme
         : 'atmosphere',
+    ...quickCategoryPersistFields({
+      categories: nextCategories,
+      quickCategorySlots: settings?.quickCategorySlots,
+      quickCategories: settings?.quickCategories,
+    }),
   });
 
   return { reassigned: affected.length, categories: nextCategories };
@@ -469,6 +496,7 @@ export async function seedEventsIfNeeded(uid, events, settings) {
           ? settings.theme
           : 'atmosphere',
       categories: normalizeCategories(settings?.categories),
+      ...quickCategoryPersistFields(settings),
       filters: settings?.filters || {
         direction: 'all',
         recurring: 'all',
@@ -556,6 +584,7 @@ export function exportPayload(events, settings) {
         settings?.theme === 'oled' || settings?.theme === 'light' || settings?.theme === 'atmosphere'
           ? settings.theme
           : 'atmosphere',
+      ...quickCategoryPersistFields(settings),
     },
     events: events.map((e) => ({
       id: e.id,

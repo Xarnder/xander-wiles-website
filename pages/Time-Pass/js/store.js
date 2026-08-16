@@ -8,9 +8,12 @@ import {
 import { applyTheme, normalizeTheme, readStoredTheme } from './theme.js';
 import {
   DEFAULT_CATEGORY,
+  DEFAULT_QUICK_CATEGORY_SLOTS,
   mergeCategoriesFromEvents,
   normalizeCategories,
   normalizeCategoryName,
+  normalizeQuickCategorySlots,
+  storedQuickCategories,
 } from './categories.js';
 import { COMPACT_CUE_UNITS_DEFAULT, normalizeCompactCueUnits } from './constants.js';
 
@@ -28,6 +31,10 @@ export function defaultSettings() {
     /** 'atmosphere' | 'oled' | 'light' */
     theme: 'atmosphere',
     categories: [DEFAULT_CATEGORY],
+    /** 2, 4, 6, or 8 permanent one-click filter slots in the header/footer. */
+    quickCategorySlots: DEFAULT_QUICK_CATEGORY_SLOTS,
+    /** Explicit picks when there are more categories than slots; null = auto. */
+    quickCategories: null,
     filters: {
       direction: 'all',
       recurring: 'all',
@@ -156,6 +163,16 @@ export function setSettings(settings) {
       settings?.compactCueUnits ?? base.compactCueUnits
     ),
     theme: normalizeTheme(settings?.theme ?? readStoredTheme()),
+    quickCategorySlots: normalizeQuickCategorySlots(
+      settings?.quickCategorySlots ?? base.quickCategorySlots
+    ),
+    quickCategories: storedQuickCategories(
+      categories,
+      settings?.quickCategorySlots ?? base.quickCategorySlots,
+      Object.prototype.hasOwnProperty.call(settings || {}, 'quickCategories')
+        ? settings.quickCategories
+        : base.quickCategories
+    ),
   };
   applyTheme(state.settings.theme);
   notify();
@@ -183,6 +200,16 @@ export function patchSettings(partial) {
   }
   if (partial.compactCueUnits !== undefined) {
     next.compactCueUnits = normalizeCompactCueUnits(partial.compactCueUnits);
+  }
+  if (partial.quickCategorySlots !== undefined) {
+    next.quickCategorySlots = normalizeQuickCategorySlots(partial.quickCategorySlots);
+  }
+  if (partial.quickCategories !== undefined || partial.categories !== undefined) {
+    next.quickCategories = storedQuickCategories(
+      next.categories,
+      next.quickCategorySlots,
+      partial.quickCategories !== undefined ? partial.quickCategories : next.quickCategories
+    );
   }
   state.settings = next;
   if (partial.theme !== undefined) applyTheme(state.settings.theme);
