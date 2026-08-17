@@ -1,5 +1,17 @@
 [
-    "garden_1.jpg",
-    "garden_2.jpg",
-    "garden_3.jpg"
+    {
+        "name": "Garden 1",
+        "preview": "garden 1.webp",
+        "full": "garden_1.jpg"
+    },
+    {
+        "name": "Garden 2",
+        "preview": "garden 2.webp",
+        "full": "garden_2.jpg"
+    },
+    {
+        "name": "Garden 3",
+        "preview": "garden 3.webp",
+        "full": "garden_3.jpg"
+    }
 ]

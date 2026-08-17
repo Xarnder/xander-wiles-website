@@ -55,8 +55,17 @@ let imageItems = [];
 let thumbnails = []; 
 let currentIndex = 0;
 let isUiVisible = true;
-let isGeneratingThumbnails = false;
 let isMotionEnabled = false; 
+let demoLoadActive = true;
+let demoLoadController = null;
+let mediaController = null;
+let panoramaLoadToken = 0;
+let thumbGenId = 0;
+let activeSkyBitmap = null;
+let activeSkyTexture = null;
+const IMAGE_NAME_RE = /\.(jpe?g|png|webp)$/i;
+const PREVIEW_MAX_WIDTH = 1920;
+const HIRES_MAX_WIDTH = 4096;
 
 // --- A-Frame Elements ---
 const sceneEl = document.querySelector('a-scene');
@@ -64,8 +73,10 @@ const skyEl = document.querySelector('#image-360');
 const cameraEl = document.querySelector('#camera');
 const loader2d = document.getElementById('loader-2d');
 const loaderVr = document.getElementById('loader-vr');
+const hiresChip = document.getElementById('hiresChip');
 
 // --- DOM Elements ---
+const fileInput = document.getElementById('fileInput');
 const dirInput = document.getElementById('dirInput');
 const fileCountLabel = document.getElementById('fileCount');
 const currentNameLabel = document.getElementById('currentFileName');
@@ -102,30 +113,233 @@ function log(message, type = 'info') {
     debugLog.scrollTop = debugLog.scrollHeight; 
 }
 
-// --- Initialization ---
-window.addEventListener('DOMContentLoaded', async () => {
-    log('System Initializing...');
+function abortMediaLoads() {
+    if (mediaController) {
+        mediaController.abort();
+        mediaController = null;
+    }
+}
 
-    // Load Manifest
-    const demoFolder = 'assets/360-images/';
-    const manifestFile = 'manifest.json';
+function cancelDemoLoads() {
+    if (!demoLoadActive && !demoLoadController && !mediaController) return;
+    demoLoadActive = false;
+    if (demoLoadController) {
+        demoLoadController.abort();
+        demoLoadController = null;
+    }
+    abortMediaLoads();
+    panoramaLoadToken++;
+    hideLoaders();
+    hideHiresChip();
+    log('Stopped loading default 360 images.');
+}
+
+function showPreviewLoader() {
+    loader2d.classList.add('hidden');
+    loaderVr.setAttribute('visible', true);
+}
+
+function hideLoaders() {
+    loader2d.classList.add('hidden');
+    loaderVr.setAttribute('visible', false);
+}
+
+function showHiresChip(message) {
+    if (message) hiresChip.textContent = message;
+    hiresChip.classList.remove('hidden');
+}
+
+function hideHiresChip() {
+    hiresChip.classList.add('hidden');
+}
+
+function assetUrl(folder, filename) {
+    return encodeURI(folder + filename);
+}
+
+function isAbortError(err) {
+    return err && (err.name === 'AbortError' || err.message === 'Aborted');
+}
+
+function throwIfAborted(token, signal) {
+    if (signal?.aborted || token !== panoramaLoadToken) {
+        throw new DOMException('Aborted', 'AbortError');
+    }
+}
+
+function yieldToMain() {
+    if (typeof scheduler !== 'undefined' && typeof scheduler.yield === 'function') {
+        return scheduler.yield();
+    }
+    return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+async function safeCreateImageBitmap(source, options) {
     try {
-        const response = await fetch(demoFolder + manifestFile);
-        if (response.ok) {
-            const fileList = await response.json();
-            const demoFiles = fileList.map(filename => ({
-                name: filename,
-                path: demoFolder + filename, 
-                file: null 
-            }));
-            if (demoFiles.length > 0) {
-                loadImagesIntoSystem(demoFiles);
+        return await createImageBitmap(source, options);
+    } catch (err) {
+        if (options && options.imageOrientation) {
+            const fallback = { ...options };
+            delete fallback.imageOrientation;
+            return createImageBitmap(source, fallback);
+        }
+        throw err;
+    }
+}
+
+async function fetchBlob(url, signal) {
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+    const blob = await response.blob();
+    throwIfAborted(panoramaLoadToken, signal);
+    return blob;
+}
+
+async function decodeBitmap(blob, maxWidth, signal, token, forceSize) {
+    await yieldToMain();
+    throwIfAborted(token, signal);
+
+    let bitmap;
+    if (forceSize) {
+        bitmap = await safeCreateImageBitmap(blob, {
+            imageOrientation: 'flipY',
+            resizeWidth: forceSize.width,
+            resizeHeight: forceSize.height,
+            resizeQuality: 'high'
+        });
+    } else {
+        bitmap = await safeCreateImageBitmap(blob, { imageOrientation: 'flipY' });
+        if (bitmap.width > maxWidth) {
+            const resizeHeight = Math.max(1, Math.round(bitmap.height * (maxWidth / bitmap.width)));
+            const resized = await safeCreateImageBitmap(bitmap, {
+                imageOrientation: 'flipY',
+                resizeWidth: maxWidth,
+                resizeHeight,
+                resizeQuality: 'medium'
+            });
+            bitmap.close();
+            bitmap = resized;
+        }
+    }
+
+    if (signal?.aborted || token !== panoramaLoadToken) {
+        bitmap.close();
+        throw new DOMException('Aborted', 'AbortError');
+    }
+    return bitmap;
+}
+
+async function waitForSkyMesh(signal, token) {
+    const existing = skyEl.getObject3D('mesh');
+    if (existing) return existing;
+
+    if (!sceneEl.hasLoaded) {
+        await new Promise((resolve, reject) => {
+            const onAbort = () => {
+                sceneEl.removeEventListener('loaded', onLoaded);
+                reject(new DOMException('Aborted', 'AbortError'));
+            };
+            const onLoaded = () => {
+                signal?.removeEventListener('abort', onAbort);
+                resolve();
+            };
+            if (signal?.aborted) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
             }
+            sceneEl.addEventListener('loaded', onLoaded, { once: true });
+            signal?.addEventListener('abort', onAbort, { once: true });
+        });
+    }
+
+    return new Promise((resolve, reject) => {
+        const tick = () => {
+            if (signal?.aborted || token !== panoramaLoadToken) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+            }
+            const mesh = skyEl.getObject3D('mesh');
+            if (mesh) {
+                resolve(mesh);
+                return;
+            }
+            requestAnimationFrame(tick);
+        };
+        tick();
+    });
+}
+
+async function applyBitmapToSky(bitmap, token, signal) {
+    throwIfAborted(token, signal);
+    const mesh = await waitForSkyMesh(signal, token);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    throwIfAborted(token, signal);
+
+    const THREE = AFRAME.THREE;
+    const texture = new THREE.Texture(bitmap);
+    if ('SRGBColorSpace' in THREE) {
+        texture.colorSpace = THREE.SRGBColorSpace;
+    }
+    texture.flipY = false;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.needsUpdate = true;
+
+    const prevTexture = activeSkyTexture || mesh.material.map;
+    const prevBitmap = activeSkyBitmap;
+    mesh.material.map = texture;
+    mesh.material.needsUpdate = true;
+    activeSkyTexture = texture;
+    activeSkyBitmap = bitmap;
+
+    if (prevTexture && prevTexture !== texture) prevTexture.dispose();
+    if (prevBitmap && prevBitmap !== bitmap) prevBitmap.close();
+}
+
+function normalizeManifestEntry(entry, folder) {
+    if (typeof entry === 'string') {
+        return { name: entry, preview: assetUrl(folder, entry), full: null, file: null };
+    }
+    return {
+        name: entry.name || entry.full || entry.preview,
+        preview: entry.preview ? assetUrl(folder, entry.preview) : null,
+        full: entry.full ? assetUrl(folder, entry.full) : null,
+        file: null
+    };
+}
+
+// --- Initialization ---
+window.addEventListener('DOMContentLoaded', () => {
+    log('System Initializing...');
+    log('UI is ready — you can upload your own images while defaults load.');
+    setTimeout(startDemoLoad, 0);
+});
+
+async function startDemoLoad() {
+    if (!demoLoadActive) return;
+
+    const demoFolder = 'assets/360-images/';
+    demoLoadController = new AbortController();
+    const { signal } = demoLoadController;
+
+    try {
+        const response = await fetch(demoFolder + 'manifest.json', { signal });
+        if (!response.ok || !demoLoadActive) return;
+        const fileList = await response.json();
+        if (!demoLoadActive) return;
+        const demoFiles = fileList.map(entry => normalizeManifestEntry(entry, demoFolder));
+        if (demoFiles.length > 0 && demoLoadActive) {
+            log(`Loading ${demoFiles.length} preview images in the background…`);
+            loadImagesIntoSystem(demoFiles);
         }
     } catch (e) {
+        if (isAbortError(e)) return;
         log(`Manifest Error: ${e.message}`, 'error');
     }
-});
+}
 
 // --- UI Logic ---
 function toggleUI() {
@@ -205,11 +419,25 @@ vrBtn.addEventListener('click', async () => {
 });
 
 // --- File Input ---
-dirInput.addEventListener('change', (e) => {
-    const files = Array.from(e.target.files).filter(f => f.name.match(/\.(jpg|jpeg|png)$/i));
+function filesFromInput(fileList) {
+    const files = Array.from(fileList).filter(f => IMAGE_NAME_RE.test(f.name));
     files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    if (files.length > 0) loadImagesIntoSystem(files.map(f => ({ name: f.name, file: f, path: null })));
-});
+    return files.map(f => ({ name: f.name, file: f, preview: null, full: null }));
+}
+
+function handleUserFiles(fileList) {
+    const items = filesFromInput(fileList);
+    if (items.length === 0) {
+        log('No supported images found (jpg, png, webp).', 'error');
+        return;
+    }
+    cancelDemoLoads();
+    loadImagesIntoSystem(items);
+    log(`Loaded ${items.length} local image${items.length === 1 ? '' : 's'}.`, 'success');
+}
+
+fileInput.addEventListener('change', (e) => handleUserFiles(e.target.files));
+dirInput.addEventListener('change', (e) => handleUserFiles(e.target.files));
 
 // --- System Core ---
 function loadImagesIntoSystem(items) {
@@ -227,33 +455,73 @@ function loadImagesIntoSystem(items) {
 }
 
 // --- Panorama Loader ---
-function loadPanorama(index) {
+async function loadPanorama(index) {
     if (!imageItems[index]) return;
     const item = imageItems[index];
+    currentIndex = index;
     currentNameLabel.textContent = `${index + 1}/${imageItems.length}: ${item.name}`;
-    
-    // 1. Show Loaders
-    loader2d.classList.remove('hidden');
-    loaderVr.setAttribute('visible', true);
-    
-    const imageSource = item.file ? URL.createObjectURL(item.file) : item.path;
-
-    // Reset Sky to trigger load event cleanly
-    skyEl.setAttribute('src', '');
-    setTimeout(() => {
-        skyEl.setAttribute('src', imageSource);
-    }, 50);
-
     updateActiveThumbnail();
-}
 
-// --- Loading Event Listener (The key for the loading bar) ---
-skyEl.addEventListener('materialtextureloaded', () => {
-    // Hide Loaders when texture is ready
-    loader2d.classList.add('hidden');
-    loaderVr.setAttribute('visible', false);
-    log('Image loaded.');
-});
+    const token = ++panoramaLoadToken;
+    abortMediaLoads();
+    mediaController = new AbortController();
+    const { signal } = mediaController;
+
+    hideLoaders();
+    showHiresChip('Loading preview…');
+    loaderVr.setAttribute('visible', true);
+
+    let pendingBitmap = null;
+    try {
+        const previewBlob = item.file
+            ? item.file
+            : await fetchBlob(item.preview || item.full, signal);
+        throwIfAborted(token, signal);
+
+        pendingBitmap = await decodeBitmap(
+            previewBlob,
+            item.file ? HIRES_MAX_WIDTH : PREVIEW_MAX_WIDTH,
+            signal,
+            token
+        );
+        throwIfAborted(token, signal);
+
+        await applyBitmapToSky(pendingBitmap, token, signal);
+        pendingBitmap = null;
+        hideHiresChip();
+        loaderVr.setAttribute('visible', false);
+        log(`Preview ready: ${item.name}`);
+
+        if (!item.full || item.file || !demoLoadActive) return;
+
+        await yieldToMain();
+        throwIfAborted(token, signal);
+
+        showHiresChip('Enhancing to high-res…');
+        const fullBlob = await fetchBlob(item.full, signal);
+        throwIfAborted(token, signal);
+
+        pendingBitmap = await decodeBitmap(
+            fullBlob,
+            HIRES_MAX_WIDTH,
+            signal,
+            token,
+            { width: HIRES_MAX_WIDTH, height: Math.round(HIRES_MAX_WIDTH / 2) }
+        );
+        throwIfAborted(token, signal);
+
+        await applyBitmapToSky(pendingBitmap, token, signal);
+        pendingBitmap = null;
+        hideHiresChip();
+        log(`High-res ready: ${item.name}`, 'success');
+    } catch (e) {
+        if (pendingBitmap) pendingBitmap.close();
+        if (isAbortError(e) || token !== panoramaLoadToken) return;
+        hideHiresChip();
+        loaderVr.setAttribute('visible', false);
+        log(`Load failed: ${e.message}`, 'error');
+    }
+}
 
 
 // --- Slider & Nav ---
@@ -262,29 +530,33 @@ fovSlider.addEventListener('input', (e) => {
     cameraEl.setAttribute('camera', 'fov', e.target.value);
 });
 
-nextBtn.addEventListener('click', () => { if(currentIndex < imageItems.length - 1) loadPanorama(++currentIndex); });
-prevBtn.addEventListener('click', () => { if(currentIndex > 0) loadPanorama(--currentIndex); });
+nextBtn.addEventListener('click', () => { if(currentIndex < imageItems.length - 1) loadPanorama(currentIndex + 1); });
+prevBtn.addEventListener('click', () => { if(currentIndex > 0) loadPanorama(currentIndex - 1); });
 clearBtn.addEventListener('click', () => { if(confirm('Clear?')) location.reload(); });
 
-// --- Thumbnails (Simplified for space) ---
+// --- Thumbnails ---
 async function startThumbnailGeneration() {
-    if (isGeneratingThumbnails) return;
-    isGeneratingThumbnails = true;
+    const genId = ++thumbGenId;
     galleryGrid.innerHTML = ''; 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 200; canvas.height = 100;
 
     for (let i = 0; i < imageItems.length; i++) {
+        if (genId !== thumbGenId) return;
         const item = imageItems[i];
         const div = document.createElement('div');
         div.className = 'thumb-card';
         div.id = `thumb-${i}`;
         div.onclick = () => loadPanorama(i);
         
-        const img = new Image();
-        img.src = item.file ? URL.createObjectURL(item.file) : item.path;
-        div.appendChild(img); // Simple append for speed
+        const img = document.createElement('img');
+        img.alt = item.name;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        if (item.file) {
+            img.src = URL.createObjectURL(item.file);
+        } else {
+            img.src = item.preview || item.full || '';
+        }
+        div.appendChild(img);
         
         const label = document.createElement('div');
         label.className = 'thumb-label';
@@ -294,7 +566,7 @@ async function startThumbnailGeneration() {
         galleryGrid.appendChild(div);
         await new Promise(r => setTimeout(r, 10)); 
     }
-    isGeneratingThumbnails = false;
+    updateActiveThumbnail();
 }
 
 function updateActiveThumbnail() {

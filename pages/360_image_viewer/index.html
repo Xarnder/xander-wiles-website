@@ -26,22 +26,23 @@
     </div>
     <script src="/assets/js/nav-loader.js"></script> 
 
-    <!-- 2D LOADING SCREEN (Visible on Phone/Desktop) -->
+    <!-- 2D LOADING SCREEN — sits behind the control UI so it never blocks clicks -->
     <div id="loader-2d" class="loader-overlay hidden">
         <div class="spinner"></div>
         <p>Loading 360° Image...</p>
     </div>
 
-    <!-- A-FRAME SCENE -->
-    <a-scene embedded vr-mode-ui="enabled: false" renderer="colorManagement: true; antialias: true;">
-        
-        <!-- Asset Management System (For preloading) -->
-        <a-assets>
-            <img id="placeholder" src=""> 
-        </a-assets>
+    <div id="hiresChip" class="hires-chip hidden">Enhancing to high-res…</div>
 
-        <!-- The Sky Sphere -->
-        <a-sky id="image-360" src="" rotation="0 -90 0"></a-sky>
+    <!-- A-FRAME SCENE -->
+    <a-scene
+        embedded
+        vr-mode-ui="enabled: false"
+        loading-screen="enabled: false"
+        renderer="colorManagement: true; antialias: true;">
+
+        <!-- The Sky Sphere — src is applied from JS after off-thread decode -->
+        <a-sky id="image-360" rotation="0 -90 0"></a-sky>
 
         <!-- CAMERA RIG -->
         <!-- We rotate the RIG, not the camera, for the "Drag" effect -->
@@ -86,10 +87,14 @@
                 </div>
             </div>
             
-            <div class="control-group">
-                <label for="dirInput" class="file-btn">
-                    Select Local Folder
-                    <input type="file" id="dirInput" webkitdirectory directory multiple>
+            <div class="control-group file-actions">
+                <label for="fileInput" class="file-btn">
+                    Select Images
+                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple>
+                </label>
+                <label for="dirInput" class="file-btn file-btn-secondary">
+                    Select Folder
+                    <input type="file" id="dirInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" webkitdirectory directory multiple>
                 </label>
                 <span id="fileCount">No files loaded</span>
             </div>

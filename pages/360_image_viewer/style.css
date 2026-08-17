@@ -42,7 +42,7 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    z-index: 100;
+    z-index: 2200;
     pointer-events: none;
 }
 #site-header-container * {
@@ -59,12 +59,19 @@ a-scene {
     z-index: 0; /* Behind everything */
 }
 
+/* A-Frame's built-in loader is z-index 1000 and would cover the UI */
+.a-loader,
+.a-loader-title {
+    display: none !important;
+    pointer-events: none !important;
+}
+
 /* --- Toggle Button --- */
 .floating-toggle {
     position: absolute;
     bottom: 30px;
     left: 20px;
-    z-index: 50;
+    z-index: 2000;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     color: white;
@@ -92,10 +99,11 @@ a-scene {
     left: 20px;
     width: 320px;
     max-width: 90vw; 
-    z-index: 50;
+    z-index: 2000; /* Above A-Frame loader chrome (z-index 1000) */
     max-height: calc(100vh - 120px); 
     display: flex;
     flex-direction: column;
+    pointer-events: auto;
 }
 
 .glass-panel {
@@ -134,7 +142,12 @@ h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
 
 .control-group { margin-bottom: 16px; }
 
-/* File Input Button */
+/* File Input Buttons */
+.file-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 .file-btn {
     display: block;
     background: var(--primary);
@@ -150,6 +163,12 @@ h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
 }
 .file-btn:hover { background: #2563eb; transform: translateY(-1px); }
 .file-btn:active { transform: translateY(1px); }
+.file-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+    font-weight: 500;
+}
+.file-btn-secondary:hover { background: rgba(255, 255, 255, 0.18); }
 input[type="file"] { display: none; }
 
 #fileCount {
@@ -250,7 +269,7 @@ input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-left: 1px solid var(--glass-border);
-    z-index: 200; 
+    z-index: 2100; 
     display: flex;
     flex-direction: column;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
@@ -361,27 +380,49 @@ input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer
 
 /* --- Add this to your style.css --- */
 
-/* 2D Loader Overlay */
+/* 2D Loader Overlay — never intercepts clicks; UI stays above it */
 .loader-overlay {
     position: absolute;
     top: 0; 
     left: 0;
     width: 100%; 
     height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(5px);
-    z-index: 80; /* Below Header (100) but above UI (50) */
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 10;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     color: white;
+    pointer-events: none;
     transition: opacity 0.3s;
 }
 
 .loader-overlay.hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+.hires-chip {
+    position: absolute;
+    bottom: 30px;
+    right: 20px;
+    z-index: 1500;
+    pointer-events: none;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 8px 14px;
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    transition: opacity 0.25s;
+}
+
+.hires-chip.hidden {
+    opacity: 0;
 }
 
 /* Spinner Animation */
