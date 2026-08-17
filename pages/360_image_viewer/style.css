@@ -47,6 +47,20 @@ html, body {
     transform: translateY(-8px);
 }
 
+html.is-slim-mobile:not(.ui-ready) #mainUi {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+html.is-slim-mobile:not(.ui-ready) #toggleUiBtn .btn-icon-eye-blind {
+    display: none;
+}
+
+html.is-slim-mobile:not(.ui-ready) #toggleUiBtn .btn-icon-eye-open {
+    display: block;
+}
+
 /* --- A-Frame Scene --- */
 a-scene {
     width: 100%;
@@ -476,7 +490,15 @@ body.is-fullscreen a-scene {
     padding-bottom: 12px;
 }
 
-.header-actions { display: flex; gap: 10px; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+
+#helpMenuBtn {
+    display: none;
+}
+
+.icon-btn.active {
+    color: #4ade80;
+}
 h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
 
 .icon-btn, .close-btn {
@@ -551,6 +573,11 @@ h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
 .btn-icon-eye-blind {
     -webkit-mask-image: url('/assets/SVGs/eye-blind-icon.svg');
     mask-image: url('/assets/SVGs/eye-blind-icon.svg');
+}
+
+.btn-icon-pin {
+    -webkit-mask-image: url('/assets/SVGs/pin.svg');
+    mask-image: url('/assets/SVGs/pin.svg');
 }
 
 .btn-icon-wander {
@@ -771,6 +798,20 @@ input[type="file"] { display: none; }
 }
 
 .sensor-controls { display: flex; gap: 8px; }
+
+.extra-toggles {
+    display: flex;
+    gap: 8px;
+}
+
+.extra-toggles .sensor-btn {
+    flex: 1;
+}
+
+.extra-toggles .btn-icon {
+    width: 16px;
+    height: 16px;
+}
 
 .sensor-btn {
     background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
@@ -1033,11 +1074,12 @@ input[type="file"] { display: none; }
     .look-hud {
         top: calc(72px + var(--safe-top) + var(--vv-top));
         bottom: auto;
-        width: min(94vw, 420px);
+        width: min(240px, calc(100vw - 48px));
     }
 
     .look-hud canvas {
-        height: 56px;
+        height: auto;
+        aspect-ratio: 2 / 1;
     }
 
     body.is-ui-hidden .look-hud {
@@ -1053,6 +1095,232 @@ input[type="file"] { display: none; }
     
     .nav-controls button, .file-btn, .sensor-btn {
         padding: 14px; 
+    }
+}
+
+/* Slim portrait phones: collapsed by default, half-screen scrollable menu */
+@media (max-width: 600px) and (orientation: portrait) {
+    :root {
+        --ui-scale: 0.88;
+        --slim-menu-h: 50dvh;
+        --look-hud-w: min(240px, calc(100vw - 48px));
+        --look-hud-h: 152px;
+        --look-hud-bottom: calc(16px + var(--safe-bottom));
+    }
+
+    .scene-hud {
+        top: calc(8px + var(--safe-top) + var(--vv-top));
+        left: calc(8px + env(safe-area-inset-left, 0px));
+        max-width: calc(100vw - 128px);
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        z-index: 4100;
+    }
+
+    .scene-hud #sceneHudName {
+        max-width: min(48vw, 200px);
+    }
+
+    #hudControls #helpBtn {
+        display: none;
+    }
+
+    #helpMenuBtn {
+        display: flex;
+    }
+
+    .help-panel {
+        top: auto;
+        bottom: calc(var(--slim-menu-h) + 8px);
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-height: calc(50dvh - 24px);
+        overflow-y: auto;
+    }
+
+    html.is-slim-mobile:not(.ui-ready) .look-hud,
+    body.is-ui-hidden .look-hud {
+        top: auto;
+        bottom: var(--look-hud-bottom);
+        width: var(--look-hud-w);
+    }
+
+    body:not(.is-ui-hidden) {
+        --look-hud-bottom: calc(var(--slim-menu-h) + 8px);
+    }
+
+    body:not(.is-ui-hidden) .look-hud {
+        top: auto;
+        bottom: var(--look-hud-bottom);
+        width: var(--look-hud-w);
+    }
+
+    .look-hud canvas {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2 / 1;
+    }
+
+    .edge-nav {
+        top: auto;
+        transform: none;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        bottom: calc(var(--look-hud-bottom) + var(--look-hud-h) + 6px);
+    }
+
+    .edge-nav .btn-icon {
+        width: 12px;
+        height: 12px;
+    }
+
+    .edge-nav-prev {
+        left: max(8px, calc(50% - var(--look-hud-w) / 2));
+    }
+
+    .edge-nav-next {
+        right: max(8px, calc(50% - var(--look-hud-w) / 2));
+    }
+
+    body.is-look-hud-hidden .edge-nav {
+        bottom: calc(var(--look-hud-bottom) + 6px);
+    }
+
+    .ui-container {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        height: var(--slim-menu-h);
+        max-height: var(--slim-menu-h);
+        transform: none;
+        overflow: hidden;
+        padding-bottom: var(--safe-bottom);
+        touch-action: pan-y;
+    }
+
+    .ui-container.fade-transition.hidden {
+        transform: translateY(16px);
+    }
+
+    .glass-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        padding: calc(12px * var(--ui-scale, 0.88)) calc(14px * var(--ui-scale, 0.88));
+        padding-bottom: calc(16px * var(--ui-scale, 0.88));
+        border-radius: 16px 16px 0 0;
+        border-bottom: none;
+        box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55);
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+    }
+
+    .glass-panel::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .glass-panel::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.35);
+        border-radius: 999px;
+    }
+
+    .slider-wrap,
+    .slider-wrap input[type="range"] {
+        touch-action: auto;
+    }
+
+    .card-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        margin-bottom: calc(10px * var(--ui-scale, 0.88));
+        padding-bottom: calc(8px * var(--ui-scale, 0.88));
+        background: rgba(15, 15, 15, 0.94);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    h2 {
+        font-size: calc(1rem * var(--ui-scale, 0.88));
+    }
+
+    .control-group {
+        margin-bottom: calc(10px * var(--ui-scale, 0.88));
+    }
+
+    .slider-stack {
+        gap: calc(8px * var(--ui-scale, 0.88));
+    }
+
+    .file-actions {
+        gap: calc(6px * var(--ui-scale, 0.88));
+    }
+
+    .file-btn {
+        padding: calc(10px * var(--ui-scale, 0.88));
+        font-size: calc(0.85rem * var(--ui-scale, 0.88));
+        border-radius: 8px;
+    }
+
+    #fileCount {
+        margin-top: calc(4px * var(--ui-scale, 0.88));
+        font-size: calc(0.7rem * var(--ui-scale, 0.88));
+    }
+
+    .slider-box label {
+        font-size: calc(0.78rem * var(--ui-scale, 0.88));
+        margin-bottom: calc(6px * var(--ui-scale, 0.88));
+    }
+
+    .mode-controls {
+        gap: calc(6px * var(--ui-scale, 0.88));
+    }
+
+    .mode-controls .sensor-btn {
+        min-height: max(44px, calc(48px * var(--ui-scale, 0.88)));
+        padding: calc(6px * var(--ui-scale, 0.88)) 4px;
+        font-size: calc(0.72rem * var(--ui-scale, 0.88));
+        gap: 2px;
+    }
+
+    .mode-controls .btn-icon {
+        width: calc(18px * var(--ui-scale, 0.88));
+        height: calc(18px * var(--ui-scale, 0.88));
+    }
+
+    .sensor-btn {
+        padding: calc(10px * var(--ui-scale, 0.88));
+        font-size: calc(0.82rem * var(--ui-scale, 0.88));
+    }
+
+    .nav-controls {
+        gap: calc(8px * var(--ui-scale, 0.88));
+    }
+
+    .nav-controls button,
+    .file-btn,
+    .sensor-btn {
+        padding: calc(10px * var(--ui-scale, 0.88));
+    }
+
+    .nav-arrow-btn {
+        flex-basis: calc(48px * var(--ui-scale, 0.88));
+    }
+
+    .file-info-box {
+        font-size: calc(0.72rem * var(--ui-scale, 0.88));
+        margin-bottom: calc(8px * var(--ui-scale, 0.88));
     }
 }
 
@@ -1115,4 +1383,124 @@ input[type="file"] { display: none; }
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* App modal (motion permission). Explicit colors: A-Frame's default
+   dialog is white and inherits this page's white text, so it looks blank. */
+.app-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    padding-bottom: max(24px, var(--safe-bottom));
+    background: rgba(0, 0, 0, 0.62);
+    color: #f5f5f5;
+}
+
+.app-modal.hidden {
+    display: none;
+}
+
+.app-modal-card {
+    width: min(360px, 100%);
+    background: rgba(18, 18, 20, 0.96);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    color: #f5f5f5;
+    text-align: center;
+}
+
+.app-modal-icon {
+    width: 28px;
+    height: 28px;
+    margin: 0 auto 12px;
+    color: #93c5fd;
+}
+
+.app-modal-card h3 {
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    margin-bottom: 10px;
+}
+
+.app-modal-card p {
+    color: #d4d4d4;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    margin-bottom: 18px;
+}
+
+.app-modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.app-modal-btn {
+    flex: 1;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: #ffffff;
+}
+
+.app-modal-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.app-modal-btn-primary {
+    background: var(--primary);
+    border-color: #2563eb;
+}
+
+.app-modal-btn-primary:disabled,
+.app-modal-btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Safety net if A-Frame still injects its permission dialog */
+div.a-modal {
+    color: #f5f5f5;
+}
+
+div.a-dialog {
+    background-color: rgba(18, 18, 20, 0.96) !important;
+    color: #f5f5f5 !important;
+    height: auto !important;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+div.a-dialog-text,
+div.a-dialog .a-dialog-text {
+    color: #e5e5e5 !important;
+}
+
+button.a-dialog-button {
+    color: #ffffff !important;
+}
+
+button.a-dialog-allow-button,
+button.a-dialog-ok-button {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+button.a-dialog-deny-button {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
 }

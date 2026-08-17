@@ -54,7 +54,8 @@ AFRAME.registerComponent('drag-rotate-world', {
 let imageItems = []; 
 let thumbnails = []; 
 let currentIndex = 0;
-let isUiVisible = true;
+const SLIM_MOBILE_MQ = window.matchMedia('(max-width: 600px) and (orientation: portrait)');
+let isUiVisible = !SLIM_MOBILE_MQ.matches;
 let isMotionEnabled = false; 
 let demoLoadActive = true;
 let demoLoadController = null;
@@ -106,7 +107,9 @@ const wanderBtn = document.getElementById('wanderBtn');
 const flatView = document.getElementById('flatView');
 const flatCanvas = document.getElementById('flatCanvas');
 const flipBtn = document.getElementById('flipBtn');
+const lookHudBtn = document.getElementById('lookHudBtn');
 const helpBtn = document.getElementById('helpBtn');
+const helpMenuBtn = document.getElementById('helpMenuBtn');
 const helpPanel = document.getElementById('helpPanel');
 const sceneHud = document.getElementById('sceneHud');
 const sceneHudIndex = document.getElementById('sceneHudIndex');
@@ -125,7 +128,12 @@ const lookZoom = document.getElementById('lookZoom');
 const FOV_MIN = 20;
 const FOV_MAX = 100;
 const DEFAULT_FOV = 80;
+const LOOK_HUD_STORAGE_KEY = 'xw-360-look-hud-hidden';
 const HINT_STORAGE_KEY = 'xw-360-hint-dismissed';
+let isLookHudVisible = true;
+try {
+    isLookHudVisible = localStorage.getItem(LOOK_HUD_STORAGE_KEY) !== '1';
+} catch (err) { /* ignore */ }
 // look-controls pitch.x: positive looks up, negative looks down
 const WANDER_PITCH_UP = 20 * Math.PI / 180;
 const WANDER_PITCH_DOWN = 60 * Math.PI / 180;
@@ -161,6 +169,11 @@ const toggleUiBtn = document.getElementById('toggleUiBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const closeUiBtn = document.getElementById('closeUiBtn');
 const closeGalleryBtn = document.getElementById('closeGalleryBtn');
+const motionPermissionModal = document.getElementById('motionPermissionModal');
+const motionPermTitle = document.getElementById('motionPermTitle');
+const motionPermCopy = document.getElementById('motionPermCopy');
+const motionPermAllow = document.getElementById('motionPermAllow');
+const motionPermDeny = document.getElementById('motionPermDeny');
 
 // --- Logger ---
 function log(message, type = 'info') {
@@ -427,6 +440,28 @@ function normalizeManifestEntry(entry, folder) {
     };
 }
 
+function isSlimVerticalLayout() {
+    return SLIM_MOBILE_MQ.matches;
+}
+
+function updateSlimUiLayout(opts) {
+    const slim = isSlimVerticalLayout();
+    const initial = !!(opts && opts.initial);
+    document.documentElement.classList.toggle('is-slim-mobile', slim);
+    document.body.classList.toggle('is-slim-mobile', slim);
+
+    if (slim) {
+        const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        const scale = Math.max(0.75, Math.min(1, viewportH / 860));
+        mainUi.style.setProperty('--ui-scale', scale.toFixed(3));
+    } else {
+        mainUi.style.removeProperty('--ui-scale');
+    }
+
+    if (initial && slim) setUiVisible(false);
+    document.documentElement.classList.add('ui-ready');
+}
+
 // --- Initialization ---
 window.addEventListener('DOMContentLoaded', () => {
     log('System Initializing...');
@@ -434,6 +469,8 @@ window.addEventListener('DOMContentLoaded', () => {
     setFov(DEFAULT_FOV);
     setLens(0);
     updateNavButtons();
+    updateSlimUiLayout({ initial: true });
+    setLookHudVisible(isLookHudVisible);
     syncChrome();
     startLookHud();
     if (sceneEl.hasLoaded) ensureLensPass();
@@ -488,6 +525,7 @@ function setUiVisible(visible) {
     toggleUiBtn.setAttribute('aria-label', isUiVisible ? 'Hide controls' : 'Show controls');
     toggleUiBtn.title = isUiVisible ? 'Hide controls' : 'Show controls';
     document.body.classList.toggle('is-ui-hidden', !isUiVisible);
+    if (!isUiVisible && isSlimVerticalLayout()) setHelpOpen(false);
     syncChrome();
 }
 
@@ -532,15 +570,19 @@ function setGalleryOpen(open) {
 function setHelpOpen(open) {
     helpPanel.classList.toggle('hidden', !open);
     helpPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
-    helpBtn.classList.toggle('active', open);
-    helpBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
-    helpBtn.setAttribute('aria-label', open ? 'Hide shortcuts' : 'Show shortcuts');
-    helpBtn.title = open ? 'Hide shortcuts' : 'Shortcuts';
+    [helpBtn, helpMenuBtn].forEach((btn) => {
+        if (!btn) return;
+        btn.classList.toggle('active', open);
+        btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+        btn.setAttribute('aria-label', open ? 'Hide shortcuts' : 'Show shortcuts');
+        btn.title = open ? 'Hide shortcuts' : 'Shortcuts';
+    });
 }
 
 function closeOverlays() {
     setHelpOpen(false);
     if (isGalleryOpen()) setGalleryOpen(false);
+    setMotionPermissionOpen(false);
 }
 
 function syncChrome() {
@@ -549,7 +591,8 @@ function syncChrome() {
     const showEdges = hasImages && multi && !isUiVisible && !sceneEl.is('vr-mode');
     edgePrev.classList.toggle('hidden', !showEdges);
     edgeNext.classList.toggle('hidden', !showEdges);
-    sceneHud.classList.toggle('hidden', isUiVisible || !hasImages || sceneEl.is('vr-mode'));
+    const hideSceneHud = !hasImages || sceneEl.is('vr-mode') || (isUiVisible && !isSlimVerticalLayout());
+    sceneHud.classList.toggle('hidden', hideSceneHud);
     if (sceneHudPaused) sceneHudPaused.classList.toggle('hidden', !playbackPaused);
     syncLookHudVisibility();
 }
@@ -618,6 +661,14 @@ helpBtn.addEventListener('click', (e) => {
     setHelpOpen(helpPanel.classList.contains('hidden'));
 });
 helpBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+if (helpMenuBtn) {
+    helpMenuBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setHelpOpen(helpPanel.classList.contains('hidden'));
+    });
+    helpMenuBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+}
 
 edgePrev.addEventListener('click', (e) => {
     e.preventDefault();
@@ -694,29 +745,116 @@ if (window.visualViewport) {
     window.visualViewport.addEventListener('scroll', syncTogglePosition);
 }
 
+function onSlimLayoutChange() {
+    updateSlimUiLayout();
+}
+if (typeof SLIM_MOBILE_MQ.addEventListener === 'function') {
+    SLIM_MOBILE_MQ.addEventListener('change', onSlimLayoutChange);
+} else if (typeof SLIM_MOBILE_MQ.addListener === 'function') {
+    SLIM_MOBILE_MQ.addListener(onSlimLayoutChange);
+}
+window.addEventListener('resize', onSlimLayoutChange);
+window.addEventListener('orientationchange', () => setTimeout(onSlimLayoutChange, 150));
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onSlimLayoutChange);
+}
+
 // --- Gallery Logic ---
 galleryBtn.addEventListener('click', () => setGalleryOpen(true));
 closeGalleryBtn.addEventListener('click', () => setGalleryOpen(false));
 
+function needsMotionPermission() {
+    return typeof DeviceOrientationEvent !== 'undefined'
+        && typeof DeviceOrientationEvent.requestPermission === 'function';
+}
+
+function setMotionPermissionOpen(open, opts) {
+    if (!motionPermissionModal) return;
+    const denied = !!(opts && opts.denied);
+    motionPermissionModal.classList.toggle('hidden', !open);
+    motionPermissionModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (!open) return;
+    if (motionPermTitle) motionPermTitle.textContent = denied ? 'Tilt permission blocked' : 'Allow tilt sensors';
+    if (motionPermCopy) {
+        motionPermCopy.textContent = denied
+            ? 'Motion control needs access to your phone’s tilt sensors. You can enable this in Safari settings, then try Motion again.'
+            : 'Motion mode uses your phone’s gyroscope so you can look around by tilting the device. Your browser will ask for permission next.';
+    }
+    if (motionPermAllow) {
+        motionPermAllow.textContent = denied ? 'OK' : 'Allow';
+        motionPermAllow.hidden = false;
+    }
+    if (motionPermDeny) motionPermDeny.hidden = denied;
+}
+
+async function requestMotionPermission() {
+    const root = document.documentElement;
+    const previousScheme = root.style.colorScheme;
+    root.style.colorScheme = 'light';
+    try {
+        return await DeviceOrientationEvent.requestPermission();
+    } finally {
+        root.style.colorScheme = previousScheme;
+    }
+}
+
 // --- Look modes: Pan (default), Auto, Motion, Flat, Wander; VR is a same-sized action ---
-gyroBtn.addEventListener('click', async () => {
+gyroBtn.addEventListener('click', () => {
     if (lookMode === 'motion') {
         setLookMode('pan');
         return;
     }
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (needsMotionPermission()) {
+        setMotionPermissionOpen(true);
+        return;
+    }
+    setLookMode('motion');
+});
+
+if (motionPermDeny) {
+    motionPermDeny.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMotionPermissionOpen(false);
+    });
+}
+
+if (motionPermAllow) {
+    motionPermAllow.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (motionPermDeny && motionPermDeny.hidden) {
+            setMotionPermissionOpen(false);
+            return;
+        }
+        if (!needsMotionPermission()) {
+            setMotionPermissionOpen(false);
+            setLookMode('motion');
+            return;
+        }
+        motionPermAllow.disabled = true;
         try {
-            const response = await DeviceOrientationEvent.requestPermission();
+            const response = await requestMotionPermission();
+            setMotionPermissionOpen(false);
             if (response === 'granted') {
                 setLookMode('motion');
             } else {
-                alert('Permission denied. Motion control requires sensor access.');
+                setMotionPermissionOpen(true, { denied: true });
             }
-        } catch (err) { console.error(err); }
-    } else {
-        setLookMode('motion');
-    }
-});
+        } catch (err) {
+            console.error(err);
+            setMotionPermissionOpen(true, { denied: true });
+        } finally {
+            motionPermAllow.disabled = false;
+        }
+    });
+}
+
+if (motionPermissionModal) {
+    motionPermissionModal.addEventListener('click', (e) => {
+        if (e.target === motionPermissionModal) setMotionPermissionOpen(false);
+    });
+}
 
 panBtn.addEventListener('click', () => setLookMode('pan'));
 autoPanBtn.addEventListener('click', () => {
@@ -1141,10 +1279,26 @@ function getLookControls() {
 
 function syncLookHudVisibility() {
     if (!lookHud) return;
-    const show = imageItems.length > 0 && lookMode !== 'flat' && !sceneEl.is('vr-mode');
+    const show = isLookHudVisible && imageItems.length > 0 && lookMode !== 'flat' && !sceneEl.is('vr-mode');
     lookHud.classList.toggle('hidden', !show);
     lookHud.setAttribute('aria-hidden', show ? 'false' : 'true');
     lookHud.classList.toggle('is-wander', lookMode === 'wander');
+}
+
+function setLookHudVisible(visible) {
+    isLookHudVisible = !!visible;
+    document.body.classList.toggle('is-look-hud-hidden', !isLookHudVisible);
+    if (lookHudBtn) {
+        lookHudBtn.classList.toggle('active', isLookHudVisible);
+        lookHudBtn.setAttribute('aria-pressed', isLookHudVisible ? 'true' : 'false');
+        const label = isLookHudVisible ? 'Hide location preview' : 'Show location preview';
+        lookHudBtn.title = label;
+        lookHudBtn.setAttribute('aria-label', label);
+    }
+    try {
+        localStorage.setItem(LOOK_HUD_STORAGE_KEY, isLookHudVisible ? '0' : '1');
+    } catch (err) { /* ignore */ }
+    syncLookHudVisibility();
 }
 
 function refreshLookMapCache() {
@@ -1196,11 +1350,10 @@ function getViewOnImage() {
 function drawLookMap(view) {
     if (!lookMap || !view) return;
     const wrap = lookHud;
-    const cssW = Math.max(1, wrap ? wrap.clientWidth - 16 : 360);
-    const cssH = Math.max(1, lookMap.clientHeight || 72);
+    const cssW = Math.max(2, lookMap.clientWidth || (wrap ? wrap.clientWidth - 16 : 240));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.max(1, Math.round(cssW * dpr));
-    const h = Math.max(1, Math.round(cssH * dpr));
+    const w = Math.max(2, Math.round(cssW * dpr));
+    const h = Math.max(1, Math.round((cssW / 2) * dpr));
     if (lookMap.width !== w) lookMap.width = w;
     if (lookMap.height !== h) lookMap.height = h;
     const ctx = lookMap.getContext('2d');
@@ -1286,7 +1439,7 @@ function rotateLook(dx, dy) {
 }
 
 function isHudTarget(el) {
-    return !!(el && el.closest && el.closest('#hudControls, #mainUi, #galleryModal, #helpPanel, #edgePrev, #edgeNext, button, input, label, a, .floating-toggle, .glass-panel, .edge-nav, .help-panel'));
+    return !!(el && el.closest && el.closest('#hudControls, #mainUi, #galleryModal, #helpPanel, #motionPermissionModal, #edgePrev, #edgeNext, button, input, label, a, .floating-toggle, .glass-panel, .edge-nav, .help-panel, .app-modal'));
 }
 
 function bindPanZoom() {
@@ -1595,6 +1748,9 @@ clearBtn.addEventListener('click', () => {
     if (confirm('Clear all images and reload the viewer?')) location.reload();
 });
 flipBtn.addEventListener('click', toggleFlip);
+if (lookHudBtn) {
+    lookHudBtn.addEventListener('click', () => setLookHudVisible(!isLookHudVisible));
+}
 
 function applySkyFlip(flipped) {
     skyEl.setAttribute('scale', flipped ? '-1 -1 1' : '-1 1 1');

@@ -14,8 +14,19 @@
     <link rel="icon" href="favicon.ico" sizes="any">
     
     <meta name="theme-color" content="#111115">
+    <script>
+        document.documentElement.classList.toggle(
+            'is-slim-mobile',
+            window.matchMedia('(max-width: 600px) and (orientation: portrait)').matches
+        );
+    </script>
 </head>
 <body>
+<script>
+    if (document.documentElement.classList.contains('is-slim-mobile')) {
+        document.body.classList.add('is-ui-hidden');
+    }
+</script>
 
     <!-- 2D LOADING SCREEN — sits behind the control UI so it never blocks clicks -->
     <div id="loader-2d" class="loader-overlay hidden">
@@ -34,6 +45,7 @@
         embedded
         vr-mode-ui="enabled: false"
         loading-screen="enabled: false"
+        device-orientation-permission-ui="enabled: false"
         renderer="colorManagement: true; antialias: true;">
 
         <!-- The Sky Sphere — src is applied from JS after off-thread decode -->
@@ -72,6 +84,18 @@
             <span class="btn-icon btn-icon-eye-blind" data-eye="hide" aria-hidden="true"></span>
             <span class="btn-icon btn-icon-eye-open" data-eye="show" aria-hidden="true"></span>
         </button>
+    </div>
+
+    <div id="motionPermissionModal" class="app-modal hidden" role="dialog" aria-modal="true" aria-labelledby="motionPermTitle" aria-hidden="true">
+        <div class="app-modal-card">
+            <span class="btn-icon btn-icon-tilt app-modal-icon" aria-hidden="true"></span>
+            <h3 id="motionPermTitle">Allow tilt sensors</h3>
+            <p id="motionPermCopy">Motion mode uses your phone’s gyroscope so you can look around by tilting the device. Your browser will ask for permission next.</p>
+            <div class="app-modal-actions">
+                <button type="button" id="motionPermDeny" class="app-modal-btn app-modal-btn-secondary">Not now</button>
+                <button type="button" id="motionPermAllow" class="app-modal-btn app-modal-btn-primary">Allow</button>
+            </div>
+        </div>
     </div>
 
     <div id="helpPanel" class="help-panel hidden" role="dialog" aria-labelledby="helpTitle" aria-hidden="true">
@@ -128,10 +152,15 @@
             <div class="card-header">
                 <h2>360° VR Viewer</h2>
                 <div class="header-actions">
+                    <button id="helpMenuBtn" class="icon-btn" type="button" title="Shortcuts" aria-label="Show shortcuts" aria-pressed="false" aria-controls="helpPanel">
+                        <span class="help-mark" aria-hidden="true">?</span>
+                    </button>
                     <button id="clearBtn" class="icon-btn" type="button" title="Clear images and reload" disabled>
                         <span class="btn-icon btn-icon-bin" aria-hidden="true"></span>
                     </button>
-                    <button class="close-btn" id="closeUiBtn" type="button" title="Hide controls" aria-label="Hide controls">&times;</button>
+                    <button class="icon-btn" id="closeUiBtn" type="button" title="Hide controls" aria-label="Hide controls">
+                        <span class="btn-icon btn-icon-eye-blind" aria-hidden="true"></span>
+                    </button>
                 </div>
             </div>
             
@@ -162,9 +191,13 @@
                 </div>
             </div>
 
-            <div class="control-group">
+            <div class="control-group extra-toggles">
                 <button id="flipBtn" class="sensor-btn" type="button" title="Flip image if it appears upside down" disabled>
                     <span>⇅ Flip</span>
+                </button>
+                <button id="lookHudBtn" class="sensor-btn active" type="button" title="Hide location preview" aria-pressed="true" aria-label="Hide location preview">
+                    <span class="btn-icon btn-icon-pin" aria-hidden="true"></span>
+                    <span>Preview</span>
                 </button>
             </div>
 
