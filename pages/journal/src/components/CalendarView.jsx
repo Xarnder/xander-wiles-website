@@ -130,7 +130,7 @@ export default function CalendarView() {
     }, [currentYear, loading]);
 
     return (
-        <div className="space-y-6">
+        <div className={isEntrySelected ? 'md:space-y-6' : 'space-y-6'}>
             {/* Stats Header - Hidden if entry selected on mobile to save space */}
             <div className={`glass-card p-6 flex flex-col md:flex-row md:items-center md:justify-between transition-all duration-300 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
                 <div>
@@ -150,16 +150,6 @@ export default function CalendarView() {
             </div>
 
             {/* Controls - Hidden if entry selected on mobile */}
-            {isEntrySelected && (
-                <button
-                    type="button"
-                    onClick={() => navigate('/')}
-                    className="md:hidden glass-button px-4 py-2 text-sm text-text inline-flex items-center gap-2"
-                >
-                    <ChevronLeft className="w-4 h-4" />
-                    Back to calendar
-                </button>
-            )}
             <div className={`items-center justify-center space-x-6 mb-8 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
                 <button
                     type="button"

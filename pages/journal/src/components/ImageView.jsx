@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { format, isValid, parseISO } from 'date-fns';
-import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square } from 'lucide-react';
+import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square, Columns2 } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
 
 const GALLERY_LOAD_TIMEOUT_MS = 12000;
@@ -66,16 +66,53 @@ function createGalleryEntries(snapshot) {
     return imageEntries.sort((a, b) => b.id.localeCompare(a.id));
 }
 
-function GallerySkeleton({ mobileColumns }) {
+function flattenGalleryImages(entryList) {
+    const photos = [];
+
+    entryList.forEach((entry) => {
+        entry.images.forEach((image, index) => {
+            if (!image?.url) return;
+            photos.push({
+                key: `${entry.id}-${index}`,
+                url: image.url,
+                caption: typeof image.caption === 'string' ? image.caption : '',
+                entryId: entry.id,
+                date: entry.date,
+                title: entry.title,
+                isSpecial: entry.isSpecial,
+                isFirstForEntry: index === 0
+            });
+        });
+    });
+
+    return photos;
+}
+
+const GALLERY_MODES = [
+    { id: 'grid', icon: LayoutGrid, label: 'Day grid' },
+    { id: 'large', icon: Square, label: 'Large days' },
+    { id: 'masonry', icon: Columns2, label: 'Masonry photos' }
+];
+
+function GallerySkeleton({ galleryMode }) {
+    const isMasonry = galleryMode === 'masonry';
+
     return (
         <div role="status" aria-label="Loading photo gallery" className="space-y-5">
             <span className="sr-only">Loading gallery…</span>
-            <div className="h-6 w-40 rounded-lg bg-white/10 animate-pulse" />
-            <div className={`grid ${mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
-                {Array.from({ length: 8 }).map((_, index) => (
+            {!isMasonry && <div className="h-6 w-40 rounded-lg bg-white/10 animate-pulse" />}
+            <div className={isMasonry
+                ? 'columns-2 md:columns-3 lg:columns-4 gap-4'
+                : `grid ${galleryMode === 'large' ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`
+            }>
+                {Array.from({ length: isMasonry ? 12 : 8 }).map((_, index) => (
                     <div
                         key={index}
-                        className="relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                        className={`relative overflow-hidden rounded-xl border border-white/10 bg-white/5 ${
+                            isMasonry
+                                ? `mb-4 break-inside-avoid ${index % 3 === 0 ? 'h-52' : index % 3 === 1 ? 'h-40' : 'h-64'}`
+                                : 'aspect-square'
+                        }`}
                     >
                         <div
                             className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"
@@ -99,7 +136,7 @@ export default function ImageView() {
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showInfo, setShowInfo] = useState(true);
-    const [mobileColumns, setMobileColumns] = useState(2);
+    const [galleryMode, setGalleryMode] = useState('grid');
     const [loadError, setLoadError] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
 
@@ -193,6 +230,7 @@ export default function ImageView() {
 
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const paginatedEntries = entries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    const masonryPhotos = useMemo(() => flattenGalleryImages(paginatedEntries), [paginatedEntries]);
 
     // Group by month
     const groupedEntries = paginatedEntries.reduce((groups, entry) => {
@@ -223,14 +261,29 @@ export default function ImageView() {
                 </div>
                 <div className="text-right flex flex-col items-end">
                     <div className="flex items-center space-x-4 mb-2">
-                        <button
-                            onClick={() => setMobileColumns(prev => prev === 1 ? 2 : 1)}
-                            className="p-2 rounded-lg transition-colors md:hidden bg-white/5 text-text-muted hover:bg-white/10 hover:text-white mr-2"
-                            title={mobileColumns === 1 ? "Show 2 columns" : "Show 1 column"}
-                            aria-label={mobileColumns === 1 ? "Show 2 columns" : "Show 1 column"}
-                        >
-                            {mobileColumns === 1 ? <LayoutGrid className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                        </button>
+                        <div className="flex items-center rounded-lg bg-white/5 p-0.5">
+                            {GALLERY_MODES.map((mode) => {
+                                const Icon = mode.icon;
+                                const isActive = galleryMode === mode.id;
+                                return (
+                                    <button
+                                        key={mode.id}
+                                        type="button"
+                                        onClick={() => setGalleryMode(mode.id)}
+                                        className={`p-2 rounded-md transition-colors ${
+                                            isActive
+                                                ? 'bg-primary text-white'
+                                                : 'text-text-muted hover:bg-white/10 hover:text-white'
+                                        }`}
+                                        title={mode.label}
+                                        aria-label={mode.label}
+                                        aria-pressed={isActive}
+                                    >
+                                        <Icon className="w-5 h-5" />
+                                    </button>
+                                );
+                            })}
+                        </div>
                         <button
                             onClick={() => setShowInfo(!showInfo)}
                             className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-white' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-white'}`}
@@ -251,7 +304,7 @@ export default function ImageView() {
             </div>
 
             {loading ? (
-                <GallerySkeleton mobileColumns={mobileColumns} />
+                <GallerySkeleton galleryMode={galleryMode} />
             ) : loadError ? (
                 <div role="alert" className="glass-card p-8 text-center">
                     <p className="text-text-secondary mb-4">{loadError}</p>
@@ -261,13 +314,62 @@ export default function ImageView() {
                 </div>
             ) : entries.length > 0 ? (
                 <>
+                    {galleryMode === 'masonry' ? (
+                        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 sm:gap-4">
+                            {masonryPhotos.map((photo) => (
+                                <button
+                                    type="button"
+                                    key={photo.key}
+                                    id={photo.isFirstForEntry ? `gallery-item-${photo.entryId}` : undefined}
+                                    onClick={() => navigate(`/entry/${format(photo.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: photo.entryId, from: '/images' } })}
+                                    aria-label={`Open ${photo.title} from ${format(photo.date, 'MMMM d, yyyy')}`}
+                                    className={`group mb-2 sm:mb-4 w-full break-inside-avoid overflow-hidden rounded-xl border bg-white/5 text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${
+                                        photo.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'
+                                    }`}
+                                >
+                                    <div className="relative">
+                                        <ImageWithSkeleton
+                                            src={photo.url}
+                                            alt={photo.title}
+                                            className="w-full"
+                                            imgClassName="block h-auto w-full transition-transform duration-500 group-hover:scale-[1.03]"
+                                        />
+
+                                        {photo.isSpecial && (
+                                            <div className="absolute top-2 left-2 z-10 rounded-full bg-yellow-400 p-1 text-[#1a1b1e] shadow-lg">
+                                                <Star className="h-3.5 w-3.5 fill-[#1a1b1e]" />
+                                            </div>
+                                        )}
+
+                                        <div className={`absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3 transition-opacity duration-300 ${showInfo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                            <div className={`transform transition-transform duration-300 ${showInfo ? 'translate-y-0' : 'translate-y-4 group-hover:translate-y-0'}`}>
+                                                <p className="mb-1 flex items-center text-xs font-extrabold text-white drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                    <Calendar className="mr-1 h-3.5 w-3.5 drop-shadow-md" />
+                                                    {format(photo.date, 'MMM d, yyyy')}
+                                                </p>
+                                                <p className="line-clamp-2 font-serif text-sm font-bold text-white drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                    {photo.title}
+                                                </p>
+                                                {photo.caption && (
+                                                    <p className="mt-1 line-clamp-2 text-[11px] italic text-white/80">
+                                                        {photo.caption}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <>
                     {Object.entries(groupedEntries).map(([monthYear, monthEntries]) => (
                         <div key={monthYear} className="space-y-4">
                             <h3 className="text-lg font-bold text-white/80 border-b border-white/10 pb-2 flex items-center">
                                 <Calendar className="w-4 h-4 mr-2 text-primary" />
                                 {monthYear}
                             </h3>
-                            <div className={`grid ${mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
+                            <div className={`grid ${galleryMode === 'large' ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
                                 {monthEntries.map((entry) => (
                                     <button
                                         type="button"
@@ -328,6 +430,8 @@ export default function ImageView() {
                             </div>
                         </div>
                     ))}
+                        </>
+                    )}
 
                     {/* Pagination Controls */}
                     {totalPages > 1 && (

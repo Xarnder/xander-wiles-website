@@ -1,9 +1,31 @@
 const SAVE_SOUND_URL = `${import.meta.env.BASE_URL}audio/Save.mp3`;
 const PROGRESS_SOUND_URL = `${import.meta.env.BASE_URL}audio/Progress.mp3`;
+const SOUNDS_ENABLED_KEY = 'journal-sounds-enabled';
 
 let saveAudio = null;
 let progressAudio = null;
 let audioUnlocked = false;
+
+export function areJournalSoundsEnabled() {
+    try {
+        return localStorage.getItem(SOUNDS_ENABLED_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+
+export function setJournalSoundsEnabled(enabled) {
+    try {
+        localStorage.setItem(SOUNDS_ENABLED_KEY, String(Boolean(enabled)));
+    } catch {
+        // Ignore storage failures; playback is still gated in memory this session.
+    }
+
+    if (!enabled) {
+        stopAllJournalAudio();
+        audioUnlocked = false;
+    }
+}
 
 function createAudio(url, volume) {
     const audio = new Audio(url);
@@ -27,6 +49,22 @@ function getProgressAudio() {
     return progressAudio;
 }
 
+function stopAudio(audio) {
+    if (!audio) return;
+
+    try {
+        audio.pause();
+        audio.currentTime = 0;
+    } catch {
+        // Ignore teardown errors from interrupted playback.
+    }
+}
+
+function stopAllJournalAudio() {
+    stopAudio(saveAudio);
+    stopAudio(progressAudio);
+}
+
 function playAudio(audio, label) {
     if (!audio) return;
 
@@ -45,7 +83,7 @@ function playAudio(audio, label) {
 }
 
 export function unlockJournalAudio() {
-    if (audioUnlocked) return;
+    if (!areJournalSoundsEnabled() || audioUnlocked) return;
     audioUnlocked = true;
 
     [getSaveAudio(), getProgressAudio()].forEach((audio) => {
@@ -78,11 +116,13 @@ export function unlockJournalAudio() {
 }
 
 export function playSaveSound() {
+    if (!areJournalSoundsEnabled()) return;
     unlockJournalAudio();
     playAudio(getSaveAudio(), 'save');
 }
 
 export function playProgressSound() {
+    if (!areJournalSoundsEnabled()) return;
     unlockJournalAudio();
     playAudio(getProgressAudio(), '100-word progress');
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useBackup } from '../context/BackupContext';
@@ -21,6 +21,7 @@ import {
     subEntriesToPlainText
 } from '../utils/entrySections';
 import { BACKUP_REMINDER_OPTIONS } from '../utils/backupReminder';
+import { areJournalSoundsEnabled, setJournalSoundsEnabled, unlockJournalAudio } from '../lib/journalAudio';
 
 const THEME_OPTIONS = [
     {
@@ -80,6 +81,7 @@ export default function SettingsView() {
     const { backupReminderSettings, openBackup, updateBackupReminderSettings } = useBackup();
     const [theme, setTheme] = useState(getInitialTheme);
     const [showRawHeader, setShowRawHeader] = useState(getInitialShowRawHeader);
+    const [soundsEnabled, setSoundsEnabled] = useState(areJournalSoundsEnabled);
     const [entrySections, setEntrySections] = useState([]);
     const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
@@ -676,6 +678,45 @@ export default function SettingsView() {
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={showRawHeader}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${showRawHeader ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                </div>
+            </section>
+
+            <section className="glass-card overflow-hidden">
+                <div className="border-b border-white/10 px-4 py-4 sm:px-6">
+                    <h3 className="text-base font-bold text-white">Sound</h3>
+                    <p className="mt-1 text-sm text-text-muted">Keep late-night writing quiet unless you want feedback sounds.</p>
+                </div>
+
+                <div className="px-4 py-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !soundsEnabled;
+                            setSoundsEnabled(nextEnabled);
+                            setJournalSoundsEnabled(nextEnabled);
+                            if (nextEnabled) {
+                                unlockJournalAudio();
+                            }
+                        }}
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={soundsEnabled}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${soundsEnabled ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Volume2 className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Feedback sounds</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Play save and 100-word milestone sounds. Off by default so opening and writing stay silent.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={soundsEnabled}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${soundsEnabled ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                 </div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
@@ -11,7 +11,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square } from 'lucide-react';
+import { Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -22,6 +22,7 @@ import SaveConfetti from './SaveConfetti';
 import LocalSummaryPanel from './LocalSummaryPanel';
 import Modal from './Modal';
 import HarperProofreader from './HarperProofreader';
+import CrossIcon from './CrossIcon';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import { playProgressSound, playSaveSound, unlockJournalAudio } from '../lib/journalAudio';
 import {
@@ -77,6 +78,28 @@ function normalizeMood(value) {
     return Number.isInteger(numericValue) && numericValue >= 1 && numericValue <= 5
         ? numericValue
         : null;
+}
+
+function AdvancedEntrySection({ open, onToggle, children, className = '' }) {
+    return (
+        <div className={`mb-4 sm:mb-6 rounded-xl border border-white/10 bg-white/5 overflow-hidden ${className}`}>
+            <button
+                type="button"
+                onClick={onToggle}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                aria-expanded={open}
+            >
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                    <Layers className="h-4 w-4 text-primary" />
+                    Advanced entry
+                </span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={open ? 'space-y-4 border-t border-white/10 px-3 py-3 sm:px-4 sm:py-4' : 'hidden'}>
+                {children}
+            </div>
+        </div>
+    );
 }
 
 function normalizeImages(data) {
@@ -136,7 +159,6 @@ export default function EntryEditor() {
     const { openBackupReminder } = useBackup();
     const { date } = useParams();
     const navigate = useNavigate();
-    const location = useLocation();
     const [content, setContent] = useState('');
     const [title, setTitle] = useState('');
     const [loading, setLoading] = useState(true);
@@ -155,7 +177,8 @@ export default function EntryEditor() {
     const [numericEntries, setNumericEntries] = useState({});
     const [entrySettingsLoaded, setEntrySettingsLoaded] = useState(false);
     const [mdeInstance, setMdeInstance] = useState(null);
-    const [showFormatting, setShowFormatting] = useState(false);
+    const [showAdvancedEntry, setShowAdvancedEntry] = useState(false);
+    const [editDateFontSize, setEditDateFontSize] = useState(16);
     const [isClipboardTyping, setIsClipboardTyping] = useState(false);
     const [clipboardTypingProgress, setClipboardTypingProgress] = useState(0);
     const [saveConfettiActive, setSaveConfettiActive] = useState(false);
@@ -181,6 +204,7 @@ export default function EntryEditor() {
     const [tempCaption, setTempCaption] = useState('');
     const [lightboxImage, setLightboxImage] = useState(null);
     const [zoomLevel, setZoomLevel] = useState(1);
+    const [entryImageColumns, setEntryImageColumns] = useState(2);
 
     // Drag and Drop State
     const [draggedImageIndex, setDraggedImageIndex] = useState(null);
@@ -247,20 +271,6 @@ export default function EntryEditor() {
     const selectedMoodDetails = MOODS.find((item) => item.value === mood) || null;
     const SelectedMoodIcon = selectedMoodDetails?.icon;
 
-    const fromPath = location.state?.from;
-    const isFromGallery = location.state?.fromGallery;
-
-    const getBackLabel = () => {
-        if (isFromGallery) return "To Gallery";
-        if (fromPath === '/stats') return "To Stats";
-        if (fromPath === '/tags') return "To Tags";
-        if (fromPath === '/month') return "To Month";
-        if (fromPath === '/memories') return "To Memories";
-        if (fromPath === '/') return "To Calendar";
-        if (fromPath?.startsWith('/entry/')) return "Prev View";
-        return "Back";
-    };
-
     const handleDragStart = (e, index) => {
         setDraggedImageIndex(index);
         // Required for Firefox
@@ -303,6 +313,8 @@ export default function EntryEditor() {
     const clipboardFocusRef = useRef(null);
     const savedEntryViewRef = useRef(null);
     const lastClipboardFocusScrollRef = useRef(0);
+    const dateFitContainerRef = useRef(null);
+    const dateFitTextRef = useRef(null);
 
     const scrollClipboardFocusIntoView = useCallback((force = false) => {
         const focusEl = clipboardFocusRef.current;
@@ -547,6 +559,38 @@ export default function EntryEditor() {
             return date;
         }
     }, [date]);
+
+    useLayoutEffect(() => {
+        if (!isEditing) return undefined;
+
+        const container = dateFitContainerRef.current;
+        const text = dateFitTextRef.current;
+        if (!container || !text) return undefined;
+
+        const MIN_SIZE = 12;
+        const MAX_SIZE = 34;
+
+        const fitDate = () => {
+            const available = container.clientWidth;
+            if (available <= 0) return;
+
+            const previousSize = text.style.fontSize;
+            text.style.fontSize = `${MAX_SIZE}px`;
+            const naturalWidth = text.scrollWidth;
+            text.style.fontSize = previousSize;
+
+            if (naturalWidth <= 0) return;
+
+            const nextSize = Math.max(MIN_SIZE, Math.min(MAX_SIZE, MAX_SIZE * ((available - 1) / naturalWidth)));
+            setEditDateFontSize(nextSize);
+        };
+
+        const observer = new ResizeObserver(fitDate);
+        observer.observe(container);
+        fitDate();
+
+        return () => observer.disconnect();
+    }, [isEditing, displayDate]);
 
     // Prepare content for display
     const getDisplayContent = useCallback((value) => {
@@ -1361,8 +1405,9 @@ export default function EntryEditor() {
             nativeSpellcheck: true,
             inputStyle: 'contenteditable',
             status: false,
-            placeholder: "Capture the moment...",
+            placeholder: "Main Entry...",
             toolbar: false,
+            minHeight: "200px",
         };
     }, []);
 
@@ -1461,7 +1506,7 @@ export default function EntryEditor() {
 
     return (
         <div className="h-full flex flex-col relative text-text">
-            <div className="mb-6 sticky top-24 z-40 relative transition-all duration-300 isolate">
+            <div className="mb-2 sm:mb-3 sticky top-16 sm:top-20 z-40 relative transition-all duration-300 isolate">
                 {/* Background Layer */}
                 <div
                     className="absolute inset-0 bg-surface -z-10 rounded-xl shadow-lg border border-border"
@@ -1478,43 +1523,12 @@ export default function EntryEditor() {
                     </>
                 )}
 
-                <div className="p-4 flex flex-col gap-6">
-                    {/* Toolbar Row: All buttons at the top */}
-                    <div className="flex items-center justify-between w-full gap-2 flex-wrap">
-                        {/* Navigation Group (Back, Prev/Next) */}
-                        <div className="flex items-center gap-2">
-                            {/* Generic Dynamic Back Button */}
-                            {fromPath && (
-                                <button
-                                    onClick={() => {
-                                        if (isFromGallery) {
-                                            navigate('/images', { state: { scrollToId: location.state.scrollToId } });
-                                        } else {
-                                            navigate(fromPath);
-                                        }
-                                    }}
-                                    className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center shrink-0"
-                                    title={`Back to ${getBackLabel()}`}
-                                >
-                                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
-                                    <span className="hidden sm:inline font-medium">{getBackLabel()}</span>
-                                </button>
-                            )}
-
-                            {/* Fallback Mobile Back to Calendar (only if no fromPath) */}
-                            {!fromPath && !isFromGallery && (
-                                <button
-                                    onClick={() => navigate('/')}
-                                    className="glass-button p-2 text-text-muted hover:text-white md:hidden shrink-0"
-                                    title="Back to Calendar"
-                                >
-                                    <ArrowLeft className="w-5 h-5" />
-                                </button>
-                            )}
-
-                            {/* Navigation Arrows (View Mode Only) */}
+                <div className="px-3 py-2 sm:p-3 flex flex-col gap-2">
+                    {/* Toolbar Row: Date inline with actions */}
+                    <div className="flex items-center justify-between w-full gap-2">
+                        <div className={`flex min-w-0 items-center gap-2 ${isEditing ? 'flex-1' : ''}`}>
                             {!isEditing && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 shrink-0">
                                     <button
                                         onClick={handlePrevDay}
                                         className="glass-button p-2 text-text-muted hover:text-white shrink-0"
@@ -1531,121 +1545,140 @@ export default function EntryEditor() {
                                     </button>
                                 </div>
                             )}
+                            {isEditing && (
+                                <div ref={dateFitContainerRef} className="flex min-w-0 flex-1 items-center overflow-hidden">
+                                    <span
+                                        ref={dateFitTextRef}
+                                        className={`inline-flex items-center gap-[0.3em] whitespace-nowrap font-semibold tracking-wide ${isSpecial ? 'text-yellow-400' : 'text-primary'}`}
+                                        style={{ fontSize: `${editDateFontSize}px` }}
+                                    >
+                                        <Calendar className="h-[0.9em] w-[0.9em] shrink-0" />
+                                        {displayDate}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Action Group (Edit/Save, Copy, Raw Toggle, Prompt) */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        <div className="flex items-center gap-2 shrink-0">
                             {isEditing ? (
                                 <>
                                     <button
                                         onClick={() => setIsEditing(false)}
-                                        className="glass-button px-4 py-2 text-text hover:bg-white/10 flex items-center justify-center"
+                                        className="glass-button p-2 text-text-muted hover:text-white shrink-0"
                                         disabled={saving}
+                                        title="Cancel"
+                                        aria-label="Cancel"
                                     >
-                                        <X className="w-4 h-4 mr-2" />
-                                        Cancel
+                                        <CrossIcon className="h-5 w-5" />
                                     </button>
                                     <button
-                                        onClick={getRandomPrompt}
-                                        className="glass-button p-2 text-secondary hover:text-white hover:bg-secondary/20 shrink-0"
-                                        title="Get a Writing Prompt"
+                                        onClick={(e) => {
+                                            const nextIsSpecial = !isSpecial;
+                                            setIsSpecial(nextIsSpecial);
+                                            if (nextIsSpecial) {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setButtonRect({
+                                                    x: rect.left + rect.width / 2,
+                                                    y: rect.top + rect.height / 2
+                                                });
+                                                setAnimationActive(true);
+                                            } else {
+                                                setAnimationActive(false);
+                                            }
+                                        }}
+                                        className={`glass-button p-2 shrink-0 ${
+                                            isSpecial
+                                                ? 'text-yellow-400 hover:text-yellow-300'
+                                                : 'text-text-muted hover:text-white'
+                                        }`}
+                                        title={isSpecial ? 'Marked as Special Day' : 'Mark as Special Day'}
+                                        aria-label={isSpecial ? 'Marked as Special Day' : 'Mark as Special Day'}
+                                        aria-pressed={isSpecial}
                                     >
-                                        <Sparkles className="w-5 h-5" />
+                                        <Star className={`w-5 h-5 ${isSpecial ? 'fill-yellow-400' : ''}`} />
                                     </button>
                                     <button
                                         onClick={() => {
                                             unlockJournalAudio();
                                             handleSave();
                                         }}
-                                        className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center relative group"
+                                        className="p-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center shrink-0"
                                         disabled={saving}
+                                        title={saving ? 'Saving' : 'Save'}
+                                        aria-label={saving ? 'Saving' : 'Save'}
                                     >
-                                        <Save className="w-4 h-4 mr-2" />
-                                        {saving ? 'Saving...' : 'Save'}
+                                        {saving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                                     </button>
                                 </>
                             ) : (
                                 <>
                                     <button
                                         onClick={handleCopy}
-                                        className="glass-button px-4 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
+                                        className="glass-button p-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 shrink-0"
                                         title="Copy to Clipboard"
+                                        aria-label="Copy to clipboard"
                                     >
-                                        <Copy className="w-4 h-4 sm:mr-2" />
-                                        <span className="hidden sm:inline">Copy</span>
+                                        <Copy className="w-5 h-5" />
                                     </button>
+                                    {images.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setEntryImageColumns((prev) => (prev === 1 ? 2 : 1))}
+                                            className="glass-button p-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 shrink-0"
+                                            title={entryImageColumns === 1 ? 'Show 2 columns' : 'Show 1 column'}
+                                            aria-label={entryImageColumns === 1 ? 'Show images in two columns' : 'Expand images to one column'}
+                                            aria-pressed={entryImageColumns === 1}
+                                        >
+                                            {entryImageColumns === 1 ? <LayoutGrid className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setIsEditing(true)}
-                                        className="glass-button px-4 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
+                                        className="glass-button p-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 shrink-0"
+                                        title="Edit entry"
+                                        aria-label="Edit entry"
                                     >
-                                        <Edit2 className="w-4 h-4 sm:mr-2" />
-                                        <span className="hidden sm:inline">Edit Entry</span>
-                                        <span className="sm:hidden">Edit</span>
+                                        <Edit2 className="w-5 h-5" />
                                     </button>
                                 </>
                             )}
                         </div>
                     </div>
 
-                    {/* Entry Details Row: Date, Title, Special Star */}
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                        <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
-                            <Calendar className="w-3 h-3 mr-1 shrink-0" />
-                            <span className={isSpecial ? 'text-yellow-400 transition-colors' : ''}>{date}</span>
-                            
-                            {isEditing ? (
-                                <button
-                                    onClick={(e) => {
-                                        const nextIsSpecial = !isSpecial;
-                                        setIsSpecial(nextIsSpecial);
-                                        if (nextIsSpecial) {
-                                            const rect = e.currentTarget.getBoundingClientRect();
-                                            setButtonRect({
-                                                x: rect.left + rect.width / 2,
-                                                y: rect.top + rect.height / 2
-                                            });
-                                            setAnimationActive(true);
-                                        } else {
-                                            setAnimationActive(false);
-                                        }
-                                    }}
-                                    className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
-                                        isSpecial 
-                                        ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-lg shadow-yellow-400/20 scale-105' 
-                                        : 'bg-white/5 text-text-muted border-white/10 hover:border-white/30 hover:bg-white/10'
-                                    }`}
-                                    title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
-                                >
-                                    <Star className={`w-4 h-4 ${isSpecial ? 'fill-black' : ''}`} />
-                                    <span className="text-[10px] sm:text-xs uppercase tracking-widest leading-none">Special Day</span>
-                                </button>
-                            ) : isSpecial && (
-                                <Star className="w-6 h-6 ml-4 fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)] animate-pulse-slow font-bold" />
+                    {!isEditing && (
+                        <div className="min-w-0">
+                            {title && (
+                                <h2 className="text-3xl sm:text-5xl font-serif font-bold text-white break-words leading-tight">{title}</h2>
                             )}
+                            <div className={`flex min-w-0 items-center gap-x-1 text-primary text-[10px] sm:text-xs font-medium tracking-wide ${title ? 'mt-1' : ''}`}>
+                                <Calendar className="w-3 h-3 shrink-0" />
+                                <span className={`min-w-0 ${isSpecial ? 'text-yellow-400 transition-colors' : ''}`}>{displayDate}</span>
+                                {isSpecial && (
+                                    <Star className="w-3.5 h-3.5 shrink-0 fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)] animate-pulse-slow" />
+                                )}
+                            </div>
                         </div>
-                        <h2 className="text-2xl sm:text-4xl font-serif font-bold text-white break-words mt-1">{displayDate}</h2>
-                        {title && !isEditing && <p className="text-secondary text-lg font-medium opacity-90 break-words mt-1">{title}</p>}
-                    </div>
+                    )}
                 </div>
             </div>
 
 
             {/* Content Container */}
-            <div className={`glass-card flex-1 p-4 sm:p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
+            <div className={`glass-card flex-1 overflow-hidden flex flex-col relative ${isEditing ? 'p-3 sm:p-4 md:p-6 ring-2 ring-primary/30' : 'p-4 sm:p-6 md:p-8'}`}>
 
                 {images.length > 0 && !isEditing && (
-                    <div className={`mb-6 ${images.length === 1 ? 'flex justify-center' : 'columns-1 sm:columns-2 gap-4'}`}>
+                    <div className={`mb-6 ${entryImageColumns === 1 ? 'columns-1' : 'columns-2'} gap-2 sm:gap-4`}>
                         {images.map((img, idx) => (
                             <div
                                 key={idx}
                                 onClick={() => handleImageClick(img)}
-                                className={`break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in ${images.length > 1 ? 'mb-4' : ''}`}
+                                className="mb-2 sm:mb-4 break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in"
                             >
                                 <ImageWithSkeleton
                                     src={img.url}
                                     alt={`Attachment ${idx + 1}`}
                                     className="w-full"
-                                    imgClassName={`block h-auto ${images.length === 1 ? 'max-h-[80vh] w-auto max-w-full' : 'w-full'}`}
+                                    imgClassName="block h-auto w-full"
                                 />
                                 {img.caption && (
                                     <div className="p-3 bg-white/5 backdrop-blur-sm border-t border-white/10">
@@ -1691,14 +1724,14 @@ export default function EntryEditor() {
                                 ref={titleTextareaRef}
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Give this day a title..."
+                                placeholder="Title..."
                                 spellCheck={true}
                                 autoCorrect="on"
                                 autoCapitalize="sentences"
                                 autoComplete="on"
                                 readOnly={isInferredTitle}
                                 rows={1}
-                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-1 sm:mb-2 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
+                                className={`w-full bg-transparent text-3xl sm:text-5xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-1 sm:mb-2 p-0 resize-none overflow-hidden leading-tight ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
                             />
                             {isInferredTitle && (
                                 <div className="absolute -top-6 left-0 text-[10px] text-text-muted/60 uppercase tracking-widest flex items-center">
@@ -1808,10 +1841,41 @@ export default function EntryEditor() {
                                             </div>
                                         </div>
                                     ))}
+                                    {images.length + (uploading ? uploadQueueCount : 0) < 8 && (
+                                        <div className="relative group aspect-square">
+                                            <input
+                                                type="file"
+                                                accept="image/*,.heic,.heif"
+                                                multiple
+                                                onChange={handleImageUpload}
+                                                className="hidden"
+                                                id="image-upload"
+                                                disabled={uploading}
+                                            />
+                                            <label
+                                                htmlFor="image-upload"
+                                                className={`flex flex-col items-center justify-center w-full h-full border-2 border-dashed border-white/10 rounded-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed bg-white/5' : 'cursor-pointer hover:border-primary/50 hover:bg-white/5'}`}
+                                            >
+                                                <ImageIcon className="h-[70%] w-[70%] text-text-muted group-hover:text-white" strokeWidth={1.25} />
+                                                {images.length > 0 && (
+                                                    <span className="mt-0.5 text-[10px] sm:text-xs tabular-nums font-medium text-text-muted group-hover:text-white">
+                                                        {images.length}/8
+                                                    </span>
+                                                )}
+                                                <span className="sr-only">Upload images</span>
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
-                            {images.length + (uploading ? uploadQueueCount : 0) < 8 && (
+                            {images.length > 0 && images.length + (uploading ? uploadQueueCount : 0) >= 8 && (
+                                <p className="mb-2 text-right text-[10px] sm:text-xs tabular-nums font-medium text-text-muted">
+                                    {images.length}/8
+                                </p>
+                            )}
+
+                            {images.length === 0 && !uploading && (
                                 <div className="relative group">
                                     <input
                                         type="file"
@@ -1824,13 +1888,10 @@ export default function EntryEditor() {
                                     />
                                     <label
                                         htmlFor="image-upload"
-                                        className={`flex flex-col items-center justify-center w-full ${(images.length > 0 || uploading) ? 'h-20 sm:h-24' : 'h-24 sm:h-32'} border-2 border-dashed border-white/10 rounded-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed bg-white/5' : 'cursor-pointer hover:border-primary/50 hover:bg-white/5'}`}
+                                        className="flex items-center justify-center w-full h-24 sm:h-32 p-1 border-2 border-dashed border-white/10 rounded-lg cursor-pointer transition-all hover:border-primary/50 hover:bg-white/5"
                                     >
-                                        <div className="flex flex-col items-center text-text-muted group-hover:text-white">
-                                            <ImageIcon className="w-6 h-6 sm:w-8 sm:h-8 mb-1.5 sm:mb-2" />
-                                            <span className="text-xs sm:text-sm font-medium">Click to upload images ({images.length + (uploading ? uploadQueueCount : 0)}/8)</span>
-                                            <span className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
-                                        </div>
+                                        <ImageIcon className="h-full w-auto text-text-muted group-hover:text-white" strokeWidth={1.25} />
+                                        <span className="sr-only">Upload images</span>
                                     </label>
                                 </div>
                             )}
@@ -1839,18 +1900,56 @@ export default function EntryEditor() {
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
                             <div
                                 ref={clipboardFocusRef}
-                                className="scroll-mt-28 sm:scroll-mt-32"
+                                className="scroll-mt-20 sm:scroll-mt-24"
                             >
+                            <div className="mb-3" onPointerDown={unlockJournalAudio}>
+                                {useNativeEditor ? (
+                                    <textarea
+                                        ref={nativeTextareaRef}
+                                        value={content}
+                                        onChange={(event) => {
+                                            if (clipboardAnimationRef.current?.type === 'native') {
+                                                stopClipboardTyping();
+                                            }
+                                            handleMainContentChange(event.target.value);
+                                        }}
+                                        rows={10}
+                                        spellCheck
+                                        autoCorrect="on"
+                                        autoCapitalize="sentences"
+                                        autoComplete="on"
+                                        aria-label="Main journal entry"
+                                        placeholder="Main Entry..."
+                                        className="min-h-[14rem] sm:min-h-[20rem] w-full resize-y rounded-xl border border-white/10 bg-black/20 p-4 text-base leading-relaxed text-text outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                                    />
+                                ) : (
+                                    <>
+                                        <SimpleMdeReact
+                                            value={content}
+                                            onChange={handleMainContentChange}
+                                            options={mdeOptions}
+                                            getCodemirrorInstance={configureCodeMirrorInstance}
+                                            className="prose-dark"
+                                        />
+                                        <HarperProofreader
+                                            text={content}
+                                            onTextChange={handleMainContentChange}
+                                            editor={mdeInstance}
+                                        />
+                                    </>
+                                )}
+                            </div>
+
                             {/* Writing progress — cycles every 100 main-entry words */}
                             <div
-                                className={`mb-4 sm:mb-5 rounded-xl border p-3 sm:p-4 transition-colors ${
+                                className={`mb-4 sm:mb-6 rounded-xl border p-2 sm:p-3 transition-colors ${
                                     wordMilestoneFlash
                                         ? 'border-secondary/40 bg-secondary/10 animate-progress-milestone'
                                         : 'border-white/10 bg-white/5'
                                 }`}
                                 aria-live="polite"
                             >
-                                <div className="mb-2.5 flex items-center justify-between gap-3">
+                                <div className="mb-1 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-text-muted">
                                         <Target className={`h-3.5 w-3.5 ${wordMilestoneFlash ? 'text-secondary' : 'text-primary'}`} />
                                         Writing progress
@@ -1874,149 +1973,36 @@ export default function EntryEditor() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="h-3 sm:h-3.5 rounded-full bg-black/30 border border-white/5 overflow-hidden shadow-inner">
-                                    <div
-                                        className={`h-full rounded-full bg-gradient-to-r from-primary via-primary-variant to-secondary shadow-[0_0_12px_rgba(139,92,246,0.35)] ${
-                                            wordMilestoneFlash
-                                                ? 'animate-progress-fill-flash'
-                                                : wordProgress === 0
-                                                    ? ''
-                                                    : 'transition-[width] duration-300 ease-out'
-                                        }`}
-                                        style={{ width: `${wordProgress}%` }}
-                                    />
-                                </div>
-                                <div className="mt-2 flex justify-between text-[10px] uppercase tracking-wider text-text-muted/60">
-                                    <span>{wordsInCycle || (wordMilestoneFlash ? wordCycleGoal : 0)} / {wordCycleGoal}</span>
-                                    <span>Resets every {wordCycleGoal}</span>
-                                </div>
-                            </div>
-
-                            <div className="mb-4 sm:mb-6" onPointerDown={unlockJournalAudio}>
-                                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
-                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
-                                        <BookOpen className="h-4 w-4 text-primary" />
-                                        Main entry
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => void handleAnimatedClipboardPaste()}
-                                        className={`relative inline-flex min-h-9 items-center gap-1.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                                            isClipboardTyping
-                                                ? 'border-secondary/40 bg-secondary/10 text-secondary hover:bg-secondary/15'
-                                                : 'border-white/10 bg-white/5 text-text-secondary hover:border-primary/30 hover:text-primary'
-                                        }`}
-                                        title={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with a typing animation'}
-                                        aria-label={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with typing animation'}
-                                    >
-                                        {isClipboardTyping ? <Square className="h-3.5 w-3.5 fill-current" /> : <ClipboardPaste className="h-3.5 w-3.5" />}
-                                        {isClipboardTyping ? `Stop · ${clipboardTypingProgress}%` : 'Type clipboard'}
-                                        {isClipboardTyping && (
-                                            <span
-                                                className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-secondary transition-transform duration-100"
-                                                style={{ transform: `scaleX(${clipboardTypingProgress / 100})` }}
-                                                aria-hidden="true"
-                                            />
-                                        )}
-                                    </button>
-                                </div>
-                                {useNativeEditor ? (
-                                    <textarea
-                                        ref={nativeTextareaRef}
-                                        value={content}
-                                        onChange={(event) => {
-                                            if (clipboardAnimationRef.current?.type === 'native') {
-                                                stopClipboardTyping();
-                                            }
-                                            handleMainContentChange(event.target.value);
-                                        }}
-                                        rows={16}
-                                        spellCheck
-                                        autoCorrect="on"
-                                        autoCapitalize="sentences"
-                                        autoComplete="on"
-                                        aria-label="Main journal entry"
-                                        placeholder="Capture the moment..."
-                                        className="min-h-[22rem] w-full resize-y rounded-xl border border-white/10 bg-black/20 p-4 text-base leading-relaxed text-text outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                                    />
-                                ) : (
-                                    <>
-                                        <SimpleMdeReact
-                                            value={content}
-                                            onChange={handleMainContentChange}
-                                            options={mdeOptions}
-                                            getCodemirrorInstance={configureCodeMirrorInstance}
-                                            className="prose-dark"
+                                <div className="flex items-center gap-2">
+                                    <div className="h-3 sm:h-3.5 flex-1 rounded-full bg-black/30 border border-white/5 overflow-hidden shadow-inner">
+                                        <div
+                                            className={`h-full rounded-full bg-gradient-to-r from-primary via-primary-variant to-secondary shadow-[0_0_12px_rgba(139,92,246,0.35)] ${
+                                                wordMilestoneFlash
+                                                    ? 'animate-progress-fill-flash'
+                                                    : wordProgress === 0
+                                                        ? ''
+                                                        : 'transition-[width] duration-300 ease-out'
+                                            }`}
+                                            style={{ width: `${wordProgress}%` }}
                                         />
-                                        <HarperProofreader
-                                            text={content}
-                                            onTextChange={handleMainContentChange}
-                                            editor={mdeInstance}
-                                        />
-                                    </>
-                                )}
-                            </div>
-                            </div>
-
-                            {/* Combined Mood Picker and Formatting Tool Row */}
-                            <div className="flex flex-col gap-2 mb-4 sm:mb-6">
-                                <div className="flex items-center gap-2 sm:gap-4 py-1 px-2.5 sm:py-2 sm:px-3 bg-white/5 rounded-xl border border-white/10 w-fit">
-                                    <span className="text-[10px] text-text-muted uppercase tracking-widest font-bold">How's your mood?</span>
-                                    <div className="flex items-center gap-1.5">
-                                        {MOODS.map((m) => {
-                                            const Icon = m.icon;
-                                            const isSelected = mood === m.value;
-                                            return (
-                                                <button
-                                                    key={m.value}
-                                                    type="button"
-                                                    onClick={() => setMood(isSelected ? null : m.value)}
-                                                    className={`p-1 sm:p-1.5 rounded-lg transition-all duration-200 group/item relative ${
-                                                        isSelected 
-                                                        ? 'bg-white/10 scale-110 shadow-lg' 
-                                                        : 'hover:bg-white/5 opacity-40 hover:opacity-100'
-                                                    }`}
-                                                    title={m.label}
-                                                >
-                                                    <Icon 
-                                                        className="w-4 h-4 sm:w-5 sm:h-5 transition-colors" 
-                                                        style={{ color: isSelected ? m.color : 'white' }}
-                                                    />
-                                                    {isSelected && (
-                                                        <div 
-                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full animate-bounce"
-                                                            style={{ backgroundColor: m.color }}
-                                                        />
-                                                    )}
-                                                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-[10px] py-1 px-2 rounded opacity-0 group-hover/item:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                                                        {m.label}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
                                     </div>
-
-                                    {/* Divider */}
-                                    <div className="h-4 w-px bg-white/10" />
-
-                                    {/* Tiny 'T' button for formatting toggle */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowFormatting(!showFormatting)}
-                                        className={`p-1 sm:p-1.5 rounded-lg transition-all duration-200 relative ${
-                                            showFormatting 
-                                            ? 'bg-white/10 text-primary scale-110 shadow-lg' 
-                                            : 'hover:bg-white/5 text-text-muted hover:text-white'
-                                        }`}
-                                        title={showFormatting ? "Hide Formatting" : "Formatting Tools"}
-                                    >
-                                        <Type className="w-4 h-4 sm:w-5 sm:h-5" />
-                                    </button>
+                                    <span className="shrink-0 text-[10px] tabular-nums uppercase tracking-wider text-text-muted/60">
+                                        {wordsInCycle || (wordMilestoneFlash ? wordCycleGoal : 0)} / {wordCycleGoal}
+                                    </span>
                                 </div>
+                            </div>
+                            </div>
 
-                                {/* Collapsible Formatting Panel */}
-                                {showFormatting && (
-                                    <div className="flex flex-wrap items-center gap-1 p-1.5 bg-white/5 border border-white/10 rounded-lg animation-fade-in w-fit">
+                            <AdvancedEntrySection
+                                open={showAdvancedEntry}
+                                onToggle={() => setShowAdvancedEntry((current) => !current)}
+                            >
+                                <div>
+                                    <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                                        <Type className="h-4 w-4 text-primary" />
+                                        Text format
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-1 p-1.5 bg-white/5 border border-white/10 rounded-lg w-fit">
                                         <button
                                             type="button"
                                             onClick={() => mdeInstance && EasyMDE.toggleBold(mdeInstance)}
@@ -2083,12 +2069,48 @@ export default function EntryEditor() {
                                             <ImageIcon className="w-4 h-4" />
                                         </button>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 sm:gap-4 py-1 px-2.5 sm:py-2 sm:px-3 bg-white/5 rounded-xl border border-white/10 w-fit">
+                                    <span className="text-[10px] text-text-muted uppercase tracking-widest font-bold">How's your mood?</span>
+                                    <div className="flex items-center gap-1.5">
+                                        {MOODS.map((m) => {
+                                            const Icon = m.icon;
+                                            const isSelected = mood === m.value;
+                                            return (
+                                                <button
+                                                    key={m.value}
+                                                    type="button"
+                                                    onClick={() => setMood(isSelected ? null : m.value)}
+                                                    className={`p-1 sm:p-1.5 rounded-lg transition-all duration-200 group/item relative ${
+                                                        isSelected 
+                                                        ? 'bg-white/10 scale-110 shadow-lg' 
+                                                        : 'hover:bg-white/5 opacity-40 hover:opacity-100'
+                                                    }`}
+                                                    title={m.label}
+                                                >
+                                                    <Icon 
+                                                        className="w-4 h-4 sm:w-5 sm:h-5 transition-colors" 
+                                                        style={{ color: isSelected ? m.color : 'white' }}
+                                                    />
+                                                    {isSelected && (
+                                                        <div 
+                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full animate-bounce"
+                                                            style={{ backgroundColor: m.color }}
+                                                        />
+                                                    )}
+                                                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-[10px] py-1 px-2 rounded opacity-0 group-hover/item:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                                        {m.label}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
 
                             {/* Tags Editor Area moved under the main entry input box */}
                             {availableTags.length > 0 && (
-                                <div className="mb-4 sm:mb-6">
+                                <div>
                                     <label className="flex items-center text-sm font-medium text-text-muted mb-2">
                                         <Tag className="w-4 h-4 mr-2" /> Tags
                                     </label>
@@ -2201,21 +2223,54 @@ export default function EntryEditor() {
                                 </div>
                             )}
 
-                            {/* AI summary status message moved to the bottom of the scrollable area */}
-                            <div className="mt-4 sm:mt-6 mb-2 rounded-lg border border-secondary/20 bg-secondary/10 px-3 py-2 sm:px-4 sm:py-3 text-sm text-text-secondary">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={getRandomPrompt}
+                                    className="glass-button inline-flex min-h-9 items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-secondary hover:text-white hover:bg-secondary/20"
+                                    title="Get a Writing Prompt"
+                                >
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    Writing prompt
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleAnimatedClipboardPaste()}
+                                    className={`relative inline-flex min-h-9 items-center gap-1.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                                        isClipboardTyping
+                                            ? 'border-secondary/40 bg-secondary/10 text-secondary hover:bg-secondary/15'
+                                            : 'border-white/10 bg-white/5 text-text-secondary hover:border-primary/30 hover:text-primary'
+                                    }`}
+                                    title={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with a typing animation'}
+                                    aria-label={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with typing animation'}
+                                >
+                                    {isClipboardTyping ? <Square className="h-3.5 w-3.5 fill-current" /> : <ClipboardPaste className="h-3.5 w-3.5" />}
+                                    {isClipboardTyping ? `Stop · ${clipboardTypingProgress}%` : 'Type clipboard'}
+                                    {isClipboardTyping && (
+                                        <span
+                                            className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-secondary transition-transform duration-100"
+                                            style={{ transform: `scaleX(${clipboardTypingProgress / 100})` }}
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                </button>
+                            </div>
+
+                            <div className="rounded-lg border border-secondary/20 bg-secondary/10 px-3 py-2 sm:px-4 sm:py-3 text-sm text-text-secondary">
                                 <div className="flex items-start gap-3">
                                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
                                     <div>
-                                        <p className="font-bold text-white">AI summary available after saving</p>
+                                        <p className="font-bold text-white">AI summary</p>
                                         <p className="mt-1 text-xs leading-relaxed text-text-muted">
                                             Save this entry, then switch to view mode to generate or review the private local AI summary.
                                         </p>
                                     </div>
                                 </div>
                             </div>
+                            </AdvancedEntrySection>
                         </div>
                         
-                        <div className="mt-3 pt-3 sm:mt-4 sm:pt-4 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5">
+                        <div className="mt-2 pt-2 sm:mt-3 sm:pt-3 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5">
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-1.5">
                                     <PenTool className="w-3 h-3" />
@@ -2246,110 +2301,26 @@ export default function EntryEditor() {
                 ) : (
                     <>
                         <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
-                            <div ref={savedEntryViewRef} className="max-w-none scroll-mt-28 sm:scroll-mt-32">
-                                {selectedMoodDetails && SelectedMoodIcon && (
-                                    <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl bg-white/5 border border-white/10 w-fit">
-                                        <div 
-                                            className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
-                                            style={{ backgroundColor: `${selectedMoodDetails.color}20` }}
-                                        >
-                                            <SelectedMoodIcon
-                                                className="w-6 h-6"
-                                                style={{ color: selectedMoodDetails.color }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold">Today's Mood</p>
-                                            <p className="text-white font-bold">{selectedMoodDetails.label}</p>
-                                        </div>
+                            <div ref={savedEntryViewRef} className="max-w-none scroll-mt-20 sm:scroll-mt-24">
+                                <div className="flex items-center gap-4 text-xs mb-8">
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
+                                        <PenTool className="w-3.5 h-3.5 text-secondary" />
+                                        <span className="text-white font-medium">{totalWordCount} words</span>
                                     </div>
-                                )}
-
-                                {/* Metadata Section (View Mode) */}
-                                <div className="flex flex-col gap-4 mb-8">
-                                    {selectedTags.length > 0 && availableTags.length > 0 && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedTags.map(tagId => {
-                                                const tag = availableTags.find(t => t.id === tagId);
-                                                if (!tag) return null;
-                                                return (
-                                                    <span
-                                                        key={tagId}
-                                                        className="px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5"
-                                                        style={{ backgroundColor: `${tag.color}20`, color: tag.color, border: `1px solid ${tag.color}40` }}
-                                                    >
-                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }}></div>
-                                                        {tag.name}
-                                                    </span>
-                                                );
-                                            })}
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
+                                        <Clock className="w-3.5 h-3.5 text-primary" />
+                                        <span className="text-white font-medium">{readingTime}</span>
+                                    </div>
+                                    {timeSinceEntry && (
+                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold">
+                                            <span>{timeSinceEntry}</span>
                                         </div>
                                     )}
-
-                                    <div className="flex items-center gap-4 text-xs">
-                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                                            <PenTool className="w-3.5 h-3.5 text-secondary" />
-                                            <span className="text-white font-medium">{totalWordCount} words</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                                            <Clock className="w-3.5 h-3.5 text-primary" />
-                                            <span className="text-white font-medium">{readingTime}</span>
-                                        </div>
-                                        {timeSinceEntry && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold">
-                                                <span>{timeSinceEntry}</span>
-                                            </div>
-                                        )}
-                                    </div>
                                 </div>
 
                                 <div className="markdown-content prose prose-invert max-w-none">
                                     {displayContent && (
                                         <ReactMarkdown>{displayContent}</ReactMarkdown>
-                                    )}
-
-                                    {visibleSubEntries.length > 0 && (
-                                        <div className={`${displayContent ? 'mt-10 border-t border-white/10 pt-8' : ''} space-y-6`}>
-                                            {visibleSubEntries.map((subEntry) => (
-                                                <section
-                                                    key={subEntry.section.id}
-                                                    className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-5"
-                                                >
-                                                    <div className="mb-4 flex min-w-0 flex-col gap-1">
-                                                        <div className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
-                                                            <Type className="h-4 w-4 shrink-0" />
-                                                            <span className="min-w-0 truncate">{subEntry.section.name}</span>
-                                                        </div>
-                                                        {subEntry.title && (
-                                                            <h3 className="m-0 text-xl font-serif font-bold text-white">{subEntry.title}</h3>
-                                                        )}
-                                                    </div>
-
-                                                    {subEntry.content && (
-                                                        <div className="markdown-content prose prose-invert max-w-none">
-                                                            <ReactMarkdown>{subEntry.content}</ReactMarkdown>
-                                                        </div>
-                                                    )}
-                                                </section>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {visibleNumericEntries.length > 0 && (
-                                        <div className={`${displayContent || visibleSubEntries.length > 0 ? 'mt-10 border-t border-white/10 pt-8' : ''} grid gap-3 sm:grid-cols-2`}>
-                                            {visibleNumericEntries.map((entry) => (
-                                                <section
-                                                    key={entry.field.id}
-                                                    className="rounded-xl border border-white/10 bg-white/5 p-4"
-                                                >
-                                                    <div className="mb-2 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
-                                                        <Hash className="h-4 w-4 shrink-0 text-primary" />
-                                                        <span className="min-w-0 truncate">{entry.field.name}</span>
-                                                    </div>
-                                                    <p className="m-0 text-3xl font-bold text-white">{entry.value}</p>
-                                                </section>
-                                            ))}
-                                        </div>
                                     )}
 
                                     {!displayContent && visibleSubEntries.length === 0 && visibleNumericEntries.length === 0 && (
@@ -2361,7 +2332,91 @@ export default function EntryEditor() {
                                     )}
                                 </div>
 
-                                {/* Moved Private AI Section (LocalSummaryPanel) to the bottom */}
+                                {(selectedMoodDetails || (selectedTags.length > 0 && availableTags.length > 0) || visibleSubEntries.length > 0 || visibleNumericEntries.length > 0) && (
+                                    <div className="mt-8 space-y-4">
+                                        {selectedMoodDetails && SelectedMoodIcon && (
+                                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 w-fit">
+                                                <div
+                                                    className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+                                                    style={{ backgroundColor: `${selectedMoodDetails.color}20` }}
+                                                >
+                                                    <SelectedMoodIcon
+                                                        className="w-6 h-6"
+                                                        style={{ color: selectedMoodDetails.color }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold">Today's Mood</p>
+                                                    <p className="text-white font-bold">{selectedMoodDetails.label}</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedTags.length > 0 && availableTags.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedTags.map(tagId => {
+                                                    const tag = availableTags.find(t => t.id === tagId);
+                                                    if (!tag) return null;
+                                                    return (
+                                                        <span
+                                                            key={tagId}
+                                                            className="px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5"
+                                                            style={{ backgroundColor: `${tag.color}20`, color: tag.color, border: `1px solid ${tag.color}40` }}
+                                                        >
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }}></div>
+                                                            {tag.name}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {visibleSubEntries.length > 0 && (
+                                            <div className="space-y-6">
+                                                {visibleSubEntries.map((subEntry) => (
+                                                    <section
+                                                        key={subEntry.section.id}
+                                                        className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-5"
+                                                    >
+                                                        <div className="mb-4 flex min-w-0 flex-col gap-1">
+                                                            <div className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                                                                <Type className="h-4 w-4 shrink-0" />
+                                                                <span className="min-w-0 truncate">{subEntry.section.name}</span>
+                                                            </div>
+                                                            {subEntry.title && (
+                                                                <h3 className="m-0 text-xl font-serif font-bold text-white">{subEntry.title}</h3>
+                                                            )}
+                                                        </div>
+
+                                                        {subEntry.content && (
+                                                            <div className="markdown-content prose prose-invert max-w-none">
+                                                                <ReactMarkdown>{subEntry.content}</ReactMarkdown>
+                                                            </div>
+                                                        )}
+                                                    </section>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {visibleNumericEntries.length > 0 && (
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                {visibleNumericEntries.map((entry) => (
+                                                    <section
+                                                        key={entry.field.id}
+                                                        className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                                    >
+                                                        <div className="mb-2 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                                                            <Hash className="h-4 w-4 shrink-0 text-primary" />
+                                                            <span className="min-w-0 truncate">{entry.field.name}</span>
+                                                        </div>
+                                                        <p className="m-0 text-3xl font-bold text-white">{entry.value}</p>
+                                                    </section>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {displayContent && (
                                     <div className="mt-8">
                                         <LocalSummaryPanel
@@ -2375,7 +2430,7 @@ export default function EntryEditor() {
                                 )}
 
                                 {displayContent && (
-                                    <div id={`journal-ai-debug-${date}`} className="mt-8" />
+                                    <div id={`journal-ai-debug-${date}`} />
                                 )}
                             </div>
                         </div>

@@ -309,8 +309,10 @@ export default function LocalSummaryPanel({ entryText, wordCount, debugTargetId,
         window.setTimeout(() => setDebugCopyStatus(''), 1800);
     }
 
+    const showDebugControls = !isRunning && debugEntries.length > 0;
+
     const debugTerminal = (
-        <div className="mt-2 border-t border-white/10 pt-3">
+        <div className="mt-8 border-t border-white/10 pt-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                     type="button"
@@ -527,9 +529,9 @@ export default function LocalSummaryPanel({ entryText, wordCount, debugTargetId,
                 {isRunning && !summary && <SummarySkeleton />}
 
                 </div>
-                {!debugTarget && debugTerminal}
+                {showDebugControls && !debugTarget && debugTerminal}
             </section>
-            {debugTarget ? createPortal(debugTerminal, debugTarget) : null}
+            {showDebugControls && debugTarget ? createPortal(debugTerminal, debugTarget) : null}
         </>
     );
 }

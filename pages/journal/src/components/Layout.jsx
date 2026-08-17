@@ -8,6 +8,7 @@ import { collection, query, where, documentId, onSnapshot } from 'firebase/fires
 import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
 import BackupOptions from './BackupOptions';
+import LeftArrowIcon from './LeftArrowIcon';
 
 function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
     const isActive = currentPath === path || (path === '/' && currentPath.startsWith('/entry/'));
@@ -146,23 +147,50 @@ export default function Layout() {
         navigate(path);
     };
 
+    const isEntryView = location.pathname.startsWith('/entry/');
+    const fromPath = location.state?.from;
+    const isFromGallery = location.state?.fromGallery;
+
+    function getEntryBackLabel() {
+        if (isFromGallery) return 'Back to gallery';
+        if (fromPath === '/stats') return 'Back to stats';
+        if (fromPath === '/tags') return 'Back to tags';
+        if (fromPath === '/month') return 'Back to month view';
+        if (fromPath === '/memories') return 'Back to memories';
+        if (fromPath === '/') return 'Back to calendar';
+        if (fromPath?.startsWith('/entry/')) return 'Back to previous entry';
+        if (fromPath) return 'Go back';
+        return 'Back to calendar';
+    }
+
+    function handleEntryBack() {
+        if (isFromGallery) {
+            navigate('/images', { state: { scrollToId: location.state?.scrollToId } });
+            return;
+        }
+
+        navigate(fromPath || '/');
+    }
+
     return (
         <div className="min-h-screen flex flex-col font-body text-text">
             <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
             <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
-            <header className="sticky top-0 z-50 px-4 pt-4 pb-2">
-                <div className="glass-card max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center transition-all duration-300 relative">
-                    {/* Logo / Title */}
-                    <button type="button" className="flex items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
-                        <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors mr-3">
-                            <Book className="h-6 w-6 text-primary" />
-                        </div>
-                        <h1 className="hidden sm:block text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-                            Digital Journal
-                        </h1>
-                    </button>
+            <header className={`sticky top-0 z-50 px-3 sm:px-4 ${isEntryView ? 'pt-2 pb-1' : 'pt-3 pb-2 sm:pt-4'}`}>
+                <div className={`glass-card max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex justify-between items-center transition-all duration-300 relative ${isEntryView ? 'py-2' : 'py-3'}`}>
+                    <div className="flex min-w-0 items-center">
+                        {/* Logo / Title */}
+                        <button type="button" className="flex items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
+                            <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors mr-3">
+                                <Book className="h-6 w-6 text-primary" />
+                            </div>
+                            <h1 className="hidden sm:block text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+                                Digital Journal
+                            </h1>
+                        </button>
+                    </div>
 
                     {/* Desktop Actions */}
                     <div className="hidden md:flex items-center space-x-3">
@@ -171,6 +199,17 @@ export default function Layout() {
                         </span>
 
                         <div className="flex items-center gap-2 border-r border-white/10 pr-4 mr-1">
+                            {isEntryView && (
+                                <button
+                                    type="button"
+                                    onClick={handleEntryBack}
+                                    className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                                    title={getEntryBackLabel()}
+                                    aria-label={getEntryBackLabel()}
+                                >
+                                    <LeftArrowIcon className="h-6 w-6" />
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={handleQuickWrite}
@@ -285,6 +324,17 @@ export default function Layout() {
 
                     {/* Mobile Header Controls */}
                     <div className="flex md:hidden items-center gap-2">
+                        {isEntryView && (
+                            <button
+                                type="button"
+                                onClick={handleEntryBack}
+                                className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                                title={getEntryBackLabel()}
+                                aria-label={getEntryBackLabel()}
+                            >
+                                <LeftArrowIcon className="h-6 w-6" />
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={handleQuickWrite}
@@ -339,7 +389,11 @@ export default function Layout() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animation-fade-in">
+            <main className={`flex-1 w-full max-w-7xl mx-auto animation-fade-in ${
+                isEntryView
+                    ? 'px-3 pt-1 pb-3 sm:px-4 sm:pt-2 sm:pb-4 lg:px-8 lg:pt-4 lg:pb-8'
+                    : 'p-4 sm:p-6 lg:p-8'
+            }`}>
                 <Outlet />
             </main>
 

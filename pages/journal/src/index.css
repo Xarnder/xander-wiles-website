@@ -420,7 +420,7 @@
 
 @media (max-width: 640px) {
   .EasyMDEContainer .CodeMirror {
-    min-height: 180px !important;
+    min-height: 140px !important;
   }
 }
 
