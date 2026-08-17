@@ -1103,8 +1103,6 @@ input[type="file"] { display: none; }
     :root {
         --ui-scale: 0.88;
         --slim-menu-h: 50dvh;
-        --look-hud-w: min(240px, calc(100vw - 48px));
-        --look-hud-h: 152px;
         --look-hud-bottom: calc(16px + var(--safe-bottom));
     }
 
@@ -1139,27 +1137,16 @@ input[type="file"] { display: none; }
         overflow-y: auto;
     }
 
-    html.is-slim-mobile:not(.ui-ready) .look-hud,
-    body.is-ui-hidden .look-hud {
-        top: auto;
-        bottom: var(--look-hud-bottom);
-        width: var(--look-hud-w);
+    .look-hud {
+        display: none !important;
+    }
+
+    #lookHudBtn {
+        display: none;
     }
 
     body:not(.is-ui-hidden) {
         --look-hud-bottom: calc(var(--slim-menu-h) + 8px);
-    }
-
-    body:not(.is-ui-hidden) .look-hud {
-        top: auto;
-        bottom: var(--look-hud-bottom);
-        width: var(--look-hud-w);
-    }
-
-    .look-hud canvas {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 2 / 1;
     }
 
     .edge-nav {
@@ -1168,7 +1155,7 @@ input[type="file"] { display: none; }
         width: 28px;
         height: 28px;
         border-radius: 8px;
-        bottom: calc(var(--look-hud-bottom) + var(--look-hud-h) + 6px);
+        bottom: calc(var(--look-hud-bottom) + 6px);
     }
 
     .edge-nav .btn-icon {
@@ -1177,15 +1164,11 @@ input[type="file"] { display: none; }
     }
 
     .edge-nav-prev {
-        left: max(8px, calc(50% - var(--look-hud-w) / 2));
+        left: calc(8px + env(safe-area-inset-left, 0px));
     }
 
     .edge-nav-next {
-        right: max(8px, calc(50% - var(--look-hud-w) / 2));
-    }
-
-    body.is-look-hud-hidden .edge-nav {
-        bottom: calc(var(--look-hud-bottom) + 6px);
+        right: calc(8px + env(safe-area-inset-right, 0px));
     }
 
     .ui-container {

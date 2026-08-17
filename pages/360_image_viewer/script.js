@@ -460,6 +460,7 @@ function updateSlimUiLayout(opts) {
 
     if (initial && slim) setUiVisible(false);
     document.documentElement.classList.add('ui-ready');
+    syncLookHudVisibility();
 }
 
 // --- Initialization ---
@@ -1279,15 +1280,16 @@ function getLookControls() {
 
 function syncLookHudVisibility() {
     if (!lookHud) return;
-    const show = isLookHudVisible && imageItems.length > 0 && lookMode !== 'flat' && !sceneEl.is('vr-mode');
+    const slim = isSlimVerticalLayout();
+    const show = !slim && isLookHudVisible && imageItems.length > 0 && lookMode !== 'flat' && !sceneEl.is('vr-mode');
     lookHud.classList.toggle('hidden', !show);
     lookHud.setAttribute('aria-hidden', show ? 'false' : 'true');
     lookHud.classList.toggle('is-wander', lookMode === 'wander');
+    document.body.classList.toggle('is-look-hud-hidden', !show);
 }
 
 function setLookHudVisible(visible) {
     isLookHudVisible = !!visible;
-    document.body.classList.toggle('is-look-hud-hidden', !isLookHudVisible);
     if (lookHudBtn) {
         lookHudBtn.classList.toggle('active', isLookHudVisible);
         lookHudBtn.setAttribute('aria-pressed', isLookHudVisible ? 'true' : 'false');
