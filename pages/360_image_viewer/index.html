@@ -2,12 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>360° VR Viewer</title>
     
-    <!-- Header Styles -->
-    <link rel="stylesheet" href="/assets/css/style.css">
-
     <!-- A-Frame Library -->
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 
@@ -20,12 +17,6 @@
 </head>
 <body>
 
-    <!-- Site Header Wrapper -->
-    <div id="site-header-container" class="fade-transition">
-        <div id="main-nav-placeholder"></div> 
-    </div>
-    <script src="/assets/js/nav-loader.js"></script> 
-
     <!-- 2D LOADING SCREEN — sits behind the control UI so it never blocks clicks -->
     <div id="loader-2d" class="loader-overlay hidden">
         <div class="spinner"></div>
@@ -33,6 +24,10 @@
     </div>
 
     <div id="hiresChip" class="hires-chip hidden">Enhancing to high-res…</div>
+
+    <div id="flatView" class="flat-view hidden" aria-hidden="true">
+        <canvas id="flatCanvas"></canvas>
+    </div>
 
     <!-- A-FRAME SCENE -->
     <a-scene
@@ -42,14 +37,14 @@
         renderer="colorManagement: true; antialias: true;">
 
         <!-- The Sky Sphere — src is applied from JS after off-thread decode -->
-        <a-sky id="image-360" rotation="0 -90 0"></a-sky>
+        <a-sky id="image-360" rotation="0 -90 0" segments-width="96" segments-height="64"></a-sky>
 
         <!-- CAMERA RIG -->
         <!-- We rotate the RIG, not the camera, for the "Drag" effect -->
         <a-entity id="rig" position="0 0 0" rotation="0 0 0">
             
             <!-- The Camera (Head) -->
-            <a-entity id="camera" camera look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: false"></a-entity>
+            <a-entity id="camera" camera look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: false; touchEnabled: false; mouseEnabled: false"></a-entity>
             
             <!-- VR Loading Indicator (Attached to head so it follows you) -->
             <a-entity id="loader-vr" position="0 0 -1.5" visible="false" text="value: LOADING...; align: center; width: 4; color: white; shader: msdf; font: roboto"></a-entity>
@@ -65,13 +60,64 @@
     </a-scene>
 
     <!-- UI Buttons -->
-    <button id="toggleUiBtn" class="floating-toggle" title="Toggle UI (Press H)">👁️</button>
+    <div id="hudControls" class="hud-controls">
+        <button id="helpBtn" class="floating-toggle" type="button" title="Shortcuts" aria-label="Show shortcuts" aria-pressed="false" aria-controls="helpPanel">
+            <span class="help-mark" aria-hidden="true">?</span>
+        </button>
+        <button id="fullscreenBtn" class="floating-toggle" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false">
+            <span class="btn-icon btn-icon-expand" data-fs="enter" aria-hidden="true"></span>
+            <span class="btn-icon btn-icon-shrink" data-fs="exit" aria-hidden="true"></span>
+        </button>
+        <button id="toggleUiBtn" class="floating-toggle" type="button" title="Hide controls" aria-label="Hide controls" aria-pressed="true" aria-controls="mainUi">
+            <span class="btn-icon btn-icon-eye-blind" data-eye="hide" aria-hidden="true"></span>
+            <span class="btn-icon btn-icon-eye-open" data-eye="show" aria-hidden="true"></span>
+        </button>
+    </div>
+
+    <div id="helpPanel" class="help-panel hidden" role="dialog" aria-labelledby="helpTitle" aria-hidden="true">
+        <h3 id="helpTitle">Shortcuts</h3>
+        <ul>
+            <li><span>Drag</span> Look around</li>
+            <li><span>Lens</span> 2D Panini stretch correction</li>
+            <li><span>← →</span> Previous / next image</li>
+            <li><span>H</span> Show or hide controls</li>
+            <li><span>F</span> Fullscreen</li>
+            <li><span>Space</span> Pause Auto or Wander</li>
+            <li><span>R</span> Reset look and zoom</li>
+            <li><span>Esc</span> Close panels</li>
+            <li><span>Drop files</span> Load images</li>
+        </ul>
+    </div>
+
+    <div id="sceneHud" class="scene-hud hidden" aria-live="polite">
+        <span id="sceneHudIndex">0 / 0</span>
+        <span id="sceneHudName"></span>
+        <span id="sceneHudPaused" class="scene-hud-paused hidden">Paused</span>
+    </div>
+
+    <button id="edgePrev" class="edge-nav edge-nav-prev hidden" type="button" title="Previous image" aria-label="Previous image">
+        <span class="btn-icon btn-icon-left" aria-hidden="true"></span>
+    </button>
+    <button id="edgeNext" class="edge-nav edge-nav-next hidden" type="button" title="Next image" aria-label="Next image">
+        <span class="btn-icon btn-icon-right" aria-hidden="true"></span>
+    </button>
+
+    <div id="lookHud" class="look-hud hidden" aria-hidden="true">
+        <canvas id="lookMap" aria-hidden="true"></canvas>
+        <div class="look-hud-readout">
+            <span id="lookHeading" title="Heading in the image">0°</span>
+            <span id="lookPitch" title="Tilt">0°</span>
+            <span id="lookZoom" title="Zoom">1.0×</span>
+        </div>
+    </div>
+    <div id="hintToast" class="hint-toast hidden" role="status">Drag to look · Scroll to zoom · H hides controls</div>
+    <div id="dropOverlay" class="drop-overlay hidden" aria-hidden="true">Drop 360 images to load them</div>
 
     <!-- Gallery Sidebar -->
     <div id="galleryModal" class="gallery-modal hidden">
         <div class="gallery-header">
             <h3>Gallery <span id="galleryProgress"></span></h3>
-            <button id="closeGalleryBtn" class="close-btn">&times;</button>
+            <button id="closeGalleryBtn" class="close-btn" type="button" aria-label="Close gallery">&times;</button>
         </div>
         <div class="gallery-grid" id="galleryGrid"></div>
     </div>
@@ -82,8 +128,10 @@
             <div class="card-header">
                 <h2>360° VR Viewer</h2>
                 <div class="header-actions">
-                    <button id="clearBtn" class="icon-btn" title="Reset" disabled>🗑️</button>
-                    <button class="close-btn" id="closeUiBtn">&times;</button>
+                    <button id="clearBtn" class="icon-btn" type="button" title="Clear images and reload" disabled>
+                        <span class="btn-icon btn-icon-bin" aria-hidden="true"></span>
+                    </button>
+                    <button class="close-btn" id="closeUiBtn" type="button" title="Hide controls" aria-label="Hide controls">&times;</button>
                 </div>
             </div>
             
@@ -99,38 +147,97 @@
                 <span id="fileCount">No files loaded</span>
             </div>
 
-            <div class="control-group">
-                <div class="slider-box">
-                    <label>Zoom: <span id="fovVal">80</span></label>
-                    <input type="range" id="fovSlider" min="20" max="100" value="80">
+            <div class="control-group slider-stack">
+                <div class="slider-box" id="fovBox">
+                    <label>Zoom: <span id="fovVal">1.0×</span></label>
+                    <div class="slider-wrap">
+                        <input type="range" id="fovSlider" min="0" max="100" value="25" title="Drag right to zoom in">
+                    </div>
+                </div>
+                <div class="slider-box" id="lensBox">
+                    <label>Lens: <span id="lensVal">Rectilinear</span></label>
+                    <div class="slider-wrap">
+                        <input type="range" id="lensSlider" min="0" max="100" value="0" title="0 = rectilinear. 100 = Panini, less stretch at the edges, verticals stay straight.">
+                    </div>
                 </div>
             </div>
 
-            <!-- Sensor Controls -->
-            <div class="control-group sensor-controls">
-                <!-- Motion Button (Restored) -->
-                <button id="gyroBtn" class="sensor-btn" title="Enable Phone Motion">
-                    <span>📱 Motion</span>
+            <div class="control-group">
+                <button id="flipBtn" class="sensor-btn" type="button" title="Flip image if it appears upside down" disabled>
+                    <span>⇅ Flip</span>
                 </button>
-                <!-- VR Button -->
-                <button id="vrBtn" class="sensor-btn" title="Enter VR Mode">
-                    <span>🥽 VR Mode</span>
+            </div>
+
+            <!-- Look modes: Pan, Auto, Motion, VR, Flat, Wander -->
+            <div class="control-group mode-controls">
+                <button id="panBtn" class="sensor-btn active" type="button" title="Drag to look around, pinch to zoom">
+                    <span class="btn-icon btn-icon-hand" aria-hidden="true"></span>
+                    <span>Pan</span>
+                </button>
+                <button id="autoPanBtn" class="sensor-btn" type="button" title="Automatic slow pan">
+                    <span class="btn-icon btn-icon-auto-pan" aria-hidden="true"></span>
+                    <span>Auto</span>
+                </button>
+                <button id="gyroBtn" class="sensor-btn" type="button" title="Look by moving your phone">
+                    <span class="btn-icon btn-icon-tilt" aria-hidden="true"></span>
+                    <span>Motion</span>
+                </button>
+                <button id="vrBtn" class="sensor-btn" type="button" title="Enter VR Mode">
+                    <svg class="btn-icon btn-icon-vr" viewBox="1 11 22 13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-miterlimit="10">
+                        <line x1="22.5" y1="20.59" x2="22.5" y2="12.95"/>
+                        <line x1="1.5" y1="20.59" x2="1.5" y2="12.95"/>
+                        <path d="M19.64,22.5H13.91l-.07-.26a1.92,1.92,0,0,0-3.68,0l-.07.26H4.36a1.91,1.91,0,0,1-1.91-1.91V13a1.91,1.91,0,0,1,1.91-1.9H19.64A1.91,1.91,0,0,1,21.55,13v7.64A1.91,1.91,0,0,1,19.64,22.5Z"/>
+                        <line x1="5.32" y1="14.86" x2="7.23" y2="14.86"/>
+                        <line x1="5.32" y1="18.68" x2="7.23" y2="18.68"/>
+                    </svg>
+                    <span>VR</span>
+                </button>
+                <button id="flatBtn" class="sensor-btn" type="button" title="Show as a flat rectangular image">
+                    <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+                        <rect x="2.5" y="6" width="19" height="12" rx="2"/>
+                    </svg>
+                    <span>Flat</span>
+                </button>
+                <button id="wanderBtn" class="sensor-btn" type="button" title="Smoothly wander and zoom around the 360 image">
+                    <span class="btn-icon btn-icon-wander" aria-hidden="true"></span>
+                    <span>Wander</span>
+                </button>
+            </div>
+
+            <div class="control-group auto-pan-extras" id="autoPanExtras">
+                <div class="slider-box is-disabled" id="autoSpeedBox">
+                    <label><span id="autoSpeedLabel">Auto speed</span>: <span id="autoSpeedVal">30</span></label>
+                    <div class="slider-wrap">
+                        <input type="range" id="autoSpeedSlider" min="1" max="100" value="30" disabled>
+                    </div>
+                </div>
+                <button id="autoDirBtn" class="sensor-btn auto-dir-btn" type="button" title="Reverse auto pan direction" disabled>
+                    <span class="btn-icon btn-icon-left" data-dir="left" aria-hidden="true"></span>
+                    <span class="btn-icon btn-icon-right" data-dir="right" aria-hidden="true"></span>
+                    <span>Dir</span>
                 </button>
             </div>
 
             <div class="control-group nav-controls">
-                <button id="prevBtn" disabled>&#8592;</button>
-                <button id="galleryBtn" disabled>Gallery</button>
-                <button id="nextBtn" disabled>&#8594;</button>
+                <button id="prevBtn" class="nav-arrow-btn" type="button" title="Previous image" disabled>
+                    <span class="btn-icon btn-icon-left" aria-hidden="true"></span>
+                </button>
+                <button id="galleryBtn" type="button" disabled>Gallery</button>
+                <button id="nextBtn" class="nav-arrow-btn" type="button" title="Next image" disabled>
+                    <span class="btn-icon btn-icon-right" aria-hidden="true"></span>
+                </button>
             </div>
             
             <div class="file-info-box">
                 <span id="currentFileName">Waiting for input...</span>
             </div>
 
-            <div class="debug-log" id="debugLog">
-                <div>> Ready. Use HTTPS for VR.</div>
-            </div>
+            <details class="debug-details" id="debugDetails">
+                <summary>Activity</summary>
+                <div class="debug-log" id="debugLog">
+                    <div>> Ready. Use HTTPS for VR.</div>
+                </div>
+            </details>
         </div>
     </div>
 

@@ -1,5 +1,10 @@
 [
     {
+        "name": "Water Park",
+        "preview": "water park.webp",
+        "full": "water-park.jpg"
+    },
+    {
         "name": "Garden 1",
         "preview": "garden 1.webp",
         "full": "garden_1.jpg"
