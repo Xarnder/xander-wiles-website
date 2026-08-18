@@ -23,6 +23,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "jspdf": "^4.2.1"
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.1"
   }
 }

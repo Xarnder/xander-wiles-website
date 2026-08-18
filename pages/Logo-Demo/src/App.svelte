@@ -18,6 +18,7 @@
 	import ReorderMenu from './lib/ReorderMenu.svelte'
 	import ColourPanel from './lib/ColourPanel.svelte'
 	import CatalogPanel from './lib/CatalogPanel.svelte'
+	import { exportLogoPngZip, PNG_EXPORT } from './lib/exportLogoPng'
 
 	const SCALE_MIN = 0.5
 	const SCALE_MAX = 2
@@ -28,7 +29,7 @@
 	let reorderOpen = $state(false)
 	let colourPanelOpen = $state(false)
 	let colourPanel = $state<{ exportBrandPdf: () => Promise<void> } | undefined>()
-	let exportBusy = $state(false)
+	let exportBusy = $state<'pdf' | 'png' | false>(false)
 	let exportError = $state('')
 	let catalogOpen = $state(false)
 	let companyName = $state('Sylenze')
@@ -260,12 +261,36 @@
 
 	async function exportPdfFromToolbar() {
 		if (!currentLogo || exportBusy) return
-		exportBusy = true
+		exportBusy = 'pdf'
 		exportError = ''
 		try {
 			await colourPanel?.exportBrandPdf()
 		} catch (err: unknown) {
 			exportError = err instanceof Error ? err.message : 'Export failed'
+		} finally {
+			exportBusy = false
+		}
+	}
+
+	async function exportPngFromToolbar(scale: number) {
+		if (!currentLogo || exportBusy) return
+		exportBusy = 'png'
+		exportError = ''
+		try {
+			await exportLogoPngZip({
+				logoSrc: currentLogo.src,
+				logoLabel: currentLogo.label,
+				companyName,
+				fontName,
+				fontFamily,
+				logoScale,
+				textScale,
+				textColorOnLight,
+				textColorOnDark,
+				scale,
+			})
+		} catch (err: unknown) {
+			exportError = err instanceof Error ? err.message : 'PNG export failed'
 		} finally {
 			exportBusy = false
 		}
@@ -374,10 +399,28 @@
 				type="button"
 				class="btn btn-export"
 				onclick={exportPdfFromToolbar}
-				disabled={!currentLogo || exportBusy}
+				disabled={!currentLogo || exportBusy !== false}
 				title="Export brand colour presentation PDF"
 			>
-				{exportBusy ? 'Exporting…' : 'Export PDF'}
+				{exportBusy === 'pdf' ? 'Exporting…' : 'Export PDF'}
+			</button>
+			<button
+				type="button"
+				class="btn btn-export-png"
+				onclick={() => exportPngFromToolbar(PNG_EXPORT.scale)}
+				disabled={!currentLogo || exportBusy !== false}
+				title="Export lockup PNG zip at 2× (white, black, transparent)"
+			>
+				{exportBusy === 'png' ? 'Exporting…' : 'Export PNG'}
+			</button>
+			<button
+				type="button"
+				class="btn btn-export-png"
+				onclick={() => exportPngFromToolbar(PNG_EXPORT.highResScale)}
+				disabled={!currentLogo || exportBusy !== false}
+				title="Export lockup PNG zip at 8× high resolution (white, black, transparent)"
+			>
+				{exportBusy === 'png' ? 'Exporting…' : 'PNG 8×'}
 			</button>
 			{#if exportError}
 				<span class="export-error" role="alert">{exportError}</span>
@@ -819,6 +862,32 @@
 	}
 
 	.btn.btn-export:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.btn.btn-export-png {
+		width: auto;
+		height: 2.35rem;
+		padding: 0 1rem;
+		background: #2a2a2a;
+		color: #f3f3f3;
+		border: 1px solid #f3f3f3;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
+	.btn.btn-export-png:hover:not(:disabled) {
+		background: #333;
+		border-color: #ffffff;
+	}
+
+	.btn.btn-export-png:active:not(:disabled) {
+		background: #222;
+	}
+
+	.btn.btn-export-png:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
 	}
