@@ -11,6 +11,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
+import { useEntryUi } from '../context/EntryUiContext';
 import { Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
@@ -102,6 +103,69 @@ function AdvancedEntrySection({ open, onToggle, children, className = '' }) {
     );
 }
 
+function WritingProgress({
+    wordCount,
+    wordProgress,
+    wordMilestoneFlash,
+    wordsUntilNextMilestone,
+    wordsInCycle,
+    wordCycleGoal,
+    className = ''
+}) {
+    return (
+        <div
+            className={`rounded-xl border p-2 sm:p-3 transition-colors ${
+                wordMilestoneFlash
+                    ? 'border-secondary/40 bg-secondary/10 animate-progress-milestone'
+                    : 'border-white/10 bg-white/5'
+            } ${className}`}
+            aria-live="polite"
+        >
+            <div className="mb-1 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-text-muted">
+                    <Target className={`h-3.5 w-3.5 ${wordMilestoneFlash ? 'text-secondary' : 'text-primary'}`} />
+                    Writing progress
+                </div>
+                <div
+                    className={`flex items-center gap-2 text-[11px] tabular-nums ${
+                        wordMilestoneFlash ? 'text-secondary animate-word-milestone' : 'text-text-muted'
+                    }`}
+                >
+                    <span className="font-medium">
+                        {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                    </span>
+                    {wordMilestoneFlash ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+                            Well done · {wordMilestoneFlash}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] text-text-muted/70">
+                            {wordsUntilNextMilestone} to next
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="h-3 sm:h-3.5 flex-1 rounded-full bg-black/30 border border-white/5 overflow-hidden shadow-inner">
+                    <div
+                        className={`h-full rounded-full bg-gradient-to-r from-primary via-primary-variant to-secondary shadow-[0_0_12px_rgba(139,92,246,0.35)] ${
+                            wordMilestoneFlash
+                                ? 'animate-progress-fill-flash'
+                                : wordProgress === 0
+                                    ? ''
+                                    : 'transition-[width] duration-300 ease-out'
+                        }`}
+                        style={{ width: `${wordProgress}%` }}
+                    />
+                </div>
+                <span className="shrink-0 text-[10px] tabular-nums uppercase tracking-wider text-text-muted/60">
+                    {wordsInCycle || (wordMilestoneFlash ? wordCycleGoal : 0)} / {wordCycleGoal}
+                </span>
+            </div>
+        </div>
+    );
+}
+
 function normalizeImages(data) {
     if (Array.isArray(data.images)) return data.images;
     if (typeof data.imageUrl === 'string' && data.imageUrl) {
@@ -157,6 +221,7 @@ export default function EntryEditor() {
     const { currentUser } = useAuth();
     const { success, error: toastError } = useToast();
     const { openBackupReminder } = useBackup();
+    const { setIsEditingEntry } = useEntryUi();
     const { date } = useParams();
     const navigate = useNavigate();
     const [content, setContent] = useState('');
@@ -193,7 +258,6 @@ export default function EntryEditor() {
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
-    const [isAutoSaving, setIsAutoSaving] = useState(false);
 
     // Tags State
     const [availableTags, setAvailableTags] = useState([]);
@@ -419,6 +483,11 @@ export default function EntryEditor() {
         clipboardAnimationRef.current = null;
     }, []);
 
+    useEffect(() => {
+        setIsEditingEntry(isEditing);
+        return () => setIsEditingEntry(false);
+    }, [isEditing, setIsEditingEntry]);
+
     // Auto-resize title textarea
     useEffect(() => {
         if (titleTextareaRef.current) {
@@ -426,6 +495,23 @@ export default function EntryEditor() {
             titleTextareaRef.current.style.height = titleTextareaRef.current.scrollHeight + 'px';
         }
     }, [title, isEditing]);
+
+    useLayoutEffect(() => {
+        if (!isEditing) return;
+
+        if (useNativeEditor) {
+            const textarea = nativeTextareaRef.current;
+            if (!textarea) return;
+            textarea.style.height = 'auto';
+            textarea.style.height = `${Math.max(textarea.scrollHeight, 224)}px`;
+            return;
+        }
+
+        if (mdeInstance?.setSize) {
+            mdeInstance.setOption?.('viewportMargin', Infinity);
+            mdeInstance.setSize(null, 'auto');
+        }
+    }, [content, isEditing, useNativeEditor, mdeInstance]);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -502,7 +588,6 @@ export default function EntryEditor() {
         if (!currentUser || !isEditing) return;
         
         try {
-            setIsAutoSaving(true);
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
@@ -543,11 +628,9 @@ export default function EntryEditor() {
                 numericFields,
                 entrySettingsLoaded
             });
-            setTimeout(() => setIsAutoSaving(false), 2000);
         } catch (err) {
             console.error("Auto-save error:", err);
             toastError('Auto-save failed. Your changes are still in the editor.');
-            setIsAutoSaving(false);
         }
     }
 
@@ -1407,7 +1490,7 @@ export default function EntryEditor() {
             status: false,
             placeholder: "Main Entry...",
             toolbar: false,
-            minHeight: "200px",
+            minHeight: "14rem",
         };
     }, []);
 
@@ -1418,6 +1501,8 @@ export default function EntryEditor() {
         codeMirror.setOption('spellcheck', true);
         codeMirror.setOption('autocorrect', true);
         codeMirror.setOption('autocapitalize', true);
+        codeMirror.setOption('viewportMargin', Infinity);
+        codeMirror.setSize(null, 'auto');
 
         const input = codeMirror.getInputField?.();
         if (!input) return;
@@ -1505,8 +1590,14 @@ export default function EntryEditor() {
     );
 
     return (
-        <div className="h-full flex flex-col relative text-text">
-            <div className="mb-2 sm:mb-3 sticky top-16 sm:top-20 z-40 relative transition-all duration-300 isolate">
+        <div className={`flex flex-col relative text-text ${isEditing ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : 'h-full'}`}>
+            <div
+                className={isEditing
+                    ? 'sticky z-40 -mt-1 pt-1 sm:-mt-2 sm:pt-2 lg:-mt-4 lg:pt-4 bg-bg mb-2 sm:mb-3'
+                    : 'mb-2 sm:mb-3'}
+                style={isEditing ? { top: 'var(--journal-header-height, 4rem)' } : undefined}
+            >
+            <div className="relative isolate">
                 {/* Background Layer */}
                 <div
                     className="absolute inset-0 bg-surface -z-10 rounded-xl shadow-lg border border-border"
@@ -1598,11 +1689,12 @@ export default function EntryEditor() {
                                         <Star className={`w-5 h-5 ${isSpecial ? 'fill-yellow-400' : ''}`} />
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => {
                                             unlockJournalAudio();
                                             handleSave();
                                         }}
-                                        className="p-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center shrink-0"
+                                        className="hidden md:flex p-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 items-center justify-center shrink-0"
                                         disabled={saving}
                                         title={saving ? 'Saving' : 'Save'}
                                         aria-label={saving ? 'Saving' : 'Save'}
@@ -1620,7 +1712,7 @@ export default function EntryEditor() {
                                     >
                                         <Copy className="w-5 h-5" />
                                     </button>
-                                    {images.length > 0 && (
+                                    {images.length > 2 && (
                                         <button
                                             type="button"
                                             onClick={() => setEntryImageColumns((prev) => (prev === 1 ? 2 : 1))}
@@ -1659,15 +1751,28 @@ export default function EntryEditor() {
                             </div>
                         </div>
                     )}
+
+                    {isEditing && (
+                        <WritingProgress
+                            className="mt-2"
+                            wordCount={wordCount}
+                            wordProgress={wordProgress}
+                            wordMilestoneFlash={wordMilestoneFlash}
+                            wordsUntilNextMilestone={wordsUntilNextMilestone}
+                            wordsInCycle={wordsInCycle}
+                            wordCycleGoal={wordCycleGoal}
+                        />
+                    )}
                 </div>
+            </div>
             </div>
 
 
             {/* Content Container */}
-            <div className={`glass-card flex-1 overflow-hidden flex flex-col relative ${isEditing ? 'p-3 sm:p-4 md:p-6 ring-2 ring-primary/30' : 'p-4 sm:p-6 md:p-8'}`}>
+            <div className={`glass-card flex-1 flex flex-col relative ${isEditing ? 'overflow-visible p-3 sm:p-4 md:p-6 ring-2 ring-primary/30' : 'overflow-hidden p-4 sm:p-6 md:p-8'}`}>
 
                 {images.length > 0 && !isEditing && (
-                    <div className={`mb-6 ${entryImageColumns === 1 ? 'columns-1' : 'columns-2'} gap-2 sm:gap-4`}>
+                    <div className={`mb-6 ${images.length <= 2 || entryImageColumns === 1 ? 'columns-1' : 'columns-2'} gap-2 sm:gap-4`}>
                         {images.map((img, idx) => (
                             <div
                                 key={idx}
@@ -1694,7 +1799,7 @@ export default function EntryEditor() {
 
                 {isEditing ? (
                     <div
-                        className="h-full flex flex-col relative"
+                        className="flex flex-col relative"
                         onPaste={handlePaste}
                         onDragEnter={(event) => {
                             if (event.dataTransfer?.types?.includes('Files')) setIsFileDragging(true);
@@ -1897,7 +2002,7 @@ export default function EntryEditor() {
                             )}
                         </div>
 
-                        <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
+                        <div className="-mr-4 pr-4">
                             <div
                                 ref={clipboardFocusRef}
                                 className="scroll-mt-20 sm:scroll-mt-24"
@@ -1913,14 +2018,14 @@ export default function EntryEditor() {
                                             }
                                             handleMainContentChange(event.target.value);
                                         }}
-                                        rows={10}
+                                        rows={8}
                                         spellCheck
                                         autoCorrect="on"
                                         autoCapitalize="sentences"
                                         autoComplete="on"
                                         aria-label="Main journal entry"
                                         placeholder="Main Entry..."
-                                        className="min-h-[14rem] sm:min-h-[20rem] w-full resize-y rounded-xl border border-white/10 bg-black/20 p-4 text-base leading-relaxed text-text outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                                        className="min-h-[14rem] w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/20 p-4 text-base leading-relaxed text-text outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
                                     />
                                 ) : (
                                     <>
@@ -1929,7 +2034,7 @@ export default function EntryEditor() {
                                             onChange={handleMainContentChange}
                                             options={mdeOptions}
                                             getCodemirrorInstance={configureCodeMirrorInstance}
-                                            className="prose-dark"
+                                            className="prose-dark journal-entry-autogrow"
                                         />
                                         <HarperProofreader
                                             text={content}
@@ -1938,58 +2043,6 @@ export default function EntryEditor() {
                                         />
                                     </>
                                 )}
-                            </div>
-
-                            {/* Writing progress — cycles every 100 main-entry words */}
-                            <div
-                                className={`mb-4 sm:mb-6 rounded-xl border p-2 sm:p-3 transition-colors ${
-                                    wordMilestoneFlash
-                                        ? 'border-secondary/40 bg-secondary/10 animate-progress-milestone'
-                                        : 'border-white/10 bg-white/5'
-                                }`}
-                                aria-live="polite"
-                            >
-                                <div className="mb-1 flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-text-muted">
-                                        <Target className={`h-3.5 w-3.5 ${wordMilestoneFlash ? 'text-secondary' : 'text-primary'}`} />
-                                        Writing progress
-                                    </div>
-                                    <div
-                                        className={`flex items-center gap-2 text-[11px] tabular-nums ${
-                                            wordMilestoneFlash ? 'text-secondary animate-word-milestone' : 'text-text-muted'
-                                        }`}
-                                    >
-                                        <span className="font-medium">
-                                            {wordCount} {wordCount === 1 ? 'word' : 'words'}
-                                        </span>
-                                        {wordMilestoneFlash ? (
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
-                                                Well done · {wordMilestoneFlash}
-                                            </span>
-                                        ) : (
-                                            <span className="text-[10px] text-text-muted/70">
-                                                {wordsUntilNextMilestone} to next
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="h-3 sm:h-3.5 flex-1 rounded-full bg-black/30 border border-white/5 overflow-hidden shadow-inner">
-                                        <div
-                                            className={`h-full rounded-full bg-gradient-to-r from-primary via-primary-variant to-secondary shadow-[0_0_12px_rgba(139,92,246,0.35)] ${
-                                                wordMilestoneFlash
-                                                    ? 'animate-progress-fill-flash'
-                                                    : wordProgress === 0
-                                                        ? ''
-                                                        : 'transition-[width] duration-300 ease-out'
-                                            }`}
-                                            style={{ width: `${wordProgress}%` }}
-                                        />
-                                    </div>
-                                    <span className="shrink-0 text-[10px] tabular-nums uppercase tracking-wider text-text-muted/60">
-                                        {wordsInCycle || (wordMilestoneFlash ? wordCycleGoal : 0)} / {wordCycleGoal}
-                                    </span>
-                                </div>
                             </div>
                             </div>
 
@@ -2268,34 +2321,6 @@ export default function EntryEditor() {
                                 </div>
                             </div>
                             </AdvancedEntrySection>
-                        </div>
-                        
-                        <div className="mt-2 pt-2 sm:mt-3 sm:pt-3 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5">
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-1.5">
-                                    <PenTool className="w-3 h-3" />
-                                    {totalWordCount} words
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Clock className="w-3 h-3" />
-                                    {readingTime}
-                                </div>
-                            </div>
-                            {isEditing && (
-                                <div className="flex items-center gap-2 text-primary">
-                                    {isAutoSaving ? (
-                                        <div className="flex items-center gap-2 text-secondary animate-pulse">
-                                            <Loader className="w-3 h-3 animate-spin" />
-                                            Saving Changes...
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-2 animate-pulse">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                            Editing Mode
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     </div>
                 ) : (
@@ -2611,6 +2636,27 @@ export default function EntryEditor() {
 
             {saveConfettiActive && createPortal(
                 <SaveConfetti onComplete={() => setSaveConfettiActive(false)} />,
+                document.body
+            )}
+
+            {isEditing && !lightboxImage && createPortal(
+                <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            unlockJournalAudio();
+                            handleSave();
+                        }}
+                        className="save-glint-button pointer-events-auto relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-secondary px-4 py-3.5 text-white shadow-lg shadow-primary/30 transition-opacity duration-200 disabled:opacity-70"
+                        disabled={saving}
+                        title={saving ? 'Saving' : 'Save'}
+                        aria-label={saving ? 'Saving' : 'Save'}
+                    >
+                        <span className="save-glint" aria-hidden="true" />
+                        {saving ? <Loader className="relative w-5 h-5 animate-spin" /> : <Save className="relative w-5 h-5" />}
+                        <span className="relative text-base font-semibold">{saving ? 'Saving' : 'Save'}</span>
+                    </button>
+                </div>,
                 document.body
             )}
         </div >

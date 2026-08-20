@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, documentId, getCountFromServer, onSnapshot } from 'firebase/firestore';
 import { format, startOfYear, endOfYear, eachMonthOfInterval, startOfMonth, getDay, getDaysInMonth } from 'date-fns';
-import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { subEntriesToPlainText } from '../utils/entrySections';
+import { areCalendarImageCountsEnabled, subscribeCalendarImageCounts, areCalendarTagDotsEnabled, subscribeCalendarTagDots } from '../lib/calendarDisplay';
+
+const CALENDAR_MONTH_NAMES = Array.from({ length: 12 }, (_, monthIndex) =>
+    format(new Date(2024, monthIndex, 1), 'MMMM')
+);
+const MONTH_TITLE_MIN_SIZE = 16;
+const MONTH_TITLE_MAX_SIZE = 48;
 
 export default function CalendarView() {
     const { currentUser } = useAuth();
@@ -13,12 +20,17 @@ export default function CalendarView() {
     const [entries, setEntries] = useState(new Map()); // Map<DateString, { wordCount: number, tags: string[] }>
     const [tags, setTags] = useState({}); // Map of tagId -> tag data
     const [totalEntries, setTotalEntries] = useState(0);
+    const [showImageCounts, setShowImageCounts] = useState(areCalendarImageCountsEnabled);
+    const [showTagDots, setShowTagDots] = useState(areCalendarTagDotsEnabled);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
     const isEntrySelected = location.pathname.includes('/entry/');
+    const monthTitleRef = useRef(null);
+    const monthTitleMeasureRef = useRef(null);
+    const [monthTitleFontSize, setMonthTitleFontSize] = useState(MONTH_TITLE_MIN_SIZE);
 
     // Helper to count words
     const countWords = (str) => {
@@ -39,6 +51,9 @@ export default function CalendarView() {
         });
         return () => unsubscribe();
     }, [currentUser]);
+
+    useEffect(() => subscribeCalendarImageCounts(setShowImageCounts), []);
+    useEffect(() => subscribeCalendarTagDots(setShowTagDots), []);
 
     // Fetch entries for the selected year with real-time listener
     useEffect(() => {
@@ -116,6 +131,51 @@ export default function CalendarView() {
         end: endOfYear(currentYearDate)
     });
 
+    useLayoutEffect(() => {
+        if (loading) return undefined;
+
+        const container = monthTitleRef.current;
+        const measure = monthTitleMeasureRef.current;
+        if (!container || !measure) return undefined;
+
+        const fitMonthTitles = () => {
+            const available = container.clientWidth;
+            if (available <= 0) return;
+
+            let widest = 0;
+            for (const monthName of CALENDAR_MONTH_NAMES) {
+                measure.textContent = monthName;
+                widest = Math.max(widest, measure.scrollWidth);
+            }
+
+            if (widest <= 0) return;
+
+            const nextSize = Math.max(
+                MONTH_TITLE_MIN_SIZE,
+                Math.min(MONTH_TITLE_MAX_SIZE, MONTH_TITLE_MAX_SIZE * ((available - 1) / widest))
+            );
+            setMonthTitleFontSize((currentSize) => (
+                Math.abs(currentSize - nextSize) < 0.25 ? currentSize : nextSize
+            ));
+        };
+
+        const observer = new ResizeObserver(fitMonthTitles);
+        observer.observe(container);
+        fitMonthTitles();
+
+        let cancelled = false;
+        if (document.fonts?.ready) {
+            document.fonts.ready.then(() => {
+                if (!cancelled) fitMonthTitles();
+            });
+        }
+
+        return () => {
+            cancelled = true;
+            observer.disconnect();
+        };
+    }, [loading, isEntrySelected]);
+
     // Auto-scroll to current month on mobile
     useEffect(() => {
         if (!loading && currentYear === new Date().getFullYear() && window.innerWidth < 640) {
@@ -130,44 +190,37 @@ export default function CalendarView() {
     }, [currentYear, loading]);
 
     return (
-        <div className={isEntrySelected ? 'md:space-y-6' : 'space-y-6'}>
-            {/* Stats Header - Hidden if entry selected on mobile to save space */}
-            <div className={`glass-card p-6 flex flex-col md:flex-row md:items-center md:justify-between transition-all duration-300 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
-                <div>
-                    <h2 className="text-xl font-bold text-white mb-1">Journal Overview</h2>
-                    <p className="text-text-muted text-sm">Your journey through time</p>
+        <div className={isEntrySelected ? 'md:space-y-4' : 'space-y-3'}>
+            {/* Stats + year — Hidden if entry selected on mobile to save space */}
+            <div className={`glass-card px-3 py-2 flex-wrap items-center justify-center gap-x-5 gap-y-2 transition-all duration-300 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
+                <div className="text-center">
+                    <p className="text-text-muted text-[10px] uppercase tracking-wider leading-none mb-1">In {currentYear}</p>
+                    <p className="text-2xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary leading-none">{entries.size}</p>
                 </div>
-                <div className="flex space-x-8 mt-4 md:mt-0 text-sm">
-                    <div className="text-center md:text-right">
-                        <p className="text-text-muted text-xs uppercase tracking-wider mb-1">In {currentYear}</p>
-                        <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">{entries.size}</p>
-                    </div>
-                    <div className="text-center md:text-right border-l border-white/10 pl-8">
-                        <p className="text-text-muted text-xs uppercase tracking-wider mb-1">Total Entries</p>
-                        <p className="text-3xl font-serif font-bold text-white">{totalEntries}</p>
-                    </div>
+                <div className="text-center">
+                    <p className="text-text-muted text-[10px] uppercase tracking-wider leading-none mb-1">Total Entries</p>
+                    <p className="text-2xl font-serif font-bold text-white leading-none">{totalEntries}</p>
                 </div>
-            </div>
-
-            {/* Controls - Hidden if entry selected on mobile */}
-            <div className={`items-center justify-center space-x-6 mb-8 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
-                <button
-                    type="button"
-                    onClick={prevYear}
-                    className="glass-button p-3 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
-                    aria-label={`Show ${currentYear - 1}`}
-                >
-                    <ChevronLeft className="w-6 h-6" />
-                </button>
-                <h2 className="text-4xl font-serif font-bold text-white tracking-tight">{currentYear}</h2>
-                <button
-                    type="button"
-                    onClick={nextYear}
-                    className="glass-button p-3 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
-                    aria-label={`Show ${currentYear + 1}`}
-                >
-                    <ChevronRight className="w-6 h-6" />
-                </button>
+                <div className="h-8 w-px bg-white/10" aria-hidden="true" />
+                <div className="flex items-center gap-1.5">
+                    <button
+                        type="button"
+                        onClick={prevYear}
+                        className="glass-button p-1.5 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
+                        aria-label={`Show ${currentYear - 1}`}
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <h2 className="min-w-[4.5rem] text-center text-2xl font-serif font-bold text-white tracking-tight leading-none">{currentYear}</h2>
+                    <button
+                        type="button"
+                        onClick={nextYear}
+                        className="glass-button p-1.5 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
+                        aria-label={`Show ${currentYear + 1}`}
+                    >
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
 
             {/* Main Layout: Calendar + Editor Split */}
@@ -190,10 +243,17 @@ export default function CalendarView() {
                             </button>
                         </div>
                     ) : (
-                        <div className={`grid gap-6 transition-all duration-300 ${isEntrySelected
-                            ? 'grid-cols-1'
-                            : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                            }`}>
+                        <>
+                            <span
+                                ref={monthTitleMeasureRef}
+                                aria-hidden="true"
+                                className="pointer-events-none fixed -left-[9999px] top-0 whitespace-nowrap font-serif font-bold"
+                                style={{ fontSize: `${MONTH_TITLE_MAX_SIZE}px` }}
+                            />
+                            <div className={`grid gap-6 transition-all duration-300 ${isEntrySelected
+                                ? 'grid-cols-1'
+                                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                                }`}>
                             {monthsInYear.map((monthDate) => {
                                 const monthIndex = monthDate.getMonth();
                                 const daysInMonth = getDaysInMonth(monthDate);
@@ -226,7 +286,13 @@ export default function CalendarView() {
                                         id={monthIndex === new Date().getMonth() && currentYear === new Date().getFullYear() ? 'current-month-card' : undefined}
                                         className="glass-card p-5 hover:border-primary/30 transition duration-300 group"
                                     >
-                                        <h3 className="text-center font-serif text-white font-bold mb-4 text-lg border-b border-white/5 pb-2 group-hover:text-primary transition-colors">{format(monthDate, 'MMMM')}</h3>
+                                        <h3
+                                            ref={monthIndex === 0 ? monthTitleRef : undefined}
+                                            className="w-full text-center font-serif text-white font-bold mb-4 whitespace-nowrap border-b border-white/5 pb-2 leading-tight group-hover:text-primary transition-colors"
+                                            style={{ fontSize: `${monthTitleFontSize}px` }}
+                                        >
+                                            {format(monthDate, 'MMMM')}
+                                        </h3>
 
                                         <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold opacity-60">
                                             {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d, i) => (
@@ -234,6 +300,7 @@ export default function CalendarView() {
                                             ))}
                                         </div>
 
+                                        <div className="relative">
                                         <div className="grid grid-cols-7 gap-1 text-center">
                                             {/* Empty slots */}
                                             {Array.from({ length: startOffset }).map((_, i) => (
@@ -252,7 +319,7 @@ export default function CalendarView() {
 
                                                 // Calculate Intensity and Color
                                                 let style = {};
-                                                let className = `aspect-square flex items-center justify-center rounded-full transition-all duration-300 text-sm relative z-0 `;
+                                                let className = `aspect-square flex items-center justify-center rounded-sm transition-all duration-300 text-sm relative z-0 `;
 
                                                 if (isSelected) {
                                                     // Blue selection instead of secondary/primary
@@ -316,19 +383,6 @@ export default function CalendarView() {
                                                         aria-label={`${format(dateObj, 'MMMM d, yyyy')}${entry ? `, ${entry.wordCount} words, ${entry.imageCount} images${entry.isSpecial ? ', special day' : ''}` : ', no entry'}`}
                                                     >
                                                         {day}
-                                                        {/* Special Day Star Icon */}
-                                                        {entry && entry.isSpecial && (
-                                                            <div className="absolute -top-1 -left-1 text-yellow-400 drop-shadow-sm z-20">
-                                                                <Star className="w-3 h-3 fill-yellow-400" />
-                                                            </div>
-                                                        )}
-
-                                                        {/* Image Indicator - Blue Badge with Count */}
-                                                        {entry && entry.imageCount > 0 && (
-                                                            <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-0.5 bg-blue-500 rounded-full border-2 border-bg text-[10px] font-bold text-white z-20 shadow-sm" aria-hidden="true">
-                                                                {entry.imageCount}
-                                                            </div>
-                                                        )}
 
                                                         {/* Title Only Indicator - Red Dot on Left */}
                                                         {isTitleOnly && (
@@ -336,7 +390,7 @@ export default function CalendarView() {
                                                         )}
 
                                                         {/* Tag Indicators - Max 4 Dots at bottom */}
-                                                        {entry && entry.tags && entry.tags.length > 0 && (
+                                                        {showTagDots && entry && entry.tags && entry.tags.length > 0 && (
                                                             <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5 px-0.5 pointer-events-none">
                                                                 {entry.tags.slice(0, 4).map(tagId => {
                                                                     const tagColor = tags[tagId]?.color;
@@ -355,10 +409,33 @@ export default function CalendarView() {
                                                 );
                                             })}
                                         </div>
+                                        {showImageCounts && (
+                                        <div className="pointer-events-none absolute inset-0 z-30 grid grid-cols-7 gap-1" aria-hidden="true">
+                                            {Array.from({ length: startOffset }).map((_, i) => (
+                                                <div key={`image-badge-empty-${i}`} />
+                                            ))}
+                                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                                                const dateKey = format(new Date(currentYear, monthIndex, i + 1), 'yyyy-MM-dd');
+                                                const imageCount = entries.get(dateKey)?.imageCount || 0;
+
+                                                return (
+                                                    <div key={`image-badge-${dateKey}`} className="relative aspect-square">
+                                                        {imageCount > 0 && (
+                                                            <div className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-bg bg-blue-500 px-0.5 text-[10px] font-bold text-white shadow-sm">
+                                                                {imageCount}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        )}
+                                        </div>
                                     </div>
                                 );
                             })}
-                        </div>
+                            </div>
+                        </>
                     )}
                 </div>
 

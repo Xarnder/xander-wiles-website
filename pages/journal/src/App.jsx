@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { BackupProvider } from './context/BackupContext';
+import { EntryUiProvider } from './context/EntryUiContext';
 import Login from './components/Login';
 import Layout from './components/Layout';
 // Placeholders for now, will create next
@@ -42,7 +43,9 @@ function App() {
 
             <Route path="/" element={
               <PrivateRoute>
-                <Layout />
+                <EntryUiProvider>
+                  <Layout />
+                </EntryUiProvider>
               </PrivateRoute>
             }>
               <Route path="/" element={<CalendarView />}>

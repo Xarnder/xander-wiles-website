@@ -347,6 +347,142 @@
   animation: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+.save-glint {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.save-glint::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: 0;
+  height: 140%;
+  width: 38%;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 35%,
+    rgba(255, 255, 255, 0.38) 50%,
+    rgba(255, 255, 255, 0.08) 65%,
+    transparent 100%
+  );
+  animation: save-glint 6.5s ease-in-out infinite;
+}
+
+.save-glint-button:disabled .save-glint::after {
+  animation: none;
+  opacity: 0;
+}
+
+@keyframes save-glint {
+  0%,
+  62% {
+    transform: translateX(-160%) skewX(-18deg);
+    opacity: 0;
+  }
+
+  70% {
+    opacity: 0.7;
+  }
+
+  82%,
+  100% {
+    transform: translateX(320%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-glint::after {
+    animation: none;
+  }
+
+  .quick-write-fab--ready {
+    animation: none;
+  }
+
+  .quick-write-fab-shine::after {
+    animation: none;
+  }
+}
+
+.quick-write-fab {
+  isolation: isolate;
+}
+
+.quick-write-fab--ready {
+  background-image: linear-gradient(to bottom right, var(--color-primary), var(--color-primary-variant));
+  animation: quick-write-fab-glow 2.8s ease-in-out infinite;
+}
+
+.quick-write-fab--busy {
+  background-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.quick-write-fab-shine {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+.quick-write-fab-shine::after {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: 0;
+  height: 160%;
+  width: 45%;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 40%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.12) 60%,
+    transparent 100%
+  );
+  animation: quick-write-fab-shine 2.4s ease-in-out infinite;
+}
+
+@keyframes quick-write-fab-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.28),
+      0 0 10px rgba(250, 204, 21, 0.32);
+  }
+
+  50% {
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.28),
+      0 0 22px rgba(250, 204, 21, 0.78),
+      0 0 40px rgba(253, 224, 71, 0.42);
+  }
+}
+
+@keyframes quick-write-fab-shine {
+  0%,
+  58% {
+    transform: translateX(-180%) skewX(-20deg);
+    opacity: 0;
+  }
+
+  68% {
+    opacity: 0.85;
+  }
+
+  78%,
+  100% {
+    transform: translateX(280%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
 @keyframes pulseSlow {
   0%, 100% {
     opacity: 1;
@@ -422,6 +558,24 @@
   .EasyMDEContainer .CodeMirror {
     min-height: 140px !important;
   }
+}
+
+.EasyMDEContainer.journal-entry-autogrow .CodeMirror,
+.journal-entry-autogrow .EasyMDEContainer .CodeMirror {
+  height: auto !important;
+  min-height: 14rem !important;
+}
+
+.EasyMDEContainer.journal-entry-autogrow .CodeMirror-scroll,
+.journal-entry-autogrow .EasyMDEContainer .CodeMirror-scroll {
+  min-height: 14rem;
+  overflow-y: hidden !important;
+  overflow-x: auto !important;
+}
+
+.EasyMDEContainer.journal-entry-autogrow .CodeMirror-vscrollbar,
+.journal-entry-autogrow .EasyMDEContainer .CodeMirror-vscrollbar {
+  display: none !important;
 }
 
 

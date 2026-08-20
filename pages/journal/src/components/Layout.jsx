@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool, Settings } from 'lucide-react';
@@ -9,6 +9,20 @@ import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
 import BackupOptions from './BackupOptions';
 import LeftArrowIcon from './LeftArrowIcon';
+import { useEntryUi } from '../context/EntryUiContext';
+
+function getWorkspaceTitle(pathname) {
+    if (pathname.startsWith('/entry/')) return 'Entry';
+    if (pathname === '/month') return 'Month View';
+    if (pathname === '/images') return 'Photos';
+    if (pathname === '/stats') return 'Stats';
+    if (pathname === '/tags') return 'Tags';
+    if (pathname === '/memories') return 'Memories';
+    if (pathname === '/pdf-export') return 'PDF Export';
+    if (pathname === '/settings') return 'Settings';
+    if (pathname === '/') return 'Calendar';
+    return 'Journal';
+}
 
 function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
     const isActive = currentPath === path || (path === '/' && currentPath.startsWith('/entry/'));
@@ -29,12 +43,18 @@ function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
+    const { isEditingEntry } = useEntryUi();
     const navigate = useNavigate();
     const location = useLocation();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
     const [recentEntries, setRecentEntries] = useState({});
+    const [headerTitleFontSize, setHeaderTitleFontSize] = useState(18);
+    const headerTitleContainerRef = useRef(null);
+    const headerTitleTextRef = useRef(null);
+    const headerRef = useRef(null);
+    const workspaceTitle = useMemo(() => getWorkspaceTitle(location.pathname), [location.pathname]);
 
     // Keep a real-time listener for the last 7 days to make "Quick Write" instantaneous
     useEffect(() => {
@@ -111,6 +131,11 @@ export default function Layout() {
 
     // Global Search Shortcut (Cmd+K / Ctrl+K)
     useEffect(() => {
+        if (isEditingEntry) {
+            setIsSearchOpen(false);
+            return undefined;
+        }
+
         const handleKeyDown = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
                 e.preventDefault();
@@ -119,28 +144,60 @@ export default function Layout() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [isEditingEntry]);
 
     // Dynamic Tab Title
     useEffect(() => {
-        const path = location.pathname;
-        let title = "Digital Journal";
+        document.title = `Journal - ${workspaceTitle}`;
+    }, [workspaceTitle]);
 
-        if (path === '/') title = "Journal - Calendar";
-        else if (path === '/month') title = "Journal - Month View";
-        else if (path === '/images') title = "Journal - Photos";
-        else if (path === '/stats') title = "Journal - Statistics";
-        else if (path === '/tags') title = "Journal - Tags";
-        else if (path === '/memories') title = "Journal - Memories";
-        else if (path === '/pdf-export') title = "Journal - Export PDF";
-        else if (path === '/settings') title = "Journal - Settings";
-        else if (path.startsWith('/entry/')) {
-            const dateStr = path.split('/').pop();
-            title = `Journal - ${dateStr}`;
-        }
+    useLayoutEffect(() => {
+        const container = headerTitleContainerRef.current;
+        const text = headerTitleTextRef.current;
+        if (!container || !text) return undefined;
 
-        document.title = title;
-    }, [location.pathname]);
+        const MIN_SIZE = 13;
+        const MAX_SIZE = 30;
+
+        const fitTitle = () => {
+            const available = container.clientWidth;
+            if (available <= 0) return;
+
+            const previousSize = text.style.fontSize;
+            text.style.fontSize = `${MAX_SIZE}px`;
+            const naturalWidth = text.scrollWidth;
+            text.style.fontSize = previousSize;
+
+            if (naturalWidth <= 0) return;
+
+            const nextSize = Math.max(MIN_SIZE, Math.min(MAX_SIZE, MAX_SIZE * ((available - 1) / naturalWidth)));
+            setHeaderTitleFontSize(nextSize);
+        };
+
+        const observer = new ResizeObserver(fitTitle);
+        observer.observe(container);
+        fitTitle();
+
+        return () => observer.disconnect();
+    }, [workspaceTitle, isEditingEntry]);
+
+    useLayoutEffect(() => {
+        const header = headerRef.current;
+        if (!header) return undefined;
+
+        const syncHeaderHeight = () => {
+            document.documentElement.style.setProperty('--journal-header-height', `${header.offsetHeight}px`);
+        };
+
+        const observer = new ResizeObserver(syncHeaderHeight);
+        observer.observe(header);
+        syncHeaderHeight();
+
+        return () => {
+            observer.disconnect();
+            document.documentElement.style.removeProperty('--journal-header-height');
+        };
+    }, []);
 
     const handleMobileNavigate = (path) => {
         setIsMobileMenuOpen(false);
@@ -148,6 +205,7 @@ export default function Layout() {
     };
 
     const isEntryView = location.pathname.startsWith('/entry/');
+    const isCalendarView = location.pathname === '/';
     const fromPath = location.state?.from;
     const isFromGallery = location.state?.fromGallery;
 
@@ -178,22 +236,27 @@ export default function Layout() {
             <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
-            <header className={`sticky top-0 z-50 px-3 sm:px-4 ${isEntryView ? 'pt-2 pb-1' : 'pt-3 pb-2 sm:pt-4'}`}>
-                <div className={`glass-card max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex justify-between items-center transition-all duration-300 relative ${isEntryView ? 'py-2' : 'py-3'}`}>
-                    <div className="flex min-w-0 items-center">
-                        {/* Logo / Title */}
-                        <button type="button" className="flex items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
-                            <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors mr-3">
+            <header ref={headerRef} className={`sticky top-0 z-50 px-3 sm:px-4 ${isEntryView || isCalendarView ? 'pt-2 pb-1' : 'pt-3 pb-2 sm:pt-4'}`}>
+                <div className={`glass-card max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center gap-2 sm:gap-3 transition-all duration-300 relative ${isEntryView ? 'py-2' : 'py-3'}`}>
+                    <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                        <button type="button" className="flex shrink-0 items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
+                            <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
                                 <Book className="h-6 w-6 text-primary" />
                             </div>
-                            <h1 className="hidden sm:block text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-                                Digital Journal
-                            </h1>
                         </button>
+                        <div ref={headerTitleContainerRef} className="min-w-0 flex-1 overflow-hidden">
+                            <h1
+                                ref={headerTitleTextRef}
+                                className="inline-flex max-w-full items-center whitespace-nowrap font-serif font-bold leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70"
+                                style={{ fontSize: `${headerTitleFontSize}px` }}
+                            >
+                                {workspaceTitle}
+                            </h1>
+                        </div>
                     </div>
 
                     {/* Desktop Actions */}
-                    <div className="hidden md:flex items-center space-x-3">
+                    <div className="hidden md:flex shrink-0 items-center space-x-3">
                         <span className="text-sm text-text-muted border-r border-white/10 pr-4 mr-1">
                             {currentUser?.email}
                         </span>
@@ -210,26 +273,30 @@ export default function Layout() {
                                     <LeftArrowIcon className="h-6 w-6" />
                                 </button>
                             )}
-                            <button
-                                type="button"
-                                onClick={handleQuickWrite}
-                                className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
-                                title="Quick Write (Last unwritten day)"
-                                aria-label="Quick Write: open the oldest unwritten day from the past week"
-                                disabled={isQuickWriting}
-                            >
-                                <PenTool className="h-5 w-5" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setIsSearchOpen(true)}
-                                className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
-                                title="Search (Cmd+K)"
-                                aria-label="Search journal"
-                                aria-expanded={isSearchOpen}
-                            >
-                                <Search className="h-5 w-5" />
-                            </button>
+                            {!isEditingEntry && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={handleQuickWrite}
+                                        className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
+                                        title="Quick Write (Last unwritten day)"
+                                        aria-label="Quick Write: open the oldest unwritten day from the past week"
+                                        disabled={isQuickWriting}
+                                    >
+                                        <PenTool className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsSearchOpen(true)}
+                                        className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                                        title="Search (Cmd+K)"
+                                        aria-label="Search journal"
+                                        aria-expanded={isSearchOpen}
+                                    >
+                                        <Search className="h-5 w-5" />
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         <button
@@ -323,7 +390,7 @@ export default function Layout() {
                     </div>
 
                     {/* Mobile Header Controls */}
-                    <div className="flex md:hidden items-center gap-2">
+                    <div className="flex md:hidden shrink-0 items-center gap-2">
                         {isEntryView && (
                             <button
                                 type="button"
@@ -335,24 +402,28 @@ export default function Layout() {
                                 <LeftArrowIcon className="h-6 w-6" />
                             </button>
                         )}
-                        <button
-                            type="button"
-                            onClick={handleQuickWrite}
-                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
-                            disabled={isQuickWriting}
-                            aria-label="Quick Write: open the oldest unwritten day from the past week"
-                        >
-                            <PenTool className="h-5 w-5" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsSearchOpen(true)}
-                            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
-                            aria-label="Search journal"
-                            aria-expanded={isSearchOpen}
-                        >
-                            <Search className="h-5 w-5" />
-                        </button>
+                        {!isEditingEntry && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={handleQuickWrite}
+                                    className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
+                                    disabled={isQuickWriting}
+                                    aria-label="Quick Write: open the oldest unwritten day from the past week"
+                                >
+                                    <PenTool className="h-5 w-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsSearchOpen(true)}
+                                    className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                                    aria-label="Search journal"
+                                    aria-expanded={isSearchOpen}
+                                >
+                                    <Search className="h-5 w-5" />
+                                </button>
+                            </>
+                        )}
 
                         <button
                             type="button"
@@ -392,7 +463,9 @@ export default function Layout() {
             <main className={`flex-1 w-full max-w-7xl mx-auto animation-fade-in ${
                 isEntryView
                     ? 'px-3 pt-1 pb-3 sm:px-4 sm:pt-2 sm:pb-4 lg:px-8 lg:pt-4 lg:pb-8'
-                    : 'p-4 sm:p-6 lg:p-8'
+                    : isCalendarView
+                        ? 'px-4 pt-1 pb-4 sm:px-6 sm:pt-1.5 sm:pb-6 lg:px-8 lg:pt-2 lg:pb-8'
+                        : 'p-4 sm:p-6 lg:p-8'
             }`}>
                 <Outlet />
             </main>
@@ -402,16 +475,17 @@ export default function Layout() {
                 <button
                     type="button"
                     onClick={handleQuickWrite}
-                    className={`fixed bottom-6 right-6 p-4 rounded-full shadow-2xl z-40 transition-all duration-300 hover:scale-110 active:scale-95 md:bottom-8 md:right-8 group ${
-                        isQuickWriting 
-                            ? 'bg-primary/50 animate-pulse cursor-wait' 
-                            : 'bg-gradient-to-br from-primary to-primary-variant hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]'
+                    className={`quick-write-fab fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-2xl transition-transform duration-300 hover:scale-110 active:scale-95 md:bottom-8 md:right-8 ${
+                        isQuickWriting
+                            ? 'quick-write-fab--busy cursor-wait'
+                            : 'quick-write-fab--ready'
                     }`}
                     title="Quick Write (Last unwritten day)"
                     aria-label="Quick Write: open the oldest unwritten day from the past week"
                     disabled={isQuickWriting}
                 >
-                    <PenTool className="h-6 w-6 text-white group-hover:rotate-12 transition-transform duration-200" />
+                    {!isQuickWriting && <span className="quick-write-fab-shine" aria-hidden="true" />}
+                    <PenTool className="relative z-10 h-6 w-6 text-white" />
                 </button>
             )}
         </div>
