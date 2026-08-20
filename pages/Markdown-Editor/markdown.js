@@ -36,7 +36,7 @@ function plainHeadingText(text) {
  * @returns {Array<{ line: number, level: number, title: string }>}
  */
 export function extractMarkdownHeadings(markdown) {
-    const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+    const lines = linesFromMarkdown(markdown);
     /** @type {Array<{ line: number, level: number, title: string }>} */
     const headings = [];
     let fence = null;
@@ -75,7 +75,19 @@ export function extractMarkdownHeadings(markdown) {
             if (/^-+\s*$/.test(next) && next.length >= 2) {
                 const title = plainHeadingText(trimmed);
                 if (title) headings.push({ line: i + 1, level: 2, title });
+                continue;
             }
+        }
+
+        if (isNumberedHeadingAt(lines, i)) {
+            const title = plainHeadingText(trimmed);
+            if (title) headings.push({ line: i + 1, level: 2, title });
+            continue;
+        }
+
+        if (isPlainListTitleLine(line) && nextContentIsList(lines, i + 1)) {
+            const title = plainHeadingText(trimmed);
+            if (title) headings.push({ line: i + 1, level: 2, title });
         }
     }
 
@@ -212,6 +224,54 @@ function isOrderedListMarker(marker) {
 }
 
 /**
+ * Drop PDF page-break / form-feed / NBSP prefixes so they are not treated as list indent.
+ * Spaces and tabs are kept (those are real nested-list indent).
+ * @param {string} line
+ */
+function stripNonIndentPrefix(line) {
+    // Form feed (\f), other C0/C1 controls, NBSP, and Unicode spaces — not ' ' / '\t'
+    return String(line ?? '').replace(
+        /^[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u0085\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]+/,
+        ''
+    );
+}
+
+function linesFromMarkdown(markdown) {
+    return String(markdown ?? '')
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map(stripNonIndentPrefix);
+}
+
+/**
+ * Lone top-level numbered line used as a section title, e.g. "1. The Core Promise".
+ * Consecutive numbered/bullet lines stay real lists. A following prose paragraph
+ * (with or without a blank line) means this was a heading, not a one-item list.
+ * @param {string[]} lines
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isNumberedHeadingAt(lines, index) {
+    if (typeof lines[index] !== 'string') return false;
+    const line = stripNonIndentPrefix(lines[index]);
+    const m = line.match(PLAIN_LIST_ITEM_RE);
+    if (!m || m[1] !== '') return false;
+    if (!isOrderedListMarker(m[2])) return false;
+    if (/^\[[ xX]\]\s+/.test(m[3])) return false;
+    if (!String(m[3] || '').trim()) return false;
+
+    const nextRaw = lines[index + 1];
+    if (nextRaw === undefined) return true;
+    const next = stripNonIndentPrefix(nextRaw);
+    if (!next.trim()) return true;
+    // Indented wrap belongs to the list item.
+    if (/^\s{2,}\S/.test(next)) return false;
+    // Another list marker on the next line → real list.
+    if (PLAIN_LIST_ITEM_RE.test(next) && !isHr(next)) return false;
+    return true;
+}
+
+/**
  * Expand tabs (width 4) and count leading spaces in an indent string.
  * @param {string} indent
  * @returns {number}
@@ -299,7 +359,8 @@ export function plainListInsertIndexAfterSubtree(items, parentIndex) {
  * @param {number} start
  */
 function parsePlainListAt(lines, start) {
-    const first = lines[start].match(PLAIN_LIST_ITEM_RE);
+    if (isNumberedHeadingAt(lines, start)) return null;
+    const first = stripNonIndentPrefix(lines[start]).match(PLAIN_LIST_ITEM_RE);
     if (!first || isHr(lines[start])) return null;
 
     const ordered = isOrderedListMarker(first[2]);
@@ -309,7 +370,7 @@ function parsePlainListAt(lines, start) {
     let hasTask = false;
 
     while (i < lines.length) {
-        const m = lines[i].match(PLAIN_LIST_ITEM_RE);
+        const m = stripNonIndentPrefix(lines[i]).match(PLAIN_LIST_ITEM_RE);
         if (!m || isHr(lines[i])) {
             if (items.length && /^\s{2,}\S/.test(lines[i]) && lines[i].trim()) {
                 items[items.length - 1].text += `\n${lines[i].trim()}`;
@@ -371,9 +432,45 @@ function parseAtxHeadingLine(line) {
 }
 
 /**
+ * Skip blank lines and report whether the next content is a real list
+ * (not a lone numbered section title).
+ * @param {string[]} lines
+ * @param {number} start
+ */
+function nextContentIsList(lines, start) {
+    let j = start;
+    while (j < lines.length && !stripNonIndentPrefix(lines[j]).trim()) j += 1;
+    if (j >= lines.length) return false;
+    if (isNumberedHeadingAt(lines, j)) return false;
+    const m = stripNonIndentPrefix(lines[j]).match(PLAIN_LIST_ITEM_RE);
+    return Boolean(m) && !isHr(lines[j]);
+}
+
+/**
+ * A non-list, non-heading line that can caption the list below it.
+ * Sentences ending in . ? ! stay as paragraphs.
+ * @param {string} line
+ */
+function isPlainListTitleLine(line) {
+    const raw = stripNonIndentPrefix(line);
+    const trimmed = raw.trim();
+    if (!trimmed) return false;
+    if (parseAtxHeadingLine(trimmed)) return false;
+    if (isHr(trimmed)) return false;
+    if (DATE_TAG_LINE_RE.test(trimmed)) return false;
+    if (/^(`{3,}|~{3,})/.test(trimmed)) return false;
+    if (trimmed.startsWith('>')) return false;
+    if (trimmed.includes('|')) return false;
+    if (/^[-=]{2,}\s*$/.test(trimmed)) return false;
+    if (PLAIN_LIST_ITEM_RE.test(raw)) return false;
+    if (/[.?!]$/.test(trimmed)) return false;
+    return Boolean(plainHeadingText(trimmed));
+}
+
+/**
  * If the prose block ending just before a list ends with an ATX heading
- * (optional blank lines after it), peel that heading into list-title metadata
- * so Preview can show it as the list title instead of rendering it twice.
+ * or a lone plain title line (optional blank lines after it), peel that
+ * into list-title metadata so Preview can show it as the list title.
  * @param {Array<object>} blocks
  * @returns {{ title: string, titleLevel: number, titleLine: number } | null}
  */
@@ -387,8 +484,12 @@ function peelTrailingListTitle(blocks) {
     while (end >= 0 && !lines[end].trim()) end -= 1;
     if (end < 0) return null;
 
-    const heading = parseAtxHeadingLine(lines[end]);
-    if (!heading) return null;
+    const atx = parseAtxHeadingLine(lines[end]);
+    const plain = !atx && isPlainListTitleLine(lines[end]);
+    if (!atx && !plain) return null;
+
+    const title = atx ? atx.title : plainHeadingText(lines[end].trim());
+    if (!title) return null;
 
     const titleLine = (Number(prev.startLine) || 1) + end;
     const kept = lines.slice(0, end);
@@ -403,8 +504,8 @@ function peelTrailingListTitle(blocks) {
     }
 
     return {
-        title: heading.title,
-        titleLevel: heading.level,
+        title,
+        titleLevel: atx ? atx.level : 0,
         titleLine,
     };
 }
@@ -412,13 +513,13 @@ function peelTrailingListTitle(blocks) {
 /**
  * Split markdown into prose chunks and detectable plain lists (ul/ol/task).
  * Fenced code is kept inside prose so list-looking lines in code are ignored.
- * A heading on the line(s) immediately above a list becomes that list's title.
+ * A heading or lone plain title on the line(s) immediately above a list
+ * becomes that list's title.
  * @param {string} markdown
  * @returns {Array<object>}
  */
 export function splitMarkdownBlocks(markdown) {
-    const src = String(markdown ?? '').replace(/\r\n?/g, '\n');
-    const lines = src.split('\n');
+    const lines = linesFromMarkdown(markdown);
     /** @type {Array<object>} */
     const blocks = [];
     let i = 0;
@@ -525,8 +626,8 @@ export function serializePlainList(block) {
     const body = lines.join('\n');
     const title = String(block?.title || '').trim();
     if (!title) return body;
-    const level = Math.max(1, Math.min(6, Number(block.titleLevel) || 2));
-    const heading = `${'#'.repeat(level)} ${title}`;
+    const level = Number(block.titleLevel);
+    const heading = level >= 1 && level <= 6 ? `${'#'.repeat(level)} ${title}` : title;
     return body ? `${heading}\n\n${body}` : heading;
 }
 
@@ -667,7 +768,7 @@ export function renderMarkdown(markdown, options = {}) {
         return '<p class="md-empty">Nothing to preview yet.</p>';
     }
 
-    const lines = src.split('\n');
+    const lines = src.split('\n').map(stripNonIndentPrefix);
     const out = [];
     let i = 0;
     let paragraph = [];
@@ -831,15 +932,23 @@ export function renderMarkdown(markdown, options = {}) {
             continue;
         }
 
+        // Numbered section title: "1. First Heading" then prose or a blank line
+        if (isNumberedHeadingAt(lines, i)) {
+            flushParagraph();
+            out.push(withSourceLine(`<h2>${renderInline(trimmed, inlineOpts)}</h2>`, lineNo));
+            i += 1;
+            continue;
+        }
+
         // Lists (ul / ol / task) — nested by indent depth
-        const listMatch = line.match(PLAIN_LIST_ITEM_RE);
+        const listMatch = stripNonIndentPrefix(line).match(PLAIN_LIST_ITEM_RE);
         if (listMatch) {
             flushParagraph();
             const startLine = lineNo;
             /** @type {Array<{ depth: number, ordered: boolean, task: boolean, checked?: boolean, text: string }>} */
             const flat = [];
             while (i < lines.length) {
-                const m = lines[i].match(PLAIN_LIST_ITEM_RE);
+                const m = stripNonIndentPrefix(lines[i]).match(PLAIN_LIST_ITEM_RE);
                 if (!m) {
                     if (flat.length && /^\s{2,}\S/.test(lines[i]) && lines[i].trim()) {
                         flat[flat.length - 1].text += `\n${lines[i].trim()}`;
@@ -893,6 +1002,13 @@ export function renderMarkdown(markdown, options = {}) {
                 i += 1;
             }
             out.push(withSourceLine(`<pre class="md-code"><code>${escapeHtml(body.join('\n'))}</code></pre>`, startLine));
+            continue;
+        }
+
+        if (isPlainListTitleLine(line) && nextContentIsList(lines, i + 1)) {
+            flushParagraph();
+            out.push(withSourceLine(`<h2>${renderInline(trimmed, inlineOpts)}</h2>`, lineNo));
+            i += 1;
             continue;
         }
 

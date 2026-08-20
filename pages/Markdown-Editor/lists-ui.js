@@ -1310,7 +1310,7 @@ function renderPlainListBlock({
     const titleRow = document.createElement('div');
     titleRow.className = 'mdlist-title-row';
 
-    const title = document.createElement('h3');
+    const title = document.createElement('h2');
     title.className = 'mdplain-title';
     applyPlainListTitleEl(title, block, segIndex);
 
@@ -1427,7 +1427,7 @@ function renderPlainListViewHeader(
     const titleRow = document.createElement('div');
     titleRow.className = 'mdlist-title-row';
 
-    const title = document.createElement('h3');
+    const title = document.createElement('h2');
     title.className = 'mdplain-title';
     applyPlainListTitleEl(title, block, segIndex);
 
@@ -3069,7 +3069,7 @@ function renderListViewHeader(seg, doc, onChange, onStatus, { reordering = false
     const titleRow = document.createElement('div');
     titleRow.className = 'mdlist-title-row';
 
-    const title = document.createElement('h3');
+    const title = document.createElement('h2');
     title.className = 'mdlist-title';
     title.textContent = list.title || 'Untitled list';
 
