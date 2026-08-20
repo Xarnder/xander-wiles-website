@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { BookOpen } from 'lucide-react';
 
 const AuthContext = createContext();
-const ALLOWED_EMAILS = ['xanderwiles@gmail.com'];
+const ALLOWED_EMAILS = ['xanderwiles@gmail.com', 'isobelwilesuk@gmail.com'];
 
 function isAuthorized(user) {
     const email = user?.email || '';
