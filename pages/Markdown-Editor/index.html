@@ -348,6 +348,16 @@
                         <p class="settings-prefs-lede settings-prefs-lede--tight">Quickly double-tap a list item in Preview or List to copy that item’s text. Turn off if it interferes with scrolling or selection.</p>
                     </div>
                     <div class="settings-prefs">
+                        <h3 class="settings-subheading">Saving</h3>
+                        <label class="settings-pref settings-pref--toggle">
+                            <span class="settings-pref-label">Block screen until save finishes</span>
+                            <input id="pref-blocking-save" class="settings-toggle" type="checkbox" checked>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">
+                            Default on. A “Saving in progress” screen blocks tabs and buttons until Drive finishes. Turn off only if you want to keep using the app during a save.
+                        </p>
+                    </div>
+                    <div class="settings-prefs">
                         <h3 class="settings-subheading">Finder layout</h3>
                         <p class="settings-prefs-lede">Choose where the Markdown section appears relative to Folders.</p>
                         <label class="settings-pref">
@@ -374,7 +384,7 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
-                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
+                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. While a save is running, a <strong>Saving in progress</strong> screen blocks other buttons (turn this off in Settings if you really need to). <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
@@ -463,6 +473,28 @@
         <!-- Single overlay toast host — never in document flow, never shifts UI -->
         <div id="app-toast" class="app-toast" hidden role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
+
+    <dialog id="saving-dialog" class="dialog dialog--saving" aria-modal="true" aria-labelledby="saving-dialog-title" aria-describedby="saving-dialog-message">
+        <div class="dialog-body saving-dialog-body">
+            <div class="loading-spinner saving-dialog-spinner" aria-hidden="true"></div>
+            <h2 id="saving-dialog-title">Saving in progress</h2>
+            <p id="saving-dialog-message">Please wait until this file is saved to Drive. Other buttons are paused so nothing is lost.</p>
+        </div>
+    </dialog>
+
+    <dialog id="blocking-save-off-dialog" class="dialog dialog--warn">
+        <form method="dialog" class="dialog-body">
+            <h2>Turn off save lock?</h2>
+            <p>
+                If you turn this off, you can tap Pinned, Finder, and other buttons while a save is still running.
+                That can interrupt Drive and bring back extra save warnings.
+            </p>
+            <div class="dialog-actions">
+                <button type="submit" value="keep" class="btn btn-primary">Keep blocking</button>
+                <button type="submit" value="turn-off" class="btn btn-ghost">Turn off anyway</button>
+            </div>
+        </form>
+    </dialog>
 
     <dialog id="unsaved-dialog" class="dialog">
         <form method="dialog" class="dialog-body">

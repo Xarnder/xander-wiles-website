@@ -32,6 +32,7 @@ let applyingCloud = false;
  *   listLayout?: string,
  *   defaultEditView?: string,
  *   doubleTapCopy?: boolean,
+ *   blockingSave?: boolean,
  *   showDates?: boolean,
  *   finderMdOrder?: { mobile?: string, desktop?: string },
  *   finderSort?: string,
@@ -126,6 +127,8 @@ export async function pullCloudSettings(getLocalSnapshot) {
             defaultEditView: parsed.defaultEditView,
             doubleTapCopy:
                 typeof parsed.doubleTapCopy === 'boolean' ? parsed.doubleTapCopy : undefined,
+            blockingSave:
+                typeof parsed.blockingSave === 'boolean' ? parsed.blockingSave : undefined,
             pwaBottomOffset: parsed.pwaBottomOffset,
             finderMdOrder: parsed.finderMdOrder,
             finderSort: parsed.finderSort,
@@ -148,6 +151,7 @@ export async function pullCloudSettings(getLocalSnapshot) {
             cloud.listLayout != null ||
             cloud.defaultEditView != null ||
             cloud.doubleTapCopy != null ||
+            cloud.blockingSave != null ||
             cloud.finderMdOrder != null ||
             cloud.finderSort != null ||
             cloud.pinnedItems != null ||

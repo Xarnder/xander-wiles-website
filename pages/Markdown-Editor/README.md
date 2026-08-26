@@ -20,7 +20,7 @@ Live path: `/pages/Markdown-Editor/`
 13. **Large-change guard** — big deletes/replacements delay autosave, then pin the *previous* Drive revision **after** a successful save (Drive cannot pin the live head). Pin failure never blocks saving.
 14. **Conflict check** — if Drive’s file *text* changed elsewhere, Save asks Keep mine / Use Drive / Review. Version bumps from our own pins are ignored.
 15. **Named versions** — Edit ⋮ → Name this version… protects the current revision with a label in History
-16. **Pinned / Finder / Settings** keep the open file in memory and save in the background — they do not show “unsaved changes” dialogs. That prompt still appears when opening a different file or signing out.
+16. **Pinned / Finder / Settings** keep the open file in memory. With **Block screen until save finishes** on (default), a “Saving in progress” screen blocks every button until Drive finishes; you can turn that off in Settings after a warning. The unsaved-file prompt still appears when opening a different file or signing out.
 
 **Undo vs History:** Undo/Redo cover mistakes in the current tab. Version history covers earlier cloud uploads after reload or after a bad autosave.
 

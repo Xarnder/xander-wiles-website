@@ -44,6 +44,8 @@ import {
     DEFAULT_EDIT_VIEW_VALUES,
     DEFAULT_EDIT_VIEW_OPTIONS,
     DOUBLE_TAP_COPY_KEY,
+    BLOCKING_SAVE_KEY,
+    BLOCKING_SAVE_DEFAULT,
     SHOW_DATES_KEY,
     PREVIEW_TOC_OPEN_KEY,
     PREVIEW_TOC_STICKY_KEY,
@@ -216,6 +218,10 @@ import {
     syncListLayoutControl,
     syncDefaultEditViewControl,
     syncDoubleTapCopyControl,
+    syncBlockingSaveControl,
+    showSavingOverlay,
+    hideSavingOverlay,
+    promptTurnOffBlockingSave,
     syncEditorMoreShowDates,
     syncFinderSortControl,
     syncUndoRedoButtons,
@@ -1022,6 +1028,32 @@ function applySavedDoubleTapCopy() {
     syncDoubleTapCopyControl(readDoubleTapCopyEnabled());
 }
 
+function readBlockingSaveEnabled() {
+    try {
+        const raw = localStorage.getItem(BLOCKING_SAVE_KEY);
+        if (raw === '0') return false;
+        if (raw === '1') return true;
+    } catch {
+        // ignore
+    }
+    return BLOCKING_SAVE_DEFAULT;
+}
+
+function writeBlockingSaveEnabled(enabled) {
+    const next = Boolean(enabled);
+    try {
+        localStorage.setItem(BLOCKING_SAVE_KEY, next ? '1' : '0');
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedBlockingSave() {
+    syncBlockingSaveControl(readBlockingSaveEnabled());
+}
+
 function buildSettingsSnapshot() {
     return {
         theme: readTheme(),
@@ -1034,6 +1066,7 @@ function buildSettingsSnapshot() {
         listLayout: readListLayout(),
         defaultEditView: readDefaultEditView(),
         doubleTapCopy: readDoubleTapCopyEnabled(),
+        blockingSave: readBlockingSaveEnabled(),
         showDates: readShowDatesEnabled(),
         finderMdOrder: readFinderLayoutPrefs(),
         finderSort: readFinderSort(),
@@ -1165,6 +1198,15 @@ function applyCloudSettings(cloud) {
                 // ignore
             }
             syncDoubleTapCopyControl(cloud.doubleTapCopy);
+        }
+
+        if (typeof cloud.blockingSave === 'boolean') {
+            try {
+                localStorage.setItem(BLOCKING_SAVE_KEY, cloud.blockingSave ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            syncBlockingSaveControl(cloud.blockingSave);
         }
 
         if (typeof cloud.showDates === 'boolean') {
@@ -3247,8 +3289,14 @@ async function restoreDriveRevision(rev, options = {}) {
 
     const fileId = ed.fileId;
     const mimeType = ed.mimeType || 'text/markdown';
-
-    await enqueueDriveWrite(async () => {
+    const shouldBlock = readBlockingSaveEnabled();
+    if (shouldBlock) {
+        showSavingOverlay(
+            'Saving the restored version to Drive. Please wait — other buttons are paused until this finishes.'
+        );
+    }
+    try {
+        await enqueueDriveWrite(async () => {
         if (state.editor.fileId !== fileId) return;
         restoreInFlight = true;
         stopAutosaveCountdown();
@@ -3349,6 +3397,9 @@ async function restoreDriveRevision(rev, options = {}) {
             syncAutosaveFromEditorState();
         }
     });
+    } finally {
+        if (shouldBlock) hideSavingOverlay();
+    }
 }
 
 function formatStatNumber(n) {
@@ -3926,7 +3977,7 @@ function persistOpenEditorInBackground() {
     const ed = state.editor;
     if (!ed.fileId || !ed.dirty) return;
     if (pendingConflict || ed.status === 'conflict') return;
-    saveCurrentFile({ autosave: true }).catch((err) => {
+    saveCurrentFile({ autosave: true, skipBlockingOverlay: true }).catch((err) => {
         console.warn('[md-editor] background save failed', err);
     });
 }
@@ -3940,7 +3991,27 @@ async function saveCurrentFile(options = {}) {
         return;
     }
 
-    await enqueueDriveWrite(() => saveCurrentFileExclusive(options));
+    const shouldBlock =
+        readBlockingSaveEnabled() &&
+        !options.skipBlockingOverlay &&
+        Boolean(state.editor.fileId) &&
+        (Boolean(options.force) ||
+            Boolean(state.editor.dirty) ||
+            state.editor.status === 'saving' ||
+            isDriveWriteBusy());
+
+    if (shouldBlock) {
+        showSavingOverlay(
+            autosave
+                ? 'Autosaving to Drive. Please wait — other buttons are paused until this finishes.'
+                : 'Please wait until this file is saved to Drive. Other buttons are paused so nothing is lost.'
+        );
+    }
+    try {
+        await enqueueDriveWrite(() => saveCurrentFileExclusive(options));
+    } finally {
+        if (shouldBlock) hideSavingOverlay();
+    }
 
     // Conflict detected during exclusive save — resolve outside the write lock.
     if (!autosave && pendingConflict && !skipConflictCheck) {
@@ -4236,9 +4307,18 @@ async function switchAppMode(mode) {
     const els = getEls();
     const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
     if (leavingEditor && hasOpenFile()) {
-        // File stays loaded across tabs. Save quietly — do not block with
-        // Unsaved / conflict / pin dialogs (those stacked while a save was in flight).
-        persistOpenEditorInBackground();
+        if (readBlockingSaveEnabled()) {
+            await saveCurrentFile({ autosave: true });
+            if (
+                state.editor.dirty ||
+                pendingConflict ||
+                state.editor.status === 'conflict'
+            ) {
+                return;
+            }
+        } else {
+            persistOpenEditorInBackground();
+        }
     }
 
     if (leavingEditor) {
@@ -4577,6 +4657,7 @@ function wireEvents() {
     applySavedListLayout();
     applySavedDefaultEditView();
     applySavedDoubleTapCopy();
+    applySavedBlockingSave();
     applySavedFinderSort();
     if (els.prefTheme) {
         els.prefTheme.addEventListener('change', () => {
@@ -4674,6 +4755,26 @@ function wireEvents() {
                 enabled ? 'Double-tap copy on' : 'Double-tap copy off',
                 'ok'
             );
+        });
+    }
+    if (els.prefBlockingSave) {
+        els.prefBlockingSave.addEventListener('change', async () => {
+            const wantOn = Boolean(els.prefBlockingSave.checked);
+            if (wantOn) {
+                writeBlockingSaveEnabled(true);
+                syncBlockingSaveControl(true);
+                setStatus('Save lock on — screen waits until Drive finishes', 'ok');
+                return;
+            }
+            els.prefBlockingSave.checked = true;
+            const turnOff = await promptTurnOffBlockingSave();
+            if (!turnOff) {
+                syncBlockingSaveControl(true);
+                return;
+            }
+            writeBlockingSaveEnabled(false);
+            syncBlockingSaveControl(false);
+            setStatus('Save lock off — you can use other buttons while a save is running', 'warn');
         });
     }
     if (els.prefMdOrderMobile) {
@@ -4846,6 +4947,7 @@ async function boot() {
     applySavedListLayout();
     applySavedDefaultEditView();
     applySavedDoubleTapCopy();
+    applySavedBlockingSave();
     applySavedFinderSort();
     registerServiceWorker();
 

@@ -125,6 +125,13 @@ export const DOUBLE_TAP_COPY_KEY = 'md-editor:doubleTapCopy';
 export const DOUBLE_TAP_COPY_DEFAULT = true;
 
 /**
+ * Block the UI with a non-dismissible “Saving in progress” dialog until Drive
+ * finishes. '1' on (default), '0' off.
+ */
+export const BLOCKING_SAVE_KEY = 'md-editor:blockingSave';
+export const BLOCKING_SAVE_DEFAULT = true;
+
+/**
  * Show {{date:…}} tags in Preview / List.
  * '1' on, '0' off (default — tags stay in Raw only).
  */

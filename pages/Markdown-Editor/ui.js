@@ -141,6 +141,7 @@ export function bindUi() {
     els.prefListLayoutSegmented = document.getElementById('pref-list-layout-segmented');
     els.prefDefaultEditView = document.getElementById('pref-default-edit-view');
     els.prefDoubleTapCopy = document.getElementById('pref-double-tap-copy');
+    els.prefBlockingSave = document.getElementById('pref-blocking-save');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
     els.finderLoading = document.getElementById('finder-loading');
@@ -159,6 +160,10 @@ export function bindUi() {
     els.markdownPreview = document.getElementById('markdown-preview');
     els.draftDialog = document.getElementById('draft-dialog');
     els.unsavedDialog = document.getElementById('unsaved-dialog');
+    els.savingDialog = document.getElementById('saving-dialog');
+    els.savingDialogTitle = document.getElementById('saving-dialog-title');
+    els.savingDialogMessage = document.getElementById('saving-dialog-message');
+    els.blockingSaveOffDialog = document.getElementById('blocking-save-off-dialog');
     els.itemActionsDialog = document.getElementById('item-actions-dialog');
     els.itemActionsTitle = document.getElementById('item-actions-title');
     els.itemActionsName = document.getElementById('item-actions-name');
@@ -196,6 +201,7 @@ export function bindUi() {
     els.editItemDateInput = document.getElementById('edit-item-date-input');
     els.editItemDateError = document.getElementById('edit-item-date-error');
     els.editItemDateApply = document.getElementById('edit-item-date-apply');
+    bindSavingOverlayGuards();
     return els;
 }
 
@@ -944,6 +950,106 @@ export function syncDoubleTapCopyControl(enabled) {
     if (els.prefDoubleTapCopy) {
         els.prefDoubleTapCopy.checked = Boolean(enabled);
     }
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function syncBlockingSaveControl(enabled) {
+    if (els.prefBlockingSave) {
+        els.prefBlockingSave.checked = Boolean(enabled);
+    }
+}
+
+/** Nested Drive writes share one overlay; only the last hide closes it. */
+let savingOverlayDepth = 0;
+
+function bindSavingOverlayGuards() {
+    const dialog = els.savingDialog;
+    if (!dialog || dialog.dataset.guarded === '1') return;
+    dialog.dataset.guarded = '1';
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+    });
+    dialog.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    });
+    dialog.addEventListener('close', () => {
+        if (savingOverlayDepth > 0) {
+            queueMicrotask(() => {
+                if (savingOverlayDepth > 0 && els.savingDialog && !els.savingDialog.open) {
+                    try {
+                        els.savingDialog.showModal();
+                    } catch {
+                        // ignore
+                    }
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Non-dismissible save lock. Call hideSavingOverlay once per show.
+ * @param {string} [message]
+ */
+export function showSavingOverlay(message) {
+    const dialog = els.savingDialog;
+    savingOverlayDepth += 1;
+    if (els.savingDialogMessage && message) {
+        els.savingDialogMessage.textContent = message;
+    }
+    if (els.app) els.app.setAttribute('inert', '');
+    if (!dialog) return;
+    dialog.setAttribute('aria-busy', 'true');
+    if (!dialog.open) {
+        try {
+            dialog.showModal();
+        } catch {
+            // Already open or not in the document.
+        }
+    }
+}
+
+export function hideSavingOverlay() {
+    savingOverlayDepth = Math.max(0, savingOverlayDepth - 1);
+    const dialog = els.savingDialog;
+    if (savingOverlayDepth > 0 || !dialog) return;
+    dialog.removeAttribute('aria-busy');
+    if (els.app) els.app.removeAttribute('inert');
+    if (dialog.open) {
+        try {
+            dialog.close();
+        } catch {
+            // ignore
+        }
+    }
+}
+
+/**
+ * Warn before turning off the blocking save dialog.
+ * @returns {Promise<boolean>} true when the user still wants to turn it off
+ */
+export function promptTurnOffBlockingSave() {
+    const dialog = els.blockingSaveOffDialog;
+    if (!dialog) {
+        const ok = window.confirm(
+            'If you turn this off, you can tap other buttons while a save is still running. That can interrupt Drive. Turn off anyway?'
+        );
+        return Promise.resolve(ok);
+    }
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            resolve(dialog.returnValue === 'turn-off');
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'keep';
+        dialog.showModal();
+    });
 }
 
 /**
