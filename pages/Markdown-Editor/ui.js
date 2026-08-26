@@ -1037,7 +1037,7 @@ export function promptTurnOffBlockingSave() {
     const dialog = els.blockingSaveOffDialog;
     if (!dialog) {
         const ok = window.confirm(
-            'If you turn this off, you can tap other buttons while a save is still running. That can interrupt Drive. Turn off anyway?'
+            'If you turn this off, you can tap other buttons while a manual Save is still running. Autosave is never locked. Turn off anyway?'
         );
         return Promise.resolve(ok);
     }

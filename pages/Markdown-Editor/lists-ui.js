@@ -28,11 +28,13 @@ import {
     extractMarkdownHeadings,
     joinMarkdownBlocks,
     movePlainListItem,
+    movePlainListItemAmongSiblings,
     PLAIN_LIST_MAX_DEPTH,
     plainListDepthFromIndent,
     plainListIndentForDepth,
     plainListInsertIndexAfterSubtree,
     plainListOrderedDisplayNumber,
+    plainListSiblingMoveTarget,
     renderInline,
     renderMarkdown,
     setPlainListItemDepth,
@@ -2179,6 +2181,10 @@ function openPlainItemMiniEditor({
     const canAddNested = currentDepth < PLAIN_LIST_MAX_DEPTH;
     const canIndent = currentDepth < PLAIN_LIST_MAX_DEPTH;
     const canOutdent = currentDepth > 0;
+    const canMoveUp =
+        currentDepth > 0 && plainListSiblingMoveTarget(block.items || [], itemIndex, -1) >= 0;
+    const canMoveDown =
+        currentDepth > 0 && plainListSiblingMoveTarget(block.items || [], itemIndex, 1) >= 0;
 
     const commitCurrentFields = (target, listBlock) => {
         target.text = commitEditorText();
@@ -2211,6 +2217,31 @@ function openPlainItemMiniEditor({
                 commitCurrentFields(target, listBlock);
                 const toIndex = edge === 'top' ? 0 : listBlock.items.length - 1;
                 listBlock.items = movePlainListItem(listBlock.items, idx, toIndex);
+            },
+            opts: { stayInView: true, openMiniPlainItemId: item.id },
+        });
+    };
+
+    const moveAmongSiblings = (delta) => {
+        if (closed || currentDepth <= 0) return;
+        if (plainListSiblingMoveTarget(block.items || [], itemIndex, delta) < 0) return;
+
+        closed = true;
+        if (closeActivePlainMiniEditor === closeFn) closeActivePlainMiniEditor = null;
+        cleanupOutside();
+
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const idx = (listBlock.items || []).findIndex((it) => it.id === item.id);
+                if (idx < 0) return;
+                const target = listBlock.items[idx];
+                commitCurrentFields(target, listBlock);
+                listBlock.items = movePlainListItemAmongSiblings(listBlock.items, idx, delta);
             },
             opts: { stayInView: true, openMiniPlainItemId: item.id },
         });
@@ -2331,6 +2362,24 @@ function openPlainItemMiniEditor({
     outdentBtn.addEventListener('mousedown', (event) => event.preventDefault());
     outdentBtn.addEventListener('click', () => changeDepth(currentDepth - 1));
 
+    const moveUpBtn = createMiniIconButton({
+        icon: 'up',
+        label: 'Move item up within this indent level',
+        title: canMoveUp ? 'Move up' : 'Already first at this indent level',
+    });
+    moveUpBtn.disabled = !canMoveUp;
+    moveUpBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    moveUpBtn.addEventListener('click', () => moveAmongSiblings(-1));
+
+    const moveDownBtn = createMiniIconButton({
+        icon: 'down',
+        label: 'Move item down within this indent level',
+        title: canMoveDown ? 'Move down' : 'Already last at this indent level',
+    });
+    moveDownBtn.disabled = !canMoveDown;
+    moveDownBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    moveDownBtn.addEventListener('click', () => moveAmongSiblings(1));
+
     const delBtn = createMiniIconButton({
         icon: 'delete',
         label: 'Delete item',
@@ -2356,10 +2405,12 @@ function openPlainItemMiniEditor({
     }
     topRow.append(copyBtn, doneBtn);
 
-    const toolBtns = [addNestedBtn, indentBtn, outdentBtn];
+    const toolBtns = [addNestedBtn, outdentBtn, indentBtn];
     // Nested items stay under their parent — list-edge moves don’t apply.
     if (currentDepth === 0) {
         toolBtns.push(toTopBtn, toBottomBtn);
+    } else {
+        toolBtns.push(moveUpBtn, moveDownBtn);
     }
     toolBtns.push(delBtn);
     toolsRow.append(...toolBtns);
@@ -2726,11 +2777,14 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     upBtn.setAttribute('aria-label', 'Move up');
     upBtn.title = 'Move up';
     upBtn.innerHTML = '<span class="mdlist-arrow mdlist-arrow--up" aria-hidden="true"></span>';
-    upBtn.disabled = index === 0;
+    const canMoveUp = plainListSiblingMoveTarget(block.items || [], index, -1) >= 0;
+    const canMoveDown = plainListSiblingMoveTarget(block.items || [], index, 1) >= 0;
+    upBtn.disabled = !canMoveUp;
     upBtn.addEventListener('click', () => {
         onMutate((listBlock) => {
             const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
-            if (from > 0) listBlock.items = movePlainListItem(listBlock.items, from, from - 1);
+            if (from < 0) return;
+            listBlock.items = movePlainListItemAmongSiblings(listBlock.items, from, -1);
         });
     });
 
@@ -2740,13 +2794,12 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     downBtn.setAttribute('aria-label', 'Move down');
     downBtn.title = 'Move down';
     downBtn.innerHTML = '<span class="mdlist-arrow mdlist-arrow--down" aria-hidden="true"></span>';
-    downBtn.disabled = index >= total - 1;
+    downBtn.disabled = !canMoveDown;
     downBtn.addEventListener('click', () => {
         onMutate((listBlock) => {
             const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
-            if (from >= 0 && from < listBlock.items.length - 1) {
-                listBlock.items = movePlainListItem(listBlock.items, from, from + 1);
-            }
+            if (from < 0) return;
+            listBlock.items = movePlainListItemAmongSiblings(listBlock.items, from, 1);
         });
     });
 

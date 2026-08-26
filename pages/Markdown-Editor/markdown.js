@@ -665,6 +665,58 @@ export function movePlainListItem(items, fromIndex, toIndex) {
 }
 
 /**
+ * Start index of the previous/next sibling at the same indent, or -1 if none
+ * (already first/last under this parent, or would leave this indent group).
+ * @param {Array<{ indent?: string }>} items
+ * @param {number} index
+ * @param {number} delta  negative = previous sibling, positive = next sibling
+ * @returns {number}
+ */
+export function plainListSiblingMoveTarget(items, index, delta) {
+    const list = items || [];
+    if (index < 0 || index >= list.length) return -1;
+    const dir = delta < 0 ? -1 : delta > 0 ? 1 : 0;
+    if (!dir) return -1;
+    const depth = plainListDepthFromIndent(list[index].indent);
+    if (dir < 0) {
+        for (let i = index - 1; i >= 0; i -= 1) {
+            const d = plainListDepthFromIndent(list[i].indent);
+            if (d < depth) return -1;
+            if (d === depth) return i;
+        }
+        return -1;
+    }
+    const subtreeEnd = plainListInsertIndexAfterSubtree(list, index);
+    if (subtreeEnd >= list.length) return -1;
+    const nextDepth = plainListDepthFromIndent(list[subtreeEnd].indent);
+    return nextDepth === depth ? subtreeEnd : -1;
+}
+
+/**
+ * Swap an item (and its nested descendants) with the previous or next sibling
+ * at the same indent. Never crosses into another parent’s children.
+ * @param {Array<object>} items
+ * @param {number} fromIndex
+ * @param {number} delta  negative = up, positive = down
+ */
+export function movePlainListItemAmongSiblings(items, fromIndex, delta) {
+    const next = [...(items || [])];
+    const siblingIndex = plainListSiblingMoveTarget(next, fromIndex, delta);
+    if (siblingIndex < 0) return next;
+    const fromEnd = plainListInsertIndexAfterSubtree(next, fromIndex);
+    const block = next.slice(fromIndex, fromEnd);
+    if (delta < 0) {
+        next.splice(fromIndex, block.length);
+        next.splice(siblingIndex, 0, ...block);
+        return next;
+    }
+    const siblingEnd = plainListInsertIndexAfterSubtree(next, siblingIndex);
+    next.splice(fromIndex, block.length);
+    next.splice(siblingEnd - block.length, 0, ...block);
+    return next;
+}
+
+/**
  * @param {{ task?: boolean, checked?: boolean, text?: string, depth?: number, children?: object[] }} node
  * @param {{ showDates?: boolean }} inlineOpts
  * @returns {string}

@@ -3289,14 +3289,8 @@ async function restoreDriveRevision(rev, options = {}) {
 
     const fileId = ed.fileId;
     const mimeType = ed.mimeType || 'text/markdown';
-    const shouldBlock = readBlockingSaveEnabled();
-    if (shouldBlock) {
-        showSavingOverlay(
-            'Saving the restored version to Drive. Please wait — other buttons are paused until this finishes.'
-        );
-    }
-    try {
-        await enqueueDriveWrite(async () => {
+
+    await enqueueDriveWrite(async () => {
         if (state.editor.fileId !== fileId) return;
         restoreInFlight = true;
         stopAutosaveCountdown();
@@ -3397,9 +3391,6 @@ async function restoreDriveRevision(rev, options = {}) {
             syncAutosaveFromEditorState();
         }
     });
-    } finally {
-        if (shouldBlock) hideSavingOverlay();
-    }
 }
 
 function formatStatNumber(n) {
@@ -3977,7 +3968,7 @@ function persistOpenEditorInBackground() {
     const ed = state.editor;
     if (!ed.fileId || !ed.dirty) return;
     if (pendingConflict || ed.status === 'conflict') return;
-    saveCurrentFile({ autosave: true, skipBlockingOverlay: true }).catch((err) => {
+    saveCurrentFile({ autosave: true }).catch((err) => {
         console.warn('[md-editor] background save failed', err);
     });
 }
@@ -3992,8 +3983,8 @@ async function saveCurrentFile(options = {}) {
     }
 
     const shouldBlock =
+        Boolean(options.blocking) &&
         readBlockingSaveEnabled() &&
-        !options.skipBlockingOverlay &&
         Boolean(state.editor.fileId) &&
         (Boolean(options.force) ||
             Boolean(state.editor.dirty) ||
@@ -4002,9 +3993,7 @@ async function saveCurrentFile(options = {}) {
 
     if (shouldBlock) {
         showSavingOverlay(
-            autosave
-                ? 'Autosaving to Drive. Please wait — other buttons are paused until this finishes.'
-                : 'Please wait until this file is saved to Drive. Other buttons are paused so nothing is lost.'
+            'Please wait until this file is saved to Drive. Other buttons are paused so nothing is lost.'
         );
     }
     try {
@@ -4021,7 +4010,7 @@ async function saveCurrentFile(options = {}) {
 
 /**
  * Exclusive Drive save body — always entered via enqueueDriveWrite.
- * @param {{ autosave?: boolean, skipConflictCheck?: boolean, force?: boolean }} [options]
+ * @param {{ autosave?: boolean, skipConflictCheck?: boolean, force?: boolean, blocking?: boolean }} [options]
  */
 async function saveCurrentFileExclusive(options = {}) {
     const autosave = Boolean(options.autosave);
@@ -4307,18 +4296,7 @@ async function switchAppMode(mode) {
     const els = getEls();
     const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
     if (leavingEditor && hasOpenFile()) {
-        if (readBlockingSaveEnabled()) {
-            await saveCurrentFile({ autosave: true });
-            if (
-                state.editor.dirty ||
-                pendingConflict ||
-                state.editor.status === 'conflict'
-            ) {
-                return;
-            }
-        } else {
-            persistOpenEditorInBackground();
-        }
+        persistOpenEditorInBackground();
     }
 
     if (leavingEditor) {
@@ -4488,7 +4466,7 @@ function wireEvents() {
         signOut();
     });
     els.btnSave.addEventListener('click', () => {
-        saveCurrentFile();
+        saveCurrentFile({ blocking: true });
     });
     els.btnUp.addEventListener('click', () => {
         goUp();
@@ -4874,7 +4852,7 @@ function wireEvents() {
         const key = event.key?.toLowerCase();
         if ((event.metaKey || event.ctrlKey) && key === 's') {
             event.preventDefault();
-            if (hasOpenFile()) saveCurrentFile();
+            if (hasOpenFile()) saveCurrentFile({ blocking: true });
             return;
         }
         if ((event.metaKey || event.ctrlKey) && key === 'z') {
