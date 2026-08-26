@@ -13,6 +13,34 @@ export function textsEqual(a, b) {
     return normalizeEditorText(a) === normalizeEditorText(b);
 }
 
+/**
+ * Decide whether a Drive files.version change is a real concurrent edit.
+ * Pinning revisions can bump `version` without changing markdown text.
+ * @param {{
+ *   expectedVersion?: string | number | null,
+ *   remoteVersion?: string | number | null,
+ *   snapshot: string,
+ *   baseline: string,
+ *   driveContent: string,
+ * }} args
+ * @returns {'proceed' | 'same-as-local' | 'conflict'}
+ */
+export function classifyRemoteContentChange({
+    expectedVersion,
+    remoteVersion,
+    snapshot,
+    baseline,
+    driveContent,
+}) {
+    if (expectedVersion == null || expectedVersion === '') return 'proceed';
+    if (remoteVersion == null || String(remoteVersion) === String(expectedVersion)) {
+        return 'proceed';
+    }
+    if (textsEqual(driveContent, snapshot)) return 'same-as-local';
+    if (textsEqual(driveContent, baseline)) return 'proceed';
+    return 'conflict';
+}
+
 export function readDraft(fileId) {
     try {
         const raw = localStorage.getItem(draftKey(fileId));

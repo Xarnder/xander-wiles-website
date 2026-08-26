@@ -96,6 +96,7 @@ import {
     rebaseEditorBaseline,
     setEditorText,
     textsEqual,
+    classifyRemoteContentChange,
     normalizeEditorText,
     writeDraft,
 } from './editor.js';
@@ -139,7 +140,12 @@ import {
 } from './markdown.js';
 import { createEditorSearch } from './search.js';
 import { createEditHistory } from './history.js';
-import { getRevisionContent, listAllRevisions, protectRevision } from './revisions.js';
+import {
+    getRevisionContent,
+    listAllRevisions,
+    protectRevision,
+    shouldProtectPreviousHead,
+} from './revisions.js';
 import {
     DESTRUCTIVE_AUTOSAVE_DEFER_MS,
     isDestructiveChange,
@@ -266,6 +272,8 @@ let autosaveInFlight = false;
 let restoreInFlight = false;
 /** Serializes Drive content writes (save / restore / conflict overwrite). */
 let driveWriteChain = Promise.resolve();
+/** Count of exclusive Drive write callbacks currently running or queued-started. */
+let driveWriteInFlight = 0;
 /** @type {Promise<void> | null} */
 let conflictResolveInFlight = null;
 /** @type {import('./revisions.js').DocumentRevision | null} */
@@ -289,7 +297,7 @@ let lastEditorEditAt = 0;
 let autosaveEnabled = true;
 
 function isDriveWriteBusy() {
-    return autosaveInFlight || restoreInFlight;
+    return autosaveInFlight || restoreInFlight || driveWriteInFlight > 0;
 }
 
 /**
@@ -299,7 +307,15 @@ function isDriveWriteBusy() {
  * @returns {Promise<T>}
  */
 function enqueueDriveWrite(fn) {
-    const run = driveWriteChain.then(fn, fn);
+    const wrapped = async () => {
+        driveWriteInFlight += 1;
+        try {
+            return await fn();
+        } finally {
+            driveWriteInFlight = Math.max(0, driveWriteInFlight - 1);
+        }
+    };
+    const run = driveWriteChain.then(wrapped, wrapped);
     driveWriteChain = run.then(
         () => undefined,
         () => undefined
@@ -3257,28 +3273,32 @@ async function restoreDriveRevision(rev, options = {}) {
 
             if (state.editor.fileId !== fileId) return;
 
-            // Pin the pre-restore head so the previous current version remains downloadable.
+            let previousHeadId = ed.headRevisionId ? String(ed.headRevisionId) : null;
             try {
                 const metaNow = await getFileMetadata(fileId);
-                const headId = metaNow?.headRevisionId ? String(metaNow.headRevisionId) : '';
-                if (headId && headId !== rev.id) {
-                    await protectRevision(fileId, headId);
+                if (metaNow?.headRevisionId) previousHeadId = String(metaNow.headRevisionId);
+            } catch {
+                // use cached head
+            }
+
+            const savedMeta = await updateFileContent(fileId, content, mimeType);
+            if (state.editor.fileId !== fileId) return;
+
+            const nextHead = savedMeta?.headRevisionId ? String(savedMeta.headRevisionId) : null;
+            if (shouldProtectPreviousHead(previousHeadId, nextHead)) {
+                try {
+                    await protectRevision(fileId, previousHeadId);
                     await upsertRevisionMeta({
                         fileId,
-                        revisionId: headId,
+                        revisionId: previousHeadId,
                         type: 'safety',
                         label: 'Before restore',
                         createdAt: new Date().toISOString(),
                     });
+                } catch (pinErr) {
+                    console.warn('[md-editor] could not protect previous head after restore', pinErr);
                 }
-            } catch (pinErr) {
-                console.warn('[md-editor] could not protect current head before restore', pinErr);
             }
-
-            if (state.editor.fileId !== fileId) return;
-
-            const savedMeta = await updateFileContent(fileId, content, mimeType);
-            if (state.editor.fileId !== fileId) return;
 
             const els = getEls();
             applyLoadedContent(ed, {
@@ -3287,9 +3307,7 @@ async function restoreDriveRevision(rev, options = {}) {
                 mimeType,
                 content,
                 driveVersion: savedMeta?.version ?? null,
-                headRevisionId: savedMeta?.headRevisionId
-                    ? String(savedMeta.headRevisionId)
-                    : null,
+                headRevisionId: nextHead,
             });
             ed.status = 'saved';
             if (els.editor) els.editor.value = ed.editorContent;
@@ -3806,6 +3824,113 @@ async function openMarkdownFile(file, options = {}) {
     }
 }
 
+/**
+ * Compare our last-known Drive version to live metadata.
+ * A version bump with unchanged markdown (revision pin, etc.) is not a conflict.
+ * @returns {Promise<
+ *   | { kind: 'switched' }
+ *   | { kind: 'proceed', expectedVersion: string | number | null, headRevisionId: string | null }
+ *   | { kind: 'same-as-local', remoteVersion: string | number, headRevisionId: string | null }
+ *   | { kind: 'conflict', remoteVersion: string | number, headRevisionId: string | null, driveContent: string }
+ * >}
+ */
+async function inspectRemoteHead(fileId, snapshot, baseline, expectedVersion) {
+    if (expectedVersion == null || expectedVersion === '') {
+        return { kind: 'proceed', expectedVersion, headRevisionId: null };
+    }
+    const remoteMeta = await getFileMetadata(fileId);
+    if (state.editor.fileId !== fileId) return { kind: 'switched' };
+    const remoteVersion =
+        remoteMeta?.version != null && remoteMeta.version !== '' ? remoteMeta.version : null;
+    const headRevisionId = remoteMeta?.headRevisionId ? String(remoteMeta.headRevisionId) : null;
+    if (remoteVersion == null || String(remoteVersion) === String(expectedVersion)) {
+        return {
+            kind: 'proceed',
+            expectedVersion,
+            headRevisionId: headRevisionId || null,
+        };
+    }
+    const driveContent = await getFileContent(fileId);
+    if (state.editor.fileId !== fileId) return { kind: 'switched' };
+    const kind = classifyRemoteContentChange({
+        expectedVersion,
+        remoteVersion,
+        snapshot,
+        baseline,
+        driveContent,
+    });
+    if (kind === 'same-as-local') {
+        return { kind: 'same-as-local', remoteVersion, headRevisionId };
+    }
+    if (kind === 'proceed') {
+        return { kind: 'proceed', expectedVersion: remoteVersion, headRevisionId };
+    }
+    return { kind: 'conflict', remoteVersion, headRevisionId, driveContent };
+}
+
+function rememberConflict(fileId, snapshot, driveContent, driveVersion, headRevisionId, autosave) {
+    const ed = state.editor;
+    pendingConflict = {
+        fileId,
+        localContent: state.editor.fileId === fileId ? ed.editorContent || snapshot : snapshot,
+        driveContent,
+        driveVersion,
+        headRevisionId,
+    };
+    writeDraft(fileId, pendingConflict.localContent, ed.fileName);
+    if (state.editor.fileId !== fileId) return;
+    ed.status = 'conflict';
+    ed.errorMessage = 'Changed elsewhere';
+    if (autosave) {
+        showEditorToast('Changed elsewhere — tap Save to resolve', 'warn', {
+            key: 'conflict',
+            durationMs: 4000,
+        });
+        syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+        setStatus('Changed elsewhere', 'warn');
+        return;
+    }
+    syncEditorChrome(ed);
+}
+
+/**
+ * Pin the revision we just replaced. Drive cannot keepForever the live head,
+ * so this must run *after* a successful upload. Failures never block the save.
+ */
+async function pinRetiredHeadAfterSave(fileId, previousHeadId, newHeadId) {
+    if (!shouldProtectPreviousHead(previousHeadId, newHeadId)) return;
+    try {
+        await protectRevision(fileId, previousHeadId);
+        await upsertRevisionMeta({
+            fileId,
+            revisionId: previousHeadId,
+            type: 'safety',
+            label: 'Before large change',
+            createdAt: new Date().toISOString(),
+        });
+        pruneSafetyRevisions(fileId).catch((err) => {
+            console.warn('[md-editor] safety prune failed', err);
+        });
+    } catch (pinErr) {
+        console.warn('[md-editor] safety pin after save failed', pinErr);
+    }
+}
+
+/**
+ * Flush + save without blocking navigation. The open file stays in memory on
+ * Pinned / Finder / Settings — do not prompt; autosave / this write covers it.
+ */
+function persistOpenEditorInBackground() {
+    if (!hasOpenFile()) return;
+    flushCurrentEditorContent();
+    const ed = state.editor;
+    if (!ed.fileId || !ed.dirty) return;
+    if (pendingConflict || ed.status === 'conflict') return;
+    saveCurrentFile({ autosave: true }).catch((err) => {
+        console.warn('[md-editor] background save failed', err);
+    });
+}
+
 async function saveCurrentFile(options = {}) {
     const autosave = Boolean(options.autosave);
     const skipConflictCheck = Boolean(options.skipConflictCheck);
@@ -3841,6 +3966,8 @@ async function saveCurrentFileExclusive(options = {}) {
     const snapshot = ed.editorContent;
     const baselineAtStart = ed.originalContent;
     let expectedVersion = ed.driveVersion;
+    let previousHeadId = ed.headRevisionId ? String(ed.headRevisionId) : null;
+    const pinAfterUpload = isDestructiveChange(baselineAtStart, snapshot);
 
     if (!ed.dirty && !options.force) {
         if (!autosave) {
@@ -3864,167 +3991,49 @@ async function saveCurrentFileExclusive(options = {}) {
     const stillSameFile = () => state.editor.fileId === fileId;
 
     try {
-        if (!skipConflictCheck && expectedVersion != null && expectedVersion !== '') {
-            const remoteMeta = await getFileMetadata(fileId);
-            if (!stillSameFile()) return;
-            const remoteVersion =
-                remoteMeta?.version != null && remoteMeta.version !== ''
-                    ? remoteMeta.version
-                    : null;
-            if (
-                remoteVersion != null &&
-                String(remoteVersion) !== String(expectedVersion)
-            ) {
-                const driveContent = await getFileContent(fileId);
-                if (!stillSameFile()) return;
-                if (!textsEqual(driveContent, snapshot)) {
-                    pendingConflict = {
-                        fileId,
-                        localContent: stillSameFile()
-                            ? state.editor.editorContent || snapshot
-                            : snapshot,
-                        driveContent,
-                        driveVersion: remoteVersion,
-                        headRevisionId: remoteMeta?.headRevisionId
-                            ? String(remoteMeta.headRevisionId)
-                            : null,
-                    };
-                    writeDraft(fileId, pendingConflict.localContent, ed.fileName);
-                    if (stillSameFile()) {
-                        ed.status = 'conflict';
-                        ed.errorMessage = 'Changed elsewhere';
-                    }
-                    if (autosave) {
-                        showEditorToast('Changed elsewhere — tap Save to resolve', 'warn', {
-                            key: 'conflict',
-                            durationMs: 4000,
-                        });
-                        if (stillSameFile()) {
-                            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
-                        }
-                        setStatus('Changed elsewhere', 'warn');
-                        return;
-                    }
-                    if (stillSameFile()) syncEditorChrome(ed);
-                    // resolvePendingConflict runs outside this exclusive lock via saveCurrentFile.
-                    return;
-                }
-                // Same text — adopt remote version and continue.
-                expectedVersion = remoteVersion;
-                if (stillSameFile()) {
-                    applyDriveVersionMeta(ed, {
-                        version: remoteVersion,
-                        headRevisionId: remoteMeta?.headRevisionId || null,
-                    });
-                }
+        if (!skipConflictCheck) {
+            const remote = await inspectRemoteHead(
+                fileId,
+                snapshot,
+                baselineAtStart,
+                expectedVersion
+            );
+            if (remote.kind === 'switched') return;
+            if (remote.kind === 'conflict') {
+                rememberConflict(
+                    fileId,
+                    snapshot,
+                    remote.driveContent,
+                    remote.remoteVersion,
+                    remote.headRevisionId,
+                    autosave
+                );
+                return;
             }
-        }
-
-        // Before uploading a destructive edit, pin the current Drive head.
-        if (isDestructiveChange(baselineAtStart, snapshot)) {
-            let headId = stillSameFile() ? ed.headRevisionId : null;
-            try {
-                const meta = await getFileMetadata(fileId);
-                if (!stillSameFile()) return;
-                headId = meta?.headRevisionId ? String(meta.headRevisionId) : headId;
-                expectedVersion =
-                    meta?.version != null && meta.version !== ''
-                        ? meta.version
-                        : expectedVersion;
-                if (stillSameFile()) {
-                    applyDriveVersionMeta(ed, {
-                        version: meta?.version,
-                        headRevisionId: headId,
-                    });
+            if (remote.kind === 'same-as-local') {
+                applySavedBaseline(ed, snapshot);
+                applyDriveVersionMeta(ed, {
+                    version: remote.remoteVersion,
+                    headRevisionId: remote.headRevisionId,
+                });
+                autosaveContentFingerprint = ed.editorContent;
+                destructiveAutosaveDeferUntil = 0;
+                destructiveWarnedFingerprint = null;
+                if (pendingConflict?.fileId === fileId) pendingConflict = null;
+                if (autosave) {
+                    syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+                } else {
+                    syncEditorChrome(ed);
                 }
-            } catch {
-                // keep cached head if any
+                return;
             }
-
-            if (headId) {
-                try {
-                    await protectRevision(fileId, headId);
-                    await upsertRevisionMeta({
-                        fileId,
-                        revisionId: headId,
-                        type: 'safety',
-                        label: 'Before large change',
-                        createdAt: new Date().toISOString(),
-                    });
-                    pruneSafetyRevisions(fileId).catch((err) => {
-                        console.warn('[md-editor] safety prune failed', err);
-                    });
-                } catch (pinErr) {
-                    console.warn('[md-editor] safety pin before destructive save failed', pinErr);
-                    if (autosave) {
-                        if (stillSameFile()) {
-                            ed.status = 'dirty';
-                            syncEditorChrome(ed, { quiet: true, syncAutosave: true });
-                        }
-                        showEditorToast(
-                            'Autosave blocked — could not protect previous version. Tap Save.',
-                            'warn',
-                            { key: 'destructive-pin-fail', durationMs: 4000 }
-                        );
-                        return;
-                    }
-                    const proceed = window.confirm(
-                        'Could not protect the previous version on Drive before saving this large change. Save anyway?'
-                    );
-                    if (!proceed) {
-                        if (stillSameFile()) {
-                            ed.status = 'dirty';
-                            syncEditorChrome(ed);
-                        }
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Final version recheck immediately before upload (shrinks TOCTOU window).
-        if (!skipConflictCheck && expectedVersion != null && expectedVersion !== '') {
-            const preMeta = await getFileMetadata(fileId);
-            if (!stillSameFile()) return;
-            const preVersion =
-                preMeta?.version != null && preMeta.version !== '' ? preMeta.version : null;
-            if (preVersion != null && String(preVersion) !== String(expectedVersion)) {
-                const driveContent = await getFileContent(fileId);
-                if (!stillSameFile()) return;
-                if (!textsEqual(driveContent, snapshot)) {
-                    pendingConflict = {
-                        fileId,
-                        localContent: state.editor.editorContent || snapshot,
-                        driveContent,
-                        driveVersion: preVersion,
-                        headRevisionId: preMeta?.headRevisionId
-                            ? String(preMeta.headRevisionId)
-                            : null,
-                    };
-                    writeDraft(fileId, pendingConflict.localContent, ed.fileName);
-                    if (stillSameFile()) {
-                        ed.status = 'conflict';
-                        ed.errorMessage = 'Changed elsewhere';
-                        syncEditorChrome(ed);
-                    }
-                    if (!autosave) {
-                        if (stillSameFile()) syncEditorChrome(ed);
-                        // Outer saveCurrentFile will call resolvePendingConflict.
-                        return;
-                    }
-                    showEditorToast('Changed elsewhere — tap Save to resolve', 'warn', {
-                        key: 'conflict',
-                        durationMs: 4000,
-                    });
-                    return;
-                }
-                expectedVersion = preVersion;
-                if (stillSameFile()) {
-                    applyDriveVersionMeta(ed, {
-                        version: preVersion,
-                        headRevisionId: preMeta?.headRevisionId || null,
-                    });
-                }
+            expectedVersion = remote.expectedVersion;
+            if (remote.headRevisionId) previousHeadId = remote.headRevisionId;
+            if (stillSameFile() && remote.headRevisionId) {
+                applyDriveVersionMeta(ed, {
+                    version: expectedVersion,
+                    headRevisionId: remote.headRevisionId,
+                });
             }
         }
 
@@ -4049,6 +4058,24 @@ async function saveCurrentFileExclusive(options = {}) {
                 // keep whatever upload returned
             }
         }
+
+        if (pinAfterUpload && previousHeadId) {
+            await pinRetiredHeadAfterSave(fileId, previousHeadId, nextHead);
+            if (stillSameFile()) {
+                try {
+                    const afterPin = await getFileMetadata(fileId);
+                    if (afterPin?.version != null && afterPin.version !== '') {
+                        nextVersion = afterPin.version;
+                    }
+                    if (afterPin?.headRevisionId) {
+                        nextHead = String(afterPin.headRevisionId);
+                    }
+                } catch {
+                    // keep upload metadata
+                }
+            }
+        }
+
         if (stillSameFile()) {
             applyDriveVersionMeta(ed, {
                 version: nextVersion,
@@ -4209,16 +4236,9 @@ async function switchAppMode(mode) {
     const els = getEls();
     const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
     if (leavingEditor && hasOpenFile()) {
-        flushCurrentEditorContent();
-        // Format-only drift should have been rebased by flush; only warn on real edits.
-        if (state.editor.dirty) {
-            const choice = await promptUnsavedChanges(els.unsavedDialog);
-            if (choice === 'cancel') return;
-            if (choice === 'save') {
-                await saveCurrentFile();
-                if (state.editor.dirty) return;
-            }
-        }
+        // File stays loaded across tabs. Save quietly — do not block with
+        // Unsaved / conflict / pin dialogs (those stacked while a save was in flight).
+        persistOpenEditorInBackground();
     }
 
     if (leavingEditor) {
@@ -4257,6 +4277,8 @@ async function signIn() {
 
 async function signOut() {
     if (state.editor.fileId) {
+        flushCurrentEditorContent();
+        await waitForDriveWritesIdle();
         flushCurrentEditorContent();
     }
     if (state.editor.dirty) {
@@ -4802,7 +4824,7 @@ function wireEvents() {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden' && state.editor.fileId) {
             // Persist buffer/draft; don't invent dirty from format-only serialize.
-            flushCurrentEditorContent();
+            persistOpenEditorInBackground();
         }
     });
 

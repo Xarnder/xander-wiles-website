@@ -1182,7 +1182,32 @@ export function syncEditorChrome(state, options = {}) {
         els.editor.value = state.editorContent;
     }
 
-    if (els.viewEditor.hidden) {
+    const editorHidden = Boolean(els.viewEditor?.hidden);
+    // Keep the global save toast in sync even after leaving Edit (otherwise
+    // "Saving…" sticks on Pinned/Finder until the user comes back).
+    if (editorHidden) {
+        if (quiet) {
+            if (state.status === 'saved' && !state.dirty) {
+                announceEditorSaveToast('autosaved', 'Autosaved', 'ok', { durationMs: 1400 });
+            } else if (editorSaveToastKey === 'saving') {
+                resetEditorSaveToast();
+            }
+            return;
+        }
+        if (state.status === 'saving') {
+            announceEditorSaveToast('saving', 'Saving…', '', { sticky: true });
+        } else if (state.status === 'saved' && !state.dirty) {
+            announceEditorSaveToast('saved', 'Saved', 'ok', { durationMs: 2000 });
+        } else if (state.status === 'error') {
+            announceEditorSaveToast(
+                `error:${state.errorMessage || 'Error'}`,
+                state.errorMessage || 'Error',
+                'error',
+                { durationMs: 3600 }
+            );
+        } else if (editorSaveToastKey === 'saving' || editorSaveToastKey === 'dirty') {
+            resetEditorSaveToast();
+        }
         return;
     }
 

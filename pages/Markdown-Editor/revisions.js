@@ -145,6 +145,18 @@ export async function listAllRevisions(fileId, options = {}) {
 }
 
 /**
+ * Drive rejects keepForever on the live head revision. Pin only a retired head
+ * (the revision we just replaced by uploading new content).
+ * @param {string | null | undefined} previousHeadId
+ * @param {string | null | undefined} currentHeadId
+ */
+export function shouldProtectPreviousHead(previousHeadId, currentHeadId) {
+    if (!previousHeadId) return false;
+    if (currentHeadId && String(previousHeadId) === String(currentHeadId)) return false;
+    return true;
+}
+
+/**
  * Mark a revision keepForever so its media can be downloaded.
  * @param {string} fileId
  * @param {string} revisionId

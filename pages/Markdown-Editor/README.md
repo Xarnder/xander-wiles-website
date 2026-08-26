@@ -17,9 +17,10 @@ Live path: `/pages/Markdown-Editor/`
 10. **Autosaves** to Drive after **10 seconds** of inactivity (slim countdown bar under the mode switcher)
 11. **Undo / Redo** survive autosave — Edit toolbar buttons (mobile) plus ⌘/Ctrl+Z and ⌘/Ctrl+Shift+Z / Ctrl+Y
 12. **Version history** — Edit ⋮ → Version history lists Drive revisions; Preview (read-only) or Restore (uploads that text as a **new** current version; older revisions stay available)
-13. **Large-change guard** — big deletes/replacements delay autosave and pin the previous Drive head before upload
-14. **Conflict check** — if Drive’s file version changed elsewhere, Save asks Keep mine / Use Drive / Review
+13. **Large-change guard** — big deletes/replacements delay autosave, then pin the *previous* Drive revision **after** a successful save (Drive cannot pin the live head). Pin failure never blocks saving.
+14. **Conflict check** — if Drive’s file *text* changed elsewhere, Save asks Keep mine / Use Drive / Review. Version bumps from our own pins are ignored.
 15. **Named versions** — Edit ⋮ → Name this version… protects the current revision with a label in History
+16. **Pinned / Finder / Settings** keep the open file in memory and save in the background — they do not show “unsaved changes” dialogs. That prompt still appears when opening a different file or signing out.
 
 **Undo vs History:** Undo/Redo cover mistakes in the current tab. Version history covers earlier cloud uploads after reload or after a bad autosave.
 
