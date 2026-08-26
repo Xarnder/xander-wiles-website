@@ -18,6 +18,7 @@
 		startRun
 	} from '$lib/stores/run.svelte';
 	import type { StartMode } from '$lib/run/run-session';
+	import { enabledTasks } from '$lib/types/routine';
 	import { moveItem } from '$lib/utils/order';
 
 	let dragIndex = $state<number | null>(null);
@@ -31,8 +32,11 @@
 	function startRoutine(id: string, mode: StartMode = 'fresh') {
 		const routine = routines.find((item) => item.id === id);
 		if (!routine) return;
-		if (routine.tasks.length === 0) {
-			error = 'Add at least one task before starting this routine.';
+		if (enabledTasks(routine.tasks).length === 0) {
+			error =
+				routine.tasks.length === 0
+					? 'Add at least one task before starting this routine.'
+					: 'Enable at least one task before starting this routine.';
 			return;
 		}
 		if (mode === 'continue' && !routineCanContinueFromLast(routine)) {

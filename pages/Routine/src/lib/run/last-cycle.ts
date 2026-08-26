@@ -1,4 +1,4 @@
-import type { Routine } from '$lib/types/routine';
+import { enabledTasks, type Routine } from '$lib/types/routine';
 import type { ProgressSegments, TaskStatus } from '$lib/types/run';
 import { buildProgressSegments } from './run-session';
 
@@ -47,10 +47,7 @@ function uniqueLiving(ids: Iterable<string>, living: Set<string>): string[] {
  * Persist last-cycle outcomes. A continue-from-last run only includes leftover
  * tasks, so this merges into the previous record instead of replacing it.
  */
-export function saveLastCycle(
-	routineId: string,
-	statuses: Record<string, TaskStatus>
-): void {
+export function saveLastCycle(routineId: string, statuses: Record<string, TaskStatus>): void {
 	const previous = getLastCycle(routineId);
 	const completed = new Set(previous?.completedTaskIds ?? []);
 	const skipped = new Set(previous?.skippedTaskIds ?? []);
@@ -141,10 +138,7 @@ export function getOmittedTaskIds(routine: Routine): string[] {
 	const record = getLastCycle(routine.id);
 	if (!record) return [];
 	const living = new Set(routine.tasks.map((task) => task.id));
-	return uniqueLiving(
-		[...record.completedTaskIds, ...(record.skippedTaskIds ?? [])],
-		living
-	);
+	return uniqueLiving([...record.completedTaskIds, ...(record.skippedTaskIds ?? [])], living);
 }
 
 /**
@@ -152,8 +146,9 @@ export function getOmittedTaskIds(routine: Routine): string[] {
  * leftover work remains — so "from last" is useful.
  */
 export function canContinueFromLastCycle(routine: Routine): boolean {
-	if (routine.tasks.length === 0) return false;
+	const runnable = enabledTasks(routine.tasks);
+	if (runnable.length === 0) return false;
 	const omitted = new Set(getOmittedTaskIds(routine));
 	if (omitted.size === 0) return false;
-	return routine.tasks.some((task) => !omitted.has(task.id));
+	return runnable.some((task) => !omitted.has(task.id));
 }

@@ -11,8 +11,7 @@
 		oncomplete,
 		onlater,
 		onnottoday,
-		onback,
-		onexit
+		onback
 	}: {
 		canBack?: boolean;
 		canLater?: boolean;
@@ -24,7 +23,6 @@
 		onlater: () => void;
 		onnottoday: () => void;
 		onback: () => void;
-		onexit: () => void;
 	} = $props();
 
 	let flash = $state(false);
@@ -99,7 +97,6 @@
 			disabled={!canBack}
 			data-testid="back-task">Back</button
 		>
-		<button type="button" class="btn exit" onclick={onexit} data-testid="exit-run">Exit</button>
 		{#if hintsVisible}
 			<p class="hint" data-testid="keyboard-hints" aria-hidden="true">
 				Space complete · L later · N not today · ← back · Esc exit
@@ -201,8 +198,7 @@
 
 	.later,
 	.not-today,
-	.back,
-	.exit {
+	.back {
 		width: 100%;
 		height: 100%;
 		min-height: 0;
@@ -220,7 +216,7 @@
 	}
 
 	.later {
-		grid-column: 1;
+		grid-column: 1 / -1;
 		grid-row: 1;
 		background: var(--later);
 		color: var(--on-later);
@@ -229,8 +225,8 @@
 	}
 
 	.not-today {
-		grid-column: 2;
-		grid-row: 1;
+		grid-column: 1;
+		grid-row: 2;
 		background: var(--not-today);
 		color: var(--on-not-today);
 		border: none;
@@ -239,17 +235,8 @@
 	}
 
 	.back {
-		grid-column: 1;
-		grid-row: 2;
-	}
-
-	.exit {
 		grid-column: 2;
 		grid-row: 2;
-	}
-
-	.back,
-	.exit {
 		border: 1px solid var(--line);
 		background: var(--surface);
 		color: var(--ink-soft);
@@ -265,8 +252,7 @@
 	.complete:active,
 	.later:active,
 	.not-today:active,
-	.back:active,
-	.exit:active {
+	.back:active {
 		transform: scale(0.985);
 	}
 

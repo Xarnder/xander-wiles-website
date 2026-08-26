@@ -1,6 +1,6 @@
 <script lang="ts">
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
-	import type { Routine } from '$lib/types/routine';
+	import { isTaskDisabled, type Routine } from '$lib/types/routine';
 	import {
 		getRoutineTaskStats,
 		observationTotal,
@@ -46,8 +46,8 @@
 <section class="stats" data-testid="routine-stats">
 	<p class="lede">
 		First-pass choices from <strong>Start fresh</strong> cycles on this device. Complete, Later, or
-		Not Today — whichever you picked the first time through. <em>From last</em> runs are leftover
-		work, so they are not counted.
+		Not Today — whichever you picked the first time through. <em>From last</em> runs are leftover work,
+		so they are not counted.
 	</p>
 
 	{#if !hasData}
@@ -64,11 +64,7 @@
 					{cycleCount === 1 ? 'cycle' : 'cycles'} · {timesLabel(overall.total)}
 				</p>
 			</div>
-			<ProgressBar
-				segments={overall.segments}
-				label="Overall first-pass mix"
-				showPercent={false}
-			/>
+			<ProgressBar segments={overall.segments} label="Overall first-pass mix" showPercent={false} />
 			<div class="ratios" aria-label="Overall ratios">
 				<span class="ratio first">
 					<strong>{overall.percents.firstTime}%</strong>
@@ -96,13 +92,21 @@
 
 		<div class="task-stack">
 			{#each rows as row, index (row.task.id)}
-				<article class="card task" data-testid={`stats-task-${row.task.id}`}>
+				<article
+					class={['card', 'task', isTaskDisabled(row.task) && 'is-off']}
+					data-testid={`stats-task-${row.task.id}`}
+				>
 					<div class="task-head">
 						<p class="num">{index + 1}</p>
 						<div class="task-copy">
 							<h3>{row.task.title.trim() || 'Untitled task'}</h3>
 							<p class="meta">
-								{#if row.total === 0}
+								{#if isTaskDisabled(row.task)}
+									Off · skipped on run
+									{#if row.total > 0}
+										· {timesLabel(row.total)}
+									{/if}
+								{:else if row.total === 0}
 									No first-pass data yet
 								{:else}
 									{timesLabel(row.total)}
@@ -213,6 +217,17 @@
 	.task h3 {
 		font-size: 1.12rem;
 		overflow-wrap: anywhere;
+	}
+
+	.task.is-off {
+		border-style: dashed;
+		opacity: 0.78;
+	}
+
+	.task.is-off h3 {
+		color: var(--muted);
+		text-decoration: line-through;
+		text-decoration-thickness: 2px;
 	}
 
 	.meta {

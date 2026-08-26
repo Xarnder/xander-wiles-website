@@ -87,6 +87,36 @@ describe('run-session', () => {
 		expect(deriveSummary(session).percentComplete).toBe(100);
 	});
 
+	it('skips disabled tasks on a fresh run', () => {
+		const mixed: RoutineTask[] = [
+			{ id: 't1', title: 'One', order: 0 },
+			{ id: 't2', title: 'Two', order: 1, disabled: true },
+			{ id: 't3', title: 'Three', order: 2 }
+		];
+		const session = createRunSession(makeRoutine(mixed));
+		expect(session.tasks.map((task) => task.id)).toEqual(['t1', 't3']);
+		expect(session.statuses).toEqual({ t1: 'pending', t3: 'pending' });
+		expect(session.phase).toBe('running');
+	});
+
+	it('opens summary when every task is disabled', () => {
+		const session = createRunSession(
+			makeRoutine([{ id: 't1', title: 'One', order: 0, disabled: true }])
+		);
+		expect(session.tasks).toEqual([]);
+		expect(session.phase).toBe('summary');
+	});
+
+	it('still skips disabled leftover tasks when continuing from last', () => {
+		const mixed: RoutineTask[] = [
+			{ id: 't1', title: 'One', order: 0 },
+			{ id: 't2', title: 'Two', order: 1, disabled: true },
+			{ id: 't3', title: 'Three', order: 2 }
+		];
+		const session = createRunSession(makeRoutine(mixed), ['t1']);
+		expect(session.tasks.map((task) => task.id)).toEqual(['t3']);
+	});
+
 	it('starts fresh with all tasks pending', () => {
 		const session = createRunSession(makeRoutine(tasks));
 		expect(session.statuses).toEqual({ t1: 'pending', t2: 'pending', t3: 'pending' });

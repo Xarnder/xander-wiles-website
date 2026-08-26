@@ -1,4 +1,4 @@
-import type { Routine, RoutineTask } from '$lib/types/routine';
+import { isTaskDisabled, type Routine, type RoutineTask } from '$lib/types/routine';
 import type { ProgressSegments, RunSession, StartMode, TaskStatus } from '$lib/types/run';
 
 function sortedTasks(tasks: RoutineTask[]): RoutineTask[] {
@@ -17,7 +17,9 @@ export function createRunSession(
 	startMode: StartMode = 'fresh'
 ): RunSession {
 	const omitted = new Set(omitIds);
-	const tasks = sortedTasks(routine.tasks).filter((task) => !omitted.has(task.id));
+	const tasks = sortedTasks(routine.tasks).filter(
+		(task) => !isTaskDisabled(task) && !omitted.has(task.id)
+	);
 	const statuses: Record<string, TaskStatus> = {};
 	for (const task of tasks) {
 		statuses[task.id] = 'pending';
@@ -86,8 +88,7 @@ export function buildProgressSegments(
 		pending
 	]);
 	const resolved =
-		resolvedPercent ??
-		(total === 0 ? 0 : Math.round(((total - pending) / total) * 100));
+		resolvedPercent ?? (total === 0 ? 0 : Math.round(((total - pending) / total) * 100));
 
 	return {
 		total,
@@ -121,7 +122,11 @@ export function getProgressSegments(session: RunSession): ProgressSegments {
 
 	const total = session.tasks.length;
 	const resolved =
-		total === 0 ? 0 : session.phase === 'summary' ? 100 : Math.round(((total - pending) / total) * 100);
+		total === 0
+			? 0
+			: session.phase === 'summary'
+				? 100
+				: Math.round(((total - pending) / total) * 100);
 
 	return buildProgressSegments({ completed, later, skipped, pending }, resolved);
 }

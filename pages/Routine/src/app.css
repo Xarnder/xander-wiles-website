@@ -162,11 +162,13 @@ img {
 }
 
 .app-shell {
+	--shell-pad-x: 1rem;
+	--shell-pad-bottom: 1.25rem;
 	width: min(720px, 100%);
 	margin: 0 auto;
 	min-height: 100dvh;
-	padding: calc(1rem + var(--safe-top)) calc(1rem + var(--safe-right))
-		calc(1.25rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
+	padding: calc(1rem + var(--safe-top)) calc(var(--shell-pad-x) + var(--safe-right))
+		calc(var(--shell-pad-bottom) + var(--safe-bottom)) calc(var(--shell-pad-x) + var(--safe-left));
 }
 
 .app-shell.run-mode {
@@ -265,7 +267,6 @@ img {
 		grid-template-rows: minmax(0, 1fr) minmax(5.75rem, 42%);
 	}
 }
-
 
 .page-header {
 	display: flex;

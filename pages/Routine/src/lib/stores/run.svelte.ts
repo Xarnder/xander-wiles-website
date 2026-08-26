@@ -18,7 +18,7 @@ import {
 	getOmittedTaskIds,
 	saveLastCycle
 } from '$lib/run/last-cycle';
-import type { Routine } from '$lib/types/routine';
+import { enabledTasks, type Routine } from '$lib/types/routine';
 import type { ProgressSegments, RunSession, RoutineSummaryStats } from '$lib/types/run';
 import { recordFreshCycleStats } from '$lib/run/task-stats';
 
@@ -38,11 +38,7 @@ function persist(): void {
 		if (session.phase === 'summary') {
 			saveLastCycle(session.routineId, session.statuses);
 			if (session.startMode !== 'continue') {
-				recordFreshCycleStats(
-					session.routineId,
-					session.statuses,
-					session.recordedStatStatuses
-				);
+				recordFreshCycleStats(session.routineId, session.statuses, session.recordedStatStatuses);
 				session = {
 					...session,
 					recordedStatStatuses: { ...session.statuses }
@@ -100,8 +96,8 @@ export function routineLastCycleSegments(routine: Routine): ProgressSegments | n
 }
 
 export function startRun(routine: Routine, mode: StartMode = 'fresh'): void {
-	if (routine.tasks.length === 0) {
-		throw new Error('This routine has no tasks.');
+	if (enabledTasks(routine.tasks).length === 0) {
+		throw new Error('This routine has no tasks to run.');
 	}
 	const omitIds = mode === 'continue' ? getOmittedTaskIds(routine) : [];
 	session = createRunSession(routine, omitIds, mode);

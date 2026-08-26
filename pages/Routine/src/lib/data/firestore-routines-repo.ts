@@ -23,7 +23,8 @@ function fromDoc(id: string, data: DocumentData): Routine {
 				id: String(task.id),
 				title: String(task.title ?? ''),
 				description: task.description ? String(task.description) : undefined,
-				order: typeof task.order === 'number' ? task.order : index
+				order: typeof task.order === 'number' ? task.order : index,
+				disabled: task.disabled === true ? true : undefined
 			}))
 		: [];
 
@@ -48,7 +49,8 @@ function toDoc(routine: Routine): DocumentData {
 			id: task.id,
 			title: task.title,
 			description: task.description ?? null,
-			order: task.order
+			order: task.order,
+			disabled: task.disabled === true
 		})),
 		sortOrder: routine.sortOrder,
 		createdAt: routine.createdAt,

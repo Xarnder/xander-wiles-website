@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
-	import type { Routine } from '$lib/types/routine';
+	import { enabledTasks, type Routine } from '$lib/types/routine';
 	import type { ProgressSegments } from '$lib/types/run';
 
 	let {
@@ -25,7 +25,9 @@
 	} = $props();
 
 	const taskCount = $derived(routine.tasks.length);
-	const canStart = $derived(taskCount > 0);
+	const enabledCount = $derived(enabledTasks(routine.tasks).length);
+	const offCount = $derived(taskCount - enabledCount);
+	const canStart = $derived(enabledCount > 0);
 	const editHref = $derived(resolve('/routines/[id]/edit', { id: routine.id }));
 </script>
 
@@ -41,7 +43,13 @@
 				<h2>{routine.name}</h2>
 			</button>
 		{:else}
-			<a class="title-hit" href={editHref} aria-label={`Add tasks to ${routine.name}`}>
+			<a
+				class="title-hit"
+				href={editHref}
+				aria-label={taskCount > 0
+					? `Enable tasks in ${routine.name}`
+					: `Add tasks to ${routine.name}`}
+			>
 				<h2>{routine.name}</h2>
 			</a>
 		{/if}
@@ -72,8 +80,13 @@
 
 		<p class="meta">
 			{#if canStart}
-				{taskCount}
-				{taskCount === 1 ? 'task' : 'tasks'}
+				{enabledCount}
+				{enabledCount === 1 ? 'task' : 'tasks'}
+				{#if offCount > 0}
+					· {offCount} off
+				{/if}
+			{:else if taskCount > 0}
+				0 tasks · {offCount} off
 			{:else}
 				0 tasks · add tasks to start
 			{/if}
@@ -108,9 +121,9 @@
 					</button>
 				</div>
 			{:else}
-				<a class="start-btn add-tasks" href={editHref} data-testid={`start-fresh-${routine.id}`}
-					>Add tasks</a
-				>
+				<a class="start-btn add-tasks" href={editHref} data-testid={`start-fresh-${routine.id}`}>
+					{taskCount > 0 ? 'Enable' : 'Add tasks'}
+				</a>
 			{/if}
 			<a class="edit-btn" href={editHref}>Edit</a>
 		</div>
@@ -118,12 +131,7 @@
 
 	{#if lastSegments}
 		<div class="last-cycle" data-testid={`last-cycle-bar-${routine.id}`}>
-			<ProgressBar
-				segments={lastSegments}
-				label="Last cycle"
-				compact
-				showPercent={false}
-			/>
+			<ProgressBar segments={lastSegments} label="Last cycle" compact showPercent={false} />
 		</div>
 	{/if}
 </article>

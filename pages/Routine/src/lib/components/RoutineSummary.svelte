@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { scale } from 'svelte/transition';
+	import ConfettiBurst from './ConfettiBurst.svelte';
 	import ThemeToggle from './ThemeToggle.svelte';
 	import { statusCaption } from '$lib/run/summary';
 	import type { RoutineSummaryStats } from '$lib/types/run';
@@ -29,6 +30,7 @@
 </script>
 
 <section class="summary" data-testid="routine-summary">
+	<ConfettiBurst />
 	<div class="top-bar">
 		<ThemeToggle />
 	</div>
@@ -86,6 +88,7 @@
 
 <style>
 	.summary {
+		position: relative;
 		height: 100dvh;
 		max-height: 100dvh;
 		height: 100svh;

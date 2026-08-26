@@ -29,7 +29,7 @@
 		startRun
 	} from '$lib/stores/run.svelte';
 	import { getProgressSegments } from '$lib/run/run-session';
-	import type { Routine } from '$lib/types/routine';
+	import { enabledTasks, type Routine } from '$lib/types/routine';
 	import { hapticCelebrate } from '$lib/utils/haptics';
 	import { lockLandscape, unlockOrientation } from '$lib/utils/orientation';
 	import { releaseWakeLock, requestWakeLock } from '$lib/utils/wake-lock';
@@ -64,8 +64,11 @@
 				loading = false;
 				return;
 			}
-			if (found.tasks.length === 0) {
-				error = 'This routine has no tasks.';
+			if (enabledTasks(found.tasks).length === 0) {
+				error =
+					found.tasks.length === 0
+						? 'This routine has no tasks.'
+						: 'All tasks are off. Enable one in Edit, then start again.';
 				loading = false;
 				return;
 			}
@@ -126,9 +129,7 @@
 		};
 	});
 
-	const forceLandscapeRun = $derived(
-		isForceLandscape() && session?.phase === 'running'
-	);
+	const forceLandscapeRun = $derived(isForceLandscape() && session?.phase === 'running');
 	const progress = $derived(session ? getProgressSegments(session) : null);
 
 	function maybeCelebrate() {
@@ -240,10 +241,15 @@
 	>
 		<header class="chrome">
 			<div class="chrome-left">
-				<button type="button" class="exit-link" onclick={requestExit}>Exit</button>
+				<button type="button" class="exit-link" onclick={requestExit} data-testid="exit-run"
+					>Exit</button
+				>
 				<ThemeToggle />
 			</div>
-			<p class="routine-name">{session.routineName}</p>
+			<p class="routine-name" title={session.routineName} data-testid="run-routine-name">
+				{session.routineName}
+			</p>
+			<div class="chrome-spacer" aria-hidden="true"></div>
 		</header>
 
 		<div class="progress-wrap">
@@ -265,7 +271,6 @@
 				onlater={later}
 				onnottoday={notToday}
 				onback={back}
-				onexit={requestExit}
 			>
 				{#snippet lead()}
 					<RoutineTaskSlide task={activeTask} {priorStatus} />
@@ -310,17 +315,27 @@
 	}
 
 	.chrome {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(0, 1fr);
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
+		column-gap: 0.5rem;
+		min-height: 2.5rem;
 	}
 
 	.chrome-left {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		gap: 0.45rem;
 		align-items: center;
+		justify-self: start;
+	}
+
+	.chrome-left :global(.theme-toggle) {
+		flex-shrink: 0;
+	}
+
+	.chrome-spacer {
+		min-width: 0;
 	}
 
 	.exit-link {
@@ -332,16 +347,18 @@
 		color: var(--ink-soft);
 		font-weight: 600;
 		cursor: pointer;
+		flex-shrink: 0;
 	}
 
 	.routine-name {
 		margin: 0;
-		text-align: right;
+		text-align: center;
+		justify-self: center;
 		font-weight: 700;
 		color: var(--ink);
 		font-size: 0.95rem;
 		line-height: 1.25;
-		max-width: 45%;
+		max-width: 100%;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

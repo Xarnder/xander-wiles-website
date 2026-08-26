@@ -85,6 +85,32 @@ describe('last-cycle', () => {
 		expect(getOmittedTaskIds(routine)).toEqual(['t1', 't2']);
 	});
 
+	it('does not continue from last when leftover work is only disabled', () => {
+		saveLastCycle('r1', { t1: 'completed', t2: 'later', t3: 'later' });
+		const withDisabled: Routine = {
+			...routine,
+			tasks: [
+				{ id: 't1', title: 'One', order: 0 },
+				{ id: 't2', title: 'Two', order: 1, disabled: true },
+				{ id: 't3', title: 'Three', order: 2, disabled: true }
+			]
+		};
+		expect(canContinueFromLastCycle(withDisabled)).toBe(false);
+	});
+
+	it('continues from last when an enabled leftover remains', () => {
+		saveLastCycle('r1', { t1: 'completed', t2: 'later', t3: 'later' });
+		const withDisabled: Routine = {
+			...routine,
+			tasks: [
+				{ id: 't1', title: 'One', order: 0 },
+				{ id: 't2', title: 'Two', order: 1, disabled: true },
+				{ id: 't3', title: 'Three', order: 2 }
+			]
+		};
+		expect(canContinueFromLastCycle(withDisabled)).toBe(true);
+	});
+
 	it('allows continue only when some leftover work remains', () => {
 		expect(canContinueFromLastCycle(routine)).toBe(false);
 		saveLastCycle('r1', { t1: 'completed', t2: 'skipped', t3: 'later' });
