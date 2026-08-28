@@ -4676,8 +4676,13 @@ html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.m
     max-width: min(92vw, 360px);
     background: var(--bg-elevated);
     color: var(--text);
-    border-color: var(--border);
+    border: 1px solid var(--border);
     color-scheme: inherit;
+}
+
+.dialog--saving:focus,
+.dialog--saving:focus-visible {
+    outline: none;
 }
 
 .dialog--saving::backdrop {
@@ -4716,9 +4721,26 @@ html[data-theme="light"] .dialog--saving {
 }
 
 html[data-theme="oled"] .dialog--saving {
-    background: #0a0a0a;
+    background: #000000;
     color: #f2f2f2;
-    border-color: rgba(255, 255, 255, 0.12);
+    /* Full shorthand so UA/iOS system (blue) dialog chrome cannot leak through. */
+    border: 1px solid #3a3a3a;
+    outline: none;
+    box-shadow: none;
+    color-scheme: dark;
+    accent-color: #cfcfcf;
+}
+
+html[data-theme="oled"] .dialog--saving:focus,
+html[data-theme="oled"] .dialog--saving:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border-color: #3a3a3a;
+}
+
+html[data-theme="oled"] .dialog--saving .loading-spinner {
+    border-color: #2a2a2a;
+    border-top-color: #cfcfcf;
 }
 
 .saving-dialog-body {
