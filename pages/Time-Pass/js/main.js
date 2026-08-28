@@ -43,6 +43,25 @@ let seedAttempted = false;
 let filterPersistTimer = null;
 let lastA11yMinute = -1;
 let lastTimelineLayoutMs = 0;
+let splashHidden = false;
+
+function hideSplash({ delayMs = 0 } = {}) {
+  if (splashHidden) return;
+  splashHidden = true;
+  const reveal = () => {
+    document.documentElement.classList.remove('is-booting');
+    const overlay = document.getElementById('loading-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-busy', 'false');
+    overlay.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+      overlay.remove();
+    }, 600);
+  };
+  if (delayMs > 0) setTimeout(reveal, delayMs);
+  else reveal();
+}
 
 function isBenignFirestoreError(err) {
   const code = String(err?.code || '');
@@ -191,6 +210,7 @@ function attachFirestore(uid) {
     if (eventsReady && settingsReady) {
       setSyncStatus({ syncReady: true, syncing: false });
       maybeSeed(uid, latestEvents, latestSettings);
+      hideSplash({ delayMs: 500 });
     }
   };
 
@@ -209,6 +229,7 @@ function attachFirestore(uid) {
       }
       console.error(err);
       setSyncStatus({ syncing: false, syncReady: true });
+      hideSplash();
       toast(`Events sync error: ${err.message}`, 'error');
     }
   );
@@ -227,6 +248,7 @@ function attachFirestore(uid) {
         return;
       }
       console.error(err);
+      hideSplash();
       toast(`Settings sync error: ${err.message}`, 'error');
     }
   );
@@ -619,6 +641,7 @@ async function boot() {
       clearListeners();
       setSyncStatus({ syncReady: true, syncing: false });
       renderAll(Date.now());
+      hideSplash();
       return;
     }
 
@@ -630,6 +653,7 @@ async function boot() {
     if (!isFirebaseConfigured) {
       toast('Firebase config missing — cannot sync.', 'error');
       setSyncStatus({ syncReady: true, syncing: false });
+      hideSplash();
       return;
     }
 
