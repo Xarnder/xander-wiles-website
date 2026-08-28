@@ -4678,11 +4678,18 @@ html[data-list-layout="segmented"][data-list-stripe="spectrum"] .md-preview li.m
     color: var(--text);
     border: 1px solid var(--border);
     color-scheme: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .dialog--saving:focus,
-.dialog--saving:focus-visible {
-    outline: none;
+.dialog--saving:focus-visible,
+.dialog--saving:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 .dialog--saving::backdrop {
@@ -4720,27 +4727,38 @@ html[data-theme="light"] .dialog--saving {
     border-color: rgba(20, 32, 56, 0.12);
 }
 
-html[data-theme="oled"] .dialog--saving {
-    background: #000000;
-    color: #f2f2f2;
-    /* Full shorthand so UA/iOS system (blue) dialog chrome cannot leak through. */
-    border: 1px solid #3a3a3a;
-    outline: none;
-    box-shadow: none;
+html[data-theme="oled"] .dialog--saving,
+html[data-theme="oled"] .dialog--saving[data-oled-chrome],
+.dialog--saving[data-oled-chrome] {
+    background: #000000 !important;
+    color: #f2f2f2 !important;
+    /* iOS uses outline-style:auto (system blue) on focused dialogs — replace, don’t only unset. */
+    border: 1px solid #4a4a4a !important;
+    outline: 1px solid #4a4a4a !important;
+    outline-offset: 0 !important;
+    box-shadow: none !important;
     color-scheme: dark;
-    accent-color: #cfcfcf;
+    accent-color: #c8c8c8;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 html[data-theme="oled"] .dialog--saving:focus,
-html[data-theme="oled"] .dialog--saving:focus-visible {
-    outline: none;
-    box-shadow: none;
-    border-color: #3a3a3a;
+html[data-theme="oled"] .dialog--saving:focus-visible,
+html[data-theme="oled"] .dialog--saving:focus-within,
+.dialog--saving[data-oled-chrome]:focus,
+.dialog--saving[data-oled-chrome]:focus-visible,
+.dialog--saving[data-oled-chrome]:focus-within {
+    outline: 1px solid #4a4a4a !important;
+    outline-offset: 0 !important;
+    box-shadow: none !important;
+    border: 1px solid #4a4a4a !important;
 }
 
-html[data-theme="oled"] .dialog--saving .loading-spinner {
-    border-color: #2a2a2a;
-    border-top-color: #cfcfcf;
+html[data-theme="oled"] .dialog--saving .loading-spinner,
+.dialog--saving[data-oled-chrome] .loading-spinner {
+    border-color: #2a2a2a !important;
+    border-top-color: #c8c8c8 !important;
 }
 
 .saving-dialog-body {

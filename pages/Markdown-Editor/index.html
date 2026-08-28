@@ -136,7 +136,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260828-oled-save">
+    <style>
+        /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
+        html[data-theme="oled"] #saving-dialog,
+        html[data-theme="oled"] #saving-dialog:focus,
+        html[data-theme="oled"] #saving-dialog:focus-visible,
+        html[data-theme="oled"] #saving-dialog:focus-within {
+            background: #000 !important;
+            color: #f2f2f2 !important;
+            border: 1px solid #4a4a4a !important;
+            outline: 1px solid #4a4a4a !important;
+            outline-offset: 0 !important;
+            box-shadow: none !important;
+            -webkit-appearance: none;
+            appearance: none;
+            -webkit-tap-highlight-color: transparent;
+            accent-color: #c8c8c8;
+        }
+        html[data-theme="oled"] #saving-dialog .loading-spinner {
+            border-color: #2a2a2a !important;
+            border-top-color: #c8c8c8 !important;
+        }
+    </style>
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -790,7 +812,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=126"></script>
 </body>
 
 </html>

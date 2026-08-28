@@ -202,6 +202,7 @@ export function bindUi() {
     els.editItemDateError = document.getElementById('edit-item-date-error');
     els.editItemDateApply = document.getElementById('edit-item-date-apply');
     bindSavingOverlayGuards();
+    syncSavingDialogChrome();
     return els;
 }
 
@@ -827,6 +828,7 @@ export function applyTheme(theme, options = {}) {
     if (meta && options.metaColor) {
         meta.setAttribute('content', options.metaColor);
     }
+    syncSavingDialogChrome();
 }
 
 export function syncThemeControl(theme) {
@@ -983,6 +985,7 @@ function bindSavingOverlayGuards() {
                 if (savingOverlayDepth > 0 && els.savingDialog && !els.savingDialog.open) {
                     try {
                         els.savingDialog.showModal();
+                        syncSavingDialogChrome();
                     } catch {
                         // ignore
                     }
@@ -990,6 +993,28 @@ function bindSavingOverlayGuards() {
             });
         }
     });
+}
+
+/**
+ * OLED: pin greyscale chrome on the dialog node itself so iOS UA blue
+ * focus rings cannot win via ancestor selectors or cached stylesheets.
+ */
+function syncSavingDialogChrome() {
+    const dialog = els.savingDialog || document.getElementById('saving-dialog');
+    if (!dialog) return;
+    const oled = document.documentElement.getAttribute('data-theme') === 'oled';
+    dialog.toggleAttribute('data-oled-chrome', oled);
+    const props = ['border', 'outline', 'outline-offset', 'box-shadow', 'background', 'color'];
+    if (oled) {
+        dialog.style.setProperty('border', '1px solid #4a4a4a', 'important');
+        dialog.style.setProperty('outline', '1px solid #4a4a4a', 'important');
+        dialog.style.setProperty('outline-offset', '0', 'important');
+        dialog.style.setProperty('box-shadow', 'none', 'important');
+        dialog.style.setProperty('background', '#000', 'important');
+        dialog.style.setProperty('color', '#f2f2f2', 'important');
+    } else {
+        for (const prop of props) dialog.style.removeProperty(prop);
+    }
 }
 
 /**
@@ -1005,6 +1030,7 @@ export function showSavingOverlay(message) {
     if (els.app) els.app.setAttribute('inert', '');
     if (!dialog) return;
     dialog.setAttribute('aria-busy', 'true');
+    syncSavingDialogChrome();
     if (!dialog.open) {
         try {
             dialog.showModal();
@@ -1012,6 +1038,7 @@ export function showSavingOverlay(message) {
             // Already open or not in the document.
         }
     }
+    syncSavingDialogChrome();
 }
 
 export function hideSavingOverlay() {
