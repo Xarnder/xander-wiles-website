@@ -47,6 +47,8 @@ import {
   applyBirthdayCategoryIfNeeded,
 } from './categories.js';
 import { resolveEventEmoji, emojiPickerChoices, normalizeEventEmoji } from './emoji-from-title.js';
+import { setFluentEmoji } from './fluent-emoji.js';
+import { clearUnitFitCache, compactCueFloorWidth, fitTimeAmounts } from './unit-fit.js';
 import {
   formatUnitValue,
   recurrenceLabel,
@@ -1017,12 +1019,17 @@ function formatBlockCue(block, compact = false) {
   });
 }
 
-function renderUnitRow(parts, visibleUnits) {
-  const row = el('div', { className: 'unit-row' });
+function renderUnitRow(parts, visibleUnits, enabledUnits) {
+  const enabled = normalizeUnits(enabledUnits);
+  const row = el('div', {
+    className: 'unit-row',
+    'data-enabled': enabled.join(','),
+    'data-visible': (visibleUnits || []).join(','),
+  });
   for (const u of visibleUnits) {
     const v = parts[u] || 0;
     row.appendChild(
-      el('div', { className: 'unit-pill' }, [
+      el('div', { className: 'unit-pill', 'data-unit': u }, [
         el('span', { className: 'value', text: formatUnitValue(u, v) }),
         el('span', { className: 'label', text: unitLabel(u, v) }),
       ])
@@ -1055,7 +1062,7 @@ function renderDirectionRow(block, compact = false, event = null) {
   return row;
 }
 
-function renderStatExtra(block, label, compact) {
+function renderStatExtra(block, label, compact, enabledUnits) {
   const sec = el('div', { className: 'secondary-block' });
   const secRow = el('div', { className: 'direction-row' });
   if (!compact) {
@@ -1064,7 +1071,7 @@ function renderStatExtra(block, label, compact) {
   secRow.appendChild(el('span', { className: 'relative-cue', text: formatBlockCue(block, compact) }));
   sec.appendChild(secRow);
   if (!compact) {
-    sec.appendChild(renderUnitRow(block.parts, block.visibleUnits));
+    sec.appendChild(renderUnitRow(block.parts, block.visibleUnits, enabledUnits));
   }
   return sec;
 }
@@ -1128,6 +1135,7 @@ function renderCard(vm, readOnly, { thisWeek = false, pinned = false } = {}) {
     }${isPinned ? ' is-pinned' : ''}${selecting ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`,
     style: `--event-color: ${event.color}`,
     'data-id': eventId,
+    'data-units': normalizeUnits(event.units).join(','),
   });
   li._tpVm = vm;
   li.dataset.shapeKey = cardShapeKey(vm, readOnly, thisWeek, isPinned);
@@ -1148,9 +1156,6 @@ function renderCard(vm, readOnly, { thisWeek = false, pinned = false } = {}) {
 
   const titleBlock = el('div', { className: 'event-title-block' });
   const titleRow = el('div', { className: 'event-title-row' });
-  if (isPinned) {
-    titleRow.appendChild(uiIcon('pin', 'event-pin-mark'));
-  }
   titleRow.appendChild(el('h2', { className: 'event-title', text: event.name }));
   titleBlock.appendChild(titleRow);
   if (isPinned && isThisWeekVm(vm)) {
@@ -1198,13 +1203,12 @@ function renderCard(vm, readOnly, { thisWeek = false, pinned = false } = {}) {
   }
 
   const lead = el('div', { className: 'event-card-lead' });
-  lead.appendChild(
-    el('span', {
-      className: 'event-emoji',
-      text: resolveEventEmoji(event),
-      'aria-hidden': 'true',
-    })
-  );
+  const emojiEl = el('span', {
+    className: 'event-emoji',
+    'aria-hidden': 'true',
+  });
+  setFluentEmoji(emojiEl, resolveEventEmoji(event));
+  lead.appendChild(emojiEl);
   const leadBody = el('div', { className: 'event-card-lead-body' });
   leadBody.appendChild(head);
   leadBody.appendChild(renderDirectionRow(primary, compact, event));
@@ -1212,12 +1216,12 @@ function renderCard(vm, readOnly, { thisWeek = false, pinned = false } = {}) {
   li.appendChild(lead);
 
   if (!compact) {
-    li.appendChild(renderUnitRow(primary.parts, primary.visibleUnits));
+    li.appendChild(renderUnitRow(primary.parts, primary.visibleUnits, event.units));
   }
 
   if (cycleProgress && !compact) li.appendChild(renderCycleProgress(cycleProgress, false));
-  if (secondary) li.appendChild(renderStatExtra(secondary, 'Since last', compact));
-  if (sinceFirst) li.appendChild(renderStatExtra(sinceFirst, 'Since first', compact));
+  if (secondary) li.appendChild(renderStatExtra(secondary, 'Since last', compact, event.units));
+  if (sinceFirst) li.appendChild(renderStatExtra(sinceFirst, 'Since first', compact, event.units));
 
   return li;
 }
@@ -1387,10 +1391,7 @@ function patchCardInPlace(card, vm) {
   if (title && title.textContent !== vm.event.name) title.textContent = vm.event.name;
 
   const emojiEl = card.querySelector('.event-emoji');
-  if (emojiEl) {
-    const nextEmoji = resolveEventEmoji(vm.event);
-    if (emojiEl.textContent !== nextEmoji) emojiEl.textContent = nextEmoji;
-  }
+  if (emojiEl) setFluentEmoji(emojiEl, resolveEventEmoji(vm.event));
 
   const meta = card.querySelector('.event-meta');
   if (meta) {
@@ -1565,11 +1566,23 @@ function restoreScrollY(y) {
 /** Floor so short cues (e.g. "now") don't collapse cards uncomfortably. */
 const COMPACT_CARD_MIN_FLOOR_REM = 11.5;
 
-let compactColumnMinRaf = 0;
+let listMetricsRaf = 0;
+let listWidthLast = -1;
+let listResizeObs = null;
+
+function timeAmountFitOpts(compact) {
+  return {
+    compact,
+    maxUnits: cueMaxUnits(compact),
+    format: compact
+      ? normalizeCompactCueFormat(state.settings.compactCueFormat)
+      : 'words',
+  };
+}
 
 /**
- * Size compact grid columns from the longest on-screen stat row
- * (relative cue, and cue + date on the primary row).
+ * Size compact grid columns from chrome + the longest possible cue at the
+ * minimum readable scale, so scaling can fill the card without overflowing.
  */
 function syncCompactColumnMin(list) {
   if (!list) return;
@@ -1584,16 +1597,21 @@ function syncCompactColumnMin(list) {
     return;
   }
 
+  const cueOpts = {
+    maxUnits: cueMaxUnits(true),
+    format: normalizeCompactCueFormat(state.settings.compactCueFormat),
+    compact: true,
+  };
+
   let maxBody = 0;
   for (const card of list.querySelectorAll('.event-card.is-compact')) {
-    for (const row of card.querySelectorAll('.direction-row')) {
-      const cue = row.querySelector('.relative-cue');
-      if (!cue) continue;
-      const date = row.querySelector('.event-date-inline');
-      const gap = date ? parseFloat(getComputedStyle(row).columnGap || getComputedStyle(row).gap) || 0 : 0;
-      const need = cue.scrollWidth + (date ? date.scrollWidth + gap : 0);
-      if (need > maxBody) maxBody = need;
-    }
+    const enabled = normalizeUnits(card._tpVm?.event?.units);
+    const cueFloor = compactCueFloorWidth(enabled, cueOpts);
+    const date = card.querySelector('.event-date-inline');
+    const gap = date ? parseFloat(getComputedStyle(date.parentElement).columnGap || getComputedStyle(date.parentElement).gap) || 0 : 0;
+    const dateW = date ? date.getBoundingClientRect().width : 0;
+    const need = cueFloor + (date ? dateW + gap : 0);
+    if (need > maxBody) maxBody = need;
   }
 
   const pad =
@@ -1619,17 +1637,59 @@ function syncCompactColumnMin(list) {
   }
 }
 
-function scheduleCompactColumnMin(list = document.getElementById('event-list')) {
-  if (!list) return;
-  if (compactColumnMinRaf) cancelAnimationFrame(compactColumnMinRaf);
-  compactColumnMinRaf = requestAnimationFrame(() => {
-    compactColumnMinRaf = 0;
-    syncCompactColumnMin(list);
+function runListMetrics() {
+  try {
+    const list = document.getElementById('event-list');
+    const compact = state.settings.cardDensity === 'compact';
+    const opts = timeAmountFitOpts(compact);
+    if (list) {
+      syncCompactColumnMin(list);
+      void list.offsetWidth;
+      if (list.clientWidth > 0) fitTimeAmounts(list, opts);
+    }
+    const preview = document.querySelector('#modal-root .event-card-preview-list');
+    if (preview) fitTimeAmounts(preview, opts);
+  } catch (err) {
+    console.error('[Time Pass] time-amount fit failed', err);
+  }
+}
+
+function scheduleListMetrics() {
+  if (listMetricsRaf) cancelAnimationFrame(listMetricsRaf);
+  listMetricsRaf = requestAnimationFrame(() => {
+    listMetricsRaf = 0;
+    runListMetrics();
   });
+  clearTimeout(scheduleListMetrics._t);
+  scheduleListMetrics._t = setTimeout(() => runListMetrics(), 48);
+}
+
+function ensureListResizeObserver(list) {
+  if (!list || typeof ResizeObserver === 'undefined') return;
+  if (!listResizeObs) {
+    listResizeObs = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width ?? 0;
+      if (Math.abs(w - listWidthLast) < 0.5) return;
+      listWidthLast = w;
+      clearUnitFitCache();
+      scheduleListMetrics();
+    });
+  }
+  listResizeObs.disconnect();
+  listResizeObs.observe(list);
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => scheduleCompactColumnMin());
+  window.addEventListener('resize', () => {
+    clearUnitFitCache();
+    scheduleListMetrics();
+  });
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      clearUnitFitCache();
+      scheduleListMetrics();
+    });
+  }
 }
 
 export function renderList(nowMs = Date.now()) {
@@ -1654,7 +1714,8 @@ export function renderList(nowMs = Date.now()) {
   list.classList.toggle('is-compact', compact);
   if (!compact) list.style.removeProperty('--card-min-compact');
   reconcileEventList(list, nowMs, readOnly);
-  scheduleCompactColumnMin(list);
+  ensureListResizeObserver(list);
+  scheduleListMetrics();
 
   if (!vms.length) {
     empty.hidden = false;
@@ -2891,18 +2952,17 @@ export function patchListDigits(nowMs = Date.now()) {
         )
       ) {
         reconcileEventList(list, nowMs, state.mode === 'guest');
-        scheduleCompactColumnMin(list);
+        scheduleListMetrics();
         return;
       }
       patchCardInPlace(card, entry.vm);
     }
-    scheduleCompactColumnMin(list);
     return;
   }
 
   // Order/membership changed (e.g. this-week boundary) — move/reuse nodes, never wipe.
   reconcileEventList(list, nowMs, state.mode === 'guest');
-  scheduleCompactColumnMin(list);
+  scheduleListMetrics();
 }
 
 function closeModal() {
@@ -2978,6 +3038,7 @@ export function openEventCardPreview(event) {
   backdrop.appendChild(dialog);
   document.getElementById('modal-root').replaceChildren(backdrop);
   trapFocus(dialog, closeBtn);
+  scheduleListMetrics();
 }
 
 function trapFocus(modal, initialFocus) {
@@ -3126,9 +3187,9 @@ export function openEventModal(event) {
   let selectedEmoji = draft.emoji; // null = auto
   const emojiPreview = el('span', {
     className: 'emoji-picker-preview',
-    text: resolveEventEmoji(draft.name, selectedEmoji),
     'aria-hidden': 'true',
   });
+  setFluentEmoji(emojiPreview, resolveEventEmoji(draft.name, selectedEmoji));
   const emojiModeHint = el('span', {
     className: 'emoji-picker-mode',
     text: selectedEmoji ? 'Custom' : 'Auto from title',
@@ -3163,7 +3224,7 @@ export function openEventModal(event) {
 
   const refreshEmojiUi = ({ syncInput = true } = {}) => {
     const manual = selectedEmoji != null;
-    emojiPreview.textContent = resolveEventEmoji(nameInput.value, selectedEmoji);
+    setFluentEmoji(emojiPreview, resolveEventEmoji(nameInput.value, selectedEmoji));
     emojiModeHint.textContent = manual ? 'Custom' : 'Auto from title';
     emojiPanel.hidden = !manual;
     emojiPanel.setAttribute('aria-hidden', String(!manual));
@@ -3235,20 +3296,19 @@ export function openEventModal(event) {
   });
 
   for (const emo of emojiPickerChoices()) {
-    emojiGrid.appendChild(
-      el('button', {
-        type: 'button',
-        className: `emoji-swatch${selectedEmoji === emo ? ' is-active' : ''}`,
-        text: emo,
-        'data-emoji': emo,
-        'aria-label': `Emoji ${emo}`,
-        'aria-pressed': selectedEmoji === emo,
-        onClick: () => {
-          selectedEmoji = emo;
-          refreshEmojiUi();
-        },
-      })
-    );
+    const swatch = el('button', {
+      type: 'button',
+      className: `emoji-swatch${selectedEmoji === emo ? ' is-active' : ''}`,
+      'data-emoji': emo,
+      'aria-label': `Emoji ${emo}`,
+      'aria-pressed': selectedEmoji === emo,
+      onClick: () => {
+        selectedEmoji = emo;
+        refreshEmojiUi();
+      },
+    });
+    setFluentEmoji(swatch, emo);
+    emojiGrid.appendChild(swatch);
   }
 
   emojiPanel.appendChild(emojiInput);
@@ -3372,7 +3432,7 @@ export function openEventModal(event) {
   nameInput.addEventListener('input', () => {
     applyBirthdaySuggestion();
     if (selectedEmoji == null) refreshEmojiUi();
-    else emojiPreview.textContent = resolveEventEmoji(nameInput.value, selectedEmoji);
+    else setFluentEmoji(emojiPreview, resolveEventEmoji(nameInput.value, selectedEmoji));
   });
   applyBirthdaySuggestion();
   refreshEmojiUi();

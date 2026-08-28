@@ -212,22 +212,6 @@ html[data-theme="light"] .event-card {
   background: #ffffff;
 }
 
-html[data-theme="light"] .event-card.is-this-week {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
-    0 0 16px color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent),
-    0 0 28px color-mix(in srgb, var(--event-color, var(--accent)) 22%, transparent),
-    0 8px 24px rgba(15, 23, 42, 0.1);
-}
-
-html[data-theme="light"] .event-card.is-this-week.is-compact {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
-    0 0 12px color-mix(in srgb, var(--event-color, var(--accent)) 40%, transparent),
-    0 0 22px color-mix(in srgb, var(--event-color, var(--accent)) 18%, transparent),
-    0 4px 14px rgba(15, 23, 42, 0.08);
-}
-
 html[data-theme="light"] .app-header,
 html[data-theme="light"] body:not(.is-settings-view):not(.is-calculator-view) .toolbar {
   background: rgba(255, 255, 255, 0.94);
@@ -276,7 +260,6 @@ html[data-theme="light"] .btn-ghost {
 html[data-theme="light"] .chip,
 html[data-theme="light"] .search-input,
 html[data-theme="light"] .calc-input,
-html[data-theme="light"] .unit-pill,
 html[data-theme="light"] .filter-family,
 html[data-theme="light"] .calc-endpoint,
 html[data-theme="light"] .calc-offset-grid,

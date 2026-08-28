@@ -10,6 +10,7 @@ import {
   normalizeCompactCueUnits,
 } from './constants.js';
 import { resolveEventEmoji } from './emoji-from-title.js';
+import { fluentEmojiHost, setFluentEmoji } from './fluent-emoji.js';
 import { toViewModel, filterViewModels, isThisWeekVm, isHiddenFromTimeline } from './filters.js';
 import { formatDisplayDate, formatDisplayTime, formatRelativeCue } from './format.js';
 import { state } from './store.js';
@@ -448,10 +449,10 @@ function fillMarker(node, m) {
   const members = m.members || [];
   const first = members[0];
   const multi = members.length > 1;
-  const titleText = multi ? `${members.length} events` : memberLabel(first);
+  const titleText = multi ? `${members.length} events` : first?.name || 'Event';
   const cue = formatMarkerCue(first?.primary);
   const when = formatMarkerWhen(first);
-  const ariaBits = [titleText, !multi ? when : '', cue].filter(Boolean);
+  const ariaBits = [multi ? titleText : memberLabel(first), !multi ? when : '', cue].filter(Boolean);
 
   node.classList.toggle('is-cluster', multi);
   node.dataset.eventId = first?.id || '';
@@ -468,6 +469,16 @@ function fillMarker(node, m) {
   if (!title) {
     title = el('span', { className: 'timeline-marker-title' });
     titleRow.prepend(title);
+  }
+  let emojiHost = titleRow.querySelector('.timeline-marker-emoji');
+  if (multi) {
+    if (emojiHost) emojiHost.remove();
+  } else {
+    if (!emojiHost) {
+      emojiHost = el('span', { className: 'timeline-marker-emoji', 'aria-hidden': 'true' });
+      titleRow.prepend(emojiHost);
+    }
+    setFluentEmoji(emojiHost, resolveEventEmoji(first?.event));
   }
   if (title.textContent !== titleText) title.textContent = titleText;
   setDateEl(titleRow, multi ? '' : when, { after: title });
@@ -489,7 +500,8 @@ function fillMarker(node, m) {
         ...shown.map((x) => {
           const item = el('span', { className: 'timeline-marker-stack-item' });
           item.append(
-            el('span', { className: 'timeline-marker-stack-name', text: memberLabel(x) }),
+            fluentEmojiHost(resolveEventEmoji(x.event), 'timeline-marker-emoji'),
+            el('span', { className: 'timeline-marker-stack-name', text: x.name || 'Event' }),
             el('span', { className: 'timeline-marker-date', text: formatMarkerWhen(x) })
           );
           return item;
@@ -552,16 +564,22 @@ function openChooser(members, anchor) {
     const when = formatMarkerWhen(m);
     const cue = timesDiffer ? formatMarkerCue(m.primary) : '';
     chooserEl.appendChild(
-      el('button', {
-        type: 'button',
-        className: 'timeline-chooser-item',
-        role: 'option',
-        text: [m.name, when, cue].filter(Boolean).join(' · '),
-        onClick: () => {
-          closeChooser();
-          handlers.onOpenEvent(m.event);
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'timeline-chooser-item',
+          role: 'option',
+          onClick: () => {
+            closeChooser();
+            handlers.onOpenEvent(m.event);
+          },
         },
-      })
+        [
+          fluentEmojiHost(resolveEventEmoji(m.event), 'timeline-chooser-emoji'),
+          el('span', { text: [m.name, when, cue].filter(Boolean).join(' · ') }),
+        ]
+      )
     );
   }
   root.appendChild(chooserEl);

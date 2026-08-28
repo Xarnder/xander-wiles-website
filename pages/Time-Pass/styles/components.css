@@ -767,7 +767,6 @@ html[data-theme="light"] .filter-family-subhint {
   margin-top: 0.1rem;
   margin-bottom: 0.2rem;
   padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--glass-border);
 }
 
 .section-heading--this-week {
@@ -779,25 +778,20 @@ html[data-theme="light"] .filter-family-subhint {
 .section-heading--this-week:not(:first-child) {
   margin-top: 1.15rem;
   padding-top: 0.7rem;
-  border-top: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
 }
 
 .section-heading--pinned ~ .section-heading:not(.section-heading--this-week),
 .section-heading--this-week ~ .section-heading {
   margin-top: 1.05rem;
   padding-top: 0.55rem;
-  border-top: 1px solid var(--glass-border);
 }
 
 .relative-cue {
   display: inline-block;
   margin-left: 0.45rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 3px;
-  border: 1px solid color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent);
+  padding: 0;
   color: var(--text);
-  background: color-mix(in srgb, var(--event-color, var(--accent)) 16%, transparent);
-  font-size: var(--font-cue);
+  font-size: calc(var(--font-cue) * var(--cue-fit, 1));
   letter-spacing: 0.02em;
   text-transform: none;
   max-width: 100%;
@@ -859,11 +853,10 @@ html[data-theme="light"] .filter-family-subhint {
   gap: var(--space-xs);
 }
 
-/* Event cards: full accent border (not left-only) */
 .event-card {
   padding: clamp(0.45rem, 1.2vw, 0.75rem) clamp(0.5rem, 1.4vw, 0.85rem);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
-  border: 1.5px solid var(--event-color, var(--accent));
+  transition: box-shadow 0.25s ease, background 0.25s ease;
+  border: none;
   background-image: none;
   /* Opaque enough without backdrop-filter (blur + mask icons flicker on mobile scroll) */
   background: color-mix(in srgb, var(--bg-1) 88%, var(--glass-bg-strong));
@@ -875,50 +868,12 @@ html[data-theme="light"] .filter-family-subhint {
   overflow-wrap: anywhere;
 }
 
+html[data-theme='oled'] .event-card.glass {
+  border: none;
+}
+
 .event-card.is-full-colour {
   background: color-mix(in srgb, var(--event-color, var(--accent)) 32%, rgba(6, 10, 24, 0.88));
-  border-color: var(--event-color, var(--accent));
-}
-
-/* This week's pin — thicker border + outer glow so they stand out */
-.event-card.is-this-week {
-  border-width: 2.5px;
-  border-color: var(--event-color, var(--accent));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 35%, transparent),
-    0 0 18px color-mix(in srgb, var(--event-color, var(--accent)) 55%, transparent),
-    0 0 36px color-mix(in srgb, var(--event-color, var(--accent)) 28%, transparent),
-    0 8px 28px rgba(0, 0, 0, 0.35);
-}
-
-.event-card.is-this-week.is-compact {
-  border-width: 2.5px;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 35%, transparent),
-    0 0 14px color-mix(in srgb, var(--event-color, var(--accent)) 50%, transparent),
-    0 0 28px color-mix(in srgb, var(--event-color, var(--accent)) 24%, transparent),
-    0 4px 14px rgba(0, 0, 0, 0.28);
-}
-
-.event-card.is-this-week:hover {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent),
-    0 0 22px color-mix(in srgb, var(--event-color, var(--accent)) 65%, transparent),
-    0 0 42px color-mix(in srgb, var(--event-color, var(--accent)) 35%, transparent),
-    0 8px 28px rgba(0, 0, 0, 0.35);
-}
-
-.event-card.is-this-week.is-compact:hover {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-color, var(--accent)) 45%, transparent),
-    0 0 18px color-mix(in srgb, var(--event-color, var(--accent)) 60%, transparent),
-    0 0 32px color-mix(in srgb, var(--event-color, var(--accent)) 30%, transparent),
-    0 4px 14px rgba(0, 0, 0, 0.28);
-}
-
-/* User pins: marker + filled pin control — not the This week glow */
-.event-card.is-pinned {
-  border-width: 1.5px;
 }
 
 .event-title-row {
@@ -931,20 +886,6 @@ html[data-theme="light"] .filter-family-subhint {
 .event-title-row .event-title {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.event-pin-mark {
-  width: 0.85rem;
-  height: 0.85rem;
-  flex-shrink: 0;
-  margin-top: 0.18rem;
-  color: var(--accent);
-}
-
-.event-card.is-compact .event-pin-mark {
-  width: 0.78rem;
-  height: 0.78rem;
-  margin-top: 0.12rem;
 }
 
 .event-also-week {
@@ -993,10 +934,10 @@ html[data-theme="light"] .filter-family-subhint {
 
 .event-card.is-compact .relative-cue {
   margin-left: 0;
-  font-size: 0.72rem;
-  padding: 0.08rem 0.35rem;
-  flex: 0 0 auto;
-  min-width: max-content;
+  font-size: calc(0.72rem * var(--cue-fit, 1));
+  padding: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
@@ -1014,7 +955,7 @@ html[data-theme="light"] .filter-family-subhint {
 
 .event-card.is-compact .secondary-block {
   margin-top: 0.2rem;
-  padding-top: 0.2rem;
+  padding-top: 0;
 }
 
 .event-card.is-compact .icon-btn {
@@ -1100,6 +1041,21 @@ html[data-theme="light"] .filter-family-subhint {
   line-height: 1;
   text-align: center;
   user-select: none;
+}
+
+.fluent-emoji {
+  display: block;
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.event-emoji .fluent-emoji {
+  width: 100%;
+  height: auto;
+  max-width: var(--event-emoji-size);
+  max-height: var(--event-emoji-size);
 }
 
 /* Keep unit pills / extra stats under the text column (aligned with first cue) */
@@ -1301,28 +1257,35 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
 }
 
 .unit-row {
+  --unit-value-size: 1.05rem;
+  --unit-label-size: 0.62rem;
+  --unit-gap: 0.4rem;
+  --unit-fit: 1;
   display: flex;
   flex-wrap: nowrap;
-  gap: 0.4rem;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: calc(var(--unit-gap) * var(--unit-fit, 1));
   margin-top: 0.5rem;
+  width: 100%;
   min-width: 0;
 }
 
 .unit-pill {
-  min-width: max-content;
-  padding: 0.35rem 0.5rem;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  text-align: center;
+  box-sizing: content-box;
   flex: 0 0 auto;
+  width: calc(var(--pill-w, 2.5rem) * var(--unit-fit, 1));
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: center;
   overflow-wrap: normal;
   word-break: normal;
 }
 
 .unit-pill .value {
   display: block;
-  font-size: clamp(0.95rem, 0.85rem + 0.45vw, 1.15rem);
+  font-size: calc(var(--unit-value-size) * var(--unit-fit, 1));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
@@ -1333,7 +1296,7 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
 
 .unit-pill .label {
   display: block;
-  font-size: 0.62rem;
+  font-size: calc(var(--unit-label-size) * var(--unit-fit, 1));
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -1345,14 +1308,12 @@ html[data-theme='light'] .icon-btn--accent:focus-visible {
 
 .secondary-block {
   margin-top: 0.55rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0;
 }
 
 .cycle-progress {
   margin-top: 0.55rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0;
 }
 
 .cycle-progress.is-compact {
@@ -2218,7 +2179,8 @@ html[data-theme="light"] .cue-format-option {
 }
 
 .event-card.is-selectable:hover {
-  border-color: color-mix(in srgb, var(--event-color, var(--accent)) 70%, #fff);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--event-color, var(--accent)) 50%, transparent),
+    0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 .event-card.is-selected {
@@ -2629,8 +2591,17 @@ html[data-theme='light'] .event-history {
   font-size: 1.55rem;
   line-height: 1;
   width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
   text-align: center;
   user-select: none;
+}
+
+.emoji-picker-preview .fluent-emoji,
+.emoji-swatch .fluent-emoji {
+  width: 1.35em;
+  height: 1.35em;
 }
 
 .emoji-picker-mode {
@@ -3469,7 +3440,6 @@ input[type="range"]::-webkit-slider-runnable-track {
 
   .event-card {
     padding: 0.4rem 0.5rem 0.45rem;
-    border-width: 1px;
   }
 
   .event-card.is-compact {
@@ -3565,34 +3535,33 @@ input[type="range"]::-webkit-slider-runnable-track {
 
   .relative-cue {
     margin-left: 0.2rem;
-    padding: 0.05rem 0.3rem;
-    font-size: 0.62rem;
+    padding: 0;
+    font-size: calc(0.62rem * var(--cue-fit, 1));
   }
 
   .unit-row {
-    gap: 0.25rem;
+    --unit-value-size: 0.95rem;
+    --unit-label-size: 0.55rem;
+    --unit-gap: 0.25rem;
+    gap: calc(var(--unit-gap) * var(--unit-fit, 1));
     margin-top: 0.3rem;
   }
 
   .unit-pill {
-    min-width: 2.6rem;
-    padding: 0.2rem 0.28rem;
-    border-radius: 3px;
+    padding: 0;
   }
 
   .unit-pill .value {
-    font-size: 0.92rem;
     line-height: 1.1;
   }
 
   .unit-pill .label {
-    font-size: 0.55rem;
     letter-spacing: 0.04em;
   }
 
   .secondary-block {
     margin-top: 0.35rem;
-    padding-top: 0.3rem;
+    padding-top: 0;
   }
 
   .empty-state {
@@ -3722,14 +3691,6 @@ input[type="range"]::-webkit-slider-runnable-track {
     width: 1rem;
     height: 1rem;
   }
-
-  .unit-pill {
-    min-width: 2.35rem;
-  }
-
-  .unit-pill .value {
-    font-size: 0.85rem;
-  }
 }
 
 /* Short / landscape phones — keep chrome compact */
@@ -3789,15 +3750,23 @@ input[type="range"]::-webkit-slider-runnable-track {
   }
 }
 
-/* Narrow / mobile cards: allow pills to wrap when a single column is still tight */
-@media (max-width: 640px) {
-  .unit-row {
-    flex-wrap: wrap;
-  }
+.unit-row--probe {
+  margin: 0 !important;
+  width: max-content;
+  --unit-fit: 1;
+}
 
-  .unit-pill {
-    flex: 0 1 auto;
-  }
+.unit-row--probe .unit-pill {
+  width: max-content;
+}
+
+.unit-fit-probe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Prefer denser cards when container is narrow */

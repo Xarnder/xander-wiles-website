@@ -142,7 +142,7 @@
 .timeline-marker-title-row,
 .timeline-marker-stack-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.45rem;
   width: 100%;
   max-width: min(100%, 26rem);
@@ -214,6 +214,23 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.timeline-marker-emoji,
+.timeline-chooser-emoji,
+.fluent-emoji-host {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 1.15rem;
+}
+
+.timeline-marker-emoji .fluent-emoji,
+.timeline-chooser-emoji .fluent-emoji {
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .timeline-marker-stack-item.is-more {
@@ -357,6 +374,9 @@
   min-height: 44px;
   border-radius: 8px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .timeline-chooser-item:hover,

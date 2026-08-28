@@ -134,6 +134,12 @@ for (const item of items) {
             }
             if (sourcePath.includes('.env')) return false;
             if (
+                sourcePath.includes(`${path.sep}node_modules${path.sep}`) ||
+                sourcePath.endsWith(`${path.sep}node_modules`)
+            ) {
+                return false;
+            }
+            if (
                 rel === 'secrets' ||
                 rel.startsWith('secrets' + path.sep) ||
                 sourcePath.includes(`${path.sep}secrets${path.sep}`) ||
