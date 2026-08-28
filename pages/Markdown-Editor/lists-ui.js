@@ -24,6 +24,7 @@ import {
     sortItemsByScore,
     stripMdlistAgentNotes,
 } from './lists.js';
+import { attachPointerDrag } from './list-drag.js';
 import {
     extractMarkdownHeadings,
     joinMarkdownBlocks,
@@ -3584,61 +3585,4 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
     body.append(textInput, meta, moveRow);
     li.append(rank, handle, body);
     return li;
-}
-
-function attachPointerDrag(handle, row, { onDropIndex }) {
-    let startY = 0;
-    let dragging = false;
-    let pointerId = null;
-
-    const onPointerDown = (event) => {
-        if (event.button != null && event.button !== 0) return;
-        dragging = true;
-        pointerId = event.pointerId;
-        startY = event.clientY;
-        handle.setPointerCapture(pointerId);
-        row.classList.add('is-dragging');
-        event.preventDefault();
-    };
-
-    const onPointerMove = (event) => {
-        if (!dragging || event.pointerId !== pointerId) return;
-        const dy = event.clientY - startY;
-        row.style.transform = `translateY(${dy}px)`;
-    };
-
-    const onPointerUp = (event) => {
-        if (!dragging || event.pointerId !== pointerId) return;
-        dragging = false;
-        row.classList.remove('is-dragging');
-        row.style.transform = '';
-        try {
-            handle.releasePointerCapture(pointerId);
-        } catch {
-            // ignore
-        }
-        pointerId = null;
-
-        const listEl = row.parentElement;
-        if (!listEl) return;
-        const siblings = [...listEl.querySelectorAll(':scope > .mdlist-item')];
-        const y = event.clientY;
-        let newIndex = siblings.length - 1;
-        for (let i = 0; i < siblings.length; i += 1) {
-            const rect = siblings[i].getBoundingClientRect();
-            const mid = rect.top + rect.height / 2;
-            if (y < mid) {
-                newIndex = i;
-                break;
-            }
-        }
-        const fromIndex = siblings.indexOf(row);
-        if (fromIndex < 0) return;
-        if (newIndex !== fromIndex) onDropIndex(newIndex);
-    };
-
-    handle.addEventListener('pointerdown', onPointerDown);
-    handle.addEventListener('pointermove', onPointerMove);
-    handle.addEventListener('pointerup', onPointerUp);
-    handle.addEventListener('pointercancel', onPointerUp);
 }

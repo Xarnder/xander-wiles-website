@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v126';
+const CACHE_NAME = 'md-editor-shell-v127';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -14,6 +14,7 @@ const ASSETS = [
     './ui.js',
     './lists.js',
     './lists-ui.js',
+    './list-drag.js',
     './list-import.js',
     './markdown.js',
     './search.js',
