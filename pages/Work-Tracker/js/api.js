@@ -15,6 +15,17 @@ import {
 } from './savingPots.js';
 import { createSeedBudgetPlan, sanitizeBudgetPlan, validateBudgetPlan } from './budgeting.js';
 
+function firestoreWriteErrorMessage(error, fallback) {
+    const code = error?.code || '';
+    if (code === 'permission-denied') {
+        return 'Firestore blocked this save. The live security rules may not allow this yet.';
+    }
+    if (code === 'unavailable' || code === 'deadline-exceeded') {
+        return 'Could not reach Firestore. Please check your internet connection and try again.';
+    }
+    return error?.message || fallback;
+}
+
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
 }
@@ -152,7 +163,7 @@ export async function addPayPeriod(periodData) {
         return true;
     } catch (e) {
         console.error("Debug: Error adding pay period: ", e);
-        showAlert("Save Error", "Error saving pay! Please check your internet connection.");
+        showAlert("Save Error", firestoreWriteErrorMessage(e, "Error saving pay."));
         return false;
     }
 }
@@ -169,7 +180,7 @@ export async function updatePayPeriod(periodId, periodData) {
         return true;
     } catch (e) {
         console.error("Debug: Error updating pay period: ", e);
-        showAlert("Update Error", "Error updating pay! Please check your internet connection.");
+        showAlert("Update Error", firestoreWriteErrorMessage(e, "Error updating pay."));
         return false;
     }
 }
@@ -183,7 +194,7 @@ export async function deletePayPeriod(periodId) {
         return true;
     } catch (e) {
         console.error("Debug: Error deleting pay period: ", e);
-        showAlert("Error", "There was an error deleting this pay arrangement.");
+        showAlert("Error", firestoreWriteErrorMessage(e, "There was an error deleting this pay arrangement."));
         return false;
     }
 }
