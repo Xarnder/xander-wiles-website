@@ -1,6 +1,6 @@
 import { createSeedBudgetPlan, sanitizeBudgetPlan, sanitizeBudgetSnapMode, BUDGET_SNAP_MODES } from './budgeting.js';
 
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -63,7 +63,20 @@ function loadWidgetOrder() {
 
         const knownSavedItems = savedOrder.filter(id => DEFAULT_WIDGET_ORDER.includes(id));
         const missingItems = DEFAULT_WIDGET_ORDER.filter(id => !knownSavedItems.includes(id));
-        return [...knownSavedItems, ...missingItems];
+        const merged = [...knownSavedItems];
+
+        missingItems.forEach((id) => {
+            const defaultIndex = DEFAULT_WIDGET_ORDER.indexOf(id);
+            const preceding = DEFAULT_WIDGET_ORDER.slice(0, defaultIndex);
+            let insertAt = 0;
+            preceding.forEach((previousId) => {
+                const index = merged.indexOf(previousId);
+                if (index >= insertAt) insertAt = index + 1;
+            });
+            merged.splice(insertAt, 0, id);
+        });
+
+        return merged;
     } catch (e) {
         console.warn('Debug: Could not parse widget order from storage', e);
         return DEFAULT_WIDGET_ORDER;
@@ -229,6 +242,8 @@ export const state = {
     calendarEditMode: localStorage.getItem('work_tracker_calendar_edit_mode') === 'break' ? 'break' : 'work',
     rawSessions: [],
     allSessions: [],
+    rawPayPeriods: [],
+    allPayPeriods: [],
     rawBreaks: [],
     allBreaks: [],
     breaksViewDate: (() => {
@@ -353,6 +368,11 @@ export function updatePercentageCuts(newCuts) {
 export function updateTimeCostItems(newItems) {
     state.timeCostItems = newItems;
     return state.timeCostItems;
+}
+
+export function updatePayPeriods(newPeriods) {
+    state.rawPayPeriods = Array.isArray(newPeriods) ? newPeriods : [];
+    return state.rawPayPeriods;
 }
 
 export function updateTcSavedItemFilters(filters) {

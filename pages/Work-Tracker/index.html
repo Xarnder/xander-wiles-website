@@ -156,6 +156,21 @@
                     </div>
                 </section>
 
+                <!-- Pay Widget -->
+                <section class="card pay-widget" id="widget-pay">
+                    <div class="pay-widget-header">
+                        <div class="pay-widget-header-copy">
+                            <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Pay <span class="live-indicator pay-aware-live hidden"><span class="live-dot"></span>Live</span></h2>
+                            <p class="pay-widget-subtitle">Enter salary by hour, day, week, month, or year. Widgets use this without logging each day.</p>
+                        </div>
+                        <button id="add-pay-period-btn" class="btn-outline btn-small" type="button">+ Add Pay</button>
+                    </div>
+                    <div id="pay-widget-summary" class="pay-widget-summary">
+                        <p class="loading-text">Add a pay arrangement to start tracking salary.</p>
+                    </div>
+                    <div id="pay-period-list" class="pay-period-list"></div>
+                </section>
+
                 <!-- Breaks Widget -->
                 <section class="card breaks-widget" id="widget-breaks">
                     <div class="breaks-widget-header">
@@ -193,7 +208,7 @@
                 <!-- Live Money Counter -->
                 <section class="card money-counter-widget" id="widget-money-counter">
                     <div class="money-counter-header">
-                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Live Money Counter <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Live Money Counter <span class="live-indicator pay-aware-live hidden"><span class="live-dot"></span>Live</span></h2>
                         <div class="money-counter-header-actions">
                             <div class="money-counter-mode-toggle" role="group" aria-label="Live money counter amount mode">
                                 <button type="button" class="money-counter-mode-btn active" data-money-counter-mode="before">Before</button>
@@ -237,7 +252,7 @@
                     <div class="sp-widget-header">
                         <div class="sp-widget-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Saving Pots</h2>
-                            <p class="sp-widget-subtitle">Virtual savings from tracked earnings</p>
+                            <p class="sp-widget-subtitle">Virtual savings from tracked sessions and pay</p>
                         </div>
                         <span class="sp-widget-scope-badge" id="sp-widget-scope-label">All time</span>
                     </div>
@@ -443,7 +458,7 @@
                     </div>
                     <p class="calendar-legend" id="calendar-legend">
                         <span class="calendar-legend-dot" aria-hidden="true"></span>
-                        Blue dot means the day includes break time
+                        Blue dot means the day includes break time. Green pay amounts come from your Pay arrangements.
                     </p>
                     <div class="calendar-grid">
                         <!-- Calendar days will be injected via JS -->
@@ -569,7 +584,8 @@
                 <section class="card time-cost-widget" style="margin-bottom: 25px;">
                     <h2 class="widget-title">Earning Settings</h2>
                     <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.95rem;">
-                        Configure your global earning rate and average daily work hours.
+                        Configure your global earning rate and average daily work hours. Hourly pay in the Pay widget uses these hours to spread across the week.
+                        <span id="tc-pay-derived-hint" class="tc-pay-derived-hint hidden"></span>
                         <span id="tc-cuts-summary" style="display: block; margin-top: 8px; color: var(--text-primary); font-size: 0.95rem;">
                             Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-0.0%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">£20.00/h</span>)
                         </span>
@@ -1000,6 +1016,70 @@
                 <div class="settings-footer" style="display: flex; gap: 10px; width: 100%;">
                     <button id="delete-session-btn" class="btn-outline btn-delete-modal" style="border-color: var(--accent-red); color: var(--accent-red); margin-right: auto; padding: 10px 18px; display: none;">Delete</button>
                     <button id="save-session-btn" class="btn-primary" style="flex: 1;">Save Session</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pay Period Modal (Add/Edit) -->
+        <div id="pay-period-modal" class="modal-overlay hidden">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h2 id="pay-period-modal-title">Add Pay</h2>
+                    <button id="close-pay-period-modal" class="btn-text" type="button">&times;</button>
+                </div>
+
+                <input type="hidden" id="edit-pay-period-id" value="">
+
+                <div class="input-group">
+                    <label for="pay-period-amount">Amount (<span class="currency-symbol">£</span>)</label>
+                    <input type="number" id="pay-period-amount" min="0" step="0.01" placeholder="2000">
+                </div>
+
+                <div class="input-group">
+                    <label for="pay-period-scale">Paid every</label>
+                    <select id="pay-period-scale" class="currency-dropdown">
+                        <option value="hour">Hour</option>
+                        <option value="day">Day</option>
+                        <option value="week">Week</option>
+                        <option value="month" selected>Month</option>
+                        <option value="year">Year</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="pay-period-name">Label (Optional)</label>
+                    <input type="text" id="pay-period-name" placeholder="e.g. Main salary">
+                </div>
+
+                <div class="input-group">
+                    <label for="pay-period-start">Starts</label>
+                    <input type="date" id="pay-period-start">
+                </div>
+
+                <div class="input-group">
+                    <label for="pay-period-end">Ends (Optional)</label>
+                    <input type="date" id="pay-period-end">
+                    <p class="settings-help-text">Leave empty for ongoing pay. Stats and the money counter accrue through the current period only — no need to tap each day.</p>
+                </div>
+
+                <div class="input-group">
+                    <label for="pay-period-company">Company (Optional)</label>
+                    <input type="text" id="pay-period-company" placeholder="e.g. Acme Corp" style="margin-bottom: 8px;">
+                    <select id="pay-period-company-select" class="touch-picker">
+                        <option value="">Or pick saved...</option>
+                    </select>
+                </div>
+
+                <p id="pay-period-preview" class="time-range-preview" aria-live="polite"></p>
+
+                <div class="input-group" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                    <label for="pay-period-sync-tc" style="margin-bottom: 0;">Update Time Cost hourly rate</label>
+                    <input type="checkbox" id="pay-period-sync-tc" checked style="width: 20px; height: 20px; cursor: pointer;">
+                </div>
+
+                <div class="settings-footer" style="display: flex; gap: 10px; width: 100%;">
+                    <button id="delete-pay-period-btn" class="btn-outline btn-delete-modal" style="border-color: var(--accent-red); color: var(--accent-red); margin-right: auto; padding: 10px 18px; display: none;" type="button">Delete</button>
+                    <button id="save-pay-period-btn" class="btn-primary" style="flex: 1;" type="button">Save Pay</button>
                 </div>
             </div>
         </div>

@@ -2880,6 +2880,144 @@ button:active {
     }
 }
 
+.pay-widget-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.pay-widget-header-copy {
+    min-width: 0;
+}
+
+.pay-widget-subtitle {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.pay-widget-summary {
+    padding: 16px 18px;
+    border: 1px solid rgba(0, 230, 118, 0.22);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(56, 189, 248, 0.08));
+    margin-bottom: 16px;
+}
+
+.pay-widget-summary.is-empty {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.pay-summary-label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+}
+
+.pay-summary-value {
+    display: block;
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: var(--accent-green);
+    line-height: 1.15;
+}
+
+.pay-summary-meta {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+.pay-period-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pay-period-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.pay-period-item.is-ended {
+    opacity: 0.7;
+}
+
+.pay-period-copy {
+    min-width: 0;
+}
+
+.pay-period-name {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.pay-period-rate {
+    display: block;
+    color: var(--accent-green);
+    font-weight: 700;
+}
+
+.pay-period-meta {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.pay-period-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.tc-pay-derived-hint {
+    display: block;
+    margin-top: 10px;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.tc-pay-derived-hint .btn-small {
+    margin-left: 8px;
+}
+
+.calendar-day.has-pay:not(.has-work):not(.has-break) {
+    background: rgba(0, 230, 118, 0.08);
+    color: var(--text-primary);
+    border: 1px solid rgba(0, 230, 118, 0.16);
+}
+
+.pay-amount-indicator {
+    font-size: clamp(0.52rem, 2vw, 0.68rem);
+    color: var(--accent-green);
+    margin-top: 4px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.calendar-week-total.has-pay-total:not(.has-work-total) {
+    background: rgba(0, 230, 118, 0.1);
+    border-color: rgba(0, 230, 118, 0.22);
+    color: var(--accent-green);
+}
+
 .saving-pots-widget {
     position: relative;
     overflow: hidden;
@@ -3893,8 +4031,13 @@ body.dashboard-density-spacious .sp-widget-hero {
         max-height: min(560px, 68vh);
     }
 
-    .cut-widget-header {
+    .cut-widget-header,
+    .pay-widget-header {
         align-items: stretch;
+        flex-direction: column;
+    }
+
+    .pay-period-item {
         flex-direction: column;
     }
 
@@ -4327,7 +4470,14 @@ body.dashboard-density-spacious .sp-widget-hero {
     cursor: pointer;
 }
 
-.calendar-day:not(.empty):not(.has-work):not(.has-break):hover {
+.calendar-day.has-pay:not(.has-work):not(.has-break):hover {
+    background: rgba(0, 230, 118, 0.16);
+    box-shadow: 0 5px 15px rgba(0, 230, 118, 0.16);
+    border-color: rgba(0, 230, 118, 0.32);
+    z-index: 2;
+}
+
+.calendar-day:not(.empty):not(.has-work):not(.has-break):not(.has-pay):hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
     box-shadow: 0 5px 15px rgba(255, 255, 255, 0.05);

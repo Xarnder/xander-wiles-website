@@ -63,6 +63,29 @@ test('computeEarningsPool uses all-time break-adjusted earnings after cuts', () 
     assert.equal(pool, roundMoney(150 * 0.9));
 });
 
+test('computeEarningsPool includes accrued monthly pay', () => {
+    const now = new Date('2026-08-16T00:00:00');
+    const payPeriods = [{
+        id: 'salary',
+        amount: 2000,
+        scale: 'month',
+        startDate: '2026-08-01',
+        dailyHours: 8,
+        workingDaysPerWeek: 5
+    }];
+
+    const pool = computeEarningsPool({
+        sessions: [],
+        breaks: [],
+        payPeriods,
+        poolScope: POOL_SCOPES.CALENDAR_MONTH,
+        percentageCuts: [],
+        now
+    });
+
+    assert.equal(pool, roundMoney((2000 * 15) / 31));
+});
+
 test('computeEarningsPool scopes earnings to rolling window', () => {
     const now = new Date('2026-07-13T12:00:00');
     const recentStart = now.getTime() - HOUR_MS;

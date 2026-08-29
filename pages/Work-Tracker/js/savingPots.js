@@ -3,6 +3,7 @@ import {
     getEffectiveSessionMetrics,
     getStartOfWeekDate
 } from './utils.js';
+import { computePayEarningsInWindow } from './payPeriods.js';
 
 export const POOL_SCOPES = {
     ALL_TIME: 'all_time',
@@ -94,6 +95,7 @@ function sumBreakAdjustedEarningsBeforeCuts(sessions, breaks) {
 export function computeEarningsPool({
     sessions = [],
     breaks = [],
+    payPeriods = [],
     poolScope = POOL_SCOPES.ALL_TIME,
     startOfWeek = 0,
     percentageCuts = [],
@@ -101,13 +103,16 @@ export function computeEarningsPool({
 } = {}) {
     const scope = sanitizePoolScope(poolScope);
     let beforeCutsTotal = 0;
+    const payOptions = { startOfWeek };
 
     if (scope === POOL_SCOPES.ALL_TIME) {
-        beforeCutsTotal = sumBreakAdjustedEarningsBeforeCuts(sessions, breaks);
+        beforeCutsTotal = sumBreakAdjustedEarningsBeforeCuts(sessions, breaks)
+            + computePayEarningsInWindow(payPeriods, null, now, now, payOptions);
     } else {
         const { start, end } = getPoolScopeWindow(scope, now, startOfWeek);
         const totals = calculateRollingPeriodTotals(sessions, start, end, breaks);
-        beforeCutsTotal = Number(totals.totalEarnings) || 0;
+        beforeCutsTotal = (Number(totals.totalEarnings) || 0)
+            + computePayEarningsInWindow(payPeriods, start, end, now, payOptions);
     }
 
     return roundMoney(applyPercentageCuts(beforeCutsTotal, percentageCuts));
@@ -138,6 +143,7 @@ export function getClosestGoal(items = []) {
 export function computeSavingPotState({
     sessions = [],
     breaks = [],
+    payPeriods = [],
     timeCostItems = [],
     poolScope = POOL_SCOPES.ALL_TIME,
     startOfWeek = 0,
@@ -148,6 +154,7 @@ export function computeSavingPotState({
     const earningsPool = computeEarningsPool({
         sessions,
         breaks,
+        payPeriods,
         poolScope: scope,
         startOfWeek,
         percentageCuts,
@@ -255,6 +262,7 @@ export function computeSavingPotStateFromAppState(appState, now = new Date()) {
     return computeSavingPotState({
         sessions: appState?.rawSessions || [],
         breaks: appState?.allBreaks || [],
+        payPeriods: appState?.rawPayPeriods || [],
         timeCostItems: appState?.timeCostItems || [],
         poolScope: appState?.savingPotPoolScope,
         startOfWeek: appState?.startOfWeek ?? 0,

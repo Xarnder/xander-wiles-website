@@ -1,8 +1,9 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
 import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
+import { computePayEarningsInWindow, filterPayPeriods, serializePayPeriod } from './payPeriods.js';
 import {
     sanitizePoolScope,
     computeSavingPotStateFromAppState,
@@ -130,6 +131,84 @@ export async function deleteSession(sessionId) {
         console.error("Debug: Error deleting document: ", e);
         showAlert("Error", "There was an error deleting this session.");
     }
+}
+
+function getPayPeriodsRef() {
+    return collection(db, "users", state.currentUser.uid, "payPeriods");
+}
+
+export async function addPayPeriod(periodData) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before saving pay.");
+        return false;
+    }
+
+    try {
+        await addDoc(getPayPeriodsRef(), {
+            ...serializePayPeriod(periodData),
+            createdAt: serverTimestamp()
+        });
+        console.log("Debug: Pay period saved to Firebase");
+        return true;
+    } catch (e) {
+        console.error("Debug: Error adding pay period: ", e);
+        showAlert("Save Error", "Error saving pay! Please check your internet connection.");
+        return false;
+    }
+}
+
+export async function updatePayPeriod(periodId, periodData) {
+    if (!state.currentUser || !periodId) return false;
+
+    try {
+        await updateDoc(doc(db, "users", state.currentUser.uid, "payPeriods", periodId), {
+            ...serializePayPeriod(periodData),
+            updatedAt: serverTimestamp()
+        });
+        console.log("Debug: Pay period updated", periodId);
+        return true;
+    } catch (e) {
+        console.error("Debug: Error updating pay period: ", e);
+        showAlert("Update Error", "Error updating pay! Please check your internet connection.");
+        return false;
+    }
+}
+
+export async function deletePayPeriod(periodId) {
+    if (!state.currentUser || !periodId) return false;
+
+    try {
+        await deleteDoc(doc(db, "users", state.currentUser.uid, "payPeriods", periodId));
+        console.log("Debug: Pay period deleted", periodId);
+        return true;
+    } catch (e) {
+        console.error("Debug: Error deleting pay period: ", e);
+        showAlert("Error", "There was an error deleting this pay arrangement.");
+        return false;
+    }
+}
+
+export function loadPayPeriods() {
+    if (!state.currentUser) return;
+
+    const q = query(getPayPeriodsRef(), orderBy("startDate", "desc"));
+
+    onSnapshot(q, (querySnapshot) => {
+        const periods = [];
+        querySnapshot.forEach((docSnap) => {
+            periods.push({ id: docSnap.id, ...docSnap.data() });
+        });
+
+        updatePayPeriods(periods);
+        applyGlobalFilters();
+        import('./ui.js').then((module) => {
+            module.renderPayWidget?.();
+            module.syncPayAccrualTimer?.();
+        });
+        console.log("Debug: Pay periods updated from Firebase");
+    }, (error) => {
+        console.error("Debug: Pay periods snapshot error", error);
+    });
 }
 
 export async function addCustomBreak(breakData) {
@@ -637,17 +716,21 @@ export function renderDashboardData() {
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const breaks = state.allBreaks;
 
+    const payOptions = { startOfWeek: state.startOfWeek };
+
     const dailyTotals = calculateCalendarPeriodTotals(state.allSessions, startOfDay, breaks, endOfDay);
     totalDailyMs = dailyTotals.totalMs;
     totalDailyGrossMs = dailyTotals.totalGrossMs;
     totalDailyBreakMs = dailyTotals.totalBreakMs;
-    totalDailyEarnings = dailyTotals.totalEarnings;
+    totalDailyEarnings = dailyTotals.totalEarnings
+        + computePayEarningsInWindow(state.allPayPeriods, startOfDay, endOfDay, now, payOptions);
 
     const weeklyTotals = calculateRollingPeriodTotals(state.allSessions, startOfWeek, endOfWeek, breaks);
     totalWeeklyMs = weeklyTotals.totalMs;
     totalWeeklyGrossMs = weeklyTotals.totalGrossMs;
     totalWeeklyBreakMs = weeklyTotals.totalBreakMs;
-    totalWeeklyEarnings = weeklyTotals.totalEarnings;
+    totalWeeklyEarnings = weeklyTotals.totalEarnings
+        + computePayEarningsInWindow(state.allPayPeriods, startOfWeek, endOfWeek, now, payOptions);
 
     if (state.statsPeriodMode === STATS_PERIOD_MODES.ROLLING) {
         const monthlyTotals = calculateRollingPeriodTotals(
@@ -659,7 +742,14 @@ export function renderDashboardData() {
         totalMonthlyMs = monthlyTotals.totalMs;
         totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
         totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
-        totalMonthlyEarnings = monthlyTotals.totalEarnings;
+        totalMonthlyEarnings = monthlyTotals.totalEarnings
+            + computePayEarningsInWindow(
+                state.allPayPeriods,
+                monthlyStatsConfig.start,
+                monthlyStatsConfig.end,
+                now,
+                payOptions
+            );
     } else {
         const monthlyTotals = calculateCalendarPeriodTotals(
             state.allSessions,
@@ -670,14 +760,22 @@ export function renderDashboardData() {
         totalMonthlyMs = monthlyTotals.totalMs;
         totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
         totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
-        totalMonthlyEarnings = monthlyTotals.totalEarnings;
+        totalMonthlyEarnings = monthlyTotals.totalEarnings
+            + computePayEarningsInWindow(
+                state.allPayPeriods,
+                monthlyStatsConfig.start,
+                monthlyStatsConfig.end,
+                now,
+                payOptions
+            );
     }
 
     const sixMonthTotals = calculateCalendarPeriodTotals(state.allSessions, startOfSixMonths, breaks, now);
     totalSixMonthsMs = sixMonthTotals.totalMs;
     totalSixMonthsGrossMs = sixMonthTotals.totalGrossMs;
     totalSixMonthsBreakMs = sixMonthTotals.totalBreakMs;
-    totalSixMonthsEarnings = sixMonthTotals.totalEarnings;
+    totalSixMonthsEarnings = sixMonthTotals.totalEarnings
+        + computePayEarningsInWindow(state.allPayPeriods, startOfSixMonths, now, now, payOptions);
 
     // Pagination bounds check
     const pageSize = 5;
@@ -874,6 +972,7 @@ export function renderDashboardData() {
     import('./ui.js').then(module => {
         module.renderGanttChart();
         module.renderSavingPotsWidget();
+        module.syncPayAccrualTimer?.();
         if (DOM.timeCostView && !DOM.timeCostView.classList.contains('hidden')) {
             module.renderSavingPotsSummary();
         }
@@ -1102,6 +1201,11 @@ export function applyGlobalFilters() {
             return matchCompany && matchProject;
         });
     }
+
+    state.allPayPeriods = filterPayPeriods(state.rawPayPeriods, {
+        company: state.globalFilterCompany,
+        project: state.globalFilterProject
+    });
 
     // Auto-populate timer rate based on preference if not currently running
     const isRunning = localStorage.getItem('work_tracker_start') !== null;

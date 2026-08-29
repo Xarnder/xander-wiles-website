@@ -50,6 +50,35 @@ service cloud.firestore {
                 && request.resource.data.savedAmount <= request.resource.data.cost));
     }
 
+    function isValidPayScale(scale) {
+      return scale == 'hour'
+        || scale == 'day'
+        || scale == 'week'
+        || scale == 'month'
+        || scale == 'year';
+    }
+
+    function isValidPayPeriod() {
+      return request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && isValidPayScale(request.resource.data.scale)
+        && request.resource.data.startDate is string
+        && request.resource.data.startDate.size() == 10
+        && (!('endDate' in request.resource.data)
+            || request.resource.data.endDate == null
+            || (request.resource.data.endDate is string
+                && request.resource.data.endDate.size() == 10))
+        && (!('company' in request.resource.data) || request.resource.data.company is string)
+        && (!('name' in request.resource.data) || request.resource.data.name is string)
+        && (!('dailyHours' in request.resource.data)
+            || (request.resource.data.dailyHours is number
+                && request.resource.data.dailyHours > 0))
+        && (!('workingDaysPerWeek' in request.resource.data)
+            || (request.resource.data.workingDaysPerWeek is number
+                && request.resource.data.workingDaysPerWeek >= 1
+                && request.resource.data.workingDaysPerWeek <= 7));
+    }
+
     function isValidBudgetingSettings() {
       return request.resource.data.totalAmount is number
         && request.resource.data.totalAmount >= 0
@@ -75,6 +104,12 @@ service cloud.firestore {
       match /timeCostItems/{itemId} {
         allow read: if isOwner(userId);
         allow create, update: if isOwner(userId) && isValidTimeCostItem();
+        allow delete: if isOwner(userId);
+      }
+
+      match /payPeriods/{payPeriodId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidPayPeriod();
         allow delete: if isOwner(userId);
       }
 

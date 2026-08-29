@@ -1,5 +1,21 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
 import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
+import {
+    accumulateDailyPayEarnings,
+    computePayEarningsInWindow,
+    formatDateKey,
+    formatPayRate,
+    getCombinedEquivalentHourlyRate,
+    getCurrentPayUnitProgress,
+    getEquivalentHourlyRate,
+    getPayPeriodDateLabel,
+    getPayPeriodDisplayName,
+    getWorkSettingsFromState,
+    isPayPeriodActive,
+    PAY_SCALES,
+    sanitizePayPeriod,
+    sumCurrentUnitAccrued
+} from './payPeriods.js';
 import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
 import {
     BUDGET_MAX_DIVISIONS,
@@ -156,6 +172,24 @@ export const DOM = {
     clearFilterBtn: document.getElementById('clear-filter-btn'),
     activeFiltersContainer: document.getElementById('active-filters-container'),
     addSessionBtn: document.getElementById('add-session-btn'),
+    addPayPeriodBtn: document.getElementById('add-pay-period-btn'),
+    payWidgetSummary: document.getElementById('pay-widget-summary'),
+    payPeriodList: document.getElementById('pay-period-list'),
+    payPeriodModal: document.getElementById('pay-period-modal'),
+    payPeriodModalTitle: document.getElementById('pay-period-modal-title'),
+    closePayPeriodModalBtn: document.getElementById('close-pay-period-modal'),
+    editPayPeriodId: document.getElementById('edit-pay-period-id'),
+    payPeriodAmount: document.getElementById('pay-period-amount'),
+    payPeriodScale: document.getElementById('pay-period-scale'),
+    payPeriodName: document.getElementById('pay-period-name'),
+    payPeriodStart: document.getElementById('pay-period-start'),
+    payPeriodEnd: document.getElementById('pay-period-end'),
+    payPeriodCompany: document.getElementById('pay-period-company'),
+    payPeriodCompanySelect: document.getElementById('pay-period-company-select'),
+    payPeriodPreview: document.getElementById('pay-period-preview'),
+    payPeriodSyncTc: document.getElementById('pay-period-sync-tc'),
+    savePayPeriodBtn: document.getElementById('save-pay-period-btn'),
+    deletePayPeriodBtn: document.getElementById('delete-pay-period-btn'),
     sessionModal: document.getElementById('session-modal'),
     sessionModalTitle: document.getElementById('session-modal-title'),
     closeSessionModalBtn: document.getElementById('close-session-modal'),
@@ -238,6 +272,7 @@ export const DOM = {
     tcDailyHours: document.getElementById('tc-daily-hours'),
     tcWorkingDays: document.getElementById('tc-working-days'),
     tcCutsSummary: document.getElementById('tc-cuts-summary'),
+    tcPayDerivedHint: document.getElementById('tc-pay-derived-hint'),
     tcRateBreakdown: document.getElementById('tc-rate-breakdown'),
     tcBreakdownContainer: document.getElementById('tc-breakdown-container'),
     tcSaveBtn: document.getElementById('tc-save-btn'),
@@ -350,7 +385,7 @@ export function updateCurrencyDisplays() {
             <span class="cut-divider">|</span>
             <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
         `;
-        renderLiveMoneyCounter(0, false);
+        renderLiveMoneyCounter(0, hasActivePayAccrual());
     }
 
     if (DOM.budgetingView && !DOM.budgetingView.classList.contains('hidden')) {
@@ -471,10 +506,35 @@ function renderMoneyStack(container, count, type, key) {
     }
 }
 
+function getPayWorkOptions() {
+    return { startOfWeek: state.startOfWeek };
+}
+
+function getVisiblePayPeriods() {
+    return Array.isArray(state.allPayPeriods) ? state.allPayPeriods : [];
+}
+
+function hasActivePayAccrual(now = new Date()) {
+    return getVisiblePayPeriods().some((period) => isPayPeriodActive(period, now));
+}
+
+function getSessionLiveEarnings() {
+    if (!state.startTime) return 0;
+    return ((Date.now() - state.startTime) / (1000 * 60 * 60)) * (state.currentSessionRate || 0);
+}
+
+function getLiveMoneyCounterEarnings(sessionEarned = 0, now = new Date()) {
+    return Math.max(Number(sessionEarned) || 0, 0)
+        + sumCurrentUnitAccrued(getVisiblePayPeriods(), now, getPayWorkOptions());
+}
+
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
     if (!DOM.moneyCounterWidget) return;
 
-    const beforeCutsEarned = Math.max(Number(earned) || 0, 0);
+    const now = new Date();
+    const payActive = hasActivePayAccrual(now);
+    const isLive = Boolean(isRunning) || payActive;
+    const beforeCutsEarned = getLiveMoneyCounterEarnings(earned, now);
     const displayEarned = state.moneyCounterMode === 'after'
         ? getAmountAfterPercentageCuts(beforeCutsEarned)
         : beforeCutsEarned;
@@ -484,10 +544,10 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     const poundCount = Math.floor(remainingAfterNotes / 100);
     const twentyPCount = Math.floor((remainingAfterNotes % 100) / 20);
 
-    DOM.moneyCounterWidget.classList.toggle('money-counter-active', isRunning);
+    DOM.moneyCounterWidget.classList.toggle('money-counter-active', isLive);
 
     if (DOM.moneyCounterStatus) {
-        DOM.moneyCounterStatus.textContent = isRunning ? 'Live' : 'Idle';
+        DOM.moneyCounterStatus.textContent = isLive ? 'Live' : 'Idle';
     }
 
     if (DOM.moneyCounterTotal) {
@@ -496,12 +556,13 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
 
     if (DOM.moneyCounterTime) {
         if (isRunning && state.startTime) {
-            const elapsedMs = Date.now() - state.startTime;
-            const totalSeconds = Math.floor(elapsedMs / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            DOM.moneyCounterTime.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            DOM.moneyCounterTime.textContent = formatClockDuration(Date.now() - state.startTime);
+        } else if (payActive) {
+            const activePeriod = getVisiblePayPeriods().find((period) => isPayPeriodActive(period, now));
+            const progress = activePeriod ? getCurrentPayUnitProgress(activePeriod, now, getPayWorkOptions()) : null;
+            DOM.moneyCounterTime.textContent = progress
+                ? formatClockDuration(Math.max(0, now.getTime() - progress.start.getTime()))
+                : '00:00:00';
         } else {
             DOM.moneyCounterTime.textContent = '00:00:00';
         }
@@ -536,13 +597,7 @@ export function renderMoneyCounterModeControls() {
         DOM.moneyCounterStage.style.setProperty('--stack-gap-scale', gapVal);
     }
 
-    if (state.startTime) {
-        const elapsedMs = Date.now() - state.startTime;
-        const earned = (elapsedMs / (1000 * 60 * 60)) * state.currentSessionRate;
-        renderLiveMoneyCounter(earned, true);
-    } else {
-        renderLiveMoneyCounter(0, false);
-    }
+    renderLiveMoneyCounter(getSessionLiveEarnings(), Boolean(state.startTime) || hasActivePayAccrual());
 }
 
 export function renderStatsPeriodModeControls() {
@@ -613,6 +668,14 @@ export function renderCustomStatsPeriods() {
             config.end,
             state.allBreaks
         );
+        const payEarnings = computePayEarningsInWindow(
+            getVisiblePayPeriods(),
+            config.start,
+            config.end,
+            now,
+            getPayWorkOptions()
+        );
+        const combinedEarnings = totalEarnings + payEarnings;
 
         const item = document.createElement('div');
         item.className = 'stat-item stat-item-custom';
@@ -640,7 +703,7 @@ export function renderCustomStatsPeriods() {
         const earningsValue = document.createElement('span');
         earningsValue.className = 'value';
         earningsValue.style.fontSize = '1.4rem';
-        renderStatEarningsDisplay(earningsValue, totalEarnings);
+        renderStatEarningsDisplay(earningsValue, combinedEarnings);
 
         item.appendChild(hoursLabel);
         item.appendChild(hoursValue);
@@ -707,6 +770,14 @@ export function renderCsvExportCompanySelect() {
 
     (state.rawSessions || []).forEach((session) => {
         const company = String(session.company || '').trim();
+        if (company) {
+            companies.add(company);
+        } else {
+            hasUnassigned = true;
+        }
+    });
+    (state.rawPayPeriods || []).forEach((period) => {
+        const company = String(period.company || '').trim();
         if (company) {
             companies.add(company);
         } else {
@@ -816,12 +887,33 @@ export function renderWorkPatternBreakdown() {
         DOM.workPatternAvgHoursDay.textContent = formatAverageHours(analytics.avgHoursPerDay);
     }
 
+    const payEarnings = computePayEarningsInWindow(
+        getVisiblePayPeriods(),
+        monthlyConfig.start,
+        monthlyConfig.end,
+        new Date(),
+        getPayWorkOptions()
+    );
+    const windowDays = Math.max(
+        ((monthlyConfig.end?.getTime?.() || Date.now()) - (monthlyConfig.start?.getTime?.() || Date.now())) / 86400000,
+        1
+    );
+    let avgBefore = analytics.avgEarningsBefore;
+    if (payEarnings > 0) {
+        if (analytics.daysWorked > 0 && Number.isFinite(avgBefore)) {
+            avgBefore += payEarnings / analytics.daysWorked;
+        } else {
+            avgBefore = payEarnings / windowDays;
+        }
+    }
+    const avgAfter = Number.isFinite(avgBefore) ? getAmountAfterPercentageCuts(avgBefore) : null;
+
     if (DOM.workPatternAvgEarningsBefore) {
-        DOM.workPatternAvgEarningsBefore.textContent = formatAverageEarnings(analytics.avgEarningsBefore);
+        DOM.workPatternAvgEarningsBefore.textContent = formatAverageEarnings(avgBefore);
     }
 
     if (DOM.workPatternAvgEarningsAfter) {
-        DOM.workPatternAvgEarningsAfter.textContent = formatAverageEarnings(analytics.avgEarningsAfter);
+        DOM.workPatternAvgEarningsAfter.textContent = formatAverageEarnings(avgAfter);
     }
 
     if (DOM.workPatternAvgStart) {
@@ -1020,13 +1112,10 @@ export function renderPercentageCutStats(totals) {
 }
 
 export function toggleLiveIndicators(isLive) {
-    const indicators = document.querySelectorAll('.live-indicator');
-    indicators.forEach(indicator => {
-        if (isLive) {
-            indicator.classList.remove('hidden');
-        } else {
-            indicator.classList.add('hidden');
-        }
+    const payAwareLive = hasActivePayAccrual();
+    document.querySelectorAll('.live-indicator').forEach((indicator) => {
+        const keepForPay = indicator.classList.contains('pay-aware-live') && payAwareLive;
+        indicator.classList.toggle('hidden', !(isLive || keepForPay));
     });
 }
 
@@ -1305,12 +1394,22 @@ export function renderCalendar() {
 
     const gridStartDate = new Date(year, month, 1 - firstDayIndex);
     const totalWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7);
+    const gridEndDate = new Date(gridStartDate);
+    gridEndDate.setDate(gridEndDate.getDate() + (totalWeeks * 7));
+    const dailyPay = accumulateDailyPayEarnings(
+        getVisiblePayPeriods(),
+        gridStartDate,
+        gridEndDate,
+        todayDate,
+        getPayWorkOptions()
+    );
     const todayKey = getCalendarDateKey(todayDate);
 
     for (let week = 0; week < totalWeeks; week++) {
         let weekNetHours = 0;
         let weekGrossHours = 0;
         let weekBreakHours = 0;
+        let weekPay = 0;
 
         for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
             const cellDate = new Date(gridStartDate);
@@ -1322,10 +1421,12 @@ export function renderCalendar() {
             const netHours = dailyHours[dateKey] || 0;
             const grossHours = dailyGrossHours[dateKey] || 0;
             const breakHours = dailyBreakHours[dateKey] || 0;
+            const payAmount = dailyPay[dateKey] || 0;
 
             weekNetHours += netHours;
             weekGrossHours += grossHours;
             weekBreakHours += breakHours;
+            weekPay += payAmount;
 
             const dayDiv = document.createElement('div');
             dayDiv.className = 'calendar-day';
@@ -1373,6 +1474,7 @@ export function renderCalendar() {
                 }
             } else if (netHours > 0) {
                 dayDiv.classList.add('has-work');
+                if (payAmount > 0) dayDiv.classList.add('has-pay');
                 const hourLabel = document.createElement('div');
                 hourLabel.className = 'work-hours-indicator';
                 const hasBreakTime = breakHours > 0 || (grossHours > 0 && Math.abs(grossHours - netHours) > 0.05);
@@ -1385,6 +1487,12 @@ export function renderCalendar() {
                     dayDiv.appendChild(breakDot);
                 }
                 dayDiv.appendChild(hourLabel);
+            } else if (payAmount > 0) {
+                dayDiv.classList.add('has-pay');
+                const payLabel = document.createElement('div');
+                payLabel.className = 'pay-amount-indicator';
+                payLabel.textContent = formatCalendarPayAmount(payAmount);
+                dayDiv.appendChild(payLabel);
             }
 
             DOM.calendarGrid.appendChild(dayDiv);
@@ -1407,6 +1515,9 @@ export function renderCalendar() {
             if (Math.abs(weekGrossHours - weekNetHours) > 0.05) {
                 weekTotalDiv.title = `${weekGrossHours.toFixed(1)}h gross`;
             }
+        } else if (weekPay > 0) {
+            weekTotalDiv.classList.add('has-pay-total');
+            weekTotalDiv.textContent = formatCalendarPayAmount(weekPay);
         } else {
             weekTotalDiv.classList.add('is-empty');
             weekTotalDiv.textContent = '—';
@@ -1844,10 +1955,14 @@ export function updateDatalists() {
         if (session.company) companies.add(session.company.trim());
         if (session.project) projects.add(session.project.trim());
     });
+    (state.rawPayPeriods || []).forEach((period) => {
+        if (period.company) companies.add(String(period.company).trim());
+    });
 
     DOM.companySelect.innerHTML = '<option value="">Or pick saved...</option>';
     if (DOM.sessionCompanySelect) DOM.sessionCompanySelect.innerHTML = '<option value="">Or pick saved...</option>';
     if (DOM.batchCompanySelect) DOM.batchCompanySelect.innerHTML = '<option value="">Or pick saved...</option>';
+    if (DOM.payPeriodCompanySelect) DOM.payPeriodCompanySelect.innerHTML = '<option value="">Or pick saved...</option>';
 
     Array.from(companies).sort().forEach(company => {
         const option = document.createElement('option');
@@ -1862,6 +1977,10 @@ export function updateDatalists() {
         if (DOM.batchCompanySelect) {
             const optCopy = option.cloneNode(true);
             DOM.batchCompanySelect.appendChild(optCopy);
+        }
+        if (DOM.payPeriodCompanySelect) {
+            const optCopy = option.cloneNode(true);
+            DOM.payPeriodCompanySelect.appendChild(optCopy);
         }
     });
 
@@ -1886,6 +2005,236 @@ export function updateDatalists() {
     });
 }
 
+function formatCalendarPayAmount(amount) {
+    const value = Number(amount) || 0;
+    const rounded = value >= 10 ? Math.round(value) : value;
+    return `${state.currentCurrency}${value >= 10 ? rounded : rounded.toFixed(2)}`;
+}
+
+function firstOfMonthDateKey(date = new Date()) {
+    return formatDateKey(new Date(date.getFullYear(), date.getMonth(), 1));
+}
+
+function readPayPeriodForm() {
+    const workSettings = getWorkSettingsFromState(state);
+    return sanitizePayPeriod({
+        id: DOM.editPayPeriodId?.value || undefined,
+        amount: DOM.payPeriodAmount?.value,
+        scale: DOM.payPeriodScale?.value || PAY_SCALES.MONTH,
+        name: DOM.payPeriodName?.value,
+        startDate: DOM.payPeriodStart?.value,
+        endDate: DOM.payPeriodEnd?.value || null,
+        company: DOM.payPeriodCompany?.value,
+        dailyHours: workSettings.dailyHours,
+        workingDaysPerWeek: workSettings.workingDaysPerWeek
+    });
+}
+
+export function updatePayPeriodPreview() {
+    if (!DOM.payPeriodPreview) return;
+
+    const period = readPayPeriodForm();
+    if (period.amount <= 0) {
+        DOM.payPeriodPreview.textContent = 'Enter an amount to see how this pay accrues.';
+        DOM.payPeriodPreview.classList.remove('hidden');
+        return;
+    }
+
+    const now = new Date();
+    const hourly = getEquivalentHourlyRate(period, now);
+    const progress = getCurrentPayUnitProgress(period, now, getPayWorkOptions());
+    const afterCuts = getAmountAfterPercentageCuts(progress.accrued);
+    const hourNote = period.scale === PAY_SCALES.HOUR
+        ? ` Hourly pay is spread across ${period.dailyHours}h × ${period.workingDaysPerWeek} working days each week.`
+        : '';
+
+    DOM.payPeriodPreview.textContent = `${formatPayRate(period.amount, period.scale, state.currentCurrency)} · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h. ${progress.label}: ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)} accrued${state.percentageCuts.length ? ` (${state.currentCurrency}${afterCuts.toFixed(2)} after cuts)` : ''}.${hourNote}`;
+    DOM.payPeriodPreview.classList.remove('hidden');
+}
+
+export function openPayPeriodModal(period = null) {
+    if (!DOM.payPeriodModal) return;
+
+    const isEdit = Boolean(period?.id);
+    const workSettings = getWorkSettingsFromState(state);
+    const draft = sanitizePayPeriod(period || {
+        amount: 2000,
+        scale: PAY_SCALES.MONTH,
+        startDate: firstOfMonthDateKey(),
+        dailyHours: workSettings.dailyHours,
+        workingDaysPerWeek: workSettings.workingDaysPerWeek
+    }, {
+        startDate: firstOfMonthDateKey(),
+        dailyHours: workSettings.dailyHours,
+        workingDaysPerWeek: workSettings.workingDaysPerWeek
+    });
+
+    if (DOM.payPeriodModalTitle) {
+        DOM.payPeriodModalTitle.textContent = isEdit ? 'Edit Pay' : 'Add Pay';
+    }
+    if (DOM.editPayPeriodId) DOM.editPayPeriodId.value = isEdit ? period.id : '';
+    if (DOM.payPeriodAmount) DOM.payPeriodAmount.value = draft.amount || '';
+    if (DOM.payPeriodScale) DOM.payPeriodScale.value = draft.scale;
+    if (DOM.payPeriodName) DOM.payPeriodName.value = draft.name;
+    if (DOM.payPeriodStart) DOM.payPeriodStart.value = draft.startDate;
+    if (DOM.payPeriodEnd) DOM.payPeriodEnd.value = draft.endDate || '';
+    if (DOM.payPeriodCompany) DOM.payPeriodCompany.value = draft.company;
+    if (DOM.payPeriodSyncTc) DOM.payPeriodSyncTc.checked = true;
+    if (DOM.deletePayPeriodBtn) {
+        DOM.deletePayPeriodBtn.style.display = isEdit ? 'block' : 'none';
+    }
+
+    DOM.payPeriodModal.classList.toggle('modal-mode-edit', isEdit);
+    DOM.payPeriodModal.classList.toggle('modal-mode-add', !isEdit);
+    DOM.payPeriodModal.classList.remove('hidden');
+    updatePayPeriodPreview();
+}
+
+export function closePayPeriodModal() {
+    DOM.payPeriodModal?.classList.add('hidden');
+}
+
+export function getPayPeriodFormData() {
+    return {
+        period: readPayPeriodForm(),
+        syncTimeCost: Boolean(DOM.payPeriodSyncTc?.checked)
+    };
+}
+
+export function renderPayWidget() {
+    if (!DOM.payWidgetSummary || !DOM.payPeriodList) return;
+
+    const now = new Date();
+    const periods = getVisiblePayPeriods();
+    const activePeriods = periods.filter((period) => isPayPeriodActive(period, now));
+    const accrued = sumCurrentUnitAccrued(periods, now, getPayWorkOptions());
+    const contracted = activePeriods.reduce((sum, period) => (
+        sum + getCurrentPayUnitProgress(period, now, getPayWorkOptions()).contracted
+    ), 0);
+    const hourly = getCombinedEquivalentHourlyRate(periods, now);
+    const afterCuts = getAmountAfterPercentageCuts(accrued);
+
+    if (!periods.length) {
+        DOM.payWidgetSummary.classList.add('is-empty');
+        DOM.payWidgetSummary.innerHTML = '<p class="loading-text" style="margin: 0;">Add a monthly salary or other pay scale. Stats, the money counter, and saving pots will use it without logging each day.</p>';
+    } else {
+        DOM.payWidgetSummary.classList.remove('is-empty');
+        const label = activePeriods[0]
+            ? getCurrentPayUnitProgress(activePeriods[0], now, getPayWorkOptions()).label
+            : 'Pay';
+        DOM.payWidgetSummary.innerHTML = `
+            <span class="pay-summary-label">${label} accrued</span>
+            <span class="pay-summary-value"><span class="currency-symbol">${state.currentCurrency}</span>${accrued.toFixed(2)}</span>
+            <span class="pay-summary-meta">
+                ${contracted > 0 ? `${state.currentCurrency}${contracted.toFixed(2)} contracted` : 'No active pay in the current period'}
+                ${hourly > 0 ? ` · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h` : ''}
+                ${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${afterCuts.toFixed(2)}` : ''}
+            </span>
+        `;
+    }
+
+    DOM.payPeriodList.innerHTML = '';
+
+    periods.forEach((period) => {
+        const sanitized = sanitizePayPeriod(period);
+        const active = isPayPeriodActive(sanitized, now);
+        const progress = getCurrentPayUnitProgress(sanitized, now, getPayWorkOptions());
+        const item = document.createElement('article');
+        item.className = `pay-period-item${active ? '' : ' is-ended'}`;
+
+        const companyHtml = sanitized.company
+            ? `<span class="history-badge history-badge-company">${escapeHtml(sanitized.company)}</span>`
+            : '';
+
+        item.innerHTML = `
+            <div class="pay-period-copy">
+                <span class="pay-period-name">${escapeHtml(getPayPeriodDisplayName(sanitized))}</span>
+                <span class="pay-period-rate">${formatPayRate(sanitized.amount, sanitized.scale, state.currentCurrency)}</span>
+                <span class="pay-period-meta">
+                    ${getPayPeriodDateLabel(sanitized)}
+                    ${active ? ` · ${progress.label} ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)}` : ' · Ended'}
+                    · ≈ ${state.currentCurrency}${getEquivalentHourlyRate(sanitized, now).toFixed(2)}/h
+                </span>
+                ${companyHtml ? `<div class="history-badges" style="margin-top: 8px;">${companyHtml}</div>` : ''}
+            </div>
+            <div class="pay-period-actions">
+                <button class="btn-edit" type="button" data-pay-id="${sanitized.id}" title="Edit Pay">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        item.querySelector('.btn-edit')?.addEventListener('click', () => {
+            openPayPeriodModal(period);
+        });
+
+        DOM.payPeriodList.appendChild(item);
+    });
+
+    toggleLiveIndicators(Boolean(state.startTime));
+    renderPayDerivedTimeCostHint();
+}
+
+function updatePayWidgetSummaryOnly() {
+    if (!DOM.payWidgetSummary || !getVisiblePayPeriods().length) return;
+
+    const now = new Date();
+    const periods = getVisiblePayPeriods();
+    const activePeriods = periods.filter((period) => isPayPeriodActive(period, now));
+    const accrued = sumCurrentUnitAccrued(periods, now, getPayWorkOptions());
+    const contracted = activePeriods.reduce((sum, period) => (
+        sum + getCurrentPayUnitProgress(period, now, getPayWorkOptions()).contracted
+    ), 0);
+    const hourly = getCombinedEquivalentHourlyRate(periods, now);
+    const afterCuts = getAmountAfterPercentageCuts(accrued);
+    const valueEl = DOM.payWidgetSummary.querySelector('.pay-summary-value');
+    const metaEl = DOM.payWidgetSummary.querySelector('.pay-summary-meta');
+
+    if (valueEl) {
+        valueEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${accrued.toFixed(2)}`;
+    }
+    if (metaEl) {
+        metaEl.textContent = `${contracted > 0 ? `${state.currentCurrency}${contracted.toFixed(2)} contracted` : 'No active pay in the current period'}${hourly > 0 ? ` · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h` : ''}${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${afterCuts.toFixed(2)}` : ''}`;
+    }
+}
+
+let payAccrualTimer = null;
+
+export function refreshPayAccrualDisplays() {
+    updatePayWidgetSummaryOnly();
+    renderLiveMoneyCounter(getSessionLiveEarnings(), Boolean(state.startTime) || hasActivePayAccrual());
+    toggleLiveIndicators(Boolean(state.startTime));
+}
+
+export function syncPayAccrualTimer() {
+    const shouldRun = hasActivePayAccrual();
+    if (shouldRun && !payAccrualTimer) {
+        payAccrualTimer = setInterval(refreshPayAccrualDisplays, 1000);
+    } else if (!shouldRun && payAccrualTimer) {
+        clearInterval(payAccrualTimer);
+        payAccrualTimer = null;
+    }
+    renderPayWidget();
+    refreshPayAccrualDisplays();
+}
+
+export function renderPayDerivedTimeCostHint() {
+    if (!DOM.tcPayDerivedHint) return;
+
+    const hourly = getCombinedEquivalentHourlyRate(getVisiblePayPeriods());
+    if (hourly <= 0) {
+        DOM.tcPayDerivedHint.classList.add('hidden');
+        DOM.tcPayDerivedHint.innerHTML = '';
+        return;
+    }
+
+    DOM.tcPayDerivedHint.classList.remove('hidden');
+    DOM.tcPayDerivedHint.innerHTML = `From Pay: <strong>${state.currentCurrency}${hourly.toFixed(2)}/h</strong> <button type="button" id="tc-use-pay-rate-btn" class="btn-outline btn-small">Use this rate</button>`;
+}
+
 export function applyWidgetOrder() {
     state.widgetOrder.forEach((id, index) => {
         const el = document.getElementById(id);
@@ -1897,7 +2246,7 @@ export function applyWidgetOrder() {
 
 export function applyWidgetVisibility() {
     const DEFAULT_WIDGET_IDS = [
-        'widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
+        'widget-timer', 'widget-pay', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
         'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt',
         'widget-calendar', 'widget-chart', 'widget-history'
     ];
@@ -2180,6 +2529,7 @@ export function renderWidgetOrderList() {
 
     const labels = {
         'widget-timer': 'Timer & Controls',
+        'widget-pay': 'Pay',
         'widget-breaks': 'Breaks',
         'widget-money-counter': 'Live Money Counter',
         'widget-saving-pots': 'Saving Pots',
@@ -2927,6 +3277,7 @@ export function renderTcCutsSummary() {
     const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
 
     DOM.tcCutsSummary.innerHTML = `Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-${totalCutPercentage.toFixed(1)}%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${effectiveRate.toFixed(2)}/h</span>)`;
+    renderPayDerivedTimeCostHint();
 }
 
 export function renderTimeCostRateBreakdown() {
@@ -3458,7 +3809,7 @@ export function renderSavingPotsWidget() {
         bodyHtml = `
             ${buildSavingPotBalanceGridHtml(potState, currency)}
             <div class="sp-widget-empty sp-widget-empty-compact">
-                <p class="sp-widget-empty-copy">Track work sessions to build your earnings pool, then assign savings to your goals.</p>
+                <p class="sp-widget-empty-copy">Add monthly pay or track work sessions to build your earnings pool, then assign savings to your goals.</p>
             </div>
         `;
     } else {

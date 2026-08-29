@@ -43,7 +43,13 @@ import {
     clientPointToBudgetAngle,
     renderBudgetDivisionListAmountsOnly,
     exportBudgetPieChart,
-    showConfirm
+    showConfirm,
+    renderPayWidget,
+    openPayPeriodModal,
+    closePayPeriodModal,
+    updatePayPeriodPreview,
+    getPayPeriodFormData,
+    syncPayAccrualTimer
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -85,7 +91,7 @@ import {
     updateBudgetPlan,
     updateBudgetSnapMode
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings } from './api.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings, addPayPeriod, updatePayPeriod, deletePayPeriod } from './api.js';
 import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
 import {
     BUDGET_MIN_PERCENT,
@@ -164,6 +170,8 @@ document.addEventListener('DOMContentLoaded', () => {
     applyWidgetTitles();
     applyDashboardDensity();
     renderSavingPotsWidget();
+    renderPayWidget();
+    syncPayAccrualTimer();
     renderMoneyCounterModeControls();
     renderStatsPeriodModeControls();
     renderSettingsDefaultFields();
@@ -520,6 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderTimeCostBreakdown();
         renderSavedTimeCostItems();
+        updatePayPeriodPreview();
+        renderPayWidget();
 
         clearTimeout(tcSettingsTimeout);
         tcSettingsTimeout = setTimeout(() => {
@@ -1739,6 +1749,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (session.company) companies.add(session.company.trim());
                 if (session.project) projects.add(session.project.trim());
             });
+            (state.rawPayPeriods || []).forEach((period) => {
+                if (period.company) companies.add(String(period.company).trim());
+            });
 
             DOM.filterCompanySelect.innerHTML = '<option value="">All Companies</option>';
             Array.from(companies).sort().forEach(company => {
@@ -1789,6 +1802,95 @@ document.addEventListener('DOMContentLoaded', () => {
                 module.applyGlobalFilters();
                 DOM.filterModal.classList.add('hidden');
             });
+        });
+    }
+
+    if (DOM.addPayPeriodBtn) {
+        DOM.addPayPeriodBtn.addEventListener('click', () => {
+            openPayPeriodModal();
+        });
+    }
+
+    if (DOM.closePayPeriodModalBtn) {
+        DOM.closePayPeriodModalBtn.addEventListener('click', () => {
+            closePayPeriodModal();
+        });
+    }
+
+    [DOM.payPeriodAmount, DOM.payPeriodScale, DOM.payPeriodStart, DOM.payPeriodEnd].forEach((input) => {
+        input?.addEventListener('input', updatePayPeriodPreview);
+        input?.addEventListener('change', updatePayPeriodPreview);
+    });
+
+    if (DOM.payPeriodCompanySelect) {
+        DOM.payPeriodCompanySelect.addEventListener('change', () => {
+            if (DOM.payPeriodCompany && DOM.payPeriodCompanySelect.value) {
+                DOM.payPeriodCompany.value = DOM.payPeriodCompanySelect.value;
+            }
+        });
+    }
+
+    if (DOM.savePayPeriodBtn) {
+        DOM.savePayPeriodBtn.addEventListener('click', async () => {
+            const { period, syncTimeCost } = getPayPeriodFormData();
+            if (!period.amount || period.amount <= 0) {
+                showAlert('Invalid Input', 'Please enter a pay amount greater than zero.');
+                return;
+            }
+            if (!period.startDate) {
+                showAlert('Invalid Input', 'Please choose a start date.');
+                return;
+            }
+
+            const periodId = DOM.editPayPeriodId?.value;
+            const saved = periodId
+                ? await updatePayPeriod(periodId, period)
+                : await addPayPeriod(period);
+
+            if (!saved) return;
+
+            if (syncTimeCost) {
+                const { getCombinedEquivalentHourlyRate } = await import('./payPeriods.js');
+                const nextPeriods = periodId
+                    ? (state.rawPayPeriods || []).map((entry) => (entry.id === periodId ? { ...entry, ...period } : entry))
+                    : [...(state.rawPayPeriods || []), period];
+                const hourly = getCombinedEquivalentHourlyRate(nextPeriods);
+                if (hourly > 0) {
+                    updateTcHourlyRate(Number(hourly.toFixed(2)));
+                    if (DOM.tcHourlyRate) DOM.tcHourlyRate.value = state.tcHourlyRate;
+                    saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcWorkingDaysPerWeek);
+                    renderTimeCostBreakdown();
+                    renderSavedTimeCostItems();
+                }
+            }
+
+            closePayPeriodModal();
+        });
+    }
+
+    if (DOM.deletePayPeriodBtn) {
+        DOM.deletePayPeriodBtn.addEventListener('click', async () => {
+            const periodId = DOM.editPayPeriodId?.value;
+            if (!periodId) return;
+            const confirmed = await showConfirm('Delete Pay', 'Delete this pay arrangement? Earnings from it will disappear from widgets.');
+            if (!confirmed) return;
+            await deletePayPeriod(periodId);
+            closePayPeriodModal();
+        });
+    }
+
+    if (DOM.tcPayDerivedHint) {
+        DOM.tcPayDerivedHint.addEventListener('click', async (event) => {
+            const button = event.target.closest('#tc-use-pay-rate-btn');
+            if (!button) return;
+            const { getCombinedEquivalentHourlyRate } = await import('./payPeriods.js');
+            const hourly = getCombinedEquivalentHourlyRate(state.allPayPeriods || state.rawPayPeriods || []);
+            if (hourly <= 0) return;
+            updateTcHourlyRate(Number(hourly.toFixed(2)));
+            if (DOM.tcHourlyRate) DOM.tcHourlyRate.value = state.tcHourlyRate;
+            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcWorkingDaysPerWeek);
+            renderTimeCostBreakdown();
+            renderSavedTimeCostItems();
         });
     }
 
@@ -2133,8 +2235,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Export PDF Event - Prints the currently filtered dashboard
     if (DOM.exportBtn) {
         DOM.exportBtn.addEventListener('click', () => {
-            if (!state.allSessions || state.allSessions.length === 0) {
-                import('./ui.js').then(module => module.showAlert("No Data", "There are no sessions to export."));
+            if ((!state.allSessions || state.allSessions.length === 0) && !(state.allPayPeriods || []).length) {
+                import('./ui.js').then(module => module.showAlert("No Data", "There are no sessions or pay arrangements to export."));
                 return;
             }
             window.print();
@@ -2150,7 +2252,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.csvExportCompany
                 );
 
-                if (!sessions.length) {
+                const payPeriods = (state.rawPayPeriods || []).filter((period) => {
+                    if (!state.csvExportCompany) return true;
+                    const company = String(period.company || '').trim() || 'Unassigned';
+                    if (state.csvExportCompany === CSV_UNASSIGNED_COMPANY) {
+                        return company === 'Unassigned';
+                    }
+                    return company === state.csvExportCompany;
+                });
+
+                if (!sessions.length && !payPeriods.length) {
                     import('./ui.js').then(module => {
                         const companyLabel = state.csvExportCompany === CSV_UNASSIGNED_COMPANY
                             ? 'Unassigned'
@@ -2158,20 +2269,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         module.showAlert(
                             "No Data",
                             state.csvExportCompany
-                                ? `There are no sessions to export for ${companyLabel}.`
-                                : "There are no sessions to export."
+                                ? `There are no sessions or pay arrangements to export for ${companyLabel}.`
+                                : "There are no sessions or pay arrangements to export."
                         );
                     });
                     return;
                 }
 
-                runCsvExport(sessions);
+                runCsvExport(sessions, payPeriods);
             });
         });
     }
 
-    function runCsvExport(sessions) {
-        import('./utils.js').then(({
+    function runCsvExport(sessions, payPeriods = []) {
+        Promise.all([
+            import('./utils.js'),
+            import('./payPeriods.js')
+        ]).then(([{
             getEffectiveSessionMetrics,
             getSessionBreakPeriods,
             computeMonthlyTotals,
@@ -2187,8 +2301,14 @@ document.addEventListener('DOMContentLoaded', () => {
             escapeCsvValue,
             getSessionEndTime,
             toTimestampMs,
+            parseCsvExportDate,
             CSV_UNASSIGNED_COMPANY
-        }) => {
+        }, {
+            computePayEarningsInWindow,
+            getPayCompanyLabel,
+            getPayPeriodDateLabel,
+            getPayPeriodDisplayName
+        }]) => {
                 const currency = state.currentCurrency;
                 const breaks = state.allBreaks;
 
@@ -2307,16 +2427,106 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
+                const now = new Date();
+                const payOptions = { startOfWeek: state.startOfWeek };
+
+                function payEarningsForRange(start, end) {
+                    return computePayEarningsInWindow(payPeriods, start, end, now, payOptions);
+                }
+
+                function addPayToMonthRow(row) {
+                    const start = parseCsvExportDate(row.periodStart);
+                    const endInclusive = parseCsvExportDate(row.periodEnd);
+                    if (!start || !endInclusive) return row;
+                    const end = new Date(endInclusive);
+                    end.setDate(end.getDate() + 1);
+                    end.setHours(0, 0, 0, 0);
+                    return {
+                        ...row,
+                        totalNetEarnings: (Number(row.totalNetEarnings) || 0) + payEarningsForRange(start, end)
+                    };
+                }
+
                 appendCsvSection(
-                    "Totals by Company",
-                    ["Company", ...summaryMetricHeaders],
-                    computeCompanyTotalsAll(sessions, breaks).map((entry) => [
-                        entry.company,
-                        ...formatSummaryMetrics(entry.totalNetMs, entry.totalNetEarnings)
+                    "Pay Periods",
+                    [
+                        "Label",
+                        `Amount (${currency})`,
+                        "Scale",
+                        "Starts",
+                        "Ends",
+                        "Company",
+                        "Date Range"
+                    ],
+                    payPeriods.map((period) => [
+                        getPayPeriodDisplayName(period),
+                        Number(period.amount || 0).toFixed(2),
+                        period.scale,
+                        period.startDate || "",
+                        period.endDate || "Ongoing",
+                        getPayCompanyLabel(period),
+                        getPayPeriodDateLabel(period)
                     ])
                 );
 
-                const monthlyTotals = computeMonthlyTotals(sessions, breaks);
+                const companyTotals = computeCompanyTotalsAll(sessions, breaks);
+                const companyMap = new Map(companyTotals.map((entry) => [entry.company, { ...entry }]));
+                payPeriods.forEach((period) => {
+                    const company = getPayCompanyLabel(period);
+                    const payEarnings = computePayEarningsInWindow([period], null, now, now, payOptions);
+                    const existing = companyMap.get(company) || { company, totalNetMs: 0, totalNetEarnings: 0 };
+                    existing.totalNetEarnings += payEarnings;
+                    companyMap.set(company, existing);
+                });
+
+                appendCsvSection(
+                    "Totals by Company",
+                    ["Company", ...summaryMetricHeaders],
+                    Array.from(companyMap.values())
+                        .sort((a, b) => b.totalNetEarnings - a.totalNetEarnings || a.company.localeCompare(b.company))
+                        .map((entry) => [
+                            entry.company,
+                            ...formatSummaryMetrics(entry.totalNetMs, entry.totalNetEarnings)
+                        ])
+                );
+
+                const monthlyTotals = (() => {
+                    const existing = computeMonthlyTotals(sessions, breaks);
+                    const byStart = new Map(existing.map((month) => [month.periodStart, month]));
+                    const monthNames = [
+                        'January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'
+                    ];
+
+                    payPeriods.forEach((period) => {
+                        const start = parseCsvExportDate(period.startDate);
+                        if (!start) return;
+                        const last = period.endDate ? parseCsvExportDate(period.endDate) : now;
+                        if (!last) return;
+                        const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+                        const lastMonth = new Date(last.getFullYear(), last.getMonth(), 1);
+                        const nowMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+                        while (cursor <= lastMonth && cursor <= nowMonth) {
+                            const periodStart = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-01`;
+                            if (!byStart.has(periodStart)) {
+                                const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+                                byStart.set(periodStart, {
+                                    label: `${monthNames[cursor.getMonth()]} ${cursor.getFullYear()}`,
+                                    periodStart,
+                                    periodEnd: `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`,
+                                    totalNetMs: 0,
+                                    totalNetEarnings: 0
+                                });
+                            }
+                            cursor.setMonth(cursor.getMonth() + 1);
+                        }
+                    });
+
+                    return Array.from(byStart.values())
+                        .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
+                        .map(addPayToMonthRow);
+                })();
                 appendCsvSection(
                     "Monthly Totals",
                     ["Month", "Period Start", "Period End", ...summaryMetricHeaders],
@@ -2347,14 +2557,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.csvExportPeriodTo
                 );
                 if (customPeriodTotals) {
+                    const withPay = addPayToMonthRow(customPeriodTotals);
                     appendCsvSection(
                         "Custom Period Totals",
                         ["Period", "Period Start", "Period End", ...summaryMetricHeaders],
                         [[
-                            customPeriodTotals.label,
-                            customPeriodTotals.periodStart,
-                            customPeriodTotals.periodEnd,
-                            ...formatSummaryMetrics(customPeriodTotals.totalNetMs, customPeriodTotals.totalNetEarnings)
+                            withPay.label,
+                            withPay.periodStart,
+                            withPay.periodEnd,
+                            ...formatSummaryMetrics(withPay.totalNetMs, withPay.totalNetEarnings)
                         ]]
                     );
 
@@ -2381,7 +2592,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
 
-                const now = new Date();
                 const fileDate = now.toISOString().split('T')[0];
                 const companySuffix = state.csvExportCompany
                     ? `_${state.csvExportCompany === CSV_UNASSIGNED_COMPANY ? 'Unassigned' : state.csvExportCompany}`.replace(/[^\w.-]+/g, '_')
