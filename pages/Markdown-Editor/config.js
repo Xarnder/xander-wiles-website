@@ -73,6 +73,18 @@ export const OPENED_FILES_WEEK_MS = 7 * OPENED_FILES_DAY_MS;
 /** Pinned Drive files and folders (Pinned tab). */
 export const PINNED_ITEMS_KEY = 'md-editor:pinnedItems';
 export const PINNED_ITEMS_MAX = 40;
+/** Unpin tombstones (id → unpinnedAt ms) so cloud merge does not revive removed pins. */
+export const PINNED_TOMBS_KEY = 'md-editor:pinnedTombs';
+export const PINNED_TOMB_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Per-item text colours in Finder / Pinned (id → #rrggbb).
+ * Capped so localStorage / cloud settings stay small.
+ */
+export const FILE_TEXT_COLORS_KEY = 'md-editor:fileTextColors';
+export const FILE_TEXT_COLORS_MAX = 300;
+/** Per-id timestamps for colour add/clear so cloud merge is last-write-wins. */
+export const FILE_TEXT_COLOR_AT_KEY = 'md-editor:fileTextColorAt';
 
 /** Preview mode Contents panel: '1' open, '0' collapsed */
 export const PREVIEW_TOC_OPEN_KEY = 'md-editor:previewTocOpen';
@@ -123,6 +135,13 @@ export const DEFAULT_EDIT_VIEW_VALUES = new Set(
  */
 export const DOUBLE_TAP_COPY_KEY = 'md-editor:doubleTapCopy';
 export const DOUBLE_TAP_COPY_DEFAULT = true;
+
+/**
+ * Show .md / .markdown on Finder and Pinned row labels.
+ * '1' on, '0' off (default — extensions stay hidden).
+ */
+export const SHOW_FILE_EXTENSIONS_KEY = 'md-editor:showFileExtensions';
+export const SHOW_FILE_EXTENSIONS_DEFAULT = false;
 
 /**
  * Block the UI with a non-dismissible “Saving in progress” dialog when the user

@@ -396,6 +396,11 @@
                                 <option value="bottom">Markdown at bottom</option>
                             </select>
                         </label>
+                        <label class="settings-pref settings-pref--toggle">
+                            <span class="settings-pref-label">Show file extensions</span>
+                            <input id="pref-show-file-extensions" class="settings-toggle" type="checkbox">
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Show .md on markdown names in Finder and Pinned. Off by default.</p>
                     </div>
                     <p class="browse-hint settings-hint">
                         Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
@@ -560,6 +565,7 @@
             <p id="item-actions-name" class="dialog-hint"></p>
             <div class="item-actions-list">
                 <button type="submit" value="pin" id="item-action-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
+                <button type="submit" value="colour" id="item-action-colour" class="btn btn-ghost btn-block item-action-btn">Change text colour</button>
                 <button type="submit" value="copy" id="item-action-copy" class="btn btn-ghost btn-block item-action-btn">Copy</button>
                 <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
@@ -567,6 +573,44 @@
                 <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="file-color-dialog" class="dialog dialog--color" aria-labelledby="file-color-title">
+        <div class="dialog-body">
+            <h2 id="file-color-title">Text colour</h2>
+            <p id="file-color-name" class="dialog-hint"></p>
+            <p id="file-color-preview" class="file-color-preview" aria-live="polite">Preview</p>
+            <p class="file-color-label">Presets</p>
+            <div id="file-color-swatches" class="file-color-swatches" role="listbox" aria-label="Preset colours"></div>
+            <p class="file-color-label">Custom</p>
+            <div
+                id="file-color-sv"
+                class="file-color-sv"
+                role="slider"
+                tabindex="0"
+                aria-label="Saturation and brightness"
+            >
+                <span id="file-color-sv-thumb" class="file-color-sv-thumb" aria-hidden="true"></span>
+            </div>
+            <label class="file-color-hue-label" for="file-color-hue">
+                <span class="sr-only">Hue</span>
+                <input
+                    id="file-color-hue"
+                    class="file-color-hue"
+                    type="range"
+                    min="0"
+                    max="360"
+                    step="1"
+                    value="210"
+                    aria-label="Hue"
+                >
+            </label>
+            <div class="dialog-actions dialog-actions--color">
+                <button type="button" id="file-color-reset" class="btn btn-ghost">Default</button>
+                <button type="button" id="file-color-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="button" id="file-color-apply" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
     </dialog>
 
     <dialog id="editor-more-dialog" class="dialog dialog--editor-more">
@@ -812,7 +856,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js?v=127"></script>
+    <script type="module" src="app.js?v=128"></script>
 </body>
 
 </html>

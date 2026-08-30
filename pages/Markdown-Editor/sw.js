@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v127';
+const CACHE_NAME = 'md-editor-shell-v131';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -19,6 +19,8 @@ const ASSETS = [
     './markdown.js',
     './search.js',
     './settings-sync.js',
+    './settings-merge.js',
+    './settings-cache.js',
     './revisions.js',
     './destructive.js',
     './revision-meta.js',
@@ -93,21 +95,45 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // App shell: cache-first for same-origin page assets
-    if (url.origin === self.location.origin) {
+    if (url.origin !== self.location.origin) return;
+
+    const path = url.pathname;
+    const isAppCode =
+        path.includes('/pages/Markdown-Editor/') &&
+        (path.endsWith('.js') ||
+            path.endsWith('.css') ||
+            path.endsWith('.html') ||
+            path.endsWith('/Markdown-Editor/') ||
+            path.endsWith('/Markdown-Editor'));
+
+    // HTML/JS/CSS: network-first so a Safari cache refresh picks up sync fixes.
+    if (isAppCode) {
         event.respondWith(
-            caches.match(request).then((cached) => {
-                if (cached) return cached;
-                return fetch(request)
-                    .then((response) => {
-                        if (response && response.ok && request.url.includes('/pages/Markdown-Editor/')) {
-                            const copy = response.clone();
-                            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                        }
-                        return response;
-                    })
-                    .catch(() => cached);
-            })
+            fetch(request)
+                .then((response) => {
+                    if (response && response.ok) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(request))
         );
+        return;
     }
+
+    event.respondWith(
+        caches.match(request).then((cached) => {
+            if (cached) return cached;
+            return fetch(request)
+                .then((response) => {
+                    if (response && response.ok && request.url.includes('/pages/Markdown-Editor/')) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => cached);
+        })
+    );
 });

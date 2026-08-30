@@ -19,10 +19,15 @@ export async function driveFetch(url, options = {}, retried = false) {
         throw new Error('Not signed in');
     }
 
-    const headers = new Headers(options.headers || {});
+    const { keepalive, ...fetchOptions } = options;
+    const headers = new Headers(fetchOptions.headers || {});
     headers.set('Authorization', `Bearer ${token}`);
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, {
+        ...fetchOptions,
+        headers,
+        keepalive: Boolean(keepalive),
+    });
 
     if (response.status === 401 && !retried) {
         await refreshAccessToken();
@@ -302,7 +307,7 @@ export async function getFileContent(fileId) {
  * Last-write-wins content update for an existing file.
  * @returns {Promise<{ id?: string, version?: string | number, headRevisionId?: string, modifiedTime?: string }>}
  */
-export async function updateFileContent(fileId, text, mimeType = 'text/markdown') {
+export async function updateFileContent(fileId, text, mimeType = 'text/markdown', options = {}) {
     const params = new URLSearchParams({
         uploadType: 'media',
         fields: 'id,version,headRevisionId,modifiedTime',
@@ -315,6 +320,7 @@ export async function updateFileContent(fileId, text, mimeType = 'text/markdown'
                 'Content-Type': mimeType || 'text/plain',
             },
             body: text,
+            keepalive: Boolean(options.keepalive),
         }
     );
     return response.json();
@@ -529,22 +535,43 @@ export async function listChildFolders(parentId = ROOT_FOLDER_ID) {
 }
 
 /**
+ * List every file in the private Drive appDataFolder with this exact name.
+ * @param {string} name
+ * @returns {Promise<Array<{ id: string, name: string, modifiedTime?: string }>>}
+ */
+export async function listAppDataFiles(name) {
+    const safeName = String(name || '').replace(/'/g, "\\'");
+    const files = [];
+    let pageToken = '';
+    do {
+        const params = new URLSearchParams({
+            q: `name = '${safeName}' and trashed = false`,
+            spaces: 'appDataFolder',
+            pageSize: '100',
+            fields: 'nextPageToken, files(id, name, modifiedTime)',
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+        const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
+        const data = await response.json();
+        for (const file of data.files || []) {
+            if (file?.id) files.push(file);
+        }
+        pageToken = data.nextPageToken || '';
+    } while (pageToken);
+    files.sort((a, b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')));
+    return files;
+}
+
+/**
  * Find a file in the private Drive appDataFolder by exact name.
  * @param {string} name
  * @returns {Promise<{ id: string, name: string } | null>}
  */
 export async function findAppDataFile(name) {
-    const safeName = String(name || '').replace(/'/g, "\\'");
-    const params = new URLSearchParams({
-        q: `name = '${safeName}' and trashed = false`,
-        spaces: 'appDataFolder',
-        pageSize: '1',
-        fields: 'files(id, name)',
-    });
-    const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
-    const data = await response.json();
-    const file = (data.files || [])[0];
-    return file?.id ? { id: file.id, name: file.name || name } : null;
+    const files = await listAppDataFiles(name);
+    if (!files.length) return null;
+    const newest = files[0];
+    return { id: newest.id, name: newest.name || name };
 }
 
 /**

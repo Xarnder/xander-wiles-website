@@ -44,6 +44,7 @@ import {
     DEFAULT_EDIT_VIEW_VALUES,
     DEFAULT_EDIT_VIEW_OPTIONS,
     DOUBLE_TAP_COPY_KEY,
+    SHOW_FILE_EXTENSIONS_KEY,
     BLOCKING_SAVE_KEY,
     BLOCKING_SAVE_DEFAULT,
     SHOW_DATES_KEY,
@@ -56,6 +57,7 @@ import {
     OPENED_FILES_WEEK_MS,
     PINNED_ITEMS_KEY,
     PINNED_ITEMS_MAX,
+    PINNED_TOMBS_KEY,
 } from './config.js';
 import {
     clearToken,
@@ -131,6 +133,8 @@ import {
     scheduleCloudSettingsSave,
     withCloudApplyGuard,
 } from './settings-sync.js';
+import { cloudHasPrefs, mergeFileTextColors, mergePinnedState } from './settings-merge.js';
+import { loadLastGoodSettings, saveLastGoodSettings } from './settings-cache.js';
 import {
     extractMarkdownHeadings,
     getTextareaViewportOffset,
@@ -172,6 +176,12 @@ import {
     promptConflictReview,
     promptForName,
     promptItemActions,
+    promptFileTextColor,
+    readFileTextColorsMap,
+    readFileTextColorAtMap,
+    replaceFileTextColors,
+    writeFileTextColor,
+    displayFileListName,
     promptEditorMoreMenu,
     promptFillListDates,
     fillEditorMoreStats,
@@ -218,6 +228,8 @@ import {
     syncListLayoutControl,
     syncDefaultEditViewControl,
     syncDoubleTapCopyControl,
+    readShowFileExtensionsEnabled,
+    syncShowFileExtensionsControl,
     syncBlockingSaveControl,
     showSavingOverlay,
     hideSavingOverlay,
@@ -780,7 +792,7 @@ function writeTheme(theme) {
     } catch {
         // ignore
     }
-    queueSettingsCloudSync();
+    queueSettingsCloudSync({ immediate: true });
 }
 
 function applySavedTheme() {
@@ -1028,6 +1040,26 @@ function applySavedDoubleTapCopy() {
     syncDoubleTapCopyControl(readDoubleTapCopyEnabled());
 }
 
+function writeShowFileExtensionsEnabled(enabled) {
+    const next = Boolean(enabled);
+    try {
+        localStorage.setItem(SHOW_FILE_EXTENSIONS_KEY, next ? '1' : '0');
+    } catch {
+        // ignore
+    }
+    queueSettingsCloudSync();
+    return next;
+}
+
+function applySavedShowFileExtensions() {
+    syncShowFileExtensionsControl(readShowFileExtensionsEnabled());
+}
+
+function refreshFileNameDisplays() {
+    renderCurrentFileList();
+    renderPinnedView().catch(() => {});
+}
+
 function readBlockingSaveEnabled() {
     try {
         const raw = localStorage.getItem(BLOCKING_SAVE_KEY);
@@ -1066,18 +1098,59 @@ function buildSettingsSnapshot() {
         listLayout: readListLayout(),
         defaultEditView: readDefaultEditView(),
         doubleTapCopy: readDoubleTapCopyEnabled(),
+        showFileExtensions: readShowFileExtensionsEnabled(),
         blockingSave: readBlockingSaveEnabled(),
         showDates: readShowDatesEnabled(),
         finderMdOrder: readFinderLayoutPrefs(),
         finderSort: readFinderSort(),
         pinnedItems: readPinnedItems(),
+        pinnedTombs: readPinnedTombs(),
         openedFiles: openedFilesSnapshot(),
+        fileTextColors: Object.fromEntries(readFileTextColorsMap()),
+        fileTextColorAt: readFileTextColorAtMap(),
     };
 }
 
-function queueSettingsCloudSync() {
+/** True after a successful cloud apply, so pagehide cannot flush empty defaults. */
+let settingsHydratedFromCloud = false;
+
+function localSettingsAreMeaningful() {
+    if (readPinnedItems().length) return true;
+    if (Object.keys(readPinnedTombs()).length) return true;
+    if (readFileTextColorsMap().size) return true;
+    try {
+        if (localStorage.getItem(THEME_KEY)) return true;
+        if (localStorage.getItem(LIST_STRIPE_KEY)) return true;
+        if (localStorage.getItem(LIST_LAYOUT_KEY)) return true;
+        if (localStorage.getItem(DEFAULT_EDIT_VIEW_KEY)) return true;
+        if (localStorage.getItem(SHOW_FILE_EXTENSIONS_KEY)) return true;
+        if (localStorage.getItem(DOUBLE_TAP_COPY_KEY)) return true;
+        if (localStorage.getItem(PWA_TOP_GAP_KEY)) return true;
+        if (localStorage.getItem(PWA_BOTTOM_OFFSET_KEY)) return true;
+        if (localStorage.getItem(PREVIEW_FONT_SCALE_KEY)) return true;
+        if (localStorage.getItem(FINDER_SORT_KEY)) return true;
+        if (localStorage.getItem(FINDER_MD_ORDER_MOBILE_KEY)) return true;
+        if (localStorage.getItem(FINDER_MD_ORDER_DESKTOP_KEY)) return true;
+        if (localStorage.getItem(BLOCKING_SAVE_KEY)) return true;
+        if (localStorage.getItem(SHOW_DATES_KEY)) return true;
+        if (localStorage.getItem(PREVIEW_TOC_STICKY_KEY)) return true;
+        if (localStorage.getItem(PREVIEW_TOC_OPEN_KEY)) return true;
+    } catch {
+        // ignore
+    }
+    return false;
+}
+
+function canPushSettingsToCloud() {
+    return settingsHydratedFromCloud || localSettingsAreMeaningful();
+}
+
+function queueSettingsCloudSync(options = {}) {
     if (!isSignedIn()) return;
+    if (!canPushSettingsToCloud()) return;
     scheduleCloudSettingsSave(buildSettingsSnapshot, {
+        immediate: Boolean(options.immediate),
+        delayMs: options.delayMs,
         onError: (err) => {
             console.warn('[md-editor] settings cloud save failed', err);
         },
@@ -1200,6 +1273,15 @@ function applyCloudSettings(cloud) {
             syncDoubleTapCopyControl(cloud.doubleTapCopy);
         }
 
+        if (typeof cloud.showFileExtensions === 'boolean') {
+            try {
+                localStorage.setItem(SHOW_FILE_EXTENSIONS_KEY, cloud.showFileExtensions ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            syncShowFileExtensionsControl(cloud.showFileExtensions);
+        }
+
         if (typeof cloud.blockingSave === 'boolean') {
             try {
                 localStorage.setItem(BLOCKING_SAVE_KEY, cloud.blockingSave ? '1' : '0');
@@ -1251,23 +1333,8 @@ function applyCloudSettings(cloud) {
             syncFinderSortControl(cloud.finderSort);
         }
 
-        if (Array.isArray(cloud.pinnedItems)) {
-            const normalized = cloud.pinnedItems
-                .filter((entry) => entry && typeof entry.id === 'string' && entry.id)
-                .map((entry) => ({
-                    id: entry.id,
-                    name: entry.name || 'Untitled.md',
-                    mimeType: entry.mimeType || 'text/markdown',
-                    parentId: typeof entry.parentId === 'string' ? entry.parentId : '',
-                    pinnedAt: Number(entry.pinnedAt) || 0,
-                }))
-                .sort((a, b) => b.pinnedAt - a.pinnedAt)
-                .slice(0, PINNED_ITEMS_MAX);
-            try {
-                localStorage.setItem(PINNED_ITEMS_KEY, JSON.stringify(normalized));
-            } catch {
-                // ignore
-            }
+        if (Array.isArray(cloud.pinnedItems) || cloud.pinnedTombs) {
+            persistPinnedState(cloud.pinnedItems, cloud.pinnedTombs);
         }
 
         if (
@@ -1286,21 +1353,94 @@ function applyCloudSettings(cloud) {
             }
             writeOpenedFilesMap(merged);
         }
+
+        if (
+            (cloud.fileTextColors &&
+                typeof cloud.fileTextColors === 'object' &&
+                !Array.isArray(cloud.fileTextColors)) ||
+            (cloud.fileTextColorAt &&
+                typeof cloud.fileTextColorAt === 'object' &&
+                !Array.isArray(cloud.fileTextColorAt))
+        ) {
+            replaceFileTextColors(cloud.fileTextColors || {}, cloud.fileTextColorAt || {});
+        }
     });
+}
+
+function applyMergedCloudSettings(settings) {
+    const mergedPins = mergePinnedState({
+        localItems: readPinnedItems(),
+        localTombs: readPinnedTombs(),
+        cloudItems: settings.pinnedItems,
+        cloudTombs: settings.pinnedTombs,
+    });
+    const mergedColors = mergeFileTextColors({
+        localColors: Object.fromEntries(readFileTextColorsMap()),
+        localAt: readFileTextColorAtMap(),
+        cloudColors: settings.fileTextColors,
+        cloudAt: settings.fileTextColorAt,
+    });
+    applyCloudSettings({
+        ...settings,
+        pinnedItems: mergedPins.items,
+        pinnedTombs: mergedPins.tombs,
+        fileTextColors: mergedColors.colors,
+        fileTextColorAt: mergedColors.at,
+    });
+}
+
+async function applyCachedSettingsFallback() {
+    const cached = await loadLastGoodSettings();
+    if (!cached || !cloudHasPrefs(cached)) return false;
+    applyMergedCloudSettings(cached);
+    return true;
+}
+
+async function restoreSettingsFromLastGood() {
+    if (localSettingsAreMeaningful()) return;
+    await applyCachedSettingsFallback();
+}
+
+function sleepMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function syncSettingsFromCloudOnce() {
+    const result = await pullCloudSettings(buildSettingsSnapshot);
+    if (result.fromCloud) {
+        applyMergedCloudSettings(result.settings);
+        settingsHydratedFromCloud = true;
+        await saveLastGoodSettings(buildSettingsSnapshot());
+        if (canPushSettingsToCloud()) {
+            await flushCloudSettingsSave(buildSettingsSnapshot);
+        }
+        return;
+    }
+    if (result.readFailed) {
+        await applyCachedSettingsFallback();
+        return;
+    }
+    if (result.created && localSettingsAreMeaningful()) {
+        settingsHydratedFromCloud = true;
+        await saveLastGoodSettings(buildSettingsSnapshot());
+    }
 }
 
 async function syncSettingsFromCloud() {
     if (!isSignedIn()) return;
-    try {
-        const { settings, created } = await pullCloudSettings(buildSettingsSnapshot);
-        if (!created) {
-            applyCloudSettings(settings);
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            await syncSettingsFromCloudOnce();
+            return;
+        } catch (err) {
+            lastErr = err;
+            console.warn('[md-editor] settings cloud load failed', err);
+            if (attempt < 2) await sleepMs(400 * (attempt + 1));
         }
-        // Push so local-only fields (e.g. openedFiles) join an existing cloud blob.
-        queueSettingsCloudSync();
-    } catch (err) {
-        console.warn('[md-editor] settings cloud load failed', err);
     }
+    await applyCachedSettingsFallback();
+    if (lastErr) console.warn('[md-editor] settings cloud load gave up', lastErr);
 }
 
 function readRecentFiles() {
@@ -1450,13 +1590,39 @@ function readPinnedItems() {
     }
 }
 
-function writePinnedItems(entries) {
+function readPinnedTombs() {
     try {
-        localStorage.setItem(PINNED_ITEMS_KEY, JSON.stringify(entries.slice(0, PINNED_ITEMS_MAX)));
+        const raw = localStorage.getItem(PINNED_TOMBS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out = {};
+        for (const [id, ts] of Object.entries(parsed)) {
+            if (!id) continue;
+            const n = Number(ts) || 0;
+            if (n > 0) out[id] = n;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+function persistPinnedState(items, tombs) {
+    const list = Array.isArray(items) ? items.slice(0, PINNED_ITEMS_MAX) : [];
+    const nextTombs = tombs && typeof tombs === 'object' && !Array.isArray(tombs) ? tombs : {};
+    try {
+        localStorage.setItem(PINNED_ITEMS_KEY, JSON.stringify(list));
+        localStorage.setItem(PINNED_TOMBS_KEY, JSON.stringify(nextTombs));
     } catch {
         // ignore
     }
-    queueSettingsCloudSync();
+}
+
+function writePinnedItems(entries, options = {}) {
+    const tombs = options.tombs || readPinnedTombs();
+    persistPinnedState(entries, tombs);
+    if (options.sync !== false) queueSettingsCloudSync({ immediate: true });
 }
 
 function isPinned(fileId) {
@@ -1477,7 +1643,9 @@ function pinItem(file) {
         },
         ...readPinnedItems().filter((entry) => entry.id !== file.id),
     ].slice(0, PINNED_ITEMS_MAX);
-    writePinnedItems(next);
+    const tombs = { ...readPinnedTombs() };
+    delete tombs[file.id];
+    writePinnedItems(next, { tombs });
     const name = file.name || (isFolder(file) ? 'folder' : 'note');
     const kindLabel = isFolder(file) ? 'directory' : 'markdown';
     setStatus('');
@@ -1490,7 +1658,8 @@ const pinnedMetaCache = new Map();
 function unpinItem(fileId, { refresh = true } = {}) {
     if (!fileId) return;
     const next = readPinnedItems().filter((entry) => entry.id !== fileId);
-    writePinnedItems(next);
+    const tombs = { ...readPinnedTombs(), [fileId]: Date.now() };
+    writePinnedItems(next, { tombs });
     pinnedMetaCache.delete(fileId);
     if (refresh) renderPinnedView();
 }
@@ -2463,6 +2632,10 @@ async function handleItemMenu(file) {
     }
     if (action === 'download') {
         await handleDownloadEntry(file);
+        return;
+    }
+    if (action === 'colour') {
+        await handleFileTextColour(file);
     }
 }
 
@@ -2490,7 +2663,28 @@ async function handlePinnedItemMenu(file) {
     }
     if (action === 'download') {
         await handleDownloadEntry(file);
+        return;
     }
+    if (action === 'colour') {
+        await handleFileTextColour(file);
+    }
+}
+
+async function handleFileTextColour(file) {
+    if (!file?.id) return;
+    const current = readFileTextColorsMap().get(String(file.id)) || '';
+    const next = await promptFileTextColor({
+        name: displayFileListName(file.name, {
+            isFolder: isFolder(file),
+            showExtension: readShowFileExtensionsEnabled(),
+        }),
+        currentColor: current,
+    });
+    if (next == null) return;
+    writeFileTextColor(file.id, next);
+    queueSettingsCloudSync({ immediate: true });
+    refreshFileNameDisplays();
+    setStatus(next ? 'Text colour saved' : 'Text colour reset', 'ok');
 }
 
 /**
@@ -4353,6 +4547,7 @@ async function signOut() {
         // ignore
     }
     resetCloudSettingsState();
+    settingsHydratedFromCloud = false;
     pinnedMetaCache.clear();
     clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
@@ -4380,7 +4575,12 @@ async function afterSignedIn() {
     setStatus('');
     state.browseMode = 'folder';
 
+    const hadLocalPins = readPinnedItems().length > 0;
+    if (hadLocalPins) showPinnedView();
+
+    setStatus('Restoring settings…');
     await syncSettingsFromCloud();
+    setStatus('');
 
     const remembered = readRememberedFolder();
     if (remembered && remembered !== ROOT_FOLDER_ID) {
@@ -4635,6 +4835,7 @@ function wireEvents() {
     applySavedListLayout();
     applySavedDefaultEditView();
     applySavedDoubleTapCopy();
+    applySavedShowFileExtensions();
     applySavedBlockingSave();
     applySavedFinderSort();
     if (els.prefTheme) {
@@ -4731,6 +4932,17 @@ function wireEvents() {
             syncDoubleTapCopyControl(enabled);
             setStatus(
                 enabled ? 'Double-tap copy on' : 'Double-tap copy off',
+                'ok'
+            );
+        });
+    }
+    if (els.prefShowFileExtensions) {
+        els.prefShowFileExtensions.addEventListener('change', () => {
+            const enabled = writeShowFileExtensionsEnabled(els.prefShowFileExtensions.checked);
+            syncShowFileExtensionsControl(enabled);
+            refreshFileNameDisplays();
+            setStatus(
+                enabled ? 'File extensions shown' : 'File extensions hidden',
                 'ok'
             );
         });
@@ -4900,12 +5112,21 @@ function wireEvents() {
         }
     });
 
+    const persistSettingsOnHide = () => {
+        if (!isSignedIn()) return;
+        if (!canPushSettingsToCloud()) return;
+        flushCloudSettingsSave(buildSettingsSnapshot).catch(() => {});
+    };
+
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden' && state.editor.fileId) {
+        if (document.visibilityState !== 'hidden') return;
+        persistSettingsOnHide();
+        if (state.editor.fileId) {
             // Persist buffer/draft; don't invent dirty from format-only serialize.
             persistOpenEditorInBackground();
         }
     });
+    window.addEventListener('pagehide', persistSettingsOnHide);
 
     window.addEventListener('resize', () => {
         syncNavLayout();
@@ -4919,12 +5140,14 @@ function wireEvents() {
 async function boot() {
     bindUi();
     wireEvents();
+    await restoreSettingsFromLastGood();
     applySavedFinderLayout();
     applySavedTheme();
     applySavedListStripe();
     applySavedListLayout();
     applySavedDefaultEditView();
     applySavedDoubleTapCopy();
+    applySavedShowFileExtensions();
     applySavedBlockingSave();
     applySavedFinderSort();
     registerServiceWorker();

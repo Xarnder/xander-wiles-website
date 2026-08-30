@@ -9,6 +9,11 @@ import {
     FINDER_SORT_VALUES,
     OPENED_FILES_DAY_MS,
     OPENED_FILES_WEEK_MS,
+    SHOW_FILE_EXTENSIONS_DEFAULT,
+    SHOW_FILE_EXTENSIONS_KEY,
+    FILE_TEXT_COLORS_KEY,
+    FILE_TEXT_COLORS_MAX,
+    FILE_TEXT_COLOR_AT_KEY,
 } from './config.js';
 import {
     buildDateTag,
@@ -16,6 +21,7 @@ import {
     dateTagToIsoDate,
     resolveDateTagInput,
 } from './dates.js';
+import { notifySettingsDirty } from './settings-sync.js';
 
 const els = {};
 
@@ -141,6 +147,7 @@ export function bindUi() {
     els.prefListLayoutSegmented = document.getElementById('pref-list-layout-segmented');
     els.prefDefaultEditView = document.getElementById('pref-default-edit-view');
     els.prefDoubleTapCopy = document.getElementById('pref-double-tap-copy');
+    els.prefShowFileExtensions = document.getElementById('pref-show-file-extensions');
     els.prefBlockingSave = document.getElementById('pref-blocking-save');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
@@ -168,8 +175,19 @@ export function bindUi() {
     els.itemActionsTitle = document.getElementById('item-actions-title');
     els.itemActionsName = document.getElementById('item-actions-name');
     els.itemActionPin = document.getElementById('item-action-pin');
+    els.itemActionColour = document.getElementById('item-action-colour');
     els.itemActionCopy = document.getElementById('item-action-copy');
     els.itemActionDownload = document.getElementById('item-action-download');
+    els.fileColorDialog = document.getElementById('file-color-dialog');
+    els.fileColorName = document.getElementById('file-color-name');
+    els.fileColorPreview = document.getElementById('file-color-preview');
+    els.fileColorSwatches = document.getElementById('file-color-swatches');
+    els.fileColorSv = document.getElementById('file-color-sv');
+    els.fileColorSvThumb = document.getElementById('file-color-sv-thumb');
+    els.fileColorHue = document.getElementById('file-color-hue');
+    els.fileColorReset = document.getElementById('file-color-reset');
+    els.fileColorCancel = document.getElementById('file-color-cancel');
+    els.fileColorApply = document.getElementById('file-color-apply');
     els.pinnedMissingDialog = document.getElementById('pinned-missing-dialog');
     els.pinnedMissingTitle = document.getElementById('pinned-missing-title');
     els.pinnedMissingMessage = document.getElementById('pinned-missing-message');
@@ -954,6 +972,26 @@ export function syncDoubleTapCopyControl(enabled) {
     }
 }
 
+export function readShowFileExtensionsEnabled() {
+    try {
+        const raw = localStorage.getItem(SHOW_FILE_EXTENSIONS_KEY);
+        if (raw === '0') return false;
+        if (raw === '1') return true;
+    } catch {
+        // ignore
+    }
+    return SHOW_FILE_EXTENSIONS_DEFAULT;
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function syncShowFileExtensionsControl(enabled) {
+    if (els.prefShowFileExtensions) {
+        els.prefShowFileExtensions.checked = Boolean(enabled);
+    }
+}
+
 /**
  * @param {boolean} enabled
  */
@@ -1108,8 +1146,13 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
 
     const openedMap = openedAtById instanceof Map ? openedAtById : null;
 
+    const showExtension = readShowFileExtensionsEnabled();
+    const textColors = readFileTextColorsMap();
+
     for (const file of files) {
         const folder = isFolder(file);
+        const fullName = file.name || '(unnamed)';
+        const displayName = displayFileListName(file.name, { isFolder: folder, showExtension });
         const row = document.createElement('div');
         row.className = folder ? 'file-row file-row--folder' : 'file-row file-row--markdown';
         row.setAttribute('role', 'listitem');
@@ -1119,7 +1162,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         openBtn.className = 'file-row-main';
         openBtn.setAttribute(
             'aria-label',
-            folder ? `Open folder ${file.name || ''}` : `Open ${file.name || ''}`
+            folder ? `Open folder ${displayName}` : `Open ${displayName}`
         );
 
         const icon = document.createElement('span');
@@ -1141,7 +1184,14 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
 
         const name = document.createElement('span');
         name.className = 'file-row-name';
-        name.textContent = file.name || '(unnamed)';
+        name.textContent = displayName;
+        if (fullName && fullName !== displayName) name.title = fullName;
+        const customColor = file?.id ? textColors.get(String(file.id)) : '';
+        if (customColor) {
+            name.classList.add('file-row-name--custom');
+            name.style.setProperty('--file-text-color', customColor);
+            name.style.color = customColor;
+        }
         label.appendChild(name);
 
         if (!folder && file?.id && openedMap) {
@@ -1165,7 +1215,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         const menuBtn = document.createElement('button');
         menuBtn.type = 'button';
         menuBtn.className = 'file-row-menu';
-        menuBtn.setAttribute('aria-label', `More actions for ${file.name || 'item'}`);
+        menuBtn.setAttribute('aria-label', `More actions for ${displayName}`);
         menuBtn.title = 'More actions';
         menuBtn.innerHTML =
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
@@ -1212,6 +1262,215 @@ export function displayNoteTitle(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return 'Untitled';
     return raw.replace(/\.(md|markdown)$/i, '') || 'Untitled';
+}
+
+/**
+ * Visible name for a Finder / Pinned row. Hides .md / .markdown unless enabled.
+ * Folders always keep their full name.
+ * @param {string} [name]
+ * @param {{ isFolder?: boolean, showExtension?: boolean }} [options]
+ */
+export function displayFileListName(name, options = {}) {
+    const raw = String(name ?? '').trim();
+    if (!raw) return '(unnamed)';
+    if (options.isFolder || options.showExtension) return raw;
+    return raw.replace(/\.(md|markdown)$/i, '') || raw;
+}
+
+const FILE_COLOR_PRESETS = Object.freeze([
+    '#ff6b6b',
+    '#ffa94d',
+    '#ffe066',
+    '#69db7c',
+    '#38d9a9',
+    '#4dabf7',
+    '#748ffc',
+    '#da77f2',
+    '#f783ac',
+    '#ffffff',
+]);
+
+/**
+ * @param {string} [value]
+ * @returns {string} lowercase #rrggbb or ''
+ */
+export function normalizeHexColor(value) {
+    const raw = String(value ?? '').trim();
+    const match = raw.match(/^#?([0-9a-f]{6})$/i);
+    return match ? `#${match[1].toLowerCase()}` : '';
+}
+
+/**
+ * @returns {Map<string, string>}
+ */
+export function readFileTextColorsMap() {
+    const map = new Map();
+    try {
+        const raw = localStorage.getItem(FILE_TEXT_COLORS_KEY);
+        if (!raw) return map;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return map;
+        for (const [id, color] of Object.entries(parsed)) {
+            if (!id) continue;
+            const hex = normalizeHexColor(color);
+            if (hex) map.set(String(id), hex);
+        }
+    } catch {
+        // ignore
+    }
+    return map;
+}
+
+/**
+ * @returns {Record<string, number>}
+ */
+export function readFileTextColorAtMap() {
+    try {
+        const raw = localStorage.getItem(FILE_TEXT_COLOR_AT_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out = {};
+        for (const [id, ts] of Object.entries(parsed)) {
+            if (!id) continue;
+            const n = Number(ts) || 0;
+            if (n > 0) out[String(id)] = n;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Replace colour maps without a cloud notify (used while applying a pull).
+ * @param {Record<string, string>} colors
+ * @param {Record<string, number>} [at]
+ */
+export function replaceFileTextColors(colors, at) {
+    const nextColors = {};
+    for (const [id, color] of Object.entries(colors || {})) {
+        if (!id) continue;
+        const hex = normalizeHexColor(color);
+        if (hex) nextColors[String(id)] = hex;
+        if (Object.keys(nextColors).length >= FILE_TEXT_COLORS_MAX) break;
+    }
+    const nextAt = {};
+    for (const [id, ts] of Object.entries(at || {})) {
+        if (!id) continue;
+        const n = Number(ts) || 0;
+        if (n > 0) nextAt[String(id)] = n;
+    }
+    try {
+        localStorage.setItem(FILE_TEXT_COLORS_KEY, JSON.stringify(nextColors));
+        localStorage.setItem(FILE_TEXT_COLOR_AT_KEY, JSON.stringify(nextAt));
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * @param {Map<string, string> | Record<string, string>} colors
+ * @returns {Record<string, string>}
+ */
+export function writeFileTextColorsMap(colors) {
+    const entries =
+        colors instanceof Map
+            ? [...colors.entries()]
+            : Object.entries(colors && typeof colors === 'object' ? colors : {});
+    const next = {};
+    for (const [id, color] of entries) {
+        if (!id) continue;
+        const hex = normalizeHexColor(color);
+        if (!hex) continue;
+        next[String(id)] = hex;
+        if (Object.keys(next).length >= FILE_TEXT_COLORS_MAX) break;
+    }
+    try {
+        localStorage.setItem(FILE_TEXT_COLORS_KEY, JSON.stringify(next));
+    } catch {
+        // ignore
+    }
+    notifySettingsDirty();
+    return next;
+}
+
+/**
+ * @param {string} fileId
+ * @param {string} hex empty string clears the colour
+ */
+export function writeFileTextColor(fileId, hex) {
+    const id = String(fileId || '');
+    if (!id) return readFileTextColorsMap();
+    const map = readFileTextColorsMap();
+    const color = normalizeHexColor(hex);
+    if (color) map.set(id, color);
+    else map.delete(id);
+    const at = readFileTextColorAtMap();
+    at[id] = Date.now();
+    replaceFileTextColors(Object.fromEntries(map), at);
+    notifySettingsDirty();
+    return map;
+}
+
+function clampUnit(n) {
+    return Math.min(1, Math.max(0, Number(n) || 0));
+}
+
+function hexToHsv(hex) {
+    const color = normalizeHexColor(hex);
+    if (!color) return { h: 210, s: 0.7, v: 1 };
+    const r = parseInt(color.slice(1, 3), 16) / 255;
+    const g = parseInt(color.slice(3, 5), 16) / 255;
+    const b = parseInt(color.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d) {
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+    }
+    return { h, s: max ? d / max : 0, v: max };
+}
+
+function hsvToHex(h, s, v) {
+    const hue = ((Number(h) % 360) + 360) % 360;
+    const sat = clampUnit(s);
+    const val = clampUnit(v);
+    const c = val * sat;
+    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = val - c;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    if (hue < 60) {
+        r = c;
+        g = x;
+    } else if (hue < 120) {
+        r = x;
+        g = c;
+    } else if (hue < 180) {
+        g = c;
+        b = x;
+    } else if (hue < 240) {
+        g = x;
+        b = c;
+    } else if (hue < 300) {
+        r = x;
+        b = c;
+    } else {
+        r = c;
+        b = x;
+    }
+    const toByte = (n) =>
+        Math.round((n + m) * 255)
+            .toString(16)
+            .padStart(2, '0');
+    return `#${toByte(r)}${toByte(g)}${toByte(b)}`;
 }
 
 export function syncEditorChrome(state, options = {}) {
@@ -1952,7 +2211,7 @@ export function promptFillListDates(options) {
  * Action sheet for a Finder / Pinned row.
  * @param {object} file
  * @param {{ isPinned?: boolean }} [options]
- * @returns {Promise<'pin'|'unpin'|'copy'|'rename'|'move'|'download'|null>}
+ * @returns {Promise<'pin'|'unpin'|'colour'|'copy'|'rename'|'move'|'download'|null>}
  */
 export function promptItemActions(file, options = {}) {
     const dialog = els.itemActionsDialog;
@@ -1968,6 +2227,8 @@ export function promptItemActions(file, options = {}) {
     if (els.itemActionsName) {
         els.itemActionsName.textContent = file.name || '(unnamed)';
         els.itemActionsName.hidden = !file.name;
+        const existing = file?.id ? readFileTextColorsMap().get(String(file.id)) : '';
+        els.itemActionsName.style.color = existing || '';
     }
     if (els.itemActionPin) {
         els.itemActionPin.hidden = false;
@@ -1984,6 +2245,7 @@ export function promptItemActions(file, options = {}) {
             if (
                 value === 'pin' ||
                 value === 'unpin' ||
+                value === 'colour' ||
                 value === 'copy' ||
                 value === 'rename' ||
                 value === 'move' ||
@@ -1994,6 +2256,176 @@ export function promptItemActions(file, options = {}) {
         };
         dialog.addEventListener('close', onClose);
         dialog.returnValue = 'cancel';
+        dialog.showModal();
+    });
+}
+
+/**
+ * Touch-friendly colour picker for a Finder / Pinned row.
+ * @param {{ name?: string, currentColor?: string }} [options]
+ * @returns {Promise<string|null>} hex to apply, '' to reset, null if cancelled
+ */
+export function promptFileTextColor(options = {}) {
+    const dialog = els.fileColorDialog;
+    if (!dialog) return Promise.resolve(null);
+
+    const displayName = String(options.name || '').trim() || 'This item';
+    const initial = normalizeHexColor(options.currentColor);
+    const hsv = initial ? hexToHsv(initial) : { h: 210, s: 0.7, v: 1 };
+    let isDefault = !initial;
+
+    const preview = els.fileColorPreview;
+    const swatches = els.fileColorSwatches;
+    const sv = els.fileColorSv;
+    const thumb = els.fileColorSvThumb;
+    const hue = els.fileColorHue;
+
+    if (els.fileColorName) {
+        els.fileColorName.textContent = displayName;
+        els.fileColorName.hidden = !options.name;
+    }
+
+    const currentHex = () => hsvToHex(hsv.h, hsv.s, hsv.v);
+
+    const paintPreview = () => {
+        const hex = isDefault ? '' : currentHex();
+        if (preview) {
+            preview.textContent = displayName;
+            if (hex) preview.style.setProperty('--file-text-color', hex);
+            else preview.style.removeProperty('--file-text-color');
+        }
+        if (sv) sv.style.setProperty('--color-hue', String(hsv.h));
+        if (thumb) {
+            thumb.style.left = `${clampUnit(hsv.s) * 100}%`;
+            thumb.style.top = `${(1 - clampUnit(hsv.v)) * 100}%`;
+            thumb.style.setProperty('--file-text-color', hex || 'var(--text)');
+        }
+        if (hue && Number(hue.value) !== Math.round(hsv.h)) {
+            hue.value = String(Math.round(hsv.h));
+        }
+        if (swatches) {
+            for (const btn of swatches.querySelectorAll('.file-color-swatch')) {
+                const value = btn.getAttribute('data-color') || '';
+                const selected = isDefault ? value === '' : value === hex;
+                btn.classList.toggle('is-selected', selected);
+            }
+        }
+    };
+
+    const fillSwatches = () => {
+        if (!swatches) return;
+        swatches.replaceChildren();
+        const addSwatch = (color, label) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = color
+                ? 'file-color-swatch'
+                : 'file-color-swatch file-color-swatch--default';
+            btn.setAttribute('role', 'option');
+            btn.setAttribute('data-color', color);
+            btn.setAttribute('aria-label', label);
+            btn.title = label;
+            if (color) btn.style.setProperty('--swatch', color);
+            btn.addEventListener('click', () => {
+                if (!color) {
+                    isDefault = true;
+                } else {
+                    isDefault = false;
+                    const next = hexToHsv(color);
+                    hsv.h = next.h;
+                    hsv.s = next.s;
+                    hsv.v = next.v;
+                }
+                paintPreview();
+            });
+            swatches.appendChild(btn);
+        };
+        addSwatch('', 'Default text colour');
+        for (const color of FILE_COLOR_PRESETS) {
+            addSwatch(color, color);
+        }
+    };
+
+    const setFromPointer = (event) => {
+        if (!sv) return;
+        const rect = sv.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        hsv.s = clampUnit((event.clientX - rect.left) / rect.width);
+        hsv.v = clampUnit(1 - (event.clientY - rect.top) / rect.height);
+        isDefault = false;
+        paintPreview();
+    };
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (dialog.open) dialog.close();
+            resolve(value);
+        };
+
+        const onCancel = (event) => {
+            event?.preventDefault?.();
+            finish(null);
+        };
+        const onApply = () => finish(isDefault ? '' : currentHex());
+        const onReset = () => {
+            isDefault = true;
+            paintPreview();
+        };
+        const onHue = () => {
+            hsv.h = Number(hue?.value) || 0;
+            isDefault = false;
+            paintPreview();
+        };
+        const onPointerDown = (event) => {
+            if (event.button != null && event.button !== 0) return;
+            event.preventDefault();
+            sv?.setPointerCapture?.(event.pointerId);
+            setFromPointer(event);
+        };
+        const onPointerMove = (event) => {
+            if (!sv?.hasPointerCapture?.(event.pointerId)) return;
+            event.preventDefault();
+            setFromPointer(event);
+        };
+        const onSvKey = (event) => {
+            const step = event.shiftKey ? 0.08 : 0.03;
+            if (event.key === 'ArrowLeft') hsv.s = clampUnit(hsv.s - step);
+            else if (event.key === 'ArrowRight') hsv.s = clampUnit(hsv.s + step);
+            else if (event.key === 'ArrowUp') hsv.v = clampUnit(hsv.v + step);
+            else if (event.key === 'ArrowDown') hsv.v = clampUnit(hsv.v - step);
+            else return;
+            event.preventDefault();
+            isDefault = false;
+            paintPreview();
+        };
+
+        const cleanup = () => {
+            els.fileColorCancel?.removeEventListener('click', onCancel);
+            els.fileColorApply?.removeEventListener('click', onApply);
+            els.fileColorReset?.removeEventListener('click', onReset);
+            hue?.removeEventListener('input', onHue);
+            sv?.removeEventListener('pointerdown', onPointerDown);
+            sv?.removeEventListener('pointermove', onPointerMove);
+            sv?.removeEventListener('keydown', onSvKey);
+            dialog.removeEventListener('cancel', onCancel);
+        };
+
+        fillSwatches();
+        paintPreview();
+
+        els.fileColorCancel?.addEventListener('click', onCancel);
+        els.fileColorApply?.addEventListener('click', onApply);
+        els.fileColorReset?.addEventListener('click', onReset);
+        hue?.addEventListener('input', onHue);
+        sv?.addEventListener('pointerdown', onPointerDown);
+        sv?.addEventListener('pointermove', onPointerMove);
+        sv?.addEventListener('keydown', onSvKey);
+        dialog.addEventListener('cancel', onCancel);
+
         dialog.showModal();
     });
 }
