@@ -212,6 +212,79 @@ export function mergeFileTextColors(input = {}) {
     return { colors, at };
 }
 
+/**
+ * @param {unknown} raw
+ * @returns {Record<string, true>}
+ */
+export function normalizeBoldMap(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    for (const [id, value] of Object.entries(raw)) {
+        if (!id) continue;
+        if (value === true || value === 1 || value === '1') out[id] = true;
+    }
+    return out;
+}
+
+/**
+ * Last-write-wins per file id. A newer timestamp with no bold flag means "cleared".
+ * @param {{
+ *   localBold?: unknown,
+ *   localAt?: unknown,
+ *   cloudBold?: unknown,
+ *   cloudAt?: unknown,
+ *   max?: number,
+ * }} input
+ * @returns {{ bold: Record<string, true>, at: Record<string, number> }}
+ */
+export function mergeFileTextBold(input = {}) {
+    const max = input.max ?? FILE_TEXT_COLORS_MAX;
+    const localBold = normalizeBoldMap(input.localBold);
+    const cloudBold = normalizeBoldMap(input.cloudBold);
+    const localAt = normalizeColorTimes(input.localAt);
+    const cloudAt = normalizeColorTimes(input.cloudAt);
+    const ids = new Set([
+        ...Object.keys(localBold),
+        ...Object.keys(cloudBold),
+        ...Object.keys(localAt),
+        ...Object.keys(cloudAt),
+    ]);
+
+    const bold = {};
+    const at = {};
+    for (const id of ids) {
+        const lAt = localAt[id] || 0;
+        const cAt = cloudAt[id] || 0;
+        let on = false;
+        let ts = 0;
+        if (cAt > lAt) {
+            on = Boolean(cloudBold[id]);
+            ts = cAt;
+        } else if (lAt > cAt) {
+            on = Boolean(localBold[id]);
+            ts = lAt;
+        } else if (cloudBold[id]) {
+            on = true;
+            ts = cAt;
+        } else if (localBold[id]) {
+            on = true;
+            ts = lAt;
+        }
+        if (ts) at[id] = ts;
+        if (on) bold[id] = true;
+        if (Object.keys(bold).length >= max && Object.keys(at).length >= max) break;
+    }
+
+    const boldIds = Object.keys(bold);
+    if (boldIds.length > max) {
+        const keep = new Set(boldIds.slice(0, max));
+        for (const id of Object.keys(bold)) {
+            if (!keep.has(id)) delete bold[id];
+        }
+    }
+    return { bold, at };
+}
+
 function objectMap(value) {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : undefined;
 }
@@ -258,6 +331,8 @@ export function normalizeCloudSettings(parsed) {
         openedFiles: objectMap(parsed.openedFiles),
         fileTextColors: objectMap(parsed.fileTextColors),
         fileTextColorAt: objectMap(parsed.fileTextColorAt),
+        fileTextBold: objectMap(parsed.fileTextBold),
+        fileTextBoldAt: objectMap(parsed.fileTextBoldAt),
     };
 }
 
@@ -288,6 +363,8 @@ export function cloudHasPrefs(settings) {
     if (mapKeyCount(settings.openedFiles)) return true;
     if (mapKeyCount(settings.fileTextColors)) return true;
     if (mapKeyCount(settings.fileTextColorAt)) return true;
+    if (mapKeyCount(settings.fileTextBold)) return true;
+    if (mapKeyCount(settings.fileTextBoldAt)) return true;
     return false;
 }
 
@@ -324,6 +401,7 @@ export function cloudSettingsScore(cloud) {
     if (cloud.finderMdOrder) score += 1;
     if (Array.isArray(cloud.pinnedItems)) score += cloud.pinnedItems.length * 10;
     score += Math.min(mapKeyCount(cloud.fileTextColors), 40) * 2;
+    score += Math.min(mapKeyCount(cloud.fileTextBold), 40) * 2;
     score += Math.min(mapKeyCount(cloud.pinnedTombs), 20);
     score += Math.min(mapKeyCount(cloud.openedFiles), 20) * 0.25;
     const updated = Number(cloud.updatedAt) || 0;

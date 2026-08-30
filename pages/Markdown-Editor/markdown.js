@@ -632,6 +632,58 @@ export function serializePlainList(block) {
 }
 
 /**
+ * Single-item clipboard line (no nested children). Matches the historic
+ * Preview/List copy: plain text, or a `[x]` / `[ ]` prefix for tasks.
+ * @param {object} item
+ * @param {{ task?: boolean }} [block]
+ */
+export function formatPlainItemClipboardLine(item, block) {
+    const text = String(item?.text || '').trim();
+    const isTask =
+        Boolean(block?.task) || item?.checked === true || item?.checked === false;
+    if (isTask) {
+        return `${item?.checked ? '[x]' : '[ ]'} ${text}`.trim();
+    }
+    return text;
+}
+
+/**
+ * Clipboard text for one plain-list item plus any nested descendants.
+ * A leaf stays a single line; a parent becomes a markdown subtree so paste
+ * keeps the nest (parent at depth 0).
+ * @param {object} item
+ * @param {{ items?: object[], task?: boolean, ordered?: boolean }} [block]
+ */
+export function formatPlainItemSubtreeClipboard(item, block) {
+    const items = Array.isArray(block?.items) ? block.items : [];
+    const index =
+        item?.id != null ? items.findIndex((entry) => entry && entry.id === item.id) : -1;
+    const head = index >= 0 ? { ...items[index], ...item } : item;
+    if (!head) return '';
+
+    const end = index >= 0 ? plainListInsertIndexAfterSubtree(items, index) : -1;
+    const slice = index >= 0 && end > index ? items.slice(index, end) : [head];
+    if (slice.length <= 1) return formatPlainItemClipboardLine(head, block);
+
+    const parentDepth = plainListDepthFromIndent(head.indent);
+    const remapped = slice.map((entry, offset) => {
+        const src = offset === 0 ? head : entry;
+        const depth = Math.max(0, plainListDepthFromIndent(src.indent) - parentDepth);
+        return {
+            ...src,
+            indent: plainListIndentForDepth(depth),
+        };
+    });
+
+    return serializePlainList({
+        items: remapped,
+        ordered: Boolean(block?.ordered),
+        task: Boolean(block?.task),
+        title: '',
+    });
+}
+
+/**
  * Rebuild markdown source from split blocks (lossless for prose chunks).
  * @param {Array<object>} blocks
  * @returns {string}

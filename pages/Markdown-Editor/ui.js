@@ -14,6 +14,8 @@ import {
     FILE_TEXT_COLORS_KEY,
     FILE_TEXT_COLORS_MAX,
     FILE_TEXT_COLOR_AT_KEY,
+    FILE_TEXT_BOLD_KEY,
+    FILE_TEXT_BOLD_AT_KEY,
 } from './config.js';
 import {
     buildDateTag,
@@ -67,6 +69,7 @@ export function bindUi() {
     els.editorMoreInsertDate = document.getElementById('editor-more-insert-date');
     els.editorMoreFillDates = document.getElementById('editor-more-fill-dates');
     els.editorMoreShowDates = document.getElementById('editor-more-show-dates');
+    els.editorMorePureReader = document.getElementById('editor-more-pure-reader');
     els.editorMoreAutosaveOff = document.getElementById('editor-more-autosave-off');
     els.editorMoreHistory = document.getElementById('editor-more-history');
     els.editorMoreNameVersion = document.getElementById('editor-more-name-version');
@@ -176,6 +179,7 @@ export function bindUi() {
     els.itemActionsName = document.getElementById('item-actions-name');
     els.itemActionPin = document.getElementById('item-action-pin');
     els.itemActionColour = document.getElementById('item-action-colour');
+    els.itemActionBold = document.getElementById('item-action-bold');
     els.itemActionCopy = document.getElementById('item-action-copy');
     els.itemActionDownload = document.getElementById('item-action-download');
     els.fileColorDialog = document.getElementById('file-color-dialog');
@@ -185,6 +189,7 @@ export function bindUi() {
     els.fileColorSv = document.getElementById('file-color-sv');
     els.fileColorSvThumb = document.getElementById('file-color-sv-thumb');
     els.fileColorHue = document.getElementById('file-color-hue');
+    els.fileColorBold = document.getElementById('file-color-bold');
     els.fileColorReset = document.getElementById('file-color-reset');
     els.fileColorCancel = document.getElementById('file-color-cancel');
     els.fileColorApply = document.getElementById('file-color-apply');
@@ -1148,6 +1153,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
 
     const showExtension = readShowFileExtensionsEnabled();
     const textColors = readFileTextColorsMap();
+    const textBold = readFileTextBoldMap();
 
     for (const file of files) {
         const folder = isFolder(file);
@@ -1186,11 +1192,15 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         name.className = 'file-row-name';
         name.textContent = displayName;
         if (fullName && fullName !== displayName) name.title = fullName;
-        const customColor = file?.id ? textColors.get(String(file.id)) : '';
+        const fileId = file?.id ? String(file.id) : '';
+        const customColor = fileId ? textColors.get(fileId) : '';
         if (customColor) {
             name.classList.add('file-row-name--custom');
             name.style.setProperty('--file-text-color', customColor);
             name.style.color = customColor;
+        }
+        if (fileId && textBold.has(fileId)) {
+            name.classList.add('file-row-name--bold');
         }
         label.appendChild(name);
 
@@ -1409,6 +1419,90 @@ export function writeFileTextColor(fileId, hex) {
     const at = readFileTextColorAtMap();
     at[id] = Date.now();
     replaceFileTextColors(Object.fromEntries(map), at);
+    notifySettingsDirty();
+    return map;
+}
+
+/**
+ * @returns {Map<string, true>}
+ */
+export function readFileTextBoldMap() {
+    const map = new Map();
+    try {
+        const raw = localStorage.getItem(FILE_TEXT_BOLD_KEY);
+        if (!raw) return map;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return map;
+        for (const [id, value] of Object.entries(parsed)) {
+            if (!id) continue;
+            if (value === true || value === 1 || value === '1') map.set(String(id), true);
+        }
+    } catch {
+        // ignore
+    }
+    return map;
+}
+
+/**
+ * @returns {Record<string, number>}
+ */
+export function readFileTextBoldAtMap() {
+    try {
+        const raw = localStorage.getItem(FILE_TEXT_BOLD_AT_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out = {};
+        for (const [id, ts] of Object.entries(parsed)) {
+            if (!id) continue;
+            const n = Number(ts) || 0;
+            if (n > 0) out[String(id)] = n;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Replace bold maps without a cloud notify (used while applying a pull).
+ * @param {Record<string, boolean>} bold
+ * @param {Record<string, number>} [at]
+ */
+export function replaceFileTextBold(bold, at) {
+    const nextBold = {};
+    for (const [id, value] of Object.entries(bold || {})) {
+        if (!id) continue;
+        if (value === true || value === 1 || value === '1') nextBold[String(id)] = true;
+        if (Object.keys(nextBold).length >= FILE_TEXT_COLORS_MAX) break;
+    }
+    const nextAt = {};
+    for (const [id, ts] of Object.entries(at || {})) {
+        if (!id) continue;
+        const n = Number(ts) || 0;
+        if (n > 0) nextAt[String(id)] = n;
+    }
+    try {
+        localStorage.setItem(FILE_TEXT_BOLD_KEY, JSON.stringify(nextBold));
+        localStorage.setItem(FILE_TEXT_BOLD_AT_KEY, JSON.stringify(nextAt));
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * @param {string} fileId
+ * @param {boolean} bold
+ */
+export function writeFileTextBold(fileId, bold) {
+    const id = String(fileId || '');
+    if (!id) return readFileTextBoldMap();
+    const map = readFileTextBoldMap();
+    if (bold) map.set(id, true);
+    else map.delete(id);
+    const at = readFileTextBoldAtMap();
+    at[id] = Date.now();
+    replaceFileTextBold(Object.fromEntries(map), at);
     notifySettingsDirty();
     return map;
 }
@@ -1985,6 +2079,7 @@ export function promptEditorMoreMenu(options = {}) {
         els.editorMorePin.textContent = pinned ? 'Unpin' : 'Pin';
     }
     syncEditorMoreShowDates(Boolean(options.showDates));
+    syncEditorMorePureReader(Boolean(options.pureReader));
     syncEditorMoreAutosaveOff(options.autosaveEnabled !== false);
 
     return new Promise((resolve) => {
@@ -2011,6 +2106,18 @@ export function syncEditorMoreShowDates(enabled) {
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     btn.classList.toggle('is-selected', on);
     btn.textContent = on ? 'Hide dates' : 'Show dates';
+}
+
+/**
+ * @param {boolean} enabled
+ */
+export function syncEditorMorePureReader(enabled) {
+    const btn = els.editorMorePureReader;
+    if (!btn) return;
+    const on = Boolean(enabled);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.classList.toggle('is-selected', on);
+    btn.textContent = on ? 'Exit pure reader' : 'Pure reader';
 }
 
 /**
@@ -2211,7 +2318,7 @@ export function promptFillListDates(options) {
  * Action sheet for a Finder / Pinned row.
  * @param {object} file
  * @param {{ isPinned?: boolean }} [options]
- * @returns {Promise<'pin'|'unpin'|'colour'|'copy'|'rename'|'move'|'download'|null>}
+ * @returns {Promise<'pin'|'unpin'|'colour'|'bold'|'copy'|'rename'|'move'|'download'|null>}
  */
 export function promptItemActions(file, options = {}) {
     const dialog = els.itemActionsDialog;
@@ -2221,19 +2328,25 @@ export function promptItemActions(file, options = {}) {
     const pinned = Boolean(options.isPinned);
     const canDownload = !folder && isMarkdownCandidate(file);
     const canCopy = !folder && isMarkdownCandidate(file);
+    const fileId = file?.id ? String(file.id) : '';
+    const existingColor = fileId ? readFileTextColorsMap().get(fileId) : '';
+    const existingBold = fileId ? readFileTextBoldMap().has(fileId) : false;
     if (els.itemActionsTitle) {
         els.itemActionsTitle.textContent = folder ? 'Folder actions' : 'Markdown actions';
     }
     if (els.itemActionsName) {
         els.itemActionsName.textContent = file.name || '(unnamed)';
         els.itemActionsName.hidden = !file.name;
-        const existing = file?.id ? readFileTextColorsMap().get(String(file.id)) : '';
-        els.itemActionsName.style.color = existing || '';
+        els.itemActionsName.style.color = existingColor || '';
+        els.itemActionsName.style.fontWeight = existingBold ? '800' : '';
     }
     if (els.itemActionPin) {
         els.itemActionPin.hidden = false;
         els.itemActionPin.value = pinned ? 'unpin' : 'pin';
         els.itemActionPin.textContent = pinned ? 'Unpin' : 'Pin';
+    }
+    if (els.itemActionBold) {
+        els.itemActionBold.textContent = existingBold ? 'Regular text' : 'Bold text';
     }
     if (els.itemActionCopy) els.itemActionCopy.hidden = !canCopy;
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;
@@ -2246,6 +2359,7 @@ export function promptItemActions(file, options = {}) {
                 value === 'pin' ||
                 value === 'unpin' ||
                 value === 'colour' ||
+                value === 'bold' ||
                 value === 'copy' ||
                 value === 'rename' ||
                 value === 'move' ||
@@ -2262,8 +2376,8 @@ export function promptItemActions(file, options = {}) {
 
 /**
  * Touch-friendly colour picker for a Finder / Pinned row.
- * @param {{ name?: string, currentColor?: string }} [options]
- * @returns {Promise<string|null>} hex to apply, '' to reset, null if cancelled
+ * @param {{ name?: string, currentColor?: string, currentBold?: boolean }} [options]
+ * @returns {Promise<{ color: string, bold: boolean }|null>} hex to apply ('' resets colour), null if cancelled
  */
 export function promptFileTextColor(options = {}) {
     const dialog = els.fileColorDialog;
@@ -2273,12 +2387,14 @@ export function promptFileTextColor(options = {}) {
     const initial = normalizeHexColor(options.currentColor);
     const hsv = initial ? hexToHsv(initial) : { h: 210, s: 0.7, v: 1 };
     let isDefault = !initial;
+    let isBold = Boolean(options.currentBold);
 
     const preview = els.fileColorPreview;
     const swatches = els.fileColorSwatches;
     const sv = els.fileColorSv;
     const thumb = els.fileColorSvThumb;
     const hue = els.fileColorHue;
+    const boldToggle = els.fileColorBold;
 
     if (els.fileColorName) {
         els.fileColorName.textContent = displayName;
@@ -2291,9 +2407,11 @@ export function promptFileTextColor(options = {}) {
         const hex = isDefault ? '' : currentHex();
         if (preview) {
             preview.textContent = displayName;
+            preview.classList.toggle('is-bold', isBold);
             if (hex) preview.style.setProperty('--file-text-color', hex);
             else preview.style.removeProperty('--file-text-color');
         }
+        if (boldToggle) boldToggle.checked = isBold;
         if (sv) sv.style.setProperty('--color-hue', String(hsv.h));
         if (thumb) {
             thumb.style.left = `${clampUnit(hsv.s) * 100}%`;
@@ -2370,7 +2488,12 @@ export function promptFileTextColor(options = {}) {
             event?.preventDefault?.();
             finish(null);
         };
-        const onApply = () => finish(isDefault ? '' : currentHex());
+        const onApply = () =>
+            finish({ color: isDefault ? '' : currentHex(), bold: isBold });
+        const onBold = () => {
+            isBold = Boolean(boldToggle?.checked);
+            paintPreview();
+        };
         const onReset = () => {
             isDefault = true;
             paintPreview();
@@ -2407,6 +2530,7 @@ export function promptFileTextColor(options = {}) {
             els.fileColorCancel?.removeEventListener('click', onCancel);
             els.fileColorApply?.removeEventListener('click', onApply);
             els.fileColorReset?.removeEventListener('click', onReset);
+            boldToggle?.removeEventListener('change', onBold);
             hue?.removeEventListener('input', onHue);
             sv?.removeEventListener('pointerdown', onPointerDown);
             sv?.removeEventListener('pointermove', onPointerMove);
@@ -2420,6 +2544,7 @@ export function promptFileTextColor(options = {}) {
         els.fileColorCancel?.addEventListener('click', onCancel);
         els.fileColorApply?.addEventListener('click', onApply);
         els.fileColorReset?.addEventListener('click', onReset);
+        boldToggle?.addEventListener('change', onBold);
         hue?.addEventListener('input', onHue);
         sv?.addEventListener('pointerdown', onPointerDown);
         sv?.addEventListener('pointermove', onPointerMove);

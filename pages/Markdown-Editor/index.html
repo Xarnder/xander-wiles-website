@@ -136,7 +136,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260828-list-drag">
+    <link rel="stylesheet" href="style.css?v=20260830-pure-reader">
     <style>
         /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
         html[data-theme="oled"] #saving-dialog,
@@ -367,7 +367,7 @@
                             <span class="settings-pref-label">Double-tap item to copy</span>
                             <input id="pref-double-tap-copy" class="settings-toggle" type="checkbox" checked>
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Quickly double-tap a list item in Preview or List to copy that item’s text. Turn off if it interferes with scrolling or selection.</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Quickly double-tap a list item in Preview or List to copy that item and any nested points. Turn off if it interferes with scrolling or selection.</p>
                     </div>
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Saving</h3>
@@ -410,7 +410,7 @@
                     <ul class="settings-tips">
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
-                        <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
+                        <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text. Turn on <strong>Pure reader</strong> in the Edit ⋮ menu to lock Preview (no list buttons, long-press, or mini editor) when handing the device to someone.</li>
                         <li>Unsaved edits autosave to Drive after 10 seconds of inactivity — the slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. Tapping <strong>Save</strong> can show a <strong>Saving in progress</strong> lock (turn this off in Settings if you really need to). Autosave never blocks the screen. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
@@ -566,6 +566,7 @@
             <div class="item-actions-list">
                 <button type="submit" value="pin" id="item-action-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
                 <button type="submit" value="colour" id="item-action-colour" class="btn btn-ghost btn-block item-action-btn">Change text colour</button>
+                <button type="submit" value="bold" id="item-action-bold" class="btn btn-ghost btn-block item-action-btn">Bold text</button>
                 <button type="submit" value="copy" id="item-action-copy" class="btn btn-ghost btn-block item-action-btn">Copy</button>
                 <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
@@ -580,6 +581,10 @@
             <h2 id="file-color-title">Text colour</h2>
             <p id="file-color-name" class="dialog-hint"></p>
             <p id="file-color-preview" class="file-color-preview" aria-live="polite">Preview</p>
+            <label class="file-color-bold" for="file-color-bold">
+                <span>Bold text</span>
+                <input id="file-color-bold" class="settings-toggle" type="checkbox">
+            </label>
             <p class="file-color-label">Presets</p>
             <div id="file-color-swatches" class="file-color-swatches" role="listbox" aria-label="Preset colours"></div>
             <p class="file-color-label">Custom</p>
@@ -622,6 +627,7 @@
                     <button type="button" id="editor-more-insert-date" class="btn btn-ghost btn-block item-action-btn">Insert date</button>
                     <button type="button" id="editor-more-fill-dates" class="btn btn-ghost btn-block item-action-btn">Fill missing list dates…</button>
                     <button type="button" id="editor-more-show-dates" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Show dates</button>
+                    <button type="button" id="editor-more-pure-reader" class="btn btn-ghost btn-block item-action-btn" aria-pressed="false">Pure reader</button>
                     <button type="button" id="editor-more-history" class="btn btn-ghost btn-block item-action-btn">Version history</button>
                     <button type="button" id="editor-more-name-version" class="btn btn-ghost btn-block item-action-btn">Name this version…</button>
                     <button type="button" id="editor-more-autosave-off" class="btn btn-ghost btn-block item-action-btn">Turn off autosave</button>
@@ -856,7 +862,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js?v=128"></script>
+    <script type="module" src="app.js?v=131"></script>
 </body>
 
 </html>

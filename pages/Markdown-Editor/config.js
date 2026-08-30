@@ -86,6 +86,11 @@ export const FILE_TEXT_COLORS_MAX = 300;
 /** Per-id timestamps for colour add/clear so cloud merge is last-write-wins. */
 export const FILE_TEXT_COLOR_AT_KEY = 'md-editor:fileTextColorAt';
 
+/** Per-item bold names in Finder / Pinned (id → true). */
+export const FILE_TEXT_BOLD_KEY = 'md-editor:fileTextBold';
+/** Per-id timestamps for bold add/clear so cloud merge is last-write-wins. */
+export const FILE_TEXT_BOLD_AT_KEY = 'md-editor:fileTextBoldAt';
+
 /** Preview mode Contents panel: '1' open, '0' collapsed */
 export const PREVIEW_TOC_OPEN_KEY = 'md-editor:previewTocOpen';
 export const PREVIEW_TOC_OPEN_DEFAULT = true;
@@ -130,11 +135,18 @@ export const DEFAULT_EDIT_VIEW_VALUES = new Set(
 );
 
 /**
- * Double-tap a list item in Preview/List to copy its text.
+ * Double-tap a list item in Preview/List to copy it and any nested points.
  * '1' on (default), '0' off
  */
 export const DOUBLE_TAP_COPY_KEY = 'md-editor:doubleTapCopy';
 export const DOUBLE_TAP_COPY_DEFAULT = true;
+
+/**
+ * Preview-only lock: hide list chrome and block mini / long-press edit.
+ * Local to this device (not cloud-synced). Off by default.
+ */
+export const PURE_READER_KEY = 'md-editor:pureReader';
+export const PURE_READER_DEFAULT = false;
 
 /**
  * Show .md / .markdown on Finder and Pinned row labels.

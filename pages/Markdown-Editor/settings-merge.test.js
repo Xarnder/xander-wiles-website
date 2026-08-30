@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
     cloudHasPrefs,
     cloudSettingsScore,
+    mergeFileTextBold,
     mergeFileTextColors,
     mergePinnedState,
     normalizePinnedItems,
@@ -137,11 +138,44 @@ test('parses theme, pins, tombs, and colours from cloud JSON', () => {
     assert.equal(cloud.pinnedItems.length, 1);
     assert.equal(cloud.pinnedTombs.gone, 5);
     assert.equal(cloud.fileTextColors.n, '#ff6b6b');
+    assert.equal(cloud.fileTextBold, undefined);
+});
+
+test('parses bold flags from cloud JSON', () => {
+    const cloud = parseCloudSettingsText(
+        JSON.stringify({
+            fileTextBold: { n: true },
+            fileTextBoldAt: { n: 12 },
+        })
+    );
+    assert.equal(cloud.fileTextBold.n, true);
+    assert.equal(cloud.fileTextBoldAt.n, 12);
 });
 
 test('legacy unpinnedAt maps into pinned tombs', () => {
     const cloud = parseCloudSettingsText(JSON.stringify({ unpinnedAt: { x: 42 } }));
     assert.equal(cloud.pinnedTombs.x, 42);
+});
+
+test('newer bold timestamp wins, including clears', () => {
+    const merged = mergeFileTextBold({
+        localBold: { a: true, b: true },
+        localAt: { a: 10, b: 10 },
+        cloudBold: { a: true },
+        cloudAt: { a: 20, b: 30 },
+    });
+    assert.equal(merged.bold.a, true);
+    assert.equal(merged.bold.b, undefined);
+    assert.equal(merged.at.b, 30);
+});
+
+test('legacy bold maps without timestamps keep both sides', () => {
+    const merged = mergeFileTextBold({
+        localBold: { a: true },
+        cloudBold: { b: true },
+    });
+    assert.equal(merged.bold.a, true);
+    assert.equal(merged.bold.b, true);
 });
 
 test('picks the richest settings file, not merely the newest empty one', () => {

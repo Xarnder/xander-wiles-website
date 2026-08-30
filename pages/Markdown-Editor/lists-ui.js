@@ -27,6 +27,7 @@ import {
 import { attachPointerDrag } from './list-drag.js';
 import {
     extractMarkdownHeadings,
+    formatPlainItemSubtreeClipboard,
     joinMarkdownBlocks,
     movePlainListItem,
     movePlainListItemAmongSiblings,
@@ -61,6 +62,8 @@ import {
     PREVIEW_TOC_OPEN_KEY,
     PREVIEW_TOC_STICKY_DEFAULT,
     PREVIEW_TOC_STICKY_KEY,
+    PURE_READER_DEFAULT,
+    PURE_READER_KEY,
 } from './config.js';
 import { notifySettingsDirty } from './settings-sync.js';
 
@@ -69,6 +72,34 @@ const expandedAgentNotes = new Set();
 
 /** Active plain-list single-item mini editor closer (preview). */
 let closeActivePlainMiniEditor = null;
+
+/** True while Preview is rendering with Pure reader on. */
+let previewPureReaderActive = false;
+
+export function readPureReaderEnabled() {
+    try {
+        const raw = localStorage.getItem(PURE_READER_KEY);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+    } catch {
+        // ignore
+    }
+    return PURE_READER_DEFAULT;
+}
+
+/**
+ * @param {boolean} enabled
+ * @returns {boolean}
+ */
+export function writePureReaderEnabled(enabled) {
+    const next = Boolean(enabled);
+    try {
+        localStorage.setItem(PURE_READER_KEY, next ? '1' : '0');
+    } catch {
+        // ignore
+    }
+    return next;
+}
 
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_MOVE_PX = 14;
@@ -171,13 +202,18 @@ function formatMdlistClipboard(list) {
 }
 
 function formatPlainItemClipboard(item, block) {
-    const text = String(item?.text || '').trim();
-    const isTask =
-        Boolean(block?.task) || item?.checked === true || item?.checked === false;
-    if (isTask) {
-        return `${item?.checked ? '[x]' : '[ ]'} ${text}`.trim();
+    return formatPlainItemSubtreeClipboard(item, block);
+}
+
+function copyPlainItemWithStatus(item, block, onStatus, overrides = null) {
+    const payload = overrides ? { ...item, ...overrides } : item;
+    const text = formatPlainItemClipboard(payload, block);
+    if (!String(text || '').trim()) {
+        toastCopyFeedback('Nothing to copy', 'warn');
+        return;
     }
-    return text;
+    const hasNested = String(text).includes('\n');
+    copyWithStatus(text, onStatus, hasNested ? 'Item and sub-points copied' : 'Item copied');
 }
 
 function formatPlainListClipboard(block) {
@@ -332,7 +368,11 @@ function attachDoubleTapCopy(el, getText, onStatus) {
                 toastCopyFeedback('Nothing to copy', 'warn');
                 return;
             }
-            copyWithStatus(text, onStatus, 'Item copied');
+            copyWithStatus(
+                text,
+                onStatus,
+                text.includes('\n') ? 'Item and sub-points copied' : 'Item copied'
+            );
             return;
         }
 
@@ -410,14 +450,15 @@ export function renderListsUi(root, options) {
         onStatus,
         focusItemId,
         focusPlainItemId,
-        openMiniPlainItemId = null,
         focusTocId = null,
-        placingList = false,
         pendingImportList = null,
-        clickEdit = false,
         onEditSpot = null,
         onContentsSelect = null,
     } = options;
+    previewPureReaderActive = mode === 'preview' && readPureReaderEnabled();
+    let openMiniPlainItemId = previewPureReaderActive ? null : options.openMiniPlainItemId || null;
+    let placingList = previewPureReaderActive ? false : Boolean(options.placingList);
+    let clickEdit = previewPureReaderActive ? false : Boolean(options.clickEdit);
     const scrollTop = root.scrollTop;
     const plainListScroll = capturePlainListScroll(root);
     root.replaceChildren();
@@ -425,6 +466,7 @@ export function renderListsUi(root, options) {
     if (placingList) rootMods.push('lists-root--placing');
     if (clickEdit) rootMods.push('lists-root--click-edit');
     if (mode === 'contents') rootMods.push('lists-root--contents');
+    if (previewPureReaderActive) rootMods.push('lists-root--pure-reader');
     root.className = ['lists-root', ...rootMods].join(' ');
     const place = (target) => placeListAt(doc, onChange, target, pendingImportList);
 
@@ -1231,6 +1273,11 @@ function renderPlainListBlock({
     focusPlainItemId,
     openMiniPlainItemId = null,
 }) {
+    if (previewPureReaderActive) {
+        editing = false;
+        reordering = false;
+        openMiniPlainItemId = null;
+    }
     const wrap = document.createElement('section');
     wrap.className = editing
         ? 'mdplain-block mdplain-block--editing'
@@ -1263,19 +1310,21 @@ function renderPlainListBlock({
         }
         const viewItems = renderPlainListViewItems(block, {
             onStatus,
-            onItemLongPress: (item, li) => {
-                openPlainItemMiniEditor({
-                    li,
-                    item,
-                    block,
-                    seg,
-                    segIndex,
-                    listIndex,
-                    doc,
-                    onChange,
-                    onStatus,
-                });
-            },
+            onItemLongPress: previewPureReaderActive
+                ? undefined
+                : (item, li) => {
+                      openPlainItemMiniEditor({
+                          li,
+                          item,
+                          block,
+                          seg,
+                          segIndex,
+                          listIndex,
+                          doc,
+                          onChange,
+                          onStatus,
+                      });
+                  },
         });
         wrap.appendChild(viewItems);
         if (openMiniPlainItemId) {
@@ -1441,6 +1490,12 @@ function renderPlainListViewHeader(
 
     const actions = document.createElement('div');
     actions.className = 'mdlist-header-actions';
+
+    if (previewPureReaderActive) {
+        titleRow.append(title, count);
+        header.appendChild(titleRow);
+        return header;
+    }
 
     const reorderBtn = createListReorderButton({ active: reordering });
     reorderBtn.addEventListener('click', () => {
@@ -1870,6 +1925,7 @@ function openPlainItemMiniEditor({
     onChange,
     onStatus,
 }) {
+    if (previewPureReaderActive) return;
     if (!li || li.classList.contains('mdplain-view-item--mini-editing')) return;
 
     if (typeof closeActivePlainMiniEditor === 'function') {
@@ -2151,27 +2207,18 @@ function openPlainItemMiniEditor({
 
     const copyBtn = createListCopyButton({
         label: 'Copy item',
-        title: 'Copy this item',
+        title: 'Copy this item and any nested points',
     });
     copyBtn.addEventListener('mousedown', (event) => event.preventDefault());
     copyBtn.addEventListener('click', () => {
-        const text = formatPlainItemClipboard(
-            {
-                ...item,
-                text: commitEditorText(),
-                checked: checkInput
-                    ? checkInput.checked
-                    : item.checked === true || item.checked === false
-                      ? item.checked
-                      : null,
-            },
-            block
-        );
-        if (!String(text || '').trim()) {
-            toastCopyFeedback('Nothing to copy', 'warn');
-            return;
-        }
-        copyWithStatus(text, onStatus, 'Item copied');
+        copyPlainItemWithStatus(item, block, onStatus, {
+            text: commitEditorText(),
+            checked: checkInput
+                ? checkInput.checked
+                : item.checked === true || item.checked === false
+                  ? item.checked
+                  : null,
+        });
     });
 
     const itemIndex = (block.items || []).findIndex((it) => it.id === item.id);
@@ -2561,10 +2608,10 @@ function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
     li.setAttribute('role', 'listitem');
 
     if (typeof onItemLongPress === 'function') {
-        li.title = 'Long-press to edit this item · Double-tap to copy';
+        li.title = 'Long-press to edit this item · Double-tap to copy (includes nested points)';
         attachLongPress(li, () => onItemLongPress(item, li));
     } else {
-        li.title = 'Double-tap to copy';
+        li.title = 'Double-tap to copy (includes nested points)';
     }
     attachDoubleTapCopy(li, () => formatPlainItemClipboard(item, block), onStatus);
 
@@ -2641,10 +2688,10 @@ function renderPlainListViewItems(block, options = {}) {
         if (depth > 0) li.classList.add('mdplain-view-item--nested');
         li.setAttribute('role', 'listitem');
         if (typeof onItemLongPress === 'function') {
-            li.title = 'Long-press to edit this item · Double-tap to copy';
+            li.title = 'Long-press to edit this item · Double-tap to copy (includes nested points)';
             attachLongPress(li, () => onItemLongPress(item, li));
         } else {
-            li.title = 'Double-tap to copy';
+            li.title = 'Double-tap to copy (includes nested points)';
         }
         attachDoubleTapCopy(li, () => formatPlainItemClipboard(item, block), onStatus);
 
@@ -2931,8 +2978,8 @@ function renderListStack(seg, doc, onChange, onStatus, focusItemId) {
 
 function renderListBlock(seg, doc, onChange, onStatus, focusItemId) {
     const list = seg.list;
-    const editing = Boolean(seg._editing);
-    const reordering = Boolean(seg._reordering) && !editing;
+    const editing = previewPureReaderActive ? false : Boolean(seg._editing);
+    const reordering = previewPureReaderActive ? false : Boolean(seg._reordering) && !editing;
     const wrap = document.createElement('section');
     wrap.className = editing
         ? 'mdlist-block mdlist-block--editing'
@@ -3134,6 +3181,12 @@ function renderListViewHeader(seg, doc, onChange, onStatus, { reordering = false
 
     const actions = document.createElement('div');
     actions.className = 'mdlist-header-actions';
+
+    if (previewPureReaderActive) {
+        titleRow.append(title, count);
+        header.appendChild(titleRow);
+        return header;
+    }
 
     const reorderBtn = createListReorderButton({ active: reordering });
     reorderBtn.addEventListener('click', () => {

@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    formatPlainItemSubtreeClipboard,
     movePlainListItemAmongSiblings,
     plainListIndentForDepth,
     plainListSiblingMoveTarget,
@@ -95,4 +96,44 @@ test('top-level items move among top-level siblings with nested children attache
     const a = items.findIndex((it) => it.id === 'A');
     const next = movePlainListItemAmongSiblings(items, a, 1);
     assert.deepEqual(ids(next), ['B', 'b1', 'A', 'a1', 'a2', 'a2x', 'a2y', 'a3']);
+});
+
+test('copying a leaf item stays a single line', () => {
+    const items = sampleTree();
+    const block = { items };
+    assert.equal(formatPlainItemSubtreeClipboard(items.find((it) => it.id === 'a2x'), block), 'a2x');
+    assert.equal(formatPlainItemSubtreeClipboard(items.find((it) => it.id === 'a1'), block), 'a1');
+});
+
+test('copying a parent includes nested sub-points as markdown', () => {
+    const items = sampleTree();
+    const block = { items };
+    assert.equal(
+        formatPlainItemSubtreeClipboard(items.find((it) => it.id === 'A'), block),
+        ['- A', '  - a1', '  - a2', '    - a2x', '    - a2y', '  - a3'].join('\n')
+    );
+    assert.equal(
+        formatPlainItemSubtreeClipboard(items.find((it) => it.id === 'a2'), block),
+        ['- a2', '  - a2x', '  - a2y'].join('\n')
+    );
+});
+
+test('copying a parent does not include later siblings', () => {
+    const items = sampleTree();
+    const text = formatPlainItemSubtreeClipboard(items.find((it) => it.id === 'B'), { items });
+    assert.equal(text, ['- B', '  - b1'].join('\n'));
+    assert.equal(text.includes('A'), false);
+});
+
+test('copying a task item keeps the checkbox prefix', () => {
+    const items = [
+        { id: 'p', text: 'Parent', marker: '-', indent: plainListIndentForDepth(0), checked: false },
+        { id: 'c', text: 'Child', marker: '-', indent: plainListIndentForDepth(1), checked: true },
+    ];
+    const block = { items, task: true };
+    assert.equal(formatPlainItemSubtreeClipboard(items[1], block), '[x] Child');
+    assert.equal(
+        formatPlainItemSubtreeClipboard(items[0], block),
+        ['- [ ] Parent', '  - [x] Child'].join('\n')
+    );
 });

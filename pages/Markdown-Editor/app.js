@@ -125,7 +125,7 @@ import {
     resolveDateTagInput,
     writeShowDatesEnabled,
 } from './dates.js';
-import { applyEditingLists, applyEditingPlainLists, applyReorderingLists, applyReorderingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, renderListsUi, writeDoubleTapCopyEnabled } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyReorderingLists, applyReorderingPlainLists, applyTagFilters, readDoubleTapCopyEnabled, readPreviewTocOpen, readPreviewTocSticky, readPureReaderEnabled, renderListsUi, writeDoubleTapCopyEnabled, writePureReaderEnabled } from './lists-ui.js';
 import {
     flushCloudSettingsSave,
     pullCloudSettings,
@@ -133,7 +133,7 @@ import {
     scheduleCloudSettingsSave,
     withCloudApplyGuard,
 } from './settings-sync.js';
-import { cloudHasPrefs, mergeFileTextColors, mergePinnedState } from './settings-merge.js';
+import { cloudHasPrefs, mergeFileTextBold, mergeFileTextColors, mergePinnedState } from './settings-merge.js';
 import { loadLastGoodSettings, saveLastGoodSettings } from './settings-cache.js';
 import {
     extractMarkdownHeadings,
@@ -181,8 +181,13 @@ import {
     readFileTextColorAtMap,
     replaceFileTextColors,
     writeFileTextColor,
+    readFileTextBoldMap,
+    readFileTextBoldAtMap,
+    replaceFileTextBold,
+    writeFileTextBold,
     displayFileListName,
     promptEditorMoreMenu,
+    syncEditorMorePureReader,
     promptFillListDates,
     fillEditorMoreStats,
     promptFinderSort,
@@ -449,6 +454,7 @@ function applyHistorySnapshot(entry) {
 }
 
 function performEditorUndo() {
+    if (isPreviewPureReader()) return false;
     if (!state.editor.fileId) return false;
     flushCurrentEditorContent();
     const current = state.editor.editorContent;
@@ -462,6 +468,7 @@ function performEditorUndo() {
 }
 
 function performEditorRedo() {
+    if (isPreviewPureReader()) return false;
     if (!state.editor.fileId) return false;
     flushCurrentEditorContent();
     const current = state.editor.editorContent;
@@ -1108,6 +1115,8 @@ function buildSettingsSnapshot() {
         openedFiles: openedFilesSnapshot(),
         fileTextColors: Object.fromEntries(readFileTextColorsMap()),
         fileTextColorAt: readFileTextColorAtMap(),
+        fileTextBold: Object.fromEntries(readFileTextBoldMap()),
+        fileTextBoldAt: readFileTextBoldAtMap(),
     };
 }
 
@@ -1118,6 +1127,7 @@ function localSettingsAreMeaningful() {
     if (readPinnedItems().length) return true;
     if (Object.keys(readPinnedTombs()).length) return true;
     if (readFileTextColorsMap().size) return true;
+    if (readFileTextBoldMap().size) return true;
     try {
         if (localStorage.getItem(THEME_KEY)) return true;
         if (localStorage.getItem(LIST_STRIPE_KEY)) return true;
@@ -1364,6 +1374,17 @@ function applyCloudSettings(cloud) {
         ) {
             replaceFileTextColors(cloud.fileTextColors || {}, cloud.fileTextColorAt || {});
         }
+
+        if (
+            (cloud.fileTextBold &&
+                typeof cloud.fileTextBold === 'object' &&
+                !Array.isArray(cloud.fileTextBold)) ||
+            (cloud.fileTextBoldAt &&
+                typeof cloud.fileTextBoldAt === 'object' &&
+                !Array.isArray(cloud.fileTextBoldAt))
+        ) {
+            replaceFileTextBold(cloud.fileTextBold || {}, cloud.fileTextBoldAt || {});
+        }
     });
 }
 
@@ -1380,12 +1401,20 @@ function applyMergedCloudSettings(settings) {
         cloudColors: settings.fileTextColors,
         cloudAt: settings.fileTextColorAt,
     });
+    const mergedBold = mergeFileTextBold({
+        localBold: Object.fromEntries(readFileTextBoldMap()),
+        localAt: readFileTextBoldAtMap(),
+        cloudBold: settings.fileTextBold,
+        cloudAt: settings.fileTextBoldAt,
+    });
     applyCloudSettings({
         ...settings,
         pinnedItems: mergedPins.items,
         pinnedTombs: mergedPins.tombs,
         fileTextColors: mergedColors.colors,
         fileTextColorAt: mergedColors.at,
+        fileTextBold: mergedBold.bold,
+        fileTextBoldAt: mergedBold.at,
     });
 }
 
@@ -1936,6 +1965,7 @@ function renderStructuredEditor(extra = {}) {
     syncInsertListButton();
     syncImportListButton();
     syncClickEditButton();
+    syncPureReaderChrome();
     // Re-apply find highlights after the Preview/List DOM is rebuilt
     if (editorSearch?.isOpen()) {
         requestAnimationFrame(() => editorSearch?.refresh());
@@ -1987,9 +2017,14 @@ function syncEditorActionLocks() {
         } else if (key === 'save') {
             btn.disabled = baseDisabled || !state.editor.dirty;
         } else if (key === 'undo') {
-            btn.disabled = baseDisabled || !editHistory.canUndo();
+            btn.disabled = baseDisabled || !editHistory.canUndo() || isPreviewPureReader();
         } else if (key === 'redo') {
-            btn.disabled = baseDisabled || !editHistory.canRedo();
+            btn.disabled = baseDisabled || !editHistory.canRedo() || isPreviewPureReader();
+        } else if (
+            isPreviewPureReader() &&
+            (key === 'click-edit' || key === 'insert-list')
+        ) {
+            btn.disabled = true;
         } else {
             btn.disabled = baseDisabled;
         }
@@ -2041,6 +2076,8 @@ function syncClickEditButton() {
     );
     els.btnClickEdit.classList.toggle('btn-click-edit--active', picking);
     els.btnClickEdit.hidden = !state.editor.fileId;
+
+    syncPureReaderChrome();
 
     const icon = els.btnClickEdit.querySelector('.nav-action-icon');
     if (icon) {
@@ -2636,6 +2673,10 @@ async function handleItemMenu(file) {
     }
     if (action === 'colour') {
         await handleFileTextColour(file);
+        return;
+    }
+    if (action === 'bold') {
+        handleFileTextBold(file);
     }
 }
 
@@ -2667,24 +2708,44 @@ async function handlePinnedItemMenu(file) {
     }
     if (action === 'colour') {
         await handleFileTextColour(file);
+        return;
+    }
+    if (action === 'bold') {
+        handleFileTextBold(file);
     }
 }
 
 async function handleFileTextColour(file) {
     if (!file?.id) return;
-    const current = readFileTextColorsMap().get(String(file.id)) || '';
+    const id = String(file.id);
+    const current = readFileTextColorsMap().get(id) || '';
+    const currentBold = readFileTextBoldMap().has(id);
     const next = await promptFileTextColor({
         name: displayFileListName(file.name, {
             isFolder: isFolder(file),
             showExtension: readShowFileExtensionsEnabled(),
         }),
         currentColor: current,
+        currentBold,
     });
-    if (next == null) return;
-    writeFileTextColor(file.id, next);
+    if (!next || typeof next !== 'object') return;
+    writeFileTextColor(file.id, next.color);
+    writeFileTextBold(file.id, next.bold);
     queueSettingsCloudSync({ immediate: true });
     refreshFileNameDisplays();
-    setStatus(next ? 'Text colour saved' : 'Text colour reset', 'ok');
+    const parts = [];
+    if (next.color !== current) parts.push(next.color ? 'Text colour saved' : 'Text colour reset');
+    if (next.bold !== currentBold) parts.push(next.bold ? 'Bold on' : 'Bold off');
+    setStatus(parts.join(' · ') || 'Text style saved', 'ok');
+}
+
+function handleFileTextBold(file) {
+    if (!file?.id) return;
+    const next = !readFileTextBoldMap().has(String(file.id));
+    writeFileTextBold(file.id, next);
+    queueSettingsCloudSync({ immediate: true });
+    refreshFileNameDisplays();
+    setStatus(next ? 'Bold text on' : 'Regular text', 'ok');
 }
 
 /**
@@ -3275,6 +3336,7 @@ async function handleEditorMoreMenu() {
         isPinned: isPinned(state.editor.fileId),
         stats: buildEditorFileStatRows({ metaPending: true }),
         showDates: readShowDatesEnabled(),
+        pureReader: readPureReaderEnabled(),
         autosaveEnabled,
     });
     if (!action) return;
@@ -3704,6 +3766,10 @@ function importXanderListFromText(text) {
         setStatus('Open a markdown file first', 'warn');
         return;
     }
+    if (readPureReaderEnabled()) {
+        setStatus('Turn off Pure reader to import a list', 'warn');
+        return;
+    }
     flushCurrentEditorContent();
     refreshDocumentModelFromText(state.editor.editorContent);
 
@@ -3751,8 +3817,24 @@ function cancelListPlacement() {
     setStatus('Cancelled list placement');
 }
 
+function isPreviewPureReader() {
+    return state.viewMode === 'preview' && readPureReaderEnabled();
+}
+
+function syncPureReaderChrome() {
+    const els = getEls();
+    const on = isPreviewPureReader();
+    els.app?.classList.toggle('is-pure-reader-preview', on);
+    document.documentElement.classList.toggle('is-pure-reader-preview', on);
+    syncEditorActionLocks();
+}
+
 function insertRankedList() {
     if (!state.editor.fileId) return;
+    if (readPureReaderEnabled() && state.viewMode === 'preview') {
+        setStatus('Turn off Pure reader to edit Preview', 'warn');
+        return;
+    }
 
     if (state.viewMode === 'preview' && state.placingList) {
         cancelListPlacement();
@@ -3793,6 +3875,10 @@ function insertRankedList() {
 
 function toggleClickEdit() {
     if (!state.editor.fileId) return;
+    if (readPureReaderEnabled() && !(state.viewMode === 'preview' && state.clickEdit)) {
+        setStatus('Turn off Pure reader to edit Preview', 'warn');
+        return;
+    }
 
     if (state.viewMode === 'preview' && state.clickEdit) {
         state.clickEdit = false;
@@ -3824,6 +3910,26 @@ function toggleShowDates() {
         renderStructuredEditor();
     }
     setStatus(next ? 'Dates visible in Preview' : 'Dates hidden in Preview', 'ok');
+}
+
+function togglePureReader() {
+    const next = writePureReaderEnabled(!readPureReaderEnabled());
+    syncEditorMorePureReader(next);
+    if (next) {
+        state.clickEdit = false;
+        state.placingList = false;
+        state.pendingImportList = null;
+    }
+    if (state.editor.fileId && state.viewMode !== 'raw') {
+        renderStructuredEditor();
+    }
+    syncPureReaderChrome();
+    setStatus(
+        next
+            ? 'Pure reader on — Preview is locked'
+            : 'Pure reader off',
+        'ok'
+    );
 }
 
 function insertDateTagIntoEditor() {
@@ -4723,12 +4829,20 @@ function wireEvents() {
                 setStatus('Open a markdown file first', 'warn');
                 return;
             }
+            if (readPureReaderEnabled()) {
+                setStatus('Turn off Pure reader to import a list', 'warn');
+                return;
+            }
             els.importListFile.value = '';
             els.importListFile.click();
         });
     }
     if (els.editorMoreInsertDate) {
         els.editorMoreInsertDate.addEventListener('click', () => {
+            if (isPreviewPureReader()) {
+                setStatus('Turn off Pure reader to edit Preview', 'warn');
+                return;
+            }
             const dialog = els.editorMoreDialog;
             if (dialog?.open) dialog.close('cancel');
             insertDateTagIntoEditor();
@@ -4736,6 +4850,10 @@ function wireEvents() {
     }
     if (els.editorMoreFillDates) {
         els.editorMoreFillDates.addEventListener('click', () => {
+            if (isPreviewPureReader()) {
+                setStatus('Turn off Pure reader to edit Preview', 'warn');
+                return;
+            }
             const dialog = els.editorMoreDialog;
             if (dialog?.open) dialog.close('cancel');
             fillMissingListDatesFromMenu();
@@ -4744,6 +4862,11 @@ function wireEvents() {
     if (els.editorMoreShowDates) {
         els.editorMoreShowDates.addEventListener('click', () => {
             toggleShowDates();
+        });
+    }
+    if (els.editorMorePureReader) {
+        els.editorMorePureReader.addEventListener('click', () => {
+            togglePureReader();
         });
     }
     if (els.editorMoreAutosaveOff) {

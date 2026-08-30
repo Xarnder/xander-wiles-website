@@ -57,6 +57,8 @@ function sleep(ms) {
  *   openedFiles?: Record<string, number>,
  *   fileTextColors?: Record<string, string>,
  *   fileTextColorAt?: Record<string, number>,
+ *   fileTextBold?: Record<string, true>,
+ *   fileTextBoldAt?: Record<string, number>,
  * }} CloudSettings
  */
 
