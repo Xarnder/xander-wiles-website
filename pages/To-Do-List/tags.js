@@ -1,18 +1,25 @@
 import { generateId } from './utils.js';
 
 export const MISC_TAG_ID = 'tag_misc';
-export const MAX_TAGS = 8;
-export const MAX_CUSTOM_TAGS = 7;
+export const MAX_TAGS = 10;
+export const MAX_CUSTOM_TAGS = 9;
 export const MAX_TAG_NAME_LENGTH = 24;
+/** Compact Custom/Drag + tags into one 4-across row once this many tags exist. */
+export const DENSE_TAG_LAYOUT_MIN = 8;
 
 /**
- * Shared OKLCH lightness for all tag fills.
+ * Shared OKLCH lightness for hue tag fills.
  * Tuned so white text stays readable on every hue.
  */
 export const TAG_FILL_LIGHTNESS = 0.58;
 export const TAG_FILL_INK = 'oklch(0.99 0.01 100)';
+export const TAG_INK_ON_WHITE = 'oklch(0.12 0 0)';
 
-/** Tag / glow palette — same L, distinct hue/chroma. */
+/** Extra category colours: black (white text) and white (black text). */
+export const TAG_COLOR_BLACK = 'oklch(0.12 0 0)';
+export const TAG_COLOR_WHITE = 'oklch(0.99 0 0)';
+
+/** Tag / glow palette — equal-L hues, then black and white. */
 export const GLOW_PALETTE = [
     `oklch(${TAG_FILL_LIGHTNESS} 0.190 25)`,   // red
     `oklch(${TAG_FILL_LIGHTNESS} 0.165 50)`,   // orange
@@ -20,7 +27,9 @@ export const GLOW_PALETTE = [
     `oklch(${TAG_FILL_LIGHTNESS} 0.155 150)`,  // green
     `oklch(${TAG_FILL_LIGHTNESS} 0.165 260)`,  // blue
     `oklch(${TAG_FILL_LIGHTNESS} 0.185 305)`,  // purple
-    `oklch(${TAG_FILL_LIGHTNESS} 0.175 350)`   // pink
+    `oklch(${TAG_FILL_LIGHTNESS} 0.175 350)`,  // pink
+    TAG_COLOR_BLACK,
+    TAG_COLOR_WHITE
 ];
 
 /** Map legacy hex / prior-OKLCH values onto the current equal-L palette. */
@@ -41,7 +50,15 @@ export const LEGACY_HEX_TO_OKLCH = {
     'oklch(0.627 0.233 303.9)': GLOW_PALETTE[5],
     'oklch(0.656 0.212 354.3)': GLOW_PALETTE[6],
     // Previous equal-L yellow slot
-    'oklch(0.58 0.130 95)': GLOW_PALETTE[2]
+    'oklch(0.58 0.130 95)': GLOW_PALETTE[2],
+    '#000': TAG_COLOR_BLACK,
+    '#000000': TAG_COLOR_BLACK,
+    'black': TAG_COLOR_BLACK,
+    'oklch(0 0 0)': TAG_COLOR_BLACK,
+    '#fff': TAG_COLOR_WHITE,
+    '#ffffff': TAG_COLOR_WHITE,
+    'white': TAG_COLOR_WHITE,
+    'oklch(1 0 0)': TAG_COLOR_WHITE
 };
 
 export const VALID_GLOW_COLORS = new Set(['none', ...GLOW_PALETTE, ...Object.keys(LEGACY_HEX_TO_OKLCH)]);
@@ -60,23 +77,45 @@ function hueDistance(a, b) {
     return d > 180 ? 360 - d : d;
 }
 
-/** Snap any OKLCH colour to the nearest current palette entry by hue. */
-function matchPaletteByHue(oklchValue) {
-    const match = String(oklchValue || '').match(OKLCH_RE);
+function parseOklch(value) {
+    const match = String(value || '').match(OKLCH_RE);
     if (!match) return null;
-    const hue = Number(match[3]);
+    return { l: Number(match[1]), c: Number(match[2]), h: Number(match[3]) };
+}
+
+/** Snap chromatic OKLCH colours to the nearest hue slot. Skip black/white. */
+function matchPaletteByHue(oklchValue) {
+    const parsed = parseOklch(oklchValue);
+    if (!parsed || parsed.c < 0.04) return null;
+    const hue = parsed.h;
     let best = null;
     let bestDist = Infinity;
     for (const color of GLOW_PALETTE) {
-        const parts = color.match(OKLCH_RE);
-        if (!parts) continue;
-        const dist = hueDistance(hue, Number(parts[3]));
+        const parts = parseOklch(color);
+        if (!parts || parts.c < 0.04) continue;
+        const dist = hueDistance(hue, parts.h);
         if (dist < bestDist) {
             bestDist = dist;
             best = color;
         }
     }
     return bestDist <= 35 ? best : null;
+}
+
+export function isTagColorBlack(color) {
+    return normalizeGlowColorValue(color) === TAG_COLOR_BLACK;
+}
+
+export function isTagColorWhite(color) {
+    return normalizeGlowColorValue(color) === TAG_COLOR_WHITE;
+}
+
+/** 'black' | 'white' | 'hue' | null (Misc / none). */
+export function getTagColorTone(color) {
+    if (color == null || color === 'none') return null;
+    if (isTagColorBlack(color)) return 'black';
+    if (isTagColorWhite(color)) return 'white';
+    return normalizeGlowColorValue(color) ? 'hue' : null;
 }
 
 export function normalizeGlowColorValue(value) {
@@ -106,9 +145,9 @@ export function normalizeGlowColorValue(value) {
     return null;
 }
 
-/** Ink for tag fills — palette is equal-L and designed for white text. */
-export function getContrastingInk(_color) {
-    return TAG_FILL_INK;
+/** Ink for tag fills — white on hues/black, black on white. */
+export function getContrastingInk(color) {
+    return isTagColorWhite(color) ? TAG_INK_ON_WHITE : TAG_FILL_INK;
 }
 
 export function sortTags(tags) {
@@ -349,7 +388,7 @@ export function createTagDefinition(name, tags) {
     const validation = validateTagName(name);
     if (!validation.ok) return { ok: false, error: validation.error };
     if (!canAddMoreTags(tags)) {
-        return { ok: false, error: 'Maximum 8 tags reached.' };
+        return { ok: false, error: `Maximum ${MAX_TAGS} tags reached.` };
     }
 
     const glowColor = getNextAvailableGlowColor(tags);

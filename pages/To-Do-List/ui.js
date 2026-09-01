@@ -31,7 +31,9 @@ import {
     TAG_DISPLAY_MODE_FILL,
     TAG_DISPLAY_MODE_GLOW,
     getContrastingInk,
-    getUnusedGlowColors
+    getUnusedGlowColors,
+    getTagColorTone,
+    DENSE_TAG_LAYOUT_MIN
 } from './tags.js';
 
 // Global DOM Elements
@@ -68,6 +70,7 @@ function syncTagFilterChrome() {
     }
 
     const row = document.getElementById('tag-mode-row');
+    const tools = document.querySelector('.tag-tools-block');
     if (row) {
         row.classList.toggle('is-filtering', filtering);
         const baseLabel = 'Tag mode for new tasks';
@@ -78,6 +81,7 @@ function syncTagFilterChrome() {
                 : baseLabel
         );
     }
+    if (tools) tools.classList.toggle('is-filtering', filtering);
 
     const filterLabel = document.getElementById('tag-filter-label');
     if (filterLabel) {
@@ -1182,7 +1186,11 @@ function getTagButtonStyle(tag) {
         return '--tag-btn-bg: var(--glass-bg); --tag-btn-border: var(--glass-border); --tag-btn-text: var(--text-primary);';
     }
     const ink = getContrastingInk(tag.glowColor);
-    return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${tag.glowColor}; --tag-btn-text: ${ink};`;
+    const tone = getTagColorTone(tag.glowColor);
+    let border = tag.glowColor;
+    if (tone === 'black') border = 'oklch(1 0 0 / 0.45)';
+    if (tone === 'white') border = 'oklch(0 0 0 / 0.45)';
+    return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${border}; --tag-btn-text: ${ink};`;
 }
 
 function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId = null } = {}) {
@@ -1200,6 +1208,8 @@ function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId =
     else if (isSelected) aria += '. Press again to filter board by this tag';
     btn.setAttribute('aria-label', aria);
     btn.style.cssText = getTagButtonStyle(tag);
+    const tone = getTagColorTone(tag.glowColor);
+    if (tone === 'black' || tone === 'white') btn.dataset.tagTone = tone;
     btn.textContent = tag.name;
     btn.onclick = (e) => {
         e.preventDefault();
@@ -1224,6 +1234,9 @@ export function renderTagModeBar() {
     const tags = sortTags(ensured.tags);
     const activeId = ensured.activeTagId || MISC_TAG_ID;
     const filterId = state.tagFilterId;
+
+    const header = document.querySelector('.app-header');
+    if (header) header.classList.toggle('has-dense-tags', tags.length >= DENSE_TAG_LAYOUT_MIN);
 
     container.innerHTML = '';
     tags.forEach((tag) => {
@@ -1294,7 +1307,7 @@ export function renderTagsSettingsPanel() {
         if (sourceTag) {
             hintEl.textContent = `Swap: tap another tag's colour to trade with "${sourceTag.name}", or pick a free colour below. Tap again to cancel.`;
         } else {
-            hintEl.textContent = 'Drag to reorder categories (used when grouping a list). Tap a colour circle to swap it. Misc has no colour.';
+            hintEl.textContent = 'Drag to reorder categories (used when grouping a list). Tap a colour circle to swap it. Misc has no colour. Up to 10 tags — black uses white text, white uses black text.';
         }
     }
 
@@ -1349,6 +1362,8 @@ export function renderTagsSettingsPanel() {
         swatch.className = 'tags-settings-swatch';
         if (tag.glowColor) {
             swatch.style.background = tag.glowColor;
+            const tone = getTagColorTone(tag.glowColor);
+            if (tone === 'black' || tone === 'white') swatch.dataset.tagTone = tone;
         } else {
             swatch.classList.add('is-misc');
         }
@@ -1434,6 +1449,8 @@ export function renderTagsSettingsPanel() {
                 btn.type = 'button';
                 btn.className = 'tags-settings-free-swatch';
                 btn.style.background = color;
+                const tone = getTagColorTone(color);
+                if (tone === 'black' || tone === 'white') btn.dataset.tagTone = tone;
                 btn.title = 'Assign this colour';
                 btn.setAttribute('aria-label', 'Assign free colour');
                 btn.onclick = () => {
@@ -2314,18 +2331,24 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     const glowColor = resolveTaskGlow(task, tagsById);
     if (glowColor) {
         const displayMode = getTagDisplayMode(state.appData.settings);
+        const tone = getTagColorTone(glowColor);
         el.style.setProperty('--tag-color', glowColor);
+        if (tone === 'black' || tone === 'white') el.dataset.tagTone = tone;
         if (displayMode === TAG_DISPLAY_MODE_FILL) {
             const ink = getContrastingInk(glowColor);
             el.classList.add('tag-fill');
             el.style.setProperty('--tag-fill-color', glowColor);
             el.style.setProperty('--tag-fill-ink', ink);
             el.style.backgroundColor = glowColor;
-            el.style.borderColor = glowColor;
+            el.style.borderColor = tone === 'white'
+                ? 'oklch(0 0 0 / 0.35)'
+                : (tone === 'black' ? 'oklch(1 0 0 / 0.35)' : glowColor);
             el.style.color = ink;
             el.style.boxShadow = `0 1px 4px color-mix(in oklch, ${glowColor} 40%, transparent)`;
         } else {
             el.classList.add('tag-glow');
+            if (tone === 'black') el.classList.add('tag-glow-black');
+            if (tone === 'white') el.classList.add('tag-glow-white');
             el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px color-mix(in oklch, ${glowColor} 12%, transparent)`;
             el.style.borderColor = glowColor;
         }

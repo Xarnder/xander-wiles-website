@@ -2849,6 +2849,7 @@ body.settings-page-open #sync-console {
         gap: 12px 16px;
         align-content: start;
         align-items: start;
+        grid-auto-rows: min-content;
     }
 
     .settings-page-content > * {
@@ -2865,6 +2866,7 @@ body.settings-page-open #sync-console {
     .settings-page-content > .tags-settings-section,
     .settings-page-content > .settings-slider-block {
         grid-column: 1 / -1;
+        min-height: min-content;
     }
 }
 
@@ -2957,9 +2959,10 @@ body.settings-page-open #sync-console {
     width: 100%;
     max-width: 100%;
     height: auto;
-    min-height: 0;
+    min-height: min-content;
     box-sizing: border-box;
     overflow: visible;
+    align-self: start;
 }
 
 .settings-slider-header {
@@ -3711,17 +3714,32 @@ input:checked+.slider-small:before {
             align-items: stretch !important;
             overflow: visible !important;
             padding: 0 !important;
-            order: 1 !important;
+            order: 2 !important;
             border-top: none !important;
             margin: 0 !important;
             flex-direction: column !important;
             gap: 0 !important;
+            flex: 0 0 auto !important;
+            width: 100% !important;
+        }
+
+        .tag-tools-block {
+            order: 1 !important;
+            width: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 3px !important;
+            border-top: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
         }
 
         .header-row.tag-mode-row.is-filtering {
             gap: 3px !important;
         }
 
+        .tag-tools-block.is-filtering .tag-filter-label:not([hidden]),
         .tag-mode-row.is-filtering .tag-filter-label:not([hidden]) {
             margin-bottom: 2px !important;
         }
@@ -3731,6 +3749,7 @@ input:checked+.slider-small:before {
         }
 
         /* Mobile dock (header at bottom): filter label above tag buttons */
+        .tag-tools-block > .tag-filter-label,
         .tag-mode-row .tag-filter-label {
             order: 1 !important;
             align-self: center !important;
@@ -3742,7 +3761,7 @@ input:checked+.slider-small:before {
         }
 
         .header-row-meta {
-            order: 2 !important;
+            order: 3 !important;
             width: 100% !important;
             justify-content: stretch !important;
             gap: 6px !important;
@@ -3752,6 +3771,71 @@ input:checked+.slider-small:before {
             flex: 1 1 0 !important;
             justify-content: center !important;
             min-width: 0 !important;
+        }
+
+        /* 8+ tags: Custom + Drag match tag size (¼ width) so two extra tags fit on the right */
+        .app-header.has-dense-tags .tag-tools-block {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            justify-content: flex-start !important;
+            align-items: stretch !important;
+            column-gap: 4px !important;
+            row-gap: 3px !important;
+        }
+
+        .app-header.has-dense-tags .header-row-meta,
+        .app-header.has-dense-tags .header-row.tag-mode-row,
+        .app-header.has-dense-tags .tag-mode-buttons {
+            display: contents !important;
+        }
+
+        .app-header.has-dense-tags .tag-filter-label:not([hidden]) {
+            flex: 1 1 100% !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            order: 0 !important;
+            margin-bottom: 2px !important;
+        }
+
+        .app-header.has-dense-tags .header-meta-control,
+        .app-header.has-dense-tags .tag-mode-btn-compact {
+            flex: 1 1 calc(25% - 4px) !important;
+            min-width: 0 !important;
+            max-width: calc(25% - 3px) !important;
+            width: auto !important;
+            min-height: 24px !important;
+            height: 24px !important;
+            max-height: 24px !important;
+            box-sizing: border-box !important;
+        }
+
+        .app-header.has-dense-tags .header-meta-control {
+            padding: 0 3px !important;
+            gap: 2px !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+        }
+
+        .app-header.has-dense-tags .sort-container label {
+            display: none !important;
+        }
+
+        .app-header.has-dense-tags .header-meta-control .glass-select {
+            width: 100% !important;
+            max-width: 100% !important;
+            font-size: 0.58rem !important;
+            padding: 0 !important;
+            text-overflow: ellipsis !important;
+        }
+
+        .app-header.has-dense-tags .header-meta-control .label {
+            font-size: 0.55rem !important;
+            margin: 0 !important;
+        }
+
+        .app-header.has-dense-tags .header-meta-control .switch-small {
+            transform: scale(0.72);
+            margin: 0 !important;
         }
 
         .header-action-slots {
@@ -4224,7 +4308,7 @@ input:checked+.slider-small:before {
 
 .header-row-meta {
     flex-shrink: 0;
-    order: 2;
+    order: 1;
 }
 
 .header-action-slots {
@@ -4245,16 +4329,49 @@ input:checked+.slider-small:before {
     .header-action-slots {
         justify-content: flex-end;
     }
+
+    .tag-tools-block {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tag-tools-block > .tag-filter-label {
+        order: 3;
+        flex: 1 1 100%;
+        align-self: flex-start;
+    }
+
+    .tag-tools-block .header-row-meta {
+        order: 1;
+        flex: 0 0 auto;
+        width: auto;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .tag-tools-block .tag-mode-row {
+        order: 2;
+        flex: 1 1 auto;
+        min-width: 0;
+        width: auto;
+        border-top: none;
+        padding-top: 0;
+        margin-top: 0;
+        padding: 0;
+    }
 }
 
 /* --- TAG MODE & TAG PICKERS --- */
-.tag-mode-row {
+.tag-tools-block {
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     flex-shrink: 0;
     width: 100%;
-    padding: 4px 0;
+    padding: 4px 0 0;
     margin: 0;
     min-height: 0;
     overflow: visible;
@@ -4263,6 +4380,20 @@ input:checked+.slider-small:before {
     border-top: 1px solid var(--glass-border);
     padding-top: 10px;
     margin-top: 2px;
+    gap: 6px;
+}
+
+.tag-mode-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex-shrink: 1;
+    min-width: 0;
+    width: auto;
+    padding: 0;
+    margin: 0;
+    min-height: 0;
+    overflow: visible;
     gap: 0;
 }
 
@@ -4299,6 +4430,7 @@ input:checked+.slider-small:before {
     box-sizing: border-box;
 }
 
+.tag-tools-block.is-filtering .tag-filter-label:not([hidden]),
 .tag-mode-row.is-filtering .tag-filter-label:not([hidden]) {
     display: inline-block;
     margin-bottom: 2px;
@@ -4312,6 +4444,7 @@ input:checked+.slider-small:before {
     background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 10%, white);
 }
 
+.tag-tools-block.is-filtering .tag-mode-buttons,
 .tag-mode-row.is-filtering .tag-mode-buttons {
     padding-bottom: 2px;
 }
@@ -4495,6 +4628,14 @@ input:checked+.slider-small:before {
     outline-offset: 2px;
 }
 
+.tag-tools-block.is-filtering {
+    gap: 4px;
+}
+
+.tag-tools-block:not(.is-filtering) {
+    gap: 6px;
+}
+
 .tag-mode-row.is-filtering {
     gap: 4px;
 }
@@ -4505,6 +4646,64 @@ input:checked+.slider-small:before {
 
 .tag-picker-section {
     margin: 12px 0;
+}
+
+.task-card.tag-glow.tag-glow-black {
+    box-shadow:
+        0 0 0 1.5px oklch(1 0 0 / 0.45),
+        0 0 10px oklch(1 0 0 / 0.18),
+        inset 0 0 5px oklch(1 0 0 / 0.08);
+    border-color: oklch(1 0 0 / 0.4);
+}
+
+[data-theme="light"] .task-card.tag-glow.tag-glow-black {
+    box-shadow:
+        0 0 0 1.5px oklch(0 0 0 / 0.65),
+        0 0 8px oklch(0 0 0 / 0.2);
+    border-color: oklch(0 0 0 / 0.7);
+}
+
+.task-card.tag-glow.tag-glow-white {
+    box-shadow:
+        0 0 12px oklch(1 0 0 / 0.55),
+        0 0 0 1.5px oklch(1 0 0 / 0.7);
+    border-color: oklch(1 0 0 / 0.75);
+}
+
+[data-theme="light"] .task-card.tag-glow.tag-glow-white {
+    box-shadow:
+        0 0 0 1.5px oklch(0 0 0 / 0.3),
+        0 0 8px oklch(0 0 0 / 0.1);
+    border-color: oklch(0 0 0 / 0.35);
+}
+
+.task-card.tag-fill[data-tag-tone="white"] .task-checkbox,
+.task-card.tag-fill[data-tag-tone="white"] .nested-idea-checkbox {
+    border-color: oklch(0 0 0);
+}
+
+.task-card.tag-fill[data-tag-tone="white"] input[type="checkbox"] {
+    accent-color: oklch(0 0 0);
+}
+
+.task-card.tag-fill[data-tag-tone="white"] .task-checkbox::before,
+.task-card.tag-fill[data-tag-tone="white"] .nested-idea-checkbox::before {
+    background: oklch(0 0 0);
+}
+
+[data-theme="fancy"] .task-card.tag-fill[data-tag-tone="white"] .task-checkbox::before,
+[data-theme="fancy"] .task-card.tag-fill[data-tag-tone="white"] .nested-idea-checkbox::before {
+    background: oklch(0 0 0);
+}
+
+.tags-settings-swatch[data-tag-tone="white"],
+.tags-settings-free-swatch[data-tag-tone="white"] {
+    border-color: oklch(0 0 0 / 0.45);
+}
+
+.tags-settings-swatch[data-tag-tone="black"],
+.tags-settings-free-swatch[data-tag-tone="black"] {
+    border-color: oklch(1 0 0 / 0.4);
 }
 
 .tag-picker-section h3 {
@@ -4889,7 +5088,7 @@ button.tags-settings-swatch.is-selected {
 }
 
 @media (max-width: 500px) {
-    .tag-mode-row {
+    .tag-tools-block {
         padding: 0;
         overflow: visible;
         order: 1;
@@ -4899,8 +5098,20 @@ button.tags-settings-swatch.is-selected {
         gap: 3px;
     }
 
+    .tag-mode-row {
+        padding: 0;
+        overflow: visible;
+        order: 2;
+        border-top: none;
+        margin-top: 0;
+        flex-direction: column;
+        gap: 3px;
+        width: 100%;
+        flex: 0 0 auto;
+    }
+
     /* Mobile dock: label above buttons so pills shift down when filtering */
-    .tag-mode-row .tag-filter-label {
+    .tag-tools-block > .tag-filter-label {
         order: 1;
         align-self: center;
         text-align: center;
@@ -4911,7 +5122,8 @@ button.tags-settings-swatch.is-selected {
     }
 
     .header-row-meta {
-        order: 2;
+        order: 3;
+        width: 100%;
     }
 
     .header-action-slots {
@@ -4942,6 +5154,11 @@ button.tags-settings-swatch.is-selected {
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .app-header.has-dense-tags .tag-mode-btn-compact {
+        min-width: 0;
+        max-width: calc(25% - 3px);
     }
 
     .list-header {
