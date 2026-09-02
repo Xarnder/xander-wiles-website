@@ -1,8 +1,8 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods, updateWorkSchedule } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown, renderPayOverlapWarning, renderWorkSchedule } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge, getCalendarDateKey } from './utils.js';
+import { state, updatePercentageCuts, updatePersonalCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods, updateWorkSchedule } from './state.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, renderPersonalCutList, getAmountAfterPercentageCuts, getAmountAfterPersonalCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown, renderPayOverlapWarning, renderWorkSchedule, renderStatEarningsDisplay } from './ui.js';
+import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge, getCalendarDateKey, formatClockTime } from './utils.js';
 import { combinePayAndSessionEarnings, filterPayPeriods, serializePayPeriod, isSessionCoveredByPay, getWorkSettingsFromState } from './payPeriods.js';
 import { serializeWorkSchedule } from './workSchedule.js';
 import {
@@ -30,6 +30,10 @@ function firestoreWriteErrorMessage(error, fallback) {
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
+}
+
+function getPersonalCutsRef() {
+    return doc(db, "users", state.currentUser.uid, "settings", "personalCuts");
 }
 
 function getSavingPotSettingsRef() {
@@ -82,20 +86,7 @@ function renderStatsHoursDisplay(displayEl, effectiveMs, grossMs, breakMs) {
 }
 
 function renderStatsEarnings(displayEl, beforeAmount) {
-    if (!displayEl) return;
-
-    const before = Number(beforeAmount) || 0;
-    const after = getAmountAfterPercentageCuts(before);
-
-    if (!state.percentageCuts.length) {
-        displayEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}`;
-        return;
-    }
-
-    displayEl.innerHTML = `
-        <span class="stats-earnings-after"><span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
-        <span class="stats-earnings-before">Before cuts <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>
-    `;
+    renderStatEarningsDisplay(displayEl, beforeAmount);
 }
 
 export async function saveSession(durationMs, totalEarned) {
@@ -369,6 +360,74 @@ export function loadPercentageCuts() {
         }
     }, (error) => {
         console.error("Debug: Percentage cuts snapshot error", error);
+    });
+}
+
+export async function savePersonalCuts(cuts, options = {}) {
+    const silent = options.silent === true;
+
+    if (!state.currentUser) {
+        if (!silent) {
+            showAlert("Not Signed In", "Please sign in before saving personal cuts.");
+        }
+        return false;
+    }
+
+    const previousCuts = [...state.personalCuts];
+    const sanitizedCuts = updatePersonalCuts(cuts);
+
+    try {
+        await setDoc(getPersonalCutsRef(), {
+            cuts: serializePercentageCuts(sanitizedCuts),
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        renderDashboardData();
+        console.log("Debug: Personal cuts saved to Firebase");
+        return true;
+    } catch (e) {
+        console.error("Debug: Error saving personal cuts: ", e);
+        updatePersonalCuts(previousCuts);
+        renderPersonalCutList();
+        renderDashboardData();
+        if (!silent) {
+            showAlert("Save Error", "Error saving personal cuts! Please check your internet connection.");
+        }
+        return false;
+    }
+}
+
+export function loadPersonalCuts() {
+    if (!state.currentUser) return;
+
+    const settingsRef = getPersonalCutsRef();
+
+    onSnapshot(settingsRef, async (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            updatePersonalCuts(data.cuts || []);
+
+            renderPersonalCutList();
+            renderDashboardData();
+            console.log("Debug: Personal cuts updated from Firebase");
+            return;
+        }
+
+        if (state.personalCuts.length > 0) {
+            try {
+                await setDoc(settingsRef, {
+                    cuts: serializePercentageCuts(state.personalCuts),
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+                console.log("Debug: Local personal cuts migrated to Firebase");
+            } catch (e) {
+                console.error("Debug: Error migrating personal cuts: ", e);
+            }
+        } else {
+            renderDashboardData();
+        }
+    }, (error) => {
+        console.error("Debug: Personal cuts snapshot error", error);
     });
 }
 
@@ -907,9 +966,8 @@ export function renderDashboardData() {
             ? `<small class="history-gross-duration">${formatDuration(sessionMetrics.grossDurationMs)} gross · ${formatDuration(sessionMetrics.breakMs)} breaks</small>`
             : '';
         const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
-        const timeFormat = { hour: '2-digit', minute: '2-digit' };
-        const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
-        const endTimeStr = endDateObj.toLocaleTimeString([], timeFormat);
+        const startTimeStr = formatClockTime(dateObj, state.clockTimeFormat);
+        const endTimeStr = formatClockTime(endDateObj, state.clockTimeFormat);
         const startDateStr = dateObj.toLocaleDateString();
         const endDateStr = endDateObj.toLocaleDateString();
         const startDateTimeStr = `${startDateStr} ${startTimeStr}`;
@@ -921,8 +979,9 @@ export function renderDashboardData() {
         const sessionDateKey = getCalendarDateKey(dateObj);
         const scheduledPayCover = coveredByPay && sessionDateKey > getCalendarDateKey(new Date());
         const afterCutsEarnings = getAmountAfterPercentageCuts(sessionEarnings);
-        const afterCutsHtml = !coveredByPay && state.percentageCuts.length
-            ? `<small class="history-after-cuts">After cuts ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>`
+        const afterPersonalEarnings = getAmountAfterPersonalCuts(sessionEarnings);
+        const afterCutsHtml = !coveredByPay && (state.percentageCuts.length || state.personalCuts.length)
+            ? `${state.percentageCuts.length ? `<small class="history-after-cuts">After external ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>` : ''}${state.personalCuts.length ? `<small class="history-after-personal">After personal ${state.currentCurrency}${afterPersonalEarnings.toFixed(2)}</small>` : ''}`
             : '';
         const payCoveredNoteHtml = scheduledPayCover
             ? `<small class="history-pay-scheduled-note">Scheduled salary day — not in totals yet</small>`
@@ -1213,16 +1272,14 @@ export function renderBreakHistory() {
         DOM.breakHistoryList.innerHTML = `<p class="loading-text">${emptyMessage}</p>`;
     }
 
-    const timeFormat = { hour: '2-digit', minute: '2-digit' };
-
     dayBreaks.forEach((data) => {
         const dateObj = new Date(data.startTime);
         const item = document.createElement('div');
         item.className = 'history-item break-history-item';
 
         const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
-        const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
-        const endTimeStr = endDateObj.toLocaleTimeString([], timeFormat);
+        const startTimeStr = formatClockTime(dateObj, state.clockTimeFormat);
+        const endTimeStr = formatClockTime(endDateObj, state.clockTimeFormat);
         const startDateStr = dateObj.toLocaleDateString();
         const endDateStr = endDateObj.toLocaleDateString();
         const startDateTimeStr = isSameCalendarDay(dateObj, viewDate)

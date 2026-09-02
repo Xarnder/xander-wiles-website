@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, getAmountAfterPercentageCuts, renderWorkPatternBreakdown, updateShiftRemainingDisplay, renderChart } from './ui.js';
+import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, formatLiveEarningsHtml, renderWorkPatternBreakdown, updateShiftRemainingDisplay, renderChart } from './ui.js';
 import { saveSession } from './api.js';
 
 export function updateTimerDisplay(elapsedMs) {
@@ -13,12 +13,7 @@ export function updateTimerDisplay(elapsedMs) {
 
     const hoursFloat = elapsedMs / (1000 * 60 * 60);
     const earned = hoursFloat * state.currentSessionRate;
-    const afterCuts = getAmountAfterPercentageCuts(earned);
-    DOM.liveEarningsDisplay.innerHTML = `
-        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}</span>
-        <span class="cut-divider">|</span>
-        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${afterCuts.toFixed(2)}</span>
-    `;
+    DOM.liveEarningsDisplay.innerHTML = formatLiveEarningsHtml(earned);
     renderLiveMoneyCounter(earned, Boolean(state.startTime));
     updateShiftRemainingDisplay(elapsedMs);
 
@@ -95,11 +90,7 @@ export async function stopTimer() {
 
     toggleTimerUI(false);
     DOM.timerDisplay.textContent = "00:00:00";
-    DOM.liveEarningsDisplay.innerHTML = `
-        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-        <span class="cut-divider">|</span>
-        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-    `;
+    DOM.liveEarningsDisplay.innerHTML = formatLiveEarningsHtml(0);
     renderLiveMoneyCounter(0, false);
     if (DOM.timerStartTimeInput) {
         DOM.timerStartTimeInput.value = '';

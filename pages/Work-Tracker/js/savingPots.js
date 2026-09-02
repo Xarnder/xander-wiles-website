@@ -81,6 +81,11 @@ export function applyPercentageCuts(baseAmount, percentageCuts = []) {
     return accumulatedAmount;
 }
 
+export function applyExternalThenPersonalCuts(baseAmount, percentageCuts = [], personalCuts = []) {
+    const afterExternal = applyPercentageCuts(baseAmount, percentageCuts);
+    return applyPercentageCuts(afterExternal, personalCuts);
+}
+
 export function getItemSavedAmount(item) {
     return roundMoney(Math.max(Number(item?.savedAmount) || 0, 0));
 }
@@ -99,6 +104,7 @@ export function computeEarningsPool({
     poolScope = POOL_SCOPES.ALL_TIME,
     startOfWeek = 0,
     percentageCuts = [],
+    personalCuts = [],
     now = new Date()
 } = {}) {
     const scope = sanitizePoolScope(poolScope);
@@ -116,7 +122,7 @@ export function computeEarningsPool({
             + computePayEarningsInWindow(payPeriods, start, end, now, payOptions);
     }
 
-    return roundMoney(applyPercentageCuts(beforeCutsTotal, percentageCuts));
+    return roundMoney(applyExternalThenPersonalCuts(beforeCutsTotal, percentageCuts, personalCuts));
 }
 
 export function getClosestGoal(items = []) {
@@ -149,6 +155,7 @@ export function computeSavingPotState({
     poolScope = POOL_SCOPES.ALL_TIME,
     startOfWeek = 0,
     percentageCuts = [],
+    personalCuts = [],
     now = new Date()
 } = {}) {
     const scope = sanitizePoolScope(poolScope);
@@ -159,6 +166,7 @@ export function computeSavingPotState({
         poolScope: scope,
         startOfWeek,
         percentageCuts,
+        personalCuts,
         now
     });
 
@@ -268,6 +276,7 @@ export function computeSavingPotStateFromAppState(appState, now = new Date()) {
         poolScope: appState?.savingPotPoolScope,
         startOfWeek: appState?.startOfWeek ?? 0,
         percentageCuts: appState?.percentageCuts || [],
+        personalCuts: appState?.personalCuts || [],
         now
     });
 }

@@ -1,7 +1,8 @@
 import { createSeedBudgetPlan, sanitizeBudgetPlan, sanitizeBudgetSnapMode, BUDGET_SNAP_MODES } from './budgeting.js';
 import { createDefaultWorkSchedule, sanitizeWorkSchedule, serializeWorkSchedule } from './workSchedule.js';
+import { sanitizeClockTimeFormat } from './utils.js';
 
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-personal-cut-stats', 'widget-personal-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -109,6 +110,15 @@ function loadPercentageCuts() {
     }
 }
 
+function loadPersonalCuts() {
+    try {
+        return sanitizePercentageCuts(JSON.parse(localStorage.getItem('work_tracker_personal_cuts')) || []);
+    } catch (e) {
+        console.warn('Debug: Could not parse personal cuts from storage', e);
+        return [];
+    }
+}
+
 function loadStatsPeriodMode() {
     const saved = localStorage.getItem('work_tracker_stats_period_mode');
     return saved === 'rolling' ? 'rolling' : 'calendar';
@@ -198,8 +208,25 @@ function loadDashboardDensity() {
     return 'comfortable';
 }
 
+function loadClockTimeFormat() {
+    return sanitizeClockTimeFormat(localStorage.getItem('work_tracker_clock_time_format'));
+}
+
 function loadMoneyCounterMode() {
-    return localStorage.getItem('work_tracker_money_counter_mode') === 'after' ? 'after' : 'before';
+    const saved = localStorage.getItem('work_tracker_money_counter_mode');
+    const migrated = localStorage.getItem('work_tracker_money_counter_mode_v2') === 'true';
+
+    // The old "personal" control applied external then personal cuts.
+    if (!migrated) {
+        localStorage.setItem('work_tracker_money_counter_mode_v2', 'true');
+        if (saved === 'personal') {
+            localStorage.setItem('work_tracker_money_counter_mode', 'both');
+            return 'both';
+        }
+    }
+
+    if (saved === 'after' || saved === 'personal' || saved === 'both') return saved;
+    return 'before';
 }
 
 function loadMoneyCounterGap() {
@@ -277,6 +304,7 @@ export const state = {
     targetShiftHours: loadTargetShiftHours(),
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
     startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0, // 0 = Sunday, 1 = Monday
+    clockTimeFormat: loadClockTimeFormat(),
     continueSessionOnClose: localStorage.getItem('work_tracker_continue_session') !== 'false', // default true
     defaultHourlyRate: parseFloat(localStorage.getItem('work_tracker_default_rate')) || 20,
     ratePreference: localStorage.getItem('work_tracker_rate_pref') || 'last_session',
@@ -287,6 +315,7 @@ export const state = {
     defaultStartTime: localStorage.getItem('work_tracker_default_start_time') || '09:00',
     startTimePreference: localStorage.getItem('work_tracker_start_time_pref') || 'last_session',
     percentageCuts: loadPercentageCuts(),
+    personalCuts: loadPersonalCuts(),
     timeCostItems: [],
     tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
     tcDailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
@@ -349,6 +378,12 @@ export function updateStartOfWeek(newDay) {
     localStorage.setItem('work_tracker_start_of_week', newDay);
 }
 
+export function updateClockTimeFormat(format) {
+    state.clockTimeFormat = sanitizeClockTimeFormat(format);
+    localStorage.setItem('work_tracker_clock_time_format', state.clockTimeFormat);
+    return state.clockTimeFormat;
+}
+
 export function updateContinueSession(continueSession) {
     state.continueSessionOnClose = continueSession;
     localStorage.setItem('work_tracker_continue_session', continueSession);
@@ -360,7 +395,7 @@ export function updateDashboardDensity(density) {
 }
 
 export function updateMoneyCounterMode(mode) {
-    state.moneyCounterMode = mode === 'after' ? 'after' : 'before';
+    state.moneyCounterMode = mode === 'after' || mode === 'personal' || mode === 'both' ? mode : 'before';
     localStorage.setItem('work_tracker_money_counter_mode', state.moneyCounterMode);
 }
 
@@ -382,6 +417,12 @@ export function updatePercentageCuts(newCuts) {
     state.percentageCuts = sanitizePercentageCuts(newCuts);
     localStorage.setItem('work_tracker_percentage_cuts', JSON.stringify(state.percentageCuts));
     return state.percentageCuts;
+}
+
+export function updatePersonalCuts(newCuts) {
+    state.personalCuts = sanitizePercentageCuts(newCuts);
+    localStorage.setItem('work_tracker_personal_cuts', JSON.stringify(state.personalCuts));
+    return state.personalCuts;
 }
 
 export function updateTimeCostItems(newItems) {

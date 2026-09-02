@@ -1,7 +1,6 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany, updateWorkSchedule } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
+import { formatDuration, formatDurationDetailed, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatClockTime, formatClockHourLabel, formatTimeOfDayLabel, parseClockTimeInput, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
 import {
-    accumulateDailyPayEarnings,
     collectAssumedWorkSegments,
     combinePayAndSessionEarnings,
     formatDateKey,
@@ -22,7 +21,7 @@ import {
     sumCurrentUnitAccrued,
     summarizePaySessionOverlaps
 } from './payPeriods.js';
-import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
+import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON, applyPercentageCuts, applyExternalThenPersonalCuts } from './savingPots.js';
 import {
     BATCH_DELETE_CONFIRM_PHRASE,
     BATCH_DELETE_RANGE_MODES,
@@ -77,9 +76,16 @@ export const DOM = {
     moneyCounterStatus: document.getElementById('money-counter-status'),
     moneyCounterTotal: document.getElementById('money-counter-total'),
     moneyCounterTime: document.getElementById('money-counter-time'),
+    moneyCounterSession: document.getElementById('money-counter-session'),
+    moneyCounterSessionStartLabel: document.getElementById('money-counter-session-start-label'),
+    moneyCounterSessionStart: document.getElementById('money-counter-session-start'),
+    moneyCounterSessionEndRow: document.getElementById('money-counter-session-end-row'),
+    moneyCounterSessionEndLabel: document.getElementById('money-counter-session-end-label'),
+    moneyCounterSessionEnd: document.getElementById('money-counter-session-end'),
+    moneyCounterSessionRemaining: document.getElementById('money-counter-session-remaining'),
     moneyCounterModeLabel: document.getElementById('money-counter-mode-label'),
     moneyCounterPayHint: document.getElementById('money-counter-pay-hint'),
-    moneyCounterModeButtons: document.querySelectorAll('.money-counter-mode-btn'),
+    moneyCounterModeSelect: document.getElementById('money-counter-mode-select'),
     moneyCounterGapSlider: document.getElementById('settings-money-counter-gap-slider'),
     moneyCounterGapValue: document.getElementById('settings-money-counter-gap-value'),
     moneyCounterStage: document.getElementById('money-counter-stage'),
@@ -106,6 +112,7 @@ export const DOM = {
     monthlyEarningsLabel: document.getElementById('monthly-earnings-label'),
     statsPeriodModeHint: document.getElementById('stats-period-mode-hint'),
     cutStatsPeriodModeHint: document.getElementById('cut-stats-period-mode-hint'),
+    personalCutStatsPeriodModeHint: document.getElementById('personal-cut-stats-period-mode-hint'),
     statsPeriodModeButtons: document.querySelectorAll('.stats-period-mode-btn'),
     customStatsScroll: document.getElementById('custom-stats-scroll'),
     customStatsGrid: document.getElementById('custom-stats-grid'),
@@ -126,6 +133,7 @@ export const DOM = {
     workPatternLatestEndDay: document.getElementById('work-pattern-latest-end-day'),
     workPatternAvgEarningsBefore: document.getElementById('work-pattern-avg-earnings-before'),
     workPatternAvgEarningsAfter: document.getElementById('work-pattern-avg-earnings-after'),
+    workPatternAvgEarningsPersonal: document.getElementById('work-pattern-avg-earnings-personal'),
     settingsDefaultRate: document.getElementById('settings-default-rate'),
     settingsDefaultCompany: document.getElementById('settings-default-company'),
     settingsDefaultProject: document.getElementById('settings-default-project'),
@@ -135,6 +143,9 @@ export const DOM = {
     percentageCutStatsWidget: document.getElementById('widget-cut-stats'),
     percentageCutStats: document.getElementById('percentage-cut-stats'),
     cutStatsTotalPercentage: document.getElementById('cut-stats-total-percentage'),
+    personalCutStatsWidget: document.getElementById('widget-personal-cut-stats'),
+    personalCutStats: document.getElementById('personal-cut-stats'),
+    personalCutStatsTotalPercentage: document.getElementById('personal-cut-stats-total-percentage'),
     prevMonthBtn: document.getElementById('prev-month'),
     nextMonthBtn: document.getElementById('next-month'),
     calendarMonthYear: document.getElementById('calendar-month-year'),
@@ -166,6 +177,7 @@ export const DOM = {
     defaultStartTimeSettingInput: document.getElementById('default-start-time-input'),
     startTimePreferenceSelect: document.getElementById('start-time-preference-select'),
     startOfWeekSelect: document.getElementById('start-of-week-select'),
+    clockTimeFormatSelect: document.getElementById('clock-time-format-select'),
     widgetSpacingSelect: document.getElementById('widget-spacing-select'),
     saveSettingsBtn: document.getElementById('save-settings'),
     settingsTabButtons: document.querySelectorAll('.settings-tab-btn'),
@@ -202,6 +214,8 @@ export const DOM = {
     widgetOrderList: document.getElementById('widget-order-list'),
     addPercentageCutBtn: document.getElementById('add-percentage-cut-btn'),
     percentageCutList: document.getElementById('percentage-cut-list'),
+    addPersonalCutBtn: document.getElementById('add-personal-cut-btn'),
+    personalCutList: document.getElementById('personal-cut-list'),
     showTitlesToggle: document.getElementById('show-titles-toggle'),
     continueSessionToggle: document.getElementById('continue-session-toggle'),
     targetShiftHoursInput: document.getElementById('target-shift-hours-input'),
@@ -547,19 +561,10 @@ export function updateCurrencyDisplays() {
         const elapsedMs = now - state.startTime;
         const hoursFloat = elapsedMs / (1000 * 60 * 60);
         const earned = hoursFloat * state.currentSessionRate;
-        const after = getAmountAfterPercentageCuts(earned);
-        DOM.liveEarningsDisplay.innerHTML = `
-            <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}</span>
-            <span class="cut-divider">|</span>
-            <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
-        `;
+        DOM.liveEarningsDisplay.innerHTML = formatLiveEarningsHtml(earned);
         renderLiveMoneyCounter(earned, true);
     } else {
-        DOM.liveEarningsDisplay.innerHTML = `
-            <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-            <span class="cut-divider">|</span>
-            <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-        `;
+        DOM.liveEarningsDisplay.innerHTML = formatLiveEarningsHtml(0);
         renderLiveMoneyCounter(0, hasActivePayAccrual());
     }
 
@@ -730,6 +735,7 @@ function getPayAccrualSnapshot(now = new Date()) {
     const remaining = Math.max(0, contracted - accrued);
     const hourly = getCombinedEquivalentHourlyRate(periods, now, getPayWorkOptions());
     const afterCuts = getAmountAfterPercentageCuts(accrued);
+    const afterPersonal = getAmountAfterPersonalCuts(accrued);
     const label = activePeriods[0]
         ? getCurrentPayUnitProgress(activePeriods[0], now, getPayWorkOptions()).label
         : 'Pay';
@@ -743,6 +749,7 @@ function getPayAccrualSnapshot(now = new Date()) {
         remaining,
         hourly,
         afterCuts,
+        afterPersonal,
         label,
         accruedPct,
         remainingPct
@@ -786,9 +793,9 @@ function getSessionLiveEarnings() {
     return ((Date.now() - state.startTime) / (1000 * 60 * 60)) * (state.currentSessionRate || 0);
 }
 
-function formatClockTime(dateMs) {
+function formatWidgetClockTime(dateMs) {
     if (!Number.isFinite(dateMs)) return '';
-    return new Date(dateMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatClockTime(dateMs, state.clockTimeFormat);
 }
 
 function getLiveMoneyCounterState(sessionEarned = 0, now = new Date()) {
@@ -800,14 +807,44 @@ function getLiveMoneyCounterState(sessionEarned = 0, now = new Date()) {
         : Math.max(Number(sessionEarned) || 0, 0);
     const timerRunning = Boolean(live);
     const useTimerClock = timerRunning && extraSession > 0;
+    const startTime = useTimerClock
+        ? live.startTime
+        : (assumed?.startTime ?? live?.startTime ?? null);
+    const endTime = Number.isFinite(assumed?.endTime) ? assumed.endTime : null;
+    const nowMs = now.getTime();
     return {
         assumed,
+        live,
+        startTime,
+        endTime,
+        remainingMs: Number.isFinite(endTime) ? endTime - nowMs : null,
         earnings: extraSession + (assumed ? assumed.earnings : 0),
         elapsedMs: useTimerClock
             ? live.durationMs
             : (assumed ? assumed.elapsedMs : (timerRunning ? live.durationMs : 0)),
         isLive: timerRunning || Boolean(assumed?.isLive)
     };
+}
+
+function getMoneyCounterDisplayAmount(beforeCutsEarned) {
+    const amount = Math.max(Number(beforeCutsEarned) || 0, 0);
+    if (state.moneyCounterMode === 'after') {
+        return getAmountAfterPercentageCuts(amount);
+    }
+    if (state.moneyCounterMode === 'personal') {
+        return applyPercentageCuts(amount, state.personalCuts);
+    }
+    if (state.moneyCounterMode === 'both') {
+        return getAmountAfterPersonalCuts(amount);
+    }
+    return amount;
+}
+
+function getMoneyCounterModeLabelText(mode = state.moneyCounterMode) {
+    if (mode === 'after') return 'After external cuts';
+    if (mode === 'personal') return 'After personal cuts';
+    if (mode === 'both') return 'After both cuts';
+    return 'Before cuts';
 }
 
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
@@ -818,9 +855,7 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     const counter = getLiveMoneyCounterState(timerRunning ? earned : 0, now);
     const isLive = counter.isLive;
     const beforeCutsEarned = counter.earnings;
-    const displayEarned = state.moneyCounterMode === 'after'
-        ? getAmountAfterPercentageCuts(beforeCutsEarned)
-        : beforeCutsEarned;
+    const displayEarned = getMoneyCounterDisplayAmount(beforeCutsEarned);
     const pennies = Math.floor(displayEarned * 100);
     const noteCount = Math.floor(pennies / 1000);
     const remainingAfterNotes = pennies % 1000;
@@ -841,22 +876,55 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
         DOM.moneyCounterTime.textContent = formatClockDuration(counter.elapsedMs);
     }
 
+    if (DOM.moneyCounterSession) {
+        const hasStart = Number.isFinite(counter.startTime);
+        const hasEnd = Number.isFinite(counter.endTime);
+        const nowMs = now.getTime();
+        DOM.moneyCounterSession.classList.toggle('hidden', !hasStart);
+
+        if (hasStart && DOM.moneyCounterSessionStart) {
+            const sessionHasBegun = nowMs >= counter.startTime;
+            if (DOM.moneyCounterSessionStartLabel) {
+                DOM.moneyCounterSessionStartLabel.textContent = sessionHasBegun ? 'Started' : 'Starts';
+            }
+            DOM.moneyCounterSessionStart.textContent = formatWidgetClockTime(counter.startTime);
+        }
+
+        if (DOM.moneyCounterSessionEndRow) {
+            DOM.moneyCounterSessionEndRow.classList.toggle('hidden', !hasEnd);
+        }
+        if (hasEnd) {
+            const sessionHasEnded = nowMs >= counter.endTime;
+            if (DOM.moneyCounterSessionEndLabel) {
+                DOM.moneyCounterSessionEndLabel.textContent = sessionHasEnded ? 'Ended' : 'Ends';
+            }
+            if (DOM.moneyCounterSessionEnd) {
+                DOM.moneyCounterSessionEnd.textContent = formatWidgetClockTime(counter.endTime);
+            }
+            if (DOM.moneyCounterSessionRemaining) {
+                const remainingMs = counter.remainingMs;
+                const showRemaining = Number.isFinite(remainingMs) && remainingMs > 0;
+                DOM.moneyCounterSessionRemaining.classList.toggle('hidden', !showRemaining);
+                DOM.moneyCounterSessionRemaining.textContent = showRemaining
+                    ? `${formatDurationDetailed(remainingMs)} left`
+                    : '';
+            }
+        }
+    }
+
     if (DOM.moneyCounterModeLabel) {
-        DOM.moneyCounterModeLabel.textContent = state.moneyCounterMode === 'after'
-            ? 'After percentage cuts'
-            : 'Before percentage cuts';
+        DOM.moneyCounterModeLabel.textContent = getMoneyCounterModeLabelText();
     }
 
     if (DOM.moneyCounterPayHint) {
         const assumed = counter.assumed;
         const hasPay = getVisiblePayPeriods().length > 0;
         if (assumed) {
-            const windowLabel = `${formatClockTime(assumed.startTime)}–${formatClockTime(assumed.endTime)}`;
             DOM.moneyCounterPayHint.textContent = assumed.isLive
-                ? `Counting today's scheduled ${windowLabel} session, not the whole month. Uncovered live sessions add on top.`
+                ? 'Counting today\'s scheduled session, not the whole month. Uncovered live sessions add on top.'
                 : (assumed.isComplete
-                    ? `Today's scheduled ${windowLabel} session has finished. Uncovered live sessions still add on top.`
-                    : `Today's scheduled session is ${windowLabel}. The counter starts at the start time.`);
+                    ? 'Today\'s scheduled session has finished. Uncovered live sessions still add on top.'
+                    : 'The counter starts at the scheduled start time.');
             DOM.moneyCounterPayHint.classList.remove('hidden');
         } else if (hasPay) {
             DOM.moneyCounterPayHint.textContent = 'No scheduled session today. Uncovered live sessions still count here.';
@@ -877,11 +945,9 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
 }
 
 export function renderMoneyCounterModeControls() {
-    DOM.moneyCounterModeButtons.forEach(button => {
-        const isActive = button.dataset.moneyCounterMode === state.moneyCounterMode;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
+    if (DOM.moneyCounterModeSelect && DOM.moneyCounterModeSelect.value !== state.moneyCounterMode) {
+        DOM.moneyCounterModeSelect.value = state.moneyCounterMode;
+    }
 
     if (DOM.moneyCounterGapSlider && DOM.moneyCounterGapValue && DOM.moneyCounterStage) {
         const gapVal = state.moneyCounterGap !== undefined ? state.moneyCounterGap : 1.0;
@@ -910,6 +976,10 @@ export function renderStatsPeriodModeControls() {
         DOM.cutStatsPeriodModeHint.textContent = `Monthly totals use ${monthlyConfig.shortLabel.toLowerCase()}.`;
     }
 
+    if (DOM.personalCutStatsPeriodModeHint) {
+        DOM.personalCutStatsPeriodModeHint.textContent = `Monthly totals use ${monthlyConfig.shortLabel.toLowerCase()}.`;
+    }
+
     if (DOM.workPatternPeriodHint) {
         DOM.workPatternPeriodHint.textContent = `Breakdown for ${monthlyConfig.shortLabel.toLowerCase()}.`;
     }
@@ -923,21 +993,30 @@ export function renderStatsPeriodModeControls() {
     }
 }
 
-function renderStatEarningsDisplay(displayEl, beforeAmount) {
+export function renderStatEarningsDisplay(displayEl, beforeAmount) {
     if (!displayEl) return;
 
-    const before = Number(beforeAmount) || 0;
-    const after = getAmountAfterPercentageCuts(before);
+    const { before, afterExternal, afterPersonal } = getCutAwareAmounts(beforeAmount);
+    const hasExternal = state.percentageCuts.length > 0;
+    const hasPersonal = state.personalCuts.length > 0;
 
-    if (!state.percentageCuts.length) {
+    if (!hasExternal && !hasPersonal) {
         displayEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}`;
         return;
     }
 
-    displayEl.innerHTML = `
-        <span class="stats-earnings-after"><span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
-        <span class="stats-earnings-before">Before cuts <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>
-    `;
+    const primary = hasPersonal ? afterPersonal : afterExternal;
+    const primaryClass = hasPersonal ? 'stats-earnings-after stats-earnings-personal' : 'stats-earnings-after';
+    const lines = [
+        `<span class="${primaryClass}"><span class="currency-symbol">${state.currentCurrency}</span>${primary.toFixed(2)}</span>`
+    ];
+
+    if (hasPersonal && hasExternal) {
+        lines.push(`<span class="stats-earnings-external">After external <span class="currency-symbol">${state.currentCurrency}</span>${afterExternal.toFixed(2)}</span>`);
+    }
+
+    lines.push(`<span class="stats-earnings-before">Before cuts <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>`);
+    displayEl.innerHTML = lines.join('\n        ');
 }
 
 export function renderCustomStatsPeriods() {
@@ -1205,6 +1284,7 @@ export function renderWorkPatternBreakdown() {
         ? combinedEarnings / (analytics.daysWorked > 0 ? analytics.daysWorked : windowDays)
         : analytics.avgEarningsBefore;
     const avgAfter = Number.isFinite(avgBefore) ? getAmountAfterPercentageCuts(avgBefore) : null;
+    const avgPersonal = Number.isFinite(avgBefore) ? getAmountAfterPersonalCuts(avgBefore) : null;
 
     if (DOM.workPatternAvgEarningsBefore) {
         DOM.workPatternAvgEarningsBefore.textContent = formatAverageEarnings(avgBefore);
@@ -1214,22 +1294,26 @@ export function renderWorkPatternBreakdown() {
         DOM.workPatternAvgEarningsAfter.textContent = formatAverageEarnings(avgAfter);
     }
 
+    if (DOM.workPatternAvgEarningsPersonal) {
+        DOM.workPatternAvgEarningsPersonal.textContent = formatAverageEarnings(avgPersonal);
+    }
+
     if (DOM.workPatternAvgStart) {
-        DOM.workPatternAvgStart.textContent = formatAverageClockTime(analytics.avgFirstStartMinutes);
+        DOM.workPatternAvgStart.textContent = formatAverageClockTime(analytics.avgFirstStartMinutes, state.clockTimeFormat);
     }
 
     if (DOM.workPatternAvgEnd) {
-        DOM.workPatternAvgEnd.textContent = formatAverageClockTime(analytics.avgLastEndMinutes);
+        DOM.workPatternAvgEnd.textContent = formatAverageClockTime(analytics.avgLastEndMinutes, state.clockTimeFormat);
     }
 
     if (DOM.workPatternEarliestStart) {
-        DOM.workPatternEarliestStart.textContent = formatClockTimeFromMs(analytics.earliestStartMs);
+        DOM.workPatternEarliestStart.textContent = formatClockTimeFromMs(analytics.earliestStartMs, state.clockTimeFormat);
     }
 
     setWorkPatternDayLabel(DOM.workPatternEarliestStartDay, analytics.earliestStartDayKey);
 
     if (DOM.workPatternLatestEnd) {
-        DOM.workPatternLatestEnd.textContent = formatClockTimeFromMs(analytics.latestEndMs);
+        DOM.workPatternLatestEnd.textContent = formatClockTimeFromMs(analytics.latestEndMs, state.clockTimeFormat);
     }
 
     setWorkPatternDayLabel(DOM.workPatternLatestEndDay, analytics.latestEndDayKey);
@@ -1297,31 +1381,59 @@ function createCutStatMoneyRow(className, label, amount) {
 }
 
 export function renderPercentageCutStats(totals) {
-    if (!DOM.percentageCutStats) return;
+    renderCutStatsLayers({
+        cuts: state.percentageCuts,
+        totals,
+        container: DOM.percentageCutStats,
+        widget: DOM.percentageCutStatsWidget,
+        totalEl: DOM.cutStatsTotalPercentage
+    });
+    renderPersonalCutStats(totals);
+}
 
-    DOM.percentageCutStats.innerHTML = '';
+export function renderPersonalCutStats(totals) {
+    const startingTotals = {
+        daily: getAmountAfterPercentageCuts(totals?.daily || 0),
+        weekly: getAmountAfterPercentageCuts(totals?.weekly || 0),
+        monthly: getAmountAfterPercentageCuts(totals?.monthly || 0)
+    };
 
-    if (!state.percentageCuts.length) {
-        if (DOM.percentageCutStatsWidget) {
-            DOM.percentageCutStatsWidget.classList.add('hidden');
-        }
+    renderCutStatsLayers({
+        cuts: state.personalCuts,
+        totals: startingTotals,
+        container: DOM.personalCutStats,
+        widget: DOM.personalCutStatsWidget,
+        totalEl: DOM.personalCutStatsTotalPercentage
+    });
+}
+
+function renderCutStatsLayers({ cuts, totals, container, widget, totalEl }) {
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!cuts.length) {
+        widget?.classList.add('hidden');
         return;
     }
 
-    if (DOM.percentageCutStatsWidget) {
-        DOM.percentageCutStatsWidget.classList.remove('hidden');
+    if (widget && state.disabledWidgets.includes(widget.id)) {
+        widget.classList.add('hidden');
+        return;
     }
 
+    widget?.classList.remove('hidden');
+
     let remainingPercentage = 100;
-    state.percentageCuts.forEach(cut => {
+    cuts.forEach(cut => {
         const sourcePool = cut.basis === 'original' ? 100 : remainingPercentage;
         const deduction = sourcePool * (cut.percentage / 100);
         remainingPercentage = Math.max(remainingPercentage - deduction, 0);
     });
     const totalCutPercentage = 100 - remainingPercentage;
 
-    if (DOM.cutStatsTotalPercentage) {
-        DOM.cutStatsTotalPercentage.textContent = `(-${totalCutPercentage.toFixed(1)}%)`;
+    if (totalEl) {
+        totalEl.textContent = `(-${totalCutPercentage.toFixed(1)}%)`;
     }
 
     let runningTotals = {
@@ -1331,7 +1443,7 @@ export function renderPercentageCutStats(totals) {
     };
     const originalTotals = { ...runningTotals };
 
-    state.percentageCuts.forEach((cut, index) => {
+    cuts.forEach((cut, index) => {
         const beforeTotals = { ...runningTotals };
         const sourceTotals = cut.basis === 'original' ? originalTotals : beforeTotals;
         const deductionTotals = {
@@ -1405,7 +1517,7 @@ export function renderPercentageCutStats(totals) {
 
         layer.appendChild(header);
         layer.appendChild(grid);
-        DOM.percentageCutStats.appendChild(layer);
+        container.appendChild(layer);
     });
 }
 
@@ -1470,11 +1582,7 @@ function resetTimerWidgetIdleState() {
 
     setTimerPendingPreviewState(false);
     DOM.timerDisplay.textContent = '00:00:00';
-    DOM.liveEarningsDisplay.innerHTML = `
-        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-        <span class="cut-divider">|</span>
-        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
-    `;
+    DOM.liveEarningsDisplay.innerHTML = formatLiveEarningsHtml(0);
     updateShiftRemainingDisplay(0);
     document.title = 'Work Tracker';
 }
@@ -1489,13 +1597,9 @@ function renderTimerWidgetPendingPreview(elapsedMs) {
     const hourlyRate = Number.isFinite(rate) ? rate : 0;
     const hoursFloat = elapsedMs / (1000 * 60 * 60);
     const earned = hoursFloat * hourlyRate;
-    const afterCuts = getAmountAfterPercentageCuts(earned);
-
     DOM.liveEarningsDisplay.innerHTML = `
         <span class="timer-preview-earnings-note">Preview if started now</span>
-        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}</span>
-        <span class="cut-divider">|</span>
-        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${afterCuts.toFixed(2)}</span>
+        ${formatLiveEarningsHtml(earned)}
     `;
 }
 
@@ -1620,7 +1724,7 @@ export function toggleTimerUI(isRunning) {
             if (projectSpan) projectSpan.textContent = state.currentProject || 'None';
             if (startSpan && state.startTime) {
                 const startDate = new Date(state.startTime);
-                startSpan.textContent = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + 
+                startSpan.textContent = formatClockTime(startDate, state.clockTimeFormat) +
                     ' (' + startDate.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ')';
             }
         }
@@ -1700,13 +1804,6 @@ export function renderCalendar() {
     const totalWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7);
     const gridEndDate = new Date(gridStartDate);
     gridEndDate.setDate(gridEndDate.getDate() + (totalWeeks * 7));
-    const dailyPay = accumulateDailyPayEarnings(
-        getVisiblePayPeriods(),
-        gridStartDate,
-        gridEndDate,
-        todayDate,
-        getPayWorkOptions()
-    );
     const assumedSegments = getAssumedWorkForRange(gridStartDate, gridEndDate, { includeFuture: true });
     const assumedByDate = new Map(assumedSegments.map((segment) => [segment.dateKey, segment]));
     const todayKey = getCalendarDateKey(todayDate);
@@ -1715,7 +1812,6 @@ export function renderCalendar() {
         let weekNetHours = 0;
         let weekGrossHours = 0;
         let weekBreakHours = 0;
-        let weekPay = 0;
         let weekAssumedHours = 0;
         let weekScheduledHours = 0;
 
@@ -1729,7 +1825,6 @@ export function renderCalendar() {
             const netHours = dailyHours[dateKey] || 0;
             const grossHours = dailyGrossHours[dateKey] || 0;
             const breakHours = dailyBreakHours[dateKey] || 0;
-            const payAmount = dailyPay[dateKey] || 0;
             const assumed = assumedByDate.get(dateKey);
             const assumedHours = assumed?.hours || 0;
             const isScheduledDay = dateKey > todayKey;
@@ -1739,7 +1834,6 @@ export function renderCalendar() {
             weekNetHours += netHours;
             weekGrossHours += grossHours;
             weekBreakHours += breakHours;
-            weekPay += payAmount;
             if (isScheduledAssumed) {
                 weekScheduledHours += assumedHours;
             } else {
@@ -1806,14 +1900,9 @@ export function renderCalendar() {
                 }
                 dayDiv.appendChild(hourLabel);
                 if (hasPayCoverage) {
-                    const payMark = document.createElement('div');
-                    const scheduledCover = isScheduledDay;
-                    payMark.className = `calendar-pay-mark${scheduledCover ? ' calendar-pay-mark-scheduled' : ''}`;
-                    payMark.textContent = scheduledCover ? 'Due' : 'Pay';
-                    payMark.title = scheduledCover
+                    dayDiv.title = isScheduledDay
                         ? 'Scheduled salary day. Not in totals yet.'
                         : 'Salary covers this day. Logged hours replace the assumed block and are already in totals.';
-                    dayDiv.appendChild(payMark);
                 }
             } else if (assumedHours > 0) {
                 const scheduled = isScheduledAssumed;
@@ -1825,22 +1914,6 @@ export function renderCalendar() {
                     ? 'Scheduled pay hours — not in totals yet'
                     : 'Accrued pay hours already included in money totals';
                 dayDiv.appendChild(hourLabel);
-                const payMark = document.createElement('div');
-                payMark.className = `calendar-pay-mark${scheduled ? ' calendar-pay-mark-scheduled' : ''}`;
-                payMark.textContent = scheduled ? 'Due' : 'Pay';
-                dayDiv.appendChild(payMark);
-            } else if (hasPayCoverage) {
-                const scheduled = isScheduledDay;
-                dayDiv.classList.add(scheduled ? 'has-scheduled-pay' : 'has-pay');
-                const payMark = document.createElement('div');
-                payMark.className = `calendar-pay-mark${scheduled ? ' calendar-pay-mark-scheduled' : ''}`;
-                payMark.textContent = scheduled ? 'Due' : 'Pay';
-                payMark.title = scheduled
-                    ? 'Scheduled salary day. Not in totals yet.'
-                    : (payAmount > 0
-                        ? `Accrued salary for this day (${formatCalendarPayAmount(payAmount)})`
-                        : 'Salary covers this day and is already in totals');
-                dayDiv.appendChild(payMark);
             }
 
             DOM.calendarGrid.appendChild(dayDiv);
@@ -1879,9 +1952,6 @@ export function renderCalendar() {
             weekTotalDiv.classList.add('has-scheduled-total');
             weekTotalDiv.innerHTML = `<span class="calendar-week-due">${weekScheduledHours.toFixed(1)}h due</span>`;
             weekTotalDiv.title = `${weekScheduledHours.toFixed(1)}h scheduled pay — not in totals yet`;
-        } else if (weekPay > 0) {
-            weekTotalDiv.classList.add('has-pay-total');
-            weekTotalDiv.textContent = formatCalendarPayAmount(weekPay);
         } else {
             weekTotalDiv.classList.add('is-empty');
             weekTotalDiv.textContent = '—';
@@ -2238,7 +2308,7 @@ export function renderGanttChart() {
         const hourLabel = document.createElement('span');
         hourLabel.className = 'gantt-header-hour';
         hourLabel.style.left = `${(i / 24) * 100}%`;
-        hourLabel.textContent = `${i}:00`;
+        hourLabel.textContent = formatClockHourLabel(i, state.clockTimeFormat);
         headerRow.appendChild(hourLabel);
     }
     DOM.ganttChart.appendChild(headerRow);
@@ -2472,12 +2542,6 @@ export function updateDatalists() {
     });
 }
 
-function formatCalendarPayAmount(amount) {
-    const value = Number(amount) || 0;
-    const rounded = value >= 10 ? Math.round(value) : value;
-    return `${state.currentCurrency}${value >= 10 ? rounded : rounded.toFixed(2)}`;
-}
-
 function firstOfMonthDateKey(date = new Date()) {
     return formatDateKey(new Date(date.getFullYear(), date.getMonth(), 1));
 }
@@ -2511,9 +2575,13 @@ export function updatePayPeriodPreview() {
     const hourly = getEquivalentHourlyRate(period, now, getPayWorkOptions());
     const progress = getCurrentPayUnitProgress(period, now, getPayWorkOptions());
     const afterCuts = getAmountAfterPercentageCuts(progress.accrued);
+    const afterPersonal = getAmountAfterPersonalCuts(progress.accrued);
     const hourNote = ` Calendar, weekly breakdown, and timeline show accrued pay in green (already in totals) and scheduled future pay in purple (not counted yet). Blocks follow Work Schedule (${formatScheduleSummary(state.workSchedule)}). Logged sessions replace that day's pay block.`;
+    const cutNote = state.percentageCuts.length || state.personalCuts.length
+        ? ` (${state.currentCurrency}${afterCuts.toFixed(2)} after external${state.personalCuts.length ? `, ${state.currentCurrency}${afterPersonal.toFixed(2)} after personal` : ''})`
+        : '';
 
-    DOM.payPeriodPreview.textContent = `${formatPayRate(period.amount, period.scale, state.currentCurrency)} · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h. ${progress.label}: ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)} accrued${state.percentageCuts.length ? ` (${state.currentCurrency}${afterCuts.toFixed(2)} after cuts)` : ''}.${hourNote}`;
+    DOM.payPeriodPreview.textContent = `${formatPayRate(period.amount, period.scale, state.currentCurrency)} · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h. ${progress.label}: ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)} accrued${cutNote}.${hourNote}`;
     DOM.payPeriodPreview.classList.remove('hidden');
 }
 
@@ -2581,7 +2649,10 @@ function applyPayWidgetSummaryValues(snap) {
     if (accruedBar) accruedBar.style.width = `${snap.accruedPct}%`;
     if (scheduledBar) scheduledBar.style.width = `${snap.remainingPct}%`;
     if (metaEl) {
-        metaEl.textContent = `${snap.contracted > 0 ? `${state.currentCurrency}${snap.contracted.toFixed(2)} contracted` : 'No active pay in the current period'}${snap.hourly > 0 ? ` · ≈ ${state.currentCurrency}${snap.hourly.toFixed(2)}/h` : ''}${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${snap.afterCuts.toFixed(2)}` : ''}`;
+        const cutNote = state.percentageCuts.length || state.personalCuts.length
+            ? ` · After external ${state.currentCurrency}${snap.afterCuts.toFixed(2)}${state.personalCuts.length ? ` · After personal ${state.currentCurrency}${snap.afterPersonal.toFixed(2)}` : ''}`
+            : '';
+        metaEl.textContent = `${snap.contracted > 0 ? `${state.currentCurrency}${snap.contracted.toFixed(2)} contracted` : 'No active pay in the current period'}${snap.hourly > 0 ? ` · ≈ ${state.currentCurrency}${snap.hourly.toFixed(2)}/h` : ''}${cutNote}`;
     }
 }
 
@@ -2821,6 +2892,41 @@ function readWorkScheduleFromForm() {
     return { days };
 }
 
+function getWorkScheduleTimeDisplay(hiddenInput) {
+    return hiddenInput?.closest('.clock-time-field')?.querySelector('.work-schedule-time-display') || null;
+}
+
+function syncWorkScheduleClockField(hiddenInput, hhmm, enabled, active) {
+    if (!hiddenInput) return;
+    const display = getWorkScheduleTimeDisplay(hiddenInput);
+    const displayFocused = display && active === display;
+
+    if (active !== hiddenInput && !displayFocused) {
+        hiddenInput.value = hhmm;
+    }
+    if (display && !displayFocused) {
+        display.value = formatTimeOfDayLabel(hiddenInput.value || hhmm, state.clockTimeFormat);
+    }
+    if (display) display.disabled = !enabled;
+}
+
+function commitWorkScheduleClockDisplay(displayInput) {
+    if (!displayInput) return;
+    const field = displayInput.closest('.clock-time-field');
+    const hidden = field?.querySelector('.work-schedule-start, .work-schedule-end');
+    if (!hidden) return;
+    const parsed = parseClockTimeInput(displayInput.value);
+    if (parsed) hidden.value = parsed;
+}
+
+function normalizeWorkScheduleClockDisplay(displayInput) {
+    if (!displayInput) return;
+    const field = displayInput.closest('.clock-time-field');
+    const hidden = field?.querySelector('.work-schedule-start, .work-schedule-end');
+    if (!hidden) return;
+    displayInput.value = formatTimeOfDayLabel(hidden.value, state.clockTimeFormat);
+}
+
 function syncWorkScheduleRow(row, day) {
     if (!row || !day) return;
     const enabledInput = row.querySelector('.work-schedule-enabled');
@@ -2832,14 +2938,8 @@ function syncWorkScheduleRow(row, day) {
     if (enabledInput && active !== enabledInput) {
         enabledInput.checked = Boolean(day.enabled);
     }
-    if (startInput && active !== startInput) {
-        startInput.value = day.start;
-    }
-    if (endInput && active !== endInput) {
-        endInput.value = day.end;
-    }
-    if (startInput) startInput.disabled = !day.enabled;
-    if (endInput) endInput.disabled = !day.enabled;
+    syncWorkScheduleClockField(startInput, day.start, day.enabled, active);
+    syncWorkScheduleClockField(endInput, day.end, day.enabled, active);
     if (hoursEl) hoursEl.textContent = formatScheduleHoursShort(getScheduleDayHours(day));
     row.classList.toggle('is-disabled', !day.enabled);
 }
@@ -2902,13 +3002,25 @@ function bindWorkScheduleEvents() {
     DOM.workScheduleList.addEventListener('input', (event) => {
         const row = event.target.closest('.work-schedule-row');
         if (!row) return;
+        if (event.target.classList.contains('work-schedule-time-display')) {
+            commitWorkScheduleClockDisplay(event.target);
+        }
         previewWorkScheduleRow(row);
         scheduleWorkScheduleApply();
     });
     DOM.workScheduleList.addEventListener('change', (event) => {
         const row = event.target.closest('.work-schedule-row');
+        if (event.target.classList.contains('work-schedule-time-display')) {
+            commitWorkScheduleClockDisplay(event.target);
+            normalizeWorkScheduleClockDisplay(event.target);
+        }
         if (row) previewWorkScheduleRow(row);
         applyWorkScheduleFromForm();
+    });
+    DOM.workScheduleList.addEventListener('focusout', (event) => {
+        if (!event.target.classList.contains('work-schedule-time-display')) return;
+        commitWorkScheduleClockDisplay(event.target);
+        normalizeWorkScheduleClockDisplay(event.target);
     });
 }
 
@@ -2919,25 +3031,38 @@ export function renderWorkSchedule() {
     const order = orderedWeekdayIndexes(state.startOfWeek);
     const existingRows = [...DOM.workScheduleList.querySelectorAll('.work-schedule-row')];
     const existingOrder = existingRows.map((row) => Number(row.dataset.day));
-    const needsRebuild = existingRows.length !== 7 || order.some((dayIndex, index) => existingOrder[index] !== dayIndex);
+    const needsRebuild = existingRows.length !== 7
+        || order.some((dayIndex, index) => existingOrder[index] !== dayIndex)
+        || DOM.workScheduleList.dataset.clockFormat !== state.clockTimeFormat;
 
     if (needsRebuild) {
         DOM.workScheduleList.innerHTML = '';
+        DOM.workScheduleList.dataset.clockFormat = state.clockTimeFormat;
         order.forEach((dayIndex) => {
             const day = schedule.days[dayIndex];
             const row = document.createElement('li');
             row.className = 'work-schedule-row';
             row.dataset.day = String(dayIndex);
             const label = WEEKDAY_LABELS[dayIndex];
+            const startLabel = formatTimeOfDayLabel(day.start, state.clockTimeFormat);
+            const endLabel = formatTimeOfDayLabel(day.end, state.clockTimeFormat);
+            const disabledAttr = day.enabled ? '' : 'disabled';
             row.innerHTML = `
                 <label class="work-schedule-day">
                     <input type="checkbox" class="work-schedule-enabled" ${day.enabled ? 'checked' : ''} aria-label="Work on ${label}">
+                    <span class="work-schedule-check" aria-hidden="true"></span>
                     <span>${label}</span>
                 </label>
                 <div class="work-schedule-times">
-                    <input type="time" class="work-schedule-start" value="${day.start}" ${day.enabled ? '' : 'disabled'} aria-label="${label} start">
+                    <label class="clock-time-field">
+                        <input type="hidden" class="work-schedule-start" value="${day.start}">
+                        <input type="text" class="work-schedule-time-display" data-clock-role="start" value="${startLabel}" ${disabledAttr} aria-label="${label} start" inputmode="text" autocomplete="off" spellcheck="false">
+                    </label>
                     <span>to</span>
-                    <input type="time" class="work-schedule-end" value="${day.end}" ${day.enabled ? '' : 'disabled'} aria-label="${label} end">
+                    <label class="clock-time-field">
+                        <input type="hidden" class="work-schedule-end" value="${day.end}">
+                        <input type="text" class="work-schedule-time-display" data-clock-role="end" value="${endLabel}" ${disabledAttr} aria-label="${label} end" inputmode="text" autocomplete="off" spellcheck="false">
+                    </label>
                 </div>
                 <span class="work-schedule-hours">${formatScheduleHoursShort(getScheduleDayHours(day))}</span>
             `;
@@ -2969,7 +3094,7 @@ export function applyWidgetOrder() {
 export function applyWidgetVisibility() {
     const DEFAULT_WIDGET_IDS = [
         'widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
-        'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt',
+        'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-personal-cut-stats', 'widget-personal-cuts', 'widget-gantt',
         'widget-calendar', 'widget-chart', 'widget-history'
     ];
 
@@ -2981,6 +3106,15 @@ export function applyWidgetVisibility() {
             return;
         }
         const isDisabled = state.disabledWidgets.includes(id);
+        if (id === 'widget-cut-stats' || id === 'widget-personal-cut-stats') {
+            const hasCuts = id === 'widget-personal-cut-stats'
+                ? state.personalCuts.length > 0
+                : state.percentageCuts.length > 0;
+            const hide = isDisabled || !hasCuts;
+            el.classList.toggle('hidden', hide);
+            el.setAttribute('aria-hidden', hide ? 'true' : 'false');
+            return;
+        }
         el.classList.toggle('hidden', isDisabled);
         el.setAttribute('aria-hidden', isDisabled ? 'true' : 'false');
     });
@@ -3264,8 +3398,10 @@ export function renderWidgetOrderList() {
         'widget-saving-pots': 'Saving Pots',
         'widget-stats': 'Statistics',
         'widget-work-pattern': 'Work Pattern',
-        'widget-cut-stats': 'After Percentage Cuts',
-        'widget-cuts': 'Percentage Cuts',
+        'widget-cut-stats': 'After External Cuts',
+        'widget-cuts': 'External Cuts',
+        'widget-personal-cut-stats': 'After Personal Cuts',
+        'widget-personal-cuts': 'Personal Cuts',
         'widget-gantt': "Timeline",
         'widget-calendar': 'Calendar',
         'widget-chart': 'Weekly Breakdown',
@@ -3316,28 +3452,50 @@ export function renderWidgetOrderList() {
 }
 
 export function renderPercentageCutList() {
-    if (!DOM.percentageCutList) return;
-    DOM.percentageCutList.innerHTML = '';
+    renderCutList(DOM.percentageCutList, state.percentageCuts);
+}
 
-    state.percentageCuts.forEach(cut => {
-        DOM.percentageCutList.appendChild(createPercentageCutListItem(cut));
+export function renderPersonalCutList() {
+    renderCutList(DOM.personalCutList, state.personalCuts);
+}
+
+function renderCutList(listEl, cuts) {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    cuts.forEach(cut => {
+        listEl.appendChild(createPercentageCutListItem(cut));
     });
-
-    updatePercentageCutMoveButtons();
+    updateCutMoveButtons(listEl);
 }
 
 export function addPercentageCutListItem() {
-    if (!DOM.percentageCutList) return;
-    DOM.percentageCutList.appendChild(createPercentageCutListItem(createPercentageCut('', 0)));
-    updatePercentageCutMoveButtons();
+    addCutListItem(DOM.percentageCutList);
+}
+
+export function addPersonalCutListItem() {
+    addCutListItem(DOM.personalCutList);
+}
+
+function addCutListItem(listEl) {
+    if (!listEl) return;
+    listEl.appendChild(createPercentageCutListItem(createPercentageCut('', 0)));
+    updateCutMoveButtons(listEl);
 }
 
 export function getPercentageCutsFromWidget() {
-    if (!DOM.percentageCutList) return [];
+    return getCutsFromList(DOM.percentageCutList, 'Cut');
+}
 
-    const items = DOM.percentageCutList.querySelectorAll('.percentage-cut-item');
+export function getPersonalCutsFromWidget() {
+    return getCutsFromList(DOM.personalCutList, 'Personal cut');
+}
+
+function getCutsFromList(listEl, fallbackPrefix) {
+    if (!listEl) return [];
+
+    const items = listEl.querySelectorAll('.percentage-cut-item');
     return Array.from(items)
-        .map((item, index) => {
+        .map((item) => {
             const nameInput = item.querySelector('.cut-name-input');
             const percentageInput = item.querySelector('.cut-percentage-input');
             const basisButton = item.querySelector('.cut-basis-toggle');
@@ -3355,7 +3513,7 @@ export function getPercentageCutsFromWidget() {
         .filter(cut => cut.name || cut.percentage > 0)
         .map((cut, index) => ({
             ...cut,
-            name: cut.name || `Cut ${index + 1}`
+            name: cut.name || `${fallbackPrefix} ${index + 1}`
         }));
 }
 
@@ -3466,8 +3624,8 @@ function setCutBasisButtonState(button, basis = 'accumulative') {
     button.dataset.basis = normalizedBasis;
     button.textContent = normalizedBasis === 'original' ? 'From Original' : 'From Accumulated';
     button.title = normalizedBasis === 'original'
-        ? 'Calculated from the original earnings, then subtracted from the accumulated amount'
-        : 'Calculated from the accumulated amount, then subtracted from the accumulated amount';
+        ? 'Calculated from the starting amount of this cut list, then subtracted from the remaining amount'
+        : 'Calculated from the remaining amount after earlier cuts in this list';
 }
 
 function createCutActionButton(action, title, svg) {
@@ -3494,34 +3652,34 @@ async function handlePercentageCutAction(e) {
 
         const nameInput = item.querySelector('.cut-name-input');
         const cutName = nameInput ? nameInput.value.trim() : "";
-        const displayName = cutName ? `"${cutName}"` : "this percentage cut";
+        const listEl = item.closest('.percentage-cut-list');
+        const isPersonal = listEl?.dataset?.cutKind === 'personal';
+        const displayName = cutName ? `"${cutName}"` : (isPersonal ? 'this personal cut' : 'this external cut');
 
         const confirmed = await showConfirm(
-            "Remove Percentage Cut",
+            isPersonal ? 'Remove Personal Cut' : 'Remove External Cut',
             `Are you sure you want to remove ${displayName}?`
         );
         if (confirmed) {
             item.remove();
-            updatePercentageCutMoveButtons();
-            
-            // Dispatch input event to trigger auto-save in main.js
-            if (DOM.percentageCutList) {
-                DOM.percentageCutList.dispatchEvent(new Event('input', { bubbles: true }));
-            }
+            updateCutMoveButtons(listEl);
+            listEl?.dispatchEvent(new Event('input', { bubbles: true }));
         }
     } else if (button.dataset.action === 'up' && item.previousElementSibling) {
-        DOM.percentageCutList.insertBefore(item, item.previousElementSibling);
-        updatePercentageCutMoveButtons();
+        const listEl = item.closest('.percentage-cut-list');
+        listEl?.insertBefore(item, item.previousElementSibling);
+        updateCutMoveButtons(listEl);
     } else if (button.dataset.action === 'down' && item.nextElementSibling) {
-        DOM.percentageCutList.insertBefore(item.nextElementSibling, item);
-        updatePercentageCutMoveButtons();
+        const listEl = item.closest('.percentage-cut-list');
+        listEl?.insertBefore(item.nextElementSibling, item);
+        updateCutMoveButtons(listEl);
     }
 }
 
-function updatePercentageCutMoveButtons() {
-    if (!DOM.percentageCutList) return;
+function updateCutMoveButtons(listEl) {
+    if (!listEl) return;
 
-    const items = Array.from(DOM.percentageCutList.querySelectorAll('.percentage-cut-item'));
+    const items = Array.from(listEl.querySelectorAll('.percentage-cut-item'));
     items.forEach((item, index) => {
         const upButton = item.querySelector('button[data-action="up"]');
         const downButton = item.querySelector('button[data-action="down"]');
@@ -3563,8 +3721,9 @@ function handlePercentageCutDrop(e) {
     this.style.borderStyle = 'solid';
     this.style.borderColor = 'rgba(255, 255, 255, 0.15)';
 
-    if (draggedCutItem && draggedCutItem !== this) {
-        const items = Array.from(DOM.percentageCutList.children);
+    const listEl = this.closest('.percentage-cut-list');
+    if (draggedCutItem && draggedCutItem !== this && draggedCutItem.closest('.percentage-cut-list') === listEl) {
+        const items = Array.from(listEl.children);
         const draggedIndex = items.indexOf(draggedCutItem);
         const targetIndex = items.indexOf(this);
 
@@ -3575,21 +3734,21 @@ function handlePercentageCutDrop(e) {
         }
     }
 
-    updatePercentageCutMoveButtons();
+    updateCutMoveButtons(listEl);
     return false;
 }
 
 function handlePercentageCutDragEnd() {
     this.classList.remove('dragging');
+    const listEl = this.closest('.percentage-cut-list');
     draggedCutItem = null;
 
-    const items = DOM.percentageCutList.querySelectorAll('.percentage-cut-item');
-    items.forEach(item => {
+    listEl?.querySelectorAll('.percentage-cut-item').forEach(item => {
         item.style.borderStyle = 'solid';
         item.style.borderColor = 'rgba(255, 255, 255, 0.15)';
     });
 
-    updatePercentageCutMoveButtons();
+    updateCutMoveButtons(listEl);
 }
 
 let draggedItem = null;
@@ -3663,24 +3822,63 @@ function getTimeCostSettings() {
 }
 
 export function getAmountAfterPercentageCuts(baseAmount) {
-    const originalAmount = Math.max(Number(baseAmount) || 0, 0);
-    let accumulatedAmount = originalAmount;
+    return applyPercentageCuts(baseAmount, state.percentageCuts);
+}
 
-    state.percentageCuts.forEach(cut => {
-        const sourcePool = cut.basis === 'original' ? originalAmount : accumulatedAmount;
-        const deduction = sourcePool * (cut.percentage / 100);
-        accumulatedAmount = Math.max(accumulatedAmount - deduction, 0);
-    });
+export function getAmountAfterPersonalCuts(baseAmount) {
+    return applyExternalThenPersonalCuts(baseAmount, state.percentageCuts, state.personalCuts);
+}
 
-    return accumulatedAmount;
+function getCutAwareAmounts(baseAmount) {
+    const before = Math.max(Number(baseAmount) || 0, 0);
+    return {
+        before,
+        afterExternal: getAmountAfterPercentageCuts(before),
+        afterPersonal: getAmountAfterPersonalCuts(before)
+    };
+}
+
+export function formatLiveEarningsHtml(earned = 0) {
+    const { before, afterExternal, afterPersonal } = getCutAwareAmounts(earned);
+    const hasExternal = state.percentageCuts.length > 0;
+    const hasPersonal = state.personalCuts.length > 0;
+    const parts = [
+        `<span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>`
+    ];
+
+    if (hasExternal) {
+        parts.push('<span class="cut-divider">|</span>');
+        parts.push(`<span class="after-cut">After external: <span class="currency-symbol">${state.currentCurrency}</span>${afterExternal.toFixed(2)}</span>`);
+    }
+
+    if (hasPersonal) {
+        parts.push('<span class="cut-divider">|</span>');
+        parts.push(`<span class="after-personal-cut">After personal: <span class="currency-symbol">${state.currentCurrency}</span>${afterPersonal.toFixed(2)}</span>`);
+    }
+
+    if (!hasExternal && !hasPersonal) {
+        parts.push('<span class="cut-divider">|</span>');
+        parts.push(`<span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${afterExternal.toFixed(2)}</span>`);
+    }
+
+    return parts.join('\n            ');
 }
 
 function getEffectiveHourlyRate(baseRate) {
-    const effectiveRate = getAmountAfterPercentageCuts(baseRate);
+    const { afterExternal, afterPersonal } = getCutAwareAmounts(baseRate);
+    const leftoverRate = afterPersonal;
+    const totalCutPercentage = baseRate > 0 ? ((baseRate - leftoverRate) / baseRate) * 100 : 0;
+    const externalCutPercentage = baseRate > 0 ? ((baseRate - afterExternal) / baseRate) * 100 : 0;
+    const personalCutPercentage = afterExternal > 0 ? ((afterExternal - afterPersonal) / afterExternal) * 100 : 0;
 
-    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
-
-    return { effectiveRate, totalCutPercentage };
+    return {
+        effectiveRate: leftoverRate,
+        afterExternalRate: afterExternal,
+        afterPersonalRate: afterPersonal,
+        totalCutPercentage,
+        externalCutPercentage,
+        personalCutPercentage
+    };
 }
 
 function formatMoneyAmount(amount) {
@@ -4003,9 +4201,31 @@ export function renderTcCutsSummary() {
     if (!DOM.tcCutsSummary) return;
 
     const { baseRate } = getTimeCostSettings();
-    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const {
+        effectiveRate,
+        afterExternalRate,
+        totalCutPercentage,
+        externalCutPercentage,
+        personalCutPercentage
+    } = getEffectiveHourlyRate(baseRate);
+    const hasExternal = state.percentageCuts.length > 0;
+    const hasPersonal = state.personalCuts.length > 0;
 
-    DOM.tcCutsSummary.innerHTML = `Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-${totalCutPercentage.toFixed(1)}%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${effectiveRate.toFixed(2)}/h</span>)`;
+    if (!hasExternal && !hasPersonal) {
+        DOM.tcCutsSummary.innerHTML = `No cuts applied. Rate: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${baseRate.toFixed(2)}/h</span>`;
+        renderPayDerivedTimeCostHint();
+        return;
+    }
+
+    const parts = [];
+    if (hasExternal) {
+        parts.push(`External: <span style="color: var(--accent-blue); font-weight: 700;">-${externalCutPercentage.toFixed(1)}%</span> (${state.currentCurrency}${afterExternalRate.toFixed(2)}/h)`);
+    }
+    if (hasPersonal) {
+        parts.push(`Personal: <span style="color: var(--accent-blue); font-weight: 700;">-${personalCutPercentage.toFixed(1)}%</span> of leftover`);
+    }
+    parts.push(`Leftover: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${effectiveRate.toFixed(2)}/h</span> (-${totalCutPercentage.toFixed(1)}%)`);
+    DOM.tcCutsSummary.innerHTML = parts.join(' · ');
     renderPayDerivedTimeCostHint();
 }
 
@@ -4014,7 +4234,8 @@ export function renderTimeCostRateBreakdown() {
 
     const settings = getTimeCostSettings();
     const { baseRate, dailyHours, workingDaysPerWeek } = settings;
-    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const { effectiveRate, afterExternalRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const hasPersonal = state.personalCuts.length > 0;
     const workingDaysPerMonth = workingDaysPerWeek * 4.345;
     const defaultScales = [
         { label: 'Per Minute', amount: 1, unit: 'minutes' },
@@ -4033,14 +4254,19 @@ export function renderTimeCostRateBreakdown() {
     const bodyRows = [...defaultScales, ...customScales].map(scale => {
         const hours = getTimeScaleHours(scale, settings);
         const beforeCuts = hours * baseRate;
+        const afterExternal = hours * afterExternalRate;
         const afterCuts = hours * effectiveRate;
         const cutAmount = beforeCuts - afterCuts;
+        const afterExternalCell = hasPersonal
+            ? `<td class="tc-amount">${formatMoneyAmount(afterExternal)}</td>`
+            : '';
 
         return `
             <tr${scale.custom ? ' class="tc-custom-scale-row"' : ''}>
                 <td>${scale.label}</td>
                 <td class="tc-time">${getTimeScaleWorkLabel(scale, settings)}</td>
                 <td class="tc-amount">${formatMoneyAmount(beforeCuts)}</td>
+                ${afterExternalCell}
                 <td class="tc-amount">${formatMoneyAmount(afterCuts)}</td>
                 <td class="tc-time">-${totalCutPercentage.toFixed(1)}% (${formatMoneyAmount(cutAmount)})</td>
                 <td class="tc-scale-actions">
@@ -4103,7 +4329,8 @@ export function renderTimeCostRateBreakdown() {
                         <th>Time Scale</th>
                         <th>Work Time</th>
                         <th>Before Cuts</th>
-                        <th>After Cuts</th>
+                        ${hasPersonal ? '<th>After External</th>' : ''}
+                        <th>${hasPersonal ? 'After Personal' : 'After Cuts'}</th>
                         <th>Cut</th>
                         <th>Actions</th>
                     </tr>
@@ -4121,7 +4348,7 @@ export function renderTimeCostRateBreakdown() {
                         <tr>
                             <th>Target</th>
                             <th>Before Cuts</th>
-                            <th>After Cuts (-${totalCutPercentage.toFixed(1)}%)</th>
+                            <th>${hasPersonal ? `Leftover After Personal (-${totalCutPercentage.toFixed(1)}%)` : `After Cuts (-${totalCutPercentage.toFixed(1)}%)`}</th>
                             <th>Extra Time From Cuts</th>
                         </tr>
                     </thead>
@@ -4180,8 +4407,9 @@ export function renderTimeCostBreakdown() {
     }
 
     const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
-    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const { effectiveRate, afterExternalRate, totalCutPercentage, externalCutPercentage } = getEffectiveHourlyRate(baseRate);
     const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
+    const afterExternalHours = afterExternalRate > 0 ? cost / afterExternalRate : Infinity;
 
     function formatDaysWeeksMonths(totalHours) {
         if (totalHours === Infinity) return { days: '∞', weeks: '∞', months: '∞' };
@@ -4198,6 +4426,7 @@ export function renderTimeCostBreakdown() {
     }
 
     const baseTimeFormatted = formatDaysWeeksMonths(baseHours);
+    const afterExternalTimeFormatted = formatDaysWeeksMonths(afterExternalHours);
     const effectiveTimeFormatted = formatDaysWeeksMonths(effectiveHours);
 
     let html = `
@@ -4223,10 +4452,23 @@ export function renderTimeCostBreakdown() {
                 </tr>
     `;
 
-    if (state.percentageCuts.length > 0) {
+    if (state.percentageCuts.length > 0 && state.personalCuts.length > 0) {
+        html += `
+                <tr>
+                    <td>After External Cuts (-${externalCutPercentage.toFixed(1)}%)</td>
+                    <td class="tc-amount"><span class="currency-symbol">${state.currentCurrency}</span>${afterExternalRate.toFixed(2)}</td>
+                    <td class="tc-time">${afterExternalHours === Infinity ? '∞' : formatDuration(afterExternalHours * 60 * 60 * 1000)}</td>
+                    <td class="tc-time">${afterExternalTimeFormatted.days}</td>
+                    <td class="tc-time">${afterExternalTimeFormatted.weeks} wks</td>
+                    <td class="tc-time">${afterExternalTimeFormatted.months} mos</td>
+                </tr>
+        `;
+    }
+
+    if (state.percentageCuts.length > 0 || state.personalCuts.length > 0) {
         html += `
                 <tr class="tc-total-row">
-                    <td>After All Cuts (-${totalCutPercentage.toFixed(1)}%)</td>
+                    <td>${state.personalCuts.length ? 'Leftover After Personal' : 'After External Cuts'} (-${totalCutPercentage.toFixed(1)}%)</td>
                     <td class="tc-amount"><span class="currency-symbol">${state.currentCurrency}</span>${effectiveRate.toFixed(2)}</td>
                     <td class="tc-time">${effectiveHours === Infinity ? '∞' : formatDuration(effectiveHours * 60 * 60 * 1000)}</td>
                     <td class="tc-time">${effectiveTimeFormatted.days}</td>
@@ -4424,7 +4666,7 @@ function renderSavedItemMobileCard(itemView) {
                         </div>
                     </div>
                     <div class="tc-saved-item-time-group">
-                        <span class="tc-saved-item-time-group-title">After cuts (-${totalCutPercentage.toFixed(1)}%)</span>
+                        <span class="tc-saved-item-time-group-title">${state.personalCuts.length ? 'Leftover after personal' : 'After cuts'} (-${totalCutPercentage.toFixed(1)}%)</span>
                         <div class="tc-saved-item-time-values">
                             <span>${effectiveHoursStr}</span>
                             <span>${effectiveDaysStr}</span>
@@ -4907,7 +5149,7 @@ export function renderSavedTimeCostItems() {
                                     <th rowspan="2" style="vertical-align: middle;">Cost</th>
                                     <th rowspan="2" style="vertical-align: middle;">Date Bought</th>
                                     <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">Base Time</th>
-                                    <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">After Cuts Time (-${totalCutPercentage.toFixed(1)}%)</th>
+                                    <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">${state.personalCuts.length ? 'Leftover After Personal' : 'After Cuts'} (-${totalCutPercentage.toFixed(1)}%)</th>
                                     <th rowspan="2" style="vertical-align: middle; text-align: center;">Actions</th>
                                 </tr>
                                 <tr>

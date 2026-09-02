@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     POOL_SCOPES,
     applyPercentageCuts,
+    applyExternalThenPersonalCuts,
     clampSavedAmountForCost,
     computeEarningsPool,
     computeSavingPotState,
@@ -39,6 +40,34 @@ test('applyPercentageCuts matches accumulative cut behavior', () => {
     ];
 
     assert.equal(applyPercentageCuts(100, cuts), 72);
+});
+
+test('applyExternalThenPersonalCuts applies personal cuts to leftover after external cuts', () => {
+    const external = [{ name: 'Tax', percentage: 20, basis: 'accumulative' }];
+    const personal = [
+        { name: 'Rent', percentage: 40, basis: 'accumulative' },
+        { name: 'Food', percentage: 10, basis: 'original' }
+    ];
+
+    // 100 → 80 after tax. Rent takes 40% of 80 = 32 → 48. Food takes 10% of leftover-start (80) = 8 → 40.
+    assert.equal(applyExternalThenPersonalCuts(100, external, personal), 40);
+});
+
+test('computeEarningsPool applies personal cuts after external cuts', () => {
+    const now = new Date('2026-07-13T12:00:00');
+    const startTime = now.getTime() - HOUR_MS;
+    const sessions = [makeSession({ startTime, earnings: 100 })];
+
+    const pool = computeEarningsPool({
+        sessions,
+        breaks: [],
+        poolScope: POOL_SCOPES.ALL_TIME,
+        percentageCuts: [{ name: 'Tax', percentage: 20, basis: 'accumulative' }],
+        personalCuts: [{ name: 'Rent', percentage: 50, basis: 'accumulative' }],
+        now
+    });
+
+    assert.equal(pool, roundMoney(40));
 });
 
 test('computeEarningsPool uses all-time break-adjusted earnings after cuts', () => {

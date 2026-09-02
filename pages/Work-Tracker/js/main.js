@@ -12,6 +12,9 @@ import {
     renderPercentageCutList,
     addPercentageCutListItem,
     getPercentageCutsFromWidget,
+    renderPersonalCutList,
+    addPersonalCutListItem,
+    getPersonalCutsFromWidget,
     setupWidgetImageExports,
     renderTimeCostBreakdown,
     renderSavedTimeCostItems,
@@ -46,6 +49,7 @@ import {
     showConfirm,
     renderPayWidget,
     renderWorkSchedule,
+    toggleTimerUI,
     openPayPeriodModal,
     closePayPeriodModal,
     updatePayPeriodPreview,
@@ -69,11 +73,13 @@ import {
     updateTargetShiftHours,
     updateWidgetTitles,
     updateStartOfWeek,
+    updateClockTimeFormat,
     updateContinueSession,
     updateDashboardDensity,
     updateMoneyCounterMode,
     updateMoneyCounterGap,
     updatePercentageCuts,
+    updatePersonalCuts,
     updateTcHourlyRate,
     updateTcDailyHours,
     updateTcWorkingDaysPerWeek,
@@ -99,7 +105,7 @@ import {
     updateBudgetPlan,
     updateBudgetSnapMode
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings, addPayPeriod, updatePayPeriod, deletePayPeriod, deleteBatchEntries } from './api.js';
+import { renderDashboardData, savePercentageCuts, savePersonalCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings, addPayPeriod, updatePayPeriod, deletePayPeriod, deleteBatchEntries } from './api.js';
 import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
 import {
     BUDGET_MIN_PERCENT,
@@ -114,20 +120,35 @@ import {
 } from './budgeting.js';
 
 let percentageCutsSaveTimeout = null;
+let personalCutsSaveTimeout = null;
 let budgetingSaveTimeout = null;
 let budgetDragState = null;
 
-function schedulePercentageCutsAutosave() {
-    updatePercentageCuts(getPercentageCutsFromWidget());
+function refreshCutDependentViews() {
     renderDashboardData();
     renderTimeCostBreakdown();
     renderSavedTimeCostItems();
     renderSavingPotsWidget();
     renderMoneyCounterModeControls();
+}
+
+function schedulePercentageCutsAutosave() {
+    updatePercentageCuts(getPercentageCutsFromWidget());
+    refreshCutDependentViews();
 
     clearTimeout(percentageCutsSaveTimeout);
     percentageCutsSaveTimeout = setTimeout(() => {
         savePercentageCuts(state.percentageCuts, { silent: true });
+    }, 1200);
+}
+
+function schedulePersonalCutsAutosave() {
+    updatePersonalCuts(getPersonalCutsFromWidget());
+    refreshCutDependentViews();
+
+    clearTimeout(personalCutsSaveTimeout);
+    personalCutsSaveTimeout = setTimeout(() => {
+        savePersonalCuts(state.personalCuts, { silent: true });
     }, 1200);
 }
 
@@ -173,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCurrencyDisplays();
     DOM.currencySelect.value = state.currentCurrency;
     renderPercentageCutList();
+    renderPersonalCutList();
     applyWidgetOrder();
     applyWidgetVisibility();
     applyWidgetTitles();
@@ -225,6 +247,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             updateActiveCutStatsPeriods(nextActivePeriods);
+            document.querySelectorAll(`.period-toggle-btn[data-period="${periodKey}"]`).forEach((periodBtn) => {
+                periodBtn.classList.toggle('active', nextActivePeriods.includes(periodKey));
+            });
             
             if (state.lastStatsTotals) {
                 renderPercentageCutStats(state.lastStatsTotals);
@@ -720,6 +745,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
+        if (DOM.clockTimeFormatSelect) {
+            DOM.clockTimeFormatSelect.value = state.clockTimeFormat;
+        }
         if (DOM.defaultHourlyRateSettingInput) {
             DOM.defaultHourlyRateSettingInput.value = state.defaultHourlyRate;
         }
@@ -917,6 +945,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startOfWeekSelect) {
             updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
         }
+        if (DOM.clockTimeFormatSelect) {
+            updateClockTimeFormat(DOM.clockTimeFormatSelect.value);
+        }
 
         // Harvest new widget order
         const newOrder = [];
@@ -1063,6 +1094,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCurrencyDisplays();
         renderWorkSchedule();
         renderDashboardData();
+        if (state.startTime) {
+            toggleTimerUI(true);
+        }
 
         import('./ui.js').then(module => {
             module.showAlert("Settings Saved", "Your settings have been saved.");
@@ -1091,12 +1125,26 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.percentageCutList.addEventListener('dragend', schedulePercentageCutsAutosave);
     }
 
-    DOM.moneyCounterModeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            updateMoneyCounterMode(button.dataset.moneyCounterMode);
+    if (DOM.addPersonalCutBtn) {
+        DOM.addPersonalCutBtn.addEventListener('click', () => {
+            addPersonalCutListItem();
+            schedulePersonalCutsAutosave();
+        });
+    }
+
+    if (DOM.personalCutList) {
+        DOM.personalCutList.addEventListener('input', schedulePersonalCutsAutosave);
+        DOM.personalCutList.addEventListener('click', schedulePersonalCutsAutosave);
+        DOM.personalCutList.addEventListener('drop', schedulePersonalCutsAutosave);
+        DOM.personalCutList.addEventListener('dragend', schedulePersonalCutsAutosave);
+    }
+
+    if (DOM.moneyCounterModeSelect) {
+        DOM.moneyCounterModeSelect.addEventListener('change', () => {
+            updateMoneyCounterMode(DOM.moneyCounterModeSelect.value);
             renderMoneyCounterModeControls();
         });
-    });
+    }
 
     if (DOM.moneyCounterGapSlider) {
         DOM.moneyCounterGapSlider.addEventListener('input', (e) => {

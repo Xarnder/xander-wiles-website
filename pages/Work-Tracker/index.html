@@ -240,15 +240,31 @@
                     <div class="money-counter-header">
                         <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Live Money Counter <span class="live-indicator pay-aware-live hidden"><span class="live-dot"></span>Live</span></h2>
                         <div class="money-counter-header-actions">
-                            <div class="money-counter-mode-toggle" role="group" aria-label="Live money counter amount mode">
-                                <button type="button" class="money-counter-mode-btn active" data-money-counter-mode="before">Before</button>
-                                <button type="button" class="money-counter-mode-btn" data-money-counter-mode="after">After Cuts</button>
-                            </div>
+                            <label class="money-counter-mode-field">
+                                <span class="money-counter-mode-field-label">Show</span>
+                                <select id="money-counter-mode-select" class="money-counter-mode-select" aria-label="Live money counter amount mode">
+                                    <option value="before">Before cuts</option>
+                                    <option value="after">After external cuts</option>
+                                    <option value="personal">After personal cuts</option>
+                                    <option value="both">After both cuts</option>
+                                </select>
+                            </label>
                         </div>
                     </div>
                     <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
                     <div class="money-counter-time" id="money-counter-time">00:00:00</div>
-                    <div class="money-counter-mode-label" id="money-counter-mode-label">Before percentage cuts</div>
+                    <div class="money-counter-session hidden" id="money-counter-session">
+                        <div class="money-counter-session-row">
+                            <span class="money-counter-session-label" id="money-counter-session-start-label">Started</span>
+                            <span class="money-counter-session-value" id="money-counter-session-start"></span>
+                        </div>
+                        <div class="money-counter-session-row hidden" id="money-counter-session-end-row">
+                            <span class="money-counter-session-label" id="money-counter-session-end-label">Ends</span>
+                            <span class="money-counter-session-value" id="money-counter-session-end"></span>
+                            <span class="money-counter-session-remaining hidden" id="money-counter-session-remaining"></span>
+                        </div>
+                    </div>
+                    <div class="money-counter-mode-label" id="money-counter-mode-label">Before cuts</div>
                     <p class="widget-pay-hint hidden" id="money-counter-pay-hint"></p>
                     <div class="money-counter-stage" id="money-counter-stage" aria-live="polite">
                         <div class="money-stack money-stack-coin-small" data-denomination="20p">
@@ -283,7 +299,7 @@
                     <div class="sp-widget-header">
                         <div class="sp-widget-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Saving Pots</h2>
-                            <p class="sp-widget-subtitle">Virtual savings from tracked sessions and accrued pay. Scheduled future pay is not included.</p>
+                            <p class="sp-widget-subtitle">Virtual savings from leftover after external and personal cuts. Scheduled future pay is not included.</p>
                         </div>
                         <span class="sp-widget-scope-badge" id="sp-widget-scope-label">All time</span>
                     </div>
@@ -391,12 +407,17 @@
                         <div class="work-pattern-stat">
                             <span class="label">Avg Earnings / Day</span>
                             <span class="value" id="work-pattern-avg-earnings-before">—</span>
-                            <span class="work-pattern-subtext">Before percentage cuts</span>
+                            <span class="work-pattern-subtext">Before cuts</span>
                         </div>
                         <div class="work-pattern-stat">
                             <span class="label">Avg Earnings / Day</span>
                             <span class="value" id="work-pattern-avg-earnings-after">—</span>
-                            <span class="work-pattern-subtext">After percentage cuts</span>
+                            <span class="work-pattern-subtext">After external cuts</span>
+                        </div>
+                        <div class="work-pattern-stat">
+                            <span class="label">Avg Earnings / Day</span>
+                            <span class="value" id="work-pattern-avg-earnings-personal">—</span>
+                            <span class="work-pattern-subtext">After personal cuts</span>
                         </div>
                         <div class="work-pattern-stat">
                             <span class="label">Avg First Shift Start</span>
@@ -422,13 +443,13 @@
                     </div>
                 </section>
 
-                <!-- Percentage Cut Results -->
+                <!-- After External Cuts -->
                 <section class="card cut-stats-widget hidden" id="widget-cut-stats">
                     <div class="cut-stats-header-row">
                         <div class="cut-stats-header-copy">
-                            <h2 class="widget-title" style="margin: 0;">After Percentage Cuts <span id="cut-stats-total-percentage" style="color: var(--accent-blue); font-weight: 700; font-size: 1.15rem; margin-left: 5px;"></span></h2>
+                            <h2 class="widget-title" style="margin: 0;">After External Cuts <span id="cut-stats-total-percentage" style="color: var(--accent-blue); font-weight: 700; font-size: 1.15rem; margin-left: 5px;"></span></h2>
                             <p class="stats-period-mode-hint" id="cut-stats-period-mode-hint"></p>
-                            <p class="stats-period-mode-hint">Using net totals and including breaks.</p>
+                            <p class="stats-period-mode-hint">Tax, student loan, National Insurance, and similar deductions from gross pay.</p>
                         </div>
                         <div class="cut-stats-header-actions">
                             <div class="stats-period-mode-toggle" role="group" aria-label="Monthly statistics period">
@@ -445,15 +466,58 @@
                     <div id="percentage-cut-stats" class="cut-stats" aria-live="polite"></div>
                 </section>
 
-                <!-- Percentage Cuts -->
+                <!-- External Cuts -->
                 <section class="card percentage-cuts-widget" id="widget-cuts">
                     <div class="cut-widget-header">
-                        <h2 class="widget-title" style="margin: 0;">Percentage Cuts</h2>
+                        <div>
+                            <h2 class="widget-title" style="margin: 0;">External Cuts</h2>
+                            <p class="cut-widget-hint">Tax, student loan, National Insurance, and similar deductions.</p>
+                        </div>
                         <button id="add-percentage-cut-btn" class="btn-outline btn-small" type="button">+ Add Cut</button>
                     </div>
 
                     <div class="input-group cut-settings-group">
-                        <ul id="percentage-cut-list" class="sortable-list percentage-cut-list">
+                        <ul id="percentage-cut-list" class="sortable-list percentage-cut-list" data-cut-kind="external">
+                            <!-- Cut items will be injected by JS -->
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- After Personal Cuts -->
+                <section class="card cut-stats-widget hidden" id="widget-personal-cut-stats">
+                    <div class="cut-stats-header-row">
+                        <div class="cut-stats-header-copy">
+                            <h2 class="widget-title" style="margin: 0;">After Personal Cuts <span id="personal-cut-stats-total-percentage" style="color: var(--accent-blue); font-weight: 700; font-size: 1.15rem; margin-left: 5px;"></span></h2>
+                            <p class="stats-period-mode-hint" id="personal-cut-stats-period-mode-hint"></p>
+                            <p class="stats-period-mode-hint">Leftover after rent, food, car payments, and other take-home spending. Applied after external cuts.</p>
+                        </div>
+                        <div class="cut-stats-header-actions">
+                            <div class="stats-period-mode-toggle" role="group" aria-label="Monthly statistics period">
+                                <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
+                                <button type="button" class="stats-period-mode-btn" data-stats-period-mode="rolling" title="Rolling total for the past 30 days">Last 30 Days</button>
+                            </div>
+                            <div class="period-toggle-group">
+                                <button type="button" class="period-toggle-btn active" data-period="daily">Today</button>
+                                <button type="button" class="period-toggle-btn active" data-period="weekly">Week</button>
+                                <button type="button" class="period-toggle-btn active" data-period="monthly">Month</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="personal-cut-stats" class="cut-stats" aria-live="polite"></div>
+                </section>
+
+                <!-- Personal Cuts -->
+                <section class="card percentage-cuts-widget" id="widget-personal-cuts">
+                    <div class="cut-widget-header">
+                        <div>
+                            <h2 class="widget-title" style="margin: 0;">Personal Cuts</h2>
+                            <p class="cut-widget-hint">Rent, food, car payments, and anything else you choose. Taken from leftover after external cuts.</p>
+                        </div>
+                        <button id="add-personal-cut-btn" class="btn-outline btn-small" type="button">+ Add Cut</button>
+                    </div>
+
+                    <div class="input-group cut-settings-group">
+                        <ul id="personal-cut-list" class="sortable-list percentage-cut-list" data-cut-kind="personal">
                             <!-- Cut items will be injected by JS -->
                         </ul>
                     </div>
@@ -619,7 +683,7 @@
                         Configure your global earning rate and average daily work hours for Time Cost. Dashboard sessions (calendar, timeline, weekly breakdown, and the live money counter) use the Work Schedule widget.
                         <span id="tc-pay-derived-hint" class="tc-pay-derived-hint hidden"></span>
                         <span id="tc-cuts-summary" style="display: block; margin-top: 8px; color: var(--text-primary); font-size: 0.95rem;">
-                            Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-0.0%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">£20.00/h</span>)
+                            No cuts applied. Rate: <span style="color: var(--accent-green); font-weight: 700;">£20.00/h</span>
                         </span>
                     </p>
                     <div class="tc-settings-row">
@@ -801,6 +865,15 @@
                             <option value="0">Sunday</option>
                             <option value="1">Monday</option>
                         </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="clock-time-format-select">Time Format</label>
+                        <select id="clock-time-format-select" class="currency-dropdown">
+                            <option value="12">12-hour (AM / PM)</option>
+                            <option value="24">24-hour</option>
+                        </select>
+                        <p class="settings-help-text">Used for start and end times on the dashboard, including Work Schedule, History, and the timeline.</p>
                     </div>
 
                     <div class="input-group">

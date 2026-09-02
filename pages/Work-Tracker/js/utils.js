@@ -101,9 +101,108 @@ export function getCustomStatsPeriodConfig(period, now = new Date()) {
     };
 }
 
-export function formatClockTimeFromMs(ms) {
+export const CLOCK_TIME_FORMATS = {
+    HOUR_12: '12',
+    HOUR_24: '24'
+};
+
+export function sanitizeClockTimeFormat(value) {
+    return value === CLOCK_TIME_FORMATS.HOUR_24
+        ? CLOCK_TIME_FORMATS.HOUR_24
+        : CLOCK_TIME_FORMATS.HOUR_12;
+}
+
+export function isHour12Clock(format) {
+    return sanitizeClockTimeFormat(format) === CLOCK_TIME_FORMATS.HOUR_12;
+}
+
+function padClockPart(value) {
+    return String(value).padStart(2, '0');
+}
+
+export function formatClockTimeFromParts(hours, minutes, format = CLOCK_TIME_FORMATS.HOUR_12) {
+    const hour24 = ((Number(hours) % 24) + 24) % 24;
+    const minute = Math.min(Math.max(Math.round(Number(minutes) || 0), 0), 59);
+
+    if (!isHour12Clock(format)) {
+        return `${padClockPart(hour24)}:${padClockPart(minute)}`;
+    }
+
+    const period = hour24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hour24 % 12 || 12;
+    return `${hour12}:${padClockPart(minute)} ${period}`;
+}
+
+export function formatClockTime(dateInput, format = CLOCK_TIME_FORMATS.HOUR_12) {
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (Number.isNaN(date.getTime())) return '—';
+    return formatClockTimeFromParts(date.getHours(), date.getMinutes(), format);
+}
+
+export function formatClockTimeFromMs(ms, format = CLOCK_TIME_FORMATS.HOUR_12) {
     if (!Number.isFinite(ms)) return '—';
-    return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return formatClockTime(ms, format);
+}
+
+export function formatClockHourLabel(hour, format = CLOCK_TIME_FORMATS.HOUR_12) {
+    const parsed = Number(hour);
+    if (!Number.isFinite(parsed)) return '';
+
+    if (!isHour12Clock(format)) {
+        const clamped = Math.min(Math.max(Math.round(parsed), 0), 24);
+        return `${padClockPart(clamped)}:00`;
+    }
+
+    const hour24 = parsed === 24 ? 0 : ((parsed % 24) + 24) % 24;
+    const period = hour24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hour24 % 12 || 12;
+    return `${hour12} ${period}`;
+}
+
+export function formatTimeOfDayLabel(hhmm, format = CLOCK_TIME_FORMATS.HOUR_12) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+    if (!match) return '';
+    return formatClockTimeFromParts(Number(match[1]), Number(match[2]), format);
+}
+
+export function parseClockTimeInput(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+
+    const periodMatch = raw.match(/\s*([ap]m?)\s*$/i);
+    const periodToken = periodMatch ? periodMatch[1].toLowerCase() : '';
+    const period = periodToken.startsWith('p') ? 'pm' : periodToken.startsWith('a') ? 'am' : null;
+    const timePart = period ? raw.slice(0, periodMatch.index).trim() : raw;
+
+    let hours;
+    let minutes;
+    const colonMatch = timePart.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+    const compactMatch = timePart.match(/^(\d{1,2})(\d{2})$/);
+
+    if (colonMatch) {
+        hours = Number(colonMatch[1]);
+        minutes = colonMatch[2] != null ? Number(colonMatch[2]) : 0;
+    } else if (compactMatch) {
+        hours = Number(compactMatch[1]);
+        minutes = Number(compactMatch[2]);
+    } else {
+        return null;
+    }
+
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
+        return null;
+    }
+
+    if (period) {
+        if (hours < 1 || hours > 12) return null;
+        hours = period === 'am'
+            ? (hours === 12 ? 0 : hours)
+            : (hours === 12 ? 12 : hours + 12);
+    } else if (hours < 0 || hours > 23) {
+        return null;
+    }
+
+    return `${padClockPart(hours)}:${padClockPart(minutes)}`;
 }
 
 export function formatWorkPatternDay(dayKey) {
@@ -114,15 +213,16 @@ export function formatWorkPatternDay(dayKey) {
     return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-export function formatAverageClockTime(totalMinutes) {
+export function formatAverageClockTime(totalMinutes, format = CLOCK_TIME_FORMATS.HOUR_12) {
     if (!Number.isFinite(totalMinutes)) return '—';
 
     const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
     const hours = Math.floor(normalized / 60);
     const minutes = Math.round(normalized % 60);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (minutes === 60) {
+        return formatClockTimeFromParts((hours + 1) % 24, 0, format);
+    }
+    return formatClockTimeFromParts(hours, minutes, format);
 }
 
 function getDayKeyFromMs(ms) {
