@@ -161,7 +161,7 @@
                     <div class="pay-widget-header">
                         <div class="pay-widget-header-copy">
                             <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Pay <span class="live-indicator pay-aware-live hidden"><span class="live-dot"></span>Live</span></h2>
-                            <p class="pay-widget-subtitle">Enter salary by hour, day, week, month, or year. Widgets use this without logging each day.</p>
+                            <p class="pay-widget-subtitle">Enter salary by hour, day, week, month, or year. Green is already in totals. Purple is still scheduled and not counted yet.</p>
                         </div>
                         <button id="add-pay-period-btn" class="btn-outline btn-small" type="button">+ Add Pay</button>
                     </div>
@@ -169,6 +169,36 @@
                         <p class="loading-text">Add a pay arrangement to start tracking salary.</p>
                     </div>
                     <div id="pay-period-list" class="pay-period-list"></div>
+                </section>
+
+                <!-- Work Schedule -->
+                <section class="card work-schedule-widget" id="widget-work-schedule">
+                    <div class="work-schedule-header">
+                        <div class="work-schedule-header-copy">
+                            <h2 class="widget-title" style="margin: 0;">Work Schedule</h2>
+                            <p class="work-schedule-subtitle">Choose the days and hours you work. Calendar, timeline, weekly breakdown, and the live money counter use this as each day's session. Monthly pay still sets what those sessions are worth.</p>
+                        </div>
+                        <span class="work-schedule-summary" id="work-schedule-summary">5 days · 40h / week</span>
+                    </div>
+                    <ul class="work-schedule-list" id="work-schedule-list" aria-label="Weekly work schedule"></ul>
+                </section>
+
+                <!-- Overlapping pay warning -->
+                <section class="card pay-overlap-widget hidden" id="widget-pay-overlap" aria-live="polite">
+                    <div class="pay-overlap-header">
+                        <h2 class="widget-title" style="margin: 0;">Overlapping Pay</h2>
+                        <span class="pay-overlap-badge" id="pay-overlap-count-badge"></span>
+                    </div>
+                    <p class="pay-overlap-headline" id="pay-overlap-headline"></p>
+                    <p class="pay-overlap-copy" id="pay-overlap-copy"></p>
+                    <ol class="pay-overlap-steps">
+                        <li>Open <strong>Settings</strong> at the top of the app.</li>
+                        <li>Switch to the <strong>Batch Edit</strong> tab.</li>
+                        <li>Choose the month, or a custom date range, that covers those leftover daily sessions.</li>
+                        <li>Keep <strong>Paid sessions</strong> checked, tap <strong>Delete entries</strong>, then type <strong>Delete Confirmation</strong>.</li>
+                    </ol>
+                    <p class="pay-overlap-hint">Monthly pay is left alone. Only hourly sessions in the chosen range are removed.</p>
+                    <button type="button" id="pay-overlap-batch-btn" class="btn-outline">Open Batch Edit</button>
                 </section>
 
                 <!-- Breaks Widget -->
@@ -219,6 +249,7 @@
                     <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
                     <div class="money-counter-time" id="money-counter-time">00:00:00</div>
                     <div class="money-counter-mode-label" id="money-counter-mode-label">Before percentage cuts</div>
+                    <p class="widget-pay-hint hidden" id="money-counter-pay-hint"></p>
                     <div class="money-counter-stage" id="money-counter-stage" aria-live="polite">
                         <div class="money-stack money-stack-coin-small" data-denomination="20p">
                             <div class="money-stack-pieces" id="money-stack-20p"></div>
@@ -252,7 +283,7 @@
                     <div class="sp-widget-header">
                         <div class="sp-widget-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Saving Pots</h2>
-                            <p class="sp-widget-subtitle">Virtual savings from tracked sessions and pay</p>
+                            <p class="sp-widget-subtitle">Virtual savings from tracked sessions and accrued pay. Scheduled future pay is not included.</p>
                         </div>
                         <span class="sp-widget-scope-badge" id="sp-widget-scope-label">All time</span>
                     </div>
@@ -267,7 +298,7 @@
                         <div class="stats-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Statistics</h2>
                             <p class="stats-period-mode-hint" id="stats-period-mode-hint"></p>
-                            <p class="stats-period-mode-hint">Hours are from logged sessions. Earnings use monthly pay plus any sessions not already covered by that pay.</p>
+                            <p class="stats-period-mode-hint">Hours are from logged sessions. Earnings use monthly pay already accrued plus any sessions not already covered by that pay. Scheduled future pay is not included.</p>
                         </div>
                         <div class="stats-period-mode-toggle" role="group" aria-label="Monthly statistics period">
                             <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
@@ -327,7 +358,7 @@
                         <div class="work-pattern-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Work Pattern</h2>
                             <p class="stats-period-mode-hint" id="work-pattern-period-hint"></p>
-                            <p class="stats-period-mode-hint">Assumed weekday hours from Pay fill days without a logged session. Earnings use salary plus any sessions not already covered by that pay.</p>
+                            <p class="stats-period-mode-hint">Assumed hours from Work Schedule fill days without a logged session, through today. Earnings use salary already accrued plus any sessions not already covered by that pay. Scheduled future pay is not included.</p>
                         </div>
                         <div class="stats-period-mode-toggle" role="group" aria-label="Work pattern period">
                             <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
@@ -456,12 +487,7 @@
                             <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
                         </button>
                     </div>
-                    <p class="calendar-legend" id="calendar-legend">
-                        <span class="calendar-legend-swatch calendar-legend-swatch-logged" aria-hidden="true"></span>
-                        Logged hours
-                        <span class="calendar-legend-swatch calendar-legend-swatch-assumed" aria-hidden="true"></span>
-                        Assumed from Pay. A Pay mark means salary covers that day. Covered sessions add hours, not extra pay.
-                    </p>
+                    <ul class="pay-status-legend" id="calendar-legend" aria-label="Calendar colour key"></ul>
                     <div class="calendar-grid">
                         <!-- Calendar days will be injected via JS -->
                     </div>
@@ -487,6 +513,7 @@
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
                     </div>
+                    <ul class="pay-status-legend" id="chart-pay-legend" aria-label="Weekly breakdown colour key"></ul>
                     <p class="widget-pay-hint" id="chart-pay-hint"></p>
                 </section>
 
@@ -507,6 +534,7 @@
                     <div id="gantt-chart" class="gantt-weekly-wrapper">
                         <!-- Timeline markers and daily rows injected via JS -->
                     </div>
+                    <ul class="pay-status-legend" id="timeline-pay-legend" aria-label="Timeline colour key"></ul>
                     <p class="widget-pay-hint" id="timeline-pay-hint"></p>
                 </section>
 
@@ -588,7 +616,7 @@
                 <section class="card time-cost-widget" style="margin-bottom: 25px;">
                     <h2 class="widget-title">Earning Settings</h2>
                     <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.95rem;">
-                        Configure your global earning rate and average daily work hours. Hourly pay in the Pay widget uses these hours to spread across the week.
+                        Configure your global earning rate and average daily work hours for Time Cost. Dashboard sessions (calendar, timeline, weekly breakdown, and the live money counter) use the Work Schedule widget.
                         <span id="tc-pay-derived-hint" class="tc-pay-derived-hint hidden"></span>
                         <span id="tc-cuts-summary" style="display: block; margin-top: 8px; color: var(--text-primary); font-size: 0.95rem;">
                             Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-0.0%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">£20.00/h</span>)
@@ -1133,7 +1161,7 @@
                 <div class="input-group">
                     <label for="pay-period-end">Ends (Optional)</label>
                     <input type="date" id="pay-period-end">
-                    <p class="settings-help-text">Leave empty for ongoing pay. Stats and the money counter accrue through the current period only — no need to tap each day.</p>
+                    <p class="settings-help-text">Leave empty for ongoing pay. Stats accrue through the current period. The live money counter follows today's Work Schedule session. No need to tap each day.</p>
                 </div>
 
                 <div class="input-group">

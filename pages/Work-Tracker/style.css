@@ -9,6 +9,7 @@
     --accent-green: #00e676;
     --accent-red: #ff1744;
     --accent-blue: #00d4ff;
+    --accent-scheduled: #c77dff;
     --font-family: 'Outfit', sans-serif;
 }
 
@@ -1849,6 +1850,19 @@ button:active {
     );
 }
 
+.gantt-block.gantt-scheduled {
+    z-index: 1;
+    opacity: 0.78;
+    border: 1px dashed rgba(199, 125, 255, 0.55);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.14),
+        rgba(255, 255, 255, 0.14) 4px,
+        transparent 4px,
+        transparent 10px
+    );
+}
+
 .break-modal-content {
     border-color: rgba(255, 152, 0, 0.25);
 }
@@ -2900,6 +2914,109 @@ button:active {
     margin-bottom: 16px;
 }
 
+.work-schedule-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.work-schedule-header-copy {
+    min-width: 0;
+}
+
+.work-schedule-subtitle {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.work-schedule-summary {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(199, 125, 255, 0.12);
+    border: 1px solid rgba(199, 125, 255, 0.28);
+    color: var(--accent-scheduled);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.work-schedule-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.work-schedule-row {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.work-schedule-row.is-disabled .work-schedule-times,
+.work-schedule-row.is-disabled .work-schedule-hours {
+    opacity: 0.45;
+}
+
+.work-schedule-day {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: var(--text-primary);
+    font-weight: 650;
+}
+
+.work-schedule-day input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-scheduled);
+}
+
+.work-schedule-times {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.work-schedule-times input[type="time"] {
+    min-width: 0;
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text-primary);
+    font: inherit;
+    color-scheme: dark;
+}
+
+.work-schedule-times span {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.work-schedule-hours {
+    color: var(--accent-scheduled);
+    font-size: 0.82rem;
+    font-weight: 700;
+    min-width: 3.2rem;
+    text-align: right;
+}
+
 .pay-widget-header-copy {
     min-width: 0;
 }
@@ -2913,15 +3030,37 @@ button:active {
 
 .pay-widget-summary {
     padding: 16px 18px;
-    border: 1px solid rgba(0, 230, 118, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
-    background: linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(56, 189, 248, 0.08));
+    background: rgba(255, 255, 255, 0.03);
     margin-bottom: 16px;
 }
 
 .pay-widget-summary.is-empty {
     background: rgba(255, 255, 255, 0.03);
     border-color: rgba(255, 255, 255, 0.08);
+}
+
+.pay-summary-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.pay-summary-col {
+    min-width: 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+}
+
+.pay-summary-col-accrued {
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.14), rgba(0, 230, 118, 0.05));
+    border: 1px solid rgba(0, 230, 118, 0.24);
+}
+
+.pay-summary-col-scheduled {
+    background: linear-gradient(135deg, rgba(199, 125, 255, 0.14), rgba(199, 125, 255, 0.05));
+    border: 1px solid rgba(199, 125, 255, 0.28);
 }
 
 .pay-summary-label {
@@ -2933,18 +3072,136 @@ button:active {
 
 .pay-summary-value {
     display: block;
-    font-size: 1.7rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: var(--accent-green);
     line-height: 1.15;
 }
 
+.pay-summary-scheduled-value {
+    color: var(--accent-scheduled);
+}
+
+.pay-summary-caption {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    line-height: 1.3;
+}
+
+.pay-progress {
+    display: flex;
+    height: 8px;
+    margin-top: 12px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.pay-progress-accrued,
+.pay-progress-scheduled {
+    display: block;
+    height: 100%;
+    min-width: 0;
+}
+
+.pay-progress-accrued {
+    background: var(--accent-green);
+}
+
+.pay-progress-scheduled {
+    background: var(--accent-scheduled);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.22),
+        rgba(255, 255, 255, 0.22) 3px,
+        transparent 3px,
+        transparent 7px
+    );
+}
+
 .pay-summary-meta {
     display: block;
-    margin-top: 8px;
+    margin-top: 10px;
     color: var(--text-secondary);
-    font-size: 0.86rem;
+    font-size: 0.82rem;
     line-height: 1.4;
+}
+
+.pay-widget-summary .pay-status-legend {
+    margin: 12px 0 0;
+    justify-content: flex-start;
+}
+
+.pay-accrued-text {
+    color: var(--accent-green);
+    font-weight: 700;
+}
+
+.pay-scheduled-text {
+    color: var(--accent-scheduled);
+    font-weight: 700;
+}
+
+.pay-overlap-widget {
+    border-color: rgba(255, 152, 0, 0.35);
+    background: linear-gradient(180deg, rgba(255, 152, 0, 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.pay-overlap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.pay-overlap-badge {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #ffb74d;
+    background: rgba(255, 152, 0, 0.16);
+    border: 1px solid rgba(255, 152, 0, 0.35);
+}
+
+.pay-overlap-headline {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.pay-overlap-copy,
+.pay-overlap-hint {
+    margin: 0 0 14px;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.pay-overlap-steps {
+    margin: 0 0 14px;
+    padding-left: 1.2rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.pay-overlap-steps li + li {
+    margin-top: 6px;
+}
+
+.pay-overlap-hint {
+    margin-bottom: 16px;
+}
+
+#pay-overlap-batch-btn {
+    align-self: flex-start;
 }
 
 .pay-period-list {
@@ -3015,9 +3272,24 @@ button:active {
     border: 1px solid rgba(0, 230, 118, 0.16);
 }
 
+.calendar-day.has-scheduled-pay:not(.has-work):not(.has-break) {
+    background: rgba(199, 125, 255, 0.08);
+    color: var(--text-primary);
+    border: 1px dashed rgba(199, 125, 255, 0.32);
+}
+
 .assumed-hours-indicator {
     font-size: clamp(0.52rem, 2vw, 0.68rem);
     color: var(--accent-green);
+    margin-top: 4px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.scheduled-hours-indicator {
+    font-size: clamp(0.52rem, 2vw, 0.68rem);
+    color: var(--accent-scheduled);
     margin-top: 4px;
     font-weight: 700;
     line-height: 1;
@@ -3038,9 +3310,44 @@ button:active {
     line-height: 1.2;
 }
 
+.calendar-pay-mark-scheduled {
+    color: var(--accent-scheduled);
+    background: rgba(199, 125, 255, 0.14);
+    border-color: rgba(199, 125, 255, 0.38);
+}
+
 .calendar-week-total.has-pay-total:not(.has-work-total) {
     background: rgba(0, 230, 118, 0.1);
     border-color: rgba(0, 230, 118, 0.22);
+    color: var(--accent-green);
+}
+
+.calendar-week-total.has-scheduled-total {
+    background: rgba(199, 125, 255, 0.1);
+    border-color: rgba(199, 125, 255, 0.28);
+    color: var(--accent-scheduled);
+}
+
+.calendar-week-total.has-mixed-schedule {
+    gap: 3px;
+}
+
+.calendar-week-counted {
+    display: block;
+}
+
+.calendar-week-due {
+    display: block;
+    color: var(--accent-scheduled);
+    font-size: 0.85em;
+    font-weight: 800;
+}
+
+.calendar-week-total.has-work-total .calendar-week-counted {
+    color: var(--accent-blue);
+}
+
+.calendar-week-total.has-pay-total:not(.has-work-total) .calendar-week-counted {
     color: var(--accent-green);
 }
 
@@ -3057,10 +3364,24 @@ button:active {
     color: var(--accent-green);
 }
 
+.history-badge-scheduled {
+    background: rgba(199, 125, 255, 0.14);
+    border-color: rgba(199, 125, 255, 0.38);
+    color: var(--accent-scheduled);
+}
+
 .history-pay-covered-note {
     display: block;
     margin-top: 4px;
     color: var(--accent-green);
+    font-size: 0.72rem;
+    line-height: 1.3;
+}
+
+.history-pay-scheduled-note {
+    display: block;
+    margin-top: 4px;
+    color: var(--accent-scheduled);
     font-size: 0.72rem;
     line-height: 1.3;
 }
@@ -4079,13 +4400,31 @@ body.dashboard-density-spacious .sp-widget-hero {
     }
 
     .cut-widget-header,
-    .pay-widget-header {
+    .pay-widget-header,
+    .work-schedule-header {
         align-items: stretch;
         flex-direction: column;
     }
 
+    .work-schedule-summary {
+        align-self: flex-start;
+        white-space: normal;
+    }
+
+    .work-schedule-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .work-schedule-times {
+        grid-column: 1 / -1;
+    }
+
     .pay-period-item {
         flex-direction: column;
+    }
+
+    .pay-summary-split {
+        grid-template-columns: 1fr;
     }
 
     .calendar-grid {
@@ -4115,6 +4454,8 @@ body.dashboard-density-spacious .sp-widget-hero {
     }
 
     .work-hours-indicator,
+    .assumed-hours-indicator,
+    .scheduled-hours-indicator,
     .break-hours-indicator {
         font-size: 0.62rem;
     }
@@ -4364,23 +4705,88 @@ body.dashboard-density-spacious .sp-widget-hero {
     font-weight: 500;
 }
 
+.pay-status-legend,
 .calendar-legend {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 8px;
-    min-height: 1.15rem;
+    gap: 10px 16px;
+    list-style: none;
     margin: 0 0 12px;
+    padding: 0;
     color: var(--text-secondary);
     font-size: 0.78rem;
-    line-height: 1.3;
+    line-height: 1.25;
     transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
+.chart-widget .pay-status-legend,
+.gantt-widget .pay-status-legend {
+    margin: 12px 0 0;
+    justify-content: flex-start;
+}
+
+.pay-status-legend.is-hidden,
 .calendar-legend.is-hidden {
     visibility: hidden;
     opacity: 0;
+}
+
+.pay-status-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.pay-status-legend-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pay-status-legend-copy strong {
+    color: var(--text-primary);
+    font-weight: 650;
+    font-size: 0.8rem;
+}
+
+.pay-status-legend-copy small {
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+}
+
+.pay-status-swatch,
+.calendar-legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.pay-status-swatch-logged,
+.calendar-legend-swatch-logged {
+    background: var(--accent-blue);
+    box-shadow: 0 0 6px rgba(0, 212, 255, 0.45);
+}
+
+.pay-status-swatch-accrued,
+.calendar-legend-swatch-assumed {
+    background: var(--accent-green);
+    box-shadow: 0 0 6px rgba(0, 230, 118, 0.45);
+}
+
+.pay-status-swatch-scheduled {
+    background: var(--accent-scheduled);
+    box-shadow: 0 0 6px rgba(199, 125, 255, 0.45);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.25),
+        rgba(255, 255, 255, 0.25) 2px,
+        transparent 2px,
+        transparent 5px
+    );
 }
 
 .calendar-legend-dot,
@@ -4391,23 +4797,6 @@ body.dashboard-density-spacious .sp-widget-hero {
     background: var(--accent-blue);
     box-shadow: 0 0 6px rgba(0, 212, 255, 0.55);
     flex-shrink: 0;
-}
-
-.calendar-legend-swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-
-.calendar-legend-swatch-logged {
-    background: var(--accent-blue);
-    box-shadow: 0 0 6px rgba(0, 212, 255, 0.45);
-}
-
-.calendar-legend-swatch-assumed {
-    background: var(--accent-green);
-    box-shadow: 0 0 6px rgba(0, 230, 118, 0.45);
 }
 
 .calendar-break-dot {
@@ -4442,6 +4831,7 @@ body.dashboard-density-spacious .sp-widget-hero {
 
 .calendar-week-total {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 0;
@@ -4514,6 +4904,7 @@ body.dashboard-density-spacious .sp-widget-hero {
 
 .calendar-day.outside-month .work-hours-indicator,
 .calendar-day.outside-month .assumed-hours-indicator,
+.calendar-day.outside-month .scheduled-hours-indicator,
 .calendar-day.outside-month .break-hours-indicator {
     opacity: 0.85;
 }
@@ -4543,7 +4934,14 @@ body.dashboard-density-spacious .sp-widget-hero {
     z-index: 2;
 }
 
-.calendar-day:not(.empty):not(.has-work):not(.has-break):not(.has-pay):hover {
+.calendar-day.has-scheduled-pay:not(.has-work):not(.has-break):hover {
+    background: rgba(199, 125, 255, 0.16);
+    box-shadow: 0 5px 15px rgba(199, 125, 255, 0.16);
+    border-color: rgba(199, 125, 255, 0.42);
+    z-index: 2;
+}
+
+.calendar-day:not(.empty):not(.has-work):not(.has-break):not(.has-pay):not(.has-scheduled-pay):hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
     box-shadow: 0 5px 15px rgba(255, 255, 255, 0.05);
@@ -5006,7 +5404,20 @@ body.dashboard-density-spacious .sp-widget-hero {
     font-weight: 700;
     color: var(--accent-green);
     text-align: center;
-    white-space: nowrap;
+    white-space: normal;
+}
+
+.chart-week-counted {
+    color: var(--accent-green);
+}
+
+.chart-week-scheduled {
+    color: var(--accent-scheduled);
+}
+
+.chart-week-total-sep {
+    color: var(--text-secondary);
+    font-weight: 600;
 }
 
 .chart-widget h2 {
@@ -5157,6 +5568,19 @@ body.dashboard-density-spacious .sp-widget-hero {
         rgba(255, 255, 255, 0.12) 5px,
         transparent 5px,
         transparent 10px
+    );
+}
+
+.chart-sub-session-scheduled {
+    background: linear-gradient(180deg, rgba(199, 125, 255, 0.78) 0%, rgba(140, 80, 200, 0.78) 100%);
+    box-shadow: 0 0 10px rgba(199, 125, 255, 0.28);
+    opacity: 0.82;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.16),
+        rgba(255, 255, 255, 0.16) 4px,
+        transparent 4px,
+        transparent 9px
     );
 }
 
@@ -5697,6 +6121,27 @@ body.dashboard-density-spacious .sp-widget-hero {
         background: rgba(0, 0, 0, 0.1) !important;
         border-color: #000 !important;
         color: black !important;
+    }
+
+    .calendar-day.has-pay:not(.has-work) {
+        background: rgba(0, 0, 0, 0.05) !important;
+        border: 1px solid #000 !important;
+        color: black !important;
+    }
+
+    .calendar-day.has-scheduled-pay:not(.has-work) {
+        background: transparent !important;
+        border: 1px dashed #000 !important;
+        color: black !important;
+    }
+
+    .work-hours-indicator,
+    .assumed-hours-indicator,
+    .scheduled-hours-indicator,
+    .calendar-pay-mark,
+    .calendar-week-counted,
+    .calendar-week-due {
+        color: #000 !important;
     }
 
     .btn-delete {

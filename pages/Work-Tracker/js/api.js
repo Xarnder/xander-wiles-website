@@ -1,9 +1,10 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
-import { combinePayAndSessionEarnings, filterPayPeriods, serializePayPeriod, isSessionCoveredByPay } from './payPeriods.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods, updateWorkSchedule } from './state.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown, renderPayOverlapWarning, renderWorkSchedule } from './ui.js';
+import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge, getCalendarDateKey } from './utils.js';
+import { combinePayAndSessionEarnings, filterPayPeriods, serializePayPeriod, isSessionCoveredByPay, getWorkSettingsFromState } from './payPeriods.js';
+import { serializeWorkSchedule } from './workSchedule.js';
 import {
     sanitizePoolScope,
     computeSavingPotStateFromAppState,
@@ -37,6 +38,10 @@ function getSavingPotSettingsRef() {
 
 function getBudgetingSettingsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "budgeting");
+}
+
+function getWorkScheduleSettingsRef() {
+    return doc(db, "users", state.currentUser.uid, "settings", "workSchedule");
 }
 
 function serializeBudgetPlan(plan) {
@@ -215,6 +220,7 @@ export function loadPayPeriods() {
         applyGlobalFilters();
         import('./ui.js').then((module) => {
             module.renderPayWidget?.();
+            module.renderPayOverlapWarning?.();
             module.syncPayAccrualTimer?.();
         });
         console.log("Debug: Pay periods updated from Firebase");
@@ -736,6 +742,44 @@ export function loadTimeCostSettings() {
     });
 }
 
+export async function saveWorkSchedule(schedule) {
+    if (!state.currentUser) return;
+    try {
+        const serialized = serializeWorkSchedule(schedule || state.workSchedule);
+        await setDoc(getWorkScheduleSettingsRef(), {
+            ...serialized,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        console.log("Debug: Work schedule saved to Firebase");
+    } catch (e) {
+        console.error("Debug: Error saving work schedule: ", e);
+    }
+}
+
+export function loadWorkSchedule() {
+    if (!state.currentUser) return;
+
+    const settingsRef = getWorkScheduleSettingsRef();
+
+    onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const incoming = serializeWorkSchedule(docSnap.data());
+            const current = serializeWorkSchedule(state.workSchedule);
+            if (JSON.stringify(incoming) === JSON.stringify(current)) return;
+
+            updateWorkSchedule(incoming);
+            renderWorkSchedule();
+            renderDashboardData();
+            console.log("Debug: Work schedule updated from Firebase");
+            return;
+        }
+
+        saveWorkSchedule(state.workSchedule);
+    }, (error) => {
+        console.error("Debug: Work schedule snapshot error", error);
+    });
+}
+
 export function renderDashboardData() {
     DOM.historyList.innerHTML = "";
     if (DOM.breakHistoryList) {
@@ -770,7 +814,7 @@ export function renderDashboardData() {
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const breaks = state.allBreaks;
 
-    const payOptions = { startOfWeek: state.startOfWeek };
+    const payOptions = getWorkSettingsFromState(state);
 
     const dailyTotals = calculateCalendarPeriodTotals(state.allSessions, startOfDay, breaks, endOfDay);
     totalDailyMs = dailyTotals.totalMs;
@@ -874,19 +918,25 @@ export function renderDashboardData() {
             ? sessionMetrics.effectiveEarnings
             : (Number(data.earnings) || 0);
         const coveredByPay = isSessionCoveredByPay(data, state.allPayPeriods);
+        const sessionDateKey = getCalendarDateKey(dateObj);
+        const scheduledPayCover = coveredByPay && sessionDateKey > getCalendarDateKey(new Date());
         const afterCutsEarnings = getAmountAfterPercentageCuts(sessionEarnings);
         const afterCutsHtml = !coveredByPay && state.percentageCuts.length
             ? `<small class="history-after-cuts">After cuts ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>`
             : '';
-        const payCoveredNoteHtml = coveredByPay
-            ? `<small class="history-pay-covered-note">Hours only — not added on top of pay</small>`
-            : '';
+        const payCoveredNoteHtml = scheduledPayCover
+            ? `<small class="history-pay-scheduled-note">Scheduled salary day — not in totals yet</small>`
+            : (coveredByPay
+                ? `<small class="history-pay-covered-note">Hours only — already in pay totals</small>`
+                : '');
 
         const companyHtml = data.company ? `<span class="history-badge history-badge-company">${data.company}</span>` : '';
         const projectHtml = data.project ? `<span class="history-badge history-badge-project">${data.project}</span>` : '';
-        const payCoveredHtml = coveredByPay
-            ? `<span class="history-badge history-badge-pay">Covered by pay</span>`
-            : '';
+        const payCoveredHtml = scheduledPayCover
+            ? `<span class="history-badge history-badge-scheduled">Scheduled pay</span>`
+            : (coveredByPay
+                ? `<span class="history-badge history-badge-pay">Covered by pay</span>`
+                : '');
         let focusHtml = '';
         if (data.focused === true) {
             focusHtml = `<span class="history-badge history-badge-focus">Focused</span>`;
@@ -1034,6 +1084,8 @@ export function renderDashboardData() {
     renderWorkPatternBreakdown();
 
     renderBreakHistory();
+
+    renderPayOverlapWarning();
 
     renderCalendar();
     renderChart();

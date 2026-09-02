@@ -1,13 +1,12 @@
-import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
+import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany, updateWorkSchedule } from './state.js';
 import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
 import {
     accumulateDailyPayEarnings,
-    assumedHoursByDateKey,
     collectAssumedWorkSegments,
     combinePayAndSessionEarnings,
     formatDateKey,
     formatPayRate,
-    formatWorkingDaysAssumption,
+    getAssumedLivePaySession,
     getCombinedEquivalentHourlyRate,
     getCurrentPayUnitProgress,
     getEquivalentHourlyRate,
@@ -18,8 +17,10 @@ import {
     isSessionCoveredByPay,
     PAY_SCALES,
     payPeriodCoversDay,
+    parseDateKey,
     sanitizePayPeriod,
-    sumCurrentUnitAccrued
+    sumCurrentUnitAccrued,
+    summarizePaySessionOverlaps
 } from './payPeriods.js';
 import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
 import {
@@ -46,6 +47,13 @@ import {
     angleToPoint,
     sanitizeBudgetSnapMode
 } from './budgeting.js';
+import {
+    WEEKDAY_LABELS,
+    formatScheduleSummary,
+    getScheduleDayHours,
+    orderedWeekdayIndexes,
+    sanitizeWorkSchedule
+} from './workSchedule.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -70,6 +78,7 @@ export const DOM = {
     moneyCounterTotal: document.getElementById('money-counter-total'),
     moneyCounterTime: document.getElementById('money-counter-time'),
     moneyCounterModeLabel: document.getElementById('money-counter-mode-label'),
+    moneyCounterPayHint: document.getElementById('money-counter-pay-hint'),
     moneyCounterModeButtons: document.querySelectorAll('.money-counter-mode-btn'),
     moneyCounterGapSlider: document.getElementById('settings-money-counter-gap-slider'),
     moneyCounterGapValue: document.getElementById('settings-money-counter-gap-value'),
@@ -137,10 +146,12 @@ export const DOM = {
     chartWeekRange: document.getElementById('chart-week-range'),
     chartWeekTotal: document.getElementById('chart-week-total'),
     chartPayHint: document.getElementById('chart-pay-hint'),
+    chartPayLegend: document.getElementById('chart-pay-legend'),
     prevTimelineWeekBtn: document.getElementById('prev-timeline-week'),
     nextTimelineWeekBtn: document.getElementById('next-timeline-week'),
     timelineWeekRange: document.getElementById('timeline-week-range'),
     timelinePayHint: document.getElementById('timeline-pay-hint'),
+    timelinePayLegend: document.getElementById('timeline-pay-legend'),
     settingsBtn: document.getElementById('settings-btn'),
     settingsView: document.getElementById('settings-view'),
     viewSettingsBtn: document.getElementById('view-settings-btn'),
@@ -213,6 +224,14 @@ export const DOM = {
     addPayPeriodBtn: document.getElementById('add-pay-period-btn'),
     payWidgetSummary: document.getElementById('pay-widget-summary'),
     payPeriodList: document.getElementById('pay-period-list'),
+    workScheduleWidget: document.getElementById('widget-work-schedule'),
+    workScheduleList: document.getElementById('work-schedule-list'),
+    workScheduleSummary: document.getElementById('work-schedule-summary'),
+    payOverlapWidget: document.getElementById('widget-pay-overlap'),
+    payOverlapCountBadge: document.getElementById('pay-overlap-count-badge'),
+    payOverlapHeadline: document.getElementById('pay-overlap-headline'),
+    payOverlapCopy: document.getElementById('pay-overlap-copy'),
+    payOverlapBatchBtn: document.getElementById('pay-overlap-batch-btn'),
     payPeriodModal: document.getElementById('pay-period-modal'),
     payPeriodModalTitle: document.getElementById('pay-period-modal-title'),
     closePayPeriodModalBtn: document.getElementById('close-pay-period-modal'),
@@ -663,12 +682,7 @@ function renderMoneyStack(container, count, type, key) {
 }
 
 function getPayWorkOptions() {
-    return {
-        startOfWeek: state.startOfWeek,
-        defaultStartTime: state.defaultStartTime || '09:00',
-        dailyHours: state.tcDailyHours,
-        workingDaysPerWeek: state.tcWorkingDaysPerWeek
-    };
+    return getWorkSettingsFromState(state);
 }
 
 function getVisiblePayPeriods() {
@@ -688,21 +702,79 @@ function getPayAwareLiveSession() {
     };
 }
 
-function getAssumedWorkForRange(rangeStart, rangeEnd) {
+function getAssumedWorkForRange(rangeStart, rangeEnd, extra = {}) {
     const live = getPayAwareLiveSession();
     const sessions = live ? [...state.allSessions, live] : state.allSessions;
     return collectAssumedWorkSegments(getVisiblePayPeriods(), rangeStart, rangeEnd, {
         sessions,
         breaks: state.allBreaks,
         ...getPayWorkOptions(),
-        now: new Date()
+        includeFuture: Boolean(extra.includeFuture),
+        now: extra.now instanceof Date ? extra.now : new Date()
     });
 }
 
 function getPayScheduleHint() {
     const periods = getVisiblePayPeriods();
     if (!periods.length) return '';
-    return `Green pay blocks use ${formatWorkingDaysAssumption(state.tcDailyHours, state.tcWorkingDaysPerWeek)} from Time Cost, starting at ${state.defaultStartTime || '09:00'}. Logged sessions replace that assumed block. Only sessions not covered by pay add extra money.`;
+    return `Green is accrued pay already in totals. Purple is scheduled future pay and is not counted yet. Blocks follow Work Schedule (${formatScheduleSummary(state.workSchedule)}). Logged sessions replace that day's pay block.`;
+}
+
+function getPayAccrualSnapshot(now = new Date()) {
+    const periods = getVisiblePayPeriods();
+    const activePeriods = periods.filter((period) => isPayPeriodActive(period, now));
+    const accrued = sumCurrentUnitAccrued(periods, now, getPayWorkOptions());
+    const contracted = activePeriods.reduce((sum, period) => (
+        sum + getCurrentPayUnitProgress(period, now, getPayWorkOptions()).contracted
+    ), 0);
+    const remaining = Math.max(0, contracted - accrued);
+    const hourly = getCombinedEquivalentHourlyRate(periods, now, getPayWorkOptions());
+    const afterCuts = getAmountAfterPercentageCuts(accrued);
+    const label = activePeriods[0]
+        ? getCurrentPayUnitProgress(activePeriods[0], now, getPayWorkOptions()).label
+        : 'Pay';
+    const accruedPct = contracted > 0 ? Math.min(100, (accrued / contracted) * 100) : 0;
+    const remainingPct = contracted > 0 ? Math.max(0, 100 - accruedPct) : 0;
+    return {
+        periods,
+        activePeriods,
+        accrued,
+        contracted,
+        remaining,
+        hourly,
+        afterCuts,
+        label,
+        accruedPct,
+        remainingPct
+    };
+}
+
+function renderPayStatusLegend(el, options = {}) {
+    if (!el) return;
+    const hasPay = getVisiblePayPeriods().length > 0;
+    const includeLogged = options.includeLogged !== false;
+    const items = [];
+    if (includeLogged) {
+        items.push(`
+        <li class="pay-status-legend-item">
+            <span class="pay-status-swatch pay-status-swatch-logged" aria-hidden="true"></span>
+            <span class="pay-status-legend-copy"><strong>Logged</strong><small>Completed hours in totals</small></span>
+        </li>`);
+    }
+    if (hasPay) {
+        items.push(`
+        <li class="pay-status-legend-item">
+            <span class="pay-status-swatch pay-status-swatch-accrued" aria-hidden="true"></span>
+            <span class="pay-status-legend-copy"><strong>Accrued pay</strong><small>Already in money totals</small></span>
+        </li>
+        <li class="pay-status-legend-item">
+            <span class="pay-status-swatch pay-status-swatch-scheduled" aria-hidden="true"></span>
+            <span class="pay-status-legend-copy"><strong>Scheduled pay</strong><small>Future, not counted yet</small></span>
+        </li>`);
+    }
+    el.innerHTML = items.join('');
+    el.classList.toggle('pay-status-legend-pay', hasPay);
+    el.hidden = items.length === 0;
 }
 
 function hasActivePayAccrual(now = new Date()) {
@@ -714,21 +786,38 @@ function getSessionLiveEarnings() {
     return ((Date.now() - state.startTime) / (1000 * 60 * 60)) * (state.currentSessionRate || 0);
 }
 
-function getLiveMoneyCounterEarnings(sessionEarned = 0, now = new Date()) {
+function formatClockTime(dateMs) {
+    if (!Number.isFinite(dateMs)) return '';
+    return new Date(dateMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function getLiveMoneyCounterState(sessionEarned = 0, now = new Date()) {
+    const periods = getVisiblePayPeriods();
+    const assumed = getAssumedLivePaySession(periods, now, getPayWorkOptions());
     const live = getPayAwareLiveSession();
-    const extraSession = live && isSessionCoveredByPay(live, getVisiblePayPeriods())
+    const extraSession = live && isSessionCoveredByPay(live, periods)
         ? 0
         : Math.max(Number(sessionEarned) || 0, 0);
-    return extraSession + sumCurrentUnitAccrued(getVisiblePayPeriods(), now, getPayWorkOptions());
+    const timerRunning = Boolean(live);
+    const useTimerClock = timerRunning && extraSession > 0;
+    return {
+        assumed,
+        earnings: extraSession + (assumed ? assumed.earnings : 0),
+        elapsedMs: useTimerClock
+            ? live.durationMs
+            : (assumed ? assumed.elapsedMs : (timerRunning ? live.durationMs : 0)),
+        isLive: timerRunning || Boolean(assumed?.isLive)
+    };
 }
 
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
     if (!DOM.moneyCounterWidget) return;
 
     const now = new Date();
-    const payActive = hasActivePayAccrual(now);
-    const isLive = Boolean(isRunning) || payActive;
-    const beforeCutsEarned = getLiveMoneyCounterEarnings(earned, now);
+    const timerRunning = Boolean(isRunning && state.startTime);
+    const counter = getLiveMoneyCounterState(timerRunning ? earned : 0, now);
+    const isLive = counter.isLive;
+    const beforeCutsEarned = counter.earnings;
     const displayEarned = state.moneyCounterMode === 'after'
         ? getAmountAfterPercentageCuts(beforeCutsEarned)
         : beforeCutsEarned;
@@ -749,23 +838,33 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     }
 
     if (DOM.moneyCounterTime) {
-        if (isRunning && state.startTime) {
-            DOM.moneyCounterTime.textContent = formatClockDuration(Date.now() - state.startTime);
-        } else if (payActive) {
-            const activePeriod = getVisiblePayPeriods().find((period) => isPayPeriodActive(period, now));
-            const progress = activePeriod ? getCurrentPayUnitProgress(activePeriod, now, getPayWorkOptions()) : null;
-            DOM.moneyCounterTime.textContent = progress
-                ? formatClockDuration(Math.max(0, now.getTime() - progress.start.getTime()))
-                : '00:00:00';
-        } else {
-            DOM.moneyCounterTime.textContent = '00:00:00';
-        }
+        DOM.moneyCounterTime.textContent = formatClockDuration(counter.elapsedMs);
     }
 
     if (DOM.moneyCounterModeLabel) {
         DOM.moneyCounterModeLabel.textContent = state.moneyCounterMode === 'after'
             ? 'After percentage cuts'
             : 'Before percentage cuts';
+    }
+
+    if (DOM.moneyCounterPayHint) {
+        const assumed = counter.assumed;
+        const hasPay = getVisiblePayPeriods().length > 0;
+        if (assumed) {
+            const windowLabel = `${formatClockTime(assumed.startTime)}–${formatClockTime(assumed.endTime)}`;
+            DOM.moneyCounterPayHint.textContent = assumed.isLive
+                ? `Counting today's scheduled ${windowLabel} session, not the whole month. Uncovered live sessions add on top.`
+                : (assumed.isComplete
+                    ? `Today's scheduled ${windowLabel} session has finished. Uncovered live sessions still add on top.`
+                    : `Today's scheduled session is ${windowLabel}. The counter starts at the start time.`);
+            DOM.moneyCounterPayHint.classList.remove('hidden');
+        } else if (hasPay) {
+            DOM.moneyCounterPayHint.textContent = 'No scheduled session today. Uncovered live sessions still count here.';
+            DOM.moneyCounterPayHint.classList.remove('hidden');
+        } else {
+            DOM.moneyCounterPayHint.textContent = '';
+            DOM.moneyCounterPayHint.classList.add('hidden');
+        }
     }
 
     renderMoneyStack(DOM.moneyStack20p, twentyPCount, 'coin coin-small', 'twentyP');
@@ -1312,7 +1411,12 @@ export function renderPercentageCutStats(totals) {
 
 export function toggleLiveIndicators(isLive) {
     const payAwareLive = hasActivePayAccrual();
+    const moneyCounterLive = Boolean(getAssumedLivePaySession(getVisiblePayPeriods(), new Date(), getPayWorkOptions())?.isLive);
     document.querySelectorAll('.live-indicator').forEach((indicator) => {
+        if (indicator.closest('#widget-money-counter')) {
+            indicator.classList.toggle('hidden', !(isLive || moneyCounterLive));
+            return;
+        }
         const keepForPay = indicator.classList.contains('pay-aware-live') && payAwareLive;
         indicator.classList.toggle('hidden', !(isLive || keepForPay));
     });
@@ -1557,6 +1661,7 @@ export function renderCalendar() {
 
     if (DOM.calendarLegend) {
         DOM.calendarLegend.classList.toggle('is-hidden', isBreakMode);
+        if (!isBreakMode) renderPayStatusLegend(DOM.calendarLegend);
     }
 
     // Inject Days of Week Header
@@ -1602,8 +1707,8 @@ export function renderCalendar() {
         todayDate,
         getPayWorkOptions()
     );
-    const assumedSegments = getAssumedWorkForRange(gridStartDate, gridEndDate);
-    const dailyAssumedHours = assumedHoursByDateKey(assumedSegments);
+    const assumedSegments = getAssumedWorkForRange(gridStartDate, gridEndDate, { includeFuture: true });
+    const assumedByDate = new Map(assumedSegments.map((segment) => [segment.dateKey, segment]));
     const todayKey = getCalendarDateKey(todayDate);
 
     for (let week = 0; week < totalWeeks; week++) {
@@ -1612,6 +1717,7 @@ export function renderCalendar() {
         let weekBreakHours = 0;
         let weekPay = 0;
         let weekAssumedHours = 0;
+        let weekScheduledHours = 0;
 
         for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
             const cellDate = new Date(gridStartDate);
@@ -1624,14 +1730,21 @@ export function renderCalendar() {
             const grossHours = dailyGrossHours[dateKey] || 0;
             const breakHours = dailyBreakHours[dateKey] || 0;
             const payAmount = dailyPay[dateKey] || 0;
-            const assumedHours = dailyAssumedHours[dateKey] || 0;
+            const assumed = assumedByDate.get(dateKey);
+            const assumedHours = assumed?.hours || 0;
+            const isScheduledDay = dateKey > todayKey;
+            const isScheduledAssumed = Boolean(assumed?.scheduled);
             const hasPayCoverage = isCurrentMonth && getVisiblePayPeriods().some((period) => payPeriodCoversDay(period, cellDate));
 
             weekNetHours += netHours;
             weekGrossHours += grossHours;
             weekBreakHours += breakHours;
             weekPay += payAmount;
-            weekAssumedHours += assumedHours;
+            if (isScheduledAssumed) {
+                weekScheduledHours += assumedHours;
+            } else {
+                weekAssumedHours += assumedHours;
+            }
 
             const dayDiv = document.createElement('div');
             dayDiv.className = 'calendar-day';
@@ -1694,30 +1807,39 @@ export function renderCalendar() {
                 dayDiv.appendChild(hourLabel);
                 if (hasPayCoverage) {
                     const payMark = document.createElement('div');
-                    payMark.className = 'calendar-pay-mark';
-                    payMark.textContent = 'Pay';
-                    payMark.title = 'Salary covers this day. Logged hours replace the assumed block. Only uncovered sessions add extra pay.';
+                    const scheduledCover = isScheduledDay;
+                    payMark.className = `calendar-pay-mark${scheduledCover ? ' calendar-pay-mark-scheduled' : ''}`;
+                    payMark.textContent = scheduledCover ? 'Due' : 'Pay';
+                    payMark.title = scheduledCover
+                        ? 'Scheduled salary day. Not in totals yet.'
+                        : 'Salary covers this day. Logged hours replace the assumed block and are already in totals.';
                     dayDiv.appendChild(payMark);
                 }
             } else if (assumedHours > 0) {
-                dayDiv.classList.add('has-pay', 'has-assumed-pay');
+                const scheduled = isScheduledAssumed;
+                dayDiv.classList.add(scheduled ? 'has-scheduled-pay' : 'has-pay', scheduled ? 'has-scheduled-assumed' : 'has-assumed-pay');
                 const hourLabel = document.createElement('div');
-                hourLabel.className = 'assumed-hours-indicator';
+                hourLabel.className = scheduled ? 'scheduled-hours-indicator' : 'assumed-hours-indicator';
                 hourLabel.textContent = `${assumedHours.toFixed(1)}h`;
-                hourLabel.title = 'Assumed hours from monthly pay';
+                hourLabel.title = scheduled
+                    ? 'Scheduled pay hours — not in totals yet'
+                    : 'Accrued pay hours already included in money totals';
                 dayDiv.appendChild(hourLabel);
                 const payMark = document.createElement('div');
-                payMark.className = 'calendar-pay-mark';
-                payMark.textContent = 'Pay';
+                payMark.className = `calendar-pay-mark${scheduled ? ' calendar-pay-mark-scheduled' : ''}`;
+                payMark.textContent = scheduled ? 'Due' : 'Pay';
                 dayDiv.appendChild(payMark);
             } else if (hasPayCoverage) {
-                dayDiv.classList.add('has-pay');
+                const scheduled = isScheduledDay;
+                dayDiv.classList.add(scheduled ? 'has-scheduled-pay' : 'has-pay');
                 const payMark = document.createElement('div');
-                payMark.className = 'calendar-pay-mark';
-                payMark.textContent = 'Pay';
-                payMark.title = payAmount > 0
-                    ? `Salary covers this day (${formatCalendarPayAmount(payAmount)} accrued)`
-                    : 'Salary covers this day';
+                payMark.className = `calendar-pay-mark${scheduled ? ' calendar-pay-mark-scheduled' : ''}`;
+                payMark.textContent = scheduled ? 'Due' : 'Pay';
+                payMark.title = scheduled
+                    ? 'Scheduled salary day. Not in totals yet.'
+                    : (payAmount > 0
+                        ? `Accrued salary for this day (${formatCalendarPayAmount(payAmount)})`
+                        : 'Salary covers this day and is already in totals');
                 dayDiv.appendChild(payMark);
             }
 
@@ -1736,16 +1858,27 @@ export function renderCalendar() {
                 weekTotalDiv.textContent = '—';
             }
         } else if (weekNetHours > 0 || weekAssumedHours > 0) {
-            weekTotalDiv.classList.add('has-work-total');
+            if (weekNetHours > 0) weekTotalDiv.classList.add('has-work-total');
             if (weekAssumedHours > 0) weekTotalDiv.classList.add('has-pay-total');
-            weekTotalDiv.textContent = `${(weekNetHours + weekAssumedHours).toFixed(1)}h`;
+            const countedHours = weekNetHours + weekAssumedHours;
             const titles = [];
             if (weekNetHours > 0) titles.push(`${weekNetHours.toFixed(1)}h logged`);
-            if (weekAssumedHours > 0) titles.push(`${weekAssumedHours.toFixed(1)}h assumed from pay`);
+            if (weekAssumedHours > 0) titles.push(`${weekAssumedHours.toFixed(1)}h accrued pay`);
+            if (weekScheduledHours > 0) titles.push(`${weekScheduledHours.toFixed(1)}h scheduled`);
             if (Math.abs(weekGrossHours - weekNetHours) > 0.05) {
                 titles.push(`${weekGrossHours.toFixed(1)}h gross`);
             }
+            if (weekScheduledHours > 0) {
+                weekTotalDiv.classList.add('has-mixed-schedule');
+                weekTotalDiv.innerHTML = `<span class="calendar-week-counted">${countedHours.toFixed(1)}h</span><span class="calendar-week-due">${weekScheduledHours.toFixed(1)}h due</span>`;
+            } else {
+                weekTotalDiv.textContent = `${countedHours.toFixed(1)}h`;
+            }
             if (titles.length) weekTotalDiv.title = titles.join(' · ');
+        } else if (weekScheduledHours > 0) {
+            weekTotalDiv.classList.add('has-scheduled-total');
+            weekTotalDiv.innerHTML = `<span class="calendar-week-due">${weekScheduledHours.toFixed(1)}h due</span>`;
+            weekTotalDiv.title = `${weekScheduledHours.toFixed(1)}h scheduled pay — not in totals yet`;
         } else if (weekPay > 0) {
             weekTotalDiv.classList.add('has-pay-total');
             weekTotalDiv.textContent = formatCalendarPayAmount(weekPay);
@@ -1859,7 +1992,7 @@ export function renderChart() {
         }
     }
 
-    const assumedSegments = getAssumedWorkForRange(startOfWeek, endOfWeek);
+    const assumedSegments = getAssumedWorkForRange(startOfWeek, endOfWeek, { includeFuture: true });
     assumedSegments.forEach((segment) => {
         const segmentDate = new Date(segment.startTime);
         const dayIndex = (segmentDate.getDay() - state.startOfWeek + 7) % 7;
@@ -1868,32 +2001,45 @@ export function renderChart() {
             durationMs: segment.durationMs,
             company: segment.company || segment.name,
             project: '',
-            isPayAssumed: true
+            isPayAssumed: true,
+            isPayScheduled: Boolean(segment.scheduled)
         });
         const dailyTotal = weekData[dayIndex].reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
         if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
     });
 
-    const weeklyNetMs = weekData.reduce(
-        (sum, daySessions) => sum + daySessions.reduce((daySum, sessionObj) => daySum + sessionObj.durationMs, 0),
+    const weeklyAssumedMs = assumedSegments
+        .filter((segment) => !segment.scheduled)
+        .reduce((sum, segment) => sum + (segment.durationMs || 0), 0);
+    const weeklyScheduledMs = assumedSegments
+        .filter((segment) => segment.scheduled)
+        .reduce((sum, segment) => sum + (segment.durationMs || 0), 0);
+    const weeklyLoggedMs = weekData.reduce(
+        (sum, daySessions) => sum + daySessions.reduce((daySum, sessionObj) => {
+            if (sessionObj.isPayAssumed) return daySum;
+            return daySum + sessionObj.durationMs;
+        }, 0),
         0
     );
-
-    const weeklyAssumedMs = assumedSegments.reduce((sum, segment) => sum + (segment.durationMs || 0), 0);
-    const weeklyLoggedMs = weeklyNetMs - weeklyAssumedMs;
+    const weeklyCountedMs = weeklyLoggedMs + weeklyAssumedMs;
 
     if (DOM.chartWeekTotal) {
-        if (weeklyAssumedMs > 0 && weeklyLoggedMs > 0) {
-            DOM.chartWeekTotal.textContent = `${formatDuration(weeklyNetMs)} total · ${formatDuration(weeklyAssumedMs)} assumed pay`;
-        } else if (weeklyAssumedMs > 0) {
-            DOM.chartWeekTotal.textContent = `${formatDuration(weeklyAssumedMs)} assumed pay hours`;
-        } else {
-            DOM.chartWeekTotal.textContent = weeklyNetMs > 0
-                ? `${formatDuration(weeklyNetMs)} net total`
-                : '0h net total';
+        const parts = [];
+        if (weeklyCountedMs > 0) {
+            parts.push(`<span class="chart-week-counted">${formatDuration(weeklyCountedMs)} counted</span>`);
         }
+        if (weeklyScheduledMs > 0) {
+            parts.push(`<span class="chart-week-scheduled">${formatDuration(weeklyScheduledMs)} scheduled</span>`);
+        }
+        DOM.chartWeekTotal.innerHTML = parts.length
+            ? parts.join('<span class="chart-week-total-sep"> · </span>')
+            : '<span class="chart-week-counted">0h counted</span>';
     }
 
+    renderPayStatusLegend(DOM.chartPayLegend);
+    if (DOM.chartPayLegend) {
+        DOM.chartPayLegend.classList.toggle('hidden', !getVisiblePayPeriods().length);
+    }
     if (DOM.chartPayHint) {
         const hint = getPayScheduleHint();
         DOM.chartPayHint.textContent = hint;
@@ -1926,10 +2072,9 @@ export function renderChart() {
     }
 
     assumedSegments.forEach((segment) => {
-        if (segment.durationMs > 0) {
-            totalSessionMs += segment.durationMs;
-            sessionCount += 1;
-        }
+        if (segment.scheduled || segment.durationMs <= 0) return;
+        totalSessionMs += segment.durationMs;
+        sessionCount += 1;
     });
 
     const avgSessionMs = sessionCount > 0 ? totalSessionMs / sessionCount : 0;
@@ -1981,7 +2126,7 @@ export function renderChart() {
         weekData[index].forEach((sessionObj, sIndex) => {
             const hrs = sessionObj.hours;
             const bar = document.createElement('div');
-            bar.className = `chart-sub-session${sessionObj.isLive ? ' chart-sub-session-live' : ''}${sessionObj.isPayAssumed ? ' chart-sub-session-pay' : ''}`;
+            bar.className = `chart-sub-session${sessionObj.isLive ? ' chart-sub-session-live' : ''}${sessionObj.isPayAssumed && !sessionObj.isPayScheduled ? ' chart-sub-session-pay' : ''}${sessionObj.isPayScheduled ? ' chart-sub-session-scheduled' : ''}`;
             bar.style.height = `${(hrs / scaleMax) * 100}%`;
 
             // Determine color based on project or company
@@ -1991,14 +2136,21 @@ export function renderChart() {
                 bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
             }
 
-            let titlePrefix = sessionObj.isPayAssumed
-                ? 'Assumed pay hours · '
-                : (sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : ''));
+            let titlePrefix = sessionObj.isPayScheduled
+                ? 'Scheduled pay hours — not counted yet · '
+                : sessionObj.isPayAssumed
+                    ? 'Accrued pay hours · '
+                    : (sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : ''));
             const livePrefix = sessionObj.isLive ? 'Live · ' : '';
             bar.title = `${livePrefix}${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
 
             // Add persistent label if an identifier exists
-            if (sessionObj.isPayAssumed) {
+            if (sessionObj.isPayScheduled) {
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'chart-bar-label';
+                labelSpan.textContent = 'Due';
+                bar.appendChild(labelSpan);
+            } else if (sessionObj.isPayAssumed) {
                 const labelSpan = document.createElement('span');
                 labelSpan.className = 'chart-bar-label';
                 labelSpan.textContent = 'Pay';
@@ -2063,6 +2215,10 @@ export function renderGanttChart() {
     if (DOM.timelineWeekRange) {
         DOM.timelineWeekRange.textContent = formatWeekRange(startOfWeek);
     }
+    renderPayStatusLegend(DOM.timelinePayLegend);
+    if (DOM.timelinePayLegend) {
+        DOM.timelinePayLegend.classList.toggle('hidden', !getVisiblePayPeriods().length);
+    }
     if (DOM.timelinePayHint) {
         const hint = getPayScheduleHint();
         DOM.timelinePayHint.textContent = hint;
@@ -2072,7 +2228,7 @@ export function renderGanttChart() {
     const timelineEnd = new Date(startOfWeek);
     timelineEnd.setDate(startOfWeek.getDate() + 7);
     const assumedByDay = new Map(
-        getAssumedWorkForRange(startOfWeek, timelineEnd).map((segment) => [segment.dateKey, segment])
+        getAssumedWorkForRange(startOfWeek, timelineEnd, { includeFuture: true }).map((segment) => [segment.dateKey, segment])
     );
 
     // Header Row for hour markers
@@ -2134,13 +2290,15 @@ export function renderGanttChart() {
             }
 
             const block = document.createElement('div');
-            block.className = `gantt-block ${isLive ? 'gantt-live' : ''} ${blockType === 'break' ? 'gantt-break' : ''} ${blockType === 'pay' ? 'gantt-pay' : ''}`;
+            block.className = `gantt-block ${isLive ? 'gantt-live' : ''} ${blockType === 'break' ? 'gantt-break' : ''} ${blockType === 'pay' ? 'gantt-pay' : ''} ${blockType === 'scheduled' ? 'gantt-scheduled' : ''}`;
             block.style.left = `${leftPercent}%`;
             block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%';
 
             let color;
             if (blockType === 'break') {
                 color = 'rgba(255, 152, 0, 0.85)';
+            } else if (blockType === 'scheduled') {
+                color = 'rgba(199, 125, 255, 0.72)';
             } else if (blockType === 'pay') {
                 color = 'rgba(0, 230, 118, 0.78)';
             } else {
@@ -2153,9 +2311,11 @@ export function renderGanttChart() {
 
             let titlePrefix = blockType === 'break'
                 ? 'Break: '
-                : blockType === 'pay'
-                    ? 'Assumed pay hours: '
-                    : (project ? `[${project}] ` : (company ? `[${company}] ` : ''));
+                : blockType === 'scheduled'
+                    ? 'Scheduled pay hours — not counted yet: '
+                    : blockType === 'pay'
+                        ? 'Accrued pay hours: '
+                        : (project ? `[${project}] ` : (company ? `[${company}] ` : ''));
             block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
 
             if (widthPercent > 4) {
@@ -2164,6 +2324,8 @@ export function renderGanttChart() {
                 const durationText = formatDuration(durationMs);
                 if (blockType === 'break') {
                     label.textContent = durationText;
+                } else if (blockType === 'scheduled') {
+                    label.textContent = `Due (${durationText})`;
                 } else if (blockType === 'pay') {
                     label.textContent = `Pay (${durationText})`;
                 } else if ((project || company) && (project || company) !== 'default') {
@@ -2186,7 +2348,7 @@ export function renderGanttChart() {
                 assumed.name,
                 assumed.company,
                 false,
-                'pay'
+                assumed.scheduled ? 'scheduled' : 'pay'
             );
         }
 
@@ -2346,10 +2508,10 @@ export function updatePayPeriodPreview() {
     }
 
     const now = new Date();
-    const hourly = getEquivalentHourlyRate(period, now);
+    const hourly = getEquivalentHourlyRate(period, now, getPayWorkOptions());
     const progress = getCurrentPayUnitProgress(period, now, getPayWorkOptions());
     const afterCuts = getAmountAfterPercentageCuts(progress.accrued);
-    const hourNote = ` Calendar, weekly breakdown, and timeline assume ${formatWorkingDaysAssumption(state.tcDailyHours, state.tcWorkingDaysPerWeek)} starting at ${state.defaultStartTime || '09:00'}. Logged sessions replace that assumed block. Only sessions not covered by this pay add extra money.`;
+    const hourNote = ` Calendar, weekly breakdown, and timeline show accrued pay in green (already in totals) and scheduled future pay in purple (not counted yet). Blocks follow Work Schedule (${formatScheduleSummary(state.workSchedule)}). Logged sessions replace that day's pay block.`;
 
     DOM.payPeriodPreview.textContent = `${formatPayRate(period.amount, period.scale, state.currentCurrency)} · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h. ${progress.label}: ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)} accrued${state.percentageCuts.length ? ` (${state.currentCurrency}${afterCuts.toFixed(2)} after cuts)` : ''}.${hourNote}`;
     DOM.payPeriodPreview.classList.remove('hidden');
@@ -2404,36 +2566,59 @@ export function getPayPeriodFormData() {
     };
 }
 
+function applyPayWidgetSummaryValues(snap) {
+    const accruedEl = DOM.payWidgetSummary.querySelector('.pay-summary-accrued-value');
+    const scheduledEl = DOM.payWidgetSummary.querySelector('.pay-summary-scheduled-value');
+    const accruedBar = DOM.payWidgetSummary.querySelector('.pay-progress-accrued');
+    const scheduledBar = DOM.payWidgetSummary.querySelector('.pay-progress-scheduled');
+    const metaEl = DOM.payWidgetSummary.querySelector('.pay-summary-meta');
+    if (accruedEl) {
+        accruedEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${snap.accrued.toFixed(2)}`;
+    }
+    if (scheduledEl) {
+        scheduledEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${snap.remaining.toFixed(2)}`;
+    }
+    if (accruedBar) accruedBar.style.width = `${snap.accruedPct}%`;
+    if (scheduledBar) scheduledBar.style.width = `${snap.remainingPct}%`;
+    if (metaEl) {
+        metaEl.textContent = `${snap.contracted > 0 ? `${state.currentCurrency}${snap.contracted.toFixed(2)} contracted` : 'No active pay in the current period'}${snap.hourly > 0 ? ` · ≈ ${state.currentCurrency}${snap.hourly.toFixed(2)}/h` : ''}${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${snap.afterCuts.toFixed(2)}` : ''}`;
+    }
+}
+
 export function renderPayWidget() {
     if (!DOM.payWidgetSummary || !DOM.payPeriodList) return;
 
     const now = new Date();
-    const periods = getVisiblePayPeriods();
-    const activePeriods = periods.filter((period) => isPayPeriodActive(period, now));
-    const accrued = sumCurrentUnitAccrued(periods, now, getPayWorkOptions());
-    const contracted = activePeriods.reduce((sum, period) => (
-        sum + getCurrentPayUnitProgress(period, now, getPayWorkOptions()).contracted
-    ), 0);
-    const hourly = getCombinedEquivalentHourlyRate(periods, now);
-    const afterCuts = getAmountAfterPercentageCuts(accrued);
+    const snap = getPayAccrualSnapshot(now);
+    const periods = snap.periods;
 
     if (!periods.length) {
         DOM.payWidgetSummary.classList.add('is-empty');
-        DOM.payWidgetSummary.innerHTML = '<p class="loading-text" style="margin: 0;">Add a monthly salary or other pay scale. Calendar, weekly breakdown, and timeline show assumed work hours. Stats, the money counter, and saving pots use salary plus any sessions not already covered by that pay.</p>';
+        DOM.payWidgetSummary.innerHTML = '<p class="loading-text" style="margin: 0;">Add a monthly salary or other pay scale. Calendar, weekly breakdown, timeline, and the live money counter follow the Work Schedule widget for assumed sessions. Stats and saving pots use accrued salary plus any sessions not already covered by that pay. Scheduled future pay is not counted yet.</p>';
     } else {
         DOM.payWidgetSummary.classList.remove('is-empty');
-        const label = activePeriods[0]
-            ? getCurrentPayUnitProgress(activePeriods[0], now, getPayWorkOptions()).label
-            : 'Pay';
         DOM.payWidgetSummary.innerHTML = `
-            <span class="pay-summary-label">${label} accrued</span>
-            <span class="pay-summary-value"><span class="currency-symbol">${state.currentCurrency}</span>${accrued.toFixed(2)}</span>
-            <span class="pay-summary-meta">
-                ${contracted > 0 ? `${state.currentCurrency}${contracted.toFixed(2)} contracted` : 'No active pay in the current period'}
-                ${hourly > 0 ? ` · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h` : ''}
-                ${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${afterCuts.toFixed(2)}` : ''}
-            </span>
+            <div class="pay-summary-split">
+                <div class="pay-summary-col pay-summary-col-accrued">
+                    <span class="pay-summary-label">${snap.label} accrued</span>
+                    <span class="pay-summary-value pay-summary-accrued-value"><span class="currency-symbol">${state.currentCurrency}</span>${snap.accrued.toFixed(2)}</span>
+                    <span class="pay-summary-caption">Already in money totals</span>
+                </div>
+                <div class="pay-summary-col pay-summary-col-scheduled">
+                    <span class="pay-summary-label">Still scheduled</span>
+                    <span class="pay-summary-value pay-summary-scheduled-value"><span class="currency-symbol">${state.currentCurrency}</span>${snap.remaining.toFixed(2)}</span>
+                    <span class="pay-summary-caption">Not counted yet</span>
+                </div>
+            </div>
+            <div class="pay-progress" role="img" aria-label="${snap.label} ${state.currentCurrency}${snap.accrued.toFixed(2)} accrued, ${state.currentCurrency}${snap.remaining.toFixed(2)} still scheduled">
+                <span class="pay-progress-accrued" style="width: ${snap.accruedPct}%"></span>
+                <span class="pay-progress-scheduled" style="width: ${snap.remainingPct}%"></span>
+            </div>
+            <span class="pay-summary-meta"></span>
+            <ul class="pay-status-legend" aria-label="Pay colour key"></ul>
         `;
+        applyPayWidgetSummaryValues(snap);
+        renderPayStatusLegend(DOM.payWidgetSummary.querySelector('.pay-status-legend'), { includeLogged: false });
     }
 
     DOM.payPeriodList.innerHTML = '';
@@ -2442,6 +2627,7 @@ export function renderPayWidget() {
         const sanitized = sanitizePayPeriod(period);
         const active = isPayPeriodActive(sanitized, now);
         const progress = getCurrentPayUnitProgress(sanitized, now, getPayWorkOptions());
+        const remaining = Math.max(0, progress.contracted - progress.accrued);
         const item = document.createElement('article');
         item.className = `pay-period-item${active ? '' : ' is-ended'}`;
 
@@ -2455,8 +2641,10 @@ export function renderPayWidget() {
                 <span class="pay-period-rate">${formatPayRate(sanitized.amount, sanitized.scale, state.currentCurrency)}</span>
                 <span class="pay-period-meta">
                     ${getPayPeriodDateLabel(sanitized)}
-                    ${active ? ` · ${progress.label} ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)}` : ' · Ended'}
-                    · ≈ ${state.currentCurrency}${getEquivalentHourlyRate(sanitized, now).toFixed(2)}/h
+                    ${active
+                        ? ` · <span class="pay-accrued-text">${state.currentCurrency}${progress.accrued.toFixed(2)}</span> accrued of ${state.currentCurrency}${progress.contracted.toFixed(2)} · <span class="pay-scheduled-text">${state.currentCurrency}${remaining.toFixed(2)}</span> scheduled`
+                        : ' · Ended'}
+                    · ≈ ${state.currentCurrency}${getEquivalentHourlyRate(sanitized, now, getPayWorkOptions()).toFixed(2)}/h
                 </span>
                 ${companyHtml ? `<div class="history-badges" style="margin-top: 8px;">${companyHtml}</div>` : ''}
             </div>
@@ -2479,29 +2667,97 @@ export function renderPayWidget() {
 
     toggleLiveIndicators(Boolean(state.startTime));
     renderPayDerivedTimeCostHint();
+    renderPayOverlapWarning();
+}
+
+let lastPayOverlapSummary = summarizePaySessionOverlaps();
+
+function formatOverlapDateLabel(dateKey) {
+    const date = parseDateKey(dateKey);
+    if (!date) return dateKey || '';
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function pluralCount(count, singular, pluralWord = `${singular}s`) {
+    return `${count} ${count === 1 ? singular : pluralWord}`;
+}
+
+export function renderPayOverlapWarning() {
+    if (!DOM.payOverlapWidget) return;
+
+    const sessions = state.rawSessions.length ? state.rawSessions : state.allSessions;
+    const periods = state.rawPayPeriods.length ? state.rawPayPeriods : state.allPayPeriods;
+    const breaks = state.rawBreaks.length ? state.rawBreaks : state.allBreaks;
+    const summary = summarizePaySessionOverlaps(sessions, periods, breaks);
+    lastPayOverlapSummary = summary;
+
+    const disabled = state.disabledWidgets.includes('widget-pay-overlap');
+    const show = !disabled && summary.dayCount > 0;
+    DOM.payOverlapWidget.classList.toggle('hidden', !show);
+    DOM.payOverlapWidget.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (!show) return;
+
+    if (DOM.payOverlapCountBadge) {
+        DOM.payOverlapCountBadge.textContent = pluralCount(summary.dayCount, 'day');
+    }
+
+    if (DOM.payOverlapHeadline) {
+        const rangeLabel = summary.fromDate === summary.toDate
+            ? formatOverlapDateLabel(summary.fromDate)
+            : `${formatOverlapDateLabel(summary.fromDate)} – ${formatOverlapDateLabel(summary.toDate)}`;
+        DOM.payOverlapHeadline.textContent = `You have ${pluralCount(summary.dayCount, 'overlapping day')} (${rangeLabel}) where monthly pay and a logged session are both active.`;
+    }
+
+    if (DOM.payOverlapCopy) {
+        const sessionBit = `${pluralCount(summary.sessionCount, 'logged session')} on those days`;
+        if (summary.extraEarningSessionCount > 0) {
+            DOM.payOverlapCopy.textContent = `${sessionBit}. ${pluralCount(summary.extraEarningSessionCount, 'session')} still add extra money because their company does not match your pay — that is double-counted. Covered sessions add hours only. Remove the leftover daily sessions if they were stand-ins for salary.`;
+        } else {
+            DOM.payOverlapCopy.textContent = `${sessionBit}. Those sessions are already treated as hours-only, so their hourly rate is not added on top of salary. Remove them if you no longer want the extra hours on the calendar, weekly breakdown, and timeline.`;
+        }
+    }
+
+    if (DOM.payOverlapBatchBtn && !DOM.payOverlapBatchBtn.dataset.bound) {
+        DOM.payOverlapBatchBtn.dataset.bound = '1';
+        DOM.payOverlapBatchBtn.addEventListener('click', () => {
+            openPayOverlapBatchEdit();
+        });
+    }
+}
+
+export function openPayOverlapBatchEdit() {
+    const summary = lastPayOverlapSummary?.dayCount
+        ? lastPayOverlapSummary
+        : summarizePaySessionOverlaps(
+            state.rawSessions.length ? state.rawSessions : state.allSessions,
+            state.rawPayPeriods.length ? state.rawPayPeriods : state.allPayPeriods,
+            state.rawBreaks.length ? state.rawBreaks : state.allBreaks
+        );
+
+    DOM.viewSettingsBtn?.click();
+    setSettingsTab('batch-edit');
+
+    if (DOM.batchDeleteSessions) DOM.batchDeleteSessions.checked = true;
+    if (DOM.batchDeleteBreaks) DOM.batchDeleteBreaks.checked = false;
+
+    if (summary.sameMonth && summary.monthValue && DOM.batchDeleteMonth) {
+        DOM.batchDeleteMonth.value = summary.monthValue;
+        setBatchDeleteRangeMode(BATCH_DELETE_RANGE_MODES.MONTH);
+    } else if (summary.fromDate && summary.toDate) {
+        if (DOM.batchDeleteFrom) DOM.batchDeleteFrom.value = summary.fromDate;
+        if (DOM.batchDeleteTo) DOM.batchDeleteTo.value = summary.toDate;
+        setBatchDeleteRangeMode(BATCH_DELETE_RANGE_MODES.CUSTOM);
+    } else {
+        setBatchDeleteRangeMode(BATCH_DELETE_RANGE_MODES.MONTH);
+    }
+
+    updateBatchDeletePreview();
+    DOM.settingsPanelBatchEdit?.scrollIntoView({ block: 'start' });
 }
 
 function updatePayWidgetSummaryOnly() {
     if (!DOM.payWidgetSummary || !getVisiblePayPeriods().length) return;
-
-    const now = new Date();
-    const periods = getVisiblePayPeriods();
-    const activePeriods = periods.filter((period) => isPayPeriodActive(period, now));
-    const accrued = sumCurrentUnitAccrued(periods, now, getPayWorkOptions());
-    const contracted = activePeriods.reduce((sum, period) => (
-        sum + getCurrentPayUnitProgress(period, now, getPayWorkOptions()).contracted
-    ), 0);
-    const hourly = getCombinedEquivalentHourlyRate(periods, now);
-    const afterCuts = getAmountAfterPercentageCuts(accrued);
-    const valueEl = DOM.payWidgetSummary.querySelector('.pay-summary-value');
-    const metaEl = DOM.payWidgetSummary.querySelector('.pay-summary-meta');
-
-    if (valueEl) {
-        valueEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${accrued.toFixed(2)}`;
-    }
-    if (metaEl) {
-        metaEl.textContent = `${contracted > 0 ? `${state.currentCurrency}${contracted.toFixed(2)} contracted` : 'No active pay in the current period'}${hourly > 0 ? ` · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h` : ''}${state.percentageCuts.length ? ` · After cuts ${state.currentCurrency}${afterCuts.toFixed(2)}` : ''}`;
-    }
+    applyPayWidgetSummaryValues(getPayAccrualSnapshot());
 }
 
 let payAccrualTimer = null;
@@ -2527,7 +2783,7 @@ export function syncPayAccrualTimer() {
 export function renderPayDerivedTimeCostHint() {
     if (!DOM.tcPayDerivedHint) return;
 
-    const hourly = getCombinedEquivalentHourlyRate(getVisiblePayPeriods());
+    const hourly = getCombinedEquivalentHourlyRate(getVisiblePayPeriods(), new Date(), getPayWorkOptions());
     if (hourly <= 0) {
         DOM.tcPayDerivedHint.classList.add('hidden');
         DOM.tcPayDerivedHint.innerHTML = '';
@@ -2536,6 +2792,169 @@ export function renderPayDerivedTimeCostHint() {
 
     DOM.tcPayDerivedHint.classList.remove('hidden');
     DOM.tcPayDerivedHint.innerHTML = `From Pay: <strong>${state.currentCurrency}${hourly.toFixed(2)}/h</strong> <button type="button" id="tc-use-pay-rate-btn" class="btn-outline btn-small">Use this rate</button>`;
+}
+
+function formatScheduleHoursShort(hours) {
+    if (!(hours > 0)) return 'Off';
+    return `${parseFloat(Number(hours).toFixed(2))}h`;
+}
+
+function readWorkScheduleFromForm() {
+    const days = [0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+        const row = DOM.workScheduleList?.querySelector(`.work-schedule-row[data-day="${dayIndex}"]`);
+        const existing = state.workSchedule?.days?.[dayIndex] || {};
+        if (!row) {
+            return {
+                day: dayIndex,
+                enabled: Boolean(existing.enabled),
+                start: existing.start || '09:00',
+                end: existing.end || '17:00'
+            };
+        }
+        return {
+            day: dayIndex,
+            enabled: Boolean(row.querySelector('.work-schedule-enabled')?.checked),
+            start: row.querySelector('.work-schedule-start')?.value || existing.start || '09:00',
+            end: row.querySelector('.work-schedule-end')?.value || existing.end || '17:00'
+        };
+    });
+    return { days };
+}
+
+function syncWorkScheduleRow(row, day) {
+    if (!row || !day) return;
+    const enabledInput = row.querySelector('.work-schedule-enabled');
+    const startInput = row.querySelector('.work-schedule-start');
+    const endInput = row.querySelector('.work-schedule-end');
+    const hoursEl = row.querySelector('.work-schedule-hours');
+    const active = document.activeElement;
+
+    if (enabledInput && active !== enabledInput) {
+        enabledInput.checked = Boolean(day.enabled);
+    }
+    if (startInput && active !== startInput) {
+        startInput.value = day.start;
+    }
+    if (endInput && active !== endInput) {
+        endInput.value = day.end;
+    }
+    if (startInput) startInput.disabled = !day.enabled;
+    if (endInput) endInput.disabled = !day.enabled;
+    if (hoursEl) hoursEl.textContent = formatScheduleHoursShort(getScheduleDayHours(day));
+    row.classList.toggle('is-disabled', !day.enabled);
+}
+
+function previewWorkScheduleRow(row) {
+    if (!row) return;
+    const dayIndex = Number(row.dataset.day);
+    const enabled = Boolean(row.querySelector('.work-schedule-enabled')?.checked);
+    const start = row.querySelector('.work-schedule-start')?.value || '09:00';
+    const end = row.querySelector('.work-schedule-end')?.value || '17:00';
+    syncWorkScheduleRow(row, { day: dayIndex, enabled, start, end });
+    if (DOM.workScheduleSummary) {
+        DOM.workScheduleSummary.textContent = formatScheduleSummary(readWorkScheduleFromForm());
+    }
+}
+
+function refreshAssumedWorkDisplays() {
+    renderCalendar();
+    renderChart();
+    renderGanttChart();
+    renderPayWidget();
+    renderWorkPatternBreakdown();
+    renderMoneyCounterModeControls();
+    updatePayPeriodPreview();
+}
+
+let workScheduleApplyTimeout = null;
+
+function persistWorkSchedule() {
+    import('./api.js').then((module) => {
+        module.saveWorkSchedule?.(state.workSchedule);
+    }).catch((error) => {
+        console.error('Debug: Could not save work schedule', error);
+    });
+}
+
+function applyWorkScheduleFromForm() {
+    clearTimeout(workScheduleApplyTimeout);
+    workScheduleApplyTimeout = null;
+    updateWorkSchedule(readWorkScheduleFromForm());
+    const schedule = sanitizeWorkSchedule(state.workSchedule);
+    DOM.workScheduleList?.querySelectorAll('.work-schedule-row').forEach((row) => {
+        syncWorkScheduleRow(row, schedule.days[Number(row.dataset.day)]);
+    });
+    if (DOM.workScheduleSummary) {
+        DOM.workScheduleSummary.textContent = formatScheduleSummary(schedule);
+    }
+    persistWorkSchedule();
+    refreshAssumedWorkDisplays();
+}
+
+function scheduleWorkScheduleApply() {
+    clearTimeout(workScheduleApplyTimeout);
+    workScheduleApplyTimeout = setTimeout(applyWorkScheduleFromForm, 400);
+}
+
+function bindWorkScheduleEvents() {
+    if (!DOM.workScheduleList || DOM.workScheduleList.dataset.bound === 'true') return;
+    DOM.workScheduleList.dataset.bound = 'true';
+    DOM.workScheduleList.addEventListener('input', (event) => {
+        const row = event.target.closest('.work-schedule-row');
+        if (!row) return;
+        previewWorkScheduleRow(row);
+        scheduleWorkScheduleApply();
+    });
+    DOM.workScheduleList.addEventListener('change', (event) => {
+        const row = event.target.closest('.work-schedule-row');
+        if (row) previewWorkScheduleRow(row);
+        applyWorkScheduleFromForm();
+    });
+}
+
+export function renderWorkSchedule() {
+    if (!DOM.workScheduleList) return;
+
+    const schedule = sanitizeWorkSchedule(state.workSchedule);
+    const order = orderedWeekdayIndexes(state.startOfWeek);
+    const existingRows = [...DOM.workScheduleList.querySelectorAll('.work-schedule-row')];
+    const existingOrder = existingRows.map((row) => Number(row.dataset.day));
+    const needsRebuild = existingRows.length !== 7 || order.some((dayIndex, index) => existingOrder[index] !== dayIndex);
+
+    if (needsRebuild) {
+        DOM.workScheduleList.innerHTML = '';
+        order.forEach((dayIndex) => {
+            const day = schedule.days[dayIndex];
+            const row = document.createElement('li');
+            row.className = 'work-schedule-row';
+            row.dataset.day = String(dayIndex);
+            const label = WEEKDAY_LABELS[dayIndex];
+            row.innerHTML = `
+                <label class="work-schedule-day">
+                    <input type="checkbox" class="work-schedule-enabled" ${day.enabled ? 'checked' : ''} aria-label="Work on ${label}">
+                    <span>${label}</span>
+                </label>
+                <div class="work-schedule-times">
+                    <input type="time" class="work-schedule-start" value="${day.start}" ${day.enabled ? '' : 'disabled'} aria-label="${label} start">
+                    <span>to</span>
+                    <input type="time" class="work-schedule-end" value="${day.end}" ${day.enabled ? '' : 'disabled'} aria-label="${label} end">
+                </div>
+                <span class="work-schedule-hours">${formatScheduleHoursShort(getScheduleDayHours(day))}</span>
+            `;
+            row.classList.toggle('is-disabled', !day.enabled);
+            DOM.workScheduleList.appendChild(row);
+        });
+    } else {
+        existingRows.forEach((row) => {
+            syncWorkScheduleRow(row, schedule.days[Number(row.dataset.day)]);
+        });
+    }
+
+    if (DOM.workScheduleSummary) {
+        DOM.workScheduleSummary.textContent = formatScheduleSummary(schedule);
+    }
+
+    bindWorkScheduleEvents();
 }
 
 export function applyWidgetOrder() {
@@ -2549,7 +2968,7 @@ export function applyWidgetOrder() {
 
 export function applyWidgetVisibility() {
     const DEFAULT_WIDGET_IDS = [
-        'widget-timer', 'widget-pay', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
+        'widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
         'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt',
         'widget-calendar', 'widget-chart', 'widget-history'
     ];
@@ -2557,6 +2976,10 @@ export function applyWidgetVisibility() {
     DEFAULT_WIDGET_IDS.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
+        if (id === 'widget-pay-overlap') {
+            renderPayOverlapWarning();
+            return;
+        }
         const isDisabled = state.disabledWidgets.includes(id);
         el.classList.toggle('hidden', isDisabled);
         el.setAttribute('aria-hidden', isDisabled ? 'true' : 'false');
@@ -2795,6 +3218,7 @@ function createWidgetExportFooter(widget) {
 
 export function setupWidgetImageExports() {
     document.querySelectorAll('.dashboard-grid > .card[id^="widget-"]').forEach(widget => {
+        if (widget.id === 'widget-pay-overlap') return;
         if (widget.querySelector(':scope > .widget-export-footer')) return;
         widget.appendChild(createWidgetExportFooter(widget));
     });
@@ -2833,6 +3257,8 @@ export function renderWidgetOrderList() {
     const labels = {
         'widget-timer': 'Timer & Controls',
         'widget-pay': 'Pay',
+        'widget-work-schedule': 'Work Schedule',
+        'widget-pay-overlap': 'Overlapping Pay',
         'widget-breaks': 'Breaks',
         'widget-money-counter': 'Live Money Counter',
         'widget-saving-pots': 'Saving Pots',

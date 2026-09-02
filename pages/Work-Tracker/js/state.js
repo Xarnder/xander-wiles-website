@@ -1,6 +1,7 @@
 import { createSeedBudgetPlan, sanitizeBudgetPlan, sanitizeBudgetSnapMode, BUDGET_SNAP_MODES } from './budgeting.js';
+import { createDefaultWorkSchedule, sanitizeWorkSchedule, serializeWorkSchedule } from './workSchedule.js';
 
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -164,6 +165,23 @@ function loadTcCustomTimeScales() {
     }
 }
 
+function loadWorkSchedule() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('work_tracker_work_schedule'));
+        if (saved && (Array.isArray(saved.days) || Array.isArray(saved))) {
+            return sanitizeWorkSchedule(Array.isArray(saved) ? { days: saved } : saved);
+        }
+    } catch (e) {
+        console.warn('Debug: Could not parse work schedule from storage', e);
+    }
+
+    return createDefaultWorkSchedule({
+        dailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
+        workingDaysPerWeek: loadTcWorkingDaysPerWeek(),
+        defaultStartTime: localStorage.getItem('work_tracker_default_start_time') || '09:00'
+    });
+}
+
 function loadTcWorkingDaysPerWeek() {
     const saved = parseFloat(localStorage.getItem('work_tracker_tc_working_days_per_week'));
     if (Number.isFinite(saved)) return Math.min(Math.max(saved, 1), 7);
@@ -273,6 +291,7 @@ export const state = {
     tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
     tcDailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
     tcWorkingDaysPerWeek: loadTcWorkingDaysPerWeek(),
+    workSchedule: loadWorkSchedule(),
     dashboardDensity: loadDashboardDensity(),
     moneyCounterMode: loadMoneyCounterMode(),
     moneyCounterGap: loadMoneyCounterGap(),
@@ -407,6 +426,16 @@ export function updateTcWorkingDaysPerWeek(days) {
     const parsedDays = Number(days);
     state.tcWorkingDaysPerWeek = Number.isFinite(parsedDays) ? Math.min(Math.max(parsedDays, 1), 7) : 5;
     localStorage.setItem('work_tracker_tc_working_days_per_week', state.tcWorkingDaysPerWeek);
+}
+
+export function updateWorkSchedule(schedule) {
+    state.workSchedule = sanitizeWorkSchedule(schedule, {
+        dailyHours: state.tcDailyHours,
+        workingDaysPerWeek: state.tcWorkingDaysPerWeek,
+        defaultStartTime: state.defaultStartTime
+    });
+    localStorage.setItem('work_tracker_work_schedule', JSON.stringify(serializeWorkSchedule(state.workSchedule)));
+    return state.workSchedule;
 }
 
 export function createTcCustomTimeScale(amount = 1, unit = 'hours') {

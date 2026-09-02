@@ -10,16 +10,20 @@ import {
     getCombinedEquivalentHourlyRate,
     getCurrentPayUnitProgress,
     getEquivalentHourlyRate,
+    getAssumedLivePaySession,
     isPayPeriodActive,
     sanitizePayPeriod,
     sanitizePayPeriods,
     combinePayAndSessionEarnings,
     collectAssumedWorkSegments,
+    getAssumedWorkSegment,
     formatWorkingDaysAssumption,
     isContractedWorkingDay,
     isSessionCoveredByPay,
+    summarizePaySessionOverlaps,
     sessionsUncoveredByPay
 } from './payPeriods.js';
+import { sanitizeWorkSchedule } from './workSchedule.js';
 
 function makeMonthlyPay(overrides = {}) {
     return sanitizePayPeriod({
@@ -329,6 +333,28 @@ test('assumed work segments fill weekday hours and skip logged days, weekends, a
     assert.deepEqual(segments.map((segment) => segment.dateKey), ['2026-08-11', '2026-08-12']);
     assert.equal(segments[0].hours, 8);
     assert.equal(segments[0].assumedPay, true);
+    assert.equal(segments[0].scheduled, false);
+});
+
+test('assumed work can include future weekdays as scheduled, not counted', () => {
+    const salary = makeMonthlyPay();
+    const now = new Date(2026, 7, 12, 12, 0, 0); // Wednesday
+    const segments = collectAssumedWorkSegments(
+        [salary],
+        new Date(2026, 7, 12),
+        new Date(2026, 7, 15),
+        {
+            sessions: [],
+            defaultStartTime: '09:00',
+            includeFuture: true,
+            now
+        }
+    );
+
+    assert.deepEqual(segments.map((segment) => segment.dateKey), ['2026-08-12', '2026-08-13', '2026-08-14']);
+    assert.equal(segments[0].scheduled, false);
+    assert.equal(segments[1].scheduled, true);
+    assert.equal(segments[2].scheduled, true);
 });
 
 test('assumed work includes today when the window ends at a time of day', () => {
@@ -362,4 +388,95 @@ test('assumed work can use Time Cost hours instead of the pay period snapshot', 
 
     assert.equal(segments.length, 1);
     assert.equal(segments[0].hours, 6);
+});
+
+test('live pay session counts today\'s scheduled block, not the month so far', () => {
+    const salary = makeMonthlyPay();
+    const options = { defaultStartTime: '09:00', dailyHours: 8, workingDaysPerWeek: 5 };
+    const during = getAssumedLivePaySession([salary], new Date(2026, 7, 12, 13, 0, 0), options);
+    const hourly = getEquivalentHourlyRate(salary, new Date(2026, 7, 12, 13, 0, 0), options);
+
+    assert.equal(during.isLive, true);
+    assert.equal(during.elapsedMs, 4 * 60 * 60 * 1000);
+    assert.equal(Number(during.earnings.toFixed(4)), Number((hourly * 4).toFixed(4)));
+    assert.ok(during.elapsedMs < 24 * 60 * 60 * 1000);
+
+    const before = getAssumedLivePaySession([salary], new Date(2026, 7, 12, 8, 0, 0), options);
+    assert.equal(before.isLive, false);
+    assert.equal(before.elapsedMs, 0);
+    assert.equal(before.earnings, 0);
+
+    const after = getAssumedLivePaySession([salary], new Date(2026, 7, 12, 18, 0, 0), options);
+    assert.equal(after.isLive, false);
+    assert.equal(after.isComplete, true);
+    assert.equal(after.elapsedMs, 8 * 60 * 60 * 1000);
+    assert.equal(Number(after.earnings.toFixed(4)), Number((hourly * 8).toFixed(4)));
+
+    assert.equal(getAssumedLivePaySession([salary], new Date(2026, 7, 15, 13, 0, 0), options), null);
+});
+
+test('assumed work follows the per-day work schedule', () => {
+    const salary = makeMonthlyPay();
+    const schedule = sanitizeWorkSchedule({
+        days: [
+            { day: 3, enabled: true, start: '10:00', end: '14:00' }
+        ]
+    }, { workingDaysPerWeek: 0 });
+    const now = new Date(2026, 7, 12, 12, 0, 0); // Wednesday
+    const wednesday = getAssumedWorkSegment(salary, now, { schedule, now, includeFuture: true });
+    const thursday = getAssumedWorkSegment(salary, new Date(2026, 7, 13), { schedule, now, includeFuture: true });
+
+    assert.equal(wednesday.hours, 4);
+    assert.equal(new Date(wednesday.startTime).getHours(), 10);
+    assert.equal(thursday, null);
+
+    const live = getAssumedLivePaySession([salary], now, { schedule });
+    const hourly = getEquivalentHourlyRate(salary, now, { schedule });
+    const defaultHourly = getEquivalentHourlyRate(salary, now);
+    assert.equal(live.isLive, true);
+    assert.equal(live.elapsedMs, 2 * 60 * 60 * 1000);
+    assert.equal(Number(live.earnings.toFixed(4)), Number((hourly * 2).toFixed(4)));
+    assert.ok(hourly > defaultHourly);
+});
+
+test('pay overlap summary counts days with both salary coverage and a logged session', () => {
+    const salary = makeMonthlyPay();
+    const covered = {
+        id: 's1',
+        startTime: new Date(2026, 7, 10, 9).getTime(),
+        endTime: new Date(2026, 7, 10, 17).getTime(),
+        durationMs: 8 * 3600000,
+        earnings: 160,
+        company: ''
+    };
+    const outside = {
+        id: 's2',
+        startTime: new Date(2026, 6, 10, 9).getTime(),
+        endTime: new Date(2026, 6, 10, 17).getTime(),
+        durationMs: 8 * 3600000,
+        earnings: 160,
+        company: ''
+    };
+    const freelance = {
+        id: 's3',
+        startTime: new Date(2026, 7, 11, 9).getTime(),
+        endTime: new Date(2026, 7, 11, 10).getTime(),
+        durationMs: 3600000,
+        earnings: 40,
+        company: 'Freelance'
+    };
+
+    const empty = summarizePaySessionOverlaps([covered], [], []);
+    assert.equal(empty.dayCount, 0);
+
+    const summary = summarizePaySessionOverlaps([covered, outside, freelance], [salary], []);
+    assert.equal(summary.dayCount, 2);
+    assert.equal(summary.sessionCount, 2);
+    assert.equal(summary.coveredSessionCount, 1);
+    assert.equal(summary.extraEarningSessionCount, 1);
+    assert.equal(summary.fromDate, '2026-08-10');
+    assert.equal(summary.toDate, '2026-08-11');
+    assert.equal(summary.sameMonth, true);
+    assert.equal(summary.monthValue, '2026-08');
+    assert.equal(Number(summary.extraEarnings.toFixed(2)), 40);
 });

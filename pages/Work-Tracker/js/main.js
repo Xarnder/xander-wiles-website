@@ -45,6 +45,7 @@ import {
     exportBudgetPieChart,
     showConfirm,
     renderPayWidget,
+    renderWorkSchedule,
     openPayPeriodModal,
     closePayPeriodModal,
     updatePayPeriodPreview,
@@ -178,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyDashboardDensity();
     renderSavingPotsWidget();
     renderPayWidget();
+    renderWorkSchedule();
     syncPayAccrualTimer();
     renderMoneyCounterModeControls();
     renderStatsPeriodModeControls();
@@ -1059,6 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyWidgetTitles();
         applyDashboardDensity();
         updateCurrencyDisplays();
+        renderWorkSchedule();
         renderDashboardData();
 
         import('./ui.js').then(module => {
@@ -1933,11 +1936,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!saved) return;
 
             if (syncTimeCost) {
-                const { getCombinedEquivalentHourlyRate } = await import('./payPeriods.js');
+                const { getCombinedEquivalentHourlyRate, getWorkSettingsFromState } = await import('./payPeriods.js');
                 const nextPeriods = periodId
                     ? (state.rawPayPeriods || []).map((entry) => (entry.id === periodId ? { ...entry, ...period } : entry))
                     : [...(state.rawPayPeriods || []), period];
-                const hourly = getCombinedEquivalentHourlyRate(nextPeriods);
+                const hourly = getCombinedEquivalentHourlyRate(nextPeriods, new Date(), getWorkSettingsFromState(state));
                 if (hourly > 0) {
                     updateTcHourlyRate(Number(hourly.toFixed(2)));
                     if (DOM.tcHourlyRate) DOM.tcHourlyRate.value = state.tcHourlyRate;
@@ -1966,8 +1969,8 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.tcPayDerivedHint.addEventListener('click', async (event) => {
             const button = event.target.closest('#tc-use-pay-rate-btn');
             if (!button) return;
-            const { getCombinedEquivalentHourlyRate } = await import('./payPeriods.js');
-            const hourly = getCombinedEquivalentHourlyRate(state.allPayPeriods || state.rawPayPeriods || []);
+            const { getCombinedEquivalentHourlyRate, getWorkSettingsFromState } = await import('./payPeriods.js');
+            const hourly = getCombinedEquivalentHourlyRate(state.allPayPeriods || state.rawPayPeriods || [], new Date(), getWorkSettingsFromState(state));
             if (hourly <= 0) return;
             updateTcHourlyRate(Number(hourly.toFixed(2)));
             if (DOM.tcHourlyRate) DOM.tcHourlyRate.value = state.tcHourlyRate;

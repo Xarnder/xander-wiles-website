@@ -1,4 +1,11 @@
-import { getCalendarDateKey, getStartOfWeekDate, parseCsvExportDate, toTimestampMs, calculateRollingPeriodTotals, accumulateDailySessionHours } from './utils.js';
+import { getCalendarDateKey, getStartOfWeekDate, parseCsvExportDate, toTimestampMs, calculateRollingPeriodTotals, accumulateDailySessionHours, sessionOverlapsDay, getEffectiveSessionMetrics } from './utils.js';
+import {
+    getEnabledScheduleDay,
+    getScheduleAverageDailyHours,
+    getScheduleDayHours,
+    getScheduleHoursPerWeek,
+    getScheduleWorkingDayCount
+} from './workSchedule.js';
 
 export const PAY_SCALES = {
     HOUR: 'hour',
@@ -293,13 +300,20 @@ export function sumCurrentUnitAccrued(periods, now = new Date(), options = {}) {
     ), 0);
 }
 
-export function getEquivalentHourlyRate(period, now = new Date()) {
+export function getEquivalentHourlyRate(period, now = new Date(), options = {}) {
     const sanitized = sanitizePayPeriod(period);
-    const hoursPerWeek = sanitized.dailyHours * sanitized.workingDaysPerWeek;
+    const scheduleHours = options.schedule ? getScheduleHoursPerWeek(options.schedule) : 0;
+    const dailyHours = scheduleHours > 0
+        ? (getScheduleAverageDailyHours(options.schedule) || clampWorkHours(options.dailyHours ?? sanitized.dailyHours))
+        : clampWorkHours(options.dailyHours ?? sanitized.dailyHours);
+    const workingDaysPerWeek = scheduleHours > 0
+        ? (getScheduleWorkingDayCount(options.schedule) || clampWorkingDays(options.workingDaysPerWeek ?? sanitized.workingDaysPerWeek))
+        : clampWorkingDays(options.workingDaysPerWeek ?? sanitized.workingDaysPerWeek);
+    const hoursPerWeek = scheduleHours > 0 ? scheduleHours : (dailyHours * workingDaysPerWeek);
     if (hoursPerWeek <= 0) return 0;
 
     if (sanitized.scale === PAY_SCALES.HOUR) return sanitized.amount;
-    if (sanitized.scale === PAY_SCALES.DAY) return sanitized.amount / sanitized.dailyHours;
+    if (sanitized.scale === PAY_SCALES.DAY) return sanitized.amount / dailyHours;
     if (sanitized.scale === PAY_SCALES.WEEK) return sanitized.amount / hoursPerWeek;
     if (sanitized.scale === PAY_SCALES.YEAR) return sanitized.amount / (hoursPerWeek * (365.25 / 7));
 
@@ -309,10 +323,10 @@ export function getEquivalentHourlyRate(period, now = new Date()) {
     return sanitized.amount / (hoursPerWeek * weeksInMonth);
 }
 
-export function getCombinedEquivalentHourlyRate(periods, now = new Date()) {
+export function getCombinedEquivalentHourlyRate(periods, now = new Date(), options = {}) {
     return (Array.isArray(periods) ? periods : [])
         .filter((period) => isPayPeriodActive(period, now))
-        .reduce((sum, period) => sum + getEquivalentHourlyRate(period, now), 0);
+        .reduce((sum, period) => sum + getEquivalentHourlyRate(period, now, options), 0);
 }
 
 export function filterPayPeriods(periods, { company = '', project = '' } = {}) {
@@ -373,6 +387,96 @@ export function combinePayAndSessionEarnings(sessions, breaks, periods, windowSt
         + computePayEarningsInWindow(periods, windowStart, windowEnd, now, options);
 }
 
+function sessionIdentity(session, index) {
+    return session?.id || `session-${toTimestampMs(session?.startTime) || index}`;
+}
+
+export function summarizePaySessionOverlaps(sessions = [], payPeriods = [], breaks = []) {
+    const empty = {
+        dayCount: 0,
+        sessionCount: 0,
+        coveredSessionCount: 0,
+        extraEarningSessionCount: 0,
+        extraEarnings: 0,
+        fromDate: null,
+        toDate: null,
+        sameMonth: false,
+        monthValue: '',
+        days: []
+    };
+
+    const periods = Array.isArray(payPeriods) ? payPeriods : [];
+    const list = Array.isArray(sessions) ? sessions : [];
+    if (!periods.length || !list.length) return empty;
+
+    const { dailyHours, dailyGrossHours } = accumulateDailySessionHours(list, breaks);
+    const dayKeys = [...new Set([...Object.keys(dailyHours), ...Object.keys(dailyGrossHours)])]
+        .filter((key) => (dailyHours[key] || 0) > 0 || (dailyGrossHours[key] || 0) > 0)
+        .sort();
+
+    const overlappingIds = new Set();
+    const coveredIds = new Set();
+    const extraIds = new Set();
+    const days = [];
+
+    dayKeys.forEach((dateKey) => {
+        const day = parseDateKey(dateKey);
+        if (!day) return;
+        const payCount = periods.filter((period) => payPeriodCoversDay(period, day)).length;
+        if (payCount === 0) return;
+
+        const daySessions = list.filter((session) => sessionOverlapsDay(session, day));
+        if (!daySessions.length) return;
+
+        days.push({
+            dateKey,
+            payCount,
+            sessionCount: daySessions.length
+        });
+
+        daySessions.forEach((session, index) => {
+            const id = sessionIdentity(session, index);
+            overlappingIds.add(id);
+            if (isSessionCoveredByPay(session, periods)) {
+                coveredIds.add(id);
+            } else {
+                extraIds.add(id);
+            }
+        });
+    });
+
+    if (!days.length) return empty;
+
+    const fromDate = days[0].dateKey;
+    const toDate = days[days.length - 1].dateKey;
+    const from = parseDateKey(fromDate);
+    const to = parseDateKey(toDate);
+    const sameMonth = Boolean(
+        from && to
+        && from.getFullYear() === to.getFullYear()
+        && from.getMonth() === to.getMonth()
+    );
+
+    const extraEarnings = list.reduce((sum, session, index) => {
+        const id = sessionIdentity(session, index);
+        if (!extraIds.has(id)) return sum;
+        return sum + (Number(getEffectiveSessionMetrics(session, breaks).effectiveEarnings) || 0);
+    }, 0);
+
+    return {
+        dayCount: days.length,
+        sessionCount: overlappingIds.size,
+        coveredSessionCount: coveredIds.size,
+        extraEarningSessionCount: extraIds.size,
+        extraEarnings,
+        fromDate,
+        toDate,
+        sameMonth,
+        monthValue: sameMonth && fromDate ? fromDate.slice(0, 7) : '',
+        days
+    };
+}
+
 export function isContractedWorkingDay(date, workingDaysPerWeek = 5, scale = PAY_SCALES.MONTH) {
     if (scale === PAY_SCALES.DAY) return true;
     const days = clampWorkingDays(workingDaysPerWeek);
@@ -411,18 +515,35 @@ export function getAssumedWorkSegment(period, day, options = {}) {
     const sanitized = sanitizePayPeriod(period);
     if (!payPeriodCoversDay(sanitized, day)) return null;
 
-    const dailyHours = clampWorkHours(options.dailyHours ?? sanitized.dailyHours);
-    const workingDaysPerWeek = clampWorkingDays(options.workingDaysPerWeek ?? sanitized.workingDaysPerWeek);
-    if (!isContractedWorkingDay(day, workingDaysPerWeek, sanitized.scale)) return null;
+    const scheduleDay = options.schedule ? getEnabledScheduleDay(options.schedule, day) : null;
+    if (options.schedule && !scheduleDay) return null;
+
+    let dailyHours;
+    let startHours;
+    let startMinutes;
+    if (scheduleDay) {
+        dailyHours = getScheduleDayHours(scheduleDay);
+        if (dailyHours <= 0) return null;
+        const parsedStart = parseTimeOfDay(scheduleDay.start);
+        startHours = parsedStart.hours;
+        startMinutes = parsedStart.minutes;
+    } else {
+        dailyHours = clampWorkHours(options.dailyHours ?? sanitized.dailyHours);
+        const workingDaysPerWeek = clampWorkingDays(options.workingDaysPerWeek ?? sanitized.workingDaysPerWeek);
+        if (!isContractedWorkingDay(day, workingDaysPerWeek, sanitized.scale)) return null;
+        const parsedStart = parseTimeOfDay(options.defaultStartTime);
+        startHours = parsedStart.hours;
+        startMinutes = parsedStart.minutes;
+    }
 
     const dayStart = new Date(getStartOfDayMs(day));
     const now = options.now instanceof Date ? options.now : new Date();
     const todayStart = getStartOfDayMs(now);
-    if (dayStart.getTime() > todayStart) return null;
+    const isFuture = dayStart.getTime() > todayStart;
+    if (isFuture && !options.includeFuture) return null;
 
-    const { hours, minutes } = parseTimeOfDay(options.defaultStartTime);
     const start = new Date(dayStart);
-    start.setHours(hours, minutes, 0, 0);
+    start.setHours(startHours, startMinutes, 0, 0);
     const durationMs = dailyHours * 60 * 60 * 1000;
 
     return {
@@ -436,8 +557,53 @@ export function getAssumedWorkSegment(period, day, options = {}) {
         company: sanitized.company,
         name: getPayPeriodDisplayName(sanitized),
         assumedPay: true,
+        scheduled: isFuture,
         earnings: 0,
         rate: 0
+    };
+}
+
+export function getAssumedLivePaySession(periods, now = new Date(), options = {}) {
+    const current = now instanceof Date ? now : new Date(now);
+    const nowMs = current.getTime();
+    if (!Number.isFinite(nowMs)) return null;
+
+    const list = (Array.isArray(periods) ? periods : []).filter((period) => isPayPeriodActive(period, current));
+    if (!list.length) return null;
+
+    let startTime = Infinity;
+    let endTime = 0;
+    let earnings = 0;
+    let hasSegment = false;
+
+    list.forEach((period) => {
+        const segment = getAssumedWorkSegment(period, current, {
+            ...options,
+            now: current,
+            includeFuture: false
+        });
+        if (!segment) return;
+        hasSegment = true;
+        startTime = Math.min(startTime, segment.startTime);
+        endTime = Math.max(endTime, segment.endTime);
+        const hourly = getEquivalentHourlyRate(period, current, options);
+        const elapsedMs = Math.max(0, Math.min(nowMs, segment.endTime) - segment.startTime);
+        earnings += hourly * (elapsedMs / (1000 * 60 * 60));
+    });
+
+    if (!hasSegment) return null;
+
+    const durationMs = Math.max(0, endTime - startTime);
+    const elapsedMs = Math.max(0, Math.min(nowMs, endTime) - startTime);
+
+    return {
+        startTime,
+        endTime,
+        durationMs,
+        elapsedMs: Math.min(elapsedMs, durationMs),
+        earnings,
+        isLive: nowMs >= startTime && nowMs < endTime,
+        isComplete: nowMs >= endTime
     };
 }
 
@@ -544,6 +710,8 @@ export function getWorkSettingsFromState(appState = {}) {
     return {
         dailyHours: clampWorkHours(appState.tcDailyHours),
         workingDaysPerWeek: clampWorkingDays(appState.tcWorkingDaysPerWeek),
-        startOfWeek: Number.isFinite(Number(appState.startOfWeek)) ? Number(appState.startOfWeek) : 0
+        startOfWeek: Number.isFinite(Number(appState.startOfWeek)) ? Number(appState.startOfWeek) : 0,
+        defaultStartTime: appState.defaultStartTime || '09:00',
+        schedule: appState.workSchedule
     };
 }
