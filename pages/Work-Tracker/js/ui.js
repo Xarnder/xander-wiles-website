@@ -2,9 +2,12 @@ import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTime
 import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
 import {
     accumulateDailyPayEarnings,
-    computePayEarningsInWindow,
+    assumedHoursByDateKey,
+    collectAssumedWorkSegments,
+    combinePayAndSessionEarnings,
     formatDateKey,
     formatPayRate,
+    formatWorkingDaysAssumption,
     getCombinedEquivalentHourlyRate,
     getCurrentPayUnitProgress,
     getEquivalentHourlyRate,
@@ -12,11 +15,22 @@ import {
     getPayPeriodDisplayName,
     getWorkSettingsFromState,
     isPayPeriodActive,
+    isSessionCoveredByPay,
     PAY_SCALES,
+    payPeriodCoversDay,
     sanitizePayPeriod,
     sumCurrentUnitAccrued
 } from './payPeriods.js';
 import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
+import {
+    BATCH_DELETE_CONFIRM_PHRASE,
+    BATCH_DELETE_RANGE_MODES,
+    currentYearMonthValue,
+    describeBatchDeleteSelection,
+    monthBoundsFromValue,
+    resolveBatchDeleteRange,
+    selectEntriesForBatchDelete
+} from './batchDelete.js';
 import {
     BUDGET_MAX_DIVISIONS,
     BUDGET_MIN_PERCENT,
@@ -122,9 +136,11 @@ export const DOM = {
     nextWeekBtn: document.getElementById('next-week'),
     chartWeekRange: document.getElementById('chart-week-range'),
     chartWeekTotal: document.getElementById('chart-week-total'),
+    chartPayHint: document.getElementById('chart-pay-hint'),
     prevTimelineWeekBtn: document.getElementById('prev-timeline-week'),
     nextTimelineWeekBtn: document.getElementById('next-timeline-week'),
     timelineWeekRange: document.getElementById('timeline-week-range'),
+    timelinePayHint: document.getElementById('timeline-pay-hint'),
     settingsBtn: document.getElementById('settings-btn'),
     settingsView: document.getElementById('settings-view'),
     viewSettingsBtn: document.getElementById('view-settings-btn'),
@@ -141,6 +157,28 @@ export const DOM = {
     startOfWeekSelect: document.getElementById('start-of-week-select'),
     widgetSpacingSelect: document.getElementById('widget-spacing-select'),
     saveSettingsBtn: document.getElementById('save-settings'),
+    settingsTabButtons: document.querySelectorAll('.settings-tab-btn'),
+    settingsTabPreferences: document.getElementById('settings-tab-preferences'),
+    settingsTabBatchEdit: document.getElementById('settings-tab-batch-edit'),
+    settingsPanelPreferences: document.getElementById('settings-panel-preferences'),
+    settingsPanelBatchEdit: document.getElementById('settings-panel-batch-edit'),
+    settingsSaveFooter: document.getElementById('settings-save-footer'),
+    batchDeleteRangeModeButtons: document.querySelectorAll('[data-batch-delete-range-mode]'),
+    batchDeleteMonthFields: document.getElementById('batch-delete-month-fields'),
+    batchDeleteMonth: document.getElementById('batch-delete-month'),
+    batchDeleteCustomFields: document.getElementById('batch-delete-custom-fields'),
+    batchDeleteFrom: document.getElementById('batch-delete-from'),
+    batchDeleteTo: document.getElementById('batch-delete-to'),
+    batchDeleteSessions: document.getElementById('batch-delete-sessions'),
+    batchDeleteBreaks: document.getElementById('batch-delete-breaks'),
+    batchDeletePreview: document.getElementById('batch-delete-preview'),
+    batchDeleteOpenBtn: document.getElementById('batch-delete-open-btn'),
+    batchDeleteModal: document.getElementById('batch-delete-modal'),
+    batchDeleteModalMessage: document.getElementById('batch-delete-modal-message'),
+    batchDeleteConfirmInput: document.getElementById('batch-delete-confirm-input'),
+    batchDeleteConfirmBtn: document.getElementById('batch-delete-confirm-btn'),
+    batchDeleteCancelBtn: document.getElementById('batch-delete-cancel-btn'),
+    closeBatchDeleteModalBtn: document.getElementById('close-batch-delete-modal'),
     alertModal: document.getElementById('alert-modal'),
     alertTitle: document.getElementById('alert-title'),
     alertMessage: document.getElementById('alert-message'),
@@ -363,6 +401,124 @@ export function showConfirm(title, message) {
     });
 }
 
+export function getBatchDeleteFormState() {
+    const activeModeBtn = [...(DOM.batchDeleteRangeModeButtons || [])]
+        .find((button) => button.classList.contains('active'));
+    const mode = activeModeBtn?.dataset.batchDeleteRangeMode === BATCH_DELETE_RANGE_MODES.CUSTOM
+        ? BATCH_DELETE_RANGE_MODES.CUSTOM
+        : BATCH_DELETE_RANGE_MODES.MONTH;
+
+    return {
+        mode,
+        monthValue: DOM.batchDeleteMonth?.value || '',
+        fromDate: DOM.batchDeleteFrom?.value || '',
+        toDate: DOM.batchDeleteTo?.value || '',
+        includeSessions: Boolean(DOM.batchDeleteSessions?.checked),
+        includeBreaks: Boolean(DOM.batchDeleteBreaks?.checked)
+    };
+}
+
+export function setSettingsTab(tab = 'preferences') {
+    const isBatchEdit = tab === 'batch-edit';
+
+    DOM.settingsTabButtons?.forEach((button) => {
+        const active = button.dataset.settingsTab === tab;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    DOM.settingsPanelPreferences?.classList.toggle('hidden', isBatchEdit);
+    DOM.settingsPanelBatchEdit?.classList.toggle('hidden', !isBatchEdit);
+    DOM.settingsView?.classList.toggle('settings-tab-batch-edit', isBatchEdit);
+}
+
+export function setBatchDeleteRangeMode(mode = BATCH_DELETE_RANGE_MODES.MONTH) {
+    const isCustom = mode === BATCH_DELETE_RANGE_MODES.CUSTOM;
+
+    DOM.batchDeleteRangeModeButtons?.forEach((button) => {
+        button.classList.toggle('active', button.dataset.batchDeleteRangeMode === mode);
+    });
+    DOM.batchDeleteMonthFields?.classList.toggle('hidden', isCustom);
+    DOM.batchDeleteCustomFields?.classList.toggle('hidden', !isCustom);
+
+    if (isCustom && DOM.batchDeleteFrom && DOM.batchDeleteTo && !DOM.batchDeleteFrom.value && !DOM.batchDeleteTo.value) {
+        const bounds = monthBoundsFromValue(DOM.batchDeleteMonth?.value || currentYearMonthValue());
+        if (bounds) {
+            DOM.batchDeleteFrom.value = bounds.fromDate;
+            DOM.batchDeleteTo.value = bounds.toDate;
+        }
+    }
+
+    updateBatchDeletePreview();
+}
+
+export function initBatchDeleteForm() {
+    if (DOM.batchDeleteMonth && !DOM.batchDeleteMonth.value) {
+        DOM.batchDeleteMonth.value = currentYearMonthValue();
+    }
+    setBatchDeleteRangeMode(getBatchDeleteFormState().mode);
+}
+
+export function updateBatchDeletePreview() {
+    const form = getBatchDeleteFormState();
+    const range = resolveBatchDeleteRange(form);
+    const selection = selectEntriesForBatchDelete({
+        sessions: state.rawSessions,
+        breaks: state.rawBreaks,
+        includeSessions: form.includeSessions,
+        includeBreaks: form.includeBreaks,
+        range
+    });
+    const description = describeBatchDeleteSelection(selection, range, {
+        includeSessions: form.includeSessions,
+        includeBreaks: form.includeBreaks
+    });
+
+    if (DOM.batchDeletePreview) {
+        DOM.batchDeletePreview.textContent = description.text;
+    }
+    if (DOM.batchDeleteOpenBtn) {
+        DOM.batchDeleteOpenBtn.disabled = !description.canDelete;
+    }
+
+    return { form, range, selection, description };
+}
+
+export function syncBatchDeleteConfirmInput() {
+    const matches = String(DOM.batchDeleteConfirmInput?.value || '').trim() === BATCH_DELETE_CONFIRM_PHRASE;
+    if (DOM.batchDeleteConfirmBtn) {
+        DOM.batchDeleteConfirmBtn.disabled = !matches;
+    }
+    return matches;
+}
+
+export function openBatchDeleteConfirmModal(message) {
+    if (!DOM.batchDeleteModal) return;
+
+    if (DOM.batchDeleteModalMessage) {
+        DOM.batchDeleteModalMessage.textContent = message || '';
+    }
+    if (DOM.batchDeleteConfirmInput) {
+        DOM.batchDeleteConfirmInput.value = '';
+    }
+    if (DOM.batchDeleteConfirmBtn) {
+        DOM.batchDeleteConfirmBtn.textContent = 'Delete entries';
+        DOM.batchDeleteConfirmBtn.disabled = true;
+    }
+    DOM.batchDeleteModal.classList.remove('hidden');
+    DOM.batchDeleteConfirmInput?.focus();
+}
+
+export function closeBatchDeleteConfirmModal() {
+    DOM.batchDeleteModal?.classList.add('hidden');
+    if (DOM.batchDeleteConfirmInput) {
+        DOM.batchDeleteConfirmInput.value = '';
+    }
+    if (DOM.batchDeleteConfirmBtn) {
+        DOM.batchDeleteConfirmBtn.textContent = 'Delete entries';
+        DOM.batchDeleteConfirmBtn.disabled = true;
+    }
+}
+
 export function updateCurrencyDisplays() {
     const symbolSpans = document.querySelectorAll('.currency-symbol');
     symbolSpans.forEach(span => { span.textContent = state.currentCurrency; });
@@ -507,11 +663,46 @@ function renderMoneyStack(container, count, type, key) {
 }
 
 function getPayWorkOptions() {
-    return { startOfWeek: state.startOfWeek };
+    return {
+        startOfWeek: state.startOfWeek,
+        defaultStartTime: state.defaultStartTime || '09:00',
+        dailyHours: state.tcDailyHours,
+        workingDaysPerWeek: state.tcWorkingDaysPerWeek
+    };
 }
 
 function getVisiblePayPeriods() {
     return Array.isArray(state.allPayPeriods) ? state.allPayPeriods : [];
+}
+
+function getPayAwareLiveSession() {
+    if (!state.startTime) return null;
+    const elapsedMs = Date.now() - state.startTime;
+    return {
+        startTime: state.startTime,
+        endTime: Date.now(),
+        durationMs: elapsedMs,
+        company: state.currentCompany,
+        project: state.currentProject,
+        earnings: (elapsedMs / (1000 * 60 * 60)) * (state.currentSessionRate || 0)
+    };
+}
+
+function getAssumedWorkForRange(rangeStart, rangeEnd) {
+    const live = getPayAwareLiveSession();
+    const sessions = live ? [...state.allSessions, live] : state.allSessions;
+    return collectAssumedWorkSegments(getVisiblePayPeriods(), rangeStart, rangeEnd, {
+        sessions,
+        breaks: state.allBreaks,
+        ...getPayWorkOptions(),
+        now: new Date()
+    });
+}
+
+function getPayScheduleHint() {
+    const periods = getVisiblePayPeriods();
+    if (!periods.length) return '';
+    return `Green pay blocks use ${formatWorkingDaysAssumption(state.tcDailyHours, state.tcWorkingDaysPerWeek)} from Time Cost, starting at ${state.defaultStartTime || '09:00'}. Logged sessions replace that assumed block. Only sessions not covered by pay add extra money.`;
 }
 
 function hasActivePayAccrual(now = new Date()) {
@@ -524,8 +715,11 @@ function getSessionLiveEarnings() {
 }
 
 function getLiveMoneyCounterEarnings(sessionEarned = 0, now = new Date()) {
-    return Math.max(Number(sessionEarned) || 0, 0)
-        + sumCurrentUnitAccrued(getVisiblePayPeriods(), now, getPayWorkOptions());
+    const live = getPayAwareLiveSession();
+    const extraSession = live && isSessionCoveredByPay(live, getVisiblePayPeriods())
+        ? 0
+        : Math.max(Number(sessionEarned) || 0, 0);
+    return extraSession + sumCurrentUnitAccrued(getVisiblePayPeriods(), now, getPayWorkOptions());
 }
 
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
@@ -662,20 +856,21 @@ export function renderCustomStatsPeriods() {
 
     state.customStatsPeriods.forEach((period) => {
         const config = getCustomStatsPeriodConfig(period, now);
-        const { totalMs, totalGrossMs, totalBreakMs, totalEarnings } = calculateRollingPeriodTotals(
+        const { totalMs, totalGrossMs, totalBreakMs } = calculateRollingPeriodTotals(
             state.allSessions,
             config.start,
             config.end,
             state.allBreaks
         );
-        const payEarnings = computePayEarningsInWindow(
+        const combinedEarnings = combinePayAndSessionEarnings(
+            state.allSessions,
+            state.allBreaks,
             getVisiblePayPeriods(),
             config.start,
             config.end,
             now,
             getPayWorkOptions()
         );
-        const combinedEarnings = totalEarnings + payEarnings;
 
         const item = document.createElement('div');
         item.className = 'stat-item stat-item-custom';
@@ -722,6 +917,8 @@ function getAnalyticsSessions() {
             startTime: state.startTime,
             endTime: Date.now(),
             durationMs: elapsedMs,
+            company: state.currentCompany,
+            project: state.currentProject,
             earnings: (elapsedMs / (1000 * 60 * 60)) * (state.currentSessionRate || 0)
         });
     }
@@ -861,8 +1058,13 @@ export function updateBatchModalForMode() {
 
 export function renderWorkPatternBreakdown() {
     const monthlyConfig = getMonthlyStatsConfig(state.statsPeriodMode);
+    const payPeriods = getVisiblePayPeriods();
+    const sessions = getAnalyticsSessions().map((session) => (
+        isSessionCoveredByPay(session, payPeriods) ? { ...session, earnings: 0 } : session
+    ));
+    const assumed = getAssumedWorkForRange(monthlyConfig.start, monthlyConfig.end);
     const analytics = computeWorkPatternAnalytics(
-        getAnalyticsSessions(),
+        [...sessions, ...assumed],
         monthlyConfig.start,
         monthlyConfig.end,
         getAmountAfterPercentageCuts,
@@ -887,8 +1089,10 @@ export function renderWorkPatternBreakdown() {
         DOM.workPatternAvgHoursDay.textContent = formatAverageHours(analytics.avgHoursPerDay);
     }
 
-    const payEarnings = computePayEarningsInWindow(
-        getVisiblePayPeriods(),
+    const combinedEarnings = combinePayAndSessionEarnings(
+        getAnalyticsSessions(),
+        state.allBreaks,
+        payPeriods,
         monthlyConfig.start,
         monthlyConfig.end,
         new Date(),
@@ -898,14 +1102,9 @@ export function renderWorkPatternBreakdown() {
         ((monthlyConfig.end?.getTime?.() || Date.now()) - (monthlyConfig.start?.getTime?.() || Date.now())) / 86400000,
         1
     );
-    let avgBefore = analytics.avgEarningsBefore;
-    if (payEarnings > 0) {
-        if (analytics.daysWorked > 0 && Number.isFinite(avgBefore)) {
-            avgBefore += payEarnings / analytics.daysWorked;
-        } else {
-            avgBefore = payEarnings / windowDays;
-        }
-    }
+    const avgBefore = combinedEarnings > 0
+        ? combinedEarnings / (analytics.daysWorked > 0 ? analytics.daysWorked : windowDays)
+        : analytics.avgEarningsBefore;
     const avgAfter = Number.isFinite(avgBefore) ? getAmountAfterPercentageCuts(avgBefore) : null;
 
     if (DOM.workPatternAvgEarningsBefore) {
@@ -1403,6 +1602,8 @@ export function renderCalendar() {
         todayDate,
         getPayWorkOptions()
     );
+    const assumedSegments = getAssumedWorkForRange(gridStartDate, gridEndDate);
+    const dailyAssumedHours = assumedHoursByDateKey(assumedSegments);
     const todayKey = getCalendarDateKey(todayDate);
 
     for (let week = 0; week < totalWeeks; week++) {
@@ -1410,6 +1611,7 @@ export function renderCalendar() {
         let weekGrossHours = 0;
         let weekBreakHours = 0;
         let weekPay = 0;
+        let weekAssumedHours = 0;
 
         for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
             const cellDate = new Date(gridStartDate);
@@ -1422,11 +1624,14 @@ export function renderCalendar() {
             const grossHours = dailyGrossHours[dateKey] || 0;
             const breakHours = dailyBreakHours[dateKey] || 0;
             const payAmount = dailyPay[dateKey] || 0;
+            const assumedHours = dailyAssumedHours[dateKey] || 0;
+            const hasPayCoverage = isCurrentMonth && getVisiblePayPeriods().some((period) => payPeriodCoversDay(period, cellDate));
 
             weekNetHours += netHours;
             weekGrossHours += grossHours;
             weekBreakHours += breakHours;
             weekPay += payAmount;
+            weekAssumedHours += assumedHours;
 
             const dayDiv = document.createElement('div');
             dayDiv.className = 'calendar-day';
@@ -1474,7 +1679,7 @@ export function renderCalendar() {
                 }
             } else if (netHours > 0) {
                 dayDiv.classList.add('has-work');
-                if (payAmount > 0) dayDiv.classList.add('has-pay');
+                if (hasPayCoverage) dayDiv.classList.add('has-pay');
                 const hourLabel = document.createElement('div');
                 hourLabel.className = 'work-hours-indicator';
                 const hasBreakTime = breakHours > 0 || (grossHours > 0 && Math.abs(grossHours - netHours) > 0.05);
@@ -1487,12 +1692,33 @@ export function renderCalendar() {
                     dayDiv.appendChild(breakDot);
                 }
                 dayDiv.appendChild(hourLabel);
-            } else if (payAmount > 0) {
+                if (hasPayCoverage) {
+                    const payMark = document.createElement('div');
+                    payMark.className = 'calendar-pay-mark';
+                    payMark.textContent = 'Pay';
+                    payMark.title = 'Salary covers this day. Logged hours replace the assumed block. Only uncovered sessions add extra pay.';
+                    dayDiv.appendChild(payMark);
+                }
+            } else if (assumedHours > 0) {
+                dayDiv.classList.add('has-pay', 'has-assumed-pay');
+                const hourLabel = document.createElement('div');
+                hourLabel.className = 'assumed-hours-indicator';
+                hourLabel.textContent = `${assumedHours.toFixed(1)}h`;
+                hourLabel.title = 'Assumed hours from monthly pay';
+                dayDiv.appendChild(hourLabel);
+                const payMark = document.createElement('div');
+                payMark.className = 'calendar-pay-mark';
+                payMark.textContent = 'Pay';
+                dayDiv.appendChild(payMark);
+            } else if (hasPayCoverage) {
                 dayDiv.classList.add('has-pay');
-                const payLabel = document.createElement('div');
-                payLabel.className = 'pay-amount-indicator';
-                payLabel.textContent = formatCalendarPayAmount(payAmount);
-                dayDiv.appendChild(payLabel);
+                const payMark = document.createElement('div');
+                payMark.className = 'calendar-pay-mark';
+                payMark.textContent = 'Pay';
+                payMark.title = payAmount > 0
+                    ? `Salary covers this day (${formatCalendarPayAmount(payAmount)} accrued)`
+                    : 'Salary covers this day';
+                dayDiv.appendChild(payMark);
             }
 
             DOM.calendarGrid.appendChild(dayDiv);
@@ -1509,12 +1735,17 @@ export function renderCalendar() {
                 weekTotalDiv.classList.add('is-empty');
                 weekTotalDiv.textContent = '—';
             }
-        } else if (weekNetHours > 0) {
+        } else if (weekNetHours > 0 || weekAssumedHours > 0) {
             weekTotalDiv.classList.add('has-work-total');
-            weekTotalDiv.textContent = `${weekNetHours.toFixed(1)}h`;
+            if (weekAssumedHours > 0) weekTotalDiv.classList.add('has-pay-total');
+            weekTotalDiv.textContent = `${(weekNetHours + weekAssumedHours).toFixed(1)}h`;
+            const titles = [];
+            if (weekNetHours > 0) titles.push(`${weekNetHours.toFixed(1)}h logged`);
+            if (weekAssumedHours > 0) titles.push(`${weekAssumedHours.toFixed(1)}h assumed from pay`);
             if (Math.abs(weekGrossHours - weekNetHours) > 0.05) {
-                weekTotalDiv.title = `${weekGrossHours.toFixed(1)}h gross`;
+                titles.push(`${weekGrossHours.toFixed(1)}h gross`);
             }
+            if (titles.length) weekTotalDiv.title = titles.join(' · ');
         } else if (weekPay > 0) {
             weekTotalDiv.classList.add('has-pay-total');
             weekTotalDiv.textContent = formatCalendarPayAmount(weekPay);
@@ -1628,15 +1859,45 @@ export function renderChart() {
         }
     }
 
+    const assumedSegments = getAssumedWorkForRange(startOfWeek, endOfWeek);
+    assumedSegments.forEach((segment) => {
+        const segmentDate = new Date(segment.startTime);
+        const dayIndex = (segmentDate.getDay() - state.startOfWeek + 7) % 7;
+        weekData[dayIndex].push({
+            hours: segment.hours,
+            durationMs: segment.durationMs,
+            company: segment.company || segment.name,
+            project: '',
+            isPayAssumed: true
+        });
+        const dailyTotal = weekData[dayIndex].reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
+        if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
+    });
+
     const weeklyNetMs = weekData.reduce(
         (sum, daySessions) => sum + daySessions.reduce((daySum, sessionObj) => daySum + sessionObj.durationMs, 0),
         0
     );
 
+    const weeklyAssumedMs = assumedSegments.reduce((sum, segment) => sum + (segment.durationMs || 0), 0);
+    const weeklyLoggedMs = weeklyNetMs - weeklyAssumedMs;
+
     if (DOM.chartWeekTotal) {
-        DOM.chartWeekTotal.textContent = weeklyNetMs > 0
-            ? `${formatDuration(weeklyNetMs)} net total`
-            : '0h net total';
+        if (weeklyAssumedMs > 0 && weeklyLoggedMs > 0) {
+            DOM.chartWeekTotal.textContent = `${formatDuration(weeklyNetMs)} total · ${formatDuration(weeklyAssumedMs)} assumed pay`;
+        } else if (weeklyAssumedMs > 0) {
+            DOM.chartWeekTotal.textContent = `${formatDuration(weeklyAssumedMs)} assumed pay hours`;
+        } else {
+            DOM.chartWeekTotal.textContent = weeklyNetMs > 0
+                ? `${formatDuration(weeklyNetMs)} net total`
+                : '0h net total';
+        }
+    }
+
+    if (DOM.chartPayHint) {
+        const hint = getPayScheduleHint();
+        DOM.chartPayHint.textContent = hint;
+        DOM.chartPayHint.classList.toggle('hidden', !hint);
     }
 
     const weekEndLimitMs = Math.min(endOfWeekMs, Date.now());
@@ -1663,6 +1924,13 @@ export function renderChart() {
             }
         }
     }
+
+    assumedSegments.forEach((segment) => {
+        if (segment.durationMs > 0) {
+            totalSessionMs += segment.durationMs;
+            sessionCount += 1;
+        }
+    });
 
     const avgSessionMs = sessionCount > 0 ? totalSessionMs / sessionCount : 0;
     const avgSessionHours = avgSessionMs / (1000 * 60 * 60);
@@ -1713,22 +1981,29 @@ export function renderChart() {
         weekData[index].forEach((sessionObj, sIndex) => {
             const hrs = sessionObj.hours;
             const bar = document.createElement('div');
-            bar.className = `chart-sub-session${sessionObj.isLive ? ' chart-sub-session-live' : ''}`;
+            bar.className = `chart-sub-session${sessionObj.isLive ? ' chart-sub-session-live' : ''}${sessionObj.isPayAssumed ? ' chart-sub-session-pay' : ''}`;
             bar.style.height = `${(hrs / scaleMax) * 100}%`;
 
             // Determine color based on project or company
             const identifier = sessionObj.project || sessionObj.company || 'default';
             const color = getColorForIdentifier(identifier);
-            if (!sessionObj.isLive) {
+            if (!sessionObj.isLive && !sessionObj.isPayAssumed) {
                 bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
             }
 
-            let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
+            let titlePrefix = sessionObj.isPayAssumed
+                ? 'Assumed pay hours · '
+                : (sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : ''));
             const livePrefix = sessionObj.isLive ? 'Live · ' : '';
             bar.title = `${livePrefix}${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
 
             // Add persistent label if an identifier exists
-            if (identifier !== 'default' && !sessionObj.isLive) {
+            if (sessionObj.isPayAssumed) {
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'chart-bar-label';
+                labelSpan.textContent = 'Pay';
+                bar.appendChild(labelSpan);
+            } else if (identifier !== 'default' && !sessionObj.isLive) {
                 const labelSpan = document.createElement('span');
                 labelSpan.className = 'chart-bar-label';
                 labelSpan.textContent = sessionObj.project || sessionObj.company;
@@ -1788,6 +2063,17 @@ export function renderGanttChart() {
     if (DOM.timelineWeekRange) {
         DOM.timelineWeekRange.textContent = formatWeekRange(startOfWeek);
     }
+    if (DOM.timelinePayHint) {
+        const hint = getPayScheduleHint();
+        DOM.timelinePayHint.textContent = hint;
+        DOM.timelinePayHint.classList.toggle('hidden', !hint);
+    }
+
+    const timelineEnd = new Date(startOfWeek);
+    timelineEnd.setDate(startOfWeek.getDate() + 7);
+    const assumedByDay = new Map(
+        getAssumedWorkForRange(startOfWeek, timelineEnd).map((segment) => [segment.dateKey, segment])
+    );
 
     // Header Row for hour markers
     const headerRow = document.createElement('div');
@@ -1848,13 +2134,15 @@ export function renderGanttChart() {
             }
 
             const block = document.createElement('div');
-            block.className = `gantt-block ${isLive ? 'gantt-live' : ''} ${blockType === 'break' ? 'gantt-break' : ''}`;
+            block.className = `gantt-block ${isLive ? 'gantt-live' : ''} ${blockType === 'break' ? 'gantt-break' : ''} ${blockType === 'pay' ? 'gantt-pay' : ''}`;
             block.style.left = `${leftPercent}%`;
             block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%';
 
             let color;
             if (blockType === 'break') {
                 color = 'rgba(255, 152, 0, 0.85)';
+            } else if (blockType === 'pay') {
+                color = 'rgba(0, 230, 118, 0.78)';
             } else {
                 const identifier = project || company || 'default';
                 color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
@@ -1865,7 +2153,9 @@ export function renderGanttChart() {
 
             let titlePrefix = blockType === 'break'
                 ? 'Break: '
-                : (project ? `[${project}] ` : (company ? `[${company}] ` : ''));
+                : blockType === 'pay'
+                    ? 'Assumed pay hours: '
+                    : (project ? `[${project}] ` : (company ? `[${company}] ` : ''));
             block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
 
             if (widthPercent > 4) {
@@ -1874,6 +2164,8 @@ export function renderGanttChart() {
                 const durationText = formatDuration(durationMs);
                 if (blockType === 'break') {
                     label.textContent = durationText;
+                } else if (blockType === 'pay') {
+                    label.textContent = `Pay (${durationText})`;
                 } else if ((project || company) && (project || company) !== 'default') {
                     label.textContent = `${project || company} (${durationText})`;
                 } else {
@@ -1884,6 +2176,19 @@ export function renderGanttChart() {
 
             rowContainer.appendChild(block);
         };
+
+        const dateKey = getCalendarDateKey(dayDate);
+        const assumed = assumedByDay.get(dateKey);
+        if (assumed) {
+            addGanttBlock(
+                new Date(assumed.startTime),
+                assumed.durationMs,
+                assumed.name,
+                assumed.company,
+                false,
+                'pay'
+            );
+        }
 
         const dayBreaks = state.allBreaks.filter(breakItem => {
             const range = getSessionTimeRange(breakItem);
@@ -2044,9 +2349,7 @@ export function updatePayPeriodPreview() {
     const hourly = getEquivalentHourlyRate(period, now);
     const progress = getCurrentPayUnitProgress(period, now, getPayWorkOptions());
     const afterCuts = getAmountAfterPercentageCuts(progress.accrued);
-    const hourNote = period.scale === PAY_SCALES.HOUR
-        ? ` Hourly pay is spread across ${period.dailyHours}h × ${period.workingDaysPerWeek} working days each week.`
-        : '';
+    const hourNote = ` Calendar, weekly breakdown, and timeline assume ${formatWorkingDaysAssumption(state.tcDailyHours, state.tcWorkingDaysPerWeek)} starting at ${state.defaultStartTime || '09:00'}. Logged sessions replace that assumed block. Only sessions not covered by this pay add extra money.`;
 
     DOM.payPeriodPreview.textContent = `${formatPayRate(period.amount, period.scale, state.currentCurrency)} · ≈ ${state.currentCurrency}${hourly.toFixed(2)}/h. ${progress.label}: ${state.currentCurrency}${progress.accrued.toFixed(2)} of ${state.currentCurrency}${progress.contracted.toFixed(2)} accrued${state.percentageCuts.length ? ` (${state.currentCurrency}${afterCuts.toFixed(2)} after cuts)` : ''}.${hourNote}`;
     DOM.payPeriodPreview.classList.remove('hidden');
@@ -2116,7 +2419,7 @@ export function renderPayWidget() {
 
     if (!periods.length) {
         DOM.payWidgetSummary.classList.add('is-empty');
-        DOM.payWidgetSummary.innerHTML = '<p class="loading-text" style="margin: 0;">Add a monthly salary or other pay scale. Stats, the money counter, and saving pots will use it without logging each day.</p>';
+        DOM.payWidgetSummary.innerHTML = '<p class="loading-text" style="margin: 0;">Add a monthly salary or other pay scale. Calendar, weekly breakdown, and timeline show assumed work hours. Stats, the money counter, and saving pots use salary plus any sessions not already covered by that pay.</p>';
     } else {
         DOM.payWidgetSummary.classList.remove('is-empty');
         const label = activePeriods[0]

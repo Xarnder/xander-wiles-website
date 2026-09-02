@@ -1,9 +1,9 @@
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
 import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
-import { computePayEarningsInWindow, filterPayPeriods, serializePayPeriod } from './payPeriods.js';
+import { combinePayAndSessionEarnings, filterPayPeriods, serializePayPeriod, isSessionCoveredByPay } from './payPeriods.js';
 import {
     sanitizePoolScope,
     computeSavingPotStateFromAppState,
@@ -14,6 +14,7 @@ import {
     roundMoney
 } from './savingPots.js';
 import { createSeedBudgetPlan, sanitizeBudgetPlan, validateBudgetPlan } from './budgeting.js';
+import { chunkItems, FIRESTORE_BATCH_LIMIT } from './batchDelete.js';
 
 function firestoreWriteErrorMessage(error, fallback) {
     const code = error?.code || '';
@@ -252,6 +253,48 @@ export async function deleteBreak(breakId) {
     } catch (e) {
         console.error("Debug: Error deleting break document: ", e);
         showAlert("Error", "There was an error deleting this break.");
+    }
+}
+
+export async function deleteBatchEntries(sessionIds = [], breakIds = []) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before deleting entries.");
+        return { ok: false, deleted: 0 };
+    }
+
+    const operations = [
+        ...sessionIds.filter(Boolean).map((id) => ({ collectionName: 'sessions', id })),
+        ...breakIds.filter(Boolean).map((id) => ({ collectionName: 'breaks', id }))
+    ];
+
+    if (!operations.length) {
+        return { ok: false, deleted: 0 };
+    }
+
+    try {
+        const uid = state.currentUser.uid;
+        for (const chunk of chunkItems(operations, FIRESTORE_BATCH_LIMIT)) {
+            const batch = writeBatch(db);
+            chunk.forEach((operation) => {
+                batch.delete(doc(db, "users", uid, operation.collectionName, operation.id));
+            });
+            await batch.commit();
+        }
+
+        const sessionCount = sessionIds.filter(Boolean).length;
+        const breakCount = breakIds.filter(Boolean).length;
+        const parts = [];
+        if (sessionCount) parts.push(`${sessionCount} paid session${sessionCount === 1 ? '' : 's'}`);
+        if (breakCount) parts.push(`${breakCount} break${breakCount === 1 ? '' : 's'}`);
+        return {
+            ok: true,
+            deleted: operations.length,
+            message: `Deleted ${parts.join(' and ')}.`
+        };
+    } catch (e) {
+        console.error("Debug: Error batch deleting entries: ", e);
+        showAlert("Delete Error", firestoreWriteErrorMessage(e, "There was an error deleting those entries."));
+        return { ok: false, deleted: 0 };
     }
 }
 
@@ -733,15 +776,17 @@ export function renderDashboardData() {
     totalDailyMs = dailyTotals.totalMs;
     totalDailyGrossMs = dailyTotals.totalGrossMs;
     totalDailyBreakMs = dailyTotals.totalBreakMs;
-    totalDailyEarnings = dailyTotals.totalEarnings
-        + computePayEarningsInWindow(state.allPayPeriods, startOfDay, endOfDay, now, payOptions);
+    totalDailyEarnings = combinePayAndSessionEarnings(
+        state.allSessions, breaks, state.allPayPeriods, startOfDay, endOfDay, now, payOptions
+    );
 
     const weeklyTotals = calculateRollingPeriodTotals(state.allSessions, startOfWeek, endOfWeek, breaks);
     totalWeeklyMs = weeklyTotals.totalMs;
     totalWeeklyGrossMs = weeklyTotals.totalGrossMs;
     totalWeeklyBreakMs = weeklyTotals.totalBreakMs;
-    totalWeeklyEarnings = weeklyTotals.totalEarnings
-        + computePayEarningsInWindow(state.allPayPeriods, startOfWeek, endOfWeek, now, payOptions);
+    totalWeeklyEarnings = combinePayAndSessionEarnings(
+        state.allSessions, breaks, state.allPayPeriods, startOfWeek, endOfWeek, now, payOptions
+    );
 
     if (state.statsPeriodMode === STATS_PERIOD_MODES.ROLLING) {
         const monthlyTotals = calculateRollingPeriodTotals(
@@ -753,14 +798,15 @@ export function renderDashboardData() {
         totalMonthlyMs = monthlyTotals.totalMs;
         totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
         totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
-        totalMonthlyEarnings = monthlyTotals.totalEarnings
-            + computePayEarningsInWindow(
-                state.allPayPeriods,
-                monthlyStatsConfig.start,
-                monthlyStatsConfig.end,
-                now,
-                payOptions
-            );
+        totalMonthlyEarnings = combinePayAndSessionEarnings(
+            state.allSessions,
+            breaks,
+            state.allPayPeriods,
+            monthlyStatsConfig.start,
+            monthlyStatsConfig.end,
+            now,
+            payOptions
+        );
     } else {
         const monthlyTotals = calculateCalendarPeriodTotals(
             state.allSessions,
@@ -771,22 +817,24 @@ export function renderDashboardData() {
         totalMonthlyMs = monthlyTotals.totalMs;
         totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
         totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
-        totalMonthlyEarnings = monthlyTotals.totalEarnings
-            + computePayEarningsInWindow(
-                state.allPayPeriods,
-                monthlyStatsConfig.start,
-                monthlyStatsConfig.end,
-                now,
-                payOptions
-            );
+        totalMonthlyEarnings = combinePayAndSessionEarnings(
+            state.allSessions,
+            breaks,
+            state.allPayPeriods,
+            monthlyStatsConfig.start,
+            monthlyStatsConfig.end,
+            now,
+            payOptions
+        );
     }
 
     const sixMonthTotals = calculateCalendarPeriodTotals(state.allSessions, startOfSixMonths, breaks, now);
     totalSixMonthsMs = sixMonthTotals.totalMs;
     totalSixMonthsGrossMs = sixMonthTotals.totalGrossMs;
     totalSixMonthsBreakMs = sixMonthTotals.totalBreakMs;
-    totalSixMonthsEarnings = sixMonthTotals.totalEarnings
-        + computePayEarningsInWindow(state.allPayPeriods, startOfSixMonths, now, now, payOptions);
+    totalSixMonthsEarnings = combinePayAndSessionEarnings(
+        state.allSessions, breaks, state.allPayPeriods, startOfSixMonths, now, now, payOptions
+    );
 
     // Pagination bounds check
     const pageSize = 5;
@@ -825,13 +873,20 @@ export function renderDashboardData() {
         const sessionEarnings = sessionMetrics.breakMs > 0
             ? sessionMetrics.effectiveEarnings
             : (Number(data.earnings) || 0);
+        const coveredByPay = isSessionCoveredByPay(data, state.allPayPeriods);
         const afterCutsEarnings = getAmountAfterPercentageCuts(sessionEarnings);
-        const afterCutsHtml = state.percentageCuts.length
+        const afterCutsHtml = !coveredByPay && state.percentageCuts.length
             ? `<small class="history-after-cuts">After cuts ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>`
+            : '';
+        const payCoveredNoteHtml = coveredByPay
+            ? `<small class="history-pay-covered-note">Hours only — not added on top of pay</small>`
             : '';
 
         const companyHtml = data.company ? `<span class="history-badge history-badge-company">${data.company}</span>` : '';
         const projectHtml = data.project ? `<span class="history-badge history-badge-project">${data.project}</span>` : '';
+        const payCoveredHtml = coveredByPay
+            ? `<span class="history-badge history-badge-pay">Covered by pay</span>`
+            : '';
         let focusHtml = '';
         if (data.focused === true) {
             focusHtml = `<span class="history-badge history-badge-focus">Focused</span>`;
@@ -858,10 +913,12 @@ export function renderDashboardData() {
                         ${companyHtml}
                         ${projectHtml}
                         ${focusHtml}
+                        ${payCoveredHtml}
                     </div>
                 </div>
                 <div class="history-details">
                     <div>${state.currentCurrency}${sessionEarnings.toFixed(2)}</div>
+                    ${payCoveredNoteHtml}
                     ${afterCutsHtml}
                     <small>@ ${state.currentCurrency}${data.rate}/hr</small>
                 </div>
@@ -984,6 +1041,7 @@ export function renderDashboardData() {
         module.renderGanttChart();
         module.renderSavingPotsWidget();
         module.syncPayAccrualTimer?.();
+        module.updateBatchDeletePreview?.();
         if (DOM.timeCostView && !DOM.timeCostView.classList.contains('hidden')) {
             module.renderSavingPotsSummary();
         }

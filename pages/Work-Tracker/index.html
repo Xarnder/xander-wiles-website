@@ -267,7 +267,7 @@
                         <div class="stats-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Statistics</h2>
                             <p class="stats-period-mode-hint" id="stats-period-mode-hint"></p>
-                            <p class="stats-period-mode-hint">Hours and earnings exclude overlapping break time. Gross time is shown when breaks apply.</p>
+                            <p class="stats-period-mode-hint">Hours are from logged sessions. Earnings use monthly pay plus any sessions not already covered by that pay.</p>
                         </div>
                         <div class="stats-period-mode-toggle" role="group" aria-label="Monthly statistics period">
                             <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
@@ -327,7 +327,7 @@
                         <div class="work-pattern-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Work Pattern</h2>
                             <p class="stats-period-mode-hint" id="work-pattern-period-hint"></p>
-                            <p class="stats-period-mode-hint">Hours and earnings use net session time with breaks subtracted. Start and end times show actual session boundaries.</p>
+                            <p class="stats-period-mode-hint">Assumed weekday hours from Pay fill days without a logged session. Earnings use salary plus any sessions not already covered by that pay.</p>
                         </div>
                         <div class="stats-period-mode-toggle" role="group" aria-label="Work pattern period">
                             <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
@@ -457,8 +457,10 @@
                         </button>
                     </div>
                     <p class="calendar-legend" id="calendar-legend">
-                        <span class="calendar-legend-dot" aria-hidden="true"></span>
-                        Blue dot means the day includes break time. Green pay amounts come from your Pay arrangements.
+                        <span class="calendar-legend-swatch calendar-legend-swatch-logged" aria-hidden="true"></span>
+                        Logged hours
+                        <span class="calendar-legend-swatch calendar-legend-swatch-assumed" aria-hidden="true"></span>
+                        Assumed from Pay. A Pay mark means salary covers that day. Covered sessions add hours, not extra pay.
                     </p>
                     <div class="calendar-grid">
                         <!-- Calendar days will be injected via JS -->
@@ -485,6 +487,7 @@
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
                     </div>
+                    <p class="widget-pay-hint" id="chart-pay-hint"></p>
                 </section>
 
                 <!-- Weekly Gantt Chart -->
@@ -504,6 +507,7 @@
                     <div id="gantt-chart" class="gantt-weekly-wrapper">
                         <!-- Timeline markers and daily rows injected via JS -->
                     </div>
+                    <p class="widget-pay-hint" id="timeline-pay-hint"></p>
                 </section>
 
                 <!-- Calendar / History -->
@@ -742,6 +746,12 @@
                     <h2>Settings</h2>
                 </div>
 
+                <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                    <button type="button" class="settings-tab-btn active" id="settings-tab-preferences" data-settings-tab="preferences" role="tab" aria-selected="true" aria-controls="settings-panel-preferences">Preferences</button>
+                    <button type="button" class="settings-tab-btn" id="settings-tab-batch-edit" data-settings-tab="batch-edit" role="tab" aria-selected="false" aria-controls="settings-panel-batch-edit">Batch Edit</button>
+                </div>
+
+                <div id="settings-panel-preferences" role="tabpanel" aria-labelledby="settings-tab-preferences">
                 <section class="settings-section">
                     <h3 class="settings-section-title">General</h3>
                     <p class="settings-section-desc">App-wide display and behaviour preferences.</p>
@@ -930,9 +940,54 @@
                         </button>
                     </div>
                 </section>
+                </div>
+
+                <div id="settings-panel-batch-edit" class="hidden" role="tabpanel" aria-labelledby="settings-tab-batch-edit">
+                    <section class="settings-section">
+                        <h3 class="settings-section-title">Delete entries</h3>
+                        <p class="settings-section-desc">Remove old hourly paid sessions and/or breaks from a whole month or a custom date range. Monthly pay arrangements are left alone.</p>
+
+                        <div class="input-group">
+                            <label>Time period</label>
+                            <div class="settings-segmented" role="group" aria-label="Delete range type">
+                                <button type="button" class="settings-segment-btn active" data-batch-delete-range-mode="month">Month</button>
+                                <button type="button" class="settings-segment-btn" data-batch-delete-range-mode="custom">Custom period</button>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="batch-delete-month-fields">
+                            <label for="batch-delete-month">Month</label>
+                            <input type="month" id="batch-delete-month" class="currency-dropdown">
+                        </div>
+
+                        <div id="batch-delete-custom-fields" class="csv-export-period-row hidden">
+                            <div class="input-group">
+                                <label for="batch-delete-from">From</label>
+                                <input type="date" id="batch-delete-from" class="currency-dropdown">
+                            </div>
+                            <div class="input-group">
+                                <label for="batch-delete-to">To</label>
+                                <input type="date" id="batch-delete-to" class="currency-dropdown">
+                            </div>
+                        </div>
+
+                        <div class="input-group settings-toggle-row">
+                            <label for="batch-delete-sessions">Paid sessions</label>
+                            <input type="checkbox" id="batch-delete-sessions" class="settings-checkbox" checked>
+                        </div>
+                        <div class="input-group settings-toggle-row">
+                            <label for="batch-delete-breaks">Breaks</label>
+                            <input type="checkbox" id="batch-delete-breaks" class="settings-checkbox">
+                        </div>
+
+                        <p id="batch-delete-preview" class="batch-delete-preview">Choose a period to see how many entries will be deleted.</p>
+
+                        <button id="batch-delete-open-btn" class="btn-danger batch-delete-open-btn" type="button" disabled>Delete entries</button>
+                    </section>
+                </div>
 
             </div>
-            <div class="settings-footer settings-footer-sticky">
+            <div class="settings-footer settings-footer-sticky" id="settings-save-footer">
                 <button id="save-settings" class="btn-primary" type="button">Save Changes</button>
             </div>
         </div>
@@ -956,6 +1011,25 @@
                 <div class="settings-footer" style="justify-content: center; gap: 15px;">
                     <button id="confirm-cancel-btn" class="btn-outline" style="min-width: 120px;">Cancel</button>
                     <button id="confirm-ok-btn" class="btn-danger" style="min-width: 120px;">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Delete Confirmation Modal -->
+        <div id="batch-delete-modal" class="modal-overlay hidden">
+            <div class="modal-content card batch-delete-modal-content">
+                <div class="modal-header">
+                    <h2 id="batch-delete-modal-title">Delete Confirmation</h2>
+                    <button type="button" id="close-batch-delete-modal" class="btn-text" aria-label="Close">&times;</button>
+                </div>
+                <p id="batch-delete-modal-message" class="batch-delete-modal-message"></p>
+                <div class="input-group">
+                    <label for="batch-delete-confirm-input">Please type "Delete Confirmation" to delete those entries.</label>
+                    <input type="text" id="batch-delete-confirm-input" class="currency-dropdown" placeholder="Delete Confirmation" autocomplete="off" autocapitalize="off" spellcheck="false">
+                </div>
+                <div class="settings-footer batch-delete-modal-actions">
+                    <button type="button" id="batch-delete-cancel-btn" class="btn-outline">Cancel</button>
+                    <button type="button" id="batch-delete-confirm-btn" class="btn-danger" disabled>Delete entries</button>
                 </div>
             </div>
         </div>

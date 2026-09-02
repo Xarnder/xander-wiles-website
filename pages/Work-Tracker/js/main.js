@@ -49,7 +49,14 @@ import {
     closePayPeriodModal,
     updatePayPeriodPreview,
     getPayPeriodFormData,
-    syncPayAccrualTimer
+    syncPayAccrualTimer,
+    setSettingsTab,
+    initBatchDeleteForm,
+    setBatchDeleteRangeMode,
+    updateBatchDeletePreview,
+    openBatchDeleteConfirmModal,
+    closeBatchDeleteConfirmModal,
+    syncBatchDeleteConfirmInput
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -91,7 +98,7 @@ import {
     updateBudgetPlan,
     updateBudgetSnapMode
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings, addPayPeriod, updatePayPeriod, deletePayPeriod } from './api.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot, saveBudgetingSettings, addPayPeriod, updatePayPeriod, deletePayPeriod, deleteBatchEntries } from './api.js';
 import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
 import {
     BUDGET_MIN_PERCENT,
@@ -752,6 +759,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderWidgetOrderList();
         renderCustomStatsPeriodsSettings();
         renderSettingsDefaultFields();
+        initBatchDeleteForm();
+        updateBatchDeletePreview();
     }
 
     [DOM.ratePreferenceSelect, DOM.companyPreferenceSelect, DOM.projectPreferenceSelect, DOM.startTimePreferenceSelect]
@@ -814,6 +823,80 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.viewSettingsBtn.click();
         }
     });
+
+    DOM.settingsTabButtons?.forEach((button) => {
+        button.addEventListener('click', () => {
+            setSettingsTab(button.dataset.settingsTab || 'preferences');
+            if (button.dataset.settingsTab === 'batch-edit') {
+                updateBatchDeletePreview();
+            }
+        });
+    });
+
+    DOM.batchDeleteRangeModeButtons?.forEach((button) => {
+        button.addEventListener('click', () => {
+            setBatchDeleteRangeMode(button.dataset.batchDeleteRangeMode);
+        });
+    });
+
+    [DOM.batchDeleteMonth, DOM.batchDeleteFrom, DOM.batchDeleteTo, DOM.batchDeleteSessions, DOM.batchDeleteBreaks]
+        .filter(Boolean)
+        .forEach((field) => {
+            field.addEventListener('input', updateBatchDeletePreview);
+            field.addEventListener('change', updateBatchDeletePreview);
+        });
+
+    let pendingBatchDelete = null;
+
+    if (DOM.batchDeleteOpenBtn) {
+        DOM.batchDeleteOpenBtn.addEventListener('click', () => {
+            const preview = updateBatchDeletePreview();
+            if (!preview.description.canDelete) {
+                showAlert('Nothing to Delete', preview.description.text);
+                return;
+            }
+
+            pendingBatchDelete = {
+                sessionIds: [...preview.selection.sessionIds],
+                breakIds: [...preview.selection.breakIds]
+            };
+            openBatchDeleteConfirmModal(preview.description.confirmMessage);
+        });
+    }
+
+    const closePendingBatchDelete = () => {
+        pendingBatchDelete = null;
+        closeBatchDeleteConfirmModal();
+    };
+
+    DOM.batchDeleteCancelBtn?.addEventListener('click', closePendingBatchDelete);
+    DOM.closeBatchDeleteModalBtn?.addEventListener('click', closePendingBatchDelete);
+
+    DOM.batchDeleteConfirmInput?.addEventListener('input', syncBatchDeleteConfirmInput);
+    DOM.batchDeleteConfirmInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            DOM.batchDeleteConfirmBtn?.click();
+        }
+    });
+
+    if (DOM.batchDeleteConfirmBtn) {
+        DOM.batchDeleteConfirmBtn.addEventListener('click', async () => {
+            if (!syncBatchDeleteConfirmInput() || !pendingBatchDelete) return;
+
+            const { sessionIds, breakIds } = pendingBatchDelete;
+            DOM.batchDeleteConfirmBtn.disabled = true;
+            DOM.batchDeleteConfirmBtn.textContent = 'Deleting...';
+
+            const result = await deleteBatchEntries(sessionIds, breakIds);
+            closePendingBatchDelete();
+            updateBatchDeletePreview();
+
+            if (result.ok) {
+                await showAlert('Entries Deleted', result.message);
+            }
+        });
+    }
 
     if (DOM.toggleWidgetOrderBtn) {
         DOM.toggleWidgetOrderBtn.addEventListener('click', () => {
@@ -2307,10 +2390,12 @@ document.addEventListener('DOMContentLoaded', () => {
             computePayEarningsInWindow,
             getPayCompanyLabel,
             getPayPeriodDateLabel,
-            getPayPeriodDisplayName
+            getPayPeriodDisplayName,
+            isSessionCoveredByPay
         }]) => {
                 const currency = state.currentCurrency;
                 const breaks = state.allBreaks;
+                const uncoveredSessions = sessions.filter((session) => !isSessionCoveredByPay(session, payPeriods));
 
                 const summaryMetricHeaders = [
                     "Total Net Duration",
@@ -2469,7 +2554,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ])
                 );
 
-                const companyTotals = computeCompanyTotalsAll(sessions, breaks);
+                const companyTotals = computeCompanyTotalsAll(uncoveredSessions, breaks);
                 const companyMap = new Map(companyTotals.map((entry) => [entry.company, { ...entry }]));
                 payPeriods.forEach((period) => {
                     const company = getPayCompanyLabel(period);
@@ -2491,7 +2576,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 const monthlyTotals = (() => {
-                    const existing = computeMonthlyTotals(sessions, breaks);
+                    const existing = computeMonthlyTotals(uncoveredSessions, breaks);
                     const byStart = new Map(existing.map((month) => [month.periodStart, month]));
                     const monthNames = [
                         'January', 'February', 'March', 'April', 'May', 'June',
@@ -2541,7 +2626,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 appendCsvSection(
                     "Monthly Totals by Company",
                     ["Month", "Period Start", "Period End", "Company", ...summaryMetricHeaders],
-                    computeMonthlyTotalsByCompany(sessions, breaks).map((entry) => [
+                    computeMonthlyTotalsByCompany(uncoveredSessions, breaks).map((entry) => [
                         entry.month,
                         entry.periodStart,
                         entry.periodEnd,
@@ -2551,7 +2636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 const customPeriodTotals = computeCustomPeriodTotals(
-                    sessions,
+                    uncoveredSessions,
                     breaks,
                     state.csvExportPeriodFrom,
                     state.csvExportPeriodTo
@@ -2573,7 +2658,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         "Custom Period Totals by Company",
                         ["Period", "Period Start", "Period End", "Company", ...summaryMetricHeaders],
                         computeCustomPeriodTotalsByCompany(
-                            sessions,
+                            uncoveredSessions,
                             breaks,
                             state.csvExportPeriodFrom,
                             state.csvExportPeriodTo

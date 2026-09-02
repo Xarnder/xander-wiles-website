@@ -3,7 +3,7 @@ import {
     getEffectiveSessionMetrics,
     getStartOfWeekDate
 } from './utils.js';
-import { computePayEarningsInWindow } from './payPeriods.js';
+import { computePayEarningsInWindow, sessionsUncoveredByPay } from './payPeriods.js';
 
 export const POOL_SCOPES = {
     ALL_TIME: 'all_time',
@@ -104,13 +104,14 @@ export function computeEarningsPool({
     const scope = sanitizePoolScope(poolScope);
     let beforeCutsTotal = 0;
     const payOptions = { startOfWeek };
+    const uncoveredSessions = sessionsUncoveredByPay(sessions, payPeriods);
 
     if (scope === POOL_SCOPES.ALL_TIME) {
-        beforeCutsTotal = sumBreakAdjustedEarningsBeforeCuts(sessions, breaks)
+        beforeCutsTotal = sumBreakAdjustedEarningsBeforeCuts(uncoveredSessions, breaks)
             + computePayEarningsInWindow(payPeriods, null, now, now, payOptions);
     } else {
         const { start, end } = getPoolScopeWindow(scope, now, startOfWeek);
-        const totals = calculateRollingPeriodTotals(sessions, start, end, breaks);
+        const totals = calculateRollingPeriodTotals(uncoveredSessions, start, end, breaks);
         beforeCutsTotal = (Number(totals.totalEarnings) || 0)
             + computePayEarningsInWindow(payPeriods, start, end, now, payOptions);
     }

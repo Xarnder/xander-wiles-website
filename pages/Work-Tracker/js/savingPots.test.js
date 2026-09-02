@@ -86,6 +86,40 @@ test('computeEarningsPool includes accrued monthly pay', () => {
     assert.equal(pool, roundMoney((2000 * 15) / 31));
 });
 
+test('computeEarningsPool does not add hourly earnings already covered by salary', () => {
+    const now = new Date('2026-08-16T00:00:00');
+    const payPeriods = [{
+        id: 'salary',
+        amount: 2000,
+        scale: 'month',
+        startDate: '2026-08-01',
+        dailyHours: 8,
+        workingDaysPerWeek: 5
+    }];
+    const covered = makeSession({
+        startTime: new Date(2026, 7, 10, 9).getTime(),
+        durationMs: 8 * HOUR_MS,
+        earnings: 160
+    });
+    const extra = makeSession({
+        id: 'extra',
+        startTime: new Date(2026, 7, 11, 9).getTime(),
+        earnings: 40
+    });
+    extra.company = 'Freelance';
+
+    const pool = computeEarningsPool({
+        sessions: [covered, extra],
+        breaks: [],
+        payPeriods,
+        poolScope: POOL_SCOPES.CALENDAR_MONTH,
+        percentageCuts: [],
+        now
+    });
+
+    assert.equal(pool, roundMoney(((2000 * 15) / 31) + 40));
+});
+
 test('computeEarningsPool scopes earnings to rolling window', () => {
     const now = new Date('2026-07-13T12:00:00');
     const recentStart = now.getTime() - HOUR_MS;

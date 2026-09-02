@@ -285,17 +285,41 @@ a:hover {
     min-height: 44px;
     margin: 0;
     padding: 0.55rem clamp(0.48rem, 0.75vw, 0.78rem);
+    overflow: visible;
+    appearance: none;
+    -webkit-appearance: none;
     border: 1px solid transparent;
     border-radius: 12px;
     background: transparent;
+    box-shadow: none;
     color: var(--text-secondary);
     font: 600 clamp(0.78rem, 0.92vw, 0.92rem)/1 'Outfit', 'Inter', sans-serif;
     letter-spacing: 0.01em;
     text-decoration: none;
+    text-transform: none;
     white-space: nowrap;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-    transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.nav-top-link::before,
+.nav-top-link::after,
+.nav-disclosure::before,
+.nav-disclosure::after,
+.nav-toggle::before,
+.nav-toggle::after,
+.nav-search-trigger::before,
+.nav-search-trigger::after {
+    content: none;
+    display: none;
+}
+
+.nav-top-link:active,
+.nav-disclosure:active,
+.nav-toggle:active,
+.nav-search-trigger:active {
+    transform: none;
 }
 
 .nav-top-link:hover,
@@ -304,27 +328,26 @@ a:hover {
     color: var(--text-primary);
     border-color: rgba(0, 245, 255, 0.18);
     background: rgba(255, 255, 255, 0.07);
+    box-shadow: none;
 }
 
 .nav-top-link.active,
-.nav-disclosure.has-active-page {
+.nav-disclosure.has-active-page,
+.nav-has-dropdown.is-open > .nav-disclosure.has-active-page {
     color: var(--text-primary);
     border-color: rgba(0, 245, 255, 0.55);
     background:
         linear-gradient(135deg, rgba(0, 245, 255, 0.14), rgba(157, 78, 221, 0.1));
-    box-shadow:
-        0 0 0 1px rgba(0, 245, 255, 0.18),
-        0 0 18px rgba(0, 245, 255, 0.16);
+    box-shadow: 0 0 18px rgba(0, 245, 255, 0.16);
 }
 
 .nav-top-link.active:hover,
-.nav-disclosure.has-active-page:hover {
+.nav-disclosure.has-active-page:hover,
+.nav-has-dropdown.is-open > .nav-disclosure.has-active-page:hover {
     border-color: rgba(0, 245, 255, 0.72);
     background:
         linear-gradient(135deg, rgba(0, 245, 255, 0.18), rgba(157, 78, 221, 0.14));
-    box-shadow:
-        0 0 0 1px rgba(0, 245, 255, 0.24),
-        0 0 22px rgba(0, 245, 255, 0.22);
+    box-shadow: 0 0 22px rgba(0, 245, 255, 0.22);
 }
 
 .nav-top-link:focus-visible,
@@ -370,7 +393,7 @@ a:hover {
     background: rgba(10, 10, 17, 0.98);
     -webkit-backdrop-filter: blur(24px) saturate(145%);
     backdrop-filter: blur(24px) saturate(145%);
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(0, 245, 255, 0.04);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
     transform: translateX(-50%);
     scrollbar-gutter: stable;
 }
@@ -494,9 +517,7 @@ svg.nav-item-icon {
     border-color: rgba(0, 245, 255, 0.5);
     background:
         linear-gradient(135deg, rgba(0, 245, 255, 0.14), rgba(157, 78, 221, 0.1));
-    box-shadow:
-        0 0 0 1px rgba(0, 245, 255, 0.14),
-        0 0 16px rgba(0, 245, 255, 0.14);
+    box-shadow: 0 0 16px rgba(0, 245, 255, 0.14);
 }
 
 .nav-submenu a.active:hover {

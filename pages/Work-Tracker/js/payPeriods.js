@@ -1,4 +1,4 @@
-import { getCalendarDateKey, getStartOfWeekDate, parseCsvExportDate, toTimestampMs } from './utils.js';
+import { getCalendarDateKey, getStartOfWeekDate, parseCsvExportDate, toTimestampMs, calculateRollingPeriodTotals, accumulateDailySessionHours } from './utils.js';
 
 export const PAY_SCALES = {
     HOUR: 'hour',
@@ -329,6 +329,162 @@ export function payPeriodCoversDay(period, day) {
     const dayEnd = dayStart + 86400000;
     const { startMs, endMs } = getPayPeriodBounds(period);
     return Number.isFinite(startMs) && dayEnd > startMs && dayStart < endMs;
+}
+
+function normalizeCompany(value) {
+    return String(value || '').trim();
+}
+
+export function payPeriodCoversTimestamp(period, timestampMs) {
+    const time = toTimestampMs(timestampMs);
+    if (!Number.isFinite(time)) return false;
+    const { startMs, endMs } = getPayPeriodBounds(period);
+    return Number.isFinite(startMs) && time >= startMs && time < endMs;
+}
+
+export function payPeriodCoversSession(period, session) {
+    const startMs = toTimestampMs(session?.startTime);
+    if (!payPeriodCoversTimestamp(period, startMs)) return false;
+
+    const payCompany = normalizeCompany(period?.company);
+    const sessionCompany = normalizeCompany(session?.company);
+    if (!sessionCompany) return true;
+    if (!payCompany) return false;
+    return payCompany === sessionCompany;
+}
+
+export function isSessionCoveredByPay(session, periods = []) {
+    return (Array.isArray(periods) ? periods : []).some((period) => payPeriodCoversSession(period, session));
+}
+
+export function sessionsUncoveredByPay(sessions, periods = []) {
+    return (Array.isArray(sessions) ? sessions : []).filter((session) => !isSessionCoveredByPay(session, periods));
+}
+
+export function computeUncoveredSessionEarnings(sessions, breaks, periods, windowStart, windowEnd) {
+    const uncovered = sessionsUncoveredByPay(sessions, periods);
+    const start = windowStart == null ? new Date(0) : windowStart;
+    const end = windowEnd == null ? new Date() : windowEnd;
+    return Number(calculateRollingPeriodTotals(uncovered, start, end, breaks).totalEarnings) || 0;
+}
+
+export function combinePayAndSessionEarnings(sessions, breaks, periods, windowStart, windowEnd, now = new Date(), options = {}) {
+    return computeUncoveredSessionEarnings(sessions, breaks, periods, windowStart, windowEnd)
+        + computePayEarningsInWindow(periods, windowStart, windowEnd, now, options);
+}
+
+export function isContractedWorkingDay(date, workingDaysPerWeek = 5, scale = PAY_SCALES.MONTH) {
+    if (scale === PAY_SCALES.DAY) return true;
+    const days = clampWorkingDays(workingDaysPerWeek);
+    if (days >= 7) return true;
+    const source = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(source.getTime())) return false;
+    const mondayBased = (source.getDay() + 6) % 7;
+    return mondayBased < days;
+}
+
+export function formatWorkingDaysAssumption(dailyHours = 8, workingDaysPerWeek = 5) {
+    const hours = clampWorkHours(dailyHours);
+    const days = clampWorkingDays(workingDaysPerWeek);
+    const hourLabel = `${hours}h`;
+    if (days >= 7) return `${hourLabel} every day`;
+    if (days === 6) return `${hourLabel}, Monday–Saturday`;
+    if (days === 5) return `${hourLabel}, Monday–Friday`;
+    return `${hourLabel} × ${days} weekdays`;
+}
+
+function parseTimeOfDay(value, fallback = '09:00') {
+    const raw = String(value || fallback);
+    const match = /^(\d{1,2}):(\d{2})$/.exec(raw);
+    if (!match) return { hours: 9, minutes: 0 };
+    const hours = Math.min(Math.max(Number(match[1]), 0), 23);
+    const minutes = Math.min(Math.max(Number(match[2]), 0), 59);
+    return { hours, minutes };
+}
+
+export function getTrackedWorkDateKeys(sessions, breaks = []) {
+    const { dailyHours } = accumulateDailySessionHours(sessions, breaks);
+    return new Set(Object.keys(dailyHours).filter((key) => (dailyHours[key] || 0) > 0));
+}
+
+export function getAssumedWorkSegment(period, day, options = {}) {
+    const sanitized = sanitizePayPeriod(period);
+    if (!payPeriodCoversDay(sanitized, day)) return null;
+
+    const dailyHours = clampWorkHours(options.dailyHours ?? sanitized.dailyHours);
+    const workingDaysPerWeek = clampWorkingDays(options.workingDaysPerWeek ?? sanitized.workingDaysPerWeek);
+    if (!isContractedWorkingDay(day, workingDaysPerWeek, sanitized.scale)) return null;
+
+    const dayStart = new Date(getStartOfDayMs(day));
+    const now = options.now instanceof Date ? options.now : new Date();
+    const todayStart = getStartOfDayMs(now);
+    if (dayStart.getTime() > todayStart) return null;
+
+    const { hours, minutes } = parseTimeOfDay(options.defaultStartTime);
+    const start = new Date(dayStart);
+    start.setHours(hours, minutes, 0, 0);
+    const durationMs = dailyHours * 60 * 60 * 1000;
+
+    return {
+        id: `pay-assumed-${sanitized.id || 'period'}-${formatDateKey(dayStart)}`,
+        periodId: sanitized.id,
+        dateKey: formatDateKey(dayStart),
+        startTime: start.getTime(),
+        endTime: start.getTime() + durationMs,
+        durationMs,
+        hours: dailyHours,
+        company: sanitized.company,
+        name: getPayPeriodDisplayName(sanitized),
+        assumedPay: true,
+        earnings: 0,
+        rate: 0
+    };
+}
+
+export function collectAssumedWorkSegments(periods, rangeStart, rangeEnd, options = {}) {
+    const occupied = options.occupiedDateKeys instanceof Set
+        ? options.occupiedDateKeys
+        : getTrackedWorkDateKeys(options.sessions || [], options.breaks || []);
+    const start = rangeStart instanceof Date ? new Date(rangeStart.getTime()) : new Date(rangeStart);
+    const end = rangeEnd instanceof Date ? new Date(rangeEnd.getTime()) : new Date(rangeEnd);
+    start.setHours(0, 0, 0, 0);
+    const endIsExclusiveMidnight = end.getHours() === 0
+        && end.getMinutes() === 0
+        && end.getSeconds() === 0
+        && end.getMilliseconds() === 0;
+    end.setHours(0, 0, 0, 0);
+    if (!endIsExclusiveMidnight) {
+        end.setDate(end.getDate() + 1);
+    }
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return [];
+
+    const byDay = new Map();
+    const list = Array.isArray(periods) ? periods : [];
+
+    for (let cursor = new Date(start); cursor < end; cursor.setDate(cursor.getDate() + 1)) {
+        const dateKey = formatDateKey(cursor);
+        if (occupied.has(dateKey)) continue;
+
+        list.forEach((period) => {
+            const segment = getAssumedWorkSegment(period, cursor, options);
+            if (!segment) return;
+            const existing = byDay.get(dateKey);
+            if (!existing || segment.hours > existing.hours) {
+                byDay.set(dateKey, segment);
+            }
+        });
+    }
+
+    return [...byDay.values()];
+}
+
+export function assumedHoursByDateKey(segments) {
+    const daily = {};
+    (Array.isArray(segments) ? segments : []).forEach((segment) => {
+        if (!segment?.dateKey) return;
+        daily[segment.dateKey] = (daily[segment.dateKey] || 0) + (Number(segment.hours) || 0);
+    });
+    return daily;
 }
 
 export function accumulateDailyPayEarnings(periods, rangeStart, rangeEnd, now = new Date(), options = {}) {

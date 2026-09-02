@@ -12,7 +12,13 @@ import {
     getEquivalentHourlyRate,
     isPayPeriodActive,
     sanitizePayPeriod,
-    sanitizePayPeriods
+    sanitizePayPeriods,
+    combinePayAndSessionEarnings,
+    collectAssumedWorkSegments,
+    formatWorkingDaysAssumption,
+    isContractedWorkingDay,
+    isSessionCoveredByPay,
+    sessionsUncoveredByPay
 } from './payPeriods.js';
 
 function makeMonthlyPay(overrides = {}) {
@@ -237,4 +243,123 @@ test('daily pay map marks covered calendar days', () => {
 
 test('formatPayRate uses the selected scale', () => {
     assert.equal(formatPayRate(2000, PAY_SCALES.MONTH, '£'), '£2000.00 / month');
+});
+
+test('contracted working days are Monday–Friday for a 5-day week', () => {
+    assert.equal(isContractedWorkingDay(new Date(2026, 7, 3), 5), true); // Monday
+    assert.equal(isContractedWorkingDay(new Date(2026, 7, 7), 5), true); // Friday
+    assert.equal(isContractedWorkingDay(new Date(2026, 7, 8), 5), false); // Saturday
+    assert.equal(isContractedWorkingDay(new Date(2026, 7, 9), 5), false); // Sunday
+    assert.equal(isContractedWorkingDay(new Date(2026, 7, 8), 5, PAY_SCALES.DAY), true);
+    assert.equal(formatWorkingDaysAssumption(8, 5), '8h, Monday–Friday');
+});
+
+test('salary covers unlabeled sessions and matching companies, not other companies', () => {
+    const salary = makeMonthlyPay({ company: 'Acme' });
+    const unlabeled = { id: 's1', startTime: new Date(2026, 7, 10, 9).getTime(), company: '' };
+    const acme = { id: 's2', startTime: new Date(2026, 7, 10, 9).getTime(), company: 'Acme' };
+    const other = { id: 's3', startTime: new Date(2026, 7, 10, 9).getTime(), company: 'Freelance' };
+    const outside = { id: 's4', startTime: new Date(2026, 6, 10, 9).getTime(), company: 'Acme' };
+
+    assert.equal(isSessionCoveredByPay(unlabeled, [salary]), true);
+    assert.equal(isSessionCoveredByPay(acme, [salary]), true);
+    assert.equal(isSessionCoveredByPay(other, [salary]), false);
+    assert.equal(isSessionCoveredByPay(outside, [salary]), false);
+    assert.equal(sessionsUncoveredByPay([unlabeled, acme, other], [salary]).map((s) => s.id).join(','), 's3');
+
+    const unscoped = makeMonthlyPay({ company: '' });
+    assert.equal(isSessionCoveredByPay(unlabeled, [unscoped]), true);
+    assert.equal(isSessionCoveredByPay(acme, [unscoped]), false);
+});
+
+test('combined earnings do not double-count sessions covered by monthly pay', () => {
+    const salary = makeMonthlyPay();
+    const now = new Date(2026, 7, 16, 0, 0, 0);
+    const covered = {
+        id: 'covered',
+        startTime: new Date(2026, 7, 10, 9).getTime(),
+        endTime: new Date(2026, 7, 10, 17).getTime(),
+        durationMs: 8 * 3600000,
+        earnings: 160
+    };
+    const extra = {
+        id: 'extra',
+        startTime: new Date(2026, 7, 11, 9).getTime(),
+        endTime: new Date(2026, 7, 11, 10).getTime(),
+        durationMs: 3600000,
+        earnings: 40,
+        company: 'Freelance'
+    };
+
+    const combined = combinePayAndSessionEarnings(
+        [covered, extra],
+        [],
+        [salary],
+        new Date(2026, 7, 1),
+        now,
+        now
+    );
+    const payOnly = computePayEarningsInWindow([salary], new Date(2026, 7, 1), now, now);
+
+    assert.equal(Number(combined.toFixed(2)), Number((payOnly + 40).toFixed(2)));
+});
+
+test('assumed work segments fill weekday hours and skip logged days, weekends, and the future', () => {
+    const salary = makeMonthlyPay();
+    const now = new Date(2026, 7, 12, 12, 0, 0); // Wednesday
+    const loggedMonday = {
+        id: 'logged',
+        startTime: new Date(2026, 7, 10, 9).getTime(),
+        endTime: new Date(2026, 7, 10, 17).getTime(),
+        durationMs: 8 * 3600000
+    };
+
+    const segments = collectAssumedWorkSegments(
+        [salary],
+        new Date(2026, 7, 10),
+        new Date(2026, 7, 14),
+        {
+            sessions: [loggedMonday],
+            breaks: [],
+            defaultStartTime: '09:00',
+            now
+        }
+    );
+
+    assert.deepEqual(segments.map((segment) => segment.dateKey), ['2026-08-11', '2026-08-12']);
+    assert.equal(segments[0].hours, 8);
+    assert.equal(segments[0].assumedPay, true);
+});
+
+test('assumed work includes today when the window ends at a time of day', () => {
+    const salary = makeMonthlyPay();
+    const now = new Date(2026, 7, 12, 15, 30, 0);
+    const segments = collectAssumedWorkSegments(
+        [salary],
+        new Date(2026, 7, 12),
+        now,
+        { sessions: [], defaultStartTime: '09:00', now }
+    );
+
+    assert.deepEqual(segments.map((segment) => segment.dateKey), ['2026-08-12']);
+});
+
+test('assumed work can use Time Cost hours instead of the pay period snapshot', () => {
+    const salary = makeMonthlyPay({ dailyHours: 8 });
+    const now = new Date(2026, 7, 11, 12, 0, 0);
+    const segments = collectAssumedWorkSegments(
+        [salary],
+        new Date(2026, 7, 11),
+        new Date(2026, 7, 12),
+        {
+            sessions: [],
+            defaultStartTime: '09:00',
+            dailyHours: 6,
+            workingDaysPerWeek: 5,
+            now
+        }
+    );
+
+    assert.equal(segments.length, 1);
+    assert.equal(segments[0].hours, 6);
 });
