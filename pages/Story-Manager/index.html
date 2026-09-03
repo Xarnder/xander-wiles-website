@@ -7,6 +7,17 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <base href="/pages/To-Do-List/">
     <title>Story Manager</title>
+    <script>
+        (function () {
+            try {
+                var standalone = window.navigator.standalone === true
+                    || window.matchMedia('(display-mode: standalone)').matches
+                    || window.matchMedia('(display-mode: fullscreen)').matches
+                    || window.matchMedia('(display-mode: minimal-ui)').matches;
+                if (standalone) document.documentElement.classList.add('is-pwa');
+            } catch (e) {}
+        })();
+    </script>
 
     <!-- STORY MANAGER CONFIGURATION -->
     <script>
@@ -48,6 +59,26 @@
 
     <!-- Global Header -->
     <link rel="stylesheet" href="/assets/css/style.css">
+    <style>
+        html.is-pwa #main-nav-placeholder {
+            display: none !important;
+            min-height: 0 !important;
+        }
+        html.is-pwa .show-site-header-setting {
+            display: none !important;
+        }
+        @media (display-mode: standalone),
+            (display-mode: fullscreen),
+            (display-mode: minimal-ui) {
+            #main-nav-placeholder {
+                display: none !important;
+                min-height: 0 !important;
+            }
+            .show-site-header-setting {
+                display: none !important;
+            }
+        }
+    </style>
 
     <!-- Google Fonts: Outfit for Fancy Theme -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -133,8 +164,15 @@
         </div>
     </div>
 
-    <!-- GLOBAL HEADER PLACEHOLDER -->
+    <!-- GLOBAL HEADER PLACEHOLDER (omitted in installed PWA / iOS home screen) -->
     <div id="main-nav-placeholder"></div>
+    <script>
+        (function () {
+            if (!document.documentElement.classList.contains('is-pwa')) return;
+            var placeholder = document.getElementById('main-nav-placeholder');
+            if (placeholder) placeholder.remove();
+        })();
+    </script>
     <script src="/assets/js/nav-loader.js"></script>
 
     <!-- APP CONTAINER -->
@@ -278,7 +316,7 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
-                <label class="dropdown-item-toggle">
+                <label class="dropdown-item-toggle show-site-header-setting">
                     <span>Show Site Header</span>
                     <div class="switch-small">
                         <input type="checkbox" id="show-site-header-toggle">
