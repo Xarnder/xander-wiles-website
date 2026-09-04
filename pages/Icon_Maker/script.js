@@ -22,10 +22,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const sharedSvgVariantGroup = document.getElementById('shared-svg-variant-group');
     const sharedOriginalInput = document.getElementById('shared-original');
     const sharedRecoloredInput = document.getElementById('shared-recolored');
+    const gradientControls = document.getElementById('gradient-controls');
+    const gradientKeepInput = document.getElementById('gradient-keep');
+    const gradientPosterizeInput = document.getElementById('gradient-posterize');
+    const gradientModeHint = document.getElementById('gradient-mode-hint');
+    const posterizeStepsGroup = document.getElementById('posterize-steps-group');
+    const posterizeStepsSlider = document.getElementById('posterize-steps-slider');
+    const posterizeStepsValue = document.getElementById('posterize-steps-value');
 
     const bgControls = document.getElementById('bg-controls');
     const colorsSlider = document.getElementById('colors-slider');
     const colorsValue = document.getElementById('colors-value');
+    const reduceColorsToggle = document.getElementById('reduce-colors-toggle');
+    const colorsSliderGroup = document.getElementById('colors-slider-group');
+    const reduceColorsHint = document.getElementById('reduce-colors-hint');
+    const traceQualityToggle = document.getElementById('trace-quality-toggle');
+    const traceQualityGroup = document.getElementById('trace-quality-group');
     const detailSlider = document.getElementById('detail-slider');
     const detailValue = document.getElementById('detail-value');
     const smoothingSlider = document.getElementById('smoothing-slider');
@@ -119,6 +131,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    document.querySelectorAll('input[name="gradient-mode"]').forEach(input => {
+        input.addEventListener('change', () => {
+            updateGradientModeUi();
+            if (sourceFile && processingMode === 'vector') {
+                updateSvgPreviews();
+            }
+        });
+    });
+
+    posterizeStepsSlider.addEventListener('input', () => {
+        posterizeStepsValue.textContent = posterizeStepsSlider.value;
+        if (gradientPosterizeInput.checked && sourceFile && processingMode === 'vector') {
+            debouncedUpdate();
+        }
+    });
+
     // Mode Selector listeners
     document.querySelectorAll('input[name="icon-mode"]').forEach(input => {
         input.addEventListener('change', async (e) => {
@@ -129,6 +157,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sliders only affect PNG tracing
     colorsSlider.addEventListener('input', () => handleSliderChange(colorsSlider, colorsValue));
+
+    reduceColorsToggle.addEventListener('change', () => {
+        updateReduceColorsUi();
+        if (sourceFile && processingMode === 'vector' && !isVectorMode) {
+            updateSvgPreviews();
+            generateBtn.classList.add('glow-animation');
+        }
+    });
+
+    traceQualityToggle.addEventListener('change', () => {
+        updateTraceQualityUi();
+    });
     detailSlider.addEventListener('input', () => handleSliderChange(detailSlider, detailValue, 1));
     smoothingSlider.addEventListener('input', () => handleSliderChange(smoothingSlider, smoothingValue));
 
@@ -259,8 +299,8 @@ document.addEventListener('DOMContentLoaded', () => {
         resetBtn.classList.remove('hidden');
         imageFilename.textContent = file.name;
 
-        // Detect Type
-        isVectorMode = file.type.includes('svg');
+        // Detect Type (MIME can be empty; fall back to the file name)
+        isVectorMode = isSvgUpload(file);
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -277,13 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 processingMode = 'vector';
                 modeVectorInput.checked = true;
                 modeSelectorContainer.classList.add('hidden');
-                rasterControls.classList.add('hidden'); // Hide tracing sliders
+                updateRasterControlsVisibility();
 
                 // Read content as text for manipulation
                 const textReader = new FileReader();
                 textReader.onload = async (textEvent) => {
                     sourceSvgText = textEvent.target.result;
                     svgControlsCard.classList.remove('hidden');
+                    updateGradientControlsVisibility();
                     generateBtn.disabled = false;
                     await updateSvgPreviews();
                     generateBtn.classList.add('glow-animation');
@@ -292,19 +333,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 textReader.readAsText(file);
 
             } else {
-                // Handle PNG Input
-                if (file.type !== 'image/png') { alert('Please upload a PNG or SVG.'); return; }
+                // Handle PNG / JPEG input
+                if (!isRasterUpload(file)) { alert('Please upload a PNG, JPEG, or SVG.'); return; }
                 
                 // Show mode selector
                 modeSelectorContainer.classList.remove('hidden');
+                updateGradientControlsVisibility();
                 processingMode = document.querySelector('input[name="icon-mode"]:checked')?.value || 'vector';
 
                 try {
                     sourceImageData = await getImageDataFromSrc(imagePreview.src);
                     
                     if (processingMode === 'vector') {
-                        rasterControls.classList.remove('hidden'); // Show tracing sliders
                         svgControlsCard.classList.remove('hidden');
+                        updateRasterControlsVisibility();
                         await updateSvgPreviews();
                     } else {
                         svgControlsCard.classList.add('hidden');
@@ -329,6 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (newMode === 'raster') {
             svgControlsCard.classList.add('hidden');
+            updateGradientControlsVisibility();
+            updateRasterControlsVisibility();
             lightSvgString = null;
             darkSvgString = null;
             originalSvgString = null;
@@ -339,11 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updatePaddingPreview();
         } else {
             svgControlsCard.classList.remove('hidden');
-            if (isVectorMode) {
-                rasterControls.classList.add('hidden');
-            } else {
-                rasterControls.classList.remove('hidden');
-            }
+            updateGradientControlsVisibility();
+            updateRasterControlsVisibility();
             generateBtn.disabled = false;
             generateBtn.classList.add('glow-animation');
             
@@ -368,6 +409,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getSharedSvgVariant() {
         return sharedRecoloredInput.checked ? 'recolored' : 'original';
+    }
+
+    function getGradientMode() {
+        return gradientPosterizeInput.checked ? 'posterize' : 'keep';
+    }
+
+    function svgContainsGradients(svgStr) {
+        if (!svgStr) return false;
+        return /<(linear|radial)Gradient\b/i.test(svgStr) || /[-a-z]*gradient\s*\(/i.test(svgStr);
+    }
+
+    function updateGradientModeUi() {
+        const posterize = getGradientMode() === 'posterize';
+        posterizeStepsGroup.classList.toggle('hidden', !posterize);
+        if (gradientModeHint) {
+            gradientModeHint.textContent = posterize
+                ? 'Posterize turns smooth SVG gradients into stepped colour bands, still as SVG.'
+                : 'Keep the original SVG gradient paints in the exported SVG.';
+        }
+    }
+
+    function updateGradientControlsVisibility() {
+        const show = isVectorMode && processingMode === 'vector' && svgContainsGradients(sourceSvgText);
+        gradientControls.classList.toggle('hidden', !show);
+        updateGradientModeUi();
+    }
+
+    function isSvgUpload(file) {
+        if (!file) return false;
+        return /svg/i.test(file.type || '') || /\.svg$/i.test(file.name || '');
+    }
+
+    function isRasterUpload(file) {
+        if (!file) return false;
+        return /image\/(png|jpeg|jpg)/i.test(file.type || '') || /\.(png|jpe?g)$/i.test(file.name || '');
+    }
+
+    function updateTraceQualityUi() {
+        const show = traceQualityToggle.checked;
+        traceQualityGroup.classList.toggle('hidden', !show);
+    }
+
+    function updateRasterControlsVisibility() {
+        const showTracing = Boolean(sourceFile) && !isVectorMode && processingMode === 'vector';
+        rasterControls.classList.toggle('hidden', !showTracing);
+        updateTraceQualityUi();
+    }
+
+    function updateReduceColorsUi() {
+        const reduce = reduceColorsToggle.checked;
+        colorsSliderGroup.style.opacity = reduce ? '1' : '0.5';
+        colorsSliderGroup.style.pointerEvents = reduce ? 'auto' : 'none';
+        if (reduceColorsHint) {
+            reduceColorsHint.textContent = reduce
+                ? 'Limits the traced SVG to the colour count below. Turn this off to keep a smooth SVG gradient.'
+                : 'Colour reduction is off. Smooth gradients are kept as real SVG paints instead of being flattened.';
+        }
     }
 
     function updateSameThemeUi() {
@@ -445,16 +543,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (isVectorMode) {
-                // --- VECTOR PATH: Clean & Recoloring ---
+                // --- VECTOR PATH: Clean, keep or posterize gradients, then recolor ---
                 originalSvgString = cleanSvg(sourceSvgText);
+                if (getGradientMode() === 'posterize' && svgContainsGradients(originalSvgString)) {
+                    originalSvgString = posterizeSvgGradients(
+                        originalSvgString,
+                        parseInt(posterizeStepsSlider.value, 10) || 6
+                    );
+                }
             } else {
-                // --- RASTER PATH: Tracing ---
+                // --- RASTER PATH: Tracing, or keep a detected gradient as SVG ---
                 const settings = { colors: parseInt(colorsSlider.value), detail: parseFloat(detailSlider.value), smoothing: parseInt(smoothingSlider.value) };
-                const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
 
-                // Trace PNG to create source SVG
-                const tracedSvg = traceImageDataToSvg(sourceImageData, lightPalette, settings);
-                originalSvgString = cleanSvg(tracedSvg);
+                if (!reduceColorsToggle.checked) {
+                    const gradientSvg = buildGradientSvgFromImage(sourceImageData, settings);
+                    if (gradientSvg) {
+                        originalSvgString = cleanSvg(gradientSvg);
+                    } else {
+                        const richPalette = await getSmartPalette(imagePreview.src, 24);
+                        originalSvgString = cleanSvg(traceImageDataToSvg(sourceImageData, richPalette, settings));
+                    }
+                } else {
+                    const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
+                    const tracedSvg = traceImageDataToSvg(sourceImageData, lightPalette, settings);
+                    originalSvgString = cleanSvg(tracedSvg);
+                }
             }
 
             applyThemeVariants();
@@ -466,8 +579,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPreviewsInDOM() {
-        if (lightSvgString) svgPreviewWrapperLight.innerHTML = lightSvgString;
-        if (darkSvgString) svgPreviewWrapperDark.innerHTML = darkSvgString;
+        if (lightSvgString) svgPreviewWrapperLight.innerHTML = prefixSvgPaintIds(lightSvgString, 'icn-l');
+        if (darkSvgString) svgPreviewWrapperDark.innerHTML = prefixSvgPaintIds(darkSvgString, 'icn-d');
     }
 
     // --- Core Logic: Cleaning & Coloring ---
@@ -518,6 +631,197 @@ document.addEventListener('DOMContentLoaded', () => {
         svgEl.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
         svgEl.removeAttribute('width');
         svgEl.removeAttribute('height');
+        if (!svgEl.getAttribute('xmlns')) {
+            svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        }
+        if (!svgEl.getAttribute('xmlns:xlink')) {
+            svgEl.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+        }
+        return new XMLSerializer().serializeToString(doc);
+    }
+
+    function parseStopOffset(value) {
+        if (value == null || value === '') return 0;
+        const v = String(value).trim();
+        if (v.endsWith('%')) return Math.max(0, Math.min(1, parseFloat(v) / 100));
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+    }
+
+    function getStopColor(stop) {
+        const attr = stop.getAttribute('stop-color');
+        if (attr) return attr;
+        const style = stop.getAttribute('style') || '';
+        const match = style.match(/stop-color\s*:\s*([^;]+)/i);
+        return match ? match[1].trim() : '#000000';
+    }
+
+    function getStopOpacity(stop) {
+        const attr = stop.getAttribute('stop-opacity');
+        if (attr != null && attr !== '') return parseFloat(attr);
+        const style = stop.getAttribute('style') || '';
+        const match = style.match(/stop-opacity\s*:\s*([^;]+)/i);
+        return match ? parseFloat(match[1]) : 1;
+    }
+
+    function collectGradientStops(gradEl, seen = new Set()) {
+        if (!gradEl || seen.has(gradEl)) return [];
+        seen.add(gradEl);
+
+        const localStops = Array.from(gradEl.querySelectorAll('stop'));
+        if (localStops.length) {
+            return localStops.map(stop => ({
+                offset: parseStopOffset(stop.getAttribute('offset')),
+                color: getStopColor(stop),
+                opacity: Number.isFinite(getStopOpacity(stop)) ? getStopOpacity(stop) : 1
+            })).sort((a, b) => a.offset - b.offset);
+        }
+
+        const href = gradEl.getAttribute('href') || gradEl.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+        if (href && href.startsWith('#')) {
+            const ref = gradEl.ownerDocument.getElementById(decodeURIComponent(href.slice(1)));
+            return collectGradientStops(ref, seen);
+        }
+        return [];
+    }
+
+    function samplePosterizeColor(stops, t) {
+        const parsed = stops.map(stop => {
+            const rgba = parseColorToRgb(stop.color) || { r: 0, g: 0, b: 0, a: 1 };
+            return {
+                offset: stop.offset,
+                r: rgba.r,
+                g: rgba.g,
+                b: rgba.b,
+                a: (rgba.a ?? 1) * (stop.opacity ?? 1)
+            };
+        });
+
+        if (!parsed.length) return { r: 0, g: 0, b: 0, a: 1 };
+        if (t <= parsed[0].offset || parsed.length === 1) return parsed[0];
+        if (t >= parsed[parsed.length - 1].offset) return parsed[parsed.length - 1];
+
+        for (let i = 0; i < parsed.length - 1; i++) {
+            const a = parsed[i];
+            const b = parsed[i + 1];
+            if (t >= a.offset && t <= b.offset) {
+                const span = b.offset - a.offset;
+                const u = span === 0 ? 0 : (t - a.offset) / span;
+                return {
+                    r: a.r + (b.r - a.r) * u,
+                    g: a.g + (b.g - a.g) * u,
+                    b: a.b + (b.b - a.b) * u,
+                    a: a.a + (b.a - a.a) * u
+                };
+            }
+        }
+        return parsed[parsed.length - 1];
+    }
+
+    function posterizeSvgGradients(svgStr, steps = 6) {
+        const bandCount = Math.max(2, Math.min(24, steps || 6));
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgStr, 'image/svg+xml');
+        const gradients = Array.from(doc.querySelectorAll('linearGradient, radialGradient'));
+        if (!gradients.length) return svgStr;
+
+        const snapshots = gradients.map(el => ({ el, stops: collectGradientStops(el) }));
+        const ns = 'http://www.w3.org/2000/svg';
+
+        snapshots.forEach(({ el, stops }) => {
+            if (!stops.length) return;
+            Array.from(el.querySelectorAll('stop')).forEach(stop => stop.remove());
+
+            for (let i = 0; i < bandCount; i++) {
+                const t0 = i / bandCount;
+                const t1 = (i + 1) / bandCount;
+                const sample = samplePosterizeColor(stops, (t0 + t1) / 2);
+                const color = `rgb(${Math.round(sample.r)},${Math.round(sample.g)},${Math.round(sample.b)})`;
+
+                const start = doc.createElementNS(ns, 'stop');
+                start.setAttribute('offset', String(t0));
+                start.setAttribute('stop-color', color);
+                if (sample.a < 0.999) start.setAttribute('stop-opacity', String(+sample.a.toFixed(3)));
+
+                const end = doc.createElementNS(ns, 'stop');
+                end.setAttribute('offset', String(t1));
+                end.setAttribute('stop-color', color);
+                if (sample.a < 0.999) end.setAttribute('stop-opacity', String(+sample.a.toFixed(3)));
+
+                el.appendChild(start);
+                el.appendChild(end);
+            }
+        });
+
+        return new XMLSerializer().serializeToString(doc);
+    }
+
+    function rewritePaintUrlRefs(value, idMap) {
+        if (!value || !value.includes('url(')) return value;
+        return value.replace(/url\(\s*(['"]?)#([^)'"]+)\1\s*\)/gi, (full, _quote, id) => {
+            const decoded = decodeURIComponent(id);
+            const mapped = idMap.get(decoded) || idMap.get(id);
+            return mapped ? `url(#${mapped})` : full;
+        });
+    }
+
+    function rewriteHashRef(ref, idMap) {
+        if (!ref || ref.charAt(0) !== '#') return ref;
+        const id = decodeURIComponent(ref.slice(1));
+        return idMap.has(id) ? `#${idMap.get(id)}` : ref;
+    }
+
+    function prefixSvgPaintIds(svgStr, prefix) {
+        if (!svgStr || !prefix) return svgStr;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgStr, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (!svgEl) return svgStr;
+
+        const idMap = new Map();
+        svgEl.querySelectorAll('[id]').forEach(el => {
+            const oldId = el.getAttribute('id');
+            if (!oldId) return;
+            const newId = `${prefix}-${oldId}`;
+            idMap.set(oldId, newId);
+            el.setAttribute('id', newId);
+        });
+        const classMap = new Map();
+        svgEl.querySelectorAll('[class]').forEach(el => {
+            const next = el.getAttribute('class').split(/\s+/).filter(Boolean).map(cls => {
+                if (!classMap.has(cls)) classMap.set(cls, `${prefix}-${cls}`);
+                return classMap.get(cls);
+            }).join(' ');
+            el.setAttribute('class', next);
+        });
+
+        const xlinkNs = 'http://www.w3.org/1999/xlink';
+        svgEl.querySelectorAll('*').forEach(el => {
+            ['fill', 'stroke', 'clip-path', 'mask', 'filter', 'style'].forEach(attr => {
+                const value = el.getAttribute(attr);
+                if (value) {
+                    const next = rewritePaintUrlRefs(value, idMap);
+                    if (next !== value) el.setAttribute(attr, next);
+                }
+            });
+
+            const href = el.getAttribute('href');
+            if (href) el.setAttribute('href', rewriteHashRef(href, idMap));
+
+            const xlinkHref = el.getAttributeNS(xlinkNs, 'href');
+            if (xlinkHref) el.setAttributeNS(xlinkNs, 'xlink:href', rewriteHashRef(xlinkHref, idMap));
+        });
+
+        svgEl.querySelectorAll('style').forEach(styleEl => {
+            let css = rewritePaintUrlRefs(styleEl.textContent || '', idMap);
+            const classes = Array.from(classMap.keys()).sort((a, b) => b.length - a.length);
+            classes.forEach(cls => {
+                const escaped = cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                css = css.replace(new RegExp(`\\.${escaped}(?![\\w-])`, 'g'), `.${classMap.get(cls)}`);
+            });
+            styleEl.textContent = css;
+        });
+
         return new XMLSerializer().serializeToString(doc);
     }
 
@@ -1129,6 +1433,248 @@ document.addEventListener('DOMContentLoaded', () => {
     function getImageDataFromSrc(imgSrc) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); resolve(ctx.getImageData(0, 0, img.width, img.height)); }; img.onerror = reject; img.src = imgSrc; }); }
     function traceImageDataToSvg(imageData, palette, settings) { const options = { pal: palette, numberofcolors: palette.length, ltres: settings.detail, qtres: settings.detail, roundcoords: settings.smoothing }; let svgString = ImageTracer.imagedataToSVG(imageData, options); const viewBox = `viewBox="0 0 ${imageData.width} ${imageData.height}"`; return svgString.replace('<svg ', `<svg ${viewBox} `); }
 
+    function sampleOpaquePixels(imageData) {
+        const { width, height, data } = imageData;
+        const step = Math.max(1, Math.floor(Math.min(width, height) / 72));
+        const samples = [];
+        let minX = width, minY = height, maxX = 0, maxY = 0;
+        for (let y = 0; y < height; y += step) {
+            for (let x = 0; x < width; x += step) {
+                const i = (y * width + x) * 4;
+                if (data[i + 3] < 240) continue;
+                samples.push({ x, y, r: data[i], g: data[i + 1], b: data[i + 2], a: 255 });
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+        return { samples, minX, minY, maxX, maxY, width, height };
+    }
+
+    function binGradientStops(entries, getT, binCount = 10) {
+        let tMin = Infinity;
+        let tMax = -Infinity;
+        for (const item of entries) {
+            const t = getT(item);
+            item._t = t;
+            if (t < tMin) tMin = t;
+            if (t > tMax) tMax = t;
+        }
+        const span = tMax - tMin || 1;
+        const bins = Array.from({ length: binCount }, () => ({ r: 0, g: 0, b: 0, a: 0, n: 0 }));
+        for (const item of entries) {
+            const u = (item._t - tMin) / span;
+            const bi = Math.min(binCount - 1, Math.floor(u * binCount));
+            bins[bi].r += item.r;
+            bins[bi].g += item.g;
+            bins[bi].b += item.b;
+            bins[bi].a += item.a;
+            bins[bi].n++;
+        }
+
+        const stops = [];
+        let perpVar = 0;
+        let perpN = 0;
+        for (const item of entries) {
+            const u = (item._t - tMin) / span;
+            const bi = Math.min(binCount - 1, Math.floor(u * binCount));
+            if (!bins[bi].n) continue;
+            const n = bins[bi].n;
+            const dr = item.r - bins[bi].r / n;
+            const dg = item.g - bins[bi].g / n;
+            const db = item.b - bins[bi].b / n;
+            perpVar += dr * dr + dg * dg + db * db;
+            perpN++;
+        }
+
+        for (let i = 0; i < binCount; i++) {
+            if (!bins[i].n) continue;
+            const n = bins[i].n;
+            stops.push({
+                offset: i / (binCount - 1),
+                r: bins[i].r / n,
+                g: bins[i].g / n,
+                b: bins[i].b / n,
+                a: bins[i].a / n
+            });
+        }
+
+        let range = 0;
+        if (stops.length >= 2) {
+            const a = stops[0];
+            const b = stops[stops.length - 1];
+            range = Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+        }
+
+        return {
+            stops,
+            tMin,
+            tMax,
+            range,
+            meanPerpErr: perpVar / (perpN || 1)
+        };
+    }
+
+    function analyzeImageGradient(imageData) {
+        const { samples, minX, minY, maxX, maxY, width, height } = sampleOpaquePixels(imageData);
+        if (samples.length < 24) return null;
+
+        let bestLinear = null;
+        for (let angle = 0; angle < 180; angle += 15) {
+            const rad = angle * Math.PI / 180;
+            const dx = Math.cos(rad);
+            const dy = Math.sin(rad);
+            const fitted = binGradientStops(samples, s => s.x * dx + s.y * dy);
+            const score = fitted.range - fitted.meanPerpErr * 0.04;
+            if (!bestLinear || score > bestLinear.score) {
+                bestLinear = { ...fitted, type: 'linear', angle, dx, dy, score };
+            }
+        }
+
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const radial = binGradientStops(samples, s => Math.hypot(s.x - cx, s.y - cy));
+        const radialScore = radial.range - radial.meanPerpErr * 0.04;
+        const bestRadial = { ...radial, type: 'radial', cx, cy, score: radialScore };
+
+        const best = bestRadial.score > (bestLinear?.score || -Infinity) + 8 ? bestRadial : bestLinear;
+        if (!best || best.range < 18 || best.meanPerpErr > 2800 || best.stops.length < 2) {
+            return null;
+        }
+
+        if (best.type === 'linear') {
+            const tCenter = cx * best.dx + cy * best.dy;
+            return {
+                type: 'linear',
+                x1: cx + (best.tMin - tCenter) * best.dx,
+                y1: cy + (best.tMin - tCenter) * best.dy,
+                x2: cx + (best.tMax - tCenter) * best.dx,
+                y2: cy + (best.tMax - tCenter) * best.dy,
+                stops: best.stops,
+                width,
+                height
+            };
+        }
+
+        return {
+            type: 'radial',
+            cx: best.cx,
+            cy: best.cy,
+            r: Math.max(best.tMax, 1),
+            stops: best.stops,
+            width,
+            height
+        };
+    }
+
+    function makeAlphaSilhouette(imageData) {
+        const sil = new ImageData(imageData.width, imageData.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            if (imageData.data[i + 3] < 20) continue;
+            sil.data[i] = 0;
+            sil.data[i + 1] = 0;
+            sil.data[i + 2] = 0;
+            sil.data[i + 3] = 255;
+        }
+        return sil;
+    }
+
+    function stopToColor(stop) {
+        const r = Math.round(stop.r);
+        const g = Math.round(stop.g);
+        const b = Math.round(stop.b);
+        const a = (stop.a ?? 255) / 255;
+        return a < 0.999 ? `rgba(${r},${g},${b},${+a.toFixed(3)})` : `rgb(${r},${g},${b})`;
+    }
+
+    function applyGradientToTracedSvg(svgStr, fit) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgStr, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (!svgEl) return null;
+
+        const ns = 'http://www.w3.org/2000/svg';
+        let defs = svgEl.querySelector('defs');
+        if (!defs) {
+            defs = doc.createElementNS(ns, 'defs');
+            svgEl.insertBefore(defs, svgEl.firstChild);
+        }
+
+        const grad = doc.createElementNS(ns, fit.type === 'radial' ? 'radialGradient' : 'linearGradient');
+        grad.setAttribute('id', 'source-gradient');
+        grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+        if (fit.type === 'radial') {
+            grad.setAttribute('cx', String(fit.cx));
+            grad.setAttribute('cy', String(fit.cy));
+            grad.setAttribute('r', String(fit.r));
+        } else {
+            grad.setAttribute('x1', String(fit.x1));
+            grad.setAttribute('y1', String(fit.y1));
+            grad.setAttribute('x2', String(fit.x2));
+            grad.setAttribute('y2', String(fit.y2));
+        }
+        fit.stops.forEach(stop => {
+            const el = doc.createElementNS(ns, 'stop');
+            el.setAttribute('offset', String(stop.offset));
+            el.setAttribute('stop-color', stopToColor(stop));
+            grad.appendChild(el);
+        });
+        defs.appendChild(grad);
+
+        const paint = 'url(#source-gradient)';
+        const shapes = Array.from(svgEl.querySelectorAll('path, polygon, circle, rect, ellipse'));
+        shapes.forEach(el => {
+            const opacity = parseFloat(el.getAttribute('opacity') ?? '1');
+            if (opacity === 0) {
+                el.remove();
+                return;
+            }
+
+            const fill = (el.getAttribute('fill') || '').trim().toLowerCase();
+            const style = el.getAttribute('style') || '';
+            const hasVisibleFill = (fill && fill !== 'none' && fill !== 'transparent') || /fill\s*:\s*(?!none)/i.test(style);
+            if (hasVisibleFill || !fill) {
+                el.setAttribute('fill', paint);
+            }
+            if (style && /fill\s*:/i.test(style)) {
+                el.setAttribute('style', style.replace(/fill\s*:\s*[^;]+/i, `fill:${paint}`));
+            }
+
+            el.setAttribute('stroke', 'none');
+            el.removeAttribute('stroke-width');
+            if (el.getAttribute('style')) {
+                el.setAttribute(
+                    'style',
+                    el.getAttribute('style')
+                        .replace(/stroke-width\s*:\s*[^;]+;?/gi, '')
+                        .replace(/stroke\s*:\s*[^;]+;?/gi, '')
+                        .trim()
+                );
+            }
+        });
+
+        return new XMLSerializer().serializeToString(doc);
+    }
+
+    function buildGradientSvgFromImage(imageData, settings) {
+        const fit = analyzeImageGradient(imageData);
+        if (!fit) return null;
+
+        const silhouette = makeAlphaSilhouette(imageData);
+        const palette = [
+            { r: 0, g: 0, b: 0, a: 0 },
+            { r: 0, g: 0, b: 0, a: 255 }
+        ];
+        let traced;
+        try {
+            traced = traceImageDataToSvg(silhouette, palette, settings);
+        } catch (error) {
+            traced = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${imageData.width} ${imageData.height}"><rect width="${imageData.width}" height="${imageData.height}" fill="#000"/></svg>`;
+        }
+        return applyGradientToTracedSvg(traced, fit);
+    }
+
     function convertToSquare(blob, size, paddingPercent = 0, backgroundColor = null, squircleColor = null) {
         return new Promise((resolve, reject) => {
             const canvas = document.createElement('canvas');
@@ -1415,6 +1961,16 @@ document.addEventListener('DOMContentLoaded', () => {
         sharedRecoloredInput.checked = true;
         updateSameThemeUi();
 
+        gradientKeepInput.checked = true;
+        posterizeStepsSlider.value = 6;
+        posterizeStepsValue.textContent = '6';
+        updateGradientControlsVisibility();
+
+        reduceColorsToggle.checked = true;
+        updateReduceColorsUi();
+        traceQualityToggle.checked = true;
+        updateRasterControlsVisibility();
+
         paddingSmallIconsCheckbox.checked = true;
 
         // Reset ICO resolution checkboxes
@@ -1563,31 +2119,29 @@ document.addEventListener('DOMContentLoaded', () => {
             squirclePath.setAttribute("fill", squircleColor);
             squirclePath.setAttribute("class", "svg-squircle-bg");
 
-            // Create group to scale original contents — match PNG convertToSquare sizing:
+            // Nested viewport keeps userSpaceOnUse gradients aligned with the artwork.
             // iconScale = (1 - 2*squirclePad) * (1 - 2*iconPad)
-            const g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
-            const cx = minX + width / 2;
-            const cy = minY + height / 2;
             const iconPaddingPercent = (parseInt(paddingSlider.value) || 0) / 100;
             const finalScale = (1 - 2 * squirclePaddingPercent) * (1 - 2 * iconPaddingPercent);
-            g.setAttribute("transform", `translate(${cx}, ${cy}) scale(${finalScale}) translate(${-cx}, ${-cy})`);
+            const contentW = width * finalScale;
+            const contentH = height * finalScale;
+            const contentX = minX + (width - contentW) / 2;
+            const contentY = minY + (height - contentH) / 2;
 
-            // Move non-metadata children to group
-            const children = Array.from(svgEl.childNodes);
-            children.forEach(child => {
-                if (child.nodeType === Node.ELEMENT_NODE) {
-                    const tag = child.tagName.toLowerCase();
-                    if (tag !== 'defs' && tag !== 'style' && tag !== 'metadata') {
-                        g.appendChild(child);
-                    }
-                }
-            });
+            const innerSvg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+            innerSvg.setAttribute("x", String(contentX));
+            innerSvg.setAttribute("y", String(contentY));
+            innerSvg.setAttribute("width", String(contentW));
+            innerSvg.setAttribute("height", String(contentH));
+            innerSvg.setAttribute("viewBox", `${minX} ${minY} ${width} ${height}`);
+            innerSvg.setAttribute("overflow", "visible");
 
-            // Append group to SVG
-            svgEl.appendChild(g);
+            while (svgEl.firstChild) {
+                innerSvg.appendChild(svgEl.firstChild);
+            }
 
-            // Prepend squircle path so it is in the background
-            svgEl.insertBefore(squirclePath, svgEl.firstChild);
+            svgEl.appendChild(squirclePath);
+            svgEl.appendChild(innerSvg);
 
             return new XMLSerializer().serializeToString(doc);
         } catch (e) {
@@ -1619,5 +2173,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateSameThemeUi();
+    updateGradientControlsVisibility();
+    updateReduceColorsUi();
+    updateRasterControlsVisibility();
     updatePaddingPreviewWrapperBg('transparent');
 });

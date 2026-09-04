@@ -46,7 +46,7 @@
         <!-- Step 1: Upload Card -->
         <section class="glass-card" id="upload-card">
             <h2>1. Upload Source Image</h2>
-            <p class="description">Upload a high-res <strong>PNG</strong> (to trace) or an existing <strong>SVG</strong>
+            <p class="description">Upload a high-res <strong>PNG</strong> or <strong>JPEG</strong> (to trace) or an existing <strong>SVG</strong>
                 (to recolor). Square aspect ratio works best.</p>
             
             <!-- Processing Mode Selector -->
@@ -69,11 +69,11 @@
 
             <div class="upload-area">
                 <!-- Added accept="image/svg+xml" -->
-                <input type="file" id="image-upload" accept="image/png, image/svg+xml" class="hidden">
+                <input type="file" id="image-upload" accept="image/png, image/jpeg, image/svg+xml" class="hidden">
                 <label for="image-upload" id="upload-label">
                     <div id="upload-prompt">
                         <strong>Click to browse</strong> or drag & drop<br>
-                        <small>(PNG or SVG)</small>
+                        <small>(PNG, JPEG, or SVG)</small>
                     </div>
                     <div id="image-preview-container" class="hidden">
                         <img id="image-preview" src="#" alt="Image preview">
@@ -122,6 +122,28 @@
                     </div>
                 </div>
 
+                <div id="gradient-controls" class="hidden">
+                    <div class="mode-selector-wrapper" style="margin-bottom: 0.75rem; width: 100%;">
+                        <span class="mode-label">SVG gradients</span>
+                        <div class="segmented-control">
+                            <input type="radio" name="gradient-mode" id="gradient-keep" value="keep" checked>
+                            <label for="gradient-keep">
+                                <span class="mode-text">Keep gradient</span>
+                            </label>
+                            <input type="radio" name="gradient-mode" id="gradient-posterize" value="posterize">
+                            <label for="gradient-posterize">
+                                <span class="mode-text">Posterize</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p class="gradient-mode-hint" id="gradient-mode-hint">Keep the original SVG gradient paints in the exported SVG.</p>
+                    <div id="posterize-steps-group" class="control-group hidden" style="margin-bottom: 1.25rem;">
+                        <label for="posterize-steps-slider">Steps</label>
+                        <input type="range" id="posterize-steps-slider" min="3" max="16" value="6" step="1">
+                        <span id="posterize-steps-value">6</span>
+                    </div>
+                </div>
+
                 <div class="preview-header">
                     <h3>SVG Previews</h3>
                     <div class="preview-bg-controls" id="bg-controls">
@@ -159,23 +181,41 @@
                     </div>
                 </div>
 
-                <!-- Controls: Only visible for PNGs -->
-                <div id="raster-controls" class="controls-grid">
-                    <div class="divider"><span>Tracing Settings (PNG Only)</span></div>
-                    <div class="control-group">
+                <!-- Controls: Only visible when tracing a PNG or JPEG -->
+                <div id="raster-controls" class="controls-grid hidden">
+                    <div class="divider"><span>Tracing Settings (PNG / JPEG)</span></div>
+                    <div class="toggle-row">
+                        <div class="toggle-switch-wrapper">
+                            <input type="checkbox" id="reduce-colors-toggle" class="toggle-input" checked>
+                            <label for="reduce-colors-toggle" class="toggle-label"></label>
+                        </div>
+                        <label for="reduce-colors-toggle" class="toggle-text">Reduce colours</label>
+                    </div>
+                    <p class="gradient-mode-hint" id="reduce-colors-hint">Limits the traced SVG to the colour count below. Turn this off to keep a smooth SVG gradient.</p>
+                    <div class="control-group" id="colors-slider-group">
                         <label for="colors-slider">Colors</label>
                         <input type="range" id="colors-slider" min="2" max="20" value="8" step="1">
                         <span id="colors-value">8</span>
                     </div>
-                    <div class="control-group">
-                        <label for="detail-slider">Detail Level</label>
-                        <input type="range" id="detail-slider" min="0" max="5" value="1" step="0.1">
-                        <span id="detail-value">1.0</span>
+                    <div class="toggle-row">
+                        <div class="toggle-switch-wrapper">
+                            <input type="checkbox" id="trace-quality-toggle" class="toggle-input" checked>
+                            <label for="trace-quality-toggle" class="toggle-label"></label>
+                        </div>
+                        <label for="trace-quality-toggle" class="toggle-text">Adjust detail &amp; smoothing</label>
                     </div>
-                    <div class="control-group">
-                        <label for="smoothing-slider">Smoothing</label>
-                        <input type="range" id="smoothing-slider" min="0" max="5" value="1" step="1">
-                        <span id="smoothing-value">1</span>
+                    <p class="gradient-mode-hint">Only needed when tracing a PNG or JPEG. Hidden automatically for SVG uploads.</p>
+                    <div id="trace-quality-group">
+                        <div class="control-group">
+                            <label for="detail-slider">Detail Level</label>
+                            <input type="range" id="detail-slider" min="0" max="5" value="1" step="0.1">
+                            <span id="detail-value">1.0</span>
+                        </div>
+                        <div class="control-group">
+                            <label for="smoothing-slider">Smoothing</label>
+                            <input type="range" id="smoothing-slider" min="0" max="5" value="1" step="1">
+                            <span id="smoothing-value">1</span>
+                        </div>
                     </div>
                 </div>
             </div>
