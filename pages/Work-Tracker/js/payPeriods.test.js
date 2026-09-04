@@ -11,6 +11,7 @@ import {
     getCurrentPayUnitProgress,
     getEquivalentHourlyRate,
     getAssumedLivePaySession,
+    getNextAssumedPaySession,
     isPayPeriodActive,
     sanitizePayPeriod,
     sanitizePayPeriods,
@@ -415,6 +416,28 @@ test('live pay session counts today\'s scheduled block, not the month so far', (
     assert.equal(getAssumedLivePaySession([salary], new Date(2026, 7, 15, 13, 0, 0), options), null);
 });
 
+test('next assumed pay session counts until the upcoming start, not the current session end', () => {
+    const salary = makeMonthlyPay();
+    const options = { defaultStartTime: '09:00', dailyHours: 8, workingDaysPerWeek: 5 };
+
+    const before = getNextAssumedPaySession([salary], new Date(2026, 7, 12, 8, 0, 0), options);
+    assert.equal(new Date(before.startTime).getDate(), 12);
+    assert.equal(new Date(before.startTime).getHours(), 9);
+    assert.equal(before.remainingMs, 60 * 60 * 1000);
+
+    const during = getNextAssumedPaySession([salary], new Date(2026, 7, 12, 13, 0, 0), options);
+    assert.equal(new Date(during.startTime).getDate(), 13);
+    assert.equal(new Date(during.startTime).getHours(), 9);
+
+    const after = getNextAssumedPaySession([salary], new Date(2026, 7, 12, 18, 0, 0), options);
+    assert.equal(new Date(after.startTime).getDate(), 13);
+    assert.equal(new Date(after.startTime).getHours(), 9);
+
+    const weekend = getNextAssumedPaySession([salary], new Date(2026, 7, 15, 13, 0, 0), options);
+    assert.equal(new Date(weekend.startTime).getDate(), 17);
+    assert.equal(new Date(weekend.startTime).getDay(), 1);
+});
+
 test('assumed work follows the per-day work schedule', () => {
     const salary = makeMonthlyPay();
     const schedule = sanitizeWorkSchedule({
@@ -437,6 +460,24 @@ test('assumed work follows the per-day work schedule', () => {
     assert.equal(live.elapsedMs, 2 * 60 * 60 * 1000);
     assert.equal(Number(live.earnings.toFixed(4)), Number((hourly * 2).toFixed(4)));
     assert.ok(hourly > defaultHourly);
+});
+
+test('next assumed pay session follows the work schedule across days', () => {
+    const salary = makeMonthlyPay();
+    const schedule = sanitizeWorkSchedule({
+        days: [
+            { day: 3, enabled: true, start: '10:00', end: '14:00' }
+        ]
+    }, { workingDaysPerWeek: 0 });
+    const afterWednesday = getNextAssumedPaySession(
+        [salary],
+        new Date(2026, 7, 12, 15, 0, 0),
+        { schedule }
+    );
+
+    assert.equal(new Date(afterWednesday.startTime).getDate(), 19);
+    assert.equal(new Date(afterWednesday.startTime).getDay(), 3);
+    assert.equal(new Date(afterWednesday.startTime).getHours(), 10);
 });
 
 test('pay overlap summary counts days with both salary coverage and a logged session', () => {

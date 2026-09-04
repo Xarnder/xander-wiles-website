@@ -2,7 +2,7 @@ import { createSeedBudgetPlan, sanitizeBudgetPlan, sanitizeBudgetSnapMode, BUDGE
 import { createDefaultWorkSchedule, sanitizeWorkSchedule, serializeWorkSchedule } from './workSchedule.js';
 import { sanitizeClockTimeFormat } from './utils.js';
 
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-personal-cut-stats', 'widget-personal-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-yesterday', 'widget-tomorrow', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-personal-cut-stats', 'widget-personal-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {

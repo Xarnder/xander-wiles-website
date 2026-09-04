@@ -6,6 +6,7 @@ import {
     formatDateKey,
     formatPayRate,
     getAssumedLivePaySession,
+    getNextAssumedPaySession,
     getCombinedEquivalentHourlyRate,
     getCurrentPayUnitProgress,
     getEquivalentHourlyRate,
@@ -21,6 +22,7 @@ import {
     sumCurrentUnitAccrued,
     summarizePaySessionOverlaps
 } from './payPeriods.js';
+import { getNeighborWorkDaySummary } from './neighborWorkDays.js';
 import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON, applyPercentageCuts, applyExternalThenPersonalCuts } from './savingPots.js';
 import {
     BATCH_DELETE_CONFIRM_PHRASE,
@@ -48,6 +50,7 @@ import {
 } from './budgeting.js';
 import {
     WEEKDAY_LABELS,
+    WEEKDAY_SHORT,
     formatScheduleSummary,
     getScheduleDayHours,
     orderedWeekdayIndexes,
@@ -79,6 +82,7 @@ export const DOM = {
     moneyCounterSession: document.getElementById('money-counter-session'),
     moneyCounterSessionStartLabel: document.getElementById('money-counter-session-start-label'),
     moneyCounterSessionStart: document.getElementById('money-counter-session-start'),
+    moneyCounterSessionStartRemaining: document.getElementById('money-counter-session-start-remaining'),
     moneyCounterSessionEndRow: document.getElementById('money-counter-session-end-row'),
     moneyCounterSessionEndLabel: document.getElementById('money-counter-session-end-label'),
     moneyCounterSessionEnd: document.getElementById('money-counter-session-end'),
@@ -95,6 +99,12 @@ export const DOM = {
     moneyCount20p: document.getElementById('money-count-20p'),
     moneyCount1: document.getElementById('money-count-1'),
     moneyCount10: document.getElementById('money-count-10'),
+    yesterdayWidget: document.getElementById('widget-yesterday'),
+    yesterdayRelativeLabel: document.getElementById('yesterday-relative-label'),
+    yesterdayContent: document.getElementById('yesterday-widget-content'),
+    tomorrowWidget: document.getElementById('widget-tomorrow'),
+    tomorrowRelativeLabel: document.getElementById('tomorrow-relative-label'),
+    tomorrowContent: document.getElementById('tomorrow-widget-content'),
     companyInput: document.getElementById('company-input'),
     projectInput: document.getElementById('project-input'),
     companySelect: document.getElementById('company-select'),
@@ -568,6 +578,8 @@ export function updateCurrencyDisplays() {
         renderLiveMoneyCounter(0, hasActivePayAccrual());
     }
 
+    renderNeighborDayWidgets();
+
     if (DOM.budgetingView && !DOM.budgetingView.classList.contains('hidden')) {
         renderBudgetingView();
     }
@@ -798,31 +810,54 @@ function formatWidgetClockTime(dateMs) {
     return formatClockTime(dateMs, state.clockTimeFormat);
 }
 
+function formatWidgetSessionTime(dateMs, now = new Date()) {
+    const time = formatWidgetClockTime(dateMs);
+    if (!time) return '';
+    const date = new Date(dateMs);
+    if (Number.isNaN(date.getTime())) return time;
+    if (date.toDateString() === now.toDateString()) return time;
+    const weekday = WEEKDAY_SHORT[date.getDay()] || date.toLocaleDateString(undefined, { weekday: 'short' });
+    return `${weekday} ${time}`;
+}
+
 function getLiveMoneyCounterState(sessionEarned = 0, now = new Date()) {
     const periods = getVisiblePayPeriods();
-    const assumed = getAssumedLivePaySession(periods, now, getPayWorkOptions());
+    const workOptions = getPayWorkOptions();
+    const assumed = getAssumedLivePaySession(periods, now, workOptions);
     const live = getPayAwareLiveSession();
     const extraSession = live && isSessionCoveredByPay(live, periods)
         ? 0
         : Math.max(Number(sessionEarned) || 0, 0);
     const timerRunning = Boolean(live);
     const useTimerClock = timerRunning && extraSession > 0;
+    const isLive = timerRunning || Boolean(assumed?.isLive);
+    const nextSession = isLive ? null : getNextAssumedPaySession(periods, now, workOptions);
     const startTime = useTimerClock
         ? live.startTime
-        : (assumed?.startTime ?? live?.startTime ?? null);
-    const endTime = Number.isFinite(assumed?.endTime) ? assumed.endTime : null;
+        : (nextSession?.startTime ?? assumed?.startTime ?? live?.startTime ?? null);
+    const endTime = Number.isFinite(nextSession?.endTime)
+        ? nextSession.endTime
+        : (Number.isFinite(assumed?.endTime) ? assumed.endTime : null);
     const nowMs = now.getTime();
+    const countdownKind = isLive
+        ? (Number.isFinite(endTime) && endTime > nowMs ? 'until-end' : null)
+        : (Number.isFinite(nextSession?.startTime) && nextSession.startTime > nowMs ? 'until-start' : null);
+    const countdownTarget = countdownKind === 'until-start'
+        ? nextSession.startTime
+        : (countdownKind === 'until-end' ? endTime : null);
     return {
         assumed,
         live,
+        nextSession,
         startTime,
         endTime,
-        remainingMs: Number.isFinite(endTime) ? endTime - nowMs : null,
+        remainingMs: Number.isFinite(countdownTarget) ? countdownTarget - nowMs : null,
+        countdownKind,
         earnings: extraSession + (assumed ? assumed.earnings : 0),
         elapsedMs: useTimerClock
             ? live.durationMs
             : (assumed ? assumed.elapsedMs : (timerRunning ? live.durationMs : 0)),
-        isLive: timerRunning || Boolean(assumed?.isLive)
+        isLive
     };
 }
 
@@ -883,32 +918,43 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
         DOM.moneyCounterSession.classList.toggle('hidden', !hasStart);
 
         if (hasStart && DOM.moneyCounterSessionStart) {
-            const sessionHasBegun = nowMs >= counter.startTime;
+            const sessionHasBegun = isLive || nowMs >= counter.startTime;
             if (DOM.moneyCounterSessionStartLabel) {
                 DOM.moneyCounterSessionStartLabel.textContent = sessionHasBegun ? 'Started' : 'Starts';
             }
-            DOM.moneyCounterSessionStart.textContent = formatWidgetClockTime(counter.startTime);
+            DOM.moneyCounterSessionStart.textContent = formatWidgetSessionTime(counter.startTime, now);
         }
 
         if (DOM.moneyCounterSessionEndRow) {
             DOM.moneyCounterSessionEndRow.classList.toggle('hidden', !hasEnd);
         }
         if (hasEnd) {
-            const sessionHasEnded = nowMs >= counter.endTime;
+            const sessionHasEnded = !isLive && nowMs >= counter.endTime;
             if (DOM.moneyCounterSessionEndLabel) {
                 DOM.moneyCounterSessionEndLabel.textContent = sessionHasEnded ? 'Ended' : 'Ends';
             }
             if (DOM.moneyCounterSessionEnd) {
-                DOM.moneyCounterSessionEnd.textContent = formatWidgetClockTime(counter.endTime);
+                DOM.moneyCounterSessionEnd.textContent = formatWidgetSessionTime(counter.endTime, now);
             }
-            if (DOM.moneyCounterSessionRemaining) {
-                const remainingMs = counter.remainingMs;
-                const showRemaining = Number.isFinite(remainingMs) && remainingMs > 0;
-                DOM.moneyCounterSessionRemaining.classList.toggle('hidden', !showRemaining);
-                DOM.moneyCounterSessionRemaining.textContent = showRemaining
-                    ? `${formatDurationDetailed(remainingMs)} left`
-                    : '';
-            }
+        }
+
+        const remainingMs = counter.remainingMs;
+        const showRemaining = Number.isFinite(remainingMs) && remainingMs > 0 && Boolean(counter.countdownKind);
+        const remainingText = !showRemaining
+            ? ''
+            : (counter.countdownKind === 'until-start'
+                ? `${formatDurationDetailed(remainingMs)} until next schedule start`
+                : `${formatDurationDetailed(remainingMs)} left`);
+        const showStartRemaining = showRemaining && counter.countdownKind === 'until-start';
+        const showEndRemaining = showRemaining && counter.countdownKind === 'until-end';
+
+        if (DOM.moneyCounterSessionStartRemaining) {
+            DOM.moneyCounterSessionStartRemaining.classList.toggle('hidden', !showStartRemaining);
+            DOM.moneyCounterSessionStartRemaining.textContent = showStartRemaining ? remainingText : '';
+        }
+        if (DOM.moneyCounterSessionRemaining) {
+            DOM.moneyCounterSessionRemaining.classList.toggle('hidden', !showEndRemaining);
+            DOM.moneyCounterSessionRemaining.textContent = showEndRemaining ? remainingText : '';
         }
     }
 
@@ -923,11 +969,13 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
             DOM.moneyCounterPayHint.textContent = assumed.isLive
                 ? 'Counting today\'s scheduled session, not the whole month. Uncovered live sessions add on top.'
                 : (assumed.isComplete
-                    ? 'Today\'s scheduled session has finished. Uncovered live sessions still add on top.'
-                    : 'The counter starts at the scheduled start time.');
+                    ? 'Today\'s scheduled session has finished. The countdown is until the next schedule start.'
+                    : 'Waiting until the next schedule start. The counter begins then.');
             DOM.moneyCounterPayHint.classList.remove('hidden');
         } else if (hasPay) {
-            DOM.moneyCounterPayHint.textContent = 'No scheduled session today. Uncovered live sessions still count here.';
+            DOM.moneyCounterPayHint.textContent = counter.countdownKind === 'until-start'
+                ? 'No scheduled session today. The countdown is until the next schedule start.'
+                : 'No scheduled session today. Uncovered live sessions still count here.';
             DOM.moneyCounterPayHint.classList.remove('hidden');
         } else {
             DOM.moneyCounterPayHint.textContent = '';
@@ -942,6 +990,176 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     if (DOM.moneyCount20p) DOM.moneyCount20p.textContent = twentyPCount;
     if (DOM.moneyCount1) DOM.moneyCount1.textContent = poundCount;
     if (DOM.moneyCount10) DOM.moneyCount10.textContent = noteCount;
+}
+
+function getNeighborDaySessions() {
+    const sessions = [...(state.allSessions || [])];
+    if (!state.startTime) return sessions;
+    const elapsedMs = Date.now() - state.startTime;
+    sessions.push({
+        startTime: state.startTime,
+        endTime: Date.now(),
+        durationMs: elapsedMs,
+        earnings: (elapsedMs / (1000 * 60 * 60)) * (state.currentSessionRate || 0),
+        company: state.currentCompany
+    });
+    return sessions;
+}
+
+function formatNeighborMoney(amount) {
+    return `<span class="currency-symbol">${escapeHtml(state.currentCurrency)}</span>${(Number(amount) || 0).toFixed(2)}`;
+}
+
+function formatNeighborHours(hours) {
+    return formatDuration(Math.max(Number(hours) || 0, 0) * 3600000);
+}
+
+function formatNeighborDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString(undefined, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+    });
+}
+
+function getNeighborDayHint(summary, kind) {
+    if (kind === 'next') {
+        return summary.hasPay
+            ? 'Scheduled salary for this session. It is not in totals until the day starts.'
+            : 'Estimated from your hourly rate and Work Schedule. It is not in totals yet.';
+    }
+    if (summary.hasLogged && summary.hasPay) {
+        return 'Hours are from your logged session. Money uses the scheduled salary day, plus any uncovered extra sessions.';
+    }
+    if (summary.hasLogged) {
+        return 'Hours and money are from your logged session that day.';
+    }
+    if (summary.hasPay) {
+        return 'No logged session that day. Hours and money are assumed from Work Schedule and salary.';
+    }
+    return 'No logged session that day. Hours are assumed from Work Schedule.';
+}
+
+function renderNeighborDayStat(label, value) {
+    return `
+        <div class="neighbor-day-stat">
+            <span class="label">${label}</span>
+            <span class="value">${value}</span>
+        </div>
+    `;
+}
+
+function renderNeighborDayCard(kind, summary) {
+    if (!summary) {
+        return `<p class="neighbor-day-empty">No scheduled work day found. Turn on days in Work Schedule to see this.</p>`;
+    }
+
+    const cuts = getCutAwareAmounts(summary.earnings);
+    const hourlyCuts = getCutAwareAmounts(summary.hourlyRate);
+    const hasExternal = state.percentageCuts.length > 0;
+    const hasPersonal = state.personalCuts.length > 0;
+    const afterAmount = hasPersonal ? cuts.afterPersonal : cuts.afterExternal;
+    const afterHourly = hasPersonal ? hourlyCuts.afterPersonal : hourlyCuts.afterExternal;
+    const afterLabel = hasPersonal ? 'After both cuts' : (hasExternal ? 'After external cuts' : 'After cuts');
+    const startLabel = formatClockTime(summary.startTime, state.clockTimeFormat);
+    const endLabel = formatClockTime(summary.endTime, state.clockTimeFormat);
+    const hoursLabel = kind === 'previous' ? 'Hours worked' : 'Hours scheduled';
+    const hoursValue = kind === 'previous' ? summary.hoursWorked : summary.scheduledHours;
+    const showScheduledHours = kind === 'previous' && Math.abs(summary.scheduledHours - summary.hoursWorked) > 0.05;
+    const stats = [
+        renderNeighborDayStat(hoursLabel, formatNeighborHours(hoursValue)),
+        renderNeighborDayStat('Hourly before cuts', formatNeighborMoney(summary.hourlyRate)),
+        renderNeighborDayStat('Hourly after cuts', formatNeighborMoney(afterHourly))
+    ];
+    if (showScheduledHours) {
+        stats.splice(1, 0, renderNeighborDayStat('Hours scheduled', formatNeighborHours(summary.scheduledHours)));
+    }
+    if (summary.breakHours > 0) {
+        stats.push(renderNeighborDayStat('Breaks', formatNeighborHours(summary.breakHours)));
+    }
+    if (summary.sessionCount > 0) {
+        stats.push(renderNeighborDayStat('Logged sessions', String(summary.sessionCount)));
+    }
+    if (summary.payNames.length) {
+        stats.push(renderNeighborDayStat('Pay', escapeHtml(summary.payNames.join(', '))));
+    }
+
+    const afterNote = (!hasExternal && !hasPersonal)
+        ? '<span class="neighbor-day-money-note">No cuts set</span>'
+        : '';
+
+    return `
+        <h3 class="neighbor-day-date">${escapeHtml(formatNeighborDate(summary.date))}</h3>
+        <div class="neighbor-day-session">${escapeHtml(startLabel)} – ${escapeHtml(endLabel)}</div>
+        <div class="neighbor-day-money">
+            <div class="neighbor-day-money-card is-after">
+                <span class="label">${afterLabel}</span>
+                <span class="value">${formatNeighborMoney(afterAmount)}</span>
+                ${afterNote}
+            </div>
+            <div class="neighbor-day-money-card is-before">
+                <span class="label">Before cuts</span>
+                <span class="value">${formatNeighborMoney(cuts.before)}</span>
+            </div>
+        </div>
+        ${hasPersonal && hasExternal ? `<div class="neighbor-day-money-note">After external cuts ${formatNeighborMoney(cuts.afterExternal)}</div>` : ''}
+        <div class="neighbor-day-stats">${stats.join('')}</div>
+        <p class="neighbor-day-hint">${getNeighborDayHint(summary, kind)}</p>
+    `;
+}
+
+let neighborDayRenderKey = '';
+
+export function renderNeighborDayWidgets() {
+    if (!DOM.yesterdayContent && !DOM.tomorrowContent) return;
+
+    const now = new Date();
+    const workOptions = getPayWorkOptions();
+    const context = {
+        now,
+        schedule: workOptions.schedule || state.workSchedule,
+        sessions: getNeighborDaySessions(),
+        breaks: state.allBreaks || [],
+        periods: getVisiblePayPeriods(),
+        fallbackHourlyRate: state.tcHourlyRate || state.currentSessionRate || 0,
+        dailyHours: workOptions.dailyHours,
+        workingDaysPerWeek: workOptions.workingDaysPerWeek,
+        defaultStartTime: workOptions.defaultStartTime
+    };
+    const previous = getNeighborWorkDaySummary('previous', context);
+    const next = getNeighborWorkDaySummary('next', context);
+    const renderKey = JSON.stringify({
+        currency: state.currentCurrency,
+        clock: state.clockTimeFormat,
+        cuts: [state.percentageCuts, state.personalCuts],
+        previous: previous && {
+            dateKey: previous.dateKey,
+            earnings: roundMoney(previous.earnings),
+            hoursWorked: roundMoney(previous.hoursWorked),
+            sessionCount: previous.sessionCount
+        },
+        next: next && {
+            dateKey: next.dateKey,
+            earnings: roundMoney(next.earnings),
+            scheduledHours: roundMoney(next.scheduledHours)
+        }
+    });
+    if (renderKey === neighborDayRenderKey) return;
+    neighborDayRenderKey = renderKey;
+
+    if (DOM.yesterdayRelativeLabel) {
+        DOM.yesterdayRelativeLabel.textContent = previous?.relativeLabel || 'Last work day';
+    }
+    if (DOM.tomorrowRelativeLabel) {
+        DOM.tomorrowRelativeLabel.textContent = next?.relativeLabel || 'Next work day';
+    }
+    if (DOM.yesterdayContent) {
+        DOM.yesterdayContent.innerHTML = renderNeighborDayCard('previous', previous);
+    }
+    if (DOM.tomorrowContent) {
+        DOM.tomorrowContent.innerHTML = renderNeighborDayCard('next', next);
+    }
 }
 
 export function renderMoneyCounterModeControls() {
@@ -2836,6 +3054,7 @@ let payAccrualTimer = null;
 export function refreshPayAccrualDisplays() {
     updatePayWidgetSummaryOnly();
     renderLiveMoneyCounter(getSessionLiveEarnings(), Boolean(state.startTime) || hasActivePayAccrual());
+    renderNeighborDayWidgets();
     toggleLiveIndicators(Boolean(state.startTime));
 }
 
@@ -3080,6 +3299,7 @@ export function renderWorkSchedule() {
     }
 
     bindWorkScheduleEvents();
+    renderNeighborDayWidgets();
 }
 
 export function applyWidgetOrder() {
@@ -3093,7 +3313,7 @@ export function applyWidgetOrder() {
 
 export function applyWidgetVisibility() {
     const DEFAULT_WIDGET_IDS = [
-        'widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
+        'widget-timer', 'widget-pay', 'widget-work-schedule', 'widget-pay-overlap', 'widget-breaks', 'widget-money-counter', 'widget-yesterday', 'widget-tomorrow', 'widget-saving-pots', 'widget-stats',
         'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-personal-cut-stats', 'widget-personal-cuts', 'widget-gantt',
         'widget-calendar', 'widget-chart', 'widget-history'
     ];
@@ -3395,6 +3615,8 @@ export function renderWidgetOrderList() {
         'widget-pay-overlap': 'Overlapping Pay',
         'widget-breaks': 'Breaks',
         'widget-money-counter': 'Live Money Counter',
+        'widget-yesterday': 'Yesterday',
+        'widget-tomorrow': 'Tomorrow',
         'widget-saving-pots': 'Saving Pots',
         'widget-stats': 'Statistics',
         'widget-work-pattern': 'Work Pattern',

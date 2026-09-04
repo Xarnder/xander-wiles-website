@@ -329,6 +329,14 @@ export function getCombinedEquivalentHourlyRate(periods, now = new Date(), optio
         .reduce((sum, period) => sum + getEquivalentHourlyRate(period, now, options), 0);
 }
 
+export function getCombinedHourlyRateForDay(periods, day, options = {}) {
+    const date = day instanceof Date ? day : new Date(day);
+    if (Number.isNaN(date.getTime())) return 0;
+    return (Array.isArray(periods) ? periods : [])
+        .filter((period) => payPeriodCoversDay(period, date))
+        .reduce((sum, period) => sum + getEquivalentHourlyRate(period, date, options), 0);
+}
+
 export function filterPayPeriods(periods, { company = '', project = '' } = {}) {
     const list = Array.isArray(periods) ? periods : [];
     if (project) return [];
@@ -605,6 +613,48 @@ export function getAssumedLivePaySession(periods, now = new Date(), options = {}
         isLive: nowMs >= startTime && nowMs < endTime,
         isComplete: nowMs >= endTime
     };
+}
+
+export function getNextAssumedPaySession(periods, now = new Date(), options = {}) {
+    const current = now instanceof Date ? now : new Date(now);
+    const nowMs = current.getTime();
+    if (!Number.isFinite(nowMs)) return null;
+
+    const list = Array.isArray(periods) ? periods : [];
+    if (!list.length) return null;
+
+    for (let offset = 0; offset < 21; offset++) {
+        const day = new Date(getStartOfDayMs(current));
+        day.setDate(day.getDate() + offset);
+
+        let startTime = Infinity;
+        let endTime = 0;
+        let hasSegment = false;
+
+        list.forEach((period) => {
+            if (!payPeriodCoversDay(period, day)) return;
+            const segment = getAssumedWorkSegment(period, day, {
+                ...options,
+                now: current,
+                includeFuture: true
+            });
+            if (!segment || segment.startTime <= nowMs) return;
+            hasSegment = true;
+            startTime = Math.min(startTime, segment.startTime);
+            endTime = Math.max(endTime, segment.endTime);
+        });
+
+        if (!hasSegment) continue;
+
+        return {
+            startTime,
+            endTime,
+            durationMs: Math.max(0, endTime - startTime),
+            remainingMs: startTime - nowMs
+        };
+    }
+
+    return null;
 }
 
 export function collectAssumedWorkSegments(periods, rangeStart, rangeEnd, options = {}) {

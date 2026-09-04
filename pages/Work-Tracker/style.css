@@ -759,6 +759,198 @@ body.dashboard-density-spacious .cut-stat-layer {
     color: var(--accent-green);
 }
 
+.neighbor-day-widget {
+    position: relative;
+    overflow: hidden;
+}
+
+.neighbor-day-yesterday::after,
+.neighbor-day-tomorrow::after {
+    content: "";
+    position: absolute;
+    inset: auto -24% -40% -24%;
+    height: 58%;
+    pointer-events: none;
+}
+
+.neighbor-day-yesterday::after {
+    background: radial-gradient(circle at 50% 50%, rgba(0, 230, 118, 0.16), transparent 64%);
+}
+
+.neighbor-day-tomorrow::after {
+    background: radial-gradient(circle at 50% 50%, rgba(199, 125, 255, 0.16), transparent 64%);
+}
+
+.neighbor-day-header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.neighbor-day-header-copy {
+    min-width: 0;
+}
+
+.neighbor-day-subtitle {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+.neighbor-day-badge {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neighbor-day-yesterday .neighbor-day-badge {
+    color: var(--accent-green);
+    border-color: rgba(0, 230, 118, 0.28);
+}
+
+.neighbor-day-tomorrow .neighbor-day-badge {
+    color: var(--accent-scheduled);
+    border-color: rgba(199, 125, 255, 0.28);
+}
+
+.neighbor-day-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.neighbor-day-date {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.neighbor-day-session {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.neighbor-day-money {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.neighbor-day-money-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.neighbor-day-money-card .label {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neighbor-day-money-card .value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+}
+
+.neighbor-day-money-card.is-before .value {
+    color: var(--accent-blue);
+}
+
+.neighbor-day-money-card.is-after .value {
+    color: var(--accent-green);
+}
+
+.neighbor-day-tomorrow .neighbor-day-money-card.is-after .value {
+    color: var(--accent-scheduled);
+}
+
+.neighbor-day-money-note {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+.neighbor-day-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+}
+
+.neighbor-day-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.neighbor-day-stat .label {
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.neighbor-day-stat .value {
+    font-size: 0.98rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.neighbor-day-hint {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.neighbor-day-empty {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+    .neighbor-day-money,
+    .neighbor-day-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .neighbor-day-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
 .money-counter-mode-label {
     color: var(--text-secondary);
     font-size: 0.78rem;

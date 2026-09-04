@@ -49,6 +49,7 @@ import {
     showConfirm,
     renderPayWidget,
     renderWorkSchedule,
+    renderNeighborDayWidgets,
     toggleTimerUI,
     openPayPeriodModal,
     closePayPeriodModal,
@@ -202,6 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderSavingPotsWidget();
     renderPayWidget();
     renderWorkSchedule();
+    renderNeighborDayWidgets();
     syncPayAccrualTimer();
     renderMoneyCounterModeControls();
     renderStatsPeriodModeControls();

@@ -257,6 +257,7 @@
                         <div class="money-counter-session-row">
                             <span class="money-counter-session-label" id="money-counter-session-start-label">Started</span>
                             <span class="money-counter-session-value" id="money-counter-session-start"></span>
+                            <span class="money-counter-session-remaining hidden" id="money-counter-session-start-remaining"></span>
                         </div>
                         <div class="money-counter-session-row hidden" id="money-counter-session-end-row">
                             <span class="money-counter-session-label" id="money-counter-session-end-label">Ends</span>
@@ -291,6 +292,34 @@
                                 <strong id="money-count-10">0</strong>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Yesterday -->
+                <section class="card neighbor-day-widget neighbor-day-yesterday" id="widget-yesterday">
+                    <div class="neighbor-day-header">
+                        <div class="neighbor-day-header-copy">
+                            <h2 class="widget-title" style="margin: 0;">Yesterday</h2>
+                            <p class="neighbor-day-subtitle">Last scheduled work day — what you made</p>
+                        </div>
+                        <span class="neighbor-day-badge" id="yesterday-relative-label">Last work day</span>
+                    </div>
+                    <div id="yesterday-widget-content" class="neighbor-day-content">
+                        <p class="loading-text">Loading last work day...</p>
+                    </div>
+                </section>
+
+                <!-- Tomorrow -->
+                <section class="card neighbor-day-widget neighbor-day-tomorrow" id="widget-tomorrow">
+                    <div class="neighbor-day-header">
+                        <div class="neighbor-day-header-copy">
+                            <h2 class="widget-title" style="margin: 0;">Tomorrow</h2>
+                            <p class="neighbor-day-subtitle">Next scheduled work day — what you will make</p>
+                        </div>
+                        <span class="neighbor-day-badge" id="tomorrow-relative-label">Next work day</span>
+                    </div>
+                    <div id="tomorrow-widget-content" class="neighbor-day-content">
+                        <p class="loading-text">Loading next work day...</p>
                     </div>
                 </section>
 

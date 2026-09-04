@@ -1,7 +1,7 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
 import { state, updatePercentageCuts, updatePersonalCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope, updateBudgetPlan, updatePayPeriods, updateWorkSchedule } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, renderPersonalCutList, getAmountAfterPercentageCuts, getAmountAfterPersonalCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown, renderPayOverlapWarning, renderWorkSchedule, renderStatEarningsDisplay } from './ui.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, renderPersonalCutList, getAmountAfterPercentageCuts, getAmountAfterPersonalCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown, renderPayOverlapWarning, renderWorkSchedule, renderStatEarningsDisplay, renderNeighborDayWidgets } from './ui.js';
 import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge, getCalendarDateKey, formatClockTime } from './utils.js';
 import { combinePayAndSessionEarnings, filterPayPeriods, serializePayPeriod, isSessionCoveredByPay, getWorkSettingsFromState } from './payPeriods.js';
 import { serializeWorkSchedule } from './workSchedule.js';
@@ -212,6 +212,7 @@ export function loadPayPeriods() {
         import('./ui.js').then((module) => {
             module.renderPayWidget?.();
             module.renderPayOverlapWarning?.();
+            module.renderNeighborDayWidgets?.();
             module.syncPayAccrualTimer?.();
         });
         console.log("Debug: Pay periods updated from Firebase");
@@ -1145,6 +1146,7 @@ export function renderDashboardData() {
     renderBreakHistory();
 
     renderPayOverlapWarning();
+    renderNeighborDayWidgets();
 
     renderCalendar();
     renderChart();
