@@ -20,11 +20,14 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - Mouse — look around (after clicking to enter pointer lock)
 - `Shift` — run
 - `Space` — jump (when gravity is enabled)
-- `Esc` — release the mouse, and cancel a pending foundation corner or wall point if one is selected
-- `1`–`5` — hotbar slots: `1` Foundation, `2` Wall, `3` Window, `4` Door, `5` empty
-- Left click — select a corner/point, place a wall, or place a window/door (only once pointer lock is
-  engaged)
-- Right click — cancel the current foundation or wall selection
+- `Esc` — release the mouse, and cancel a pending foundation corner or in-progress wall/path if one
+  is selected
+- `1`–`5` — hotbar slots: `1` Foundation, `2` Wall, `3` Window, `4` Door, `5` Continuous/Polygon Wall
+- Left click — select a corner/point, place a wall, add a path point, close a path loop, or place a
+  window/door (only once pointer lock is engaged)
+- Right click — cancel the current foundation, wall, or in-progress wall-path selection
+- `Enter` (Continuous Wall only) — finish the current path as an open (unclosed) chain
+- `Backspace` (Continuous Wall only) — undo the most recently placed path point
 
 ## How infinite terrain works
 
@@ -470,6 +473,183 @@ too close to the edge, cross-foundation endpoints); a diagonal wall's world tran
 and collision leaving a door's centre passable while still blocking the solid wall beside it.
 `tests/game.e2e.ts` extends the existing smoke tests: the hotbar shows Wall/Window/Door and switches
 tool with 2/3/4, and the Building GUI folder's Grid/Walls/Windows/Doors sections render.
+
+## Continuous Wall paths: clean joined corners
+
+The Straight Wall Tool (`[2]`) is unchanged and still works exactly as before — two clicks, one
+independent wall. Its known limitation was corners: two independently-placed straight walls meeting
+at a point either overlap (a visible double-thickness spike) or gap, because each wall's geometry is
+a plain rectangle with flat, perpendicular end caps that know nothing about their neighbour.
+
+The **Continuous/Polygon Wall Tool** (`[5]`, `src/lib/game/building/PolygonWallTool.ts`) solves this
+by drawing a whole connected path in one tool session and computing real corner joins between
+consecutive segments — while still producing ordinary, individually-addressable wall segments
+underneath, so Window/Door/collision/serialization all keep working exactly as they did for
+standalone walls.
+
+### How paths are stored
+
+`WallPathDefinition` (`WallPathTypes.ts`) holds an ordered `points: BuildingGridPoint[]` (the exact
+same foundation-local building-grid integers standalone walls already use — nothing new here), a
+`closed` flag, and one `WallPathSegmentDefinition` per edge (`points[i] -> points[i+1]`, plus a
+closing `points[length-1] -> points[0]` segment when `closed`). Each segment is just `{ id,
+openings: WallOpeningDefinition[] }` — as lightweight as a standalone wall's own openings list, and
+deliberately _not_ storing its own endpoints redundantly (they're derived from the path's `points`
+by index). `wallHeight`/`wallThickness`/`joinStyle`/`miterLimit` live once per path, since a path is
+authored as one continuous shape.
+
+**Existing `WallDefinition` is untouched** — no migration, no shared base type, no "wall paths are
+now the only representation" refactor. `FoundationBuildingDefinition` just grew an additive
+`wallPaths: WallPathDefinition[]` field alongside its original `walls: WallDefinition[]`; older
+serialized saves with no `wallPaths` field load back in with an empty path list (`BuildingManager
+.load()`'s `building.wallPaths ?? []`), so nothing existing ever breaks.
+
+### How corner joins are calculated
+
+`wallPathMath.ts` is pure, Three.js-free 2D math (foundation-local X/Z), directly unit-tested
+(`wallPathMath.spec.ts`, 32 tests). For each interior path point (or, on a closed path, _every_
+point — see below), `computeJoinAt()` takes the incoming and outgoing segment directions and:
+
+1. Offsets each segment's edge line by `wallThickness / 2` along its own `perpLeft()` — a consistent
+   "rotate 90°" convention that's purely local to each segment's own direction, which is what makes
+   left turns, right turns, and clockwise/counter-clockwise drawing all produce identical-looking
+   joins with no special-casing for winding order.
+2. Intersects the two offset lines (`lineIntersection2D`, plain 2D line-line intersection) to find
+   the **miter point** — the single point both segments' edges should route through so they meet
+   with no gap and no overlap.
+3. Checks `miterDistance / halfThickness` against `miterLimit` (the standard SVG/canvas-stroke
+   ratio). If either side of the corner exceeds it, **both** sides fall back to a **bevel** — two
+   separate points (the two segments' own unextended edge offsets) joined by a short flat cut,
+   rather than letting a very acute angle produce a runaway spike. A near-collinear point (checked
+   via an angular epsilon before any of the above) collapses straight to a single shared offset
+   point with no join computation at all — so `A──B──C` never bulges at `B`.
+
+`buildSegmentFootprint()` then assembles one segment's actual 2D shape from its own start/end points
+plus the (possibly-null, for an open path's bare endpoints) join points at each end — a segment with
+no join at either end degenerates to exactly the plain rectangle a standalone wall already uses, so
+the join math never changes anything visually unless a real neighbour is present.
+
+### Miter/bevel fallback
+
+`wallJoinStyle` (`miter` default, or `bevel`) and `miterLimit` (default `4`) are both exposed in the
+**Building → Walls** GUI folder and read live per path at _placement_ time (captured into the
+`WallPathDefinition`, so changing the GUI default never reshapes an already-built path). Explicit
+`bevel` style always produces the two-point cut; `miter` produces a clean single-point corner and
+only falls back to bevel automatically when the limit is exceeded — see `wallPathMath.spec.ts`'s
+acute-angle test.
+
+### Geometry: one merged mesh, still built from real per-segment solid regions
+
+`WallPathGeometryBuilder.buildWallPath()` builds each segment's visible geometry as: a small
+join-aware "cap" polygon at each joined end via a generic `extrudePolygon()` helper, plus a
+plain-rectangle "safe middle" built through the _exact same_ `computeSolidWallSegments()` openings
+algorithm standalone walls use, clipped (`clipPolygonToURange`, a small Sutherland-Hodgman pass) to
+stay clear of the join caps. Every segment's pieces across the whole path are merged into **one**
+`BufferGeometryUtils.mergeGeometries()` mesh per path — a real room has one draw call, not one per
+wall — with normals computed per-piece before merging so lighting doesn't show seams at a join.
+
+**The cap's clip range is the join's own true computed extent (`computeJoinUBounds`), never a fixed
+margin measured from the plain endpoint.** This is the one detail that makes the whole join actually
+gap-free: for any non-collinear corner, a miter (or bevel) point's _outer_ side necessarily extends
+slightly _past_ the plain corner — that's the entire mechanism that lets it meet the neighbouring
+segment's edge. An earlier version of this clipped the cap to `[0, someMargin]` /
+`[length - someMargin, length]`, i.e. it never let the range extend past the plain endpoint at all —
+which chopped that extension off and produced exactly the visible corner gaps described above (the
+centerlines met correctly; the outer edges didn't, because the geometry that should have reached
+them was being clipped away before it got there). `computeJoinUBounds` instead returns the join
+points' actual `[minU, maxU]` in that segment's own local frame, which can and does extend below `0`
+or above `length` — and the cap is clipped to _that_ range, so the true corner vertex always ends up
+in the final mesh. `WallPathGeometryBuilder.spec.ts` asserts this directly: it independently computes
+the true miter point via `computeJoinAt` and checks the built mesh's vertex buffer actually contains
+it (both the outer and inner corner vertices), for a single 90° corner and for all four corners
+(including the closing one) of a full rectangular room.
+
+### How windows/doors identify polygon segments
+
+`WallPathManager.getSegmentAsWallView(segmentId)` synthesizes a `WallDefinition`-shaped object from
+a path segment (its own two grid points, the path's height/thickness, its own openings) — segments
+already have their own globally-unique id (`crypto.randomUUID()`, same as a standalone wall's id),
+so `BuildingManager.getWall()` just tries `WallManager` first, then falls back to this synthesized
+view. `OpeningToolBase` (shared by Window/Door tools) now raycasts against
+`BuildingManager.getRaycastableWallMeshes()` — the union of standalone wall meshes and, per path,
+one small **invisible picking box per segment** (a plain box, positioned/rotated exactly like a
+segment's real placement, tagged `userData.wallId = segment.id`) alongside the merged _visible_
+mesh. This is the "continuous visible geometry + simple invisible segment picking meshes" approach —
+the visible mesh stays one clean merged shape, while raycasting still resolves to an exact logical
+segment. Neither tool needed to change beyond routing lookups through `BuildingManager` instead of
+`WallManager` directly, since a segment view and a standalone wall are identical for their purposes.
+
+Openings near a joined corner need more clearance than a plain edge, since the join's cap extends
+into that space. `WallPathGeometryBuilder` also computes, per segment, how far each joined end's cap
+_actually_ reaches into the segment (`startJoinReach`/`endJoinReach` — the same `computeJoinUBounds`
+result the geometry itself was built from, cached by `WallPathManager` alongside the mesh so it's
+never recomputed out of sync with what's actually rendered). `BuildingManager.getOpeningMargins()`
+then requires `max(cornerOpeningMargin, actualJoinReach)` clearance at a joined end (falling back to
+the plain `openingEdgeMargin` at an unjoined open-path endpoint) — so the configured
+`cornerOpeningMargin` (Building → Walls GUI folder, default `0.15`) acts as a user-adjustable
+_minimum_, but can never be smaller than what the real corner geometry requires, regardless of wall
+thickness or `miterLimit`. This is the same margin used by both the live preview and the
+authoritative `addOpening` check, so they can never disagree.
+
+### Collision at joined corners
+
+Collision reuses each segment's own solid regions (never a separate shape from what's visible), with
+one adjustment: an outer collision rect touching a _joined_ end is extended to the join's own actual
+`[minU, maxU]` bound (the same one the visible cap geometry was clipped to — not a fixed guess), so
+two segments' collision always meets or slightly overlaps at a corner rather than leaving a gap.
+`BuildingManager.spec.ts`'s polygon-door test confirms a door on a path segment stays fully passable
+at its centre while the solid wall on either side of it still blocks.
+
+### Closed loops
+
+Setting `closed: true` adds one extra segment (`points[length-1] -> points[0]`) and — critically —
+`computeWallPathJoints()` computes a join at **every** point of a closed path, including that
+wrap-around point, using the _exact same_ `computeJoinAt()` call as any interior corner. There is no
+special-cased "closing seam" logic anywhere in the geometry builder; `wallPathMath.spec.ts` asserts
+all four corners of a closed rectangle (including the wrap-around one) produce identical, symmetric
+single-point miters.
+
+### Tool interaction
+
+`PolygonWallTool.ts` shares its foundation-top targeting/snapping with `WallTool.ts` via the
+extracted `foundationTopTargeting.ts` (both tools need identical raycast-top-face → foundation-local
+→ snap-to-grid → footprint-check logic). It holds an ordered list of confirmed points; every click
+either adds a point, ignores a duplicate-of-the-last-point click, or — when hovering the path's own
+first point with at least 3 points already placed — closes the loop. `Backspace` undoes the most
+recent point (or returns to idle if only one remains); `Enter` finishes an open path; right-click/
+`Escape` cancels the whole in-progress path (routed through the existing `onSecondaryAction`/
+`BuildToolManager` machinery, unchanged). The live preview is not a stack of disconnected boxes —
+it's the _exact_ final geometry, built by constructing a temporary `WallPathDefinition` from the
+current points plus the hovered point (or `closed: true` when hovering the first point) and running
+it through the real `buildWallPath()`, so what you see while drawing is exactly what gets built.
+
+### Serialization
+
+`BuildingManager.serialize()`/`.load()` now round-trip `wallPaths` alongside `walls`, grouped by
+foundation exactly like before. `BuildingManager.spec.ts`'s wall-path round-trip test confirms
+`points`, `closed`, every segment's stable `id`, and every segment's `openings` survive a
+serialize → load → serialize cycle unchanged.
+
+### Tests
+
+`wallPathMath.spec.ts` (32 tests): 90-degree miters for left and right turns, identical results
+regardless of clockwise/counter-clockwise winding, straight-through points producing no bulge,
+miter-limit-triggered bevel fallback, explicit bevel always producing two points, diagonal↔diagonal
+and diagonal↔straight joins, footprint construction matching a plain rectangle when unjoined,
+polygon U-range clipping, self-intersection detection (including that adjacent segments sharing an
+endpoint are never flagged), and a closed rectangle's four corners (including the wrap-around one)
+all producing identical symmetric joins. `BuildingManager.spec.ts` adds path-level integration tests:
+accepting an open L-shape and a closed rectangle, rejecting an out-of-foundation point, a duplicate
+point, a duplicate closing point, an obviously self-intersecting path, and a too-short point list;
+adding a window to one segment without affecting its neighbour's openings or corner; rejecting a
+window placed inside its joined end's actual required clearance; a door on a polygon segment staying
+passable while the solid wall beside it still blocks; and the full serialize/load round trip.
+`WallPathGeometryBuilder.spec.ts` verifies the actual built geometry (not just the isolated join
+math) — that a 90° corner's built mesh contains both the true outer and inner miter vertices rather
+than being clipped at the plain endpoint, that all four corners of a closed rectangular room do too,
+and that windows/doors on a segment adjacent to a joined corner still produce collision on both
+segments. `tests/game.e2e.ts` confirms the hotbar's slot 5 (Polygon/Continuous Wall) is selectable
+with the 5 key.
 
 ## Vegetation: independent forest regions
 

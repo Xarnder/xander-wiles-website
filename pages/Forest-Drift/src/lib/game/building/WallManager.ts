@@ -83,7 +83,12 @@ export class WallManager {
 		if (!foundation || !buildingRoot) return null;
 
 		const frame = foundationLocalFrame(foundation, this.getVertexSpacing());
-		const transform = computeWallTransform(definition, frame, this.getBuildingGridSize());
+		const transform = computeWallTransform(
+			definition,
+			frame,
+			this.getBuildingGridSize(),
+			definition.baseY
+		);
 		const segments = computeSolidWallSegments(
 			transform.length,
 			definition.height,
@@ -188,7 +193,12 @@ export class WallManager {
 		const foundation = this.getFoundation(entry.definition.foundationId);
 		if (!foundation) return undefined;
 		const frame = foundationLocalFrame(foundation, this.getVertexSpacing());
-		return computeWallTransform(entry.definition, frame, this.getBuildingGridSize());
+		return computeWallTransform(
+			entry.definition,
+			frame,
+			this.getBuildingGridSize(),
+			entry.definition.baseY
+		);
 	}
 
 	/**

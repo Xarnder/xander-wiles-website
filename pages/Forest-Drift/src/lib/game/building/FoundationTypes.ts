@@ -27,7 +27,16 @@ export interface FoundationDefinition {
 	bottomY: number;
 }
 
-export type ToolId = 'foundation' | 'wall' | 'window' | 'door' | 'none';
+export type ToolId =
+	| 'foundation'
+	| 'wall'
+	| 'window'
+	| 'door'
+	| 'polygon-wall'
+	| 'ceiling'
+	| 'floor'
+	| 'flat-roof'
+	| 'none';
 
 export interface HotbarSlot {
 	slot: number;
@@ -40,13 +49,25 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlot[] = [
 	{ slot: 2, toolId: 'wall', label: 'Wall' },
 	{ slot: 3, toolId: 'window', label: 'Window' },
 	{ slot: 4, toolId: 'door', label: 'Door' },
-	{ slot: 5, toolId: 'none', label: '' }
+	{ slot: 5, toolId: 'polygon-wall', label: 'Poly Wall' },
+	{ slot: 6, toolId: 'ceiling', label: 'Ceiling' },
+	{ slot: 7, toolId: 'floor', label: 'Floor' },
+	{ slot: 8, toolId: 'flat-roof', label: 'Roof' }
 ];
 
 export type FoundationToolState = 'idle' | 'first-corner-selected';
 
 /** Wall Tool's two-click state machine — mirrors FoundationToolState. */
 export type WallToolState = 'idle' | 'first-point-selected';
+
+/** Polygon Wall Tool's state — 'idle' means no path is being drawn yet; 'drawing' retains every confirmed point so far. */
+export type PolygonWallToolState = 'idle' | 'drawing';
+
+/** Slab (Ceiling/Floor/Flat Roof) Tool's state — same shape as PolygonWallToolState, but a slab polygon can only ever be closed (there's no "open slab" concept). */
+export type SlabToolState = 'idle' | 'drawing';
+
+/** How lower building levels render while editing a higher one — see BuildingLevelManager. */
+export type BuildingLevelViewMode = 'all' | 'current-and-below' | 'current-only';
 
 /**
  * Dev-only controls for the building system, surfaced in the debug GUI's Building folder.
@@ -84,6 +105,33 @@ export interface BuildingSettings {
 	openingGridSize: number;
 	openingEdgeMargin: number;
 	openingSpacing: number;
+
+	/** Corner-join style for the Polygon/Continuous Wall Tool — standalone walls are unaffected (they have no interior joints). */
+	wallJoinStyle: 'miter' | 'bevel';
+	/** miterDistance / halfThickness above which a corner automatically falls back to a bevel, so a very acute angle never produces a runaway spike. */
+	miterLimit: number;
+	/**
+	 * Minimum clearance an opening must keep from a polygon-wall segment's *joined* ends (as
+	 * opposed to `openingEdgeMargin`, which applies to a plain, unjoined end). Defaults to
+	 * whichever is larger of the two — a join's visual extent scales with wall thickness, so a
+	 * thicker wall needs a wider corner margin regardless of the configured edge margin.
+	 */
+	cornerOpeningMargin: number;
+
+	/** Default wall height for a newly-created building level (see BuildingLevelManager) — levelBaseY = levelIndex * defaultStoreyHeight, frozen into each BuildingLevelDefinition once created. */
+	defaultStoreyHeight: number;
+	/** Which level Wall/Polygon Wall/Slab tools currently build on — a live "current floor" selector, changed via Page Up/Page Down (see BuildingLevelManager), not just a placement default. */
+	currentBuildingLevelIndex: number;
+	showLevelConstructionPlane: boolean;
+	buildingLevelViewMode: BuildingLevelViewMode;
+
+	floorThickness: number;
+	roofThickness: number;
+	showSlabBounds: boolean;
+	showSlabPolygonPoints: boolean;
+	slabPreviewOpacity: number;
+	/** Whether slab polygon points snap strongly to nearby existing wall endpoints/corners, in addition to the plain fine grid — still resolves to the same underlying BuildingGridPoint, never an off-grid position. */
+	snapToWallCorners: boolean;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -114,7 +162,23 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 
 		openingGridSize: 0.1,
 		openingEdgeMargin: 0.1,
-		openingSpacing: 0.15
+		openingSpacing: 0.15,
+
+		wallJoinStyle: 'miter',
+		miterLimit: 4,
+		cornerOpeningMargin: 0.15,
+
+		defaultStoreyHeight: 3,
+		currentBuildingLevelIndex: 0,
+		showLevelConstructionPlane: true,
+		buildingLevelViewMode: 'all',
+
+		floorThickness: 0.2,
+		roofThickness: 0.25,
+		showSlabBounds: false,
+		showSlabPolygonPoints: true,
+		slabPreviewOpacity: 0.45,
+		snapToWallCorners: true
 	};
 }
 

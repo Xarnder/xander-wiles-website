@@ -82,6 +82,26 @@ export class FoundationManager {
 		return best;
 	}
 
+	/**
+	 * The (highest, if several overlap) foundation whose footprint covers (worldX, worldZ) — used to
+	 * resolve which foundation an elevated building level's construction plane belongs to when the
+	 * player is looking up/sideways rather than directly at a foundation's top mesh (see
+	 * foundationTopTargeting.raycastLevelConstructionPlane).
+	 */
+	getFoundationContaining(worldX: number, worldZ: number): FoundationDefinition | undefined {
+		const spacing = this.getVertexSpacing();
+		let best: FoundationDefinition | undefined;
+		for (const { definition } of this.foundations.values()) {
+			const minX = definition.minGridX * spacing - EDGE_TOLERANCE;
+			const maxX = definition.maxGridX * spacing + EDGE_TOLERANCE;
+			const minZ = definition.minGridZ * spacing - EDGE_TOLERANCE;
+			const maxZ = definition.maxGridZ * spacing + EDGE_TOLERANCE;
+			if (worldX < minX || worldX > maxX || worldZ < minZ || worldZ > maxZ) continue;
+			if (!best || definition.topY > best.topY) best = definition;
+		}
+		return best;
+	}
+
 	/** Plain, serializable world-state — never Three.js objects. */
 	serialize(): FoundationDefinition[] {
 		return this.getFoundations();

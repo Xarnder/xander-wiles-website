@@ -42,10 +42,17 @@ export interface WallTransform {
 	length: number;
 }
 
+/**
+ * `baseY` shifts the wall's local Y=0 origin above the foundation top — 0 for a ground-floor wall
+ * (the historical, still-default behaviour), a building level's `baseY` for an upper-storey one.
+ * Still measured from the same foundation-local Y=0 the frame itself is anchored to — see
+ * BuildingLevelManager's doc comment.
+ */
 export function computeWallTransform(
 	wall: WallEndpoints,
 	frame: FoundationLocalFrame,
-	buildingGridSize: number
+	buildingGridSize: number,
+	baseY = 0
 ): WallTransform {
 	const start = buildingGridToLocal(
 		{ gridX: wall.startGridX, gridZ: wall.startGridZ },
@@ -59,7 +66,7 @@ export function computeWallTransform(
 
 	return {
 		originWorldX: frame.originWorldX + start.localX,
-		originWorldY: frame.originWorldY,
+		originWorldY: frame.originWorldY + baseY,
 		originWorldZ: frame.originWorldZ + start.localZ,
 		headingRadians,
 		dirX: length > EPSILON ? dx / length : Math.cos(headingRadians),
@@ -229,16 +236,23 @@ export function validateWallLength(
 	return { valid: true };
 }
 
-/** An opening must sit fully inside the wall, with at least `edgeMargin` clearance from both ends and top/bottom. */
+/**
+ * An opening must sit fully inside the wall, with clearance from both ends and top/bottom.
+ * `startMargin`/`endMargin` can differ — a wall-path segment's joined end needs the wider
+ * `cornerOpeningMargin` while its unjoined end (an open path's bare endpoint) only needs the plain
+ * `openingEdgeMargin`; a standalone wall (or a call that only passes one margin) uses the same
+ * value for both, unchanged from before this had two parameters.
+ */
 export function isOpeningWithinWallBounds(
 	opening: OpeningRect,
 	wallLength: number,
 	wallHeight: number,
-	edgeMargin: number
+	startMargin: number,
+	endMargin: number = startMargin
 ): boolean {
 	return (
-		opening.minU >= edgeMargin - EPSILON &&
-		opening.maxU <= wallLength - edgeMargin + EPSILON &&
+		opening.minU >= startMargin - EPSILON &&
+		opening.maxU <= wallLength - endMargin + EPSILON &&
 		opening.minY >= -EPSILON &&
 		opening.maxY <= wallHeight + EPSILON
 	);

@@ -1,13 +1,20 @@
 import * as THREE from 'three';
+import { BuildingLevelManager } from './building/BuildingLevelManager';
 import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
+import { CeilingTool } from './building/CeilingTool';
 import { DoorTool } from './building/DoorTool';
+import { FloorTool } from './building/FloorTool';
 import { FoundationManager } from './building/FoundationManager';
 import { FoundationTool } from './building/FoundationTool';
 import type { BuildingSettings, BuildUiState, HotbarUiState } from './building/FoundationTypes';
 import { vertexSpacingFor } from './building/foundationMath';
+import { PolygonWallTool } from './building/PolygonWallTool';
+import { RoofTool } from './building/RoofTool';
+import { SlabManager } from './building/SlabManager';
 import { resolvePlayerPositionAgainstWalls } from './building/wallCollision';
 import { WallManager } from './building/WallManager';
+import { WallPathManager } from './building/WallPathManager';
 import { WallTool } from './building/WallTool';
 import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
@@ -84,6 +91,9 @@ export class ThreeScene {
 	private readonly treeManager: TreeManager;
 	private readonly foundationManager: FoundationManager;
 	private readonly wallManager: WallManager;
+	private readonly wallPathManager: WallPathManager;
+	private readonly slabManager: SlabManager;
+	private readonly levelManager: BuildingLevelManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly worldSurfaceSampler: WorldSurfaceSampler;
 	private readonly controller: FirstPersonController;
@@ -91,6 +101,10 @@ export class ThreeScene {
 	private readonly wallTool: WallTool;
 	private readonly windowTool: WindowTool;
 	private readonly doorTool: DoorTool;
+	private readonly polygonWallTool: PolygonWallTool;
+	private readonly ceilingTool: CeilingTool;
+	private readonly floorTool: FloorTool;
+	private readonly roofTool: RoofTool;
 	private readonly buildToolManager: BuildToolManager;
 	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
@@ -165,17 +179,39 @@ export class ThreeScene {
 			getBuildingGridSize: () => buildingSettings.buildingGridSize
 		});
 		this.scene.add(this.wallManager.group);
-		this.buildingManager = new BuildingManager({
-			foundationManager: this.foundationManager,
-			wallManager: this.wallManager,
+		this.wallPathManager = new WallPathManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize
 		});
+		this.scene.add(this.wallPathManager.group);
+
+		this.levelManager = new BuildingLevelManager(buildingSettings);
+
+		this.slabManager = new SlabManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize
+		});
+		this.scene.add(this.slabManager.group);
+
+		this.buildingManager = new BuildingManager({
+			foundationManager: this.foundationManager,
+			wallManager: this.wallManager,
+			wallPathManager: this.wallPathManager,
+			slabManager: this.slabManager,
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			getCornerOpeningMargin: () => buildingSettings.cornerOpeningMargin
+		});
 
 		this.worldSurfaceSampler = new WorldSurfaceSampler(
 			this.terrainManager.getHeightSampler(),
-			this.foundationManager
+			this.foundationManager,
+			this.slabManager
 		);
 
 		this.treeManager = new TreeManager({
@@ -191,18 +227,17 @@ export class ThreeScene {
 		this.controller = new FirstPersonController({
 			domElement: this.renderer.domElement,
 			camera: this.camera,
-			getTerrainHeight: (x, z) => this.worldSurfaceSampler.getGroundHeight(x, z),
+			getSupportingSurfaceY: (x, z, referenceY) =>
+				this.worldSurfaceSampler.getSupportingSurfaceY(x, z, referenceY),
+			getCeilingBlockY: (x, z, fromY, toY) =>
+				this.worldSurfaceSampler.getCeilingBlockY(x, z, fromY, toY),
 			settings: this.settings.player,
 			onPointerLockChange: options.onPointerLockChange,
 			resolveHorizontalCollision: (x, z, feetY, headY) =>
-				resolvePlayerPositionAgainstWalls(
-					x,
-					z,
-					feetY,
-					headY,
-					PLAYER_COLLISION_RADIUS,
-					this.wallManager.getAllCollisionRects()
-				)
+				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
+					...this.wallManager.getAllCollisionRects(),
+					...this.wallPathManager.getAllCollisionRects()
+				])
 		});
 
 		this.controller.spawn(0, 0);
@@ -224,6 +259,7 @@ export class ThreeScene {
 			camera: this.camera,
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -232,7 +268,6 @@ export class ThreeScene {
 		this.windowTool = new WindowTool({
 			scene: this.scene,
 			camera: this.camera,
-			wallManager: this.wallManager,
 			buildingManager: this.buildingManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -241,8 +276,51 @@ export class ThreeScene {
 		this.doorTool = new DoorTool({
 			scene: this.scene,
 			camera: this.camera,
-			wallManager: this.wallManager,
 			buildingManager: this.buildingManager,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.polygonWallTool = new PolygonWallTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.ceilingTool = new CeilingTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.floorTool = new FloorTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.roofTool = new RoofTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
@@ -253,7 +331,11 @@ export class ThreeScene {
 				foundation: this.foundationTool,
 				wall: this.wallTool,
 				window: this.windowTool,
-				door: this.doorTool
+				door: this.doorTool,
+				'polygon-wall': this.polygonWallTool,
+				ceiling: this.ceilingTool,
+				floor: this.floorTool,
+				'flat-roof': this.roofTool
 			},
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
@@ -283,6 +365,10 @@ export class ThreeScene {
 			},
 			onShowWallBoundsChange: () => {
 				this.wallManager.setShowBounds(buildingSettings.showWallBounds);
+				this.wallPathManager.setShowBounds(buildingSettings.showWallBounds);
+			},
+			onShowSlabBoundsChange: () => {
+				this.slabManager.setShowBounds(buildingSettings.showSlabBounds);
 			}
 		});
 		this.gui.addVegetationFolder(options.vegetationSettings, {
@@ -345,6 +431,8 @@ export class ThreeScene {
 		this.treeManager.group.visible = !showSkyOnly;
 		this.foundationManager.group.visible = !showSkyOnly;
 		this.wallManager.group.visible = !showSkyOnly;
+		this.wallPathManager.group.visible = !showSkyOnly;
+		this.slabManager.group.visible = !showSkyOnly;
 	}
 
 	/** `scene.background` is contested between "let the sky dome show" and "debug: show the raw HDRI" — this is the single place that decides. */
@@ -514,8 +602,15 @@ export class ThreeScene {
 		this.wallTool.dispose();
 		this.windowTool.dispose();
 		this.doorTool.dispose();
+		this.polygonWallTool.dispose();
+		this.ceilingTool.dispose();
+		this.floorTool.dispose();
+		this.roofTool.dispose();
 		this.treeManager.dispose();
 		this.wallManager.dispose();
+		this.wallPathManager.dispose();
+		this.slabManager.dispose();
+		this.levelManager.dispose();
 		this.foundationManager.dispose();
 		this.controller.dispose();
 		this.terrainManager.dispose();

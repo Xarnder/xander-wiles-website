@@ -21,6 +21,7 @@ const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
 const routineSrc = path.join(rootDir, 'pages', 'Routine');
 const gifMakerSrc = path.join(rootDir, 'pages', 'GIF-Maker');
+const forestDriftSrc = path.join(rootDir, 'pages', 'Forest-Drift');
 
 /** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
 const nestedBuildEnv = {
@@ -129,6 +130,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'GIF-Maker') ||
                 rel.startsWith(path.join('pages', 'GIF-Maker') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Forest-Drift') ||
+                rel.startsWith(path.join('pages', 'Forest-Drift') + path.sep)
             ) {
                 return false;
             }
@@ -393,7 +400,37 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
     }
 }
 
-// 12. Replace Environment Variables in Static Files
+// 12. Build and Inject Forest-Drift (SvelteKit)
+console.log('Building Forest-Drift App...');
+try {
+    npmInstallAndBuild(forestDriftSrc, 'Forest-Drift');
+} catch (error) {
+    console.error('Failed to build Forest-Drift:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Forest-Drift build...');
+const forestDriftDest = path.join(deployOut, 'pages', 'Forest-Drift');
+fs.mkdirSync(forestDriftDest, { recursive: true });
+
+const forestDriftDist = path.join(forestDriftSrc, 'dist');
+if (fs.existsSync(forestDriftDist)) {
+    fs.cpSync(forestDriftDist, forestDriftDest, { recursive: true });
+} else {
+    console.error('Forest-Drift dist folder not found!');
+    process.exit(1);
+}
+
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(forestDriftSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(forestDriftDest, name));
+    }
+}
+
+// 13. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

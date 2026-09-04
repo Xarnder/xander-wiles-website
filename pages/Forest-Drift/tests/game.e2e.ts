@@ -82,6 +82,26 @@ test('shows Wall, Window and Door hotbar slots and switches the active tool with
 	expect(pageErrors).toEqual([]);
 });
 
+test('shows a Polygon/Continuous Wall hotbar slot in slot 5, selectable with the 5 key', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const polygonWallSlot = page.getByTestId('hotbar-slot-polygon-wall');
+	await expect(polygonWallSlot).toBeVisible();
+
+	await page.keyboard.press('5');
+	await expect(polygonWallSlot).toHaveClass(/active/);
+
+	await page.keyboard.press('1');
+	await expect(polygonWallSlot).not.toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
 test('shows the Building GUI folder with Grid, Walls, Windows and Doors sections', async ({
 	page
 }) => {

@@ -2,13 +2,11 @@ import type * as THREE from 'three';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingSettings, BuildUiState } from './FoundationTypes';
 import { OpeningToolBase } from './OpeningToolBase';
-import type { WallManager } from './WallManager';
 import type { BuildTool } from './BuildToolManager';
 
 export interface WindowToolOptions {
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
-	wallManager: WallManager;
 	buildingManager: BuildingManager;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;

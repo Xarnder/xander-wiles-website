@@ -151,7 +151,11 @@ export class TerrainDebugGui {
 	 */
 	addBuildingFolder(
 		settings: BuildingSettings,
-		callbacks: { onShowFoundationBoundsChange: () => void; onShowWallBoundsChange: () => void }
+		callbacks: {
+			onShowFoundationBoundsChange: () => void;
+			onShowWallBoundsChange: () => void;
+			onShowSlabBoundsChange: () => void;
+		}
 	): void {
 		const building = this.gui.addFolder('Building');
 
@@ -176,6 +180,11 @@ export class TerrainDebugGui {
 		walls.add(settings, 'wallThickness', 0.05, 0.5, 0.01);
 		walls.add(settings, 'minimumWallLength', 0.05, 2, 0.05);
 		walls.add(settings, 'showWallBounds').onChange(callbacks.onShowWallBoundsChange);
+		walls
+			.add(settings, 'wallJoinStyle', { Miter: 'miter', Bevel: 'bevel' })
+			.name('Join style (Continuous Wall)');
+		walls.add(settings, 'miterLimit', 1, 10, 0.5).name('Miter limit');
+		walls.add(settings, 'cornerOpeningMargin', 0.05, 1, 0.01).name('Corner opening margin');
 
 		const windows = building.addFolder('Windows');
 		windows.add(settings, 'windowWidth', 0.2, 4, 0.05);
@@ -191,6 +200,29 @@ export class TerrainDebugGui {
 		doors.add(settings, 'openingGridSize', 0.02, 1, 0.01);
 		doors.add(settings, 'openingEdgeMargin', 0, 1, 0.01);
 		doors.add(settings, 'openingSpacing', 0, 1, 0.01);
+
+		// currentBuildingLevelIndex is also live-editable here as a fallback to Page Up/Page Down —
+		// both write the same BuildingSettings field, so the GUI and the keyboard shortcut can never
+		// disagree about "what floor am I building on" (see BuildingLevelManager).
+		const levels = building.addFolder('Levels');
+		levels.add(settings, 'currentBuildingLevelIndex', 0, 20, 1).name('Current level');
+		levels.add(settings, 'defaultStoreyHeight', 1, 8, 0.1).name('Default storey height');
+		levels.add(settings, 'showLevelConstructionPlane').name('Show construction plane');
+		levels
+			.add(settings, 'buildingLevelViewMode', {
+				All: 'all',
+				'Current + Below': 'current-and-below',
+				'Current Only': 'current-only'
+			})
+			.name('Level view mode');
+
+		const slabs = building.addFolder('Slabs');
+		slabs.add(settings, 'floorThickness', 0.05, 1, 0.01).name('Floor thickness');
+		slabs.add(settings, 'roofThickness', 0.05, 1, 0.01).name('Roof thickness');
+		slabs.add(settings, 'showSlabBounds').onChange(callbacks.onShowSlabBoundsChange);
+		slabs.add(settings, 'showSlabPolygonPoints').name('Show polygon points');
+		slabs.add(settings, 'slabPreviewOpacity', 0.1, 1, 0.05).name('Preview opacity');
+		slabs.add(settings, 'snapToWallCorners').name('Snap to wall corners');
 	}
 
 	/**

@@ -1,15 +1,11 @@
 import * as THREE from 'three';
+import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
-import {
-	foundationLocalFrame,
-	foundationLocalSize,
-	isBuildingGridPointInsideFoundation,
-	snapLocalToBuildingGrid,
-	worldToFoundationLocal
-} from './FoundationLocalMath';
+import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
 import type { BuildingSettings, BuildUiState, ToolId, WallToolState } from './FoundationTypes';
+import { raycastLevelConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
 import { applyWallTransform, buildWallGeometry } from './WallGeometryBuilder';
 import { computeSolidWallSegments, computeWallLength } from './wallGeometryMath';
@@ -47,6 +43,7 @@ export interface WallToolOptions {
 	camera: THREE.PerspectiveCamera;
 	foundationManager: FoundationManager;
 	buildingManager: BuildingManager;
+	levelManager: BuildingLevelManager;
 	terrainSettings: TerrainSettings;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
@@ -65,6 +62,7 @@ export class WallTool implements BuildTool {
 	private readonly camera: THREE.PerspectiveCamera;
 	private readonly foundationManager: FoundationManager;
 	private readonly buildingManager: BuildingManager;
+	private readonly levelManager: BuildingLevelManager;
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -108,6 +106,7 @@ export class WallTool implements BuildTool {
 		this.camera = options.camera;
 		this.foundationManager = options.foundationManager;
 		this.buildingManager = options.buildingManager;
+		this.levelManager = options.levelManager;
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -173,7 +172,7 @@ export class WallTool implements BuildTool {
 	update(): void {
 		if (!this.active) return;
 
-		const hit = this.raycastFoundationTop();
+		const hit = this.findFoundationTopTarget();
 		if (!hit) {
 			if (this.target) {
 				this.target = null;
@@ -222,42 +221,24 @@ export class WallTool implements BuildTool {
 		this.refreshVisuals();
 	}
 
-	private raycastFoundationTop(): { foundationId: string; gridPoint: BuildingGridPoint } | null {
+	private findFoundationTopTarget(): { foundationId: string; gridPoint: BuildingGridPoint } | null {
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
-		const meshes = this.foundationManager.getMeshes();
-		if (meshes.length === 0) return null;
-
-		const hits = this.raycaster.intersectObjects(meshes, false);
-		const hit = hits.find((h) => (h.face?.normal.y ?? 0) > 0.9);
-		if (!hit) return null;
-
-		const foundationId = hit.object.userData.foundationId as string | undefined;
-		if (!foundationId) return null;
-		const foundation = this.foundationManager.getFoundation(foundationId);
-		if (!foundation) return null;
-
-		const spacing = this.vertexSpacing();
-		const frame = foundationLocalFrame(foundation, spacing);
-		const local = worldToFoundationLocal(frame, hit.point.x, hit.point.y, hit.point.z);
-		const gridPoint = snapLocalToBuildingGrid(
-			local.localX,
-			local.localZ,
+		return raycastLevelConstructionPlane(
+			this.raycaster,
+			this.foundationManager,
+			this.levelManager,
+			this.levelManager.getCurrentLevelIndex(),
+			this.vertexSpacing(),
 			this.buildingSettings.buildingGridSize
 		);
+	}
 
-		const { width, depth } = foundationLocalSize(foundation, spacing);
-		if (
-			!isBuildingGridPointInsideFoundation(
-				gridPoint,
-				this.buildingSettings.buildingGridSize,
-				width,
-				depth
-			)
-		) {
-			return null;
-		}
-
-		return { foundationId, gridPoint };
+	/** The Y a new wall on `foundationId` should start at, for whatever level is currently selected — see BuildingLevelManager's doc comment on why this is frozen per-level rather than derived live. */
+	private currentBaseY(foundationId: string): number {
+		return this.levelManager.getOrCreateLevel(
+			foundationId,
+			this.levelManager.getCurrentLevelIndex()
+		).baseY;
 	}
 
 	private confirmWall(): void {
@@ -274,6 +255,7 @@ export class WallTool implements BuildTool {
 				gridX: this.target.point.gridX,
 				gridZ: this.target.point.gridZ
 			},
+			baseY: this.currentBaseY(this.firstPoint.foundationId),
 			height: this.buildingSettings.wallHeight,
 			thickness: this.buildingSettings.wallThickness,
 			minimumWallLength: this.buildingSettings.minimumWallLength
@@ -350,6 +332,7 @@ export class WallTool implements BuildTool {
 
 		const spacing = this.vertexSpacing();
 		const frame = foundationLocalFrame(foundation, spacing);
+		const levelY = frame.originWorldY + this.currentBaseY(foundationId);
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const { width, depth } = foundationLocalSize(foundation, spacing);
 
@@ -380,7 +363,7 @@ export class WallTool implements BuildTool {
 				const local = { localX: gx * buildingGridSize, localZ: gz * buildingGridSize };
 				const p = i * 3;
 				this.gridPositions[p] = frame.originWorldX + local.localX;
-				this.gridPositions[p + 1] = frame.originWorldY + lift;
+				this.gridPositions[p + 1] = levelY + lift;
 				this.gridPositions[p + 2] = frame.originWorldZ + local.localZ;
 
 				const isNearest = gx === centerPoint.gridX && gz === centerPoint.gridZ;
@@ -399,7 +382,7 @@ export class WallTool implements BuildTool {
 			this.buildingSettings.buildingGridOpacity;
 		this.gridPoints.visible = true;
 
-		const outlineY = frame.originWorldY + lift;
+		const outlineY = levelY + lift;
 		const corners: [number, number][] = [
 			[frame.originWorldX, frame.originWorldZ],
 			[frame.originWorldX + width, frame.originWorldZ],
@@ -436,7 +419,7 @@ export class WallTool implements BuildTool {
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		this.targetMarker.position.set(
 			frame.originWorldX + target.point.gridX * buildingGridSize,
-			frame.originWorldY + 0.05,
+			frame.originWorldY + this.currentBaseY(target.foundationId) + 0.05,
 			frame.originWorldZ + target.point.gridZ * buildingGridSize
 		);
 		(this.targetMarker.material as THREE.MeshBasicMaterial).color.setHex(color);
@@ -473,7 +456,7 @@ export class WallTool implements BuildTool {
 		applyWallTransform(
 			this.previewMesh,
 			frame.originWorldX + startLocalX,
-			frame.originWorldY,
+			frame.originWorldY + this.currentBaseY(this.firstPoint.foundationId),
 			frame.originWorldZ + startLocalZ,
 			headingRadians
 		);
@@ -494,11 +477,21 @@ export class WallTool implements BuildTool {
 		this.hidePreview();
 	}
 
+	/** "LEVEL N" / "Elevation: X.XXm" — the same level-context line every level-aware tool's HUD shows, per the README. Elevation is only resolvable once a specific foundation is in play. */
+	private levelHudLines(foundationId?: string): string[] {
+		const levelIndex = this.levelManager.getCurrentLevelIndex();
+		const lines = [`LEVEL ${levelIndex}`];
+		if (foundationId) lines.push(`Elevation: ${this.currentBaseY(foundationId).toFixed(2)}m`);
+		return lines;
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: 'wall',
 			crosshair: this.target ? 'valid' : 'default',
 			hintLines: [
+				...this.levelHudLines(this.target?.foundationId),
+				'',
 				'WALL',
 				'',
 				'Look at a foundation',
@@ -512,7 +505,14 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			crosshair: 'default',
-			hintLines: ['WALL', '', 'Select end point', 'Right click: Cancel']
+			hintLines: [
+				...this.levelHudLines(this.firstPoint?.foundationId),
+				'',
+				'WALL',
+				'',
+				'Select end point',
+				'Right click: Cancel'
+			]
 		};
 	}
 
@@ -520,7 +520,15 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			crosshair: 'invalid',
-			hintLines: ['WALL', '', reason, '', 'Right click: Cancel']
+			hintLines: [
+				...this.levelHudLines(this.firstPoint?.foundationId),
+				'',
+				'WALL',
+				'',
+				reason,
+				'',
+				'Right click: Cancel'
+			]
 		};
 	}
 
@@ -529,6 +537,8 @@ export class WallTool implements BuildTool {
 			toolId: 'wall',
 			crosshair: 'valid',
 			hintLines: [
+				...this.levelHudLines(this.firstPoint?.foundationId),
+				'',
 				'WALL',
 				'',
 				`Length: ${length.toFixed(2)}m`,

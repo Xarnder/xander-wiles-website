@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { SlabManager } from '../SlabManager';
 import { WorldSurfaceSampler } from '../WorldSurfaceSampler';
 
 const SPACING = 2;
+
+function makeSlabManager(foundationManager: FoundationManager): SlabManager {
+	return new SlabManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => SPACING,
+		getBuildingGridSize: () => 0.25
+	});
+}
 
 function makeDefinition(overrides: Partial<FoundationDefinition> = {}): FoundationDefinition {
 	return {
@@ -75,22 +84,47 @@ describe('FoundationManager serialize/load', () => {
 describe('WorldSurfaceSampler', () => {
 	it('returns the terrain height when no foundation covers the point', () => {
 		const manager = new FoundationManager(() => SPACING);
-		const sampler = new WorldSurfaceSampler({ sample: () => 3.5 } as never, manager);
-		expect(sampler.getGroundHeight(0, 0)).toBe(3.5);
+		const sampler = new WorldSurfaceSampler(
+			{ sample: () => 3.5 } as never,
+			manager,
+			makeSlabManager(manager)
+		);
+		expect(sampler.getSupportingSurfaceY(0, 0, Infinity)).toBe(3.5);
 	});
 
 	it("returns the foundation's topY when it stands above the terrain", () => {
 		const manager = new FoundationManager(() => SPACING);
 		manager.addFoundation(makeDefinition({ topY: 12 }));
-		const sampler = new WorldSurfaceSampler({ sample: () => 3.5 } as never, manager);
-		expect(sampler.getGroundHeight(0, 0)).toBe(12);
+		const sampler = new WorldSurfaceSampler(
+			{ sample: () => 3.5 } as never,
+			manager,
+			makeSlabManager(manager)
+		);
+		expect(sampler.getSupportingSurfaceY(0, 0, Infinity)).toBe(12);
 	});
 
 	it('falls back to terrain height if the terrain happens to be higher than a nearby foundation elsewhere', () => {
 		const manager = new FoundationManager(() => SPACING);
 		manager.addFoundation(makeDefinition({ topY: 12 }));
-		const sampler = new WorldSurfaceSampler({ sample: () => 3.5 } as never, manager);
+		const sampler = new WorldSurfaceSampler(
+			{ sample: () => 3.5 } as never,
+			manager,
+			makeSlabManager(manager)
+		);
 		// Outside the foundation footprint entirely.
-		expect(sampler.getGroundHeight(1000, 1000)).toBe(3.5);
+		expect(sampler.getSupportingSurfaceY(1000, 1000, Infinity)).toBe(3.5);
+	});
+
+	it('does not return a surface above referenceY (no teleporting up onto a higher surface)', () => {
+		const manager = new FoundationManager(() => SPACING);
+		manager.addFoundation(makeDefinition({ topY: 12 }));
+		const sampler = new WorldSurfaceSampler(
+			{ sample: () => 0 } as never,
+			manager,
+			makeSlabManager(manager)
+		);
+		// referenceY (the player's current feet Y) is well below the foundation top — it must not be
+		// snapped up onto it, only the terrain height (0) should come back.
+		expect(sampler.getSupportingSurfaceY(0, 0, 1)).toBe(0);
 	});
 });

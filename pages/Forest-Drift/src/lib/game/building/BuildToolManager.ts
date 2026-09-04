@@ -19,7 +19,10 @@ const DIGIT_TO_SLOT: Record<string, number> = {
 	Digit2: 2,
 	Digit3: 3,
 	Digit4: 4,
-	Digit5: 5
+	Digit5: 5,
+	Digit6: 6,
+	Digit7: 7,
+	Digit8: 8
 };
 
 export interface BuildToolManagerOptions {

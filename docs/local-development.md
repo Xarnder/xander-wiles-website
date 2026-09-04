@@ -16,7 +16,7 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 | **Static page + Google auth** | Markdown-Editor, Time Pass | `npm run build` → `npm run preview` (Client ID / Firebase is injected at build time) |
 | **Vite app** (React) | Journal, Teleprompter | `cd pages/<app>` → `npm run dev` |
 | **Vite app** (Svelte) | Logo-Demo | `cd pages/<app>` → `npm run dev` |
-| **SvelteKit app** | Fighter-Jet, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
+| **SvelteKit app** | Fighter-Jet, Forest-Drift, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
 | **Full site** (nav + built apps) | Homepage → Journal link, etc. | `npm run build` → `npm run preview` |
 
 Root `npm run dev` is **`npx serve .`** — it only serves files on disk. It does **not** compile TypeScript/JSX or run Vite. Opening a Vite app’s source `index.html` that way will look **blank** (browser tries to load `/src/main.tsx` and fails).
@@ -45,6 +45,7 @@ Copy-paste the **From repo root** command while your shell is in the website rep
 | **Teleprompter** | `pages/Teleprompter/` | `http://localhost:5173/pages/Teleprompter/` | `cd pages/Teleprompter && npm install && npm run dev` |
 | **Logo Demo** | `pages/Logo-Demo/` | `http://localhost:5173/pages/Logo-Demo/` | `cd pages/Logo-Demo && npm install && npm run dev` |
 | **Fighter-Jet** | `pages/Fighter-Jet/` | Vite prints URL (often `http://localhost:5173/`) | `cd pages/Fighter-Jet && npm install && npm run dev` |
+| **Forest Drift** | `pages/Forest-Drift/` | Vite prints URL (often `http://localhost:5173/`) | `cd pages/Forest-Drift && npm install && npm run dev` |
 | **Z-Image Turbo** | `pages/z-image-turbo-sveltekit/` | Vite prints URL | `cd pages/z-image-turbo-sveltekit && npm install && npm run dev` |
 | **Tax Helper** | `pages/Tax-Helper/` | Vite prints URL | `cd pages/Tax-Helper && npm install && npm run dev` |
 | **Full site** | `deploy_out/` | `http://localhost:3000/` | `npm install && npm run build && npm run preview` |
@@ -216,21 +217,21 @@ Mic and on-device ASR need a **secure context** (`localhost` is fine). Use Chrom
 
 ---
 
-## 6. SvelteKit apps (Fighter-Jet, Z-Image Turbo)
+## 6. SvelteKit apps (Fighter-Jet, Forest-Drift, Z-Image Turbo)
 
 ```bash
-cd pages/Fighter-Jet   # or pages/z-image-turbo-sveltekit
+cd pages/Fighter-Jet   # or pages/Forest-Drift / pages/z-image-turbo-sveltekit
 npm install
 npm run dev
 ```
 
-Use the URL Vite prints in the terminal. These apps are built and injected into `deploy_out` during root `npm run build`; paths on the live site are `/pages/Fighter-Jet/` and `/pages/z-image-turbo-sveltekit/`.
+Use the URL Vite prints in the terminal. These apps are built and injected into `deploy_out` during root `npm run build`; paths on the live site are `/pages/Fighter-Jet/`, `/pages/Forest-Drift/`, and `/pages/z-image-turbo-sveltekit/`.
 
 ---
 
 ## 7. Full website preview (navigation + built apps)
 
-This matches what Vercel deploys: homepage, `assets/`, nav, static pages, **and** compiled Journal / Teleprompter / Fighter-Jet / Z-Image.
+This matches what Vercel deploys: homepage, `assets/`, nav, static pages, **and** compiled Journal / Teleprompter / Fighter-Jet / Forest-Drift / Z-Image.
 
 ```bash
 # From repo root

@@ -10,7 +10,6 @@ import {
 	worldToWallLocal
 } from './wallGeometryMath';
 import type { WallTransform } from './wallGeometryMath';
-import type { WallManager } from './WallManager';
 import type { WallOpeningType } from './WallTypes';
 import type { BuildTool } from './BuildToolManager';
 
@@ -56,7 +55,6 @@ export class OpeningToolBase implements BuildTool {
 
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
-	private readonly wallManager: WallManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly config: OpeningToolConfig;
@@ -89,7 +87,6 @@ export class OpeningToolBase implements BuildTool {
 		options: {
 			scene: THREE.Scene;
 			camera: THREE.PerspectiveCamera;
-			wallManager: WallManager;
 			buildingManager: BuildingManager;
 			buildingSettings: BuildingSettings;
 			onHudChange?: (hud: BuildUiState | null) => void;
@@ -99,7 +96,6 @@ export class OpeningToolBase implements BuildTool {
 		this.config = config;
 		this.scene = options.scene;
 		this.camera = options.camera;
-		this.wallManager = options.wallManager;
 		this.buildingManager = options.buildingManager;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -137,7 +133,7 @@ export class OpeningToolBase implements BuildTool {
 		if (!this.active) return;
 
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
-		const meshes = this.wallManager.getWallMeshesForRaycast();
+		const meshes = this.buildingManager.getRaycastableWallMeshes();
 		const hits = meshes.length > 0 ? this.raycaster.intersectObjects(meshes, false) : [];
 		const hit = hits.length > 0 ? hits[0] : null;
 
@@ -161,7 +157,7 @@ export class OpeningToolBase implements BuildTool {
 		this.setHoveredWall(wallId, hit.object as THREE.Mesh);
 
 		const wall = this.buildingManager.getWall(wallId);
-		const transform = this.wallManager.getWallTransform(wallId);
+		const transform = this.buildingManager.getWallTransform(wallId);
 		if (!wall || !transform) {
 			this.target = null;
 			this.previewMesh.visible = false;
@@ -187,11 +183,16 @@ export class OpeningToolBase implements BuildTool {
 		);
 
 		const candidate = { minU, maxU, minY, maxY };
+		const { startMargin, endMargin } = this.buildingManager.getOpeningMargins(
+			wallId,
+			this.buildingSettings.openingEdgeMargin
+		);
 		let valid = isOpeningWithinWallBounds(
 			candidate,
 			wallLength,
 			wall.height,
-			this.buildingSettings.openingEdgeMargin
+			startMargin,
+			endMargin
 		);
 		let reason = valid ? undefined : 'Opening does not fit';
 

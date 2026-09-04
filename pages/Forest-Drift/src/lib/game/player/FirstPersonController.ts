@@ -8,14 +8,28 @@ const MAX_PITCH = Math.PI / 2 - 0.01;
 export interface FirstPersonControllerOptions {
 	domElement: HTMLElement;
 	camera: THREE.PerspectiveCamera;
-	getTerrainHeight: (worldX: number, worldZ: number) => number;
+	/**
+	 * The highest walkable surface at (worldX, worldZ) that is at or below `referenceY` — terrain,
+	 * a foundation top, or a slab (floor/roof) top; see WorldSurfaceSampler.getSupportingSurfaceY.
+	 * `referenceY` is always the player's pre-step feet Y, so a slab ABOVE the player is correctly
+	 * excluded rather than yanking the player up onto it — this is what prevents "teleporting" onto
+	 * a roof or upper floor the player is merely standing underneath.
+	 */
+	getSupportingSurfaceY: (worldX: number, worldZ: number, referenceY: number) => number;
+	/**
+	 * Optional: the lowest solid surface (a slab's underside) crossed while rising from `fromY` to
+	 * `toY` at (worldX, worldZ), or null if nothing blocks the rise — used to stop the player
+	 * jumping/rising up through a ceiling or floor from below. Checked only while actually moving
+	 * upward. Left undefined, upward movement is never blocked (pre-buildings behavior).
+	 */
+	getCeilingBlockY?: (worldX: number, worldZ: number, fromY: number, toY: number) => number | null;
 	settings: PlayerSettings;
 	onPointerLockChange?: (locked: boolean) => void;
 	/**
 	 * Optional horizontal-collision resolver (e.g. against building walls) — given a proposed
 	 * (x, z) and the player's current vertical span [feetY, headY], returns the position after
 	 * pushing out of any solid obstacle. Left undefined, movement is unconstrained horizontally
-	 * exactly as before buildings existed. Decoupled the same way getTerrainHeight is: the
+	 * exactly as before buildings existed. Decoupled the same way getSupportingSurfaceY is: the
 	 * controller has no idea what "walls" are, it just calls this if provided.
 	 */
 	resolveHorizontalCollision?: (
@@ -28,16 +42,28 @@ export interface FirstPersonControllerOptions {
 
 /**
  * FPS-style camera controller: pointer-lock mouse look + WASD movement, with the player's
- * vertical position always derived from the same TerrainHeightSampler-backed height function
- * the terrain mesh itself uses (via getTerrainHeight), so the player never clips into or floats
- * above the ground the mesh actually shows.
+ * vertical position always derived from the same WorldSurfaceSampler-backed height function the
+ * terrain/foundation/slab meshes themselves use (via getSupportingSurfaceY), so the player never
+ * clips into or floats above the surface actually shown, and is never snapped up onto a surface
+ * that happens to be above them (e.g. a roof they're standing under) — see getSupportingSurfaceY's
+ * doc comment above.
  */
 export class FirstPersonController {
 	readonly worldPosition = new THREE.Vector3();
 
 	private readonly domElement: HTMLElement;
 	private readonly camera: THREE.PerspectiveCamera;
-	private readonly getTerrainHeight: (worldX: number, worldZ: number) => number;
+	private readonly getSupportingSurfaceY: (
+		worldX: number,
+		worldZ: number,
+		referenceY: number
+	) => number;
+	private readonly getCeilingBlockY?: (
+		worldX: number,
+		worldZ: number,
+		fromY: number,
+		toY: number
+	) => number | null;
 	private readonly settings: PlayerSettings;
 	private readonly onPointerLockChange?: (locked: boolean) => void;
 	private readonly resolveHorizontalCollision?: (
@@ -89,7 +115,8 @@ export class FirstPersonController {
 	constructor(options: FirstPersonControllerOptions) {
 		this.domElement = options.domElement;
 		this.camera = options.camera;
-		this.getTerrainHeight = options.getTerrainHeight;
+		this.getSupportingSurfaceY = options.getSupportingSurfaceY;
+		this.getCeilingBlockY = options.getCeilingBlockY;
 		this.settings = options.settings;
 		this.onPointerLockChange = options.onPointerLockChange;
 		this.resolveHorizontalCollision = options.resolveHorizontalCollision;
@@ -101,9 +128,14 @@ export class FirstPersonController {
 		this.domElement.addEventListener('click', this.handleClick);
 	}
 
-	/** Places the player at (x, z), snapped to the terrain surface plus eye height. */
+	/**
+	 * Places the player at (x, z), snapped to the highest surface there plus eye height.
+	 * `referenceY = Infinity` means "ignore any notion of current position, land on the highest
+	 * surface available" — the same "land on the highest thing" behavior spawn always had, now
+	 * expressed as a plain case of getSupportingSurfaceY's referenceY ceiling.
+	 */
 	spawn(worldX: number, worldZ: number): void {
-		const groundHeight = this.getTerrainHeight(worldX, worldZ);
+		const groundHeight = this.getSupportingSurfaceY(worldX, worldZ, Infinity);
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		this.grounded = true;
 		this.verticalVelocity = 0;
@@ -149,7 +181,12 @@ export class FirstPersonController {
 			worldZ = resolved.z;
 		}
 
-		const groundHeight = this.getTerrainHeight(worldX, worldZ) + this.settings.eyeHeight;
+		// The player's own pre-step feet Y — passed as getSupportingSurfaceY's referenceY so a
+		// surface above the player (e.g. a roof they're standing under) is never treated as
+		// something to snap up onto; see FirstPersonControllerOptions.getSupportingSurfaceY.
+		const preStepFeetY = this.worldPosition.y - this.settings.eyeHeight;
+		const groundHeight =
+			this.getSupportingSurfaceY(worldX, worldZ, preStepFeetY) + this.settings.eyeHeight;
 
 		let worldY: number;
 		if (!this.settings.gravityEnabled) {
@@ -163,7 +200,15 @@ export class FirstPersonController {
 			}
 
 			this.verticalVelocity -= GRAVITY * deltaSeconds;
-			const proposedY = this.worldPosition.y + this.verticalVelocity * deltaSeconds;
+			let proposedY = this.worldPosition.y + this.verticalVelocity * deltaSeconds;
+
+			if (proposedY > this.worldPosition.y && this.getCeilingBlockY) {
+				const ceilingY = this.getCeilingBlockY(worldX, worldZ, this.worldPosition.y, proposedY);
+				if (ceilingY !== null) {
+					proposedY = ceilingY;
+					this.verticalVelocity = 0;
+				}
+			}
 
 			if (proposedY <= groundHeight) {
 				worldY = groundHeight;
