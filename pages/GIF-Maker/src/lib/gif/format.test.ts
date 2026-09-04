@@ -4,6 +4,9 @@ import {
 	aspectRatioValue,
 	clipDuration,
 	compressionLabel,
+	outputDuration,
+	resolvedPlaybackSpeed,
+	snapSpeedPreset,
 	dimensionsForWidth,
 	evenFloor,
 	formatBytes,
@@ -73,10 +76,27 @@ describe('formatting helpers', () => {
 			frameCount: 150
 		});
 		expect(clipDuration({ startSeconds: 1, endSeconds: 4 })).toBe(3);
+		expect(outputDuration(6, false)).toBe(6);
+		expect(outputDuration(6, true)).toBe(12);
+		expect(outputDuration(6, false, 2)).toBe(3);
+		expect(outputDuration(6, true, 2)).toBe(6);
+		expect(snapSpeedPreset(2.24)).toBe(2);
+		expect(snapSpeedPreset(2.26)).toBe(2.5);
+		expect(
+			resolvedPlaybackSpeed({
+				clipSeconds: 10,
+				bounce: false,
+				mode: 'duration',
+				speed: 1,
+				targetSeconds: 2.5
+			})
+		).toBeCloseTo(4);
 	});
 
 	it('treats common extensions as video even without a MIME type', () => {
 		expect(isProbablyVideo(new File([], 'clip.mkv'))).toBe(true);
+		expect(isProbablyVideo(new File([], 'IMG_0123.MOV'))).toBe(true);
+		expect(isProbablyVideo(new File([], 'clip.mov', { type: 'video/quicktime' }))).toBe(true);
 		expect(isProbablyVideo(new File([], 'notes.txt'))).toBe(false);
 	});
 });

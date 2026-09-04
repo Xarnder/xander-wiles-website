@@ -49,8 +49,14 @@ const LAYER_RECIPES: readonly LayerRecipe[] = [
 
 const VERTEX_SHADER = /* glsl */ `
 	varying vec2 vUv;
+	varying vec2 vWorldXZ;
 	void main() {
 		vUv = uv;
+		// The plane's local (pre-translation) X/Z, already in real world units since PlaneGeometry
+		// is built at true world size (PLANE_SIZE) — used instead of vUv for noise sampling so cloud
+		// feature size is a real world-space quantity, not a fraction of the plane's own arbitrary
+		// size. See uMacroScale/uBreakupScale/uWispyScale usage below for why this matters.
+		vWorldXZ = position.xz;
 		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 	}
 `;
@@ -61,6 +67,16 @@ const VERTEX_SHADER = /* glsl */ `
 // rule the terrain system uses.
 const FRAGMENT_SHADER = /* glsl */ `
 	varying vec2 vUv;
+	varying vec2 vWorldXZ;
+
+	// World units per noise cycle at uMacroScale == 1. From typical eye height, only a few hundred
+	// world units of a cloud layer's huge plane are ever actually visible between the horizon and
+	// the top of the screen — sampling noise from raw plane UV (a fraction of the whole 8000-unit
+	// plane) put nearly the entire visible sky inside a fraction of one noise cycle, so it always
+	// looked flat. Sampling world-space coordinates against this much smaller reference keeps real
+	// variation inside the visible window, matching every other noise-driven system in this project
+	// (terrain, vegetation), which always scales against real world-space distance.
+	const float CLOUD_NOISE_REFERENCE_UNIT = 900.0;
 
 	uniform float uMacroScale;
 	uniform float uBreakupScale;
@@ -108,11 +124,11 @@ const FRAGMENT_SHADER = /* glsl */ `
 	}
 
 	void main() {
-		vec2 uv = vUv - 0.5;
+		vec2 worldCoord = vWorldXZ / CLOUD_NOISE_REFERENCE_UNIT;
 
-		float macro = fbm3(uv * uMacroScale + uOffsetMacro);
-		float breakup = fbm3(uv * uBreakupScale + uOffsetBreakup);
-		float wispy = fbm3(uv * uWispyScale + uOffsetWispy);
+		float macro = fbm3(worldCoord * uMacroScale + uOffsetMacro);
+		float breakup = fbm3(worldCoord * uBreakupScale + uOffsetBreakup);
+		float wispy = fbm3(worldCoord * uWispyScale + uOffsetWispy);
 
 		float density = macro * 0.6 + breakup * 0.3 + wispy * 0.1;
 		density += (uCoverage - 0.5);
@@ -121,7 +137,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 
 		// Fade the plane's own boundary to nothing well before its edge, so there is never a
 		// visible rectangular border no matter how far the player can theoretically see.
-		float edgeFade = 1.0 - smoothstep(0.28, 0.5, length(uv));
+		float edgeFade = 1.0 - smoothstep(0.28, 0.5, length(vUv - 0.5));
 		alpha *= edgeFade;
 
 		if (alpha <= 0.002) discard;

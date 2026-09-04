@@ -1,3 +1,4 @@
+import { formatSpeedFactor } from './format';
 import type { GifSettings } from './types';
 
 export function scaleFilter(settings: GifSettings): string {
@@ -27,14 +28,31 @@ export function palettePassFilter(settings: GifSettings): string {
 	return `${fpsFilter(settings)},${scaleFilter(settings)},${paletteGenFilter(settings)}`;
 }
 
-export function videoPrepFilter(settings: GifSettings): string {
-	return `${fpsFilter(settings)},${scaleFilter(settings)}`;
+export function bounceLoopFilter(): string {
+	return 'split[fwd][tmp];[tmp]reverse[rev];[fwd][rev]concat=n=2:v=1:a=0';
 }
 
-export function combinedPaletteFilter(settings: GifSettings): string {
-	return `${fpsFilter(settings)},${scaleFilter(settings)},split[s0][s1];[s0]${paletteGenFilter(settings)}[p];[s1][p]${paletteUseFilter(settings)}`;
+export function speedFilter(speed: number): string | null {
+	if (!Number.isFinite(speed) || speed <= 1.001) return null;
+	return `setpts=PTS/${formatSpeedFactor(speed)}`;
 }
 
-export function paletteUseComplex(settings: GifSettings): string {
-	return `[0:v]${videoPrepFilter(settings)}[x];[x][1:v]${paletteUseFilter(settings)}`;
+export function videoPrepFilter(settings: GifSettings, bounce = false, speed = 1): string {
+	let prep = `${fpsFilter(settings)},${scaleFilter(settings)}`;
+	if (bounce) {
+		prep = `${prep},${bounceLoopFilter()}`;
+	}
+	const speedPart = speedFilter(speed);
+	if (speedPart) {
+		prep = `${prep},${speedPart},${fpsFilter(settings)}`;
+	}
+	return prep;
+}
+
+export function combinedPaletteFilter(settings: GifSettings, bounce = false, speed = 1): string {
+	return `${videoPrepFilter(settings, bounce, speed)},split[s0][s1];[s0]${paletteGenFilter(settings)}[p];[s1][p]${paletteUseFilter(settings)}`;
+}
+
+export function paletteUseComplex(settings: GifSettings, bounce = false, speed = 1): string {
+	return `[0:v]${videoPrepFilter(settings, bounce, speed)}[x];[x][1:v]${paletteUseFilter(settings)}`;
 }

@@ -1,11 +1,13 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
-
 	let { children } = $props();
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<title>Forest Drift</title>
+	<meta
+		name="description"
+		content="A procedural, seeded, infinite-terrain exploration prototype built with Three.js and SvelteKit."
+	/>
 </svelte:head>
 
 {@render children()}

@@ -60,7 +60,9 @@ export async function encodeGif(
 		request.clip,
 		'full.gif',
 		onFfmpegProgress,
-		signal
+		signal,
+		request.bounce === true,
+		request.speed ?? 1
 	);
 }
 
@@ -106,7 +108,9 @@ async function encodeRange(
 	clip: ClipRange,
 	outputName: string,
 	onFfmpegProgress?: (progress: number) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	bounce = false,
+	speed = 1
 ): Promise<EncodeResult> {
 	const { ffmpeg, inputPath } = prepared;
 	const duration = Math.max(0.05, clip.endSeconds - clip.startSeconds);
@@ -154,7 +158,7 @@ async function encodeRange(
 					paletteName,
 					'-an',
 					'-filter_complex',
-					paletteUseComplex(settings),
+					paletteUseComplex(settings, bounce, speed),
 					'-gifflags',
 					'+transdiff',
 					'-loop',
@@ -179,7 +183,7 @@ async function encodeRange(
 					inputPath,
 					'-an',
 					'-vf',
-					combinedPaletteFilter(settings),
+					combinedPaletteFilter(settings, bounce, speed),
 					'-gifflags',
 					'+transdiff',
 					'-loop',

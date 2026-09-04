@@ -9,7 +9,11 @@ import { estimateGifBytes } from './size-model';
 import { minimumSettings } from './candidate-generator';
 import type { AdvancedConstraints, MemoryWarning, VideoAnalysis } from './types';
 
-export function inputMemoryWarning(fileSizeBytes: number, deviceMemoryGb?: number): MemoryWarning {
+export function inputMemoryWarning(
+	fileSizeBytes: number,
+	deviceMemoryGb?: number,
+	constrainedMemory = false
+): MemoryWarning {
 	if (fileSizeBytes >= HUGE_FILE_BYTES) {
 		return {
 			level: 'huge',
@@ -17,8 +21,9 @@ export function inputMemoryWarning(fileSizeBytes: number, deviceMemoryGb?: numbe
 		};
 	}
 
-	const largeLimit =
-		deviceMemoryGb !== undefined && deviceMemoryGb > 0 && deviceMemoryGb <= 4
+	const largeLimit = constrainedMemory
+		? 60 * 1024 * 1024
+		: deviceMemoryGb !== undefined && deviceMemoryGb > 0 && deviceMemoryGb <= 4
 			? 80 * 1024 * 1024
 			: LARGE_FILE_BYTES;
 

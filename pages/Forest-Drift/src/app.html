@@ -4,6 +4,28 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<meta name="color-scheme" content="dark light" />
+		<meta name="theme-color" content="#bfe3ff" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#293a20" media="(prefers-color-scheme: dark)" />
+
+		<link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="any" />
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/favicon-light.svg"
+			type="image/svg+xml"
+			media="(prefers-color-scheme: light)"
+		/>
+		<link
+			rel="icon"
+			href="%sveltekit.assets%/favicon-dark.svg"
+			type="image/svg+xml"
+			media="(prefers-color-scheme: dark)"
+		/>
+		<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/favicon-32x32.png" />
+		<link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/favicon-16x16.png" />
+		<link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

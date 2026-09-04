@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { formatDuration } from '$lib/gif/format';
+	import { formatDuration, outputDuration } from '$lib/gif/format';
 
 	let {
 		duration,
 		startSeconds = $bindable(0),
-		endSeconds = $bindable(0)
+		endSeconds = $bindable(0),
+		bounce = $bindable(false)
 	}: {
 		duration: number;
 		startSeconds: number;
 		endSeconds: number;
+		bounce: boolean;
 	} = $props();
 
 	const max = $derived(Math.max(0.05, duration));
@@ -56,7 +58,22 @@
 			oninput={(event) => onEnd(Number(event.currentTarget.value))}
 		/>
 	</label>
-	<p class="hint">Using {formatDuration(selected)} of {formatDuration(duration)}</p>
+	<button
+		class="chip"
+		type="button"
+		aria-pressed={bounce}
+		onclick={() => {
+			bounce = !bounce;
+		}}
+	>
+		Bounce loop
+	</button>
+	<p class="hint">
+		Using {formatDuration(selected)} of {formatDuration(duration)}
+		{#if bounce}
+			· plays forward then reverse for {formatDuration(outputDuration(selected, true))}
+		{/if}
+	</p>
 </section>
 
 <style>

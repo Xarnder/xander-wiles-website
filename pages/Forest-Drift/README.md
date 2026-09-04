@@ -20,10 +20,11 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - Mouse — look around (after clicking to enter pointer lock)
 - `Shift` — run
 - `Space` — jump (when gravity is enabled)
-- `Esc` — release the mouse, and cancel a pending foundation corner if one is selected
-- `1`–`5` — hotbar slots (`1` is the Foundation tool)
-- Left click — select a foundation corner / confirm placement (only once pointer lock is engaged)
-- Right click — cancel the current foundation selection
+- `Esc` — release the mouse, and cancel a pending foundation corner or wall point if one is selected
+- `1`–`5` — hotbar slots: `1` Foundation, `2` Wall, `3` Window, `4` Door, `5` empty
+- Left click — select a corner/point, place a wall, or place a window/door (only once pointer lock is
+  engaged)
+- Right click — cancel the current foundation or wall selection
 
 ## How infinite terrain works
 
@@ -264,6 +265,212 @@ the eventual game, terrain settings are fixed/versioned once building starts, so
 during terrain-tuning development — don't change `chunkSize`/`chunkResolution` after placing
 foundations you want to keep walking on correctly.
 
+## Building system: foundation-local walls, windows and doors
+
+Everything above the foundation — walls, and eventually floors/roofs/etc. — lives in
+`src/lib/game/building/` alongside the foundation tool, built around one rule: **buildings can
+only exist on foundations, and every building element is stored relative to its foundation, never
+in raw world coordinates.**
+
+```
+WORLD
+│
+├── terrain (global coordinates)
+│
+└── foundation (placed in world coordinates)
+      │
+      └── BUILDING LOCAL SPACE (local X/Z origin at the footprint's min corner, local Y=0 at the top surface)
+            │
+            └── wall (foundation-local grid endpoints)
+                  │
+                  ├── window opening (wall-local U/Y)
+                  └── door opening (wall-local U/Y)
+```
+
+### Foundation-local coordinates
+
+**`FoundationLocalMath.ts`** is the one place the "foundation top = local Y 0" rule is implemented
+— every tool and manager goes through it rather than re-deriving world math itself:
+
+```ts
+foundationLocalFrame(foundation, vertexSpacing); // { originWorldX, originWorldY: foundation.topY, originWorldZ }
+foundationLocalToWorld(frame, localX, localY, localZ);
+worldToFoundationLocal(frame, worldX, worldY, worldZ);
+```
+
+The origin is the footprint's min-X/min-Z corner (`foundation.minGridX/minGridZ * vertexSpacing`);
+local Y=0 is `foundation.topY`. A wall authored as "local Y 0 to 3" therefore renders at
+17.4m–20.4m on a foundation whose top is 17.4m, and at 42m–45m on a foundation at 42m — the _same_
+`WallDefinition`, unchanged — because `foundation.topY` is read fresh every time a wall's transform
+is computed, never baked into the stored wall. `FoundationLocalMath.spec.ts` asserts this round-trip
+and the topY-swap case directly.
+
+### The fine building grid
+
+The foundation itself snaps to the coarse _terrain_ vertex grid (spacing ≈ `chunkSize /
+chunkResolution`, ~2m by default). Walls snap to a separate, much finer **building grid**
+(`buildingGridSize`, default `0.25m`), local to each foundation and never forced to equal the
+terrain spacing. `FoundationLocalMath.snapLocalToBuildingGrid()` rounds a local X/Z position to
+integer `{ gridX, gridZ }` — the _authoritative_ representation stored on every `WallDefinition` —
+with metres always derived (`gridX * buildingGridSize`), the same "store integers, derive floats"
+approach `foundationMath.worldToGridCoord` already uses for the terrain grid, so there's no
+floating-point drift. `isBuildingGridPointInsideFoundation()` rejects any grid point that would fall
+outside the footprint — enforced both while hovering (Wall Tool won't show a target) and again at
+the data layer (`BuildingManager.addWall` re-validates independently).
+
+### Wall placement (`WallTool.ts`)
+
+Wall Tool raycasts against foundation _top surfaces only_ (`FoundationManager.getMeshes()`, filtered
+to hits whose face normal is ≈ `(0, 1, 0)`) — never terrain, so there is no way to target open
+ground. A hit point is converted to foundation-local X/Z, snapped to the building grid, and checked
+against the footprint. The tool runs the same two-click state machine as Foundation Tool
+(`idle` → `first-point-selected` → confirm), and — since a wall's local direction is unrestricted —
+supports horizontal, vertical, and diagonal walls: `dx/dz = end - start`, length = `Math.hypot(dx,
+dz)`, heading = `Math.atan2(dz, dx)`. Both endpoints must resolve to the _same_ foundation; hovering
+a different foundation while a first point is selected shows an invalid preview rather than letting
+the wall span two independent coordinate systems. While targeting a foundation, a bounded grid
+overlay (dots) plus a boundary outline render over just that foundation's footprint — never a
+permanent grid over every foundation — falling back from the full footprint to a radius around the
+cursor once the point count would exceed a small cap, so a very large foundation never allocates an
+unbounded buffer.
+
+### Wall-local coordinates and openings (`wallGeometryMath.ts`)
+
+Each wall has its own simple local space, independent of its world rotation: **U** runs along the
+wall from the start point (`U=0`) to the end point (`U=wallLength`); **Y** is vertical, `Y=0` at the
+foundation top (the wall's bottom) and `Y=wallHeight` at its top. `WallOpeningDefinition` stores
+`{ minU, maxU, minY, maxY }` in this space — a door always has `minY=0`. Because openings are
+wall-local, they work identically on a diagonal wall as on an axis-aligned one; nothing about
+opening math ever assumes the wall faces X or Z (`wallGeometryMath.spec.ts`'s diagonal-wall test
+asserts this directly).
+
+**No destructive CSG.** A wall is never one box with holes carved out of it at runtime. Instead,
+`computeSolidWallSegments(wallLength, wallHeight, openings)` is a pure function that: collects every
+opening's `minU`/`maxU` plus the wall's own `0`/`length` as strip boundaries; sorts/dedupes them into
+vertical strips; for each strip, finds the openings that fully span it and subtracts their Y-ranges
+from `[0, wallHeight]` (via a standard interval-merge-then-subtract, `subtractIntervals`); and emits
+one rectangular solid segment per remaining Y-interval per strip. A door opening removes the `Y=0`
+interval entirely, so no segment ever exists beneath it. This supports any number of non-overlapping
+openings — including one stacked directly above another (a window over a door in the same strip) —
+purely as data, deterministically, and is exercised directly in `wallGeometryMath.spec.ts` without
+touching Three.js at all.
+
+`WallGeometryBuilder.ts` turns those solid segments into geometry: one `THREE.BoxGeometry` per
+segment (built in wall-local space — X=U, Y=vertical, Z=thickness — so segment math never has to
+think about world orientation), merged into a single `THREE.BufferGeometry` via
+`BufferGeometryUtils.mergeGeometries` — **one render mesh per wall**, regardless of how many
+openings it has. The whole mesh is then positioned/rotated as a unit
+(`applyWallTransform`) — note `rotation.y = -headingRadians`, not `headingRadians`: Three.js's
+Y-rotation matrix maps local +X to world `(cosθ, -sinθ)`, while `headingRadians` is defined as
+`atan2(dz, dx)` (local +X should map to `(cosφ, sinφ)`), so `θ = -φ`. Every wall mesh is a child of
+its foundation's **BuildingRoot** group (`WallManager`), positioned once at the foundation's world
+origin — exactly the hierarchy the spec calls for — so if a foundation's world position ever changed,
+every attached wall would move with it for free via the scene graph, without touching a single
+`WallDefinition`.
+
+### Window Tool / Door Tool (`OpeningToolBase.ts`, `WindowTool.ts`, `DoorTool.ts`)
+
+Both tools raycast against wall meshes only (`WallManager.getWallMeshesForRaycast()`) — never
+terrain or foundations — and share one implementation (`OpeningToolBase`) parameterized by opening
+type, width, and vertical extent; `WindowTool`/`DoorTool` are thin wrappers so the hotbar/tool
+identity stays distinct. A hit is converted into that wall's local `(U, Y)` via
+`worldToWallLocal(transform, ...)`, the horizontal centre snaps to `openingGridSize` (default 0.1m,
+deliberately separate from `buildingGridSize`), and the vertical extent comes straight from settings
+— a fixed `windowSillHeight`/`windowHeight` for windows, `minY=0`/`doorHeight` for doors — the
+"preferred first version" the spec calls for, rather than trying to derive height from where you're
+looking vertically. Before showing a valid preview, the candidate is checked against the _same_
+`isOpeningWithinWallBounds`/`doOpeningsOverlap` functions `BuildingManager.addOpening` uses
+authoritatively — `openingEdgeMargin` (clearance from the wall's own ends/top/bottom) and
+`openingSpacing` (clearance from other openings) apply identically to windows and doors, since an
+opening is an opening regardless of type. Only a _confirmed_ click rebuilds the wall's actual
+geometry — hovering never touches it — and only that one wall regenerates, never every wall in the
+world.
+
+### Collision (`wallCollision.ts`)
+
+Collision is derived from the exact same solid segments used for the visible mesh — never a
+separate shape — so a hole the player can see is always a hole the player can walk through.
+`WallManager` turns each solid segment into a world-space `WallCollisionRect` (an oriented rectangle:
+centre, half-length along the wall, half-thickness, direction, and a world Y range). The player is
+approximated as a vertical capsule — a circle of `PLAYER_COLLISION_RADIUS` in the horizontal plane —
+and `resolvePlayerPositionAgainstWalls()` pushes a proposed `(x, z)` out of any rect whose Y range
+overlaps the player's `[feetY, headY]`; a rect for a door's Y=0..wallHeight gap simply doesn't exist,
+so there's nothing to collide with in the doorway. `FirstPersonController` gained one optional
+`resolveHorizontalCollision` callback (decoupled the exact same way `getTerrainHeight` already is —
+the controller has no idea "walls" exist), called between computing a proposed move and grounding it
+on terrain/foundation height. `wallCollision.spec.ts` asserts the centre of a valid door opening is
+left untouched while the solid sections beside it still block.
+
+### Enforcement at the data layer
+
+Every rule above is checked in `BuildingManager`, not only in the tools — `addWall` independently
+validates both endpoints resolve to the _same, existing_ foundation and land inside its footprint
+before ever constructing a `WallDefinition`; `addOpening` re-validates bounds/overlap before
+mutating a wall. `WallManager` remains the single permanent owner of wall/mesh/collision state (per
+the "don't make the tool the permanent state owner" rule); `BuildingManager` is a thin validating
+facade in front of it, and is what every tool calls.
+
+### Foundation deletion
+
+Not implemented as a UI action yet, but the rule is settled: deleting a foundation **cascades** to
+its building content — `BuildingManager.removeBuildingForFoundation(foundationId)` removes every
+wall (and the foundation's now-empty BuildingRoot group) — rather than blocking deletion while
+occupied. Any future deletion code path must call it alongside `FoundationManager.removeFoundation`.
+
+### Serialization
+
+`BuildingManager.serialize()` groups walls by foundation into plain `FoundationBuildingDefinition[]`
+— grid integers and wall-local opening rectangles only, never Three.js objects or derived world
+transforms:
+
+```json
+{
+	"foundationId": "foundation-123",
+	"walls": [
+		{
+			"id": "wall-1",
+			"foundationId": "foundation-123",
+			"startGridX": 0,
+			"startGridZ": 0,
+			"endGridX": 20,
+			"endGridZ": 0,
+			"height": 3,
+			"thickness": 0.15,
+			"openings": [
+				{ "id": "window-1", "type": "window", "minU": 1.5, "maxU": 2.7, "minY": 0.9, "maxY": 2.1 },
+				{ "id": "door-1", "type": "door", "minU": 3.4, "maxU": 4.3, "minY": 0, "maxY": 2.1 }
+			]
+		}
+	]
+}
+```
+
+`load()` reproduces every wall's mesh/collision exactly, since both are always _derived_ from this
+data plus the current `FoundationDefinition` — never loaded or cached independently — which is also
+what `BuildingManager.spec.ts`'s round-trip test asserts (`serialize()` after a fresh `load()` of a
+prior `serialize()` output is deep-equal to the original).
+
+### GUI and settings
+
+One **Building** GUI folder, alongside the existing **Foundation** sub-folder: **Grid**
+(`buildingGridSize`, `showBuildingGrid`, `buildingGridOpacity`), **Walls** (`wallHeight`,
+`wallThickness`, `minimumWallLength`, `showWallBounds`), **Windows** and **Doors** (their own
+width/height plus the shared `openingGridSize`/`openingEdgeMargin`/`openingSpacing`). Every one of
+these is read live at placement time and copied into the new `WallDefinition`/`WallOpeningDefinition`
+— changing a default only ever affects the _next_ thing placed, never anything already built.
+
+### Tests
+
+`FoundationLocalMath.spec.ts`, `wallGeometryMath.spec.ts`, `wallCollision.spec.ts`, and
+`BuildingManager.spec.ts` cover: the local↔world round trip and the topY-swap case; building-grid
+snapping (including negative coordinates) and footprint containment; the segmentation algorithm for
+no openings, a centred window, a door with nothing beneath it, two independent windows, and a window
+stacked above a door; wall/opening validation (zero-length, too-short, out-of-bounds, overlapping,
+too close to the edge, cross-foundation endpoints); a diagonal wall's world transform round trip;
+and collision leaving a door's centre passable while still blocking the solid wall beside it.
+`tests/game.e2e.ts` extends the existing smoke tests: the hotbar shows Wall/Window/Door and switches
+tool with 2/3/4, and the Building GUI folder's Grid/Walls/Windows/Doors sections render.
+
 ## Vegetation: independent forest regions
 
 `src/lib/game/vegetation/` adds large procedural forests **as a second map laid over the terrain**,
@@ -438,7 +645,7 @@ is a cheap uniform or scene-property update, not a regeneration.
   (`scene.environment` via `THREE.PMREMGenerator`), **not** as the visible sky by default
   (`showHdriAsBackground: false`) — the visible sky is always `SkySystem`'s gradient dome unless you
   explicitly opt into showing the HDRI itself. This avoids "double clouds": if the HDRI has visible
-  clouds baked into its panorama *and* it were also shown as the background, they'd float behind (and
+  clouds baked into its panorama _and_ it were also shown as the background, they'd float behind (and
   disagree with) the procedural cloud layers.
 
 ### Sun, atmosphere, and fog
@@ -473,7 +680,7 @@ works out of the box, it just won't have real reflections until you add a file. 
 1. Download a **clear or lightly-clouded** equirectangular HDRI from
    [Poly Haven](https://polyhaven.com/hdris) (search "sky" — a mostly-clear noon/afternoon sky
    works best). Avoid heavily-clouded HDRIs — since `showHdriAsBackground` is off by default the
-   clouds in the HDRI won't normally be visible, but if you *do* turn that on, its clouds would
+   clouds in the HDRI won't normally be visible, but if you _do_ turn that on, its clouds would
    otherwise visually compete with `CloudSystem`'s procedural layers.
 2. Save it as `static/hdri/sky.hdr` in this project (create the `hdri/` folder — it doesn't exist
    yet).

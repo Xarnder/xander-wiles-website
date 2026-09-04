@@ -20,6 +20,7 @@ const teleprompterSrc = path.join(rootDir, 'pages', 'Teleprompter');
 const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
 const routineSrc = path.join(rootDir, 'pages', 'Routine');
+const gifMakerSrc = path.join(rootDir, 'pages', 'GIF-Maker');
 
 /** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
 const nestedBuildEnv = {
@@ -122,6 +123,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Routine') ||
                 rel.startsWith(path.join('pages', 'Routine') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'GIF-Maker') ||
+                rel.startsWith(path.join('pages', 'GIF-Maker') + path.sep)
             ) {
                 return false;
             }
@@ -356,7 +363,37 @@ if (!fs.existsSync(path.join(routineDest, '200.html'))) {
     process.exit(1);
 }
 
-// 11. Replace Environment Variables in Static Files
+// 11. Build and Inject GIF-Maker (SvelteKit)
+console.log('Building GIF-Maker App...');
+try {
+    npmInstallAndBuild(gifMakerSrc, 'GIF-Maker');
+} catch (error) {
+    console.error('Failed to build GIF-Maker:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting GIF-Maker build...');
+const gifMakerDest = path.join(deployOut, 'pages', 'GIF-Maker');
+fs.mkdirSync(gifMakerDest, { recursive: true });
+
+const gifMakerDist = path.join(gifMakerSrc, 'dist');
+if (fs.existsSync(gifMakerDist)) {
+    fs.cpSync(gifMakerDist, gifMakerDest, { recursive: true });
+} else {
+    console.error('GIF-Maker dist folder not found!');
+    process.exit(1);
+}
+
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(gifMakerSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(gifMakerDest, name));
+    }
+}
+
+// 12. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

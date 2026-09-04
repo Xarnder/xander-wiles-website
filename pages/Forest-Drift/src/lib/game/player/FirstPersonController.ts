@@ -11,6 +11,19 @@ export interface FirstPersonControllerOptions {
 	getTerrainHeight: (worldX: number, worldZ: number) => number;
 	settings: PlayerSettings;
 	onPointerLockChange?: (locked: boolean) => void;
+	/**
+	 * Optional horizontal-collision resolver (e.g. against building walls) — given a proposed
+	 * (x, z) and the player's current vertical span [feetY, headY], returns the position after
+	 * pushing out of any solid obstacle. Left undefined, movement is unconstrained horizontally
+	 * exactly as before buildings existed. Decoupled the same way getTerrainHeight is: the
+	 * controller has no idea what "walls" are, it just calls this if provided.
+	 */
+	resolveHorizontalCollision?: (
+		x: number,
+		z: number,
+		feetY: number,
+		headY: number
+	) => { x: number; z: number };
 }
 
 /**
@@ -27,6 +40,12 @@ export class FirstPersonController {
 	private readonly getTerrainHeight: (worldX: number, worldZ: number) => number;
 	private readonly settings: PlayerSettings;
 	private readonly onPointerLockChange?: (locked: boolean) => void;
+	private readonly resolveHorizontalCollision?: (
+		x: number,
+		z: number,
+		feetY: number,
+		headY: number
+	) => { x: number; z: number };
 
 	private yaw = 0;
 	private pitch = 0;
@@ -73,6 +92,7 @@ export class FirstPersonController {
 		this.getTerrainHeight = options.getTerrainHeight;
 		this.settings = options.settings;
 		this.onPointerLockChange = options.onPointerLockChange;
+		this.resolveHorizontalCollision = options.resolveHorizontalCollision;
 
 		document.addEventListener('pointerlockchange', this.handlePointerLockChange);
 		document.addEventListener('mousemove', this.handleMouseMove);
@@ -119,6 +139,14 @@ export class FirstPersonController {
 			const speed = running ? this.settings.runSpeed : this.settings.walkSpeed;
 			worldX += dirX * speed * deltaSeconds;
 			worldZ += dirZ * speed * deltaSeconds;
+		}
+
+		if (this.resolveHorizontalCollision) {
+			const feetY = this.worldPosition.y - this.settings.eyeHeight;
+			const headY = feetY + this.settings.eyeHeight;
+			const resolved = this.resolveHorizontalCollision(worldX, worldZ, feetY, headY);
+			worldX = resolved.x;
+			worldZ = resolved.z;
 		}
 
 		const groundHeight = this.getTerrainHeight(worldX, worldZ) + this.settings.eyeHeight;

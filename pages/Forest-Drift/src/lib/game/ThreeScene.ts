@@ -1,9 +1,15 @@
 import * as THREE from 'three';
+import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
+import { DoorTool } from './building/DoorTool';
 import { FoundationManager } from './building/FoundationManager';
 import { FoundationTool } from './building/FoundationTool';
 import type { BuildingSettings, BuildUiState, HotbarUiState } from './building/FoundationTypes';
 import { vertexSpacingFor } from './building/foundationMath';
+import { resolvePlayerPositionAgainstWalls } from './building/wallCollision';
+import { WallManager } from './building/WallManager';
+import { WallTool } from './building/WallTool';
+import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
 import { TerrainDebugGui } from './debug/TerrainDebugGui';
 import { FirstPersonController } from './player/FirstPersonController';
@@ -20,6 +26,9 @@ import type { VegetationSettings } from './vegetation/VegetationTypes';
 
 /** Sun light offset distance (world units) from the camera — see updateSunLightPosition(). */
 const SUN_LIGHT_DISTANCE = 300;
+
+/** Player's horizontal collision radius against building walls — see resolveHorizontalCollision wiring below. */
+const PLAYER_COLLISION_RADIUS = 0.35;
 
 export interface SceneStats {
 	fps: number;
@@ -74,9 +83,14 @@ export class ThreeScene {
 	private readonly terrainManager: TerrainManager;
 	private readonly treeManager: TreeManager;
 	private readonly foundationManager: FoundationManager;
+	private readonly wallManager: WallManager;
+	private readonly buildingManager: BuildingManager;
 	private readonly worldSurfaceSampler: WorldSurfaceSampler;
 	private readonly controller: FirstPersonController;
 	private readonly foundationTool: FoundationTool;
+	private readonly wallTool: WallTool;
+	private readonly windowTool: WindowTool;
+	private readonly doorTool: DoorTool;
 	private readonly buildToolManager: BuildToolManager;
 	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
@@ -144,6 +158,21 @@ export class ThreeScene {
 		);
 		this.scene.add(this.foundationManager.group);
 
+		this.wallManager = new WallManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize
+		});
+		this.scene.add(this.wallManager.group);
+		this.buildingManager = new BuildingManager({
+			foundationManager: this.foundationManager,
+			wallManager: this.wallManager,
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize
+		});
+
 		this.worldSurfaceSampler = new WorldSurfaceSampler(
 			this.terrainManager.getHeightSampler(),
 			this.foundationManager
@@ -164,7 +193,16 @@ export class ThreeScene {
 			camera: this.camera,
 			getTerrainHeight: (x, z) => this.worldSurfaceSampler.getGroundHeight(x, z),
 			settings: this.settings.player,
-			onPointerLockChange: options.onPointerLockChange
+			onPointerLockChange: options.onPointerLockChange,
+			resolveHorizontalCollision: (x, z, feetY, headY) =>
+				resolvePlayerPositionAgainstWalls(
+					x,
+					z,
+					feetY,
+					headY,
+					PLAYER_COLLISION_RADIUS,
+					this.wallManager.getAllCollisionRects()
+				)
 		});
 
 		this.controller.spawn(0, 0);
@@ -181,9 +219,42 @@ export class ThreeScene {
 			onHudChange: options.onBuildHudChange
 		});
 
+		this.wallTool = new WallTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.windowTool = new WindowTool({
+			scene: this.scene,
+			camera: this.camera,
+			wallManager: this.wallManager,
+			buildingManager: this.buildingManager,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.doorTool = new DoorTool({
+			scene: this.scene,
+			camera: this.camera,
+			wallManager: this.wallManager,
+			buildingManager: this.buildingManager,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
 		this.buildToolManager = new BuildToolManager({
 			domElement: this.renderer.domElement,
-			tools: { foundation: this.foundationTool },
+			tools: {
+				foundation: this.foundationTool,
+				wall: this.wallTool,
+				window: this.windowTool,
+				door: this.doorTool
+			},
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
 			onHudChange: options.onBuildHudChange
@@ -206,8 +277,13 @@ export class ThreeScene {
 				this.dirty.rendering = true;
 			}
 		});
-		this.gui.addBuildingFolder(buildingSettings, () => {
-			this.foundationManager.setShowBounds(buildingSettings.showFoundationBounds);
+		this.gui.addBuildingFolder(buildingSettings, {
+			onShowFoundationBoundsChange: () => {
+				this.foundationManager.setShowBounds(buildingSettings.showFoundationBounds);
+			},
+			onShowWallBoundsChange: () => {
+				this.wallManager.setShowBounds(buildingSettings.showWallBounds);
+			}
 		});
 		this.gui.addVegetationFolder(options.vegetationSettings, {
 			onSettingsChange: () => {
@@ -268,6 +344,7 @@ export class ThreeScene {
 		this.terrainManager.group.visible = !showSkyOnly;
 		this.treeManager.group.visible = !showSkyOnly;
 		this.foundationManager.group.visible = !showSkyOnly;
+		this.wallManager.group.visible = !showSkyOnly;
 	}
 
 	/** `scene.background` is contested between "let the sky dome show" and "debug: show the raw HDRI" — this is the single place that decides. */
@@ -434,7 +511,11 @@ export class ThreeScene {
 		this.gui.dispose();
 		this.buildToolManager.dispose();
 		this.foundationTool.dispose();
+		this.wallTool.dispose();
+		this.windowTool.dispose();
+		this.doorTool.dispose();
 		this.treeManager.dispose();
+		this.wallManager.dispose();
 		this.foundationManager.dispose();
 		this.controller.dispose();
 		this.terrainManager.dispose();

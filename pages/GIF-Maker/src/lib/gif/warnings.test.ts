@@ -43,6 +43,8 @@ describe('warnings', () => {
 		expect(inputMemoryWarning(500 * 1024 * 1024).level).toBe('huge');
 		expect(inputMemoryWarning(180 * 1024 * 1024).level).toBe('large');
 		expect(inputMemoryWarning(8 * 1024 * 1024).level).toBe('none');
+		expect(inputMemoryWarning(70 * 1024 * 1024).level).toBe('none');
+		expect(inputMemoryWarning(70 * 1024 * 1024, undefined, true).level).toBe('large');
 	});
 });
 
@@ -61,5 +63,42 @@ describe('filter graph', () => {
 		expect(graph).toContain('paletteuse=dither=sierra2_4a');
 		expect(graph).toContain('scale=640:360:flags=lanczos');
 		expect(graph).toContain('fps=15');
+		expect(graph).not.toContain('reverse');
+	});
+
+	it('appends a forward-then-reverse concat when bounce is on', () => {
+		const graph = combinedPaletteFilter(
+			{
+				width: 320,
+				height: 180,
+				fps: 10,
+				colours: 64,
+				dither: 'none',
+				scaleFlags: 'bicubic',
+				statsMode: 'full'
+			},
+			true
+		);
+		expect(graph).toContain('reverse');
+		expect(graph).toContain('concat=n=2:v=1:a=0');
+		expect(graph).toContain('fps=10');
+	});
+
+	it('compresses timestamps when a speed-up is applied', () => {
+		const graph = combinedPaletteFilter(
+			{
+				width: 320,
+				height: 180,
+				fps: 12,
+				colours: 64,
+				dither: 'none',
+				scaleFlags: 'bicubic',
+				statsMode: 'full'
+			},
+			false,
+			2
+		);
+		expect(graph).toContain('setpts=PTS/2');
+		expect(graph).toContain('fps=12');
 	});
 });

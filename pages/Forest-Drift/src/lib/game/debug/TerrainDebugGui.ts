@@ -142,21 +142,55 @@ export class TerrainDebugGui {
 	}
 
 	/**
-	 * Dev-only building controls. showFoundationBounds gets a real callback because it must apply
-	 * immediately to already-placed foundations; everything else here is simply read live by the
-	 * building tools each time they need it (same pattern as the Player folder above), so no
-	 * onChange wiring is needed for it.
+	 * Dev-only building controls. showFoundationBounds/showWallBounds get real callbacks because
+	 * they must apply immediately to already-placed foundations/walls; everything else here
+	 * (including every Wall/Window/Door dimension) is simply read live by the building tools each
+	 * time they need it (same pattern as the Player folder above) — changing a default only affects
+	 * the *next* thing placed, since WallDefinition/WallOpeningDefinition copy these values at
+	 * placement time rather than referencing settings, so no onChange wiring is needed for them.
 	 */
-	addBuildingFolder(settings: BuildingSettings, onShowBoundsChange: () => void): void {
+	addBuildingFolder(
+		settings: BuildingSettings,
+		callbacks: { onShowFoundationBoundsChange: () => void; onShowWallBoundsChange: () => void }
+	): void {
 		const building = this.gui.addFolder('Building');
+
 		const foundation = building.addFolder('Foundation');
 		foundation.add(settings, 'showVertexGrid');
 		foundation.add(settings, 'foundationGridDisplayRadius', 1, 10, 1);
 		foundation.add(settings, 'maxFoundationCells', 4, 128, 1);
 		foundation.add(settings, 'foundationUndergroundDepth', 0, 10, 0.1);
 		foundation.add(settings, 'showFoundationHighestPoint');
-		foundation.add(settings, 'showFoundationBounds').onChange(onShowBoundsChange);
+		foundation
+			.add(settings, 'showFoundationBounds')
+			.onChange(callbacks.onShowFoundationBoundsChange);
 		foundation.add(settings, 'previewOpacity', 0.1, 1, 0.05);
+
+		const grid = building.addFolder('Grid');
+		grid.add(settings, 'buildingGridSize', 0.05, 2, 0.05);
+		grid.add(settings, 'showBuildingGrid');
+		grid.add(settings, 'buildingGridOpacity', 0, 1, 0.05);
+
+		const walls = building.addFolder('Walls');
+		walls.add(settings, 'wallHeight', 0.5, 6, 0.05);
+		walls.add(settings, 'wallThickness', 0.05, 0.5, 0.01);
+		walls.add(settings, 'minimumWallLength', 0.05, 2, 0.05);
+		walls.add(settings, 'showWallBounds').onChange(callbacks.onShowWallBoundsChange);
+
+		const windows = building.addFolder('Windows');
+		windows.add(settings, 'windowWidth', 0.2, 4, 0.05);
+		windows.add(settings, 'windowHeight', 0.2, 3, 0.05);
+		windows.add(settings, 'windowSillHeight', 0, 3, 0.05);
+		windows.add(settings, 'openingGridSize', 0.02, 1, 0.01);
+		windows.add(settings, 'openingEdgeMargin', 0, 1, 0.01);
+		windows.add(settings, 'openingSpacing', 0, 1, 0.01);
+
+		const doors = building.addFolder('Doors');
+		doors.add(settings, 'doorWidth', 0.4, 3, 0.05);
+		doors.add(settings, 'doorHeight', 0.5, 4, 0.05);
+		doors.add(settings, 'openingGridSize', 0.02, 1, 0.01);
+		doors.add(settings, 'openingEdgeMargin', 0, 1, 0.01);
+		doors.add(settings, 'openingSpacing', 0, 1, 0.01);
 	}
 
 	/**

@@ -2,15 +2,27 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
-		<meta name="color-scheme" content="light dark" />
+		<meta name="color-scheme" content="dark light" />
+		<meta name="theme-color" content="#0a1220" />
 		<script>
 			try {
-				const theme = localStorage.getItem('svgif-theme');
-				if (theme === 'light' || theme === 'dark') {
-					document.documentElement.dataset.theme = theme;
-				}
+				const stored = localStorage.getItem('svgif-theme');
+				const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+				const theme =
+					stored === 'oled' || stored === 'light' || stored === 'navy'
+						? stored
+						: stored === 'dark' || prefersDark
+							? 'navy'
+							: 'light';
+				document.documentElement.dataset.theme = theme;
+				document
+					.querySelector('meta[name="theme-color"]')
+					?.setAttribute(
+						'content',
+						theme === 'oled' ? '#000000' : theme === 'light' ? '#e8eef6' : '#0a1220'
+					);
 			} catch (error) {
 				void error;
 			}

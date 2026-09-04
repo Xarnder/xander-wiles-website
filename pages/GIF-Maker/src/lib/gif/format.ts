@@ -1,5 +1,5 @@
-import { VIDEO_EXTENSIONS } from './constants';
-import type { ClipRange } from './types';
+import { MAX_SPEED, MIN_SPEED, VIDEO_EXTENSIONS } from './constants';
+import type { ClipRange, PlaybackMode } from './types';
 
 export function gcd(a: number, b: number): number {
 	let x = Math.abs(Math.round(a));
@@ -134,6 +134,63 @@ export function clipDuration(clip: ClipRange, fallbackDuration?: number): number
 	const end = Number.isFinite(clip.endSeconds) ? clip.endSeconds : (fallbackDuration ?? 0);
 	const start = Number.isFinite(clip.startSeconds) ? clip.startSeconds : 0;
 	return Math.max(0.05, end - start);
+}
+
+/** Unsped GIF length. Bounce plays the clip forward, then reversed. */
+export function contentDuration(clipSeconds: number, bounce: boolean): number {
+	const clip = Math.max(0.05, clipSeconds);
+	return bounce ? clip * 2 : clip;
+}
+
+export function snapSpeedPreset(speed: number): number {
+	if (!Number.isFinite(speed)) return MIN_SPEED;
+	return Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round(speed * 2) / 2));
+}
+
+export function formatSpeedFactor(speed: number): string {
+	const value = Math.round(Math.max(MIN_SPEED, speed) * 10_000) / 10_000;
+	return String(value);
+}
+
+export function formatSpeed(speed: number): string {
+	const value = Math.round(Math.max(0, speed) * 10) / 10;
+	const label = Number.isInteger(value) ? String(value) : value.toFixed(1);
+	return `${label}×`;
+}
+
+export function clampTargetDuration(targetSeconds: number, clipSeconds: number): number {
+	const clip = Math.max(0.05, clipSeconds);
+	const maxTarget = Math.max(0.05, clip - 0.05);
+	if (!Number.isFinite(targetSeconds)) return Math.min(maxTarget, clip / 2);
+	return Math.min(maxTarget, Math.max(0.05, targetSeconds));
+}
+
+export function speedFromTargetDuration(contentSeconds: number, targetSeconds: number): number {
+	const content = Math.max(0.05, contentSeconds);
+	const target = Math.min(content, Math.max(0.05, targetSeconds));
+	return content / target;
+}
+
+export function resolvedPlaybackSpeed(options: {
+	clipSeconds: number;
+	bounce: boolean;
+	mode: PlaybackMode;
+	speed: number;
+	targetSeconds: number;
+}): number {
+	const content = contentDuration(options.clipSeconds, options.bounce);
+	if (options.mode === 'duration') {
+		return speedFromTargetDuration(
+			content,
+			clampTargetDuration(options.targetSeconds, options.clipSeconds)
+		);
+	}
+	return snapSpeedPreset(options.speed);
+}
+
+/** GIF playback length after bounce and speed. */
+export function outputDuration(clipSeconds: number, bounce: boolean, speed = 1): number {
+	return contentDuration(clipSeconds, bounce) / Math.max(MIN_SPEED, speed);
 }
 
 export function clampClip(clip: ClipRange, durationSeconds: number): ClipRange {

@@ -2,7 +2,7 @@ import { analyseLoadedVideo } from './analyse-video';
 import { defaultConstraints } from './candidate-generator';
 import { loadFfmpeg, probeVideo } from './ffmpeg';
 import { encodeGif, prepareInput, releaseInput, type PreparedInput } from './gif-encoder';
-import { clipDuration, clampClip } from './format';
+import { clipDuration, clampClip, outputDuration } from './format';
 import { minimumSettings } from './candidate-generator';
 import { combinedPaletteFilter } from './filter-graph';
 import { optimiseGif } from './optimiser';
@@ -23,6 +23,8 @@ export interface ConvertOptions {
 	targetBytes: number;
 	clip: ClipRange;
 	constraints: AdvancedConstraints;
+	bounce?: boolean;
+	speed?: number;
 	onProgress: ProgressFn;
 	signal?: AbortSignal;
 }
@@ -104,7 +106,9 @@ export async function convertVideoToGif(options: ConvertOptions): Promise<Optimi
 				analysis,
 				targetBytes: options.targetBytes,
 				clip,
-				constraints
+				constraints,
+				bounce: options.bounce === true,
+				speed: options.speed ?? 1
 			},
 			encode,
 			(progress: OptimiserProgress) => options.onProgress(progress),
@@ -124,7 +128,11 @@ export async function convertVideoToGif(options: ConvertOptions): Promise<Optimi
 export async function encodeSmallestGif(options: ConvertOptions): Promise<OptimiserResult> {
 	const clip = clampClip(options.clip, options.analysis.durationSeconds);
 	const constraints = { ...defaultConstraints(), ...options.constraints };
-	const duration = clipDuration(clip, options.analysis.durationSeconds);
+	const duration = outputDuration(
+		clipDuration(clip, options.analysis.durationSeconds),
+		options.bounce === true,
+		options.speed ?? 1
+	);
 	const settings = minimumSettings(options.analysis, duration, constraints);
 
 	options.onProgress({
@@ -142,7 +150,7 @@ export async function encodeSmallestGif(options: ConvertOptions): Promise<Optimi
 	try {
 		const encoded = await encodeGif(
 			prepared,
-			{ settings, mode: 'full', clip },
+			{ settings, mode: 'full', clip, bounce: options.bounce === true, speed: options.speed ?? 1 },
 			(ffmpegProgress) => {
 				options.onProgress({
 					stage: 'final',
@@ -181,7 +189,7 @@ export async function encodeSmallestGif(options: ConvertOptions): Promise<Optimi
 					kind: 'full'
 				}
 			],
-			filterGraph: combinedPaletteFilter(settings),
+			filterGraph: combinedPaletteFilter(settings, options.bounce === true, options.speed ?? 1),
 			usedMultiThread: session.multiThread,
 			calibration: 1
 		};

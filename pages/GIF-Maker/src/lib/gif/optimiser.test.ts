@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConstraints, settingsFromQualityLevel } from './candidate-generator';
-import { clipDuration } from './format';
+import { clipDuration, outputDuration } from './format';
 import { optimiseGif, recommendSettings, searchByEstimate } from './optimiser';
 import { estimateGifBytes } from './size-model';
 import type { EncodeFn, GifSettings, OptimiserInput, VideoAnalysis } from './types';
@@ -37,7 +37,7 @@ function mockEncode(factor = 1): EncodeFn {
 		const duration =
 			request.mode === 'sample' && request.windows
 				? request.windows.reduce((sum, window) => sum + window.duration, 0)
-				: clipDuration(request.clip);
+				: outputDuration(clipDuration(request.clip), request.bounce === true, request.speed ?? 1);
 		const size = Math.max(
 			800,
 			Math.round(estimateGifBytes(request.settings, analysis(), duration) * factor)
@@ -133,6 +133,73 @@ describe('minimum-quality and constraint handling', () => {
 			})
 		);
 		expect(recommendation.settings.colours).toBe(64);
+	});
+});
+
+describe('bounce loop planning', () => {
+	it('treats bounce as twice the clip length when estimating size', () => {
+		const settings = settingsFromQualityLevel(0.5, analysis(), 6, defaultConstraints());
+		const forward = estimateGifBytes(settings, analysis(), 6);
+		const bounced = estimateGifBytes(settings, analysis(), outputDuration(6, true));
+		expect(bounced).toBeGreaterThan(forward * 1.8);
+		expect(bounced).toBeLessThan(forward * 2.2);
+	});
+
+	it('chooses more conservative settings when bounce doubles the GIF', () => {
+		const shared = {
+			targetBytes: 700_000,
+			clip: { startSeconds: 0, endSeconds: 6 },
+			analysis: analysis({ motionComplexity: 0.45, detailComplexity: 0.4 }),
+			constraints: defaultConstraints()
+		};
+		const forward = searchByEstimate(shared);
+		const bounced = searchByEstimate({ ...shared, bounce: true });
+		expect(bounced.estimatedFileSizeBytes).toBeLessThanOrEqual(shared.targetBytes);
+		expect(
+			bounced.settings.width * bounced.settings.height * bounced.settings.fps
+		).toBeLessThanOrEqual(forward.settings.width * forward.settings.height * forward.settings.fps);
+	});
+
+	it('plans a shorter GIF and higher quality budget at 2× speed', () => {
+		const shared = {
+			targetBytes: 500_000,
+			clip: { startSeconds: 0, endSeconds: 8 },
+			analysis: analysis({ motionComplexity: 0.5, detailComplexity: 0.45 }),
+			constraints: defaultConstraints()
+		};
+		const normal = searchByEstimate(shared);
+		const fast = searchByEstimate({ ...shared, speed: 2 });
+		expect(fast.estimatedFileSizeBytes).toBeLessThanOrEqual(shared.targetBytes);
+		expect(fast.settings.width * fast.settings.height * fast.settings.fps).toBeGreaterThanOrEqual(
+			normal.settings.width * normal.settings.height * normal.settings.fps
+		);
+	});
+
+	it('encodes a bounced GIF that still fits the target', async () => {
+		const result = await optimiseGif(
+			input({
+				targetBytes: 1.2 * 1024 * 1024,
+				clip: { startSeconds: 0, endSeconds: 4 },
+				bounce: true
+			}),
+			mockEncode(1)
+		);
+		expect(result.status).toBe('ok');
+		expect(result.fileSizeBytes).toBeLessThanOrEqual(1.2 * 1024 * 1024);
+		expect(result.filterGraph).toContain('reverse');
+	});
+
+	it('encodes a sped-up GIF with a setpts filter', async () => {
+		const result = await optimiseGif(
+			input({
+				targetBytes: 1.2 * 1024 * 1024,
+				clip: { startSeconds: 0, endSeconds: 4 },
+				speed: 2
+			}),
+			mockEncode(1)
+		);
+		expect(result.status).toBe('ok');
+		expect(result.filterGraph).toContain('setpts=PTS/2');
 	});
 });
 

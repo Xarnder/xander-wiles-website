@@ -1,17 +1,45 @@
 import { ANALYSE_FRAME_WIDTH, ANALYSE_SAMPLE_COUNT } from './constants';
 import { colourDiversityFromFrame, detailFromFrame, motionFromFrames } from './analyse-frames';
 import { aspectRatioLabel, aspectRatioValue } from './format';
+import { prefersNativeShareSave } from './platform';
 import type { VideoAnalysis } from './types';
+
+export function prepareVideoElement(video: HTMLVideoElement): void {
+	video.muted = true;
+	video.playsInline = true;
+	video.setAttribute('playsinline', '');
+	video.setAttribute('webkit-playsinline', '');
+	video.preload = 'metadata';
+}
 
 export function canUseWebCodecs(): boolean {
 	return typeof VideoFrame !== 'undefined';
 }
 
+function hasUsableMetadata(video: HTMLVideoElement): boolean {
+	return (
+		video.readyState >= 1 &&
+		video.videoWidth >= 2 &&
+		Number.isFinite(video.duration) &&
+		video.duration > 0
+	);
+}
+
 export async function waitForMetadata(video: HTMLVideoElement): Promise<void> {
-	if (video.readyState >= 1 && video.duration && video.videoWidth) return;
+	if (hasUsableMetadata(video)) return;
 
 	await new Promise<void>((resolve, reject) => {
+		const timer = window.setTimeout(() => {
+			cleanup();
+			if (hasUsableMetadata(video)) {
+				resolve();
+				return;
+			}
+			reject(new Error('This file could not be read as video in the browser.'));
+		}, 15000);
+
 		const onReady = () => {
+			if (!hasUsableMetadata(video)) return;
 			cleanup();
 			resolve();
 		};
@@ -20,15 +48,22 @@ export async function waitForMetadata(video: HTMLVideoElement): Promise<void> {
 			reject(new Error('This file could not be read as video in the browser.'));
 		};
 		const cleanup = () => {
+			window.clearTimeout(timer);
 			video.removeEventListener('loadedmetadata', onReady);
+			video.removeEventListener('loadeddata', onReady);
+			video.removeEventListener('durationchange', onReady);
+			video.removeEventListener('canplay', onReady);
 			video.removeEventListener('error', onError);
 		};
 		video.addEventListener('loadedmetadata', onReady);
+		video.addEventListener('loadeddata', onReady);
+		video.addEventListener('durationchange', onReady);
+		video.addEventListener('canplay', onReady);
 		video.addEventListener('error', onError);
 	});
 }
 
-function waitForSeek(video: HTMLVideoElement): Promise<void> {
+function waitForSeek(video: HTMLVideoElement, timeoutMs = 700): Promise<void> {
 	if (!Number.isFinite(video.duration)) {
 		return Promise.resolve();
 	}
@@ -38,7 +73,7 @@ function waitForSeek(video: HTMLVideoElement): Promise<void> {
 			video.removeEventListener('seeked', done);
 			resolve();
 		};
-		const timer = window.setTimeout(done, 700);
+		const timer = window.setTimeout(done, timeoutMs);
 		video.addEventListener('seeked', done);
 	});
 }
@@ -110,6 +145,7 @@ export async function analyseLoadedVideo(
 	file: File,
 	onProgress?: (percent: number) => void
 ): Promise<VideoAnalysis> {
+	prepareVideoElement(video);
 	await waitForMetadata(video);
 	const width = video.videoWidth;
 	const height = video.videoHeight;
@@ -133,11 +169,13 @@ export async function analyseLoadedVideo(
 	const frames: Uint8ClampedArray[] = [];
 	const details: number[] = [];
 	const colours: number[] = [];
+	const ios = prefersNativeShareSave();
+	const seekTimeout = ios ? 2000 : 700;
 
 	for (let i = 0; i < samples; i += 1) {
 		const t = durationSeconds * ((i + 0.5) / samples);
 		video.currentTime = Math.min(durationSeconds - 0.01, Math.max(0, t));
-		await waitForSeek(video);
+		await waitForSeek(video, seekTimeout);
 		drawFrame(video, ctx, ANALYSE_FRAME_WIDTH, analyseHeight);
 		const image = ctx.getImageData(0, 0, ANALYSE_FRAME_WIDTH, analyseHeight);
 		frames.push(image.data);
@@ -152,10 +190,12 @@ export async function analyseLoadedVideo(
 	frames.length = 0;
 
 	let sourceFps: number | undefined;
-	try {
-		sourceFps = await estimateSourceFps(video);
-	} catch {
-		sourceFps = undefined;
+	if (!ios) {
+		try {
+			sourceFps = await estimateSourceFps(video);
+		} catch {
+			sourceFps = undefined;
+		}
 	}
 
 	video.currentTime = 0;

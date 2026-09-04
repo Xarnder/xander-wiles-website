@@ -3,20 +3,38 @@
 	import ClipSelector from '$lib/components/ClipSelector.svelte';
 	import ConversionProgress from '$lib/components/ConversionProgress.svelte';
 	import GifResult from '$lib/components/GifResult.svelte';
+	import PlaybackSelector from '$lib/components/PlaybackSelector.svelte';
 	import SizeSelector from '$lib/components/SizeSelector.svelte';
 	import VideoDropzone from '$lib/components/VideoDropzone.svelte';
 	import VideoPreview from '$lib/components/VideoPreview.svelte';
 	import { defaultConstraints } from '$lib/gif/candidate-generator';
 	import { DEFAULT_TARGET_BYTES } from '$lib/gif/constants';
-	import { clipDuration, formatBytes, gifFilename } from '$lib/gif/format';
+	import {
+		clipDuration,
+		formatBytes,
+		formatDuration,
+		formatSpeed,
+		gifFilename,
+		outputDuration,
+		resolvedPlaybackSpeed
+	} from '$lib/gif/format';
 	import { recommendSettings } from '$lib/gif/optimiser';
 	import { colourEstimateLabel } from '$lib/gif/size-model';
+	import { prefersNativeShareSave } from '$lib/gif/platform';
+	import {
+		THEME_LABEL,
+		nextTheme,
+		resolveStoredTheme,
+		themeColor,
+		type ThemeName
+	} from '$lib/gif/theme';
 	import { inputMemoryWarning, longVideoWarning, tightTargetWarning } from '$lib/gif/warnings';
 	import { onMount, tick } from 'svelte';
 	import type {
 		AdvancedConstraints,
 		OptimiserProgress,
 		OptimiserResult,
+		PlaybackMode,
 		VideoAnalysis
 	} from '$lib/gif/types';
 
@@ -28,30 +46,50 @@
 	let targetBytes = $state(DEFAULT_TARGET_BYTES);
 	let startSeconds = $state(0);
 	let endSeconds = $state(0);
+	let bounce = $state(false);
+	let playbackMode = $state<PlaybackMode>('speed');
+	let speed = $state(1);
+	let targetSeconds = $state(1);
 	let constraints = $state<AdvancedConstraints>(defaultConstraints());
 	let converting = $state(false);
 	let progress = $state<OptimiserProgress | null>(null);
 	let result = $state<OptimiserResult | null>(null);
 	let gifUrl = $state<string | null>(null);
+	let gifFile = $state<File | null>(null);
 	let errorMessage = $state<string | null>(null);
-	let theme = $state<'light' | 'dark' | 'system'>('system');
+	let theme = $state<ThemeName>('navy');
+	const upcomingTheme = $derived(nextTheme(theme));
 	let abort: AbortController | undefined;
 
 	const clip = $derived({ startSeconds, endSeconds });
 	const selectedDuration = $derived(analysis ? clipDuration(clip, analysis.durationSeconds) : 0);
+	const playbackRate = $derived(
+		resolvedPlaybackSpeed({
+			clipSeconds: selectedDuration,
+			bounce,
+			mode: playbackMode,
+			speed,
+			targetSeconds
+		})
+	);
+	const gifDuration = $derived(outputDuration(selectedDuration, bounce, playbackRate));
 	const recommendation = $derived.by(() => {
 		if (!analysis) return null;
 		return recommendSettings({
 			analysis,
 			targetBytes,
 			clip,
-			constraints
+			constraints,
+			bounce,
+			speed: playbackRate
 		});
 	});
-	const memoryWarning = $derived(file ? inputMemoryWarning(file.size, deviceMemory()) : null);
-	const durationWarning = $derived(analysis ? longVideoWarning(selectedDuration) : null);
+	const memoryWarning = $derived(
+		file ? inputMemoryWarning(file.size, deviceMemory(), prefersNativeShareSave()) : null
+	);
+	const durationWarning = $derived(analysis ? longVideoWarning(gifDuration) : null);
 	const qualityWarning = $derived(
-		analysis ? tightTargetWarning(selectedDuration, targetBytes, analysis, constraints) : null
+		analysis ? tightTargetWarning(gifDuration, targetBytes, analysis, constraints) : null
 	);
 	const downloadName = $derived(file ? gifFilename(file.name) : 'video.gif');
 
@@ -74,28 +112,22 @@
 		return nav.deviceMemory;
 	}
 
-	function readTheme(): 'light' | 'dark' | 'system' {
+	function readTheme(): ThemeName {
+		let stored: string | null = null;
 		try {
-			const stored = localStorage.getItem('svgif-theme');
-			if (stored === 'light' || stored === 'dark') return stored;
+			stored = localStorage.getItem('svgif-theme');
 		} catch {
 			// Ignore blocked storage.
 		}
-		return 'system';
+		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+		return resolveStoredTheme(stored, prefersDark);
 	}
 
-	function applyTheme(next: 'light' | 'dark' | 'system') {
+	function applyTheme(next: ThemeName) {
 		theme = next;
-		if (next === 'system') {
-			delete document.documentElement.dataset.theme;
-			try {
-				localStorage.removeItem('svgif-theme');
-			} catch {
-				// Ignore blocked storage.
-			}
-			return;
-		}
 		document.documentElement.dataset.theme = next;
+		const color = themeColor(next);
+		document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 		try {
 			localStorage.setItem('svgif-theme', next);
 		} catch {
@@ -111,12 +143,16 @@
 		errorMessage = null;
 		result = null;
 		gifUrl = null;
+		gifFile = null;
 		file = next;
 		videoUrl = URL.createObjectURL(next);
 		analysis = null;
 		analysing = true;
 		startSeconds = 0;
 		endSeconds = 0;
+		bounce = false;
+		playbackMode = 'speed';
+		speed = 1;
 
 		await tick();
 
@@ -133,6 +169,7 @@
 			analysis = nextAnalysis;
 			startSeconds = 0;
 			endSeconds = nextAnalysis.durationSeconds;
+			targetSeconds = Math.max(0.05, nextAnalysis.durationSeconds / 2);
 		} catch (error) {
 			errorMessage =
 				error instanceof Error ? error.message : 'This video could not be analysed in the browser.';
@@ -144,6 +181,7 @@
 	function resetResult() {
 		result = null;
 		gifUrl = null;
+		gifFile = null;
 		errorMessage = null;
 	}
 
@@ -168,6 +206,8 @@
 				targetBytes,
 				clip,
 				constraints,
+				bounce,
+				speed: playbackRate,
 				onProgress: (next: OptimiserProgress) => {
 					progress = next;
 				},
@@ -181,7 +221,8 @@
 			if (nextResult.gifBytes) {
 				const copy = new Uint8Array(nextResult.gifBytes.byteLength);
 				copy.set(nextResult.gifBytes);
-				gifUrl = URL.createObjectURL(new Blob([copy], { type: 'image/gif' }));
+				gifFile = new File([copy], downloadName, { type: 'image/gif' });
+				gifUrl = URL.createObjectURL(gifFile);
 			}
 		} catch (error) {
 			if (error instanceof DOMException && error.name === 'AbortError') {
@@ -200,9 +241,7 @@
 	}
 
 	function toggleTheme() {
-		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-		const current = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
-		applyTheme(current === 'dark' ? 'light' : 'dark');
+		applyTheme(nextTheme(theme));
 	}
 </script>
 
@@ -213,11 +252,17 @@
 				<p class="eyebrow">Local converter</p>
 				<h1>Smart Video to GIF</h1>
 				<p class="lede">
-					Drop a video, pick a maximum size, and the app finds the best GIF settings.
+					Choose a video, pick a maximum size, and the app finds the best GIF settings on this
+					device.
 				</p>
 			</div>
-			<button class="theme-toggle" type="button" onclick={toggleTheme}>
-				{theme === 'dark' ? 'Light' : 'Dark'}
+			<button
+				class="theme-toggle"
+				type="button"
+				aria-label="Theme {THEME_LABEL[theme]}. Switch to {THEME_LABEL[upcomingTheme]}"
+				onclick={toggleTheme}
+			>
+				{THEME_LABEL[upcomingTheme]}
 			</button>
 		</header>
 
@@ -255,7 +300,19 @@
 
 			{#if analysis}
 				<SizeSelector bind:bytes={targetBytes} />
-				<ClipSelector duration={analysis.durationSeconds} bind:startSeconds bind:endSeconds />
+				<ClipSelector
+					duration={analysis.durationSeconds}
+					bind:startSeconds
+					bind:endSeconds
+					bind:bounce
+				/>
+				<PlaybackSelector
+					clipSeconds={selectedDuration}
+					{bounce}
+					bind:mode={playbackMode}
+					bind:speed
+					bind:targetSeconds
+				/>
 				<AdvancedSettings bind:constraints />
 
 				{#if durationWarning}
@@ -276,6 +333,16 @@
 								recommendation.settings.colours
 							)}
 						</span>
+						{#if bounce || playbackRate > 1.01}
+							<span>
+								{#if bounce}Bounce loop{/if}
+								{#if bounce && playbackRate > 1.01}
+									·
+								{/if}
+								{#if playbackRate > 1.01}{formatSpeed(playbackRate)}{/if}
+								· {formatDuration(gifDuration)}
+							</span>
+						{/if}
 						<span class="hint">
 							About {formatBytes(recommendation.estimatedFileSizeBytes)} before test encodes. Actual settings
 							may change slightly after testing.
@@ -320,12 +387,15 @@
 				<p class="danger">{errorMessage}</p>
 			{/if}
 
-			{#if result && gifUrl && analysis}
+			{#if result && gifUrl && gifFile && analysis}
 				<GifResult
 					{result}
 					url={gifUrl}
+					file={gifFile}
 					filename={downloadName}
-					durationSeconds={selectedDuration}
+					durationSeconds={gifDuration}
+					{bounce}
+					speed={playbackRate}
 					{targetBytes}
 					originalBytes={analysis.fileSizeBytes}
 					onagain={resetResult}

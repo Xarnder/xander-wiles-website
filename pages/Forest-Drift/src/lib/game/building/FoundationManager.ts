@@ -57,6 +57,11 @@ export class FoundationManager {
 		return Array.from(this.foundations.values(), (entry) => entry.definition);
 	}
 
+	/** Every foundation's mesh, for tools that raycast against foundation surfaces (e.g. Wall Tool targeting the top face) rather than terrain — mirrors TerrainManager.getActiveMeshes(). */
+	getMeshes(): THREE.Object3D[] {
+		return Array.from(this.foundations.values(), (entry) => entry.mesh.object);
+	}
+
 	setShowBounds(visible: boolean): void {
 		this.showBounds = visible;
 		for (const entry of this.foundations.values()) entry.mesh.setBoundsVisible(visible);

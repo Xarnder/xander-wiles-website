@@ -4,7 +4,7 @@ import {
 	settingsFromQualityLevel,
 	settingsKey
 } from './candidate-generator';
-import { clipDuration } from './format';
+import { clipDuration, outputDuration } from './format';
 import { combinedPaletteFilter } from './filter-graph';
 import { scoreQuality } from './quality-score';
 import { estimateGifBytes, pickSampleWindows, projectSampleToFull } from './size-model';
@@ -44,8 +44,16 @@ export function startingQualityCap(durationSeconds: number, targetBytes: number)
 	return cap;
 }
 
+function planningDuration(input: OptimiserInput): number {
+	return outputDuration(
+		clipDuration(input.clip, input.analysis.durationSeconds),
+		input.bounce === true,
+		input.speed ?? 1
+	);
+}
+
 export function searchByEstimate(input: OptimiserInput, calibration = 1): Recommendation {
-	const duration = clipDuration(input.clip, input.analysis.durationSeconds);
+	const duration = planningDuration(input);
 	const hiStart = startingQualityCap(duration, input.targetBytes);
 	const min = minimumSettings(input.analysis, duration, input.constraints);
 	const smallestPossibleBytes = estimateGifBytes(min, input.analysis, duration, calibration);
@@ -105,7 +113,10 @@ export async function optimiseGif(
 	onProgress: ProgressFn = () => undefined,
 	signal?: AbortSignal
 ): Promise<OptimiserResult> {
-	const duration = clipDuration(input.clip, input.analysis.durationSeconds);
+	const clipSeconds = clipDuration(input.clip, input.analysis.durationSeconds);
+	const duration = planningDuration(input);
+	const bounce = input.bounce === true;
+	const speed = input.speed ?? 1;
 	const tried: TriedCandidate[] = [];
 	const logs: string[] = [];
 	let sampleEncodes = 0;
@@ -147,8 +158,8 @@ export async function optimiseGif(
 		kind: 'estimate'
 	});
 
-	const windows = pickSampleWindows(duration);
-	const canSample = duration > 2.2 && windows[0]?.duration < duration * 0.95;
+	const windows = pickSampleWindows(clipSeconds);
+	const canSample = clipSeconds > 2.2 && windows[0]?.duration < clipSeconds * 0.95;
 
 	if (canSample) {
 		ensure();
@@ -240,7 +251,7 @@ export async function optimiseGif(
 			sampleEncodes,
 			logs,
 			tried,
-			filterGraph: combinedPaletteFilter(recommendation.settings),
+			filterGraph: combinedPaletteFilter(recommendation.settings, bounce, speed),
 			usedMultiThread: false,
 			calibration
 		};
@@ -253,7 +264,9 @@ export async function optimiseGif(
 	let encoded = await encode({
 		settings: chosen,
 		mode: 'full',
-		clip: input.clip
+		clip: input.clip,
+		bounce,
+		speed
 	});
 	fullEncodes += 1;
 	tried.push({
@@ -291,7 +304,9 @@ export async function optimiseGif(
 		encoded = await encode({
 			settings,
 			mode: 'full',
-			clip: input.clip
+			clip: input.clip,
+			bounce,
+			speed
 		});
 		fullEncodes += 1;
 		tried.push({
@@ -320,7 +335,7 @@ export async function optimiseGif(
 			sampleEncodes,
 			logs,
 			tried,
-			filterGraph: combinedPaletteFilter(settings),
+			filterGraph: combinedPaletteFilter(settings, bounce, speed),
 			usedMultiThread: false,
 			calibration
 		};
@@ -346,7 +361,9 @@ export async function optimiseGif(
 			const better = await encode({
 				settings: improved,
 				mode: 'full',
-				clip: input.clip
+				clip: input.clip,
+				bounce,
+				speed
 			});
 			fullEncodes += 1;
 			tried.push({
@@ -381,7 +398,7 @@ export async function optimiseGif(
 		sampleEncodes,
 		logs,
 		tried,
-		filterGraph: combinedPaletteFilter(settings),
+		filterGraph: combinedPaletteFilter(settings, bounce, speed),
 		usedMultiThread: false,
 		calibration
 	};

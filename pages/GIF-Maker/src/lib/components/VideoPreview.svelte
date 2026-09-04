@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { motionLabel } from '$lib/gif/analyse-frames';
+	import { prepareVideoElement } from '$lib/gif/analyse-video';
 	import { formatBytes, formatDuration } from '$lib/gif/format';
 	import type { VideoAnalysis } from '$lib/gif/types';
 
@@ -16,7 +17,15 @@
 
 <section class="stack">
 	<div class="preview-frame">
-		<video bind:this={element} src={url} controls muted playsinline preload="metadata"></video>
+		<video
+			bind:this={element}
+			{@attach prepareVideoElement}
+			src={url}
+			controls
+			muted
+			playsinline
+			preload="metadata"
+		></video>
 	</div>
 
 	{#if analysis}

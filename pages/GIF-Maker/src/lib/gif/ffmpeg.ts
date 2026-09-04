@@ -1,6 +1,7 @@
 import { base } from '$app/paths';
 import type { FFmpeg, LogEvent, ProgressEvent as FfmpegProgress } from '@ffmpeg/ffmpeg';
 import { parseProbeOutput } from './format';
+import { prefersNativeShareSave, shouldUseMultiThreadFfmpeg } from './platform';
 
 export interface FfmpegHandle {
 	ffmpeg: FFmpeg;
@@ -28,7 +29,10 @@ export async function loadFfmpeg(
 		const { toBlobURL } = await import('@ffmpeg/util');
 		const ffmpegWorker = await import('@ffmpeg/ffmpeg/worker?url');
 
-		const multiThread = isCrossOriginIsolated();
+		const multiThread = shouldUseMultiThreadFfmpeg(
+			isCrossOriginIsolated(),
+			prefersNativeShareSave()
+		);
 		const coreDir = `${base}/ffmpeg/${multiThread ? 'core-mt' : 'core'}`;
 
 		const coreURL = await toBlobURL(`${coreDir}/ffmpeg-core.js`, 'text/javascript');

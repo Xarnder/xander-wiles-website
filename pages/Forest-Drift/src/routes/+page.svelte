@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import titleMark from '$lib/assets/forest-drift-title.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import { createDefaultBuildingSettings } from '$lib/game/building/FoundationTypes';
@@ -49,14 +50,6 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Forest Drift</title>
-	<meta
-		name="description"
-		content="A procedural, seeded, infinite-terrain exploration prototype built with Three.js and SvelteKit."
-	/>
-</svelte:head>
-
 <div class="game-shell">
 	<div class="canvas-container" data-testid="canvas-container" bind:this={container}></div>
 
@@ -68,6 +61,13 @@
 
 	{#if !pointerLocked}
 		<div class="instructions" class:fading={pointerLocked}>
+			<img
+				class="title-mark"
+				src={titleMark}
+				alt="Forest Drift"
+				width="614"
+				height="350"
+			/>
 			<p class="headline">Click to explore</p>
 			<p>WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc to release mouse</p>
 		</div>
@@ -170,6 +170,16 @@
 
 	.instructions.fading {
 		opacity: 0;
+	}
+
+	.title-mark {
+		display: block;
+		width: min(22rem, 72vw);
+		height: auto;
+		margin: 0 auto 0.85rem;
+		filter:
+			drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35)) drop-shadow(0 4px 16px rgba(0, 0, 0, 0.55));
+		pointer-events: none;
 	}
 
 	.instructions .headline {

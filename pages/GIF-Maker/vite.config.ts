@@ -16,6 +16,9 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter({
+				pages: 'dist',
+				assets: 'dist',
+				fallback: undefined,
 				strict: true
 			}),
 			paths: {

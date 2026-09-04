@@ -21,6 +21,8 @@ test('renders the world with no uncaught exceptions and loads at least one chunk
 
 test('shows click-to-explore instructions before pointer lock is engaged', async ({ page }) => {
 	await page.goto('/');
+	await expect(page).toHaveTitle('Forest Drift');
+	await expect(page.getByAltText('Forest Drift')).toBeVisible();
 	await expect(page.getByText('Click to explore')).toBeVisible();
 });
 
@@ -43,6 +45,58 @@ test('shows the hotbar with a Foundation slot, selectable with the 1 key', async
 
 	await page.keyboard.press('1');
 	await expect(foundationSlot).toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('shows Wall, Window and Door hotbar slots and switches the active tool with 2/3/4', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const wallSlot = page.getByTestId('hotbar-slot-wall');
+	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const doorSlot = page.getByTestId('hotbar-slot-door');
+	await expect(wallSlot).toBeVisible();
+	await expect(windowSlot).toBeVisible();
+	await expect(doorSlot).toBeVisible();
+
+	await page.keyboard.press('2');
+	await expect(wallSlot).toHaveClass(/active/);
+
+	await page.keyboard.press('3');
+	await expect(windowSlot).toHaveClass(/active/);
+	await expect(wallSlot).not.toHaveClass(/active/);
+
+	await page.keyboard.press('4');
+	await expect(doorSlot).toHaveClass(/active/);
+	await expect(windowSlot).not.toHaveClass(/active/);
+
+	await page.keyboard.press('1');
+	await expect(page.getByTestId('hotbar-slot-foundation')).toHaveClass(/active/);
+	await expect(doorSlot).not.toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('shows the Building GUI folder with Grid, Walls, Windows and Doors sections', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
+
+	const buildingFolder = page.locator('.lil-title', { hasText: 'Building' }).first();
+	await expect(buildingFolder).toBeVisible({ timeout: 10_000 });
+
+	for (const sectionTitle of ['Grid', 'Walls', 'Windows', 'Doors']) {
+		await expect(page.locator('.lil-title', { hasText: sectionTitle }).first()).toBeVisible();
+	}
 
 	expect(pageErrors).toEqual([]);
 });

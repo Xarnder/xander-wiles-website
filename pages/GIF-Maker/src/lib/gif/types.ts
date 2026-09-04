@@ -6,6 +6,8 @@ export type StatsMode = 'full' | 'diff' | 'single';
 
 export type ScaleFlags = 'lanczos' | 'bicubic' | 'bilinear';
 
+export type PlaybackMode = 'speed' | 'duration';
+
 export interface VideoAnalysis {
 	filename: string;
 	fileSizeBytes: number;
@@ -79,6 +81,10 @@ export interface EncodeRequest {
 	mode: 'sample' | 'full';
 	clip: ClipRange;
 	windows?: SampleWindow[];
+	/** Full encodes only. Sample encodes stay forward so calibration stays linear. */
+	bounce?: boolean;
+	/** Full encodes only. 1 = original pace. */
+	speed?: number;
 }
 
 export interface EncodeResult {
@@ -95,6 +101,8 @@ export interface OptimiserInput {
 	targetBytes: number;
 	clip: ClipRange;
 	constraints: AdvancedConstraints;
+	bounce?: boolean;
+	speed?: number;
 }
 
 export interface TriedCandidate {

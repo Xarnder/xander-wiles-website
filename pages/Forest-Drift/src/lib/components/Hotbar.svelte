@@ -16,7 +16,7 @@
 			type="button"
 			class="slot"
 			class:active={slot.slot === activeSlot}
-			data-testid={slot.toolId === 'foundation' ? 'hotbar-slot-foundation' : undefined}
+			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
 		>
 			<span class="slot-number">{slot.slot}</span>

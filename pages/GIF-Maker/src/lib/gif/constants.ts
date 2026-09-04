@@ -34,6 +34,10 @@ export const ANALYSE_SAMPLE_COUNT = 10;
 
 export const DEFAULT_DITHER: DitherStrategy = 'sierra2_4a';
 
+export const SPEED_PRESETS = [1, 1.5, 2, 2.5, 3, 3.5, 4] as const;
+export const MIN_SPEED = 1;
+export const MAX_SPEED = 4;
+
 export const VIDEO_EXTENSIONS = [
 	'.mp4',
 	'.mov',
@@ -59,12 +63,6 @@ export const VIDEO_EXTENSIONS = [
 	'.m4s'
 ] as const;
 
-export const FILE_PICKER_ACCEPT = [
-	'video/*',
-	...VIDEO_EXTENSIONS,
-	'.MP4',
-	'.MOV',
-	'.WEBM',
-	'.MKV',
-	'.AVI'
-].join(',');
+// Keep this short. A long extension list makes iOS Safari skip Photos/Camera Roll
+// and open the Files browser instead.
+export const FILE_PICKER_ACCEPT = 'video/*,video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v';
