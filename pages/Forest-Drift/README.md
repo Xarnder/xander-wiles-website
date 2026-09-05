@@ -32,6 +32,12 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `Page Up` / `Page Down` — change the current building level (see "Building levels"), or click the
   ▲ / ▼ on-screen floor selector on the left edge of the screen, shown whenever a level-aware tool
   (Wall, Continuous Wall, Ceiling/Floor/Roof, Stairs) is active
+- `-` (Minus, or Numpad Subtract) — undo the last build action (see "Undo: reverting the last few
+  build actions")
+- `X`, or the trash icon beside the hotbar — toggle Remove Mode, a global overlay independent of
+  the hotbar (see "Remove Mode"); while active, left click removes the highlighted wall, wall
+  segment, window, door, or staircase, and `X` / right click / `Esc` exits back to whichever tool
+  was selected before
 - `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
   Wall, Ceiling, Floor and Roof — see "Draw-snap: axis, inline and wall-corner alignment" below
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
@@ -691,6 +697,19 @@ raycasting or rendering. Pressing `C` cycles
   ground (see "Targeting elevated building levels" below), so lining a slab's corners up with the
   walls it sits above is otherwise hard to eyeball precisely.
 
+### Defaults on entry, not "off"
+
+Every point-drawing tool used to start each activation at `'off'`, requiring a `C` press before
+snapping did anything. `WallTool` now defaults to `'axis-inline'` and the three `SlabToolBase` tools
+(Ceiling/Floor/Roof) default to `'wall-corners'` every time the tool is activated (see each one's
+`activate()`) — axis-locked placement and tracing a room's own wall corners are what a player wants
+almost all the time for these tools, not an opt-in. `C` still cycles exactly as before, so a single
+press turns the default off (`'axis-inline' -> 'off'` for Wall Tool, `'wall-corners' -> 'off'` for
+the slab tools — see `cycleSnapMode`), and re-selecting the tool later resets back to the default
+rather than remembering whatever the player last chose. `PolygonWallTool` is unchanged and still
+starts at `'off'` — a freehand continuous wall is the one drawing tool where an unconstrained first
+attempt is the more common case.
+
 `snapDrawingPoint(points, raw, mode)` is the one pure function every tool calls from inside its own
 `update()`, right after the shared raycast/grid-snap resolves a raw hover point and before that
 point becomes the tool's live `hoverTarget` — so the preview, the HUD, and the eventual confirmed
@@ -1147,6 +1166,44 @@ teaching `WallManager`/`WallPathManager`/`SlabManager`/`StairManager` to compare
 `baseY` (or, for a slab, `localY`) against the active foundation's current level and adjust
 visibility/opacity accordingly, re-applied whenever the active foundation or level changes.
 
+## Undo: reverting the last few build actions (`BuildUndoManager.ts`)
+
+Pressing `-` (or Numpad Subtract) reverses the most recent successful placement: a standalone wall,
+a Continuous/Polygon Wall path, a window/door opening, or a ceiling/floor/roof slab. `BuildUndoManager`
+holds a small LIFO stack — up to 5 entries, oldest dropped once a 6th is recorded — of tagged actions
+(`{kind: 'wall', wallId}`, `{kind: 'wallPath', pathId}`, `{kind: 'opening', wallId, openingId}`,
+`{kind: 'slab', slabId}`). Every placement tool calls `record()` right after its own
+`BuildingManager.addX(...)` call reports `{valid: true, value}`, capturing `value.id`; `undo()` pops
+the most recent entry and reverses it with the matching `BuildingManager.removeX(...)` call — the
+same removal methods `BuildingManager` already exposed, so the undo manager owns no placement state
+of its own beyond "what to remove next."
+
+Like `BuildingLevelManager`'s own Page Up/Down handling, the `-` key listener is attached once,
+unconditionally, in the constructor (not gated on any particular tool being active) — pressing `-`
+undoes the last build action regardless of which tool is currently selected, or none at all.
+Removing a wall or wall path already cascades to remove every opening on it (openings live inside
+the wall/segment's own `openings` array — see "Enforcement at the data layer"), so undoing a wall
+placement never needs to separately track or remove the openings that were cut into it afterward;
+undoing a single opening, by contrast, only removes that one opening and leaves its wall standing.
+
+Deliberately out of scope: undoing a Foundation or a Stair placement. A foundation's removal cascades
+to every wall/path/slab/stair built on it (`BuildingManager.removeBuildingForFoundation`) and there is
+no foundation-deletion UI at all yet (see "Foundation deletion"); wiring that into a 5-deep undo stack
+raises its own questions (what happens to other entries in the stack that reference something the
+foundation undo just deleted out from under them) that are better solved once foundation deletion
+itself is designed, not bolted on here.
+
+### Tests
+
+`BuildUndoManager.spec.ts` covers: `undo()` on an empty history is a no-op returning `false`; each of
+the four action kinds calls the correct `BuildingManager.removeX` with the correct id(s) (notably
+`removeOpening(wallId, openingId)` — the two-argument case); LIFO ordering across mixed action kinds;
+the 5-entry cap actually evicts the oldest entry once a 6th is recorded; a real `keydown` dispatch for
+both `Minus` and `NumpadSubtract` triggers undo while an unrelated key does not; and `dispose()`
+actually removes the listener. A `FakeWindow` stand-in (identical in shape to
+`BuildingLevelManager.spec.ts`'s own) dispatches real `keydown` events in vitest's DOM-less `node`
+environment, so the key-handling path is exercised for real rather than by calling `undo()` directly.
+
 ## Stairs: axis-aligned, grid-driven straight staircases
 
 `src/lib/game/building/stairMath.ts`, `StairTypes.ts`, `StairGeometryBuilder.ts`,
@@ -1408,6 +1465,169 @@ folder render with no console errors.
 L-shaped/U-shaped/spiral stairs, landings, railings/bannisters, a stair materials catalogue,
 decorative trim, curved stairs, elevators, ladders, ramps, automatic stair generation between
 arbitrary floors, and precise head-clearance-driven (rather than full-footprint) opening sizing.
+
+## Remove Mode: a global demolition overlay (`RemoveTool.ts`, `BuildingRemovalManager.ts`, `RemovalTypes.ts`)
+
+Pressing `X` (or clicking the trash icon beside the hotbar) toggles Remove Mode — a temporary
+GLOBAL overlay, not another numbered hotbar tool. The hotbar is already full at 1-9, and removal is
+a universal editor action rather than another building piece, so it lives entirely outside
+`BuildToolManager`'s slot system: entering Remove Mode cancels any unfinished multi-click
+construction (a pending polygon/stair selection) and suspends the active tool's own preview/HUD —
+exactly what its own `deactivate()` already does for every tool — without ever touching
+`activeSlotNumber`. Exiting (`X` again, right-click, Escape, or picking a different hotbar slot)
+calls that same slot's `activate()` again, so the tool you had selected is exactly what comes back,
+in its normal idle state, with zero separate "remembered slot" bookkeeping needed.
+
+### What can be removed
+
+Individual straight walls, individual segments of a Continuous/Polygon Wall path, windows, doors,
+and staircases (with their owned upper-floor slab opening restored). Floors/ceilings/roofs, whole
+wall paths, and foundations are deliberately not wired up yet — `RemovalTarget`
+(`RemovalTypes.ts`) is a plain `{type, ...ids}` discriminated union specifically so adding one of
+those later is a new case in a handful of `switch` statements, not a redesign; a foundation in
+particular already has its own cascade primitive (`BuildingManager.removeBuildingForFoundation`,
+built for the level system) but no deletion UI at all, and no "what happens to a full 5-deep undo
+stack when a foundation it referenced just vanished" answer yet — better solved once foundation
+deletion is actually designed than bolted on here.
+
+### Targeting: a logical RemovalTarget, never a raw mesh
+
+`RemoveTool.update()` raycasts every frame against three pools of geometry — standalone wall
+meshes + wall-path segment picking meshes (`BuildingManager.getRaycastableWallMeshes`, already used
+by Window/Door), every stair's real mesh (`getRaycastableStairMeshes`), and this tool's own
+OpeningPickingProxy meshes (below) — and resolves the nearest hit's `object.userData` into a
+`RemovalTarget` via `resolveRemovalTarget` (`RemovalTypes.ts`), a small pure function unit-tested
+without Three.js at all. Everything downstream — highlighting, HUD text, the actual removal call —
+operates on that logical target, never on the mesh; `RemoveTool` doesn't even know which manager
+owns what.
+
+Priority ("a door/window opening beats the wall it's cut into, a wall beats nothing") falls out of
+the raycast itself rather than an explicit rule: a standalone wall's real geometry has an actual
+hole where an opening is (see "Wall-local coordinates and openings" above), so only its
+OpeningPickingProxy can register a hit there at all; a wall-path segment's picking box, by contrast,
+is a simple solid box that knows nothing about openings, so its co-located proxy is built
+deliberately `OPENING_PROXY_DEPTH_BUFFER` (4cm) _thicker_ than the wall — its front face sits
+fractionally nearer the camera from either approach direction, so ordinary nearest-hit-wins already
+resolves it correctly without a second comparison pass.
+
+`removeToolMaxDistance` (default 12m, a `BuildingSettings`/debug-GUI field) caps the raycast the same
+way a player shouldn't be able to demolish a wall hundreds of metres away.
+
+### Window/door opening picking (`OpeningPickingProxy`)
+
+Windows and doors are holes in wall geometry — see the "Window/Door targeting" section above for why
+that's true even for a Continuous Wall segment's own (opening-unaware) picking box. Rather than
+assume a hole has nothing to click, `RemoveTool` builds one invisible box per EXISTING opening,
+sized to the opening's own logical bounds (`maxU-minU` × `maxY-minY` × `wall.thickness + buffer`,
+transformed via the same `wallLocalToWorld`/`applyWallTransform` helpers OpeningToolBase's own
+preview uses) and tagged with `foundationId`/`wallId`/`openingId`/`openingType` — never rendered
+normally (`showRemovalPickingProxies` in the debug GUI renders them translucent yellow for
+inspection). The whole set is rebuilt from scratch on `activate()` and after every successful
+removal — never incrementally patched — the same "rebuild the whole thing, don't try to be clever"
+rule every other manager in this codebase already applies to its own geometry.
+
+Hovering a proxy shows a translucent rectangle filling the hole (`WINDOW / 1.20 × 1.20m / Click to
+remove`), reusing the proxy's own box geometry for the highlight rather than the parent wall's.
+
+### Removing a window or door restores solid wall — never a patch mesh
+
+`BuildingRemovalManager.removeOpening` calls straight through to the SAME
+`BuildingManager.removeOpening` every other tool already used to CUT the opening — it splices the
+`WallOpeningDefinition` out of the wall's (or wall-path segment's) own `openings` array and calls
+`rebuildWall`/`rebuildPath`, which regenerates the mesh from `computeSolidWallSegments(wallLength,
+wallHeight, wall.openings)` — the exact same authoritative "what's solid" function the wall was
+built from in the first place (see "Wall-local coordinates and openings"). With the opening gone
+from that array, the function naturally reports the whole span as solid again — there's no separate
+"patch" step, because there's no such thing as a wall mesh independent of its own opening list to
+patch in the first place.
+
+### Removing a wall or wall-path segment
+
+A standalone wall's removal was already a single `BuildingManager.removeWall` call (openings live
+inside the wall's own definition, so they're disposed along with it — no separate cleanup loop
+needed, confirmed by `WallManager.removeWall` tearing down the whole entry in one shot).
+
+A Continuous/Polygon Wall path's SEGMENT is new: `BuildingManager.removeWallSegment(pathId,
+segmentId)` never leaves a fake logical connection across the gap. For an OPEN path, the removed
+segment's index splits `points`/`segments` into a "before" and "after" run; each becomes its own new
+path only if it still has >= 2 points (a lone leftover point isn't a wall at all, so removing a
+path's only segment can delete the whole thing with no replacement). For a CLOSED path, removing any
+one segment can never split a loop in two — a cycle minus one edge is a single connected chain — so
+the result is always exactly one new OPEN path (`closed = false`), containing every original point,
+rotated to start right after the cut (removing `B→C` from loop `A-B-C-D` leaves the single chain
+`C→D→A→B`, not two fragments).
+
+Both cases preserve the ORIGINAL `WallPathSegmentDefinition` objects — same id, same openings — for
+every segment that survives; the removed segment's own openings are never migrated to a neighbour,
+they simply cease to exist with it. The old path is torn down and the new one(s) built fresh via
+`WallPathManager.addPath`, which is what guarantees the corner-join geometry at the new endpoints
+regenerates cleanly from the current point sequence alone — no leftover miter/bevel/spike, no stale
+collision, from a segment that no longer exists (see "How corner joins are calculated").
+
+### Removing stairs restores ONLY the slab opening they own
+
+`SlabOpeningDefinition` gained an optional `sourceStairId` — set to the stair's own id the moment
+`BuildingManager.addStairOpening` cuts the hole (mirroring the forward cascade in `openSlabForStair`
+/`autoOpenStairsIntoSlab`). `BuildingManager.removeStair` now removes the stair, then scans every
+slab for an opening whose `sourceStairId` matches and removes exactly those (via the new
+`SlabManager.removeOpening`, the mirror of `addOpening`) — never an opening belonging to a different
+staircase, and never a manually authored one that merely happens to overlap the same footprint.
+Ownership is explicit, stored data, never inferred from overlapping position.
+
+### Dependency-aware removal, and where the logic actually lives
+
+Every removal operates on IDs and stored building state, never by searching for nearby meshes.
+`BuildingRemovalManager` is a deliberately thin RemoveTool-facing facade — `removeWall`/
+`removeWallSegment`/`removeOpening`/`removeStair`, plus a `remove(target: RemovalTarget)` dispatcher
+RemoveTool actually calls — over `BuildingManager`'s own primitives. The topology-splitting and
+cascade logic themselves live in `BuildingManager`, not in `BuildingRemovalManager`: `BuildingManager`
+already privately owns `WallPathManager`/`SlabManager`/`StairManager` and is the one place every
+OTHER tool's `confirm*()` call already goes to mutate building state (see its own class doc
+comment) — putting the REMOVE side of the exact same relationships anywhere else would mean two
+competing places that can mutate the same state.
+
+### Collision and serialization
+
+Every collision query (`WallManager`/`WallPathManager`/`StairManager`.`getAllCollisionRects()`,
+`SlabManager.getTopSurfacesAt`/`getUndersidesAt`) is already called fresh every frame by
+`FirstPersonController`'s own movement resolution rather than cached — removing a wall, restoring a
+doorway, or clearing a stairwell all take effect on the very next frame with no separate
+"invalidate collision" step. Removal mutates the same `WallManager`/`WallPathManager`/`SlabManager`/
+`StairManager` maps every other placement already writes to, so `BuildingManager.serialize()`
+reflects a removal immediately — there is no separate "visual-only" removal path to keep in sync.
+
+### Tests
+
+`RemovalTypes.spec.ts` covers `resolveRemovalTarget`'s priority (opening > stair > wall-segment >
+wall) and `removalTargetKey`'s stability, entirely without Three.js. `BuildingManager.spec.ts`
+covers: `removeWall` removing a wall's openings/collision in one call; `removeOpening` restoring
+exact pre-cut collision rect counts for both a window (partial height) and a door (full height down
+to the wall base); `removeWallSegment` on an open path (middle segment splits into two, an end
+segment leaves one survivor, a path's only segment deletes it entirely, openings never migrate to a
+neighbour) and on a closed path (one segment removed always yields a single open path with the
+correct rotated point/segment order); `removeStair` restoring only its own slab opening (never a
+different stair's, never a manually authored one); and a full serialize → remove → serialize →
+reload round trip proving a removal is never purely visual. `BuildToolManager.spec.ts` covers Remove
+Mode's input routing end-to-end with a fake tool: `X` activates/deactivates it and suspends the
+active tool; left-click routes to it only once pointer lock is engaged (the lock-acquiring click
+never removes anything, same rule every other tool follows); right-click and Escape exit it;
+selecting a hotbar slot — including via a real simulated KEYDOWN, which caught a real routing bug
+during development where digit keys were silently swallowed instead of exiting Remove Mode first —
+exits Remove Mode and switches tools; and no digit key ever activates the remove tool. `game.e2e.ts`
+confirms `X` shows a `REMOVE` HUD and toggles the hotbar trash icon's active state, that the
+previously selected tool (and its own HUD) comes back exactly once Remove Mode exits, that clicking
+the trash icon does the same as `X`, and that selecting a hotbar slot while active exits Remove Mode.
+
+### Not implemented yet
+
+Removing floors/ceilings/roofs, whole wall paths in one click, and foundations (see "What can be
+removed" above); a confirmation step for any of those once they exist (deliberately not needed for
+the current per-element removals — hover-preview-plus-click is the whole confirmation, per the
+spec's "removal must feel like almost no friction" guidance); and any deeper undo integration beyond
+what `BuildUndoManager` already covers for placement (removal doesn't currently push onto that same
+stack — reversing a removal would mean fully reconstructing a `WallDefinition`/`WallPathDefinition`
+/`StairDefinition` including every opening it had, which the existing undo stack's `{type, id}`
+shape doesn't carry; a natural, but separate, future extension).
 
 ## Vegetation: independent forest regions
 

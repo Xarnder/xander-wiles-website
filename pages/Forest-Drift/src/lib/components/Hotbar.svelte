@@ -4,10 +4,18 @@
 	interface Props {
 		slots: readonly HotbarSlot[];
 		activeSlot: number;
+		removeModeActive?: boolean;
 		onSelectSlot?: (slot: number) => void;
+		onToggleRemoveMode?: () => void;
 	}
 
-	let { slots, activeSlot, onSelectSlot }: Props = $props();
+	let {
+		slots,
+		activeSlot,
+		removeModeActive = false,
+		onSelectSlot,
+		onToggleRemoveMode
+	}: Props = $props();
 </script>
 
 <div class="hotbar" data-testid="hotbar">
@@ -15,7 +23,7 @@
 		<button
 			type="button"
 			class="slot"
-			class:active={slot.slot === activeSlot}
+			class:active={slot.slot === activeSlot && !removeModeActive}
 			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
 		>
@@ -25,6 +33,21 @@
 			{/if}
 		</button>
 	{/each}
+
+	<!-- Deliberately outside the numbered-slot loop above — Remove Mode is a global overlay, not a
+	     hotbar selection, so it never takes a slot number (see BuildToolManager's class doc comment). -->
+	<button
+		type="button"
+		class="slot remove-slot"
+		class:active={removeModeActive}
+		data-testid="hotbar-remove-toggle"
+		onclick={() => onToggleRemoveMode?.()}
+		aria-label="Toggle Remove Mode"
+		aria-pressed={removeModeActive}
+	>
+		<span class="slot-number">X</span>
+		<span class="slot-label">Remove</span>
+	</button>
 </div>
 
 <style>
@@ -69,6 +92,19 @@
 		border-color: #ffcc33;
 		background: rgba(60, 50, 15, 0.6);
 		box-shadow: 0 0 0 1px rgba(255, 204, 51, 0.5);
+	}
+
+	/* A visual gap plus a distinct (red, not yellow) active color — Remove Mode isn't "another tool
+	   in the row", it's a different kind of thing, and its highlight shouldn't look like a normal
+	   hotbar selection. */
+	.remove-slot {
+		margin-left: 0.5rem;
+	}
+
+	.remove-slot.active {
+		border-color: #ff5c4d;
+		background: rgba(60, 15, 15, 0.6);
+		box-shadow: 0 0 0 1px rgba(255, 92, 77, 0.5);
 	}
 
 	.slot-number {

@@ -28,6 +28,16 @@ export interface SlabOpeningDefinition {
 	maxGridX: number;
 	minGridZ: number;
 	maxGridZ: number;
+	/**
+	 * The stair that caused this opening to be cut (see BuildingManager.addStairOpening) — ownership
+	 * is explicit rather than inferred from position, so removing ONE staircase only ever restores
+	 * the slab opening it actually created, never a different staircase's opening or a manually
+	 * authored one that merely happens to overlap it (see BuildingManager.removeStair). Optional so
+	 * openings serialized before this field existed still load — they simply can't be cleaned up
+	 * automatically by a stair removal, which is the same "no worse than before" fallback every other
+	 * optional-field migration in this codebase uses.
+	 */
+	sourceStairId?: string;
 }
 
 export interface SlabDefinition {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
+import type { BuildUndoManager } from './BuildUndoManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
@@ -49,6 +50,7 @@ export interface PolygonWallToolOptions {
 	foundationManager: FoundationManager;
 	buildingManager: BuildingManager;
 	levelManager: BuildingLevelManager;
+	undoManager: BuildUndoManager;
 	terrainSettings: TerrainSettings;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
@@ -71,6 +73,7 @@ export class PolygonWallTool implements BuildTool {
 	private readonly foundationManager: FoundationManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly undoManager: BuildUndoManager;
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -137,6 +140,7 @@ export class PolygonWallTool implements BuildTool {
 		this.foundationManager = options.foundationManager;
 		this.buildingManager = options.buildingManager;
 		this.levelManager = options.levelManager;
+		this.undoManager = options.undoManager;
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -362,7 +366,8 @@ export class PolygonWallTool implements BuildTool {
 			minimumSegmentLength: this.buildingSettings.minimumWallLength
 		});
 
-		if (!result.valid) return;
+		if (!result.valid || !result.value) return;
+		this.undoManager.record({ kind: 'wallPath', pathId: result.value.id });
 
 		this.state = 'idle';
 		this.points = [];

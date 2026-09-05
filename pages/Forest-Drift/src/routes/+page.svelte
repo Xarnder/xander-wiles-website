@@ -203,6 +203,19 @@
 					<dd>Confirm stairs</dd>
 				</dl>
 
+				<h3>Remove Mode</h3>
+				<dl>
+					<dt>X</dt>
+					<dd>
+						Toggle Remove Mode — a global overlay independent of the hotbar; the tool you had
+						selected is remembered and restored when you exit
+					</dd>
+					<dt>Left click</dt>
+					<dd>Remove the highlighted wall, wall segment, window, door, or staircase</dd>
+					<dt>X / Right click / Esc</dt>
+					<dd>Exit Remove Mode</dd>
+				</dl>
+
 				<h3>Other</h3>
 				<dl>
 					<dt>H</dt>
@@ -250,7 +263,9 @@
 		<Hotbar
 			slots={hotbar.slots}
 			activeSlot={hotbar.activeSlot}
+			removeModeActive={hotbar.removeModeActive}
 			onSelectSlot={(slot) => scene?.selectHotbarSlot(slot)}
+			onToggleRemoveMode={() => scene?.toggleRemoveMode()}
 		/>
 	{/if}
 </div>

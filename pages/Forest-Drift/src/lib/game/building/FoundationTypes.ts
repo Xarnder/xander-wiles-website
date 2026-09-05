@@ -39,6 +39,7 @@ export type ToolId =
 	| 'floor'
 	| 'flat-roof'
 	| 'stairs'
+	| 'remove'
 	| 'none';
 
 export interface HotbarSlot {
@@ -170,6 +171,11 @@ export interface BuildingSettings {
 	showStairDirection: boolean;
 	/** Minimum vertical clearance (world units) an automatically-generated upper-floor stair opening must leave above the topmost few treads — see the README's "Stair openings" section. */
 	stairHeadClearance: number;
+
+	/** Maximum crosshair-to-target distance Remove Mode will raycast — see RemoveTool.ts and the README's "Remove Mode" section. Reused, not duplicated, by any future removal target types. */
+	removeToolMaxDistance: number;
+	/** Dev-only: renders every window/door OpeningPickingProxy as a visible translucent box instead of an invisible one, so the picking geometry itself can be inspected. */
+	showRemovalPickingProxies: boolean;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -225,7 +231,10 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		stairPreviewOpacity: 0.55,
 		showStairBounds: false,
 		showStairDirection: true,
-		stairHeadClearance: 2.1
+		stairHeadClearance: 2.1,
+
+		removeToolMaxDistance: 12,
+		showRemovalPickingProxies: false
 	};
 }
 
@@ -256,4 +265,12 @@ export interface BuildUiState {
 export interface HotbarUiState {
 	slots: readonly HotbarSlot[];
 	activeSlot: number;
+	/**
+	 * Whether Remove Mode (the `X` key) is currently active — deliberately separate from
+	 * `activeSlot` rather than a slot value of its own, since Remove Mode is a temporary global
+	 * overlay, not a hotbar selection: `activeSlot` keeps pointing at whichever numbered tool was
+	 * selected before Remove Mode was entered, and is restored to exactly that the moment Remove Mode
+	 * exits. See BuildToolManager's class doc comment and the README's "Remove Mode" section.
+	 */
+	removeModeActive: boolean;
 }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
+import type { BuildUndoManager } from './BuildUndoManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
@@ -78,6 +79,7 @@ export class SlabToolBase implements BuildTool {
 	private readonly foundationManager: FoundationManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly undoManager: BuildUndoManager;
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly config: SlabToolConfig;
@@ -120,8 +122,15 @@ export class SlabToolBase implements BuildTool {
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
 
-	/** Cycled by pressing `C` — see polygonDrawSnap.ts. */
-	private snapMode: SnapMode = 'off';
+	/**
+	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'wall-corners'` every time the
+	 * tool is activated (see `activate()`) rather than persisting the player's last choice — tracing
+	 * a ceiling/floor/roof polygon exactly over the room's own walls below is the common case for
+	 * these three tools, per the README's "Draw-snap" section. Harmless even before any wall exists
+	 * on the current level: `snapToNearestCorner` simply passes the raw point through when there's
+	 * nothing to snap to.
+	 */
+	private snapMode: SnapMode = 'wall-corners';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
@@ -171,6 +180,7 @@ export class SlabToolBase implements BuildTool {
 			foundationManager: FoundationManager;
 			buildingManager: BuildingManager;
 			levelManager: BuildingLevelManager;
+			undoManager: BuildUndoManager;
 			terrainSettings: TerrainSettings;
 			buildingSettings: BuildingSettings;
 			onHudChange?: (hud: BuildUiState | null) => void;
@@ -183,6 +193,7 @@ export class SlabToolBase implements BuildTool {
 		this.foundationManager = options.foundationManager;
 		this.buildingManager = options.buildingManager;
 		this.levelManager = options.levelManager;
+		this.undoManager = options.undoManager;
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -252,6 +263,7 @@ export class SlabToolBase implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
+		this.snapMode = 'wall-corners';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
@@ -401,7 +413,8 @@ export class SlabToolBase implements BuildTool {
 			thickness: this.config.getThickness(this.buildingSettings)
 		});
 
-		if (!result.valid) return;
+		if (!result.valid || !result.value) return;
+		this.undoManager.record({ kind: 'slab', slabId: result.value.id });
 
 		this.state = 'idle';
 		this.points = [];

@@ -156,6 +156,7 @@ export class TerrainDebugGui {
 			onShowWallBoundsChange: () => void;
 			onShowSlabBoundsChange: () => void;
 			onShowStairBoundsChange: () => void;
+			onShowRemovalPickingProxiesChange: () => void;
 		}
 	): void {
 		const building = this.gui.addFolder('Building');
@@ -240,6 +241,13 @@ export class TerrainDebugGui {
 		stairs.add(settings, 'showStairBounds').onChange(callbacks.onShowStairBoundsChange);
 		stairs.add(settings, 'showStairDirection').name('Show direction markers');
 		stairs.add(settings, 'stairHeadClearance', 1, 3, 0.05).name('Head clearance');
+
+		const remove = building.addFolder('Remove');
+		remove.add(settings, 'removeToolMaxDistance', 1, 30, 0.5).name('Max distance');
+		remove
+			.add(settings, 'showRemovalPickingProxies')
+			.name('Show opening proxies')
+			.onChange(callbacks.onShowRemovalPickingProxiesChange);
 	}
 
 	/**

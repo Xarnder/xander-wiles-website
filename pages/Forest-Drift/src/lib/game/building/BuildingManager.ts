@@ -21,7 +21,7 @@ import {
 } from './wallGeometryMath';
 import { pathSelfIntersects } from './wallPathMath';
 import type { WallJoinStyle } from './wallPathMath';
-import type { WallPathDefinition } from './WallPathTypes';
+import type { WallPathDefinition, WallPathSegmentDefinition } from './WallPathTypes';
 import type { WallPathManager } from './WallPathManager';
 import type {
 	FoundationBuildingDefinition,
@@ -291,6 +291,75 @@ export class BuildingManager {
 	}
 
 	/**
+	 * Removes ONE segment from a wall path, splitting/reshaping the remaining topology cleanly rather
+	 * than leaving a fake logical connection across the gap — see the README's "Removing polygon /
+	 * continuous wall segments" section for the worked examples this mirrors exactly:
+	 *
+	 * - Open path: the segment's index splits `points`/`segments` into a "before" and "after" run.
+	 *   Each run becomes its own new path IF it still has >= 2 points (a single leftover point isn't
+	 *   a wall at all, so a 1-point run is simply dropped) — removing a path's only segment can
+	 *   therefore delete the whole path with no replacement.
+	 * - Closed path: removing any one segment can never split a loop in two (a cycle minus one edge
+	 *   is a single connected chain) — the result is always exactly one new OPEN path, containing
+	 *   every original point, rotated to start right after the cut.
+	 *
+	 * Both cases preserve the ORIGINAL WallPathSegmentDefinition objects (same id, same openings) for
+	 * every segment that survives — never regenerated — so a surviving segment's own windows/doors
+	 * ride along untouched. The removed segment's own openings are never migrated to a neighbour;
+	 * they simply cease to exist along with it. The old path is fully torn down and the new one(s)
+	 * built fresh via `wallPathManager.addPath`, which is what guarantees corner-join geometry at the
+	 * new endpoints regenerates cleanly (no leftover miter/bevel/spike from the segment that's gone —
+	 * see WallPathGeometryBuilder, which always computes joins from the CURRENT point sequence alone).
+	 */
+	removeWallSegment(pathId: string, segmentId: string): boolean {
+		const path = this.wallPathManager.getPath(pathId);
+		if (!path) return false;
+		const index = path.segments.findIndex((s) => s.id === segmentId);
+		if (index === -1) return false;
+
+		const shared = {
+			foundationId: path.foundationId,
+			baseY: path.baseY,
+			wallHeight: path.wallHeight,
+			wallThickness: path.wallThickness,
+			joinStyle: path.joinStyle,
+			miterLimit: path.miterLimit
+		};
+
+		const addIfValid = (
+			points: WallPathDefinition['points'],
+			segments: WallPathSegmentDefinition[]
+		) => {
+			if (points.length < 2) return;
+			this.wallPathManager.addPath({
+				id: crypto.randomUUID(),
+				...shared,
+				points,
+				closed: false,
+				segments
+			});
+		};
+
+		this.wallPathManager.removePath(pathId);
+
+		if (!path.closed) {
+			addIfValid(path.points.slice(0, index + 1), path.segments.slice(0, index));
+			addIfValid(path.points.slice(index + 1), path.segments.slice(index + 1));
+			return true;
+		}
+
+		// Closed loop: rotate to start right after the removed segment, dropping it — see doc comment.
+		const n = path.points.length;
+		const rotatedPoints = Array.from({ length: n }, (_, k) => path.points[(index + 1 + k) % n]);
+		const rotatedSegments = Array.from(
+			{ length: n - 1 },
+			(_, k) => path.segments[(index + 1 + k) % n]
+		);
+		addIfValid(rotatedPoints, rotatedSegments);
+		return true;
+	}
+
+	/**
 	 * Validates and creates a filled horizontal slab (ceiling/floor/flat roof — see SlabTypes.ts,
 	 * they all share this one path). Every point must be inside the same foundation, the polygon
 	 * itself must be a valid simple polygon (>=3 points, no duplicate/zero-length edges, non-zero
@@ -495,13 +564,29 @@ export class BuildingManager {
 			minGridX: stair.minGridX,
 			maxGridX: stair.maxGridX,
 			minGridZ: stair.minGridZ,
-			maxGridZ: stair.maxGridZ
+			maxGridZ: stair.maxGridZ,
+			sourceStairId: stair.id
 		};
 		this.slabManager.addOpening(slabId, opening);
 	}
 
+	/**
+	 * Removes the stair, then restores solid floor by removing every slab opening THIS stair created
+	 * (matched via `sourceStairId` — see SlabOpeningDefinition's doc comment) and rebuilding those
+	 * slabs. Never touches an opening belonging to a different stair, or one with no `sourceStairId`
+	 * at all (manually authored, or serialized before that field existed) — ownership is explicit,
+	 * not inferred from overlapping position, per the README's "Removing stairs" section.
+	 */
 	removeStair(id: string): boolean {
-		return this.stairManager.removeStair(id);
+		const removed = this.stairManager.removeStair(id);
+		if (!removed) return false;
+
+		for (const slab of this.slabManager.getAllSlabs()) {
+			for (const opening of slab.openings) {
+				if (opening.sourceStairId === id) this.slabManager.removeOpening(slab.id, opening.id);
+			}
+		}
+		return true;
 	}
 
 	getStair(id: string): StairDefinition | undefined {
@@ -624,7 +709,7 @@ export class BuildingManager {
 		);
 	}
 
-	/** Every raycastable wall surface — standalone wall meshes plus wall-path segment picking meshes — for Window/Door tool targeting. */
+	/** Every raycastable wall surface — standalone wall meshes plus wall-path segment picking meshes — for Window/Door tool and Remove Mode targeting. */
 	getRaycastableWallMeshes() {
 		return [
 			...this.wallManager.getWallMeshesForRaycast(),
@@ -632,8 +717,27 @@ export class BuildingManager {
 		];
 	}
 
+	/** Every stair's real mesh — for Remove Mode targeting (see StairManager.getMeshesForRaycast). */
+	getRaycastableStairMeshes() {
+		return this.stairManager.getMeshesForRaycast();
+	}
+
 	getWallPath(pathId: string): WallPathDefinition | undefined {
 		return this.wallPathManager.getPath(pathId);
+	}
+
+	/** Every standalone wall across every foundation — used by RemoveTool to build one OpeningPickingProxy per existing window/door. */
+	getAllWalls(): WallDefinition[] {
+		return this.wallManager.getAllWalls();
+	}
+
+	/** Every wall path across every foundation — same purpose as `getAllWalls`, for path-segment openings. */
+	getAllWallPaths(): WallPathDefinition[] {
+		return this.wallPathManager.getAllPaths();
+	}
+
+	getAllStairs(): StairDefinition[] {
+		return this.stairManager.getAllStairs();
 	}
 
 	getBuildingForFoundation(foundationId: string): FoundationBuildingDefinition {

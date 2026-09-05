@@ -349,6 +349,11 @@ function pathPoint(gridX: number, gridZ: number) {
 	return { foundationId: 'foundation-a', gridX, gridZ };
 }
 
+/** A WallPathDefinition's own stored points carry no `foundationId` (unlike addWallPath's input params) — see WallPathTypes.ts. */
+function storedPoint(gridX: number, gridZ: number) {
+	return { gridX, gridZ };
+}
+
 describe('BuildingManager.addWallPath — validation', () => {
 	it('accepts an open L-shaped path with clean joins', () => {
 		const { foundationManager, buildingManager } = setup();
@@ -1353,5 +1358,408 @@ describe('stair serialize/load round trip', () => {
 		second.buildingManager.load(serialized);
 
 		expect(second.buildingManager.serialize()).toEqual(serialized);
+	});
+});
+
+describe('Remove Mode — BuildingManager.removeWall', () => {
+	it('removes the wall, its openings, and its collision rects in one call', () => {
+		const { foundationManager, wallManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'window',
+			minU: 1,
+			maxU: 1.8,
+			minY: 1,
+			maxY: 2,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+		expect(wallManager.getAllCollisionRects().length).toBeGreaterThan(0);
+
+		expect(buildingManager.removeWall(wall.id)).toBe(true);
+
+		expect(wallManager.getWall(wall.id)).toBeUndefined();
+		expect(wallManager.getAllCollisionRects()).toHaveLength(0);
+		expect(buildingManager.getWall(wall.id)).toBeUndefined();
+	});
+
+	it('returns false for an unknown wall id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.removeWall('missing')).toBe(false);
+	});
+});
+
+describe('Remove Mode — BuildingManager.removeOpening restores solid wall', () => {
+	it('removing a window restores full solid wall geometry and collision', () => {
+		const { foundationManager, wallManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const collisionRectsSolid = wallManager.getAllCollisionRects().length;
+
+		const opening = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'window',
+			minU: 1,
+			maxU: 1.8,
+			minY: 1,
+			maxY: 2,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		}).value!;
+		// Cutting a window splits the solid wall into more, smaller collision rects.
+		expect(wallManager.getAllCollisionRects().length).toBeGreaterThan(collisionRectsSolid);
+
+		expect(buildingManager.removeOpening(wall.id, opening.id)).toBe(true);
+
+		expect(buildingManager.getWall(wall.id)?.openings).toHaveLength(0);
+		expect(wallManager.getAllCollisionRects()).toHaveLength(collisionRectsSolid);
+	});
+
+	it('removing a door restores solid wall all the way down to the wall base', () => {
+		const { foundationManager, wallManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const solidRects = wallManager.getAllCollisionRects().length;
+
+		const door = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'door',
+			minU: 1,
+			maxU: 1.9,
+			minY: 0,
+			maxY: 2.1,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		}).value!;
+		expect(buildingManager.removeOpening(wall.id, door.id)).toBe(true);
+
+		const rectsAfter = wallManager.getAllCollisionRects();
+		expect(rectsAfter).toHaveLength(solidRects);
+		// A door reaches minY=0 (the wall's own base) — after removal every rect must cover down to
+		// the foundation top + baseY again, i.e. nothing left with a gap starting above the wall base.
+		const foundationTopY = foundationManager.getFoundation('foundation-a')!.topY;
+		for (const rect of rectsAfter) {
+			expect(rect.minWorldY).toBeCloseTo(foundationTopY + wall.baseY, 5);
+		}
+	});
+});
+
+describe('Remove Mode — BuildingManager.removeWallSegment (open path)', () => {
+	it('removing the middle segment of A→B→C→D splits it into two independent paths: A→B and C→D', () => {
+		const { foundationManager, wallPathManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8), pathPoint(0, 8)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const [segAB, segBC, segCD] = path.segments;
+
+		expect(buildingManager.removeWallSegment(path.id, segBC.id)).toBe(true);
+
+		expect(wallPathManager.getPath(path.id)).toBeUndefined();
+		const remaining = wallPathManager.getAllPaths();
+		expect(remaining).toHaveLength(2);
+
+		const first = remaining.find((p) => p.segments.some((s) => s.id === segAB.id))!;
+		expect(first.points).toEqual([storedPoint(0, 0), storedPoint(8, 0)]);
+		expect(first.segments).toEqual([segAB]);
+		expect(first.closed).toBe(false);
+
+		const second = remaining.find((p) => p.segments.some((s) => s.id === segCD.id))!;
+		expect(second.points).toEqual([storedPoint(8, 8), storedPoint(0, 8)]);
+		expect(second.segments).toEqual([segCD]);
+
+		// The removed segment is gone, not reachable through either surviving path.
+		expect(wallPathManager.findSegment(segBC.id)).toBeUndefined();
+	});
+
+	it('removing the only segment of a 2-point path deletes it entirely, with no replacement', () => {
+		const { foundationManager, wallPathManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+
+		expect(buildingManager.removeWallSegment(path.id, path.segments[0].id)).toBe(true);
+		expect(wallPathManager.getAllPaths()).toHaveLength(0);
+	});
+
+	it('removing an end segment of a 3-point path leaves one surviving 2-point path, not two', () => {
+		const { foundationManager, wallPathManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const [segAB, segBC] = path.segments;
+
+		buildingManager.removeWallSegment(path.id, segAB.id);
+
+		const remaining = wallPathManager.getAllPaths();
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0].points).toEqual([storedPoint(8, 0), storedPoint(8, 8)]);
+		expect(remaining[0].segments).toEqual([segBC]);
+	});
+
+	it('does not migrate the removed segment’s own openings to a neighbouring segment', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const [segAB, segBC] = path.segments;
+		buildingManager.addOpening({
+			wallId: segAB.id,
+			type: 'window',
+			minU: 1,
+			maxU: 1.8,
+			minY: 1,
+			maxY: 2,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(buildingManager.removeWallSegment(path.id, segAB.id)).toBe(true);
+
+		// segBC survives (as its own new path) with zero openings — the removed segAB's window never
+		// appears on it.
+		expect(buildingManager.getWall(segBC.id)?.openings).toHaveLength(0);
+	});
+
+	it('returns false for an unknown path id or segment id', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+
+		expect(buildingManager.removeWallSegment('missing', path.segments[0].id)).toBe(false);
+		expect(buildingManager.removeWallSegment(path.id, 'missing')).toBe(false);
+	});
+});
+
+describe('Remove Mode — BuildingManager.removeWallSegment (closed path)', () => {
+	it('removing one segment from a closed rectangular loop leaves a single open path with the remaining connected sequence', () => {
+		const { foundationManager, wallPathManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		// A closed loop A(0,0)-B(8,0)-C(8,8)-D(0,8), segments: A-B(0), B-C(1), C-D(2), D-A(3).
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8), pathPoint(0, 8)],
+			closed: true,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const [segAB, segBC, segCD, segDA] = path.segments;
+
+		// Remove B-C: the remaining connected chain, starting right after the cut, is C -> D -> A -> B.
+		expect(buildingManager.removeWallSegment(path.id, segBC.id)).toBe(true);
+
+		const remaining = wallPathManager.getAllPaths();
+		expect(remaining).toHaveLength(1);
+		const result = remaining[0];
+		expect(result.closed).toBe(false);
+		expect(result.points).toEqual([
+			storedPoint(8, 8),
+			storedPoint(0, 8),
+			storedPoint(0, 0),
+			storedPoint(8, 0)
+		]);
+		expect(result.segments).toEqual([segCD, segDA, segAB]);
+		expect(wallPathManager.findSegment(segBC.id)).toBeUndefined();
+	});
+});
+
+describe('Remove Mode — BuildingManager.removeStair', () => {
+	function addFloorSlab(buildingManager: ReturnType<typeof setup>['buildingManager']) {
+		return buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		}).value!;
+	}
+
+	it('removes the stair and restores solid floor by removing only the slab opening IT created', () => {
+		const { foundationManager, stairManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slab = addFloorSlab(buildingManager);
+		const stair = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		}).value!;
+		expect(slabManager.getSlab(slab.id)!.openings).toHaveLength(1);
+
+		expect(buildingManager.removeStair(stair.id)).toBe(true);
+
+		expect(stairManager.getStair(stair.id)).toBeUndefined();
+		expect(slabManager.getSlab(slab.id)!.openings).toHaveLength(0);
+	});
+
+	it('never removes a slab opening owned by a DIFFERENT stair', () => {
+		const { foundationManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slab = addFloorSlab(buildingManager);
+		const stairA = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		}).value!;
+		const stairB = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 10,
+			maxGridZ: 14,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		}).value!;
+		expect(slabManager.getSlab(slab.id)!.openings).toHaveLength(2);
+
+		buildingManager.removeStair(stairA.id);
+
+		const remainingOpenings = slabManager.getSlab(slab.id)!.openings;
+		expect(remainingOpenings).toHaveLength(1);
+		expect(remainingOpenings[0].sourceStairId).toBe(stairB.id);
+	});
+
+	it('never removes a manually authored slab opening (no sourceStairId) even if it overlaps a removed stair’s footprint', () => {
+		const { foundationManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slab = addFloorSlab(buildingManager);
+		const stair = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		}).value!;
+
+		// Simulate a manually authored opening at the exact same footprint, with no sourceStairId.
+		slabManager.addOpening(slab.id, {
+			id: 'manual-opening',
+			type: 'stairs',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6
+		});
+		expect(slabManager.getSlab(slab.id)!.openings).toHaveLength(2);
+
+		buildingManager.removeStair(stair.id);
+
+		const remainingOpenings = slabManager.getSlab(slab.id)!.openings;
+		expect(remainingOpenings).toHaveLength(1);
+		expect(remainingOpenings[0].id).toBe('manual-opening');
+	});
+
+	it('returns false for an unknown stair id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.removeStair('missing')).toBe(false);
+	});
+});
+
+describe('Remove Mode — serialization reflects removal', () => {
+	it('a removed wall, opening, wall-path segment, and stair all stay gone across a serialize/reload round trip', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const survivingWall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 2 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 2 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 4), pathPoint(8, 4), pathPoint(8, 12)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const stair = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 14,
+			maxGridZ: 18,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		}).value!;
+
+		buildingManager.removeWall(wall.id);
+		buildingManager.removeWallSegment(path.id, path.segments[0].id);
+		buildingManager.removeStair(stair.id);
+
+		const serialized = buildingManager.serialize();
+
+		const reloaded = setup();
+		reloaded.foundationManager.addFoundation(makeFoundation());
+		reloaded.buildingManager.load(serialized);
+
+		expect(reloaded.buildingManager.getWall(wall.id)).toBeUndefined();
+		expect(reloaded.buildingManager.getWall(survivingWall.id)).toBeDefined();
+		expect(reloaded.buildingManager.getStair(stair.id)).toBeUndefined();
+		expect(reloaded.buildingManager.serialize()).toEqual(serialized);
 	});
 });

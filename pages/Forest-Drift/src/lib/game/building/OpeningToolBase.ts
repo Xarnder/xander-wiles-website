@@ -3,6 +3,7 @@ import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
+import type { BuildUndoManager } from './BuildUndoManager';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
 import type { OpeningWallCandidate } from './openingWallPick';
 import { isWallOnLevel, pickOpeningWall } from './openingWallPick';
@@ -67,6 +68,7 @@ export class OpeningToolBase implements BuildTool {
 	private readonly camera: THREE.PerspectiveCamera;
 	private readonly buildingManager: BuildingManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly undoManager: BuildUndoManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly config: OpeningToolConfig;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -100,6 +102,7 @@ export class OpeningToolBase implements BuildTool {
 			camera: THREE.PerspectiveCamera;
 			buildingManager: BuildingManager;
 			levelManager: BuildingLevelManager;
+			undoManager: BuildUndoManager;
 			buildingSettings: BuildingSettings;
 			onHudChange?: (hud: BuildUiState | null) => void;
 		}
@@ -110,6 +113,7 @@ export class OpeningToolBase implements BuildTool {
 		this.camera = options.camera;
 		this.buildingManager = options.buildingManager;
 		this.levelManager = options.levelManager;
+		this.undoManager = options.undoManager;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
 
@@ -303,7 +307,12 @@ export class OpeningToolBase implements BuildTool {
 			spacing: this.buildingSettings.openingSpacing
 		});
 
-		if (!result.valid) return;
+		if (!result.valid || !result.value) return;
+		this.undoManager.record({
+			kind: 'opening',
+			wallId: this.target.wallId,
+			openingId: result.value.id
+		});
 		this.previewMesh.visible = false;
 		this.target = null;
 	}

@@ -1,11 +1,45 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BuildTool } from '../BuildToolManager';
 import { BuildToolManager } from '../BuildToolManager';
 import { FoundationManager } from '../FoundationManager';
 import { FoundationTool } from '../FoundationTool';
 import { createDefaultBuildingSettings } from '../FoundationTypes';
 import { TerrainHeightSampler } from '../../terrain/TerrainHeightSampler';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
+
+/** A trivial BuildTool stand-in that just counts calls — used as `removeTool` in tests that don't care about real removal targeting. */
+function makeFakeTool(): BuildTool & {
+	activateCount: number;
+	deactivateCount: number;
+	updateCount: number;
+	primaryCount: number;
+	secondaryCount: number;
+} {
+	return {
+		toolId: 'remove',
+		activateCount: 0,
+		deactivateCount: 0,
+		updateCount: 0,
+		primaryCount: 0,
+		secondaryCount: 0,
+		activate() {
+			this.activateCount++;
+		},
+		deactivate() {
+			this.deactivateCount++;
+		},
+		update() {
+			this.updateCount++;
+		},
+		onPrimaryAction() {
+			this.primaryCount++;
+		},
+		onSecondaryAction() {
+			this.secondaryCount++;
+		}
+	};
+}
 
 /**
  * These tests exercise the real click-routing/state-machine logic end to end (BuildToolManager ->
@@ -36,7 +70,11 @@ class FakeElement {
 }
 
 function buildHarness(pointerLocked: { value: boolean }) {
-	vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+	// A real dispatching fake, not a bare vi.fn() spy — the new Remove Mode tests below need `X`/
+	// `Escape` keydowns (registered on `window`, per BuildToolManager's constructor) to actually reach
+	// handleKeyDown, not just be recorded as having been "listened for".
+	const fakeWindow = new FakeElement();
+	vi.stubGlobal('window', fakeWindow);
 
 	const scene = new THREE.Scene();
 	const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
@@ -68,9 +106,11 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	});
 
 	const domElement = new FakeElement();
+	const removeTool = makeFakeTool();
 	const buildToolManager = new BuildToolManager({
 		domElement: domElement as unknown as HTMLElement,
 		tools: { foundation: foundationTool },
+		removeTool,
 		isPointerLocked: () => pointerLocked.value
 	});
 
@@ -85,7 +125,11 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		domElement.dispatch('mousedown', { button });
 	}
 
-	return { foundationManager, pointCrosshairAt, click };
+	function key(code: string): void {
+		fakeWindow.dispatch('keydown', { code });
+	}
+
+	return { foundationManager, buildToolManager, removeTool, pointCrosshairAt, click, key };
 }
 
 describe('BuildToolManager + FoundationTool click routing', () => {
@@ -147,5 +191,110 @@ describe('BuildToolManager + FoundationTool click routing', () => {
 		click(0); // same vertex again -> invalid, must not place
 
 		expect(foundationManager.getFoundations()).toHaveLength(0);
+	});
+});
+
+describe('BuildToolManager Remove Mode routing', () => {
+	const pointerLocked = { value: true };
+
+	beforeEach(() => {
+		pointerLocked.value = true;
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('X activates the remove tool and suspends the currently selected hotbar tool', () => {
+		const { removeTool, key, pointCrosshairAt } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		expect(removeTool.activateCount).toBe(1);
+
+		pointCrosshairAt(0, 0);
+		expect(removeTool.updateCount).toBeGreaterThan(0);
+	});
+
+	it('X again exits Remove Mode and restores the previously selected hotbar tool', () => {
+		const { foundationManager, removeTool, key, pointCrosshairAt, click } =
+			buildHarness(pointerLocked);
+
+		key('KeyX');
+		key('KeyX'); // toggle back off
+		expect(removeTool.deactivateCount).toBe(1);
+
+		// Foundation tool (slot 1, the default) must be usable again exactly as before.
+		pointCrosshairAt(0, 0);
+		click(0);
+		pointCrosshairAt(20, 14);
+		click(0);
+		expect(foundationManager.getFoundations()).toHaveLength(1);
+	});
+
+	it('left click while Remove Mode is active routes to the remove tool, not the hotbar tool', () => {
+		const { foundationManager, removeTool, key, pointCrosshairAt, click } =
+			buildHarness(pointerLocked);
+
+		key('KeyX');
+		pointCrosshairAt(0, 0);
+		click(0);
+
+		expect(removeTool.primaryCount).toBe(1);
+		expect(foundationManager.getFoundations()).toHaveLength(0);
+	});
+
+	it('the click that only acquires pointer lock does not remove anything', () => {
+		pointerLocked.value = false;
+		const { removeTool, key, click } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		click(0); // pointer lock not active yet — must be ignored, same rule as every other tool
+
+		expect(removeTool.primaryCount).toBe(0);
+	});
+
+	it('right click exits Remove Mode', () => {
+		const { removeTool, key, click } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		click(2);
+
+		expect(removeTool.deactivateCount).toBe(1);
+	});
+
+	it('Escape exits Remove Mode', () => {
+		const { removeTool, key } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		key('Escape');
+
+		expect(removeTool.deactivateCount).toBe(1);
+	});
+
+	it('selecting a hotbar slot while Remove Mode is active exits Remove Mode and switches tools', () => {
+		const { removeTool, key, buildToolManager } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		buildToolManager.selectSlot(2); // Wall — irrelevant which, just not the current slot
+
+		expect(removeTool.deactivateCount).toBe(1);
+	});
+
+	it('regression: pressing a DIGIT KEY (not calling selectSlot directly) while Remove Mode is active also exits it — the keydown handler must route digits through selectSlot, not swallow them', () => {
+		const { removeTool, key } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		expect(removeTool.activateCount).toBe(1);
+
+		key('Digit2'); // Wall
+		expect(removeTool.deactivateCount).toBe(1);
+	});
+
+	it('never occupies a numbered hotbar slot — pressing a digit never activates the remove tool', () => {
+		const { removeTool, key } = buildHarness(pointerLocked);
+
+		for (const digit of ['Digit1', 'Digit2', 'Digit9']) key(digit);
+
+		expect(removeTool.activateCount).toBe(0);
 	});
 });

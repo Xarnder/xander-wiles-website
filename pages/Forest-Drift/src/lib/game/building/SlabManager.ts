@@ -144,6 +144,23 @@ export class SlabManager {
 		return true;
 	}
 
+	/**
+	 * Removes `openingId` from `slabId`'s definition and rebuilds its mesh + collision data — the
+	 * mirror of `addOpening`, used by BuildingManager.removeStair to restore solid floor where a
+	 * stair-owned opening used to be. A no-op (returns `false`) if the slab or the opening isn't
+	 * found.
+	 */
+	removeOpening(slabId: string, openingId: string): boolean {
+		const entry = this.slabs.get(slabId);
+		if (!entry) return false;
+		const openings = entry.definition.openings.filter((o) => o.id !== openingId);
+		if (openings.length === entry.definition.openings.length) return false;
+		const definition: SlabDefinition = { ...entry.definition, openings };
+		const rebuilt = this.buildEntry(definition, entry);
+		if (rebuilt) this.slabs.set(slabId, rebuilt);
+		return true;
+	}
+
 	removeSlab(id: string): boolean {
 		const entry = this.slabs.get(id);
 		if (!entry) return false;

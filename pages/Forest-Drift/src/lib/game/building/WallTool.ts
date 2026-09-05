@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
+import type { BuildUndoManager } from './BuildUndoManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
@@ -47,6 +48,7 @@ export interface WallToolOptions {
 	foundationManager: FoundationManager;
 	buildingManager: BuildingManager;
 	levelManager: BuildingLevelManager;
+	undoManager: BuildUndoManager;
 	terrainSettings: TerrainSettings;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
@@ -66,6 +68,7 @@ export class WallTool implements BuildTool {
 	private readonly foundationManager: FoundationManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly undoManager: BuildUndoManager;
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -104,8 +107,15 @@ export class WallTool implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private firstPoint: HoverTarget | null = null;
 
-	/** Cycled by pressing `C` — see polygonDrawSnap.ts. Only ever `'off'` or `'axis'` here (a straight wall never accumulates the 3+ points `'axis-inline'` needs). */
-	private snapMode: SnapMode = 'off';
+	/**
+	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'axis-inline'` every time the
+	 * tool is activated (see `activate()`) rather than persisting the player's last choice, per the
+	 * README's "Draw-snap" section; a straight wall never accumulates the 3+ points `'axis-inline'`
+	 * needs to differ from plain `'axis'`, so in practice this just starts the player on axis-locked
+	 * placement, one `C` press away from `'off'` (`cycleSnapMode('axis-inline', ...)` goes straight
+	 * to `'off'` since `wallCornersAvailable` is never passed here).
+	 */
+	private snapMode: SnapMode = 'axis-inline';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.code !== 'KeyC') return;
@@ -119,6 +129,7 @@ export class WallTool implements BuildTool {
 		this.foundationManager = options.foundationManager;
 		this.buildingManager = options.buildingManager;
 		this.levelManager = options.levelManager;
+		this.undoManager = options.undoManager;
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -169,6 +180,7 @@ export class WallTool implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
+		this.snapMode = 'axis-inline';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
@@ -285,7 +297,8 @@ export class WallTool implements BuildTool {
 			minimumWallLength: this.buildingSettings.minimumWallLength
 		});
 
-		if (!result.valid) return;
+		if (!result.valid || !result.value) return;
+		this.undoManager.record({ kind: 'wall', wallId: result.value.id });
 
 		this.state = 'idle';
 		this.firstPoint = null;

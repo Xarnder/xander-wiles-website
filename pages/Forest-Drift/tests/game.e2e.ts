@@ -173,7 +173,7 @@ test('the build HUD does not sit underneath the debug GUI panel — its hints an
 	expect(pageErrors).toEqual([]);
 });
 
-test('shows the snap-mode badge while cycling Wall Tool snap with C, and hides it when snap is off', async ({
+test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it off', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -181,15 +181,29 @@ test('shows the snap-mode badge while cycling Wall Tool snap with C, and hides i
 
 	await page.goto('/');
 
+	// The badge only (re-)renders once the tool's HUD is actually rebuilt (on a target change, or a
+	// `C` press forcing one) — with no foundation in view there's nothing to target here, so the
+	// default itself is verified indirectly, through the very first `C` press's transition:
+	// `'axis-inline' -> 'off'` (the new default) is observably different from the old `'off' ->
+	// 'axis'` a single press would have produced.
 	await expect(page.getByTestId('hotbar-slot-wall')).toBeVisible();
 	await page.keyboard.press('2');
 	const snapBadge = page.getByTestId('snap-badge');
-	await expect(snapBadge).not.toBeVisible();
+
+	await page.keyboard.press('c');
+	await expect(snapBadge).not.toBeVisible(); // axis-inline -> off: proves the default was Axis + Inline, not Off
 
 	await page.keyboard.press('c');
 	await expect(snapBadge).toBeVisible();
-	await expect(snapBadge).toHaveText('AXIS SNAP');
+	await expect(snapBadge).toHaveText('AXIS SNAP'); // off -> axis
 
+	await page.keyboard.press('c');
+	await expect(snapBadge).not.toBeVisible(); // axis -> off (Wall Tool never reaches axis-inline by cycling)
+
+	// Re-selecting the tool resets back to the default rather than remembering the last choice —
+	// the very next `C` press goes straight back to `off` again, not `axis`.
+	await page.keyboard.press('1');
+	await page.keyboard.press('2');
 	await page.keyboard.press('c');
 	await expect(snapBadge).not.toBeVisible();
 
@@ -312,6 +326,84 @@ test('renders the sky and shows its GUI sections with no uncaught errors', async
 			timeout: 10_000
 		})
 		.toBe(true);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('X toggles Remove Mode, shows a Remove HUD, and restores the previously selected hotbar tool on exit', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	// Window (not Wall) — its HUD always renders something even with nothing targeted (see the
+	// "build HUD does not sit underneath the debug GUI panel" test above), so its absence here is a
+	// reliable signal, unlike Wall/Foundation which show no HUD at all until a foundation exists.
+	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const removeToggle = page.getByTestId('hotbar-remove-toggle');
+	const hud = page.getByTestId('build-hud');
+	await expect(windowSlot).toBeVisible();
+	await expect(removeToggle).toBeVisible();
+
+	await page.keyboard.press('3'); // Window — the tool that must be remembered/restored
+	await expect(windowSlot).toHaveClass(/active/);
+	await expect(removeToggle).not.toHaveClass(/active/);
+	await expect(hud).toContainText('WINDOW');
+
+	await page.keyboard.press('x');
+	await expect(removeToggle).toHaveClass(/active/);
+	// Entering Remove Mode never actually deselects the hotbar slot itself — only the visual
+	// "active" highlight moves to the trash icon (see BuildToolManager's class doc comment).
+	await expect(hud).toContainText('REMOVE');
+	await expect(hud).toContainText('Left Click: Remove');
+
+	await page.keyboard.press('x');
+	await expect(removeToggle).not.toHaveClass(/active/);
+	await expect(windowSlot).toHaveClass(/active/);
+	await expect(hud).not.toContainText('REMOVE');
+	await expect(hud).toContainText('WINDOW');
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('clicking the hotbar trash icon toggles Remove Mode the same as the X key', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const removeToggle = page.getByTestId('hotbar-remove-toggle');
+	await expect(removeToggle).toBeVisible();
+
+	await removeToggle.click();
+	await expect(removeToggle).toHaveClass(/active/);
+	await expect(page.getByTestId('build-hud')).toContainText('REMOVE');
+
+	await removeToggle.click();
+	await expect(removeToggle).not.toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('selecting a hotbar slot while Remove Mode is active exits Remove Mode', async ({ page }) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const removeToggle = page.getByTestId('hotbar-remove-toggle');
+	await expect(removeToggle).toBeVisible();
+
+	await page.keyboard.press('x');
+	await expect(removeToggle).toHaveClass(/active/);
+
+	await page.keyboard.press('3'); // Window
+	await expect(page.getByTestId('hotbar-remove-toggle')).not.toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
 
 	expect(pageErrors).toEqual([]);
 });

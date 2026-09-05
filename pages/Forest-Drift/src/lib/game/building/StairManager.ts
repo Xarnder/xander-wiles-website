@@ -184,6 +184,11 @@ export class StairManager {
 		return Array.from(this.stairs.values(), (entry) => entry.definition);
 	}
 
+	/** Every stair's real visible mesh, for Remove Mode's raycasting — already carries `userData.stairId`/`userData.foundationId` (see `buildEntry`). */
+	getMeshesForRaycast(): THREE.Object3D[] {
+		return Array.from(this.stairs.values(), (entry) => entry.mesh);
+	}
+
 	/**
 	 * Every tread top surface at (worldX, worldZ) — used by WorldSurfaceSampler with a wider
 	 * "maxStepHeight" tolerance (rather than its usual small epsilon) so walking horizontally into a

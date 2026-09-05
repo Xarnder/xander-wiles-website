@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { BuildingLevelManager } from './building/BuildingLevelManager';
+import { BuildingRemovalManager } from './building/BuildingRemovalManager';
+import { BuildUndoManager } from './building/BuildUndoManager';
 import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
 import { CeilingTool } from './building/CeilingTool';
@@ -10,6 +12,7 @@ import { FoundationTool } from './building/FoundationTool';
 import type { BuildingSettings, BuildUiState, HotbarUiState } from './building/FoundationTypes';
 import { vertexSpacingFor } from './building/foundationMath';
 import { PolygonWallTool } from './building/PolygonWallTool';
+import { RemoveTool } from './building/RemoveTool';
 import { RoofTool } from './building/RoofTool';
 import { SlabManager } from './building/SlabManager';
 import { StairManager } from './building/StairManager';
@@ -97,7 +100,9 @@ export class ThreeScene {
 	private readonly slabManager: SlabManager;
 	private readonly stairManager: StairManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly undoManager: BuildUndoManager;
 	private readonly buildingManager: BuildingManager;
+	private readonly removalManager: BuildingRemovalManager;
 	private readonly worldSurfaceSampler: WorldSurfaceSampler;
 	private readonly controller: FirstPersonController;
 	private readonly foundationTool: FoundationTool;
@@ -109,6 +114,7 @@ export class ThreeScene {
 	private readonly floorTool: FloorTool;
 	private readonly roofTool: RoofTool;
 	private readonly stairTool: StairTool;
+	private readonly removeTool: RemoveTool;
 	private readonly buildToolManager: BuildToolManager;
 	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
@@ -220,6 +226,9 @@ export class ThreeScene {
 			getCornerOpeningMargin: () => buildingSettings.cornerOpeningMargin
 		});
 
+		this.undoManager = new BuildUndoManager(this.buildingManager);
+		this.removalManager = new BuildingRemovalManager(this.buildingManager);
+
 		this.worldSurfaceSampler = new WorldSurfaceSampler(
 			this.terrainManager.getHeightSampler(),
 			this.foundationManager,
@@ -275,6 +284,7 @@ export class ThreeScene {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -285,6 +295,7 @@ export class ThreeScene {
 			camera: this.camera,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
@@ -294,6 +305,7 @@ export class ThreeScene {
 			camera: this.camera,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
@@ -304,6 +316,7 @@ export class ThreeScene {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -315,6 +328,7 @@ export class ThreeScene {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -326,6 +340,7 @@ export class ThreeScene {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -337,6 +352,7 @@ export class ThreeScene {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			undoManager: this.undoManager,
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -349,6 +365,15 @@ export class ThreeScene {
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
 			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.removeTool = new RemoveTool({
+			scene: this.scene,
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			removalManager: this.removalManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
@@ -366,6 +391,7 @@ export class ThreeScene {
 				'flat-roof': this.roofTool,
 				stairs: this.stairTool
 			},
+			removeTool: this.removeTool,
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
 			onHudChange: options.onBuildHudChange
@@ -401,6 +427,9 @@ export class ThreeScene {
 			},
 			onShowStairBoundsChange: () => {
 				this.stairManager.setShowBounds(buildingSettings.showStairBounds);
+			},
+			onShowRemovalPickingProxiesChange: () => {
+				this.removeTool.setShowPickingProxies(buildingSettings.showRemovalPickingProxies);
 			}
 		});
 		this.gui.addVegetationFolder(options.vegetationSettings, {
@@ -431,6 +460,11 @@ export class ThreeScene {
 		this.handleResize();
 
 		this.animationFrameId = requestAnimationFrame(this.animate);
+	}
+
+	/** Lets the Svelte hotbar UI's trash icon toggle Remove Mode by click, in addition to the `X` key shortcut. */
+	toggleRemoveMode(): void {
+		this.buildToolManager.toggleRemoveMode();
 	}
 
 	/** Lets the Svelte hotbar UI select a slot by click, in addition to the number-key shortcuts. */
@@ -650,12 +684,14 @@ export class ThreeScene {
 		this.floorTool.dispose();
 		this.roofTool.dispose();
 		this.stairTool.dispose();
+		this.removeTool.dispose();
 		this.treeManager.dispose();
 		this.wallManager.dispose();
 		this.wallPathManager.dispose();
 		this.slabManager.dispose();
 		this.stairManager.dispose();
 		this.levelManager.dispose();
+		this.undoManager.dispose();
 		this.foundationManager.dispose();
 		this.controller.dispose();
 		this.terrainManager.dispose();
