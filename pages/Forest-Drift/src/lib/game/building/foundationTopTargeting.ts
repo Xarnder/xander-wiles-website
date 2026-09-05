@@ -63,12 +63,25 @@ export function raycastFoundationTop(
  * 2. Otherwise, whichever foundation's footprint contains the ray's origin (i.e. the player is
  *    currently standing on/in it) — covers the common case of looking up/sideways to build a
  *    ceiling while standing inside the room below it.
+ * 3. Otherwise, whichever foundation `BuildingLevelManager` already considers "active" (the one the
+ *    player was last building on, or has locked mid-placement) — covers stepping back OUTSIDE a
+ *    foundation's own footprint to get a workable upward angle on an elevated level, which the first
+ *    two heuristics alone can't handle: an upper-storey plane usually has no mesh to hit, and a
+ *    small foundation's footprint is easy to overshoot backing away from it. The final
+ *    inside-the-footprint bounds check below still protects against this producing a nonsense
+ *    result if the player has genuinely wandered away from that foundation entirely — it only helps
+ *    when the analytic plane, projected from wherever they're actually standing, still lands
+ *    somewhere inside the real footprint.
+ *
+ * The level used is `levelManager.getCurrentLevelIndex(foundationId)` — i.e. resolved AFTER the
+ * foundation is known, from that specific foundation's own per-foundation current level, never a
+ * single global index — see BuildingLevelManager's class doc comment on why levels are
+ * foundation-scoped.
  */
 export function raycastLevelConstructionPlane(
 	raycaster: THREE.Raycaster,
 	foundationManager: FoundationManager,
 	levelManager: BuildingLevelManager,
-	currentLevelIndex: number,
 	vertexSpacing: number,
 	buildingGridSize: number
 ): FoundationTopHit | null {
@@ -84,8 +97,12 @@ export function raycastLevelConstructionPlane(
 		const origin = raycaster.ray.origin;
 		foundationId = foundationManager.getFoundationContaining(origin.x, origin.z)?.id;
 	}
+	if (!foundationId) {
+		foundationId = levelManager.getActiveFoundationId() ?? undefined;
+	}
 	if (!foundationId) return null;
 
+	const currentLevelIndex = levelManager.getCurrentLevelIndex(foundationId);
 	if (currentLevelIndex === 0 && meshHit && meshHit.foundationId === foundationId) {
 		return meshHit;
 	}
@@ -128,13 +145,19 @@ export function raycastLevelConstructionPlane(
  * now the same plane. Foundation resolution prefers "which foundation am I standing in" (XZ-only,
  * ignores aim direction) over a physical mesh hit, since looking up means the ray moves away from
  * any ground-level mesh and would essentially never hit one; the mesh-hit path remains as a
- * fallback for the reverse case (aiming down at a foundation from just outside its footprint).
+ * fallback for the reverse case (aiming down at a foundation from just outside its footprint). A
+ * final fallback to `levelManager`'s already-active foundation covers stepping back outside the
+ * footprint entirely to get a workable angle on a high ceiling — see
+ * `raycastLevelConstructionPlane`'s doc comment for why this is safe (the footprint bounds check
+ * below still applies).
+ *
+ * As with `raycastLevelConstructionPlane`, the level used is resolved AFTER the foundation is
+ * known, via that specific foundation's own `levelManager.getCurrentLevelIndex(foundationId)`.
  */
 export function raycastSlabConstructionPlane(
 	raycaster: THREE.Raycaster,
 	foundationManager: FoundationManager,
 	levelManager: BuildingLevelManager,
-	currentLevelIndex: number,
 	vertexSpacing: number,
 	buildingGridSize: number
 ): FoundationTopHit | null {
@@ -149,12 +172,18 @@ export function raycastSlabConstructionPlane(
 		);
 		foundationId = meshHit?.foundationId;
 	}
+	if (!foundationId) {
+		foundationId = levelManager.getActiveFoundationId() ?? undefined;
+	}
 	if (!foundationId) return null;
 
 	const foundation = foundationManager.getFoundation(foundationId);
 	if (!foundation) return null;
 
-	const level = levelManager.getOrCreateLevel(foundationId, currentLevelIndex);
+	const level = levelManager.getOrCreateLevel(
+		foundationId,
+		levelManager.getCurrentLevelIndex(foundationId)
+	);
 	const planeWorldY = foundation.topY + level.baseY + level.wallHeight;
 
 	const dirY = raycaster.ray.direction.y;

@@ -29,9 +29,11 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - Right click — cancel the current foundation, wall, or in-progress wall-path selection
 - `Enter` (Continuous Wall only) — finish the current path as an open (unclosed) chain
 - `Backspace` (Continuous Wall only) — undo the most recently placed path point
-- `Page Up` / `Page Down` — change the current building level (see "Building levels")
-- `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline) on Wall, Continuous Wall, Ceiling,
-  Floor and Roof — see "Draw-snap: axis and inline alignment" below
+- `Page Up` / `Page Down` — change the current building level (see "Building levels"), or click the
+  ▲ / ▼ on-screen floor selector on the left edge of the screen, shown whenever a level-aware tool
+  (Wall, Continuous Wall, Ceiling/Floor/Roof, Stairs) is active
+- `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
+  Wall, Ceiling, Floor and Roof — see "Draw-snap: axis, inline and wall-corner alignment" below
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -754,12 +756,63 @@ contiguous from 0), and freezes a new level's `baseY` (previous level's `baseY +
 for level 0) and `wallHeight` (the _current_ `defaultStoreyHeight` setting) at creation time — the
 same "store authored values, don't re-derive from a live default" rule `wallHeight`/`wallThickness`
 already follow for individual walls. Dragging `defaultStoreyHeight` in the GUI afterwards only
-changes the _next_ level created, never an existing one.
+changes the _next_ level created, never an existing one. Because levels are always created
+contiguously and each new one's `baseY` is always strictly greater than its predecessor's, "the next
+index" and "the next known elevation" are the same thing — moving up/down never needs a separate
+search by Y, and never skips a level authored with a non-default storey height (a building doesn't
+have to use the same storey height throughout).
 
-`currentBuildingLevelIndex` lives directly on the shared `BuildingSettings` object (the project's
-existing "flat mutable settings bag" pattern) so the GUI slider and `BuildingLevelManager`'s own
-Page Up / Page Down keydown listener can never disagree about which floor a level-aware tool is
-building on. Minimum level is 0; Page Down clamps there.
+**Levels are per-foundation, not global.** Two foundations never share a "current level" — each has
+its own independent index, tracked in `BuildingLevelManager`'s own
+`Map<foundationId, currentLevelIndex>`. `getCurrentLevelIndex(foundationId)`/
+`setCurrentLevelIndex(foundationId, index)` both take an explicit `foundationId` for exactly this
+reason (an earlier version stored one single global index in `BuildingSettings`, which meant
+standing on Foundation B's Level 0 while Foundation A's Level 2 was still "current" would silently
+apply Foundation A's level number to Foundation B). `BuildingSettings.currentBuildingLevelIndex`
+still exists, but only as a live, best-effort **mirror** of whichever foundation is currently active
+— written to (for the dev-only debug GUI's benefit), never read from, by anything else.
+
+**Which foundation "current level" applies to** is its own piece of state,
+`BuildingLevelManager`'s `activeFoundationId`, resolved via:
+
+- `reportHoveredFoundation(foundationId | null)` — called every frame by every level-aware tool
+  with whatever its crosshair currently resolves to. A hit switches the active foundation; a miss
+  deliberately does nothing (retains whichever foundation was last active), so a player's context
+  doesn't flicker away the instant they glance off the edge of what they're building.
+- `lockActiveFoundation(foundationId)` / `unlockActiveFoundation()` — every tool calls the former
+  the moment a multi-click placement begins (a wall's first point, a wall-path/slab polygon's first
+  point, a stair footprint's first corner) and the latter on both successful confirm and cancel
+  (including via `Escape`/right-click, undoing back to zero points, or switching hotbar slots
+  mid-draw — every tool's `deactivate()` also unlocks, defensively). While locked,
+  `reportHoveredFoundation` is a no-op, so the crosshair drifting over a neighbouring foundation
+  mid-placement can never retarget which foundation "current level" means partway through.
+
+Page Up/Page Down (and the on-screen floor selector below) both call `moveUp()`/`moveDown()`, which
+operate on `activeFoundationId` — never below level 0 (a no-op there), and never past
+`maxBuildingLevels` (a safety limit, default 10, not a game-design restriction) unless a higher
+level was already authored, in which case selecting it is always allowed regardless of the cap.
+`moveUp()` doesn't need to search for "the next known elevation" separately from "the next index"
+(see above) — it just calls `getOrCreateLevel(foundationId, currentIndex + 1)`, which transparently
+returns an already-authored level's real elevation, or creates a new one from the _current_ level's
+own `baseY + wallHeight` if none exists yet.
+
+**Automatic level discovery**, for a foundation that already has placed geometry but no
+`BuildingLevelDefinition`s recorded yet (e.g. after a fresh load in a future save/load feature —
+today, every level is always created through `getOrCreateLevel` the moment a tool needs it, so this
+mainly exists for that future case and is directly unit-tested):
+`BuildingLevelManager.discoverLevelsFromBuilding(foundationId, building)` scans a
+`FoundationBuildingDefinition`'s walls'/wall-paths' `baseY`, slabs' `localY` (a slab's top surface
+always sits exactly at the `baseY` of the level above it — see the Slabs section), and stairs'
+`baseY`, dedupes elevations within a small epsilon, and backfills one `BuildingLevelDefinition` per
+distinct elevation (level 0 always included at `baseY = 0`), with each one's `wallHeight` inferred
+from the gap to the next elevation above it. A no-op if the foundation already has any authored
+levels — this only ever backfills, never overwrites.
+
+**Level naming** (`BuildingLevelTypes.levelDisplayName`): the first eleven levels get player-facing
+names — "Ground Floor", "First Floor", "Second Floor", ... "Tenth Floor" — read far more naturally
+in a first-person building game than "Level 0"; anything beyond that falls back to `Level N`.
+Internal code (grid math, HUD keys, serialization) always keeps using the plain numeric
+`index`/`baseY` — this table is consulted only at the point text is actually shown to the player.
 
 ### Targeting elevated building levels (`foundationTopTargeting.raycastLevelConstructionPlane`)
 
@@ -769,10 +822,30 @@ physical to raycast yet, so `raycastLevelConstructionPlane` resolves the target 
 current position — covers looking up to build a ceiling while standing in the room below it), then
 analytically intersects the same camera ray against a logical horizontal plane at
 `foundation.topY + level.baseY`. Wall, Polygon Wall and Stairs all use this one function, so they
-can never disagree about where "the current level's floor" is.
+can never disagree about where "the current level's floor" is. The level itself is resolved via
+`levelManager.getCurrentLevelIndex(foundationId)` — deliberately **after** the foundation is known
+(not passed in as a separate parameter), since with per-foundation levels there's no single "current
+level" to ask for until you know which foundation you mean.
+
+**Bugfix: targeting an elevated level failed as soon as the player stepped outside the
+foundation's own footprint.** Both heuristics above have a blind spot for upper storeys
+specifically: there's no mesh to hit (nothing physical exists up there yet, most of the time), and
+"standing inside the footprint" fails the moment the player backs away from a small foundation to
+get a workable upward viewing angle on a plane several metres above their head — exactly the pose
+you'd naturally take to see a high ceiling or wall. When both failed, the function returned `null`
+outright: no crosshair, no preview, and for Window/Door (which need a real wall to already exist)
+nothing to attach an opening to either, even though the player was clearly still working on the
+same foundation. Fixed by adding a third fallback — `levelManager.getActiveFoundationId()`, i.e.
+whichever foundation is already the established building context (see "Building levels" above) —
+tried only after both other heuristics fail. This is safe against wandering off somewhere unrelated:
+the existing `isBuildingGridPointInsideFoundation` check at the end still rejects the result if the
+analytic plane, projected from wherever the player actually is, doesn't land inside that
+foundation's real footprint — the fallback only ever helps the case where it does.
+`foundationTopTargeting.spec.ts` covers both the successful fallback and that out-of-range case.
 
 Slabs use a sibling function, `raycastSlabConstructionPlane` — see the Slabs section below for why
-they need a different target height than the other level-aware tools.
+they need a different target height than the other level-aware tools; it gained the identical
+fallback and regression coverage.
 
 ### Slabs (`SlabTypes.ts`, `slabMath.ts`, `SlabGeometryBuilder.ts`, `SlabManager.ts`, `SlabToolBase.ts`)
 
@@ -877,30 +950,100 @@ and into each collision rect's Y extents. Window/Door openings stay wall-local (
 relative to the wall's own base) exactly as before — an upper-storey wall's opening world Y is
 still just `wall transform's originWorldY + opening minY/maxY`, no separate code path.
 
+### The on-screen floor selector, and per-tool level HUD
+
+Every level-aware tool's `BuildUiState` now carries an optional `level: BuildingLevelUiState` field
+— `{ index, baseY, displayName, canMoveUp, canMoveDown }`, computed live by
+`BuildingLevelManager.getLevelUiState(foundationId)` (a single shared source for the cap/bounds
+logic, rather than duplicating it per tool). `+page.svelte` renders this as a standalone widget on
+the screen's left edge whenever it's present — a ▲ button, the level's display name and elevation,
+and a ▼ button, each arrow disabled exactly when `canMoveUp`/`canMoveDown` is false. Clicking either
+button calls `ThreeScene.moveLevelUp()`/`moveLevelDown()`, which simply forward to
+`BuildingLevelManager.moveUp()`/`moveDown()` — the exact same methods Page Up/Page Down call, so the
+two controls can never disagree about what "moving a level" means. Foundation/Window/Door tools
+don't set `level` at all (they aren't level-aware — see "Window/Door targeting" below), so the
+selector only ever appears for Wall, Continuous Wall, Ceiling/Floor/Roof, and Stairs.
+
+Each tool's HUD `hintLines` also show the current level's display name (`"GROUND FLOOR"`,
+`"FIRST FLOOR"`, ...) instead of the old raw `"LEVEL 0"` text, via the same `getLevelUiState`/
+`levelDisplayName` — falling back to `getActiveFoundationId()` when the tool itself has nothing
+specific hovered (e.g. the idle HUD right after switching tools), and to `'Look at a foundation'`
+when no foundation has ever been targeted at all.
+
+### Window/Door targeting is intentionally level-independent
+
+`WindowTool`/`DoorTool` (via `OpeningToolBase`) target whatever wall the crosshair is actually
+looking at, using that wall's own stored `baseY` — they never consult
+`BuildingLevelManager.getCurrentLevelIndex()`/`getActiveFoundationId()` at all. This means a player
+on Level 2 can still place a window on a Level 0 wall they happen to be looking at, without needing
+to first navigate back down — an opening's placement is a property of the wall geometry it cuts
+into, not of whatever level the player's own "current level" selector happens to be on.
+
+### Stairs and level targeting
+
+The Stair Tool locks onto a foundation (`lockActiveFoundation`) the moment its first corner is
+placed, and freezes `activeLevelIndex`/`activeBaseY` from that foundation's current level at that
+same moment — a stair's bottom is always `currentLevel.baseY`, exactly like the other level-aware
+tools' first click. `findMatchingLevel` (unchanged from before this feature) checks whether the
+stair's calculated total rise lines up with an already-authored level's `baseY`, or with where the
+_next_ level would land if created — the direction-HUD now surfaces this as
+
+```
+Stairs connect:
+Ground Floor → First Floor
+```
+
+using the same player-facing names as everywhere else, replacing the old `Target: Level N` line.
+Once stairs are confirmed and they meaningfully reach a level, `StairTool` remembers that target
+(`{ foundationId, levelIndex }`) and surfaces a `Page Up: Build on First Floor` hint in the idle HUD
+— cleared automatically the moment the player's own current level for that foundation reaches or
+passes the target (checked on every idle-state HUD refresh), so the hint never lingers once it's
+been acted on. Placing stairs never forces the player up to the new level automatically — the hint
+is the only nudge.
+
 ### GUI and settings
 
-**Building > Levels**: `currentBuildingLevelIndex` (also editable here as a fallback to Page
-Up/Down — both write the same field), `defaultStoreyHeight`, `showLevelConstructionPlane`,
-`buildingLevelViewMode`. **Building > Slabs**: `floorThickness`, `roofThickness`, `showSlabBounds`,
-`showSlabPolygonPoints`, `slabPreviewOpacity`. (A `snapToWallCorners` GUI toggle used to sit here —
-removed once wall-corner snapping actually shipped as the `C`-cycled `'wall-corners'` mode below;
-the toggle's own doc comment described exactly that behavior but nothing had ever implemented it.)
+**Building > Levels**: `currentBuildingLevelIndex` (now a live-updating, best-effort **mirror** of
+whichever foundation is active — `.listen()`'d so it stays current, but no longer meaningfully
+editable by dragging it: the real controls are Page Up/Down and the on-screen floor selector),
+`defaultStoreyHeight`, `maxBuildingLevels`, `showLevelConstructionPlane`, `buildingLevelViewMode`
+(default changed to `'current-and-below'`, per the brief — showing every level by default made
+placing something on an upper floor harder to judge against the room below it), `fadeNonCurrentLevels`
+(currently a plain settings field with no rendering wired to it yet — see "Not implemented yet").
+**Building > Slabs**: `floorThickness`, `roofThickness`, `showSlabBounds`, `showSlabPolygonPoints`,
+`slabPreviewOpacity`. (A `snapToWallCorners` GUI toggle used to sit here — removed once wall-corner
+snapping actually shipped as the `C`-cycled `'wall-corners'` mode below; the toggle's own doc comment
+described exactly that behavior but nothing had ever implemented it.)
 
 ### Tests
 
-`BuildingLevelManager.spec.ts` (12 tests): level 0 always starts at `baseY = 0`; a new level's
+`BuildingLevelManager.spec.ts` (34 tests): level 0 always starts at `baseY = 0`; a new level's
 `baseY` is the previous level's `baseY + wallHeight`; requesting level N recursively creates every
 level below it, contiguously; `wallHeight`/`baseY` freeze at creation and don't move when
 `defaultStoreyHeight` changes afterward; levels are independent per foundation; a negative index
-throws; Page Up/Down and the GUI share one field; serialize/load round-trips. `slabMath.spec.ts` (18
+throws; each foundation's `currentLevelIndex` is independent and mirrored onto
+`buildingSettings.currentBuildingLevelIndex` only for the active foundation;
+`reportHoveredFoundation`/`lockActiveFoundation`/`unlockActiveFoundation` — hover switches context,
+a miss retains the last active foundation, and a lock makes hover a no-op until released;
+`moveUp`/`moveDown` via Page Up/Down — selects an already-authored higher level instead of
+recomputing one from the live `defaultStoreyHeight`, never skips a known elevation, and refuses to
+create a level past `maxBuildingLevels` while still allowing one already authored above the cap;
+`getLevelUiState`'s `canMoveUp`/`canMoveDown` bounds; `discoverLevelsFromBuilding` inferring levels
+from wall/slab/stair elevations (deduped within a small epsilon, level 0 always included, a no-op
+once any level is already authored); `removeLevelsForFoundation` also forgetting that foundation's
+current-level and active-foundation state; serialize/load round-trips. `slabMath.spec.ts` (18
 tests) and `SlabGeometryBuilder.spec.ts` (10 tests, including geometric winding checks via each
 triangle's cross-product normal) cover the polygon math and extrusion in isolation.
-`foundationTopTargeting.spec.ts` (6 tests) covers `raycastSlabConstructionPlane`: resolving the
-foundation a player stands in and intersecting the ceiling plane (not the ground) while looking
-straight up; a regression proving a diagonal look-up ray lands at the ceiling height specifically,
-not the old ground height; falling back to a physical mesh hit when aiming down at a foundation from
-outside its footprint; returning `null` for a ray that hits neither; returning `null` when a shallow
-look-up angle lands outside the footprint at the ceiling's height; and targeting a level other than 0.
+`foundationTopTargeting.spec.ts` (12 tests) covers both targeting functions: `raycastSlabConstructionPlane`
+resolving the foundation a player stands in and intersecting the ceiling plane (not the ground) while
+looking straight up; a regression proving a diagonal look-up ray lands at the ceiling height
+specifically, not the old ground height; falling back to a physical mesh hit when aiming down at a
+foundation from outside its footprint; returning `null` for a ray that hits neither; returning `null`
+when a shallow look-up angle lands outside the footprint at the ceiling's height; targeting a level
+other than 0; and the active-foundation fallback both succeeding (stepped outside the footprint, still
+land inside it) and correctly staying rejected when the ray genuinely lands outside. `raycastLevelConstructionPlane`
+gets equivalent coverage: a direct ground-level mesh hit, the standing-inside fallback for an elevated
+floor plane, the same active-foundation-fallback regression, and a plain `null` case with nothing active.
 `BuildingManager.spec.ts` adds: `addSlab` accepting concave polygons and rejecting self-intersecting
 / out-of-foundation / zero-area / duplicate-point ones; rejecting a same-level overlapping slab
 while accepting one at a different `localY`; a Ceiling+Floor pair at the same default elevation
@@ -913,13 +1056,23 @@ collision behavior directly: no snapping onto a slab above the player, snapping 
 is actually at/above it, spawn-style `Infinity` landing on the highest surface, terrain as the
 unconditional fallback, and `getCeilingBlockY` reporting the correct (lowest, when several are
 crossed) underside. `tests/game.e2e.ts` confirms the hotbar's Ceiling/Floor/Roof slots (6-8) and the
-Levels/Slabs GUI folders render with no console errors.
+Levels/Slabs GUI folders render with no console errors, plus that the on-screen floor selector stays
+hidden until a foundation is actually targeted (never shows a misleading "Ground Floor" for a world
+with no foundations at all) and that Page Up/Page Down never throw with no active foundation yet.
 
 ### Not implemented yet
 
 Room detection/auto-enclosure, floor holes/stairwell openings beyond the stair-driven ones below,
 atriums, balconies, railings/parapets, skylights, sloped floors, a floor materials catalogue, and
 negative building levels (basements).
+
+`buildingLevelViewMode` (`'all' | 'current-and-below' | 'current-only'`) and `fadeNonCurrentLevels`
+exist as `BuildingSettings` fields with a debug GUI toggle each, but nothing yet reads either one to
+actually hide or fade any wall/slab/stair mesh by level — every placed object on every level, on
+every foundation, always renders simultaneously regardless of these settings. Wiring this up means
+teaching `WallManager`/`WallPathManager`/`SlabManager`/`StairManager` to compare each mesh's own
+`baseY` (or, for a slab, `localY`) against the active foundation's current level and adjust
+visibility/opacity accordingly, re-applied whenever the active foundation or level changes.
 
 ## Stairs: axis-aligned, grid-driven straight staircases
 

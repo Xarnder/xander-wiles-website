@@ -4,6 +4,8 @@
  * building tools.
  */
 
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
+
 /** One vertex of the global terrain grid. gridX/gridZ are authoritative; world coords are derived. */
 export interface TerrainGridPoint {
 	gridX: number;
@@ -125,10 +127,19 @@ export interface BuildingSettings {
 
 	/** Default wall height for a newly-created building level (see BuildingLevelManager) — levelBaseY = levelIndex * defaultStoreyHeight, frozen into each BuildingLevelDefinition once created. */
 	defaultStoreyHeight: number;
-	/** Which level Wall/Polygon Wall/Slab tools currently build on — a live "current floor" selector, changed via Page Up/Page Down (see BuildingLevelManager), not just a placement default. */
+	/**
+	 * A live, best-effort MIRROR of whichever foundation is currently active's current level index —
+	 * kept only so the dev-only debug GUI has something sensible to display. `BuildingLevelManager`'s
+	 * own per-foundation map is the actual source of truth; this field is written TO, never read FROM,
+	 * by anything outside the debug GUI (see BuildingLevelManager's class doc comment).
+	 */
 	currentBuildingLevelIndex: number;
+	/** Safety limit on how many levels Page Up / the floor selector can CREATE for one foundation — not a game-design restriction, just a sane upper bound (see BuildingLevelManager.moveUp). Selecting an already-authored level above this count is still always allowed. */
+	maxBuildingLevels: number;
 	showLevelConstructionPlane: boolean;
 	buildingLevelViewMode: BuildingLevelViewMode;
+	/** When true, levels other than the current one (per `buildingLevelViewMode`) render at reduced opacity instead of full brightness — a purely visual editing aid, never a material change. */
+	fadeNonCurrentLevels: boolean;
 
 	floorThickness: number;
 	roofThickness: number;
@@ -197,8 +208,10 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 
 		defaultStoreyHeight: 3,
 		currentBuildingLevelIndex: 0,
+		maxBuildingLevels: 10,
 		showLevelConstructionPlane: true,
-		buildingLevelViewMode: 'all',
+		buildingLevelViewMode: 'current-and-below',
+		fadeNonCurrentLevels: false,
 
 		floorThickness: 0.2,
 		roofThickness: 0.25,
@@ -223,6 +236,8 @@ export interface BuildUiState {
 	hintLines: string[];
 	/** The active draw-snap mode (see polygonDrawSnap.ts), for a dedicated on-screen badge near the crosshair — `undefined`/`'off'` shows nothing. Kept separate from `hintLines` so it can render as a prominent, differently-styled indicator rather than just another line of text. */
 	snapMode?: 'off' | 'axis' | 'axis-inline' | 'wall-corners';
+	/** The current building level, for the on-screen floor selector (▲ / name+elevation / ▼) — every level-aware tool (Wall, Continuous Wall, Ceiling/Floor/Roof, Stairs) provides this; Foundation/Window/Door don't, since they don't build "on a level" (see the README's "Window / Door exception"). `undefined` when no foundation has ever been targeted yet. */
+	level?: BuildingLevelUiState;
 }
 
 export interface HotbarUiState {

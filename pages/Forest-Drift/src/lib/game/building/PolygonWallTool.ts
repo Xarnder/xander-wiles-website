@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
@@ -186,7 +187,7 @@ export class PolygonWallTool implements BuildTool {
 		if (this.activeFoundationId === foundationId) return this.activeBaseY;
 		return this.levelManager.getOrCreateLevel(
 			foundationId,
-			this.levelManager.getCurrentLevelIndex()
+			this.levelManager.getCurrentLevelIndex(foundationId)
 		).baseY;
 	}
 
@@ -208,6 +209,7 @@ export class PolygonWallTool implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
 		window.removeEventListener('keydown', this.handleKeyDown);
@@ -222,10 +224,10 @@ export class PolygonWallTool implements BuildTool {
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
-			this.levelManager.getCurrentLevelIndex(),
 			this.vertexSpacing(),
 			this.buildingSettings.buildingGridSize
 		);
+		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 
 		if (!hit) {
 			if (this.hoverTarget) {
@@ -267,9 +269,10 @@ export class PolygonWallTool implements BuildTool {
 		if (this.state === 'idle') {
 			this.points = [this.hoverTarget.gridPoint];
 			this.activeFoundationId = this.hoverTarget.foundationId;
+			this.levelManager.lockActiveFoundation(this.hoverTarget.foundationId);
 			this.activeBaseY = this.levelManager.getOrCreateLevel(
 				this.hoverTarget.foundationId,
-				this.levelManager.getCurrentLevelIndex()
+				this.levelManager.getCurrentLevelIndex(this.hoverTarget.foundationId)
 			).baseY;
 			this.state = 'drawing';
 			this.refreshVisuals();
@@ -304,6 +307,7 @@ export class PolygonWallTool implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -312,6 +316,7 @@ export class PolygonWallTool implements BuildTool {
 			this.state = 'idle';
 			this.points = [];
 			this.activeFoundationId = null;
+			this.levelManager.unlockActiveFoundation();
 		} else {
 			this.points = this.points.slice(0, -1);
 		}
@@ -362,6 +367,7 @@ export class PolygonWallTool implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -615,12 +621,17 @@ export class PolygonWallTool implements BuildTool {
 		this.hidePreview();
 	}
 
-	/** "LEVEL N" / "Elevation: X.XXm" — same level-context line every level-aware tool's HUD shows. */
+	/** The current level's UI state for `foundationId`, or the globally "active" foundation if none is given — `undefined` once no foundation has ever been targeted. See BuildUiState.level. */
+	private currentLevelUiState(foundationId?: string): BuildingLevelUiState | undefined {
+		const id = foundationId ?? this.levelManager.getActiveFoundationId() ?? undefined;
+		return id ? this.levelManager.getLevelUiState(id) : undefined;
+	}
+
+	/** "GROUND FLOOR" / "Elevation: X.XXm" — same level-context line every level-aware tool's HUD shows. */
 	private levelHudLines(foundationId?: string): string[] {
-		const levelIndex = this.levelManager.getCurrentLevelIndex();
-		const lines = [`LEVEL ${levelIndex}`];
-		if (foundationId) lines.push(`Elevation: ${this.resolveBaseY(foundationId).toFixed(2)}m`);
-		return lines;
+		const level = this.currentLevelUiState(foundationId);
+		if (!level) return ['Look at a foundation'];
+		return [level.displayName.toUpperCase(), `Elevation: ${level.baseY.toFixed(2)}m`];
 	}
 
 	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
@@ -633,6 +644,7 @@ export class PolygonWallTool implements BuildTool {
 		return {
 			toolId: 'polygon-wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.hoverTarget?.foundationId),
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
@@ -654,11 +666,13 @@ export class PolygonWallTool implements BuildTool {
 		}));
 		const length = computePathLength(localPoints, false);
 		const levelLines = this.levelHudLines(this.activeFoundationId ?? undefined);
+		const level = this.currentLevelUiState(this.activeFoundationId ?? undefined);
 
 		if (closingLoop) {
 			return {
 				toolId: 'polygon-wall',
 				snapMode: this.snapMode,
+				level,
 				crosshair: 'valid',
 				hintLines: [
 					...levelLines,
@@ -677,6 +691,7 @@ export class PolygonWallTool implements BuildTool {
 		return {
 			toolId: 'polygon-wall',
 			snapMode: this.snapMode,
+			level,
 			crosshair: 'valid',
 			hintLines: [
 				...levelLines,
@@ -700,6 +715,7 @@ export class PolygonWallTool implements BuildTool {
 		return {
 			toolId: 'polygon-wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.activeFoundationId ?? undefined),
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),

@@ -436,6 +436,16 @@ export class ThreeScene {
 		this.buildToolManager.selectSlot(slot);
 	}
 
+	/** Lets the on-screen floor selector's ▲ button move up a level by click, identically to Page Up. */
+	moveLevelUp(): void {
+		this.levelManager.moveUp();
+	}
+
+	/** Lets the on-screen floor selector's ▼ button move down a level by click, identically to Page Down. */
+	moveLevelDown(): void {
+		this.levelManager.moveDown();
+	}
+
 	/**
 	 * Re-applies every sky/HDRI/atmosphere/cloud setting. Called once at startup, once more when
 	 * the (async) HDRI finishes loading, and directly from the GUI on every change — all of these

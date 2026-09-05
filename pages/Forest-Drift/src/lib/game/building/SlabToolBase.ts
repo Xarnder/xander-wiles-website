@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
@@ -146,7 +147,7 @@ export class SlabToolBase implements BuildTool {
 	private wallCornersOnCurrentLevel(foundationId: string): BuildingGridPoint[] {
 		const levelBaseY = this.levelManager.getOrCreateLevel(
 			foundationId,
-			this.levelManager.getCurrentLevelIndex()
+			this.levelManager.getCurrentLevelIndex(foundationId)
 		).baseY;
 		const building = this.buildingManager.getBuildingForFoundation(foundationId);
 		const corners: BuildingGridPoint[] = [];
@@ -231,7 +232,7 @@ export class SlabToolBase implements BuildTool {
 	private defaultLocalY(foundationId: string): number {
 		const level = this.levelManager.getOrCreateLevel(
 			foundationId,
-			this.levelManager.getCurrentLevelIndex()
+			this.levelManager.getCurrentLevelIndex(foundationId)
 		);
 		return level.baseY + level.wallHeight;
 	}
@@ -260,6 +261,7 @@ export class SlabToolBase implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
 		window.removeEventListener('keydown', this.handleKeyDown);
@@ -274,10 +276,10 @@ export class SlabToolBase implements BuildTool {
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
-			this.levelManager.getCurrentLevelIndex(),
 			this.vertexSpacing(),
 			this.buildingSettings.buildingGridSize
 		);
+		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 
 		if (!hit) {
 			if (this.hoverTarget) {
@@ -325,6 +327,7 @@ export class SlabToolBase implements BuildTool {
 		if (this.state === 'idle') {
 			this.points = [this.hoverTarget.point];
 			this.activeFoundationId = this.hoverTarget.foundationId;
+			this.levelManager.lockActiveFoundation(this.hoverTarget.foundationId);
 			this.activeLocalY = this.defaultLocalY(this.hoverTarget.foundationId);
 			this.state = 'drawing';
 			this.refreshVisuals();
@@ -356,6 +359,7 @@ export class SlabToolBase implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -364,6 +368,7 @@ export class SlabToolBase implements BuildTool {
 			this.state = 'idle';
 			this.points = [];
 			this.activeFoundationId = null;
+			this.levelManager.unlockActiveFoundation();
 		} else {
 			this.points = this.points.slice(0, -1);
 		}
@@ -391,7 +396,7 @@ export class SlabToolBase implements BuildTool {
 		const result = this.buildingManager.addSlab({
 			points: this.points.map((p) => ({ ...p, foundationId: this.activeFoundationId! })),
 			type: this.config.slabType,
-			levelIndex: this.levelManager.getCurrentLevelIndex(),
+			levelIndex: this.levelManager.getCurrentLevelIndex(this.activeFoundationId),
 			localY: this.activeLocalY,
 			thickness: this.config.getThickness(this.buildingSettings)
 		});
@@ -401,6 +406,7 @@ export class SlabToolBase implements BuildTool {
 		this.state = 'idle';
 		this.points = [];
 		this.activeFoundationId = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -649,10 +655,17 @@ export class SlabToolBase implements BuildTool {
 		this.hidePreview();
 	}
 
-	/** "LEVEL N" / "Elevation: X.XXm" — same level-context line every level-aware tool's HUD shows. */
+	/** The current level's UI state for `foundationId`, or the globally "active" foundation if none is given — `undefined` once no foundation has ever been targeted. See BuildUiState.level. */
+	private currentLevelUiState(foundationId?: string): BuildingLevelUiState | undefined {
+		const id = foundationId ?? this.levelManager.getActiveFoundationId() ?? undefined;
+		return id ? this.levelManager.getLevelUiState(id) : undefined;
+	}
+
+	/** "GROUND FLOOR" / "Elevation: X.XXm" — same level-context line every level-aware tool's HUD shows. Elevation here is the slab's own surface (top of the level's walls), not the level's baseY — see `resolveLocalY`. */
 	private levelHudLines(foundationId?: string): string[] {
-		const levelIndex = this.levelManager.getCurrentLevelIndex();
-		const lines = [`LEVEL ${levelIndex}`];
+		const level = this.currentLevelUiState(foundationId);
+		if (!level) return ['Look at a foundation'];
+		const lines = [level.displayName.toUpperCase()];
 		if (foundationId) lines.push(`Elevation: ${this.resolveLocalY(foundationId).toFixed(2)}m`);
 		return lines;
 	}
@@ -671,6 +684,7 @@ export class SlabToolBase implements BuildTool {
 		return {
 			toolId: this.toolId,
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.hoverTarget?.foundationId),
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
@@ -688,6 +702,7 @@ export class SlabToolBase implements BuildTool {
 
 	private buildDrawingHud(closingLoop: boolean): BuildUiState {
 		const levelLines = this.levelHudLines(this.activeFoundationId ?? undefined);
+		const level = this.currentLevelUiState(this.activeFoundationId ?? undefined);
 		const common = [
 			this.config.label,
 			'',
@@ -700,6 +715,7 @@ export class SlabToolBase implements BuildTool {
 			return {
 				toolId: this.toolId,
 				snapMode: this.snapMode,
+				level,
 				crosshair: 'valid',
 				hintLines: [...levelLines, '', ...common, '', ...this.snapHudLines(), 'Click to close slab']
 			};
@@ -708,6 +724,7 @@ export class SlabToolBase implements BuildTool {
 		return {
 			toolId: this.toolId,
 			snapMode: this.snapMode,
+			level,
 			crosshair: 'valid',
 			hintLines: [
 				...levelLines,
@@ -728,6 +745,7 @@ export class SlabToolBase implements BuildTool {
 		return {
 			toolId: this.toolId,
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.activeFoundationId ?? undefined),
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),

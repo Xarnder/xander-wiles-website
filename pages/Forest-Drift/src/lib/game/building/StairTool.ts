@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
+import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import {
@@ -138,6 +140,15 @@ export class StairTool implements BuildTool {
 	private activeBaseY = 0;
 	private activeLevelIndex = 0;
 
+	/**
+	 * Set once a confirmed stair's total rise lines up with a specific level (see
+	 * `findMatchingLevel`) — surfaced as a brief "Page Up: Build on {level}" idle-HUD hint so the
+	 * obvious next step (moving up to build on what was just connected) doesn't require guessing.
+	 * Cleared once the player's own current level for that foundation reaches or passes the target,
+	 * or once a new stair placement begins.
+	 */
+	private lastStairTarget: { foundationId: string; levelIndex: number } | null = null;
+
 	private hoverPoint: BuildingGridPoint | null = null;
 	private lastGridX: number | null = null;
 	private lastGridZ: number | null = null;
@@ -225,6 +236,7 @@ export class StairTool implements BuildTool {
 		this.foundationId = null;
 		this.firstCorner = null;
 		this.secondCorner = null;
+		this.levelManager.unlockActiveFoundation();
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
 		window.removeEventListener('keydown', this.handleKeyDown);
@@ -239,10 +251,10 @@ export class StairTool implements BuildTool {
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
-			this.levelManager.getCurrentLevelIndex(),
 			this.vertexSpacing(),
 			this.buildingSettings.buildingGridSize
 		);
+		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 
 		if (!hit) {
 			if (this.hoverPoint) {
@@ -278,12 +290,14 @@ export class StairTool implements BuildTool {
 
 		if (this.state === 'idle') {
 			this.foundationId = this.lastFoundationId;
+			this.levelManager.lockActiveFoundation(this.foundationId!);
 			this.firstCorner = this.hoverPoint;
-			this.activeLevelIndex = this.levelManager.getCurrentLevelIndex();
+			this.activeLevelIndex = this.levelManager.getCurrentLevelIndex(this.foundationId!);
 			this.activeBaseY = this.levelManager.getOrCreateLevel(
 				this.foundationId!,
 				this.activeLevelIndex
 			).baseY;
+			this.lastStairTarget = null;
 			this.state = 'first-corner-selected';
 			this.refreshVisuals();
 			return;
@@ -314,6 +328,7 @@ export class StairTool implements BuildTool {
 		this.foundationId = null;
 		this.firstCorner = null;
 		this.secondCorner = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -402,10 +417,21 @@ export class StairTool implements BuildTool {
 		});
 		if (!result.valid) return;
 
+		const metrics = computeStairMetrics({
+			...footprint,
+			direction: this.direction,
+			gridSizeAtCreation: this.buildingSettings.buildingGridSize,
+			baseY: this.activeBaseY
+		});
+		const targetLevel = this.findMatchingLevel(metrics.topLocalY);
+		this.lastStairTarget =
+			targetLevel !== null ? { foundationId: this.foundationId, levelIndex: targetLevel } : null;
+
 		this.state = 'idle';
 		this.foundationId = null;
 		this.firstCorner = null;
 		this.secondCorner = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -420,6 +446,15 @@ export class StairTool implements BuildTool {
 			this.outline.visible = false;
 			this.firstCornerMarker.visible = false;
 			this.hidePreview();
+			if (
+				this.lastStairTarget &&
+				this.levelManager.getCurrentLevelIndex(this.lastStairTarget.foundationId) >=
+					this.lastStairTarget.levelIndex
+			) {
+				// The player already moved up to (or past) the level these stairs reach — the hint has
+				// served its purpose.
+				this.lastStairTarget = null;
+			}
 			this.onHudChange?.(this.buildIdleHud());
 			return;
 		}
@@ -770,20 +805,37 @@ export class StairTool implements BuildTool {
 		this.hideRoughBox();
 	}
 
-	private levelHudLines(): string[] {
-		return [`LEVEL ${this.activeLevelIndex}`, `Start elevation: ${this.activeBaseY.toFixed(2)}m`];
+	/** The current level's UI state for `foundationId`, or the globally "active" foundation if none is given — `undefined` once no foundation has ever been targeted. See BuildUiState.level. */
+	private currentLevelUiState(foundationId?: string): BuildingLevelUiState | undefined {
+		const id = foundationId ?? this.levelManager.getActiveFoundationId() ?? undefined;
+		return id ? this.levelManager.getLevelUiState(id) : undefined;
+	}
+
+	/** Frozen level info once a footprint is being placed — `activeLevelIndex`/`activeBaseY` were captured at the first click (see `onPrimaryAction`), so this stays fixed for the rest of the placement even if the player's live current level changes elsewhere. */
+	private activeLevelHudLines(): string[] {
+		return [
+			levelDisplayName(this.activeLevelIndex).toUpperCase(),
+			`Start elevation: ${this.activeBaseY.toFixed(2)}m`
+		];
 	}
 
 	private buildIdleHud(): BuildUiState {
+		const level = this.currentLevelUiState(this.lastFoundationId ?? undefined);
+		const hintExtra: string[] = [];
+		if (this.lastStairTarget) {
+			hintExtra.push('', `Page Up: Build on ${levelDisplayName(this.lastStairTarget.levelIndex)}`);
+		}
 		return {
 			toolId: 'stairs',
+			level,
 			crosshair: this.hoverPoint ? 'valid' : 'default',
 			hintLines: [
-				`LEVEL ${this.levelManager.getCurrentLevelIndex()}`,
+				level ? level.displayName.toUpperCase() : 'Look at a foundation',
 				'',
 				'STAIRS',
 				'',
-				'Click first corner'
+				'Click first corner',
+				...hintExtra
 			]
 		};
 	}
@@ -791,9 +843,10 @@ export class StairTool implements BuildTool {
 	private buildWaitingHud(): BuildUiState {
 		return {
 			toolId: 'stairs',
+			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
 			crosshair: 'default',
 			hintLines: [
-				...this.levelHudLines(),
+				...this.activeLevelHudLines(),
 				'',
 				'STAIRS',
 				'',
@@ -813,7 +866,7 @@ export class StairTool implements BuildTool {
 		const xCells = footprint.maxGridX - footprint.minGridX;
 		const zCells = footprint.maxGridZ - footprint.minGridZ;
 		const lines = [
-			...this.levelHudLines(),
+			...this.activeLevelHudLines(),
 			'',
 			'STAIRS',
 			'',
@@ -825,7 +878,12 @@ export class StairTool implements BuildTool {
 			lines.push(matches ? 'Matches ceiling height!' : 'Drag to match ceiling height');
 		}
 		lines.push('', 'Click: Confirm footprint', 'Right click: Cancel');
-		return { toolId: 'stairs', crosshair: 'valid', hintLines: lines };
+		return {
+			toolId: 'stairs',
+			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
+			crosshair: 'valid',
+			hintLines: lines
+		};
 	}
 
 	private buildDirectionHud(
@@ -836,7 +894,7 @@ export class StairTool implements BuildTool {
 		const targetLevel = this.findMatchingLevel(metrics.topLocalY);
 
 		const lines = [
-			...this.levelHudLines(),
+			...this.activeLevelHudLines(),
 			'',
 			'STAIRS',
 			'',
@@ -852,20 +910,29 @@ export class StairTool implements BuildTool {
 			lines.push(matches ? 'Matches ceiling above!' : 'Does not reach ceiling exactly');
 		}
 		if (targetLevel !== null) {
-			lines.push(`Target: Level ${targetLevel}`);
+			lines.push(
+				'Stairs connect:',
+				`${levelDisplayName(this.activeLevelIndex)} → ${levelDisplayName(targetLevel)}`
+			);
 		} else {
 			lines.push(`Top elevation: ${metrics.topLocalY.toFixed(2)}m`, 'No matching floor level');
 		}
 		lines.push('', '← / → Change direction', 'Enter / Click: Build', 'Right click: Cancel');
-		return { toolId: 'stairs', crosshair: 'valid', hintLines: lines };
+		return {
+			toolId: 'stairs',
+			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
+			crosshair: 'valid',
+			hintLines: lines
+		};
 	}
 
 	private buildInvalidDirectionHud(reason: string): BuildUiState {
 		return {
 			toolId: 'stairs',
+			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
 			crosshair: 'invalid',
 			hintLines: [
-				...this.levelHudLines(),
+				...this.activeLevelHudLines(),
 				'',
 				'STAIRS',
 				'',

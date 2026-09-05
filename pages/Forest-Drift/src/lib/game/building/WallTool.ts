@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
@@ -176,6 +177,7 @@ export class WallTool implements BuildTool {
 		this.active = false;
 		this.state = 'idle';
 		this.firstPoint = null;
+		this.levelManager.unlockActiveFoundation();
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
 		window.removeEventListener('keydown', this.handleKeyDown);
@@ -186,6 +188,7 @@ export class WallTool implements BuildTool {
 		if (!this.active) return;
 
 		const hit = this.findFoundationTopTarget();
+		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 		if (!hit) {
 			if (this.target) {
 				this.target = null;
@@ -226,6 +229,7 @@ export class WallTool implements BuildTool {
 
 		if (this.state === 'idle') {
 			this.firstPoint = this.target;
+			this.levelManager.lockActiveFoundation(this.target.foundationId);
 			this.state = 'first-point-selected';
 			this.refreshVisuals();
 			return;
@@ -238,6 +242,7 @@ export class WallTool implements BuildTool {
 		if (!this.active || this.state !== 'first-point-selected') return;
 		this.state = 'idle';
 		this.firstPoint = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -247,7 +252,6 @@ export class WallTool implements BuildTool {
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
-			this.levelManager.getCurrentLevelIndex(),
 			this.vertexSpacing(),
 			this.buildingSettings.buildingGridSize
 		);
@@ -257,7 +261,7 @@ export class WallTool implements BuildTool {
 	private currentBaseY(foundationId: string): number {
 		return this.levelManager.getOrCreateLevel(
 			foundationId,
-			this.levelManager.getCurrentLevelIndex()
+			this.levelManager.getCurrentLevelIndex(foundationId)
 		).baseY;
 	}
 
@@ -285,6 +289,7 @@ export class WallTool implements BuildTool {
 
 		this.state = 'idle';
 		this.firstPoint = null;
+		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
 
@@ -497,12 +502,17 @@ export class WallTool implements BuildTool {
 		this.hidePreview();
 	}
 
-	/** "LEVEL N" / "Elevation: X.XXm" — the same level-context line every level-aware tool's HUD shows, per the README. Elevation is only resolvable once a specific foundation is in play. */
+	/** The current level's UI state for `foundationId`, or the globally "active" foundation if none is given — `undefined` once no foundation has ever been targeted. See BuildUiState.level. */
+	private currentLevelUiState(foundationId?: string): BuildingLevelUiState | undefined {
+		const id = foundationId ?? this.levelManager.getActiveFoundationId() ?? undefined;
+		return id ? this.levelManager.getLevelUiState(id) : undefined;
+	}
+
+	/** "GROUND FLOOR" / "Elevation: X.XXm" — the same level-context line every level-aware tool's HUD shows, per the README. */
 	private levelHudLines(foundationId?: string): string[] {
-		const levelIndex = this.levelManager.getCurrentLevelIndex();
-		const lines = [`LEVEL ${levelIndex}`];
-		if (foundationId) lines.push(`Elevation: ${this.currentBaseY(foundationId).toFixed(2)}m`);
-		return lines;
+		const level = this.currentLevelUiState(foundationId);
+		if (!level) return ['Look at a foundation'];
+		return [level.displayName.toUpperCase(), `Elevation: ${level.baseY.toFixed(2)}m`];
 	}
 
 	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
@@ -515,6 +525,7 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.target?.foundationId),
 			crosshair: this.target ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.target?.foundationId),
@@ -534,6 +545,7 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.firstPoint?.foundationId),
 			crosshair: 'default',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),
@@ -552,6 +564,7 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.firstPoint?.foundationId),
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),
@@ -571,6 +584,7 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
+			level: this.currentLevelUiState(this.firstPoint?.foundationId),
 			crosshair: 'valid',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),

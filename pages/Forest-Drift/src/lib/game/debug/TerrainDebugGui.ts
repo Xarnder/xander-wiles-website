@@ -202,12 +202,19 @@ export class TerrainDebugGui {
 		doors.add(settings, 'openingEdgeMargin', 0, 1, 0.01);
 		doors.add(settings, 'openingSpacing', 0, 1, 0.01);
 
-		// currentBuildingLevelIndex is also live-editable here as a fallback to Page Up/Page Down —
-		// both write the same BuildingSettings field, so the GUI and the keyboard shortcut can never
-		// disagree about "what floor am I building on" (see BuildingLevelManager).
+		// currentBuildingLevelIndex is now a live, best-effort MIRROR of whichever foundation is
+		// currently active's own level — BuildingLevelManager's own per-foundation map is the real
+		// source of truth (see its class doc comment). `.listen()` keeps this display in sync; dragging
+		// it directly no longer has any lasting effect (the next mirror update overwrites it), so it's
+		// shown read-only-in-practice here rather than removed outright — the real player-facing
+		// control is the on-screen floor selector / Page Up/Page Down.
 		const levels = building.addFolder('Levels');
-		levels.add(settings, 'currentBuildingLevelIndex', 0, 20, 1).name('Current level');
+		levels
+			.add(settings, 'currentBuildingLevelIndex', 0, 20, 1)
+			.name('Current level (mirror)')
+			.listen();
 		levels.add(settings, 'defaultStoreyHeight', 1, 8, 0.1).name('Default storey height');
+		levels.add(settings, 'maxBuildingLevels', 1, 30, 1).name('Max levels');
 		levels.add(settings, 'showLevelConstructionPlane').name('Show construction plane');
 		levels
 			.add(settings, 'buildingLevelViewMode', {
@@ -216,6 +223,7 @@ export class TerrainDebugGui {
 				'Current Only': 'current-only'
 			})
 			.name('Level view mode');
+		levels.add(settings, 'fadeNonCurrentLevels').name('Fade other levels');
 
 		const slabs = building.addFolder('Slabs');
 		slabs.add(settings, 'floorThickness', 0.05, 1, 0.01).name('Floor thickness');

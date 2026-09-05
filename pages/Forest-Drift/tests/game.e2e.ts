@@ -123,6 +123,28 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	expect(pageErrors).toEqual([]);
 });
 
+test('the on-screen floor selector stays hidden until a foundation is targeted, and Page Up/Down never throw with no active foundation', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	await page.keyboard.press('2'); // Wall Tool — a level-aware tool
+	const floorSelector = page.getByTestId('floor-selector');
+	// No foundation exists anywhere in a fresh world, so nothing can ever be targeted — the selector
+	// (which only appears once buildHud.level is set) must stay absent rather than show a misleading
+	// "Ground Floor" for a foundation that doesn't exist.
+	await expect(floorSelector).not.toBeVisible();
+
+	await page.keyboard.press('PageUp');
+	await page.keyboard.press('PageDown');
+
+	await page.keyboard.press('1');
+	expect(pageErrors).toEqual([]);
+});
+
 test('shows the snap-mode badge while cycling Wall Tool snap with C, and hides it when snap is off', async ({
 	page
 }) => {

@@ -74,6 +74,33 @@
 		class:invalid={buildHud?.crosshair === 'invalid'}
 	></div>
 
+	{#if buildHud?.level}
+		<div class="floor-selector" data-testid="floor-selector">
+			<button
+				class="floor-arrow"
+				data-testid="floor-up"
+				disabled={!buildHud.level.canMoveUp}
+				onclick={() => scene?.moveLevelUp()}
+				aria-label="Move up one building level"
+			>
+				▲
+			</button>
+			<div class="floor-label">
+				<div class="floor-name" data-testid="floor-name">{buildHud.level.displayName}</div>
+				<div class="floor-elevation">{buildHud.level.baseY.toFixed(2)}m</div>
+			</div>
+			<button
+				class="floor-arrow"
+				data-testid="floor-down"
+				disabled={!buildHud.level.canMoveDown}
+				onclick={() => scene?.moveLevelDown()}
+				aria-label="Move down one building level"
+			>
+				▼
+			</button>
+		</div>
+	{/if}
+
 	{#if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
 		<div
 			class="snap-badge"
@@ -131,7 +158,10 @@
 					<dt>Right click</dt>
 					<dd>Cancel / deselect</dd>
 					<dt>Page Up / Page Down</dt>
-					<dd>Change current building level</dd>
+					<dd>
+						Change current building level — or click the ▲ / ▼ floor selector on the left edge of
+						the screen, shown whenever a level-aware tool is active
+					</dd>
 					<dt>C</dt>
 					<dd>
 						Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) — Wall,
@@ -326,6 +356,66 @@
 
 	.build-hud-spacer {
 		height: 0.35rem;
+	}
+
+	.floor-selector {
+		position: absolute;
+		top: 50%;
+		left: 0.75rem;
+		transform: translateY(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.6rem 0.5rem;
+		background: rgba(10, 20, 15, 0.55);
+		border-radius: 10px;
+		backdrop-filter: blur(2px);
+	}
+
+	.floor-arrow {
+		width: 2rem;
+		height: 2rem;
+		border: 1px solid rgba(234, 246, 255, 0.25);
+		border-radius: 8px;
+		background: rgba(234, 246, 255, 0.1);
+		color: #eaf6ff;
+		font-size: 0.9rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.floor-arrow:hover:not(:disabled) {
+		background: rgba(234, 246, 255, 0.22);
+	}
+
+	.floor-arrow:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+
+	.floor-label {
+		text-align: center;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		color: #eaf6ff;
+		line-height: 1.3;
+		padding: 0.15rem 0.1rem;
+	}
+
+	.floor-name {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
+	}
+
+	.floor-elevation {
+		font-size: 0.7rem;
+		opacity: 0.75;
 	}
 
 	.snap-badge {
