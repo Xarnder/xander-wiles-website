@@ -122,7 +122,12 @@ export class WallPathManager {
 				pickingMesh.userData.wallId = segment.segmentId;
 				buildingRoot.add(pickingMesh);
 			}
-			pickingMesh.position.set(segment.localX, 0, segment.localZ);
+			// `baseY`, not 0: the picking box spans local Y 0..wallHeight (see the translate above), so
+			// it has to be lifted to the path's own storey. The visible merged mesh bakes `baseY` into
+			// its vertices instead (WallPathGeometryBuilder), which is why an upper-floor path used to
+			// LOOK right while its invisible raycast target sat a full storey below — Window/Door then
+			// found nothing where the wall appeared, and found the wall by aiming at the ground floor.
+			pickingMesh.position.set(segment.localX, definition.baseY, segment.localZ);
 			pickingMesh.rotation.set(0, -segment.headingRadians, 0);
 			pickingMeshes.set(segment.segmentId, pickingMesh);
 			this.segmentToPath.set(segment.segmentId, definition.id);

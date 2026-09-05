@@ -500,6 +500,13 @@ no openings, a centred window, a door with nothing beneath it, two independent w
 stacked above a door; wall/opening validation (zero-length, too-short, out-of-bounds, overlapping,
 too close to the edge, cross-foundation endpoints); a diagonal wall's world transform round trip;
 and collision leaving a door's centre passable while still blocking the solid wall beside it.
+`openingWallPick.spec.ts` (10 tests) covers which wall an opening applies to once a building has
+more than one storey: the nearest wall being taken and marked on-level when that's what's being
+pointed at, the same wall marked off-level (not silently replaced) when it belongs to another
+storey, a regression that it never reaches _through_ the wall in front of the crosshair to a farther
+one that happens to be on the selected level, placing on an upper wall when that upper wall is what's
+being pointed at, per-foundation level resolution, and the wall↔level epsilon accepting float drift
+while still rejecting an adjacent storey.
 `tests/game.e2e.ts` extends the existing smoke tests: the hotbar shows Wall/Window/Door and switches
 tool with 2/3/4, and the Building GUI folder's Grid/Walls/Windows/Doors sections render.
 
@@ -952,17 +959,16 @@ still just `wall transform's originWorldY + opening minY/maxY`, no separate code
 
 ### The on-screen floor selector, and per-tool level HUD
 
-Every level-aware tool's `BuildUiState` now carries an optional `level: BuildingLevelUiState` field
-— `{ index, baseY, displayName, canMoveUp, canMoveDown }`, computed live by
-`BuildingLevelManager.getLevelUiState(foundationId)` (a single shared source for the cap/bounds
-logic, rather than duplicating it per tool). `+page.svelte` renders this as a standalone widget on
-the screen's left edge whenever it's present — a ▲ button, the level's display name and elevation,
-and a ▼ button, each arrow disabled exactly when `canMoveUp`/`canMoveDown` is false. Clicking either
-button calls `ThreeScene.moveLevelUp()`/`moveLevelDown()`, which simply forward to
+Every tool's `BuildUiState` (Foundation excepted — it has no notion of "current level" at all)
+carries an optional `level: BuildingLevelUiState` field — `{ index, baseY, displayName, canMoveUp,
+canMoveDown }`, computed live by `BuildingLevelManager.getLevelUiState(foundationId)` (a single
+shared source for the cap/bounds logic, rather than duplicating it per tool). `+page.svelte` renders
+this as a standalone widget on the screen's left edge whenever it's present — a ▲ button, the
+level's display name and elevation, and a ▼ button, each arrow disabled exactly when
+`canMoveUp`/`canMoveDown` is false. Clicking either button calls
+`ThreeScene.moveLevelUp()`/`moveLevelDown()`, which simply forward to
 `BuildingLevelManager.moveUp()`/`moveDown()` — the exact same methods Page Up/Page Down call, so the
-two controls can never disagree about what "moving a level" means. Foundation/Window/Door tools
-don't set `level` at all (they aren't level-aware — see "Window/Door targeting" below), so the
-selector only ever appears for Wall, Continuous Wall, Ceiling/Floor/Roof, and Stairs.
+two controls can never disagree about what "moving a level" means.
 
 Each tool's HUD `hintLines` also show the current level's display name (`"GROUND FLOOR"`,
 `"FIRST FLOOR"`, ...) instead of the old raw `"LEVEL 0"` text, via the same `getLevelUiState`/
@@ -970,14 +976,81 @@ Each tool's HUD `hintLines` also show the current level's display name (`"GROUND
 specific hovered (e.g. the idle HUD right after switching tools), and to `'Look at a foundation'`
 when no foundation has ever been targeted at all.
 
-### Window/Door targeting is intentionally level-independent
+### Window/Door targeting (`openingWallPick.ts`)
 
-`WindowTool`/`DoorTool` (via `OpeningToolBase`) target whatever wall the crosshair is actually
-looking at, using that wall's own stored `baseY` — they never consult
-`BuildingLevelManager.getCurrentLevelIndex()`/`getActiveFoundationId()` at all. This means a player
-on Level 2 can still place a window on a Level 0 wall they happen to be looking at, without needing
-to first navigate back down — an opening's placement is a property of the wall geometry it cuts
-into, not of whatever level the player's own "current level" selector happens to be on.
+`WindowTool`/`DoorTool` (via `OpeningToolBase`) place an opening on the wall the crosshair is
+pointing at — never on an invisible construction plane — and the opening's position _within_ that
+wall comes purely from where the ray lands on it. That wall is then **validated against the selected
+level**: `pickOpeningWall` (a pure, framework-free module, unit-tested in `openingWallPick.spec.ts`)
+returns the nearest hit flagged with whether its `baseY` matches its foundation's current level.
+On-level it places; off-level `OpeningToolBase` still highlights the wall — so it's obvious what the
+crosshair found — but refuses, showing `Wall is on Ground Floor` / `Page Up / Page Down to match`.
+Levels are resolved per foundation inside the pick, so two foundations in view can legitimately be
+on different storeys at once.
+
+**Bugfix, in two rounds.** Originally the tool took `hits[0]` with no level check at all, so with
+"First Floor" selected a window aimed near an upper wall still got cut into whatever wall the ray
+met first — usually a ground-floor one — and Page Up changed nothing, because nothing about the pick
+consulted the level. The first fix over-corrected: it scanned the hit list for the first wall _on
+the selected level_. But a raycaster reports every wall along the ray, **including ones hidden
+behind the one you're looking at** — in a closed room, aiming slightly upward at the near
+ground-floor wall also passes through the far first-floor wall above and beyond it. Openings then
+landed on walls the player couldn't see, and the only way to place upstairs was to aim at a
+downstairs wall: exactly backwards. The rule is now simply "the wall in front of the crosshair,
+validated against the level", which keeps what you see and what you get the same thing, and makes
+the failure case self-explanatory instead of silently redirecting the opening elsewhere.
+
+A wall's `baseY` is copied verbatim from its level at placement time, so the wall↔level comparison
+(`isWallOnLevel`) is an exact match plus a 1cm epsilon that only ever absorbs float drift through
+serialization — not a "near enough" allowance that could let an adjacent storey qualify.
+
+**Why this needs loud feedback: stacked walls look like one wall.** A ground-floor wall and the
+first-floor wall above it are flush and identically shaded, so they read as a single tall surface
+with no visible seam at `y = 3`. Aiming at the lower half of "the wall in front of you" while
+standing upstairs is therefore genuinely aiming at the ground-floor wall, and gets refused — which
+looks exactly like the tool doing nothing unless it says so. Two things make it say so:
+`BuildUiState.notice` renders the blocking reason as a badge right above the crosshair (see below),
+and the build HUD was moved out from under the dev GUI.
+
+**Bugfix: an upper-storey Continuous Wall's raycast target sat a whole storey below the wall
+itself.** A wall path keeps two meshes per segment — one merged _visible_ mesh, and an invisible
+per-segment **picking** box that Window/Door raycast against (`WallPathManager`). The visible mesh
+bakes `baseY` into its vertices (see `WallPathGeometryBuilder`), but the picking box is built
+spanning local Y `0..wallHeight` and was then positioned at local Y **0**, ignoring `baseY`
+entirely. So a first-floor path _rendered_ at 3–6m while the thing the crosshair could actually hit
+sat at 0–3m. Standing upstairs and aiming straight at the wall found nothing at all ("Look at a
+wall"), and aiming down at the ground floor found the stale box — which resolves to the upper
+segment's id, so the opening appeared on the floor above. That is the whole "I have to point at the
+ground-floor wall to place upstairs" behaviour, and it was never the level check: standalone
+Wall-tool walls (`WallManager`, which positions via the full `computeWallTransform` including
+`baseY`) were always correct, which is why it looked intermittent. Fixed by positioning the picking
+mesh at `definition.baseY`. `WallPathManager.spec.ts` pins the picking box's world-Y extent to the
+path's own storey at several levels — those tests fail against the old line.
+
+**Bugfix: the build HUD was drawn underneath the lil-gui debug panel.** `.build-hud` sat at
+top-right; lil-gui auto-places itself at top-right too, at full viewport height. The HUD was
+completely covered — so every hint and every blocking reason the build tools emit ("Look at a wall",
+"Wall is on Ground Floor", opening dimensions, the level name) was rendered invisibly, and the only
+feedback reaching the player was the crosshair's colour. It now sits bottom-left, clear of the GUI,
+the stats overlay, the floor selector and the hotbar; `tests/game.e2e.ts` asserts the two boxes
+don't intersect so it can't silently regress.
+
+**Bugfix: the floor selector disappeared, and Page Up/Down silently stopped doing anything, the
+moment a player switched to Window or Door.** `BuildingLevelManager.moveUp()`/`moveDown()` (and by
+extension the floor selector's own arrows) act on `activeFoundationId` — which is only ever set by a
+tool calling `reportHoveredFoundation()`. `OpeningToolBase` originally never called it at all (it
+had no `BuildingLevelManager` reference), so switching to Window/Door didn't just hide the selector
+— if the player hadn't already established a foundation as active via some OTHER tool first, Page
+Up/Down would do nothing at all while placing openings, with no feedback that anything was wrong.
+This is exactly backwards from "place a window on a Level 2 wall": you need the floor selector and
+Page Up/Down precisely to get to the right wall in the first place. Fixed by giving
+`OpeningToolBase` a `levelManager` reference and calling
+`reportHoveredFoundation(wall.foundationId)` in `update()` whenever a wall is hovered (via the
+target wall's own stored `foundationId` — never the reverse: this still never influences where an
+opening actually gets placed, which is unaffected and still purely wall-based). The HUD's `level`
+field falls back to `getActiveFoundationId()` when nothing is currently hovered, so the selector
+stays visible and stable between openings rather than flickering away every time the crosshair
+drifts off a wall.
 
 ### Stairs and level targeting
 

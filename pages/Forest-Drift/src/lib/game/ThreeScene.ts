@@ -284,6 +284,7 @@ export class ThreeScene {
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
@@ -292,6 +293,7 @@ export class ThreeScene {
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});

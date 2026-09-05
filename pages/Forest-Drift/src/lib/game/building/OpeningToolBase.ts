@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import type { BuildingLevelManager } from './BuildingLevelManager';
+import type { BuildingLevelUiState } from './BuildingLevelTypes';
+import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
+import type { OpeningWallCandidate } from './openingWallPick';
+import { isWallOnLevel, pickOpeningWall } from './openingWallPick';
 import { applyWallTransform } from './WallGeometryBuilder';
 import {
 	computeWallLength,
@@ -10,7 +15,7 @@ import {
 	worldToWallLocal
 } from './wallGeometryMath';
 import type { WallTransform } from './wallGeometryMath';
-import type { WallOpeningType } from './WallTypes';
+import type { WallDefinition, WallOpeningType } from './WallTypes';
 import type { BuildTool } from './BuildToolManager';
 
 const VALID_COLOR = 0x39d353;
@@ -49,6 +54,11 @@ interface Target {
  * horizontally to `openingGridSize`, validate against the SAME bounds/overlap rules
  * BuildingManager.addOpening enforces authoritatively, and preview/confirm. Stays in a single
  * "idle" state re-evaluated every frame, per the spec — there's no two-click sequence for openings.
+ *
+ * The wall an opening applies to is always the one directly in front of the crosshair, and it is
+ * only accepted if it's on the currently-selected building level — see `pickWallHit` /
+ * openingWallPick.ts. What you point at is what you get; a wall on another storey is highlighted
+ * and explained rather than silently cut into.
  */
 export class OpeningToolBase implements BuildTool {
 	readonly toolId: ToolId;
@@ -56,6 +66,7 @@ export class OpeningToolBase implements BuildTool {
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
 	private readonly buildingManager: BuildingManager;
+	private readonly levelManager: BuildingLevelManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly config: OpeningToolConfig;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -88,6 +99,7 @@ export class OpeningToolBase implements BuildTool {
 			scene: THREE.Scene;
 			camera: THREE.PerspectiveCamera;
 			buildingManager: BuildingManager;
+			levelManager: BuildingLevelManager;
 			buildingSettings: BuildingSettings;
 			onHudChange?: (hud: BuildUiState | null) => void;
 		}
@@ -97,6 +109,7 @@ export class OpeningToolBase implements BuildTool {
 		this.scene = options.scene;
 		this.camera = options.camera;
 		this.buildingManager = options.buildingManager;
+		this.levelManager = options.levelManager;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
 
@@ -129,15 +142,68 @@ export class OpeningToolBase implements BuildTool {
 		this.onHudChange?.(null);
 	}
 
+	/**
+	 * Resolves the raycaster's hits (nearest-first) into wall candidates, then defers the actual
+	 * choice to `pickOpeningWall` — see that module for why the wall in front of the crosshair is
+	 * used rather than the nearest one that happens to be on the selected level. Hits that aren't
+	 * walls, or whose wall has since been removed, are simply skipped.
+	 */
+	private pickWallHit(hits: THREE.Intersection[]): {
+		hit: THREE.Intersection;
+		wall: WallDefinition;
+		onCurrentLevel: boolean;
+	} | null {
+		const candidates: OpeningWallCandidate<{ hit: THREE.Intersection; wall: WallDefinition }>[] =
+			[];
+		for (const hit of hits) {
+			const wallId = hit.object.userData.wallId as string | undefined;
+			if (!wallId) continue;
+			const wall = this.buildingManager.getWall(wallId);
+			if (!wall) continue;
+			candidates.push({
+				hit: { hit, wall },
+				wallId,
+				foundationId: wall.foundationId,
+				baseY: wall.baseY
+			});
+		}
+
+		const picked = pickOpeningWall(candidates, (foundationId) =>
+			this.currentLevelBaseY(foundationId)
+		);
+		if (!picked) return null;
+		return {
+			hit: picked.hit.hit,
+			wall: picked.hit.wall,
+			onCurrentLevel: picked.onCurrentLevel
+		};
+	}
+
+	private currentLevelBaseY(foundationId: string): number {
+		return this.levelManager.getOrCreateLevel(
+			foundationId,
+			this.levelManager.getCurrentLevelIndex(foundationId)
+		).baseY;
+	}
+
+	/** "First Floor" for a wall sitting at an authored level's `baseY`, else its raw elevation — used only for the "wrong storey" HUD message. */
+	private levelNameForWall(foundationId: string, baseY: number): string {
+		const level = this.levelManager
+			.getLevelsForFoundation(foundationId)
+			.find((candidate) => isWallOnLevel(baseY, candidate.baseY));
+		return level ? levelDisplayName(level.index) : `elevation ${baseY.toFixed(2)}m`;
+	}
+
 	update(): void {
 		if (!this.active) return;
 
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
 		const meshes = this.buildingManager.getRaycastableWallMeshes();
 		const hits = meshes.length > 0 ? this.raycaster.intersectObjects(meshes, false) : [];
-		const hit = hits.length > 0 ? hits[0] : null;
+		const picked = this.pickWallHit(hits);
 
-		if (!hit) {
+		if (!picked) {
+			this.levelManager.reportHoveredFoundation(null);
 			this.setHoveredWall(null);
 			this.target = null;
 			this.previewMesh.visible = false;
@@ -145,20 +211,32 @@ export class OpeningToolBase implements BuildTool {
 			return;
 		}
 
-		const wallId = hit.object.userData.wallId as string | undefined;
-		if (!wallId) {
-			this.setHoveredWall(null);
-			this.target = null;
-			this.previewMesh.visible = false;
-			this.onHudChange?.(this.buildIdleHud());
-			return;
-		}
-
+		const { hit, wall, onCurrentLevel } = picked;
+		const wallId = wall.id;
 		this.setHoveredWall(wallId, hit.object as THREE.Mesh);
 
-		const wall = this.buildingManager.getWall(wallId);
+		// Keeps the on-screen floor selector / Page Up/Down usable while placing openings — the level
+		// index itself is per-foundation, so it has to follow whichever foundation's wall is in front
+		// of the crosshair.
+		this.levelManager.reportHoveredFoundation(wall.foundationId);
+
+		if (!onCurrentLevel) {
+			// The wall being pointed at belongs to another storey. Highlight it so it's obvious what
+			// the crosshair found, but refuse to cut an opening into it, and say which floor it's on —
+			// never quietly redirect the opening to some other wall the player isn't looking at.
+			this.target = null;
+			this.previewMesh.visible = false;
+			this.onHudChange?.(
+				this.buildInvalidHud(
+					`Wall is on ${this.levelNameForWall(wall.foundationId, wall.baseY)}`,
+					'Page Up / Page Down to match'
+				)
+			);
+			return;
+		}
+
 		const transform = this.buildingManager.getWallTransform(wallId);
-		if (!wall || !transform) {
+		if (!transform) {
 			this.target = null;
 			this.previewMesh.visible = false;
 			return;
@@ -281,10 +359,24 @@ export class OpeningToolBase implements BuildTool {
 		this.previewMesh.visible = true;
 	}
 
+	/**
+	 * The current level's UI state for the on-screen floor selector — purely informational here
+	 * (never gates this tool's own targeting, which always follows the wall being looked at
+	 * regardless of level). Falls back to whichever foundation `BuildingLevelManager` already
+	 * considers active when nothing is currently hovered, so the selector — and Page Up/Down —
+	 * keep working while the crosshair briefly isn't on a wall, e.g. between placements.
+	 */
+	private currentLevelUiState(): BuildingLevelUiState | undefined {
+		const foundationId = this.levelManager.getActiveFoundationId();
+		return foundationId ? this.levelManager.getLevelUiState(foundationId) : undefined;
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: this.toolId,
+			level: this.currentLevelUiState(),
 			crosshair: 'default',
+			notice: 'Look at a wall',
 			hintLines: [
 				this.config.label,
 				'',
@@ -298,6 +390,7 @@ export class OpeningToolBase implements BuildTool {
 	private buildValidHud(wallLength: number): BuildUiState {
 		return {
 			toolId: this.toolId,
+			level: this.currentLevelUiState(),
 			crosshair: 'valid',
 			hintLines: [
 				this.config.label,
@@ -310,11 +403,13 @@ export class OpeningToolBase implements BuildTool {
 		};
 	}
 
-	private buildInvalidHud(reason: string): BuildUiState {
+	private buildInvalidHud(reason: string, hint?: string): BuildUiState {
 		return {
 			toolId: this.toolId,
+			level: this.currentLevelUiState(),
 			crosshair: 'invalid',
-			hintLines: [this.config.label, '', reason]
+			notice: hint ? `${reason} · ${hint}` : reason,
+			hintLines: hint ? [this.config.label, '', reason, '', hint] : [this.config.label, '', reason]
 		};
 	}
 

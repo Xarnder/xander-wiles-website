@@ -236,7 +236,20 @@ export interface BuildUiState {
 	hintLines: string[];
 	/** The active draw-snap mode (see polygonDrawSnap.ts), for a dedicated on-screen badge near the crosshair — `undefined`/`'off'` shows nothing. Kept separate from `hintLines` so it can render as a prominent, differently-styled indicator rather than just another line of text. */
 	snapMode?: 'off' | 'axis' | 'axis-inline' | 'wall-corners';
-	/** The current building level, for the on-screen floor selector (▲ / name+elevation / ▼) — every level-aware tool (Wall, Continuous Wall, Ceiling/Floor/Roof, Stairs) provides this; Foundation/Window/Door don't, since they don't build "on a level" (see the README's "Window / Door exception"). `undefined` when no foundation has ever been targeted yet. */
+	/**
+	 * Why the thing under the crosshair can't be placed on right now, rendered as a badge beside the
+	 * crosshair itself rather than only in the corner HUD. A blocking reason is useless where the
+	 * player isn't looking — and the corner HUD in particular can be covered by the dev GUI — so
+	 * anything that explains "nothing is happening" belongs here too.
+	 */
+	notice?: string;
+	/**
+	 * The current building level, for the on-screen floor selector (▲ / name+elevation / ▼) — every
+	 * tool except Foundation provides this, Window/Door included: they report whichever wall's
+	 * foundation is being looked at, and only cut openings into walls on that foundation's selected
+	 * level (see openingWallPick.ts, and the README's "Window/Door targeting" section).
+	 * `undefined` when no foundation has ever been targeted yet.
+	 */
 	level?: BuildingLevelUiState;
 }
 

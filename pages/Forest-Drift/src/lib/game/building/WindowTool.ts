@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingSettings, BuildUiState } from './FoundationTypes';
 import { OpeningToolBase } from './OpeningToolBase';
@@ -8,6 +9,7 @@ export interface WindowToolOptions {
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	buildingManager: BuildingManager;
+	levelManager: BuildingLevelManager;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
 }

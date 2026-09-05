@@ -101,6 +101,10 @@
 		</div>
 	{/if}
 
+	{#if buildHud?.notice}
+		<div class="crosshair-notice" data-testid="crosshair-notice">{buildHud.notice}</div>
+	{/if}
+
 	{#if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
 		<div
 			class="snap-badge"
@@ -178,6 +182,17 @@
 					<dd>Finish an open wall path (Continuous Wall only)</dd>
 					<dt>Click first point again</dt>
 					<dd>Close the loop / shape</dd>
+				</dl>
+
+				<h3>Windows / Doors</h3>
+				<dl>
+					<dt>Left click</dt>
+					<dd>Cut the opening into the wall you're looking at</dd>
+					<dt>Floor</dt>
+					<dd>
+						Only walls on the selected floor can be cut — if the crosshair finds a wall on another
+						storey it says so; use Page Up / Page Down to match it
+					</dd>
 				</dl>
 
 				<h3>Stairs</h3>
@@ -333,10 +348,16 @@
 		backdrop-filter: blur(2px);
 	}
 
+	/*
+	 * Bottom-left, not top-right: the dev GUI (lil-gui) auto-places itself top-right at full viewport
+	 * height, and covered this panel completely — every hint and blocking reason the build tools
+	 * emit was being drawn underneath it, invisible. Bottom-left clears the GUI, the stats overlay
+	 * (top-left), the floor selector (mid-left) and the hotbar (bottom-centre).
+	 */
 	.build-hud {
 		position: absolute;
-		top: 0.75rem;
-		right: 0.75rem;
+		bottom: 3.25rem;
+		left: 0.75rem;
 		padding: 0.6rem 0.85rem;
 		background: rgba(10, 20, 15, 0.5);
 		color: #eaf6ff;
@@ -356,6 +377,29 @@
 
 	.build-hud-spacer {
 		height: 0.35rem;
+	}
+
+	/* Sits just above the crosshair — the one place a player is guaranteed to be looking when they're wondering why a click did nothing. */
+	.crosshair-notice {
+		position: absolute;
+		top: calc(50% - 34px);
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 0.25rem 0.65rem;
+		background: rgba(10, 20, 15, 0.72);
+		border: 1px solid rgba(255, 122, 122, 0.55);
+		color: #ffd9d9;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		border-radius: 999px;
+		white-space: nowrap;
+		pointer-events: none;
+		backdrop-filter: blur(2px);
 	}
 
 	.floor-selector {

@@ -145,6 +145,34 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	expect(pageErrors).toEqual([]);
 });
 
+test('the build HUD does not sit underneath the debug GUI panel — its hints and blocking reasons must actually be readable', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await page.keyboard.press('3'); // Window tool — always emits a HUD, even with nothing targeted
+
+	const hud = page.getByTestId('build-hud');
+	await expect(hud).toBeVisible();
+
+	// lil-gui auto-places itself at the top-right, full viewport height; the HUD used to be drawn
+	// directly underneath it, hiding every hint the build tools produce.
+	const hudBox = await hud.boundingBox();
+	const guiBox = await page.locator('.lil-gui.lil-root').first().boundingBox();
+	expect(hudBox).not.toBeNull();
+	expect(guiBox).not.toBeNull();
+	const overlaps =
+		hudBox!.x < guiBox!.x + guiBox!.width &&
+		hudBox!.x + hudBox!.width > guiBox!.x &&
+		hudBox!.y < guiBox!.y + guiBox!.height &&
+		hudBox!.y + hudBox!.height > guiBox!.y;
+	expect(overlaps).toBe(false);
+
+	expect(pageErrors).toEqual([]);
+});
+
 test('shows the snap-mode badge while cycling Wall Tool snap with C, and hides it when snap is off', async ({
 	page
 }) => {
