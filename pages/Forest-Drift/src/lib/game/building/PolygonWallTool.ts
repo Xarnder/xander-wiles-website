@@ -12,6 +12,8 @@ import type {
 } from './FoundationTypes';
 import { raycastLevelConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
+import { cycleSnapMode, snapDrawingPoint, snapModeLabel } from './polygonDrawSnap';
+import type { SnapMode } from './polygonDrawSnap';
 import { buildWallPath } from './WallPathGeometryBuilder';
 import { computePathLength, pathSelfIntersects } from './wallPathMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
@@ -110,8 +112,17 @@ export class PolygonWallTool implements BuildTool {
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
 
+	/** Cycled by pressing `C` — see polygonDrawSnap.ts. Not reset on undo/cancel, only on deactivate, so a player's preferred snap mode persists across separate wall paths in the same session. */
+	private snapMode: SnapMode = 'off';
+
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || this.state !== 'drawing') return;
+		if (!this.active) return;
+		if (event.code === 'KeyC') {
+			this.snapMode = cycleSnapMode(this.snapMode, this.points.length);
+			this.refreshVisuals();
+			return;
+		}
+		if (this.state !== 'drawing') return;
 		if (event.code === 'Enter') {
 			this.finishOpenPath();
 		} else if (event.code === 'Backspace') {
@@ -227,19 +238,26 @@ export class PolygonWallTool implements BuildTool {
 			return;
 		}
 
+		// Only snap against the in-progress path's own points, on its own foundation — a hover on a
+		// different foundation (rejected on confirm anyway) has no meaningful "last point" to lock to.
+		const gridPoint =
+			this.state === 'drawing' && hit.foundationId === this.activeFoundationId
+				? snapDrawingPoint(this.points, hit.gridPoint, this.snapMode)
+				: hit.gridPoint;
+
 		if (
 			this.hoverTarget &&
-			hit.gridPoint.gridX === this.lastGridX &&
-			hit.gridPoint.gridZ === this.lastGridZ &&
+			gridPoint.gridX === this.lastGridX &&
+			gridPoint.gridZ === this.lastGridZ &&
 			hit.foundationId === this.lastFoundationId
 		) {
 			return;
 		}
 
-		this.lastGridX = hit.gridPoint.gridX;
-		this.lastGridZ = hit.gridPoint.gridZ;
+		this.lastGridX = gridPoint.gridX;
+		this.lastGridZ = gridPoint.gridZ;
 		this.lastFoundationId = hit.foundationId;
-		this.hoverTarget = hit;
+		this.hoverTarget = { foundationId: hit.foundationId, gridPoint };
 		this.refreshVisuals();
 	}
 
@@ -605,16 +623,25 @@ export class PolygonWallTool implements BuildTool {
 		return lines;
 	}
 
+	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
+	private snapHudLines(): string[] {
+		const label = snapModeLabel(this.snapMode);
+		return label ? [label] : [];
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: 'polygon-wall',
+			snapMode: this.snapMode,
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
 				'',
 				'CONTINUOUS WALL',
 				'',
-				'Click to start'
+				'Click to start',
+				...this.snapHudLines(),
+				'C: Cycle snap'
 			]
 		};
 	}
@@ -631,6 +658,7 @@ export class PolygonWallTool implements BuildTool {
 		if (closingLoop) {
 			return {
 				toolId: 'polygon-wall',
+				snapMode: this.snapMode,
 				crosshair: 'valid',
 				hintLines: [
 					...levelLines,
@@ -640,6 +668,7 @@ export class PolygonWallTool implements BuildTool {
 					`Points: ${this.points.length}`,
 					`Total length: ${length.toFixed(2)}m`,
 					'',
+					...this.snapHudLines(),
 					'Click: Close loop'
 				]
 			};
@@ -647,6 +676,7 @@ export class PolygonWallTool implements BuildTool {
 
 		return {
 			toolId: 'polygon-wall',
+			snapMode: this.snapMode,
 			crosshair: 'valid',
 			hintLines: [
 				...levelLines,
@@ -656,9 +686,11 @@ export class PolygonWallTool implements BuildTool {
 				`Points: ${this.points.length}`,
 				`Total length: ${length.toFixed(2)}m`,
 				'',
+				...this.snapHudLines(),
 				'Click: Add point',
 				'Enter: Finish',
 				'Backspace: Undo point',
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -667,6 +699,7 @@ export class PolygonWallTool implements BuildTool {
 	private buildInvalidHud(reason: string): BuildUiState {
 		return {
 			toolId: 'polygon-wall',
+			snapMode: this.snapMode,
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),
@@ -676,8 +709,10 @@ export class PolygonWallTool implements BuildTool {
 				`Points: ${this.points.length}`,
 				reason,
 				'',
+				...this.snapHudLines(),
 				'Enter: Finish',
 				'Backspace: Undo point',
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};

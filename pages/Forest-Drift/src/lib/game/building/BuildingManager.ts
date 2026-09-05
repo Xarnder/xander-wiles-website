@@ -5,9 +5,13 @@ import {
 } from './FoundationLocalMath';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
-import { validateSlabPolygon } from './slabMath';
-import type { SlabDefinition, SlabType } from './SlabTypes';
+import { polygonsOverlap, validateSlabPolygon } from './slabMath';
+import type { SlabDefinition, SlabOpeningDefinition, SlabType } from './SlabTypes';
+import { slabBottomY } from './SlabTypes';
 import type { SlabManager } from './SlabManager';
+import { computeStairMetrics, validateStairFootprint } from './stairMath';
+import type { StairManager } from './StairManager';
+import type { StairDefinition, StairDirection } from './StairTypes';
 import type { WallManager } from './WallManager';
 import {
 	computeWallLength,
@@ -58,6 +62,20 @@ export interface AddSlabParams {
 	thickness: number;
 }
 
+export interface AddStairParams {
+	foundationId: string;
+	minGridX: number;
+	maxGridX: number;
+	minGridZ: number;
+	maxGridZ: number;
+	baseY: number;
+	direction: StairDirection;
+	levelIndex: number;
+	gridSizeAtCreation: number;
+	minimumStairWidthCells: number;
+	minimumStairRunCells: number;
+}
+
 export interface OpeningCandidate {
 	type: WallOpeningType;
 	minU: number;
@@ -83,6 +101,7 @@ export interface BuildingManagerOptions {
 	wallManager: WallManager;
 	wallPathManager: WallPathManager;
 	slabManager: SlabManager;
+	stairManager: StairManager;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
 	getCornerOpeningMargin: () => number;
@@ -112,6 +131,7 @@ export class BuildingManager {
 	private readonly wallManager: WallManager;
 	private readonly wallPathManager: WallPathManager;
 	private readonly slabManager: SlabManager;
+	private readonly stairManager: StairManager;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly getCornerOpeningMargin: () => number;
@@ -121,6 +141,7 @@ export class BuildingManager {
 		this.wallManager = options.wallManager;
 		this.wallPathManager = options.wallPathManager;
 		this.slabManager = options.slabManager;
+		this.stairManager = options.stairManager;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
@@ -322,10 +343,12 @@ export class BuildingManager {
 			levelIndex: params.levelIndex,
 			localY: params.localY,
 			thickness: params.thickness,
-			points: points.map((p) => ({ gridX: p.gridX, gridZ: p.gridZ }))
+			points: points.map((p) => ({ gridX: p.gridX, gridZ: p.gridZ })),
+			openings: []
 		};
 
 		this.slabManager.addSlab(slab);
+		this.autoOpenStairsIntoSlab(slab);
 		return { valid: true, value: slab };
 	}
 
@@ -339,6 +362,154 @@ export class BuildingManager {
 
 	getSlabsForFoundation(foundationId: string): SlabDefinition[] {
 		return this.slabManager.getSlabsForFoundation(foundationId);
+	}
+
+	/**
+	 * Validates and creates an axis-aligned straight staircase (see StairTypes.ts / stairMath.ts).
+	 * Footprint must be inside the foundation, must satisfy the minimum width/run cell counts, and
+	 * `direction` must run along the footprint's long axis (or either axis, for a square footprint)
+	 * — see `stairMath.validateStairFootprint`. Overlap against other stairs/walls is intentionally
+	 * NOT checked yet (see the README's "not implemented yet" list) — only the footprint-shape rules
+	 * above are enforced for v1.
+	 */
+	addStair(params: AddStairParams): BuildingMutationResult<StairDefinition> {
+		const foundation = this.foundationManager.getFoundation(params.foundationId);
+		if (!foundation) return { valid: false, reason: 'Foundation not found' };
+
+		const vertexSpacing = this.getVertexSpacing();
+		const buildingGridSize = this.getBuildingGridSize();
+		const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+
+		const corners: BuildingGridPoint[] = [
+			{ gridX: params.minGridX, gridZ: params.minGridZ },
+			{ gridX: params.maxGridX, gridZ: params.maxGridZ }
+		];
+		for (const corner of corners) {
+			if (!isBuildingGridPointInsideFoundation(corner, buildingGridSize, width, depth)) {
+				return { valid: false, reason: 'Stair must stay within the foundation' };
+			}
+		}
+
+		const footprintCheck = validateStairFootprint(
+			params,
+			params.direction,
+			params.minimumStairWidthCells,
+			params.minimumStairRunCells
+		);
+		if (!footprintCheck.valid) return { valid: false, reason: footprintCheck.reason };
+
+		const stair: StairDefinition = {
+			id: crypto.randomUUID(),
+			foundationId: params.foundationId,
+			minGridX: params.minGridX,
+			maxGridX: params.maxGridX,
+			minGridZ: params.minGridZ,
+			maxGridZ: params.maxGridZ,
+			baseY: params.baseY,
+			direction: params.direction,
+			levelIndex: params.levelIndex,
+			gridSizeAtCreation: params.gridSizeAtCreation
+		};
+
+		this.stairManager.addStair(stair);
+		this.openSlabForStair(stair);
+		return { valid: true, value: stair };
+	}
+
+	/** The stair's footprint as a foundation-local (meter) polygon — used only by the auto-opening checks below. */
+	private stairFootprintLocalPolygon(
+		stair: Pick<StairDefinition, 'minGridX' | 'maxGridX' | 'minGridZ' | 'maxGridZ'>
+	) {
+		const buildingGridSize = this.getBuildingGridSize();
+		return [
+			{ gridX: stair.minGridX, gridZ: stair.minGridZ },
+			{ gridX: stair.maxGridX, gridZ: stair.minGridZ },
+			{ gridX: stair.maxGridX, gridZ: stair.maxGridZ },
+			{ gridX: stair.minGridX, gridZ: stair.maxGridZ }
+		].map((p) => {
+			const local = buildingGridToLocal(p, buildingGridSize);
+			return { x: local.localX, z: local.localZ };
+		});
+	}
+
+	/**
+	 * A stair's topmost tread box occupies local Y `[metrics.topLocalY - stepRise, metrics.topLocalY]`
+	 * and, being a stacked solid (see StairGeometryBuilder), every tread below it fills the space
+	 * beneath that too — so the stair's solid mass physically intersects a slab whenever its top
+	 * reaches at or past that slab's UNDERSIDE, not only when it lines up with the slab's top surface
+	 * exactly. Requiring an exact match (the original implementation) meant a hole was only ever cut
+	 * for the one specific stair length that happened to sum to bit-for-bit the same Y as the slab —
+	 * effectively never, for a stair whose length the user chose freely — which is why the opening
+	 * silently failed to appear for ordinary stairs. A tiny epsilon absorbs floating-point noise, not
+	 * "close enough" fudging: this is a real solid/solid intersection test, not a fuzzy heuristic.
+	 */
+	private stairReachesSlab(stairTopLocalY: number, slab: SlabDefinition): boolean {
+		const EPS = 1e-6;
+		return stairTopLocalY >= slabBottomY(slab) - EPS;
+	}
+
+	private slabLocalPolygonOf(slab: Pick<SlabDefinition, 'points'>) {
+		const buildingGridSize = this.getBuildingGridSize();
+		return slab.points.map((p) => {
+			const local = buildingGridToLocal(p, buildingGridSize);
+			return { x: local.localX, z: local.localZ };
+		});
+	}
+
+	/**
+	 * Punches a rectangular opening into every slab on the stair's foundation whose underside the
+	 * stair's solid mass actually reaches into (see `stairReachesSlab`) and whose footprint overlaps
+	 * the stair's — the "sensible, slightly-oversized" v1 opening the README describes (full stair
+	 * width and run, which alone already guarantees headroom the whole way up since nothing above
+	 * the stair's own footprint is ever solid). A stair passing through more than one stacked slab
+	 * (e.g. a very tall single flight) opens each one it reaches, not just the first. Called right
+	 * after a stair is placed; the mirror case (a slab placed AFTER a stair that already reaches it)
+	 * is `autoOpenStairsIntoSlab` below.
+	 */
+	private openSlabForStair(stair: StairDefinition): void {
+		const metrics = computeStairMetrics(stair);
+		const stairLocalPolygon = this.stairFootprintLocalPolygon(stair);
+		for (const slab of this.slabManager.getSlabsForFoundation(stair.foundationId)) {
+			if (!this.stairReachesSlab(metrics.topLocalY, slab)) continue;
+			if (!polygonsOverlap(this.slabLocalPolygonOf(slab), stairLocalPolygon)) continue;
+			this.addStairOpening(slab.id, stair);
+		}
+	}
+
+	/** Mirror of `openSlabForStair`, called right after a slab is placed — opens it for any existing stair on the same foundation whose solid mass reaches into it and overlaps its footprint. */
+	private autoOpenStairsIntoSlab(slab: SlabDefinition): void {
+		const slabLocalPolygon = this.slabLocalPolygonOf(slab);
+		for (const stair of this.stairManager.getStairsForFoundation(slab.foundationId)) {
+			const metrics = computeStairMetrics(stair);
+			if (!this.stairReachesSlab(metrics.topLocalY, slab)) continue;
+			const stairLocalPolygon = this.stairFootprintLocalPolygon(stair);
+			if (!polygonsOverlap(slabLocalPolygon, stairLocalPolygon)) continue;
+			this.addStairOpening(slab.id, stair);
+		}
+	}
+
+	private addStairOpening(slabId: string, stair: StairDefinition): void {
+		const opening: SlabOpeningDefinition = {
+			id: crypto.randomUUID(),
+			type: 'stairs',
+			minGridX: stair.minGridX,
+			maxGridX: stair.maxGridX,
+			minGridZ: stair.minGridZ,
+			maxGridZ: stair.maxGridZ
+		};
+		this.slabManager.addOpening(slabId, opening);
+	}
+
+	removeStair(id: string): boolean {
+		return this.stairManager.removeStair(id);
+	}
+
+	getStair(id: string): StairDefinition | undefined {
+		return this.stairManager.getStair(id);
+	}
+
+	getStairsForFoundation(foundationId: string): StairDefinition[] {
+		return this.stairManager.getStairsForFoundation(foundationId);
 	}
 
 	/**
@@ -470,7 +641,8 @@ export class BuildingManager {
 			foundationId,
 			walls: this.wallManager.getWallsForFoundation(foundationId),
 			wallPaths: this.wallPathManager.getPathsForFoundation(foundationId),
-			slabs: this.slabManager.getSlabsForFoundation(foundationId)
+			slabs: this.slabManager.getSlabsForFoundation(foundationId),
+			stairs: this.stairManager.getStairsForFoundation(foundationId)
 		};
 	}
 
@@ -486,18 +658,24 @@ export class BuildingManager {
 		this.wallManager.removeWallsForFoundation(foundationId);
 		this.wallPathManager.removePathsForFoundation(foundationId);
 		this.slabManager.removeSlabsForFoundation(foundationId);
+		this.stairManager.removeStairsForFoundation(foundationId);
 	}
 
 	/** Plain, serializable world-state grouped by foundation — never Three.js objects. Building *levels* aren't included here since BuildingManager doesn't own BuildingLevelManager; ThreeScene combines both when serializing the full scene. */
 	serialize(): FoundationBuildingDefinition[] {
 		const byFoundation = new Map<
 			string,
-			{ walls: WallDefinition[]; wallPaths: WallPathDefinition[]; slabs: SlabDefinition[] }
+			{
+				walls: WallDefinition[];
+				wallPaths: WallPathDefinition[];
+				slabs: SlabDefinition[];
+				stairs: StairDefinition[];
+			}
 		>();
 		const ensure = (foundationId: string) => {
 			let entry = byFoundation.get(foundationId);
 			if (!entry) {
-				entry = { walls: [], wallPaths: [], slabs: [] };
+				entry = { walls: [], wallPaths: [], slabs: [], stairs: [] };
 				byFoundation.set(foundationId, entry);
 			}
 			return entry;
@@ -507,6 +685,9 @@ export class BuildingManager {
 			ensure(path.foundationId).wallPaths.push(path);
 		}
 		for (const slab of this.slabManager.getAllSlabs()) ensure(slab.foundationId).slabs.push(slab);
+		for (const stair of this.stairManager.getAllStairs()) {
+			ensure(stair.foundationId).stairs.push(stair);
+		}
 		return Array.from(byFoundation.entries(), ([foundationId, data]) => ({
 			foundationId,
 			...data
@@ -523,6 +704,7 @@ export class BuildingManager {
 		for (const wall of this.wallManager.getAllWalls()) this.wallManager.removeWall(wall.id);
 		for (const path of this.wallPathManager.getAllPaths()) this.wallPathManager.removePath(path.id);
 		for (const slab of this.slabManager.getAllSlabs()) this.slabManager.removeSlab(slab.id);
+		for (const stair of this.stairManager.getAllStairs()) this.stairManager.removeStair(stair.id);
 		for (const building of definitions) {
 			// Runtime data loaded from an actual save file may predate `baseY` even though the type
 			// says it's required — `?? 0` keeps that old data loading as ground-floor walls/paths.
@@ -533,6 +715,7 @@ export class BuildingManager {
 				this.wallPathManager.addPath({ ...path, baseY: path.baseY ?? 0 });
 			}
 			for (const slab of building.slabs ?? []) this.slabManager.addSlab(slab);
+			for (const stair of building.stairs ?? []) this.stairManager.addStair(stair);
 		}
 	}
 }

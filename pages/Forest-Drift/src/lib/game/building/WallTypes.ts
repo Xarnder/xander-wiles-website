@@ -7,6 +7,7 @@
  */
 
 import type { SlabDefinition } from './SlabTypes';
+import type { StairDefinition } from './StairTypes';
 import type { WallPathDefinition } from './WallPathTypes';
 
 export type WallOpeningType = 'window' | 'door';
@@ -57,10 +58,11 @@ export interface WallDefinition {
 /**
  * All building elements attached to one foundation that BuildingManager itself owns. Composition
  * over the foundation definition, not a mutation of it — see FoundationTypes.ts's
- * FoundationDefinition, which stays untouched. `wallPaths` (Continuous/Polygon Wall Tool output)
- * and `slabs` (Ceiling/Floor/Flat Roof Tool output) were each added alongside the original `walls`
- * (Straight Wall Tool output) without changing its shape — older serialized data missing either
- * field loads back in with an empty list for it, never breaking existing saves.
+ * FoundationDefinition, which stays untouched. `wallPaths` (Continuous/Polygon Wall Tool output),
+ * `slabs` (Ceiling/Floor/Flat Roof Tool output) and `stairs` (Stair Tool output) were each added
+ * alongside the original `walls` (Straight Wall Tool output) without changing its shape — older
+ * serialized data missing any of these fields loads back in with an empty list for it, never
+ * breaking existing saves.
  *
  * Building *levels* (BuildingLevelDefinition) are deliberately NOT part of this type — they're
  * owned by the separate BuildingLevelManager, which BuildingManager doesn't know exists (see its
@@ -71,4 +73,5 @@ export interface FoundationBuildingDefinition {
 	walls: WallDefinition[];
 	wallPaths: WallPathDefinition[];
 	slabs: SlabDefinition[];
+	stairs: StairDefinition[];
 }

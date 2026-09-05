@@ -113,3 +113,64 @@ export function raycastLevelConstructionPlane(
 
 	return { foundationId, gridPoint };
 }
+
+/**
+ * Targeting for the Ceiling/Floor/Flat Roof tools: unlike walls and stairs (built starting from
+ * the current level's *floor*), a slab always sits at the top of the current level's walls — well
+ * above head height. `raycastLevelConstructionPlane`'s ground-mesh shortcut exists for walls, where
+ * "look down at the floor" is the natural aiming pose; reusing it for slabs forced players to aim
+ * at the ground to place points for a shape that actually gets drawn a storey above their head,
+ * with no visual relationship between where they were looking and where the point landed.
+ *
+ * This instead always intersects the ray with the analytic plane at the slab's actual height
+ * (`foundation.topY + level.baseY + level.wallHeight`), so a player looks *up* at the (invisible)
+ * ceiling plane and clicks corners directly on it — the crosshair target and the slab preview are
+ * now the same plane. Foundation resolution prefers "which foundation am I standing in" (XZ-only,
+ * ignores aim direction) over a physical mesh hit, since looking up means the ray moves away from
+ * any ground-level mesh and would essentially never hit one; the mesh-hit path remains as a
+ * fallback for the reverse case (aiming down at a foundation from just outside its footprint).
+ */
+export function raycastSlabConstructionPlane(
+	raycaster: THREE.Raycaster,
+	foundationManager: FoundationManager,
+	levelManager: BuildingLevelManager,
+	currentLevelIndex: number,
+	vertexSpacing: number,
+	buildingGridSize: number
+): FoundationTopHit | null {
+	const origin = raycaster.ray.origin;
+	let foundationId = foundationManager.getFoundationContaining(origin.x, origin.z)?.id;
+	if (!foundationId) {
+		const meshHit = raycastFoundationTop(
+			raycaster,
+			foundationManager,
+			vertexSpacing,
+			buildingGridSize
+		);
+		foundationId = meshHit?.foundationId;
+	}
+	if (!foundationId) return null;
+
+	const foundation = foundationManager.getFoundation(foundationId);
+	if (!foundation) return null;
+
+	const level = levelManager.getOrCreateLevel(foundationId, currentLevelIndex);
+	const planeWorldY = foundation.topY + level.baseY + level.wallHeight;
+
+	const dirY = raycaster.ray.direction.y;
+	if (Math.abs(dirY) < 1e-6) return null; // ray parallel to the construction plane
+	const t = (planeWorldY - raycaster.ray.origin.y) / dirY;
+	if (t <= 0) return null; // plane is behind the camera
+
+	const hitX = raycaster.ray.origin.x + raycaster.ray.direction.x * t;
+	const hitZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t;
+
+	const frame = foundationLocalFrame(foundation, vertexSpacing);
+	const local = worldToFoundationLocal(frame, hitX, planeWorldY, hitZ);
+	const gridPoint = snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
+
+	const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+	if (!isBuildingGridPointInsideFoundation(gridPoint, buildingGridSize, width, depth)) return null;
+
+	return { foundationId, gridPoint };
+}

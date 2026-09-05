@@ -36,6 +36,7 @@ export type ToolId =
 	| 'ceiling'
 	| 'floor'
 	| 'flat-roof'
+	| 'stairs'
 	| 'none';
 
 export interface HotbarSlot {
@@ -52,7 +53,8 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlot[] = [
 	{ slot: 5, toolId: 'polygon-wall', label: 'Poly Wall' },
 	{ slot: 6, toolId: 'ceiling', label: 'Ceiling' },
 	{ slot: 7, toolId: 'floor', label: 'Floor' },
-	{ slot: 8, toolId: 'flat-roof', label: 'Roof' }
+	{ slot: 8, toolId: 'flat-roof', label: 'Roof' },
+	{ slot: 9, toolId: 'stairs', label: 'Stairs' }
 ];
 
 export type FoundationToolState = 'idle' | 'first-corner-selected';
@@ -65,6 +67,9 @@ export type PolygonWallToolState = 'idle' | 'drawing';
 
 /** Slab (Ceiling/Floor/Flat Roof) Tool's state — same shape as PolygonWallToolState, but a slab polygon can only ever be closed (there's no "open slab" concept). */
 export type SlabToolState = 'idle' | 'drawing';
+
+/** Stair Tool's state — two-click rectangular footprint (mirrors FoundationToolState), then a direction-selection step before confirming — see StairTool.ts. */
+export type StairToolState = 'idle' | 'first-corner-selected' | 'choosing-direction';
 
 /** How lower building levels render while editing a higher one — see BuildingLevelManager. */
 export type BuildingLevelViewMode = 'all' | 'current-and-below' | 'current-only';
@@ -130,8 +135,30 @@ export interface BuildingSettings {
 	showSlabBounds: boolean;
 	showSlabPolygonPoints: boolean;
 	slabPreviewOpacity: number;
-	/** Whether slab polygon points snap strongly to nearby existing wall endpoints/corners, in addition to the plain fine grid — still resolves to the same underlying BuildingGridPoint, never an off-grid position. */
-	snapToWallCorners: boolean;
+
+	/**
+	 * Minimum stair footprint dimensions, in building-grid cells — see stairMath.validateStairFootprint.
+	 * `minimumStairWidthCells`'s default is chosen well above the player's own collision diameter
+	 * (`PLAYER_COLLISION_RADIUS * 2` in ThreeScene.ts) so a minimum-width staircase is always
+	 * comfortably walkable, not merely technically non-zero-width.
+	 */
+	minimumStairWidthCells: number;
+	minimumStairRunCells: number;
+	/**
+	 * How far above the player's current supporting surface a step may rise and still be walked
+	 * onto automatically (no jump needed) — see WorldSurfaceSampler's stair-aware supporting-surface
+	 * query. Must be `>= buildingGridSize` for stairs built on the default grid to be climbable at
+	 * all; kept independently configurable rather than hardcoded to buildingGridSize so a dev can
+	 * loosen/tighten it without it silently changing every future stair's own step height (which
+	 * stays governed by `gridSizeAtCreation`, not this setting).
+	 */
+	maxStepHeight: number;
+	stairPreviewOpacity: number;
+	showStairBounds: boolean;
+	/** Whether the live stair preview shows a bottom/top marker + travel-direction arrow. */
+	showStairDirection: boolean;
+	/** Minimum vertical clearance (world units) an automatically-generated upper-floor stair opening must leave above the topmost few treads — see the README's "Stair openings" section. */
+	stairHeadClearance: number;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -178,7 +205,14 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showSlabBounds: false,
 		showSlabPolygonPoints: true,
 		slabPreviewOpacity: 0.45,
-		snapToWallCorners: true
+
+		minimumStairWidthCells: 4,
+		minimumStairRunCells: 2,
+		maxStepHeight: 0.3,
+		stairPreviewOpacity: 0.55,
+		showStairBounds: false,
+		showStairDirection: true,
+		stairHeadClearance: 2.1
 	};
 }
 
@@ -187,6 +221,8 @@ export interface BuildUiState {
 	toolId: ToolId;
 	crosshair: 'default' | 'valid' | 'invalid';
 	hintLines: string[];
+	/** The active draw-snap mode (see polygonDrawSnap.ts), for a dedicated on-screen badge near the crosshair — `undefined`/`'off'` shows nothing. Kept separate from `hintLines` so it can render as a prominent, differently-styled indicator rather than just another line of text. */
+	snapMode?: 'off' | 'axis' | 'axis-inline' | 'wall-corners';
 }
 
 export interface HotbarUiState {

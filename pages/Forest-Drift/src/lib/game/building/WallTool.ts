@@ -7,6 +7,8 @@ import type { FoundationManager } from './FoundationManager';
 import type { BuildingSettings, BuildUiState, ToolId, WallToolState } from './FoundationTypes';
 import { raycastLevelConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
+import { cycleSnapMode, snapDrawingPoint, snapModeLabel } from './polygonDrawSnap';
+import type { SnapMode } from './polygonDrawSnap';
 import { applyWallTransform, buildWallGeometry } from './WallGeometryBuilder';
 import { computeSolidWallSegments, computeWallLength } from './wallGeometryMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
@@ -101,6 +103,15 @@ export class WallTool implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private firstPoint: HoverTarget | null = null;
 
+	/** Cycled by pressing `C` — see polygonDrawSnap.ts. Only ever `'off'` or `'axis'` here (a straight wall never accumulates the 3+ points `'axis-inline'` needs). */
+	private snapMode: SnapMode = 'off';
+
+	private readonly handleKeyDown = (event: KeyboardEvent) => {
+		if (!this.active || event.code !== 'KeyC') return;
+		this.snapMode = cycleSnapMode(this.snapMode, this.firstPoint ? 1 : 0);
+		this.refreshVisuals();
+	};
+
 	constructor(options: WallToolOptions) {
 		this.scene = options.scene;
 		this.camera = options.camera;
@@ -158,6 +169,7 @@ export class WallTool implements BuildTool {
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
 		this.scene.add(this.overlayGroup);
+		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
 	deactivate(): void {
@@ -166,6 +178,7 @@ export class WallTool implements BuildTool {
 		this.firstPoint = null;
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
+		window.removeEventListener('keydown', this.handleKeyDown);
 		this.onHudChange?.(null);
 	}
 
@@ -184,7 +197,14 @@ export class WallTool implements BuildTool {
 			return;
 		}
 
-		const { foundationId, gridPoint } = hit;
+		const { foundationId } = hit;
+		const gridPoint =
+			this.state === 'first-point-selected' &&
+			this.firstPoint &&
+			foundationId === this.firstPoint.foundationId
+				? snapDrawingPoint([this.firstPoint.point], hit.gridPoint, this.snapMode)
+				: hit.gridPoint;
+
 		if (
 			this.target &&
 			gridPoint.gridX === this.lastGridX &&
@@ -485,9 +505,16 @@ export class WallTool implements BuildTool {
 		return lines;
 	}
 
+	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
+	private snapHudLines(): string[] {
+		const label = snapModeLabel(this.snapMode);
+		return label ? [label] : [];
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: 'wall',
+			snapMode: this.snapMode,
 			crosshair: this.target ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.target?.foundationId),
@@ -496,7 +523,9 @@ export class WallTool implements BuildTool {
 				'',
 				'Look at a foundation',
 				`Grid: ${this.buildingSettings.buildingGridSize.toFixed(2)}m`,
-				'Left click: Select start point'
+				'Left click: Select start point',
+				...this.snapHudLines(),
+				'C: Cycle snap'
 			]
 		};
 	}
@@ -504,6 +533,7 @@ export class WallTool implements BuildTool {
 	private buildWaitingHud(): BuildUiState {
 		return {
 			toolId: 'wall',
+			snapMode: this.snapMode,
 			crosshair: 'default',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),
@@ -511,6 +541,8 @@ export class WallTool implements BuildTool {
 				'WALL',
 				'',
 				'Select end point',
+				...this.snapHudLines(),
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -519,6 +551,7 @@ export class WallTool implements BuildTool {
 	private buildInvalidHud(reason: string): BuildUiState {
 		return {
 			toolId: 'wall',
+			snapMode: this.snapMode,
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),
@@ -527,6 +560,8 @@ export class WallTool implements BuildTool {
 				'',
 				reason,
 				'',
+				...this.snapHudLines(),
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -535,6 +570,7 @@ export class WallTool implements BuildTool {
 	private buildValidHud(length: number): BuildUiState {
 		return {
 			toolId: 'wall',
+			snapMode: this.snapMode,
 			crosshair: 'valid',
 			hintLines: [
 				...this.levelHudLines(this.firstPoint?.foundationId),
@@ -544,7 +580,9 @@ export class WallTool implements BuildTool {
 				`Length: ${length.toFixed(2)}m`,
 				`Height: ${this.buildingSettings.wallHeight.toFixed(2)}m`,
 				'',
+				...this.snapHudLines(),
 				'Left click: Build',
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};

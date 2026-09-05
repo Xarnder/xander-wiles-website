@@ -155,6 +155,7 @@ export class TerrainDebugGui {
 			onShowFoundationBoundsChange: () => void;
 			onShowWallBoundsChange: () => void;
 			onShowSlabBoundsChange: () => void;
+			onShowStairBoundsChange: () => void;
 		}
 	): void {
 		const building = this.gui.addFolder('Building');
@@ -222,7 +223,15 @@ export class TerrainDebugGui {
 		slabs.add(settings, 'showSlabBounds').onChange(callbacks.onShowSlabBoundsChange);
 		slabs.add(settings, 'showSlabPolygonPoints').name('Show polygon points');
 		slabs.add(settings, 'slabPreviewOpacity', 0.1, 1, 0.05).name('Preview opacity');
-		slabs.add(settings, 'snapToWallCorners').name('Snap to wall corners');
+
+		const stairs = building.addFolder('Stairs');
+		stairs.add(settings, 'minimumStairWidthCells', 1, 10, 1).name('Min width (cells)');
+		stairs.add(settings, 'minimumStairRunCells', 1, 20, 1).name('Min run (cells)');
+		stairs.add(settings, 'maxStepHeight', 0.05, 1, 0.01).name('Max step height');
+		stairs.add(settings, 'stairPreviewOpacity', 0.1, 1, 0.05).name('Preview opacity');
+		stairs.add(settings, 'showStairBounds').onChange(callbacks.onShowStairBoundsChange);
+		stairs.add(settings, 'showStairDirection').name('Show direction markers');
+		stairs.add(settings, 'stairHeadClearance', 1, 3, 0.05).name('Head clearance');
 	}
 
 	/**

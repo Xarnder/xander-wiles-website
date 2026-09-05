@@ -15,6 +15,21 @@ export type SlabType = 'ceiling' | 'floor' | 'flat-roof';
  * because player grounding and future object placement only ever care about the top. Points are
  * foundation-local building-grid integers, exactly like a wall's endpoints — never world-space.
  */
+/**
+ * A rectangular hole punched through a slab — currently only ever created automatically (never a
+ * user-facing tool) so a staircase reaching an upper floor has somewhere to physically pass
+ * through; see BuildingManager.addStair's auto-opening logic and the README's "Stair openings"
+ * section. Bounds are foundation-local building-grid integers, exactly like the slab's own `points`.
+ */
+export interface SlabOpeningDefinition {
+	id: string;
+	type: 'stairs';
+	minGridX: number;
+	maxGridX: number;
+	minGridZ: number;
+	maxGridZ: number;
+}
+
 export interface SlabDefinition {
 	id: string;
 	foundationId: string;
@@ -23,6 +38,8 @@ export interface SlabDefinition {
 	localY: number;
 	thickness: number;
 	points: BuildingGridPoint[];
+	/** Defaults to `[]` when absent so slabs serialized before openings existed still load. */
+	openings: SlabOpeningDefinition[];
 }
 
 /** `slab.localY - slab.thickness`, i.e. the slab's underside — see SlabDefinition's doc comment. */

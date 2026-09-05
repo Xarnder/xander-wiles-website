@@ -22,12 +22,19 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `Space` — jump (when gravity is enabled)
 - `Esc` — release the mouse, and cancel a pending foundation corner or in-progress wall/path if one
   is selected
-- `1`–`5` — hotbar slots: `1` Foundation, `2` Wall, `3` Window, `4` Door, `5` Continuous/Polygon Wall
+- `1`–`9` — hotbar slots: `1` Foundation, `2` Wall, `3` Window, `4` Door, `5` Continuous/Polygon
+  Wall, `6` Ceiling, `7` Floor, `8` Flat Roof, `9` Stairs
 - Left click — select a corner/point, place a wall, add a path point, close a path loop, or place a
   window/door (only once pointer lock is engaged)
 - Right click — cancel the current foundation, wall, or in-progress wall-path selection
 - `Enter` (Continuous Wall only) — finish the current path as an open (unclosed) chain
 - `Backspace` (Continuous Wall only) — undo the most recently placed path point
+- `Page Up` / `Page Down` — change the current building level (see "Building levels")
+- `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline) on Wall, Continuous Wall, Ceiling,
+  Floor and Roof — see "Draw-snap: axis and inline alignment" below
+- `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
+  (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
+  never has to leave the game to look them up
 
 ## How infinite terrain works
 
@@ -216,6 +223,26 @@ it's left for a follow-up once the base terrain system is solid.
 A small building system sits alongside the terrain, in `src/lib/game/building/`. It does **not**
 modify terrain generation in any way — a foundation is a separate cuboid that intersects the
 procedural ground.
+
+### Rendering: flat shading on every built object
+
+Every final, placed-object material in the building system — `wallMaterial` (`WallManager.ts`,
+`WallPathManager.ts`), `foundationMaterial` (`FoundationMesh.ts`), `floorMaterial` /
+`roofMaterial` (`SlabManager.ts`, shared by Ceiling/Floor/Flat Roof), and `stairMaterial`
+(`StairManager.ts`) — sets `flatShading: true`. Windows and doors have no material of their own;
+they render as a cutout in the wall mesh, so they inherit `wallMaterial`'s flat shading for free.
+This matters most for `SlabGeometryBuilder.ts` and `WallPathGeometryBuilder.ts`, which both call
+`geometry.computeVertexNormals()` on a hand-built, vertex-shared `BufferGeometry` — without
+`flatShading`, that produces smoothly-interpolated (Gouraud) lighting across an edge where two
+differently-angled faces meet (e.g. a slab's top face rounding into its collar/side wall),
+which reads as subtly rounded rather than crisply built. `flatShading` derives each triangle's
+lighting normal from screen-space position derivatives instead, giving every face a single flat
+tone regardless of the underlying vertex-normal data — a deliberate low-poly/blocky look
+consistent with the plain, grid-snapped geometry the building tools produce. `WallGeometryBuilder.ts`,
+`FoundationMesh.ts`, and `StairGeometryBuilder.ts` build from (or copy per-face normals out of)
+plain `THREE.BoxGeometry`, which already keeps every face's vertices unshared — so those objects
+already read as faceted, and `flatShading` there is a no-op kept for consistency in case that
+changes.
 
 - **`foundationMath.ts`** — pure, framework-free math: snapping a world coordinate to the global
   terrain grid, normalizing two clicked corners into a footprint, and scanning that footprint for
@@ -623,6 +650,54 @@ it's the _exact_ final geometry, built by constructing a temporary `WallPathDefi
 current points plus the hovered point (or `closed: true` when hovering the first point) and running
 it through the real `buildWallPath()`, so what you see while drawing is exactly what gets built.
 
+### Draw-snap: axis, inline and wall-corner alignment (`polygonDrawSnap.ts`)
+
+Placing points freehand rarely lands exactly on a straight line — `polygonDrawSnap.ts` is a small,
+framework-free module shared by every point-drawing tool (`WallTool`, `PolygonWallTool`, and the
+Ceiling/Floor/Flat Roof tools via `SlabToolBase`) that fixes this without touching any tool's own
+raycasting or rendering. Pressing `C` cycles
+`SnapMode = 'off' | 'axis' | 'axis-inline' | 'wall-corners'`:
+
+- **`'axis'`** forces the segment from the last confirmed point to be perfectly horizontal or
+  vertical — whichever the raw drag direction is closer to — instead of an arbitrary diagonal.
+- **`'axis-inline'`** (only reachable once 3+ points are already confirmed — `Wall Tool` never
+  accumulates enough points to reach it, so `C` only toggles `'axis'` there) keeps the same axis
+  constraint, but if the point's other, still-free coordinate is close to matching an EARLIER
+  confirmed point's corresponding coordinate (`INLINE_SNAP_TOLERANCE_CELLS`, a small fixed grid-cell
+  radius — deliberately tight, so it only fires for a clearly-intended alignment), it snaps exactly
+  to that value instead of the raw one. This is what lets the last wall of a room close flush with
+  the very first corner, or a new segment line up with one built several points earlier, without
+  needing pixel-perfect aiming.
+- **`'wall-corners'`** — slab tools (Ceiling/Floor/Roof) only, and only offered when at least one
+  wall corner exists to snap to (`cycleSnapMode`'s `wallCornersAvailable` parameter — Wall/Polygon
+  Wall Tool never pass it, since a wall has no "wall below itself"). Snaps the hovered point to the
+  nearest corner of a standalone wall or wall-path on the SAME level (`SlabToolBase.wallCornersOnCurrentLevel`,
+  comparing each wall's frozen `baseY` against the current level's own `baseY`), via
+  `snapToNearestCorner`'s plain nearest-point search (`WALL_CORNER_SNAP_TOLERANCE_CELLS`, a bit more
+  generous than the inline tolerance — aiming at an invisible plane above a room is naturally less
+  precise than aiming at the ground below). Unlike the other two modes, this applies even to the
+  very FIRST point of a polygon, not just once a "last point" exists to lock an axis against — since
+  tracing a room's ceiling should be able to start exactly on that room's own corner. This exists
+  because drawing a slab now targets the plane at the room's actual ceiling height rather than the
+  ground (see "Targeting elevated building levels" below), so lining a slab's corners up with the
+  walls it sits above is otherwise hard to eyeball precisely.
+
+`snapDrawingPoint(points, raw, mode)` is the one pure function every tool calls from inside its own
+`update()`, right after the shared raycast/grid-snap resolves a raw hover point and before that
+point becomes the tool's live `hoverTarget` — so the preview, the HUD, and the eventual confirmed
+point are always the SAME (possibly snapped) value, never out of sync with each other; it passes
+`'wall-corners'` straight through unchanged, since resolving actual wall data is a tool-side concern
+`snapDrawingPoint` deliberately doesn't have — `SlabToolBase.update()` calls `snapToNearestCorner`
+itself instead when that mode is active. Each tool's HUD shows the current mode (`Snap: Axis` /
+`Snap: Axis + Inline` / `Snap: Wall Corners`) and a `C: Cycle snap` hint whenever relevant.
+
+Because the small HUD text line was easy to miss mid-build, the current mode is additionally
+plumbed all the way to `BuildUiState.snapMode` (`FoundationTypes.ts`) and rendered in
+`+page.svelte` as a standalone, high-contrast pill directly under the crosshair (`AXIS SNAP` in
+blue, `AXIS + INLINE SNAP` in green, `WALL CORNER SNAP` in orange) — it's present only while a mode
+is active and disappears the instant `C` cycles back to `'off'`, so it reads at a glance without
+competing with the rest of the build HUD.
+
 ### Serialization
 
 `BuildingManager.serialize()`/`.load()` now round-trip `wallPaths` alongside `walls`, grouped by
@@ -648,8 +723,465 @@ passable while the solid wall beside it still blocks; and the full serialize/loa
 math) — that a 90° corner's built mesh contains both the true outer and inner miter vertices rather
 than being clipped at the plain endpoint, that all four corners of a closed rectangular room do too,
 and that windows/doors on a segment adjacent to a joined corner still produce collision on both
-segments. `tests/game.e2e.ts` confirms the hotbar's slot 5 (Polygon/Continuous Wall) is selectable
-with the 5 key.
+segments. `polygonDrawSnap.spec.ts` (26 tests) covers the shared draw-snap module directly: mode
+cycling (including that `'axis-inline'` is skipped with fewer than 3 points, and that
+`'wall-corners'` is only ever offered when `wallCornersAvailable` is true); axis locking in all four
+drag directions, ties favoring X, and locking against the LAST point rather than the first once
+several are confirmed; inline alignment — snapping to a genuinely earlier point's coordinate, never
+the immediately-previous point's own (that's what plain axis locking already provides), rejecting a
+match outside the tolerance, and preferring the closest qualifying candidate; and
+`snapToNearestCorner` — snapping to the nearest in-tolerance corner, preferring the closest of
+several, passing an out-of-tolerance or empty corner list through unchanged, and an exact
+tolerance-boundary match still snapping.
+`tests/game.e2e.ts` confirms the hotbar's slot 5 (Polygon/Continuous Wall) is selectable with the 5
+key, and that pressing `C` on the Wall/Polygon Wall/Ceiling tools cycles snap mode with no console
+errors.
+
+## Building levels, horizontal slabs, and multi-level collision
+
+`src/lib/game/building/` extends the ground-floor-only building system above with **storeys**:
+ceilings, upper floors, and flat roofs (all one shared "slab" representation), a logical
+current-level selector the player can build on above ground level, and collision that lets the
+player actually stand on, and be blocked by, those slabs.
+
+### Building levels (`BuildingLevelTypes.ts`, `BuildingLevelManager.ts`)
+
+A **level** is a logical subdivision of the _same_ foundation-local coordinate space every other
+building element already uses — never a separate per-storey origin. `BuildingLevelDefinition`
+stores `{ id, foundationId, index, baseY, wallHeight }`; `BuildingLevelManager.getOrCreateLevel`
+recursively ensures every level below the requested one exists first (so indices are always
+contiguous from 0), and freezes a new level's `baseY` (previous level's `baseY + wallHeight`, or 0
+for level 0) and `wallHeight` (the _current_ `defaultStoreyHeight` setting) at creation time — the
+same "store authored values, don't re-derive from a live default" rule `wallHeight`/`wallThickness`
+already follow for individual walls. Dragging `defaultStoreyHeight` in the GUI afterwards only
+changes the _next_ level created, never an existing one.
+
+`currentBuildingLevelIndex` lives directly on the shared `BuildingSettings` object (the project's
+existing "flat mutable settings bag" pattern) so the GUI slider and `BuildingLevelManager`'s own
+Page Up / Page Down keydown listener can never disagree about which floor a level-aware tool is
+building on. Minimum level is 0; Page Down clamps there.
+
+### Targeting elevated building levels (`foundationTopTargeting.raycastLevelConstructionPlane`)
+
+Ground-floor tools raycast against a real foundation-top mesh. An upper level usually has nothing
+physical to raycast yet, so `raycastLevelConstructionPlane` resolves the target foundation first
+(a real mesh hit if one exists, otherwise whichever foundation's footprint contains the player's
+current position — covers looking up to build a ceiling while standing in the room below it), then
+analytically intersects the same camera ray against a logical horizontal plane at
+`foundation.topY + level.baseY`. Wall, Polygon Wall and Stairs all use this one function, so they
+can never disagree about where "the current level's floor" is.
+
+Slabs use a sibling function, `raycastSlabConstructionPlane` — see the Slabs section below for why
+they need a different target height than the other level-aware tools.
+
+### Slabs (`SlabTypes.ts`, `slabMath.ts`, `SlabGeometryBuilder.ts`, `SlabManager.ts`, `SlabToolBase.ts`)
+
+`SlabType = 'ceiling' | 'floor' | 'flat-roof'` — all three are exactly the same underlying
+`SlabDefinition` (a foundation-local polygon, a top-surface `localY`, and a `thickness`); `type`
+only ever affects material and HUD text, never geometry. This is also what lets **one physical slab
+serve as both a room's ceiling and the floor above it**: Ceiling Tool and Floor Tool both default a
+new slab's `localY` to `level.baseY + level.wallHeight` (the top of the level's walls), and
+`SlabManager.findOverlappingSlabAtLevel` rejects a second slab with an overlapping footprint at that
+_same_ `localY` on the same foundation as a duplicate — there's no separate "usages" flag, the
+ordinary overlap rule alone prevents two coplanar objects. Slabs at _different_ `localY` values are
+free to overlap in X/Z (that's just stacked floors).
+
+**Targeting: looking up at the slab's own plane, not down at the ground.** Unlike Wall/Polygon
+Wall/Stairs (which start at the current level's _floor_), a slab always sits at the top of the
+current level's walls — well above head height (see `defaultLocalY` above). Reusing
+`raycastLevelConstructionPlane` here (as originally implemented) meant every slab tool's crosshair
+targeted the ground-level plane, so a player had to aim _down_ at their feet to place points for a
+shape that actually gets built a storey above their head — the point markers and preview appeared
+in the right place, but nothing about where you were looking corresponded to where a click would
+land. `SlabToolBase` instead calls a dedicated `foundationTopTargeting.raycastSlabConstructionPlane`,
+which always intersects the ray with the analytic plane at the slab's real height
+(`foundation.topY + level.baseY + level.wallHeight`) — so the crosshair, the building-grid overlay,
+and the point/preview markers all sit on the exact same plane a player is looking _up_ at, and
+corners are clicked directly on that (otherwise invisible) plane rather than inferred from a ground
+click. Foundation resolution prefers "which foundation's footprint am I standing in" over a mesh
+hit, since aiming up moves the ray away from any ground-level mesh; the mesh-hit path remains as a
+fallback for aiming down at a foundation from just outside its footprint.
+`foundationTopTargeting.spec.ts` covers both resolution paths, the ceiling-vs-ground height
+regression, an out-of-footprint miss, and targeting a level other than 0.
+
+Points are the same foundation-local `BuildingGridPoint` list every wall/wall-path uses — no second
+grid. `slabMath.validateSlabPolygon` rejects fewer than 3 points, a duplicate/zero-length edge, a
+zero-area polygon, and self-intersection (reusing `wallPathMath.pathSelfIntersects` directly, since
+a slab polygon is geometrically a closed wall path). `slabMath.ensureCCW` normalizes winding before
+triangulation so a polygon drawn clockwise or counter-clockwise always produces an identical,
+correctly-lit solid — verified directly by `SlabGeometryBuilder.spec.ts` computing each output
+face's actual normal.
+
+`SlabGeometryBuilder.buildSlabGeometry` builds a real extruded prism (top surface, underside, and
+vertical side walls — never a single-sided flat `ShapeGeometry`) via
+`THREE.ShapeUtils.triangulateShape` (Earcut), which supports concave simple polygons, not just
+convex fans. It also accepts `holes` (see "Stair openings in slabs" below) and punches an actual
+physical gap through both faces plus an inward-facing "collar" wall around each hole's boundary —
+the opening is real geometry, not a rendering trick.
+
+`SlabManager` owns one BuildingRoot group per foundation (`FoundationRootRegistry`, the same "one
+Group at the foundation's world origin, children positioned foundation-locally" pattern
+WallManager/WallPathManager already use, extracted here since this is its third independent user).
+It caches each slab's world-space outer polygon and hole polygons alongside its mesh so
+`getTopSurfacesAt`/`getUndersidesAt` (point-in-polygon queries the collision system below reads)
+never re-derive them per call, and correctly exclude any point that falls inside an opening.
+
+The Ceiling/Floor/Roof tools are three thin `SlabToolBase` configurations (label, slab type,
+default thickness setting) — one shared implementation for the click-to-add-a-point,
+click-first-point-to-close polygon interaction (always closed; there's no "open slab" concept,
+unlike a wall path), live stepped preview, and per-tool HUD.
+
+### Multi-level collision (`WorldSurfaceSampler.ts`, `FirstPersonController.ts`)
+
+A single (worldX, worldZ) column can have several stacked horizontal surfaces — terrain, a
+foundation top, and any number of slabs at different levels. `WorldSurfaceSampler.getSupportingSurfaceY(worldX, worldZ, referenceY)`
+returns the _highest_ candidate that is still at or below `referenceY` (the player's own pre-step
+feet Y) plus a small epsilon — this is the whole fix for "must NOT magically teleport vertically
+onto slabs above them": a roof's top is a real "highest surface at this X/Z", but since it isn't
+below the player, it's correctly excluded. Terrain height and a foundation's top are both always
+included unconditionally, regardless of `referenceY` — see the bugfix note directly below for why
+foundations don't get the same restriction slabs do. Spawning passes `referenceY = Infinity`,
+recovering the original "land on the highest available surface" behavior as a plain special case.
+
+`getCeilingBlockY(worldX, worldZ, fromY, toY)` finds the lowest slab underside crossed by an upward
+move, so a jump can't punch through a floor from below — `FirstPersonController.update()` checks it
+only while `proposedY > this.worldPosition.y` (moving up), clamping the proposed position and
+zeroing vertical velocity if a ceiling is hit.
+
+**Bugfix: foundations were incorrectly given the same "not above referenceY" restriction slabs
+need, breaking the previously-working "always step up onto a foundation" behavior.** The
+restriction exists so a player standing in a room can't be magically sucked up onto the roof above
+them — a real scenario for slabs, since a room genuinely exists _underneath_ one. A foundation has
+no equivalent scenario (there are no basements yet; it's a raised platform, not a ceiling), but an
+earlier version applied the identical `referenceY + SUPPORT_EPSILON` (~0.05m) gate to it anyway. A
+foundation levels out to the site's _highest_ terrain point, so its edge is very often a metre or
+more above the surrounding ground it was built on — walking up to one from lower terrain almost
+always exceeded that 5cm tolerance, so the player would clip straight through the edge instead of
+stepping up onto it, landing at the wrong height below it. Since a stair's `baseY` is measured from
+that same foundation top, this made stairs built on such a foundation feel unreachable too, even
+though the stairs' own collision was correct — the player's _reference_ height was simply wrong to
+begin with. Fixed by treating a foundation's top exactly like terrain: an unconditional candidate,
+never gated by `referenceY`. `FoundationManager.spec.ts` and `FirstPersonController.spec.ts` both
+cover the corrected behavior — the latter walks a full end-to-end scenario (spawn on low terrain →
+step onto a 2m-elevated foundation → climb its stairs) with no jump required at any point.
+
+### Walls on upper levels
+
+`WallDefinition`/`WallPathDefinition` both gained a required `baseY` (defaulting to 0 for older
+saved data via `?? 0` at load time) — the wall's bottom, still measured from the _same_
+foundation-local Y=0 origin every other element uses. `computeWallTransform` took a new optional
+`baseY` parameter that simply adds into `originWorldY`, so `buildWallCollisionRects`' existing
+`transform.originWorldY` usage needed no changes at all; `WallPathGeometryBuilder`'s mesh vertices
+are baked in local space, so `baseY` had to be added explicitly into every `extrudePolygon` Y-value
+and into each collision rect's Y extents. Window/Door openings stay wall-local (`minY`/`maxY`
+relative to the wall's own base) exactly as before — an upper-storey wall's opening world Y is
+still just `wall transform's originWorldY + opening minY/maxY`, no separate code path.
+
+### GUI and settings
+
+**Building > Levels**: `currentBuildingLevelIndex` (also editable here as a fallback to Page
+Up/Down — both write the same field), `defaultStoreyHeight`, `showLevelConstructionPlane`,
+`buildingLevelViewMode`. **Building > Slabs**: `floorThickness`, `roofThickness`, `showSlabBounds`,
+`showSlabPolygonPoints`, `slabPreviewOpacity`. (A `snapToWallCorners` GUI toggle used to sit here —
+removed once wall-corner snapping actually shipped as the `C`-cycled `'wall-corners'` mode below;
+the toggle's own doc comment described exactly that behavior but nothing had ever implemented it.)
+
+### Tests
+
+`BuildingLevelManager.spec.ts` (12 tests): level 0 always starts at `baseY = 0`; a new level's
+`baseY` is the previous level's `baseY + wallHeight`; requesting level N recursively creates every
+level below it, contiguously; `wallHeight`/`baseY` freeze at creation and don't move when
+`defaultStoreyHeight` changes afterward; levels are independent per foundation; a negative index
+throws; Page Up/Down and the GUI share one field; serialize/load round-trips. `slabMath.spec.ts` (18
+tests) and `SlabGeometryBuilder.spec.ts` (10 tests, including geometric winding checks via each
+triangle's cross-product normal) cover the polygon math and extrusion in isolation.
+`foundationTopTargeting.spec.ts` (6 tests) covers `raycastSlabConstructionPlane`: resolving the
+foundation a player stands in and intersecting the ceiling plane (not the ground) while looking
+straight up; a regression proving a diagonal look-up ray lands at the ceiling height specifically,
+not the old ground height; falling back to a physical mesh hit when aiming down at a foundation from
+outside its footprint; returning `null` for a ray that hits neither; returning `null` when a shallow
+look-up angle lands outside the footprint at the ceiling's height; and targeting a level other than 0.
+`BuildingManager.spec.ts` adds: `addSlab` accepting concave polygons and rejecting self-intersecting
+/ out-of-foundation / zero-area / duplicate-point ones; rejecting a same-level overlapping slab
+while accepting one at a different `localY`; a Ceiling+Floor pair at the same default elevation
+collapsing into exactly one physical slab; world-Y conversion (`topY=20, localY=3 → top=23`) and
+thickness (`localY=3, thickness=0.2 → bottom=2.8`); CW/CCW winding producing an identical walkable
+surface; concave-slab point containment correctly excluding a point in the polygon's own notch;
+wall `baseY` placement and an upper-wall opening's absolute world Y; and a full multi-storey
+serialize/load round trip across two levels. `WorldSurfaceSampler.spec.ts` adds the core multi-level
+collision behavior directly: no snapping onto a slab above the player, snapping fine once the player
+is actually at/above it, spawn-style `Infinity` landing on the highest surface, terrain as the
+unconditional fallback, and `getCeilingBlockY` reporting the correct (lowest, when several are
+crossed) underside. `tests/game.e2e.ts` confirms the hotbar's Ceiling/Floor/Roof slots (6-8) and the
+Levels/Slabs GUI folders render with no console errors.
+
+### Not implemented yet
+
+Room detection/auto-enclosure, floor holes/stairwell openings beyond the stair-driven ones below,
+atriums, balconies, railings/parapets, skylights, sloped floors, a floor materials catalogue, and
+negative building levels (basements).
+
+## Stairs: axis-aligned, grid-driven straight staircases
+
+`src/lib/game/building/stairMath.ts`, `StairTypes.ts`, `StairGeometryBuilder.ts`,
+`StairManager.ts`, `StairTool.ts` add a simple, deterministic way to physically connect building
+levels — the multi-level system above lets you _build_ an upper floor, but had no way to _reach_
+one. This is deliberately the simplest possible staircase: straight, axis-aligned, one flight, no
+landings, turns, or spirals (see "Not implemented yet" below).
+
+### The core rule: footprint length determines height
+
+Stair height is never typed in independently. `1 grid cell of run = 1 step = 1 grid cell of rise`:
+given the current foundation-local building grid size, `stepRise = stepRun = buildingGridSize`, and
+`stepCount` is simply the footprint's run length in grid cells — `totalRise = stepCount * stepRise`
+falls straight out of that. A 12-cell run at the default 0.25m grid produces 12 steps and exactly
+3.0m of rise; a 4-cell run produces 4 steps and 1.0m. The longer the footprint, the higher the
+staircase reaches — there is no other way to make a staircase taller.
+
+### Coordinate model (`StairTypes.ts`)
+
+`StairDefinition` stores only what can't be derived: `{ id, foundationId, minGridX, maxGridX,
+minGridZ, maxGridZ, baseY, direction, levelIndex, gridSizeAtCreation }`. `gridSizeAtCreation` is the
+building grid size _at placement time_, frozen — the same "store authored values" rule
+`BuildingLevelDefinition.wallHeight` follows — so a later change to the GUI's default building grid
+size never resizes an existing staircase's steps. Everything else (width, run, step count, rise,
+total rise) is derived on demand via `stairMath.computeStairMetrics`.
+
+`StairDirection = '+x' | '-x' | '+z' | '-z'` — the axis and sense the stairs ascend along. Only
+directions along the footprint's _long_ dimension are valid (`validDirectionsForFootprint`): a
+footprint longer in X only offers `+x`/`-x`; longer in Z only offers `+z`/`-z`; an exactly square
+footprint offers all four, letting Left/Right Arrow cycle through every axis.
+
+### Canonical stair space (`stairMath.stairCanonicalToLocalXZ`)
+
+Rather than four separate geometry/collision implementations (one bug-prone copy per direction),
+everything is built once in "canonical stair space" — run along +X (0 = bottom), width along +Z,
+rise along +Y — and every point is remapped into foundation-local X/Z via one shared function,
+`stairCanonicalToLocalXZ(bounds, direction, runDistance, widthDistance)`. `StairGeometryBuilder` (the
+visual mesh) and `StairManager` (tread-surface and collision rects) both call this _same_ function,
+so the visible steps and the walkable/collidable steps can never drift apart. Passing an all-zero
+`bounds` recovers just the transform's linear part (no translation) — used to remap normals the same
+way positions are remapped, since the transform is always a pure axis permutation/reflection, never
+a shear or scale.
+
+Two of the four directions (`-x`, `+z`) are reflections rather than rotations (`stairDirectionFlipsWinding`),
+which would otherwise invert triangle winding; `StairGeometryBuilder` detects these and reverses
+their index order afterward, so lighting and backface culling stay correct without needing a
+double-sided material (the stair material is still double-sided anyway, as a defensive fallback).
+`StairGeometryBuilder.spec.ts` verifies this isn't just plausible-looking but actually correct, by
+computing each triangle's real geometric (cross-product) normal — not just the smoothed vertex
+attribute, which would pass even with backwards winding — for the topmost, fully-exposed tread in
+every direction.
+
+### Step geometry: a stacked solid, not a ramp (`StairGeometryBuilder.ts`)
+
+Each tread `i` (0-indexed) is a box spanning canonical run `[i * stepRun, runMeters]` (i.e. it
+extends all the way to the top, hidden beneath higher treads) and canonical rise
+`[i * stepRise, (i + 1) * stepRise]`. The union of these `stepCount` boxes is the classic nested
+staircase profile: at any point along the run, the visible/walkable height is `(k + 1) * stepRise`
+where `k` is that point's cell index. **Top step convention**: the topmost tread's surface reaches
+exactly `baseY + totalRise`, never one riser short — tread `i`'s surface is `baseY + (i + 1) *
+stepRise`, so the _last_ tread (`i = stepCount - 1`) lands exactly on `totalRise`. **Bottom
+convention**: the first tread (i=0) rises one grid increment from the base floor, so the player
+steps naturally up from level ground onto it. Both are tested explicitly in `stairMath.spec.ts` and
+`StairGeometryBuilder.spec.ts` (bounding-box min/max Y). The whole solid is intentionally a stepped
+mass down to the ground (an acceptable, documented v1 simplification — no open timber
+understructure yet), built once via temporary `THREE.BoxGeometry` instances merged into a single
+`BufferGeometry` — never one Mesh per step.
+
+### Placement interaction (`StairTool.ts`)
+
+A three-state machine (`StairToolState = 'idle' | 'first-corner-selected' | 'choosing-direction'`)
+mirroring `FoundationTool`'s two-click flow plus a direction-selection step: click a first corner,
+move to the opposite corner (rectangular footprint preview, mirroring Foundation Tool), click to
+confirm the footprint, then Left/Right Arrow cycles `StairDirection` while a live stepped preview
+(built with the real `StairGeometryBuilder`, not a placeholder box) updates immediately, with
+bottom/top markers when `showStairDirection` is on. Enter or another click confirms; right-click
+cancels back to idle. Uses the same level-aware `raycastLevelConstructionPlane` targeting as every
+other level-aware tool, so stairs can be started from any building level, with `baseY` frozen from
+the current level at first-corner time.
+
+The HUD shows width, run, step count, rise per step, total rise, and current direction as soon as
+the footprint is confirmed — and, if the stair's `topLocalY` lands within one grid increment of an
+existing (or would-be-next) building level's `baseY`, "Target: Level N"; otherwise "No matching
+floor level", without ever silently resizing the stair to force a match — height is footprint length,
+full stop.
+
+**Judging the right length before committing.** Getting a stair's footprint length right by eye is
+hard — its height only exists as an abstract "1 cell of run = 1 cell of rise" rule until it's built.
+Two aids address this, both driven by `StairTool.findCeilingLocalYAbove` (a live query against
+_actual placed slabs_ via `BuildingManager.getSlabsForFoundation`, not the abstract level system):
+
+- **A rough bounding-box preview appears as soon as the second corner is being chosen** — before a
+  `direction` (and therefore the real stepped geometry) even exists yet. It estimates height from
+  the footprint's longer dimension (the eventual run axis) at the same one-cell-run-per-cell-rise
+  rule the real stair uses, so the player can judge roughly how tall the staircase will reach while
+  still dragging, not only after committing to a footprint.
+- **The box (and, after the footprint is confirmed, the real stepped preview) turns green the moment
+  its height would land exactly on a ceiling or floor slab actually present directly above** —
+  reserving green specifically for that exact match, rather than for "valid" in general (a merely
+  valid, non-matching placement stays a neutral blue). The HUD's `Ceiling above: X.XXm` /
+  `Matches ceiling height!` lines make the same signal explicit in text. If no slab exists above the
+  footprint at all, no ceiling line is shown and the preview simply stays neutral — this never forces
+  or auto-resizes anything, it only tells the player when they've dragged to the height that would
+  align.
+
+### Stair opening in slabs (`SlabTypes.SlabOpeningDefinition`, `BuildingManager`)
+
+If a floor/ceiling slab fully covers a staircase's arrival point, the player has nowhere to walk
+through. `SlabOpeningDefinition` (`{ id, type: 'stairs', minGridX, maxGridX, minGridZ, maxGridZ }`)
+is a rectangular hole belonging to a specific slab; `SlabGeometryBuilder.buildSlabGeometry`'s `holes`
+parameter (see above) cuts it as real geometry on both faces, and `SlabManager.getTopSurfacesAt`/
+`getUndersidesAt` correctly exclude any point inside an opening, so the hole exists in collision too,
+not just visually.
+
+`BuildingManager` generates this automatically and bidirectionally — no user-facing "cut a hole"
+tool exists yet. `addStair` checks every slab on the same foundation for whether the stair's solid
+mass actually reaches into it (`BuildingManager.stairReachesSlab`, see the bugfix below) and its
+footprint overlaps, opening every one that qualifies (not just the first — a very tall single flight
+can legitimately pierce more than one stacked slab); `addSlab` does the mirror check against every
+existing stair on that foundation. The opening is simply the stair's own full footprint — a
+deliberately "slightly oversized rather than too small" v1 choice (per the spec) that also
+automatically guarantees head clearance the whole way up, since nothing above the stair's own
+footprint is ever solid.
+
+**Bugfix: the opening only ever appeared for the one stair length that happened to match a slab's
+`localY` bit-for-bit.** The original "does this stair reach this slab" check
+(`SlabManager.findOverlappingSlabAtLevel`) required `stair.topLocalY` to equal `slab.localY` within
+a tiny floating-point epsilon — but a stair's length (and therefore its `topLocalY`) is whatever the
+user's freely-chosen footprint produces, so in ordinary use it essentially never lines up exactly,
+and the opening silently never appeared ("no visual hole" / "no collision hole", reported after the
+step-up collision fix above made the stairs themselves climbable). Fixed by testing genuine
+solid/solid intersection instead: `BuildingManager.stairReachesSlab` opens a slab whenever the
+stair's top is at or past that slab's UNDERSIDE (`stairTopLocalY >= slabBottomY(slab)`, not
+`=== slab.localY`) — correct because the stair is a stacked solid all the way from its own base up
+to `topLocalY` (see StairGeometryBuilder above), so it physically intersects a slab the moment it
+reaches at least that slab's underside, whether it stops partway through the slab's thickness, lands
+exactly on its top surface, or overshoots past it entirely. A stair that never reaches a slab's
+underside at all correctly gets no opening there. `BuildingManager.spec.ts` now covers all three
+"reaches into" cases (mid-thickness, past the top surface, and short of the underside) explicitly.
+
+**Bugfix: the collar (the hole's inner side wall, connecting its top and bottom rings) had backwards
+winding.** `buildSlabGeometry` normalizes a hole's point order to be opposite the outer contour's
+(purely so earcut/`triangulateShape` behaves consistently) — that reversed loop direction alone is
+what flips the resulting face normal to point correctly inward, into the hole. An earlier version
+_additionally_ reversed the triangle index order on top of that already-reversed loop, cancelling
+out and pointing every collar face into the solid material instead of into the opening — invisible
+from a normal viewing angle on the slab's single-sided material, which was the "the hole in the
+ceiling doesn't render" report. `SlabGeometryBuilder.spec.ts` now verifies this directly by computing
+each collar triangle's actual geometric (cross-product) normal and checking it points toward the
+hole's centre, for both winding directions of both the outer polygon and the hole.
+
+### Step-up / step-down collision (`WorldSurfaceSampler.ts`, `StairManager.ts`)
+
+`StairManager.getStepSurfacesAt(worldX, worldZ)` returns every tread's world-space top Y whose
+axis-aligned rectangle contains that point (trivial, since stairs are strictly axis-aligned — no
+polygon math needed, unlike slabs). `WorldSurfaceSampler.getSupportingSurfaceY` folds these in with
+a **much larger** tolerance than every other surface: `maxStepHeight` (a GUI setting, default 0.3m,
+must be `>= buildingGridSize` for the default grid's steps to be climbable) rather than the tiny
+fixed `SUPPORT_EPSILON` (~0.05m) foundation/slab tops use. This is the entire "walk up stairs
+without jumping" mechanism — reusing the exact same "snap onto the highest surface at or below
+`referenceY` (+ tolerance)" logic that already handles foundation edges and floors, just with a
+bigger allowance specifically for treads, which are _meant_ to be climbed one at a time. Descending
+needs no special tolerance at all: a lower step is always "at or below" the player regardless of
+epsilon size, so the existing logic already returns the very next step down, not several at once.
+
+**Bugfix: a single frame's horizontal movement can cross more than one tread.** An individual
+tread's walkable footprint is only one grid cell wide along the run (e.g. 0.25m), and
+`getSupportingSurfaceY` only ever climbs one riser per call. Checking just the frame's _endpoint_
+worked fine at a normal 60fps walk speed (each frame moves far less than one tread), but at run
+speed, or after any single frame-time hitch (the delta is clamped but can still reach 0.1s — see
+`ThreeScene.animate`), a frame's movement can cross several tread widths at once. Once that happens
+even one frame, the player permanently falls behind the stairs' rising floor: every remaining
+tread's top is now further than `maxStepHeight` above their (now too-low) actual height, so they
+just walk under the (visually elevated) rest of the staircase for good — indistinguishable from "the
+stairs have no collision at all until you jump" (jumping's fall happens across many small, slow
+frames, which never triggers the skip).
+
+`FirstPersonController.sweptSupportingSurfaceY` fixes this: instead of one `getSupportingSurfaceY`
+call at the frame's endpoint, it walks the straight-line path the frame actually covered in small
+increments (`STEP_SWEEP_SAMPLE_SPACING`, capped at `MAX_STEP_SWEEP_SAMPLES` samples), **progressively
+re-basing `referenceY` on each increment's own result** — simulating what continuous,
+infinitesimally-small movement steps would have produced, so several risers can be climbed within a
+single real frame if that frame's full movement crossed several tread boundaries. It never climbs
+higher, per real-world distance travelled, than a normal walking pace would; it only removes the
+frame-boundary artefact that let a tread be skipped over undetected.
+`FirstPersonController.spec.ts` reproduces the failure directly (a 0.1s-dt, run-speed climb) and
+confirms the player reaches the top instead of falling back to ground level partway across.
+
+Horizontal collision is a deliberate v1 simplification, called out explicitly rather than silently
+skipped: `StairManager.getAllCollisionRects()` returns two thin side-edge strips (reusing the exact
+`WallCollisionRect` shape/consumer wall collision already uses), running the stair's full length
+along whichever edges are perpendicular to its width, blocking the player from walking sideways into
+the stair body. Each strip is positioned **entirely outside** the footprint — its inner face flush
+with the tread edge, never overlapping the walkable width — rather than centered on the boundary
+line; centering it on the boundary was an early bug that, combined with the player's own collision
+radius, could narrow a stair's _effectively walkable_ width to zero for anything near the minimum
+configured width, making it impossible to climb except by hugging one edge (see
+`stairMath.stairSideRectsLocal`'s doc comment and its regression tests in `stairMath.spec.ts` /
+`StairManager.spec.ts`). It intentionally does **not** attempt full volumetric side/underside
+collision for the entire stepped solid (a player standing directly beneath a ground-level staircase,
+in the rare case that's physically reachable at all given the solid bottom-slab construction, is not
+blocked) — the vertical (step-up/step-down) collision above is the one this feature is actually
+about, and is fully real, not a hidden-ramp shortcut.
+
+### GUI and settings
+
+**Building > Stairs**: `minimumStairWidthCells` (default 4 — chosen comfortably above the player's
+own collision diameter so a minimum-width staircase is always walkable, not merely non-zero-width),
+`minimumStairRunCells` (default 2), `maxStepHeight`, `stairPreviewOpacity`,
+`showStairBounds`, `showStairDirection`, `stairHeadClearance` (reserved for a future, more precise
+opening-sizing pass — see "Not implemented yet"). `stepRise` is deliberately **not** exposed
+independently; the grid-driven rule above is the whole point.
+
+### Serialization
+
+`FoundationBuildingDefinition` gained `stairs: StairDefinition[]` alongside `walls`/`wallPaths`/
+`slabs` (defaulting to `[]` for older saves). `BuildingManager.serialize()`/`.load()` round-trip
+stairs exactly, including any slab opening a stair generated — `BuildingManager.spec.ts`'s
+serialize/load test confirms both the stair and its resulting `SlabOpeningDefinition` survive a
+full cycle unchanged.
+
+### Tests
+
+`stairMath.spec.ts` (28 tests): the core grid-driven rule (`stepCount`/`totalRise` for several run
+lengths); the top-step convention (topmost tread reaches exactly `baseY + totalRise`, never one
+riser short); a non-zero `baseY` (upper-level stair) shifting `topLocalY` correctly; direction
+validity and cycling (including wrap-around and the square-footprint four-axis case); footprint
+validation (short/narrow/zero-area rejection, direction-vs-long-axis rejection); the canonical→local
+mapping for all four directions, including that a reversed direction on the _same_ footprint keeps
+identical dimensions while swapping bottom/top; tread and side-collision-rect derivation, including
+a regression check that the side rects sit entirely outside the footprint (see the bugfix note
+above). `StairGeometryBuilder.spec.ts` (10 tests) verifies the built mesh directly: bounding-box
+top/bottom Y match the top-step/bottom conventions exactly for every direction, and — the most
+important correctness check — genuine geometric (not just attribute) face-normal winding for both
+the topmost exposed tread and the underside, in all four directions. `StairManager.spec.ts` (9
+tests) covers tread-surface queries (including a reversed-direction footprint), side collision
+rects — including an integration-level regression proving a player-radius circle can stand anywhere
+across a stair's walkable width without being pushed — and serialize/load. `BuildingManager.spec.ts`
+adds `addStair` validation (long-axis direction, min width/run, foundation containment, missing
+foundation, upper-level `baseY`) and the bidirectional auto-opening behavior: slab-then-stair,
+stair-then-slab, no opening when the stair never reaches the slab's underside, and the three
+"reaches into" regressions above (mid-thickness, past the top surface, short of the underside).
+`WorldSurfaceSampler.spec.ts` adds the step-up/step-down integration behavior directly: auto-climbing
+a step within `maxStepHeight` without needing `referenceY` above it, NOT climbing one further away in
+a single query, and descending returning the very next step down. `SlabGeometryBuilder.spec.ts`
+gained a dedicated holes suite: a hole cuts a real gap through both faces (ray-tested with a
+double-sided material to rule out culling as a false pass/fail), the collar-winding regression
+described above, and identical results regardless of the outer polygon's or the hole's own winding
+direction. `FirstPersonController.spec.ts` (new) drives the _real_ `FirstPersonController` +
+`WorldSurfaceSampler` + `StairManager` stack end to end (fake `window`/`document` event targets, no
+DOM needed): climbing a full staircase smoothly at 60fps without jumping; the frame-skip regression
+above, reproduced at run speed with a 0.1s dt; walking dead-centre up a minimum-width stair without
+being pushed sideways; and descending staying grounded, coming down one step at a time without ever
+going airborne. `tests/game.e2e.ts` confirms the Stairs hotbar slot (9) and the Building > Stairs GUI
+folder render with no console errors.
+
+### Not implemented yet
+
+L-shaped/U-shaped/spiral stairs, landings, railings/bannisters, a stair materials catalogue,
+decorative trim, curved stairs, elevators, ladders, ramps, automatic stair generation between
+arbitrary floors, and precise head-clearance-driven (rather than full-footprint) opening sizing.
 
 ## Vegetation: independent forest regions
 

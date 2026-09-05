@@ -1,7 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BuildingLevelManager } from '../BuildingLevelManager';
 import type { BuildingSettings } from '../FoundationTypes';
 import { createDefaultBuildingSettings } from '../FoundationTypes';
+
+/**
+ * Minimal EventTarget-like stand-in for `window` — this test suite runs in vitest's `node`
+ * environment (no real DOM; see vite.config.ts), same reasoning as BuildToolManager.spec.ts's
+ * FakeElement. Unlike that file's plain `vi.fn()` stub, Page Up/Down needs an actual dispatch to
+ * exercise the real keydown handler, so this fake tracks listeners for real.
+ */
+class FakeWindow {
+	private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+
+	addEventListener(type: string, handler: (event: unknown) => void): void {
+		if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+		this.listeners.get(type)?.add(handler);
+	}
+
+	removeEventListener(type: string, handler: (event: unknown) => void): void {
+		this.listeners.get(type)?.delete(handler);
+	}
+
+	dispatchEvent(event: { type: string }): void {
+		for (const handler of this.listeners.get(event.type) ?? []) handler(event);
+	}
+}
+
+let fakeWindow: FakeWindow;
+
+beforeEach(() => {
+	fakeWindow = new FakeWindow();
+	vi.stubGlobal('window', fakeWindow);
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
+function pressKey(code: string): void {
+	fakeWindow.dispatchEvent({ type: 'keydown', code } as unknown as { type: string });
+}
 
 function makeSettings(overrides: Partial<BuildingSettings> = {}): BuildingSettings {
 	return { ...createDefaultBuildingSettings(), ...overrides };
@@ -91,14 +129,14 @@ describe('BuildingLevelManager current level index', () => {
 	});
 
 	it('Page Up increments, Page Down decrements but never below 0', () => {
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageUp' }));
+		pressKey('PageUp');
 		expect(manager.getCurrentLevelIndex()).toBe(1);
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageUp' }));
+		pressKey('PageUp');
 		expect(manager.getCurrentLevelIndex()).toBe(2);
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageDown' }));
+		pressKey('PageDown');
 		expect(manager.getCurrentLevelIndex()).toBe(1);
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageDown' }));
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageDown' }));
+		pressKey('PageDown');
+		pressKey('PageDown');
 		expect(manager.getCurrentLevelIndex()).toBe(0);
 	});
 
@@ -111,7 +149,7 @@ describe('BuildingLevelManager current level index', () => {
 
 	it('dispose() removes the keydown listener', () => {
 		manager.dispose();
-		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'PageUp' }));
+		pressKey('PageUp');
 		expect(settings.currentBuildingLevelIndex).toBe(0);
 	});
 });

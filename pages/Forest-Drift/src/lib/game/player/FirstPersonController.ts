@@ -5,6 +5,15 @@ const GRAVITY = 18;
 const MOUSE_SENSITIVITY = 0.0022;
 const MAX_PITCH = Math.PI / 2 - 0.01;
 
+/**
+ * Max distance (world units) between samples when sweeping a frame's horizontal movement for
+ * step-up detection — see the `groundHeight` computation in `update()`. Must be comfortably
+ * smaller than the smallest realistic stair step run/rise so a single frame's movement can never
+ * skip clean over a climbable tread even at run speed or after a frame-time hitch.
+ */
+const STEP_SWEEP_SAMPLE_SPACING = 0.08;
+const MAX_STEP_SWEEP_SAMPLES = 24;
+
 export interface FirstPersonControllerOptions {
 	domElement: HTMLElement;
 	camera: THREE.PerspectiveCamera;
@@ -186,7 +195,13 @@ export class FirstPersonController {
 		// something to snap up onto; see FirstPersonControllerOptions.getSupportingSurfaceY.
 		const preStepFeetY = this.worldPosition.y - this.settings.eyeHeight;
 		const groundHeight =
-			this.getSupportingSurfaceY(worldX, worldZ, preStepFeetY) + this.settings.eyeHeight;
+			this.sweptSupportingSurfaceY(
+				this.worldPosition.x,
+				this.worldPosition.z,
+				worldX,
+				worldZ,
+				preStepFeetY
+			) + this.settings.eyeHeight;
 
 		let worldY: number;
 		if (!this.settings.gravityEnabled) {
@@ -222,6 +237,55 @@ export class FirstPersonController {
 
 		this.worldPosition.set(worldX, worldY, worldZ);
 		this.syncCamera();
+	}
+
+	/**
+	 * Same contract as `getSupportingSurfaceY`, but walks the straight-line path from (fromX, fromZ)
+	 * to (toX, toZ) in small increments — not just checking the endpoint — progressively re-basing
+	 * the `referenceY` ceiling at each increment on the result of the previous one.
+	 *
+	 * Why this matters: an individual stair tread's walkable footprint is only one grid cell wide
+	 * (e.g. 0.25m) along the direction of travel, and `getSupportingSurfaceY` only ever climbs a
+	 * single tread per call (its tolerance is `maxStepHeight`, one riser). At run speed, or after
+	 * any single frame-time hitch (the delta is clamped but can still reach 0.1s — see
+	 * ThreeScene.animate), a frame's horizontal movement can easily cross SEVERAL tread widths at
+	 * once. Calling `getSupportingSurfaceY` just once, at the endpoint, with the frame-start
+	 * `referenceY`, can only ever climb one riser's worth regardless — so on a fast-enough frame the
+	 * player would fall permanently behind the stairs' rising floor after a single such frame, and
+	 * from then on find every remaining tread's top far out of `maxStepHeight` reach: the exact bug
+	 * this method exists to fix, previously indistinguishable from "the stairs have no collision at
+	 * all until you jump" (a jump's fall happens across many small, slow frames, which never
+	 * triggers it).
+	 *
+	 * Re-basing `referenceY` on each increment's own result — rather than keeping it fixed at the
+	 * frame-start value — simulates what continuous, infinitesimally-small movement steps would have
+	 * produced: each increment can climb the one riser now within reach of wherever the *previous*
+	 * increment ended up, so several risers can be climbed within a single real frame if the frame's
+	 * full movement crossed several tread boundaries. It still can never climb higher, per real-world
+	 * distance travelled, than a normal walking pace would — it only removes the frame-boundary
+	 * artefact.
+	 */
+	private sweptSupportingSurfaceY(
+		fromX: number,
+		fromZ: number,
+		toX: number,
+		toZ: number,
+		referenceY: number
+	): number {
+		const distance = Math.hypot(toX - fromX, toZ - fromZ);
+		const sampleCount = Math.min(
+			MAX_STEP_SWEEP_SAMPLES,
+			Math.max(1, Math.ceil(distance / STEP_SWEEP_SAMPLE_SPACING))
+		);
+
+		let currentY = referenceY;
+		for (let i = 1; i <= sampleCount; i++) {
+			const t = i / sampleCount;
+			const sampleX = fromX + (toX - fromX) * t;
+			const sampleZ = fromZ + (toZ - fromZ) * t;
+			currentY = this.getSupportingSurfaceY(sampleX, sampleZ, currentY);
+		}
+		return currentY;
 	}
 
 	private syncCamera(): void {

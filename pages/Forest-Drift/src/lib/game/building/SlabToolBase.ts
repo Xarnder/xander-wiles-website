@@ -5,8 +5,15 @@ import type { BuildingGridPoint } from './FoundationLocalMath';
 import { foundationLocalFrame, foundationLocalSize } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
 import type { BuildingSettings, BuildUiState, SlabToolState, ToolId } from './FoundationTypes';
-import { raycastLevelConstructionPlane } from './foundationTopTargeting';
+import { raycastSlabConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
+import {
+	cycleSnapMode,
+	snapDrawingPoint,
+	snapModeLabel,
+	snapToNearestCorner
+} from './polygonDrawSnap';
+import type { SnapMode } from './polygonDrawSnap';
 import { buildSlabGeometry } from './SlabGeometryBuilder';
 import { validateSlabPolygon } from './slabMath';
 import type { SlabType } from './SlabTypes';
@@ -112,10 +119,48 @@ export class SlabToolBase implements BuildTool {
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
 
+	/** Cycled by pressing `C` — see polygonDrawSnap.ts. */
+	private snapMode: SnapMode = 'off';
+
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || this.state !== 'drawing') return;
+		if (!this.active) return;
+		if (event.code === 'KeyC') {
+			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
+			const wallCornersAvailable = foundationId
+				? this.wallCornersOnCurrentLevel(foundationId).length > 0
+				: false;
+			this.snapMode = cycleSnapMode(this.snapMode, this.points.length, wallCornersAvailable);
+			this.refreshVisuals();
+			return;
+		}
+		if (this.state !== 'drawing') return;
 		if (event.code === 'Backspace') this.undoLastPoint();
 	};
+
+	/**
+	 * Every wall-endpoint/wall-path-point on `foundationId`, on the SAME level this slab is being
+	 * drawn on — i.e. the corners of the room this ceiling/floor/roof sits above. A wall's `baseY`
+	 * is frozen from `level.baseY` at the moment it's built (see WallTool/PolygonWallTool), so
+	 * comparing against the current level's own `baseY` is an exact match, not a tolerance check.
+	 */
+	private wallCornersOnCurrentLevel(foundationId: string): BuildingGridPoint[] {
+		const levelBaseY = this.levelManager.getOrCreateLevel(
+			foundationId,
+			this.levelManager.getCurrentLevelIndex()
+		).baseY;
+		const building = this.buildingManager.getBuildingForFoundation(foundationId);
+		const corners: BuildingGridPoint[] = [];
+		for (const wall of building.walls) {
+			if (wall.baseY !== levelBaseY) continue;
+			corners.push({ gridX: wall.startGridX, gridZ: wall.startGridZ });
+			corners.push({ gridX: wall.endGridX, gridZ: wall.endGridZ });
+		}
+		for (const path of building.wallPaths) {
+			if (path.baseY !== levelBaseY) continue;
+			for (const point of path.points) corners.push({ gridX: point.gridX, gridZ: point.gridZ });
+		}
+		return corners;
+	}
 
 	constructor(
 		config: SlabToolConfig,
@@ -225,7 +270,7 @@ export class SlabToolBase implements BuildTool {
 		if (!this.active) return;
 
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
-		const hit = raycastLevelConstructionPlane(
+		const hit = raycastSlabConstructionPlane(
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
@@ -245,19 +290,32 @@ export class SlabToolBase implements BuildTool {
 			return;
 		}
 
+		// 'wall-corners' applies regardless of drawing state — even the very first point benefits
+		// from starting exactly on a wall corner. The other modes only make sense once there's a
+		// last-confirmed-point to lock an axis against, and only on the polygon's own foundation.
+		let gridPoint = hit.gridPoint;
+		if (this.snapMode === 'wall-corners') {
+			gridPoint = snapToNearestCorner(
+				hit.gridPoint,
+				this.wallCornersOnCurrentLevel(hit.foundationId)
+			);
+		} else if (this.state === 'drawing' && hit.foundationId === this.activeFoundationId) {
+			gridPoint = snapDrawingPoint(this.points, hit.gridPoint, this.snapMode);
+		}
+
 		if (
 			this.hoverTarget &&
-			hit.gridPoint.gridX === this.lastGridX &&
-			hit.gridPoint.gridZ === this.lastGridZ &&
+			gridPoint.gridX === this.lastGridX &&
+			gridPoint.gridZ === this.lastGridZ &&
 			hit.foundationId === this.lastFoundationId
 		) {
 			return;
 		}
 
-		this.lastGridX = hit.gridPoint.gridX;
-		this.lastGridZ = hit.gridPoint.gridZ;
+		this.lastGridX = gridPoint.gridX;
+		this.lastGridZ = gridPoint.gridZ;
 		this.lastFoundationId = hit.foundationId;
-		this.hoverTarget = { foundationId: hit.foundationId, point: hit.gridPoint };
+		this.hoverTarget = { foundationId: hit.foundationId, point: gridPoint };
 		this.refreshVisuals();
 	}
 
@@ -603,9 +661,16 @@ export class SlabToolBase implements BuildTool {
 		return `Thickness: ${this.config.getThickness(this.buildingSettings).toFixed(2)}m`;
 	}
 
+	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
+	private snapHudLines(): string[] {
+		const label = snapModeLabel(this.snapMode);
+		return label ? [label] : [];
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: this.toolId,
+			snapMode: this.snapMode,
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
@@ -614,7 +679,9 @@ export class SlabToolBase implements BuildTool {
 				'',
 				this.thicknessLine(),
 				'',
-				'Click to start'
+				'Look up: click to start',
+				...this.snapHudLines(),
+				'C: Cycle snap'
 			]
 		};
 	}
@@ -632,22 +699,26 @@ export class SlabToolBase implements BuildTool {
 		if (closingLoop) {
 			return {
 				toolId: this.toolId,
+				snapMode: this.snapMode,
 				crosshair: 'valid',
-				hintLines: [...levelLines, '', ...common, '', 'Click to close slab']
+				hintLines: [...levelLines, '', ...common, '', ...this.snapHudLines(), 'Click to close slab']
 			};
 		}
 
 		return {
 			toolId: this.toolId,
+			snapMode: this.snapMode,
 			crosshair: 'valid',
 			hintLines: [
 				...levelLines,
 				'',
 				...common,
 				'',
+				...this.snapHudLines(),
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -656,6 +727,7 @@ export class SlabToolBase implements BuildTool {
 	private buildInvalidHud(reason: string): BuildUiState {
 		return {
 			toolId: this.toolId,
+			snapMode: this.snapMode,
 			crosshair: 'invalid',
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),
@@ -664,7 +736,9 @@ export class SlabToolBase implements BuildTool {
 				'',
 				reason,
 				'',
+				...this.snapHudLines(),
 				'Backspace: Undo point',
+				'C: Cycle snap',
 				'Right click: Cancel'
 			]
 		};

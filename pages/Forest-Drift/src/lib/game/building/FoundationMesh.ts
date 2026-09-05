@@ -13,7 +13,8 @@ const foundationMaterial = new THREE.MeshStandardMaterial({
 	metalness: 0.04,
 	polygonOffset: true,
 	polygonOffsetFactor: -1,
-	polygonOffsetUnits: -1
+	polygonOffsetUnits: -1,
+	flatShading: true
 });
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xfff2b0 });

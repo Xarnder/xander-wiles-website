@@ -3,6 +3,7 @@ import { BuildingManager } from '../BuildingManager';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
 import { SlabManager } from '../SlabManager';
+import { StairManager } from '../StairManager';
 import { resolvePlayerPositionAgainstWalls } from '../wallCollision';
 import { WallManager } from '../WallManager';
 import { WallPathManager } from '../WallPathManager';
@@ -41,16 +42,28 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize
 	});
+	const stairManager = new StairManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => VERTEX_SPACING
+	});
 	const buildingManager = new BuildingManager({
 		foundationManager,
 		wallManager,
 		wallPathManager,
 		slabManager,
+		stairManager,
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize,
 		getCornerOpeningMargin: () => cornerOpeningMargin
 	});
-	return { foundationManager, wallManager, wallPathManager, slabManager, buildingManager };
+	return {
+		foundationManager,
+		wallManager,
+		wallPathManager,
+		slabManager,
+		stairManager,
+		buildingManager
+	};
 }
 
 const DEFAULT_WALL_PARAMS = { baseY: 0, height: 3, thickness: 0.15, minimumWallLength: 0.25 };
@@ -935,5 +948,410 @@ describe('wall path serialization round trip', () => {
 		expect(reloadedPath.closed).toBe(true);
 		expect(reloadedPath.segments.map((s) => s.id)).toEqual(path.segments.map((s) => s.id));
 		expect(reloadedPath.segments[0].openings).toHaveLength(1);
+	});
+});
+
+const DEFAULT_STAIR_PARAMS = {
+	minimumStairWidthCells: 2,
+	minimumStairRunCells: 2,
+	gridSizeAtCreation: BUILDING_GRID_SIZE
+};
+
+describe('BuildingManager.addStair — validation', () => {
+	it('accepts a valid axis-aligned stair along its long (X) axis', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.direction).toBe('+x');
+	});
+
+	it('rejects a direction running along the short axis', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+z',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(false);
+	});
+
+	it('rejects a footprint narrower than the minimum width', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 1,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(false);
+	});
+
+	it('rejects a footprint shorter than the minimum run', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 1,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(false);
+	});
+
+	it('rejects a footprint extending outside the foundation', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 9999,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(false);
+	});
+
+	it('rejects a foundation that does not exist', () => {
+		const { buildingManager } = setup();
+		const result = buildingManager.addStair({
+			foundationId: 'missing',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(result.valid).toBe(false);
+	});
+
+	it('a stair starting at a non-zero baseY (upper level) ends at baseY + totalRise', () => {
+		const { foundationManager, buildingManager, stairManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 3,
+			direction: '+x',
+			levelIndex: 1,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(true);
+		const stair = stairManager.getStair(result.value!.id)!;
+		// 12 cells at 0.5m grid = 6m total rise; starting at baseY=3 reaches 9.
+		expect(stair.baseY + 12 * BUILDING_GRID_SIZE).toBeCloseTo(9);
+	});
+});
+
+describe('BuildingManager auto stair-opening in slabs', () => {
+	it('opens a rectangular hole in a slab already present at the stair top elevation', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		// A 20x20-cell floor slab (10m x 10m at 0.5m grid) at localY = 6 (the stair's top elevation).
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(1);
+		expect(slab.openings[0]).toMatchObject({
+			type: 'stairs',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6
+		});
+	});
+
+	it('opens a rectangular hole in a slab placed AFTER the stair already reaches it', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(1);
+	});
+
+	it('does NOT open a slab at a different elevation than the stair top', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 999, // deliberately not the stair's top elevation
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(0);
+	});
+
+	it('regression: opens the slab even when the stair does NOT land on its exact localY, as long as it reaches into the slab’s thickness — a stair whose length the user chose freely (the ordinary case) never lines up bit-for-bit with a slab’s localY, so requiring exact equality meant the opening silently never appeared', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 1 // underside at 5 — a wide band so a mid-band stair top is neither endpoint
+		});
+		expect(slabResult.valid).toBe(true);
+
+		// 11 cells @ 0.5m grid = 5.5m total rise — strictly between the slab's underside (5) and its
+		// top surface (6), matching neither exactly: exactly the ordinary case that used to silently
+		// fail to open at all.
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 13,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(1);
+	});
+
+	it('regression: opens the slab even when the stair overshoots past its top surface, not just when it stops exactly at or within it', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 4, // stair below reaches 6 — well past this slab's top surface
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14, // 12 cells -> 6m total rise
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(1);
+	});
+
+	it('does not open a slab the stair falls genuinely short of (never reaches its underside)', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2 // underside at 5.8
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 13, // 11 cells -> 5.5m total rise, short of the underside (5.8)
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(0);
+	});
+});
+
+describe('stair serialize/load round trip', () => {
+	it('reproduces a stair exactly after a load, including its resulting slab opening', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		const serialized = buildingManager.serialize();
+		expect(serialized[0].stairs).toHaveLength(1);
+		expect(serialized[0].slabs[0].openings).toHaveLength(1);
+
+		const second = setup();
+		second.foundationManager.addFoundation(makeFoundation());
+		second.buildingManager.load(serialized);
+
+		expect(second.buildingManager.serialize()).toEqual(serialized);
 	});
 });

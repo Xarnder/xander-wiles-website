@@ -14,7 +14,8 @@ import type { WallDefinition } from './WallTypes';
 const wallMaterial = new THREE.MeshStandardMaterial({
 	color: 0xcfc6b3,
 	roughness: 0.88,
-	metalness: 0.02
+	metalness: 0.02,
+	flatShading: true
 });
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0x7fe0ff });
