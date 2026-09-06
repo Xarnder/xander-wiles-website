@@ -1,3 +1,4 @@
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { WallOpeningDefinition } from './WallTypes';
 
 export type { WallJoinStyle } from './wallPathMath';
@@ -8,10 +9,17 @@ export type { WallJoinStyle } from './wallPathMath';
  * `points[0]`). Kept exactly as lightweight as a standalone WallDefinition's openings, on purpose:
  * a path segment is meant to behave like a normal wall everywhere except how its visible geometry
  * joins its neighbours — see WallPathManager.getSegmentAsWallView().
+ *
+ * `material` works exactly like `WallDefinition.material` (`undefined` = this segment's own
+ * unpainted default look) but is stored PER SEGMENT, not once for the whole path — painting one
+ * segment of a Continuous Wall must never recolour its neighbours (see the README's "Paint Tool"
+ * section on why the merged visible mesh still needs one Three.js material GROUP per segment to make
+ * this possible — WallPathManager.rebuildEntry).
  */
 export interface WallPathSegmentDefinition {
 	id: string;
 	openings: WallOpeningDefinition[];
+	material?: BuildingMaterialDefinition;
 }
 
 /**

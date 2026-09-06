@@ -1318,6 +1318,140 @@ describe('BuildingManager auto stair-opening in slabs', () => {
 		const slab = slabManager.getSlab(slabResult.value!.id)!;
 		expect(slab.openings).toHaveLength(0);
 	});
+
+	it('regression: never opens a hole in the slab the stair itself stands on (at or below its own base) — a previous version had no lower bound and cut a hole in the floor beneath the stair', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		// The ground-floor slab the stair is placed ON TOP of — its underside is BELOW the stair's own
+		// baseY (0), not above it, so it must never be treated as "the ceiling above".
+		const groundSlabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 0,
+			localY: 0,
+			thickness: 0.2
+		});
+		expect(groundSlabResult.valid).toBe(true);
+
+		buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		const groundSlab = slabManager.getSlab(groundSlabResult.value!.id)!;
+		expect(groundSlab.openings).toHaveLength(0);
+	});
+
+	it('regression: opens only the NEAREST slab above, never a farther one the stair’s solid mass would also technically reach — a previous version opened every slab whose underside was at or below the stair’s top', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const nearSlabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 3,
+			thickness: 0.2
+		});
+		const farSlabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 2,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(nearSlabResult.valid).toBe(true);
+		expect(farSlabResult.valid).toBe(true);
+
+		buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14, // 12 cells -> 6m total rise, reaching both slabs' undersides (2.8 and 5.8)
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(slabManager.getSlab(nearSlabResult.value!.id)!.openings).toHaveLength(1);
+		expect(slabManager.getSlab(farSlabResult.value!.id)!.openings).toHaveLength(0);
+	});
+
+	it('autoOpenStairsIntoSlab: placing a nearer slab after a farther one already owns the opening moves it to the nearer slab', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14, // 6m total rise
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		// The far slab is placed first — at the time it's added, it's the only (and therefore nearest)
+		// candidate, so it correctly receives the opening.
+		const farSlabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 2,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabManager.getSlab(farSlabResult.value!.id)!.openings).toHaveLength(1);
+
+		// A nearer slab is placed afterward — it's now the true "ceiling directly above", so the
+		// opening must move to it, and the far slab's stale opening must be removed.
+		const nearSlabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 3,
+			thickness: 0.2
+		});
+
+		expect(slabManager.getSlab(nearSlabResult.value!.id)!.openings).toHaveLength(1);
+		expect(slabManager.getSlab(farSlabResult.value!.id)!.openings).toHaveLength(0);
+	});
 });
 
 describe('stair serialize/load round trip', () => {
@@ -1761,5 +1895,269 @@ describe('Remove Mode — serialization reflects removal', () => {
 		expect(reloaded.buildingManager.getWall(survivingWall.id)).toBeDefined();
 		expect(reloaded.buildingManager.getStair(stair.id)).toBeUndefined();
 		expect(reloaded.buildingManager.serialize()).toEqual(serialized);
+	});
+});
+
+describe('Paint Tool — BuildingManager.paintWall', () => {
+	it('an unpainted wall has no material override by default', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+
+		expect(wall.material).toBeUndefined();
+	});
+
+	it('paints a wall, changing its mesh material while preserving openings, geometry, and collision', () => {
+		const { foundationManager, wallManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'window',
+			minU: 1,
+			maxU: 1.8,
+			minY: 1,
+			maxY: 2,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+		const openingsBefore = buildingManager.getWall(wall.id)!.openings;
+		const collisionBefore = wallManager.getAllCollisionRects();
+		const materialBefore = wallManager.getMeshForWall(wall.id)!.material;
+
+		expect(buildingManager.paintWall(wall.id, { type: 'color', color: '#3E6FA6' })).toBe(true);
+
+		expect(buildingManager.getWall(wall.id)!.material).toEqual({
+			type: 'color',
+			color: '#3E6FA6'
+		});
+		expect(buildingManager.getWall(wall.id)!.openings).toEqual(openingsBefore);
+		expect(wallManager.getAllCollisionRects()).toEqual(collisionBefore);
+		expect(wallManager.getMeshForWall(wall.id)!.material).not.toBe(materialBefore);
+	});
+
+	it('resetting to Default (undefined) removes the material override', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		buildingManager.paintWall(wall.id, { type: 'color', color: '#3E6FA6' });
+
+		expect(buildingManager.paintWall(wall.id, undefined)).toBe(true);
+		expect(buildingManager.getWall(wall.id)!.material).toBeUndefined();
+	});
+
+	it('returns false for an unknown wall id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.paintWall('missing', { type: 'color', color: '#3E6FA6' })).toBe(false);
+	});
+});
+
+describe('Paint Tool — BuildingManager.paintWallSegment', () => {
+	it('paints ONE segment without altering a neighbouring segment’s own material', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const [segA, segB] = path.segments;
+
+		expect(
+			buildingManager.paintWallSegment(path.id, segA.id, { type: 'color', color: '#C1443C' })
+		).toBe(true);
+
+		expect(buildingManager.getWall(segA.id)!.material).toEqual({ type: 'color', color: '#C1443C' });
+		expect(buildingManager.getWall(segB.id)!.material).toBeUndefined();
+	});
+
+	it('preserves the segment’s own openings when painting it', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0), pathPoint(8, 8)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const segA = path.segments[0];
+		buildingManager.addOpening({
+			wallId: segA.id,
+			type: 'door',
+			minU: 1,
+			maxU: 1.9,
+			minY: 0,
+			maxY: 2.1,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+		const openingsBefore = buildingManager.getWall(segA.id)!.openings;
+
+		buildingManager.paintWallSegment(path.id, segA.id, { type: 'color', color: '#C1443C' });
+
+		expect(buildingManager.getWall(segA.id)!.openings).toEqual(openingsBefore);
+	});
+
+	it('returns false for an unknown path or segment id', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(8, 0)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+
+		expect(
+			buildingManager.paintWallSegment('missing', path.segments[0].id, {
+				type: 'color',
+				color: '#000000'
+			})
+		).toBe(false);
+		expect(
+			buildingManager.paintWallSegment(path.id, 'missing', { type: 'color', color: '#000000' })
+		).toBe(false);
+	});
+});
+
+describe('Paint Tool — BuildingManager.paintSlab', () => {
+	it('paints a slab, changing its mesh material', () => {
+		const { foundationManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slab = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 0,
+			localY: 3,
+			thickness: 0.2
+		}).value!;
+		const materialBefore = slabManager.getMeshForSlab(slab.id)!.material;
+
+		expect(buildingManager.paintSlab(slab.id, { type: 'color', color: '#4F8F52' })).toBe(true);
+
+		expect(slabManager.getSlab(slab.id)!.material).toEqual({ type: 'color', color: '#4F8F52' });
+		expect(slabManager.getMeshForSlab(slab.id)!.material).not.toBe(materialBefore);
+	});
+
+	it('returns false for an unknown slab id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.paintSlab('missing', { type: 'color', color: '#4F8F52' })).toBe(false);
+	});
+});
+
+describe('Paint Tool — BuildingManager.paintFoundation', () => {
+	it('paints a foundation without altering its footprint, height, or terrain-collision behaviour', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const before = foundationManager.getFoundation('foundation-a')!;
+		const topYAtCenterBefore = foundationManager.getTopYAt(5, 5);
+
+		expect(
+			buildingManager.paintFoundation('foundation-a', { type: 'color', color: '#5A5A5A' })
+		).toBe(true);
+
+		const after = foundationManager.getFoundation('foundation-a')!;
+		expect(after.minGridX).toBe(before.minGridX);
+		expect(after.maxGridX).toBe(before.maxGridX);
+		expect(after.minGridZ).toBe(before.minGridZ);
+		expect(after.maxGridZ).toBe(before.maxGridZ);
+		expect(after.topY).toBe(before.topY);
+		expect(after.bottomY).toBe(before.bottomY);
+		expect(after.material).toEqual({ type: 'color', color: '#5A5A5A' });
+		expect(foundationManager.getTopYAt(5, 5)).toBe(topYAtCenterBefore);
+	});
+
+	it('returns false for an unknown foundation id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.paintFoundation('missing', { type: 'color', color: '#5A5A5A' })).toBe(
+			false
+		);
+	});
+});
+
+describe('Paint Tool — serialization reflects painted colours', () => {
+	it('a painted wall, wall-path segment, slab, and foundation all retain their colour across a serialize/reload round trip', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 4), pathPoint(8, 4), pathPoint(8, 12)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const slab = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'flat-roof',
+			levelIndex: 0,
+			localY: 3,
+			thickness: 0.25
+		}).value!;
+
+		buildingManager.paintWall(wall.id, { type: 'color', color: '#3E6FA6' });
+		buildingManager.paintWallSegment(path.id, path.segments[0].id, {
+			type: 'color',
+			color: '#C1443C'
+		});
+		buildingManager.paintSlab(slab.id, { type: 'color', color: '#4F8F52' });
+		buildingManager.paintFoundation('foundation-a', { type: 'color', color: '#5A5A5A' });
+
+		const serializedBuilding = buildingManager.serialize();
+		const serializedFoundations = foundationManager.serialize();
+
+		const reloaded = setup();
+		// Foundations must load FIRST — WallManager/SlabManager only store an entry when
+		// `getFoundation` already resolves (see WallManager.rebuildEntry), same requirement every
+		// other reload test in this file already follows.
+		reloaded.foundationManager.load(serializedFoundations);
+		reloaded.buildingManager.load(serializedBuilding);
+
+		expect(reloaded.buildingManager.getWall(wall.id)!.material).toEqual({
+			type: 'color',
+			color: '#3E6FA6'
+		});
+		expect(reloaded.buildingManager.getWall(path.segments[0].id)!.material).toEqual({
+			type: 'color',
+			color: '#C1443C'
+		});
+		expect(reloaded.buildingManager.getSlab(slab.id)!.material).toEqual({
+			type: 'color',
+			color: '#4F8F52'
+		});
+		expect(reloaded.foundationManager.getFoundation('foundation-a')!.material).toEqual({
+			type: 'color',
+			color: '#5A5A5A'
+		});
 	});
 });

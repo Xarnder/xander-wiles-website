@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import type { FoundationDefinition } from './FoundationTypes';
 import type { WallCollisionRect } from './wallCollision';
@@ -6,13 +7,6 @@ import { computeWallTransform } from './wallGeometryMath';
 import { buildWallPath } from './WallPathGeometryBuilder';
 import type { WallPathDefinition, WallPathSegmentDefinition } from './WallPathTypes';
 import type { WallDefinition } from './WallTypes';
-
-const wallMaterial = new THREE.MeshStandardMaterial({
-	color: 0xcfc6b3,
-	roughness: 0.88,
-	metalness: 0.02,
-	flatShading: true
-});
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0x7fe0ff });
 
@@ -29,12 +23,16 @@ interface PathEntry {
 	boundsHelper: THREE.LineSegments | null;
 	/** segmentId -> how far that segment's start/end join actually reaches into it — computed once per rebuild by buildWallPath, cached here rather than recomputed by every getSegmentJoinInfo call. */
 	joinReach: Map<string, SegmentJoinReach>;
+	/** `visibleMesh.material[i]`'s owning segment id — see WallPathBuildResult.groupSegmentIds. Used by PaintTool to build a live preview materials array without disturbing every OTHER segment's own colour. */
+	groupSegmentIds: string[];
 }
 
 export interface WallPathManagerOptions {
 	getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
+	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
+	materialManager?: BuildingMaterialManager;
 }
 
 /**
@@ -51,6 +49,7 @@ export class WallPathManager {
 	private readonly getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
+	private readonly materialManager: BuildingMaterialManager;
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly paths = new Map<string, PathEntry>();
@@ -62,6 +61,7 @@ export class WallPathManager {
 		this.getFoundation = options.getFoundation;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
+		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -87,12 +87,33 @@ export class WallPathManager {
 		const buildingGridSize = this.getBuildingGridSize();
 		const result = buildWallPath(definition, frame, buildingGridSize);
 
+		// One cached material per DISTINCT segment id among this rebuild's groups — a segment that
+		// contributed multiple pieces (a middle span plus join caps) simply reuses the same reference
+		// across each of its groups, per WallPathBuildResult.groupSegmentIds's doc comment.
+		const materialBySegmentId = new Map<string, THREE.Material>();
+		for (const segment of definition.segments) {
+			materialBySegmentId.set(
+				segment.id,
+				this.materialManager.getMaterial('wall', segment.material)
+			);
+		}
+		const groupMaterials = result.groupSegmentIds.map(
+			(segmentId) =>
+				materialBySegmentId.get(segmentId) ?? this.materialManager.getMaterial('wall', undefined)
+		);
+
 		let visibleMesh = existing?.visibleMesh;
 		if (visibleMesh) {
 			visibleMesh.geometry.dispose();
 			visibleMesh.geometry = result.visibleGeometry;
+			visibleMesh.material = groupMaterials.length > 0 ? groupMaterials : visibleMesh.material;
 		} else {
-			visibleMesh = new THREE.Mesh(result.visibleGeometry, wallMaterial);
+			visibleMesh = new THREE.Mesh(
+				result.visibleGeometry,
+				groupMaterials.length > 0
+					? groupMaterials
+					: this.materialManager.getMaterial('wall', undefined)
+			);
 			visibleMesh.userData.foundationId = definition.foundationId;
 			visibleMesh.userData.wallPathId = definition.id;
 			buildingRoot.add(visibleMesh);
@@ -115,7 +136,10 @@ export class WallPathManager {
 				pickingMesh.geometry.dispose();
 				pickingMesh.geometry = geometry;
 			} else {
-				pickingMesh = new THREE.Mesh(geometry, wallMaterial);
+				// Never rendered (`visible = false`, raycast-only) — its material is irrelevant to
+				// painting, so it always just uses the plain unpainted-wall default, regardless of this
+				// segment's own colour.
+				pickingMesh = new THREE.Mesh(geometry, this.materialManager.getMaterial('wall', undefined));
 				pickingMesh.visible = false;
 				pickingMesh.userData.foundationId = definition.foundationId;
 				pickingMesh.userData.wallPathId = definition.id;
@@ -156,7 +180,8 @@ export class WallPathManager {
 			pickingMeshes,
 			collisionRects,
 			boundsHelper: existing?.boundsHelper ?? null,
-			joinReach
+			joinReach,
+			groupSegmentIds: result.groupSegmentIds
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
@@ -249,7 +274,8 @@ export class WallPathManager {
 			baseY: path.baseY,
 			height: path.wallHeight,
 			thickness: path.wallThickness,
-			openings: segment.openings
+			openings: segment.openings,
+			material: segment.material
 		};
 	}
 
@@ -283,6 +309,26 @@ export class WallPathManager {
 		const meshes: THREE.Object3D[] = [];
 		for (const entry of this.paths.values()) meshes.push(...entry.pickingMeshes.values());
 		return meshes;
+	}
+
+	/**
+	 * The merged VISIBLE mesh a segment renders through, plus which index/indices of its
+	 * `THREE.Material[]` belong to that segment — what PaintTool needs to preview or read one
+	 * segment's own colour without touching any of its neighbours (see the class doc comment and
+	 * WallPathBuildResult.groupSegmentIds). Returns undefined for an unknown segment id.
+	 */
+	getVisibleMeshAndGroupIndices(
+		segmentId: string
+	): { mesh: THREE.Mesh; groupIndices: number[] } | undefined {
+		const pathId = this.segmentToPath.get(segmentId);
+		if (!pathId) return undefined;
+		const entry = this.paths.get(pathId);
+		if (!entry) return undefined;
+		const groupIndices: number[] = [];
+		entry.groupSegmentIds.forEach((id, index) => {
+			if (id === segmentId) groupIndices.push(index);
+		});
+		return { mesh: entry.visibleMesh, groupIndices };
 	}
 
 	getAllCollisionRects(): WallCollisionRect[] {

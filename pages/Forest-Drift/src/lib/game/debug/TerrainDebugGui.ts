@@ -248,6 +248,9 @@ export class TerrainDebugGui {
 			.add(settings, 'showRemovalPickingProxies')
 			.name('Show opening proxies')
 			.onChange(callbacks.onShowRemovalPickingProxiesChange);
+
+		const paint = building.addFolder('Paint');
+		paint.add(settings, 'paintToolMaxDistance', 1, 30, 0.5).name('Max distance');
 	}
 
 	/**

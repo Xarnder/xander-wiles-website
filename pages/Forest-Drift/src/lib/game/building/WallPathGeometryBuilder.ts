@@ -96,8 +96,22 @@ export interface WallPathSegmentBuild {
 }
 
 export interface WallPathBuildResult {
-	/** Merged visible geometry, in foundation-local X/Z/Y — meant for a mesh positioned at the BuildingRoot with no rotation (the coordinate frame is already shared across every segment). */
+	/**
+	 * Merged visible geometry, in foundation-local X/Z/Y — meant for a mesh positioned at the
+	 * BuildingRoot with no rotation (the coordinate frame is already shared across every segment).
+	 * Built with Three.js material GROUPS (one per input piece, in order) so a single merged mesh can
+	 * still carry one material PER SEGMENT — see `groupSegmentIds` and WallPathManager.rebuildEntry.
+	 */
 	visibleGeometry: THREE.BufferGeometry;
+	/**
+	 * `visibleGeometry.groups[i].materialIndex === i` for every group `mergeGeometries` creates when
+	 * called with `useGroups: true` (one group per input piece) — so `groupSegmentIds[i]` names which
+	 * segment owns that group, letting the caller build a matching `THREE.Material[]` (a segment
+	 * that contributed multiple pieces — a middle span plus one or two join caps — simply repeats its
+	 * own id, and therefore its own cached material, across each of its groups; see
+	 * BuildingMaterialManager's doc comment on why a repeated cached reference is exactly the point).
+	 */
+	groupSegmentIds: string[];
 	segments: WallPathSegmentBuild[];
 }
 
@@ -136,6 +150,7 @@ export function buildWallPath(
 
 	const segmentCount = path.closed ? localPoints.length : localPoints.length - 1;
 	const visiblePieces: THREE.BufferGeometry[] = [];
+	const pieceSegmentIds: string[] = [];
 	const segments: WallPathSegmentBuild[] = [];
 
 	for (let i = 0; i < segmentCount; i++) {
@@ -162,13 +177,19 @@ export function buildWallPath(
 			const capLocal = clipPolygonToURange(localFootprint, startCap.minU, startCap.maxU);
 			const capWorld = capLocal.map((p) => unprojectLocal(p, start, dir));
 			const geom = extrudePolygon(capWorld, path.baseY, path.baseY + path.wallHeight);
-			if (geom) visiblePieces.push(geom);
+			if (geom) {
+				visiblePieces.push(geom);
+				pieceSegmentIds.push(segmentDef.id);
+			}
 		}
 		if (endCap) {
 			const capLocal = clipPolygonToURange(localFootprint, endCap.minU, endCap.maxU);
 			const capWorld = capLocal.map((p) => unprojectLocal(p, start, dir));
 			const geom = extrudePolygon(capWorld, path.baseY, path.baseY + path.wallHeight);
-			if (geom) visiblePieces.push(geom);
+			if (geom) {
+				visiblePieces.push(geom);
+				pieceSegmentIds.push(segmentDef.id);
+			}
 		}
 
 		// Safe middle: exactly the standalone-wall algorithm (openings subtracted via
@@ -183,7 +204,10 @@ export function buildWallPath(
 				if (clippedMaxU <= clippedMinU + 1e-6) continue;
 				const rect = plainRectangle(start, dir, clippedMinU, clippedMaxU, halfThickness);
 				const geom = extrudePolygon(rect, path.baseY + solid.minY, path.baseY + solid.maxY);
-				if (geom) visiblePieces.push(geom);
+				if (geom) {
+					visiblePieces.push(geom);
+					pieceSegmentIds.push(segmentDef.id);
+				}
 			}
 		}
 
@@ -225,8 +249,15 @@ export function buildWallPath(
 		});
 	}
 
-	const merged = visiblePieces.length > 0 ? mergeGeometries(visiblePieces, false) : null;
+	// `useGroups: true` — one Three.js material GROUP per input piece, in order, so a merged mesh can
+	// still carry a THREE.Material[] with one entry per group and get correct per-segment colours
+	// (see WallPathBuildResult.groupSegmentIds's doc comment and WallPathManager.rebuildEntry).
+	const merged = visiblePieces.length > 0 ? mergeGeometries(visiblePieces, true) : null;
 	for (const piece of visiblePieces) piece.dispose();
 
-	return { visibleGeometry: merged ?? new THREE.BufferGeometry(), segments };
+	return {
+		visibleGeometry: merged ?? new THREE.BufferGeometry(),
+		groupSegmentIds: merged ? pieceSegmentIds : [],
+		segments
+	};
 }

@@ -407,3 +407,160 @@ test('selecting a hotbar slot while Remove Mode is active exits Remove Mode', as
 
 	expect(pageErrors).toEqual([]);
 });
+
+test('P toggles Paint Mode, shows a Paint HUD, and restores the previously selected hotbar tool on exit', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	// Window (not Wall) — its HUD always renders something even with nothing targeted, same
+	// reasoning as the equivalent Remove Mode test above.
+	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const paintToggle = page.getByTestId('hotbar-paint-toggle');
+	const hud = page.getByTestId('build-hud');
+	await expect(windowSlot).toBeVisible();
+	await expect(paintToggle).toBeVisible();
+
+	await page.keyboard.press('3'); // Window — the tool that must be remembered/restored
+	await expect(windowSlot).toHaveClass(/active/);
+	await expect(paintToggle).not.toHaveClass(/active/);
+	await expect(hud).toContainText('WINDOW');
+
+	await page.keyboard.press('p');
+	await expect(paintToggle).toHaveClass(/active/);
+	await expect(hud).toContainText('PAINT');
+	await expect(hud).toContainText('Left Click: Paint');
+
+	await page.keyboard.press('p');
+	await expect(paintToggle).not.toHaveClass(/active/);
+	await expect(windowSlot).toHaveClass(/active/);
+	await expect(hud).not.toContainText('PAINT');
+	await expect(hud).toContainText('WINDOW');
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('clicking the hotbar paint icon toggles Paint Mode the same as the P key', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const paintToggle = page.getByTestId('hotbar-paint-toggle');
+	await expect(paintToggle).toBeVisible();
+
+	await paintToggle.click();
+	await expect(paintToggle).toHaveClass(/active/);
+	await expect(page.getByTestId('build-hud')).toContainText('PAINT');
+
+	await paintToggle.click();
+	await expect(paintToggle).not.toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('selecting a hotbar slot while Paint Mode is active exits Paint Mode', async ({ page }) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const paintToggle = page.getByTestId('hotbar-paint-toggle');
+	await expect(paintToggle).toBeVisible();
+
+	await page.keyboard.press('p');
+	await expect(paintToggle).toHaveClass(/active/);
+
+	await page.keyboard.press('3'); // Window
+	await expect(page.getByTestId('hotbar-paint-toggle')).not.toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('Remove Mode and Paint Mode are mutually exclusive — pressing one while the other is active switches straight over', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const removeToggle = page.getByTestId('hotbar-remove-toggle');
+	const paintToggle = page.getByTestId('hotbar-paint-toggle');
+	await expect(removeToggle).toBeVisible();
+	await expect(paintToggle).toBeVisible();
+
+	await page.keyboard.press('x');
+	await expect(removeToggle).toHaveClass(/active/);
+	await expect(paintToggle).not.toHaveClass(/active/);
+
+	await page.keyboard.press('p');
+	await expect(paintToggle).toHaveClass(/active/);
+	await expect(removeToggle).not.toHaveClass(/active/);
+
+	await page.keyboard.press('x');
+	await expect(removeToggle).toHaveClass(/active/);
+	await expect(paintToggle).not.toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('C opens the colour palette in Paint Mode, and it can be closed without exiting Paint Mode', async ({
+	page
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+
+	const paintToggle = page.getByTestId('hotbar-paint-toggle');
+	await expect(paintToggle).toBeVisible();
+
+	await page.keyboard.press('p');
+	await expect(paintToggle).toHaveClass(/active/);
+
+	const palette = page.getByTestId('material-palette');
+	await expect(palette).not.toBeVisible();
+
+	await page.keyboard.press('c');
+	await expect(palette).toBeVisible();
+	await expect(palette).toContainText('Neutrals');
+	await expect(palette).toContainText('Saved Colours');
+
+	await page.getByRole('button', { name: 'Close palette' }).click();
+	await expect(palette).not.toBeVisible();
+	// Still in Paint Mode — closing the palette must not have exited it.
+	await expect(paintToggle).toHaveClass(/active/);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('selecting a colour swatch in the palette updates the HUD colour swatch', async ({ page }) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await expect(page.getByTestId('hotbar-paint-toggle')).toBeVisible();
+
+	await page.keyboard.press('p');
+	await page.keyboard.press('c');
+
+	const palette = page.getByTestId('material-palette');
+	await expect(palette).toBeVisible();
+
+	await page.getByRole('button', { name: 'Red' }).click();
+	await expect(palette).not.toBeVisible();
+
+	await expect(page.getByTestId('paint-color-swatch')).toHaveCSS(
+		'background-color',
+		'rgb(193, 68, 60)'
+	);
+
+	expect(pageErrors).toEqual([]);
+});

@@ -45,6 +45,29 @@ function makePath(baseY: number): WallPathDefinition {
 	};
 }
 
+/** A straight three-point (two-segment) path along +X then +Z, for per-segment material tests. */
+function makeTwoSegmentPath(): WallPathDefinition {
+	return {
+		id: 'two-segment-path',
+		foundationId: foundation.id,
+		points: [
+			{ gridX: 0, gridZ: 0 },
+			{ gridX: 20, gridZ: 0 },
+			{ gridX: 20, gridZ: 20 }
+		],
+		closed: false,
+		baseY: 0,
+		wallHeight: WALL_HEIGHT,
+		wallThickness: 0.15,
+		joinStyle: 'miter',
+		miterLimit: 4,
+		segments: [
+			{ id: 'seg-a', openings: [] },
+			{ id: 'seg-b', openings: [] }
+		]
+	};
+}
+
 /** World-space Y extent of a picking mesh, matrices forced up to date (nothing renders in vitest). */
 function pickingMeshWorldYRange(manager: WallPathManager): { min: number; max: number } {
 	manager.group.updateMatrixWorld(true);
@@ -86,5 +109,50 @@ describe('WallPathManager picking meshes', () => {
 			const { min } = pickingMeshWorldYRange(manager);
 			expect(min).toBeCloseTo(foundation.topY + baseY, 5);
 		}
+	});
+});
+
+describe('WallPathManager per-segment material', () => {
+	it('regression: getSegmentAsWallView surfaces the segment’s own material — it used to silently drop it, so a painted segment read back as unpainted through the unified getWall()-style accessor', () => {
+		const manager = makeManager();
+		const path = makeTwoSegmentPath();
+		path.segments[0].material = { type: 'color', color: '#C1443C' };
+		manager.addPath(path);
+
+		expect(manager.getSegmentAsWallView('seg-a')?.material).toEqual({
+			type: 'color',
+			color: '#C1443C'
+		});
+		expect(manager.getSegmentAsWallView('seg-b')?.material).toBeUndefined();
+	});
+
+	it('gives each segment its own material GROUP on the merged visible mesh, so painting one never touches another', () => {
+		const manager = makeManager();
+		const path = makeTwoSegmentPath();
+		path.segments[0].material = { type: 'color', color: '#C1443C' };
+		manager.addPath(path);
+
+		const resolvedA = manager.getVisibleMeshAndGroupIndices('seg-a');
+		const resolvedB = manager.getVisibleMeshAndGroupIndices('seg-b');
+		expect(resolvedA).toBeDefined();
+		expect(resolvedB).toBeDefined();
+		// Same merged mesh...
+		expect(resolvedA!.mesh).toBe(resolvedB!.mesh);
+		// ...but disjoint group indices, and each group's actual material differs, matching each
+		// segment's own (possibly absent) paint.
+		expect(resolvedA!.groupIndices.length).toBeGreaterThan(0);
+		expect(resolvedB!.groupIndices.length).toBeGreaterThan(0);
+		for (const indexA of resolvedA!.groupIndices) {
+			expect(resolvedB!.groupIndices).not.toContain(indexA);
+		}
+		const materials = resolvedA!.mesh.material as THREE.Material[];
+		const materialA = materials[resolvedA!.groupIndices[0]];
+		const materialB = materials[resolvedB!.groupIndices[0]];
+		expect(materialA).not.toBe(materialB);
+	});
+
+	it('returns undefined from getVisibleMeshAndGroupIndices for an unknown segment id', () => {
+		const manager = makeManager();
+		expect(manager.getVisibleMeshAndGroupIndices('missing')).toBeUndefined();
 	});
 });

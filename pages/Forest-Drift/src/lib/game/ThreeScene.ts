@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BuildingLevelManager } from './building/BuildingLevelManager';
+import { BuildingMaterialManager } from './building/BuildingMaterialManager';
 import { BuildingRemovalManager } from './building/BuildingRemovalManager';
 import { BuildUndoManager } from './building/BuildUndoManager';
 import { BuildingManager } from './building/BuildingManager';
@@ -11,6 +12,8 @@ import { FoundationManager } from './building/FoundationManager';
 import { FoundationTool } from './building/FoundationTool';
 import type { BuildingSettings, BuildUiState, HotbarUiState } from './building/FoundationTypes';
 import { vertexSpacingFor } from './building/foundationMath';
+import type { PaintUiState } from './building/PaintTool';
+import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
 import { RemoveTool } from './building/RemoveTool';
 import { RoofTool } from './building/RoofTool';
@@ -69,6 +72,8 @@ export interface ThreeSceneOptions {
 	onPointerLockChange?: (locked: boolean) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
+	onPaintPaletteChange?: (open: boolean) => void;
+	onPaintStateChange?: (state: PaintUiState) => void;
 }
 
 /**
@@ -94,6 +99,7 @@ export class ThreeScene {
 	private readonly renderer: THREE.WebGLRenderer;
 	private readonly terrainManager: TerrainManager;
 	private readonly treeManager: TreeManager;
+	private readonly materialManager: BuildingMaterialManager;
 	private readonly foundationManager: FoundationManager;
 	private readonly wallManager: WallManager;
 	private readonly wallPathManager: WallPathManager;
@@ -115,6 +121,7 @@ export class ThreeScene {
 	private readonly roofTool: RoofTool;
 	private readonly stairTool: StairTool;
 	private readonly removeTool: RemoveTool;
+	private readonly paintTool: PaintTool;
 	private readonly buildToolManager: BuildToolManager;
 	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
@@ -177,8 +184,10 @@ export class ThreeScene {
 		this.scene.add(this.terrainManager.group);
 
 		const buildingSettings = options.buildingSettings;
-		this.foundationManager = new FoundationManager(() =>
-			vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution)
+		this.materialManager = new BuildingMaterialManager();
+		this.foundationManager = new FoundationManager(
+			() => vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			this.materialManager
 		);
 		this.scene.add(this.foundationManager.group);
 
@@ -186,14 +195,16 @@ export class ThreeScene {
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
-			getBuildingGridSize: () => buildingSettings.buildingGridSize
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			materialManager: this.materialManager
 		});
 		this.scene.add(this.wallManager.group);
 		this.wallPathManager = new WallPathManager({
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
-			getBuildingGridSize: () => buildingSettings.buildingGridSize
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			materialManager: this.materialManager
 		});
 		this.scene.add(this.wallPathManager.group);
 
@@ -203,7 +214,8 @@ export class ThreeScene {
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
-			getBuildingGridSize: () => buildingSettings.buildingGridSize
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			materialManager: this.materialManager
 		});
 		this.scene.add(this.slabManager.group);
 
@@ -378,6 +390,17 @@ export class ThreeScene {
 			onHudChange: options.onBuildHudChange
 		});
 
+		this.paintTool = new PaintTool({
+			scene: this.scene,
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			materialManager: this.materialManager,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange,
+			onPaintPaletteChange: options.onPaintPaletteChange,
+			onPaintStateChange: options.onPaintStateChange
+		});
+
 		this.buildToolManager = new BuildToolManager({
 			domElement: this.renderer.domElement,
 			tools: {
@@ -392,6 +415,7 @@ export class ThreeScene {
 				stairs: this.stairTool
 			},
 			removeTool: this.removeTool,
+			paintTool: this.paintTool,
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
 			onHudChange: options.onBuildHudChange
@@ -465,6 +489,30 @@ export class ThreeScene {
 	/** Lets the Svelte hotbar UI's trash icon toggle Remove Mode by click, in addition to the `X` key shortcut. */
 	toggleRemoveMode(): void {
 		this.buildToolManager.toggleRemoveMode();
+	}
+
+	/** Lets the Svelte hotbar UI's paint icon toggle Paint Mode by click, in addition to the `P` key shortcut. */
+	togglePaintMode(): void {
+		this.buildToolManager.togglePaintMode();
+	}
+
+	/** Lets the Svelte MaterialPalette select a colour (or `undefined` for "Default") by click. */
+	selectPaintMaterial(material: Parameters<PaintTool['selectMaterial']>[0]): void {
+		this.paintTool.selectMaterial(material);
+	}
+
+	/** Saves the currently selected paint colour as a reusable preset — returns `null` if "Default" is selected (nothing to save). */
+	savePaintPreset(name?: string): ReturnType<PaintTool['savePreset']> {
+		return this.paintTool.savePreset(name);
+	}
+
+	removePaintPreset(id: string): void {
+		this.paintTool.removePreset(id);
+	}
+
+	/** Lets the Svelte MaterialPalette's own Close button (or clicking outside it) close the palette without needing to simulate a `C` key press. */
+	closePaintPalette(): void {
+		this.paintTool.closePalette();
 	}
 
 	/** Lets the Svelte hotbar UI select a slot by click, in addition to the number-key shortcuts. */
@@ -685,6 +733,8 @@ export class ThreeScene {
 		this.roofTool.dispose();
 		this.stairTool.dispose();
 		this.removeTool.dispose();
+		this.paintTool.dispose();
+		this.materialManager.dispose();
 		this.treeManager.dispose();
 		this.wallManager.dispose();
 		this.wallPathManager.dispose();

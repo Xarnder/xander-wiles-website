@@ -26,11 +26,16 @@ const DIGIT_TO_SLOT: Record<string, number> = {
 	Digit9: 9
 };
 
+/** Which temporary global editing overlay (if any) is active — see the class doc comment. */
+type GlobalMode = 'none' | 'remove' | 'paint';
+
 export interface BuildToolManagerOptions {
 	domElement: HTMLElement;
 	tools: Partial<Record<ToolId, BuildTool>>;
 	/** The global Remove Mode tool (`X` key) — always available, never placed in `tools`/the hotbar itself. See the class doc comment. */
 	removeTool: BuildTool;
+	/** The global Paint Mode tool (`P` key) — same treatment as `removeTool`. */
+	paintTool: BuildTool;
 	isPointerLocked: () => boolean;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onHudChange?: (hud: BuildUiState | null) => void;
@@ -40,40 +45,48 @@ export interface BuildToolManagerOptions {
  * Owns the hotbar selection and routes input to whichever tool is active. Contains no building
  * logic itself — FoundationTool (and future tools) own their own targeting/state/placement.
  *
- * Also owns Remove Mode (`X`), a temporary GLOBAL overlay rather than another hotbar slot — the
- * hotbar is already full at 1-9, and removal is a universal editor action, not another building
- * piece (see the README's "Remove Mode" section). While `removeModeActive`, `update()`/mouse/most
- * keyboard input route to `removeTool` instead of the numbered slot's own tool; `activeSlotNumber`
- * itself is NEVER touched by entering or exiting Remove Mode, so the previously selected hotbar
- * tool is always exactly what's restored on exit — no separate "remembered slot" bookkeeping needed.
+ * Also owns the two temporary GLOBAL editing overlays, Remove Mode (`X`) and Paint Mode (`P`),
+ * rather than either consuming a hotbar slot — the hotbar is already full at 1-9, and both are
+ * universal editor actions, not another building piece (see the README's "Remove Mode" and "Paint
+ * Tool" sections). Exactly one of `{'none', 'remove', 'paint'}` (`globalMode`) is active at a time:
+ * entering one always exits the other first, never both at once. While a global mode is active,
+ * `update()`/mouse/most keyboard input route to that mode's own tool instead of the numbered slot's
+ * own tool; `activeSlotNumber` itself is NEVER touched by entering or exiting a global mode, so the
+ * previously selected hotbar tool is always exactly what's restored on exit — no separate
+ * "remembered slot" bookkeeping needed.
  */
 export class BuildToolManager {
 	private readonly slots: readonly HotbarSlot[] = DEFAULT_HOTBAR_SLOTS;
 	private readonly tools: Partial<Record<ToolId, BuildTool>>;
 	private readonly removeTool: BuildTool;
+	private readonly paintTool: BuildTool;
 	private readonly isPointerLocked: () => boolean;
 	private readonly onHotbarChange?: (state: HotbarUiState) => void;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
 	private readonly domElement: HTMLElement;
 
 	private activeSlotNumber = 1;
-	private removeModeActive = false;
+	private globalMode: GlobalMode = 'none';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (event.code === 'KeyX') {
-			this.toggleRemoveMode();
+			this.setGlobalMode(this.globalMode === 'remove' ? 'none' : 'remove');
 			return;
 		}
-		// Digit keys always go through selectSlot, active-slot or not — it exits Remove Mode itself
-		// first when needed (see its doc comment), so this must run BEFORE the removeModeActive
+		if (event.code === 'KeyP') {
+			this.setGlobalMode(this.globalMode === 'paint' ? 'none' : 'paint');
+			return;
+		}
+		// Digit keys always go through selectSlot, active-slot or not — it exits any global mode
+		// itself first when needed (see its doc comment), so this must run BEFORE the globalMode
 		// early-return below, not be swallowed by it.
 		const slot = DIGIT_TO_SLOT[event.code];
 		if (slot !== undefined) {
 			this.selectSlot(slot);
 			return;
 		}
-		if (this.removeModeActive) {
-			if (event.code === 'Escape') this.setRemoveMode(false);
+		if (this.globalMode !== 'none') {
+			if (event.code === 'Escape') this.setGlobalMode('none');
 			return;
 		}
 		if (event.code === 'Escape') {
@@ -84,17 +97,17 @@ export class BuildToolManager {
 	private readonly handleMouseDown = (event: MouseEvent) => {
 		if (event.button === 0) {
 			// Ungate: while pointer lock is not yet engaged, this exact click is the one that
-			// acquires it (see FirstPersonController) — it must not also place a foundation or
-			// remove an object.
+			// acquires it (see FirstPersonController) — it must not also place a foundation, remove,
+			// or paint an object.
 			if (!this.isPointerLocked()) return;
-			if (this.removeModeActive) {
-				this.removeTool.onPrimaryAction();
+			if (this.globalMode !== 'none') {
+				this.getGlobalTool()?.onPrimaryAction();
 				return;
 			}
 			this.getActiveTool()?.onPrimaryAction();
 		} else if (event.button === 2) {
-			if (this.removeModeActive) {
-				this.setRemoveMode(false);
+			if (this.globalMode !== 'none') {
+				this.setGlobalMode('none');
 				return;
 			}
 			this.getActiveTool()?.onSecondaryAction();
@@ -109,6 +122,7 @@ export class BuildToolManager {
 		this.domElement = options.domElement;
 		this.tools = options.tools;
 		this.removeTool = options.removeTool;
+		this.paintTool = options.paintTool;
 		this.isPointerLocked = options.isPointerLocked;
 		this.onHotbarChange = options.onHotbarChange;
 		this.onHudChange = options.onHudChange;
@@ -122,12 +136,12 @@ export class BuildToolManager {
 	}
 
 	/**
-	 * Selecting a slot always exits Remove Mode first (whether triggered by a digit key or clicking
-	 * the on-screen hotbar) — a very natural "I'm done removing, let's build" gesture, and simpler
-	 * than deciding what a digit press should do while modally suspended.
+	 * Selecting a slot always exits any active global mode first (whether triggered by a digit key
+	 * or clicking the on-screen hotbar) — a very natural "I'm done removing/painting, let's build"
+	 * gesture, and simpler than deciding what a digit press should do while modally suspended.
 	 */
 	selectSlot(slot: number): void {
-		if (this.removeModeActive) this.setRemoveMode(false);
+		if (this.globalMode !== 'none') this.setGlobalMode('none');
 		if (slot === this.activeSlotNumber || slot < 1 || slot > this.slots.length) return;
 		this.getActiveTool()?.deactivate();
 		this.activeSlotNumber = slot;
@@ -136,35 +150,57 @@ export class BuildToolManager {
 	}
 
 	toggleRemoveMode(): void {
-		this.setRemoveMode(!this.removeModeActive);
+		this.setGlobalMode(this.globalMode === 'remove' ? 'none' : 'remove');
+	}
+
+	togglePaintMode(): void {
+		this.setGlobalMode(this.globalMode === 'paint' ? 'none' : 'paint');
 	}
 
 	isRemoveModeActive(): boolean {
-		return this.removeModeActive;
+		return this.globalMode === 'remove';
 	}
 
-	private setRemoveMode(active: boolean): void {
-		if (active === this.removeModeActive) return;
-		if (active) {
-			// Cancel any unfinished multi-click construction (a pending polygon/stair selection) rather
-			// than leaving it hidden in the background, then hide the tool's own preview/HUD — every
-			// existing tool's deactivate() already does exactly that.
+	isPaintModeActive(): boolean {
+		return this.globalMode === 'paint';
+	}
+
+	private getGlobalTool(): BuildTool | undefined {
+		if (this.globalMode === 'remove') return this.removeTool;
+		if (this.globalMode === 'paint') return this.paintTool;
+		return undefined;
+	}
+
+	private setGlobalMode(next: GlobalMode): void {
+		if (next === this.globalMode) return;
+
+		// Leaving whichever global mode (if any) was active.
+		this.getGlobalTool()?.deactivate();
+
+		if (next === 'none') {
+			this.globalMode = 'none';
+			this.activateCurrent();
+			this.emitHotbarChange();
+			return;
+		}
+
+		// Entering a global mode: if the hotbar's own tool was active (i.e. we're not just switching
+		// directly from one global mode to the other), cancel any unfinished multi-click construction
+		// rather than leaving it hidden in the background, then hide its preview/HUD — every existing
+		// tool's deactivate() already does exactly that.
+		if (this.globalMode === 'none') {
 			this.getActiveTool()?.onSecondaryAction();
 			this.getActiveTool()?.deactivate();
-			this.removeModeActive = true;
-			this.removeTool.activate();
-		} else {
-			this.removeTool.deactivate();
-			this.removeModeActive = false;
-			this.activateCurrent();
 		}
+		this.globalMode = next;
+		this.getGlobalTool()?.activate();
 		this.emitHotbarChange();
 	}
 
 	/** Call once per frame; routes to whichever tool (if any) is currently active. */
 	update(): void {
-		if (this.removeModeActive) {
-			this.removeTool.update();
+		if (this.globalMode !== 'none') {
+			this.getGlobalTool()?.update();
 			return;
 		}
 		this.getActiveTool()?.update();
@@ -191,13 +227,14 @@ export class BuildToolManager {
 		this.onHotbarChange?.({
 			slots: this.slots,
 			activeSlot: this.activeSlotNumber,
-			removeModeActive: this.removeModeActive
+			globalMode: this.globalMode
 		});
 	}
 
 	dispose(): void {
 		this.getActiveTool()?.deactivate();
 		this.removeTool.deactivate();
+		this.paintTool.deactivate();
 		window.removeEventListener('keydown', this.handleKeyDown);
 		this.domElement.removeEventListener('mousedown', this.handleMouseDown);
 		this.domElement.removeEventListener('contextmenu', this.handleContextMenu);

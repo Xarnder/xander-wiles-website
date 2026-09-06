@@ -5,16 +5,20 @@
 		slots: readonly HotbarSlot[];
 		activeSlot: number;
 		removeModeActive?: boolean;
+		paintModeActive?: boolean;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
+		onTogglePaintMode?: () => void;
 	}
 
 	let {
 		slots,
 		activeSlot,
 		removeModeActive = false,
+		paintModeActive = false,
 		onSelectSlot,
-		onToggleRemoveMode
+		onToggleRemoveMode,
+		onTogglePaintMode
 	}: Props = $props();
 </script>
 
@@ -23,7 +27,7 @@
 		<button
 			type="button"
 			class="slot"
-			class:active={slot.slot === activeSlot && !removeModeActive}
+			class:active={slot.slot === activeSlot && !removeModeActive && !paintModeActive}
 			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
 		>
@@ -34,8 +38,9 @@
 		</button>
 	{/each}
 
-	<!-- Deliberately outside the numbered-slot loop above — Remove Mode is a global overlay, not a
-	     hotbar selection, so it never takes a slot number (see BuildToolManager's class doc comment). -->
+	<!-- Deliberately outside the numbered-slot loop above — Remove Mode and Paint Mode are global
+	     overlays, not hotbar selections, so neither ever takes a slot number (see
+	     BuildToolManager's class doc comment). -->
 	<button
 		type="button"
 		class="slot remove-slot"
@@ -47,6 +52,19 @@
 	>
 		<span class="slot-number">X</span>
 		<span class="slot-label">Remove</span>
+	</button>
+
+	<button
+		type="button"
+		class="slot paint-slot"
+		class:active={paintModeActive}
+		data-testid="hotbar-paint-toggle"
+		onclick={() => onTogglePaintMode?.()}
+		aria-label="Toggle Paint Mode"
+		aria-pressed={paintModeActive}
+	>
+		<span class="slot-number">P</span>
+		<span class="slot-label">Paint</span>
 	</button>
 </div>
 
@@ -105,6 +123,15 @@
 		border-color: #ff5c4d;
 		background: rgba(60, 15, 15, 0.6);
 		box-shadow: 0 0 0 1px rgba(255, 92, 77, 0.5);
+	}
+
+	/* No extra left margin — sits right next to Remove, both being global-mode toggles rather than
+	   numbered hotbar slots; a distinct (blue, not red or yellow) active colour keeps it visually
+	   separate from both. */
+	.paint-slot.active {
+		border-color: #4da6ff;
+		background: rgba(15, 35, 60, 0.6);
+		box-shadow: 0 0 0 1px rgba(77, 166, 255, 0.5);
 	}
 
 	.slot-number {

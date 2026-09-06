@@ -1,31 +1,25 @@
 import * as THREE from 'three';
 import type { FoundationDefinition } from './FoundationTypes';
 
-/**
- * Shared by every placed foundation. polygonOffset nudges the *rendered* fragment depth only —
- * it never changes the logical topY, which stays exactly `maxTerrainHeight` — so a foundation top
- * that happens to be perfectly coplanar with the terrain at its highest sampled vertex doesn't
- * z-fight with it.
- */
-const foundationMaterial = new THREE.MeshStandardMaterial({
-	color: 0x8a8578,
-	roughness: 0.92,
-	metalness: 0.04,
-	polygonOffset: true,
-	polygonOffsetFactor: -1,
-	polygonOffsetUnits: -1,
-	flatShading: true
-});
-
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xfff2b0 });
 
-/** Three.js representation of one placed FoundationDefinition — a plain cuboid intersecting the terrain. */
+/**
+ * Three.js representation of one placed FoundationDefinition — a plain cuboid intersecting the
+ * terrain. `material` is resolved by the caller (FoundationManager, via BuildingMaterialManager)
+ * rather than hardcoded here, so a painted foundation's colour override — and an unpainted one's
+ * shared default look, `polygonOffset` included — both come from the same one place every other
+ * building surface's material does. `polygonOffset` nudges the *rendered* fragment depth only — it
+ * never changes the logical `topY`, which stays exactly `maxTerrainHeight` — so a foundation top
+ * that happens to be perfectly coplanar with the terrain at its highest sampled vertex doesn't
+ * z-fight with it; this is baked into the material itself (BuildingMaterialManager's `foundation`
+ * template), not something this class has to know about.
+ */
 export class FoundationMesh {
 	readonly object: THREE.Mesh;
 	private readonly geometry: THREE.BoxGeometry;
 	private boundsHelper: THREE.LineSegments | null = null;
 
-	constructor(definition: FoundationDefinition, vertexSpacing: number) {
+	constructor(definition: FoundationDefinition, vertexSpacing: number, material: THREE.Material) {
 		const minX = definition.minGridX * vertexSpacing;
 		const maxX = definition.maxGridX * vertexSpacing;
 		const minZ = definition.minGridZ * vertexSpacing;
@@ -36,13 +30,17 @@ export class FoundationMesh {
 		const height = definition.topY - definition.bottomY;
 
 		this.geometry = new THREE.BoxGeometry(width, height, depth);
-		this.object = new THREE.Mesh(this.geometry, foundationMaterial);
+		this.object = new THREE.Mesh(this.geometry, material);
 		this.object.position.set(
 			(minX + maxX) / 2,
 			(definition.topY + definition.bottomY) / 2,
 			(minZ + maxZ) / 2
 		);
 		this.object.userData.foundationId = definition.id;
+	}
+
+	setMaterial(material: THREE.Material): void {
+		this.object.material = material;
 	}
 
 	setBoundsVisible(visible: boolean): void {

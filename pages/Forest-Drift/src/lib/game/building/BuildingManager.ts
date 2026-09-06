@@ -5,6 +5,7 @@ import {
 } from './FoundationLocalMath';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 import { polygonsOverlap, validateSlabPolygon } from './slabMath';
 import type { SlabDefinition, SlabOpeningDefinition, SlabType } from './SlabTypes';
 import { slabBottomY } from './SlabTypes';
@@ -526,33 +527,73 @@ export class BuildingManager {
 	}
 
 	/**
-	 * Punches a rectangular opening into every slab on the stair's foundation whose underside the
-	 * stair's solid mass actually reaches into (see `stairReachesSlab`) and whose footprint overlaps
-	 * the stair's — the "sensible, slightly-oversized" v1 opening the README describes (full stair
-	 * width and run, which alone already guarantees headroom the whole way up since nothing above
-	 * the stair's own footprint is ever solid). A stair passing through more than one stacked slab
-	 * (e.g. a very tall single flight) opens each one it reaches, not just the first. Called right
-	 * after a stair is placed; the mirror case (a slab placed AFTER a stair that already reaches it)
-	 * is `autoOpenStairsIntoSlab` below.
+	 * The ONE slab that counts as "the ceiling directly above" a stair — never a slab at or below the
+	 * stair's own base (that's the floor the stair stands ON, not something it rises through — a
+	 * previous version had no lower bound here at all, which is what let a hole get cut in the floor
+	 * the stair started from), and never more than one even when the stair's solid mass would also
+	 * technically reach a farther slab stacked above the correct one. Among every slab on the same
+	 * foundation whose footprint overlaps the stair's, strictly above `stair.baseY`, and actually
+	 * reached by the stair's own solid mass (`stairReachesSlab`), this returns the one with the
+	 * LOWEST underside — i.e. the nearest one — or `undefined` if none qualify yet.
 	 */
-	private openSlabForStair(stair: StairDefinition): void {
+	private findCeilingSlabForStair(stair: StairDefinition): SlabDefinition | undefined {
+		const EPS = 1e-6;
 		const metrics = computeStairMetrics(stair);
 		const stairLocalPolygon = this.stairFootprintLocalPolygon(stair);
+		let best: SlabDefinition | undefined;
+		let bestBottom = Infinity;
 		for (const slab of this.slabManager.getSlabsForFoundation(stair.foundationId)) {
+			const bottom = slabBottomY(slab);
+			if (bottom <= stair.baseY + EPS) continue; // at/below the stair's own floor — never "above"
 			if (!this.stairReachesSlab(metrics.topLocalY, slab)) continue;
 			if (!polygonsOverlap(this.slabLocalPolygonOf(slab), stairLocalPolygon)) continue;
-			this.addStairOpening(slab.id, stair);
+			if (bottom < bestBottom) {
+				best = slab;
+				bestBottom = bottom;
+			}
+		}
+		return best;
+	}
+
+	/** Removes every slab-opening `stairId` owns (via `sourceStairId`) except the one (if any) on `keepSlabId` — used when the ceiling directly above a stair changes because a nearer slab was just placed, so a stair's opening never lingers on a slab that is no longer the correct one. */
+	private removeStairOpeningsExcept(
+		foundationId: string,
+		stairId: string,
+		keepSlabId: string
+	): void {
+		for (const slab of this.slabManager.getSlabsForFoundation(foundationId)) {
+			if (slab.id === keepSlabId) continue;
+			for (const opening of slab.openings) {
+				if (opening.sourceStairId === stairId) this.slabManager.removeOpening(slab.id, opening.id);
+			}
 		}
 	}
 
-	/** Mirror of `openSlabForStair`, called right after a slab is placed — opens it for any existing stair on the same foundation whose solid mass reaches into it and overlaps its footprint. */
+	/**
+	 * Punches a rectangular opening into the ONE slab that is "the ceiling directly above" the stair
+	 * (see `findCeilingSlabForStair`) — the "sensible, slightly-oversized" v1 opening the README
+	 * describes (full stair width and run, which alone already guarantees headroom the whole way up
+	 * since nothing above the stair's own footprint is ever solid). Never opens a slab below the
+	 * stair's own base, and never more than one slab even if a farther one is also technically
+	 * reached. Called right after a stair is placed; the mirror case (a slab placed AFTER a stair
+	 * that already reaches it) is `autoOpenStairsIntoSlab` below.
+	 */
+	private openSlabForStair(stair: StairDefinition): void {
+		const ceiling = this.findCeilingSlabForStair(stair);
+		if (ceiling) this.addStairOpening(ceiling.id, stair);
+	}
+
+	/**
+	 * Mirror of `openSlabForStair`, called right after a slab is placed — for every stair on the same
+	 * foundation, recomputes which slab is now "the ceiling directly above" it (the new slab may or
+	 * may not be the correct one — a closer slab could already exist) and opens ONLY that one,
+	 * removing any stale opening the stair previously owned on a now-incorrect (farther) slab.
+	 */
 	private autoOpenStairsIntoSlab(slab: SlabDefinition): void {
-		const slabLocalPolygon = this.slabLocalPolygonOf(slab);
 		for (const stair of this.stairManager.getStairsForFoundation(slab.foundationId)) {
-			const metrics = computeStairMetrics(stair);
-			if (!this.stairReachesSlab(metrics.topLocalY, slab)) continue;
-			const stairLocalPolygon = this.stairFootprintLocalPolygon(stair);
-			if (!polygonsOverlap(slabLocalPolygon, stairLocalPolygon)) continue;
+			const ceiling = this.findCeilingSlabForStair(stair);
+			if (!ceiling || ceiling.id !== slab.id) continue;
+			this.removeStairOpeningsExcept(stair.foundationId, stair.id, slab.id);
 			this.addStairOpening(slab.id, stair);
 		}
 	}
@@ -722,6 +763,16 @@ export class BuildingManager {
 		return this.stairManager.getMeshesForRaycast();
 	}
 
+	/** Every slab's real mesh — for Paint Mode targeting (see SlabManager.getMeshesForRaycast). */
+	getRaycastableSlabMeshes() {
+		return this.slabManager.getMeshesForRaycast();
+	}
+
+	/** Every foundation's real mesh — for Paint Mode targeting. */
+	getRaycastableFoundationMeshes() {
+		return this.foundationManager.getMeshes();
+	}
+
 	getWallPath(pathId: string): WallPathDefinition | undefined {
 		return this.wallPathManager.getPath(pathId);
 	}
@@ -738,6 +789,72 @@ export class BuildingManager {
 
 	getAllStairs(): StairDefinition[] {
 		return this.stairManager.getAllStairs();
+	}
+
+	/**
+	 * Paints (or, given `undefined`, resets to default) a standalone wall's material — the whole
+	 * logical wall, never a single face (see the README's "Paint Tool" section on why per-face
+	 * painting is out of scope for v1). Preserves every opening/collision exactly: `rebuildWall`
+	 * regenerates geometry from the SAME `openings` array, just with a different material applied —
+	 * nothing about the wall's shape is touched. Returns `false` for an unknown wall id.
+	 */
+	paintWall(wallId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		const wall = this.wallManager.getWall(wallId);
+		if (!wall) return false;
+		wall.material = material;
+		this.wallManager.rebuildWall(wallId);
+		return true;
+	}
+
+	/**
+	 * Paints ONE segment of a Continuous/Polygon Wall path — never the whole path (see the README's
+	 * "Paint Tool" section: this matches Window/Door/Remove Mode's existing per-segment targeting,
+	 * not a whole-path operation). The merged visible mesh keeps one Three.js material GROUP per
+	 * segment specifically so this is possible without repainting every neighbour — see
+	 * WallPathManager.rebuildEntry. Returns `false` for an unknown path or segment id.
+	 */
+	paintWallSegment(
+		pathId: string,
+		segmentId: string,
+		material: BuildingMaterialDefinition | undefined
+	): boolean {
+		const path = this.wallPathManager.getPath(pathId);
+		if (!path) return false;
+		const segment = path.segments.find((s) => s.id === segmentId);
+		if (!segment) return false;
+		segment.material = material;
+		this.wallPathManager.rebuildPath(pathId);
+		return true;
+	}
+
+	/** Paints (or resets) a slab (ceiling/floor/flat roof) — the whole physical slab, even when it's shared as one room's ceiling and the room above's floor (see SlabDefinition.material's doc comment). Returns `false` for an unknown slab id. */
+	paintSlab(slabId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		return this.slabManager.setMaterial(slabId, material);
+	}
+
+	/** Paints (or resets) a foundation — visual only; never touches its grid footprint, `topY`/`bottomY`, or collision (see FoundationDefinition.material's doc comment). Returns `false` for an unknown foundation id. */
+	paintFoundation(foundationId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		return this.foundationManager.setMaterial(foundationId, material);
+	}
+
+	/** A standalone wall's real mesh — for PaintTool's live hover preview (material swap + outline). */
+	getWallMesh(wallId: string) {
+		return this.wallManager.getMeshForWall(wallId);
+	}
+
+	/** A slab's real mesh — same purpose as `getWallMesh`. */
+	getSlabMesh(slabId: string) {
+		return this.slabManager.getMeshForSlab(slabId);
+	}
+
+	/** A foundation's real mesh — same purpose as `getWallMesh`. */
+	getFoundationMesh(foundationId: string) {
+		return this.foundationManager.getMeshForFoundation(foundationId);
+	}
+
+	/** A wall-path segment's merged visible mesh + which of its material-array indices are its own — see WallPathManager.getVisibleMeshAndGroupIndices and PaintTool's per-segment preview. */
+	getWallPathVisibleMeshAndGroupIndices(segmentId: string) {
+		return this.wallPathManager.getVisibleMeshAndGroupIndices(segmentId);
 	}
 
 	getBuildingForFoundation(foundationId: string): FoundationBuildingDefinition {

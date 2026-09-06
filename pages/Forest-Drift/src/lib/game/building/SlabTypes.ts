@@ -1,4 +1,5 @@
 import type { BuildingGridPoint } from './FoundationLocalMath';
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 
 export type SlabType = 'ceiling' | 'floor' | 'flat-roof';
 
@@ -50,6 +51,13 @@ export interface SlabDefinition {
 	points: BuildingGridPoint[];
 	/** Defaults to `[]` when absent so slabs serialized before openings existed still load. */
 	openings: SlabOpeningDefinition[];
+	/**
+	 * `undefined` for an unpainted slab — renders using SlabManager's own default look for `type`
+	 * (`BuildingMaterialManager.getMaterial('slab-floor' | 'slab-roof', undefined)`). A single
+	 * physical slab shared as one room's ceiling and the room above's floor gets exactly one colour
+	 * either way, per the README's "Paint Tool" section — there's no separate top/bottom material yet.
+	 */
+	material?: BuildingMaterialDefinition;
 }
 
 /** `slab.localY - slab.thickness`, i.e. the slab's underside — see SlabDefinition's doc comment. */

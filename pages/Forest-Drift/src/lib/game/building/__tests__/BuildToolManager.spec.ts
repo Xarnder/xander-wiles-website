@@ -107,10 +107,12 @@ function buildHarness(pointerLocked: { value: boolean }) {
 
 	const domElement = new FakeElement();
 	const removeTool = makeFakeTool();
+	const paintTool = makeFakeTool();
 	const buildToolManager = new BuildToolManager({
 		domElement: domElement as unknown as HTMLElement,
 		tools: { foundation: foundationTool },
 		removeTool,
+		paintTool,
 		isPointerLocked: () => pointerLocked.value
 	});
 
@@ -129,7 +131,15 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		fakeWindow.dispatch('keydown', { code });
 	}
 
-	return { foundationManager, buildToolManager, removeTool, pointCrosshairAt, click, key };
+	return {
+		foundationManager,
+		buildToolManager,
+		removeTool,
+		paintTool,
+		pointCrosshairAt,
+		click,
+		key
+	};
 }
 
 describe('BuildToolManager + FoundationTool click routing', () => {
@@ -296,5 +306,97 @@ describe('BuildToolManager Remove Mode routing', () => {
 		for (const digit of ['Digit1', 'Digit2', 'Digit9']) key(digit);
 
 		expect(removeTool.activateCount).toBe(0);
+	});
+});
+
+describe('BuildToolManager Paint Mode routing and Remove/Paint mutual exclusion', () => {
+	const pointerLocked = { value: true };
+
+	beforeEach(() => {
+		pointerLocked.value = true;
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('P activates the paint tool and suspends the currently selected hotbar tool', () => {
+		const { paintTool, key, pointCrosshairAt } = buildHarness(pointerLocked);
+
+		key('KeyP');
+		expect(paintTool.activateCount).toBe(1);
+
+		pointCrosshairAt(0, 0);
+		expect(paintTool.updateCount).toBeGreaterThan(0);
+	});
+
+	it('P again exits Paint Mode and restores the previously selected hotbar tool', () => {
+		const { foundationManager, paintTool, key, pointCrosshairAt, click } =
+			buildHarness(pointerLocked);
+
+		key('KeyP');
+		key('KeyP');
+		expect(paintTool.deactivateCount).toBe(1);
+
+		pointCrosshairAt(0, 0);
+		click(0);
+		pointCrosshairAt(20, 14);
+		click(0);
+		expect(foundationManager.getFoundations()).toHaveLength(1);
+	});
+
+	it('left click while Paint Mode is active routes to the paint tool, not the hotbar tool', () => {
+		const { foundationManager, paintTool, key, pointCrosshairAt, click } =
+			buildHarness(pointerLocked);
+
+		key('KeyP');
+		pointCrosshairAt(0, 0);
+		click(0);
+
+		expect(paintTool.primaryCount).toBe(1);
+		expect(foundationManager.getFoundations()).toHaveLength(0);
+	});
+
+	it('pressing X while Paint Mode is active exits Paint Mode and enters Remove Mode', () => {
+		const { removeTool, paintTool, key } = buildHarness(pointerLocked);
+
+		key('KeyP');
+		key('KeyX');
+
+		expect(paintTool.deactivateCount).toBe(1);
+		expect(removeTool.activateCount).toBe(1);
+	});
+
+	it('pressing P while Remove Mode is active exits Remove Mode and enters Paint Mode', () => {
+		const { removeTool, paintTool, key } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		key('KeyP');
+
+		expect(removeTool.deactivateCount).toBe(1);
+		expect(paintTool.activateCount).toBe(1);
+	});
+
+	it('never activates both Remove Mode and Paint Mode at once', () => {
+		const { removeTool, paintTool, key } = buildHarness(pointerLocked);
+
+		key('KeyX');
+		key('KeyP');
+		key('KeyX');
+
+		// Each activation of one mode must be balanced by exactly one deactivation before the next
+		// mode's own activation — never two active tools receiving update() in the same frame.
+		expect(removeTool.activateCount).toBe(2);
+		expect(removeTool.deactivateCount).toBe(1);
+		expect(paintTool.activateCount).toBe(1);
+		expect(paintTool.deactivateCount).toBe(1);
+	});
+
+	it('never occupies a numbered hotbar slot — pressing a digit never activates the paint tool', () => {
+		const { paintTool, key } = buildHarness(pointerLocked);
+
+		for (const digit of ['Digit1', 'Digit2', 'Digit9']) key(digit);
+
+		expect(paintTool.activateCount).toBe(0);
 	});
 });

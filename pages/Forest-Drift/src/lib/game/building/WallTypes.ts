@@ -6,6 +6,7 @@
  * authoritative — see the README's "Building system" section.
  */
 
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { SlabDefinition } from './SlabTypes';
 import type { StairDefinition } from './StairTypes';
 import type { WallPathDefinition } from './WallPathTypes';
@@ -38,6 +39,12 @@ export interface WallOpeningDefinition {
  * wall) — levels are a logical grouping of this one shared coordinate space, never a separate
  * per-storey origin. Defaults to 0 when absent so older serialized walls (saved before this field
  * existed) still load as ground-floor walls.
+ *
+ * `material` is `undefined` for an unpainted wall — it then renders using WallManager's own default
+ * look (`BuildingMaterialManager.getMaterial('wall', undefined)`), never a hardcoded fallback colour
+ * baked into this definition. Painting a wall (Paint Tool) sets an explicit override here; resetting
+ * it back to "Default" deletes the field again rather than reassigning some remembered original
+ * colour — see the README's "Paint Tool" section on why `undefined` IS the inheritance mechanism.
  */
 export interface WallDefinition {
 	id: string;
@@ -53,6 +60,7 @@ export interface WallDefinition {
 	thickness: number;
 
 	openings: WallOpeningDefinition[];
+	material?: BuildingMaterialDefinition;
 }
 
 /**

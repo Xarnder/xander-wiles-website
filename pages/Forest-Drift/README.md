@@ -38,8 +38,13 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
   the hotbar (see "Remove Mode"); while active, left click removes the highlighted wall, wall
   segment, window, door, or staircase, and `X` / right click / `Esc` exits back to whichever tool
   was selected before
+- `P`, or the paint icon beside the hotbar — toggle Paint Mode, another global overlay, mutually
+  exclusive with Remove Mode (see "Paint Tool"); while active, `C` opens the colour palette and left
+  click paints the highlighted wall, wall segment, slab, or foundation with the selected colour;
+  `P` / right click / `Esc` exits back to whichever tool was selected before
 - `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
   Wall, Ceiling, Floor and Roof — see "Draw-snap: axis, inline and wall-corner alignment" below
+  (while Paint Mode is active, `C` instead opens the colour palette — see "Paint Tool")
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -1319,14 +1324,34 @@ parameter (see above) cuts it as real geometry on both faces, and `SlabManager.g
 not just visually.
 
 `BuildingManager` generates this automatically and bidirectionally — no user-facing "cut a hole"
-tool exists yet. `addStair` checks every slab on the same foundation for whether the stair's solid
-mass actually reaches into it (`BuildingManager.stairReachesSlab`, see the bugfix below) and its
-footprint overlaps, opening every one that qualifies (not just the first — a very tall single flight
-can legitimately pierce more than one stacked slab); `addSlab` does the mirror check against every
-existing stair on that foundation. The opening is simply the stair's own full footprint — a
-deliberately "slightly oversized rather than too small" v1 choice (per the spec) that also
-automatically guarantees head clearance the whole way up, since nothing above the stair's own
-footprint is ever solid.
+tool exists yet. `addStair` calls `findCeilingSlabForStair`, which considers every slab on the same
+foundation whose footprint overlaps the stair's, is strictly ABOVE the stair's own base (never the
+floor the stair stands on), and whose underside the stair's solid mass actually reaches
+(`BuildingManager.stairReachesSlab`, see the bugfix below) — and opens ONLY the nearest such slab,
+never a farther one the stair would also technically intersect; `addSlab` does the mirror check
+(`autoOpenStairsIntoSlab`) against every existing stair on that foundation, additionally moving the
+opening (and removing the stale one) if the newly placed slab turns out to be nearer than whichever
+slab currently owns it. The opening is simply the stair's own full footprint — a deliberately
+"slightly oversized rather than too small" v1 choice (per the spec) that also automatically
+guarantees head clearance the whole way up, since nothing above the stair's own footprint is ever
+solid.
+
+**Bugfix: a stair punched a hole in every slab it was "at or below," including the floor it stood on
+and any slab stacked above the one it actually reached.** `stairReachesSlab`'s "does the stair's
+solid mass reach this slab's underside" check has no upper bound by design (see the section above),
+but the original `openSlabForStair`/`autoOpenStairsIntoSlab` never paired it with a LOWER bound
+either, and looped over and opened every slab that matched rather than picking the nearest one. In
+practice this meant: (1) the ground-floor slab a stair stood ON received a hole too, since its
+underside is trivially "at or below" the stair's top; and (2) if more than one slab was stacked above
+the level the stair actually reaches (a second- and third-floor ceiling, say), every one of them got
+opened, not just the ceiling directly above. Fixed with `findCeilingSlabForStair`, which adds the
+missing `slabBottomY(slab) > stair.baseY` lower bound (excluding the stair's own floor) and returns
+only the single nearest qualifying slab rather than looping over all of them; `autoOpenStairsIntoSlab`
+now also removes a stair's stale opening on a previously-nearest slab if a newer, nearer slab is
+placed afterward, via the new `sourceStairId`-scoped `removeStairOpeningsExcept`.
+`BuildingManager.spec.ts` covers all three cases: no hole in the slab the stair stands on, only the
+nearest of two reachable stacked slabs gets opened, and placing a nearer slab after a farther one
+already has the opening moves it.
 
 **Bugfix: the opening only ever appeared for the one stair length that happened to match a slab's
 `localY` bit-for-bit.** The original "does this stair reach this slab" check
@@ -1628,6 +1653,205 @@ what `BuildUndoManager` already covers for placement (removal doesn't currently 
 stack — reversing a removal would mean fully reconstructing a `WallDefinition`/`WallPathDefinition`
 /`StairDefinition` including every opening it had, which the existing undo stack's `{type, id}`
 shape doesn't carry; a natural, but separate, future extension).
+
+## Paint Tool: a building material system, not a colour-only hack (`PaintTool.ts`, `BuildingMaterialManager.ts`, `MaterialTypes.ts`, `PaintTypes.ts`, `MaterialPresetStore.ts`)
+
+Pressing `P` toggles Paint Mode — a third temporary GLOBAL overlay alongside Remove Mode (`X`),
+using the exact same mechanism (see BuildToolManager's class doc comment): entering it cancels any
+unfinished multi-click construction and suspends the active tool's own preview/HUD, and exiting
+restores whatever hotbar slot was selected before, in its normal idle state. `HotbarUiState.globalMode`
+is a single `'none' | 'remove' | 'paint'` field rather than two independent booleans, specifically so
+"both active at once" is structurally impossible rather than merely avoided by convention — pressing
+`P` while Remove Mode is active exits it and enters Paint Mode, and vice versa for `X`.
+
+### The core design requirement: a material system, not a colour system
+
+The spec for this feature was explicit that today's "solid colour only" implementation must not
+become tomorrow's rewrite when textures arrive. `BuildingMaterialDefinition` (`MaterialTypes.ts`) is
+a union with exactly one member today —
+
+```ts
+export type BuildingMaterialDefinition = { type: 'color'; color: string };
+```
+
+— never a bare `{color: string}` shape. Every wall/segment/slab/foundation stores this (or
+`undefined`) as its own `material` field; a future `{type: 'texture', textureId, scale, rotation}`
+variant is a new case added to this union, to the `switch` in `BuildingMaterialManager`, and to
+`MaterialPalette.svelte`'s swatch grid — never a redesign of where paint state lives or how it's
+applied. `MaterialPreset` (`{id, name, definition}`) is the other half of this: today's default
+palette and saved colours are already "lightweight material presets" in exactly the shape a future
+texture preset (with a thumbnail instead of a flat colour) would also take.
+
+### Paint targeting: a logical PaintTarget, never a raw mesh
+
+`PaintTarget` (`PaintTypes.ts`) mirrors `RemovalTarget` exactly — `resolvePaintTarget` is a small
+pure function (unit-tested without Three.js) that turns a raycast hit's `userData` into one of
+`'wall' | 'wall-segment' | 'slab' | 'foundation'`. `PaintTool.update()` raycasts against the SAME
+standalone-wall and wall-path-segment picking meshes Remove Mode already uses, plus every slab and
+foundation mesh — never terrain, trees, window/door openings, or stairs (none of those are
+paintable in this version). A wall-path SEGMENT is targeted individually, exactly like
+Window/Door/Remove Mode already do — painting one segment never recolours its neighbours (see
+below for how the merged mesh makes this possible).
+
+### The live preview: swap to the REAL target material, not an approximation
+
+Hovering a valid target temporarily swaps its actual mesh's `.material` to whichever cached material
+`BuildingMaterialManager` would really apply if you clicked — a genuine, byte-identical preview, not
+a tinted stand-in — plus a thin cyan outline (`EdgesGeometry`, the same technique Remove Mode's own
+highlight uses) so the target is unambiguous even before the colour registers. Both are restored the
+instant the hover target changes (`PaintTool.clearHighlight`), and — critically — NEITHER is
+"restored" after an actual paint click: by the time `BuildingManager.paintX()` returns, the owning
+manager (`WallManager`/`WallPathManager`/`SlabManager`/`FoundationManager`) has already rebuilt the
+mesh with its real new material, so `discardHighlightTracking()` just drops the stale tracking
+instead of clobbering that fresh state — the exact same "don't restore after a successful mutation"
+rule Remove Mode's own `discardHighlightTracking` already established.
+
+A wall-path SEGMENT can't use a single-material swap or a clean outline (its merged geometry has no
+per-segment boundary an `EdgesGeometry` could isolate) — instead, `PaintTool` resolves the segment's
+own material-array GROUP indices (`WallPathManager.getVisibleMeshAndGroupIndices`) and replaces only
+those entries in a cloned `THREE.Material[]`, leaving every sibling segment's own array slot
+untouched. The colour swap alone is still an unambiguous "this is the target" signal.
+
+### Material caching (`BuildingMaterialManager.ts`)
+
+Every wall/foundation/slab manager used to build its own mesh against ONE shared module-level
+`MeshStandardMaterial` constant, applied unconditionally to every instance. `BuildingMaterialManager`
+replaces that with a cache keyed by `(surface kind, logical definition)` — `getMaterial('wall',
+undefined)` always returns the exact same unpainted-look material every unpainted wall already
+shared; `getMaterial('wall', {type:'color', color:'#3E6FA6'})` returns one shared instance for every
+wall painted that exact colour, however many there are. Each of the four `MaterialKind`s
+(`'wall' | 'foundation' | 'slab-floor' | 'slab-roof'`) keeps its OWN default look (roughness/
+metalness/flatShading/foundation's `polygonOffset`) — extracted unchanged from each manager's former
+constant — so an unpainted object renders byte-identical to before this system existed. Colours are
+normalized to uppercase `#RRGGBB` (`normalizeColorHex`) before ever being used as a cache key, so
+`#d9d1c3` and `#D9D1C3` share one material instance rather than silently allocating two. Nothing
+returned by `getMaterial()` is ever mutated in place — PaintTool's preview swap is a pure reference
+reassignment (see above), never a `.color.set(...)` on a shared instance.
+
+### Default material inheritance
+
+`material?: BuildingMaterialDefinition` is optional on `WallDefinition`, `WallPathSegmentDefinition`,
+`SlabDefinition`, and `FoundationDefinition` — `undefined` means "use this object's own normal
+default look," not "authored to look however it currently happens to." An existing building's every
+wall/slab/foundation loads with `material` absent and renders exactly as before Paint Tool existed;
+nothing is migrated or backfilled. Painting sets an explicit override; selecting **Default** in the
+palette doesn't try to remember/restore some original colour — it just deletes the field again
+(`BuildingManager.paintX(id, undefined)`), which is a cleaner and more honest inheritance mechanism
+than round-tripping a remembered RGB value.
+
+### Removing colour-hardcoding from the render managers
+
+`WallManager`/`WallPathManager`/`SlabManager`/`FoundationManager` (via `FoundationMesh`) all take an
+OPTIONAL `materialManager: BuildingMaterialManager` constructor option now — optional specifically so
+the many existing tests exercising these classes for placement/collision/geometry math don't need to
+construct one; each falls back to a private instance of its own when omitted, which is functionally
+fine since a test never compares materials across separate manager instances. `ThreeScene` always
+constructs and shares ONE real `BuildingMaterialManager` across every manager, so the cache is
+actually shared in the running game — painting a wall and a slab the same colour reuses one material,
+not two.
+
+### Painting a Continuous Wall segment without recolouring the whole path
+
+`WallPathGeometryBuilder.buildWallPath` already merged every segment's pieces (a middle span plus up
+to two join caps) into ONE geometry via `BufferGeometryUtils.mergeGeometries`. It now merges with
+`useGroups: true` and returns `groupSegmentIds: string[]` — which segment owns group index `i`, in
+the same order the input pieces were merged — so `WallPathManager.rebuildEntry` can build a matching
+`THREE.Material[]` (one cached material per segment, repeated across however many groups that
+segment contributed) and assign it as the merged mesh's own `.material`. `BuildingManager.paintWallSegment`
+mutates the target segment's own `material` field directly (the same "mutate the stored definition,
+call the manager's own rebuild" pattern `addOpening`/`removeOpening` already use) and calls
+`WallPathManager.rebuildPath`, which regenerates the whole merged mesh — but every OTHER segment's
+own `material` field is untouched, so its group(s) resolve to the exact same cached material as
+before. Painting one segment of a room's four walls never touches the other three.
+
+A related bug surfaced writing this: `WallPathManager.getSegmentAsWallView` — the function that lets
+`BuildingManager.getWall()` treat a path segment exactly like a standalone wall — synthesized a
+`WallDefinition`-shaped view from the segment's own fields but forgot to copy `material` across, so a
+painted segment read back as unpainted through that unified accessor even though the paint itself had
+applied correctly. Fixed by adding the missing field; caught by
+`WallPathManager.spec.ts`'s "getSegmentAsWallView surfaces the segment's own material" regression
+test.
+
+### Preserving openings, geometry, and collision
+
+Painting a wall or slab calls the exact same `rebuildWall`/`rebuildPath`/`buildEntry` code path
+adding an opening or removing one already goes through — the only thing that changes between "cut a
+window" and "change the colour" is which field of the definition was mutated before the rebuild.
+Openings, collision rects, and geometry are all regenerated from the SAME authoritative
+`WallDefinition`/`WallPathSegmentDefinition`/`SlabDefinition` fields every other rebuild reads —
+nothing about painting a wall can lose a window, and nothing about painting a foundation can move
+it, resize it, or change its terrain intersection (`paintFoundation` only ever calls
+`FoundationManager.setMaterial`, which reassigns `entry.mesh.material` and copies `material` onto a
+new `FoundationDefinition` object — `topY`/`bottomY`/the grid footprint are never touched).
+
+### Palette UX (`MaterialPalette.svelte`)
+
+`C` opens the colour palette while Paint Mode is active (PaintTool owns this key itself, exactly like
+`WallTool`/`SlabToolBase` own their own snap-mode `C` handling) and calls
+`document.exitPointerLock()` so the OS cursor reappears — the same direct browser API call
+`FirstPersonController`'s own Escape handling already uses. `PaintTool.onPrimaryAction()` refuses to
+paint while the palette is open, and the palette panel's own root `stopPropagation`s its clicks so
+clicking it can never reach the full-screen backdrop's "click outside to close" handler underneath
+it — clicking a preset/saved/Default swatch both selects it AND closes the palette (a fast
+"pick-and-go" action); the custom colour picker deliberately stays open on every drag, since it's a
+more deliberate multi-step interaction and the Save Colour button needs to still be reachable
+afterward.
+
+The palette's own layout (`Default` / `Neutrals` / `Warm` / `Cool` / `Accent` / `Custom Colour` /
+`Saved Colours`) is deliberately generic — "Materials" the section title, "Colours" the only
+populated category — so a future `Textures` section slots in as a sibling without any markup
+rewrite; nothing assumes a swatch can only ever be a flat CSS colour. `BuildUiState.paintColor`
+(a plain `#RRGGBB` or `undefined` for "Default") is a dedicated typed field, not a magic string
+inside `hintLines` — `+page.svelte` renders it as a real coloured `<span>` next to "Current Colour:"
+in the corner HUD, the same pattern `notice`/`snapMode`/`level` already established for anything
+needing more than plain text.
+
+### Saved colours and last-selected persistence (`MaterialPresetStore.ts`)
+
+Saved colour presets and the most recently selected paint colour are `localStorage`-backed UI
+preference data — deliberately NOT part of the authoritative building-state serialization
+`BuildingManager`/`ThreeScene` handle, since they describe the player's own editing preferences, not
+multiplayer building data. Saving the same colour twice is a no-op returning the existing preset
+(normalized-colour equality), so the Saved Colours list never accumulates visual duplicates. All
+reads/writes are wrapped in `try`/`catch` and guarded by `typeof localStorage === 'undefined'` (true
+in this project's own Vitest suite, which runs in vitest's `node` environment with no `localStorage`
+global at all) — a missing/throwing/corrupted store degrades to an in-memory-only session rather than
+crashing Paint Mode; a malformed saved-presets array has its bad entries filtered out individually
+rather than discarding the whole list.
+
+### Tests
+
+`MaterialTypes.spec.ts` covers `normalizeColorHex` (uppercasing, 3-digit shorthand expansion,
+rejecting malformed input) and the default palette's own internal consistency (every preset colour
+pre-normalized, every id unique). `PaintTypes.spec.ts` covers `resolvePaintTarget`'s priority
+(slab > wall-segment > wall > foundation) exactly like RemovalTypes.spec.ts covers its own resolver,
+entirely without Three.js. `BuildingMaterialManager.spec.ts` covers caching (same colour ⇒ same
+instance, different kind ⇒ different instance even for the same colour, `dispose()` clearing the
+cache). `MaterialPresetStore.spec.ts` covers save/remove/persist-across-reload for both saved
+presets and the last-selected colour, plus resilience against corrupted/missing `localStorage`.
+`BuildingManager.spec.ts` covers `paintWall`/`paintWallSegment`/`paintSlab`/`paintFoundation`:
+mesh material actually changes; a wall's openings and a path's collision rects are byte-identical
+before and after painting; painting one segment never touches its sibling's own material; resetting
+to Default clears the override; a foundation's footprint/height/collision are unaffected; and a full
+serialize → paint → serialize → reload round trip retains every painted colour.
+`WallPathManager.spec.ts` covers the per-segment material GROUP mechanism directly (disjoint group
+indices, distinct cached materials per segment) plus the `getSegmentAsWallView` regression above.
+`game.e2e.ts` confirms `P` shows a `PAINT` HUD and toggles the hotbar paint icon, restores the
+previous tool and its own HUD on exit, that Remove Mode and Paint Mode are mutually exclusive
+(pressing one while the other is active switches straight over), that `C` opens the palette without
+exiting Paint Mode, and that picking a swatch updates the HUD's colour indicator.
+
+### Not implemented yet
+
+Image/tileable textures (the union has room to grow — see "The core design requirement" above — but
+the texture branch itself is deliberately not built yet); per-face painting (inside/outside wall
+face, wall top/edges, slab top/bottom face); painting stairs, windows, or doors; painting an entire
+wall path in one click rather than segment-by-segment; a confirmation step for painting (not needed
+for the current per-element painting — hover-preview-plus-click is the whole confirmation, same
+reasoning Remove Mode's own "Not implemented yet" section gives); and any undo-stack integration
+(painting doesn't currently push onto `BuildUndoManager`'s stack — reversing a paint would need to
+remember the PREVIOUS material, not just the object's id, which that stack's `{type, id}` shape
+doesn't carry today; a natural, but separate, future extension, same gap Remove Mode already has).
 
 ## Vegetation: independent forest regions
 

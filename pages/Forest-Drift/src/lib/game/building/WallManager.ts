@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import type { FoundationDefinition } from './FoundationTypes';
 import type { WallCollisionRect } from './wallCollision';
@@ -10,13 +11,6 @@ import {
 import { computeSolidWallSegments, computeWallTransform } from './wallGeometryMath';
 import type { WallTransform } from './wallGeometryMath';
 import type { WallDefinition } from './WallTypes';
-
-const wallMaterial = new THREE.MeshStandardMaterial({
-	color: 0xcfc6b3,
-	roughness: 0.88,
-	metalness: 0.02,
-	flatShading: true
-});
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0x7fe0ff });
 
@@ -31,6 +25,8 @@ export interface WallManagerOptions {
 	getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
+	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
+	materialManager?: BuildingMaterialManager;
 }
 
 /**
@@ -50,6 +46,7 @@ export class WallManager {
 	private readonly getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
+	private readonly materialManager: BuildingMaterialManager;
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly walls = new Map<string, WallEntry>();
@@ -59,6 +56,7 @@ export class WallManager {
 		this.getFoundation = options.getFoundation;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
+		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -98,12 +96,14 @@ export class WallManager {
 		const geometry = buildWallGeometry(segments, definition.thickness);
 		const collisionRects = buildWallCollisionRects(segments, definition.thickness, transform);
 
+		const material = this.materialManager.getMaterial('wall', definition.material);
 		let mesh = existing?.mesh;
 		if (mesh) {
 			mesh.geometry.dispose();
 			mesh.geometry = geometry;
+			mesh.material = material;
 		} else {
-			mesh = new THREE.Mesh(geometry, wallMaterial);
+			mesh = new THREE.Mesh(geometry, material);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.wallId = definition.id;
 			buildingRoot.add(mesh);

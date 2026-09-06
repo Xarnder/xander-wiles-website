@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
 import type { FoundationDefinition } from './FoundationTypes';
+import type { MaterialKind } from './MaterialTypes';
 import { pointInPolygon2D, polygonsOverlap } from './slabMath';
 import {
 	buildSlabGeometry,
@@ -12,22 +14,11 @@ import type { SlabDefinition, SlabOpeningDefinition } from './SlabTypes';
 import { slabBottomY } from './SlabTypes';
 import type { Point2D } from './wallPathMath';
 
-const floorMaterial = new THREE.MeshStandardMaterial({
-	color: 0xd8d2c4,
-	roughness: 0.9,
-	metalness: 0.02,
-	flatShading: true
-});
-const roofMaterial = new THREE.MeshStandardMaterial({
-	color: 0x8f8a7e,
-	roughness: 0.95,
-	metalness: 0.02,
-	flatShading: true
-});
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xffa64d });
 
-function materialFor(type: SlabDefinition['type']): THREE.Material {
-	return type === 'flat-roof' ? roofMaterial : floorMaterial;
+/** Ceilings and floors share one look; only a flat roof looks different — see MaterialTypes.ts's MaterialKind doc comment. */
+function materialKindFor(type: SlabDefinition['type']): MaterialKind {
+	return type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
 }
 
 interface SlabEntry {
@@ -46,6 +37,8 @@ export interface SlabManagerOptions {
 	getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
+	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
+	materialManager?: BuildingMaterialManager;
 }
 
 /**
@@ -60,6 +53,7 @@ export class SlabManager {
 	private readonly getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
+	private readonly materialManager: BuildingMaterialManager;
 	private readonly roots: FoundationRootRegistry;
 
 	private readonly slabs = new Map<string, SlabEntry>();
@@ -69,6 +63,7 @@ export class SlabManager {
 		this.getFoundation = options.getFoundation;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
+		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
 	}
@@ -88,13 +83,17 @@ export class SlabManager {
 
 		const geometry = buildSlabGeometry(localPolygon, definition.localY, bottomLocalY, localHoles);
 
+		const material = this.materialManager.getMaterial(
+			materialKindFor(definition.type),
+			definition.material
+		);
 		let mesh = existing?.mesh;
 		if (mesh) {
 			mesh.geometry.dispose();
 			mesh.geometry = geometry;
-			mesh.material = materialFor(definition.type);
+			mesh.material = material;
 		} else {
-			mesh = new THREE.Mesh(geometry, materialFor(definition.type));
+			mesh = new THREE.Mesh(geometry, material);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.slabId = definition.id;
 			root.add(mesh);
@@ -159,6 +158,25 @@ export class SlabManager {
 		const rebuilt = this.buildEntry(definition, entry);
 		if (rebuilt) this.slabs.set(slabId, rebuilt);
 		return true;
+	}
+
+	/** Sets (or, given `undefined`, clears) `slabId`'s material override and rebuilds its mesh — used by BuildingManager.paintSlab. A no-op returning `false` if the slab isn't found. */
+	setMaterial(slabId: string, material: SlabDefinition['material']): boolean {
+		const entry = this.slabs.get(slabId);
+		if (!entry) return false;
+		const definition: SlabDefinition = { ...entry.definition, material };
+		const rebuilt = this.buildEntry(definition, entry);
+		if (rebuilt) this.slabs.set(slabId, rebuilt);
+		return true;
+	}
+
+	getMeshForSlab(slabId: string): THREE.Mesh | undefined {
+		return this.slabs.get(slabId)?.mesh;
+	}
+
+	/** Every slab's real mesh, for Paint Mode's raycasting — already carries `userData.slabId`/`userData.foundationId` (see `buildEntry`). */
+	getMeshesForRaycast(): THREE.Object3D[] {
+		return Array.from(this.slabs.values(), (entry) => entry.mesh);
 	}
 
 	removeSlab(id: string): boolean {

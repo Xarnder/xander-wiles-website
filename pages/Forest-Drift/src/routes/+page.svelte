@@ -2,8 +2,10 @@
 	import { onDestroy, onMount } from 'svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
+	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import { createDefaultBuildingSettings } from '$lib/game/building/FoundationTypes';
+	import type { PaintUiState } from '$lib/game/building/PaintTool';
 	import { ThreeScene, type SceneStats } from '$lib/game/ThreeScene';
 	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
 	import { createDefaultTerrainSettings } from '$lib/game/terrain/TerrainSettings';
@@ -15,6 +17,8 @@
 	let hotbar = $state<HotbarUiState | null>(null);
 	let buildHud = $state<BuildUiState | null>(null);
 	let showHelp = $state(false);
+	let paintPaletteOpen = $state(false);
+	let paintState = $state<PaintUiState | null>(null);
 
 	let scene: ThreeScene | undefined;
 
@@ -55,6 +59,12 @@
 			},
 			onBuildHudChange: (next) => {
 				buildHud = next;
+			},
+			onPaintPaletteChange: (open) => {
+				paintPaletteOpen = open;
+			},
+			onPaintStateChange: (next) => {
+				paintState = next;
 			}
 		});
 	});
@@ -216,6 +226,22 @@
 					<dd>Exit Remove Mode</dd>
 				</dl>
 
+				<h3>Paint Mode</h3>
+				<dl>
+					<dt>P</dt>
+					<dd>
+						Toggle Paint Mode — another global overlay, mutually exclusive with Remove Mode
+						(pressing the other key switches straight over); the tool you had selected is remembered
+						and restored when you exit
+					</dd>
+					<dt>C</dt>
+					<dd>Open the colour palette — releases the mouse so you can click a swatch</dd>
+					<dt>Left click</dt>
+					<dd>Paint the highlighted wall, wall segment, slab, or foundation</dd>
+					<dt>P / Right click / Esc</dt>
+					<dd>Exit Paint Mode</dd>
+				</dl>
+
 				<h3>Other</h3>
 				<dl>
 					<dt>H</dt>
@@ -229,6 +255,20 @@
 
 	{#if buildHud}
 		<div class="build-hud" data-testid="build-hud">
+			{#if buildHud.toolId === 'paint'}
+				<div class="paint-color-row" data-testid="paint-color-row">
+					Current Colour:
+					{#if buildHud.paintColor}
+						<span
+							class="paint-color-swatch"
+							style="background-color: {buildHud.paintColor}"
+							data-testid="paint-color-swatch"
+						></span>
+					{:else}
+						<span class="paint-color-default">Default</span>
+					{/if}
+				</div>
+			{/if}
 			{#each buildHud.hintLines as line, index (index)}
 				{#if line === ''}
 					<div class="build-hud-spacer"></div>
@@ -263,10 +303,32 @@
 		<Hotbar
 			slots={hotbar.slots}
 			activeSlot={hotbar.activeSlot}
-			removeModeActive={hotbar.removeModeActive}
+			removeModeActive={hotbar.globalMode === 'remove'}
+			paintModeActive={hotbar.globalMode === 'paint'}
 			onSelectSlot={(slot) => scene?.selectHotbarSlot(slot)}
 			onToggleRemoveMode={() => scene?.toggleRemoveMode()}
+			onTogglePaintMode={() => scene?.togglePaintMode()}
 		/>
+	{/if}
+
+	{#if paintPaletteOpen && paintState}
+		<!-- Clicking the backdrop (outside the panel) closes the palette — the panel's own root div
+		     stops propagation so a click inside it never reaches this handler. -->
+		<div
+			class="palette-overlay"
+			data-testid="palette-overlay"
+			role="presentation"
+			onclick={() => scene?.closePaintPalette()}
+		>
+			<MaterialPalette
+				selected={paintState.selected}
+				savedPresets={paintState.savedPresets}
+				onSelect={(material) => scene?.selectPaintMaterial(material)}
+				onSave={() => scene?.savePaintPreset()}
+				onRemoveSaved={(id) => scene?.removePaintPreset(id)}
+				onClose={() => scene?.closePaintPalette()}
+			/>
+		</div>
 	{/if}
 </div>
 
@@ -392,6 +454,38 @@
 
 	.build-hud-spacer {
 		height: 0.35rem;
+	}
+
+	.paint-color-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 0.3rem;
+	}
+
+	.paint-color-swatch {
+		display: inline-block;
+		width: 0.9rem;
+		height: 0.9rem;
+		border-radius: 4px;
+		border: 1px solid rgba(234, 246, 255, 0.5);
+	}
+
+	.paint-color-default {
+		opacity: 0.75;
+		font-style: italic;
+	}
+
+	.palette-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(4, 8, 6, 0.55);
+		backdrop-filter: blur(2px);
+		z-index: 12;
+		pointer-events: auto;
 	}
 
 	/* Sits just above the crosshair — the one place a player is guaranteed to be looking when they're wondering why a click did nothing. */

@@ -5,6 +5,7 @@
  */
 
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 
 /** One vertex of the global terrain grid. gridX/gridZ are authoritative; world coords are derived. */
 export interface TerrainGridPoint {
@@ -18,6 +19,12 @@ export interface TerrainGridPoint {
 /**
  * A placed, rectangular foundation. Grid-integer footprint + the two Y extents computed at
  * placement time. Nothing here references Three.js — this is what gets serialized.
+ *
+ * `material` is `undefined` for an unpainted foundation (renders using FoundationManager's own
+ * default look); painting one (Paint Tool) only ever changes this field — never `topY`/`bottomY`/
+ * the grid footprint, so a foundation's terrain intersection, building origin, and collision are
+ * always completely unaffected by its colour. See WallDefinition.material's doc comment for the
+ * same "undefined = inherit the default" convention this mirrors.
  */
 export interface FoundationDefinition {
 	id: string;
@@ -27,6 +34,7 @@ export interface FoundationDefinition {
 	maxGridZ: number;
 	topY: number;
 	bottomY: number;
+	material?: BuildingMaterialDefinition;
 }
 
 export type ToolId =
@@ -40,6 +48,7 @@ export type ToolId =
 	| 'flat-roof'
 	| 'stairs'
 	| 'remove'
+	| 'paint'
 	| 'none';
 
 export interface HotbarSlot {
@@ -176,6 +185,9 @@ export interface BuildingSettings {
 	removeToolMaxDistance: number;
 	/** Dev-only: renders every window/door OpeningPickingProxy as a visible translucent box instead of an invisible one, so the picking geometry itself can be inspected. */
 	showRemovalPickingProxies: boolean;
+
+	/** Maximum crosshair-to-target distance Paint Mode will raycast — same reasoning as `removeToolMaxDistance`, kept separate so each mode's range is independently tunable. */
+	paintToolMaxDistance: number;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -234,7 +246,9 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		stairHeadClearance: 2.1,
 
 		removeToolMaxDistance: 12,
-		showRemovalPickingProxies: false
+		showRemovalPickingProxies: false,
+
+		paintToolMaxDistance: 12
 	};
 }
 
@@ -260,17 +274,24 @@ export interface BuildUiState {
 	 * `undefined` when no foundation has ever been targeted yet.
 	 */
 	level?: BuildingLevelUiState;
+	/** Paint Tool's currently selected colour (`#RRGGBB`), for the HUD's colour swatch row — see `+page.svelte`'s `.paint-color-row`. Only ever set by PaintTool's own HUD builders. */
+	paintColor?: string;
 }
 
 export interface HotbarUiState {
 	slots: readonly HotbarSlot[];
 	activeSlot: number;
 	/**
-	 * Whether Remove Mode (the `X` key) is currently active — deliberately separate from
-	 * `activeSlot` rather than a slot value of its own, since Remove Mode is a temporary global
-	 * overlay, not a hotbar selection: `activeSlot` keeps pointing at whichever numbered tool was
-	 * selected before Remove Mode was entered, and is restored to exactly that the moment Remove Mode
-	 * exits. See BuildToolManager's class doc comment and the README's "Remove Mode" section.
+	 * Which temporary GLOBAL editing overlay (if any) is currently active — `'remove'` or `'paint'`,
+	 * deliberately a single tri-state field rather than two independent booleans, so "both active at
+	 * once" is structurally unrepresentable rather than merely avoided by convention (see the
+	 * README's "Paint Tool" section: exactly one global edit mode may be active at a time; pressing
+	 * `P` while Remove Mode is active exits it and enters Paint Mode, and vice versa for `X`).
+	 *
+	 * Deliberately separate from `activeSlot` rather than a slot value of its own, since a global
+	 * mode is a temporary overlay, not a hotbar selection: `activeSlot` keeps pointing at whichever
+	 * numbered tool was selected before the overlay was entered, and is restored to exactly that the
+	 * moment it exits. See BuildToolManager's class doc comment.
 	 */
-	removeModeActive: boolean;
+	globalMode: 'none' | 'remove' | 'paint';
 }

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { FoundationMesh } from './FoundationMesh';
 import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 
 /** World-unit tolerance on the containment test, so the player never flickers between terrain and foundation height right at an edge. */
 const EDGE_TOLERANCE = 0.001;
@@ -26,18 +28,38 @@ export class FoundationManager {
 	readonly group = new THREE.Group();
 
 	private readonly getVertexSpacing: () => number;
+	private readonly materialManager: BuildingMaterialManager;
 	private readonly foundations = new Map<string, FoundationEntry>();
 	private showBounds = false;
 
-	constructor(getVertexSpacing: () => number) {
+	/**
+	 * `materialManager` is optional — most tests exercising this class care about foundation
+	 * placement/collision math, not painting, so they shouldn't have to construct one; a fresh
+	 * private instance here is functionally identical to a shared one for a manager that never
+	 * paints anything itself (see BuildingMaterialManager's own caching, which is per-instance).
+	 * ThreeScene always passes the real shared one, so a foundation's material cache is shared with
+	 * every other building manager, per the README's "Paint Tool" section.
+	 */
+	constructor(getVertexSpacing: () => number, materialManager?: BuildingMaterialManager) {
 		this.getVertexSpacing = getVertexSpacing;
+		this.materialManager = materialManager ?? new BuildingMaterialManager();
 	}
 
 	addFoundation(definition: FoundationDefinition): void {
-		const mesh = new FoundationMesh(definition, this.getVertexSpacing());
+		const material = this.materialManager.getMaterial('foundation', definition.material);
+		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), material);
 		mesh.setBoundsVisible(this.showBounds);
 		this.group.add(mesh.object);
 		this.foundations.set(definition.id, { definition, mesh });
+	}
+
+	/** Sets (or, given `undefined`, clears) a foundation's material override — visual only, never touching its grid footprint, `topY`/`bottomY`, or collision. A no-op returning `false` if the foundation isn't found. */
+	setMaterial(id: string, material: BuildingMaterialDefinition | undefined): boolean {
+		const entry = this.foundations.get(id);
+		if (!entry) return false;
+		entry.definition = { ...entry.definition, material };
+		entry.mesh.setMaterial(this.materialManager.getMaterial('foundation', material));
+		return true;
 	}
 
 	removeFoundation(id: string): boolean {
@@ -60,6 +82,11 @@ export class FoundationManager {
 	/** Every foundation's mesh, for tools that raycast against foundation surfaces (e.g. Wall Tool targeting the top face) rather than terrain — mirrors TerrainManager.getActiveMeshes(). */
 	getMeshes(): THREE.Object3D[] {
 		return Array.from(this.foundations.values(), (entry) => entry.mesh.object);
+	}
+
+	/** One foundation's own mesh — for PaintTool's live hover preview (material swap + outline). */
+	getMeshForFoundation(id: string): THREE.Mesh | undefined {
+		return this.foundations.get(id)?.mesh.object;
 	}
 
 	setShowBounds(visible: boolean): void {
