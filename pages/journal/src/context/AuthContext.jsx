@@ -4,11 +4,41 @@ import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { BookOpen } from 'lucide-react';
 
 const AuthContext = createContext();
-const ALLOWED_EMAILS = ['xanderwiles@gmail.com', 'isobelwilesuk@gmail.com'];
+
+function normalizeEmail(email) {
+    const trimmed = String(email || '').trim().toLowerCase();
+    const at = trimmed.lastIndexOf('@');
+    if (at <= 0) return trimmed;
+
+    const local = trimmed.slice(0, at);
+    const domain = trimmed.slice(at + 1);
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+        return `${local.split('+')[0].replaceAll('.', '')}@gmail.com`;
+    }
+    return `${local}@${domain}`;
+}
+
+const ALLOWED_EMAILS = ['xanderwiles@gmail.com', 'isobelwilesuk@gmail.com'].map(normalizeEmail);
+
+function emailsFromUser(user) {
+    return [user?.email, ...(user?.providerData || []).map((profile) => profile?.email)]
+        .filter(Boolean)
+        .map(normalizeEmail);
+}
 
 function isAuthorized(user) {
-    const email = user?.email || '';
-    return email.endsWith('@xanderwiles.com') || ALLOWED_EMAILS.includes(email);
+    const emails = emailsFromUser(user);
+    return emails.some((email) => (
+        email.endsWith('@xanderwiles.com') || ALLOWED_EMAILS.includes(email)
+    ));
+}
+
+function restrictedMessage(user) {
+    const email = user?.email || user?.providerData?.[0]?.email;
+    if (!email) {
+        return 'Access is restricted. This Google account did not provide an email address.';
+    }
+    return `Access is restricted for ${email}.`;
 }
 
 export function useAuth() {
@@ -24,8 +54,8 @@ export function AuthProvider({ children }) {
         setAuthError('');
         const result = await signInWithPopup(auth, googleProvider);
         if (!isAuthorized(result.user)) {
+            const message = restrictedMessage(result.user);
             await signOut(auth);
-            const message = 'Access is restricted to authorized accounts.';
             setAuthError(message);
             throw new Error(message);
         }
@@ -39,7 +69,7 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user && !isAuthorized(user)) {
-                setAuthError('Access is restricted to authorized accounts.');
+                setAuthError(restrictedMessage(user));
                 signOut(auth);
                 setCurrentUser(null);
             } else {

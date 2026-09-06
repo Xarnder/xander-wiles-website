@@ -6,6 +6,7 @@
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import { createDefaultBuildingSettings } from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
+	import { graphicsQualityLabel } from '$lib/game/graphics/GraphicsTypes';
 	import { ThreeScene, type SceneStats } from '$lib/game/ThreeScene';
 	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
 	import { createDefaultTerrainSettings } from '$lib/game/terrain/TerrainSettings';
@@ -19,8 +20,10 @@
 	let showHelp = $state(false);
 	let paintPaletteOpen = $state(false);
 	let paintState = $state<PaintUiState | null>(null);
+	let graphicsNotice = $state<string | null>(null);
 
 	let scene: ThreeScene | undefined;
+	let graphicsNoticeTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	const SNAP_MODE_TEXT: Record<'axis' | 'axis-inline' | 'wall-corners', string> = {
 		axis: 'AXIS SNAP',
@@ -28,9 +31,29 @@
 		'wall-corners': 'WALL CORNER SNAP'
 	};
 
+	/** `L` must not fire while the player is typing — into a text input, the paint palette's colour hex field, or anything else focusable — only while it's actually a game shortcut. */
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+		return target.isContentEditable;
+	}
+
+	function showGraphicsNotice(quality: Parameters<typeof graphicsQualityLabel>[0]) {
+		console.log('[DEBUG] showGraphicsNotice called with', quality);
+		graphicsNotice = `Graphics: ${graphicsQualityLabel(quality).toUpperCase()}`;
+		console.log('[DEBUG] graphicsNotice now', graphicsNotice);
+		clearTimeout(graphicsNoticeTimeout);
+		graphicsNoticeTimeout = setTimeout(() => {
+			graphicsNotice = null;
+		}, 2000);
+	}
+
 	function handleHelpKey(event: KeyboardEvent) {
 		if (event.code === 'KeyH') showHelp = !showHelp;
 		else if (event.code === 'Escape' && showHelp) showHelp = false;
+		else if (event.code === 'KeyL' && !isTypingTarget(event.target)) {
+			scene?.cycleGraphicsQuality();
+		}
 	}
 
 	onMount(() => {
@@ -65,12 +88,16 @@
 			},
 			onPaintStateChange: (next) => {
 				paintState = next;
+			},
+			onGraphicsQualityChange: (quality) => {
+				showGraphicsNotice(quality);
 			}
 		});
 	});
 
 	onDestroy(() => {
 		window.removeEventListener('keydown', handleHelpKey);
+		clearTimeout(graphicsNoticeTimeout);
 		scene?.dispose();
 	});
 </script>
@@ -113,6 +140,10 @@
 
 	{#if buildHud?.notice}
 		<div class="crosshair-notice" data-testid="crosshair-notice">{buildHud.notice}</div>
+	{/if}
+
+	{#if graphicsNotice}
+		<div class="graphics-notice" data-testid="graphics-notice">{graphicsNotice}</div>
 	{/if}
 
 	{#if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
@@ -246,6 +277,11 @@
 				<dl>
 					<dt>H</dt>
 					<dd>Toggle this help</dd>
+					<dt>L</dt>
+					<dd>
+						Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies instantly
+						and is remembered next time you visit
+					</dd>
 				</dl>
 
 				<button class="help-close" onclick={() => (showHelp = false)}>Close</button>
@@ -281,7 +317,7 @@
 
 	{#if stats}
 		<div class="stats-overlay" data-testid="stats-overlay">
-			<div>{stats.fps} FPS</div>
+			<div>{stats.fps} FPS &middot; {stats.frameTimeMs.toFixed(1)} ms</div>
 			<div>
 				Pos {stats.playerX.toFixed(1)}, {stats.playerY.toFixed(1)}, {stats.playerZ.toFixed(1)}
 			</div>
@@ -296,6 +332,21 @@
 				trees
 			</div>
 			<div>Vegetation rev {stats.vegetationRevision}</div>
+			<div data-testid="graphics-stats">
+				Graphics {stats.graphicsQuality.toUpperCase()} &middot; scale {stats.renderScale.toFixed(2)} &middot;
+				dpr {stats.pixelRatio.toFixed(2)}
+			</div>
+			<div>
+				Draws {stats.drawCalls} &middot; Geo {stats.geometries} &middot; Tex {stats.textures}
+			</div>
+			<div>
+				{#if stats.shadowsEnabled}
+					Shadows {stats.shadowCascades} cascades &middot; {stats.shadowDistance}m
+				{:else}
+					Shadows off
+				{/if}
+				&middot; AO {stats.aoEnabled ? stats.aoQuality : 'off'} &middot; AA {stats.antialiasing.toUpperCase()}
+			</div>
 		</div>
 	{/if}
 
@@ -509,6 +560,29 @@
 		white-space: nowrap;
 		pointer-events: none;
 		backdrop-filter: blur(2px);
+	}
+
+	.graphics-notice {
+		position: absolute;
+		top: 1rem;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 0.35rem 0.85rem;
+		background: rgba(10, 20, 15, 0.72);
+		border: 1px solid rgba(159, 232, 255, 0.55);
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		border-radius: 999px;
+		white-space: nowrap;
+		pointer-events: none;
+		backdrop-filter: blur(2px);
+		animation: snap-badge-in 0.15s ease;
 	}
 
 	.floor-selector {

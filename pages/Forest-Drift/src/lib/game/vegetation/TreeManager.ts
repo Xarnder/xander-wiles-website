@@ -118,11 +118,31 @@ export class TreeManager {
 			(assets) =>
 				new InstancedTreeLayer(assets.foliageGeometry, assets.foliageMaterial, CAPACITY_PER_VARIANT)
 		);
-		for (const layer of [...this.trunkLayers, ...this.foliageLayers]) this.group.add(layer.mesh);
+		for (const layer of [...this.trunkLayers, ...this.foliageLayers]) {
+			// NOT castShadow: InstancedTreeLayer deliberately sets `frustumCulled = false` on this mesh
+			// (a populated instance buffer's default bounding sphere doesn't reflect where instances
+			// actually are, and recomputing a correct one per chunk load/unload isn't implemented) —
+			// which means a shadow camera can't cull it either, so every cascade would submit every
+			// loaded tree instance (thousands) to the shadow depth shader every frame. Measured cost of
+			// that was severe enough (multi-second frame times) to rule it out for this pass; trees
+			// still receive shadows/AO from buildings and terrain for grounding. See the README's
+			// "Graphics quality" section for the full writeup and what a real fix would need.
+			layer.mesh.receiveShadow = true;
+			this.group.add(layer.mesh);
+		}
 	}
 
 	getVegetationRegionSampler(): VegetationRegionSampler {
 		return this.vegetationRegionSampler;
+	}
+
+	/**
+	 * The small, finite set of shared trunk/foliage materials (one pair per tree variant) — every
+	 * tree in the world reuses one of these, so the graphics pipeline only needs to register this
+	 * handful with the cascaded-shadow system once, regardless of how many trees are ever placed.
+	 */
+	getSharedMaterials(): THREE.Material[] {
+		return this.variantAssets.flatMap((assets) => [assets.trunkMaterial, assets.foliageMaterial]);
 	}
 
 	update(playerWorldX: number, playerWorldZ: number): void {

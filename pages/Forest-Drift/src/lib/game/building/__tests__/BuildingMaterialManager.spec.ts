@@ -64,6 +64,37 @@ describe('BuildingMaterialManager.getMaterial', () => {
 	});
 });
 
+describe('BuildingMaterialManager.onMaterialCreated', () => {
+	it('fires once for a newly-allocated material', () => {
+		const created: THREE.Material[] = [];
+		const manager = new BuildingMaterialManager((material) => created.push(material));
+		const material = manager.getMaterial('wall', { type: 'color', color: '#D9D1C3' });
+		expect(created).toEqual([material]);
+	});
+
+	it('never fires again for a cache hit on the same (kind, colour)', () => {
+		const created: THREE.Material[] = [];
+		const manager = new BuildingMaterialManager((material) => created.push(material));
+		manager.getMaterial('wall', { type: 'color', color: '#D9D1C3' });
+		manager.getMaterial('wall', { type: 'color', color: '#D9D1C3' });
+		expect(created).toHaveLength(1);
+	});
+
+	it('fires separately for the default (unpainted) material and each distinct colour', () => {
+		const created: THREE.Material[] = [];
+		const manager = new BuildingMaterialManager((material) => created.push(material));
+		manager.getMaterial('wall', undefined);
+		manager.getMaterial('wall', { type: 'color', color: '#D9D1C3' });
+		manager.getMaterial('wall', { type: 'color', color: '#123456' });
+		expect(created).toHaveLength(3);
+	});
+
+	it('works with no callback supplied at all', () => {
+		const manager = new BuildingMaterialManager();
+		expect(() => manager.getMaterial('wall', undefined)).not.toThrow();
+	});
+});
+
 describe('BuildingMaterialManager.dispose', () => {
 	it('disposes every cached material and clears the cache (a subsequent lookup allocates fresh)', () => {
 		const manager = new BuildingMaterialManager();

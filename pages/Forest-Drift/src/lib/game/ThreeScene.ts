@@ -18,7 +18,7 @@ import { PolygonWallTool } from './building/PolygonWallTool';
 import { RemoveTool } from './building/RemoveTool';
 import { RoofTool } from './building/RoofTool';
 import { SlabManager } from './building/SlabManager';
-import { StairManager } from './building/StairManager';
+import { StairManager, stairMaterial } from './building/StairManager';
 import { StairTool } from './building/StairTool';
 import { resolvePlayerPositionAgainstWalls } from './building/wallCollision';
 import { WallManager } from './building/WallManager';
@@ -27,6 +27,16 @@ import { WallTool } from './building/WallTool';
 import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
 import { TerrainDebugGui } from './debug/TerrainDebugGui';
+import { GraphicsPipeline } from './graphics/GraphicsPipeline';
+import { GraphicsSettingsStore } from './graphics/GraphicsSettingsStore';
+import {
+	createDefaultGraphicsSettings,
+	GRAPHICS_PRESETS,
+	type AntiAliasMode,
+	type AoQuality,
+	type GraphicsQuality,
+	type GraphicsSettings
+} from './graphics/GraphicsTypes';
 import { FirstPersonController } from './player/FirstPersonController';
 import { resolveFogColor } from './sky/atmosphereMath';
 import { CloudSystem } from './sky/CloudSystem';
@@ -34,6 +44,7 @@ import { HdriEnvironmentSystem } from './sky/HdriEnvironmentSystem';
 import { SkySystem } from './sky/SkySystem';
 import type { SkySettings } from './sky/SkyTypes';
 import { worldToChunkCoord } from './terrain/chunkKey';
+import { terrainMaterial } from './terrain/TerrainChunk';
 import { TerrainManager } from './terrain/TerrainManager';
 import type { TerrainSettings } from './terrain/TerrainSettings';
 import { TreeManager } from './vegetation/TreeManager';
@@ -47,6 +58,7 @@ const PLAYER_COLLISION_RADIUS = 0.35;
 
 export interface SceneStats {
 	fps: number;
+	frameTimeMs: number;
 	playerX: number;
 	playerY: number;
 	playerZ: number;
@@ -60,6 +72,18 @@ export interface SceneStats {
 	queuedVegetationChunks: number;
 	treeInstances: number;
 	vegetationRevision: number;
+	graphicsQuality: GraphicsQuality;
+	renderScale: number;
+	pixelRatio: number;
+	drawCalls: number;
+	geometries: number;
+	textures: number;
+	shadowsEnabled: boolean;
+	shadowCascades: number;
+	shadowDistance: number;
+	aoEnabled: boolean;
+	aoQuality: AoQuality;
+	antialiasing: AntiAliasMode;
 }
 
 export interface ThreeSceneOptions {
@@ -74,6 +98,7 @@ export interface ThreeSceneOptions {
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
+	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 }
 
 /**
@@ -91,6 +116,7 @@ export interface ThreeSceneOptions {
 export class ThreeScene {
 	private readonly container: HTMLElement;
 	private readonly settings: TerrainSettings;
+	private readonly vegetationSettings: VegetationSettings;
 	private readonly skySettings: SkySettings;
 	private readonly onStatsUpdate?: (stats: SceneStats) => void;
 
@@ -126,6 +152,13 @@ export class ThreeScene {
 	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
 
+	private readonly graphicsSettings: GraphicsSettings;
+	private readonly graphicsSettingsStore = new GraphicsSettingsStore();
+	private readonly graphicsPipeline: GraphicsPipeline;
+	/** The GUI-set view distances at startup — quality-driven render-distance scaling (see applyRenderDistanceForQuality) always derives from these fixed baselines, never from its own previous output, so repeated quality switching can't compound the scaling down to nothing. */
+	private readonly baseTerrainViewDistance: number;
+	private readonly baseTreeViewDistanceChunks: number;
+
 	private readonly skySystem: SkySystem;
 	private readonly cloudSystem: CloudSystem;
 	private readonly hdriSystem: HdriEnvironmentSystem;
@@ -153,15 +186,20 @@ export class ThreeScene {
 	constructor(options: ThreeSceneOptions) {
 		this.container = options.container;
 		this.settings = options.settings;
+		this.vegetationSettings = options.vegetationSettings;
 		this.skySettings = options.skySettings;
 		this.onStatsUpdate = options.onStatsUpdate;
+		this.baseTerrainViewDistance = options.settings.viewDistance;
+		this.baseTreeViewDistanceChunks = options.vegetationSettings.loading.treeViewDistanceChunks;
 
 		this.scene = new THREE.Scene();
 
 		this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 2000);
 
-		this.renderer = new THREE.WebGLRenderer({ antialias: true });
-		this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+		// `antialias: false` — MSAA on the main canvas would be redundant/wasteful once the
+		// GraphicsPipeline's own postprocessing AA pass (FXAA/SMAA, chosen per quality preset) runs;
+		// see GraphicsPipeline's class doc for the full postprocessing pipeline.
+		this.renderer = new THREE.WebGLRenderer({ antialias: false });
 		this.container.appendChild(this.renderer.domElement);
 
 		// Visible sky: a procedural gradient dome + a couple of large soft cloud sheets, both
@@ -178,13 +216,33 @@ export class ThreeScene {
 		this.scene.add(this.sunLight);
 		this.scene.add(this.sunLight.target);
 
+		const savedGraphicsQuality = this.graphicsSettingsStore.getQuality();
+		this.graphicsSettings = createDefaultGraphicsSettings();
+		if (savedGraphicsQuality) this.graphicsSettings.quality = savedGraphicsQuality;
+		this.graphicsPipeline = new GraphicsPipeline({
+			renderer: this.renderer,
+			scene: this.scene,
+			camera: this.camera,
+			sunLight: this.sunLight,
+			settings: this.graphicsSettings,
+			onQualityChange: (quality) => {
+				this.graphicsSettingsStore.setQuality(quality);
+				this.applyRenderDistanceForQuality(quality);
+				options.onGraphicsQualityChange?.(quality);
+			}
+		});
+
 		this.hdriSystem = new HdriEnvironmentSystem(this.renderer, this.scene, this.skySettings.hdri);
 
 		this.terrainManager = new TerrainManager(this.settings);
 		this.scene.add(this.terrainManager.group);
+		this.graphicsPipeline.registerMaterial(terrainMaterial);
+		this.graphicsPipeline.registerMaterial(stairMaterial);
 
 		const buildingSettings = options.buildingSettings;
-		this.materialManager = new BuildingMaterialManager();
+		this.materialManager = new BuildingMaterialManager((material) =>
+			this.graphicsPipeline.registerMaterial(material)
+		);
 		this.foundationManager = new FoundationManager(
 			() => vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			this.materialManager
@@ -258,6 +316,9 @@ export class ThreeScene {
 		});
 		this.scene.add(this.treeManager.group);
 		this.terrainManager.setVegetationRegionSampler(this.treeManager.getVegetationRegionSampler());
+		for (const material of this.treeManager.getSharedMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
 
 		this.controller = new FirstPersonController({
 			domElement: this.renderer.domElement,
@@ -380,6 +441,9 @@ export class ThreeScene {
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
 		});
+		for (const material of this.stairTool.getPreviewMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
 
 		this.removeTool = new RemoveTool({
 			scene: this.scene,
@@ -468,6 +532,11 @@ export class ThreeScene {
 			}
 		});
 		this.gui.addSkyFolder(this.skySettings, () => this.applySkySettings());
+		this.gui.addGraphicsFolder(this.graphicsSettings, {
+			onQualityChange: () => this.graphicsPipeline.setQuality(this.graphicsSettings.quality),
+			onSettingsChange: () => this.graphicsPipeline.refreshAdvancedSettings(),
+			onExposureChange: (exposure) => this.graphicsPipeline.setToneMappingExposure(exposure)
+		});
 
 		// Sky/lights/fog are cheap to apply directly (no dirty-flag batching needed — see
 		// TerrainDebugGui.addSkyFolder's doc comment) and don't depend on the HDRI having finished
@@ -530,6 +599,15 @@ export class ThreeScene {
 		this.levelManager.moveDown();
 	}
 
+	getGraphicsQuality(): GraphicsQuality {
+		return this.graphicsPipeline.getQuality();
+	}
+
+	/** `L` cycles LOW → MEDIUM → HIGH → ULTRA → LOW, applies live (no reload, no world rebuild), and persists the choice — see GraphicsSettingsStore. Returns the newly-active quality so the caller (the `L`-key handler in +page.svelte) can show the "Graphics: X" HUD notification. */
+	cycleGraphicsQuality(): GraphicsQuality {
+		return this.graphicsPipeline.cycleQuality();
+	}
+
 	/**
 	 * Re-applies every sky/HDRI/atmosphere/cloud setting. Called once at startup, once more when
 	 * the (async) HDRI finishes loading, and directly from the GUI on every change — all of these
@@ -546,6 +624,7 @@ export class ThreeScene {
 		this.sunLight.intensity = this.skySettings.atmosphere.sunEnabled
 			? this.skySettings.atmosphere.sunIntensity
 			: 0;
+		this.graphicsPipeline.setSunColorIntensity(this.sunLight.color, this.sunLight.intensity);
 		this.updateSunLightPosition();
 
 		this.applyBackgroundAndFog();
@@ -596,6 +675,36 @@ export class ThreeScene {
 			cameraPosition.z + direction.z * SUN_LIGHT_DISTANCE
 		);
 		this.sunLight.target.position.copy(cameraPosition);
+		this.graphicsPipeline.setSunDirection(direction);
+	}
+
+	/**
+	 * Scales terrain/tree view distance by the new quality preset's render-distance multipliers —
+	 * always relative to `baseTerrainViewDistance`/`baseTreeViewDistanceChunks` (the values set at
+	 * startup), never relative to whatever the previous quality level left behind, so switching
+	 * quality back and forth can't compound the scaling. Cheap chunk-loading-radius change, not a
+	 * geometry rebuild — see flushDirtyFlags' viewDistance/vegetationViewDistance handling.
+	 */
+	private applyRenderDistanceForQuality(quality: GraphicsQuality): void {
+		const preset = GRAPHICS_PRESETS[quality];
+
+		const terrainViewDistance = Math.max(
+			1,
+			Math.round(this.baseTerrainViewDistance * preset.terrainRenderDistanceMultiplier)
+		);
+		if (this.settings.viewDistance !== terrainViewDistance) {
+			this.settings.viewDistance = terrainViewDistance;
+			this.dirty.viewDistance = true;
+		}
+
+		const treeViewDistance = Math.max(
+			1,
+			Math.round(this.baseTreeViewDistanceChunks * preset.treeRenderDistanceMultiplier)
+		);
+		if (this.vegetationSettings.loading.treeViewDistanceChunks !== treeViewDistance) {
+			this.vegetationSettings.loading.treeViewDistanceChunks = treeViewDistance;
+			this.dirty.vegetationViewDistance = true;
+		}
 	}
 
 	private handleResize(): void {
@@ -605,7 +714,7 @@ export class ThreeScene {
 
 		this.camera.aspect = width / height;
 		this.camera.updateProjectionMatrix();
-		this.renderer.setSize(width, height);
+		this.graphicsPipeline.handleResize(width, height);
 	}
 
 	/**
@@ -679,7 +788,8 @@ export class ThreeScene {
 		);
 		this.updateSunLightPosition();
 
-		this.renderer.render(this.scene, this.camera);
+		this.graphicsPipeline.update(deltaSeconds);
+		this.graphicsPipeline.render();
 
 		this.updateStats(deltaSeconds);
 	};
@@ -692,15 +802,18 @@ export class ThreeScene {
 		if (this.statsAccumSeconds < 0.25) return;
 
 		const fps = this.statsFrameCount / this.statsAccumSeconds;
+		const frameTimeMs = (this.statsAccumSeconds / this.statsFrameCount) * 1000;
 		this.statsFrameCount = 0;
 		this.statsAccumSeconds = 0;
 
 		const stats = this.terrainManager.getStats();
 		const vegetationStats = this.treeManager.getStats();
+		const graphicsStats = this.graphicsPipeline.getRenderStats();
 		const position = this.controller.worldPosition;
 
 		this.onStatsUpdate({
 			fps: Math.round(fps),
+			frameTimeMs: Math.round(frameTimeMs * 10) / 10,
 			playerX: position.x,
 			playerY: position.y,
 			playerZ: position.z,
@@ -713,7 +826,19 @@ export class ThreeScene {
 			loadedVegetationChunks: vegetationStats.loadedChunks,
 			queuedVegetationChunks: vegetationStats.queuedChunks,
 			treeInstances: vegetationStats.treeInstances,
-			vegetationRevision: vegetationStats.revision
+			vegetationRevision: vegetationStats.revision,
+			graphicsQuality: graphicsStats.quality,
+			renderScale: graphicsStats.renderScale,
+			pixelRatio: graphicsStats.pixelRatio,
+			drawCalls: graphicsStats.drawCalls,
+			geometries: graphicsStats.geometries,
+			textures: graphicsStats.textures,
+			shadowsEnabled: graphicsStats.shadowsEnabled,
+			shadowCascades: graphicsStats.shadowCascades,
+			shadowDistance: graphicsStats.shadowDistance,
+			aoEnabled: graphicsStats.aoEnabled,
+			aoQuality: graphicsStats.aoQuality,
+			antialiasing: graphicsStats.antialiasing
 		});
 	}
 
@@ -748,6 +873,7 @@ export class ThreeScene {
 		this.skySystem.dispose();
 		this.cloudSystem.dispose();
 		this.hdriSystem.dispose();
+		this.graphicsPipeline.dispose();
 		this.renderer.dispose();
 		if (this.renderer.domElement.parentElement === this.container) {
 			this.container.removeChild(this.renderer.domElement);

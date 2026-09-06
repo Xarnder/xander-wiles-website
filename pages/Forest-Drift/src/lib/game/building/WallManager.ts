@@ -106,6 +106,8 @@ export class WallManager {
 			mesh = new THREE.Mesh(geometry, material);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.wallId = definition.id;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
 			buildingRoot.add(mesh);
 		}
 

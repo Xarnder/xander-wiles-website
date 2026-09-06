@@ -116,6 +116,8 @@ export class WallPathManager {
 			);
 			visibleMesh.userData.foundationId = definition.foundationId;
 			visibleMesh.userData.wallPathId = definition.id;
+			visibleMesh.castShadow = true;
+			visibleMesh.receiveShadow = true;
 			buildingRoot.add(visibleMesh);
 		}
 

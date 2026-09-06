@@ -216,6 +216,11 @@ export class StairTool implements BuildTool {
 		return vertexSpacingFor(this.terrainSettings.chunkSize, this.terrainSettings.chunkResolution);
 	}
 
+	/** The two translucent `MeshStandardMaterial` ghosts this tool shows while placing a staircase — exposed so the graphics pipeline can register them with the cascaded-shadow system alongside every other lit material (see GraphicsPipeline.registerMaterial's doc comment). */
+	getPreviewMaterials(): THREE.Material[] {
+		return [this.previewMaterial, this.roughBoxMaterial];
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

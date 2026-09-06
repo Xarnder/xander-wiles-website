@@ -100,6 +100,10 @@ export class TerrainChunk {
 		this.geometry.setIndex(new THREE.BufferAttribute(getSharedIndices(resolution), 1));
 
 		this.mesh = new THREE.Mesh(this.geometry, terrainMaterial);
+		// Terrain receives shadows from trees/buildings (grounding contact) but deliberately never
+		// casts them onto itself — self-shadowing hills are a minor visual nicety not worth the extra
+		// per-chunk shadow-map draw calls; see the README's "Graphics quality" section.
+		this.mesh.receiveShadow = true;
 
 		const borderGeometry = new THREE.BufferGeometry();
 		this.borderLines = new THREE.LineSegments(borderGeometry, borderMaterial);

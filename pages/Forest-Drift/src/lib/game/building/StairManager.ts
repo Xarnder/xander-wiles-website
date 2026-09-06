@@ -8,7 +8,8 @@ import type { StairLocalBounds, StairTreadRect } from './stairMath';
 import type { StairDefinition } from './StairTypes';
 import type { WallCollisionRect } from './wallCollision';
 
-const stairMaterial = new THREE.MeshStandardMaterial({
+/** Exported so ThreeScene can register it with the graphics pipeline's cascaded-shadow system — see GraphicsPipeline.registerMaterial's doc comment for why every lit material must be registered. */
+export const stairMaterial = new THREE.MeshStandardMaterial({
 	color: 0xb9ac95,
 	roughness: 0.85,
 	metalness: 0.02,
@@ -105,6 +106,8 @@ export class StairManager {
 			mesh = new THREE.Mesh(geometry, stairMaterial);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.stairId = definition.id;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
 			root.add(mesh);
 		}
 

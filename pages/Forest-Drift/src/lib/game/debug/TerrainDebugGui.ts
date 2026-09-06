@@ -1,5 +1,6 @@
 import GUI from 'lil-gui';
 import type { BuildingSettings } from '../building/FoundationTypes';
+import type { GraphicsSettings } from '../graphics/GraphicsTypes';
 import type { SkySettings } from '../sky/SkyTypes';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { VegetationSettings } from '../vegetation/VegetationTypes';
@@ -414,6 +415,39 @@ export class TerrainDebugGui {
 		debug.add(settings.debug, 'showCloudLayerWireframe').onChange(onChange);
 		debug.add(settings.debug, 'showSkyOnly').onChange(onChange);
 		debug.close();
+	}
+
+	/**
+	 * Exposes the mutable knobs of GraphicsSettings — the quality preset itself (which rebuilds
+	 * shadows/AO/AA/bloom via GraphicsPipeline.setQuality) plus the handful of advanced overrides
+	 * that don't require a full preset rebuild. Every other quality-dependent value (shadow
+	 * cascades, AO radius, bloom strength, etc.) lives in the read-only `GRAPHICS_PRESETS` table in
+	 * GraphicsTypes.ts, by design — see this project's README for why that table, not scattered GUI
+	 * sliders, is the single source of truth for what each quality level looks like.
+	 */
+	addGraphicsFolder(
+		settings: GraphicsSettings,
+		callbacks: {
+			onQualityChange: () => void;
+			onSettingsChange: () => void;
+			onExposureChange: (exposure: number) => void;
+		}
+	): void {
+		const graphics = this.gui.addFolder('Graphics');
+		graphics
+			.add(settings, 'quality', { Low: 'low', Medium: 'medium', High: 'high', Ultra: 'ultra' })
+			.name('qualityPreset')
+			.onChange(callbacks.onQualityChange);
+		graphics
+			.add(settings, 'dynamicResolutionEnabled')
+			.name('dynamicResolution')
+			.onChange(callbacks.onSettingsChange);
+		graphics.add(settings, 'targetFps', 30, 120, 1).onChange(callbacks.onSettingsChange);
+		graphics
+			.add(settings, 'toneMappingExposure', 0.2, 2, 0.01)
+			.name('exposure')
+			.onChange(callbacks.onExposureChange);
+		graphics.add(settings, 'showRenderStats').onChange(callbacks.onSettingsChange);
 	}
 
 	dispose(): void {

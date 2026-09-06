@@ -96,6 +96,8 @@ export class SlabManager {
 			mesh = new THREE.Mesh(geometry, material);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.slabId = definition.id;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
 			root.add(mesh);
 		}
 

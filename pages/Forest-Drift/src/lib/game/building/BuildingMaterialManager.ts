@@ -57,6 +57,12 @@ function definitionKey(definition: BuildingMaterialDefinition | undefined): stri
  */
 export class BuildingMaterialManager {
 	private readonly cache = new Map<string, THREE.MeshStandardMaterial>();
+	private readonly onMaterialCreated?: (material: THREE.Material) => void;
+
+	/** `onMaterialCreated` fires exactly once per newly-allocated material (never for a cache hit) — ThreeScene uses it to register every building material with the graphics pipeline's cascaded-shadow system as soon as painting a new colour creates it, without needing to know about painting at all. */
+	constructor(onMaterialCreated?: (material: THREE.Material) => void) {
+		this.onMaterialCreated = onMaterialCreated;
+	}
 
 	getMaterial(
 		kind: MaterialKind,
@@ -77,6 +83,7 @@ export class BuildingMaterialManager {
 			polygonOffsetUnits: template.polygonOffsetUnits
 		});
 		this.cache.set(key, material);
+		this.onMaterialCreated?.(material);
 		return material;
 	}
 

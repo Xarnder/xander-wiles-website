@@ -31,6 +31,8 @@ export class FoundationMesh {
 
 		this.geometry = new THREE.BoxGeometry(width, height, depth);
 		this.object = new THREE.Mesh(this.geometry, material);
+		this.object.castShadow = true;
+		this.object.receiveShadow = true;
 		this.object.position.set(
 			(minX + maxX) / 2,
 			(definition.topY + definition.bottomY) / 2,
