@@ -1,6 +1,7 @@
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { createDefaultVegetationSettings } from '../../vegetation/VegetationTypes';
+import { createDefaultRoofProfileSettings } from '../../building/RoofTypes';
 import type { WorldRevisionCounters, WorldRuntime } from '../WorldSerializer';
 import { createWorldDefinition } from '../WorldSerializer';
 import {
@@ -152,6 +153,28 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 						direction: '+z',
 						levelIndex: 0,
 						gridSizeAtCreation: 0.5
+					}
+				],
+				roofs: [
+					{
+						id: 'roof-1',
+						foundationId: 'foundation-1',
+						levelIndex: 1,
+						points: [
+							{ gridX: 0, gridZ: 0 },
+							{ gridX: 8, gridZ: 0 },
+							{ gridX: 8, gridZ: 6 },
+							{ gridX: 0, gridZ: 6 }
+						],
+						baseY: 5.2,
+						type: 'gable',
+						direction: 'x',
+						shedDirection: '+x',
+						rise: 1.5,
+						thickness: 0.2,
+						overhang: 0.3,
+						profileSettings: createDefaultRoofProfileSettings(),
+						material: { type: 'color', color: '#6b4f3a' }
 					}
 				]
 			}

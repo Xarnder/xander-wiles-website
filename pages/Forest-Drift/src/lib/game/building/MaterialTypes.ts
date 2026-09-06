@@ -106,5 +106,15 @@ export const DEFAULT_MATERIAL_PALETTE: readonly MaterialPaletteGroup[] = [
 	}
 ];
 
-/** The kinds of building surface `BuildingMaterialManager` knows how to render — ceilings and floors intentionally share one look (`'slab-floor'`), matching SlabManager's own existing `materialFor()` split (only a flat roof looks different). */
-export type MaterialKind = 'wall' | 'foundation' | 'slab-floor' | 'slab-roof';
+/**
+ * The kinds of building surface `BuildingMaterialManager` knows how to render — ceilings and floors
+ * intentionally share one look (`'slab-floor'`), matching SlabManager's own existing `materialFor()`
+ * split (only a flat roof looks different). `'window-frame' | 'door-frame' | 'door-leaf'` back the
+ * procedural opening visuals (see OpeningVisualBuilder.ts) — routed through this same cache/CSM-
+ * registration mechanism so they're architecturally paintable later (a `BuildingMaterialDefinition`
+ * override) even though nothing calls `getMaterial` with one yet; window glass is deliberately NOT a
+ * `MaterialKind` here, since it needs a `MeshPhysicalMaterial` (transparency/reflection), not the
+ * `MeshStandardMaterial` this cache always builds — see OpeningVisualBuilder's own glass material.
+ */
+export type MaterialKind =
+	'wall' | 'foundation' | 'slab-floor' | 'slab-roof' | 'window-frame' | 'door-frame' | 'door-leaf';

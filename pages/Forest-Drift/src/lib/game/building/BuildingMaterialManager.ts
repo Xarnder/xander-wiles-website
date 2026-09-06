@@ -25,7 +25,10 @@ const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 		polygonOffsetUnits: -1
 	},
 	'slab-floor': { color: 0xd8d2c4, roughness: 0.9, metalness: 0.02, flatShading: true },
-	'slab-roof': { color: 0x8f8a7e, roughness: 0.95, metalness: 0.02, flatShading: true }
+	'slab-roof': { color: 0x8f8a7e, roughness: 0.95, metalness: 0.02, flatShading: true },
+	'window-frame': { color: 0xf2f0e8, roughness: 0.55, metalness: 0.05 },
+	'door-frame': { color: 0xf2f0e8, roughness: 0.55, metalness: 0.05 },
+	'door-leaf': { color: 0x8a5a35, roughness: 0.7, metalness: 0.02 }
 };
 
 /** `undefined` (no override — use the kind's own default look) collapses to a stable `'default'` key; a colour definition's key is its normalized hex, so two differently-cased/shorthand inputs that mean the same colour still share one cached material. */

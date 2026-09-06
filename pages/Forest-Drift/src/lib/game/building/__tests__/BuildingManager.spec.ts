@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BuildingManager } from '../BuildingManager';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { RoofManager } from '../RoofManager';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
 import { resolvePlayerPositionAgainstWalls } from '../wallCollision';
@@ -46,12 +47,18 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => VERTEX_SPACING
 	});
+	const roofManager = new RoofManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => VERTEX_SPACING,
+		getBuildingGridSize: () => buildingGridSize
+	});
 	const buildingManager = new BuildingManager({
 		foundationManager,
 		wallManager,
 		wallPathManager,
 		slabManager,
 		stairManager,
+		roofManager,
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize,
 		getCornerOpeningMargin: () => cornerOpeningMargin
@@ -62,6 +69,7 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		wallPathManager,
 		slabManager,
 		stairManager,
+		roofManager,
 		buildingManager
 	};
 }

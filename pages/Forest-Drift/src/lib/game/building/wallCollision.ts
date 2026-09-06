@@ -60,8 +60,9 @@ export function resolveCircleAgainstLocalRect(
  * Resolves a player's proposed horizontal position against every nearby wall collision rect,
  * treating the player as a vertical capsule approximated in the horizontal plane by a circle of
  * `radius`. Rects whose vertical range doesn't overlap [feetY, headY] are skipped entirely — this
- * is what lets the player walk through a door opening (no solid segment exists there at all) while
- * still being blocked by solid wall above/beside it.
+ * is what lets the player walk through an *open* doorway (no solid wall segment exists there) while
+ * still being blocked by solid wall above/beside it. A closed door adds its own rect via
+ * `DoorInteractionController.getCollisionRects()` so the hole is sealed until the leaf swings aside.
  */
 export function resolvePlayerPositionAgainstWalls(
 	x: number,

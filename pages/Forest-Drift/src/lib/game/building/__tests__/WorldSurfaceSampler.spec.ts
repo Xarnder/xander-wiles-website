@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { RoofManager } from '../RoofManager';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
 import { WorldSurfaceSampler } from '../WorldSurfaceSampler';
@@ -33,14 +34,20 @@ function setup() {
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => SPACING
 	});
+	const roofManager = new RoofManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => SPACING,
+		getBuildingGridSize: () => BUILDING_GRID_SIZE
+	});
 	const sampler = new WorldSurfaceSampler(
 		{ sample: () => 0 } as never,
 		foundationManager,
 		slabManager,
 		stairManager,
+		roofManager,
 		() => MAX_STEP_HEIGHT
 	);
-	return { foundationManager, slabManager, stairManager, sampler };
+	return { foundationManager, slabManager, stairManager, roofManager, sampler };
 }
 
 function gp(gridX: number, gridZ: number) {

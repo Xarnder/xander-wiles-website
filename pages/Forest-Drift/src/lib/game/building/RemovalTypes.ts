@@ -19,7 +19,8 @@ export type RemovalTarget =
 			openingType: WallOpeningType;
 			foundationId: string;
 	  }
-	| { type: 'stair'; stairId: string; foundationId: string };
+	| { type: 'stair'; stairId: string; foundationId: string }
+	| { type: 'roof'; roofId: string; foundationId: string };
 
 /** A stable string key for a target — used to detect "the hovered thing changed" without deep-equality checks. */
 export function removalTargetKey(target: RemovalTarget): string {
@@ -32,6 +33,8 @@ export function removalTargetKey(target: RemovalTarget): string {
 			return `opening:${target.wallId}:${target.openingId}`;
 		case 'stair':
 			return `stair:${target.stairId}`;
+		case 'roof':
+			return `roof:${target.roofId}`;
 	}
 }
 
@@ -48,6 +51,7 @@ export interface BuildingPickUserData {
 	wallId?: string;
 	wallPathId?: string;
 	stairId?: string;
+	roofId?: string;
 	openingId?: string;
 	openingType?: WallOpeningType;
 }
@@ -76,6 +80,9 @@ export function resolveRemovalTarget(userData: BuildingPickUserData): RemovalTar
 	}
 	if (userData.stairId) {
 		return { type: 'stair', stairId: userData.stairId, foundationId };
+	}
+	if (userData.roofId) {
+		return { type: 'roof', roofId: userData.roofId, foundationId };
 	}
 	if (userData.wallPathId && userData.wallId) {
 		return {

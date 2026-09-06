@@ -4,6 +4,7 @@ import type { BuildingRemovalManager } from './BuildingRemovalManager';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
 import { applyWallTransform } from './WallGeometryBuilder';
+import { ROOF_TYPE_LABELS } from './RoofTypes';
 import { computeStairMetrics } from './stairMath';
 import { computeWallLength, wallLocalToWorld } from './wallGeometryMath';
 import type { WallDefinition, WallOpeningDefinition, WallOpeningType } from './WallTypes';
@@ -140,6 +141,7 @@ export class RemoveTool implements BuildTool {
 		const candidates: THREE.Object3D[] = [
 			...this.buildingManager.getRaycastableWallMeshes(),
 			...this.buildingManager.getRaycastableStairMeshes(),
+			...this.buildingManager.getRaycastableRoofMeshes(),
 			...this.openingProxies.map((proxy) => proxy.mesh)
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
@@ -330,6 +332,11 @@ export class RemoveTool implements BuildTool {
 					`${levelDisplayName(stair.levelIndex)} → ${levelDisplayName(stair.levelIndex + 1)}`
 				];
 			}
+			case 'roof': {
+				const roof = this.buildingManager.getRoof(target.roofId);
+				if (!roof) return ['Roof'];
+				return [ROOF_TYPE_LABELS[roof.type], `Rise ${roof.rise.toFixed(2)}m`];
+			}
 		}
 	}
 
@@ -343,6 +350,10 @@ export class RemoveTool implements BuildTool {
 				return target.openingType === 'window' ? 'Window' : 'Door';
 			case 'stair':
 				return 'Stairs';
+			case 'roof': {
+				const roof = this.buildingManager.getRoof(target.roofId);
+				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';
+			}
 		}
 	}
 

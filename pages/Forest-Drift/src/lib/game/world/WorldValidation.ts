@@ -1,6 +1,13 @@
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
+import {
+	ROOF_TYPE_ORDER,
+	type RoofDefinition,
+	type RoofProfileSettings,
+	type RoofType,
+	type ShedDirection
+} from '../building/RoofTypes';
 import type { SlabDefinition, SlabOpeningDefinition } from '../building/SlabTypes';
 import type { StairDefinition } from '../building/StairTypes';
 import type {
@@ -28,6 +35,8 @@ export const IMPORT_LIMITS = {
 	pointsPerSlab: 2_000,
 	openingsPerSlab: 500,
 	stairsPerFoundation: 2_000,
+	roofsPerFoundation: 2_000,
+	pointsPerRoof: 2_000,
 	buildingLevels: 50_000,
 	removedTreeIds: 500_000,
 	/** Uncompressed world JSON size ceiling for an import, in bytes. */
@@ -238,6 +247,56 @@ function validateStair(value: unknown, where: string): ValidationResult<StairDef
 	return { ok: true, value: value as unknown as StairDefinition };
 }
 
+function validateRoofProfileSettings(
+	value: unknown,
+	where: string
+): ValidationResult<RoofProfileSettings> {
+	if (!isRecord(value)) return fail(`${where}: roof profileSettings must be an object`);
+	for (const key of [
+		'gambrelLowerSlopeFraction',
+		'gambrelBreakHeightFraction',
+		'mansardBreakFraction',
+		'dutchGableHipFraction',
+		'mShapedValleyFraction'
+	] as const) {
+		if (!isFiniteNumber(value[key])) {
+			return fail(`${where}: roof profileSettings ${key} must be a finite number`);
+		}
+	}
+	return { ok: true, value: value as unknown as RoofProfileSettings };
+}
+
+function validateRoof(value: unknown, where: string): ValidationResult<RoofDefinition> {
+	if (!isRecord(value)) return fail(`${where}: roof must be an object`);
+	if (!isNonEmptyString(value.id)) return fail(`${where}: roof id missing`);
+	if (!isNonEmptyString(value.foundationId)) return fail(`${where}: roof foundationId missing`);
+	if (!ROOF_TYPE_ORDER.includes(value.type as RoofType)) {
+		return fail(`${where}: unknown roof type`);
+	}
+	if (value.direction !== 'x' && value.direction !== 'z') {
+		return fail(`${where}: roof direction must be 'x' or 'z'`);
+	}
+	if (!['+x', '-x', '+z', '-z'].includes(value.shedDirection as ShedDirection)) {
+		return fail(`${where}: unknown roof shedDirection`);
+	}
+	for (const key of ['levelIndex', 'baseY', 'rise', 'thickness', 'overhang'] as const) {
+		if (!isFiniteNumber(value[key])) return fail(`${where}: roof ${key} must be a finite number`);
+	}
+	const profileSettings = validateRoofProfileSettings(value.profileSettings, where);
+	if (!profileSettings.ok) return profileSettings;
+	const material = validateMaterial(value.material, where);
+	if (!material.ok) return material;
+	if (!Array.isArray(value.points)) return fail(`${where}: roof points must be an array`);
+	if (value.points.length > IMPORT_LIMITS.pointsPerRoof)
+		return fail(`${where}: roof has too many points`);
+	for (const point of value.points) {
+		if (!isRecord(point) || !isFiniteNumber(point.gridX) || !isFiniteNumber(point.gridZ)) {
+			return fail(`${where}: roof point must have finite gridX/gridZ`);
+		}
+	}
+	return { ok: true, value: value as unknown as RoofDefinition };
+}
+
 function validateFoundation(value: unknown, where: string): ValidationResult<FoundationDefinition> {
 	if (!isRecord(value)) return fail(`${where}: foundation must be an object`);
 	if (!isNonEmptyString(value.id)) return fail(`${where}: foundation id missing`);
@@ -275,11 +334,13 @@ function validateBuilding(
 	const wallPaths = value.wallPaths ?? [];
 	const slabs = value.slabs ?? [];
 	const stairs = value.stairs ?? [];
+	const roofs = value.roofs ?? [];
 	if (
 		!Array.isArray(walls) ||
 		!Array.isArray(wallPaths) ||
 		!Array.isArray(slabs) ||
-		!Array.isArray(stairs)
+		!Array.isArray(stairs) ||
+		!Array.isArray(roofs)
 	) {
 		return fail(`${where}: building collections must be arrays`);
 	}
@@ -288,6 +349,7 @@ function validateBuilding(
 		return fail(`${where}: too many wall paths`);
 	if (slabs.length > IMPORT_LIMITS.slabsPerFoundation) return fail(`${where}: too many slabs`);
 	if (stairs.length > IMPORT_LIMITS.stairsPerFoundation) return fail(`${where}: too many stairs`);
+	if (roofs.length > IMPORT_LIMITS.roofsPerFoundation) return fail(`${where}: too many roofs`);
 
 	for (const wall of walls) {
 		const result = validateWall(wall, where);
@@ -305,6 +367,10 @@ function validateBuilding(
 		const result = validateStair(stair, where);
 		if (!result.ok) return result;
 	}
+	for (const roof of roofs) {
+		const result = validateRoof(roof, where);
+		if (!result.ok) return result;
+	}
 	return {
 		ok: true,
 		value: {
@@ -312,7 +378,8 @@ function validateBuilding(
 			walls,
 			wallPaths,
 			slabs,
-			stairs
+			stairs,
+			roofs
 		} as FoundationBuildingDefinition
 	};
 }

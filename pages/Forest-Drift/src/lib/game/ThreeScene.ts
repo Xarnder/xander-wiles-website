@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { BuildingLevelManager } from './building/BuildingLevelManager';
 import { BuildingMaterialManager } from './building/BuildingMaterialManager';
+import { getGlassMaterial } from './building/OpeningVisualBuilder';
 import { BuildingRemovalManager } from './building/BuildingRemovalManager';
 import { BuildUndoManager } from './building/BuildUndoManager';
 import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
 import { CeilingTool } from './building/CeilingTool';
+import { DoorInteractionController } from './building/DoorInteractionController';
 import { DoorTool } from './building/DoorTool';
 import { FloorTool } from './building/FloorTool';
 import { FoundationManager } from './building/FoundationManager';
@@ -23,6 +25,7 @@ import type { PaintUiState } from './building/PaintTool';
 import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
 import { RemoveTool } from './building/RemoveTool';
+import { RoofManager } from './building/RoofManager';
 import { RoofTool } from './building/RoofTool';
 import { SlabManager } from './building/SlabManager';
 import { StairManager, stairMaterial } from './building/StairManager';
@@ -185,6 +188,7 @@ export class ThreeScene implements WorldRuntime {
 	private readonly wallPathManager: WallPathManager;
 	private readonly slabManager: SlabManager;
 	private readonly stairManager: StairManager;
+	private readonly roofManager: RoofManager;
 	private readonly levelManager: BuildingLevelManager;
 	private readonly undoManager: BuildUndoManager;
 	private readonly buildingManager: BuildingManager;
@@ -195,6 +199,7 @@ export class ThreeScene implements WorldRuntime {
 	private readonly wallTool: WallTool;
 	private readonly windowTool: WindowTool;
 	private readonly doorTool: DoorTool;
+	private readonly doorInteraction: DoorInteractionController;
 	private readonly polygonWallTool: PolygonWallTool;
 	private readonly ceilingTool: CeilingTool;
 	private readonly floorTool: FloorTool;
@@ -301,6 +306,8 @@ export class ThreeScene implements WorldRuntime {
 		this.scene.add(this.terrainManager.group);
 		this.graphicsPipeline.registerMaterial(terrainMaterial);
 		this.graphicsPipeline.registerMaterial(stairMaterial);
+		const glassMaterial = getGlassMaterial();
+		this.graphicsPipeline.registerMaterial(glassMaterial);
 
 		const buildingSettings = options.buildingSettings;
 		this.materialManager = new BuildingMaterialManager((material) =>
@@ -317,7 +324,9 @@ export class ThreeScene implements WorldRuntime {
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
-			materialManager: this.materialManager
+			materialManager: this.materialManager,
+			buildingSettings,
+			glassMaterial
 		});
 		this.scene.add(this.wallManager.group);
 		this.wallPathManager = new WallPathManager({
@@ -325,7 +334,9 @@ export class ThreeScene implements WorldRuntime {
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
-			materialManager: this.materialManager
+			materialManager: this.materialManager,
+			buildingSettings,
+			glassMaterial
 		});
 		this.scene.add(this.wallPathManager.group);
 
@@ -347,12 +358,22 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.scene.add(this.stairManager.group);
 
+		this.roofManager = new RoofManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			materialManager: this.materialManager
+		});
+		this.scene.add(this.roofManager.group);
+
 		this.buildingManager = new BuildingManager({
 			foundationManager: this.foundationManager,
 			wallManager: this.wallManager,
 			wallPathManager: this.wallPathManager,
 			slabManager: this.slabManager,
 			stairManager: this.stairManager,
+			roofManager: this.roofManager,
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
@@ -367,6 +388,7 @@ export class ThreeScene implements WorldRuntime {
 			this.foundationManager,
 			this.slabManager,
 			this.stairManager,
+			this.roofManager,
 			() => buildingSettings.maxStepHeight
 		);
 
@@ -396,7 +418,8 @@ export class ThreeScene implements WorldRuntime {
 				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
 					...this.wallManager.getAllCollisionRects(),
 					...this.wallPathManager.getAllCollisionRects(),
-					...this.stairManager.getAllCollisionRects()
+					...this.stairManager.getAllCollisionRects(),
+					...(this.doorInteraction?.getCollisionRects() ?? [])
 				])
 		});
 
@@ -528,6 +551,11 @@ export class ThreeScene implements WorldRuntime {
 			onPaintStateChange: options.onPaintStateChange
 		});
 
+		this.doorInteraction = new DoorInteractionController({
+			camera: this.camera,
+			getHingePivots: () => this.buildingManager.getDoorHingePivots()
+		});
+
 		this.buildToolManager = new BuildToolManager({
 			domElement: this.renderer.domElement,
 			tools: {
@@ -579,11 +607,18 @@ export class ThreeScene implements WorldRuntime {
 				this.wallManager.setShowBounds(buildingSettings.showWallBounds);
 				this.wallPathManager.setShowBounds(buildingSettings.showWallBounds);
 			},
+			onOpeningVisualSettingsChange: () => {
+				this.wallManager.rebuildAllWalls();
+				this.wallPathManager.rebuildAllPaths();
+			},
 			onShowSlabBoundsChange: () => {
 				this.slabManager.setShowBounds(buildingSettings.showSlabBounds);
 			},
 			onShowStairBoundsChange: () => {
 				this.stairManager.setShowBounds(buildingSettings.showStairBounds);
+			},
+			onShowRoofBoundsChange: () => {
+				this.roofManager.setShowBounds(buildingSettings.showRoofBounds);
 			},
 			onShowRemovalPickingProxiesChange: () => {
 				this.removeTool.setShowPickingProxies(buildingSettings.showRemovalPickingProxies);
@@ -735,6 +770,22 @@ export class ThreeScene implements WorldRuntime {
 	/** Lets the on-screen floor selector's ▲ button move up a level by click, identically to Page Up. */
 	moveLevelUp(): void {
 		this.levelManager.moveUp();
+	}
+
+	/**
+	 * If no foundation is active yet, prefer the pad the player is standing on, or the only
+	 * foundation in the world — so `]`/`[` and the floor selector work before a construction-plane hit.
+	 */
+	private suggestBuildingLevelFoundation(): void {
+		if (this.levelManager.getActiveFoundationId() || this.levelManager.isFoundationLocked()) return;
+		const position = this.controller.worldPosition;
+		const standing = this.foundationManager.getFoundationContaining(position.x, position.z);
+		if (standing) {
+			this.levelManager.suggestActiveFoundation(standing.id);
+			return;
+		}
+		const foundations = this.foundationManager.getFoundations();
+		if (foundations.length === 1) this.levelManager.suggestActiveFoundation(foundations[0].id);
 	}
 
 	/** Lets the on-screen floor selector's ▼ button move down a level by click, identically to Page Down. */
@@ -1045,7 +1096,9 @@ export class ThreeScene implements WorldRuntime {
 
 		this.flushDirtyFlags();
 
+		this.doorInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
+		this.suggestBuildingLevelFoundation();
 		this.terrainManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
@@ -1122,6 +1175,7 @@ export class ThreeScene implements WorldRuntime {
 		this.foundationTool.dispose();
 		this.wallTool.dispose();
 		this.windowTool.dispose();
+		this.doorInteraction.dispose();
 		this.doorTool.dispose();
 		this.polygonWallTool.dispose();
 		this.ceilingTool.dispose();

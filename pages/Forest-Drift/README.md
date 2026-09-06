@@ -880,7 +880,9 @@ fallback and regression coverage.
 
 ### Slabs (`SlabTypes.ts`, `slabMath.ts`, `SlabGeometryBuilder.ts`, `SlabManager.ts`, `SlabToolBase.ts`)
 
-`SlabType = 'ceiling' | 'floor' | 'flat-roof'` — all three are exactly the same underlying
+`SlabType = 'ceiling' | 'floor' | 'flat-roof'` — `'flat-roof'` is now a LOAD-ONLY legacy member (see
+the "Roofs" section below for the pitched-roof system that replaced it on the hotbar); all three are
+exactly the same underlying
 `SlabDefinition` (a foundation-local polygon, a top-surface `localY`, and a `thickness`); `type`
 only ever affects material and HUD text, never geometry. This is also what lets **one physical slab
 serve as both a room's ceiling and the floor above it**: Ceiling Tool and Floor Tool both default a
@@ -930,10 +932,14 @@ It caches each slab's world-space outer polygon and hole polygons alongside its 
 `getTopSurfacesAt`/`getUndersidesAt` (point-in-polygon queries the collision system below reads)
 never re-derive them per call, and correctly exclude any point that falls inside an opening.
 
-The Ceiling/Floor/Roof tools are three thin `SlabToolBase` configurations (label, slab type,
-default thickness setting) — one shared implementation for the click-to-add-a-point,
+The Ceiling and Floor tools are two thin `SlabToolBase` configurations (label, slab type, default
+thickness setting) — one shared implementation for the click-to-add-a-point,
 click-first-point-to-close polygon interaction (always closed; there's no "open slab" concept,
-unlike a wall path), live stepped preview, and per-tool HUD.
+unlike a wall path), live stepped preview, and per-tool HUD. Roof used to be a third `SlabToolBase`
+configuration (`'flat-roof'`) but is now its own, considerably larger multi-type system — see
+"Roofs" below — that happens to reuse this exact same polygon-drawing interaction as its first
+phase, rather than extending `SlabToolBase` itself (a pitched roof needs a whole extra modal phase
+`SlabToolBase` has no concept of).
 
 ### Multi-level collision (`WorldSurfaceSampler.ts`, `FirstPersonController.ts`)
 
@@ -1491,6 +1497,211 @@ L-shaped/U-shaped/spiral stairs, landings, railings/bannisters, a stair material
 decorative trim, curved stairs, elevators, ladders, ramps, automatic stair generation between
 arbitrary floors, and precise head-clearance-driven (rather than full-footprint) opening sizing.
 
+## Roofs: nine procedural pitched roof types over one polygon-drawing workflow (`RoofTypes.ts`, `roofMath.ts`, `RoofGeometryBuilder.ts`, `RoofManager.ts`, `RoofTool.ts`)
+
+The original Roof Tool was just Ceiling/Floor's flat-slab workflow relabelled (see the "Roofs" note
+in the Slabs section above). This replaces it on the hotbar with a real pitched-roof system —
+`flat | shed | gable | hip | gambrel | mansard | butterfly | m-shaped | dutch-gable` — while
+deliberately keeping the exact same footprint-drawing interaction the flat version (and every slab
+tool) already used: draw a closed polygon, click the first point to close it. What changes is what
+happens next.
+
+### Data model: a logical definition, never generated vertices (`RoofTypes.ts`)
+
+`RoofDefinition` stores only what can't be derived — `{id, foundationId, levelIndex, points, baseY,
+type, direction, shedDirection, rise, thickness, overhang, profileSettings, material?}` — the exact
+same "logical world, not rendered world" rule every other building type (and the world-save system
+itself) already follows. `points` is the flat eave-line footprint polygon, in the same
+foundation-local building-grid integers every other building type uses; `baseY` is the eave
+elevation, matching the top of the level's walls at creation time exactly like a slab's `localY`.
+`rise` (metres, vertical) is authoritative; pitch (the angle) is always DERIVED from it plus the
+footprint's own span (`roofMath.pitchDegrees`), never stored — the same reasoning `StairDefinition`
+stores footprint length rather than a typed-in height. `direction: 'x' | 'z'` says which axis the
+ridge (or valley, for butterfly) runs along; `shedDirection` is `shed`'s separate four-state "which
+edge is high" field, since a shed has no ridge at all.
+
+`RoofProfileSettings` (the gambrel/mansard/dutch-gable/m-shaped shape-defining fractions) is frozen
+into the roof from the live `BuildingSettings` defaults at CREATION time, never re-read later — the
+same "world-defining settings snapshotted into the definition" rule `WorldEnvironmentDefinition`
+already follows for terrain/vegetation/sky: retuning the GUI's defaults later must never reshape an
+already-built roof.
+
+### Geometry, expressed once in (u, v), never once per orientation (`roofMath.ts`)
+
+Every pitched type is built from an axis-aligned rectangle (`axisAlignedRectangleOf` — exactly 4
+points, every edge axis-parallel; returns `null` for anything else, including an off-axis rectangle,
+a triangle, or an L-shape) in a local `(u, v)` frame: `u` runs along the ridge (or, for `shed`, along
+the high/low edge), `v` runs across the span the roof climbs over. `direction: 'x'` maps `u→x, v→z`;
+`direction: 'z'` maps `u→z, v→x`. Writing each type's slope maths once in `(u, v)` and mapping to
+world axes only at the very end is what lets `R` "rotate" a roof by 90° for free — every face-builder
+takes the same numbers regardless of orientation; only the frame changes.
+
+- **`shed`** — one full-span slope from the low edge to the high edge.
+- **`gable`** — two slopes meeting at a full-length ridge; **`butterfly`** is the identical shape
+  with the eave/ridge Y roles swapped (a valley instead of a ridge).
+- **`hip`** — rises from all four eave edges to a real ridge (or, for a square footprint, a single
+  peak point — the pyramid case degenerates safely rather than needing a special case). Its ridge
+  axis is always the footprint's LONGER dimension (`hipRidgeDirection`) — `R` has no effect on it.
+- **`gambrel`** — a symmetric two-pitch gable: a steep lower slope to a break, then a shallow upper
+  slope to the ridge, both sides.
+- **`m-shaped`** — two gables side by side sharing a central valley (four full-span slopes).
+- **`mansard`** — a steep hip frustum (`buildHipFrustumFaces`, a uniform inset on all four sides —
+  genuinely different from `hip`'s converging ridge line, since it stops at a real, still-rectangular
+  inner platform) topped by a shallower true hip rising to a real peak. Like `hip`, this is fully
+  footprint-derived (both the frustum and its hip cap ignore `direction` entirely) — `R` has no
+  effect on it either.
+- **`dutch-gable`** — the same hip frustum, but topped by a full-length GABLE cap instead of another
+  hip — so, unlike `mansard`, it DOES have a real, user-chosen ridge direction (an earlier version of
+  this roof ignored the stored `direction` and re-derived the cap's orientation from the footprint
+  the same way `hip`/`mansard` do — fixed so `R` actually rotates the visible cap; see
+  `roofTypeHasOrientationControl`'s doc comment).
+
+`roofTypeHasSlope`/`roofTypeHasOrientationControl` are the single source of truth for which keys do
+anything for a given type — `'flat'` has neither; `'hip'` and `'mansard'` have slope but no
+orientation control (both are fully footprint-derived); every other pitched type has both.
+
+### Solid geometry, sharp ridges, and a watertight underside (`RoofGeometryBuilder.ts`)
+
+`buildRoofGeometry(roof, buildingGridSize)` is the one place a `RoofDefinition` becomes a mesh —
+nothing about it is persisted; loading a world calls straight back into this function, exactly like
+`SlabGeometryBuilder.buildSlabGeometry` for slabs. `'flat'` is handled separately by delegating to
+`buildSlabGeometry` directly (it supports an arbitrary simple polygon, not just a rectangle); every
+other type requires `axisAlignedRectangleOf` to succeed first, or this throws `RoofFootprintError`
+("`Gable roof requires a compatible footprint`"-style messages) rather than ever building corrupt
+geometry — `RoofTool`'s live preview and `RoofManager.addRoof` both turn this into the same rejection
+rather than a crash.
+
+Each `RoofFace` (a planar, convex list of points plus a per-edge `fasciaEdges` flag marking a true
+outer boundary vs. an internal ridge/hip/valley edge shared with a neighbour) becomes: a fan-
+triangulated TOP skin, wound so its normal points up (`ensureUpwardWinding`, a Newell-normal check —
+every real face here is a "roof skin," never something that should face down); a BOTTOM skin reusing
+the SAME (now-corrected) point order, offset down by `thickness` and reversed; and a vertical FASCIA
+quad per edge flagged `true`. Vertices are deliberately NOT deduplicated across faces even where two
+faces share an edge exactly (positions coincide, so there's no visible gap) — each face gets its own,
+independently-computed flat normal, which is what keeps a ridge or hip line looking like a sharp
+architectural edge instead of being smoothed across by shared vertex normals. A cheap planar
+(world-ish XZ) UV is written for every vertex — not textured today, but real coordinates rather than
+an empty attribute, so a future roof material has something usable to sample without this geometry
+needing to be rebuilt from scratch.
+
+### Placement: draw, then adjust, then confirm (`RoofTool.ts`)
+
+`RoofToolState = 'idle' | 'drawing' | 'adjusting'`. The first two phases are the identical
+polygon-drawing interaction every slab tool already uses (same draw-snap cycling via `C`, the same
+building-grid overlay, Backspace to undo a point, right-click to cancel) — closing the loop (clicking
+the first point with ≥3 points) freezes the footprint and enters `'adjusting'` instead of confirming
+immediately. From there:
+
+- **`V`** cycles `ROOF_TYPE_ORDER`, wrapping.
+- **`R`** rotates — toggles `direction` between X/Z axis for most types, cycles `shedDirection`
+  through all four compass directions for `shed`, and is a no-op for `flat`/`hip`/`mansard` (see
+  above).
+- **`↑` / `↓`** adjust `rise` by `roofRiseStep` (Shift for the finer `roofRiseFineStep`), clamped to
+  never go negative; a no-op for `'flat'` (`roofTypeHasSlope`).
+
+A second click confirms (`BuildingManager.addRoof`, recorded on the undo stack); right-click cancels
+the WHOLE placement back to `'idle'` — mirroring `StairTool`'s own `'choosing-direction'` phase rather
+than stepping back to `'drawing'`, the same "a modal adjustment step is all-or-nothing" convention
+already established there. The live preview while adjusting is built from the exact same
+`buildRoofGeometry` call the real placement uses, so what's shown is always what will actually be
+placed — never a simplified stand-in. The HUD shows the current type, rise, a live-computed pitch in
+degrees, and the ridge/high-edge orientation (or "auto (long axis)" for the footprint-derived types),
+plus the type/rise entering `'adjusting'` always starts from `defaultRoofType`/`roofRiseStep` — the
+settings fields double as both the starting point for a new roof and the ↑/↓ increment, never
+retroactively applied to an already-placed one.
+
+Entering `'adjusting'` on an incompatible (non-rectangular) footprint simply means every pitched type
+shows "requires a compatible footprint" until `V` cycles back to `'flat'` — there is no separate
+"fix the polygon" step; the footprint was already frozen when the loop closed.
+
+### Sloped-surface collision, without touching `WorldSurfaceSampler`'s contract (`RoofManager.ts`)
+
+A roof's top/underside is NOT a constant Y across its footprint, unlike a slab — the one genuinely
+new collision problem this system introduces. Rather than changing what `WorldSurfaceSampler` itself
+does, `RoofManager` caches every placed roof's world-space `RoofFace` list (or, for `'flat'`, the
+same constant-Y pair a slab uses) and exposes `getTopSurfacesAt`/`getUndersidesAt` with the EXACT SAME
+shape `SlabManager`'s own methods already have: given a world `(x, z)`, find which face's 2D
+projection contains the point (`pointInPolygon2D`, reused from `slabMath.ts`) and evaluate that face's
+own plane equation for the real Y there. `WorldSurfaceSampler.getSupportingSurfaceY`/
+`getCeilingBlockY` fold these in with one extra loop each, identical in shape to the existing slab
+loop — a player can stand on (and bump their head against the underside of) a pitched roof exactly
+like a flat one, at the correct sloped height rather than the roof's highest point everywhere.
+
+### Remove/Paint Mode and world-save integration
+
+A placed roof is removable (`'roof'` `RemovalTarget`, dispatched to `BuildingManager.removeRoof`) and
+paintable (`'roof'` `PaintTarget`, reusing the `'slab-roof'` `MaterialKind` — a pitched roof gets the
+exact same CSM shadow registration and cached-material behaviour a flat roof/ceiling/floor already
+had, for free) — see the Remove Mode and Paint Tool sections below, both updated to include it.
+`FoundationBuildingDefinition.roofs: RoofDefinition[]` sits alongside `walls`/`wallPaths`/`slabs`/
+`stairs` (defaulting to `[]` for older saves); `BuildingManager.serialize()`/`.load()` round-trip it
+exactly like every other building type, and `WorldValidation.validateRoof` gives imported roof data
+the same untrusted-input treatment (unknown type/direction/shedDirection rejected, size-capped
+points/roofs-per-foundation, finite-number checks on every numeric field) every other imported
+building type already gets.
+
+### GUI and settings
+
+**Building > Roofs**: `defaultRoofType`, `roofDeckThickness` (a NEW, separate field from the legacy
+`roofThickness` the old flat-roof-as-slab path still uses — kept apart so a world saved before this
+system still reproduces its old flat roofs unchanged), `roofRiseStep`, `roofRiseFineStep`,
+`roofOverhang`, `roofPreviewOpacity`, the five profile fractions (`gambrelLowerSlopeFraction`,
+`gambrelBreakHeightFraction`, `mansardBreakFraction`, `dutchGableHipFraction`,
+`mShapedValleyFraction`), and `showRoofBounds`/`showRoofPlanes`/`showRoofRidge`/`showRoofNormals`
+(the latter three reserved for a future debug-visualisation pass; only `showRoofBounds` is currently
+wired to anything).
+
+### Tests
+
+`roofMath.spec.ts` (26 tests): the axis-aligned-rectangle detector (including rejecting an off-axis
+rectangle and a non-rectangular quad); pitch/rise math; per-type face generation for all nine types,
+including the square-footprint hip "pyramid" degenerate case and the mansard/dutch-gable
+break-rectangle handoff (no gap between the lower frustum and upper cap); the shed-direction axis
+mapping regression (see below); and `roofTypeHasOrientationControl`'s exact true/false set for every
+type, including the dutch-gable ridge-direction regression. `RoofGeometryBuilder.spec.ts` (15 tests)
+verifies the built solid directly: watertightness (triangle count is a multiple of 3, correctly
+accounting for `'flat'`'s indexed geometry), every triangle's real geometric normal (not just the
+smoothed attribute) faces outward/upward, sharp (non-shared) normals at a ridge, and the
+`RoofFootprintError` rejection path for every incompatible type/footprint combination.
+`RoofManager.spec.ts` (9 tests) covers add/remove/serialize round-trips, the footprint-compatibility
+rejection, and `getTopSurfacesAt`/`getUndersidesAt` returning the exact eave and ridge heights for a
+known gable. `WorldValidation.spec.ts` adds an unknown-roof-type rejection and an absurd
+roofs-per-foundation count guard. `tests/game.e2e.ts` confirms the Roof hotbar slot (6) and its GUI
+folder render with no console errors.
+
+**Bugfix: `shed`'s high/low edge was mapped to the wrong axis.** `buildShedFaces` initially computed
+`axis = shedDirection is +x/-x ? 'x' : 'z'` — backwards. A shed's high/low edges vary ALONG the axis
+named in `shedDirection`, which means the frame's `v` (the varying coordinate) must map to THAT axis
+— per the `(u, v)` convention above, that requires the OPPOSITE `direction` value. Two failing tests
+(all four corners on the expected plane; reversing `shedDirection` swaps which edge is high) caught
+this before it shipped.
+
+**Bugfix: a square-footprint hip roof was missing two of its four faces.** An early version guarded
+the two long ("north"/"south") trapezoid faces behind `if (ridgeUMax - ridgeUMin > EPSILON)`, meant
+to skip a supposedly-zero-area face once the ridge shrinks to a point on a square footprint — but the
+"trapezoid" doesn't have zero AREA in that case, only one zero-length edge (a valid degenerate quad),
+so the guard silently produced two open holes in the roof for any square/near-square footprint. Fixed
+by pushing both faces unconditionally; the geometry builder's fan-triangulation turns the degenerate
+case into one real triangle plus one harmless zero-area one.
+
+**Bugfix: `dutch-gable`'s upper cap ignored the player's chosen ridge direction.** Unlike `mansard`
+(genuinely footprint-derived — the geometry is identical either way, since both the frustum and its
+hip cap are direction-invariant), `dutch-gable`'s upper section is a real gable with a real ridge
+direction, but `buildDutchGableFaces` originally called `hipRidgeDirection(rect)` internally instead
+of accepting the roof's own `direction` field — so `R` had no visible effect at all. Fixed by
+threading `direction` through as a real parameter; `roofTypeHasOrientationControl` was also corrected
+to return `false` for `mansard` specifically (it previously claimed `R` did something for every
+non-hip pitched type, which wasn't true for mansard) while confirming `dutch-gable` genuinely does
+rotate.
+
+### Not implemented yet
+
+Dormers, skylights, chimneys, gutters/downpipes, roof windows, decorative fascia/trim, tile/shingle
+textures, snow accumulation, drainage simulation, structural support rules, arbitrary (non-rectangle)
+footprints for any pitched type, and a straight-skeleton solver for non-rectangular hip-family roofs.
+The legacy flat-roof-as-slab path (`SlabType: 'flat-roof'`) is intentionally left in place, unreachable
+from the hotbar but still fully functional for any world saved before this system existed.
+
 ## Remove Mode: a global demolition overlay (`RemoveTool.ts`, `BuildingRemovalManager.ts`, `RemovalTypes.ts`)
 
 Pressing `X` (or clicking the trash icon beside the hotbar) toggles Remove Mode — a temporary
@@ -1506,8 +1717,10 @@ in its normal idle state, with zero separate "remembered slot" bookkeeping neede
 ### What can be removed
 
 Individual straight walls, individual segments of a Continuous/Polygon Wall path, windows, doors,
-and staircases (with their owned upper-floor slab opening restored). Floors/ceilings/roofs, whole
-wall paths, and foundations are deliberately not wired up yet — `RemovalTarget`
+staircases (with their owned upper-floor slab opening restored), and pitched roofs (see the "Roofs"
+section above — the first "remove a slab-like solid" case in the codebase, with no
+`removeSlab`/floor/ceiling equivalent yet). Floors/ceilings (the flat-slab kind), whole wall paths,
+and foundations are still deliberately not wired up — `RemovalTarget`
 (`RemovalTypes.ts`) is a plain `{type, ...ids}` discriminated union specifically so adding one of
 those later is a new case in a handful of `switch` statements, not a redesign; a foundation in
 particular already has its own cascade primitive (`BuildingManager.removeBuildingForFoundation`,
@@ -1517,10 +1730,11 @@ deletion is actually designed than bolted on here.
 
 ### Targeting: a logical RemovalTarget, never a raw mesh
 
-`RemoveTool.update()` raycasts every frame against three pools of geometry — standalone wall
+`RemoveTool.update()` raycasts every frame against four pools of geometry — standalone wall
 meshes + wall-path segment picking meshes (`BuildingManager.getRaycastableWallMeshes`, already used
-by Window/Door), every stair's real mesh (`getRaycastableStairMeshes`), and this tool's own
-OpeningPickingProxy meshes (below) — and resolves the nearest hit's `object.userData` into a
+by Window/Door), every stair's real mesh (`getRaycastableStairMeshes`), every roof's real mesh
+(`getRaycastableRoofMeshes`), and this tool's own OpeningPickingProxy meshes (below) — and resolves
+the nearest hit's `object.userData` into a
 `RemovalTarget` via `resolveRemovalTarget` (`RemovalTypes.ts`), a small pure function unit-tested
 without Three.js at all. Everything downstream — highlighting, HUD text, the actual removal call —
 operates on that logical target, never on the mesh; `RemoveTool` doesn't even know which manager
@@ -1686,10 +1900,12 @@ texture preset (with a thumbnail instead of a flat colour) would also take.
 
 `PaintTarget` (`PaintTypes.ts`) mirrors `RemovalTarget` exactly — `resolvePaintTarget` is a small
 pure function (unit-tested without Three.js) that turns a raycast hit's `userData` into one of
-`'wall' | 'wall-segment' | 'slab' | 'foundation'`. `PaintTool.update()` raycasts against the SAME
-standalone-wall and wall-path-segment picking meshes Remove Mode already uses, plus every slab and
-foundation mesh — never terrain, trees, window/door openings, or stairs (none of those are
-paintable in this version). A wall-path SEGMENT is targeted individually, exactly like
+`'wall' | 'wall-segment' | 'slab' | 'roof' | 'foundation'`. `PaintTool.update()` raycasts against the
+SAME standalone-wall and wall-path-segment picking meshes Remove Mode already uses, plus every slab,
+roof, and foundation mesh — never terrain, trees, window/door openings, or stairs (none of those are
+paintable in this version). A roof reuses the exact same `'slab-roof'` `MaterialKind` a flat-roof
+slab already used — one shared look, no new cache dimension needed. A wall-path SEGMENT is targeted
+individually, exactly like
 Window/Door/Remove Mode already do — painting one segment never recolours its neighbours (see
 below for how the merged mesh makes this possible).
 

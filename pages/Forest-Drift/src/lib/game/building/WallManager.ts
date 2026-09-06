@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
+import type { BuildingSettings } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { FoundationDefinition } from './FoundationTypes';
+import { buildOpeningVisual, disposeOpeningVisual, getGlassMaterial } from './OpeningVisualBuilder';
 import type { WallCollisionRect } from './wallCollision';
 import {
 	applyWallTransform,
@@ -19,6 +22,8 @@ interface WallEntry {
 	mesh: THREE.Mesh;
 	collisionRects: WallCollisionRect[];
 	boundsHelper: THREE.LineSegments | null;
+	/** Child of `mesh`, positioned/oriented for free by inheriting its parent's transform — holds one procedural window/door visual per opening (see OpeningVisualBuilder.ts). Rebuilt from scratch alongside the wall's own geometry, never incrementally patched, same convention as everything else here. */
+	openingVisuals: THREE.Group;
 }
 
 export interface WallManagerOptions {
@@ -27,6 +32,10 @@ export interface WallManagerOptions {
 	getBuildingGridSize: () => number;
 	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
 	materialManager?: BuildingMaterialManager;
+	/** Live settings this manager reads at every rebuild for procedural opening-visual sizing — optional, defaulting to `createDefaultBuildingSettings()`, so existing test call sites that construct this manager without one keep compiling. */
+	buildingSettings?: BuildingSettings;
+	/** The one shared window-glass material — optional, defaulting to `getGlassMaterial()`'s own lazily-created singleton. */
+	glassMaterial?: THREE.Material;
 }
 
 /**
@@ -47,9 +56,13 @@ export class WallManager {
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
+	private readonly glassMaterial: THREE.Material;
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly walls = new Map<string, WallEntry>();
+	/** openingId -> its door's hingePivot — `DoorInteractionController` reads this to swing leaves. */
+	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: WallManagerOptions) {
@@ -57,6 +70,8 @@ export class WallManager {
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
+		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
+		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -121,14 +136,57 @@ export class WallManager {
 			transform.headingRadians
 		);
 
+		const openingVisuals = this.rebuildOpeningVisuals(definition, mesh, existing?.openingVisuals);
+
 		const entry: WallEntry = {
 			definition,
 			mesh,
 			collisionRects,
-			boundsHelper: existing?.boundsHelper ?? null
+			boundsHelper: existing?.boundsHelper ?? null,
+			openingVisuals
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
+	}
+
+	/**
+	 * Rebuilds every procedural window/door visual for one wall from scratch, exactly like its own
+	 * solid geometry is rebuilt above — never incrementally patched, so an opening that resized or
+	 * disappeared can never leave a stale frame/glass/leaf behind. Parented as a CHILD of the wall's
+	 * own `mesh` (always `visible = true`, unlike the invisible picking meshes elsewhere in this
+	 * codebase), which is what lets every child below be positioned in the SAME absolute wall-local
+	 * (U, Y, thickness) coordinates `WallOpeningDefinition` itself already uses — `mesh`'s own
+	 * `applyWallTransform` call already carries the wall's position/heading, so nothing here has to
+	 * re-derive it. Never added to `getWallMeshesForRaycast()` (or any other raycast candidate list),
+	 * so it's invisible to Window/Door/Remove/Paint targeting regardless (those all use
+	 * non-recursive `intersectObjects`, which never descends into a hit candidate's own children).
+	 */
+	private rebuildOpeningVisuals(
+		definition: WallDefinition,
+		mesh: THREE.Mesh,
+		existing: THREE.Group | undefined
+	): THREE.Group {
+		if (existing) {
+			clearDoorHingePivotsFrom(existing, this.doorHingePivots);
+			disposeOpeningVisual(existing);
+		}
+
+		const group = new THREE.Group();
+		group.name = 'opening-visuals';
+		for (const opening of definition.openings) {
+			const result = buildOpeningVisual(
+				opening,
+				definition.thickness,
+				this.buildingSettings,
+				this.materialManager,
+				this.glassMaterial
+			);
+			if (!result) continue;
+			group.add(result.object);
+			if (result.hingePivot) this.doorHingePivots.set(opening.id, result.hingePivot);
+		}
+		mesh.add(group);
+		return group;
 	}
 
 	addWall(definition: WallDefinition): void {
@@ -147,11 +205,27 @@ export class WallManager {
 	removeWall(wallId: string): boolean {
 		const entry = this.walls.get(wallId);
 		if (!entry) return false;
+		disposeOpeningVisual(entry.openingVisuals);
+		for (const opening of entry.definition.openings) this.doorHingePivots.delete(opening.id);
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
 		this.walls.delete(wallId);
 		return true;
+	}
+
+	/** Rebuilds every wall's opening visuals — used when a global `BuildingSettings` opening-visual default (frame width/depth, glass on/off, ...) changes in the debug GUI, per the class's "never incrementally patched" rebuild convention. */
+	rebuildAllWalls(): void {
+		for (const wallId of Array.from(this.walls.keys())) this.rebuildWall(wallId);
+	}
+
+	/** The hinge pivot for a door opening, if it has one — `undefined` for a window opening, a disabled/frame-less door, or an unknown id. */
+	getDoorHingePivot(openingId: string): THREE.Object3D | undefined {
+		return this.doorHingePivots.get(openingId);
+	}
+
+	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.doorHingePivots;
 	}
 
 	/** Cascade delete: removes every wall belonging to a foundation, and that foundation's now-empty BuildingRoot. */
@@ -241,4 +315,12 @@ export class WallManager {
 		this.buildingRoots.clear();
 		this.group.clear();
 	}
+}
+
+function clearDoorHingePivotsFrom(root: THREE.Object3D, pivots: Map<string, THREE.Object3D>): void {
+	root.traverse((child) => {
+		if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
+			pivots.delete(child.userData.openingId);
+		}
+	});
 }

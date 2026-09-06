@@ -38,6 +38,10 @@ export class BuildingRemovalManager {
 		return this.buildingManager.removeStair(stairId);
 	}
 
+	removeRoof(roofId: string): boolean {
+		return this.buildingManager.removeRoof(roofId);
+	}
+
 	/** Dispatches a RemovalTarget to the matching removal call above — the single entry point RemoveTool actually uses. */
 	remove(target: RemovalTarget): boolean {
 		switch (target.type) {
@@ -49,6 +53,8 @@ export class BuildingRemovalManager {
 				return this.removeOpening(target.wallId, target.openingId);
 			case 'stair':
 				return this.removeStair(target.stairId);
+			case 'roof':
+				return this.removeRoof(target.roofId);
 		}
 	}
 }

@@ -7,7 +7,8 @@ export type BuildAction =
 	| { kind: 'wall'; wallId: string }
 	| { kind: 'wallPath'; pathId: string }
 	| { kind: 'opening'; wallId: string; openingId: string }
-	| { kind: 'slab'; slabId: string };
+	| { kind: 'slab'; slabId: string }
+	| { kind: 'roof'; roofId: string };
 
 /**
  * A small LIFO stack of the last few successful placements (wall, continuous/polygon wall,
@@ -55,6 +56,8 @@ export class BuildUndoManager {
 				return this.buildingManager.removeOpening(action.wallId, action.openingId);
 			case 'slab':
 				return this.buildingManager.removeSlab(action.slabId);
+			case 'roof':
+				return this.buildingManager.removeRoof(action.roofId);
 		}
 	}
 

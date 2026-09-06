@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BuildingManager } from '../../building/BuildingManager';
 import { FoundationManager } from '../../building/FoundationManager';
 import type { FoundationDefinition } from '../../building/FoundationTypes';
+import { RoofManager } from '../../building/RoofManager';
 import { SlabManager } from '../../building/SlabManager';
 import { StairManager } from '../../building/StairManager';
 import { WallManager } from '../../building/WallManager';
@@ -26,12 +27,14 @@ function setup() {
 		getFoundation: shared.getFoundation,
 		getVertexSpacing: shared.getVertexSpacing
 	});
+	const roofManager = new RoofManager(shared);
 	const buildingManager = new BuildingManager({
 		foundationManager,
 		wallManager,
 		wallPathManager,
 		slabManager,
 		stairManager,
+		roofManager,
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => BUILDING_GRID_SIZE,
 		getCornerOpeningMargin: () => 0.15

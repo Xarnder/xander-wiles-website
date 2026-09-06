@@ -7,6 +7,7 @@
  */
 
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import type { RoofDefinition } from './RoofTypes';
 import type { SlabDefinition } from './SlabTypes';
 import type { StairDefinition } from './StairTypes';
 import type { WallPathDefinition } from './WallPathTypes';
@@ -82,4 +83,6 @@ export interface FoundationBuildingDefinition {
 	wallPaths: WallPathDefinition[];
 	slabs: SlabDefinition[];
 	stairs: StairDefinition[];
+	/** Defaults to `[]` when absent so buildings serialized before pitched roofs existed still load — same convention as `wallPaths`/`slabs` above. */
+	roofs: RoofDefinition[];
 }

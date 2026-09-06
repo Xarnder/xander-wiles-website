@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	autoPromotePolygonWallSnap,
 	cycleSnapMode,
 	snapDrawingPoint,
 	snapModeLabel,
@@ -43,6 +44,25 @@ describe('cycleSnapMode', () => {
 
 	it('never offers wall-corners when wallCornersAvailable is false, regardless of point count', () => {
 		expect(cycleSnapMode('axis-inline', 5, false)).toBe('off');
+	});
+});
+
+describe('autoPromotePolygonWallSnap', () => {
+	it('keeps axis snap for the first two confirmed points', () => {
+		expect(autoPromotePolygonWallSnap('axis', 0)).toBe('axis');
+		expect(autoPromotePolygonWallSnap('axis', 1)).toBe('axis');
+		expect(autoPromotePolygonWallSnap('axis', 2)).toBe('axis');
+	});
+
+	it('promotes axis to axis-inline once three points are confirmed', () => {
+		expect(autoPromotePolygonWallSnap('axis', 3)).toBe('axis-inline');
+		expect(autoPromotePolygonWallSnap('axis', 4)).toBe('axis-inline');
+	});
+
+	it('leaves a player-chosen mode alone (off, already inline, wall-corners)', () => {
+		expect(autoPromotePolygonWallSnap('off', 3)).toBe('off');
+		expect(autoPromotePolygonWallSnap('axis-inline', 3)).toBe('axis-inline');
+		expect(autoPromotePolygonWallSnap('wall-corners', 3)).toBe('wall-corners');
 	});
 });
 

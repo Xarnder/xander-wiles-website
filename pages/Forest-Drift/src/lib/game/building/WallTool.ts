@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import type { BuildingLevelManager } from './BuildingLevelManager';
+import {
+	createActiveLevelWatch,
+	pullActiveLevelChange,
+	type BuildingLevelManager
+} from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUndoManager } from './BuildUndoManager';
@@ -106,6 +110,7 @@ export class WallTool implements BuildTool {
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
 	private firstPoint: HoverTarget | null = null;
+	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	/**
 	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'axis-inline'` every time the
@@ -183,6 +188,7 @@ export class WallTool implements BuildTool {
 		this.snapMode = 'axis-inline';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
+		this.refreshVisuals();
 	}
 
 	deactivate(): void {
@@ -201,8 +207,9 @@ export class WallTool implements BuildTool {
 
 		const hit = this.findFoundationTopTarget();
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
+		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
 		if (!hit) {
-			if (this.target) {
+			if (this.target || levelChanged) {
 				this.target = null;
 				this.lastGridX = null;
 				this.lastGridZ = null;
@@ -224,7 +231,8 @@ export class WallTool implements BuildTool {
 			this.target &&
 			gridPoint.gridX === this.lastGridX &&
 			gridPoint.gridZ === this.lastGridZ &&
-			foundationId === this.lastFoundationId
+			foundationId === this.lastFoundationId &&
+			!levelChanged
 		) {
 			return;
 		}
@@ -538,7 +546,7 @@ export class WallTool implements BuildTool {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
-			level: this.currentLevelUiState(this.target?.foundationId),
+			level: this.currentLevelUiState(),
 			crosshair: this.target ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.target?.foundationId),

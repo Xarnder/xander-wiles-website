@@ -7,6 +7,7 @@ import { MaterialPresetStore } from './MaterialPresetStore';
 import type { BuildingMaterialDefinition, MaterialKind, MaterialPreset } from './MaterialTypes';
 import type { PaintPickUserData, PaintTarget } from './PaintTypes';
 import { paintTargetKey, resolvePaintTarget } from './PaintTypes';
+import { ROOF_TYPE_LABELS } from './RoofTypes';
 
 const OUTLINE_COLOR = 0x7fe0ff;
 
@@ -130,6 +131,7 @@ export class PaintTool implements BuildTool {
 		const candidates: THREE.Object3D[] = [
 			...this.buildingManager.getRaycastableWallMeshes(),
 			...this.buildingManager.getRaycastableSlabMeshes(),
+			...this.buildingManager.getRaycastableRoofMeshes(),
 			...this.buildingManager.getRaycastableFoundationMeshes()
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
@@ -159,6 +161,9 @@ export class PaintTool implements BuildTool {
 				break;
 			case 'slab':
 				painted = this.buildingManager.paintSlab(target.slabId, material);
+				break;
+			case 'roof':
+				painted = this.buildingManager.paintRoof(target.roofId, material);
 				break;
 			case 'foundation':
 				painted = this.buildingManager.paintFoundation(target.foundationId, material);
@@ -255,6 +260,7 @@ export class PaintTool implements BuildTool {
 			const slab = this.buildingManager.getSlab(target.slabId);
 			return slab?.type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
 		}
+		if (target.type === 'roof') return 'slab-roof';
 		return 'wall';
 	}
 
@@ -301,6 +307,8 @@ export class PaintTool implements BuildTool {
 				return this.buildingManager.getFoundationMesh(target.foundationId);
 			case 'slab':
 				return this.buildingManager.getSlabMesh(target.slabId);
+			case 'roof':
+				return this.buildingManager.getRoofMesh(target.roofId);
 			case 'wall-segment':
 				return undefined;
 		}
@@ -347,6 +355,10 @@ export class PaintTool implements BuildTool {
 				if (slab?.type === 'flat-roof') return 'Flat Roof';
 				if (slab?.type === 'ceiling') return 'Ceiling';
 				return 'Floor';
+			}
+			case 'roof': {
+				const roof = this.buildingManager.getRoof(target.roofId);
+				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';
 			}
 		}
 	}

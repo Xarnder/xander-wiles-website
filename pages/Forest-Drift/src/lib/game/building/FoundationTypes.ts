@@ -6,6 +6,7 @@
 
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import type { RoofType } from './RoofTypes';
 
 /** One vertex of the global terrain grid. gridX/gridZ are authoritative; world coords are derived. */
 export interface TerrainGridPoint {
@@ -80,6 +81,9 @@ export type PolygonWallToolState = 'idle' | 'drawing';
 /** Slab (Ceiling/Floor/Flat Roof) Tool's state — same shape as PolygonWallToolState, but a slab polygon can only ever be closed (there's no "open slab" concept). */
 export type SlabToolState = 'idle' | 'drawing';
 
+/** Roof Tool's state — same polygon-drawing phase as `SlabToolState`, plus an `'adjusting'` phase entered once the footprint polygon closes: `V`/`R`/↑/↓ change the roof's type/orientation/rise live in preview until confirmed — see RoofTool.ts. */
+export type RoofToolState = 'idle' | 'drawing' | 'adjusting';
+
 /** Stair Tool's state — two-click rectangular footprint (mirrors FoundationToolState), then a direction-selection step before confirming — see StairTool.ts. */
 export type StairToolState = 'idle' | 'first-corner-selected' | 'choosing-direction';
 
@@ -123,6 +127,33 @@ export interface BuildingSettings {
 	openingEdgeMargin: number;
 	openingSpacing: number;
 
+	/**
+	 * Procedural window/door visual inserts (see OpeningVisualBuilder.ts) — purely derived render
+	 * geometry sized from each opening's own `minU/maxU/minY/maxY`, never persisted. Every dimension
+	 * here is a PREFERRED size only: `openingVisualMath.clampFrameWidth`/`clampFrameDepth` scale it
+	 * down for an unusually small opening or a thin wall, so a tiny window never inherits a
+	 * comically oversized fixed frame.
+	 */
+	windowFramesEnabled: boolean;
+	windowFrameWidth: number;
+	windowFrameDepth: number;
+	windowGlassEnabled: boolean;
+
+	doorFramesEnabled: boolean;
+	doorFrameWidth: number;
+	doorFrameDepth: number;
+	/** The door leaf's own thickness (a thin solid box, never a zero-thickness plane). */
+	doorThickness: number;
+	/** Gap kept between the door leaf and its frame (top + both sides) so the leaf never intersects the jambs/lintel — never subtracted from the bottom, which always stays flush with the floor. */
+	doorClearance: number;
+
+	/** Dev-only: outlines each opening's own logical `minU/maxU/minY/maxY` rect — the same bounds `OpeningVisualBuilder` derives everything from, useful for diagnosing procedural sizing. */
+	showOpeningBounds: boolean;
+	/** Dev-only: outlines the actual (post-clamping) frame rects `openingVisualMath` computed — shows exactly what adaptive frame-width scaling produced for THIS opening. */
+	showOpeningFrameBounds: boolean;
+	/** Dev-only: renders a small marker at a door's `hingePivot` — the axis a future interactive door will rotate around. */
+	showDoorHinge: boolean;
+
 	/** Corner-join style for the Polygon/Continuous Wall Tool — standalone walls are unaffected (they have no interior joints). */
 	wallJoinStyle: 'miter' | 'bevel';
 	/** miterDistance / halfThickness above which a corner automatically falls back to a bevel, so a very acute angle never produces a runaway spike. */
@@ -152,10 +183,37 @@ export interface BuildingSettings {
 	fadeNonCurrentLevels: boolean;
 
 	floorThickness: number;
+	/** Flat-roof-as-slab thickness (see SlabTypes.ts's `'flat-roof'` `SlabType` member) — unrelated to pitched-roof `RoofDefinition.thickness`, which every roof type (including `'flat'`, when built via Roof Tool) uses `roofDeckThickness` for instead. Kept so any world saved before this session's pitched-roof system still reproduces its old flat-roof-as-slab geometry unchanged. */
 	roofThickness: number;
 	showSlabBounds: boolean;
 	showSlabPolygonPoints: boolean;
 	slabPreviewOpacity: number;
+
+	/**
+	 * Roof Tool defaults — see RoofTypes.ts for what each field means. `V`/`R`/↑/↓ change these per
+	 * roof while drawing; the settings here are only the STARTING point for a newly-drawn roof and
+	 * the increment ↑/↓ steps by, never retroactively applied to an already-placed roof. Roof Tool
+	 * re-applies `defaultRoofType` / `defaultRoofRise` every time it is selected.
+	 */
+	defaultRoofType: RoofType;
+	/** Starting rise (metres) when the Roof Tool is selected or a new footprint enters `'adjusting'`. */
+	defaultRoofRise: number;
+	roofDeckThickness: number;
+	/** ↑/↓ step size, metres — defaults to one building-grid cell so rise stays a "clean" number. */
+	roofRiseStep: number;
+	/** Shift+↑/↓ uses this smaller step instead, for fine adjustment. */
+	roofRiseFineStep: number;
+	roofOverhang: number;
+	roofPreviewOpacity: number;
+	gambrelLowerSlopeFraction: number;
+	gambrelBreakHeightFraction: number;
+	mansardBreakFraction: number;
+	dutchGableHipFraction: number;
+	mShapedValleyFraction: number;
+	showRoofBounds: boolean;
+	showRoofPlanes: boolean;
+	showRoofRidge: boolean;
+	showRoofNormals: boolean;
 
 	/**
 	 * Minimum stair footprint dimensions, in building-grid cells — see stairMath.validateStairFootprint.
@@ -220,6 +278,21 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		openingEdgeMargin: 0.1,
 		openingSpacing: 0.15,
 
+		windowFramesEnabled: true,
+		windowFrameWidth: 0.08,
+		windowFrameDepth: 0.08,
+		windowGlassEnabled: true,
+
+		doorFramesEnabled: true,
+		doorFrameWidth: 0.08,
+		doorFrameDepth: 0.08,
+		doorThickness: 0.04,
+		doorClearance: 0.02,
+
+		showOpeningBounds: false,
+		showOpeningFrameBounds: false,
+		showDoorHinge: false,
+
 		wallJoinStyle: 'miter',
 		miterLimit: 4,
 		cornerOpeningMargin: 0.15,
@@ -236,6 +309,23 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showSlabBounds: false,
 		showSlabPolygonPoints: true,
 		slabPreviewOpacity: 0.45,
+
+		defaultRoofType: 'gable',
+		defaultRoofRise: 4,
+		roofDeckThickness: 0.2,
+		roofRiseStep: 0.25,
+		roofRiseFineStep: 0.0625,
+		roofOverhang: 0.3,
+		roofPreviewOpacity: 0.5,
+		gambrelLowerSlopeFraction: 0.55,
+		gambrelBreakHeightFraction: 0.65,
+		mansardBreakFraction: 0.7,
+		dutchGableHipFraction: 0.65,
+		mShapedValleyFraction: 0.45,
+		showRoofBounds: false,
+		showRoofPlanes: false,
+		showRoofRidge: false,
+		showRoofNormals: false,
 
 		minimumStairWidthCells: 4,
 		minimumStairRunCells: 2,

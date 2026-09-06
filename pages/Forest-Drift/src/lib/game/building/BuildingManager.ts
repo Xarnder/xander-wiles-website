@@ -6,6 +6,15 @@ import {
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import { isFootprintCompatibleWithRoofType } from './RoofGeometryBuilder';
+import type { RoofManager } from './RoofManager';
+import type {
+	RoofDefinition,
+	RoofDirection,
+	RoofProfileSettings,
+	RoofType,
+	ShedDirection
+} from './RoofTypes';
 import { polygonsOverlap, validateSlabPolygon } from './slabMath';
 import type { SlabDefinition, SlabOpeningDefinition, SlabType } from './SlabTypes';
 import { slabBottomY } from './SlabTypes';
@@ -63,6 +72,19 @@ export interface AddSlabParams {
 	thickness: number;
 }
 
+export interface AddRoofParams {
+	points: WallEndpointTarget[];
+	levelIndex: number;
+	baseY: number;
+	type: RoofType;
+	direction: RoofDirection;
+	shedDirection: ShedDirection;
+	rise: number;
+	thickness: number;
+	overhang: number;
+	profileSettings: RoofProfileSettings;
+}
+
 export interface AddStairParams {
 	foundationId: string;
 	minGridX: number;
@@ -103,6 +125,7 @@ export interface BuildingManagerOptions {
 	wallPathManager: WallPathManager;
 	slabManager: SlabManager;
 	stairManager: StairManager;
+	roofManager: RoofManager;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
 	getCornerOpeningMargin: () => number;
@@ -133,6 +156,7 @@ export class BuildingManager {
 	private readonly wallPathManager: WallPathManager;
 	private readonly slabManager: SlabManager;
 	private readonly stairManager: StairManager;
+	private readonly roofManager: RoofManager;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly getCornerOpeningMargin: () => number;
@@ -155,6 +179,7 @@ export class BuildingManager {
 		this.wallPathManager = options.wallPathManager;
 		this.slabManager = options.slabManager;
 		this.stairManager = options.stairManager;
+		this.roofManager = options.roofManager;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
@@ -448,6 +473,80 @@ export class BuildingManager {
 	removeSlab(id: string): boolean {
 		this.revision++;
 		return this.slabManager.removeSlab(id);
+	}
+
+	/**
+	 * Places a pitched (or, via `type: 'flat'`, arbitrary-polygon) roof — the same "validate footprint
+	 * against the foundation and grid, then delegate" shape as `addSlab`, plus one check `addSlab`
+	 * doesn't need: `isFootprintCompatibleWithRoofType` rejects a non-rectangular footprint for any
+	 * pitched type BEFORE `RoofManager` ever attempts to build geometry from it, matching the
+	 * README's "Gable roof requires a compatible footprint" behaviour rather than throwing.
+	 */
+	addRoof(params: AddRoofParams): BuildingMutationResult<RoofDefinition> {
+		this.revision++;
+		const { points } = params;
+		if (points.length === 0) return { valid: false, reason: 'Need at least 3 points' };
+
+		const foundationId = points[0].foundationId;
+		if (points.some((p) => p.foundationId !== foundationId)) {
+			return { valid: false, reason: 'All points must be on the same foundation' };
+		}
+
+		const foundation = this.foundationManager.getFoundation(foundationId);
+		if (!foundation) return { valid: false, reason: 'Foundation not found' };
+
+		const vertexSpacing = this.getVertexSpacing();
+		const buildingGridSize = this.getBuildingGridSize();
+		const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+
+		for (const point of points) {
+			if (!isBuildingGridPointInsideFoundation(point, buildingGridSize, width, depth)) {
+				return { valid: false, reason: 'Roof must stay within the foundation' };
+			}
+		}
+
+		const localPoints = points.map((p) => {
+			const local = buildingGridToLocal(p, buildingGridSize);
+			return { x: local.localX, z: local.localZ };
+		});
+
+		const polygonCheck = validateSlabPolygon(localPoints);
+		if (!polygonCheck.valid) return { valid: false, reason: polygonCheck.reason };
+
+		if (!isFootprintCompatibleWithRoofType(localPoints, params.type)) {
+			return {
+				valid: false,
+				reason: `${params.type} roof requires a compatible footprint`
+			};
+		}
+
+		const roof: RoofDefinition = {
+			id: crypto.randomUUID(),
+			foundationId,
+			levelIndex: params.levelIndex,
+			points: points.map((p) => ({ gridX: p.gridX, gridZ: p.gridZ })),
+			baseY: params.baseY,
+			type: params.type,
+			direction: params.direction,
+			shedDirection: params.shedDirection,
+			rise: params.rise,
+			thickness: params.thickness,
+			overhang: params.overhang,
+			profileSettings: params.profileSettings
+		};
+
+		const result = this.roofManager.addRoof(roof);
+		if (!result.ok) return { valid: false, reason: result.reason };
+		return { valid: true, value: roof };
+	}
+
+	removeRoof(id: string): boolean {
+		this.revision++;
+		return this.roofManager.removeRoof(id);
+	}
+
+	getRoof(id: string): RoofDefinition | undefined {
+		return this.roofManager.getRoof(id);
 	}
 
 	getSlab(id: string): SlabDefinition | undefined {
@@ -796,9 +895,19 @@ export class BuildingManager {
 		return this.slabManager.getMeshesForRaycast();
 	}
 
+	/** Every roof's real mesh — for Remove/Paint Mode targeting (see RoofManager.getMeshesForRaycast). */
+	getRaycastableRoofMeshes() {
+		return this.roofManager.getMeshesForRaycast();
+	}
+
 	/** Every foundation's real mesh — for Paint Mode targeting. */
 	getRaycastableFoundationMeshes() {
 		return this.foundationManager.getMeshes();
+	}
+
+	/** Every door hinge pivot (standalone walls and path segments) — `DoorInteractionController` swings these. */
+	getDoorHingePivots() {
+		return [...this.wallManager.getDoorHingePivots(), ...this.wallPathManager.getDoorHingePivots()];
 	}
 
 	getWallPath(pathId: string): WallPathDefinition | undefined {
@@ -817,6 +926,10 @@ export class BuildingManager {
 
 	getAllStairs(): StairDefinition[] {
 		return this.stairManager.getAllStairs();
+	}
+
+	getAllRoofs(): RoofDefinition[] {
+		return this.roofManager.getAllRoofs();
 	}
 
 	/**
@@ -869,6 +982,12 @@ export class BuildingManager {
 		return this.foundationManager.setMaterial(foundationId, material);
 	}
 
+	/** Paints (or resets) a roof — preserves type/pitch/geometry/collision exactly, only the material changes (RoofManager.setMaterial rebuilds the mesh from the SAME RoofDefinition with just `material` swapped). Returns `false` for an unknown roof id. */
+	paintRoof(roofId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
+		return this.roofManager.setMaterial(roofId, material);
+	}
+
 	/** A standalone wall's real mesh — for PaintTool's live hover preview (material swap + outline). */
 	getWallMesh(wallId: string) {
 		return this.wallManager.getMeshForWall(wallId);
@@ -884,6 +1003,11 @@ export class BuildingManager {
 		return this.foundationManager.getMeshForFoundation(foundationId);
 	}
 
+	/** A roof's real mesh — same purpose as `getWallMesh`. */
+	getRoofMesh(roofId: string) {
+		return this.roofManager.getMeshForRoof(roofId);
+	}
+
 	/** A wall-path segment's merged visible mesh + which of its material-array indices are its own — see WallPathManager.getVisibleMeshAndGroupIndices and PaintTool's per-segment preview. */
 	getWallPathVisibleMeshAndGroupIndices(segmentId: string) {
 		return this.wallPathManager.getVisibleMeshAndGroupIndices(segmentId);
@@ -895,7 +1019,8 @@ export class BuildingManager {
 			walls: this.wallManager.getWallsForFoundation(foundationId),
 			wallPaths: this.wallPathManager.getPathsForFoundation(foundationId),
 			slabs: this.slabManager.getSlabsForFoundation(foundationId),
-			stairs: this.stairManager.getStairsForFoundation(foundationId)
+			stairs: this.stairManager.getStairsForFoundation(foundationId),
+			roofs: this.roofManager.getRoofsForFoundation(foundationId)
 		};
 	}
 
@@ -913,6 +1038,7 @@ export class BuildingManager {
 		this.wallPathManager.removePathsForFoundation(foundationId);
 		this.slabManager.removeSlabsForFoundation(foundationId);
 		this.stairManager.removeStairsForFoundation(foundationId);
+		this.roofManager.removeRoofsForFoundation(foundationId);
 	}
 
 	/** Plain, serializable world-state grouped by foundation — never Three.js objects. Building *levels* aren't included here since BuildingManager doesn't own BuildingLevelManager; ThreeScene combines both when serializing the full scene. */
@@ -924,12 +1050,13 @@ export class BuildingManager {
 				wallPaths: WallPathDefinition[];
 				slabs: SlabDefinition[];
 				stairs: StairDefinition[];
+				roofs: RoofDefinition[];
 			}
 		>();
 		const ensure = (foundationId: string) => {
 			let entry = byFoundation.get(foundationId);
 			if (!entry) {
-				entry = { walls: [], wallPaths: [], slabs: [], stairs: [] };
+				entry = { walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [] };
 				byFoundation.set(foundationId, entry);
 			}
 			return entry;
@@ -942,6 +1069,7 @@ export class BuildingManager {
 		for (const stair of this.stairManager.getAllStairs()) {
 			ensure(stair.foundationId).stairs.push(stair);
 		}
+		for (const roof of this.roofManager.getAllRoofs()) ensure(roof.foundationId).roofs.push(roof);
 		return Array.from(byFoundation.entries(), ([foundationId, data]) => ({
 			foundationId,
 			...data
@@ -960,6 +1088,7 @@ export class BuildingManager {
 		for (const path of this.wallPathManager.getAllPaths()) this.wallPathManager.removePath(path.id);
 		for (const slab of this.slabManager.getAllSlabs()) this.slabManager.removeSlab(slab.id);
 		for (const stair of this.stairManager.getAllStairs()) this.stairManager.removeStair(stair.id);
+		for (const roof of this.roofManager.getAllRoofs()) this.roofManager.removeRoof(roof.id);
 		for (const building of definitions) {
 			// Runtime data loaded from an actual save file may predate `baseY` even though the type
 			// says it's required — `?? 0` keeps that old data loading as ground-floor walls/paths.
@@ -971,6 +1100,7 @@ export class BuildingManager {
 			}
 			for (const slab of building.slabs ?? []) this.slabManager.addSlab(slab);
 			for (const stair of building.stairs ?? []) this.stairManager.addStair(stair);
+			for (const roof of building.roofs ?? []) this.roofManager.addRoof(roof);
 		}
 	}
 }

@@ -250,6 +250,57 @@ describe('raycastSlabConstructionPlane', () => {
 });
 
 describe('raycastLevelConstructionPlane', () => {
+	it('looking down from above an elevated storey hits that storey under the crosshair, not a far-forward ground-slab point', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		settings.defaultStoreyHeight = WALL_HEIGHT;
+		const levelManager = new BuildingLevelManager(settings);
+		levelManager.setCurrentLevelIndex('test-foundation', 1); // plane at topY(10)+baseY(3)=13
+
+		// Above the first-floor plane, looking down and slightly forward. The ground slab (y=10)
+		// is further along the same ray than the storey plane (y=13); using the mesh X/Z used to
+		// put the hover point well ahead of the crosshair.
+		const origin = new THREE.Vector3(0, 16, 0);
+		const direction = new THREE.Vector3(0.4, -1, 0);
+		const hit = raycastLevelConstructionPlane(
+			makeRaycaster(origin, direction),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE
+		);
+
+		expect(hit).not.toBeNull();
+		const dir = direction.clone().normalize();
+		const tPlane = (13 - 16) / dir.y;
+		const tGround = (10 - 16) / dir.y;
+		const planeX = origin.x + dir.x * tPlane;
+		const groundX = origin.x + dir.x * tGround;
+		expect(Math.abs(groundX) - Math.abs(planeX)).toBeGreaterThan(0.5);
+		expect(hit!.gridPoint.gridX * BUILDING_GRID_SIZE).toBeCloseTo(planeX + 10, 0);
+	});
+
+	it('looking down at the foundation still targets after switching to an elevated level — X/Z from the slab, Y from the storey', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		settings.defaultStoreyHeight = WALL_HEIGHT;
+		const levelManager = new BuildingLevelManager(settings);
+		levelManager.setCurrentLevelIndex('test-foundation', 1);
+
+		const hit = raycastLevelConstructionPlane(
+			makeRaycaster(new THREE.Vector3(0, 20, 0), new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE
+		);
+
+		expect(hit).not.toBeNull();
+		expect(hit?.foundationId).toBe('test-foundation');
+	});
+
 	it('returns a direct mesh hit at level 0 when looking down at the foundation from within its footprint', () => {
 		const foundationManager = new FoundationManager(() => SPACING);
 		foundationManager.addFoundation(makeDefinition());

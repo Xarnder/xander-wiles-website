@@ -1,5 +1,6 @@
 import type { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { FoundationManager } from './FoundationManager';
+import type { RoofManager } from './RoofManager';
 import type { SlabManager } from './SlabManager';
 import type { StairManager } from './StairManager';
 
@@ -35,6 +36,7 @@ export class WorldSurfaceSampler {
 		private readonly foundationManager: FoundationManager,
 		private readonly slabManager: SlabManager,
 		private readonly stairManager: StairManager,
+		private readonly roofManager: RoofManager,
 		/** Read live (a GUI setting), same convention as every other tunable in this codebase. */
 		private readonly getMaxStepHeight: () => number
 	) {}
@@ -65,6 +67,10 @@ export class WorldSurfaceSampler {
 			if (slabTopY > best && slabTopY <= limit) best = slabTopY;
 		}
 
+		for (const roofTopY of this.roofManager.getTopSurfacesAt(worldX, worldZ)) {
+			if (roofTopY > best && roofTopY <= limit) best = roofTopY;
+		}
+
 		const stepLimit = referenceY + this.getMaxStepHeight();
 		for (const stepTopY of this.stairManager.getStepSurfacesAt(worldX, worldZ)) {
 			if (stepTopY > best && stepTopY <= stepLimit) best = stepTopY;
@@ -82,6 +88,11 @@ export class WorldSurfaceSampler {
 		if (toY <= fromY) return null;
 		let best: number | null = null;
 		for (const undersideY of this.slabManager.getUndersidesAt(worldX, worldZ)) {
+			if (undersideY > fromY && undersideY <= toY) {
+				if (best === null || undersideY < best) best = undersideY;
+			}
+		}
+		for (const undersideY of this.roofManager.getUndersidesAt(worldX, worldZ)) {
 			if (undersideY > fromY && undersideY <= toY) {
 				if (best === null || undersideY < best) best = undersideY;
 			}

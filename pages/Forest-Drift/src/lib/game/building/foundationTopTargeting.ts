@@ -9,6 +9,7 @@ import {
 	worldToFoundationLocal
 } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
+import type { FoundationDefinition } from './FoundationTypes';
 
 export interface FoundationTopHit {
 	foundationId: string;
@@ -58,8 +59,10 @@ export function raycastFoundationTop(
  *
  * Foundation resolution, in order:
  * 1. `raycastFoundationTop` — a real mesh hit (covers ground level, and any level where a slab
- *    happens to already exist there to look at) — if it hits, that foundation is authoritative and,
- *    at level 0, its hit point is used directly (no extra plane math needed).
+ *    happens to already exist there to look at) — if it hits, that foundation is authoritative.
+ *    The hover point itself is the look-ray ∩ the current storey's plane when that intersection
+ *    is in front of the camera (so the grid sits under the crosshair). The mesh X/Z is only a
+ *    fallback when the storey is above the camera (looking down, plane behind the eye).
  * 2. Otherwise, whichever foundation's footprint contains the ray's origin (i.e. the player is
  *    currently standing on/in it) — covers the common case of looking up/sideways to build a
  *    ceiling while standing inside the room below it.
@@ -102,33 +105,49 @@ export function raycastLevelConstructionPlane(
 	}
 	if (!foundationId) return null;
 
-	const currentLevelIndex = levelManager.getCurrentLevelIndex(foundationId);
-	if (currentLevelIndex === 0 && meshHit && meshHit.foundationId === foundationId) {
-		return meshHit;
-	}
-
 	const foundation = foundationManager.getFoundation(foundationId);
 	if (!foundation) return null;
 
+	const currentLevelIndex = levelManager.getCurrentLevelIndex(foundationId);
 	const level = levelManager.getOrCreateLevel(foundationId, currentLevelIndex);
-	const planeWorldY = foundation.topY + level.baseY;
+	const planeHit = intersectFoundationPlane(
+		raycaster,
+		foundation,
+		foundation.topY + level.baseY,
+		vertexSpacing,
+		buildingGridSize
+	);
+	if (planeHit) return { foundationId, gridPoint: planeHit };
 
+	// Storey is above the camera (looking down) — the plane is behind the eye, so keep targeting
+	// via the visible foundation-top X/Z rather than dropping the hover entirely.
+	if (meshHit && meshHit.foundationId === foundationId) {
+		return meshHit;
+	}
+
+	return null;
+}
+
+function intersectFoundationPlane(
+	raycaster: THREE.Raycaster,
+	foundation: FoundationDefinition,
+	planeWorldY: number,
+	vertexSpacing: number,
+	buildingGridSize: number
+): BuildingGridPoint | null {
 	const dirY = raycaster.ray.direction.y;
-	if (Math.abs(dirY) < 1e-6) return null; // ray parallel to the construction plane
+	if (Math.abs(dirY) < 1e-6) return null;
 	const t = (planeWorldY - raycaster.ray.origin.y) / dirY;
-	if (t <= 0) return null; // plane is behind the camera
+	if (t <= 0) return null;
 
 	const hitX = raycaster.ray.origin.x + raycaster.ray.direction.x * t;
 	const hitZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t;
-
 	const frame = foundationLocalFrame(foundation, vertexSpacing);
 	const local = worldToFoundationLocal(frame, hitX, planeWorldY, hitZ);
 	const gridPoint = snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
-
 	const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
 	if (!isBuildingGridPointInsideFoundation(gridPoint, buildingGridSize, width, depth)) return null;
-
-	return { foundationId, gridPoint };
+	return gridPoint;
 }
 
 /**
@@ -184,22 +203,12 @@ export function raycastSlabConstructionPlane(
 		foundationId,
 		levelManager.getCurrentLevelIndex(foundationId)
 	);
-	const planeWorldY = foundation.topY + level.baseY + level.wallHeight;
-
-	const dirY = raycaster.ray.direction.y;
-	if (Math.abs(dirY) < 1e-6) return null; // ray parallel to the construction plane
-	const t = (planeWorldY - raycaster.ray.origin.y) / dirY;
-	if (t <= 0) return null; // plane is behind the camera
-
-	const hitX = raycaster.ray.origin.x + raycaster.ray.direction.x * t;
-	const hitZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t;
-
-	const frame = foundationLocalFrame(foundation, vertexSpacing);
-	const local = worldToFoundationLocal(frame, hitX, planeWorldY, hitZ);
-	const gridPoint = snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
-
-	const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
-	if (!isBuildingGridPointInsideFoundation(gridPoint, buildingGridSize, width, depth)) return null;
-
-	return { foundationId, gridPoint };
+	const planeHit = intersectFoundationPlane(
+		raycaster,
+		foundation,
+		foundation.topY + level.baseY + level.wallHeight,
+		vertexSpacing,
+		buildingGridSize
+	);
+	return planeHit ? { foundationId, gridPoint: planeHit } : null;
 }

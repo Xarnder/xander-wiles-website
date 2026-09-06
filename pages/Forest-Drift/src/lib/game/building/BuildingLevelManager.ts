@@ -8,12 +8,12 @@ const LEVEL_DISCOVERY_EPSILON = 0.01;
 
 /**
  * Owns every foundation's building levels (storeys) AND which foundation/level a level-aware tool
- * (Wall, Polygon Wall, Ceiling/Floor/Roof, Stairs) currently builds on next — changed live via Page
- * Up/Page Down or the on-screen floor selector, not just a placement default.
+ * (Wall, Polygon Wall, Ceiling/Floor/Roof, Stairs) currently builds on next — changed live via
+ * `]`/`[` (or Page Up/Page Down) or the on-screen floor selector, not just a placement default.
  *
  * Levels are per-foundation: `currentLevelIndex` is tracked separately for every `foundationId`, so
  * standing on one foundation's Level 2 doesn't leak into another nearby foundation's own level
- * state. Which foundation Page Up/Down actually apply to — `activeFoundationId` — is resolved
+ * state. Which foundation the level keys actually apply to — `activeFoundationId` — is resolved
  * separately: level-aware tools call `reportHoveredFoundation` every frame with whatever they're
  * currently targeting (used only while nothing is locked), and `lockActiveFoundation`/
  * `unlockActiveFoundation` around an in-progress multi-click placement so the crosshair drifting
@@ -48,9 +48,10 @@ export class BuildingLevelManager {
 	private revision = 0;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (event.code === 'PageUp') {
+		// `]` / `[` are the Mac-friendly pair (Page Up/Down need Fn on most laptop keyboards).
+		if (event.code === 'PageUp' || event.code === 'BracketRight') {
 			this.moveUp();
-		} else if (event.code === 'PageDown') {
+		} else if (event.code === 'PageDown' || event.code === 'BracketLeft') {
 			this.moveDown();
 		}
 	};
@@ -96,6 +97,17 @@ export class BuildingLevelManager {
 	 */
 	reportHoveredFoundation(foundationId: string | null): void {
 		if (this.foundationLocked || !foundationId) return;
+		this.setActiveFoundation(foundationId);
+	}
+
+	/**
+	 * Establishes an active foundation when none is set yet (player is standing on a pad, or the
+	 * world only has one). Does not override a foundation the player already targeted, and is a
+	 * no-op while a placement is locked — so `]`/`[` and the floor selector work before the
+	 * crosshair has had a successful construction-plane hit.
+	 */
+	suggestActiveFoundation(foundationId: string | null): void {
+		if (this.foundationLocked || this.activeFoundationId || !foundationId) return;
 		this.setActiveFoundation(foundationId);
 	}
 
@@ -298,4 +310,31 @@ export class BuildingLevelManager {
 	dispose(): void {
 		window.removeEventListener('keydown', this.handleKeyDown);
 	}
+}
+
+/** Mutable watch token for `pullActiveLevelChange` — tools keep one and pass it every frame. */
+export interface ActiveLevelWatch {
+	foundationId: string | null;
+	levelIndex: number;
+}
+
+export function createActiveLevelWatch(): ActiveLevelWatch {
+	return { foundationId: null, levelIndex: Number.NaN };
+}
+
+/**
+ * Records the manager's current active foundation + storey on `watch`. Returns true when either
+ * changed since the last call — tools use this so a `]`/`[` press still refreshes the HUD/grid
+ * even if the crosshair hasn't moved.
+ */
+export function pullActiveLevelChange(
+	manager: BuildingLevelManager,
+	watch: ActiveLevelWatch
+): boolean {
+	const foundationId = manager.getActiveFoundationId();
+	const levelIndex = foundationId ? manager.getCurrentLevelIndex(foundationId) : -1;
+	const changed = watch.foundationId !== foundationId || watch.levelIndex !== levelIndex;
+	watch.foundationId = foundationId;
+	watch.levelIndex = levelIndex;
+	return changed;
 }

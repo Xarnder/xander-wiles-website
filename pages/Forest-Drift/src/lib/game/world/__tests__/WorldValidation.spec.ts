@@ -70,6 +70,18 @@ describe('enum and material safety', () => {
 		expectRejected(world, /stair direction/i);
 	});
 
+	it('rejects an unknown roof type', () => {
+		const world = richWorld();
+		(world.buildings[0].roofs[0] as { type: string }).type = 'onion-dome';
+		expectRejected(world, /roof type/i);
+	});
+
+	it('rejects a non-finite roof rise', () => {
+		const world = richWorld();
+		world.buildings[0].roofs[0].rise = Number.NaN;
+		expectRejected(world, /finite/i);
+	});
+
 	it('rejects a colour that is not a colour, rather than handing it to THREE.Color', () => {
 		const world = richWorld();
 		world.buildings[0].walls[0].material = {
@@ -139,6 +151,19 @@ describe('malicious or corrupt size guards', () => {
 			})
 		);
 		expectRejected(world, /too many walls/i);
+	});
+
+	it('rejects an absurd roof count on a single foundation', () => {
+		const world = richWorld();
+		const roof = world.buildings[0].roofs[0];
+		world.buildings[0].roofs = Array.from(
+			{ length: IMPORT_LIMITS.roofsPerFoundation + 1 },
+			(_, i) => ({
+				...roof,
+				id: `r-${i}`
+			})
+		);
+		expectRejected(world, /too many roofs/i);
 	});
 
 	it('rejects an absurd wall-path point count', () => {

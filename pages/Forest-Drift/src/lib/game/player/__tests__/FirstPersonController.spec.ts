@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { FirstPersonController } from '../FirstPersonController';
 import { FoundationManager } from '../../building/FoundationManager';
+import { RoofManager } from '../../building/RoofManager';
 import { SlabManager } from '../../building/SlabManager';
 import { StairManager } from '../../building/StairManager';
 import type { StairDefinition } from '../../building/StairTypes';
@@ -65,11 +66,17 @@ function setup(foundationTopY = 0, terrainHeight = 0) {
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => VERTEX_SPACING
 	});
+	const roofManager = new RoofManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => VERTEX_SPACING,
+		getBuildingGridSize: () => GRID_SIZE
+	});
 	const sampler = new WorldSurfaceSampler(
 		{ sample: () => terrainHeight } as never,
 		foundationManager,
 		slabManager,
 		stairManager,
+		roofManager,
 		() => 0.3
 	);
 

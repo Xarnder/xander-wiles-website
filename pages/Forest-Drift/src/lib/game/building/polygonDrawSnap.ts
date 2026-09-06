@@ -49,6 +49,19 @@ export function cycleSnapMode(
 	return 'off'; // 'wall-corners' -> 'off'
 }
 
+/**
+ * Polygon Wall Tool starts on `'axis'` each time it is selected. `'axis-inline'` only differs once
+ * 3 points exist, so if the player left the default on, step them up automatically at that count.
+ * Any other mode (they pressed `C`) is left alone.
+ */
+export function autoPromotePolygonWallSnap(
+	mode: SnapMode,
+	confirmedPointCount: number
+): SnapMode {
+	if (mode === 'axis' && confirmedPointCount >= 3) return 'axis-inline';
+	return mode;
+}
+
 /** How close (in grid cells) an "inline" candidate coordinate must be to snap to it — small enough that it only fires for a clearly-intended alignment, not any nearby point. */
 const INLINE_SNAP_TOLERANCE_CELLS = 6;
 

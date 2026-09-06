@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BuildingLevelManager } from '../BuildingLevelManager';
+import {
+	BuildingLevelManager,
+	createActiveLevelWatch,
+	pullActiveLevelChange
+} from '../BuildingLevelManager';
 import type { BuildingSettings } from '../FoundationTypes';
 import { createDefaultBuildingSettings } from '../FoundationTypes';
 import type { FoundationBuildingDefinition } from '../WallTypes';
@@ -47,7 +51,7 @@ function makeSettings(overrides: Partial<BuildingSettings> = {}): BuildingSettin
 }
 
 function emptyBuilding(foundationId: string): FoundationBuildingDefinition {
-	return { foundationId, walls: [], wallPaths: [], slabs: [], stairs: [] };
+	return { foundationId, walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [] };
 }
 
 describe('BuildingLevelManager.getOrCreateLevel', () => {
@@ -174,6 +178,23 @@ describe('BuildingLevelManager foundation context (activeFoundationId, hover, an
 		expect(manager.getActiveFoundationId()).toBe('a');
 	});
 
+	it('suggestActiveFoundation only fills in when nothing is active yet', () => {
+		manager.suggestActiveFoundation('a');
+		expect(manager.getActiveFoundationId()).toBe('a');
+		manager.suggestActiveFoundation('b');
+		expect(manager.getActiveFoundationId()).toBe('a');
+		manager.lockActiveFoundation('a');
+		manager.unlockActiveFoundation();
+		manager.suggestActiveFoundation(null);
+		expect(manager.getActiveFoundationId()).toBe('a');
+	});
+
+	it('suggestActiveFoundation is a no-op while a placement is locked', () => {
+		manager.lockActiveFoundation('a');
+		manager.suggestActiveFoundation('b');
+		expect(manager.getActiveFoundationId()).toBe('a');
+	});
+
 	it('reportHoveredFoundation(null) — a raycast miss — retains the most recently active foundation rather than clearing it', () => {
 		manager.reportHoveredFoundation('a');
 		manager.reportHoveredFoundation(null);
@@ -196,6 +217,16 @@ describe('BuildingLevelManager foundation context (activeFoundationId, hover, an
 		expect(manager.isFoundationLocked()).toBe(false);
 		manager.reportHoveredFoundation('b');
 		expect(manager.getActiveFoundationId()).toBe('b');
+	});
+
+	it('pullActiveLevelChange is true when the active storey changes, then false until the next change', () => {
+		const watch = createActiveLevelWatch();
+		manager.reportHoveredFoundation('f1');
+		expect(pullActiveLevelChange(manager, watch)).toBe(true);
+		expect(pullActiveLevelChange(manager, watch)).toBe(false);
+		manager.moveUp();
+		expect(pullActiveLevelChange(manager, watch)).toBe(true);
+		expect(pullActiveLevelChange(manager, watch)).toBe(false);
 	});
 
 	it('each foundation keeps its own current level index, independent of which one is currently active', () => {
@@ -240,6 +271,19 @@ describe('BuildingLevelManager.moveUp / moveDown', () => {
 		expect(manager.getCurrentLevelIndex('f1')).toBe(1);
 		pressKey('PageDown');
 		pressKey('PageDown');
+		expect(manager.getCurrentLevelIndex('f1')).toBe(0);
+	});
+
+	it('] / [ move the active foundation the same way as Page Up / Page Down', () => {
+		manager.reportHoveredFoundation('f1');
+		pressKey('BracketRight');
+		expect(manager.getCurrentLevelIndex('f1')).toBe(1);
+		pressKey('BracketRight');
+		expect(manager.getCurrentLevelIndex('f1')).toBe(2);
+		pressKey('BracketLeft');
+		expect(manager.getCurrentLevelIndex('f1')).toBe(1);
+		pressKey('BracketLeft');
+		pressKey('BracketLeft');
 		expect(manager.getCurrentLevelIndex('f1')).toBe(0);
 	});
 

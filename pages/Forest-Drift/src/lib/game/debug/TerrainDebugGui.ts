@@ -157,7 +157,9 @@ export class TerrainDebugGui {
 			onShowWallBoundsChange: () => void;
 			onShowSlabBoundsChange: () => void;
 			onShowStairBoundsChange: () => void;
+			onShowRoofBoundsChange: () => void;
 			onShowRemovalPickingProxiesChange: () => void;
+			onOpeningVisualSettingsChange: () => void;
 		}
 	): void {
 		const building = this.gui.addFolder('Building');
@@ -233,6 +235,94 @@ export class TerrainDebugGui {
 		slabs.add(settings, 'showSlabBounds').onChange(callbacks.onShowSlabBoundsChange);
 		slabs.add(settings, 'showSlabPolygonPoints').name('Show polygon points');
 		slabs.add(settings, 'slabPreviewOpacity', 0.1, 1, 0.05).name('Preview opacity');
+
+		const roofs = building.addFolder('Roofs');
+		roofs
+			.add(settings, 'defaultRoofType', {
+				Flat: 'flat',
+				Shed: 'shed',
+				Gable: 'gable',
+				Hip: 'hip',
+				Gambrel: 'gambrel',
+				Mansard: 'mansard',
+				Butterfly: 'butterfly',
+				'M-Shaped': 'm-shaped',
+				'Dutch Gable': 'dutch-gable'
+			})
+			.name('Default type');
+		roofs.add(settings, 'defaultRoofRise', 0, 12, 0.25).name('Default rise');
+		roofs.add(settings, 'roofDeckThickness', 0.05, 1, 0.01).name('Deck thickness');
+		roofs.add(settings, 'roofRiseStep', 0.05, 2, 0.05).name('Rise step');
+		roofs.add(settings, 'roofRiseFineStep', 0.01, 0.5, 0.0025).name('Rise fine step (Shift)');
+		roofs.add(settings, 'roofOverhang', 0, 2, 0.05).name('Overhang');
+		roofs.add(settings, 'roofPreviewOpacity', 0.1, 1, 0.05).name('Preview opacity');
+		roofs
+			.add(settings, 'gambrelLowerSlopeFraction', 0.1, 0.9, 0.01)
+			.name('Gambrel lower slope frac.');
+		roofs
+			.add(settings, 'gambrelBreakHeightFraction', 0.1, 0.9, 0.01)
+			.name('Gambrel break height frac.');
+		roofs.add(settings, 'mansardBreakFraction', 0.1, 0.9, 0.01).name('Mansard break frac.');
+		roofs.add(settings, 'dutchGableHipFraction', 0.1, 0.9, 0.01).name('Dutch Gable hip frac.');
+		roofs.add(settings, 'mShapedValleyFraction', 0.05, 0.95, 0.01).name('M-Shaped valley frac.');
+		roofs.add(settings, 'showRoofBounds').onChange(callbacks.onShowRoofBoundsChange);
+		roofs.add(settings, 'showRoofPlanes').name('Show face planes');
+		roofs.add(settings, 'showRoofRidge').name('Show ridge line');
+		roofs.add(settings, 'showRoofNormals').name('Show normals');
+
+		const openings = building.addFolder('Openings');
+		const windowFrames = openings.addFolder('Window Frames');
+		windowFrames
+			.add(settings, 'windowFramesEnabled')
+			.name('Enabled')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		windowFrames
+			.add(settings, 'windowFrameWidth', 0.01, 0.3, 0.005)
+			.name('Frame width')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		windowFrames
+			.add(settings, 'windowFrameDepth', 0.01, 0.3, 0.005)
+			.name('Frame depth')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		windowFrames
+			.add(settings, 'windowGlassEnabled')
+			.name('Glass enabled')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+
+		const doorVisuals = openings.addFolder('Doors');
+		doorVisuals
+			.add(settings, 'doorFramesEnabled')
+			.name('Enabled')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		doorVisuals
+			.add(settings, 'doorFrameWidth', 0.01, 0.3, 0.005)
+			.name('Frame width')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		doorVisuals
+			.add(settings, 'doorFrameDepth', 0.01, 0.3, 0.005)
+			.name('Frame depth')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		doorVisuals
+			.add(settings, 'doorThickness', 0.01, 0.2, 0.005)
+			.name('Leaf thickness')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		doorVisuals
+			.add(settings, 'doorClearance', 0, 0.1, 0.005)
+			.name('Leaf clearance')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		doorVisuals
+			.add(settings, 'showDoorHinge')
+			.name('Show hinge')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+
+		openings
+			.add(settings, 'showOpeningBounds')
+			.name('Show opening bounds')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
+		openings
+			.add(settings, 'showOpeningFrameBounds')
+			.name('Show interior bounds')
+			.onChange(callbacks.onOpeningVisualSettingsChange);
 
 		const stairs = building.addFolder('Stairs');
 		stairs.add(settings, 'minimumStairWidthCells', 1, 10, 1).name('Min width (cells)');

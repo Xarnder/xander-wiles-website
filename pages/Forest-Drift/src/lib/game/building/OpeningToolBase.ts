@@ -134,6 +134,7 @@ export class OpeningToolBase implements BuildTool {
 		this.hoveredWallId = null;
 		this.target = null;
 		this.scene.add(this.overlayGroup);
+		this.onHudChange?.(this.buildIdleHud());
 	}
 
 	deactivate(): void {
@@ -233,7 +234,7 @@ export class OpeningToolBase implements BuildTool {
 			this.onHudChange?.(
 				this.buildInvalidHud(
 					`Wall is on ${this.levelNameForWall(wall.foundationId, wall.baseY)}`,
-					'Page Up / Page Down to match'
+					'] / [ to match'
 				)
 			);
 			return;

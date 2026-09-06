@@ -477,10 +477,11 @@
 						<dd>Place / confirm</dd>
 						<dt>Right click</dt>
 						<dd>Cancel / deselect</dd>
-						<dt>Page Up / Page Down</dt>
+						<dt>] / [</dt>
 						<dd>
-							Change current building level — or click the ▲ / ▼ floor selector on the left edge of
-							the screen, shown whenever a level-aware tool is active
+							Change current building level (] up, [ down) — Page Up / Page Down still work, or
+							click the ▲ / ▼ floor selector on the left edge of the screen whenever a level-aware
+							tool is active
 						</dd>
 						<dt>C</dt>
 						<dd>
@@ -502,12 +503,14 @@
 
 					<h3>Windows / Doors</h3>
 					<dl>
+						<dt>K</dt>
+						<dd>Open or close the door under the crosshair</dd>
 						<dt>Left click</dt>
 						<dd>Cut the opening into the wall you're looking at</dd>
 						<dt>Floor</dt>
 						<dd>
 							Only walls on the selected floor can be cut — if the crosshair finds a wall on another
-							storey it says so; use Page Up / Page Down to match it
+							storey it says so; use ] / [ to match it
 						</dd>
 					</dl>
 

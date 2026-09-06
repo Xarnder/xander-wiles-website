@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import type { BuildingLevelManager } from './BuildingLevelManager';
+import {
+	createActiveLevelWatch,
+	pullActiveLevelChange,
+	type BuildingLevelManager
+} from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
@@ -142,7 +146,7 @@ export class StairTool implements BuildTool {
 
 	/**
 	 * Set once a confirmed stair's total rise lines up with a specific level (see
-	 * `findMatchingLevel`) — surfaced as a brief "Page Up: Build on {level}" idle-HUD hint so the
+	 * `findMatchingLevel`) — surfaced as a brief "]: Build on {level}" idle-HUD hint so the
 	 * obvious next step (moving up to build on what was just connected) doesn't require guessing.
 	 * Cleared once the player's own current level for that foundation reaches or passes the target,
 	 * or once a new stair placement begins.
@@ -153,6 +157,7 @@ export class StairTool implements BuildTool {
 	private lastGridX: number | null = null;
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
+	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || this.state !== 'choosing-direction') return;
@@ -233,6 +238,7 @@ export class StairTool implements BuildTool {
 		this.lastFoundationId = null;
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
+		this.refreshVisuals();
 	}
 
 	deactivate(): void {
@@ -260,9 +266,10 @@ export class StairTool implements BuildTool {
 			this.buildingSettings.buildingGridSize
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
+		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
 
 		if (!hit) {
-			if (this.hoverPoint) {
+			if (this.hoverPoint || levelChanged) {
 				this.hoverPoint = null;
 				this.lastGridX = null;
 				this.lastGridZ = null;
@@ -278,7 +285,8 @@ export class StairTool implements BuildTool {
 			this.hoverPoint &&
 			hit.gridPoint.gridX === this.lastGridX &&
 			hit.gridPoint.gridZ === this.lastGridZ &&
-			hit.foundationId === this.lastFoundationId
+			hit.foundationId === this.lastFoundationId &&
+			!levelChanged
 		) {
 			return;
 		}
@@ -743,6 +751,15 @@ export class StairTool implements BuildTool {
 		this.topMarker.visible = false;
 	}
 
+	/** Live storey while idle (so the grid sits on the selected floor before the first click); frozen `activeBaseY` once a placement has started. */
+	private previewBaseY(foundationId: string): number {
+		if (this.state !== 'idle') return this.activeBaseY;
+		return this.levelManager.getOrCreateLevel(
+			foundationId,
+			this.levelManager.getCurrentLevelIndex(foundationId)
+		).baseY;
+	}
+
 	private updateGridOverlay(foundationId: string, centerPoint: BuildingGridPoint): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -752,7 +769,7 @@ export class StairTool implements BuildTool {
 
 		const spacing = this.vertexSpacing();
 		const frame = foundationLocalFrame(foundation, spacing);
-		const y = frame.originWorldY + this.activeBaseY;
+		const y = frame.originWorldY + this.previewBaseY(foundationId);
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const { width, depth } = foundationLocalSize(foundation, spacing);
 
@@ -828,7 +845,7 @@ export class StairTool implements BuildTool {
 		const level = this.currentLevelUiState(this.lastFoundationId ?? undefined);
 		const hintExtra: string[] = [];
 		if (this.lastStairTarget) {
-			hintExtra.push('', `Page Up: Build on ${levelDisplayName(this.lastStairTarget.levelIndex)}`);
+			hintExtra.push('', `]: Build on ${levelDisplayName(this.lastStairTarget.levelIndex)}`);
 		}
 		return {
 			toolId: 'stairs',

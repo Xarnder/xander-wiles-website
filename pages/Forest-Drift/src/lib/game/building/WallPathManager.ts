@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
+import type { BuildingSettings } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { FoundationDefinition } from './FoundationTypes';
+import { buildOpeningVisual, disposeOpeningVisual, getGlassMaterial } from './OpeningVisualBuilder';
 import type { WallCollisionRect } from './wallCollision';
 import { computeWallTransform } from './wallGeometryMath';
 import { buildWallPath } from './WallPathGeometryBuilder';
@@ -19,6 +22,14 @@ interface PathEntry {
 	definition: WallPathDefinition;
 	visibleMesh: THREE.Mesh;
 	pickingMeshes: Map<string, THREE.Mesh>; // segmentId -> invisible raycast target
+	/**
+	 * segmentId -> a small, always-VISIBLE group holding that segment's procedural window/door
+	 * visuals, positioned/rotated exactly like the segment's own (invisible) picking mesh — see
+	 * `rebuildEntry`'s per-segment loop. Cannot be parented under `visibleMesh` the way WallManager
+	 * parents its own opening visuals under its wall mesh: `visibleMesh` is ONE merged mesh shared by
+	 * every segment in the path, with no single per-segment local frame to inherit.
+	 */
+	openingVisuals: Map<string, THREE.Group>;
 	collisionRects: WallCollisionRect[];
 	boundsHelper: THREE.LineSegments | null;
 	/** segmentId -> how far that segment's start/end join actually reaches into it — computed once per rebuild by buildWallPath, cached here rather than recomputed by every getSegmentJoinInfo call. */
@@ -33,6 +44,10 @@ export interface WallPathManagerOptions {
 	getBuildingGridSize: () => number;
 	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
 	materialManager?: BuildingMaterialManager;
+	/** Live settings this manager reads at every rebuild for procedural opening-visual sizing — optional, defaulting to `createDefaultBuildingSettings()`, so existing test call sites that construct this manager without one keep compiling. */
+	buildingSettings?: BuildingSettings;
+	/** The one shared window-glass material — optional, defaulting to `getGlassMaterial()`'s own lazily-created singleton. */
+	glassMaterial?: THREE.Material;
 }
 
 /**
@@ -50,11 +65,15 @@ export class WallPathManager {
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
+	private readonly glassMaterial: THREE.Material;
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly paths = new Map<string, PathEntry>();
 	/** segmentId -> owning path id, so a raycast hit's segmentId resolves back to its path in O(1). */
 	private readonly segmentToPath = new Map<string, string>();
+	/** openingId -> its door's hingePivot — mirrors WallManager; `DoorInteractionController` reads this. */
+	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: WallPathManagerOptions) {
@@ -62,6 +81,8 @@ export class WallPathManager {
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
+		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
+		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -122,6 +143,7 @@ export class WallPathManager {
 		}
 
 		const pickingMeshes = new Map<string, THREE.Mesh>();
+		const openingVisuals = new Map<string, THREE.Group>();
 		const collisionRects: WallCollisionRect[] = [];
 		const joinReach = new Map<string, SegmentJoinReach>();
 		for (const segment of result.segments) {
@@ -162,10 +184,40 @@ export class WallPathManager {
 				startJoinReach: segment.startJoinReach,
 				endJoinReach: segment.endJoinReach
 			});
+
+			const segmentDefinition = definition.segments.find((s) => s.id === segment.segmentId);
+			const existingVisuals = existing?.openingVisuals.get(segment.segmentId);
+			if (existingVisuals) {
+				existingVisuals.traverse((child) => {
+					if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
+						this.doorHingePivots.delete(child.userData.openingId);
+					}
+				});
+				disposeOpeningVisual(existingVisuals);
+			}
+			const visualsGroup = new THREE.Group();
+			visualsGroup.name = 'opening-visuals';
+			visualsGroup.position.set(segment.localX, definition.baseY, segment.localZ);
+			visualsGroup.rotation.set(0, -segment.headingRadians, 0);
+			for (const opening of segmentDefinition?.openings ?? []) {
+				const visualResult = buildOpeningVisual(
+					opening,
+					definition.wallThickness,
+					this.buildingSettings,
+					this.materialManager,
+					this.glassMaterial
+				);
+				if (!visualResult) continue;
+				visualsGroup.add(visualResult.object);
+				if (visualResult.hingePivot) this.doorHingePivots.set(opening.id, visualResult.hingePivot);
+			}
+			buildingRoot.add(visualsGroup);
+			openingVisuals.set(segment.segmentId, visualsGroup);
 		}
 
-		// Drop picking meshes for segments that no longer exist (shouldn't normally happen — paths
-		// aren't edited after creation yet — but keeps rebuildEntry safe to call unconditionally).
+		// Drop picking meshes/opening-visuals for segments that no longer exist (shouldn't normally
+		// happen — paths aren't edited after creation yet — but keeps rebuildEntry safe to call
+		// unconditionally).
 		if (existing) {
 			for (const [segmentId, mesh] of existing.pickingMeshes) {
 				if (!pickingMeshes.has(segmentId)) {
@@ -174,12 +226,16 @@ export class WallPathManager {
 					this.segmentToPath.delete(segmentId);
 				}
 			}
+			for (const [segmentId, group] of existing.openingVisuals) {
+				if (!openingVisuals.has(segmentId)) disposeOpeningVisual(group);
+			}
 		}
 
 		const entry: PathEntry = {
 			definition,
 			visibleMesh,
 			pickingMeshes,
+			openingVisuals,
 			collisionRects,
 			boundsHelper: existing?.boundsHelper ?? null,
 			joinReach,
@@ -213,8 +269,26 @@ export class WallPathManager {
 			mesh.removeFromParent();
 			this.segmentToPath.delete(segmentId);
 		}
+		for (const group of entry.openingVisuals.values()) disposeOpeningVisual(group);
+		for (const segment of entry.definition.segments) {
+			for (const opening of segment.openings) this.doorHingePivots.delete(opening.id);
+		}
 		this.paths.delete(pathId);
 		return true;
+	}
+
+	/** Rebuilds every path's opening visuals — used when a global `BuildingSettings` opening-visual default changes in the debug GUI, mirroring `WallManager.rebuildAllWalls`. */
+	rebuildAllPaths(): void {
+		for (const pathId of Array.from(this.paths.keys())) this.rebuildPath(pathId);
+	}
+
+	/** The hinge pivot for a door opening on a path segment, if it has one — mirrors `WallManager.getDoorHingePivot`. */
+	getDoorHingePivot(openingId: string): THREE.Object3D | undefined {
+		return this.doorHingePivots.get(openingId);
+	}
+
+	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.doorHingePivots;
 	}
 
 	removePathsForFoundation(foundationId: string): void {

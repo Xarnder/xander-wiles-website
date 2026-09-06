@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import type { BuildingLevelManager } from './BuildingLevelManager';
+import {
+	createActiveLevelWatch,
+	pullActiveLevelChange,
+	type BuildingLevelManager
+} from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUndoManager } from './BuildUndoManager';
@@ -14,7 +18,12 @@ import type {
 } from './FoundationTypes';
 import { raycastLevelConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
-import { cycleSnapMode, snapDrawingPoint, snapModeLabel } from './polygonDrawSnap';
+import {
+	autoPromotePolygonWallSnap,
+	cycleSnapMode,
+	snapDrawingPoint,
+	snapModeLabel
+} from './polygonDrawSnap';
 import type { SnapMode } from './polygonDrawSnap';
 import { buildWallPath } from './WallPathGeometryBuilder';
 import { computePathLength, pathSelfIntersects } from './wallPathMath';
@@ -115,9 +124,15 @@ export class PolygonWallTool implements BuildTool {
 	private lastGridX: number | null = null;
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
+	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/** Cycled by pressing `C` — see polygonDrawSnap.ts. Not reset on undo/cancel, only on deactivate, so a player's preferred snap mode persists across separate wall paths in the same session. */
-	private snapMode: SnapMode = 'off';
+	/**
+	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Reset to `'axis'` every time the tool is
+	 * selected (`activate()`). After three confirmed points, `'axis'` is auto-promoted to
+	 * `'axis-inline'` so later corners can flush with earlier ones; a `C` press to any other mode
+	 * is left alone.
+	 */
+	private snapMode: SnapMode = 'axis';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
@@ -204,8 +219,10 @@ export class PolygonWallTool implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
+		this.snapMode = 'axis';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
+		this.refreshVisuals();
 	}
 
 	deactivate(): void {
@@ -232,9 +249,10 @@ export class PolygonWallTool implements BuildTool {
 			this.buildingSettings.buildingGridSize
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
+		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
 
 		if (!hit) {
-			if (this.hoverTarget) {
+			if (this.hoverTarget || levelChanged) {
 				this.hoverTarget = null;
 				this.lastGridX = null;
 				this.lastGridZ = null;
@@ -255,7 +273,8 @@ export class PolygonWallTool implements BuildTool {
 			this.hoverTarget &&
 			gridPoint.gridX === this.lastGridX &&
 			gridPoint.gridZ === this.lastGridZ &&
-			hit.foundationId === this.lastFoundationId
+			hit.foundationId === this.lastFoundationId &&
+			!levelChanged
 		) {
 			return;
 		}
@@ -303,6 +322,7 @@ export class PolygonWallTool implements BuildTool {
 		if (this.wouldSelfIntersect(candidatePoints, false)) return;
 
 		this.points = candidatePoints;
+		this.promoteSnapModeIfNeeded();
 		this.refreshVisuals();
 	}
 
@@ -325,6 +345,11 @@ export class PolygonWallTool implements BuildTool {
 			this.points = this.points.slice(0, -1);
 		}
 		this.refreshVisuals();
+	}
+
+	/** Axis → axis-inline after the third point, if the player left the default on. */
+	private promoteSnapModeIfNeeded(): void {
+		this.snapMode = autoPromotePolygonWallSnap(this.snapMode, this.points.length);
 	}
 
 	private finishOpenPath(): void {
@@ -649,7 +674,7 @@ export class PolygonWallTool implements BuildTool {
 		return {
 			toolId: 'polygon-wall',
 			snapMode: this.snapMode,
-			level: this.currentLevelUiState(this.hoverTarget?.foundationId),
+			level: this.currentLevelUiState(),
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),

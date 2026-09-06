@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { RoofManager } from '../RoofManager';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
 import { WorldSurfaceSampler } from '../WorldSurfaceSampler';
@@ -19,6 +20,14 @@ function makeStairManager(foundationManager: FoundationManager): StairManager {
 	return new StairManager({
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => SPACING
+	});
+}
+
+function makeRoofManager(foundationManager: FoundationManager): RoofManager {
+	return new RoofManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => SPACING,
+		getBuildingGridSize: () => 0.25
 	});
 }
 
@@ -97,6 +106,7 @@ describe('WorldSurfaceSampler', () => {
 			manager,
 			makeSlabManager(manager),
 			makeStairManager(manager),
+			makeRoofManager(manager),
 			() => 0.3
 		);
 		expect(sampler.getSupportingSurfaceY(0, 0, Infinity)).toBe(3.5);
@@ -110,6 +120,7 @@ describe('WorldSurfaceSampler', () => {
 			manager,
 			makeSlabManager(manager),
 			makeStairManager(manager),
+			makeRoofManager(manager),
 			() => 0.3
 		);
 		expect(sampler.getSupportingSurfaceY(0, 0, Infinity)).toBe(12);
@@ -123,6 +134,7 @@ describe('WorldSurfaceSampler', () => {
 			manager,
 			makeSlabManager(manager),
 			makeStairManager(manager),
+			makeRoofManager(manager),
 			() => 0.3
 		);
 		// Outside the foundation footprint entirely.
@@ -143,6 +155,7 @@ describe('WorldSurfaceSampler', () => {
 			manager,
 			makeSlabManager(manager),
 			makeStairManager(manager),
+			makeRoofManager(manager),
 			() => 0.3
 		);
 		// referenceY (the player's current feet Y, from much lower ground) is well below the

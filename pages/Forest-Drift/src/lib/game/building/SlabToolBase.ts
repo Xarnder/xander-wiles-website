@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import type { BuildingLevelManager } from './BuildingLevelManager';
+import {
+	createActiveLevelWatch,
+	pullActiveLevelChange,
+	type BuildingLevelManager
+} from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUndoManager } from './BuildUndoManager';
@@ -121,6 +125,7 @@ export class SlabToolBase implements BuildTool {
 	private lastGridX: number | null = null;
 	private lastGridZ: number | null = null;
 	private lastFoundationId: string | null = null;
+	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	/**
 	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'wall-corners'` every time the
@@ -266,6 +271,7 @@ export class SlabToolBase implements BuildTool {
 		this.snapMode = 'wall-corners';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
+		this.refreshVisuals();
 	}
 
 	deactivate(): void {
@@ -292,9 +298,10 @@ export class SlabToolBase implements BuildTool {
 			this.buildingSettings.buildingGridSize
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
+		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
 
 		if (!hit) {
-			if (this.hoverTarget) {
+			if (this.hoverTarget || levelChanged) {
 				this.hoverTarget = null;
 				this.lastGridX = null;
 				this.lastGridZ = null;
@@ -321,7 +328,8 @@ export class SlabToolBase implements BuildTool {
 			this.hoverTarget &&
 			gridPoint.gridX === this.lastGridX &&
 			gridPoint.gridZ === this.lastGridZ &&
-			hit.foundationId === this.lastFoundationId
+			hit.foundationId === this.lastFoundationId &&
+			!levelChanged
 		) {
 			return;
 		}
@@ -697,7 +705,7 @@ export class SlabToolBase implements BuildTool {
 		return {
 			toolId: this.toolId,
 			snapMode: this.snapMode,
-			level: this.currentLevelUiState(this.hoverTarget?.foundationId),
+			level: this.currentLevelUiState(),
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
