@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Image as ImageIcon, Lock, Loader2, Moon, Plus, Settings, Sun, Tag, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Image as ImageIcon, Lock, Loader2, Moon, PenTool, Plus, Settings, Sun, Tag, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useBackup } from '../context/BackupContext';
@@ -23,6 +23,7 @@ import {
 import { BACKUP_REMINDER_OPTIONS } from '../utils/backupReminder';
 import { areJournalSoundsEnabled, setJournalSoundsEnabled, unlockJournalAudio } from '../lib/journalAudio';
 import { areCalendarImageCountsEnabled, setCalendarImageCountsEnabled, areCalendarTagDotsEnabled, setCalendarTagDotsEnabled } from '../lib/calendarDisplay';
+import { isQuickWriteFillOldestEmptyEnabled, setQuickWriteFillOldestEmptyEnabled } from '../lib/quickWrite';
 
 const THEME_OPTIONS = [
     {
@@ -85,6 +86,7 @@ export default function SettingsView() {
     const [soundsEnabled, setSoundsEnabled] = useState(areJournalSoundsEnabled);
     const [showCalendarImageCounts, setShowCalendarImageCounts] = useState(areCalendarImageCountsEnabled);
     const [showCalendarTagDots, setShowCalendarTagDots] = useState(areCalendarTagDotsEnabled);
+    const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
     const [entrySections, setEntrySections] = useState([]);
     const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
@@ -733,6 +735,32 @@ export default function SettingsView() {
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={showCalendarTagDots}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${showCalendarTagDots ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !fillOldestEmptyDay;
+                            setFillOldestEmptyDay(nextEnabled);
+                            setQuickWriteFillOldestEmptyEnabled(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={fillOldestEmptyDay}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${fillOldestEmptyDay ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <PenTool className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Quick Write fills empty days</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Open the oldest unwritten day from the past week. Off by default so Quick Write opens today.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={fillOldestEmptyDay}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${fillOldestEmptyDay ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                 </div>

@@ -39,9 +39,7 @@
 	}
 
 	function showGraphicsNotice(quality: Parameters<typeof graphicsQualityLabel>[0]) {
-		console.log('[DEBUG] showGraphicsNotice called with', quality);
 		graphicsNotice = `Graphics: ${graphicsQualityLabel(quality).toUpperCase()}`;
-		console.log('[DEBUG] graphicsNotice now', graphicsNotice);
 		clearTimeout(graphicsNoticeTimeout);
 		graphicsNoticeTimeout = setTimeout(() => {
 			graphicsNotice = null;

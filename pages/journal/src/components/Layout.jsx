@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool, Settings } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, Settings } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
@@ -9,7 +9,9 @@ import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
 import BackupOptions from './BackupOptions';
 import LeftArrowIcon from './LeftArrowIcon';
+import PlusIcon from './PlusIcon';
 import { useEntryUi } from '../context/EntryUiContext';
+import { isQuickWriteFillOldestEmptyEnabled, subscribeQuickWriteFillOldestEmpty } from '../lib/quickWrite';
 
 function getWorkspaceTitle(pathname) {
     if (pathname.startsWith('/entry/')) return 'Entry';
@@ -49,12 +51,19 @@ export default function Layout() {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
+    const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
     const [recentEntries, setRecentEntries] = useState({});
     const [headerTitleFontSize, setHeaderTitleFontSize] = useState(18);
     const headerTitleContainerRef = useRef(null);
     const headerTitleTextRef = useRef(null);
     const headerRef = useRef(null);
     const workspaceTitle = useMemo(() => getWorkspaceTitle(location.pathname), [location.pathname]);
+    const quickWriteLabel = fillOldestEmptyDay
+        ? 'Quick Write: open the oldest unwritten day from the past week'
+        : "Quick Write: open today's entry";
+    const quickWriteTitle = fillOldestEmptyDay
+        ? 'Quick Write (Last unwritten day)'
+        : 'Quick Write (Today)';
 
     // Keep a real-time listener for the last 7 days to make "Quick Write" instantaneous
     useEffect(() => {
@@ -86,33 +95,34 @@ export default function Layout() {
         return () => unsubscribe();
     }, [currentUser]);
 
+    useEffect(() => subscribeQuickWriteFillOldestEmpty(setFillOldestEmptyDay), []);
+
     function handleQuickWrite() {
         if (!currentUser) return;
         setIsQuickWriting(true);
-        
-        // Find the dates for the last 7 days
-        const today = new Date();
-        const datesToCheck = [];
-        for (let i = 0; i < 7; i++) {
-            datesToCheck.push(format(subDays(today, i), 'yyyy-MM-dd'));
-        }
 
-        // Find the oldest date with no content within the last week
-        let targetDate = datesToCheck[0]; // Default to today
-        
-        // Check from oldest (last item in datesToCheck) to newest (today)
-        for (let i = datesToCheck.length - 1; i >= 0; i--) {
-            const dateStr = datesToCheck[i];
-            const entry = recentEntries[dateStr];
-            const hasContent = entry && (
-                (entry.content && entry.content.trim().length > 0) || 
-                (entry.images && entry.images.length > 0) || 
-                (entry.title && entry.title.trim().length > 0)
-            );
-            
-            if (!hasContent) {
-                targetDate = dateStr;
-                break; // Found the oldest gap
+        const today = format(new Date(), 'yyyy-MM-dd');
+        let targetDate = today;
+
+        if (fillOldestEmptyDay) {
+            const datesToCheck = [];
+            for (let i = 0; i < 7; i++) {
+                datesToCheck.push(format(subDays(new Date(), i), 'yyyy-MM-dd'));
+            }
+
+            for (let i = datesToCheck.length - 1; i >= 0; i--) {
+                const dateStr = datesToCheck[i];
+                const entry = recentEntries[dateStr];
+                const hasContent = entry && (
+                    (entry.content && entry.content.trim().length > 0) ||
+                    (entry.images && entry.images.length > 0) ||
+                    (entry.title && entry.title.trim().length > 0)
+                );
+
+                if (!hasContent) {
+                    targetDate = dateStr;
+                    break;
+                }
             }
         }
 
@@ -279,11 +289,11 @@ export default function Layout() {
                                         type="button"
                                         onClick={handleQuickWrite}
                                         className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
-                                        title="Quick Write (Last unwritten day)"
-                                        aria-label="Quick Write: open the oldest unwritten day from the past week"
+                                        title={quickWriteTitle}
+                                        aria-label={quickWriteLabel}
                                         disabled={isQuickWriting}
                                     >
-                                        <PenTool className="h-5 w-5" />
+                                        <PlusIcon className="h-5 w-5" />
                                     </button>
                                     <button
                                         type="button"
@@ -409,9 +419,9 @@ export default function Layout() {
                                     onClick={handleQuickWrite}
                                     className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
                                     disabled={isQuickWriting}
-                                    aria-label="Quick Write: open the oldest unwritten day from the past week"
+                                    aria-label={quickWriteLabel}
                                 >
-                                    <PenTool className="h-5 w-5" />
+                                    <PlusIcon className="h-5 w-5" />
                                 </button>
                                 <button
                                     type="button"
@@ -480,12 +490,12 @@ export default function Layout() {
                             ? 'quick-write-fab--busy cursor-wait'
                             : 'quick-write-fab--ready'
                     }`}
-                    title="Quick Write (Last unwritten day)"
-                    aria-label="Quick Write: open the oldest unwritten day from the past week"
+                    title={quickWriteTitle}
+                    aria-label={quickWriteLabel}
                     disabled={isQuickWriting}
                 >
                     {!isQuickWriting && <span className="quick-write-fab-shine" aria-hidden="true" />}
-                    <PenTool className="relative z-10 h-6 w-6 text-white" />
+                    <PlusIcon className="relative z-10 h-6 w-6 text-white" />
                 </button>
             )}
         </div>

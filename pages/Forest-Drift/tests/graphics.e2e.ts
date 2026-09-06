@@ -40,13 +40,38 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 		timeout: 10_000
 	});
 
-	const notice = page.getByTestId('graphics-notice');
 	await page.keyboard.press('l');
-	await expect(notice).toHaveText('Graphics: ULTRA', { timeout: 10_000 });
+
+	// Polling this predicate from *inside* the page in a single round-trip (rather than issuing one
+	// CDP round-trip per poll tick, which this page's busy WebGL render loop can make slow enough to
+	// miss a several-second-wide window entirely) is what actually catches this transient element
+	// reliably — see the README's "Graphics quality" section for the full story.
+	const result = await page.evaluate(
+		() =>
+			new Promise<{ appearedWith: string | null; disappearedAfter: boolean }>((resolve) => {
+				let appearedWith: string | null = null;
+				const start = performance.now();
+				const poll = () => {
+					const el = document.querySelector('[data-testid="graphics-notice"]');
+					if (el && appearedWith === null) appearedWith = el.textContent;
+					if (appearedWith !== null && !el) {
+						resolve({ appearedWith, disappearedAfter: true });
+						return;
+					}
+					if (performance.now() - start > 8000) {
+						resolve({ appearedWith, disappearedAfter: !el });
+						return;
+					}
+					setTimeout(poll, 20);
+				};
+				poll();
+			})
+	);
+
+	expect(result.appearedWith).toBe('Graphics: ULTRA');
 	// Transient — it must fade back out on its own rather than staying on screen permanently (the
-	// brief explicitly rules out "a large permanent notification"). Generous timeout: this only
-	// needs to confirm it disappears eventually, not exactly when.
-	await expect(notice).toBeHidden({ timeout: 15_000 });
+	// brief explicitly rules out "a large permanent notification").
+	expect(result.disappearedAfter).toBe(true);
 });
 
 test('graphics quality persists across a reload', async ({ page }) => {
@@ -95,20 +120,22 @@ test('L does not change graphics quality while typing into the paint palette col
 test('switching graphics quality repeatedly keeps the world running with no console errors', async ({
 	page
 }) => {
+	test.setTimeout(60_000);
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
-	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
-		timeout: 10_000
-	});
+	const stats = page.getByTestId('graphics-stats');
+	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 
-	for (let i = 0; i < 12; i++) {
+	// Two full cycles through all four levels — rebuilding CSM/composer/GTAO each time — must not
+	// leak resources or crash the render loop (see GraphicsPipeline.dispose/teardownCsm/disposeComposer).
+	const sequence = ['ULTRA', 'LOW', 'MEDIUM', 'HIGH', 'ULTRA', 'LOW', 'MEDIUM', 'HIGH'];
+	for (const expected of sequence) {
 		await page.keyboard.press('l');
+		await expect(stats).toContainText(`Graphics ${expected}`, { timeout: 10_000 });
 	}
 
-	// 12 presses from HIGH lands back on HIGH (12 is a multiple of the 4-level cycle).
-	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH');
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
 	expect(pageErrors).toEqual([]);
