@@ -317,14 +317,7 @@ export class GraphicsPipeline {
 			if (preset.aoEnabled) {
 				gtaoPass = new GTAOPass(this.scene, this.camera, this.containerWidth, this.containerHeight);
 				gtaoPass.output = GTAOPass.OUTPUT.Denoise;
-				gtaoPass.blendIntensity = preset.aoIntensity;
-				const tuning = AO_TUNING[preset.aoQuality];
-				gtaoPass.updateGtaoMaterial({ radius: preset.aoRadius, samples: tuning.samples });
-				gtaoPass.updatePdMaterial({
-					radius: preset.aoRadius,
-					rings: tuning.pdRings,
-					samples: tuning.pdSamples
-				});
+				gtaoPass.blendIntensity = 0; // TEMP DEBUG
 				composer.addPass(gtaoPass);
 			}
 

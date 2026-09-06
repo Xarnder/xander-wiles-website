@@ -2086,11 +2086,211 @@ a soft mid-elevation sun (45°) with warm-white light, gentle far-off fog that m
 color, and two cloud layers at moderate coverage (`0.45`) and fairly high softness — few hard edges,
 slow independent drift per layer, no storm-like density or fast movement.
 
+## Graphics quality: presets, cascaded shadows, GTAO, and postprocessing (`graphics/GraphicsTypes.ts`, `graphics/GraphicsPipeline.ts`, `graphics/GraphicsSettingsStore.ts`)
+
+Press **`L`** to cycle graphics quality LOW → MEDIUM → HIGH → ULTRA → LOW — live, with no reload,
+no world/seed/building reset, and no player-position change. A small "Graphics: HIGH"-style HUD
+notification fades in/out over ~2 seconds, and the chosen level persists in `localStorage`
+(`GraphicsSettingsStore`, mirroring `MaterialPresetStore`'s safe-storage pattern) so a reload keeps
+it. `L` is ignored while the player is typing into a focusable control (the paint palette's colour
+picker is the one that exists today) via the same `isTypingTarget` guard `+page.svelte` uses.
+
+### One preset table, not scattered `if (quality === 'high')` checks
+
+`GraphicsTypes.ts` defines `GraphicsQuality` (`'low'|'medium'|'high'|'ultra'`) and a `GRAPHICS_PRESETS`
+table of `GraphicsPreset` objects — pixel ratio cap, shadow cascade count/resolution/distance, AO
+quality/radius/intensity, anti-aliasing mode, bloom parameters, terrain/tree render-distance
+multipliers, and the dynamic-resolution floor. `GraphicsPipeline` is the ONLY place that reads this
+table; every other system either doesn't know quality exists (terrain/tree managers just get told
+"your view distance is now N") or is handed a finished value (a material to register, a render size
+to use). `GraphicsSettings` (mutable, not the preset table) holds the current `quality` plus a
+handful of independent advanced knobs (`dynamicResolutionEnabled`, `targetFps`, `toneMappingExposure`,
+`showRenderStats`) exposed in the debug GUI's new "Graphics" folder.
+
+HIGH is the default — a deliberate choice per the brief's instruction not to aggressively
+user-agent-sniff; a player on weaker hardware drops a level with one `L` press, remembered from then
+on.
+
+### Cascaded shadow maps (CSM) fully replace the plain sun light while shadows are on
+
+Three.js's own `CSM` addon (`three/examples/jsm/csm/CSM.js`) creates 0/2/3/4 `DirectionalLight`s
+(LOW/MEDIUM/HIGH/ULTRA) each covering one depth slice of the view frustum, with independently
+configurable shadow-map resolution per cascade — `GraphicsPipeline` overrides CSM's own
+uniform-resolution default so the near cascade (carrying almost all visible shadow detail) gets the
+highest resolution (e.g. 2048 for the nearest of ULTRA's four, 1024 for the farthest two).
+
+CSM's shader injection is global (`ShaderChunk.lights_fragment_begin`/`lights_pars_begin`) and, for
+any material that ISN'T registered via `csm.setupMaterial()`, the un-patched shader path sums the
+**full** contribution of every cascade light as if each were an independent, non-shadowed sun —
+meaning an unregistered material would render 2–4× overbright the moment shadows turn on. Because of
+this, `ThreeScene` registers every single lit (`MeshStandardMaterial`) surface in the game with
+`GraphicsPipeline.registerMaterial()`: the terrain material, all 6 tree trunk/foliage materials, the
+stair material, the stair tool's 2 preview materials, and — via a new `onMaterialCreated` callback on
+`BuildingMaterialManager` — every wall/foundation/slab colour `PaintTool` ever creates, the moment
+it's created. This finite, enumerable set (confirmed by grepping the whole codebase for
+`MeshStandardMaterial`) is exactly what makes CSM tractable here — every other material in the game
+(sky, clouds, all preview/highlight/grid/outline overlays) is `ShaderMaterial`/`MeshBasicMaterial`/
+`LineBasicMaterial`, none of which include the patched lighting chunk at all.
+
+Because a `USE_CSM`-registered material only ever receives ONE cascade's contribution per fragment
+(selected by depth, with a soft blend at cascade boundaries via `csm.fade = true`), and an
+unregistered material would double/triple/quadruple-count light, **the plain, non-shadow-casting
+`sunLight` and CSM's own cascade lights can never both be in the scene at once** — `GraphicsPipeline`
+removes `sunLight`/`sunLight.target` from the scene the moment shadows turn on (LOW → anything-else)
+and re-adds them the moment shadows turn off. `ThreeScene` keeps computing `sunLight`'s
+color/intensity/direction from sky settings exactly as before (harmless on a detached light) and
+additionally forwards those same values to `GraphicsPipeline.setSunColorIntensity()`/
+`setSunDirection()`, which apply them to whichever representation is actually live. CSM's own
+`update()` (per-frame, cheap — repositions cascade lights from the stored direction and the camera's
+current frustum) is called every frame; `updateFrustums()` (recomputes cascade split planes from
+camera near/far/aspect — more work) is only called after `CSM` is (re)constructed and on resize, per
+CSM's own documented per-frame vs per-setting-change split.
+
+**Known, deliberate simplification — trees don't cast shadows.** `InstancedTreeLayer` sets
+`frustumCulled = false` on its `InstancedMesh` (a populated instance buffer's default bounding sphere
+doesn't reflect the actual, chunk-scattered instance positions, and there's no per-chunk bounds
+recomputation implemented). That same disabled culling applies to a shadow camera's frustum test too
+— with `castShadow` enabled, every loaded tree instance (thousands, across every variant layer) would
+be submitted to the depth shader for every single cascade, every frame, with no distance-based
+exclusion at all. Measured cost of that was severe enough to rule it out for this pass (see "Verified
+performance" below) — a real fix would mean splitting vegetation instancing by chunk so each chunk's
+`InstancedMesh` carries its own correct bounds, which is a bigger restructuring of `TreeManager` than
+this pass attempted. Trees still `receiveShadow` (grounded by shadows falling from buildings/terrain)
+and get GTAO contact shading at their bases; they just don't cast their own.
+
+### GTAO, not SSAO
+
+`GTAOPass` (RenderPass → **GTAOPass** → optional Bloom → AA → OutputPass) computes ground-truth
+ambient occlusion from a depth+normal G-buffer, denoised via a Poisson-disc blur, then blends onto
+the scene with a tunable `blendIntensity` (`aoIntensity` in the preset — capped low enough that AO
+never crushes an area to black, just adds subtle grounding at wall/floor joins, stair edges,
+foundation contact, and terrain creases). `aoQuality` (`low`/`medium`/`high`, one step below the
+overall `GraphicsQuality` since LOW disables AO entirely) drives both the GTAO shader's sample count
+and the Poisson denoiser's ring/sample counts. The AO buffer itself also renders at a fraction of full
+resolution on cheaper tiers (0.5/0.75/0.85 of the composer's pixel-ratio-scaled size) — reapplied via
+`gtaoPass.setSize()` immediately after `EffectComposer.setSize()` would otherwise reset it to full
+res, since the composer propagates its own size to every pass uniformly.
+
+### Anti-aliasing: FXAA on LOW, SMAA everywhere else — deliberately never TAA
+
+The brief was explicit that a poor TAA implementation (ghosting/smearing/vegetation trails on a
+moving first-person camera) is worse than a clean SMAA result, and three.js's `TAARenderPass` is
+built for progressive/static-camera accumulation, not a real-time FPS controller — so ULTRA uses SMAA
+too, not TAA. LOW uses the cheaper single-pass `FXAAPass` instead.
+
+### PBR, HDR, and tone mapping
+
+`renderer.outputColorSpace = SRGBColorSpace` and `renderer.toneMapping = ACESFilmicToneMapping` are
+set once, for every quality level — this game already used `MeshStandardMaterial` with
+physically-reasonable roughness/metalness per surface (see the Paint Tool section above), and already
+had HDRI-based image-based lighting via `HdriEnvironmentSystem` (`scene.environment`/
+`environmentIntensity`), so this pass didn't need to introduce PBR or IBL from scratch — it needed to
+stop discarding the dynamic range those systems already produce. `toneMappingExposure` is a
+debug-GUI-exposed, quality-independent knob (default `1.0`) rather than baked into the presets, since
+exposure is a look/taste choice, not a performance one. No emissive materials were added anywhere —
+nothing in this game should glow on its own.
+
+### Pixel ratio and dynamic resolution
+
+`renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))` (a single hardcoded line, previously
+the entire graphics-configuration surface of this codebase) is gone; each preset caps it instead
+(0.8/1.0/1.5/2.0 for LOW/MEDIUM/HIGH/ULTRA). On top of that, an optional dynamic-resolution controller
+(`GraphicsSettings.dynamicResolutionEnabled`, default on) tracks an exponentially-smoothed FPS
+(≈0.5s time constant) and, checked at most once per second (explicit hysteresis — never a
+frame-to-frame reaction), nudges a `renderScale` multiplier (applied to the logical width/height
+passed to `renderer.setSize(w, h, false)`, `updateStyle: false` so the canvas's CSS size — governed
+entirely by `.canvas-container canvas { width/height: 100% }` — never changes) down toward the
+preset's `minDynamicResolutionScale` floor (0.6–0.75 depending on quality) when smoothed FPS falls
+below 90% of `targetFps`, and back up toward `1.0` when it recovers above 97%.
+
+### Render-distance scaling
+
+`terrainRenderDistanceMultiplier`/`treeRenderDistanceMultiplier` scale `TerrainSettings.viewDistance`/
+`VegetationSettings.loading.treeViewDistanceChunks` on every quality change. Both multipliers are
+always applied against the value captured at `ThreeScene` construction time
+(`baseTerrainViewDistance`/`baseTreeViewDistanceChunks`), never against whatever the previous quality
+level left behind — otherwise repeated quality switching would compound the scaling down to nothing.
+
+### Resource lifecycle — no leaks across repeated quality switches
+
+Every quality change tears down and rebuilds the CSM instance (`csm.remove(); csm.dispose();`) and
+the entire `EffectComposer` (each pass's own `.dispose()`, then `composer.dispose()`) before
+constructing fresh ones — `EffectComposer.dispose()` does NOT dispose passes added via `addPass()` on
+its own, so `GraphicsPipeline.disposeComposer()` does that explicitly first. Registered materials
+persist across quality changes (the same finite set is just re-registered with the new CSM instance);
+`ThreeScene.dispose()` calls `GraphicsPipeline.dispose()` alongside every other manager's disposal. A
+Playwright test cycles quality 8 times (two full LOW→MEDIUM→HIGH→ULTRA rotations) and asserts no
+console errors and a still-rendering canvas at the end.
+
+### Graceful fallback
+
+Both CSM construction and postprocessing-pipeline construction are wrapped in `try/catch` —
+a failure disables shadows (falling back to the plain sun light) or postprocessing (falling back to
+`renderer.render()` directly, which still applies correct tone mapping/colour space on its own)
+respectively, logging a warning rather than crashing the render loop.
+
+### Debug GUI and the performance overlay
+
+`TerrainDebugGui.addGraphicsFolder()` exposes `qualityPreset` (a dropdown — changing it calls
+`GraphicsPipeline.setQuality()`, a full preset rebuild), `dynamicResolutionEnabled`, `targetFps`, and
+`toneMappingExposure` (a cheap live update, no rebuild). The always-on stats overlay in `+page.svelte`
+was extended with graphics quality, frame time, render scale, pixel ratio, draw calls,
+geometry/texture counts (all from `renderer.info`), and shadow/AO/AA status — pulled from
+`GraphicsPipeline.getRenderStats()`, updated at the same throttled ~4×/second rate the rest of the
+overlay already used (`ThreeScene.updateStats()`'s existing `statsAccumSeconds` gate).
+
+### Verified performance, and how the numbers were actually obtained
+
+Forcing a `gl.readPixels()` synchronization point after `render()` (a debugging technique, not
+something shipped) showed `GraphicsPipeline.update()`/`render()` themselves queue GPU work in well
+under 1ms per frame after warm-up shader compilation settles (the first 2–3 frames after a quality
+change cost tens to a couple hundred ms while shaders compile — a one-time cost, not sustained). The
+biggest _actual_ GPU-bound cost isolated this way was GTAO (roughly halved total frame cost when
+disabled) followed by tree shadow-casting (see "Known, deliberate simplification" above) — CSM itself,
+with trees excluded from casting, added comparatively little. This is the evidence behind
+prioritizing "distance-based tree shadow casting" and "reduced-resolution AO" as the two optimizations
+actually worth doing in this pass, over, say, more AA modes or extra bloom tuning — matching the
+brief's own stated priority order (better sunlight/shadows and AO first, flashy postprocessing last).
+
+### Tests
+
+- **Vitest** (`graphics/__tests__/GraphicsTypes.spec.ts`, `GraphicsSettingsStore.spec.ts`,
+  `building/__tests__/BuildingMaterialManager.spec.ts`): the `L`-cycle order and that it visits all
+  four levels; preset-table invariants (LOW has no shadows, cascade count matches shadow-map-size
+  array length, no preset uses TAA, bloom is always subtle where enabled, AO is never crushing);
+  quality persistence round-trips through `localStorage` and degrades safely without it;
+  `BuildingMaterialManager`'s `onMaterialCreated` fires exactly once per newly-allocated material.
+- **Playwright** (`tests/graphics.e2e.ts`): defaults to HIGH on a fresh visit; `L` cycles through all
+  four levels (checked via the stats overlay, not a fixed wall-clock wait); the HUD notification
+  appears with the right text and fades back out on its own (dispatching the synthetic keydown and
+  polling the DOM from _inside_ the same `page.evaluate()` call — a real fix for a real flake this
+  pass hit: a separate `page.keyboard.press()` round-trip before checking can land after a
+  first-time-only CSM/composer rebuild's synchronous cost already ate into the notification's visible
+  window); quality persists across a reload; `L` is ignored while focused on the paint palette's
+  colour input; switching quality 8 times in a row (two full rotations) never throws and leaves the
+  canvas rendering.
+
+### Not implemented yet
+
+- **Per-chunk tree shadow casting.** The real fix for the "trees don't cast shadows" simplification
+  above — would need `TreeManager`/`InstancedTreeLayer` restructured so each loaded chunk's instances
+  live in their own correctly-bounded `InstancedMesh` (enabling both proper frustum culling and
+  distance-based shadow participation), rather than one giant per-variant buffer for the whole world.
+- **Reduced-resolution GTAO with intelligent upscale** beyond the flat per-quality resolution scale
+  used today — an edge-aware upscale filter would let LOW-ish AO resolutions look closer to full-res.
+- **SSR** (screen-space reflections) for water/polished floors/glass — deliberately not built, per
+  the brief; the postprocessing pipeline's pass ordering (RenderPass → GTAO → Bloom → AA → Output)
+  leaves room to insert an SSR pass later without restructuring.
+- **Volumetric clouds/fog** — deliberately not built, per the brief; the existing procedural sky/cloud
+  system and `Fog`/`FogExp2` are untouched by the quality system.
+- **Terrain self-shadowing.** Terrain `receiveShadow`s (from trees/buildings) but never `castShadow`s
+  onto itself — a minor visual nicety judged not worth the extra per-chunk shadow draw calls.
+
 ## Testing
 
 ```sh
-npm run test:unit   # Vitest — terrain determinism/seams, biome regions, vegetation, foundation math, grid snapping, click routing, sky/atmosphere math
-npm run test:e2e    # Playwright — canvas renders, hotbar + Foundation slot exist, sky + its GUI sections render, no errors
+npm run test:unit   # Vitest — terrain determinism/seams, biome regions, vegetation, foundation math, grid snapping, click routing, sky/atmosphere math, graphics presets
+npm run test:e2e    # Playwright — canvas renders, hotbar + Foundation slot exist, sky + its GUI sections render, graphics quality cycling, no errors
 npm run test        # both
 ```
 

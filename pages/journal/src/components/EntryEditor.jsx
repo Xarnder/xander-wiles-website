@@ -27,6 +27,12 @@ import CrossIcon from './CrossIcon';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import { playProgressSound, playSaveSound, unlockJournalAudio } from '../lib/journalAudio';
 import {
+    isStickyWritingHeaderEnabled,
+    isStickySaveButtonEnabled,
+    subscribeStickyWritingHeader,
+    subscribeStickySaveButton
+} from '../lib/editorChrome';
+import {
     cleanSubEntriesForSave,
     cleanNumericEntriesForSave,
     ENTRY_SECTIONS_SETTINGS_DOC,
@@ -269,6 +275,8 @@ export default function EntryEditor() {
     const [lightboxImage, setLightboxImage] = useState(null);
     const [zoomLevel, setZoomLevel] = useState(1);
     const [entryImageColumns, setEntryImageColumns] = useState(2);
+    const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
+    const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
 
     // Drag and Drop State
     const [draggedImageIndex, setDraggedImageIndex] = useState(null);
@@ -487,6 +495,9 @@ export default function EntryEditor() {
         setIsEditingEntry(isEditing);
         return () => setIsEditingEntry(false);
     }, [isEditing, setIsEditingEntry]);
+
+    useEffect(() => subscribeStickyWritingHeader(setStickyWritingHeader), []);
+    useEffect(() => subscribeStickySaveButton(setStickySaveButton), []);
 
     // Auto-resize title textarea
     useEffect(() => {
@@ -1590,12 +1601,12 @@ export default function EntryEditor() {
     );
 
     return (
-        <div className={`flex flex-col relative text-text ${isEditing ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : 'h-full'}`}>
+        <div className={`flex flex-col relative text-text ${isEditing && stickySaveButton ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : isEditing ? '' : 'h-full'}`}>
             <div
-                className={isEditing
+                className={isEditing && stickyWritingHeader
                     ? 'sticky z-40 -mt-1 pt-1 sm:-mt-2 sm:pt-2 lg:-mt-4 lg:pt-4 bg-bg mb-2 sm:mb-3'
                     : 'mb-2 sm:mb-3'}
-                style={isEditing ? { top: 'var(--journal-header-height, 4rem)' } : undefined}
+                style={isEditing && stickyWritingHeader ? { top: 'var(--journal-header-height, 4rem)' } : undefined}
             >
             <div className="relative isolate">
                 {/* Background Layer */}
@@ -1694,7 +1705,7 @@ export default function EntryEditor() {
                                             unlockJournalAudio();
                                             handleSave();
                                         }}
-                                        className="hidden md:flex p-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 items-center justify-center shrink-0"
+                                        className={`${stickySaveButton ? 'hidden md:flex' : 'flex'} p-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 items-center justify-center shrink-0`}
                                         disabled={saving}
                                         title={saving ? 'Saving' : 'Save'}
                                         aria-label={saving ? 'Saving' : 'Save'}
@@ -2639,7 +2650,7 @@ export default function EntryEditor() {
                 document.body
             )}
 
-            {isEditing && !lightboxImage && createPortal(
+            {isEditing && stickySaveButton && !lightboxImage && createPortal(
                 <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
                     <button
                         type="button"

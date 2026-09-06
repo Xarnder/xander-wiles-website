@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Image as ImageIcon, Lock, Loader2, Moon, PenTool, Plus, Settings, Sun, Tag, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Image as ImageIcon, Lock, Loader2, Moon, PanelTop, PenTool, Plus, Save, Settings, Sun, Tag, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useBackup } from '../context/BackupContext';
@@ -24,6 +24,12 @@ import { BACKUP_REMINDER_OPTIONS } from '../utils/backupReminder';
 import { areJournalSoundsEnabled, setJournalSoundsEnabled, unlockJournalAudio } from '../lib/journalAudio';
 import { areCalendarImageCountsEnabled, setCalendarImageCountsEnabled, areCalendarTagDotsEnabled, setCalendarTagDotsEnabled } from '../lib/calendarDisplay';
 import { isQuickWriteFillOldestEmptyEnabled, setQuickWriteFillOldestEmptyEnabled } from '../lib/quickWrite';
+import {
+    isStickyWritingHeaderEnabled,
+    setStickyWritingHeaderEnabled,
+    isStickySaveButtonEnabled,
+    setStickySaveButtonEnabled
+} from '../lib/editorChrome';
 
 const THEME_OPTIONS = [
     {
@@ -87,6 +93,8 @@ export default function SettingsView() {
     const [showCalendarImageCounts, setShowCalendarImageCounts] = useState(areCalendarImageCountsEnabled);
     const [showCalendarTagDots, setShowCalendarTagDots] = useState(areCalendarTagDotsEnabled);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
+    const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
+    const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
     const [entrySections, setEntrySections] = useState([]);
     const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
@@ -761,6 +769,67 @@ export default function SettingsView() {
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={fillOldestEmptyDay}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${fillOldestEmptyDay ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                </div>
+            </section>
+
+            <section className="glass-card overflow-hidden">
+                <div className="border-b border-white/10 px-4 py-4 sm:px-6">
+                    <h3 className="text-base font-bold text-white">Writing</h3>
+                    <p className="mt-1 text-sm text-text-muted">Free up space on small screens while the keyboard is open.</p>
+                </div>
+                <div className="px-4 py-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !stickyWritingHeader;
+                            setStickyWritingHeader(nextEnabled);
+                            setStickyWritingHeaderEnabled(nextEnabled);
+                        }}
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={stickyWritingHeader}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stickyWritingHeader ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <PanelTop className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Sticky writing header</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Keep the journal header and editing date bar pinned. Off by default so they scroll away and leave room to type.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={stickyWritingHeader}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${stickyWritingHeader ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !stickySaveButton;
+                            setStickySaveButton(nextEnabled);
+                            setStickySaveButtonEnabled(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={stickySaveButton}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stickySaveButton ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Save className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Sticky save button</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Keep Save pinned at the bottom while editing. Off by default so it does not cover the keyboard.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={stickySaveButton}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${stickySaveButton ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                 </div>

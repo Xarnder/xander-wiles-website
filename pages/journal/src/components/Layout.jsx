@@ -12,6 +12,7 @@ import LeftArrowIcon from './LeftArrowIcon';
 import PlusIcon from './PlusIcon';
 import { useEntryUi } from '../context/EntryUiContext';
 import { isQuickWriteFillOldestEmptyEnabled, subscribeQuickWriteFillOldestEmpty } from '../lib/quickWrite';
+import { isStickyWritingHeaderEnabled, subscribeStickyWritingHeader } from '../lib/editorChrome';
 
 function getWorkspaceTitle(pathname) {
     if (pathname.startsWith('/entry/')) return 'Entry';
@@ -62,6 +63,7 @@ export default function Layout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
+    const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
     const [recentEntries, setRecentEntries] = useState({});
     const [recentEntriesReady, setRecentEntriesReady] = useState(false);
     const [getStartedHintDismissed, setGetStartedHintDismissed] = useState(false);
@@ -111,6 +113,7 @@ export default function Layout() {
     }, [currentUser]);
 
     useEffect(() => subscribeQuickWriteFillOldestEmpty(setFillOldestEmptyDay), []);
+    useEffect(() => subscribeStickyWritingHeader(setStickyWritingHeader), []);
 
     function handleQuickWrite() {
         if (!currentUser) return;
@@ -264,7 +267,7 @@ export default function Layout() {
             <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
-            <header ref={headerRef} className={`sticky top-0 z-50 px-3 sm:px-4 ${isEntryView || isCalendarView ? 'pt-2 pb-1' : 'pt-3 pb-2 sm:pt-4'}`}>
+            <header ref={headerRef} className={`${isEditingEntry && !stickyWritingHeader ? 'relative' : 'sticky top-0'} z-50 px-3 sm:px-4 ${isEntryView || isCalendarView ? 'pt-2 pb-1' : 'pt-3 pb-2 sm:pt-4'}`}>
                 <div className={`glass-card max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center gap-2 sm:gap-3 transition-all duration-300 relative ${isEntryView ? 'py-2' : 'py-3'}`}>
                     <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                         <button type="button" className="flex shrink-0 items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
