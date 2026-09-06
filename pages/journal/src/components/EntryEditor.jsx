@@ -2004,10 +2004,12 @@ export default function EntryEditor() {
                                     />
                                     <label
                                         htmlFor="image-upload"
-                                        className="flex items-center justify-center w-full h-24 sm:h-32 p-1 border-2 border-dashed border-white/10 rounded-lg cursor-pointer transition-all hover:border-primary/50 hover:bg-white/5"
+                                        className="flex h-24 w-full cursor-pointer items-center gap-3 border-2 border-dashed border-white/10 px-4 transition-all hover:border-primary/50 hover:bg-white/5 sm:h-32 sm:gap-4 sm:px-5 rounded-lg"
                                     >
-                                        <ImageIcon className="h-full w-auto text-text-muted group-hover:text-white" strokeWidth={1.25} />
-                                        <span className="sr-only">Upload images</span>
+                                        <ImageIcon className="h-12 w-12 shrink-0 text-text-muted group-hover:text-white sm:h-16 sm:w-16" strokeWidth={1.25} />
+                                        <span className="text-sm font-medium text-text-muted group-hover:text-white sm:text-base">
+                                            Click here to add an image
+                                        </span>
                                     </label>
                                 </div>
                             )}

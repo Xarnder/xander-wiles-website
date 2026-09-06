@@ -316,8 +316,20 @@ export class GraphicsPipeline {
 			let gtaoPass: GTAOPass | null = null;
 			if (preset.aoEnabled) {
 				gtaoPass = new GTAOPass(this.scene, this.camera, this.containerWidth, this.containerHeight);
-				gtaoPass.output = GTAOPass.OUTPUT.Denoise;
-				gtaoPass.blendIntensity = 0; // TEMP DEBUG
+				// OUTPUT.Denoise replaces the whole frame with the raw (near-white, unoccluded-by-default)
+				// AO buffer — useful only for debugging the AO term in isolation. OUTPUT.Default is the
+				// mode that actually composites AO onto the scene colour (copies the scene through, then
+				// multiplies the denoised AO term over it via `blendIntensity`), which is what an actual
+				// rendered frame needs.
+				gtaoPass.output = GTAOPass.OUTPUT.Default;
+				gtaoPass.blendIntensity = preset.aoIntensity;
+				const tuning = AO_TUNING[preset.aoQuality];
+				gtaoPass.updateGtaoMaterial({ radius: preset.aoRadius, samples: tuning.samples });
+				gtaoPass.updatePdMaterial({
+					radius: preset.aoRadius,
+					rings: tuning.pdRings,
+					samples: tuning.pdSamples
+				});
 				composer.addPass(gtaoPass);
 			}
 
