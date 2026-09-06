@@ -29,11 +29,8 @@ export interface GraphicsPreset {
 	readonly shadowDistance: number;
 
 	readonly aoEnabled: boolean;
+	/** Only affects the AO buffer's render resolution (see AO_RESOLUTION_SCALE) — the actual look of the AO (radius, contrast, strength, ...) is controlled by the shared, live-tunable `AoTuning` in GraphicsSettings, not per-preset, since it's a look/taste knob rather than a performance tier. */
 	readonly aoQuality: AoQuality;
-	/** GTAO sample radius, world units. */
-	readonly aoRadius: number;
-	/** GTAO blend intensity — how strongly the computed occlusion darkens the scene (kept subtle; never full black). */
-	readonly aoIntensity: number;
 
 	readonly antialiasing: AntiAliasMode;
 
@@ -52,7 +49,11 @@ export interface GraphicsPreset {
 export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>> = {
 	low: {
 		label: 'Low',
-		pixelRatioCap: 0.8,
+		// LOW deliberately never reduces resolution — its performance budget comes entirely from
+		// disabling shadows/AO and shrinking render distance, not from rendering below the display's
+		// native resolution. `4` is comfortably above every real device pixel ratio in use today, so
+		// this is effectively "no cap" rather than a real limit.
+		pixelRatioCap: 4,
 		anisotropy: 1,
 		shadowsEnabled: false,
 		shadowCascades: 0,
@@ -60,8 +61,6 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		shadowDistance: 0,
 		aoEnabled: false,
 		aoQuality: 'low',
-		aoRadius: 3,
-		aoIntensity: 0.7,
 		antialiasing: 'fxaa',
 		bloomEnabled: false,
 		bloomStrength: 0,
@@ -69,7 +68,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		bloomThreshold: 1,
 		terrainRenderDistanceMultiplier: 0.75,
 		treeRenderDistanceMultiplier: 0.6,
-		minDynamicResolutionScale: 0.6
+		// Never dynamic-resolution-downscale below full res at LOW either — see pixelRatioCap's comment.
+		minDynamicResolutionScale: 1
 	},
 	medium: {
 		label: 'Medium',
@@ -81,8 +81,6 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		shadowDistance: 60,
 		aoEnabled: true,
 		aoQuality: 'low',
-		aoRadius: 4,
-		aoIntensity: 0.85,
 		antialiasing: 'smaa',
 		bloomEnabled: false,
 		bloomStrength: 0,
@@ -102,8 +100,6 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		shadowDistance: 100,
 		aoEnabled: true,
 		aoQuality: 'medium',
-		aoRadius: 5,
-		aoIntensity: 1.0,
 		antialiasing: 'smaa',
 		bloomEnabled: false,
 		bloomStrength: 0,
@@ -123,8 +119,6 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		shadowDistance: 140,
 		aoEnabled: true,
 		aoQuality: 'high',
-		aoRadius: 6,
-		aoIntensity: 1.1,
 		antialiasing: 'smaa',
 		// Very subtle — only the brightest sun/sky highlights bloom; see the README for why ULTRA
 		// deliberately does not use TAA (ghosting/smearing on a moving first-person camera) and keeps
@@ -151,6 +145,59 @@ export function graphicsQualityLabel(quality: GraphicsQuality): string {
 	return GRAPHICS_PRESETS[quality].label;
 }
 
+/**
+ * Every GTAO shader parameter that actually shapes how the ambient occlusion looks — as opposed to
+ * `GraphicsPreset.aoQuality`, which only controls the AO buffer's render *resolution* (a performance
+ * tier). Shared across every quality level with AO enabled, and fully live-tunable from the debug
+ * GUI's "Ambient Occlusion" folder — see `GraphicsPipeline.setAoTuning`/`refreshAoTuning` and
+ * `exportSettings()`, which lets a value found by eye in the GUI be handed back as new defaults here.
+ * Field names/descriptions are phrased for the GUI, not just the GLSL uniform name, since this is the
+ * one part of the graphics system meant to be tuned by a person watching the result, not just read by
+ * code — see the README's "Graphics quality" section for the full list of what each one does and the
+ * real three.js `GTAOShader`/`PoissonDenoiseShader` defaults this was seeded from.
+ */
+export interface AoTuning {
+	/** GTAOShader `radius` — world-space sample radius; ~1 is roughly the width of one grid cell/wall. */
+	radius: number;
+	/** GTAOShader `distanceExponent` — raises AO contrast; higher = darker, more defined creases. */
+	distanceExponent: number;
+	/** GTAOShader `thickness` — max view-space depth difference still counted as a nearby occluder. */
+	thickness: number;
+	/** GTAOShader `distanceFallOff` — how quickly farther samples contribute less to the occlusion. */
+	distanceFallOff: number;
+	/** GTAOShader `scale` — overall sample-radius scale; leave at 1 unless `radius` alone isn't enough range. */
+	scale: number;
+	/** GTAOShader `SAMPLES` — more samples = smoother, more expensive raw AO before denoising. */
+	samples: number;
+	/** GTAOPass `blendIntensity` — overall strength the denoised AO darkens the scene by. */
+	blendIntensity: number;
+	/** PoissonDenoiseShader `radius` — denoise blur radius; smooths noise, but can wash out narrow creases if too high. */
+	denoiseRadius: number;
+	/** PoissonDenoiseShader `rings` — Poisson-disc ring count for the denoiser. */
+	denoiseRings: number;
+	/** PoissonDenoiseShader `samples` — samples per ring for the denoiser. */
+	denoiseSamples: number;
+	/** PoissonDenoiseShader `radiusExponent` — higher values cluster denoise samples closer to the current pixel. */
+	denoiseRadiusExponent: number;
+}
+
+/** Seeded directly from three.js's own `GTAOShader`/`GTAOPass` built-in defaults — a known-reasonable starting point rather than a guess, since it's what the library authors validated the effect against. */
+export function createDefaultAoTuning(): AoTuning {
+	return {
+		radius: 0.25,
+		distanceExponent: 1,
+		thickness: 1,
+		distanceFallOff: 1,
+		scale: 1,
+		samples: 16,
+		blendIntensity: 1,
+		denoiseRadius: 8,
+		denoiseRings: 2,
+		denoiseSamples: 16,
+		denoiseRadiusExponent: 2
+	};
+}
+
 export interface GraphicsSettings {
 	quality: GraphicsQuality;
 	/** Smoothly scales resolution down (within the active preset's `minDynamicResolutionScale`) when frame time rises above `targetFps`'s budget, and back up when it recovers. */
@@ -160,6 +207,8 @@ export interface GraphicsSettings {
 	toneMappingExposure: number;
 	/** Debug-GUI-only: shows the extended render-stats overlay (draw calls, triangles, shadow cost, etc). */
 	showRenderStats: boolean;
+	/** Live-tunable GTAO look parameters — see `AoTuning`'s own doc comment. */
+	aoTuning: AoTuning;
 }
 
 /**
@@ -174,6 +223,7 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		dynamicResolutionEnabled: true,
 		targetFps: 60,
 		toneMappingExposure: 1.0,
-		showRenderStats: false
+		showRenderStats: false,
+		aoTuning: createDefaultAoTuning()
 	};
 }

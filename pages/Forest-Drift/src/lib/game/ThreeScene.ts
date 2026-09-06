@@ -535,7 +535,9 @@ export class ThreeScene {
 		this.gui.addGraphicsFolder(this.graphicsSettings, {
 			onQualityChange: () => this.graphicsPipeline.setQuality(this.graphicsSettings.quality),
 			onSettingsChange: () => this.graphicsPipeline.refreshAdvancedSettings(),
-			onExposureChange: (exposure) => this.graphicsPipeline.setToneMappingExposure(exposure)
+			onExposureChange: (exposure) => this.graphicsPipeline.setToneMappingExposure(exposure),
+			onAoTuningChange: () => this.graphicsPipeline.refreshAoTuning(),
+			onExportSettings: () => this.exportGraphicsSettings()
 		});
 
 		// Sky/lights/fog are cheap to apply directly (no dirty-flag batching needed — see
@@ -606,6 +608,16 @@ export class ThreeScene {
 	/** `L` cycles LOW → MEDIUM → HIGH → ULTRA → LOW, applies live (no reload, no world rebuild), and persists the choice — see GraphicsSettingsStore. Returns the newly-active quality so the caller (the `L`-key handler in +page.svelte) can show the "Graphics: X" HUD notification. */
 	cycleGraphicsQuality(): GraphicsQuality {
 		return this.graphicsPipeline.cycleQuality();
+	}
+
+	/** Debug GUI's "Export Settings" button — prints the current AO tuning (plus exposure/quality/dynamic-resolution) as JSON to the console and tries to copy it to the clipboard, so a value dialed in by eye can be handed back as new code defaults. */
+	exportGraphicsSettings(): void {
+		const json = this.graphicsPipeline.exportSettings();
+		console.info('[graphics] Exported settings:\n' + json);
+		void navigator.clipboard?.writeText(json).catch(() => {
+			// Clipboard access can be denied/unavailable (insecure context, no permission, etc) — the
+			// console output above is already the authoritative copy, so this failing is harmless.
+		});
 	}
 
 	/**

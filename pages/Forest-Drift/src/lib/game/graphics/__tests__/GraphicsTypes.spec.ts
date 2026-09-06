@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	createDefaultAoTuning,
 	createDefaultGraphicsSettings,
 	GRAPHICS_PRESETS,
 	graphicsQualityLabel,
@@ -34,9 +35,16 @@ describe('GRAPHICS_PRESETS', () => {
 		expect(Object.keys(GRAPHICS_PRESETS).sort()).toEqual([...QUALITIES].sort());
 	});
 
-	it('increases pixel ratio cap monotonically from LOW to ULTRA', () => {
-		const caps = QUALITIES.map((q) => GRAPHICS_PRESETS[q].pixelRatioCap);
+	it('increases pixel ratio cap monotonically from MEDIUM to ULTRA', () => {
+		const caps = (['medium', 'high', 'ultra'] as const).map(
+			(q) => GRAPHICS_PRESETS[q].pixelRatioCap
+		);
 		for (let i = 1; i < caps.length; i++) expect(caps[i]).toBeGreaterThanOrEqual(caps[i - 1]);
+	});
+
+	it('never reduces resolution below native at LOW — its savings come from disabled effects, not a blurrier image', () => {
+		expect(GRAPHICS_PRESETS.low.pixelRatioCap).toBeGreaterThanOrEqual(3);
+		expect(GRAPHICS_PRESETS.low.minDynamicResolutionScale).toBe(1);
 	});
 
 	it('never turns shadows on for LOW (the "none/very cheap" tier)', () => {
@@ -64,11 +72,29 @@ describe('GRAPHICS_PRESETS', () => {
 			if (preset.bloomEnabled) expect(preset.bloomStrength).toBeLessThan(0.3);
 		}
 	});
+});
 
-	it('never lets AO intensity fully crush the scene to black', () => {
-		for (const quality of QUALITIES) {
-			expect(GRAPHICS_PRESETS[quality].aoIntensity).toBeLessThanOrEqual(1.5);
-		}
+describe('createDefaultAoTuning', () => {
+	it("matches three.js GTAOShader/PoissonDenoiseShader's own built-in defaults, not an arbitrary guess", () => {
+		const tuning = createDefaultAoTuning();
+		expect(tuning.radius).toBe(0.25);
+		expect(tuning.distanceExponent).toBe(1);
+		expect(tuning.thickness).toBe(1);
+		expect(tuning.distanceFallOff).toBe(1);
+		expect(tuning.scale).toBe(1);
+		expect(tuning.samples).toBe(16);
+		expect(tuning.blendIntensity).toBe(1);
+	});
+
+	it('never fully crushes the scene to black by default', () => {
+		expect(createDefaultAoTuning().blendIntensity).toBeLessThanOrEqual(1.5);
+	});
+
+	it('returns a fresh object each call (no shared mutable default)', () => {
+		const a = createDefaultAoTuning();
+		const b = createDefaultAoTuning();
+		a.radius = 999;
+		expect(b.radius).not.toBe(999);
 	});
 });
 
@@ -88,6 +114,8 @@ describe('createDefaultGraphicsSettings', () => {
 		const a = createDefaultGraphicsSettings();
 		const b = createDefaultGraphicsSettings();
 		a.quality = 'low';
+		a.aoTuning.radius = 999;
 		expect(b.quality).toBe('high');
+		expect(b.aoTuning.radius).not.toBe(999);
 	});
 });

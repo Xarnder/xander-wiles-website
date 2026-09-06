@@ -2193,15 +2193,26 @@ nothing in this game should glow on its own.
 ### Pixel ratio and dynamic resolution
 
 `renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))` (a single hardcoded line, previously
-the entire graphics-configuration surface of this codebase) is gone; each preset caps it instead
-(0.8/1.0/1.5/2.0 for LOW/MEDIUM/HIGH/ULTRA). On top of that, an optional dynamic-resolution controller
-(`GraphicsSettings.dynamicResolutionEnabled`, default on) tracks an exponentially-smoothed FPS
-(≈0.5s time constant) and, checked at most once per second (explicit hysteresis — never a
-frame-to-frame reaction), nudges a `renderScale` multiplier (applied to the logical width/height
-passed to `renderer.setSize(w, h, false)`, `updateStyle: false` so the canvas's CSS size — governed
-entirely by `.canvas-container canvas { width/height: 100% }` — never changes) down toward the
-preset's `minDynamicResolutionScale` floor (0.6–0.75 depending on quality) when smoothed FPS falls
-below 90% of `targetFps`, and back up toward `1.0` when it recovers above 97%.
+the entire graphics-configuration surface of this codebase) is gone; each preset caps it instead —
+except LOW, which deliberately has **no** effective cap (`pixelRatioCap: 4`, comfortably above any
+real device pixel ratio) and a `minDynamicResolutionScale` of `1`, so it never renders below the
+display's native resolution. LOW's performance savings come entirely from disabling shadows/AO and
+shrinking render distance, not from a blurrier sub-native image — a fixed-effects-off, full-resolution
+"fast" tier reads as correct on every screen, where a resolution cut only reads as correct on some.
+
+On top of that, an optional dynamic-resolution controller (`GraphicsSettings.dynamicResolutionEnabled`,
+default on, `targetFps: 60`) tracks an exponentially-smoothed FPS (≈0.5s time constant) and, checked
+at most once per second (explicit hysteresis — never a frame-to-frame reaction), nudges a
+`renderScale` multiplier (applied to the logical width/height passed to `renderer.setSize(w, h, false)`,
+`updateStyle: false` so the canvas's CSS size — governed entirely by
+`.canvas-container canvas { width/height: 100% }` — never changes) down toward the preset's
+`minDynamicResolutionScale` floor when smoothed FPS falls below 90% of `targetFps`, and back up
+toward `1.0` at the _same_ step size when it recovers above 97% — recovery used to be half as fast as
+the drop, which reads as "stuck" at reduced quality even once the hardware can comfortably do better.
+Switching quality (`L`, or the debug GUI) also resets `renderScale` to `1` and clears the smoothed-FPS
+history immediately, rather than carrying over a scale/reading computed for a _different_ preset's
+cost profile — otherwise LOW could stay visibly reduced for several seconds after switching down from
+a heavier preset that had scaled itself back, even though LOW's own floor is `1`.
 
 ### Render-distance scaling
 
@@ -2238,6 +2249,58 @@ was extended with graphics quality, frame time, render scale, pixel ratio, draw 
 geometry/texture counts (all from `renderer.info`), and shadow/AO/AA status — pulled from
 `GraphicsPipeline.getRenderStats()`, updated at the same throttled ~4×/second rate the rest of the
 overlay already used (`ThreeScene.updateStats()`'s existing `statsAccumSeconds` gate).
+
+### Ambient Occlusion tuning: live sliders, not fixed-per-quality guesses (`AoTuning` in `GraphicsTypes.ts`)
+
+Unlike shadows/bloom/AA (fixed per quality tier in `GRAPHICS_PRESETS`, since those are genuine
+performance tiers), GTAO's look parameters — sample radius, contrast, denoise radius, overall
+strength, and so on — are a "look at the result and adjust" task that no fixed per-quality number
+gets right for every scene. `AoTuning` (in `GraphicsSettings.aoTuning`) holds every GTAOShader/
+PoissonDenoiseShader parameter that shapes the effect, shared across every quality level that has AO
+enabled, and fully live-tunable from the debug GUI's Graphics → "Ambient Occlusion" folder:
+
+| GUI label              | Field                   | What it does                                                                      |
+| ---------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| GTAO Strength          | `blendIntensity`        | Overall strength the AO darkens the scene by                                      |
+| AO Spread Distance     | `radius`                | World-space sample radius (~1 ≈ one grid cell/wall width)                         |
+| AO Darkness Power      | `distanceExponent`      | Raises AO contrast — darker, more defined creases                                 |
+| AO Thickness           | `thickness`             | Max depth difference still counted as a nearby occluder                           |
+| AO Distance Falloff    | `distanceFallOff`       | How quickly farther samples contribute less                                       |
+| AO Scale               | `scale`                 | Overall sample-radius scale (leave at 1 unless radius alone isn't enough range)   |
+| AO Samples             | `samples`               | GTAO raw sample count — smoother but more expensive                               |
+| AO Denoise Radius      | `denoiseRadius`         | Poisson-disc blur radius — smooths noise, can wash out narrow creases if too high |
+| AO Denoise Rings       | `denoiseRings`          | Poisson-disc ring count                                                           |
+| AO Denoise Samples     | `denoiseSamples`        | Samples per ring                                                                  |
+| AO Sample Distribution | `denoiseRadiusExponent` | Higher values cluster denoise samples closer to the current pixel                 |
+
+Every slider calls `GraphicsPipeline.refreshAoTuning()` on change — a cheap direct update to the
+already-built `GTAOPass`'s uniforms (`updateGtaoMaterial`/`updatePdMaterial`/`blendIntensity`), never
+a composer rebuild, so dragging a slider is instant. Defaults (`createDefaultAoTuning()`) are seeded
+directly from three.js's own `GTAOShader`/`GTAOPass` built-in values (`radius: 0.25`, not a guessed
+number) rather than invented from scratch — a real, known-reasonable starting point, since an
+earlier version of this tuning used values roughly 12–24× too large for `radius`'s actual world-space
+units (a genuine bug, part of what made an earlier build's AO/shadows look wrong; see the fixed
+`GTAOPass.output` mode below for the other half of that).
+
+A "Export Settings" button next to the AO folder calls `GraphicsPipeline.exportSettings()`, which
+prints the current quality/exposure/dynamic-resolution/AO-tuning values as JSON to the console and
+tries to copy them to the clipboard — meant for exactly the workflow of dialing in values by eye in
+the running game, then handing that JSON back to become new code defaults, rather than guessing
+numbers blind.
+
+### A real GTAOPass bug this pass found and fixed: wrong `output` mode
+
+`GTAOPass.output` was set to `GTAOPass.OUTPUT.Denoise` — the mode shown in three.js's own JSDoc usage
+example. That mode does **not** composite AO onto the scene; it replaces the entire frame with the
+raw AO buffer texture, which for a typical outdoor scene (mostly unoccluded, so mostly white) renders
+as an almost completely blown-out white screen — exactly the bug this pass hit at every quality level
+except LOW (the only one with AO disabled). `GTAOPass.OUTPUT.Default` is the mode that actually
+copies the scene through and then blends the denoised AO term on top of it via `blendIntensity`,
+which is what a real rendered frame needs; `OUTPUT.Denoise`/`OUTPUT.AO`/`OUTPUT.Normal`/`OUTPUT.Depth`
+are debug-visualization modes for looking at one buffer in isolation, not for normal rendering. Found
+by bisection: disabling AO entirely fixed the render, and forcing `blendIntensity` to `0` (which
+should make AO's blend step a no-op) _still_ showed a fully white screen — proving the bug was in the
+output mode itself, not in any blend/intensity tuning.
 
 ### Verified performance, and how the numbers were actually obtained
 

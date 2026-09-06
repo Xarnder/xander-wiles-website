@@ -419,11 +419,15 @@ export class TerrainDebugGui {
 
 	/**
 	 * Exposes the mutable knobs of GraphicsSettings — the quality preset itself (which rebuilds
-	 * shadows/AO/AA/bloom via GraphicsPipeline.setQuality) plus the handful of advanced overrides
-	 * that don't require a full preset rebuild. Every other quality-dependent value (shadow
-	 * cascades, AO radius, bloom strength, etc.) lives in the read-only `GRAPHICS_PRESETS` table in
-	 * GraphicsTypes.ts, by design — see this project's README for why that table, not scattered GUI
-	 * sliders, is the single source of truth for what each quality level looks like.
+	 * shadows/AO/AA/bloom via GraphicsPipeline.setQuality), the handful of advanced overrides that
+	 * don't require a full preset rebuild, and the live-tunable GTAO "Ambient Occlusion" parameters
+	 * (`AoTuning` — see its own doc comment in GraphicsTypes.ts for what each slider actually does).
+	 * Shadow cascade count/resolution, bloom, and anti-aliasing mode stay in the read-only
+	 * `GRAPHICS_PRESETS` table by design — only AO is meant to be tuned by eye, since getting its
+	 * radius/contrast/strength right for a given scene is inherently a "look at it and adjust" task,
+	 * not something a fixed number per quality tier can get right for every scene. "Export Settings"
+	 * dumps the current AO tuning (plus exposure/quality/dynamic-resolution) as JSON to the console
+	 * and the clipboard, so a value found here can be handed back as new code defaults.
 	 */
 	addGraphicsFolder(
 		settings: GraphicsSettings,
@@ -431,6 +435,8 @@ export class TerrainDebugGui {
 			onQualityChange: () => void;
 			onSettingsChange: () => void;
 			onExposureChange: (exposure: number) => void;
+			onAoTuningChange: () => void;
+			onExportSettings: () => void;
 		}
 	): void {
 		const graphics = this.gui.addFolder('Graphics');
@@ -448,6 +454,40 @@ export class TerrainDebugGui {
 			.name('exposure')
 			.onChange(callbacks.onExposureChange);
 		graphics.add(settings, 'showRenderStats').onChange(callbacks.onSettingsChange);
+
+		const ao = graphics.addFolder('Ambient Occlusion');
+		const tuning = settings.aoTuning;
+		ao.add(tuning, 'blendIntensity', 0, 2, 0.01)
+			.name('GTAO Strength')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'radius', 0.05, 2, 0.01)
+			.name('AO Spread Distance')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'distanceExponent', 0.1, 4, 0.05)
+			.name('AO Darkness Power')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'thickness', 0.1, 4, 0.05)
+			.name('AO Thickness')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'distanceFallOff', 0, 2, 0.01)
+			.name('AO Distance Falloff')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'scale', 0.1, 4, 0.05).name('AO Scale').onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'samples', 4, 32, 1).name('AO Samples').onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'denoiseRadius', 0, 20, 0.5)
+			.name('AO Denoise Radius')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'denoiseRings', 1, 6, 1)
+			.name('AO Denoise Rings')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'denoiseSamples', 4, 32, 1)
+			.name('AO Denoise Samples')
+			.onChange(callbacks.onAoTuningChange);
+		ao.add(tuning, 'denoiseRadiusExponent', 0.5, 4, 0.1)
+			.name('AO Sample Distribution')
+			.onChange(callbacks.onAoTuningChange);
+
+		graphics.add({ export: callbacks.onExportSettings }, 'export').name('Export Settings');
 	}
 
 	dispose(): void {

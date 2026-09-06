@@ -13,17 +13,11 @@ import {
 	nextGraphicsQuality,
 	type AntiAliasMode,
 	type AoQuality,
+	type AoTuning,
 	type GraphicsPreset,
 	type GraphicsQuality,
 	type GraphicsSettings
 } from './GraphicsTypes';
-
-/** GTAO's own sample-count/denoise tuning per AO quality tier — see GraphicsTypes.ts's AoQuality doc. */
-const AO_TUNING: Record<AoQuality, { samples: number; pdRings: number; pdSamples: number }> = {
-	low: { samples: 8, pdRings: 2, pdSamples: 8 },
-	medium: { samples: 16, pdRings: 2, pdSamples: 16 },
-	high: { samples: 24, pdRings: 3, pdSamples: 20 }
-};
 
 /**
  * Runs the GTAO buffer at a fraction of render resolution on cheaper tiers and upscales via the
@@ -160,6 +154,49 @@ export class GraphicsPipeline {
 		this.renderer.toneMappingExposure = exposure;
 	}
 
+	getAoTuning(): AoTuning {
+		return this.settings.aoTuning;
+	}
+
+	/** Re-applies `settings.aoTuning` to the live GTAO pass — cheap uniform updates, no rebuild. Call after mutating fields on the object `getAoTuning()` returned (the debug GUI's sliders do this directly). A no-op when AO is disabled for the current preset (nothing to apply to). */
+	refreshAoTuning(): void {
+		if (this.passes?.gtaoPass) this.applyAoTuning(this.passes.gtaoPass);
+	}
+
+	private applyAoTuning(gtaoPass: GTAOPass): void {
+		const tuning = this.settings.aoTuning;
+		gtaoPass.blendIntensity = tuning.blendIntensity;
+		gtaoPass.updateGtaoMaterial({
+			radius: tuning.radius,
+			distanceExponent: tuning.distanceExponent,
+			thickness: tuning.thickness,
+			distanceFallOff: tuning.distanceFallOff,
+			scale: tuning.scale,
+			samples: tuning.samples
+		});
+		gtaoPass.updatePdMaterial({
+			radius: tuning.denoiseRadius,
+			rings: tuning.denoiseRings,
+			samples: tuning.denoiseSamples,
+			radiusExponent: tuning.denoiseRadiusExponent
+		});
+	}
+
+	/** A JSON snapshot of every player/developer-tunable value (quality, AO look, exposure, dynamic resolution) — for the debug GUI's "Export Settings" button, so a value dialed in by eye can be handed back as new code defaults. Not meant to be re-imported at runtime; it's a one-way "tell me what you found" export. */
+	exportSettings(): string {
+		return JSON.stringify(
+			{
+				quality: this.settings.quality,
+				toneMappingExposure: this.settings.toneMappingExposure,
+				dynamicResolutionEnabled: this.settings.dynamicResolutionEnabled,
+				targetFps: this.settings.targetFps,
+				aoTuning: this.settings.aoTuning
+			},
+			null,
+			2
+		);
+	}
+
 	/** Cheap per-frame direction update — CSM repositions its cascade lights from this every `update()` call; does not touch shadow-frustum bounds (see the class doc's per-frame vs per-settings-change split). */
 	setSunDirection(direction: THREE.Vector3): void {
 		this.sunDirection.copy(direction);
@@ -233,6 +270,19 @@ export class GraphicsPipeline {
 
 		const cappedPixelRatio = Math.min(window.devicePixelRatio || 1, preset.pixelRatioCap);
 		this.renderer.setPixelRatio(cappedPixelRatio);
+
+		// Always start a newly-selected preset at full resolution rather than carrying over whatever
+		// scale dynamic resolution had settled on for a DIFFERENT preset's cost profile — a preset
+		// with `minDynamicResolutionScale: 1` (LOW) would otherwise stay visibly reduced for several
+		// seconds after switching from a heavier preset that had scaled down, instead of being full
+		// resolution immediately. The dynamic-resolution controller (see updateDynamicResolution) is
+		// free to scale back down again from here if the new preset genuinely needs it.
+		this.renderScale = 1;
+		// Give the new preset a clean slate rather than judging it by the old preset's smoothed FPS
+		// history, and don't let it re-evaluate (and potentially downscale) until it's had a moment to
+		// actually run at the new settings.
+		this.smoothedFps = this.settings.targetFps;
+		this.dynamicResCooldown = DYNAMIC_RES_CHECK_INTERVAL;
 
 		this.applyShadowSettings(preset);
 		this.rebuildComposer(preset);
@@ -322,14 +372,7 @@ export class GraphicsPipeline {
 				// multiplies the denoised AO term over it via `blendIntensity`), which is what an actual
 				// rendered frame needs.
 				gtaoPass.output = GTAOPass.OUTPUT.Default;
-				gtaoPass.blendIntensity = preset.aoIntensity;
-				const tuning = AO_TUNING[preset.aoQuality];
-				gtaoPass.updateGtaoMaterial({ radius: preset.aoRadius, samples: tuning.samples });
-				gtaoPass.updatePdMaterial({
-					radius: preset.aoRadius,
-					rings: tuning.pdRings,
-					samples: tuning.pdSamples
-				});
+				this.applyAoTuning(gtaoPass);
 				composer.addPass(gtaoPass);
 			}
 
@@ -412,7 +455,9 @@ export class GraphicsPipeline {
 			this.renderScale = Math.max(floor, this.renderScale - DYNAMIC_RES_STEP);
 			this.applyRenderSize();
 		} else if (this.smoothedFps > targetFps * 0.97 && this.renderScale < 1) {
-			this.renderScale = Math.min(1, this.renderScale + DYNAMIC_RES_STEP / 2);
+			// Recover at the same rate resolution was dropped, not slower — a slow recovery reads as
+			// "stuck" at reduced quality/frame rate even once the hardware can comfortably do better.
+			this.renderScale = Math.min(1, this.renderScale + DYNAMIC_RES_STEP);
 			this.applyRenderSize();
 		}
 	}
