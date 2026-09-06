@@ -43,6 +43,16 @@ function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
     );
 }
 
+function entryHasContent(entry) {
+    return Boolean(
+        entry && (
+            (entry.content && entry.content.trim().length > 0) ||
+            (entry.images && entry.images.length > 0) ||
+            (entry.title && entry.title.trim().length > 0)
+        )
+    );
+}
+
 export default function Layout() {
     const { currentUser, logout } = useAuth();
     const { isEditingEntry } = useEntryUi();
@@ -53,6 +63,8 @@ export default function Layout() {
     const [isQuickWriting, setIsQuickWriting] = useState(false);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
     const [recentEntries, setRecentEntries] = useState({});
+    const [recentEntriesReady, setRecentEntriesReady] = useState(false);
+    const [getStartedHintDismissed, setGetStartedHintDismissed] = useState(false);
     const [headerTitleFontSize, setHeaderTitleFontSize] = useState(18);
     const headerTitleContainerRef = useRef(null);
     const headerTitleTextRef = useRef(null);
@@ -68,7 +80,9 @@ export default function Layout() {
     // Keep a real-time listener for the last 7 days to make "Quick Write" instantaneous
     useEffect(() => {
         if (!currentUser) {
-            return;
+            setRecentEntries({});
+            setRecentEntriesReady(false);
+            return undefined;
         }
 
         const today = new Date();
@@ -88,6 +102,7 @@ export default function Layout() {
                 entries[doc.id] = doc.data();
             });
             setRecentEntries(entries);
+            setRecentEntriesReady(true);
         }, (err) => {
             console.error("Error listening to recent entries:", err);
         });
@@ -113,13 +128,7 @@ export default function Layout() {
             for (let i = datesToCheck.length - 1; i >= 0; i--) {
                 const dateStr = datesToCheck[i];
                 const entry = recentEntries[dateStr];
-                const hasContent = entry && (
-                    (entry.content && entry.content.trim().length > 0) ||
-                    (entry.images && entry.images.length > 0) ||
-                    (entry.title && entry.title.trim().length > 0)
-                );
-
-                if (!hasContent) {
+                if (!entryHasContent(entry)) {
                     targetDate = dateStr;
                     break;
                 }
@@ -127,6 +136,7 @@ export default function Layout() {
         }
 
         navigate(`/entry/${targetDate}`);
+        setGetStartedHintDismissed(true);
         window.setTimeout(() => setIsQuickWriting(false), 500);
     }
 
@@ -216,6 +226,14 @@ export default function Layout() {
 
     const isEntryView = location.pathname.startsWith('/entry/');
     const isCalendarView = location.pathname === '/';
+    const hasEntriesThisWeek = Object.values(recentEntries).some(entryHasContent);
+    const showGetStartedHint = Boolean(
+        currentUser
+        && recentEntriesReady
+        && !hasEntriesThisWeek
+        && !getStartedHintDismissed
+        && !isEntryView
+    );
     const fromPath = location.state?.from;
     const isFromGallery = location.state?.fromGallery;
 
@@ -468,6 +486,33 @@ export default function Layout() {
                     />
                 </div>
             </header>
+
+            {showGetStartedHint && (
+                <div
+                    className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3 sm:px-4"
+                    style={{ top: 'calc(var(--journal-header-height, 4.5rem) + 0.5rem)' }}
+                >
+                    <div
+                        role="status"
+                        className="pointer-events-auto flex w-full max-w-lg items-start gap-3 rounded-lg border border-primary/30 bg-primary/15 p-3 shadow-lg backdrop-blur-md animate-slide-in sm:p-4"
+                    >
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-white">
+                            <PlusIcon className="h-4 w-4" />
+                        </span>
+                        <p className="min-w-0 flex-1 text-sm font-medium text-white">
+                            Click the plus button at the bottom to get started.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setGetStartedHintDismissed(true)}
+                            aria-label="Dismiss get started hint"
+                            className="shrink-0 rounded-md p-1 text-white/70 transition-opacity hover:text-white"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Main Content */}
             <main className={`flex-1 w-full max-w-7xl mx-auto animation-fade-in ${

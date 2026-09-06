@@ -40,15 +40,18 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 		timeout: 10_000
 	});
 
-	await page.keyboard.press('l');
-
-	// Polling this predicate from *inside* the page in a single round-trip (rather than issuing one
-	// CDP round-trip per poll tick, which this page's busy WebGL render loop can make slow enough to
-	// miss a several-second-wide window entirely) is what actually catches this transient element
-	// reliably — see the README's "Graphics quality" section for the full story.
+	// Dispatching the keydown AND polling for the notice inside one page.evaluate() call (rather
+	// than `page.keyboard.press()` followed by a separate check) avoids a cross-process timing gap:
+	// applying a quality change for the first time does real synchronous work (building a fresh CSM
+	// + postprocessing composer), and on a busy page that can take long enough that a *separate*
+	// round-trip back to Node before polling starts risks missing the notice's whole visible window
+	// entirely. Running both in the same synchronous page script eliminates that gap — see the
+	// README's "Graphics quality" section for the full story.
 	const result = await page.evaluate(
 		() =>
 			new Promise<{ appearedWith: string | null; disappearedAfter: boolean }>((resolve) => {
+				window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyL', bubbles: true }));
+
 				let appearedWith: string | null = null;
 				const start = performance.now();
 				const poll = () => {
