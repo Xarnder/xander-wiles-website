@@ -13,6 +13,18 @@ import type { TerrainSettings } from '../terrain/TerrainSettings';
 /** Generous per-variant, per-component instance capacity — see the README for the sizing rationale. */
 const CAPACITY_PER_VARIANT = 6000;
 
+/**
+ * The stable identity of a procedural tree: its vegetation cell, and nothing else.
+ *
+ * This works precisely because tree existence/position/scale/rotation/variant are all derived from
+ * `(worldSeed, cellX, cellZ)` alone (see TreePlacementGenerator) — so a cell reference is enough to
+ * name a specific tree forever, in a save file or, later, in a multiplayer message, without either
+ * side having sent the tree's data.
+ */
+export function proceduralTreeId(cellX: number, cellZ: number): string {
+	return `${cellX}:${cellZ}`;
+}
+
 const UP_AXIS = new THREE.Vector3(0, 1, 0);
 
 const treeChunkBorderMaterial = new THREE.LineBasicMaterial({ color: 0x33ccff });
@@ -85,6 +97,16 @@ export class TreeManager {
 	private readonly active = new Map<ChunkKey, VegetationChunkRecord>();
 	private readonly queue = new TerrainGenerationQueue();
 
+	/**
+	 * Deterministic ids of procedural trees the player has removed — the vegetation half of
+	 * `ProceduralWorldOverrides`. Held as a Set because it's consulted once per candidate cell during
+	 * chunk materialization, and it is the ONLY vegetation state that is ever persisted: every tree
+	 * that still exists is regenerated from `(seed, cell)` instead.
+	 */
+	private removedTreeIds = new Set<string>();
+	/** Bumped whenever the override set changes, so world persistence can detect it — see WorldRevisionCounters. */
+	private overrideRevision = 0;
+
 	private revision = 0;
 	private lastPlayerChunkX = Number.NaN;
 	private lastPlayerChunkZ = Number.NaN;
@@ -134,6 +156,32 @@ export class TreeManager {
 
 	getVegetationRegionSampler(): VegetationRegionSampler {
 		return this.vegetationRegionSampler;
+	}
+
+	/** The persisted procedural-tree exceptions. Sorted so an unchanged world serializes to identical bytes run after run. */
+	getRemovedTreeIds(): string[] {
+		return [...this.removedTreeIds].sort();
+	}
+
+	/** Applied on world load, before any chunk is generated, so removed trees never appear even briefly. */
+	setRemovedTreeIds(ids: Iterable<string>): void {
+		this.removedTreeIds = new Set(ids);
+		this.overrideRevision++;
+		this.notifySettingsChanged();
+	}
+
+	/** Removes one deterministic tree, permanently for this world. Returns `false` if it was already removed. */
+	removeProceduralTree(cellX: number, cellZ: number): boolean {
+		const id = proceduralTreeId(cellX, cellZ);
+		if (this.removedTreeIds.has(id)) return false;
+		this.removedTreeIds.add(id);
+		this.overrideRevision++;
+		this.notifySettingsChanged();
+		return true;
+	}
+
+	getOverrideRevision(): number {
+		return this.overrideRevision;
 	}
 
 	/**
@@ -308,6 +356,10 @@ export class TreeManager {
 				const evaluation = this.treePlacementGenerator.evaluateCell(cx, cz);
 				if (collectDebug) debugEvaluations.push(evaluation);
 				if (!evaluation.accepted || !evaluation.tree) continue;
+				// The world save stores *exceptions* to the deterministic forest, never the forest
+				// itself — see ProceduralWorldOverrides. A removed tree costs one short id in the save;
+				// the millions still standing cost nothing because they are re-derived from the seed.
+				if (this.removedTreeIds.has(proceduralTreeId(cx, cz))) continue;
 				if (
 					this.foundationManager.getTopYAt(evaluation.tree.worldX, evaluation.tree.worldZ) !== null
 				)

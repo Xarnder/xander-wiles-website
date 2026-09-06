@@ -2349,11 +2349,312 @@ brief's own stated priority order (better sunlight/shadows and AO first, flashy 
 - **Terrain self-shadowing.** Terrain `receiveShadow`s (from trees/buildings) but never `castShadow`s
   onto itself — a minor visual nicety judged not worth the extra per-chunk shadow draw calls.
 
+## Worlds: local persistence, import/export, and the save architecture (`world/`)
+
+The game opens on a **Worlds** screen rather than dropping into an anonymous session. A player can
+keep several local worlds, each with its own seed, terrain, forests and buildings; worlds autosave
+while you play, and can be renamed, duplicated, exported to a file, imported back, and deleted.
+
+### The one rule the whole design follows
+
+```
+SAVE:           what defines the world
+DO NOT SAVE:    what can be regenerated from that definition
+```
+
+A world's save contains its seed, its generation settings, the buildings a player authored, the
+handful of _exceptions_ to the procedural world, and where the player was standing. It contains no
+terrain vertices, no chunk cache, no tree positions, no meshes, no materials, no collision rects and
+no Three.js objects of any kind — all of those are runtime representations rebuilt on load from the
+definition.
+
+That distinction is what makes an infinite world cheap to store. Walking 20km generates a great deal
+of terrain and many thousands of trees, and adds **zero bytes** to the save, because every one of
+them is reproducible from `(seed, settings)`. Save size grows with _authored content plus procedural
+exceptions_, never with explored area.
+
+### `WorldDefinition` — the persistence contract (`world/WorldTypes.ts`)
+
+```ts
+interface WorldDefinition {
+	schemaVersion: number;
+	id: string;                 // stable UUID; the NAME is a label, never identity
+	name: string;
+	createdAt / updatedAt / lastPlayedAt: string;   // ISO strings
+	saveRevision: number;       // monotonic; every successful write bumps it
+	seed: string;               // authoritative over environment.terrain.seed
+
+	environment: {              // how this world generates — snapshotted explicitly
+		terrain: TerrainSettings;
+		vegetation: VegetationSettings;
+		sky: SkySettings;
+	};
+
+	foundations: FoundationDefinition[];            // authored — cannot be regenerated
+	buildings: FoundationBuildingDefinition[];      // walls, wall paths, slabs, stairs, openings, paint
+	buildingLevels: BuildingLevelDefinition[];
+
+	proceduralOverrides: { removedTreeIds: string[] };   // deltas only
+
+	player: SavedPlayerState;
+}
+```
+
+Every authored building type is covered, and the existing `serialize()`/`load()` pairs on
+`FoundationManager`, `BuildingManager` and `BuildingLevelManager` are reused as the contract for
+their own state rather than reimplemented — so a new building type is included by construction as
+soon as it appears in its manager's `serialize()`.
+
+**Environment settings are stored in full, including values identical to today's defaults.** That's
+deliberate: application defaults drift between releases, and a world made today must keep looking
+like itself after they change. `WorldSerializer.spec.ts` asserts exactly this.
+
+### World state vs. application preference
+
+A few values live in a world's settings objects but are _not_ world state, and are normalized out on
+capture (see `ThreeScene.getEnvironment`):
+
+| Value                                                       | Where it lives                           | Why                                                                                                                            |
+| ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Graphics quality, AO tuning, exposure                       | `localStorage` (`GraphicsSettingsStore`) | A machine's capability, not a world's look. "Graphics: ULTRA" must not be baked into a world you share.                        |
+| Terrain/tree **view distance**                              | Normalized to the world's own baseline   | The active graphics preset scales these live; a world must not inherit the render distance of whichever machine last saved it. |
+| Debug view toggles (wireframe, chunk borders, cloud bounds) | Reset on capture                         | Debug GUI preferences, not world content.                                                                                      |
+| Saved paint colours                                         | `localStorage` (`MaterialPresetStore`)   | A player's palette, not a property of one world.                                                                               |
+
+### Player state
+
+Position, yaw, pitch, the locked foundation, and the per-foundation current storey. Explicitly _not_
+saved: velocity, held keys, jump state, pointer lock — those are transient input, and a world that
+reloaded you mid-fall with keys still held would be restoring a moment rather than a place.
+`sanitizePlayerState` rejects non-finite or absurdly distant coordinates and falls back to a safe
+spawn, so a corrupted save can't strand a player at `NaN`.
+
+### Procedural overrides: deltas, never contents
+
+Trees exist because `(worldSeed, cellX, cellZ)` says so (see `TreePlacementGenerator`), so a tree's
+stable identity is just its cell — `proceduralTreeId(cellX, cellZ)` → `"12:-7"`. Cutting one down
+stores that one short string; the millions still standing store nothing. `TreeManager` consults the
+removed set while materializing a chunk, so a removed tree never reappears and never flickers into
+existence on load. Every future procedural-world edit (terrain deformation, harvested resources,
+scattered props) should take the same delta shape.
+
+### Storage architecture
+
+```
+GAME LOGICAL STATE  →  WorldSerializer  →  VERSIONED WorldDefinition  →  WorldRepository  →  IndexedDB
+```
+
+| Class                   | Responsibility                                                                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WorldManager`          | Lifecycle: create, open, save, rename, duplicate, delete, import, export. Owns the single authoritative copy of the open world.                            |
+| `WorldRepository`       | The persistence _interface_. `IndexedDbWorldRepository` is today's implementation; `InMemoryWorldRepository` backs unit tests and the no-storage fallback. |
+| `WorldSerializer`       | Converts between live runtime state and the persisted contract. Imports no Three.js, by design.                                                            |
+| `WorldAutosaveManager`  | Dirty tracking, debouncing, save-status state machine, stale-write protection.                                                                             |
+| `WorldImportExport`     | The portable `.forestworld` package.                                                                                                                       |
+| `WorldMigrationManager` | Old schema → current schema.                                                                                                                               |
+| `WorldSession`          | Binds one open world's scene + autosave + browser lifecycle hooks together.                                                                                |
+
+**IndexedDB, not `localStorage`**: worlds are structured, potentially multi-megabyte, and must not
+block the main thread mid-gameplay. `localStorage` is synchronous, string-only, and quota-limited to
+a few megabytes — disqualifying regardless of how small a single save happens to be today.
+
+Three stores, each for a specific reason:
+
+- **`worldMeta`** — what the Worlds browser lists. Opening the Worlds screen reads only these (a few
+  hundred bytes each), never full worlds; the difference between an instant screen and a multi-second
+  one once someone has a dozen large worlds.
+- **`worlds`** — the full `WorldDefinition`, read only when a world is opened, exported or duplicated.
+- **`thumbnails`** — image blobs, kept out of the record autosave rewrites every few seconds.
+
+A save writes `worlds` and `worldMeta` inside **one transaction**, so the two can never disagree
+about which revision is current — a half-applied save is exactly the corruption that makes a save
+system untrustworthy.
+
+### Autosave: revision counters, not serialization
+
+Managers bump a plain integer when they mutate (`BuildingManager.getRevision()`,
+`FoundationManager.getRevision()`, `BuildingLevelManager.getRevision()`, `TreeManager
+.getOverrideRevision()`, plus `ThreeScene`'s own environment counter). The autosave loop polls those
+integers twice a second, so _"has anything changed?"_ costs a few comparisons — an idle world costs
+nothing, and serialization only happens when a debounce actually fires.
+
+| Trigger                                    | Timing                                                                                                   |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Structural edit (wall, paint, removal, …)  | 2s after the last change, capped at 10s from the first unsaved change so continuous building still saves |
+| Critical edit (foundation placed, rename)  | 0.6s                                                                                                     |
+| Player movement only                       | Every 15s, and only if the position actually changed                                                     |
+| Pause menu, quit, `Cmd/Ctrl+S`, tab hidden | Immediate, awaited                                                                                       |
+
+Lifecycle flushes use `visibilitychange` and `pagehide`, **not** `beforeunload` — asynchronous
+IndexedDB writes frequently cannot complete there. The normal cadence is designed to keep storage
+nearly current at all times rather than relying on a last-gasp save.
+
+### Stale-write protection
+
+Every capture is tagged with the content _generation_ it came from. If the world changes while a
+write is in flight, the completed write only clears dirtiness up to the generation it actually
+captured, and the newer state is written on the next tick. Writes are serialised through a single
+promise chain, so two never run concurrently and an older one can never mark newer work as saved —
+the failure mode that silently resurrects deleted walls. Directly asserted in
+`WorldAutosaveManager.spec.ts`.
+
+### Save status and failure handling
+
+`SaveStatus` is a four-state machine (`saved` / `dirty` / `saving` / `error`) surfaced as a small
+unobtrusive corner indicator that only becomes prominent when it needs attention. A failed write
+keeps the world dirty _and_ keeps the in-memory world intact — the pause menu then offers **Retry
+Save** and **Export Backup**, because a storage failure should never mean the session's work is gone.
+
+`navigator.storage.persist()` is requested once, right after the player creates real world data —
+not on first page load, which is how you train people to decline.
+
+### Thumbnails
+
+Captured at milestones only — manual save, quitting to the Worlds screen, and at most every five
+minutes during autosave — never on the autosave cadence. Rendered to a 320×180 WebP at quality 0.7,
+cover-fit so the view isn't squashed, and stored in their own IndexedDB store. **Thumbnail failure
+never fails a save**: it's optional metadata, so a world writes successfully whether or not a
+screenshot could be produced.
+
+### Export package (`.forestworld`)
+
+A ZIP holding three entries:
+
+```
+manifest.json     format, versions, world id/name, exportedAt, applicationVersion, checksum
+world.json        the WorldDefinition
+thumbnail.webp    optional
+```
+
+Deflate at level 6 for the JSON (building data is extremely repetitive and compresses roughly an
+order of magnitude — asserted in the tests); the thumbnail is stored uncompressed since WebP is
+already compressed. The manifest sits _outside_ the compressed payload so provenance and the checksum
+can be read before anything large is decompressed. The checksum (FNV-1a over the exact `world.json`
+bytes) detects accidental corruption — a truncated download, a mangled transfer. It is deliberately
+**not** a signature, and imports are treated as untrusted regardless of whether it matches.
+
+Everything happens locally in the browser; no backend is involved.
+
+### Import validation
+
+Imported files are hostile input until proven otherwise, and nothing is instantiated — no Three.js
+geometry is built — until all of this has passed:
+
+1. Package size ceiling, checked _before_ decompressing (a zip bomb's compressed size is the first
+   thing that can be checked, so it is).
+2. Manifest present, correct `format`, `formatVersion` not from a newer build.
+3. Checksum matches.
+4. World JSON size ceiling, then parse.
+5. Migration to the current schema.
+6. Full structural validation: types, finite numbers, known enums, valid colour strings, and
+   **record-count limits** — a file declaring five hundred million walls is rejected rather than
+   frozen over.
+7. **Relationship integrity**: every wall/slab/stair/level must reference a foundation that exists in
+   the same file, and the saved active foundation must exist. A file can be perfectly valid JSON and
+   still describe a building hanging off nothing.
+
+An id collision **never overwrites**. Re-importing a world you already have produces a second copy,
+because silently replacing someone's current save with an older exported version of it is a data-loss
+bug wearing a convenience feature's clothing.
+
+### Schema versioning and migrations
+
+`schemaVersion` starts at 1 and is versioned from day one. `WorldMigrationManager` holds sequential
+`N → N+1` steps; loading or importing an older world migrates it in memory, validates it, and writes
+the upgraded form back so the cost is paid once. A world from a **newer** schema is refused with an
+actionable message ("Please update the game") rather than guessed at — silently dropping unrecognised
+fields would quietly corrupt someone's world.
+
+Application version and schema version are deliberately separate concepts: a release doesn't imply a
+schema change, and vice versa.
+
+### Loading a world
+
+```
+read stored WorldDefinition → migrate → validate → apply environment settings (in place)
+→ foundations → buildings → levels → procedural overrides → player position → prime nearby chunks
+```
+
+Environment settings are copied _into_ the existing settings objects rather than replacing them:
+every manager, tool and GUI controller holds a reference to those exact instances. Only chunks near
+the player are generated — the infinite world keeps using ordinary proximity-based loading, and
+loading a world never depends on a generated chunk cache existing.
+
+### Worlds UI
+
+```
+MY WORLDS                          in-world:  Esc → Resume / Save / World / Settings / Quit to Worlds
+[ + New World ] [ Import World ]              World → Rename / Export World / Duplicate World
+┌─────────────────────────────┐
+│ [thumb]  Forest House       │
+│          Updated 2m ago     │
+│          1.8 MB   [Play][…] │
+└─────────────────────────────┘
+```
+
+Each row's `…` menu holds Play / Rename / Duplicate / Export / Delete. Deleting asks for confirmation
+and offers **Export Backup** first — unlike deleting a wall, it isn't undoable. `Cmd/Ctrl+S` saves
+(and suppresses the browser's own save-page action), but only in-game and never while typing.
+
+### Ready for cloud worlds later, without building them now
+
+Cloud saving, accounts, and multiplayer sync are explicitly **not** implemented. What _is_ in place
+is the seam they'd need: game code talks only to the `WorldRepository` interface, never to IndexedDB,
+so a `CloudWorldRepository` slots in without touching a single building manager. The concepts that
+make remote synchronisation possible — a stable world `id`, a `schemaVersion`, and a monotonic
+`saveRevision` that detects stale and diverged writes — are already the ones this system runs on
+locally.
+
+### Measured sizes and timings
+
+Measured in a real browser session (`tests/worldPersistence.e2e.ts` prints these):
+
+| World                                                                                                          | Stored size      |
+| -------------------------------------------------------------------------------------------------------------- | ---------------- |
+| Walked around in for several seconds — hundreds of terrain chunks and thousands of trees generated             | **3,093 bytes**  |
+| 300 walls, each with a window opening and a paint colour, plus a foundation, a level and 3 removed-tree deltas | **82,092 bytes** |
+
+The first number is the important one: exploring generates a great deal of world and adds _nothing_
+to the save, because all of it is reproducible from the seed. Size tracks authored content only —
+roughly 270 bytes per fully-specified wall — and the export package compresses that by about 4×.
+
+**Synchronous cost of a save: 0.20 ms.** That's capture plus serialization on the main thread, the
+only part that could stall a frame; the IndexedDB write itself is asynchronous. Well under a 16 ms
+frame budget, and it runs on a debounce rather than per edit, so autosave doesn't appear in frame
+timings at all.
+
+### Tests
+
+- **Vitest** (`world/__tests__/`, 100+ cases): full round trip of every authored building type;
+  openings, materials and stair-owned slab openings; player state precision and spawn sanitisation;
+  seed/settings preserved against changed application defaults; procedural trees never written while
+  removed-tree deltas are; create/rename/duplicate/delete semantics (new id, fresh timestamps, deep
+  copy, thumbnail carried across); import as copy on id collision; malformed/corrupt/newer-schema
+  packages rejected; autosave debouncing, cadence, status machine, failure handling, and the
+  stale-write guard; migration and future-schema refusal; validation of numbers, enums, colours,
+  relationships and record-count limits; revision counters on every mutation path.
+- **Playwright** (`tests/worlds.e2e.ts`): Worlds screen and empty state; create → play → list; survives
+  a full reload; pause-menu save and `Cmd/Ctrl+S`; quit to Worlds tears the renderer down; rename;
+  duplicate; delete-with-confirmation (including cancel); export a real downloaded file and import it
+  back as a separate copy; invalid file rejected with a message; listing worlds without starting a
+  renderer.
+
+### Not implemented yet
+
+- **Cloud/multiplayer worlds** — deliberately out of scope; see the seam described above.
+- **Explicit "replace this world" on import** — an id collision always imports as a copy today.
+- **Web Worker compression for export** — worlds compress in well under a frame at current sizes;
+  the seam to move it off-thread is `createWorldPackage`, if large builds ever make it worth doing.
+- **Per-section incremental persistence** — a world is written as one atomic record. The repository
+  interface is shaped so foundations/buildings/overrides could be split into separate records later,
+  but that complexity isn't earned yet.
+- **Auto-resume the last world on launch** — the Worlds screen is always the entry point.
+
 ## Testing
 
 ```sh
-npm run test:unit   # Vitest — terrain determinism/seams, biome regions, vegetation, foundation math, grid snapping, click routing, sky/atmosphere math, graphics presets
-npm run test:e2e    # Playwright — canvas renders, hotbar + Foundation slot exist, sky + its GUI sections render, graphics quality cycling, no errors
+npm run test:unit   # Vitest — terrain determinism/seams, biome regions, vegetation, foundation math, grid snapping, click routing, sky/atmosphere math, graphics presets, world persistence
+npm run test:e2e    # Playwright — worlds screen + save/load lifecycle, canvas renders, hotbar + Foundation slot exist, sky + its GUI sections render, graphics quality cycling, no errors
 npm run test        # both
 ```
 

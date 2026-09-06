@@ -31,6 +31,8 @@ export class FoundationManager {
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly foundations = new Map<string, FoundationEntry>();
 	private showBounds = false;
+	/** Monotonic change counter polled by world persistence — see BuildingManager.revision for why this exists rather than re-serializing to detect changes. */
+	private revision = 0;
 
 	/**
 	 * `materialManager` is optional — most tests exercising this class care about foundation
@@ -46,6 +48,7 @@ export class FoundationManager {
 	}
 
 	addFoundation(definition: FoundationDefinition): void {
+		this.revision++;
 		const material = this.materialManager.getMaterial('foundation', definition.material);
 		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), material);
 		mesh.setBoundsVisible(this.showBounds);
@@ -55,6 +58,7 @@ export class FoundationManager {
 
 	/** Sets (or, given `undefined`, clears) a foundation's material override — visual only, never touching its grid footprint, `topY`/`bottomY`, or collision. A no-op returning `false` if the foundation isn't found. */
 	setMaterial(id: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
 		entry.definition = { ...entry.definition, material };
@@ -63,12 +67,17 @@ export class FoundationManager {
 	}
 
 	removeFoundation(id: string): boolean {
+		this.revision++;
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
 		this.group.remove(entry.mesh.object);
 		entry.mesh.dispose();
 		this.foundations.delete(id);
 		return true;
+	}
+
+	getRevision(): number {
+		return this.revision;
 	}
 
 	getFoundation(id: string): FoundationDefinition | undefined {
@@ -136,6 +145,7 @@ export class FoundationManager {
 
 	/** Replaces all current foundations with the given definitions (e.g. loaded from a future server/database). */
 	load(definitions: FoundationDefinition[]): void {
+		this.revision++;
 		for (const id of Array.from(this.foundations.keys())) this.removeFoundation(id);
 		for (const definition of definitions) this.addFoundation(definition);
 	}

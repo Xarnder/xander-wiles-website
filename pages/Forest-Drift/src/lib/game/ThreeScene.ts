@@ -10,7 +10,14 @@ import { DoorTool } from './building/DoorTool';
 import { FloorTool } from './building/FloorTool';
 import { FoundationManager } from './building/FoundationManager';
 import { FoundationTool } from './building/FoundationTool';
-import type { BuildingSettings, BuildUiState, HotbarUiState } from './building/FoundationTypes';
+import type {
+	BuildingSettings,
+	BuildUiState,
+	FoundationDefinition,
+	HotbarUiState
+} from './building/FoundationTypes';
+import type { BuildingLevelDefinition } from './building/BuildingLevelTypes';
+import type { FoundationBuildingDefinition } from './building/WallTypes';
 import { vertexSpacingFor } from './building/foundationMath';
 import type { PaintUiState } from './building/PaintTool';
 import { PaintTool } from './building/PaintTool';
@@ -42,16 +49,56 @@ import { resolveFogColor } from './sky/atmosphereMath';
 import { CloudSystem } from './sky/CloudSystem';
 import { HdriEnvironmentSystem } from './sky/HdriEnvironmentSystem';
 import { SkySystem } from './sky/SkySystem';
-import type { SkySettings } from './sky/SkyTypes';
+import { createDefaultSkySettings, type SkySettings } from './sky/SkyTypes';
 import { worldToChunkCoord } from './terrain/chunkKey';
 import { terrainMaterial } from './terrain/TerrainChunk';
 import { TerrainManager } from './terrain/TerrainManager';
-import type { TerrainSettings } from './terrain/TerrainSettings';
+import { createDefaultTerrainSettings, type TerrainSettings } from './terrain/TerrainSettings';
 import { TreeManager } from './vegetation/TreeManager';
-import type { VegetationSettings } from './vegetation/VegetationTypes';
+import {
+	createDefaultVegetationSettings,
+	type VegetationSettings
+} from './vegetation/VegetationTypes';
+import type { WorldRevisionCounters, WorldRuntime } from './world/WorldSerializer';
+import { sanitizePlayerState } from './world/WorldSerializer';
+import {
+	createEmptyProceduralOverrides,
+	type ProceduralWorldOverrides,
+	type SavedPlayerState,
+	type WorldDefinition,
+	type WorldEnvironmentDefinition
+} from './world/WorldTypes';
 
 /** Sun light offset distance (world units) from the camera — see updateSunLightPosition(). */
 const SUN_LIGHT_DISTANCE = 300;
+
+/**
+ * Recursively copies `source`'s own values into `target`, keeping `target`'s object identity at
+ * every level.
+ *
+ * Loading a world must not swap the settings *objects*: every manager, build tool and lil-gui
+ * controller captured a reference to the exact instances created at startup, so replacing them would
+ * leave half the game reading a settings object nothing else can see. Assigning into them in place
+ * keeps one authoritative instance per settings tree, which is the same reason the debug GUI mutates
+ * these objects rather than emitting new ones.
+ */
+function deepAssign<T extends object>(target: T, source: Partial<T>): void {
+	for (const [key, value] of Object.entries(source)) {
+		const current = (target as Record<string, unknown>)[key];
+		if (
+			value !== null &&
+			typeof value === 'object' &&
+			!Array.isArray(value) &&
+			current !== null &&
+			typeof current === 'object' &&
+			!Array.isArray(current)
+		) {
+			deepAssign(current as object, value as object);
+		} else if (value !== undefined) {
+			(target as Record<string, unknown>)[key] = Array.isArray(value) ? [...value] : value;
+		}
+	}
+}
 
 /** Player's horizontal collision radius against building walls — see resolveHorizontalCollision wiring below. */
 const PLAYER_COLLISION_RADIUS = 0.35;
@@ -99,6 +146,13 @@ export interface ThreeSceneOptions {
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
+	/**
+	 * The world to open. Its `environment` settings are copied into the live settings objects and
+	 * its authored content is loaded, so the scene starts as an exact reproduction of the save
+	 * rather than as defaults that are then patched. Omitted only by tests/tools that want a
+	 * scratch scene.
+	 */
+	world?: WorldDefinition;
 }
 
 /**
@@ -113,7 +167,7 @@ export interface ThreeSceneOptions {
  * generation must keep using true logical world coordinates so it stays deterministic and
  * multiplayer-compatible. That rebasing step is intentionally not implemented yet.
  */
-export class ThreeScene {
+export class ThreeScene implements WorldRuntime {
 	private readonly container: HTMLElement;
 	private readonly settings: TerrainSettings;
 	private readonly vegetationSettings: VegetationSettings;
@@ -155,9 +209,18 @@ export class ThreeScene {
 	private readonly graphicsSettings: GraphicsSettings;
 	private readonly graphicsSettingsStore = new GraphicsSettingsStore();
 	private readonly graphicsPipeline: GraphicsPipeline;
-	/** The GUI-set view distances at startup — quality-driven render-distance scaling (see applyRenderDistanceForQuality) always derives from these fixed baselines, never from its own previous output, so repeated quality switching can't compound the scaling down to nothing. */
-	private readonly baseTerrainViewDistance: number;
-	private readonly baseTreeViewDistanceChunks: number;
+	/**
+	 * The world's own view distances — quality-driven render-distance scaling (see
+	 * applyRenderDistanceForQuality) always derives from these fixed baselines, never from its own
+	 * previous output, so repeated quality switching can't compound the scaling down to nothing.
+	 * Re-established when a world is loaded, since the saved world defines the baseline and the local
+	 * graphics preset only scales it.
+	 */
+	private baseTerrainViewDistance: number;
+	private baseTreeViewDistanceChunks: number;
+
+	/** Bumped whenever world-defining generation settings change (debug GUI edits, world load). Polled by world persistence — see WorldRevisionCounters. */
+	private environmentRevision = 0;
 
 	private readonly skySystem: SkySystem;
 	private readonly cloudSystem: CloudSystem;
@@ -487,15 +550,21 @@ export class ThreeScene {
 
 		this.gui = new TerrainDebugGui(this.settings, {
 			onTopologyChange: () => {
+				this.environmentRevision++;
 				this.dirty.topology = true;
 			},
 			onViewDistanceChange: () => {
+				// View distance is a local performance choice, not part of the world's definition, so
+				// it deliberately doesn't bump `environmentRevision` — see normalizeEnvironmentForSave.
+				this.baseTerrainViewDistance = this.settings.viewDistance;
 				this.dirty.viewDistance = true;
 			},
 			onSettingsChange: () => {
+				this.environmentRevision++;
 				this.dirty.settings = true;
 			},
 			onSeedChange: () => {
+				this.environmentRevision++;
 				this.dirty.seed = true;
 			},
 			onRenderingChange: () => {
@@ -522,16 +591,22 @@ export class ThreeScene {
 		});
 		this.gui.addVegetationFolder(options.vegetationSettings, {
 			onSettingsChange: () => {
+				this.environmentRevision++;
 				this.dirty.vegetationSettings = true;
 			},
 			onViewDistanceChange: () => {
+				// Local performance choice, not world definition — see onViewDistanceChange above.
+				this.baseTreeViewDistanceChunks = options.vegetationSettings.loading.treeViewDistanceChunks;
 				this.dirty.vegetationViewDistance = true;
 			},
 			onBorderToggle: () => {
 				this.treeManager.setBorderVisibility(options.vegetationSettings.debug.showTreeChunkBorders);
 			}
 		});
-		this.gui.addSkyFolder(this.skySettings, () => this.applySkySettings());
+		this.gui.addSkyFolder(this.skySettings, () => {
+			this.environmentRevision++;
+			this.applySkySettings();
+		});
 		this.gui.addGraphicsFolder(this.graphicsSettings, {
 			onQualityChange: () => this.graphicsPipeline.setQuality(this.graphicsSettings.quality),
 			onSettingsChange: () => this.graphicsPipeline.refreshAdvancedSettings(),
@@ -554,7 +629,73 @@ export class ThreeScene {
 		this.resizeObserver.observe(this.container);
 		this.handleResize();
 
+		// Loading happens last, after every manager and tool exists, so restoring a world is exactly
+		// the same code path as building one interactively — nothing has to be "pre-seeded" during
+		// construction, which is what keeps load and play from drifting apart.
+		if (options.world) this.loadWorld(options.world);
+
 		this.animationFrameId = requestAnimationFrame(this.animate);
+	}
+
+	/**
+	 * Reproduces a saved world in the running scene.
+	 *
+	 * Order matters and is not arbitrary: environment settings first (so terrain/vegetation
+	 * regenerate from the right parameters and seed), then foundations (walls reference them), then
+	 * buildings and levels, then procedural overrides, and the player last. Nothing here creates
+	 * geometry directly — it hands logical definitions to the same managers the build tools use, and
+	 * they rebuild meshes, collision and picking data themselves.
+	 */
+	private loadWorld(world: WorldDefinition): void {
+		this.applyEnvironment(world.environment, world.seed);
+
+		this.foundationManager.load(structuredClone(world.foundations));
+		this.buildingManager.load(structuredClone(world.buildings));
+		this.levelManager.load(structuredClone(world.buildingLevels));
+
+		this.treeManager.setRemovedTreeIds(world.proceduralOverrides?.removedTreeIds ?? []);
+
+		const player = sanitizePlayerState(world.player);
+		if (world.saveRevision > 1 || player.position.y !== 0) {
+			this.controller.restoreState(player.position, player.yaw, player.pitch);
+		} else {
+			// A never-played world has no meaningful saved position; spawn onto the terrain surface
+			// rather than restoring the placeholder (0,0,0), which would drop the player underground.
+			this.controller.spawn(player.position.x, player.position.z);
+		}
+		if (player.currentLevelIndexByFoundation) {
+			this.levelManager.restoreCurrentLevelIndexes(player.currentLevelIndexByFoundation);
+		}
+		if (player.activeFoundationId)
+			this.levelManager.lockActiveFoundation(player.activeFoundationId);
+
+		this.terrainManager.primeAround(player.position.x, player.position.z, 1);
+	}
+
+	/**
+	 * Copies a saved environment into the live settings objects *in place* rather than replacing
+	 * them: every manager, tool and GUI controller holds a reference to these exact objects, so
+	 * swapping the references would leave half the game reading a stale settings instance.
+	 */
+	private applyEnvironment(environment: WorldEnvironmentDefinition, seed: string): void {
+		this.environmentRevision++;
+
+		deepAssign(this.settings, environment.terrain);
+		this.settings.seed = seed;
+		deepAssign(this.vegetationSettings, environment.vegetation);
+		deepAssign(this.skySettings, environment.sky);
+
+		// The saved view distances are the world's own baseline; the active graphics preset re-applies
+		// its multiplier on top (see applyRenderDistanceForQuality), so a world never inherits the
+		// render distance of whatever machine last saved it.
+		this.baseTerrainViewDistance = this.settings.viewDistance;
+		this.baseTreeViewDistanceChunks = this.vegetationSettings.loading.treeViewDistanceChunks;
+		this.applyRenderDistanceForQuality(this.graphicsSettings.quality);
+
+		this.terrainManager.notifyTopologyChanged();
+		this.terrainManager.notifySeedChanged();
+		this.treeManager.notifySeedChanged(seed);
+		this.applySkySettings();
 	}
 
 	/** Lets the Svelte hotbar UI's trash icon toggle Remove Mode by click, in addition to the `X` key shortcut. */
@@ -608,6 +749,124 @@ export class ThreeScene {
 	/** `L` cycles LOW → MEDIUM → HIGH → ULTRA → LOW, applies live (no reload, no world rebuild), and persists the choice — see GraphicsSettingsStore. Returns the newly-active quality so the caller (the `L`-key handler in +page.svelte) can show the "Graphics: X" HUD notification. */
 	cycleGraphicsQuality(): GraphicsQuality {
 		return this.graphicsPipeline.cycleQuality();
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// WorldRuntime — the persistence port (see world/WorldSerializer.ts).
+	//
+	// These are the ONLY methods world persistence may call on the running game, and every one of
+	// them returns plain logical data. Nothing here can reach a mesh, a geometry or a chunk cache,
+	// which is what structurally guarantees the save format stays "the world" and never becomes "the
+	// renderer's current contents".
+	// ---------------------------------------------------------------------------------------------
+
+	/**
+	 * The world's generation settings, normalized so local machine preferences can't leak into a
+	 * shared world: view distances are reported as the world's own baselines rather than whatever
+	 * the active graphics preset scaled them to, and debug-view toggles are reset. Everything that
+	 * genuinely defines how the world *looks* is included in full, including values equal to today's
+	 * defaults — application defaults drift, and a world must keep looking like itself when they do.
+	 */
+	getEnvironment(): WorldEnvironmentDefinition {
+		const terrain: TerrainSettings = {
+			...structuredClone(this.settings),
+			viewDistance: this.baseTerrainViewDistance,
+			rendering: createDefaultTerrainSettings().rendering
+		};
+		const vegetation: VegetationSettings = structuredClone(this.vegetationSettings);
+		vegetation.loading = {
+			...vegetation.loading,
+			treeViewDistanceChunks: this.baseTreeViewDistanceChunks
+		};
+		vegetation.debug = createDefaultVegetationSettings().debug;
+		const sky: SkySettings = structuredClone(this.skySettings);
+		sky.debug = createDefaultSkySettings().debug;
+		return { terrain, vegetation, sky };
+	}
+
+	getFoundations(): FoundationDefinition[] {
+		return this.foundationManager.serialize();
+	}
+
+	getBuildings(): FoundationBuildingDefinition[] {
+		return this.buildingManager.serialize();
+	}
+
+	getBuildingLevels(): BuildingLevelDefinition[] {
+		return this.levelManager.serialize();
+	}
+
+	getPlayerState(): SavedPlayerState {
+		const position = this.controller.worldPosition;
+		return {
+			position: { x: position.x, y: position.y, z: position.z },
+			yaw: this.controller.getYaw(),
+			pitch: this.controller.getPitch(),
+			activeFoundationId: this.levelManager.getActiveFoundationId() ?? undefined,
+			currentLevelIndexByFoundation: this.levelManager.getCurrentLevelIndexes()
+		};
+	}
+
+	getProceduralOverrides(): ProceduralWorldOverrides {
+		return {
+			...createEmptyProceduralOverrides(),
+			removedTreeIds: this.treeManager.getRemovedTreeIds()
+		};
+	}
+
+	getRevisionCounters(): WorldRevisionCounters {
+		return {
+			structural:
+				this.buildingManager.getRevision() +
+				this.foundationManager.getRevision() +
+				this.levelManager.getRevision(),
+			environment: this.environmentRevision,
+			procedural: this.treeManager.getOverrideRevision()
+		};
+	}
+
+	/**
+	 * A small snapshot of the canvas for the Worlds browser.
+	 *
+	 * Re-renders once immediately before reading the canvas: with `preserveDrawingBuffer` left off
+	 * (the default, and the faster one for every other frame the game draws), the buffer is not
+	 * guaranteed to still hold the last frame by the time this runs. Failure is non-fatal by design —
+	 * a world must never fail to save because a screenshot could not be produced.
+	 */
+	async captureThumbnail(width = 320, height = 180): Promise<Blob | null> {
+		try {
+			this.graphicsPipeline.render();
+			const source = this.renderer.domElement;
+			if (source.width === 0 || source.height === 0) return null;
+
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			const context = canvas.getContext('2d');
+			if (!context) return null;
+
+			// Cover-fit: crop to the thumbnail's aspect rather than squashing the view.
+			const sourceAspect = source.width / source.height;
+			const targetAspect = width / height;
+			let sx = 0;
+			let sy = 0;
+			let sw = source.width;
+			let sh = source.height;
+			if (sourceAspect > targetAspect) {
+				sw = source.height * targetAspect;
+				sx = (source.width - sw) / 2;
+			} else {
+				sh = source.width / targetAspect;
+				sy = (source.height - sh) / 2;
+			}
+			context.drawImage(source, sx, sy, sw, sh, 0, 0, width, height);
+
+			return await new Promise<Blob | null>((resolve) => {
+				canvas.toBlob((blob) => resolve(blob), 'image/webp', 0.7);
+			});
+		} catch {
+			return null;
+		}
 	}
 
 	/** Debug GUI's "Export Settings" button — prints the current AO tuning (plus exposure/quality/dynamic-resolution) as JSON to the console and tries to copy it to the clipboard, so a value dialed in by eye can be handed back as new code defaults. */

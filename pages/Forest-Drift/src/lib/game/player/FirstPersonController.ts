@@ -151,6 +151,34 @@ export class FirstPersonController {
 		this.syncCamera();
 	}
 
+	getYaw(): number {
+		return this.yaw;
+	}
+
+	getPitch(): number {
+		return this.pitch;
+	}
+
+	/**
+	 * Restores a saved position and look direction on world load.
+	 *
+	 * Deliberately resets every *transient* movement value rather than restoring it: vertical
+	 * velocity, held keys and grounded state are runtime input, not world content, and a world that
+	 * reloaded you mid-fall with keys still "held" would be reproducing a moment rather than a place.
+	 * Non-finite input is rejected here as a last line of defence even though WorldSerializer
+	 * sanitizes first, because stranding a player at `NaN` is unrecoverable without devtools.
+	 */
+	restoreState(position: { x: number; y: number; z: number }, yaw: number, pitch: number): void {
+		if (![position.x, position.y, position.z, yaw, pitch].every(Number.isFinite)) return;
+		this.worldPosition.set(position.x, position.y, position.z);
+		this.yaw = yaw;
+		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
+		this.verticalVelocity = 0;
+		this.grounded = false;
+		this.keys.clear();
+		this.syncCamera();
+	}
+
 	update(deltaSeconds: number): void {
 		const forward = this.keys.has('KeyW') ? 1 : 0;
 		const backward = this.keys.has('KeyS') ? 1 : 0;

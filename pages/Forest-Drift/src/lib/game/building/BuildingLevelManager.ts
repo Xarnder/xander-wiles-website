@@ -44,6 +44,9 @@ export class BuildingLevelManager {
 	private activeFoundationId: string | null = null;
 	private foundationLocked = false;
 
+	/** Monotonic change counter polled by world persistence — see BuildingManager.revision. */
+	private revision = 0;
+
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (event.code === 'PageUp') {
 			this.moveUp();
@@ -57,8 +60,27 @@ export class BuildingLevelManager {
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
+	getRevision(): number {
+		return this.revision;
+	}
+
 	getActiveFoundationId(): string | null {
 		return this.activeFoundationId;
+	}
+
+	/** The per-foundation "current storey" map, for saving alongside player state — restored by `restoreCurrentLevelIndexes`. */
+	getCurrentLevelIndexes(): Record<string, number> {
+		return Object.fromEntries(this.currentIndexByFoundation);
+	}
+
+	/** Restores saved per-foundation storey selection on world load, without going through `setCurrentLevelIndex`'s clamping/UI notification for each entry. */
+	restoreCurrentLevelIndexes(indexes: Record<string, number>): void {
+		this.revision++;
+		this.currentIndexByFoundation.clear();
+		for (const [foundationId, index] of Object.entries(indexes)) {
+			if (Number.isFinite(index))
+				this.currentIndexByFoundation.set(foundationId, Math.trunc(index));
+		}
 	}
 
 	isFoundationLocked(): boolean {
@@ -111,6 +133,7 @@ export class BuildingLevelManager {
 	}
 
 	setCurrentLevelIndex(foundationId: string, index: number): void {
+		this.revision++;
 		this.currentIndexByFoundation.set(foundationId, Math.max(0, Math.round(index)));
 		if (foundationId === this.activeFoundationId) this.syncSettingsMirror();
 	}
@@ -124,6 +147,7 @@ export class BuildingLevelManager {
 	 * no-op. Does nothing if no foundation is currently active.
 	 */
 	moveUp(): void {
+		this.revision++;
 		const foundationId = this.activeFoundationId;
 		if (!foundationId) return;
 
@@ -139,6 +163,7 @@ export class BuildingLevelManager {
 
 	/** Moves the active foundation's current level down one step; never below Ground Floor (index 0), and a no-op there. Does nothing if no foundation is currently active. */
 	moveDown(): void {
+		this.revision++;
 		const foundationId = this.activeFoundationId;
 		if (!foundationId) return;
 
@@ -177,6 +202,7 @@ export class BuildingLevelManager {
 	 * its `wallHeight` is the *current* `defaultStoreyHeight` setting, captured once.
 	 */
 	getOrCreateLevel(foundationId: string, index: number): BuildingLevelDefinition {
+		this.revision++;
 		if (index < 0) throw new Error('Building levels cannot be negative');
 
 		const existing = this.getLevel(foundationId, index);
@@ -199,6 +225,7 @@ export class BuildingLevelManager {
 	}
 
 	removeLevelsForFoundation(foundationId: string): void {
+		this.revision++;
 		this.levels.delete(foundationId);
 		this.currentIndexByFoundation.delete(foundationId);
 		if (this.activeFoundationId === foundationId) {
@@ -220,6 +247,7 @@ export class BuildingLevelManager {
 	 * own invariant.
 	 */
 	discoverLevelsFromBuilding(foundationId: string, building: FoundationBuildingDefinition): void {
+		this.revision++;
 		if (this.getLevelsForFoundation(foundationId).length > 0) return;
 
 		const rawYs = [0];
@@ -257,6 +285,7 @@ export class BuildingLevelManager {
 
 	/** Replaces all current level state with the given definitions — trusts the input, same as FoundationManager.load(). */
 	load(definitions: readonly BuildingLevelDefinition[]): void {
+		this.revision++;
 		this.levels.clear();
 		for (const level of definitions) {
 			const list = this.levels.get(level.foundationId) ?? [];

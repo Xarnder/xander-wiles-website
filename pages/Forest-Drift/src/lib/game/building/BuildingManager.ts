@@ -137,6 +137,18 @@ export class BuildingManager {
 	private readonly getBuildingGridSize: () => number;
 	private readonly getCornerOpeningMargin: () => number;
 
+	/**
+	 * Bumped by every mutating method on this facade. World persistence polls it (see
+	 * WorldAutosaveManager) to answer "has anything changed?" in a single integer comparison rather
+	 * than by re-serializing the building state a few times a second.
+	 *
+	 * Bumped on entry rather than only on success, so a rejected placement can cost one redundant
+	 * save. That's the deliberate trade: over-saving is invisible, whereas a missed bump silently
+	 * loses a player's work, and every mutating path through this class — including the paint methods
+	 * that mutate a definition in place before asking a manager to rebuild — is covered by construction.
+	 */
+	private revision = 0;
+
 	constructor(options: BuildingManagerOptions) {
 		this.foundationManager = options.foundationManager;
 		this.wallManager = options.wallManager;
@@ -148,7 +160,13 @@ export class BuildingManager {
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
 	}
 
+	/** Monotonic change counter — see the `revision` field's doc comment. */
+	getRevision(): number {
+		return this.revision;
+	}
+
 	addWall(params: AddWallParams): BuildingMutationResult<WallDefinition> {
+		this.revision++;
 		const { start, end } = params;
 
 		if (start.foundationId !== end.foundationId) {
@@ -199,6 +217,7 @@ export class BuildingManager {
 	}
 
 	removeWall(wallId: string): boolean {
+		this.revision++;
 		return this.wallManager.removeWall(wallId);
 	}
 
@@ -211,6 +230,7 @@ export class BuildingManager {
 	 * about the join is decided or stored here.
 	 */
 	addWallPath(params: AddWallPathParams): BuildingMutationResult<WallPathDefinition> {
+		this.revision++;
 		const { points, closed } = params;
 		if (points.length < 2) {
 			return { valid: false, reason: 'A wall path needs at least 2 points' };
@@ -288,6 +308,7 @@ export class BuildingManager {
 	}
 
 	removeWallPath(pathId: string): boolean {
+		this.revision++;
 		return this.wallPathManager.removePath(pathId);
 	}
 
@@ -313,6 +334,7 @@ export class BuildingManager {
 	 * see WallPathGeometryBuilder, which always computes joins from the CURRENT point sequence alone).
 	 */
 	removeWallSegment(pathId: string, segmentId: string): boolean {
+		this.revision++;
 		const path = this.wallPathManager.getPath(pathId);
 		if (!path) return false;
 		const index = path.segments.findIndex((s) => s.id === segmentId);
@@ -370,6 +392,7 @@ export class BuildingManager {
 	 * floor pair without needing an explicit "usages" flag).
 	 */
 	addSlab(params: AddSlabParams): BuildingMutationResult<SlabDefinition> {
+		this.revision++;
 		const { points } = params;
 		if (points.length === 0) return { valid: false, reason: 'Need at least 3 points' };
 
@@ -423,6 +446,7 @@ export class BuildingManager {
 	}
 
 	removeSlab(id: string): boolean {
+		this.revision++;
 		return this.slabManager.removeSlab(id);
 	}
 
@@ -443,6 +467,7 @@ export class BuildingManager {
 	 * above are enforced for v1.
 	 */
 	addStair(params: AddStairParams): BuildingMutationResult<StairDefinition> {
+		this.revision++;
 		const foundation = this.foundationManager.getFoundation(params.foundationId);
 		if (!foundation) return { valid: false, reason: 'Foundation not found' };
 
@@ -619,6 +644,7 @@ export class BuildingManager {
 	 * not inferred from overlapping position, per the README's "Removing stairs" section.
 	 */
 	removeStair(id: string): boolean {
+		this.revision++;
 		const removed = this.stairManager.removeStair(id);
 		if (!removed) return false;
 
@@ -664,6 +690,7 @@ export class BuildingManager {
 	}
 
 	addOpening(params: AddOpeningParams): BuildingMutationResult<WallOpeningDefinition> {
+		this.revision++;
 		const wall = this.getWall(params.wallId);
 		if (!wall) return { valid: false, reason: 'Wall not found' };
 
@@ -720,6 +747,7 @@ export class BuildingManager {
 	}
 
 	removeOpening(wallId: string, openingId: string): boolean {
+		this.revision++;
 		const standaloneWall = this.wallManager.getWall(wallId);
 		if (standaloneWall) {
 			const index = standaloneWall.openings.findIndex((opening) => opening.id === openingId);
@@ -799,6 +827,7 @@ export class BuildingManager {
 	 * nothing about the wall's shape is touched. Returns `false` for an unknown wall id.
 	 */
 	paintWall(wallId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
 		const wall = this.wallManager.getWall(wallId);
 		if (!wall) return false;
 		wall.material = material;
@@ -818,6 +847,7 @@ export class BuildingManager {
 		segmentId: string,
 		material: BuildingMaterialDefinition | undefined
 	): boolean {
+		this.revision++;
 		const path = this.wallPathManager.getPath(pathId);
 		if (!path) return false;
 		const segment = path.segments.find((s) => s.id === segmentId);
@@ -829,11 +859,13 @@ export class BuildingManager {
 
 	/** Paints (or resets) a slab (ceiling/floor/flat roof) — the whole physical slab, even when it's shared as one room's ceiling and the room above's floor (see SlabDefinition.material's doc comment). Returns `false` for an unknown slab id. */
 	paintSlab(slabId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
 		return this.slabManager.setMaterial(slabId, material);
 	}
 
 	/** Paints (or resets) a foundation — visual only; never touches its grid footprint, `topY`/`bottomY`, or collision (see FoundationDefinition.material's doc comment). Returns `false` for an unknown foundation id. */
 	paintFoundation(foundationId: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
 		return this.foundationManager.setMaterial(foundationId, material);
 	}
 
@@ -876,6 +908,7 @@ export class BuildingManager {
 	 * class doc comment), so it can't cascade them itself.
 	 */
 	removeBuildingForFoundation(foundationId: string): void {
+		this.revision++;
 		this.wallManager.removeWallsForFoundation(foundationId);
 		this.wallPathManager.removePathsForFoundation(foundationId);
 		this.slabManager.removeSlabsForFoundation(foundationId);
@@ -922,6 +955,7 @@ export class BuildingManager {
 	 * save.
 	 */
 	load(definitions: readonly FoundationBuildingDefinition[]): void {
+		this.revision++;
 		for (const wall of this.wallManager.getAllWalls()) this.wallManager.removeWall(wall.id);
 		for (const path of this.wallPathManager.getAllPaths()) this.wallPathManager.removePath(path.id);
 		for (const slab of this.slabManager.getAllSlabs()) this.slabManager.removeSlab(slab.id);

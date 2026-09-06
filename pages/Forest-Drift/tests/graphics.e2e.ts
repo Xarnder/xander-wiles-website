@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createAndEnterWorld, openWorldNamed } from './worldHelpers';
 
 const STORAGE_KEY = 'forest-drift.graphics.v1';
 
@@ -7,6 +8,7 @@ test('defaults to HIGH graphics quality on a fresh visit', async ({ page }) => {
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
@@ -20,6 +22,7 @@ test('L cycles graphics quality HIGH → ULTRA → LOW → MEDIUM → HIGH', asy
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	const stats = page.getByTestId('graphics-stats');
 	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 
@@ -36,6 +39,7 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 	page
 }) => {
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -79,6 +83,7 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 
 test('graphics quality persists across a reload', async ({ page }) => {
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -89,7 +94,10 @@ test('graphics quality persists across a reload', async ({ page }) => {
 	const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
 	expect(stored).toBe('ultra');
 
+	// Graphics quality is a *local preference*, not world state, so it survives a reload
+	// independently of any world — reopening any world shows it again.
 	await page.reload();
+	await openWorldNamed(page, 'Test World');
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics ULTRA', {
 		timeout: 10_000
 	});
@@ -102,6 +110,7 @@ test('L does not change graphics quality while typing into the paint palette col
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -123,11 +132,13 @@ test('L does not change graphics quality while typing into the paint palette col
 test('switching graphics quality repeatedly keeps the world running with no console errors', async ({
 	page
 }) => {
-	test.setTimeout(60_000);
+	// Boots a world and then rebuilds the entire shadow/postprocessing pipeline eight times.
+	test.setTimeout(180_000);
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	const stats = page.getByTestId('graphics-stats');
 	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 

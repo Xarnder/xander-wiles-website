@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createAndEnterWorld } from './worldHelpers';
 
 test('renders the world with no uncaught exceptions and loads at least one chunk', async ({
 	page
@@ -7,6 +8,7 @@ test('renders the world with no uncaught exceptions and loads at least one chunk
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	await expect(page.getByTestId('canvas-container')).toBeVisible();
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
@@ -21,6 +23,7 @@ test('renders the world with no uncaught exceptions and loads at least one chunk
 
 test('shows click-to-explore instructions before pointer lock is engaged', async ({ page }) => {
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page).toHaveTitle('Forest Drift');
 	await expect(page.getByAltText('Forest Drift')).toBeVisible();
 	await expect(page.getByText('Click to explore')).toBeVisible();
@@ -31,6 +34,7 @@ test('shows the hotbar with a Foundation slot, selectable with the 1 key', async
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const hotbar = page.getByTestId('hotbar');
 	await expect(hotbar).toBeVisible();
@@ -56,6 +60,7 @@ test('shows Wall, Window and Door hotbar slots and switches the active tool with
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const wallSlot = page.getByTestId('hotbar-slot-wall');
 	const windowSlot = page.getByTestId('hotbar-slot-window');
@@ -89,6 +94,7 @@ test('shows a Polygon/Continuous Wall hotbar slot in slot 5, selectable with the
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const polygonWallSlot = page.getByTestId('hotbar-slot-polygon-wall');
 	await expect(polygonWallSlot).toBeVisible();
@@ -109,6 +115,7 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	// Slot 2 (Wall), slot 5 (Polygon/Continuous Wall), slot 6 (Ceiling) — pressing C on each just
 	// needs to not throw; the resulting snap behavior itself is covered by polygonDrawSnap.spec.ts.
@@ -130,6 +137,7 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	await page.keyboard.press('2'); // Wall Tool — a level-aware tool
 	const floorSelector = page.getByTestId('floor-selector');
@@ -152,6 +160,7 @@ test('the build HUD does not sit underneath the debug GUI panel — its hints an
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await page.keyboard.press('3'); // Window tool — always emits a HUD, even with nothing targeted
 
 	const hud = page.getByTestId('build-hud');
@@ -180,6 +189,7 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it 
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	// The badge only (re-)renders once the tool's HUD is actually rebuilt (on a target change, or a
 	// `C` press forcing one) — with no foundation in view there's nothing to target here, so the
@@ -218,6 +228,7 @@ test('toggles the help overlay with the H key and the help button, listing contr
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const helpOverlay = page.getByTestId('help-overlay');
 	await expect(page.getByTestId('help-toggle')).toBeVisible();
@@ -247,6 +258,7 @@ test('shows Ceiling, Floor, Roof and Stairs hotbar slots in slots 6-9, and a lev
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const ceilingSlot = page.getByTestId('hotbar-slot-ceiling');
 	const floorSlot = page.getByTestId('hotbar-slot-floor');
@@ -290,6 +302,7 @@ test('shows the Building GUI folder with Grid, Walls, Windows and Doors sections
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
 	const buildingFolder = page.locator('.lil-title', { hasText: 'Building' }).first();
@@ -312,6 +325,7 @@ test('renders the sky and shows its GUI sections with no uncaught errors', async
 	page.on('console', (msg) => consoleMessages.push(msg.text()));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
 	const topLevelSkyFolder = page.locator('.lil-title', { hasText: 'Sky' }).first();
@@ -337,6 +351,7 @@ test('X toggles Remove Mode, shows a Remove HUD, and restores the previously sel
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	// Window (not Wall) — its HUD always renders something even with nothing targeted (see the
 	// "build HUD does not sit underneath the debug GUI panel" test above), so its absence here is a
@@ -375,6 +390,7 @@ test('clicking the hotbar trash icon toggles Remove Mode the same as the X key',
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const removeToggle = page.getByTestId('hotbar-remove-toggle');
 	await expect(removeToggle).toBeVisible();
@@ -394,6 +410,7 @@ test('selecting a hotbar slot while Remove Mode is active exits Remove Mode', as
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const removeToggle = page.getByTestId('hotbar-remove-toggle');
 	await expect(removeToggle).toBeVisible();
@@ -415,6 +432,7 @@ test('P toggles Paint Mode, shows a Paint HUD, and restores the previously selec
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	// Window (not Wall) — its HUD always renders something even with nothing targeted, same
 	// reasoning as the equivalent Remove Mode test above.
@@ -450,6 +468,7 @@ test('clicking the hotbar paint icon toggles Paint Mode the same as the P key', 
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const paintToggle = page.getByTestId('hotbar-paint-toggle');
 	await expect(paintToggle).toBeVisible();
@@ -469,6 +488,7 @@ test('selecting a hotbar slot while Paint Mode is active exits Paint Mode', asyn
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const paintToggle = page.getByTestId('hotbar-paint-toggle');
 	await expect(paintToggle).toBeVisible();
@@ -490,6 +510,7 @@ test('Remove Mode and Paint Mode are mutually exclusive — pressing one while t
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const removeToggle = page.getByTestId('hotbar-remove-toggle');
 	const paintToggle = page.getByTestId('hotbar-paint-toggle');
@@ -518,6 +539,7 @@ test('C opens the colour palette in Paint Mode, and it can be closed without exi
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 
 	const paintToggle = page.getByTestId('hotbar-paint-toggle');
 	await expect(paintToggle).toBeVisible();
@@ -546,6 +568,7 @@ test('selecting a colour swatch in the palette updates the HUD colour swatch', a
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await createAndEnterWorld(page);
 	await expect(page.getByTestId('hotbar-paint-toggle')).toBeVisible();
 
 	await page.keyboard.press('p');
