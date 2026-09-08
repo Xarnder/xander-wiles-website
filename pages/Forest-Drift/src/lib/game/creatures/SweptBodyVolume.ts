@@ -23,7 +23,8 @@ export function appendSweep(
 	volume: BodyVolumeDefinition,
 	points: Vec3[],
 	boneIndices: number[],
-	lod: 0 | 1
+	lod: 0 | 1,
+	subdivisions = lod === 0 ? 7 : 3
 ) {
 	if (points.length < 2) throw new Error('A sweep needs at least two joints');
 	const curve = new CatmullRomCurve3(
@@ -31,7 +32,7 @@ export function appendSweep(
 		false,
 		'centripetal'
 	);
-	const rings = Math.max(6, (points.length - 1) * (lod === 0 ? 7 : 3)),
+	const rings = Math.max(6, (points.length - 1) * subdivisions),
 		sides = lod === 0 ? 12 : 7,
 		start = out.positions.length / 3;
 	const normal = new Vector3(1, 0, 0);

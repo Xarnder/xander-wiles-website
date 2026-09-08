@@ -55,9 +55,27 @@ export interface GameSettingsActions {
 	musicWave: () => void;
 	musicVolume: () => void;
 	musicTrails: () => void;
+	creatureLab?: () => void;
+	creatureDemo?: () => void;
+	creatureEndDemo?: () => void;
+}
+
+/** Optional port keeps settings usable by scenes without an ecosystem runtime. */
+export interface CreatureSettingsPort {
+	state: { settings: { enabled: boolean; creatureDensity: number; maxActiveCreatures: number } };
+	debug: {
+		showSkeleton: boolean;
+		showBehaviourState: boolean;
+		showTarget: boolean;
+		showSpeciesId: boolean;
+		showIndividualId: boolean;
+		showLOD: boolean;
+	};
+	settingsChanged(): void;
 }
 
 export interface GameSettingsHost {
+	creatures?: CreatureSettingsPort;
 	terrain: TerrainSettings;
 	vegetation: VegetationSettings;
 	sky: SkySettings;

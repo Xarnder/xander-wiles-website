@@ -192,6 +192,7 @@ export class BuildingLevelManager {
 		return {
 			index,
 			baseY: level.baseY,
+			wallHeight: level.wallHeight,
 			displayName: levelDisplayName(index),
 			canMoveDown: index > 0,
 			canMoveUp:

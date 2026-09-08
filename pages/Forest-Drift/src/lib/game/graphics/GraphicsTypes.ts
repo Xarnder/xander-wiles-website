@@ -227,3 +227,44 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		aoTuning: createDefaultAoTuning()
 	};
 }
+
+/** Creature budgets are client performance preferences; ecology identities never depend on them. */
+export const CREATURE_GRAPHICS_BUDGETS: Record<
+	GraphicsQuality,
+	{
+		maxActive: number;
+		nearDistance: number;
+		smallRenderDistance: number;
+		populationRadius: number;
+		shadows: boolean;
+	}
+> = {
+	low: {
+		maxActive: 16,
+		nearDistance: 35,
+		smallRenderDistance: 90,
+		populationRadius: 320,
+		shadows: false
+	},
+	medium: {
+		maxActive: 25,
+		nearDistance: 50,
+		smallRenderDistance: 130,
+		populationRadius: 384,
+		shadows: true
+	},
+	high: {
+		maxActive: 40,
+		nearDistance: 70,
+		smallRenderDistance: 170,
+		populationRadius: 448,
+		shadows: true
+	},
+	ultra: {
+		maxActive: 50,
+		nearDistance: 80,
+		smallRenderDistance: 200,
+		populationRadius: 512,
+		shadows: true
+	}
+};

@@ -3,6 +3,7 @@
 	let creatureLabOpen = $state(false);
 	function openCreatureLab() {
 		session?.scene.closePlacementCustomize();
+		session?.scene.closePlacementHeight();
 		document.exitPointerLock?.();
 		if (session) session.scene.devPanelOpen = true;
 		settingsOpen = false;
@@ -22,6 +23,7 @@
 	function openMidi() {
 		if (!session) return;
 		session.scene.closePlacementCustomize();
+		session.scene.closePlacementHeight();
 		document.exitPointerLock?.();
 		session.scene.music.importPanelOpen = true;
 		midiOpen = true;
@@ -36,10 +38,11 @@
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
+	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
-	import { isCustomizablePlacementTool } from '$lib/game/building/FoundationTypes';
+	import { isCustomizablePlacementTool, isSlabHeightTool } from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
 	import { graphicsQualityLabel } from '$lib/game/graphics/GraphicsTypes';
 	import type { SceneStats } from '$lib/game/ThreeScene';
@@ -71,6 +74,7 @@
 	let settingsOpen = $state(false);
 	let paintPaletteOpen = $state(false);
 	let placementCustomizeOpen = $state(false);
+	let placementHeightOpen = $state(false);
 	let paintState = $state<PaintUiState | null>(null);
 	let graphicsNotice = $state<string | null>(null);
 
@@ -99,7 +103,8 @@
 			creatureLabOpen ||
 			midiOpen ||
 			paintPaletteOpen ||
-			placementCustomizeOpen
+			placementCustomizeOpen ||
+			placementHeightOpen
 		);
 	}
 
@@ -117,6 +122,13 @@
 		if (!current) return undefined;
 		const id = current.slots.find((slot) => slot.slot === current.activeSlot)?.toolId;
 		return id && isCustomizablePlacementTool(id) ? id : undefined;
+	});
+
+	const heightToolId = $derived.by(() => {
+		const current = hotbar;
+		if (!current) return undefined;
+		const id = current.slots.find((slot) => slot.slot === current.activeSlot)?.toolId;
+		return id && isSlabHeightTool(id) ? id : undefined;
 	});
 
 	const SNAP_MODE_TEXT: Record<'axis' | 'axis-inline' | 'wall-corners', string> = {
@@ -157,7 +169,10 @@
 	 * status indicator the menu is already showing.
 	 */
 	function togglePause() {
-		if (!paused) session?.scene.closePlacementCustomize();
+		if (!paused) {
+			session?.scene.closePlacementCustomize();
+			session?.scene.closePlacementHeight();
+		}
 		paused = !paused;
 		if (session) session.scene.simulationPaused = clockBlocked();
 		if (paused && session?.hasUnsavedChanges()) void session.saveNow('lifecycle');
@@ -166,6 +181,7 @@
 	function openPause() {
 		if (paused) return;
 		session?.scene.closePlacementCustomize();
+		session?.scene.closePlacementHeight();
 		document.exitPointerLock?.();
 		showHelp = false;
 		togglePause();
@@ -173,6 +189,7 @@
 
 	function openSettings() {
 		session?.scene.closePlacementCustomize();
+		session?.scene.closePlacementHeight();
 		document.exitPointerLock?.();
 		showHelp = false;
 		settingsOpen = true;
@@ -199,8 +216,12 @@
 			session?.scene.closePlacementCustomize();
 			return;
 		}
+		if (placementHeightOpen && event.code === 'Escape') {
+			session?.scene.closePlacementHeight();
+			return;
+		}
 		if (screen !== 'game' || typing) return;
-		if (placementCustomizeOpen) return;
+		if (placementCustomizeOpen || placementHeightOpen) return;
 		if (settingsOpen) {
 			if (event.code === 'Escape') closeSettings();
 			return;
@@ -342,6 +363,10 @@
 			onPlacementCustomizeChange: (open) => {
 				placementCustomizeOpen = open;
 				if (open) showHelp = false;
+			},
+			onPlacementHeightChange: (open) => {
+				placementHeightOpen = open;
+				if (open) showHelp = false;
 			}
 		});
 	}
@@ -371,6 +396,7 @@
 			midiOpen = false;
 			paintPaletteOpen = false;
 			placementCustomizeOpen = false;
+			placementHeightOpen = false;
 			stats = null;
 			hotbar = null;
 			buildHud = null;
@@ -565,19 +591,14 @@
 					WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc to release mouse
 				</p>
 				<p>
-					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc again for the menu &middot; H
-					for controls
+					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc again for the menu
+					&middot; H for controls
 				</p>
 			</div>
 		{/if}
 
 		<div class="utility-buttons">
-			<button
-				class="help-toggle"
-				data-testid="pause-toggle"
-				onclick={openPause}
-				aria-label="Pause"
-			>
+			<button class="help-toggle" data-testid="pause-toggle" onclick={openPause} aria-label="Pause">
 				Pause
 			</button>
 			<button
@@ -663,9 +684,10 @@
 						</dd>
 						<dt>C</dt>
 						<dd>
-							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
-							Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
-							snaps to the room's wall corners below
+							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline) on Wall and Continuous
+							Wall. On Path, C cycles Axis snap &rarr; Free &rarr; Bezier. On Ceiling, Floor, or
+							Roof, C opens the height panel (metres above this storey's floor). Shift+C on those
+							tools still cycles snap, including Wall Corners onto the room below.
 						</dd>
 						<dt>E</dt>
 						<dd>
@@ -688,6 +710,11 @@
 						<dd>Finish an open wall path (Continuous Wall only)</dd>
 						<dt>Click first point again</dt>
 						<dd>Close the loop / shape</dd>
+						<dt>C</dt>
+						<dd>
+							On Ceiling or Floor — set how high the next slab sits above this storey's floor. Reset
+							follows the top of the walls. Shift+C cycles draw-snap.
+						</dd>
 					</dl>
 
 					<h3>Roof</h3>
@@ -707,7 +734,10 @@
 							while you are adjusting a roof
 						</dd>
 						<dt>C</dt>
-						<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
+						<dd>
+							Set how high the roof eaves sit above this storey's floor. Reset follows the top of
+							the walls. Shift+C cycles draw-snap, including Wall Corners onto the room below
+						</dd>
 						<dt>Click / Right click</dt>
 						<dd>Place the roof, or cancel</dd>
 					</dl>
@@ -726,14 +756,13 @@
 						</dd>
 						<dt>C</dt>
 						<dd>
-							Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) —
-							snaps the window, door, or beam centre to even splits of this wall's length, up to
-							16. A horizontal beam's height follows the look point; a vertical beam spans the wall.
+							Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) — snaps
+							the window, door, or beam centre to even splits of this wall's length, up to 16. A
+							horizontal beam's height follows the look point; a vertical beam spans the wall.
 						</dd>
 						<dt>R</dt>
 						<dd>
-							Flip the next beam between vertical (default, floor to top of the wall) and
-							horizontal
+							Flip the next beam between vertical (default, floor to top of the wall) and horizontal
 						</dd>
 						<dt>Floor</dt>
 						<dd>Only walls on the selected floor can be used — use ] / [ to match storey</dd>
@@ -763,9 +792,9 @@
 						</dd>
 						<dt>Left click</dt>
 						<dd>
-							Two-click rectangle for carpet, planks, and tiles; two-click start &rarr; end for a
-							path. Sits on the current floor or foundation plane, just above it. Visual only — no
-							collision.
+							Two-click rectangle for carpet, planks, and tiles. Paths: two-click start &rarr; end
+							in Axis or Free mode; Bezier adds a third click that pulls the bend. Sits on the
+							current floor or foundation plane, just above it. Visual only — no collision.
 						</dd>
 						<dt>E</dt>
 						<dd>
@@ -773,6 +802,11 @@
 							Colour 1 / Colour 2, plank width and direction, tile size and pattern (Solid / Checker
 							/ Diamond / Running bond), path width and timber framing. Reset on each field restores
 							that variant's default. Applies to the next piece you place.
+						</dd>
+						<dt>C</dt>
+						<dd>
+							On Path — cycle Axis snap (horizontal/vertical), Free (any heading), and Bezier
+							(start, end, then pull the curve)
 						</dd>
 						<dt>R</dt>
 						<dd>Cycle plank direction (X/Z), tile pattern, or path framing on/off</dd>
@@ -907,7 +941,7 @@
 		{#if creatureLabOpen && session}<CreatureLabModal
 				onClose={closeCreatureLab}
 				onPlace={(definition) => {
-					window.dispatchEvent(new CustomEvent('forest:place-creature', { detail: definition }));
+					session?.scene.placeCreature(definition);
 					closeCreatureLab();
 				}}
 			/>{/if}
@@ -969,6 +1003,15 @@
 					trees
 				</div>
 				<div>Vegetation rev {stats.vegetationRevision}</div>
+				<div>
+					Creatures {stats.creatures.rendered}/{stats.creatures.active} active · {stats.creatures
+						.sleeping} sleeping · LOD {stats.creatures.lod0}/{stats.creatures.lod1}
+				</div>
+				<div>
+					Fauna {stats.creatures.triangles.toLocaleString()} tris · {stats.creatures.animationMs.toFixed(
+						2
+					)} ms bones · {stats.creatures.behaviourMs.toFixed(2)} ms behaviour
+				</div>
 				<div data-testid="graphics-stats">
 					Graphics {stats.graphicsQuality.toUpperCase()} &middot; scale {stats.renderScale.toFixed(
 						2
@@ -1037,7 +1080,7 @@
 			{/if}
 		{/if}
 
-		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen}
+		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen}
 			<div class="door-toast" data-testid="door-toast">Press K to open the door</div>
 		{/if}
 
@@ -1046,6 +1089,14 @@
 				toolId={customizeToolId}
 				settings={session.scene.buildingSettings}
 				onClose={() => session?.scene.closePlacementCustomize()}
+			/>
+		{/if}
+		{#if placementHeightOpen && session && heightToolId}
+			<PlacementHeightModal
+				toolId={heightToolId}
+				settings={session.scene.buildingSettings}
+				level={buildHud?.level}
+				onClose={() => session?.scene.closePlacementHeight()}
 			/>
 		{/if}
 		{#if midiOpen && session}<MidiImportModal

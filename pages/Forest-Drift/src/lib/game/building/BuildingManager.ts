@@ -1,7 +1,8 @@
 import {
 	buildingGridToLocal,
 	foundationLocalSize,
-	isBuildingGridPointInsideFoundation
+	isBuildingGridPointInsideFoundation,
+	isLocalInsideFoundation
 } from './FoundationLocalMath';
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
@@ -20,7 +21,7 @@ import type { SlabDefinition, SlabOpeningDefinition, SlabType } from './SlabType
 import { slabBottomY } from './SlabTypes';
 import type { SlabManager } from './SlabManager';
 import type { FloorDetailManager } from './FloorDetailManager';
-import { validateFloorDetailFootprint } from './floorDetailMath';
+import { pathCenterlineLocalSamples, validateFloorDetailFootprint } from './floorDetailMath';
 import type { FloorDetailDefinition } from './FloorDetailTypes';
 import { computeStairMetrics, validateStairFootprint } from './stairMath';
 import type { StairManager } from './StairManager';
@@ -829,6 +830,13 @@ export class BuildingManager {
 		for (const point of params.points) {
 			if (!isBuildingGridPointInsideFoundation(point, buildingGridSize, width, depth)) {
 				return { valid: false, reason: 'Detailing must stay within the foundation' };
+			}
+		}
+		if (params.kind === 'path') {
+			for (const point of pathCenterlineLocalSamples(params.points, buildingGridSize)) {
+				if (!isLocalInsideFoundation(point.x, point.z, width, depth)) {
+					return { valid: false, reason: 'Path must stay within the foundation' };
+				}
 			}
 		}
 

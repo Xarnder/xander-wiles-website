@@ -198,6 +198,13 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 	);
 }
 
+export type SlabHeightToolId = 'ceiling' | 'floor' | 'flat-roof';
+
+/** Ceiling / Floor / Roof — `C` opens the placement-height modal. */
+export function isSlabHeightTool(id: ToolId): id is SlabHeightToolId {
+	return id === 'ceiling' || id === 'floor' || id === 'flat-roof';
+}
+
 /** Slider ranges — match the debug GUI's Walls / Windows / Doors / Beams folders. */
 export const PLACEMENT_CUSTOMIZE_LIMITS = {
 	windowWidth: { min: 0.2, max: 4, step: 0.05 },
@@ -386,6 +393,14 @@ export interface BuildingSettings {
 	/** When true, levels other than the current one (per `buildingLevelViewMode`) render at reduced opacity instead of full brightness — a purely visual editing aid, never a material change. */
 	fadeNonCurrentLevels: boolean;
 
+	/**
+	 * When true, the next ceiling / floor / roof sits at the current storey's wall-top
+	 * (`level.baseY + level.wallHeight`). When false, `slabPlacementHeight` is used instead.
+	 * Live only — stamped onto the piece as `localY` / roof `baseY` at place time.
+	 */
+	slabPlacementFollowWalls: boolean;
+	/** Metres above the current storey floor when `slabPlacementFollowWalls` is false. */
+	slabPlacementHeight: number;
 	floorThickness: number;
 	/** Flat-roof-as-slab thickness (see SlabTypes.ts's `'flat-roof'` `SlabType` member) — unrelated to pitched-roof `RoofDefinition.thickness`, which every roof type (including `'flat'`, when built via Roof Tool) uses `roofDeckThickness` for instead. Kept so any world saved before this session's pitched-roof system still reproduces its old flat-roof-as-slab geometry unchanged. */
 	roofThickness: number;
@@ -553,6 +568,8 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		buildingLevelViewMode: 'current-and-below',
 		fadeNonCurrentLevels: false,
 
+		slabPlacementFollowWalls: true,
+		slabPlacementHeight: 3,
 		floorThickness: 0.2,
 		roofThickness: 0.25,
 		showSlabBounds: false,

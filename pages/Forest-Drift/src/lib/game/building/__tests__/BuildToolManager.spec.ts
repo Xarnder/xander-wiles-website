@@ -159,8 +159,8 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		domElement.dispatch('mousedown', { button });
 	}
 
-	function key(code: string): void {
-		fakeWindow.dispatch('keydown', { code, preventDefault() {} });
+	function key(code: string, extras: { shiftKey?: boolean } = {}): void {
+		fakeWindow.dispatch('keydown', { code, shiftKey: extras.shiftKey ?? false, preventDefault() {} });
 	}
 
 	return {
@@ -781,5 +781,74 @@ describe('BuildToolManager placement customize (E)', () => {
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 		key('KeyG');
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+	});
+});
+
+describe('BuildToolManager placement height (C)', () => {
+	const pointerLocked = { value: true };
+
+	beforeEach(() => {
+		pointerLocked.value = true;
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('opens on Ceiling, Floor, and Roof, and closes with C or Escape', () => {
+		const { buildToolManager, key } = buildHarness(pointerLocked);
+
+		key('Digit4');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+
+		key('ArrowDown');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+		key('Escape');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+
+		key('ArrowDown');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+	});
+
+	it('does nothing on Wall, and Shift+C does not open it on Ceiling', () => {
+		const { buildToolManager, key } = buildHarness(pointerLocked);
+
+		key('Digit2');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+
+		key('Digit4');
+		key('KeyC', { shiftKey: true });
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+	});
+
+	it('swallows placement clicks and digit keys while open', () => {
+		const { buildToolManager, ceilingTool, key, click } = buildHarness(pointerLocked);
+
+		key('Digit4');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+		click(0);
+		expect(ceilingTool.primaryCount).toBe(0);
+
+		key('Digit1');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+		expect(ceilingTool.deactivateCount).toBe(0);
+	});
+
+	it('closes when leaving Build Mode', () => {
+		const { buildToolManager, key } = buildHarness(pointerLocked);
+
+		key('Digit4');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+		key('KeyG');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 	});
 });

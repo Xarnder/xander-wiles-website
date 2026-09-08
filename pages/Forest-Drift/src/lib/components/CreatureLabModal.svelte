@@ -155,7 +155,11 @@
 				<button disabled={busy} onclick={sample}>GENERATE 100</button><button
 					class="primary"
 					onclick={() => {
-						if (lab.definition) onPlace(lab.definition);
+						try {
+							if (lab.definition) onPlace(lab.definition);
+						} catch (e) {
+							error = String(e);
+						}
 					}}>Place in world</button
 				>
 			</aside>

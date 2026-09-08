@@ -47,10 +47,25 @@ export const FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA = 0.012;
 /** Hairline gap between 3D planks / tiles so they read as separate boards. */
 export const FLOOR_DETAIL_3D_GROOVE = 0.004;
 
+/**
+ * Board length as a multiple of plank width. Short enough that a floor is a staggered mosaic,
+ * not one strip per row.
+ */
+export const FLOOR_DETAIL_PLANK_LENGTH_RATIO = 3;
+
+/** Smallest first/last board we will cut before absorbing the remainder into the neighbour. */
+export const FLOOR_DETAIL_PLANK_MIN_SEGMENT = 0.12;
+
+/** Inset of the carpet field from the outer edge — the rim is a frame, not a second slab. */
+export const FLOOR_DETAIL_CARPET_BORDER = 0.08;
+
+/** Extra height on the carpet field so its top is never coplanar with the rim. */
+export const FLOOR_DETAIL_CARPET_PILE = 0.006;
+
 export const DEFAULT_FLOOR_DETAIL_COLORS: Record<FloorDetailKind, readonly [string, string]> = {
 	carpet: ['#6B2E1F', '#4A1F14'],
 	path: ['#8A8680', '#5C4632'],
-	planks: ['#8B5A2B', '#C4A574'],
+	planks: ['#3A2418', '#432A1C'],
 	tiles: ['#C1443C', '#F4F0E6']
 };
 
@@ -91,9 +106,9 @@ export function cycleFloorDetailTilePattern(
 
 /**
  * A decorative covering on a foundation/storey floor. `points` is a closed 4-corner building-grid
- * rectangle for carpets/planks/tiles, or a 2-point centreline (start → end) for paths — a diagonal
- * path keeps its true width in local metres rather than being snapped back onto a 4-corner grid
- * quad that would distort it.
+ * rectangle for carpets/planks/tiles, or a path centreline: two points (start → end) for a straight
+ * strip, three (start → handle → end) for a quadratic Bezier. A diagonal or curved path keeps its
+ * authored width in local metres rather than being snapped onto a 4-corner grid quad.
  */
 export interface FloorDetailDefinition {
 	id: string;

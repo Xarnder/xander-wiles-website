@@ -89,6 +89,21 @@ export function buildingGridToLocal(
 
 const BOUNDS_EPSILON = 1e-6;
 
+/** Whether a foundation-local metre point falls within (or on the edge of) the footprint. */
+export function isLocalInsideFoundation(
+	localX: number,
+	localZ: number,
+	footprintWidth: number,
+	footprintDepth: number
+): boolean {
+	return (
+		localX >= -BOUNDS_EPSILON &&
+		localX <= footprintWidth + BOUNDS_EPSILON &&
+		localZ >= -BOUNDS_EPSILON &&
+		localZ <= footprintDepth + BOUNDS_EPSILON
+	);
+}
+
 /** Whether a building-grid point falls within (or on the edge of) the foundation's local footprint. */
 export function isBuildingGridPointInsideFoundation(
 	point: BuildingGridPoint,
@@ -97,10 +112,5 @@ export function isBuildingGridPointInsideFoundation(
 	footprintDepth: number
 ): boolean {
 	const { localX, localZ } = buildingGridToLocal(point, buildingGridSize);
-	return (
-		localX >= -BOUNDS_EPSILON &&
-		localX <= footprintWidth + BOUNDS_EPSILON &&
-		localZ >= -BOUNDS_EPSILON &&
-		localZ <= footprintDepth + BOUNDS_EPSILON
-	);
+	return isLocalInsideFoundation(localX, localZ, footprintWidth, footprintDepth);
 }

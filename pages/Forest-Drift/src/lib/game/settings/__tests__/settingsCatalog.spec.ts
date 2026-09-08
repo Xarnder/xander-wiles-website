@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createDefaultBuildingSettings } from '../../building/FoundationTypes';
 import { createDefaultGraphicsSettings } from '../../graphics/GraphicsTypes';
 import type { MusicPlantPlacementTool } from '../../music/MusicPlantPlacementTool';
@@ -11,7 +11,11 @@ import {
 	type GameSettingsActions,
 	type GameSettingsHost
 } from '../GameSettingsHost';
-import { buildSettingsCatalog, categoryMatchesQuery, firstMatchingCategoryId } from '../settingsCatalog';
+import {
+	buildSettingsCatalog,
+	categoryMatchesQuery,
+	firstMatchingCategoryId
+} from '../settingsCatalog';
 
 function noopActions(): GameSettingsActions {
 	return {
@@ -88,7 +92,10 @@ describe('buildSettingsCatalog', () => {
 		]);
 
 		const titles = catalog.flatMap((category) =>
-			category.groups.flatMap((group) => [group.title, ...(group.groups ?? []).map((child) => child.title)])
+			category.groups.flatMap((group) => [
+				group.title,
+				...(group.groups ?? []).map((child) => child.title)
+			])
 		);
 		for (const required of [
 			'Landscape',
@@ -120,5 +127,86 @@ describe('buildSettingsCatalog', () => {
 		expect(firstMatchingCategoryId(catalog, 'hdri')).toBe('sky');
 		expect(firstMatchingCategoryId(catalog, 'day')).toBe('sky');
 		expect(firstMatchingCategoryId(catalog, 'no-such-setting')).toBeUndefined();
+	});
+});
+
+describe('creature settings', () => {
+	function creatureHost() {
+		const host = testHost();
+		host.creatures = {
+			state: { settings: { enabled: true, creatureDensity: 1, maxActiveCreatures: 30 } },
+			debug: {
+				showSkeleton: false,
+				showBehaviourState: false,
+				showTarget: false,
+				showSpeciesId: false,
+				showIndividualId: false,
+				showLOD: false
+			},
+			settingsChanged: vi.fn()
+		};
+		host.actions.creatureLab = vi.fn();
+		host.actions.creatureDemo = vi.fn();
+		host.actions.creatureEndDemo = vi.fn();
+		return host;
+	}
+
+	it('exposes searchable wildlife and debug controls with bounded population ranges', () => {
+		const catalog = buildSettingsCatalog(creatureHost());
+		for (const query of [
+			'creature lab',
+			'population density',
+			'show skeleton',
+			'individual id',
+			'show lod'
+		]) {
+			expect(firstMatchingCategoryId(catalog, query)).toBe('creatures');
+		}
+		const fields = catalog.find((c) => c.id === 'creatures')!.groups.flatMap((g) => g.fields);
+		expect(fields.find((f) => f.id === 'creatures.density')).toMatchObject({
+			min: 0,
+			max: 4,
+			step: 0.1
+		});
+		expect(fields.find((f) => f.id === 'creatures.maxActive')).toMatchObject({
+			min: 1,
+			max: 100,
+			step: 1
+		});
+	});
+
+	it('mutates live settings and applies expensive population changes on commit', () => {
+		const host = creatureHost();
+		const fields = buildSettingsCatalog(host)
+			.find((c) => c.id === 'creatures')!
+			.groups.flatMap((g) => g.fields);
+		const density = fields.find((f) => f.id === 'creatures.density')!;
+		if (density.kind !== 'number') throw new Error('Missing density slider');
+		density.set(2.5);
+		expect(host.creatures!.state.settings.creatureDensity).toBe(2.5);
+		expect(host.creatures!.settingsChanged).not.toHaveBeenCalled();
+		density.onCommit?.();
+		expect(host.creatures!.settingsChanged).toHaveBeenCalledOnce();
+		const enabled = fields.find((f) => f.id === 'creatures.enabled')!;
+		if (enabled.kind !== 'boolean') throw new Error('Missing enable toggle');
+		enabled.set(false);
+		enabled.onChange?.();
+		expect(host.creatures!.state.settings.enabled).toBe(false);
+		expect(host.creatures!.settingsChanged).toHaveBeenCalledTimes(2);
+		const debug = fields.find((f) => f.id === 'creatures.debug.skeleton')!;
+		if (debug.kind !== 'boolean') throw new Error('Missing skeleton toggle');
+		debug.set(true);
+		expect(host.creatures!.debug.showSkeleton).toBe(true);
+	});
+
+	it('forwards Lab and demo buttons without touching browser globals', () => {
+		const host = creatureHost();
+		const fields = buildSettingsCatalog(host)
+			.find((c) => c.id === 'creatures')!
+			.groups.flatMap((g) => g.fields);
+		for (const field of fields) if (field.kind === 'button') field.onClick();
+		expect(host.actions.creatureLab).toHaveBeenCalledOnce();
+		expect(host.actions.creatureDemo).toHaveBeenCalledOnce();
+		expect(host.actions.creatureEndDemo).toHaveBeenCalledOnce();
 	});
 });

@@ -20,11 +20,10 @@ export interface FloorToolOptions {
 }
 
 /**
- * Floor Tool — thin wrapper around SlabToolBase for placing an upper-storey floor. Defaults to the
- * exact same elevation formula as CeilingTool (`level.baseY + level.wallHeight`), which is what lets
- * a floor placed here and a ceiling placed from the level below resolve to the SAME physical slab —
- * BuildingManager.addSlab's same-level overlap rule rejects the second placement as a duplicate
- * rather than creating two coplanar objects; see SlabToolBase.ts's class doc comment.
+ * Floor Tool — thin wrapper around SlabToolBase for placing an upper-storey floor. Uses the same
+ * live elevation as CeilingTool (wall-top, or the C-panel height), so a floor here and a ceiling
+ * from the storey below can still be the same physical slab — BuildingManager.addSlab rejects a
+ * second coplanar piece; see SlabToolBase.ts.
  */
 export class FloorTool extends SlabToolBase {
 	constructor(options: FloorToolOptions) {

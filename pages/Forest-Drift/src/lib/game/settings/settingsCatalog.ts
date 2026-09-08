@@ -127,7 +127,12 @@ function colorField(
 	};
 }
 
-function group(id: string, title: string, fields: SettingsField[], groups?: SettingsGroup[]): SettingsGroup {
+function group(
+	id: string,
+	title: string,
+	fields: SettingsField[],
+	groups?: SettingsGroup[]
+): SettingsGroup {
 	return { id, title, fields, groups };
 }
 
@@ -157,8 +162,82 @@ function musicLoopField(
 	};
 }
 
+function creatureCategories(host: GameSettingsHost): SettingsCategory[] {
+	const creatures = host.creatures;
+	if (!creatures) return [];
+	const changed = () => creatures.settingsChanged();
+	const { settings } = creatures.state;
+	const buttons: SettingsField[] = [];
+	for (const [id, label, onClick] of [
+		['creatures.lab', 'Open Creature Lab', host.actions.creatureLab],
+		['creatures.demo', 'Show demo region nearby', host.actions.creatureDemo],
+		['creatures.endDemo', 'End demo region', host.actions.creatureEndDemo]
+	] as const) {
+		if (onClick) buttons.push({ kind: 'button', id, label, onClick });
+	}
+	return [
+		{
+			id: 'creatures',
+			title: 'Creatures',
+			description: 'Procedural wildlife, population limits, Creature Lab, and ecosystem debugging.',
+			groups: [
+				group('creature-population', 'Wildlife population', [
+					boolField('creatures.enabled', 'Enable creatures', settings, 'enabled', changed),
+					numberField(
+						'creatures.density',
+						'Population density',
+						settings,
+						'creatureDensity',
+						0,
+						4,
+						0.1,
+						undefined,
+						changed
+					),
+					numberField(
+						'creatures.maxActive',
+						'Maximum active creatures',
+						settings,
+						'maxActiveCreatures',
+						1,
+						100,
+						1,
+						undefined,
+						changed
+					)
+				]),
+				group('creature-lab', 'Creature Lab & demo', buttons),
+				group('creature-debug', 'Debug overlays', [
+					boolField('creatures.debug.skeleton', 'Show skeleton', creatures.debug, 'showSkeleton'),
+					boolField(
+						'creatures.debug.behaviour',
+						'Show behaviour state',
+						creatures.debug,
+						'showBehaviourState'
+					),
+					boolField(
+						'creatures.debug.target',
+						'Show movement target',
+						creatures.debug,
+						'showTarget'
+					),
+					boolField('creatures.debug.species', 'Show species ID', creatures.debug, 'showSpeciesId'),
+					boolField(
+						'creatures.debug.individual',
+						'Show individual ID',
+						creatures.debug,
+						'showIndividualId'
+					),
+					boolField('creatures.debug.lod', 'Show LOD', creatures.debug, 'showLOD')
+				])
+			]
+		}
+	];
+}
+
 export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[] {
-	const { terrain, vegetation, sky, graphics, building, music, sustain, musicVisual, actions } = host;
+	const { terrain, vegetation, sky, graphics, building, music, sustain, musicVisual, actions } =
+		host;
 	ensureDayCycleSettings(sky);
 	const shape = actions.terrainSettings;
 	const activeLoop = host.music.activeTree ?? host.music.trees[0];
@@ -184,9 +263,36 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 			groups: [
 				group('world-shape', 'Landscape', [
 					textField('world.seed', 'Seed', terrain, 'seed', actions.terrainSeed),
-					numberField('world.heightMultiplier', 'Height multiplier', terrain, 'heightMultiplier', 0, 4, 0.01, shape),
-					numberField('world.baseHeight', 'Base height', terrain, 'baseHeight', -50, 50, 0.5, shape),
-					numberField('world.terraceAmount', 'Terrace amount', terrain, 'terraceAmount', 0, 1, 0.01, shape)
+					numberField(
+						'world.heightMultiplier',
+						'Height multiplier',
+						terrain,
+						'heightMultiplier',
+						0,
+						4,
+						0.01,
+						shape
+					),
+					numberField(
+						'world.baseHeight',
+						'Base height',
+						terrain,
+						'baseHeight',
+						-50,
+						50,
+						0.5,
+						shape
+					),
+					numberField(
+						'world.terraceAmount',
+						'Terrace amount',
+						terrain,
+						'terraceAmount',
+						0,
+						1,
+						0.01,
+						shape
+					)
 				]),
 				group('chunk-loading', 'Chunk loading', [
 					numberField(
@@ -240,8 +346,26 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 			groups: [
 				group('biome', 'Biome distribution', [
 					numberField('terrain.biome.scale', 'Scale', terrain.biome, 'scale', 100, 3000, 10, shape),
-					numberField('terrain.biome.contrast', 'Contrast', terrain.biome, 'contrast', 0.3, 3, 0.05, shape),
-					numberField('terrain.biome.blendWidth', 'Blend width', terrain.biome, 'blendWidth', 0, 1, 0.01, shape),
+					numberField(
+						'terrain.biome.contrast',
+						'Contrast',
+						terrain.biome,
+						'contrast',
+						0.3,
+						3,
+						0.05,
+						shape
+					),
+					numberField(
+						'terrain.biome.blendWidth',
+						'Blend width',
+						terrain.biome,
+						'blendWidth',
+						0,
+						1,
+						0.01,
+						shape
+					),
 					numberField(
 						'terrain.biome.warpStrength',
 						'Warp strength',
@@ -254,7 +378,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 					)
 				]),
 				group('macro', 'Macro elevation', [
-					numberField('terrain.macro.scale', 'Scale', terrain.macroElevation, 'scale', 200, 8000, 50, shape),
+					numberField(
+						'terrain.macro.scale',
+						'Scale',
+						terrain.macroElevation,
+						'scale',
+						200,
+						8000,
+						50,
+						shape
+					),
 					numberField(
 						'terrain.macro.amplitude',
 						'Amplitude',
@@ -267,8 +400,26 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 					)
 				]),
 				group('plains', 'Plains', [
-					numberField('terrain.plains.amplitude', 'Amplitude', terrain.plains, 'amplitude', 0, 20, 0.1, shape),
-					numberField('terrain.plains.flatness', 'Flatness', terrain.plains, 'flatness', 0, 1, 0.01, shape),
+					numberField(
+						'terrain.plains.amplitude',
+						'Amplitude',
+						terrain.plains,
+						'amplitude',
+						0,
+						20,
+						0.1,
+						shape
+					),
+					numberField(
+						'terrain.plains.flatness',
+						'Flatness',
+						terrain.plains,
+						'flatness',
+						0,
+						1,
+						0.01,
+						shape
+					),
 					numberField(
 						'terrain.plains.detail',
 						'Detail strength',
@@ -281,9 +432,27 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 					)
 				]),
 				group('hills', 'Rolling hills', [
-					numberField('terrain.hills.amplitude', 'Amplitude', terrain.hills, 'amplitude', 0, 60, 0.5, shape),
+					numberField(
+						'terrain.hills.amplitude',
+						'Amplitude',
+						terrain.hills,
+						'amplitude',
+						0,
+						60,
+						0.5,
+						shape
+					),
 					numberField('terrain.hills.scale', 'Scale', terrain.hills, 'scale', 20, 800, 5, shape),
-					numberField('terrain.hills.roundness', 'Roundness', terrain.hills, 'roundness', 0, 1, 0.01, shape),
+					numberField(
+						'terrain.hills.roundness',
+						'Roundness',
+						terrain.hills,
+						'roundness',
+						0,
+						1,
+						0.01,
+						shape
+					),
 					numberField(
 						'terrain.hills.detail',
 						'Detail strength',
@@ -306,7 +475,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.5,
 						shape
 					),
-					numberField('terrain.highlands.scale', 'Scale', terrain.highlands, 'scale', 20, 800, 5, shape),
+					numberField(
+						'terrain.highlands.scale',
+						'Scale',
+						terrain.highlands,
+						'scale',
+						20,
+						800,
+						5,
+						shape
+					),
 					numberField(
 						'terrain.highlands.ridge',
 						'Ridge amount',
@@ -339,7 +517,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						1,
 						shape
 					),
-					numberField('terrain.mountains.scale', 'Scale', terrain.mountains, 'scale', 40, 1500, 10, shape),
+					numberField(
+						'terrain.mountains.scale',
+						'Scale',
+						terrain.mountains,
+						'scale',
+						40,
+						1500,
+						10,
+						shape
+					),
 					numberField(
 						'terrain.mountains.sharpness',
 						'Sharpness',
@@ -415,8 +602,26 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.001,
 						shape
 					),
-					numberField('terrain.warp.strength', 'Strength', terrain.detailWarp, 'strength', 0, 10, 0.1, shape),
-					numberField('terrain.warp.octaves', 'Octaves', terrain.detailWarp, 'octaves', 1, 4, 1, shape)
+					numberField(
+						'terrain.warp.strength',
+						'Strength',
+						terrain.detailWarp,
+						'strength',
+						0,
+						10,
+						0.1,
+						shape
+					),
+					numberField(
+						'terrain.warp.octaves',
+						'Octaves',
+						terrain.detailWarp,
+						'octaves',
+						1,
+						4,
+						1,
+						shape
+					)
 				])
 			]
 		},
@@ -433,6 +638,7 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				])
 			]
 		},
+		...creatureCategories(host),
 		{
 			id: 'music',
 			title: 'Music',
@@ -441,13 +647,36 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				group('music-debug', 'Debug overlays', [
 					boolField('music.debug.rings', 'Show ring indices', music.debug, 'showRingIndices'),
 					boolField('music.debug.timing', 'Show plant timing', music.debug, 'showPlantTimingDebug'),
-					boolField('music.debug.audio', 'Show audio scheduler', music.debug, 'showAudioSchedulerDebug'),
+					boolField(
+						'music.debug.audio',
+						'Show audio scheduler',
+						music.debug,
+						'showAudioSchedulerDebug'
+					),
 					boolField('music.debug.duration', 'Show duration steps', music.debug, 'showDurationSteps')
 				]),
 				group('music-loop', 'Active tree loop', [
 					musicLoopField('music.loop.bpm', 'BPM', host, musicLoopDraft, 'bpm', 30, 240, 1),
-					musicLoopField('music.loop.beats', 'Beats per bar', host, musicLoopDraft, 'beatsPerBar', 1, 8, 1),
-					musicLoopField('music.loop.bars', 'Bars per loop', host, musicLoopDraft, 'barsPerLoop', 1, 8, 1),
+					musicLoopField(
+						'music.loop.beats',
+						'Beats per bar',
+						host,
+						musicLoopDraft,
+						'beatsPerBar',
+						1,
+						8,
+						1
+					),
+					musicLoopField(
+						'music.loop.bars',
+						'Bars per loop',
+						host,
+						musicLoopDraft,
+						'barsPerLoop',
+						1,
+						8,
+						1
+					),
 					musicLoopField(
 						'music.loop.sub',
 						'Subdivisions per beat',
@@ -468,7 +697,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						20,
 						0.5
 					),
-					musicLoopField('music.loop.spacing', 'Ring spacing', host, musicLoopDraft, 'ringSpacing', 0.5, 4, 0.25)
+					musicLoopField(
+						'music.loop.spacing',
+						'Ring spacing',
+						host,
+						musicLoopDraft,
+						'ringSpacing',
+						0.5,
+						4,
+						0.25
+					)
 				]),
 				group('music-wave', 'Wave & volume', [
 					numberField(
@@ -491,7 +729,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.05,
 						actions.musicWave
 					),
-					numberField('music.wave.glow', 'Wave glow', musicVisual, 'waveGlow', 0.05, 2, 0.05, actions.musicWave),
+					numberField(
+						'music.wave.glow',
+						'Wave glow',
+						musicVisual,
+						'waveGlow',
+						0.05,
+						2,
+						0.05,
+						actions.musicWave
+					),
 					numberField(
 						'music.volume',
 						'Master volume',
@@ -504,7 +751,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 					)
 				]),
 				group('music-sustain', 'Sustain trails', [
-					boolField('music.sustain.enabled', 'Trails enabled', sustain, 'sustainTrailsEnabled', actions.musicTrails),
+					boolField(
+						'music.sustain.enabled',
+						'Trails enabled',
+						sustain,
+						'sustainTrailsEnabled',
+						actions.musicTrails
+					),
 					numberField(
 						'music.sustain.width',
 						'Trail width',
@@ -571,7 +824,12 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 			description: 'Defaults for the next piece you place, plus live visual overlays.',
 			groups: [
 				group('foundation', 'Foundation', [
-					boolField('building.foundation.vertexGrid', 'Show vertex grid', building, 'showVertexGrid'),
+					boolField(
+						'building.foundation.vertexGrid',
+						'Show vertex grid',
+						building,
+						'showVertexGrid'
+					),
 					numberField(
 						'building.foundation.gridRadius',
 						'Grid display radius',
@@ -612,19 +870,59 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						'showFoundationBounds',
 						actions.foundationBounds
 					),
-					numberField('building.foundation.preview', 'Preview opacity', building, 'previewOpacity', 0.1, 1, 0.05)
+					numberField(
+						'building.foundation.preview',
+						'Preview opacity',
+						building,
+						'previewOpacity',
+						0.1,
+						1,
+						0.05
+					)
 				]),
 				group('grid', 'Grid', [
-					numberField('building.grid.size', 'Grid size', building, 'buildingGridSize', 0.05, 2, 0.05),
+					numberField(
+						'building.grid.size',
+						'Grid size',
+						building,
+						'buildingGridSize',
+						0.05,
+						2,
+						0.05
+					),
 					boolField('building.grid.show', 'Show building grid', building, 'showBuildingGrid'),
-					numberField('building.grid.opacity', 'Grid opacity', building, 'buildingGridOpacity', 0, 1, 0.05)
+					numberField(
+						'building.grid.opacity',
+						'Grid opacity',
+						building,
+						'buildingGridOpacity',
+						0,
+						1,
+						0.05
+					)
 				]),
 				group(
 					'walls',
 					'Walls',
 					[
-						numberField('building.walls.height', 'Wall height', building, 'wallHeight', 0.5, 6, 0.05),
-						numberField('building.walls.thickness', 'Wall thickness', building, 'wallThickness', 0.05, 0.5, 0.01),
+						numberField(
+							'building.walls.height',
+							'Wall height',
+							building,
+							'wallHeight',
+							0.5,
+							6,
+							0.05
+						),
+						numberField(
+							'building.walls.thickness',
+							'Wall thickness',
+							building,
+							'wallThickness',
+							0.05,
+							0.5,
+							0.01
+						),
 						numberField(
 							'building.walls.minLength',
 							'Minimum length',
@@ -634,7 +932,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							2,
 							0.05
 						),
-						boolField('building.walls.bounds', 'Show wall bounds', building, 'showWallBounds', actions.wallBounds),
+						boolField(
+							'building.walls.bounds',
+							'Show wall bounds',
+							building,
+							'showWallBounds',
+							actions.wallBounds
+						),
 						selectField(
 							'building.walls.join',
 							'Join style (continuous wall)',
@@ -701,7 +1005,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							)
 						]),
 						group('skirting', 'Skirting', [
-							boolField('building.skirt.enabled', 'Enabled', building, 'skirtingEnabled', actions.wallFraming),
+							boolField(
+								'building.skirt.enabled',
+								'Enabled',
+								building,
+								'skirtingEnabled',
+								actions.wallFraming
+							),
 							numberField(
 								'building.skirt.height',
 								'Height',
@@ -728,16 +1038,56 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				group('windows', 'Windows', [
 					numberField('building.windows.width', 'Width', building, 'windowWidth', 0.2, 4, 0.05),
 					numberField('building.windows.height', 'Height', building, 'windowHeight', 0.2, 3, 0.05),
-					numberField('building.windows.sill', 'Sill height', building, 'windowSillHeight', 0, 3, 0.05),
-					numberField('building.windows.grid', 'Opening grid size', building, 'openingGridSize', 0.02, 1, 0.01),
-					numberField('building.windows.margin', 'Edge margin', building, 'openingEdgeMargin', 0, 1, 0.01),
+					numberField(
+						'building.windows.sill',
+						'Sill height',
+						building,
+						'windowSillHeight',
+						0,
+						3,
+						0.05
+					),
+					numberField(
+						'building.windows.grid',
+						'Opening grid size',
+						building,
+						'openingGridSize',
+						0.02,
+						1,
+						0.01
+					),
+					numberField(
+						'building.windows.margin',
+						'Edge margin',
+						building,
+						'openingEdgeMargin',
+						0,
+						1,
+						0.01
+					),
 					numberField('building.windows.spacing', 'Spacing', building, 'openingSpacing', 0, 1, 0.01)
 				]),
 				group('doors', 'Doors', [
 					numberField('building.doors.width', 'Width', building, 'doorWidth', 0.4, 3, 0.05),
 					numberField('building.doors.height', 'Height', building, 'doorHeight', 0.5, 4, 0.05),
-					numberField('building.doors.grid', 'Opening grid size', building, 'openingGridSize', 0.02, 1, 0.01),
-					numberField('building.doors.margin', 'Edge margin', building, 'openingEdgeMargin', 0, 1, 0.01),
+					numberField(
+						'building.doors.grid',
+						'Opening grid size',
+						building,
+						'openingGridSize',
+						0.02,
+						1,
+						0.01
+					),
+					numberField(
+						'building.doors.margin',
+						'Edge margin',
+						building,
+						'openingEdgeMargin',
+						0,
+						1,
+						0.01
+					),
 					numberField('building.doors.spacing', 'Spacing', building, 'openingSpacing', 0, 1, 0.01)
 				]),
 				group('beams', 'Beams', [
@@ -787,21 +1137,54 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						building,
 						'showLevelConstructionPlane'
 					),
-					selectField('building.levels.view', 'Level view mode', building, 'buildingLevelViewMode', [
-						{ value: 'all', label: 'All' },
-						{ value: 'current-and-below', label: 'Current + below' },
-						{ value: 'current-only', label: 'Current only' }
-					]),
+					selectField(
+						'building.levels.view',
+						'Level view mode',
+						building,
+						'buildingLevelViewMode',
+						[
+							{ value: 'all', label: 'All' },
+							{ value: 'current-and-below', label: 'Current + below' },
+							{ value: 'current-only', label: 'Current only' }
+						]
+					),
 					boolField('building.levels.fade', 'Fade other levels', building, 'fadeNonCurrentLevels')
 				]),
 				group(
 					'slabs',
 					'Slabs',
 					[
-						numberField('building.slabs.floor', 'Floor thickness', building, 'floorThickness', 0.05, 1, 0.01),
-						numberField('building.slabs.roof', 'Roof thickness', building, 'roofThickness', 0.05, 1, 0.01),
-						boolField('building.slabs.bounds', 'Show slab bounds', building, 'showSlabBounds', actions.slabBounds),
-						boolField('building.slabs.points', 'Show polygon points', building, 'showSlabPolygonPoints'),
+						numberField(
+							'building.slabs.floor',
+							'Floor thickness',
+							building,
+							'floorThickness',
+							0.05,
+							1,
+							0.01
+						),
+						numberField(
+							'building.slabs.roof',
+							'Roof thickness',
+							building,
+							'roofThickness',
+							0.05,
+							1,
+							0.01
+						),
+						boolField(
+							'building.slabs.bounds',
+							'Show slab bounds',
+							building,
+							'showSlabBounds',
+							actions.slabBounds
+						),
+						boolField(
+							'building.slabs.points',
+							'Show polygon points',
+							building,
+							'showSlabPolygonPoints'
+						),
 						numberField(
 							'building.slabs.preview',
 							'Preview opacity',
@@ -856,8 +1239,24 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						{ value: 'm-shaped', label: 'M-shaped' },
 						{ value: 'dutch-gable', label: 'Dutch gable' }
 					]),
-					numberField('building.roofs.rise', 'Default rise', building, 'defaultRoofRise', 0, 12, 0.25),
-					numberField('building.roofs.deck', 'Deck thickness', building, 'roofDeckThickness', 0.05, 1, 0.01),
+					numberField(
+						'building.roofs.rise',
+						'Default rise',
+						building,
+						'defaultRoofRise',
+						0,
+						12,
+						0.25
+					),
+					numberField(
+						'building.roofs.deck',
+						'Deck thickness',
+						building,
+						'roofDeckThickness',
+						0.05,
+						1,
+						0.01
+					),
 					numberField('building.roofs.step', 'Rise step', building, 'roofRiseStep', 0.05, 2, 0.05),
 					numberField(
 						'building.roofs.fine',
@@ -923,7 +1322,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.95,
 						0.01
 					),
-					boolField('building.roofs.bounds', 'Show roof bounds', building, 'showRoofBounds', actions.roofBounds),
+					boolField(
+						'building.roofs.bounds',
+						'Show roof bounds',
+						building,
+						'showRoofBounds',
+						actions.roofBounds
+					),
 					boolField('building.roofs.planes', 'Show face planes', building, 'showRoofPlanes'),
 					boolField('building.roofs.ridge', 'Show ridge line', building, 'showRoofRidge'),
 					boolField('building.roofs.normals', 'Show normals', building, 'showRoofNormals')
@@ -1064,7 +1469,15 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							20,
 							1
 						),
-						numberField('building.stairs.step', 'Max step height', building, 'maxStepHeight', 0.05, 1, 0.01),
+						numberField(
+							'building.stairs.step',
+							'Max step height',
+							building,
+							'maxStepHeight',
+							0.05,
+							1,
+							0.01
+						),
 						numberField(
 							'building.stairs.preview',
 							'Preview opacity',
@@ -1081,7 +1494,12 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							'showStairBounds',
 							actions.stairBounds
 						),
-						boolField('building.stairs.direction', 'Show direction markers', building, 'showStairDirection'),
+						boolField(
+							'building.stairs.direction',
+							'Show direction markers',
+							building,
+							'showStairDirection'
+						),
 						numberField(
 							'building.stairs.head',
 							'Head clearance',
@@ -1138,18 +1556,46 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.5,
 						0.01
 					),
-					selectField('building.floor.plankDir', 'Plank direction', building, 'floorDetailPlankDirection', [
-						{ value: 'x', label: 'X' },
-						{ value: 'z', label: 'Z' }
-					]),
-					numberField('building.floor.tileSize', 'Tile size', building, 'floorDetailTileSize', 0.2, 1.2, 0.05),
-					selectField('building.floor.pattern', 'Tile pattern', building, 'floorDetailTilePattern', [
-						{ value: 'solid', label: 'Solid' },
-						{ value: 'checker', label: 'Checker' },
-						{ value: 'diamond', label: 'Diamond' },
-						{ value: 'running-bond', label: 'Running bond' }
-					]),
-					numberField('building.floor.pathWidth', 'Path width', building, 'floorDetailPathWidth', 0.4, 3, 0.05),
+					selectField(
+						'building.floor.plankDir',
+						'Plank direction',
+						building,
+						'floorDetailPlankDirection',
+						[
+							{ value: 'x', label: 'X' },
+							{ value: 'z', label: 'Z' }
+						]
+					),
+					numberField(
+						'building.floor.tileSize',
+						'Tile size',
+						building,
+						'floorDetailTileSize',
+						0.2,
+						1.2,
+						0.05
+					),
+					selectField(
+						'building.floor.pattern',
+						'Tile pattern',
+						building,
+						'floorDetailTilePattern',
+						[
+							{ value: 'solid', label: 'Solid' },
+							{ value: 'checker', label: 'Checker' },
+							{ value: 'diamond', label: 'Diamond' },
+							{ value: 'running-bond', label: 'Running bond' }
+						]
+					),
+					numberField(
+						'building.floor.pathWidth',
+						'Path width',
+						building,
+						'floorDetailPathWidth',
+						0.4,
+						3,
+						0.05
+					),
 					boolField('building.floor.framing', 'Path framing', building, 'floorDetailPathFraming'),
 					numberField(
 						'building.floor.preview',
@@ -1471,7 +1917,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 					colorField('sky.mid', 'Mid colour', sky.sky, 'midColor', actions.sky),
 					colorField('sky.horizon', 'Horizon colour', sky.sky, 'horizonColor', actions.sky),
 					colorField('sky.haze', 'Ground haze', sky.sky, 'groundHazeColor', actions.sky),
-					numberField('sky.horizonHeight', 'Horizon height', sky.sky, 'horizonHeight', -0.3, 0.3, 0.005, actions.sky),
+					numberField(
+						'sky.horizonHeight',
+						'Horizon height',
+						sky.sky,
+						'horizonHeight',
+						-0.3,
+						0.3,
+						0.005,
+						actions.sky
+					),
 					numberField(
 						'sky.horizonSoftness',
 						'Horizon softness',
@@ -1482,9 +1937,27 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.005,
 						actions.sky
 					),
-					numberField('sky.brightness', 'Sky brightness', sky.sky, 'brightness', 0.3, 2, 0.01, actions.sky),
+					numberField(
+						'sky.brightness',
+						'Sky brightness',
+						sky.sky,
+						'brightness',
+						0.3,
+						2,
+						0.01,
+						actions.sky
+					),
 					boolField('sky.sunDisk', 'Show sun disk', sky.sky, 'showSunDisk', actions.sky),
-					numberField('sky.sunSize', 'Sun disk size', sky.sky, 'sunDiskSize', 0.002, 0.15, 0.001, actions.sky),
+					numberField(
+						'sky.sunSize',
+						'Sun disk size',
+						sky.sky,
+						'sunDiskSize',
+						0.002,
+						0.15,
+						0.001,
+						actions.sky
+					),
 					numberField(
 						'sky.sunBright',
 						'Sun disk brightness',
@@ -1508,9 +1981,33 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				]),
 				group('hdri', 'HDRI', [
 					boolField('sky.hdri.enabled', 'HDRI enabled', sky.hdri, 'enabled', actions.sky),
-					numberField('sky.hdri.intensity', 'HDRI intensity', sky.hdri, 'intensity', 0, 3, 0.05, actions.sky),
-					numberField('sky.hdri.rotation', 'HDRI rotation', sky.hdri, 'rotation', 0, 360, 1, actions.sky),
-					boolField('sky.hdri.background', 'Show as background', sky.hdri, 'showAsBackground', actions.sky)
+					numberField(
+						'sky.hdri.intensity',
+						'HDRI intensity',
+						sky.hdri,
+						'intensity',
+						0,
+						3,
+						0.05,
+						actions.sky
+					),
+					numberField(
+						'sky.hdri.rotation',
+						'HDRI rotation',
+						sky.hdri,
+						'rotation',
+						0,
+						360,
+						1,
+						actions.sky
+					),
+					boolField(
+						'sky.hdri.background',
+						'Show as background',
+						sky.hdri,
+						'showAsBackground',
+						actions.sky
+					)
 				]),
 				group('atmosphere', 'Sun & atmosphere', [
 					boolField('sky.sun.enabled', 'Sun enabled', sky.atmosphere, 'sunEnabled', actions.sky),
@@ -1556,10 +2053,25 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.sky
 					),
 					boolField('sky.fog.enabled', 'Fog enabled', sky.atmosphere, 'fogEnabled', actions.sky),
-					numberField('sky.fog.near', 'Fog near', sky.atmosphere, 'fogNear', 1, 800, 1, actions.sky),
+					numberField(
+						'sky.fog.near',
+						'Fog near',
+						sky.atmosphere,
+						'fogNear',
+						1,
+						800,
+						1,
+						actions.sky
+					),
 					numberField('sky.fog.far', 'Fog far', sky.atmosphere, 'fogFar', 10, 2000, 1, actions.sky),
 					colorField('sky.fog.color', 'Fog colour', sky.atmosphere, 'fogColor', actions.sky),
-					boolField('sky.fog.match', 'Fog match horizon', sky.atmosphere, 'fogMatchHorizon', actions.sky),
+					boolField(
+						'sky.fog.match',
+						'Fog match horizon',
+						sky.atmosphere,
+						'fogMatchHorizon',
+						actions.sky
+					),
 					selectField(
 						'sky.fog.mode',
 						'Fog density mode',
@@ -1574,22 +2086,157 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				]),
 				group('clouds', 'Clouds', [
 					boolField('sky.clouds.enabled', 'Clouds enabled', sky.clouds, 'enabled', actions.sky),
-					numberField('sky.clouds.layers', 'Layer count', sky.clouds, 'layerCount', 1, 3, 1, actions.sky),
-					numberField('sky.clouds.altitude', 'Altitude', sky.clouds, 'altitude', 30, 600, 5, actions.sky),
+					numberField(
+						'sky.clouds.layers',
+						'Layer count',
+						sky.clouds,
+						'layerCount',
+						1,
+						3,
+						1,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.altitude',
+						'Altitude',
+						sky.clouds,
+						'altitude',
+						30,
+						600,
+						5,
+						actions.sky
+					),
 					numberField('sky.clouds.scale', 'Scale', sky.clouds, 'scale', 0.2, 4, 0.05, actions.sky),
-					numberField('sky.clouds.coverage', 'Coverage', sky.clouds, 'coverage', 0, 1, 0.01, actions.sky),
-					numberField('sky.clouds.softness', 'Softness', sky.clouds, 'softness', 0, 1, 0.01, actions.sky),
-					numberField('sky.clouds.opacity', 'Opacity', sky.clouds, 'opacity', 0, 1, 0.01, actions.sky),
-					numberField('sky.clouds.brightness', 'Brightness', sky.clouds, 'brightness', 0.2, 2, 0.02, actions.sky),
-					numberField('sky.clouds.shadow', 'Shadow tint', sky.clouds, 'shadowTint', 0, 1, 0.01, actions.sky),
-					numberField('sky.clouds.speed1', 'Speed 1', sky.clouds, 'speed1', 0, 3, 0.02, actions.sky),
-					numberField('sky.clouds.speed2', 'Speed 2', sky.clouds, 'speed2', 0, 3, 0.02, actions.sky),
-					numberField('sky.clouds.dir1', 'Direction 1', sky.clouds, 'direction1', 0, 360, 1, actions.sky),
-					numberField('sky.clouds.dir2', 'Direction 2', sky.clouds, 'direction2', 0, 360, 1, actions.sky),
-					numberField('sky.clouds.drift', 'Drift strength', sky.clouds, 'driftStrength', 0, 3, 0.05, actions.sky),
-					numberField('sky.clouds.macro', 'Macro scale', sky.clouds, 'macroScale', 0.2, 6, 0.05, actions.sky),
-					numberField('sky.clouds.breakup', 'Breakup scale', sky.clouds, 'breakupScale', 0.5, 16, 0.1, actions.sky),
-					numberField('sky.clouds.wispy', 'Wispy scale', sky.clouds, 'wispyScale', 1, 24, 0.1, actions.sky),
+					numberField(
+						'sky.clouds.coverage',
+						'Coverage',
+						sky.clouds,
+						'coverage',
+						0,
+						1,
+						0.01,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.softness',
+						'Softness',
+						sky.clouds,
+						'softness',
+						0,
+						1,
+						0.01,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.opacity',
+						'Opacity',
+						sky.clouds,
+						'opacity',
+						0,
+						1,
+						0.01,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.brightness',
+						'Brightness',
+						sky.clouds,
+						'brightness',
+						0.2,
+						2,
+						0.02,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.shadow',
+						'Shadow tint',
+						sky.clouds,
+						'shadowTint',
+						0,
+						1,
+						0.01,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.speed1',
+						'Speed 1',
+						sky.clouds,
+						'speed1',
+						0,
+						3,
+						0.02,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.speed2',
+						'Speed 2',
+						sky.clouds,
+						'speed2',
+						0,
+						3,
+						0.02,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.dir1',
+						'Direction 1',
+						sky.clouds,
+						'direction1',
+						0,
+						360,
+						1,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.dir2',
+						'Direction 2',
+						sky.clouds,
+						'direction2',
+						0,
+						360,
+						1,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.drift',
+						'Drift strength',
+						sky.clouds,
+						'driftStrength',
+						0,
+						3,
+						0.05,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.macro',
+						'Macro scale',
+						sky.clouds,
+						'macroScale',
+						0.2,
+						6,
+						0.05,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.breakup',
+						'Breakup scale',
+						sky.clouds,
+						'breakupScale',
+						0.5,
+						16,
+						0.1,
+						actions.sky
+					),
+					numberField(
+						'sky.clouds.wispy',
+						'Wispy scale',
+						sky.clouds,
+						'wispyScale',
+						1,
+						24,
+						0.1,
+						actions.sky
+					),
 					numberField(
 						'sky.clouds.edgeThreshold',
 						'Edge threshold',
@@ -1621,10 +2268,25 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.sky
 					),
 					numberField('sky.clouds.warmth', 'Warmth', sky.clouds, 'warmth', 0, 1, 0.01, actions.sky),
-					numberField('sky.clouds.cool', 'Cool tint', sky.clouds, 'coolTint', 0, 1, 0.01, actions.sky)
+					numberField(
+						'sky.clouds.cool',
+						'Cool tint',
+						sky.clouds,
+						'coolTint',
+						0,
+						1,
+						0.01,
+						actions.sky
+					)
 				]),
 				group('sky-debug', 'Debug', [
-					boolField('sky.debug.bounds', 'Show cloud bounds', sky.debug, 'showCloudBounds', actions.sky),
+					boolField(
+						'sky.debug.bounds',
+						'Show cloud bounds',
+						sky.debug,
+						'showCloudBounds',
+						actions.sky
+					),
 					boolField(
 						'sky.debug.wire',
 						'Show cloud layer wireframe',
@@ -1662,7 +2324,16 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						'dynamicResolutionEnabled',
 						actions.graphicsAdvanced
 					),
-					numberField('graphics.fps', 'Target FPS', graphics, 'targetFps', 30, 120, 1, actions.graphicsAdvanced),
+					numberField(
+						'graphics.fps',
+						'Target FPS',
+						graphics,
+						'targetFps',
+						30,
+						120,
+						1,
+						actions.graphicsAdvanced
+					),
 					numberField(
 						'graphics.exposure',
 						'Exposure',
@@ -1680,7 +2351,12 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						'showRenderStats',
 						actions.graphicsAdvanced
 					),
-					{ kind: 'button', id: 'graphics.export', label: 'Export settings', onClick: actions.graphicsExport }
+					{
+						kind: 'button',
+						id: 'graphics.export',
+						label: 'Export settings',
+						onClick: actions.graphicsExport
+					}
 				]),
 				group('ao', 'Ambient occlusion', [
 					numberField(
@@ -1733,8 +2409,26 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.01,
 						actions.graphicsAo
 					),
-					numberField('graphics.ao.scale', 'AO scale', graphics.aoTuning, 'scale', 0.1, 4, 0.05, actions.graphicsAo),
-					numberField('graphics.ao.samples', 'AO samples', graphics.aoTuning, 'samples', 4, 32, 1, actions.graphicsAo),
+					numberField(
+						'graphics.ao.scale',
+						'AO scale',
+						graphics.aoTuning,
+						'scale',
+						0.1,
+						4,
+						0.05,
+						actions.graphicsAo
+					),
+					numberField(
+						'graphics.ao.samples',
+						'AO samples',
+						graphics.aoTuning,
+						'samples',
+						4,
+						32,
+						1,
+						actions.graphicsAo
+					),
 					numberField(
 						'graphics.ao.denoiseRadius',
 						'AO denoise radius',
@@ -1784,7 +2478,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 			description: 'Terrain debug views and chunk overlays.',
 			groups: [
 				group('rendering-debug', 'Terrain debug', [
-					boolField('render.wireframe', 'Wireframe', terrain.rendering, 'wireframe', actions.terrainRendering),
+					boolField(
+						'render.wireframe',
+						'Wireframe',
+						terrain.rendering,
+						'wireframe',
+						actions.terrainRendering
+					),
 					boolField(
 						'render.borders',
 						'Show chunk borders',
@@ -1836,7 +2536,10 @@ export function groupMatchesQuery(groupItem: SettingsGroup, query: string): bool
 
 export function categoryMatchesQuery(category: SettingsCategory, query: string): boolean {
 	if (!query) return true;
-	if (category.title.toLowerCase().includes(query) || category.description.toLowerCase().includes(query))
+	if (
+		category.title.toLowerCase().includes(query) ||
+		category.description.toLowerCase().includes(query)
+	)
 		return true;
 	return category.groups.some((groupItem) => groupMatchesQuery(groupItem, query));
 }

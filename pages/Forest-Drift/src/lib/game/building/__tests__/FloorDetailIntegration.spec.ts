@@ -58,6 +58,7 @@ describe('FloorDetailManager integration', () => {
 		expect(meshes[0].userData.foundationId).toBe('f1');
 		const mesh = meshes[0] as THREE.Mesh;
 		expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
+		expect((mesh.material as THREE.MeshStandardMaterial).polygonOffset).toBe(true);
 		expect('getAllCollisionRects' in manager).toBe(false);
 	});
 

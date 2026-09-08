@@ -366,6 +366,7 @@ describe('BuildingLevelManager.getLevelUiState', () => {
 		expect(state).toEqual({
 			index: 0,
 			baseY: 0,
+			wallHeight: 3,
 			displayName: 'Ground Floor',
 			canMoveDown: false,
 			canMoveUp: true

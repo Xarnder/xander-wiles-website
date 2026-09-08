@@ -8,7 +8,11 @@ import {
 	FLOOR_DETAIL_2D_THICKNESS,
 	FLOOR_DETAIL_3D_GROOVE,
 	FLOOR_DETAIL_3D_THICKNESS,
+	FLOOR_DETAIL_CARPET_BORDER,
+	FLOOR_DETAIL_CARPET_PILE,
 	FLOOR_DETAIL_HOST_LIFT,
+	FLOOR_DETAIL_PLANK_LENGTH_RATIO,
+	FLOOR_DETAIL_PLANK_MIN_SEGMENT,
 	FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA,
 	FLOOR_DETAIL_PATH_FRAME_WIDTH,
 	type FloorDetailBox,
@@ -94,6 +98,156 @@ export function localRectFromGridRect(rect: FloorDetailRect, gridSize: number): 
 	};
 }
 
+export interface PathLocalPoint {
+	x: number;
+	z: number;
+}
+
+export interface PathAuthoring {
+	start: BuildingGridPoint;
+	end: BuildingGridPoint;
+	/** Quadratic Bezier control — omitted on a straight start→end path. */
+	handle: BuildingGridPoint | null;
+}
+
+const PATH_SAMPLE_SPACING = 0.18;
+const PATH_MIN_SAMPLES = 8;
+const PATH_MAX_SAMPLES = 40;
+
+export function pathAuthoring(points: readonly BuildingGridPoint[]): PathAuthoring | null {
+	if (points.length === 2) return { start: points[0], end: points[1], handle: null };
+	if (points.length === 3) return { start: points[0], handle: points[1], end: points[2] };
+	return null;
+}
+
+function pathLocal(point: BuildingGridPoint, gridSize: number): PathLocalPoint {
+	const local = buildingGridToLocal(point, gridSize);
+	return { x: local.localX, z: local.localZ };
+}
+
+export function quadraticBezierPoint(
+	p0: PathLocalPoint,
+	p1: PathLocalPoint,
+	p2: PathLocalPoint,
+	t: number
+): PathLocalPoint {
+	const u = 1 - t;
+	return {
+		x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+		z: u * u * p0.z + 2 * u * t * p1.z + t * t * p2.z
+	};
+}
+
+function distanceToSegment(point: PathLocalPoint, a: PathLocalPoint, b: PathLocalPoint): number {
+	const dx = b.x - a.x;
+	const dz = b.z - a.z;
+	const len2 = dx * dx + dz * dz;
+	if (len2 < 1e-16) return Math.hypot(point.x - a.x, point.z - a.z);
+	const t = Math.min(1, Math.max(0, ((point.x - a.x) * dx + (point.z - a.z) * dz) / len2));
+	return Math.hypot(point.x - (a.x + t * dx), point.z - (a.z + t * dz));
+}
+
+export function pathPolylineLength(samples: readonly PathLocalPoint[]): number {
+	let length = 0;
+	for (let i = 1; i < samples.length; i++) {
+		length += Math.hypot(samples[i].x - samples[i - 1].x, samples[i].z - samples[i - 1].z);
+	}
+	return length;
+}
+
+/** True when the handle sits on the chord — persist as a 2-point straight path. */
+export function pathBendIsStraight(
+	start: BuildingGridPoint,
+	handle: BuildingGridPoint,
+	end: BuildingGridPoint,
+	gridSize: number
+): boolean {
+	const a = pathLocal(start, gridSize);
+	const c = pathLocal(handle, gridSize);
+	const b = pathLocal(end, gridSize);
+	return distanceToSegment(c, a, b) <= gridSize * 0.4;
+}
+
+/**
+ * Centreline in local metres. Two authored points stay a single segment; three become a quadratic
+ * Bezier (start → handle → end).
+ */
+export function pathCenterlineLocalSamples(
+	points: readonly BuildingGridPoint[],
+	gridSize: number
+): PathLocalPoint[] {
+	const authored = pathAuthoring(points);
+	if (!authored) return [];
+	const start = pathLocal(authored.start, gridSize);
+	const end = pathLocal(authored.end, gridSize);
+	const chord = Math.hypot(end.x - start.x, end.z - start.z);
+	if (chord < 1e-8) return [];
+	if (!authored.handle) return [start, end];
+	const handle = pathLocal(authored.handle, gridSize);
+	const pull = distanceToSegment(handle, start, end);
+	if (pull < 1e-4) return [start, end];
+	const count = Math.min(
+		PATH_MAX_SAMPLES,
+		Math.max(PATH_MIN_SAMPLES, Math.round((chord + pull) / PATH_SAMPLE_SPACING) + 1)
+	);
+	const samples: PathLocalPoint[] = [];
+	for (let i = 0; i <= count; i++) {
+		samples.push(quadraticBezierPoint(start, handle, end, i / count));
+	}
+	return samples;
+}
+
+/** Offset a centreline to the left (positive) or right (negative) of the walk direction. */
+export function offsetPathPolyline(
+	samples: readonly PathLocalPoint[],
+	offset: number
+): PathLocalPoint[] {
+	if (samples.length < 2) return [];
+	const out: PathLocalPoint[] = [];
+	for (let i = 0; i < samples.length; i++) {
+		let tx: number;
+		let tz: number;
+		if (i === 0) {
+			tx = samples[1].x - samples[0].x;
+			tz = samples[1].z - samples[0].z;
+		} else if (i === samples.length - 1) {
+			tx = samples[i].x - samples[i - 1].x;
+			tz = samples[i].z - samples[i - 1].z;
+		} else {
+			tx = samples[i + 1].x - samples[i - 1].x;
+			tz = samples[i + 1].z - samples[i - 1].z;
+		}
+		const length = Math.hypot(tx, tz);
+		if (length < 1e-8) {
+			out.push({ x: samples[i].x, z: samples[i].z });
+			continue;
+		}
+		out.push({
+			x: samples[i].x + (-tz / length) * offset,
+			z: samples[i].z + (tx / length) * offset
+		});
+	}
+	return out;
+}
+
+/**
+ * Closed ring of a constant-width ribbon: left edge start→end, then right edge end→start.
+ * Works for straight and Bezier paths.
+ */
+export function pathRibbonLocalRing(
+	points: readonly BuildingGridPoint[],
+	pathWidth: number,
+	gridSize: number
+): PathLocalPoint[] {
+	const samples = pathCenterlineLocalSamples(points, gridSize);
+	if (samples.length < 2 || pathWidth <= 0) return [];
+	const half = pathWidth / 2;
+	const left = offsetPathPolyline(samples, half);
+	const right = offsetPathPolyline(samples, -half);
+	if (left.length < 2 || right.length < 2) return [];
+	return [...left, ...right.slice().reverse()];
+}
+
 /**
  * Four local-metre corners of a constant-width strip along start→end. Not snapped back onto the
  * building grid — a diagonal path keeps its authored width.
@@ -104,21 +258,7 @@ export function pathStripLocalCorners(
 	pathWidth: number,
 	gridSize: number
 ): { x: number; z: number }[] {
-	const a = buildingGridToLocal(start, gridSize);
-	const b = buildingGridToLocal(end, gridSize);
-	const dx = b.localX - a.localX;
-	const dz = b.localZ - a.localZ;
-	const length = Math.hypot(dx, dz);
-	if (length < 1e-8 || pathWidth <= 0) return [];
-	const half = pathWidth / 2;
-	const nx = -dz / length;
-	const nz = dx / length;
-	return [
-		{ x: a.localX + nx * half, z: a.localZ + nz * half },
-		{ x: b.localX + nx * half, z: b.localZ + nz * half },
-		{ x: b.localX - nx * half, z: b.localZ - nz * half },
-		{ x: a.localX - nx * half, z: a.localZ - nz * half }
-	];
+	return pathRibbonLocalRing([start, end], pathWidth, gridSize);
 }
 
 export function validateFloorDetailFootprint(
@@ -129,17 +269,16 @@ export function validateFloorDetailFootprint(
 ): FloorDetailFootprintCheck {
 	if (kind === 'path') {
 		if (points.length < 2) return { valid: false, reason: 'Path needs a start and end' };
-		const start = points[0];
-		const end = points[1];
-		if (start.gridX === end.gridX && start.gridZ === end.gridZ) {
+		if (points.length > 3) return { valid: false, reason: 'Path can have a start, bend, and end' };
+		const authored = pathAuthoring(points);
+		if (!authored) return { valid: false, reason: 'Path needs a start and end' };
+		if (authored.start.gridX === authored.end.gridX && authored.start.gridZ === authored.end.gridZ) {
 			return { valid: false, reason: 'Path start and end must be different' };
 		}
 		if (!(pathWidth > 0) || !Number.isFinite(pathWidth)) {
 			return { valid: false, reason: 'Path width must be positive' };
 		}
-		const a = buildingGridToLocal(start, gridSize);
-		const b = buildingGridToLocal(end, gridSize);
-		const length = Math.hypot(b.localX - a.localX, b.localZ - a.localZ);
+		const length = pathPolylineLength(pathCenterlineLocalSamples(points, gridSize));
 		if (length < gridSize - 1e-6) {
 			return { valid: false, reason: 'Path is too short' };
 		}
@@ -215,19 +354,48 @@ function tileColor(
 	}
 }
 
+function rimBoxes(rect: LocalRect, inner: LocalRect, minY: number, maxY: number, color: string): FloorDetailBox[] {
+	const parts: LocalRect[] = [
+		{ minX: rect.minX, maxX: rect.maxX, minZ: rect.minZ, maxZ: inner.minZ },
+		{ minX: rect.minX, maxX: rect.maxX, minZ: inner.maxZ, maxZ: rect.maxZ },
+		{ minX: rect.minX, maxX: inner.minX, minZ: inner.minZ, maxZ: inner.maxZ },
+		{ minX: inner.maxX, maxX: rect.maxX, minZ: inner.minZ, maxZ: inner.maxZ }
+	];
+	return parts
+		.filter((part) => part.maxX - part.minX > 1e-4 && part.maxZ - part.minZ > 1e-4)
+		.map((part) => axisBox(part, minY, maxY, color));
+}
+
 function buildCarpetBoxes(def: FloorDetailDefinition, gridSize: number): FloorDetailBox[] {
 	const grid = axisAlignedRectFromPoints(def.points);
 	if (!grid) return [];
 	const rect = localRectFromGridRect(grid, gridSize);
 	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
-	const inner = insetRect(rect, 0.08);
+	const inner = insetRect(rect, FLOOR_DETAIL_CARPET_BORDER);
 	if (!inner || def.colors.length < 2) {
 		return [axisBox(rect, minY, maxY, colorAt(def.colors, 0))];
 	}
+	const pile = def.renderMode === '3d' ? FLOOR_DETAIL_CARPET_PILE : 0;
 	return [
-		axisBox(rect, minY, maxY, colorAt(def.colors, 1)),
-		axisBox(inner, minY, maxY, colorAt(def.colors, 0))
+		...rimBoxes(rect, inner, minY, maxY, colorAt(def.colors, 1)),
+		axisBox(inner, minY, maxY + pile, colorAt(def.colors, 0))
 	];
+}
+
+/** Repeating length mix so neighbouring boards do not share a joint line. */
+const PLANK_LENGTH_WEIGHTS = [1.05, 0.7, 1.2, 0.85, 1.0] as const;
+
+function plankTargetLength(plankWidth: number, runSpan: number, rowCount: number): number {
+	let target = Math.max(
+		FLOOR_DETAIL_PLANK_MIN_SEGMENT * 2,
+		plankWidth * FLOOR_DETAIL_PLANK_LENGTH_RATIO
+	);
+	target = Math.min(target, Math.max(runSpan, FLOOR_DETAIL_PLANK_MIN_SEGMENT));
+	const perRow = Math.max(1, Math.ceil(runSpan / Math.max(target, 1e-4)));
+	if (rowCount * perRow > MAX_BOARD_COUNT) {
+		target = runSpan / Math.max(1, Math.floor(MAX_BOARD_COUNT / rowCount));
+	}
+	return target;
 }
 
 function buildPlankBoxes(def: FloorDetailDefinition, gridSize: number): FloorDetailBox[] {
@@ -236,44 +404,57 @@ function buildPlankBoxes(def: FloorDetailDefinition, gridSize: number): FloorDet
 	const rect = localRectFromGridRect(grid, gridSize);
 	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
 	const plankWidth = Math.max(0.04, def.plankWidth);
-	const groove = def.renderMode === '3d' ? FLOOR_DETAIL_3D_GROOVE : 0;
+	const groove = FLOOR_DETAIL_3D_GROOVE;
+	const alongX = def.plankDirection === 'x';
+	const runMin = alongX ? rect.minX : rect.minZ;
+	const runMax = alongX ? rect.maxX : rect.maxZ;
+	const acrossMin = alongX ? rect.minZ : rect.minX;
+	const acrossMax = alongX ? rect.maxZ : rect.maxX;
+	const runSpan = runMax - runMin;
+	const acrossSpan = acrossMax - acrossMin;
+	if (runSpan < 1e-4 || acrossSpan < 1e-4) return [];
+
+	const rowCount = Math.min(MAX_BOARD_COUNT, Math.max(1, Math.round(acrossSpan / plankWidth)));
+	const rowStep = acrossSpan / rowCount;
+	const target = plankTargetLength(plankWidth, runSpan, rowCount);
 	const boxes: FloorDetailBox[] = [];
 
-	if (def.plankDirection === 'x') {
-		const span = rect.maxZ - rect.minZ;
-		const count = Math.min(MAX_BOARD_COUNT, Math.max(1, Math.round(span / plankWidth)));
-		const step = span / count;
-		for (let i = 0; i < count; i++) {
-			const minZ = rect.minZ + i * step;
-			const maxZ = i === count - 1 ? rect.maxZ : rect.minZ + (i + 1) * step;
-			const shrink = i < count - 1 ? groove : 0;
-			boxes.push(
-				axisBox(
-					{ minX: rect.minX, maxX: rect.maxX, minZ, maxZ: maxZ - shrink },
-					minY,
-					maxY,
-					colorAt(def.colors, i)
-				)
-			);
-		}
-		return boxes;
-	}
+	const emit = (run0: number, run1: number, across0: number, across1: number, color: string) => {
+		const shrinkRun = run1 < runMax - 1e-6 ? groove : 0;
+		const shrinkAcross = across1 < acrossMax - 1e-6 ? groove : 0;
+		const part = alongX
+			? { minX: run0, maxX: run1 - shrinkRun, minZ: across0, maxZ: across1 - shrinkAcross }
+			: { minX: across0, maxX: across1 - shrinkAcross, minZ: run0, maxZ: run1 - shrinkRun };
+		if (part.maxX - part.minX <= 1e-4 || part.maxZ - part.minZ <= 1e-4) return;
+		boxes.push(axisBox(part, minY, maxY, color));
+	};
 
-	const span = rect.maxX - rect.minX;
-	const count = Math.min(MAX_BOARD_COUNT, Math.max(1, Math.round(span / plankWidth)));
-	const step = span / count;
-	for (let i = 0; i < count; i++) {
-		const minX = rect.minX + i * step;
-		const maxX = i === count - 1 ? rect.maxX : rect.minX + (i + 1) * step;
-		const shrink = i < count - 1 ? groove : 0;
-		boxes.push(
-			axisBox(
-				{ minX, maxX: maxX - shrink, minZ: rect.minZ, maxZ: rect.maxZ },
-				minY,
-				maxY,
-				colorAt(def.colors, i)
-			)
-		);
+	for (let row = 0; row < rowCount; row++) {
+		const across0 = acrossMin + row * rowStep;
+		const across1 = row === rowCount - 1 ? acrossMax : acrossMin + (row + 1) * rowStep;
+		let pos = runMin;
+		let board = 0;
+		const firstCut = ((row % 3) / 3) * target;
+		if (
+			firstCut >= FLOOR_DETAIL_PLANK_MIN_SEGMENT &&
+			runMax - (runMin + firstCut) >= FLOOR_DETAIL_PLANK_MIN_SEGMENT
+		) {
+			emit(runMin, runMin + firstCut, across0, across1, colorAt(def.colors, row + board));
+			pos = runMin + firstCut;
+			board += 1;
+		}
+		while (pos < runMax - 1e-6) {
+			const remaining = runMax - pos;
+			const weight = PLANK_LENGTH_WEIGHTS[(board + row) % PLANK_LENGTH_WEIGHTS.length];
+			const len = target * weight;
+			if (remaining <= len + FLOOR_DETAIL_PLANK_MIN_SEGMENT) {
+				emit(pos, runMax, across0, across1, colorAt(def.colors, row + board));
+				break;
+			}
+			emit(pos, pos + len, across0, across1, colorAt(def.colors, row + board));
+			pos += len;
+			board += 1;
+		}
 	}
 	return boxes;
 }
@@ -320,52 +501,84 @@ function buildTileBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 	return boxes;
 }
 
-function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDetailBox[] {
-	if (def.points.length < 2) return [];
-	const start = buildingGridToLocal(def.points[0], gridSize);
-	const end = buildingGridToLocal(def.points[1], gridSize);
-	const dx = end.localX - start.localX;
-	const dz = end.localZ - start.localZ;
+/** Box whose local Z runs from A→B and whose local X is the half-width. */
+function yawedBoxAlongSegment(
+	ax: number,
+	az: number,
+	bx: number,
+	bz: number,
+	halfWidth: number,
+	minY: number,
+	maxY: number,
+	color: string
+): FloorDetailBox | null {
+	const dx = bx - ax;
+	const dz = bz - az;
 	const length = Math.hypot(dx, dz);
-	if (length < 1e-8) return [];
-	const yaw = Math.atan2(dx, dz);
-	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
-	const cx = (start.localX + end.localX) / 2;
-	const cz = (start.localZ + end.localZ) / 2;
-	const halfW = def.pathWidth / 2;
+	if (length < 1e-8 || halfWidth <= 0) return null;
+	const cx = (ax + bx) / 2;
+	const cz = (az + bz) / 2;
 	const halfL = length / 2;
-	const boxes: FloorDetailBox[] = [
-		{
-			minX: cx - halfW,
-			maxX: cx + halfW,
+	return {
+		minX: cx - halfWidth,
+		maxX: cx + halfWidth,
+		minY,
+		maxY,
+		minZ: cz - halfL,
+		maxZ: cz + halfL,
+		color,
+		yaw: Math.atan2(dx, dz)
+	};
+}
+
+function boxesAlongPolyline(
+	samples: readonly PathLocalPoint[],
+	halfWidth: number,
+	minY: number,
+	maxY: number,
+	color: string
+): FloorDetailBox[] {
+	const boxes: FloorDetailBox[] = [];
+	for (let i = 1; i < samples.length; i++) {
+		const box = yawedBoxAlongSegment(
+			samples[i - 1].x,
+			samples[i - 1].z,
+			samples[i].x,
+			samples[i].z,
+			halfWidth,
 			minY,
 			maxY,
-			minZ: cz - halfL,
-			maxZ: cz + halfL,
-			color: colorAt(def.colors, 0),
-			yaw
-		}
-	];
+			color
+		);
+		if (box) boxes.push(box);
+	}
+	return boxes;
+}
+
+function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDetailBox[] {
+	const samples = pathCenterlineLocalSamples(def.points, gridSize);
+	if (samples.length < 2) return [];
+	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
+	const halfW = def.pathWidth / 2;
+	const boxes = boxesAlongPolyline(samples, halfW, minY, maxY, colorAt(def.colors, 0));
 	if (!def.pathFraming) return boxes;
 
-	const frame = yRange(def.hostY, def.kind, def.renderMode, FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA);
 	const frameHalf = FLOOR_DETAIL_PATH_FRAME_WIDTH / 2;
+	if (halfW < frameHalf + 1e-4) return boxes;
+
 	const offset = halfW - frameHalf;
-	const perpX = Math.cos(yaw);
-	const perpZ = Math.sin(yaw);
+	const frame = yRange(def.hostY, def.kind, def.renderMode, FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA);
+	const railColor = colorAt(def.colors, 1);
 	for (const sign of [-1, 1] as const) {
-		const fcx = cx + sign * offset * perpX;
-		const fcz = cz + sign * offset * perpZ;
-		boxes.push({
-			minX: fcx - frameHalf,
-			maxX: fcx + frameHalf,
-			minY: frame.minY,
-			maxY: frame.maxY,
-			minZ: fcz - halfL,
-			maxZ: fcz + halfL,
-			color: colorAt(def.colors, 1),
-			yaw
-		});
+		boxes.push(
+			...boxesAlongPolyline(
+				offsetPathPolyline(samples, sign * offset),
+				frameHalf,
+				frame.minY,
+				frame.maxY,
+				railColor
+			)
+		);
 	}
 	return boxes;
 }

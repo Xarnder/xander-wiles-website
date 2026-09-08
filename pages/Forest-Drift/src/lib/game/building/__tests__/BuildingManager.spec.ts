@@ -2411,6 +2411,39 @@ describe('BuildingManager.addFloorDetail', () => {
 		expect(result.valid).toBe(false);
 	});
 
+	it('places a Bezier path from start, handle, and end', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const result = buildingManager.addFloorDetail({
+			foundationId: 'foundation-a',
+			points: [
+				{ gridX: 4, gridZ: 4 },
+				{ gridX: 16, gridZ: 20 },
+				{ gridX: 28, gridZ: 4 }
+			],
+			...DETAIL_PARAMS,
+			kind: 'path'
+		});
+		expect(result.valid).toBe(true);
+		expect(result.value?.points).toHaveLength(3);
+	});
+
+	it('rejects a Bezier path that bows off the foundation', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const result = buildingManager.addFloorDetail({
+			foundationId: 'foundation-a',
+			points: [
+				{ gridX: 4, gridZ: 4 },
+				{ gridX: 16, gridZ: 80 },
+				{ gridX: 28, gridZ: 4 }
+			],
+			...DETAIL_PARAMS,
+			kind: 'path'
+		});
+		expect(result.valid).toBe(false);
+	});
+
 	it('removes a placed path', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());

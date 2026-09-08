@@ -22,6 +22,8 @@ export interface BuildingLevelDefinition {
 export interface BuildingLevelUiState {
 	index: number;
 	baseY: number;
+	/** Frozen wall height of this storey — used as the default ceiling / floor / roof elevation. */
+	wallHeight: number;
 	displayName: string;
 	canMoveUp: boolean;
 	canMoveDown: boolean;

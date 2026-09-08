@@ -27,6 +27,7 @@ export interface WorldSessionOptions {
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 	onPlacementCustomizeChange?: (open: boolean) => void;
+	onPlacementHeightChange?: (open: boolean) => void;
 }
 
 /**
@@ -67,7 +68,8 @@ export class WorldSession {
 			onPaintPaletteChange: options.onPaintPaletteChange,
 			onPaintStateChange: options.onPaintStateChange,
 			onGraphicsQualityChange: options.onGraphicsQualityChange,
-			onPlacementCustomizeChange: options.onPlacementCustomizeChange
+			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
+			onPlacementHeightChange: options.onPlacementHeightChange
 		});
 
 		this.autosave = new WorldAutosaveManager({

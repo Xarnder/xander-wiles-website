@@ -43,7 +43,10 @@ export class FloorDetailManager {
 		this.material = new THREE.MeshStandardMaterial({
 			vertexColors: true,
 			roughness: 0.72,
-			metalness: 0.02
+			metalness: 0.02,
+			polygonOffset: true,
+			polygonOffsetFactor: -2,
+			polygonOffsetUnits: -2
 		});
 	}
 

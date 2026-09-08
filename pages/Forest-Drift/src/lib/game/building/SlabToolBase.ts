@@ -20,6 +20,7 @@ import {
 	snapToNearestCorner
 } from './polygonDrawSnap';
 import type { SnapMode } from './polygonDrawSnap';
+import { resolveSlabPlacementLocalY } from './slabPlacementMath';
 import { buildSlabGeometry } from './SlabGeometryBuilder';
 import { validateSlabPolygon } from './slabMath';
 import type { SlabType } from './SlabTypes';
@@ -69,11 +70,9 @@ interface HoverTarget {
  * cancel) since it's the same mental model, minus the "finish as an open chain" option a slab
  * polygon doesn't have — a slab is always a closed shape.
  *
- * All three slab tools default to the *same* elevation (`level.baseY + level.wallHeight` — the top
- * of the current level's walls), which is what lets a "Floor" placed at level 0 and a "Ceiling"
- * placed at level 0 be, physically, the exact same slab: BuildingManager.addSlab's same-level
- * overlap rule rejects the second one as a duplicate rather than creating two coplanar objects —
- * see SlabTypes.ts's doc comment.
+ * All three slab tools default to the *same* elevation (wall-top, or the C-panel height above this
+ * storey floor), which is what lets a "Floor" and a "Ceiling" on the same storey be the same slab:
+ * BuildingManager.addSlab's overlap rule rejects a second coplanar piece — see SlabTypes.ts.
  */
 export class SlabToolBase implements BuildTool {
 	readonly toolId: ToolId;
@@ -139,7 +138,7 @@ export class SlabToolBase implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyC' && event.shiftKey) {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -244,13 +243,13 @@ export class SlabToolBase implements BuildTool {
 		return vertexSpacingFor(this.terrainSettings.chunkSize, this.terrainSettings.chunkResolution);
 	}
 
-	/** The default slab elevation for a foundation at the current level — top of that level's walls, shared identically by all three slab tools; see class doc comment. */
+	/** The default slab elevation for a foundation at the current level — wall-top unless C set a custom height. */
 	private defaultLocalY(foundationId: string): number {
 		const level = this.levelManager.getOrCreateLevel(
 			foundationId,
 			this.levelManager.getCurrentLevelIndex(foundationId)
 		);
-		return level.baseY + level.wallHeight;
+		return resolveSlabPlacementLocalY(level, this.buildingSettings);
 	}
 
 	/** The active (frozen, once drawing) or live (idle/hovering) slab localY for `foundationId`. */
@@ -289,13 +288,23 @@ export class SlabToolBase implements BuildTool {
 	update(): void {
 		if (!this.active) return;
 
+		const heightFoundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
+		if (heightFoundationId) {
+			const nextY = this.defaultLocalY(heightFoundationId);
+			if (Math.abs(nextY - this.activeLocalY) > 1e-6) {
+				this.activeLocalY = nextY;
+				this.refreshVisuals();
+			}
+		}
+
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
 		const hit = raycastSlabConstructionPlane(
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
 			this.vertexSpacing(),
-			this.buildingSettings.buildingGridSize
+			this.buildingSettings.buildingGridSize,
+			this.buildingSettings
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
@@ -714,9 +723,9 @@ export class SlabToolBase implements BuildTool {
 				'',
 				this.thicknessLine(),
 				'',
-				'Look up: click to start',
+				'Look at the slab: click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap'
+				'C: Set height'
 			]
 		};
 	}
@@ -738,7 +747,15 @@ export class SlabToolBase implements BuildTool {
 				snapMode: this.snapMode,
 				level,
 				crosshair: 'valid',
-				hintLines: [...levelLines, '', ...common, '', ...this.snapHudLines(), 'Click to close slab']
+				hintLines: [
+					...levelLines,
+					'',
+					...common,
+					'',
+					...this.snapHudLines(),
+					'C: Set height',
+					'Click to close slab'
+				]
 			};
 		}
 
@@ -756,7 +773,7 @@ export class SlabToolBase implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'C: Set height',
 				'Right click: Cancel'
 			]
 		};
@@ -777,7 +794,7 @@ export class SlabToolBase implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'C: Set height',
 				'Right click: Cancel'
 			]
 		};

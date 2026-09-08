@@ -10,6 +10,10 @@ import {
 } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
 import type { FoundationDefinition } from './FoundationTypes';
+import {
+	resolveSlabPlacementLocalY,
+	type SlabPlacementHeightSettings
+} from './slabPlacementMath';
 
 export interface FoundationTopHit {
 	foundationId: string;
@@ -151,34 +155,26 @@ function intersectFoundationPlane(
 }
 
 /**
- * Targeting for the Ceiling/Floor/Flat Roof tools: unlike walls and stairs (built starting from
- * the current level's *floor*), a slab always sits at the top of the current level's walls — well
- * above head height. `raycastLevelConstructionPlane`'s ground-mesh shortcut exists for walls, where
- * "look down at the floor" is the natural aiming pose; reusing it for slabs forced players to aim
- * at the ground to place points for a shape that actually gets drawn a storey above their head,
- * with no visual relationship between where they were looking and where the point landed.
+ * Targeting for the Ceiling/Floor/Roof tools. Intersects the look ray with the analytic plane at
+ * the slab/eave height that will actually be placed (`foundation.topY + resolveSlabPlacementLocalY`),
+ * so the crosshair, building grid, and preview sit on the same plane — including when C has lowered
+ * that plane below eye height and the player is looking down at it.
  *
- * This instead always intersects the ray with the analytic plane at the slab's actual height
- * (`foundation.topY + level.baseY + level.wallHeight`), so a player looks *up* at the (invisible)
- * ceiling plane and clicks corners directly on it — the crosshair target and the slab preview are
- * now the same plane. Foundation resolution prefers "which foundation am I standing in" (XZ-only,
- * ignores aim direction) over a physical mesh hit, since looking up means the ray moves away from
- * any ground-level mesh and would essentially never hit one; the mesh-hit path remains as a
- * fallback for the reverse case (aiming down at a foundation from just outside its footprint). A
- * final fallback to `levelManager`'s already-active foundation covers stepping back outside the
- * footprint entirely to get a workable angle on a high ceiling — see
- * `raycastLevelConstructionPlane`'s doc comment for why this is safe (the footprint bounds check
- * below still applies).
+ * Foundation resolution prefers "which foundation am I standing in" (XZ-only) over a mesh hit,
+ * because aiming up at a high slab moves the ray away from any ground mesh. The mesh-hit path
+ * remains for aiming at a foundation from just outside its footprint. A final fallback to the
+ * already-active foundation covers stepping back for a workable angle — the footprint bounds check
+ * still applies.
  *
- * As with `raycastLevelConstructionPlane`, the level used is resolved AFTER the foundation is
- * known, via that specific foundation's own `levelManager.getCurrentLevelIndex(foundationId)`.
+ * The level is resolved AFTER the foundation is known, via that foundation's own current index.
  */
 export function raycastSlabConstructionPlane(
 	raycaster: THREE.Raycaster,
 	foundationManager: FoundationManager,
 	levelManager: BuildingLevelManager,
 	vertexSpacing: number,
-	buildingGridSize: number
+	buildingGridSize: number,
+	placementHeight: SlabPlacementHeightSettings
 ): FoundationTopHit | null {
 	const origin = raycaster.ray.origin;
 	let foundationId = foundationManager.getFoundationContaining(origin.x, origin.z)?.id;
@@ -206,7 +202,7 @@ export function raycastSlabConstructionPlane(
 	const planeHit = intersectFoundationPlane(
 		raycaster,
 		foundation,
-		foundation.topY + level.baseY + level.wallHeight,
+		foundation.topY + resolveSlabPlacementLocalY(level, placementHeight),
 		vertexSpacing,
 		buildingGridSize
 	);

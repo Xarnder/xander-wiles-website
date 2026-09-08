@@ -2,6 +2,7 @@ import {
 	cycleHotbarVariantIndex,
 	DEFAULT_HOTBAR_SLOTS,
 	isCustomizablePlacementTool,
+	isSlabHeightTool,
 	resolveHotbarSlot
 } from './FoundationTypes';
 import type { BuildUiState, HotbarUiState, ToolId } from './FoundationTypes';
@@ -51,6 +52,7 @@ export interface BuildToolManagerOptions {
 	onHudChange?: (hud: BuildUiState | null) => void;
 	/** Fires when the placement-customize modal opens or closes (`E` on Door / Window / Beam). */
 	onPlacementCustomizeChange?: (open: boolean) => void;
+	onPlacementHeightChange?: (open: boolean) => void;
 }
 
 /**
@@ -87,6 +89,7 @@ export class BuildToolManager {
 	private readonly onHotbarChange?: (state: HotbarUiState) => void;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
 	private readonly onPlacementCustomizeChange?: (open: boolean) => void;
+	private readonly onPlacementHeightChange?: (open: boolean) => void;
 	private readonly domElement: HTMLElement;
 
 	private activeSlotNumber = 1;
@@ -98,6 +101,7 @@ export class BuildToolManager {
 	 * still close the modal — the same key must both open and dismiss it.
 	 */
 	private placementCustomizeOpen = false;
+	private placementHeightOpen = false;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
@@ -107,20 +111,36 @@ export class BuildToolManager {
 			if (this.placementCustomizeOpen && event.code === 'Escape') {
 				this.setPlacementCustomizeOpen(false);
 			}
+			if (this.placementHeightOpen && event.code === 'Escape') {
+				this.setPlacementHeightOpen(false);
+			}
 			return;
 		}
 		if (event.repeat) return;
 		if (event.code === 'KeyG') {
 			this.setPlacementCustomizeOpen(false);
+			this.setPlacementHeightOpen(false);
 			this.toggleBuildMode();
 			return;
 		}
 		if (event.code === 'KeyE' && this.canOpenPlacementCustomize()) {
+			this.setPlacementHeightOpen(false);
 			this.togglePlacementCustomize();
+			return;
+		}
+		if (event.code === 'KeyC' && !event.shiftKey && this.canOpenPlacementHeight()) {
+			this.setPlacementCustomizeOpen(false);
+			this.togglePlacementHeight();
 			return;
 		}
 		if (this.placementCustomizeOpen) {
 			if (event.code === 'Escape') this.setPlacementCustomizeOpen(false);
+			return;
+		}
+		if (this.placementHeightOpen) {
+			if (event.code === 'Escape' || (event.code === 'KeyC' && !event.shiftKey)) {
+				this.setPlacementHeightOpen(false);
+			}
 			return;
 		}
 		if (this.isInputBlocked?.()) return;
@@ -167,7 +187,7 @@ export class BuildToolManager {
 	};
 
 	private readonly handleMouseDown = (event: MouseEvent) => {
-		if (this.placementCustomizeOpen) return;
+		if (this.placementCustomizeOpen || this.placementHeightOpen) return;
 		if (this.isInputBlocked?.()) return;
 		if (event.button === 0) {
 			// Ungate: while pointer lock is not yet engaged, this exact click is the one that
@@ -205,6 +225,7 @@ export class BuildToolManager {
 		this.onHotbarChange = options.onHotbarChange;
 		this.onHudChange = options.onHudChange;
 		this.onPlacementCustomizeChange = options.onPlacementCustomizeChange;
+		this.onPlacementHeightChange = options.onPlacementHeightChange;
 
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.domElement.addEventListener('mousedown', this.handleMouseDown);
@@ -229,6 +250,7 @@ export class BuildToolManager {
 		this.activeSlotNumber = slot;
 		this.activateCurrent();
 		this.syncPlacementCustomizeToActiveTool();
+		this.syncPlacementHeightToActiveTool();
 		this.emitHotbarChange();
 	}
 
@@ -246,6 +268,7 @@ export class BuildToolManager {
 		this.variantIndexBySlot.set(definition.slot, next);
 		this.activateCurrent();
 		this.syncPlacementCustomizeToActiveTool();
+		this.syncPlacementHeightToActiveTool();
 		this.emitHotbarChange();
 	}
 
@@ -283,6 +306,18 @@ export class BuildToolManager {
 		this.setPlacementCustomizeOpen(false);
 	}
 
+	isPlacementHeightOpen(): boolean {
+		return this.placementHeightOpen;
+	}
+
+	togglePlacementHeight(): void {
+		this.setPlacementHeightOpen(!this.placementHeightOpen);
+	}
+
+	closePlacementHeight(): void {
+		this.setPlacementHeightOpen(false);
+	}
+
 	private getGlobalTool(): BuildTool | undefined {
 		if (this.globalMode === 'remove') return this.removeTool;
 		if (this.globalMode === 'paint') return this.paintTool;
@@ -300,6 +335,7 @@ export class BuildToolManager {
 
 		if (!active) {
 			this.setPlacementCustomizeOpen(false);
+			this.setPlacementHeightOpen(false);
 			if (this.globalMode === 'remove' || this.globalMode === 'paint') {
 				this.getGlobalTool()?.deactivate();
 				this.globalMode = 'none';
@@ -320,7 +356,10 @@ export class BuildToolManager {
 
 	private setGlobalMode(next: GlobalMode): void {
 		if (next === this.globalMode) return;
-		if (next !== 'none') this.setPlacementCustomizeOpen(false);
+		if (next !== 'none') {
+			this.setPlacementCustomizeOpen(false);
+			this.setPlacementHeightOpen(false);
+		}
 
 		// Leaving whichever global mode (if any) was active.
 		this.getGlobalTool()?.deactivate();
@@ -374,6 +413,15 @@ export class BuildToolManager {
 		);
 	}
 
+	private canOpenPlacementHeight(): boolean {
+		return (
+			this.buildModeActive &&
+			this.globalMode === 'none' &&
+			isSlabHeightTool(this.getActiveToolId()) &&
+			!this.isInputBlocked?.()
+		);
+	}
+
 	private setPlacementCustomizeOpen(open: boolean): void {
 		const next = open && this.canOpenPlacementCustomize();
 		if (next === this.placementCustomizeOpen) return;
@@ -386,6 +434,21 @@ export class BuildToolManager {
 	private syncPlacementCustomizeToActiveTool(): void {
 		if (this.placementCustomizeOpen && !this.canOpenPlacementCustomize()) {
 			this.setPlacementCustomizeOpen(false);
+		}
+	}
+
+	private setPlacementHeightOpen(open: boolean): void {
+		const next = open && this.canOpenPlacementHeight();
+		if (next === this.placementHeightOpen) return;
+		this.placementHeightOpen = next;
+		if (next && typeof document !== 'undefined') document.exitPointerLock?.();
+		this.onPlacementHeightChange?.(next);
+	}
+
+	/** Keep the modal up while cycling Ceiling / Floor / Roof; close it on Foundation, etc. */
+	private syncPlacementHeightToActiveTool(): void {
+		if (this.placementHeightOpen && !this.canOpenPlacementHeight()) {
+			this.setPlacementHeightOpen(false);
 		}
 	}
 
@@ -417,6 +480,7 @@ export class BuildToolManager {
 
 	dispose(): void {
 		this.setPlacementCustomizeOpen(false);
+		this.setPlacementHeightOpen(false);
 		this.getActiveTool()?.deactivate();
 		this.removeTool.deactivate();
 		this.paintTool.deactivate();

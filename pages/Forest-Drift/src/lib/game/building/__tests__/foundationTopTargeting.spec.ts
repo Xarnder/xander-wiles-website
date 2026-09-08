@@ -58,7 +58,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).not.toBeNull();
@@ -82,7 +83,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 		expect(hit).not.toBeNull();
 
@@ -117,7 +119,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).not.toBeNull();
@@ -136,7 +139,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).toBeNull();
@@ -159,7 +163,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).toBeNull();
@@ -179,7 +184,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 		levelManager.setCurrentLevelIndex('test-foundation', 2);
 		const hitLevel2 = raycastSlabConstructionPlane(
@@ -187,7 +193,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hitLevel0).not.toBeNull();
@@ -216,7 +223,8 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).not.toBeNull();
@@ -242,7 +250,85 @@ describe('raycastSlabConstructionPlane', () => {
 			foundationManager,
 			levelManager,
 			SPACING,
-			BUILDING_GRID_SIZE
+			BUILDING_GRID_SIZE,
+			settings
+		);
+
+		expect(hit).toBeNull();
+	});
+
+	it('looking down hits a custom slab height that sits below the camera', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		settings.defaultStoreyHeight = WALL_HEIGHT;
+		settings.slabPlacementFollowWalls = false;
+		settings.slabPlacementHeight = 0.5;
+		const levelManager = new BuildingLevelManager(settings);
+
+		// Standing on the foundation top (eye ~1.6m above topY=10). The lowered slab is at
+		// topY + 0.5 = 10.5 — below the eye — so the player must look down to aim at it.
+		const origin = new THREE.Vector3(0, 11.6, 0);
+		const hit = raycastSlabConstructionPlane(
+			makeRaycaster(origin, new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			settings
+		);
+
+		expect(hit).not.toBeNull();
+		expect(hit?.foundationId).toBe('test-foundation');
+		expect(hit?.gridPoint).toEqual({ gridX: 40, gridZ: 40 });
+	});
+
+	it('a downward look uses the lowered slab plane, not the foundation top further along the same ray', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		settings.defaultStoreyHeight = WALL_HEIGHT;
+		settings.slabPlacementFollowWalls = false;
+		settings.slabPlacementHeight = 0.5;
+		const levelManager = new BuildingLevelManager(settings);
+
+		const origin = new THREE.Vector3(0, 11.6, 0);
+		const direction = new THREE.Vector3(0.4, -1, 0);
+		const hit = raycastSlabConstructionPlane(
+			makeRaycaster(origin, direction),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			settings
+		);
+		expect(hit).not.toBeNull();
+
+		const dir = direction.clone().normalize();
+		const lowT = (10.5 - origin.y) / dir.y;
+		const groundT = (10 - origin.y) / dir.y;
+		const lowX = origin.x + dir.x * lowT;
+		const groundX = origin.x + dir.x * groundT;
+		expect(Math.abs(groundX) - Math.abs(lowX)).toBeGreaterThan(0.15);
+
+		const expectedGridX = Math.round((lowX - -10) / BUILDING_GRID_SIZE);
+		expect(hit?.gridPoint.gridX).toBe(expectedGridX);
+	});
+
+	it('looking down at a wall-top slab above the camera misses — that plane is behind the eye', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		settings.defaultStoreyHeight = WALL_HEIGHT;
+		const levelManager = new BuildingLevelManager(settings);
+
+		const hit = raycastSlabConstructionPlane(
+			makeRaycaster(new THREE.Vector3(0, 11.6, 0), new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			settings
 		);
 
 		expect(hit).toBeNull();

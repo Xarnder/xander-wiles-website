@@ -124,6 +124,10 @@ export class GraphicsPipeline {
 	registerMaterial(material: THREE.Material): void {
 		if (this.registeredMaterials.has(material)) return;
 		this.registeredMaterials.add(material);
+		material.addEventListener('dispose', () => {
+			this.registeredMaterials.delete(material);
+			this.csm?.shaders.delete(material);
+		});
 		this.csm?.setupMaterial(material);
 	}
 

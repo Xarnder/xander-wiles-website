@@ -17,25 +17,36 @@ import { buildFloorDetailGeometry } from './FloorDetailGeometryBuilder';
 import {
 	axisAlignedRectFromPoints,
 	buildFloorDetailBoxes,
-	pathStripLocalCorners,
+	pathBendIsStraight,
+	pathRibbonLocalRing,
 	rectanglePointsFromCorners,
 	validateFloorDetailFootprint
 } from './floorDetailMath';
+import {
+	cycleFloorPathDrawMode,
+	floorPathDrawModeBadge,
+	floorPathDrawModeLabel,
+	type FloorPathDrawMode
+} from './floorPathDraw';
 import {
 	cycleFloorDetailTilePattern,
 	defaultFloorDetailColors,
 	type FloorDetailDefinition,
 	type FloorDetailKind
 } from './FloorDetailTypes';
+import { snapDrawingPoint } from './polygonDrawSnap';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
 
 const MAX_FULL_GRID_POINTS = 4096;
 const FALLBACK_RADIUS_CELLS = 12;
+const MAX_OUTLINE_VERTICES = 512;
 
 const NEAREST_COLOR: readonly [number, number, number] = [0.55, 0.85, 0.65];
 const FAR_COLOR: readonly [number, number, number] = [0.4, 0.7, 0.5];
 const FIRST_POINT_COLOR = 0x7ad0a0;
+const END_POINT_COLOR = 0x5ec8ff;
+const HANDLE_COLOR = 0xf0c14a;
 const VALID_COLOR = 0x39d353;
 const INVALID_COLOR = 0xff4d4d;
 
@@ -77,8 +88,9 @@ export interface FloorDetailToolOptions {
 }
 
 /**
- * Two-click floor detailing: a rectangle (carpet / planks / tiles) or a start→end strip (path)
- * on the current level's construction plane. Sits above the floor with no collision.
+ * Two-click floor detailing: a rectangle (carpet / planks / tiles) or a path on the current
+ * level's construction plane. Path C cycles axis snap, free heading, and Bezier (start → end →
+ * bend). Sits above the floor with no collision.
  */
 export class FloorDetailTool implements BuildTool {
 	readonly toolId: ToolId;
@@ -108,20 +120,27 @@ export class FloorDetailTool implements BuildTool {
 	private readonly outline: THREE.LineSegments;
 
 	private readonly firstPointMarker = makeMarker(FIRST_POINT_COLOR);
+	private readonly endPointMarker = makeMarker(END_POINT_COLOR);
+	private readonly handlePointMarker = makeMarker(HANDLE_COLOR);
 	private readonly previewMaterial = new THREE.MeshStandardMaterial({
 		vertexColors: true,
 		transparent: true,
 		opacity: 0.55,
 		depthWrite: false,
-		side: THREE.DoubleSide
+		side: THREE.DoubleSide,
+		polygonOffset: true,
+		polygonOffsetFactor: -2,
+		polygonOffsetUnits: -2
 	});
 	private previewGeometry: THREE.BufferGeometry | null = null;
 	private readonly previewMesh: THREE.Mesh;
 
 	private active = false;
-	private state: 'idle' | 'first-point-selected' = 'idle';
+	private state: 'idle' | 'first-point-selected' | 'bending' = 'idle';
 	private foundationId: string | null = null;
 	private firstPoint: BuildingGridPoint | null = null;
+	private pathEndPoint: BuildingGridPoint | null = null;
+	private pathDrawMode: FloorPathDrawMode = 'axis';
 	private activeBaseY = 0;
 	private activeLevelIndex = 0;
 
@@ -133,6 +152,16 @@ export class FloorDetailTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
+		if (event.code === 'KeyC') {
+			if (this.kind !== 'path') return;
+			this.pathDrawMode = cycleFloorPathDrawMode(this.pathDrawMode);
+			if (this.state === 'bending') {
+				this.state = 'first-point-selected';
+				this.pathEndPoint = null;
+			}
+			this.refreshVisuals();
+			return;
+		}
 		if (event.code !== 'KeyR') return;
 		if (this.kind === 'planks') {
 			this.buildingSettings.floorDetailPlankDirection =
@@ -179,8 +208,9 @@ export class FloorDetailTool implements BuildTool {
 
 		this.outlineGeometry.setAttribute(
 			'position',
-			new THREE.BufferAttribute(new Float32Array(24), 3)
+			new THREE.BufferAttribute(new Float32Array(MAX_OUTLINE_VERTICES * 3), 3)
 		);
+		this.outlineGeometry.setDrawRange(0, 0);
 		this.outline = new THREE.LineSegments(this.outlineGeometry, this.outlineMaterial);
 		this.outline.renderOrder = 6;
 		this.outline.visible = false;
@@ -188,7 +218,14 @@ export class FloorDetailTool implements BuildTool {
 		this.previewMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.previewMaterial);
 		this.previewMesh.visible = false;
 
-		this.overlayGroup.add(this.gridPoints, this.outline, this.firstPointMarker, this.previewMesh);
+		this.overlayGroup.add(
+			this.gridPoints,
+			this.outline,
+			this.firstPointMarker,
+			this.endPointMarker,
+			this.handlePointMarker,
+			this.previewMesh
+		);
 	}
 
 	private vertexSpacing(): number {
@@ -204,6 +241,8 @@ export class FloorDetailTool implements BuildTool {
 		this.state = 'idle';
 		this.foundationId = null;
 		this.firstPoint = null;
+		this.pathEndPoint = null;
+		this.pathDrawMode = 'axis';
 		this.hoverPoint = null;
 		this.lastGridX = null;
 		this.lastGridZ = null;
@@ -218,6 +257,7 @@ export class FloorDetailTool implements BuildTool {
 		this.state = 'idle';
 		this.foundationId = null;
 		this.firstPoint = null;
+		this.pathEndPoint = null;
 		this.levelManager.unlockActiveFoundation();
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
@@ -250,22 +290,37 @@ export class FloorDetailTool implements BuildTool {
 			return;
 		}
 
-		if (this.state === 'first-point-selected' && hit.foundationId !== this.foundationId) return;
+		if (
+			(this.state === 'first-point-selected' || this.state === 'bending') &&
+			hit.foundationId !== this.foundationId
+		) {
+			return;
+		}
+
+		let gridPoint = hit.gridPoint;
+		if (
+			this.kind === 'path' &&
+			this.pathDrawMode === 'axis' &&
+			this.state === 'first-point-selected' &&
+			this.firstPoint
+		) {
+			gridPoint = snapDrawingPoint([this.firstPoint], gridPoint, 'axis');
+		}
 
 		if (
 			this.hoverPoint &&
-			hit.gridPoint.gridX === this.lastGridX &&
-			hit.gridPoint.gridZ === this.lastGridZ &&
+			gridPoint.gridX === this.lastGridX &&
+			gridPoint.gridZ === this.lastGridZ &&
 			hit.foundationId === this.lastFoundationId &&
 			!levelChanged
 		) {
 			return;
 		}
 
-		this.lastGridX = hit.gridPoint.gridX;
-		this.lastGridZ = hit.gridPoint.gridZ;
+		this.lastGridX = gridPoint.gridX;
+		this.lastGridZ = gridPoint.gridZ;
 		this.lastFoundationId = hit.foundationId;
-		this.hoverPoint = hit.gridPoint;
+		this.hoverPoint = gridPoint;
 		this.refreshVisuals();
 	}
 
@@ -287,6 +342,25 @@ export class FloorDetailTool implements BuildTool {
 			return;
 		}
 
+		if (
+			this.kind === 'path' &&
+			this.pathDrawMode === 'bezier' &&
+			this.state === 'first-point-selected' &&
+			this.firstPoint
+		) {
+			const endCheck = validateFloorDetailFootprint(
+				'path',
+				[this.firstPoint, this.hoverPoint],
+				this.buildingSettings.floorDetailPathWidth,
+				this.buildingSettings.buildingGridSize
+			);
+			if (!endCheck.valid) return;
+			this.pathEndPoint = this.hoverPoint;
+			this.state = 'bending';
+			this.refreshVisuals();
+			return;
+		}
+
 		this.confirmPlacement();
 	}
 
@@ -295,6 +369,7 @@ export class FloorDetailTool implements BuildTool {
 		this.state = 'idle';
 		this.foundationId = null;
 		this.firstPoint = null;
+		this.pathEndPoint = null;
 		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
@@ -303,7 +378,12 @@ export class FloorDetailTool implements BuildTool {
 		const a = this.firstPoint;
 		const b = this.hoverPoint;
 		if (!a || !b) return null;
-		if (this.kind === 'path') return [a, b];
+		if (this.kind === 'path') {
+			if (this.state === 'bending' && this.pathEndPoint) {
+				return [a, b, this.pathEndPoint];
+			}
+			return [a, b];
+		}
 		return rectanglePointsFromCorners(a, b);
 	}
 
@@ -312,10 +392,24 @@ export class FloorDetailTool implements BuildTool {
 		const points = this.authoredPoints();
 		if (!points) return;
 
+		let placePoints = points;
+		if (
+			this.kind === 'path' &&
+			placePoints.length === 3 &&
+			pathBendIsStraight(
+				placePoints[0],
+				placePoints[1],
+				placePoints[2],
+				this.buildingSettings.buildingGridSize
+			)
+		) {
+			placePoints = [placePoints[0], placePoints[2]];
+		}
+
 		const result = this.buildingManager.addFloorDetail({
 			foundationId: this.foundationId,
 			kind: this.kind,
-			points,
+			points: placePoints,
 			levelIndex: this.activeLevelIndex,
 			hostY: this.activeBaseY,
 			renderMode: this.buildingSettings.floorDetailRenderMode,
@@ -336,6 +430,7 @@ export class FloorDetailTool implements BuildTool {
 		this.state = 'idle';
 		this.foundationId = null;
 		this.firstPoint = null;
+		this.pathEndPoint = null;
 		this.levelManager.unlockActiveFoundation();
 		this.refreshVisuals();
 	}
@@ -350,12 +445,16 @@ export class FloorDetailTool implements BuildTool {
 		if (this.state === 'idle') {
 			this.outline.visible = false;
 			this.firstPointMarker.visible = false;
+			this.endPointMarker.visible = false;
+			this.handlePointMarker.visible = false;
 			this.hidePreview();
 			this.onHudChange?.(this.buildIdleHud());
 			return;
 		}
 
 		this.updateFirstMarker();
+		this.updateEndMarker();
+		this.updateHandleMarker();
 		const points = this.authoredPoints();
 		if (!points || !this.foundationId) {
 			this.outline.visible = false;
@@ -405,6 +504,46 @@ export class FloorDetailTool implements BuildTool {
 		this.firstPointMarker.visible = true;
 	}
 
+	private updateEndMarker(): void {
+		if (this.state !== 'bending' || !this.pathEndPoint || !this.foundationId) {
+			this.endPointMarker.visible = false;
+			return;
+		}
+		const foundation = this.foundationManager.getFoundation(this.foundationId);
+		if (!foundation) {
+			this.endPointMarker.visible = false;
+			return;
+		}
+		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
+		const buildingGridSize = this.buildingSettings.buildingGridSize;
+		this.endPointMarker.position.set(
+			frame.originWorldX + this.pathEndPoint.gridX * buildingGridSize,
+			frame.originWorldY + this.activeBaseY + 0.08,
+			frame.originWorldZ + this.pathEndPoint.gridZ * buildingGridSize
+		);
+		this.endPointMarker.visible = true;
+	}
+
+	private updateHandleMarker(): void {
+		if (this.state !== 'bending' || !this.hoverPoint || !this.foundationId) {
+			this.handlePointMarker.visible = false;
+			return;
+		}
+		const foundation = this.foundationManager.getFoundation(this.foundationId);
+		if (!foundation) {
+			this.handlePointMarker.visible = false;
+			return;
+		}
+		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
+		const buildingGridSize = this.buildingSettings.buildingGridSize;
+		this.handlePointMarker.position.set(
+			frame.originWorldX + this.hoverPoint.gridX * buildingGridSize,
+			frame.originWorldY + this.activeBaseY + 0.1,
+			frame.originWorldZ + this.hoverPoint.gridZ * buildingGridSize
+		);
+		this.handlePointMarker.visible = true;
+	}
+
 	private updateOutline(foundationId: string, points: BuildingGridPoint[], color: number): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -416,17 +555,16 @@ export class FloorDetailTool implements BuildTool {
 		const y = frame.originWorldY + this.activeBaseY + 0.05;
 		let corners: [number, number][];
 		if (this.kind === 'path') {
-			const local = pathStripLocalCorners(
-				points[0],
-				points[1],
+			const ring = pathRibbonLocalRing(
+				points,
 				this.buildingSettings.floorDetailPathWidth,
 				buildingGridSize
 			);
-			if (local.length < 4) {
+			if (ring.length < 4) {
 				this.outline.visible = false;
 				return;
 			}
-			corners = local.map((p) => [frame.originWorldX + p.x, frame.originWorldZ + p.z]);
+			corners = ring.map((p) => [frame.originWorldX + p.x, frame.originWorldZ + p.z]);
 		} else {
 			const rect = axisAlignedRectFromPoints(points);
 			if (!rect) {
@@ -443,9 +581,9 @@ export class FloorDetailTool implements BuildTool {
 
 		const positions = this.outlineGeometry.attributes.position.array as Float32Array;
 		let i = 0;
-		for (let c = 0; c < 4; c++) {
+		for (let c = 0; c < corners.length && i + 6 <= positions.length; c++) {
 			const [x0, z0] = corners[c];
-			const [x1, z1] = corners[(c + 1) % 4];
+			const [x1, z1] = corners[(c + 1) % corners.length];
 			positions[i++] = x0;
 			positions[i++] = y;
 			positions[i++] = z0;
@@ -453,6 +591,7 @@ export class FloorDetailTool implements BuildTool {
 			positions[i++] = y;
 			positions[i++] = z1;
 		}
+		this.outlineGeometry.setDrawRange(0, i / 3);
 		this.outlineGeometry.attributes.position.needsUpdate = true;
 		this.outlineMaterial.color.setHex(color);
 		this.outline.visible = true;
@@ -557,6 +696,8 @@ export class FloorDetailTool implements BuildTool {
 		this.gridPoints.visible = false;
 		this.outline.visible = false;
 		this.firstPointMarker.visible = false;
+		this.endPointMarker.visible = false;
+		this.handlePointMarker.visible = false;
 		this.hidePreview();
 	}
 
@@ -569,8 +710,21 @@ export class FloorDetailTool implements BuildTool {
 		const lines = ['E customise'];
 		if (this.kind === 'planks') lines.push('R plank direction');
 		else if (this.kind === 'tiles') lines.push('R tile pattern');
-		else if (this.kind === 'path') lines.push('R path framing');
+		else if (this.kind === 'path') {
+			lines.push('C path mode');
+			lines.push('R path framing');
+		}
 		return lines;
+	}
+
+	private pathSnapBadge(): string | undefined {
+		return this.kind === 'path' ? floorPathDrawModeBadge(this.pathDrawMode) : undefined;
+	}
+
+	private pathEndHint(): string {
+		if (this.kind !== 'path') return 'Choose opposite corner';
+		if (this.state === 'bending') return 'Click to set the bend';
+		return this.pathDrawMode === 'bezier' ? 'Click path end, then bend' : 'Click path end';
 	}
 
 	private buildIdleHud(): BuildUiState {
@@ -579,6 +733,7 @@ export class FloorDetailTool implements BuildTool {
 			toolId: this.toolId,
 			level,
 			crosshair: this.hoverPoint ? 'valid' : 'default',
+			snapBadge: this.pathSnapBadge(),
 			hintLines: [
 				level ? level.displayName.toUpperCase() : 'Look at a foundation',
 				'',
@@ -595,10 +750,11 @@ export class FloorDetailTool implements BuildTool {
 			toolId: this.toolId,
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
 			crosshair: 'default',
+			snapBadge: this.pathSnapBadge(),
 			hintLines: [
 				KIND_LABEL[this.kind],
 				'',
-				this.kind === 'path' ? 'Click path end' : 'Choose opposite corner',
+				this.pathEndHint(),
 				'Right click: Cancel',
 				...this.extraHints()
 			]
@@ -611,21 +767,29 @@ export class FloorDetailTool implements BuildTool {
 		if (this.kind === 'planks') extras.push(`Direction: ${settings.floorDetailPlankDirection.toUpperCase()}`);
 		if (this.kind === 'tiles') extras.push(`Pattern: ${settings.floorDetailTilePattern}`);
 		if (this.kind === 'path') {
+			extras.push(`Mode: ${floorPathDrawModeLabel(this.pathDrawMode)}`);
 			extras.push(`Width: ${settings.floorDetailPathWidth.toFixed(2)}m`);
 			extras.push(settings.floorDetailPathFraming ? 'Framing on' : 'Framing off');
 		}
 		extras.push(settings.floorDetailRenderMode === '3d' ? '3D boards' : '2D plane');
+		const placeHint =
+			this.kind === 'path' && this.pathDrawMode === 'bezier' && this.state === 'first-point-selected'
+				? 'Click: Set end'
+				: this.state === 'bending'
+					? 'Click: Set bend'
+					: 'Click: Place';
 		return {
 			toolId: this.toolId,
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
 			crosshair: valid ? 'valid' : 'invalid',
 			notice: valid ? undefined : (reason ?? 'Invalid'),
+			snapBadge: this.pathSnapBadge(),
 			hintLines: [
 				KIND_LABEL[this.kind],
 				'',
 				...extras,
 				'',
-				valid ? 'Click: Place' : (reason ?? 'Invalid'),
+				valid ? placeHint : (reason ?? 'Invalid'),
 				'Right click: Cancel',
 				...this.extraHints()
 			]
@@ -639,6 +803,8 @@ export class FloorDetailTool implements BuildTool {
 		this.outlineGeometry.dispose();
 		this.outlineMaterial.dispose();
 		(this.firstPointMarker.material as THREE.Material).dispose();
+		(this.endPointMarker.material as THREE.Material).dispose();
+		(this.handlePointMarker.material as THREE.Material).dispose();
 		this.previewGeometry?.dispose();
 		this.previewMaterial.dispose();
 	}

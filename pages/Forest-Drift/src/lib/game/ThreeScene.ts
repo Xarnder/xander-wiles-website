@@ -1,3 +1,5 @@
+import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
+import type { CreatureDefinition } from './creatures/CreatureTypes';
 import { timelineDefinition } from './music/MusicModel';
 import { MusicPlantPlacementTool } from './music/MusicPlantPlacementTool';
 import { createDefaultSustainSettings, type SustainSettings } from './music/SustainTrailBuilder';
@@ -127,6 +129,7 @@ function deepAssign<T extends object>(target: T, source: Partial<T>): void {
 const PLAYER_COLLISION_RADIUS = 0.35;
 
 export interface SceneStats {
+	creatures: CreatureRuntimeManager['stats'];
 	fps: number;
 	frameTimeMs: number;
 	playerX: number;
@@ -174,6 +177,7 @@ export interface ThreeSceneOptions {
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 	onPlacementCustomizeChange?: (open: boolean) => void;
+	onPlacementHeightChange?: (open: boolean) => void;
 	/**
 	 * The world to open. Its `environment` settings are copied into the live settings objects and
 	 * its authored content is loaded, so the scene starts as an exact reproduction of the save
@@ -244,6 +248,7 @@ export class ThreeScene implements WorldRuntime {
 	private readonly floorTilesTool: FloorDetailTool;
 	private readonly furnitureTool: FurnitureTool;
 	readonly music: MusicPlantPlacementTool;
+	readonly creatures: CreatureRuntimeManager;
 	readonly sustainSettings: SustainSettings;
 	readonly musicVisual = createDefaultMusicVisualSettings();
 	readonly settingsHost: GameSettingsHost;
@@ -490,13 +495,22 @@ export class ThreeScene implements WorldRuntime {
 				this.worldSurfaceSampler.getCeilingBlockY(x, z, fromY, toY),
 			settings: this.settings.player,
 			onPointerLockChange: options.onPointerLockChange,
-			resolveHorizontalCollision: (x, z, feetY, headY) =>
-				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
-					...this.wallManager.getAllCollisionRects(),
-					...this.wallPathManager.getAllCollisionRects(),
-					...this.stairManager.getAllCollisionRects(),
-					...(this.doorInteraction?.getCollisionRects() ?? [])
-				])
+			resolveHorizontalCollision: (x, z, feetY, headY) => {
+				const creaturePosition = this.creatures?.resolvePlayer(x, z, feetY, headY) ?? { x, z };
+				return resolvePlayerPositionAgainstWalls(
+					creaturePosition.x,
+					creaturePosition.z,
+					feetY,
+					headY,
+					PLAYER_COLLISION_RADIUS,
+					[
+						...this.wallManager.getAllCollisionRects(),
+						...this.wallPathManager.getAllCollisionRects(),
+						...this.stairManager.getAllCollisionRects(),
+						...(this.doorInteraction?.getCollisionRects() ?? [])
+					]
+				);
+			}
 		});
 
 		this.controller.spawn(0, 0);
@@ -659,37 +673,48 @@ export class ThreeScene implements WorldRuntime {
 		this.sustainSettings = createDefaultSustainSettings();
 		let musicObstacleRevision = '';
 		let musicObstacles: THREE.Box3[] = [];
+		const naturalGroundBlocked = (x: number, z: number, radius = 0.2, height = 2) => {
+			if (this.foundationManager.getTopYAt(x, z) !== null) return true;
+			const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity);
+			if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y, y + 2) !== null) return true;
+			const revision = `${this.buildingManager.getRevision()}:${this.foundationManager.getRevision()}`;
+			if (revision !== musicObstacleRevision) {
+				musicObstacleRevision = revision;
+				musicObstacles = [
+					...this.buildingManager.getRaycastableWallMeshes(),
+					...this.buildingManager.getRaycastableStairMeshes(),
+					...this.foundationManager.getMeshes()
+				].map((m) => new THREE.Box3().setFromObject(m).expandByScalar(0.25));
+			}
+			return musicObstacles.some(
+				(box) =>
+					x + radius >= box.min.x &&
+					x - radius <= box.max.x &&
+					z + radius >= box.min.z &&
+					z - radius <= box.max.z &&
+					y < box.max.y &&
+					y + height > box.min.y
+			);
+		};
 		this.music = new MusicPlantPlacementTool({
 			scene: this.scene,
 			camera: this.camera,
 			surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
 			targets: () => [...this.terrainManager.getActiveMeshes()],
 			sustainSettings: this.sustainSettings,
-			blocked: (x, z, radius = 0.2, height = 2) => {
-				if (this.foundationManager.getTopYAt(x, z) !== null) return true;
-				const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity);
-				if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y, y + 2) !== null) return true;
-				const revision = `${this.buildingManager.getRevision()}:${this.foundationManager.getRevision()}`;
-				if (revision !== musicObstacleRevision) {
-					musicObstacleRevision = revision;
-					musicObstacles = [
-						...this.buildingManager.getRaycastableWallMeshes(),
-						...this.buildingManager.getRaycastableStairMeshes(),
-						...this.foundationManager.getMeshes()
-					].map((m) => new THREE.Box3().setFromObject(m).expandByScalar(0.25));
-				}
-				return musicObstacles.some(
-					(box) =>
-						x + radius >= box.min.x &&
-						x - radius <= box.max.x &&
-						z + radius >= box.min.z &&
-						z - radius <= box.max.z &&
-						y < box.max.y &&
-						y + height > box.min.y
-				);
-			},
+			blocked: naturalGroundBlocked,
 			hud: options.onBuildHudChange
 		});
+		this.creatures = new CreatureRuntimeManager(
+			this.settings.seed,
+			{
+				surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
+				blocked: naturalGroundBlocked
+			},
+			options.world?.creatures,
+			(m) => this.graphicsPipeline.registerMaterial(m)
+		);
+		this.scene.add(this.creatures.group);
 		this.removeTool = new RemoveTool({
 			music: this.music,
 			furniture: this.furnitureManager,
@@ -745,10 +770,12 @@ export class ThreeScene implements WorldRuntime {
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
 			onHudChange: options.onBuildHudChange,
-			onPlacementCustomizeChange: options.onPlacementCustomizeChange
+			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
+			onPlacementHeightChange: options.onPlacementHeightChange
 		});
 
 		this.settingsHost = {
+			creatures: this.creatures,
 			terrain: this.settings,
 			vegetation: this.vegetationSettings,
 			sky: this.skySettings,
@@ -758,6 +785,9 @@ export class ThreeScene implements WorldRuntime {
 			sustain: this.sustainSettings,
 			musicVisual: this.musicVisual,
 			actions: {
+				creatureLab: () => window.dispatchEvent(new Event('forest:creature-lab')),
+				creatureDemo: () => this.creatures.showDemo(this.controller.worldPosition),
+				creatureEndDemo: () => this.creatures.endDemo(),
 				terrainSeed: () => {
 					this.environmentRevision++;
 					this.dirty.seed = true;
@@ -979,6 +1009,10 @@ export class ThreeScene implements WorldRuntime {
 		this.buildToolManager.closePlacementCustomize();
 	}
 
+	closePlacementHeight(): void {
+		this.buildToolManager.closePlacementHeight();
+	}
+
 	/** Lets the Svelte hotbar UI select a slot by click, in addition to the number-key shortcuts. */
 	selectHotbarSlot(slot: number): void {
 		this.buildToolManager.selectSlot(slot);
@@ -1062,6 +1096,18 @@ export class ThreeScene implements WorldRuntime {
 			loop: { ...t.loop, timeline: timelineDefinition(t.loop) }
 		}));
 	}
+	getCreatureState() {
+		return this.creatures.serialize();
+	}
+	placeCreature(definition: CreatureDefinition) {
+		const forward = this.camera.getWorldDirection(new THREE.Vector3());
+		const distance = Math.max(12, definition.species.proportions.bodyLength * 1.5);
+		return this.creatures.place(definition, {
+			x: this.camera.position.x + forward.x * distance,
+			y: 0,
+			z: this.camera.position.z + forward.z * distance
+		});
+	}
 	getMusicPlants() {
 		return this.music.plants.definitions;
 	}
@@ -1098,6 +1144,7 @@ export class ThreeScene implements WorldRuntime {
 		return {
 			structural:
 				this.music.revision +
+				this.creatures.revision +
 				this.buildingManager.getRevision() +
 				this.foundationManager.getRevision() +
 				this.levelManager.getRevision() +
@@ -1375,6 +1422,12 @@ export class ThreeScene implements WorldRuntime {
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
 		this.music.animate();
+		this.creatures.setSeed(this.settings.seed);
+		this.creatures.update(
+			this.controller.worldPosition,
+			deltaSeconds,
+			this.graphicsPipeline.getQuality()
+		);
 		this.furnitureManager.updateLights(this.camera.position, nowMs / 1000);
 
 		this.skySystem.update(this.camera.position);
@@ -1424,6 +1477,7 @@ export class ThreeScene implements WorldRuntime {
 		const cycle = ensureDayCycleSettings(this.skySettings);
 
 		this.onStatsUpdate({
+			creatures: { ...this.creatures.stats },
 			fps: Math.round(fps),
 			frameTimeMs: Math.round(frameTimeMs * 10) / 10,
 			playerX: position.x,
@@ -1483,6 +1537,7 @@ export class ThreeScene implements WorldRuntime {
 		this.furnitureManager.dispose();
 		this.removeTool.dispose();
 		this.music.dispose();
+		this.creatures.dispose();
 		this.paintTool.dispose();
 		this.materialManager.dispose();
 		this.treeManager.dispose();

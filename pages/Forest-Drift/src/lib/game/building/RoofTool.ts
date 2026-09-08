@@ -38,6 +38,7 @@ import {
 	type RoofType,
 	type ShedDirection
 } from './RoofTypes';
+import { resolveSlabPlacementLocalY } from './slabPlacementMath';
 import { validateSlabPolygon } from './slabMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
@@ -213,7 +214,7 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyC' && event.shiftKey) {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -304,7 +305,7 @@ export class RoofTool implements BuildTool {
 			foundationId,
 			this.levelManager.getCurrentLevelIndex(foundationId)
 		);
-		return level.baseY + level.wallHeight;
+		return resolveSlabPlacementLocalY(level, this.buildingSettings);
 	}
 
 	/** The active (frozen, once drawing/adjusting) or live (idle/hovering) eave elevation for `foundationId`. */
@@ -346,7 +347,18 @@ export class RoofTool implements BuildTool {
 	}
 
 	update(): void {
-		if (!this.active || this.state === 'adjusting') return;
+		if (!this.active) return;
+
+		const heightFoundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
+		if (heightFoundationId) {
+			const nextY = this.defaultBaseY(heightFoundationId);
+			if (Math.abs(nextY - this.activeBaseY) > 1e-6) {
+				this.activeBaseY = nextY;
+				this.refreshVisuals();
+			}
+		}
+
+		if (this.state === 'adjusting') return;
 
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
 		const hit = raycastSlabConstructionPlane(
@@ -354,7 +366,8 @@ export class RoofTool implements BuildTool {
 			this.foundationManager,
 			this.levelManager,
 			this.vertexSpacing(),
-			this.buildingSettings.buildingGridSize
+			this.buildingSettings.buildingGridSize,
+			this.buildingSettings
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
@@ -896,9 +909,9 @@ export class RoofTool implements BuildTool {
 				'',
 				'Roof',
 				'',
-				'Look up: click to start',
+				'Look at the roof: click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap'
+				'C: Set height'
 			]
 		};
 	}
@@ -920,6 +933,7 @@ export class RoofTool implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
+					'C: Set height',
 					'Click to close footprint'
 				]
 			};
@@ -939,7 +953,7 @@ export class RoofTool implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'C: Set height',
 				'Right click: Cancel'
 			]
 		};
@@ -960,7 +974,7 @@ export class RoofTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'C: Set height',
 				'Right click: Cancel'
 			]
 		};
@@ -1005,6 +1019,7 @@ export class RoofTool implements BuildTool {
 				'V: Cycle type',
 				...(hasOrientation ? ['R: Rotate'] : []),
 				...(hasSlope ? ['↑/↓: Adjust rise (Shift: fine)'] : []),
+				'C: Set height',
 				'Click: Place roof',
 				'Right click: Cancel'
 			]

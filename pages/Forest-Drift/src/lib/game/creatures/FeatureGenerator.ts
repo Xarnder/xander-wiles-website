@@ -10,13 +10,19 @@ export function generateFeatures(def: CreatureDefinition, rig: ProceduralSkeleto
 		for (const side of paired ? [-1, 1] : [0]) {
 			const asymmetry = 1 + side * i.featureVariation.asymmetry * (1 - s.anatomy.symmetryStrength);
 			const small = kind === 'eyes' ? 0.115 : 0.3 * f;
+			const spine = rig.joints.filter((joint) => joint.semantic === 'spine');
+			const serpent = s.bodyPlan.id === 'serpentine';
 			const hostJointId =
 				kind === 'tail-tip'
-					? 'tail-5'
+					? serpent
+						? spine[0]?.id
+						: 'tail-5'
 					: ['spikes', 'plates', 'fins', 'frills'].includes(kind)
-						? 'chest'
+						? serpent
+							? spine[Math.floor(spine.length * 0.7)]?.id
+							: 'chest'
 						: 'head';
-			if (!rig.joints.some((j) => j.id === hostJointId)) continue;
+			if (!hostJointId || !rig.joints.some((j) => j.id === hostJointId)) continue;
 			rig.features.push({
 				id: `feature-${kind}-${side}`,
 				kind,
@@ -75,7 +81,9 @@ export function appendFeatures(
 			},
 			points,
 			points.map(() => boneIds.get(feature.hostJointId)!),
-			lod
+			lod,
+			// Rigid adornments need fewer axial rings than articulated body volumes.
+			lod === 0 ? 4 : 2
 		);
 	}
 }

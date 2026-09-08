@@ -132,8 +132,8 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Slot 2 (Poly Wall), slot 2+↓ (Wall), slot 4 (Ceiling) — pressing C on each just
-	// needs to not throw; the resulting snap behavior itself is covered by polygonDrawSnap.spec.ts.
+	// Slot 2 (Poly Wall), slot 2+↓ (Wall) still cycle snap. Slot 4 (Ceiling) opens the
+	// height panel on C — pressing it a few times must not throw.
 	await page.keyboard.press('2');
 	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
 	await page.keyboard.press('ArrowDown');
@@ -142,6 +142,29 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
 
 	await page.keyboard.press('1');
+	expect(pageErrors).toEqual([]);
+});
+
+test('C opens the ceiling height modal and closes it again', async ({ page }) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await createAndEnterWorld(page);
+
+	await page.keyboard.press('4');
+	await expect(page.getByTestId('hotbar-slot-ceiling')).toHaveClass(/active/);
+	await expect(page.getByTestId('placement-height-modal')).not.toBeVisible();
+
+	await page.keyboard.press('c');
+	const modal = page.getByTestId('placement-height-modal');
+	await expect(modal).toBeVisible();
+	await expect(modal).toContainText('Ceiling height');
+	await expect(modal).toContainText('Following top of walls');
+
+	await page.keyboard.press('c');
+	await expect(modal).not.toBeVisible();
+
 	expect(pageErrors).toEqual([]);
 });
 
