@@ -1,14 +1,49 @@
 <script lang="ts">
+	import CreatureLabModal from '$lib/components/CreatureLabModal.svelte';
+	let creatureLabOpen = $state(false);
+	function openCreatureLab() {
+		session?.scene.closePlacementCustomize();
+		document.exitPointerLock?.();
+		if (session) session.scene.devPanelOpen = true;
+		settingsOpen = false;
+		creatureLabOpen = true;
+	}
+	function closeCreatureLab() {
+		creatureLabOpen = false;
+		if (session) session.scene.devPanelOpen = false;
+	}
+	onMount(() => {
+		window.addEventListener('forest:creature-lab', openCreatureLab);
+		return () => window.removeEventListener('forest:creature-lab', openCreatureLab);
+	});
+
+	import MidiImportModal from '$lib/components/MidiImportModal.svelte';
+	let midiOpen = $state(false);
+	function openMidi() {
+		if (!session) return;
+		session.scene.closePlacementCustomize();
+		document.exitPointerLock?.();
+		session.scene.music.importPanelOpen = true;
+		midiOpen = true;
+	}
+	function closeMidi() {
+		midiOpen = false;
+		if (session) session.scene.music.importPanelOpen = false;
+	}
 	import { onDestroy, onMount, tick } from 'svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
+	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
+	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
+	import { isCustomizablePlacementTool } from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
 	import { graphicsQualityLabel } from '$lib/game/graphics/GraphicsTypes';
 	import type { SceneStats } from '$lib/game/ThreeScene';
+	import { formatDayClock } from '$lib/game/sky/dayNightMath';
 	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
 	import { createDefaultTerrainSettings } from '$lib/game/terrain/TerrainSettings';
 	import { createDefaultVegetationSettings } from '$lib/game/vegetation/VegetationTypes';
@@ -33,7 +68,9 @@
 	let hotbar = $state<HotbarUiState | null>(null);
 	let buildHud = $state<BuildUiState | null>(null);
 	let showHelp = $state(false);
+	let settingsOpen = $state(false);
 	let paintPaletteOpen = $state(false);
+	let placementCustomizeOpen = $state(false);
 	let paintState = $state<PaintUiState | null>(null);
 	let graphicsNotice = $state<string | null>(null);
 
@@ -51,13 +88,36 @@
 	let saveError = $state<string | null>(null);
 	let paused = $state(false);
 	let saveToast = $state<string | null>(null);
+	let lookedAtDoorId = $state<string | null>(null);
 
-	let session: WorldSession | undefined;
+	let session = $state.raw<WorldSession>();
+
+	function clockBlocked(): boolean {
+		return (
+			paused ||
+			settingsOpen ||
+			creatureLabOpen ||
+			midiOpen ||
+			paintPaletteOpen ||
+			placementCustomizeOpen
+		);
+	}
+
+	$effect(() => {
+		if (session) session.scene.simulationPaused = clockBlocked();
+	});
 	let worldManager: WorldManager | undefined;
 	let graphicsNoticeTimeout: ReturnType<typeof setTimeout> | undefined;
 	let saveToastTimeout: ReturnType<typeof setTimeout> | undefined;
 	/** Object URLs created for thumbnail blobs, revoked when the list is rebuilt or the page unmounts. */
 	let thumbnailUrls: string[] = [];
+
+	const customizeToolId = $derived.by(() => {
+		const current = hotbar;
+		if (!current) return undefined;
+		const id = current.slots.find((slot) => slot.slot === current.activeSlot)?.toolId;
+		return id && isCustomizablePlacementTool(id) ? id : undefined;
+	});
 
 	const SNAP_MODE_TEXT: Record<'axis' | 'axis-inline' | 'wall-corners', string> = {
 		axis: 'AXIS SNAP',
@@ -97,8 +157,29 @@
 	 * status indicator the menu is already showing.
 	 */
 	function togglePause() {
+		if (!paused) session?.scene.closePlacementCustomize();
 		paused = !paused;
+		if (session) session.scene.simulationPaused = clockBlocked();
 		if (paused && session?.hasUnsavedChanges()) void session.saveNow('lifecycle');
+	}
+
+	function openPause() {
+		if (paused) return;
+		session?.scene.closePlacementCustomize();
+		document.exitPointerLock?.();
+		showHelp = false;
+		togglePause();
+	}
+
+	function openSettings() {
+		session?.scene.closePlacementCustomize();
+		document.exitPointerLock?.();
+		showHelp = false;
+		settingsOpen = true;
+	}
+
+	function closeSettings() {
+		settingsOpen = false;
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -114,7 +195,24 @@
 			return;
 		}
 
+		if (placementCustomizeOpen && event.code === 'Escape') {
+			session?.scene.closePlacementCustomize();
+			return;
+		}
 		if (screen !== 'game' || typing) return;
+		if (placementCustomizeOpen) return;
+		if (settingsOpen) {
+			if (event.code === 'Escape') closeSettings();
+			return;
+		}
+		if (creatureLabOpen) {
+			if (event.code === 'Escape') closeCreatureLab();
+			return;
+		}
+		if (midiOpen) {
+			if (event.code === 'Escape') closeMidi();
+			return;
+		}
 
 		if (event.code === 'Escape') {
 			// Escape while pointer-locked is consumed by the browser to release the pointer; the menu
@@ -123,10 +221,20 @@
 			else if (!pointerLocked) togglePause();
 			return;
 		}
+		if (event.code === 'KeyH') {
+			showHelp = !showHelp;
+			return;
+		}
+		if (event.code === 'F3') {
+			event.preventDefault();
+			if (!session) return;
+			const on = session.scene.toggleRenderStats();
+			showSaveToast(on ? 'Render stats on' : 'Render stats off');
+			return;
+		}
 		if (paused) return;
 
-		if (event.code === 'KeyH') showHelp = !showHelp;
-		else if (event.code === 'KeyL') session?.scene.cycleGraphicsQuality();
+		if (event.code === 'KeyL') session?.scene.cycleGraphicsQuality();
 	}
 
 	async function refreshWorlds() {
@@ -227,9 +335,14 @@
 			onPointerLockChange: (locked) => (pointerLocked = locked),
 			onHotbarChange: (next) => (hotbar = next),
 			onBuildHudChange: (next) => (buildHud = next),
+			onLookedAtDoorChange: (id) => (lookedAtDoorId = id),
 			onPaintPaletteChange: (open) => (paintPaletteOpen = open),
 			onPaintStateChange: (next) => (paintState = next),
-			onGraphicsQualityChange: (quality) => showGraphicsNotice(quality)
+			onGraphicsQualityChange: (quality) => showGraphicsNotice(quality),
+			onPlacementCustomizeChange: (open) => {
+				placementCustomizeOpen = open;
+				if (open) showHelp = false;
+			}
 		});
 	}
 
@@ -246,6 +359,7 @@
 		await withBusy(async () => {
 			const result = await session!.dispose();
 			session = undefined;
+			lookedAtDoorId = null;
 			if (!result.ok) worldsError = result.error ?? 'Unable to save world before quitting.';
 			worldManager?.closeWorld();
 
@@ -253,7 +367,10 @@
 			// previous session's HUD.
 			paused = false;
 			showHelp = false;
+			settingsOpen = false;
+			midiOpen = false;
 			paintPaletteOpen = false;
+			placementCustomizeOpen = false;
 			stats = null;
 			hotbar = null;
 			buildHud = null;
@@ -287,7 +404,9 @@
 					worldsError = result.error;
 					return;
 				}
+				worldsError = null;
 				await refreshWorlds();
+				showSaveToast(`Imported ${result.value.name}`);
 			} catch (error) {
 				worldsError = error instanceof Error ? error.message : 'Unable to read that file.';
 			}
@@ -419,11 +538,19 @@
 			<div class="graphics-notice" data-testid="graphics-notice">{graphicsNotice}</div>
 		{/if}
 
-		{#if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
+		{#if buildHud?.snapBadge}
+			<div class={['snap-badge', 'snap-badge-division']} data-testid="snap-badge">
+				{buildHud.snapBadge}
+			</div>
+		{:else if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
 			<div
-				class="snap-badge"
-				class:snap-badge-inline={buildHud.snapMode === 'axis-inline'}
-				class:snap-badge-corners={buildHud.snapMode === 'wall-corners'}
+				class={[
+					'snap-badge',
+					{
+						'snap-badge-inline': buildHud.snapMode === 'axis-inline',
+						'snap-badge-corners': buildHud.snapMode === 'wall-corners'
+					}
+				]}
 				data-testid="snap-badge"
 			>
 				{SNAP_MODE_TEXT[buildHud.snapMode]}
@@ -437,21 +564,50 @@
 				<p>
 					WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc to release mouse
 				</p>
-				<p>Press H for controls</p>
+				<p>
+					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc again for the menu &middot; H
+					for controls
+				</p>
 			</div>
 		{/if}
 
-		<button
-			class="help-toggle"
-			data-testid="help-toggle"
-			onclick={() => (showHelp = !showHelp)}
-			aria-label="Toggle controls help"
-		>
-			? Help (H)
-		</button>
+		<div class="utility-buttons">
+			<button
+				class="help-toggle"
+				data-testid="pause-toggle"
+				onclick={openPause}
+				aria-label="Pause"
+			>
+				Pause
+			</button>
+			<button
+				class="help-toggle"
+				data-testid="settings-toggle"
+				onclick={openSettings}
+				aria-label="Open settings"
+			>
+				Settings
+			</button>
+			<button
+				class="help-toggle"
+				data-testid="help-toggle"
+				onclick={() => (showHelp = !showHelp)}
+				aria-label="Toggle controls help"
+			>
+				? Help (H)
+			</button>
+			<button
+				class="help-toggle"
+				data-testid="open-creature-lab"
+				onclick={openCreatureLab}
+				aria-label="Creature Lab"
+			>
+				Creature Lab
+			</button>
+		</div>
 
 		{#if showHelp}
-			<div class="help-overlay" data-testid="help-overlay">
+			<div class={['help-overlay', { 'over-menus': paused }]} data-testid="help-overlay">
 				<div class="help-panel">
 					<h2>Controls</h2>
 
@@ -466,17 +622,39 @@
 						<dt>Mouse</dt>
 						<dd>Look around</dd>
 						<dt>Esc</dt>
-						<dd>Release mouse / cancel current placement</dd>
+						<dd>
+							Release the mouse, then press again for the pause menu. Also closes Help, Settings,
+							and Creature Lab. Cancels the current placement once the mouse is free.
+						</dd>
 					</dl>
 
 					<h3>Building — general</h3>
 					<dl>
-						<dt>1&ndash;9</dt>
-						<dd>Select hotbar tool</dd>
+						<dt>G</dt>
+						<dd>
+							Toggle Build Mode and the hotbar. Independent from M, which toggles Compose Mode.
+							Tools and placement sleep while Build Mode is off; the selected slot is remembered.
+						</dd>
+						<dt>1&ndash;6, 8</dt>
+						<dd>
+							Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
+							Detailing, 8 Furniture (Torch). Slot 7 is reserved.
+						</dd>
+						<dt>↑ / ↓</dt>
+						<dd>
+							Cycle tools inside the selected slot — Poly Wall / Wall, Door / Window / Beam, Ceiling
+							/ Floor / Roof, Carpet / Path / Planks / Tiles. The last choice is remembered. While a
+							roof is being adjusted, ↑/↓ still change rise instead.
+						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
 						<dt>Right click</dt>
 						<dd>Cancel / deselect</dd>
+						<dt>−</dt>
+						<dd>
+							Undo the last placement (wall, continuous wall, window, door, beam, ceiling, floor,
+							roof, or floor detailing). Keeps the last five actions.
+						</dd>
 						<dt>] / [</dt>
 						<dd>
 							Change current building level (] up, [ down) — Page Up / Page Down still work, or
@@ -489,10 +667,21 @@
 							Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
 							snaps to the room's wall corners below
 						</dd>
+						<dt>E</dt>
+						<dd>
+							Customise the selected wall, window, door, beam, or floor detailing (carpets, paths,
+							planks, tiles) before placing. Esc or E again closes the panel. Settings apply to the
+							next piece, not ones already built.
+						</dd>
 					</dl>
 
-					<h3>Continuous Wall / Ceiling / Floor / Roof</h3>
+					<h3>Continuous Wall / Ceiling / Floor</h3>
 					<dl>
+						<dt>E</dt>
+						<dd>
+							On Wall or Continuous Wall — set the next wall's height and width (thickness). Length
+							still comes from the points you click.
+						</dd>
 						<dt>Backspace</dt>
 						<dd>Undo last point</dd>
 						<dt>Enter</dt>
@@ -501,25 +690,96 @@
 						<dd>Close the loop / shape</dd>
 					</dl>
 
-					<h3>Windows / Doors</h3>
+					<h3>Roof</h3>
+					<dl>
+						<dt>Left click</dt>
+						<dd>Trace the roof footprint, then click the first point again to close it</dd>
+						<dt>V</dt>
+						<dd>
+							After the footprint is closed, cycle roof type (Flat, Shed, Gable, Hip, Gambrel,
+							Mansard, Butterfly, M-Shaped, Dutch Gable)
+						</dd>
+						<dt>R</dt>
+						<dd>Rotate a sloped roof (ridge / high edge)</dd>
+						<dt>↑ / ↓</dt>
+						<dd>
+							Adjust rise (hold Shift for a finer step). These keys do not change hotbar variant
+							while you are adjusting a roof
+						</dd>
+						<dt>C</dt>
+						<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
+						<dt>Click / Right click</dt>
+						<dd>Place the roof, or cancel</dd>
+					</dl>
+
+					<h3>Windows / Doors / Beams</h3>
 					<dl>
 						<dt>K</dt>
 						<dd>Open or close the door under the crosshair</dd>
 						<dt>Left click</dt>
-						<dd>Cut the opening into the wall you're looking at</dd>
-						<dt>Floor</dt>
+						<dd>Place a window/door hole or a timber beam on the wall</dd>
+						<dt>E</dt>
 						<dd>
-							Only walls on the selected floor can be cut — if the crosshair finds a wall on another
-							storey it says so; use ] / [ to match it
+							Customise the next window, door, or beam — width, height (windows, doors, and
+							horizontal beams), and colour. Applies to the next piece you place, not ones already
+							built.
 						</dd>
+						<dt>C</dt>
+						<dd>
+							Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) —
+							snaps the window, door, or beam centre to even splits of this wall's length, up to
+							16. A horizontal beam's height follows the look point; a vertical beam spans the wall.
+						</dd>
+						<dt>R</dt>
+						<dd>
+							Flip the next beam between vertical (default, floor to top of the wall) and
+							horizontal
+						</dd>
+						<dt>Floor</dt>
+						<dd>Only walls on the selected floor can be used — use ] / [ to match storey</dd>
 					</dl>
 
 					<h3>Stairs</h3>
 					<dl>
+						<dt>Left click</dt>
+						<dd>
+							Two-click rectangle on the current floor or foundation, then confirm the footprint
+						</dd>
 						<dt>Left / Right Arrow</dt>
 						<dd>Change stair direction</dd>
-						<dt>Enter</dt>
+						<dt>Enter / Left click</dt>
 						<dd>Confirm stairs</dd>
+						<dt>] / [</dt>
+						<dd>
+							Build on the selected storey. Stairs connect that floor to the one their rise reaches
+						</dd>
+					</dl>
+
+					<h3>Floor Detailing</h3>
+					<dl>
+						<dt>6 / ↑ / ↓</dt>
+						<dd>
+							Slot 6 — ↑/↓ cycles Carpet / Path / Planks / Tiles. The last choice is remembered.
+						</dd>
+						<dt>Left click</dt>
+						<dd>
+							Two-click rectangle for carpet, planks, and tiles; two-click start &rarr; end for a
+							path. Sits on the current floor or foundation plane, just above it. Visual only — no
+							collision.
+						</dd>
+						<dt>E</dt>
+						<dd>
+							Customise the next piece — 3D/2D (3D boards and tiles by default; 2D is a thin plane),
+							Colour 1 / Colour 2, plank width and direction, tile size and pattern (Solid / Checker
+							/ Diamond / Running bond), path width and timber framing. Reset on each field restores
+							that variant's default. Applies to the next piece you place.
+						</dd>
+						<dt>R</dt>
+						<dd>Cycle plank direction (X/Z), tile pattern, or path framing on/off</dd>
+						<dt>X</dt>
+						<dd>Remove Mode works on placed detailing</dd>
+						<dt>−</dt>
+						<dd>Undo the last detailing placement</dd>
 					</dl>
 
 					<h3>Remove Mode</h3>
@@ -530,7 +790,10 @@
 							selected is remembered and restored when you exit
 						</dd>
 						<dt>Left click</dt>
-						<dd>Remove the highlighted wall, wall segment, window, door, or staircase</dd>
+						<dd>
+							Remove the highlighted wall, wall segment, window, door, beam, roof, staircase, floor
+							detailing, or music plant
+						</dd>
 						<dt>X / Right click / Esc</dt>
 						<dd>Exit Remove Mode</dd>
 					</dl>
@@ -546,15 +809,80 @@
 						<dt>C</dt>
 						<dd>Open the colour palette — releases the mouse so you can click a swatch</dd>
 						<dt>Left click</dt>
-						<dd>Paint the highlighted wall, wall segment, slab, or foundation</dd>
+						<dd>Paint the highlighted wall, wall segment, ceiling, floor, roof, or foundation</dd>
 						<dt>P / Right click / Esc</dt>
 						<dd>Exit Paint Mode</dd>
+					</dl>
+
+					<h3>Music Garden</h3>
+					<p>
+						Every world starts with a glowing Music Tree nearby (a tree with a soft teal-green
+						glow). Walk up to it and press <strong>M</strong> &mdash; faint rings appear on the ground
+						around the tree. Aim at the ground inside the rings and a ghost flower shows where it will
+						land; left click to plant it. Your aim angle is completely free, but the distance from the
+						tree always snaps to the nearest ring &mdash; each ring is a moment in the music's loop, so
+						flowers close to the tree play early and flowers further out play later.
+					</p>
+					<dl>
+						<dt>M</dt>
+						<dd>Enter / exit Compose Mode. The nearest Music Tree becomes active.</dd>
+						<dt>Aim + Left click</dt>
+						<dd>
+							Plant the ghost preview at the snapped ring under your crosshair. Right click / Esc
+							cancels the current preview
+						</dd>
+						<dt>Q / E</dt>
+						<dd>
+							Choose the species before placing &mdash; flower, mushroom, fern, reed, or crystal
+							&mdash; each one is a different instrument
+						</dd>
+						<dt>&uarr; / &darr;</dt>
+						<dd>
+							Grow the plant taller or shorter before placing &mdash; this sets its pitch (short =
+							low note, tall = high note)
+						</dd>
+						<dt>&larr; / &rarr;</dt>
+						<dd>
+							Make the plant paler or more vivid before placing &mdash; this sets its volume (pale =
+							quiet, vivid = loud)
+						</dd>
+						<dt>, / .</dt>
+						<dd>Shorten or lengthen the note (duration in steps)</dd>
+						<dt>F</dt>
+						<dd>
+							Select the plant under the crosshair to move it or edit its pitch / volume / duration.
+							Click again to place it on the same timing ring
+						</dd>
+						<dt>J</dt>
+						<dd>Play / pause the tree's music loop</dd>
+						<dt>Import MIDI</dt>
+						<dd>
+							Button on the music HUD. Preview a file, then click open ground to grow the imported
+							garden (right click cancels)
+						</dd>
+						<dt>X</dt>
+						<dd>Switch to Remove Mode to delete a planted flower &mdash; aim at it and click</dd>
 					</dl>
 
 					<h3>Other</h3>
 					<dl>
 						<dt>H</dt>
-						<dd>Toggle this help</dd>
+						<dd>Toggle this help · G toggles Build Mode · M opens Music Garden</dd>
+						<dt>Day / night</dt>
+						<dd>
+							The sun moves through a full day every 20 minutes of play. Pause, Settings, and other
+							menus freeze the clock. The current hour is at the top-right. Sky &rarr; Day &amp;
+							night sets the hour or turns the cycle off.
+						</dd>
+						<dt>Settings</dt>
+						<dd>
+							Button next to Help, or Pause &rarr; Settings — world, terrain, building, music, sky,
+							and graphics
+						</dd>
+						<dt>Creature Lab</dt>
+						<dd>Button next to Help — design a creature, then place it in the world</dd>
+						<dt>F3</dt>
+						<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
 						<dt>L</dt>
 						<dd>
 							Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies
@@ -563,7 +891,7 @@
 						<dt>Esc</dt>
 						<dd>
 							Release the mouse, then press again for the pause menu — Save, World (rename / export
-							/ duplicate), and Quit to Worlds
+							/ duplicate), Settings, and Quit to Worlds
 						</dd>
 						<dt>Cmd / Ctrl + S</dt>
 						<dd>
@@ -576,8 +904,20 @@
 			</div>
 		{/if}
 
+		{#if creatureLabOpen && session}<CreatureLabModal
+				onClose={closeCreatureLab}
+				onPlace={(definition) => {
+					window.dispatchEvent(new CustomEvent('forest:place-creature', { detail: definition }));
+					closeCreatureLab();
+				}}
+			/>{/if}
 		{#if buildHud}
 			<div class="build-hud" data-testid="build-hud">
+				{#if buildHud.toolId === 'music'}<button
+						class="midi-import-button"
+						data-testid="import-midi"
+						onclick={openMidi}>Import MIDI</button
+					>{/if}
 				{#if buildHud.toolId === 'paint'}
 					<div class="paint-color-row" data-testid="paint-color-row">
 						Current Colour:
@@ -603,6 +943,16 @@
 		{/if}
 
 		{#if stats}
+			<div class="sr-only" data-testid="world-load-status">
+				Loaded {stats.loadedChunks} &middot; Queued {stats.queuedChunks}
+			</div>
+		{/if}
+
+		{#if stats?.dayCycleEnabled}
+			<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
+		{/if}
+
+		{#if stats?.showRenderStats}
 			<div class="stats-overlay" data-testid="stats-overlay">
 				<div>{stats.fps} FPS &middot; {stats.frameTimeMs.toFixed(1)} ms</div>
 				<div>
@@ -638,7 +988,7 @@
 			</div>
 		{/if}
 
-		{#if hotbar}
+		{#if hotbar?.buildModeActive}
 			<Hotbar
 				slots={hotbar.slots}
 				activeSlot={hotbar.activeSlot}
@@ -679,12 +1029,29 @@
 				{#if saveStatus === 'saving'}Saving…{:else if saveStatus === 'dirty'}Unsaved{:else if saveStatus === 'error'}Save
 					failed{:else}Saved{/if}
 			</div>
+			{#if saveStatus === 'error'}
+				<div class="save-error-chip" data-testid="save-error-chip">
+					<p>{saveError ?? 'Unable to save world locally.'}</p>
+					<button type="button" onclick={() => void manualSave()}>Retry</button>
+				</div>
+			{/if}
 		{/if}
 
-		{#if saveToast}
-			<div class="save-toast" data-testid="save-toast">{saveToast}</div>
+		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen}
+			<div class="door-toast" data-testid="door-toast">Press K to open the door</div>
 		{/if}
 
+		{#if placementCustomizeOpen && session && customizeToolId}
+			<PlacementCustomizeModal
+				toolId={customizeToolId}
+				settings={session.scene.buildingSettings}
+				onClose={() => session?.scene.closePlacementCustomize()}
+			/>
+		{/if}
+		{#if midiOpen && session}<MidiImportModal
+				music={session.scene.music}
+				onClose={closeMidi}
+			/>{/if}
 		{#if paused}
 			<PauseMenu
 				worldName={currentWorldName}
@@ -707,16 +1074,126 @@
 					if (id) void duplicateWorld(id);
 				}}
 				onQuit={() => void quitToWorlds()}
-				onOpenSettings={() => {
-					paused = false;
-					showHelp = true;
-				}}
+				onOpenSettings={openSettings}
+				onOpenControls={() => (showHelp = true)}
 			/>
+		{/if}
+		{#if settingsOpen && session}
+			<SettingsMenu host={session.scene.settingsHost} onClose={closeSettings} />
 		{/if}
 	</div>
 {/if}
 
+{#if saveToast}
+	<div class="app-toast" data-testid="save-toast">{saveToast}</div>
+{/if}
+
 <style>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	.day-clock {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		z-index: 12;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		background: rgba(10, 20, 15, 0.55);
+		border: 1px solid rgba(234, 246, 255, 0.2);
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.75rem;
+		font-weight: 650;
+		letter-spacing: 0.02em;
+		font-variant-numeric: tabular-nums;
+		backdrop-filter: blur(2px);
+		pointer-events: none;
+	}
+
+	.save-error-chip {
+		position: absolute;
+		right: 0.75rem;
+		bottom: 2.6rem;
+		z-index: 16;
+		width: min(18rem, calc(100vw - 1.5rem));
+		padding: 0.55rem 0.7rem;
+		border-radius: 10px;
+		background: rgba(90, 20, 20, 0.88);
+		border: 1px solid rgba(255, 122, 122, 0.55);
+		color: #ffe8e8;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.75rem;
+		line-height: 1.35;
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+	}
+
+	.save-error-chip p {
+		margin: 0;
+	}
+
+	.save-error-chip button {
+		align-self: flex-start;
+		padding: 0.3rem 0.6rem;
+		border-radius: 7px;
+		border: 1px solid rgba(255, 200, 200, 0.45);
+		background: rgba(20, 8, 8, 0.55);
+		color: #ffe8e8;
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.app-toast {
+		position: fixed;
+		top: 1.1rem;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 0.35rem 0.85rem;
+		background: rgba(10, 20, 15, 0.86);
+		border: 1px solid rgba(159, 232, 255, 0.5);
+		border-radius: 999px;
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		pointer-events: none;
+		z-index: 60;
+		animation: snap-badge-in 0.15s ease;
+	}
+	.midi-import-button {
+		pointer-events: auto;
+		display: block;
+		margin-bottom: 0.6rem;
+		padding: 0.45rem 0.9rem;
+		border: 1px solid #8ab899;
+		border-radius: 8px;
+		background: #214a34;
+		color: #e8ffe9;
+		font: inherit;
+		cursor: pointer;
+	}
 	.loading-screen {
 		position: fixed;
 		inset: 0;
@@ -774,9 +1251,7 @@
 		}
 	}
 
-	/* Bottom-right, not top-right: the lil-gui debug panel occupies the whole top-right corner and
-	   would sit on top of this (the same collision the build HUD already has a test for). Bottom-left
-	   is the help toggle and bottom-centre is the hotbar, so bottom-right is the free corner. */
+	/* Bottom-right stays clear of the help/settings cluster (bottom-left) and the hotbar. */
 	.save-indicator {
 		position: absolute;
 		bottom: 0.75rem;
@@ -828,9 +1303,9 @@
 		background: #ff6b6b;
 	}
 
-	.save-toast {
+	.door-toast {
 		position: absolute;
-		top: 3rem;
+		top: calc(50% + 28px);
 		left: 50%;
 		transform: translateX(-50%);
 		padding: 0.35rem 0.85rem;
@@ -847,6 +1322,7 @@
 		letter-spacing: 0.03em;
 		pointer-events: none;
 		z-index: 35;
+		white-space: nowrap;
 		animation: snap-badge-in 0.15s ease;
 	}
 
@@ -942,12 +1418,7 @@
 		backdrop-filter: blur(2px);
 	}
 
-	/*
-	 * Bottom-left, not top-right: the dev GUI (lil-gui) auto-places itself top-right at full viewport
-	 * height, and covered this panel completely — every hint and blocking reason the build tools
-	 * emit was being drawn underneath it, invisible. Bottom-left clears the GUI, the stats overlay
-	 * (top-left), the floor selector (mid-left) and the hotbar (bottom-centre).
-	 */
+	/* Bottom-left, above the help/settings cluster; stats stay top-left and the hotbar is centred. */
 	.build-hud {
 		position: absolute;
 		bottom: 3.25rem;
@@ -1141,6 +1612,10 @@
 		background: rgba(255, 166, 77, 0.9);
 	}
 
+	.snap-badge-division {
+		background: rgba(120, 210, 200, 0.92);
+	}
+
 	@keyframes snap-badge-in {
 		from {
 			opacity: 0;
@@ -1152,11 +1627,16 @@
 		}
 	}
 
-	.help-toggle {
+	.utility-buttons {
 		position: absolute;
 		bottom: 0.75rem;
 		left: 0.75rem;
 		z-index: 11;
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	.help-toggle {
 		padding: 0.4rem 0.75rem;
 		background: rgba(10, 20, 15, 0.5);
 		color: #eaf6ff;
@@ -1187,8 +1667,12 @@
 		z-index: 10;
 	}
 
+	.help-overlay.over-menus {
+		z-index: 45;
+	}
+
 	.help-panel {
-		max-width: min(32rem, 90vw);
+		max-width: min(40rem, 92vw);
 		max-height: 80vh;
 		overflow-y: auto;
 		padding: 1.5rem 1.75rem;
@@ -1213,6 +1697,13 @@
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: #9fd8b8;
+	}
+
+	.help-panel p {
+		margin: 0 0 0.6rem;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: #cfe8dc;
 	}
 
 	.help-panel dl {

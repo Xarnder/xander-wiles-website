@@ -20,10 +20,12 @@ import { vertexSpacingFor } from './foundationMath';
 import { pointInPolygon2D } from './slabMath';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import {
+	classifyStairPreviewFit,
 	computeStairMetrics,
 	cycleStairDirection,
 	validDirectionsForFootprint,
-	validateStairFootprint
+	validateStairFootprint,
+	type StairPreviewFit
 } from './stairMath';
 import type { StairDirection } from './StairTypes';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
@@ -38,13 +40,30 @@ const FAR_COLOR: readonly [number, number, number] = [1, 0.6, 0.3];
 const FIRST_CORNER_COLOR = 0xff9d4d;
 /** Reserved specifically for "this footprint/height exactly reaches the ceiling above" — never used for merely-valid-but-not-matching placements, so green stays a meaningful, distinct signal. */
 const HEIGHT_MATCH_COLOR = 0x39d353;
-/** Valid, but not (yet) matching a detected ceiling above — or no ceiling exists there at all. */
-const NEUTRAL_VALID_COLOR = 0x4da6ff;
-const INVALID_COLOR = 0xff4d4d;
+/** Footprint would overshoot the ceiling above — too long, and therefore too tall. */
+const TOO_TALL_COLOR = 0x4da6ff;
+/** Below the minimum cells, or too short to reach the ceiling above. */
+const TOO_SMALL_COLOR = 0xff4d4d;
+/** Valid size, but no slab above to judge height against. Distinct from too-tall blue. */
+const NEUTRAL_VALID_COLOR = 0xc5ced8;
+const INVALID_COLOR = TOO_SMALL_COLOR;
 const BOTTOM_MARKER_COLOR = 0x4da6ff;
 const TOP_MARKER_COLOR = 0xffcc33;
 /** How close (world units) a candidate top elevation must be to a detected ceiling's underside — actually its top surface, since a flush transition means the topmost tread reaches the ceiling's own walkable surface — to count as "matching" for the green highlight. Half a typical minimum grid size, so it only lights up for a genuine match, not a near-miss. */
 const HEIGHT_MATCH_TOLERANCE = 0.05;
+
+function colorForPreviewFit(fit: StairPreviewFit): number {
+	switch (fit) {
+		case 'match':
+			return HEIGHT_MATCH_COLOR;
+		case 'too-small':
+			return TOO_SMALL_COLOR;
+		case 'too-tall':
+			return TOO_TALL_COLOR;
+		case 'neutral':
+			return NEUTRAL_VALID_COLOR;
+	}
+}
 
 const markerGeometry = new THREE.SphereGeometry(0.12, 10, 8);
 
@@ -489,23 +508,25 @@ export class StairTool implements BuildTool {
 			const estimatedTotalRise = runCells * this.buildingSettings.buildingGridSize;
 			const estimatedTopLocalY = this.activeBaseY + estimatedTotalRise;
 			const ceilingLocalY = this.ceilingAboveFootprint(this.foundationId, footprint);
-			const matches =
-				ceilingLocalY !== null &&
-				Math.abs(estimatedTopLocalY - ceilingLocalY) <= HEIGHT_MATCH_TOLERANCE;
+			const fit = classifyStairPreviewFit({
+				xCells,
+				zCells,
+				estimatedTopLocalY,
+				ceilingLocalY,
+				minimumWidthCells: this.buildingSettings.minimumStairWidthCells,
+				minimumRunCells: this.buildingSettings.minimumStairRunCells,
+				heightMatchTolerance: HEIGHT_MATCH_TOLERANCE
+			});
 
 			this.hidePreview();
-			this.updateOutline(
-				this.foundationId,
-				footprint,
-				matches ? HEIGHT_MATCH_COLOR : NEUTRAL_VALID_COLOR
-			);
+			this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit));
 			if (xCells > 0 && zCells > 0) {
-				this.updateRoughBox(this.foundationId, footprint, estimatedTotalRise, matches);
+				this.updateRoughBox(this.foundationId, footprint, estimatedTotalRise, fit);
 			} else {
 				this.hideRoughBox();
 			}
 			this.onHudChange?.(
-				this.buildFootprintHud(footprint, estimatedTotalRise, ceilingLocalY, matches)
+				this.buildFootprintHud(footprint, estimatedTotalRise, ceilingLocalY, fit)
 			);
 			return;
 		}
@@ -543,17 +564,19 @@ export class StairTool implements BuildTool {
 			baseY: this.activeBaseY
 		});
 		const ceilingLocalY = this.ceilingAboveFootprint(this.foundationId, footprint);
-		const matches =
-			ceilingLocalY !== null &&
-			Math.abs(metrics.topLocalY - ceilingLocalY) <= HEIGHT_MATCH_TOLERANCE;
+		const fit = classifyStairPreviewFit({
+			xCells: footprint.maxGridX - footprint.minGridX,
+			zCells: footprint.maxGridZ - footprint.minGridZ,
+			estimatedTopLocalY: metrics.topLocalY,
+			ceilingLocalY,
+			minimumWidthCells: this.buildingSettings.minimumStairWidthCells,
+			minimumRunCells: this.buildingSettings.minimumStairRunCells,
+			heightMatchTolerance: HEIGHT_MATCH_TOLERANCE
+		});
 
-		this.updateOutline(
-			this.foundationId,
-			footprint,
-			matches ? HEIGHT_MATCH_COLOR : NEUTRAL_VALID_COLOR
-		);
-		this.updateStairPreview(this.foundationId, footprint, matches);
-		this.onHudChange?.(this.buildDirectionHud(metrics, ceilingLocalY, matches));
+		this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit));
+		this.updateStairPreview(this.foundationId, footprint, fit);
+		this.onHudChange?.(this.buildDirectionHud(metrics, ceilingLocalY, fit));
 	}
 
 	/** The ceiling/floor slab directly above a footprint's centre point, at the tool's current active elevation — see `findCeilingLocalYAbove`. */
@@ -631,14 +654,14 @@ export class StairTool implements BuildTool {
 	 * Rough estimated bounding box shown while choosing the second corner — before a `direction`
 	 * (and therefore the real stepped geometry) exists — so the player can judge roughly how tall
 	 * the staircase will be without committing to a footprint first. A single reused unit box,
-	 * scaled/positioned per frame, colored `HEIGHT_MATCH_COLOR` when `estimatedTotalRise` would land
-	 * exactly on a detected ceiling above, `NEUTRAL_VALID_COLOR` otherwise.
+	 * scaled/positioned per frame, colored from `classifyStairPreviewFit` (green = lands on the
+	 * ceiling, red = too small, blue = too long / too tall).
 	 */
 	private updateRoughBox(
 		foundationId: string,
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
 		estimatedTotalRise: number,
-		matches: boolean
+		fit: StairPreviewFit
 	): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -663,7 +686,7 @@ export class StairTool implements BuildTool {
 			baseWorldY + estimatedTotalRise / 2,
 			(minZ + maxZ) / 2
 		);
-		this.roughBoxMaterial.color.setHex(matches ? HEIGHT_MATCH_COLOR : NEUTRAL_VALID_COLOR);
+		this.roughBoxMaterial.color.setHex(colorForPreviewFit(fit));
 		// Slightly lighter than the real stepped preview, since this is only a rough estimate.
 		this.roughBoxMaterial.opacity = this.buildingSettings.stairPreviewOpacity * 0.7;
 		this.roughBoxMesh.visible = true;
@@ -676,7 +699,7 @@ export class StairTool implements BuildTool {
 	private updateStairPreview(
 		foundationId: string,
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
-		matches: boolean
+		fit: StairPreviewFit
 	): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -702,7 +725,7 @@ export class StairTool implements BuildTool {
 		this.previewGeometry = buildStairGeometry(bounds, this.direction, this.activeBaseY, metrics);
 		this.previewMesh.geometry = this.previewGeometry;
 		this.previewMesh.position.set(frame.originWorldX, frame.originWorldY, frame.originWorldZ);
-		this.previewMaterial.color.setHex(matches ? HEIGHT_MATCH_COLOR : NEUTRAL_VALID_COLOR);
+		this.previewMaterial.color.setHex(colorForPreviewFit(fit));
 		this.previewMaterial.opacity = this.buildingSettings.stairPreviewOpacity;
 		this.previewMesh.visible = true;
 
@@ -882,7 +905,7 @@ export class StairTool implements BuildTool {
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
 		estimatedTotalRise: number,
 		ceilingLocalY: number | null,
-		matches: boolean
+		fit: StairPreviewFit
 	): BuildUiState {
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const xCells = footprint.maxGridX - footprint.minGridX;
@@ -895,15 +918,29 @@ export class StairTool implements BuildTool {
 			`${(xCells * buildingGridSize).toFixed(2)}m × ${(zCells * buildingGridSize).toFixed(2)}m`,
 			`Est. rise: ${estimatedTotalRise.toFixed(2)}m`
 		];
+		const belowMinimums =
+			Math.min(xCells, zCells) < this.buildingSettings.minimumStairWidthCells ||
+			Math.max(xCells, zCells) < this.buildingSettings.minimumStairRunCells;
 		if (ceilingLocalY !== null) {
 			lines.push(`Ceiling above: ${(ceilingLocalY - this.activeBaseY).toFixed(2)}m`);
-			lines.push(matches ? 'Matches ceiling height!' : 'Drag to match ceiling height');
+			if (fit === 'match') lines.push('Matches ceiling height!');
+			else if (fit === 'too-tall') lines.push('Too long — stairs would be too tall');
+			else if (fit === 'too-small' && belowMinimums) {
+				lines.push(
+					`Too small — need at least ${this.buildingSettings.minimumStairWidthCells} × ${this.buildingSettings.minimumStairRunCells} cells`
+				);
+			} else if (fit === 'too-small') lines.push('Too short to reach ceiling');
+			else lines.push('Drag to match ceiling height');
+		} else if (fit === 'too-small') {
+			lines.push(
+				`Too small — need at least ${this.buildingSettings.minimumStairWidthCells} × ${this.buildingSettings.minimumStairRunCells} cells`
+			);
 		}
 		lines.push('', 'Click: Confirm footprint', 'Right click: Cancel');
 		return {
 			toolId: 'stairs',
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
-			crosshair: 'valid',
+			crosshair: fit === 'too-small' ? 'invalid' : 'valid',
 			hintLines: lines
 		};
 	}
@@ -911,7 +948,7 @@ export class StairTool implements BuildTool {
 	private buildDirectionHud(
 		metrics: ReturnType<typeof computeStairMetrics>,
 		ceilingLocalY: number | null,
-		matches: boolean
+		fit: StairPreviewFit
 	): BuildUiState {
 		const targetLevel = this.findMatchingLevel(metrics.topLocalY);
 
@@ -929,7 +966,10 @@ export class StairTool implements BuildTool {
 			`Direction: ${this.direction.toUpperCase()}`
 		];
 		if (ceilingLocalY !== null) {
-			lines.push(matches ? 'Matches ceiling above!' : 'Does not reach ceiling exactly');
+			if (fit === 'match') lines.push('Matches ceiling above!');
+			else if (fit === 'too-tall') lines.push('Too long — stairs would be too tall');
+			else if (fit === 'too-small') lines.push('Too short to reach ceiling');
+			else lines.push('Does not reach ceiling exactly');
 		}
 		if (targetLevel !== null) {
 			lines.push(
@@ -943,7 +983,7 @@ export class StairTool implements BuildTool {
 		return {
 			toolId: 'stairs',
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
-			crosshair: 'valid',
+			crosshair: fit === 'too-small' ? 'invalid' : 'valid',
 			hintLines: lines
 		};
 	}

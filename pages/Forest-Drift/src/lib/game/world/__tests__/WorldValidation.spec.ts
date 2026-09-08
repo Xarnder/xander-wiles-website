@@ -58,6 +58,31 @@ describe('enum and material safety', () => {
 		expectRejected(world, /opening type/i);
 	});
 
+	it('accepts a wall saved before beams existed (missing beams field)', () => {
+		const world = richWorld();
+		delete world.buildings[0].walls[0].beams;
+		delete world.buildings[0].wallPaths[0].segments[0].beams;
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('accepts a building saved before floor detailing existed (missing floorDetails field)', () => {
+		const world = richWorld();
+		delete world.buildings[0].floorDetails;
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('rejects an unknown floor detail kind', () => {
+		const world = richWorld();
+		(world.buildings[0].floorDetails![0] as { kind: string }).kind = 'mosaic';
+		expectRejected(world, /floor detail kind/i);
+	});
+
+	it('rejects a beam with a non-finite extent', () => {
+		const world = richWorld();
+		world.buildings[0].walls[0].beams![0].minU = Number.NaN;
+		expectRejected(world, /beam minU/i);
+	});
+
 	it('rejects an unknown slab type', () => {
 		const world = richWorld();
 		(world.buildings[0].slabs[0] as { type: string }).type = 'trapdoor';
@@ -96,6 +121,29 @@ describe('enum and material safety', () => {
 		world.buildings[0].walls[0].material = { type: 'color', color: '#abc' };
 		expect(validateWorldDefinition(world).ok).toBe(true);
 	});
+
+	it('accepts a window or beam saved without a placement colour', () => {
+		const world = richWorld();
+		delete world.buildings[0].walls[0].openings[0].material;
+		delete world.buildings[0].walls[0].beams![0].material;
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('rejects an invalid colour on a window or beam', () => {
+		const world = richWorld();
+		world.buildings[0].walls[0].openings[0].material = {
+			type: 'color',
+			color: 'not-a-colour'
+		} as never;
+		expectRejected(world, /colour/i);
+
+		const world2 = richWorld();
+		world2.buildings[0].walls[0].beams![0].material = {
+			type: 'color',
+			color: 'javascript:alert(1)'
+		} as never;
+		expectRejected(world2, /colour/i);
+	});
 });
 
 describe('relationship integrity', () => {
@@ -127,6 +175,45 @@ describe('relationship integrity', () => {
 		const world = richWorld();
 		world.buildings[0].stairs = [];
 		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('accepts a world saved before furniture existed (missing furniture field)', () => {
+		const world = richWorld();
+		delete (world as { furniture?: unknown }).furniture;
+		const result = validateWorldDefinition(world);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.furniture).toEqual([]);
+	});
+
+	it('accepts a terrain torch with no foundation', () => {
+		const world = richWorld();
+		world.furniture = [
+			{
+				id: 'ground-torch',
+				kind: 'torch',
+				foundationId: null,
+				x: 1,
+				y: 2,
+				z: 3,
+				nx: 0,
+				ny: 1,
+				nz: 0
+			}
+		];
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('rejects furniture attached to a foundation that is not in the file', () => {
+		const world = richWorld();
+		world.furniture[0].foundationId = 'ghost-foundation';
+		expectRejected(world, /unknown foundation/i);
+	});
+
+	it('rejects an unknown furniture kind', () => {
+		const world = richWorld();
+		(world.furniture[0] as { kind: string }).kind = 'throne';
+		expectRejected(world, /furniture kind/i);
 	});
 });
 

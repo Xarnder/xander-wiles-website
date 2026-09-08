@@ -1,10 +1,17 @@
 import * as THREE from 'three';
+import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { buildingGridToLocal, foundationLocalFrame } from './FoundationLocalMath';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
-import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
+import { buildStairFrame, disposeStairFrame } from './StairFrameBuilder';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import { computeStairMetrics, stairSideRectsLocal, stairTreadRectsLocal } from './stairMath';
 import type { StairLocalBounds, StairTreadRect } from './stairMath';
+import {
+	computeStairLevelTriggerVolume,
+	type StairLevelTriggerVolume
+} from './stairLevelTriggerMath';
 import type { StairDefinition } from './StairTypes';
 import type { WallCollisionRect } from './wallCollision';
 
@@ -25,15 +32,23 @@ interface StairEntry {
 	definition: StairDefinition;
 	mesh: THREE.Mesh;
 	boundsHelper: THREE.LineSegments | null;
+	/** Sibling of `mesh` on the foundation root — decorative timber, never in collision or Remove raycasts. */
+	framing: THREE.Group | null;
 	/** World-space tread rects (top surface only) — the authoritative "where can the player stand/climb" data. */
 	worldTreads: StairTreadRect[];
 	/** World-space side-edge collision rects, in the same shape wall collision already uses. */
 	collisionRects: WallCollisionRect[];
+	/** Invisible AABB used to auto-switch building level after walking the stair. */
+	levelTrigger: StairLevelTriggerVolume;
 }
 
 export interface StairManagerOptions {
 	getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	getVertexSpacing: () => number;
+	/** Optional — tests can omit this; ThreeScene always passes the shared cache. */
+	materialManager?: BuildingMaterialManager;
+	/** Live framing toggles/sizes, read at every rebuild. Optional so existing tests keep compiling. */
+	buildingSettings?: BuildingSettings;
 }
 
 /**
@@ -75,6 +90,8 @@ export class StairManager {
 
 	private readonly getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	private readonly getVertexSpacing: () => number;
+	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
 	private readonly roots: FoundationRootRegistry;
 
 	private readonly stairs = new Map<string, StairEntry>();
@@ -83,6 +100,8 @@ export class StairManager {
 	constructor(options: StairManagerOptions) {
 		this.getFoundation = options.getFoundation;
 		this.getVertexSpacing = options.getVertexSpacing;
+		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
+		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
 	}
@@ -140,15 +159,36 @@ export class StairManager {
 			maxWorldY
 		}));
 
+		if (existing?.framing) disposeStairFrame(existing.framing);
+		const framing = buildStairFrame(
+			bounds,
+			definition.direction,
+			definition.baseY,
+			metrics,
+			this.buildingSettings,
+			this.materialManager
+		);
+		if (framing) root.add(framing);
+
 		const entry: StairEntry = {
 			definition,
 			mesh,
 			boundsHelper: existing?.boundsHelper ?? null,
+			framing,
 			worldTreads,
-			collisionRects
+			collisionRects,
+			levelTrigger: computeStairLevelTriggerVolume(definition, bounds, metrics, frame)
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
+	}
+
+	/** Rebuild every stair in place — used when live framing settings change. */
+	rebuildAllStairs(): void {
+		for (const entry of this.stairs.values()) {
+			const rebuilt = this.buildEntry(entry.definition, entry);
+			if (rebuilt) this.stairs.set(entry.definition.id, rebuilt);
+		}
 	}
 
 	addStair(definition: StairDefinition): void {
@@ -162,6 +202,7 @@ export class StairManager {
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
+		if (entry.framing) disposeStairFrame(entry.framing);
 		this.stairs.delete(id);
 		return true;
 	}
@@ -212,6 +253,11 @@ export class StairManager {
 			}
 		}
 		return tops;
+	}
+
+	/** World-space AABBs around each stair — see StairLevelTrigger. */
+	getLevelTriggerVolumes(): StairLevelTriggerVolume[] {
+		return Array.from(this.stairs.values(), (entry) => entry.levelTrigger);
 	}
 
 	/** Every stair's side-edge collision rects, in the same shape/consumer (`resolvePlayerPositionAgainstWalls`) wall collision already uses — see StairManager's class doc comment for why only the sides (not the full stepped volume) are represented this way. */

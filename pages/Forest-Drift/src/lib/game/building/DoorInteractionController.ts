@@ -17,6 +17,8 @@ export interface DoorInteractionControllerOptions {
 	getHingePivots: () => Iterable<readonly [string, THREE.Object3D]>;
 	maxDistance?: number;
 	aimRadius?: number;
+	/** Fires when the door under the crosshair changes, including to `null` when you look away. */
+	onLookedAtDoorChange?: (openingId: string | null) => void;
 }
 
 /**
@@ -30,6 +32,8 @@ export class DoorInteractionController {
 	private readonly getHingePivots: () => Iterable<readonly [string, THREE.Object3D]>;
 	private readonly maxDistance: number;
 	private readonly aimRadius: number;
+	private readonly onLookedAtDoorChange?: (openingId: string | null) => void;
+	private lookedAtDoorId: string | null = null;
 	private readonly openById = new Set<string>();
 	private readonly lookOrigin = new THREE.Vector3();
 	private readonly lookDirection = new THREE.Vector3();
@@ -49,11 +53,17 @@ export class DoorInteractionController {
 		this.getHingePivots = options.getHingePivots;
 		this.maxDistance = options.maxDistance ?? DOOR_INTERACT_MAX_DISTANCE;
 		this.aimRadius = options.aimRadius ?? DOOR_INTERACT_AIM_RADIUS;
+		this.onLookedAtDoorChange = options.onLookedAtDoorChange;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
 	isOpen(openingId: string): boolean {
 		return this.openById.has(openingId);
+	}
+
+	/** The door currently under the crosshair, or `null` if none is in range. */
+	getLookedAtDoor(): string | null {
+		return this.lookedAtDoorId;
 	}
 
 	/** One oriented box per live door leaf — closed fills the doorway; open sits beside it. */
@@ -87,11 +97,23 @@ export class DoorInteractionController {
 		for (const id of Array.from(this.openById)) {
 			if (!liveIds.has(id)) this.openById.delete(id);
 		}
+		this.refreshLookedAtDoor();
 	}
 
 	dispose(): void {
 		window.removeEventListener('keydown', this.handleKeyDown);
 		this.openById.clear();
+		this.setLookedAtDoor(null);
+	}
+
+	private refreshLookedAtDoor(): void {
+		this.setLookedAtDoor(this.pickLookedAtDoor());
+	}
+
+	private setLookedAtDoor(openingId: string | null): void {
+		if (openingId === this.lookedAtDoorId) return;
+		this.lookedAtDoorId = openingId;
+		this.onLookedAtDoorChange?.(openingId);
 	}
 
 	private pickLookedAtDoor(): string | null {

@@ -341,6 +341,10 @@ export class RoofTool implements BuildTool {
 		this.onHudChange?.(null);
 	}
 
+	isCapturingKey(code: string): boolean {
+		return this.active && this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown');
+	}
+
 	update(): void {
 		if (!this.active || this.state === 'adjusting') return;
 

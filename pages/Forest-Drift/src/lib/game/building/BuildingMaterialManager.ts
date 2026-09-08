@@ -13,6 +13,14 @@ interface MaterialTemplate {
 	polygonOffsetUnits?: number;
 }
 
+/** Shared default for wall / window / door frames so they read as the same timber. */
+const TIMBER_FRAME: MaterialTemplate = {
+	color: 0x5c4632,
+	roughness: 0.82,
+	metalness: 0.02,
+	flatShading: true
+};
+
 const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 	wall: { color: 0xcfc6b3, roughness: 0.88, metalness: 0.02, flatShading: true },
 	foundation: {
@@ -24,11 +32,33 @@ const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 		polygonOffsetFactor: -1,
 		polygonOffsetUnits: -1
 	},
-	'slab-floor': { color: 0xd8d2c4, roughness: 0.9, metalness: 0.02, flatShading: true },
-	'slab-roof': { color: 0x8f8a7e, roughness: 0.95, metalness: 0.02, flatShading: true },
-	'window-frame': { color: 0xf2f0e8, roughness: 0.55, metalness: 0.05 },
-	'door-frame': { color: 0xf2f0e8, roughness: 0.55, metalness: 0.05 },
-	'door-leaf': { color: 0x8a5a35, roughness: 0.7, metalness: 0.02 }
+	'slab-floor': {
+		color: 0xd8d2c4,
+		roughness: 0.9,
+		metalness: 0.02,
+		flatShading: true,
+		polygonOffset: true,
+		polygonOffsetFactor: -1,
+		polygonOffsetUnits: -1
+	},
+	'slab-roof': {
+		color: 0x8f8a7e,
+		roughness: 0.95,
+		metalness: 0.02,
+		flatShading: true,
+		polygonOffset: true,
+		polygonOffsetFactor: -1,
+		polygonOffsetUnits: -1
+	},
+	'window-frame': TIMBER_FRAME,
+	'door-frame': TIMBER_FRAME,
+	'door-leaf': { color: 0x8a5a35, roughness: 0.7, metalness: 0.02 },
+	'door-handle': { color: 0x2c2c2c, roughness: 0.4, metalness: 0.7 },
+	'wall-frame': TIMBER_FRAME,
+	skirting: { color: 0xc19a6b, roughness: 0.84, metalness: 0.02, flatShading: true },
+	'stair-frame': TIMBER_FRAME,
+	'slab-opening-frame': TIMBER_FRAME,
+	'wall-beam': TIMBER_FRAME
 };
 
 /** `undefined` (no override — use the kind's own default look) collapses to a stable `'default'` key; a colour definition's key is its normalized hex, so two differently-cased/shorthand inputs that mean the same colour still share one cached material. */

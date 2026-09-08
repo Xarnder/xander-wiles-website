@@ -1,4 +1,10 @@
+import { createDefaultCreatureState } from '../creatures/CreaturePersistence';
+import type { CreatureWorldState } from '../creatures/CreatureTypes';
+import { createMusicTree, timelineDefinition } from '../music/MusicModel';
+import { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
+import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
+import type { FurnitureDefinition } from '../building/FurnitureTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
 import {
@@ -33,6 +39,10 @@ export interface WorldRevisionCounters {
  * even by accident.
  */
 export interface WorldRuntime {
+	getCreatureState?(): CreatureWorldState;
+	getMusicTrees?(): MusicTreeDefinition[];
+	getMusicPlants?(): MusicPlantDefinition[];
+	getFurniture?(): FurnitureDefinition[];
 	getEnvironment(): WorldEnvironmentDefinition;
 	getFoundations(): FoundationDefinition[];
 	getBuildings(): FoundationBuildingDefinition[];
@@ -44,6 +54,10 @@ export interface WorldRuntime {
 
 /** The mutable half of a world — everything that changes while playing, as opposed to identity/timestamps which WorldManager owns. */
 export interface WorldContentSnapshot {
+	creatures: CreatureWorldState;
+	musicTrees: MusicTreeDefinition[];
+	musicPlants: MusicPlantDefinition[];
+	furniture: FurnitureDefinition[];
 	environment: WorldEnvironmentDefinition;
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
@@ -67,6 +81,10 @@ export interface WorldContentSnapshot {
  */
 export function captureWorldContent(runtime: WorldRuntime): WorldContentSnapshot {
 	return deepClone({
+		creatures: runtime.getCreatureState?.() ?? createDefaultCreatureState(),
+		musicTrees: runtime.getMusicTrees?.() ?? [],
+		musicPlants: runtime.getMusicPlants?.() ?? [],
+		furniture: runtime.getFurniture?.() ?? [],
 		environment: runtime.getEnvironment(),
 		foundations: runtime.getFoundations(),
 		buildings: runtime.getBuildings(),
@@ -84,6 +102,10 @@ export function applyContentToWorld(
 ): WorldDefinition {
 	return {
 		...world,
+		creatures: content.creatures,
+		musicTrees: content.musicTrees,
+		musicPlants: content.musicPlants,
+		furniture: content.furniture,
 		environment: content.environment,
 		foundations: content.foundations,
 		buildings: content.buildings,
@@ -131,6 +153,16 @@ export function createWorldDefinition({
 		saveRevision: 1,
 		seed,
 		environment: cloned,
+		creatures: createDefaultCreatureState(),
+		musicTrees: [
+			(() => {
+				const t = createMusicTree(0, new TerrainHeightSampler(cloned.terrain).sample(0, -10), -10);
+				t.loop.timeline = timelineDefinition(t.loop);
+				return t;
+			})()
+		],
+		musicPlants: [],
+		furniture: [],
 		foundations: [],
 		buildings: [],
 		buildingLevels: [],

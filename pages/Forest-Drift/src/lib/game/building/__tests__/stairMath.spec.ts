@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	classifyStairPreviewFit,
 	computeStairMetrics,
 	cycleStairDirection,
 	stairCanonicalToLocalXZ,
@@ -181,6 +182,113 @@ describe('validateStairFootprint', () => {
 			MIN_RUN
 		);
 		expect(result.valid).toBe(false);
+	});
+});
+
+describe('classifyStairPreviewFit — first-corner size box', () => {
+	const TOL = 0.05;
+	const MIN_WIDTH = 4;
+	const MIN_RUN = 2;
+	const base = {
+		minimumWidthCells: MIN_WIDTH,
+		minimumRunCells: MIN_RUN,
+		heightMatchTolerance: TOL
+	};
+
+	it('is red when the run is shorter than the ceiling above', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 8,
+				zCells: 4,
+				estimatedTopLocalY: 2,
+				ceilingLocalY: 3
+			})
+		).toBe('too-small');
+	});
+
+	it('is blue when the run would rise past the ceiling', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 16,
+				zCells: 4,
+				estimatedTopLocalY: 4,
+				ceilingLocalY: 3
+			})
+		).toBe('too-tall');
+	});
+
+	it('is green when the estimated top lands on the ceiling', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 12,
+				zCells: 4,
+				estimatedTopLocalY: 3,
+				ceilingLocalY: 3
+			})
+		).toBe('match');
+	});
+
+	it('treats a near-miss within tolerance as a match', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 12,
+				zCells: 4,
+				estimatedTopLocalY: 3.04,
+				ceilingLocalY: 3
+			})
+		).toBe('match');
+	});
+
+	it('is red when the footprint is below the minimum width, even if height would match', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 12,
+				zCells: 2,
+				estimatedTopLocalY: 3,
+				ceilingLocalY: 3
+			})
+		).toBe('too-small');
+	});
+
+	it('is red when the footprint is below the minimum run', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 1,
+				zCells: 4,
+				estimatedTopLocalY: 0.25,
+				ceilingLocalY: 3
+			})
+		).toBe('too-small');
+	});
+
+	it('stays neutral when there is no ceiling and the footprint already meets the minimums', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 12,
+				zCells: 4,
+				estimatedTopLocalY: 3,
+				ceilingLocalY: null
+			})
+		).toBe('neutral');
+	});
+
+	it('is still red with no ceiling if the footprint is too small to place', () => {
+		expect(
+			classifyStairPreviewFit({
+				...base,
+				xCells: 1,
+				zCells: 1,
+				estimatedTopLocalY: 0.25,
+				ceilingLocalY: null
+			})
+		).toBe('too-small');
 	});
 });
 

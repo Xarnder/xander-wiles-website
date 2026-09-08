@@ -33,7 +33,9 @@ describe('world round trip', () => {
 		expect(building.wallPaths).toEqual(world.buildings[0].wallPaths);
 		expect(building.slabs).toEqual(world.buildings[0].slabs);
 		expect(building.stairs).toEqual(world.buildings[0].stairs);
+		expect(building.floorDetails).toEqual(world.buildings[0].floorDetails);
 		expect(loaded.buildingLevels).toEqual(world.buildingLevels);
+		expect(loaded.furniture).toEqual(world.furniture);
 	});
 
 	it('keeps window and door openings, including which wall path segment owns them', async () => {
@@ -44,7 +46,11 @@ describe('world round trip', () => {
 
 		const wallOpenings = loaded.buildings[0].walls[0].openings;
 		expect(wallOpenings.map((opening) => opening.type)).toEqual(['window', 'door']);
+		expect(loaded.buildings[0].walls[0].beams?.map((beam) => beam.id)).toEqual(['beam-1']);
 		expect(loaded.buildings[0].wallPaths[0].segments[0].openings).toHaveLength(1);
+		expect(loaded.buildings[0].wallPaths[0].segments[0].beams?.map((beam) => beam.id)).toEqual([
+			'beam-2'
+		]);
 		expect(loaded.buildings[0].wallPaths[0].segments[1].openings).toHaveLength(0);
 	});
 
@@ -63,6 +69,24 @@ describe('world round trip', () => {
 		expect(loaded.buildings[0].slabs[0].material).toEqual({ type: 'color', color: '#d8d2c4' });
 		// An unpainted surface stays unpainted rather than being given a colour on the way through.
 		expect(loaded.buildings[0].slabs[1].material).toBeUndefined();
+	});
+
+	it('keeps placement colour on a window and a beam', async () => {
+		const repository = new InMemoryWorldRepository();
+		const world = richWorld();
+		world.buildings[0].walls[0].openings[0].material = { type: 'color', color: '#FF00AA' };
+		world.buildings[0].walls[0].beams![0].material = { type: 'color', color: '#112233' };
+		await repository.saveWorld(world);
+		const loaded = (await repository.loadWorld(world.id))!;
+
+		expect(loaded.buildings[0].walls[0].openings[0].material).toEqual({
+			type: 'color',
+			color: '#FF00AA'
+		});
+		expect(loaded.buildings[0].walls[0].beams![0].material).toEqual({
+			type: 'color',
+			color: '#112233'
+		});
 	});
 
 	it('keeps the stair-owned slab opening linked to the stair that made it', async () => {
@@ -193,6 +217,10 @@ describe('captureWorldContent', () => {
 		const content = captureWorldContent(runtime);
 		expect(Object.keys(content).sort()).toEqual(
 			[
+				'creatures',
+				'musicTrees',
+				'musicPlants',
+				'furniture',
 				'buildingLevels',
 				'buildings',
 				'environment',

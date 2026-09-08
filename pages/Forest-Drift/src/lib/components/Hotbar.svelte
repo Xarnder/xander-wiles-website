@@ -20,20 +20,44 @@
 		onToggleRemoveMode,
 		onTogglePaintMode
 	}: Props = $props();
+
+	function reservedBetween(previous: number, next: number): number[] {
+		const numbers: number[] = [];
+		for (let slot = previous + 1; slot < next; slot++) numbers.push(slot);
+		return numbers;
+	}
 </script>
 
 <div class="hotbar" data-testid="hotbar">
-	{#each slots as slot (slot.slot)}
+	{#each slots as slot, index (slot.slot)}
+		{#if index > 0}
+			{#each reservedBetween(slots[index - 1].slot, slot.slot) as reserved (reserved)}
+				<div class="slot reserved" title="Reserved" aria-hidden="true">
+					<span class="slot-number">{reserved}</span>
+					<span class="slot-label">—</span>
+				</div>
+			{/each}
+		{/if}
 		<button
 			type="button"
 			class="slot"
 			class:active={slot.slot === activeSlot && !removeModeActive && !paintModeActive}
 			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
+			aria-label={slot.variantCount > 1
+				? `${slot.label} (slot ${slot.slot}, ${slot.variantIndex + 1} of ${slot.variantCount} — up/down to switch)`
+				: undefined}
 		>
 			<span class="slot-number">{slot.slot}</span>
 			{#if slot.label}
 				<span class="slot-label">{slot.label}</span>
+			{/if}
+			{#if slot.variantCount > 1}
+				<span class="slot-variants" aria-hidden="true">
+					{#each { length: slot.variantCount }, i}
+						<span class="slot-pip" class:current={i === slot.variantIndex}></span>
+					{/each}
+				</span>
 			{/if}
 		</button>
 	{/each}
@@ -112,6 +136,12 @@
 		box-shadow: 0 0 0 1px rgba(255, 204, 51, 0.5);
 	}
 
+	.slot.reserved {
+		cursor: default;
+		opacity: 0.38;
+		pointer-events: none;
+	}
+
 	/* A visual gap plus a distinct (red, not yellow) active color — Remove Mode isn't "another tool
 	   in the row", it's a different kind of thing, and its highlight shouldn't look like a normal
 	   hotbar selection. */
@@ -143,5 +173,23 @@
 		font-size: 0.6rem;
 		line-height: 1.1;
 		text-align: center;
+	}
+
+	.slot-variants {
+		display: flex;
+		gap: 0.15rem;
+		margin-top: 0.12rem;
+		justify-content: center;
+	}
+
+	.slot-pip {
+		width: 0.28rem;
+		height: 0.28rem;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.28);
+	}
+
+	.slot-pip.current {
+		background: #ffcc33;
 	}
 </style>

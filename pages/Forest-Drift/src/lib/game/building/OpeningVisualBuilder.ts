@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingMaterialManager } from './BuildingMaterialManager';
 import {
-	clampFrameDepth,
+	clampInteriorDepth,
 	computeDoorFrameLayout,
+	computeDoorHandlePlacement,
 	computeWindowFrameLayout,
 	hingeSideForOpening
 } from './openingVisualMath';
-import type { UvRect } from './openingVisualMath';
+import type { DoorHandlePlacement, UvRect } from './openingVisualMath';
 import type { WallOpeningDefinition } from './WallTypes';
 
-/** How thick the glass pane itself is (metres), independent of the frame's own configured depth — always clamped to the wall thickness like every other depth here, via `clampFrameDepth`. */
+/** How thick the glass pane itself is (metres), independent of the frame's own configured depth — kept inside the wall via `clampInteriorDepth`, while the frame itself always sits proud of both faces. */
 const GLASS_THICKNESS = 0.02;
 
 /** Shared, never-disposed debug-wireframe materials — same "one module-level LineBasicMaterial constant" convention WallManager/RoofManager's own `boundsMaterial` already use for their bounds helpers. */
@@ -178,12 +179,11 @@ function buildWindowVisual(
 	group.name = 'window-visual';
 
 	if (settings.windowFramesEnabled) {
-		const frameMaterial = materialManager.getMaterial('window-frame', undefined);
-		const frameMesh = buildMergedBoxMesh(
-			[layout.left, layout.right, layout.top, layout.bottom],
-			layout.frameDepth,
-			frameMaterial
-		);
+		const frameMaterial = materialManager.getMaterial('window-frame', opening.material);
+		const frameRects = [layout.left, layout.right, layout.top, layout.bottom];
+		if (layout.mullion) frameRects.push(layout.mullion);
+		if (layout.transom) frameRects.push(layout.transom);
+		const frameMesh = buildMergedBoxMesh(frameRects, layout.frameDepth, frameMaterial);
 		if (frameMesh) {
 			frameMesh.castShadow = true;
 			frameMesh.receiveShadow = true;
@@ -193,7 +193,7 @@ function buildWindowVisual(
 	}
 
 	if (settings.windowGlassEnabled) {
-		const glassDepth = clampFrameDepth(GLASS_THICKNESS, wallThickness);
+		const glassDepth = clampInteriorDepth(GLASS_THICKNESS, wallThickness);
 		const glassMesh = buildMergedBoxMesh([layout.glass], glassDepth, glassMaterial);
 		if (glassMesh) {
 			glassMesh.castShadow = false;
@@ -289,12 +289,18 @@ function buildDoorVisual(
 		const sign = hingeSide === 'left' ? 1 : -1;
 		leafGeometry.translate(sign * (leafWidth / 2), leafHeight / 2, 0);
 
-		const leafMaterial = materialManager.getMaterial('door-leaf', undefined);
+		const leafMaterial = materialManager.getMaterial('door-leaf', opening.material);
 		const leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
 		leafMesh.castShadow = true;
 		leafMesh.receiveShadow = true;
 		leafMesh.name = 'door-leaf';
 		hingePivot.add(leafMesh);
+		const handles = buildDoorHandleMesh(
+			computeDoorHandlePlacement(leafWidth, leafHeight, hingeSide),
+			doorThickness,
+			materialManager.getMaterial('door-handle', undefined)
+		);
+		if (handles) hingePivot.add(handles);
 		if (settings.showDoorHinge) addHingeMarker(hingePivot);
 		group.add(hingePivot);
 	}
@@ -314,6 +320,51 @@ function buildDoorVisual(
 
 	if (group.children.length === 0) return null;
 	return { group, hingePivot };
+}
+
+/**
+ * One latch-side handle for a single door face. `faceSign` is +1/−1 along the leaf's thickness
+ * axis (out of that face); `leverSign` aims the grip toward the hinge so the handle sits on the
+ * swing edge, not the pivot. Built without a scale-flip so FrontSide winding stays outward.
+ */
+function buildOneDoorHandleGeometry(leverSign: number, faceSign: number): THREE.BufferGeometry | null {
+	const plate = new THREE.BoxGeometry(0.034, 0.1, 0.01);
+	plate.translate(0, 0, faceSign * 0.005);
+	const stem = new THREE.CylinderGeometry(0.009, 0.009, 0.02, 8);
+	stem.rotateX(Math.PI / 2);
+	stem.translate(0, 0, faceSign * 0.02);
+	const lever = new THREE.BoxGeometry(0.08, 0.014, 0.014);
+	lever.translate(leverSign * 0.04, 0, faceSign * 0.03);
+	const merged = mergeGeometries([plate, stem, lever], false);
+	plate.dispose();
+	stem.dispose();
+	lever.dispose();
+	return merged;
+}
+
+/** Two handles — one on each face of the leaf — parented under the hinge pivot so they swing with the door. */
+function buildDoorHandleMesh(
+	placement: DoorHandlePlacement,
+	doorThickness: number,
+	material: THREE.Material
+): THREE.Mesh | null {
+	const half = doorThickness / 2;
+	const pieces: THREE.BufferGeometry[] = [];
+	for (const faceSign of [1, -1] as const) {
+		const handle = buildOneDoorHandleGeometry(placement.leverSign, faceSign);
+		if (!handle) continue;
+		handle.translate(placement.localX, placement.localY, faceSign * half);
+		pieces.push(handle);
+	}
+	if (pieces.length === 0) return null;
+	const merged = mergeGeometries(pieces, false);
+	for (const piece of pieces) piece.dispose();
+	if (!merged) return null;
+	const mesh = new THREE.Mesh(merged, material);
+	mesh.castShadow = true;
+	mesh.receiveShadow = true;
+	mesh.name = 'door-handles';
+	return mesh;
 }
 
 /** Merges a small set of axis-aligned boxes (each in ABSOLUTE wall-local U/Y coordinates, exactly like `WallGeometryBuilder.buildWallGeometry`'s own solid segments) into one draw call — one merged mesh per opening per part (frame), rather than 3-4 separate meshes, per the feature's render-cost requirement. */

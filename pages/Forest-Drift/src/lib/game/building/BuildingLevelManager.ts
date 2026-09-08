@@ -9,7 +9,8 @@ const LEVEL_DISCOVERY_EPSILON = 0.01;
 /**
  * Owns every foundation's building levels (storeys) AND which foundation/level a level-aware tool
  * (Wall, Polygon Wall, Ceiling/Floor/Roof, Stairs) currently builds on next — changed live via
- * `]`/`[` (or Page Up/Page Down) or the on-screen floor selector, not just a placement default.
+ * `]`/`[` (or Page Up/Page Down), the on-screen floor selector, or walking a staircase (see
+ * StairLevelTrigger), not just a placement default.
  *
  * Levels are per-foundation: `currentLevelIndex` is tracked separately for every `foundationId`, so
  * standing on one foundation's Level 2 doesn't leak into another nearby foundation's own level

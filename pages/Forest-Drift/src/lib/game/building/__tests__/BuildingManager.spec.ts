@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BuildingManager } from '../BuildingManager';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { FloorDetailManager } from '../FloorDetailManager';
 import { RoofManager } from '../RoofManager';
+import { roomLidsFromSlabs } from '../skirtingMath';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
 import { resolvePlayerPositionAgainstWalls } from '../wallCollision';
@@ -28,17 +30,22 @@ function makeFoundation(overrides: Partial<FoundationDefinition> = {}): Foundati
 
 function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORNER_OPENING_MARGIN) {
 	const foundationManager = new FoundationManager(() => VERTEX_SPACING);
+	let slabManager!: SlabManager;
+	const getRoomLids = (foundationId: string) =>
+		roomLidsFromSlabs(slabManager.getSlabsForFoundation(foundationId), buildingGridSize);
 	const wallManager = new WallManager({
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => VERTEX_SPACING,
-		getBuildingGridSize: () => buildingGridSize
+		getBuildingGridSize: () => buildingGridSize,
+		getRoomLids
 	});
 	const wallPathManager = new WallPathManager({
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => VERTEX_SPACING,
-		getBuildingGridSize: () => buildingGridSize
+		getBuildingGridSize: () => buildingGridSize,
+		getRoomLids
 	});
-	const slabManager = new SlabManager({
+	slabManager = new SlabManager({
 		getFoundation: (id) => foundationManager.getFoundation(id),
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize
@@ -52,6 +59,11 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize
 	});
+	const floorDetailManager = new FloorDetailManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => VERTEX_SPACING,
+		getBuildingGridSize: () => buildingGridSize
+	});
 	const buildingManager = new BuildingManager({
 		foundationManager,
 		wallManager,
@@ -59,6 +71,7 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		slabManager,
 		stairManager,
 		roofManager,
+		floorDetailManager,
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize,
 		getCornerOpeningMargin: () => cornerOpeningMargin
@@ -70,6 +83,7 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		slabManager,
 		stairManager,
 		roofManager,
+		floorDetailManager,
 		buildingManager
 	};
 }
@@ -174,6 +188,31 @@ describe('BuildingManager.addOpening', () => {
 		expect(buildingManager.getWall(wall.id)?.openings).toHaveLength(1);
 	});
 
+	it('stores a placement colour on the opening', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+
+		const result = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'window',
+			minU: 2,
+			maxU: 3,
+			minY: 1,
+			maxY: 2,
+			edgeMargin: 0.1,
+			spacing: 0.15,
+			material: { type: 'color', color: '#FF3366' }
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.material).toEqual({ type: 'color', color: '#FF3366' });
+		expect(buildingManager.getWall(wall.id)?.openings[0].material).toEqual({
+			type: 'color',
+			color: '#FF3366'
+		});
+	});
+
 	it('rejects an opening extending beyond the wall edge', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
@@ -260,6 +299,148 @@ describe('BuildingManager.addOpening', () => {
 
 		expect(result.valid).toBe(true);
 		expect(result.value?.minY).toBe(0);
+	});
+});
+
+describe('BuildingManager.addBeam', () => {
+	function addTestWall(buildingManager: BuildingManager) {
+		const result = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+			end: { foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+			...DEFAULT_WALL_PARAMS
+		});
+		if (!result.value) throw new Error('setup wall failed to place');
+		return result.value;
+	}
+
+	it('adds a valid beam without cutting an opening', () => {
+		const { foundationManager, wallManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+		const collisionBefore = wallManager.getAllCollisionRects();
+
+		const result = buildingManager.addBeam({
+			wallId: wall.id,
+			minU: 2,
+			maxU: 3.2,
+			minY: 1.4,
+			maxY: 1.56,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(result.valid).toBe(true);
+		expect(buildingManager.getWall(wall.id)?.beams).toHaveLength(1);
+		expect(buildingManager.getWall(wall.id)?.openings).toHaveLength(0);
+		expect(wallManager.getAllCollisionRects()).toEqual(collisionBefore);
+	});
+
+	it('stores a placement colour on the beam', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+
+		const result = buildingManager.addBeam({
+			wallId: wall.id,
+			minU: 2,
+			maxU: 3.2,
+			minY: 1.4,
+			maxY: 1.56,
+			edgeMargin: 0.1,
+			spacing: 0.15,
+			material: { type: 'color', color: '#112233' }
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.material).toEqual({ type: 'color', color: '#112233' });
+		expect(buildingManager.getWall(wall.id)?.beams?.[0].material).toEqual({
+			type: 'color',
+			color: '#112233'
+		});
+	});
+
+	it('may sit over a door or window because it does not cut the wall', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+
+		buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'door',
+			minU: 2,
+			maxU: 3.2,
+			minY: 0,
+			maxY: 2.1,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+		const result = buildingManager.addBeam({
+			wallId: wall.id,
+			minU: 2,
+			maxU: 3.2,
+			minY: 1.8,
+			maxY: 1.96,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(result.valid).toBe(true);
+		expect(buildingManager.getWall(wall.id)?.openings).toHaveLength(1);
+		expect(buildingManager.getWall(wall.id)?.beams).toHaveLength(1);
+	});
+
+	it('rejects a beam overlapping an existing beam', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+
+		buildingManager.addBeam({
+			wallId: wall.id,
+			minU: 2,
+			maxU: 3.2,
+			minY: 1.4,
+			maxY: 1.56,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+		const result = buildingManager.addBeam({
+			wallId: wall.id,
+			minU: 2.5,
+			maxU: 3.5,
+			minY: 1.4,
+			maxY: 1.56,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(result.valid).toBe(false);
+		expect(buildingManager.getWall(wall.id)?.beams).toHaveLength(1);
+	});
+
+	it('adds a beam to a path segment and removeBeam restores the empty list', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const path = buildingManager.addWallPath({
+			points: [pathPoint(0, 0), pathPoint(20, 0)],
+			closed: false,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const segment = path.segments[0];
+
+		const result = buildingManager.addBeam({
+			wallId: segment.id,
+			minU: 2,
+			maxU: 3.2,
+			minY: 1.4,
+			maxY: 1.56,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(result.valid).toBe(true);
+		expect(buildingManager.getWall(segment.id)?.beams).toHaveLength(1);
+		expect(buildingManager.removeBeam(segment.id, result.value!.id)).toBe(true);
+		expect(buildingManager.getWall(segment.id)?.beams).toHaveLength(0);
 	});
 });
 
@@ -1108,7 +1289,7 @@ describe('BuildingManager.addStair — validation', () => {
 
 describe('BuildingManager auto stair-opening in slabs', () => {
 	it('opens a rectangular hole in a slab already present at the stair top elevation', () => {
-		const { foundationManager, buildingManager, slabManager } = setup();
+		const { foundationManager, buildingManager, slabManager, stairManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
 
 		// A 20x20-cell floor slab (10m x 10m at 0.5m grid) at localY = 6 (the stair's top elevation).
@@ -1148,6 +1329,8 @@ describe('BuildingManager auto stair-opening in slabs', () => {
 			minGridZ: 2,
 			maxGridZ: 6
 		});
+		expect(stairManager.group.getObjectByName('stair-frame')).toBeDefined();
+		expect(slabManager.group.getObjectByName('slab-opening-frame')).toBeDefined();
 	});
 
 	it('opens a rectangular hole in a slab placed AFTER the stair already reaches it', () => {
@@ -2167,5 +2350,81 @@ describe('Paint Tool — serialization reflects painted colours', () => {
 			type: 'color',
 			color: '#5A5A5A'
 		});
+	});
+});
+
+describe('BuildingManager.addFloorDetail', () => {
+	const DETAIL_PARAMS = {
+		kind: 'planks' as const,
+		levelIndex: 0,
+		hostY: 0,
+		renderMode: '3d' as const,
+		colors: ['#8B5A2B', '#C4A574'],
+		plankWidth: 0.2,
+		plankDirection: 'x' as const,
+		tileSize: 0.4,
+		tilePattern: 'checker' as const,
+		pathWidth: 1,
+		pathFraming: true
+	};
+
+	it('places planks on a foundation and round-trips through serialize/load', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addFloorDetail({
+			foundationId: 'foundation-a',
+			points: [
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 4, gridZ: 0 },
+				{ gridX: 4, gridZ: 4 },
+				{ gridX: 0, gridZ: 4 }
+			],
+			...DETAIL_PARAMS
+		});
+		expect(result.valid).toBe(true);
+		expect(result.value?.kind).toBe('planks');
+
+		const serialized = buildingManager.serialize();
+		expect(serialized[0].floorDetails).toHaveLength(1);
+
+		const reloaded = setup();
+		reloaded.foundationManager.load(foundationManager.serialize());
+		reloaded.buildingManager.load(serialized);
+		expect(reloaded.buildingManager.getFloorDetail(result.value!.id)?.kind).toBe('planks');
+	});
+
+	it('rejects a zero-area carpet', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const result = buildingManager.addFloorDetail({
+			foundationId: 'foundation-a',
+			points: [
+				{ gridX: 2, gridZ: 2 },
+				{ gridX: 2, gridZ: 2 },
+				{ gridX: 2, gridZ: 2 },
+				{ gridX: 2, gridZ: 2 }
+			],
+			...DETAIL_PARAMS,
+			kind: 'carpet'
+		});
+		expect(result.valid).toBe(false);
+	});
+
+	it('removes a placed path', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const result = buildingManager.addFloorDetail({
+			foundationId: 'foundation-a',
+			points: [
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 8, gridZ: 0 }
+			],
+			...DETAIL_PARAMS,
+			kind: 'path'
+		});
+		expect(result.valid).toBe(true);
+		expect(buildingManager.removeFloorDetail(result.value!.id)).toBe(true);
+		expect(buildingManager.getFloorDetail(result.value!.id)).toBeUndefined();
 	});
 });

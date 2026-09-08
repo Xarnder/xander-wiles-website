@@ -19,6 +19,9 @@ import { polygonsOverlap, validateSlabPolygon } from './slabMath';
 import type { SlabDefinition, SlabOpeningDefinition, SlabType } from './SlabTypes';
 import { slabBottomY } from './SlabTypes';
 import type { SlabManager } from './SlabManager';
+import type { FloorDetailManager } from './FloorDetailManager';
+import { validateFloorDetailFootprint } from './floorDetailMath';
+import type { FloorDetailDefinition } from './FloorDetailTypes';
 import { computeStairMetrics, validateStairFootprint } from './stairMath';
 import type { StairManager } from './StairManager';
 import type { StairDefinition, StairDirection } from './StairTypes';
@@ -35,6 +38,7 @@ import type { WallPathDefinition, WallPathSegmentDefinition } from './WallPathTy
 import type { WallPathManager } from './WallPathManager';
 import type {
 	FoundationBuildingDefinition,
+	WallBeamDefinition,
 	WallDefinition,
 	WallOpeningDefinition,
 	WallOpeningType
@@ -99,6 +103,22 @@ export interface AddStairParams {
 	minimumStairRunCells: number;
 }
 
+export interface AddFloorDetailParams {
+	foundationId: string;
+	kind: FloorDetailDefinition['kind'];
+	points: BuildingGridPoint[];
+	levelIndex: number;
+	hostY: number;
+	renderMode: FloorDetailDefinition['renderMode'];
+	colors: string[];
+	plankWidth: number;
+	plankDirection: FloorDetailDefinition['plankDirection'];
+	tileSize: number;
+	tilePattern: FloorDetailDefinition['tilePattern'];
+	pathWidth: number;
+	pathFraming: boolean;
+}
+
 export interface OpeningCandidate {
 	type: WallOpeningType;
 	minU: number;
@@ -111,6 +131,20 @@ export interface AddOpeningParams extends OpeningCandidate {
 	wallId: string;
 	edgeMargin: number;
 	spacing: number;
+	/** Copied onto the opening at place time so later slider edits do not recolour this one. */
+	material?: BuildingMaterialDefinition;
+}
+
+export interface AddBeamParams {
+	wallId: string;
+	minU: number;
+	maxU: number;
+	minY: number;
+	maxY: number;
+	edgeMargin: number;
+	spacing: number;
+	/** Copied onto the beam at place time so later slider edits do not recolour this one. */
+	material?: BuildingMaterialDefinition;
 }
 
 export interface BuildingMutationResult<T> {
@@ -126,6 +160,7 @@ export interface BuildingManagerOptions {
 	slabManager: SlabManager;
 	stairManager: StairManager;
 	roofManager: RoofManager;
+	floorDetailManager: FloorDetailManager;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
 	getCornerOpeningMargin: () => number;
@@ -140,10 +175,11 @@ export interface BuildingManagerOptions {
  * remain the permanent owners of their own state; this class only validates and delegates.
  *
  * Standalone walls (Straight Wall Tool) and wall-path segments (Polygon/Continuous Wall Tool) are
- * unified behind one `getWall`/`addOpening`/`removeOpening` surface: a path segment is looked up
- * via `WallPathManager.getSegmentAsWallView()`, which synthesizes the exact same WallDefinition
- * shape a standalone wall has — so Window/Door tools (via OpeningToolBase) never need to know which
- * kind of wall they're targeting. See WallPathManager's doc comment for why this is safe.
+ * unified behind one `getWall`/`addOpening`/`addBeam`/`removeOpening`/`removeBeam` surface: a path
+ * segment is looked up via `WallPathManager.getSegmentAsWallView()`, which synthesizes the exact
+ * same WallDefinition shape a standalone wall has — so Window/Door/Beam tools (via OpeningToolBase)
+ * never need to know which kind of wall they're targeting. See WallPathManager's doc comment for
+ * why this is safe.
  *
  * Walls/paths/slabs all take a `baseY` from the caller rather than resolving it themselves —
  * BuildingManager deliberately knows nothing about building levels (BuildingLevelManager); the
@@ -157,6 +193,7 @@ export class BuildingManager {
 	private readonly slabManager: SlabManager;
 	private readonly stairManager: StairManager;
 	private readonly roofManager: RoofManager;
+	private readonly floorDetailManager: FloorDetailManager;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly getCornerOpeningMargin: () => number;
@@ -180,6 +217,7 @@ export class BuildingManager {
 		this.slabManager = options.slabManager;
 		this.stairManager = options.stairManager;
 		this.roofManager = options.roofManager;
+		this.floorDetailManager = options.floorDetailManager;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
@@ -234,7 +272,8 @@ export class BuildingManager {
 			baseY: params.baseY,
 			height: params.height,
 			thickness: params.thickness,
-			openings: []
+			openings: [],
+			beams: []
 		};
 
 		this.wallManager.addWall(wall);
@@ -324,7 +363,8 @@ export class BuildingManager {
 			miterLimit: params.miterLimit,
 			segments: Array.from({ length: segmentCount }, () => ({
 				id: crypto.randomUUID(),
-				openings: []
+				openings: [],
+				beams: []
 			}))
 		};
 
@@ -467,12 +507,21 @@ export class BuildingManager {
 
 		this.slabManager.addSlab(slab);
 		this.autoOpenStairsIntoSlab(slab);
+		this.rebuildSkirtingForFoundation(slab.foundationId);
 		return { valid: true, value: slab };
 	}
 
 	removeSlab(id: string): boolean {
 		this.revision++;
-		return this.slabManager.removeSlab(id);
+		const existing = this.slabManager.getSlab(id);
+		const removed = this.slabManager.removeSlab(id);
+		if (removed && existing) this.rebuildSkirtingForFoundation(existing.foundationId);
+		return removed;
+	}
+
+	private rebuildSkirtingForFoundation(foundationId: string): void {
+		this.wallManager.rebuildWallsForFoundation(foundationId);
+		this.wallPathManager.rebuildPathsForFoundation(foundationId);
 	}
 
 	/**
@@ -764,6 +813,72 @@ export class BuildingManager {
 	}
 
 	/**
+	 * Decorative floor covering on the current storey plane. Visual only — never collision.
+	 * Footprint must stay inside the foundation; path width/rectangle size are checked in
+	 * `validateFloorDetailFootprint`.
+	 */
+	addFloorDetail(params: AddFloorDetailParams): BuildingMutationResult<FloorDetailDefinition> {
+		this.revision++;
+		const foundation = this.foundationManager.getFoundation(params.foundationId);
+		if (!foundation) return { valid: false, reason: 'Foundation not found' };
+
+		const vertexSpacing = this.getVertexSpacing();
+		const buildingGridSize = this.getBuildingGridSize();
+		const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+
+		for (const point of params.points) {
+			if (!isBuildingGridPointInsideFoundation(point, buildingGridSize, width, depth)) {
+				return { valid: false, reason: 'Detailing must stay within the foundation' };
+			}
+		}
+
+		const footprintCheck = validateFloorDetailFootprint(
+			params.kind,
+			params.points,
+			params.pathWidth,
+			buildingGridSize
+		);
+		if (!footprintCheck.valid) return { valid: false, reason: footprintCheck.reason };
+
+		if (params.colors.length === 0) {
+			return { valid: false, reason: 'Detailing needs at least one colour' };
+		}
+
+		const detail: FloorDetailDefinition = {
+			id: crypto.randomUUID(),
+			foundationId: params.foundationId,
+			levelIndex: params.levelIndex,
+			kind: params.kind,
+			hostY: params.hostY,
+			renderMode: params.renderMode,
+			points: params.points.map((p) => ({ gridX: p.gridX, gridZ: p.gridZ })),
+			colors: [...params.colors],
+			plankWidth: params.plankWidth,
+			plankDirection: params.plankDirection,
+			tileSize: params.tileSize,
+			tilePattern: params.tilePattern,
+			pathWidth: params.pathWidth,
+			pathFraming: params.pathFraming
+		};
+
+		this.floorDetailManager.addFloorDetail(detail);
+		return { valid: true, value: detail };
+	}
+
+	removeFloorDetail(id: string): boolean {
+		this.revision++;
+		return this.floorDetailManager.removeFloorDetail(id);
+	}
+
+	getFloorDetail(id: string): FloorDetailDefinition | undefined {
+		return this.floorDetailManager.getFloorDetail(id);
+	}
+
+	getFloorDetailsForFoundation(foundationId: string): FloorDetailDefinition[] {
+		return this.floorDetailManager.getDetailsForFoundation(foundationId);
+	}
+
+	/**
 	 * Resolves the actual start/end edge margins to enforce for an opening on the given wall — a
 	 * path segment's joined end must stay clear of at least `max(cornerOpeningMargin, actualJoinReach)`,
 	 * where `actualJoinReach` is the join's *true* computed geometric extent (cached by
@@ -828,7 +943,8 @@ export class BuildingManager {
 			minU: params.minU,
 			maxU: params.maxU,
 			minY: params.minY,
-			maxY: params.maxY
+			maxY: params.maxY,
+			...(params.material ? { material: params.material } : {})
 		};
 
 		const standaloneWall = this.wallManager.getWall(params.wallId);
@@ -861,6 +977,88 @@ export class BuildingManager {
 		const index = found.segment.openings.findIndex((opening) => opening.id === openingId);
 		if (index === -1) return false;
 		found.segment.openings.splice(index, 1);
+		this.wallPathManager.rebuildPath(found.path.id);
+		return true;
+	}
+
+	addBeam(params: AddBeamParams): BuildingMutationResult<WallBeamDefinition> {
+		this.revision++;
+		const wall = this.getWall(params.wallId);
+		if (!wall) return { valid: false, reason: 'Wall not found' };
+
+		const wallLength = computeWallLength(
+			{
+				startGridX: wall.startGridX,
+				startGridZ: wall.startGridZ,
+				endGridX: wall.endGridX,
+				endGridZ: wall.endGridZ
+			},
+			this.getBuildingGridSize()
+		);
+
+		const candidate = {
+			minU: params.minU,
+			maxU: params.maxU,
+			minY: params.minY,
+			maxY: params.maxY
+		};
+
+		const { startMargin, endMargin } = this.getOpeningMargins(params.wallId, params.edgeMargin);
+
+		if (!isOpeningWithinWallBounds(candidate, wallLength, wall.height, startMargin, endMargin)) {
+			return { valid: false, reason: 'Beam does not fit' };
+		}
+
+		const overlap = findOverlappingOpening(candidate, wall.beams ?? [], params.spacing);
+		if (overlap) {
+			return { valid: false, reason: 'Beam overlaps existing beam' };
+		}
+
+		const beam: WallBeamDefinition = {
+			id: crypto.randomUUID(),
+			minU: params.minU,
+			maxU: params.maxU,
+			minY: params.minY,
+			maxY: params.maxY,
+			...(params.material ? { material: params.material } : {})
+		};
+
+		const standaloneWall = this.wallManager.getWall(params.wallId);
+		if (standaloneWall) {
+			if (!standaloneWall.beams) standaloneWall.beams = [];
+			standaloneWall.beams.push(beam);
+			this.wallManager.rebuildWall(params.wallId);
+		} else {
+			const found = this.wallPathManager.findSegment(params.wallId);
+			if (!found) return { valid: false, reason: 'Wall not found' };
+			if (!found.segment.beams) found.segment.beams = [];
+			found.segment.beams.push(beam);
+			this.wallPathManager.rebuildPath(found.path.id);
+		}
+
+		return { valid: true, value: beam };
+	}
+
+	removeBeam(wallId: string, beamId: string): boolean {
+		this.revision++;
+		const standaloneWall = this.wallManager.getWall(wallId);
+		if (standaloneWall) {
+			const list = standaloneWall.beams;
+			if (!list) return false;
+			const index = list.findIndex((beam) => beam.id === beamId);
+			if (index === -1) return false;
+			list.splice(index, 1);
+			this.wallManager.rebuildWall(wallId);
+			return true;
+		}
+
+		const found = this.wallPathManager.findSegment(wallId);
+		if (!found) return false;
+		const list = found.segment.beams;
+		if (!list) return false;
+		const index = list.findIndex((beam) => beam.id === beamId);
+		if (index === -1) return false;
+		list.splice(index, 1);
 		this.wallPathManager.rebuildPath(found.path.id);
 		return true;
 	}
@@ -898,6 +1096,11 @@ export class BuildingManager {
 	/** Every roof's real mesh — for Remove/Paint Mode targeting (see RoofManager.getMeshesForRaycast). */
 	getRaycastableRoofMeshes() {
 		return this.roofManager.getMeshesForRaycast();
+	}
+
+	/** Every floor-detail mesh — Remove Mode targeting. Visual only; not in WorldSurfaceSampler. */
+	getRaycastableFloorDetailMeshes() {
+		return this.floorDetailManager.getMeshesForRaycast();
 	}
 
 	/** Every foundation's real mesh — for Paint Mode targeting. */
@@ -1020,7 +1223,8 @@ export class BuildingManager {
 			wallPaths: this.wallPathManager.getPathsForFoundation(foundationId),
 			slabs: this.slabManager.getSlabsForFoundation(foundationId),
 			stairs: this.stairManager.getStairsForFoundation(foundationId),
-			roofs: this.roofManager.getRoofsForFoundation(foundationId)
+			roofs: this.roofManager.getRoofsForFoundation(foundationId),
+			floorDetails: this.floorDetailManager.getDetailsForFoundation(foundationId)
 		};
 	}
 
@@ -1039,6 +1243,7 @@ export class BuildingManager {
 		this.slabManager.removeSlabsForFoundation(foundationId);
 		this.stairManager.removeStairsForFoundation(foundationId);
 		this.roofManager.removeRoofsForFoundation(foundationId);
+		this.floorDetailManager.removeDetailsForFoundation(foundationId);
 	}
 
 	/** Plain, serializable world-state grouped by foundation — never Three.js objects. Building *levels* aren't included here since BuildingManager doesn't own BuildingLevelManager; ThreeScene combines both when serializing the full scene. */
@@ -1051,12 +1256,13 @@ export class BuildingManager {
 				slabs: SlabDefinition[];
 				stairs: StairDefinition[];
 				roofs: RoofDefinition[];
+				floorDetails: FloorDetailDefinition[];
 			}
 		>();
 		const ensure = (foundationId: string) => {
 			let entry = byFoundation.get(foundationId);
 			if (!entry) {
-				entry = { walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [] };
+				entry = { walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [], floorDetails: [] };
 				byFoundation.set(foundationId, entry);
 			}
 			return entry;
@@ -1070,6 +1276,9 @@ export class BuildingManager {
 			ensure(stair.foundationId).stairs.push(stair);
 		}
 		for (const roof of this.roofManager.getAllRoofs()) ensure(roof.foundationId).roofs.push(roof);
+		for (const detail of this.floorDetailManager.getAllDetails()) {
+			ensure(detail.foundationId).floorDetails.push(detail);
+		}
 		return Array.from(byFoundation.entries(), ([foundationId, data]) => ({
 			foundationId,
 			...data
@@ -1089,6 +1298,9 @@ export class BuildingManager {
 		for (const slab of this.slabManager.getAllSlabs()) this.slabManager.removeSlab(slab.id);
 		for (const stair of this.stairManager.getAllStairs()) this.stairManager.removeStair(stair.id);
 		for (const roof of this.roofManager.getAllRoofs()) this.roofManager.removeRoof(roof.id);
+		for (const detail of this.floorDetailManager.getAllDetails()) {
+			this.floorDetailManager.removeFloorDetail(detail.id);
+		}
 		for (const building of definitions) {
 			// Runtime data loaded from an actual save file may predate `baseY` even though the type
 			// says it's required — `?? 0` keeps that old data loading as ground-floor walls/paths.
@@ -1101,6 +1313,10 @@ export class BuildingManager {
 			for (const slab of building.slabs ?? []) this.slabManager.addSlab(slab);
 			for (const stair of building.stairs ?? []) this.stairManager.addStair(stair);
 			for (const roof of building.roofs ?? []) this.roofManager.addRoof(roof);
+			for (const detail of building.floorDetails ?? []) this.floorDetailManager.addFloorDetail(detail);
 		}
+		// Walls load before slabs, so skirting (which reads live lids) must rebuild once both exist.
+		this.wallManager.rebuildAllWalls();
+		this.wallPathManager.rebuildAllPaths();
 	}
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createAndEnterWorld } from './worldHelpers';
+import { createAndEnterWorld, openSettingsMenu } from './worldHelpers';
 
 test('renders the world with no uncaught exceptions and loads at least one chunk', async ({
 	page
@@ -13,8 +13,7 @@ test('renders the world with no uncaught exceptions and loads at least one chunk
 	await expect(page.getByTestId('canvas-container')).toBeVisible();
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
-	await expect(page.getByTestId('stats-overlay')).toBeVisible({ timeout: 10_000 });
-	await expect(page.getByTestId('loaded-chunks')).toContainText(/Loaded [1-9]/, {
+	await expect(page.getByTestId('world-load-status')).toContainText(/Loaded [1-9]/, {
 		timeout: 10_000
 	});
 
@@ -43,7 +42,7 @@ test('shows the hotbar with a Foundation slot, selectable with the 1 key', async
 	await expect(foundationSlot).toBeVisible();
 	await expect(foundationSlot).toHaveClass(/active/);
 
-	// Deselect (slot 2 is an empty "none" tool), then reselect Foundation with the "1" key.
+	// Deselect Foundation by picking another slot, then reselect it with the "1" key.
 	await page.keyboard.press('2');
 	await expect(foundationSlot).not.toHaveClass(/active/);
 
@@ -53,7 +52,22 @@ test('shows the hotbar with a Foundation slot, selectable with the 1 key', async
 	expect(pageErrors).toEqual([]);
 });
 
-test('shows Wall, Window and Door hotbar slots and switches the active tool with 2/3/4', async ({
+test('G toggles Build Mode and hides/shows the hotbar', async ({ page }) => {
+	await page.goto('/');
+	await createAndEnterWorld(page);
+
+	const hotbar = page.getByTestId('hotbar');
+	await expect(hotbar).toBeVisible();
+
+	await page.keyboard.press('g');
+	await expect(hotbar).toBeHidden();
+
+	await page.keyboard.press('g');
+	await expect(hotbar).toBeVisible();
+	await expect(page.getByTestId('hotbar-slot-foundation')).toHaveClass(/active/);
+});
+
+test('groups walls, openings and slabs on slots 2–4, with ↑/↓ cycling the variants', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -62,48 +76,49 @@ test('shows Wall, Window and Door hotbar slots and switches the active tool with
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	const wallSlot = page.getByTestId('hotbar-slot-wall');
-	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const polyWallSlot = page.getByTestId('hotbar-slot-polygon-wall');
 	const doorSlot = page.getByTestId('hotbar-slot-door');
-	await expect(wallSlot).toBeVisible();
-	await expect(windowSlot).toBeVisible();
+	const ceilingSlot = page.getByTestId('hotbar-slot-ceiling');
+	const stairsSlot = page.getByTestId('hotbar-slot-stairs');
+	await expect(polyWallSlot).toBeVisible();
 	await expect(doorSlot).toBeVisible();
+	await expect(ceilingSlot).toBeVisible();
+	await expect(stairsSlot).toBeVisible();
 
 	await page.keyboard.press('2');
-	await expect(wallSlot).toHaveClass(/active/);
+	await expect(polyWallSlot).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
 
 	await page.keyboard.press('3');
-	await expect(windowSlot).toHaveClass(/active/);
-	await expect(wallSlot).not.toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-door')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
 
 	await page.keyboard.press('4');
-	await expect(doorSlot).toHaveClass(/active/);
-	await expect(windowSlot).not.toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-ceiling')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-flat-roof')).toHaveClass(/active/);
+
+	await page.keyboard.press('5');
+	await expect(page.getByTestId('hotbar-slot-stairs')).toHaveClass(/active/);
+
+	await page.keyboard.press('6');
+	await expect(page.getByTestId('hotbar-slot-floor-carpet')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor-path')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor-planks')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor-tiles')).toHaveClass(/active/);
+
+	await page.keyboard.press('8');
+	await expect(page.getByTestId('hotbar-slot-torch')).toHaveClass(/active/);
 
 	await page.keyboard.press('1');
 	await expect(page.getByTestId('hotbar-slot-foundation')).toHaveClass(/active/);
-	await expect(doorSlot).not.toHaveClass(/active/);
-
-	expect(pageErrors).toEqual([]);
-});
-
-test('shows a Polygon/Continuous Wall hotbar slot in slot 5, selectable with the 5 key', async ({
-	page
-}) => {
-	const pageErrors: string[] = [];
-	page.on('pageerror', (error) => pageErrors.push(error.message));
-
-	await page.goto('/');
-	await createAndEnterWorld(page);
-
-	const polygonWallSlot = page.getByTestId('hotbar-slot-polygon-wall');
-	await expect(polygonWallSlot).toBeVisible();
-
-	await page.keyboard.press('5');
-	await expect(polygonWallSlot).toHaveClass(/active/);
-
-	await page.keyboard.press('1');
-	await expect(polygonWallSlot).not.toHaveClass(/active/);
 
 	expect(pageErrors).toEqual([]);
 });
@@ -117,14 +132,14 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Slot 2 (Wall), slot 5 (Polygon/Continuous Wall), slot 6 (Ceiling) — pressing C on each just
+	// Slot 2 (Poly Wall), slot 2+↓ (Wall), slot 4 (Ceiling) — pressing C on each just
 	// needs to not throw; the resulting snap behavior itself is covered by polygonDrawSnap.spec.ts.
-	for (const slot of ['2', '5', '6']) {
-		await page.keyboard.press(slot);
-		await page.keyboard.press('c');
-		await page.keyboard.press('c');
-		await page.keyboard.press('c');
-	}
+	await page.keyboard.press('2');
+	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
+	await page.keyboard.press('ArrowDown');
+	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
+	await page.keyboard.press('4');
+	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
 
 	await page.keyboard.press('1');
 	expect(pageErrors).toEqual([]);
@@ -139,7 +154,7 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	await page.keyboard.press('2'); // Wall Tool — a level-aware tool
+	await page.keyboard.press('2'); // Poly Wall — a level-aware tool
 	const floorSelector = page.getByTestId('floor-selector');
 	// No foundation exists anywhere in a fresh world, so nothing can ever be targeted — the selector
 	// (which only appears once buildHud.level is set) must stay absent rather than show a misleading
@@ -153,31 +168,27 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	expect(pageErrors).toEqual([]);
 });
 
-test('the build HUD does not sit underneath the debug GUI panel — its hints and blocking reasons must actually be readable', async ({
-	page
-}) => {
+test('the build HUD does not sit underneath the help and settings buttons', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
 	await createAndEnterWorld(page);
-	await page.keyboard.press('3'); // Window tool — always emits a HUD, even with nothing targeted
+	await page.keyboard.press('3'); // Door tool — always emits a HUD, even with nothing targeted
 
 	const hud = page.getByTestId('build-hud');
 	await expect(hud).toBeVisible();
 
-	// lil-gui auto-places itself at the top-right, full viewport height; the HUD used to be drawn
-	// directly underneath it, hiding every hint the build tools produce.
 	const hudBox = await hud.boundingBox();
-	const guiBox = await page.locator('.lil-gui.lil-root').first().boundingBox();
+	const helpBox = await page.getByTestId('help-toggle').boundingBox();
+	const settingsBox = await page.getByTestId('settings-toggle').boundingBox();
 	expect(hudBox).not.toBeNull();
-	expect(guiBox).not.toBeNull();
-	const overlaps =
-		hudBox!.x < guiBox!.x + guiBox!.width &&
-		hudBox!.x + hudBox!.width > guiBox!.x &&
-		hudBox!.y < guiBox!.y + guiBox!.height &&
-		hudBox!.y + hudBox!.height > guiBox!.y;
-	expect(overlaps).toBe(false);
+	expect(helpBox).not.toBeNull();
+	expect(settingsBox).not.toBeNull();
+	const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+		a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+	expect(overlaps(hudBox!, helpBox!)).toBe(false);
+	expect(overlaps(hudBox!, settingsBox!)).toBe(false);
 
 	expect(pageErrors).toEqual([]);
 });
@@ -196,8 +207,9 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it 
 	// default itself is verified indirectly, through the very first `C` press's transition:
 	// `'axis-inline' -> 'off'` (the new default) is observably different from the old `'off' ->
 	// 'axis'` a single press would have produced.
-	await expect(page.getByTestId('hotbar-slot-wall')).toBeVisible();
 	await page.keyboard.press('2');
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-wall')).toBeVisible();
 	const snapBadge = page.getByTestId('snap-badge');
 
 	await page.keyboard.press('c');
@@ -251,7 +263,7 @@ test('toggles the help overlay with the H key and the help button, listing contr
 	expect(pageErrors).toEqual([]);
 });
 
-test('shows Ceiling, Floor, Roof and Stairs hotbar slots in slots 6-9, and a level selector in the GUI', async ({
+test('puts Stairs on slot 5 and still shows Levels, Slabs and Stairs in Settings', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -260,44 +272,25 @@ test('shows Ceiling, Floor, Roof and Stairs hotbar slots in slots 6-9, and a lev
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	const ceilingSlot = page.getByTestId('hotbar-slot-ceiling');
-	const floorSlot = page.getByTestId('hotbar-slot-floor');
-	const roofSlot = page.getByTestId('hotbar-slot-flat-roof');
 	const stairsSlot = page.getByTestId('hotbar-slot-stairs');
-	await expect(ceilingSlot).toBeVisible();
-	await expect(floorSlot).toBeVisible();
-	await expect(roofSlot).toBeVisible();
 	await expect(stairsSlot).toBeVisible();
 
-	await page.keyboard.press('6');
-	await expect(ceilingSlot).toHaveClass(/active/);
-
-	await page.keyboard.press('7');
-	await expect(floorSlot).toHaveClass(/active/);
-	await expect(ceilingSlot).not.toHaveClass(/active/);
-
-	await page.keyboard.press('8');
-	await expect(roofSlot).toHaveClass(/active/);
-
-	await page.keyboard.press('9');
+	await page.keyboard.press('5');
 	await expect(stairsSlot).toHaveClass(/active/);
-	await expect(roofSlot).not.toHaveClass(/active/);
 
 	await page.keyboard.press('1');
 	await expect(stairsSlot).not.toHaveClass(/active/);
 
-	const buildingFolder = page.locator('.lil-title', { hasText: 'Building' }).first();
-	await expect(buildingFolder).toBeVisible({ timeout: 10_000 });
-	for (const sectionTitle of ['Levels', 'Slabs', 'Stairs']) {
-		await expect(page.locator('.lil-title', { hasText: sectionTitle }).first()).toBeVisible();
+	await openSettingsMenu(page);
+	await page.getByTestId('settings-nav-building').click();
+	for (const section of ['levels', 'slabs', 'stairs']) {
+		await expect(page.getByTestId(`settings-group-${section}`)).toBeVisible();
 	}
 
 	expect(pageErrors).toEqual([]);
 });
 
-test('shows the Building GUI folder with Grid, Walls, Windows and Doors sections', async ({
-	page
-}) => {
+test('shows the Building settings groups for Grid, Walls, Windows and Doors', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -305,11 +298,10 @@ test('shows the Building GUI folder with Grid, Walls, Windows and Doors sections
 	await createAndEnterWorld(page);
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
-	const buildingFolder = page.locator('.lil-title', { hasText: 'Building' }).first();
-	await expect(buildingFolder).toBeVisible({ timeout: 10_000 });
-
-	for (const sectionTitle of ['Grid', 'Walls', 'Windows', 'Doors']) {
-		await expect(page.locator('.lil-title', { hasText: sectionTitle }).first()).toBeVisible();
+	await openSettingsMenu(page);
+	await page.getByTestId('settings-nav-building').click();
+	for (const section of ['grid', 'walls', 'windows', 'doors']) {
+		await expect(page.getByTestId(`settings-group-${section}`)).toBeVisible();
 	}
 
 	expect(pageErrors).toEqual([]);
@@ -328,11 +320,10 @@ test('renders the sky and shows its GUI sections with no uncaught errors', async
 	await createAndEnterWorld(page);
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible();
 
-	const topLevelSkyFolder = page.locator('.lil-title', { hasText: 'Sky' }).first();
-	await expect(topLevelSkyFolder).toBeVisible({ timeout: 10_000 });
-
-	for (const sectionTitle of ['HDRI', 'Sun & Atmosphere', 'Clouds']) {
-		await expect(page.locator('.lil-title', { hasText: sectionTitle }).first()).toBeVisible();
+	await openSettingsMenu(page);
+	await page.getByTestId('settings-nav-sky').click();
+	for (const section of ['hdri', 'atmosphere', 'clouds']) {
+		await expect(page.getByTestId(`settings-group-${section}`)).toBeVisible();
 	}
 
 	await expect
@@ -353,19 +344,19 @@ test('X toggles Remove Mode, shows a Remove HUD, and restores the previously sel
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Window (not Wall) — its HUD always renders something even with nothing targeted (see the
+	// Door (not Wall) — its HUD always renders something even with nothing targeted (see the
 	// "build HUD does not sit underneath the debug GUI panel" test above), so its absence here is a
 	// reliable signal, unlike Wall/Foundation which show no HUD at all until a foundation exists.
-	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const doorSlot = page.getByTestId('hotbar-slot-door');
 	const removeToggle = page.getByTestId('hotbar-remove-toggle');
 	const hud = page.getByTestId('build-hud');
-	await expect(windowSlot).toBeVisible();
+	await expect(doorSlot).toBeVisible();
 	await expect(removeToggle).toBeVisible();
 
-	await page.keyboard.press('3'); // Window — the tool that must be remembered/restored
-	await expect(windowSlot).toHaveClass(/active/);
+	await page.keyboard.press('3'); // Door — the tool that must be remembered/restored
+	await expect(doorSlot).toHaveClass(/active/);
 	await expect(removeToggle).not.toHaveClass(/active/);
-	await expect(hud).toContainText('WINDOW');
+	await expect(hud).toContainText('DOOR');
 
 	await page.keyboard.press('x');
 	await expect(removeToggle).toHaveClass(/active/);
@@ -376,9 +367,9 @@ test('X toggles Remove Mode, shows a Remove HUD, and restores the previously sel
 
 	await page.keyboard.press('x');
 	await expect(removeToggle).not.toHaveClass(/active/);
-	await expect(windowSlot).toHaveClass(/active/);
+	await expect(doorSlot).toHaveClass(/active/);
 	await expect(hud).not.toContainText('REMOVE');
-	await expect(hud).toContainText('WINDOW');
+	await expect(hud).toContainText('DOOR');
 
 	expect(pageErrors).toEqual([]);
 });
@@ -418,9 +409,9 @@ test('selecting a hotbar slot while Remove Mode is active exits Remove Mode', as
 	await page.keyboard.press('x');
 	await expect(removeToggle).toHaveClass(/active/);
 
-	await page.keyboard.press('3'); // Window
+	await page.keyboard.press('3'); // Door
 	await expect(page.getByTestId('hotbar-remove-toggle')).not.toHaveClass(/active/);
-	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-door')).toHaveClass(/active/);
 
 	expect(pageErrors).toEqual([]);
 });
@@ -434,18 +425,18 @@ test('P toggles Paint Mode, shows a Paint HUD, and restores the previously selec
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Window (not Wall) — its HUD always renders something even with nothing targeted, same
+	// Door (not Wall) — its HUD always renders something even with nothing targeted, same
 	// reasoning as the equivalent Remove Mode test above.
-	const windowSlot = page.getByTestId('hotbar-slot-window');
+	const doorSlot = page.getByTestId('hotbar-slot-door');
 	const paintToggle = page.getByTestId('hotbar-paint-toggle');
 	const hud = page.getByTestId('build-hud');
-	await expect(windowSlot).toBeVisible();
+	await expect(doorSlot).toBeVisible();
 	await expect(paintToggle).toBeVisible();
 
-	await page.keyboard.press('3'); // Window — the tool that must be remembered/restored
-	await expect(windowSlot).toHaveClass(/active/);
+	await page.keyboard.press('3'); // Door — the tool that must be remembered/restored
+	await expect(doorSlot).toHaveClass(/active/);
 	await expect(paintToggle).not.toHaveClass(/active/);
-	await expect(hud).toContainText('WINDOW');
+	await expect(hud).toContainText('DOOR');
 
 	await page.keyboard.press('p');
 	await expect(paintToggle).toHaveClass(/active/);
@@ -454,9 +445,9 @@ test('P toggles Paint Mode, shows a Paint HUD, and restores the previously selec
 
 	await page.keyboard.press('p');
 	await expect(paintToggle).not.toHaveClass(/active/);
-	await expect(windowSlot).toHaveClass(/active/);
+	await expect(doorSlot).toHaveClass(/active/);
 	await expect(hud).not.toContainText('PAINT');
-	await expect(hud).toContainText('WINDOW');
+	await expect(hud).toContainText('DOOR');
 
 	expect(pageErrors).toEqual([]);
 });
@@ -496,9 +487,9 @@ test('selecting a hotbar slot while Paint Mode is active exits Paint Mode', asyn
 	await page.keyboard.press('p');
 	await expect(paintToggle).toHaveClass(/active/);
 
-	await page.keyboard.press('3'); // Window
+	await page.keyboard.press('3'); // Door
 	await expect(page.getByTestId('hotbar-paint-toggle')).not.toHaveClass(/active/);
-	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-door')).toHaveClass(/active/);
 
 	expect(pageErrors).toEqual([]);
 });

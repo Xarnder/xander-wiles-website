@@ -132,6 +132,40 @@ export function validateStairFootprint(
 	return { valid: true };
 }
 
+/**
+ * Live colour of the first-corner size box (and the later stepped preview): the longer footprint
+ * axis is treated as the eventual run, so estimated rise is `max(x, z)` cells — the same rule the
+ * rough box already uses before a direction exists. Red = too short or below the minimum cells;
+ * blue = would overshoot a ceiling above; green = lands on that ceiling; `neutral` only when there
+ * is no ceiling to judge against (and the footprint already meets the minimums).
+ */
+export type StairPreviewFit = 'too-small' | 'too-tall' | 'match' | 'neutral';
+
+export function classifyStairPreviewFit(input: {
+	xCells: number;
+	zCells: number;
+	estimatedTopLocalY: number;
+	ceilingLocalY: number | null;
+	minimumWidthCells: number;
+	minimumRunCells: number;
+	heightMatchTolerance: number;
+}): StairPreviewFit {
+	const runCells = Math.max(input.xCells, input.zCells);
+	const widthCells = Math.min(input.xCells, input.zCells);
+	if (
+		input.xCells <= 0 ||
+		input.zCells <= 0 ||
+		widthCells < input.minimumWidthCells ||
+		runCells < input.minimumRunCells
+	) {
+		return 'too-small';
+	}
+	if (input.ceilingLocalY === null) return 'neutral';
+	const delta = input.estimatedTopLocalY - input.ceilingLocalY;
+	if (Math.abs(delta) <= input.heightMatchTolerance) return 'match';
+	return delta > 0 ? 'too-tall' : 'too-small';
+}
+
 export interface StairLocalBounds {
 	minLocalX: number;
 	maxLocalX: number;

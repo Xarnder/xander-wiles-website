@@ -1,5 +1,5 @@
 import type { BuildingMaterialDefinition } from './MaterialTypes';
-import type { WallOpeningDefinition } from './WallTypes';
+import type { WallBeamDefinition, WallFrameOverride, WallOpeningDefinition } from './WallTypes';
 
 export type { WallJoinStyle } from './wallPathMath';
 
@@ -19,6 +19,8 @@ export type { WallJoinStyle } from './wallPathMath';
 export interface WallPathSegmentDefinition {
 	id: string;
 	openings: WallOpeningDefinition[];
+	/** Defaults to `[]` when absent — same load convention as `WallDefinition.beams`. */
+	beams?: WallBeamDefinition[];
 	material?: BuildingMaterialDefinition;
 }
 
@@ -50,4 +52,6 @@ export interface WallPathDefinition {
 	miterLimit: number;
 
 	segments: WallPathSegmentDefinition[];
+	/** Whole-path override of the global wall-framing defaults — mirrors `WallDefinition.frameStyle`, captured once per path (not per segment) for the same reason `wallHeight`/`wallThickness` are: a path's edge framing (corner posts + top beam) is one continuous shape, not a per-segment one. */
+	frameStyle?: WallFrameOverride;
 }

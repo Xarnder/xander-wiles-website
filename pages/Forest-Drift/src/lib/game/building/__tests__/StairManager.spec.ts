@@ -143,6 +143,29 @@ describe('StairManager.getAllCollisionRects — side collision', () => {
 	});
 });
 
+describe('StairManager.getLevelTriggerVolumes', () => {
+	it('exposes a padded world AABB around each placed stair', () => {
+		const { stairManager } = setup();
+		stairManager.addStair(makeStair());
+		const volumes = stairManager.getLevelTriggerVolumes();
+		expect(volumes).toHaveLength(1);
+		expect(volumes[0].stairId).toBe('stair-1');
+		expect(volumes[0].startLevelIndex).toBe(0);
+		expect(volumes[0].endLevelIndex).toBe(1);
+		expect(volumes[0].minX).toBeLessThan(0);
+		expect(volumes[0].maxX).toBeGreaterThan(3);
+		expect(volumes[0].minY).toBeLessThan(0);
+		expect(volumes[0].maxY).toBeGreaterThan(3);
+	});
+
+	it('drops the volume when the stair is removed', () => {
+		const { stairManager } = setup();
+		stairManager.addStair(makeStair());
+		stairManager.removeStair('stair-1');
+		expect(stairManager.getLevelTriggerVolumes()).toEqual([]);
+	});
+});
+
 describe('StairManager serialize/load', () => {
 	it('round-trips a stair definition exactly', () => {
 		const { stairManager } = setup();

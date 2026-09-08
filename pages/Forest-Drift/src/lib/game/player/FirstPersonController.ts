@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PlayerSettings } from '../terrain/TerrainSettings';
+import { createWalkBobState, stepWalkBob, walkBobOffset } from './walkBob';
 
 const GRAVITY = 18;
 const MOUSE_SENSITIVITY = 0.0022;
@@ -55,7 +56,8 @@ export interface FirstPersonControllerOptions {
  * terrain/foundation/slab meshes themselves use (via getSupportingSurfaceY), so the player never
  * clips into or floats above the surface actually shown, and is never snapped up onto a surface
  * that happens to be above them (e.g. a roof they're standing under) — see getSupportingSurfaceY's
- * doc comment above.
+	 * doc comment above. A vertical-only view bob (walkBob.ts) is applied to the camera only while
+	 * walking on the ground; `worldPosition` stays the true eye height.
  */
 export class FirstPersonController {
 	readonly worldPosition = new THREE.Vector3();
@@ -86,6 +88,7 @@ export class FirstPersonController {
 	private pitch = 0;
 	private verticalVelocity = 0;
 	private grounded = true;
+	private walkBob = createWalkBobState();
 
 	private readonly keys = new Set<string>();
 	private pointerLocked = false;
@@ -148,6 +151,7 @@ export class FirstPersonController {
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		this.grounded = true;
 		this.verticalVelocity = 0;
+		this.walkBob = createWalkBobState();
 		this.syncCamera();
 	}
 
@@ -175,6 +179,7 @@ export class FirstPersonController {
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
 		this.verticalVelocity = 0;
 		this.grounded = false;
+		this.walkBob = createWalkBobState();
 		this.keys.clear();
 		this.syncCamera();
 	}
@@ -264,7 +269,14 @@ export class FirstPersonController {
 		}
 
 		this.worldPosition.set(worldX, worldY, worldZ);
-		this.syncCamera();
+		this.walkBob = stepWalkBob(
+			this.walkBob,
+			deltaSeconds,
+			moveX !== 0 || moveZ !== 0,
+			this.grounded,
+			running
+		);
+		this.syncCamera(running);
 	}
 
 	/**
@@ -316,9 +328,11 @@ export class FirstPersonController {
 		return currentY;
 	}
 
-	private syncCamera(): void {
-		this.camera.position.copy(this.worldPosition);
+	private syncCamera(running = false): void {
+		const bob = walkBobOffset(this.walkBob, running);
 		this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+		this.camera.position.copy(this.worldPosition);
+		if (bob.y !== 0) this.camera.translateY(bob.y);
 	}
 
 	isPointerLocked(): boolean {

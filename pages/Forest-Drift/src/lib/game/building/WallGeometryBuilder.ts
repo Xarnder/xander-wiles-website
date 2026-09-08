@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { visualSegmentTopY } from './buildingVisualInsets';
 import type { WallCollisionRect } from './wallCollision';
 import type { SolidWallSegment, WallTransform } from './wallGeometryMath';
 
@@ -9,18 +10,25 @@ import type { SolidWallSegment, WallTransform } from './wallGeometryMath';
  * avoid excessive mesh count" requirements. Geometry is built entirely in wall-local space (X = U
  * along the wall, Y = vertical, Z = thickness) and the whole mesh is transformed as a unit — see
  * applyWallTransform — so segment math never has to think about world/foundation orientation.
+ * Pass `authoredWallHeight` so the visible top is inset below that cap (buildingVisualInsets.ts);
+ * collision still uses the raw segments.
  */
 export function buildWallGeometry(
 	segments: readonly SolidWallSegment[],
-	thickness: number
+	thickness: number,
+	authoredWallHeight?: number
 ): THREE.BufferGeometry {
 	if (segments.length === 0) return new THREE.BufferGeometry();
 
 	const boxGeometries = segments.map((segment) => {
+		const maxY =
+			authoredWallHeight === undefined
+				? segment.maxY
+				: visualSegmentTopY(segment.maxY, authoredWallHeight);
 		const width = segment.maxU - segment.minU;
-		const height = segment.maxY - segment.minY;
+		const height = maxY - segment.minY;
 		const geometry = new THREE.BoxGeometry(width, height, thickness);
-		geometry.translate((segment.minU + segment.maxU) / 2, (segment.minY + segment.maxY) / 2, 0);
+		geometry.translate((segment.minU + segment.maxU) / 2, (segment.minY + maxY) / 2, 0);
 		return geometry;
 	});
 

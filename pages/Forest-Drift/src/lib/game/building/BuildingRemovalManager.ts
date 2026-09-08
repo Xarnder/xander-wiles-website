@@ -34,12 +34,20 @@ export class BuildingRemovalManager {
 		return this.buildingManager.removeOpening(wallId, openingId);
 	}
 
+	removeBeam(wallId: string, beamId: string): boolean {
+		return this.buildingManager.removeBeam(wallId, beamId);
+	}
+
 	removeStair(stairId: string): boolean {
 		return this.buildingManager.removeStair(stairId);
 	}
 
 	removeRoof(roofId: string): boolean {
 		return this.buildingManager.removeRoof(roofId);
+	}
+
+	removeFloorDetail(detailId: string): boolean {
+		return this.buildingManager.removeFloorDetail(detailId);
 	}
 
 	/** Dispatches a RemovalTarget to the matching removal call above — the single entry point RemoveTool actually uses. */
@@ -51,10 +59,14 @@ export class BuildingRemovalManager {
 				return this.removeWallSegment(target.wallPathId, target.segmentId);
 			case 'opening':
 				return this.removeOpening(target.wallId, target.openingId);
+			case 'beam':
+				return this.removeBeam(target.wallId, target.beamId);
 			case 'stair':
 				return this.removeStair(target.stairId);
 			case 'roof':
 				return this.removeRoof(target.roofId);
+			case 'floor-detail':
+				return this.removeFloorDetail(target.detailId);
 		}
 	}
 }

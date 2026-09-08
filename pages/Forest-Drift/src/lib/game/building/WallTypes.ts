@@ -6,6 +6,7 @@
  * authoritative — see the README's "Building system" section.
  */
 
+import type { FloorDetailDefinition } from './FloorDetailTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { RoofDefinition } from './RoofTypes';
 import type { SlabDefinition } from './SlabTypes';
@@ -13,6 +14,22 @@ import type { StairDefinition } from './StairTypes';
 import type { WallPathDefinition } from './WallPathTypes';
 
 export type WallOpeningType = 'window' | 'door';
+
+/**
+ * Per-wall (or per-path) override of the global wall-edge-framing defaults (see WallFrameBuilder.ts
+ * and `BuildingSettings.wallFrameEnabled`/`wallFrameWidth`/`wallFrameDepthExtra`).
+ * Every field is optional and independently inherits from the global default when absent — same
+ * `undefined` = "use the default look" convention as `WallDefinition.material` above, so an unpainted,
+ * un-customized wall (the overwhelmingly common case) never needs this field at all. Not yet settable
+ * from any in-game tool; exists so a future per-wall framing UI (or hand-authored world data) has
+ * somewhere to put an override without a WallDefinition shape change.
+ */
+export interface WallFrameOverride {
+	enabled?: boolean;
+	width?: number;
+	depth?: number;
+	material?: BuildingMaterialDefinition;
+}
 
 /**
  * A rectangular hole in a wall, stored in wall-local coordinates: U runs along the wall from its
@@ -28,6 +45,27 @@ export interface WallOpeningDefinition {
 	maxU: number;
 	minY: number;
 	maxY: number;
+	/**
+	 * Placement colour for this opening — window frame or door leaf. `undefined` on older saves
+	 * means the default timber / leaf look (`BuildingMaterialManager.getMaterial(..., undefined)`).
+	 */
+	material?: BuildingMaterialDefinition;
+}
+
+/**
+ * A decorative timber board on a wall, stored in the same wall-local U/Y rectangle as an opening.
+ * Unlike a window or door it does not cut a hole — collision and solid wall geometry stay unchanged.
+ * `undefined` / missing on older saves means no beams (same “absent = empty” convention as
+ * `FoundationBuildingDefinition.roofs`).
+ */
+export interface WallBeamDefinition {
+	id: string;
+	minU: number;
+	maxU: number;
+	minY: number;
+	maxY: number;
+	/** Placement colour for this beam. `undefined` on older saves means the default timber look. */
+	material?: BuildingMaterialDefinition;
 }
 
 /**
@@ -61,7 +99,11 @@ export interface WallDefinition {
 	thickness: number;
 
 	openings: WallOpeningDefinition[];
+	/** Defaults to `[]` when absent so worlds saved before placeable beams still load. */
+	beams?: WallBeamDefinition[];
 	material?: BuildingMaterialDefinition;
+	/** `undefined` = use the global wall-framing defaults — see WallFrameOverride's own doc comment. */
+	frameStyle?: WallFrameOverride;
 }
 
 /**
@@ -85,4 +127,6 @@ export interface FoundationBuildingDefinition {
 	stairs: StairDefinition[];
 	/** Defaults to `[]` when absent so buildings serialized before pitched roofs existed still load — same convention as `wallPaths`/`slabs` above. */
 	roofs: RoofDefinition[];
+	/** Defaults to `[]` when absent so buildings serialized before floor detailing existed still load. */
+	floorDetails?: FloorDetailDefinition[];
 }

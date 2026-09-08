@@ -54,10 +54,7 @@ export function cycleSnapMode(
  * 3 points exist, so if the player left the default on, step them up automatically at that count.
  * Any other mode (they pressed `C`) is left alone.
  */
-export function autoPromotePolygonWallSnap(
-	mode: SnapMode,
-	confirmedPointCount: number
-): SnapMode {
+export function autoPromotePolygonWallSnap(mode: SnapMode, confirmedPointCount: number): SnapMode {
 	if (mode === 'axis' && confirmedPointCount >= 3) return 'axis-inline';
 	return mode;
 }

@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { buildingGridToLocal } from './FoundationLocalMath';
 import type { FoundationLocalFrame } from './FoundationLocalMath';
 import type { WallCollisionRect } from './wallCollision';
+import { visualSegmentTopY } from './buildingVisualInsets';
 import { computeSolidWallSegments } from './wallGeometryMath';
 import {
 	buildSegmentFootprint,
@@ -176,7 +177,11 @@ export function buildWallPath(
 		if (startCap) {
 			const capLocal = clipPolygonToURange(localFootprint, startCap.minU, startCap.maxU);
 			const capWorld = capLocal.map((p) => unprojectLocal(p, start, dir));
-			const geom = extrudePolygon(capWorld, path.baseY, path.baseY + path.wallHeight);
+			const geom = extrudePolygon(
+				capWorld,
+				path.baseY,
+				path.baseY + visualSegmentTopY(path.wallHeight, path.wallHeight)
+			);
 			if (geom) {
 				visiblePieces.push(geom);
 				pieceSegmentIds.push(segmentDef.id);
@@ -185,7 +190,11 @@ export function buildWallPath(
 		if (endCap) {
 			const capLocal = clipPolygonToURange(localFootprint, endCap.minU, endCap.maxU);
 			const capWorld = capLocal.map((p) => unprojectLocal(p, start, dir));
-			const geom = extrudePolygon(capWorld, path.baseY, path.baseY + path.wallHeight);
+			const geom = extrudePolygon(
+				capWorld,
+				path.baseY,
+				path.baseY + visualSegmentTopY(path.wallHeight, path.wallHeight)
+			);
 			if (geom) {
 				visiblePieces.push(geom);
 				pieceSegmentIds.push(segmentDef.id);
@@ -203,7 +212,11 @@ export function buildWallPath(
 				const clippedMaxU = Math.min(solid.maxU, middleMaxU);
 				if (clippedMaxU <= clippedMinU + 1e-6) continue;
 				const rect = plainRectangle(start, dir, clippedMinU, clippedMaxU, halfThickness);
-				const geom = extrudePolygon(rect, path.baseY + solid.minY, path.baseY + solid.maxY);
+				const geom = extrudePolygon(
+					rect,
+					path.baseY + solid.minY,
+					path.baseY + visualSegmentTopY(solid.maxY, path.wallHeight)
+				);
 				if (geom) {
 					visiblePieces.push(geom);
 					pieceSegmentIds.push(segmentDef.id);

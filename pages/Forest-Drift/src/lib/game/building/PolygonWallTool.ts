@@ -683,7 +683,8 @@ export class PolygonWallTool implements BuildTool {
 				'',
 				'Click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap'
+				'C: Cycle snap',
+				'E customise'
 			]
 		};
 	}
@@ -736,6 +737,7 @@ export class PolygonWallTool implements BuildTool {
 				'Enter: Finish',
 				'Backspace: Undo point',
 				'C: Cycle snap',
+				'E customise',
 				'Right click: Cancel'
 			]
 		};

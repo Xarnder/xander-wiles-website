@@ -44,7 +44,10 @@ function makeBuildingManagerStub() {
 		removeWall: vi.fn().mockReturnValue(true),
 		removeWallPath: vi.fn().mockReturnValue(true),
 		removeOpening: vi.fn().mockReturnValue(true),
-		removeSlab: vi.fn().mockReturnValue(true)
+		removeBeam: vi.fn().mockReturnValue(true),
+		removeSlab: vi.fn().mockReturnValue(true),
+		removeRoof: vi.fn().mockReturnValue(true),
+		removeFloorDetail: vi.fn().mockReturnValue(true)
 	};
 }
 
@@ -90,6 +93,15 @@ describe('BuildUndoManager', () => {
 		expect(stub.removeOpening).toHaveBeenCalledWith('wall-1', 'opening-1');
 	});
 
+	it('undoes a recorded beam by calling removeBeam with (wallId, beamId)', () => {
+		const stub = makeBuildingManagerStub();
+		manager = new BuildUndoManager(stub as unknown as BuildingManager);
+
+		manager.record({ kind: 'beam', wallId: 'wall-1', beamId: 'beam-1' });
+		expect(manager.undo()).toBe(true);
+		expect(stub.removeBeam).toHaveBeenCalledWith('wall-1', 'beam-1');
+	});
+
 	it('undoes a recorded slab by calling removeSlab with its id', () => {
 		const stub = makeBuildingManagerStub();
 		manager = new BuildUndoManager(stub as unknown as BuildingManager);
@@ -97,6 +109,25 @@ describe('BuildUndoManager', () => {
 		manager.record({ kind: 'slab', slabId: 'slab-1' });
 		expect(manager.undo()).toBe(true);
 		expect(stub.removeSlab).toHaveBeenCalledWith('slab-1');
+	});
+
+	it('undoes a recorded furniture item via the optional remover', () => {
+		const stub = makeBuildingManagerStub();
+		const removeFurniture = vi.fn().mockReturnValue(true);
+		manager = new BuildUndoManager(stub as unknown as BuildingManager, { removeFurniture });
+
+		manager.record({ kind: 'furniture', furnitureId: 'torch-1' });
+		expect(manager.undo()).toBe(true);
+		expect(removeFurniture).toHaveBeenCalledWith('torch-1');
+	});
+
+	it('undoes a recorded floor detail by calling removeFloorDetail with its id', () => {
+		const stub = makeBuildingManagerStub();
+		manager = new BuildUndoManager(stub as unknown as BuildingManager);
+
+		manager.record({ kind: 'floorDetail', detailId: 'detail-1' });
+		expect(manager.undo()).toBe(true);
+		expect(stub.removeFloorDetail).toHaveBeenCalledWith('detail-1');
 	});
 
 	it('undoes in LIFO order — most recent action first', () => {

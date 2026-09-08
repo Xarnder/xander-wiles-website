@@ -30,6 +30,7 @@ export class WindowTool implements BuildTool {
 		this.base = new OpeningToolBase(
 			{
 				toolId: 'window',
+				placeKind: 'opening',
 				openingType: 'window',
 				label: 'WINDOW',
 				getWidth: (settings) => settings.windowWidth,

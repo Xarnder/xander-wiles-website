@@ -1,4 +1,7 @@
+import { validateCreatureWorldState } from '../creatures/CreaturePersistence';
+import { validateMusic } from '../music/MusicValidation';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
+import { validateFurniture } from '../building/FurnitureTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
 import {
@@ -10,8 +13,16 @@ import {
 } from '../building/RoofTypes';
 import type { SlabDefinition, SlabOpeningDefinition } from '../building/SlabTypes';
 import type { StairDefinition } from '../building/StairTypes';
+import {
+	isFloorDetailKind,
+	isFloorDetailPlankDirection,
+	isFloorDetailRenderMode,
+	isFloorDetailTilePattern,
+	type FloorDetailDefinition
+} from '../building/FloorDetailTypes';
 import type {
 	FoundationBuildingDefinition,
+	WallBeamDefinition,
 	WallDefinition,
 	WallOpeningDefinition
 } from '../building/WallTypes';
@@ -31,13 +42,17 @@ export const IMPORT_LIMITS = {
 	wallPathsPerFoundation: 5_000,
 	pointsPerWallPath: 2_000,
 	openingsPerWall: 200,
+	beamsPerWall: 200,
 	slabsPerFoundation: 5_000,
 	pointsPerSlab: 2_000,
 	openingsPerSlab: 500,
 	stairsPerFoundation: 2_000,
 	roofsPerFoundation: 2_000,
 	pointsPerRoof: 2_000,
+	floorDetailsPerFoundation: 2_000,
+	pointsPerFloorDetail: 8,
 	buildingLevels: 50_000,
+	furniture: 8_000,
 	removedTreeIds: 500_000,
 	/** Uncompressed world JSON size ceiling for an import, in bytes. */
 	worldJsonBytes: 64 * 1024 * 1024,
@@ -88,7 +103,38 @@ function validateOpening(value: unknown, where: string): ValidationResult<WallOp
 		if (!isFiniteNumber(value[key]))
 			return fail(`${where}: opening ${key} must be a finite number`);
 	}
+	const material = validateMaterial(value.material, where);
+	if (!material.ok) return material;
 	return { ok: true, value: value as unknown as WallOpeningDefinition };
+}
+
+function validateBeam(value: unknown, where: string): ValidationResult<WallBeamDefinition> {
+	if (!isRecord(value)) return fail(`${where}: beam must be an object`);
+	if (!isNonEmptyString(value.id)) return fail(`${where}: beam id missing`);
+	for (const key of ['minU', 'maxU', 'minY', 'maxY'] as const) {
+		if (!isFiniteNumber(value[key])) return fail(`${where}: beam ${key} must be a finite number`);
+	}
+	const material = validateMaterial(value.material, where);
+	if (!material.ok) return material;
+	return { ok: true, value: value as unknown as WallBeamDefinition };
+}
+
+function validateOptionalBeams(
+	value: unknown,
+	where: string
+): ValidationResult<WallBeamDefinition[] | undefined> {
+	if (value === undefined) return { ok: true, value: undefined };
+	if (!Array.isArray(value)) return fail(`${where}: beams must be an array`);
+	if (value.length > IMPORT_LIMITS.beamsPerWall) {
+		return fail(`${where}: too many beams on one wall`);
+	}
+	const beams: WallBeamDefinition[] = [];
+	for (const beam of value) {
+		const result = validateBeam(beam, where);
+		if (!result.ok) return result;
+		beams.push(result.value);
+	}
+	return { ok: true, value: beams };
 }
 
 function validateWall(value: unknown, where: string): ValidationResult<WallDefinition> {
@@ -118,6 +164,8 @@ function validateWall(value: unknown, where: string): ValidationResult<WallDefin
 		const result = validateOpening(opening, where);
 		if (!result.ok) return result;
 	}
+	const beams = validateOptionalBeams(value.beams, where);
+	if (!beams.ok) return beams;
 	return { ok: true, value: value as unknown as WallDefinition };
 }
 
@@ -137,6 +185,8 @@ function validateWallPathSegment(
 		const result = validateOpening(opening, where);
 		if (!result.ok) return result;
 	}
+	const beams = validateOptionalBeams(value.beams, where);
+	if (!beams.ok) return beams;
 	return { ok: true, value: value as unknown as WallPathSegmentDefinition };
 }
 
@@ -297,6 +347,40 @@ function validateRoof(value: unknown, where: string): ValidationResult<RoofDefin
 	return { ok: true, value: value as unknown as RoofDefinition };
 }
 
+function validateFloorDetail(value: unknown, where: string): ValidationResult<FloorDetailDefinition> {
+	if (!isRecord(value)) return fail(`${where}: floor detail must be an object`);
+	if (!isNonEmptyString(value.id)) return fail(`${where}: floor detail id missing`);
+	if (!isNonEmptyString(value.foundationId))
+		return fail(`${where}: floor detail foundationId missing`);
+	if (!isFloorDetailKind(value.kind)) return fail(`${where}: unknown floor detail kind`);
+	if (!isFloorDetailRenderMode(value.renderMode))
+		return fail(`${where}: unknown floor detail renderMode`);
+	if (!isFloorDetailTilePattern(value.tilePattern))
+		return fail(`${where}: unknown floor detail tilePattern`);
+	if (!isFloorDetailPlankDirection(value.plankDirection))
+		return fail(`${where}: unknown floor detail plankDirection`);
+	if (typeof value.pathFraming !== 'boolean')
+		return fail(`${where}: floor detail pathFraming must be a boolean`);
+	for (const key of ['levelIndex', 'hostY', 'plankWidth', 'tileSize', 'pathWidth'] as const) {
+		if (!isFiniteNumber(value[key]))
+			return fail(`${where}: floor detail ${key} must be a finite number`);
+	}
+	if (!Array.isArray(value.colors) || value.colors.length === 0)
+		return fail(`${where}: floor detail colors must be a non-empty array`);
+	for (const color of value.colors) {
+		if (!isValidColorString(color)) return fail(`${where}: invalid floor detail colour`);
+	}
+	if (!Array.isArray(value.points)) return fail(`${where}: floor detail points must be an array`);
+	if (value.points.length > IMPORT_LIMITS.pointsPerFloorDetail)
+		return fail(`${where}: floor detail has too many points`);
+	for (const point of value.points) {
+		if (!isRecord(point) || !isFiniteNumber(point.gridX) || !isFiniteNumber(point.gridZ)) {
+			return fail(`${where}: floor detail point must have finite gridX/gridZ`);
+		}
+	}
+	return { ok: true, value: value as unknown as FloorDetailDefinition };
+}
+
 function validateFoundation(value: unknown, where: string): ValidationResult<FoundationDefinition> {
 	if (!isRecord(value)) return fail(`${where}: foundation must be an object`);
 	if (!isNonEmptyString(value.id)) return fail(`${where}: foundation id missing`);
@@ -335,12 +419,14 @@ function validateBuilding(
 	const slabs = value.slabs ?? [];
 	const stairs = value.stairs ?? [];
 	const roofs = value.roofs ?? [];
+	const floorDetails = value.floorDetails ?? [];
 	if (
 		!Array.isArray(walls) ||
 		!Array.isArray(wallPaths) ||
 		!Array.isArray(slabs) ||
 		!Array.isArray(stairs) ||
-		!Array.isArray(roofs)
+		!Array.isArray(roofs) ||
+		!Array.isArray(floorDetails)
 	) {
 		return fail(`${where}: building collections must be arrays`);
 	}
@@ -350,6 +436,8 @@ function validateBuilding(
 	if (slabs.length > IMPORT_LIMITS.slabsPerFoundation) return fail(`${where}: too many slabs`);
 	if (stairs.length > IMPORT_LIMITS.stairsPerFoundation) return fail(`${where}: too many stairs`);
 	if (roofs.length > IMPORT_LIMITS.roofsPerFoundation) return fail(`${where}: too many roofs`);
+	if (floorDetails.length > IMPORT_LIMITS.floorDetailsPerFoundation)
+		return fail(`${where}: too many floor details`);
 
 	for (const wall of walls) {
 		const result = validateWall(wall, where);
@@ -371,6 +459,10 @@ function validateBuilding(
 		const result = validateRoof(roof, where);
 		if (!result.ok) return result;
 	}
+	for (const detail of floorDetails) {
+		const result = validateFloorDetail(detail, where);
+		if (!result.ok) return result;
+	}
 	return {
 		ok: true,
 		value: {
@@ -379,7 +471,8 @@ function validateBuilding(
 			wallPaths,
 			slabs,
 			stairs,
-			roofs
+			roofs,
+			floorDetails
 		} as FoundationBuildingDefinition
 	};
 }
@@ -422,6 +515,10 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 		return fail('Terrain chunkSize/chunkResolution must be positive');
 	}
 
+	const creatureError = validateCreatureWorldState(value.creatures);
+	if (creatureError) return fail(creatureError);
+	const musicError = validateMusic(value.musicTrees, value.musicPlants);
+	if (musicError) return fail(musicError);
 	if (!Array.isArray(value.foundations)) return fail('World foundations must be an array');
 	if (value.foundations.length > IMPORT_LIMITS.foundations) return fail('Too many foundations');
 	const foundationIds = new Set<string>();
@@ -432,6 +529,14 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 			return fail(`Duplicate foundation id: ${result.value.id}`);
 		foundationIds.add(result.value.id);
 	}
+
+	if (value.furniture === undefined) {
+		value.furniture = [];
+	} else if (!Array.isArray(value.furniture)) {
+		return fail('World furniture must be an array');
+	}
+	const furnitureError = validateFurniture(value.furniture, foundationIds);
+	if (furnitureError) return fail(furnitureError);
 
 	if (!Array.isArray(value.buildings)) return fail('World buildings must be an array');
 	const buildings: FoundationBuildingDefinition[] = [];
@@ -532,6 +637,11 @@ function validateReferences(
 		for (const stair of building.stairs) {
 			if (!foundationIds.has(stair.foundationId)) {
 				return `Stair ${stair.id} references unknown foundation: ${stair.foundationId}`;
+			}
+		}
+		for (const detail of building.floorDetails ?? []) {
+			if (!foundationIds.has(detail.foundationId)) {
+				return `Floor detail ${detail.id} references unknown foundation: ${detail.foundationId}`;
 			}
 		}
 	}

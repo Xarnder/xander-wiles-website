@@ -4,9 +4,13 @@ import { foundationLocalFrame } from './FoundationLocalMath';
 import type { BuildingSettings } from './FoundationTypes';
 import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { FoundationDefinition } from './FoundationTypes';
+import { buildBeamVisual } from './WallBeamBuilder';
 import { buildOpeningVisual, disposeOpeningVisual, getGlassMaterial } from './OpeningVisualBuilder';
 import type { WallCollisionRect } from './wallCollision';
 import { computeWallTransform } from './wallGeometryMath';
+import { buildSkirtingForWall, disposeSkirting } from './SkirtingBuilder';
+import { wallEndpointsLocal, type RoomLid } from './skirtingMath';
+import { buildWallPathFrame, disposeWallFrame } from './WallFrameBuilder';
 import { buildWallPath } from './WallPathGeometryBuilder';
 import type { WallPathDefinition, WallPathSegmentDefinition } from './WallPathTypes';
 import type { WallDefinition } from './WallTypes';
@@ -30,12 +34,18 @@ interface PathEntry {
 	 * every segment in the path, with no single per-segment local frame to inherit.
 	 */
 	openingVisuals: Map<string, THREE.Group>;
+	/** segmentId -> decorative timber boards, positioned like that segment's opening visuals. */
+	beamVisuals: Map<string, THREE.Group>;
 	collisionRects: WallCollisionRect[];
 	boundsHelper: THREE.LineSegments | null;
 	/** segmentId -> how far that segment's start/end join actually reaches into it — computed once per rebuild by buildWallPath, cached here rather than recomputed by every getSegmentJoinInfo call. */
 	joinReach: Map<string, SegmentJoinReach>;
 	/** `visibleMesh.material[i]`'s owning segment id — see WallPathBuildResult.groupSegmentIds. Used by PaintTool to build a live preview materials array without disturbing every OTHER segment's own colour. */
 	groupSegmentIds: string[];
+	/** This whole path's procedural edge framing (one corner/end post per vertex + one top beam per segment, see WallFrameBuilder.ts) — a sibling of `visibleMesh` added directly to the path's BuildingRoot (never a child of it, since its geometry is already in the same absolute foundation-local space `visibleMesh`'s own geometry uses). `null` when framing is disabled for this path. */
+	edgeFraming: THREE.Group | null;
+	/** segmentId -> interior skirting group, positioned like that segment's opening visuals. */
+	skirting: Map<string, THREE.Group>;
 }
 
 export interface WallPathManagerOptions {
@@ -48,6 +58,7 @@ export interface WallPathManagerOptions {
 	buildingSettings?: BuildingSettings;
 	/** The one shared window-glass material — optional, defaulting to `getGlassMaterial()`'s own lazily-created singleton. */
 	glassMaterial?: THREE.Material;
+	getRoomLids?: (foundationId: string) => readonly RoomLid[];
 }
 
 /**
@@ -67,6 +78,7 @@ export class WallPathManager {
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly glassMaterial: THREE.Material;
+	private readonly getRoomLids?: (foundationId: string) => readonly RoomLid[];
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly paths = new Map<string, PathEntry>();
@@ -83,6 +95,7 @@ export class WallPathManager {
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
+		this.getRoomLids = options.getRoomLids;
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -142,8 +155,20 @@ export class WallPathManager {
 			buildingRoot.add(visibleMesh);
 		}
 
+		if (existing?.edgeFraming) disposeWallFrame(existing.edgeFraming);
+		const edgeFraming = buildWallPathFrame(
+			definition,
+			buildingGridSize,
+			this.buildingSettings,
+			this.materialManager
+		);
+		if (edgeFraming) buildingRoot.add(edgeFraming);
+
 		const pickingMeshes = new Map<string, THREE.Mesh>();
 		const openingVisuals = new Map<string, THREE.Group>();
+		const beamVisuals = new Map<string, THREE.Group>();
+		const skirting = new Map<string, THREE.Group>();
+		const lids = this.getRoomLids?.(definition.foundationId) ?? [];
 		const collisionRects: WallCollisionRect[] = [];
 		const joinReach = new Map<string, SegmentJoinReach>();
 		for (const segment of result.segments) {
@@ -213,6 +238,57 @@ export class WallPathManager {
 			}
 			buildingRoot.add(visualsGroup);
 			openingVisuals.set(segment.segmentId, visualsGroup);
+
+			const existingBeams = existing?.beamVisuals?.get(segment.segmentId);
+			if (existingBeams) disposeOpeningVisual(existingBeams);
+			const beamsGroup = new THREE.Group();
+			beamsGroup.name = 'beam-visuals';
+			beamsGroup.position.set(segment.localX, definition.baseY, segment.localZ);
+			beamsGroup.rotation.set(0, -segment.headingRadians, 0);
+			for (const beam of segmentDefinition?.beams ?? []) {
+				const visual = buildBeamVisual(
+					beam,
+					definition.wallThickness,
+					this.buildingSettings,
+					this.materialManager
+				);
+				if (visual) beamsGroup.add(visual);
+			}
+			buildingRoot.add(beamsGroup);
+			beamVisuals.set(segment.segmentId, beamsGroup);
+
+			const existingSkirting = existing?.skirting?.get(segment.segmentId);
+			if (existingSkirting) disposeSkirting(existingSkirting);
+			const segmentIndex = definition.segments.findIndex((s) => s.id === segment.segmentId);
+			if (segmentIndex >= 0) {
+				const pointCount = definition.points.length;
+				const a = definition.points[segmentIndex];
+				const b = definition.points[(segmentIndex + 1) % pointCount];
+				const { start, end } = wallEndpointsLocal(
+					a.gridX,
+					a.gridZ,
+					b.gridX,
+					b.gridZ,
+					buildingGridSize
+				);
+				const skirt = buildSkirtingForWall(
+					start,
+					end,
+					definition.baseY,
+					definition.wallHeight,
+					definition.wallThickness,
+					segmentDefinition?.openings ?? [],
+					lids,
+					this.buildingSettings,
+					this.materialManager
+				);
+				if (skirt) {
+					skirt.position.set(segment.localX, definition.baseY, segment.localZ);
+					skirt.rotation.set(0, -segment.headingRadians, 0);
+					buildingRoot.add(skirt);
+					skirting.set(segment.segmentId, skirt);
+				}
+			}
 		}
 
 		// Drop picking meshes/opening-visuals for segments that no longer exist (shouldn't normally
@@ -229,6 +305,12 @@ export class WallPathManager {
 			for (const [segmentId, group] of existing.openingVisuals) {
 				if (!openingVisuals.has(segmentId)) disposeOpeningVisual(group);
 			}
+			for (const [segmentId, group] of existing.beamVisuals ?? []) {
+				if (!beamVisuals.has(segmentId)) disposeOpeningVisual(group);
+			}
+			for (const [segmentId, group] of existing.skirting ?? []) {
+				if (!skirting.has(segmentId)) disposeSkirting(group);
+			}
 		}
 
 		const entry: PathEntry = {
@@ -236,10 +318,13 @@ export class WallPathManager {
 			visibleMesh,
 			pickingMeshes,
 			openingVisuals,
+			beamVisuals,
 			collisionRects,
 			boundsHelper: existing?.boundsHelper ?? null,
 			joinReach,
-			groupSegmentIds: result.groupSegmentIds
+			groupSegmentIds: result.groupSegmentIds,
+			edgeFraming,
+			skirting
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
@@ -263,6 +348,7 @@ export class WallPathManager {
 		if (!entry) return false;
 		entry.visibleMesh.geometry.dispose();
 		entry.visibleMesh.removeFromParent();
+		if (entry.edgeFraming) disposeWallFrame(entry.edgeFraming);
 		entry.boundsHelper?.geometry.dispose();
 		for (const [segmentId, mesh] of entry.pickingMeshes) {
 			mesh.geometry.dispose();
@@ -270,6 +356,8 @@ export class WallPathManager {
 			this.segmentToPath.delete(segmentId);
 		}
 		for (const group of entry.openingVisuals.values()) disposeOpeningVisual(group);
+		for (const group of entry.beamVisuals.values()) disposeOpeningVisual(group);
+		for (const group of entry.skirting.values()) disposeSkirting(group);
 		for (const segment of entry.definition.segments) {
 			for (const opening of segment.openings) this.doorHingePivots.delete(opening.id);
 		}
@@ -280,6 +368,12 @@ export class WallPathManager {
 	/** Rebuilds every path's opening visuals — used when a global `BuildingSettings` opening-visual default changes in the debug GUI, mirroring `WallManager.rebuildAllWalls`. */
 	rebuildAllPaths(): void {
 		for (const pathId of Array.from(this.paths.keys())) this.rebuildPath(pathId);
+	}
+
+	rebuildPathsForFoundation(foundationId: string): void {
+		for (const [pathId, entry] of this.paths) {
+			if (entry.definition.foundationId === foundationId) this.rebuildPath(pathId);
+		}
 	}
 
 	/** The hinge pivot for a door opening on a path segment, if it has one — mirrors `WallManager.getDoorHingePivot`. */
@@ -351,6 +445,7 @@ export class WallPathManager {
 			height: path.wallHeight,
 			thickness: path.wallThickness,
 			openings: segment.openings,
+			beams: segment.beams,
 			material: segment.material
 		};
 	}

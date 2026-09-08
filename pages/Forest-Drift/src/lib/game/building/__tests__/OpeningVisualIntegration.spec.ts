@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createDefaultBuildingSettings } from '../FoundationTypes';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { hingeSideForOpening } from '../openingVisualMath';
 import { WallManager } from '../WallManager';
 import type { WallDefinition } from '../WallTypes';
 
@@ -72,6 +73,33 @@ function worldCenterOf(mesh: THREE.Mesh): THREE.Vector3 {
 }
 
 describe('opening visuals: wall integration', () => {
+	it('window glass stays a single pane while the frame includes a four-pane centre cross', () => {
+		const { manager } = makeManager();
+		manager.addWall(wallWithWindow());
+		const mesh = manager.getMeshForWall('wall-1')!;
+		const group = openingVisualsOf(mesh);
+		const frameMesh = findByName(group, 'window-frame') as THREE.Mesh;
+		const glassMesh = findByName(group, 'window-glass') as THREE.Mesh;
+		expect(frameMesh).toBeDefined();
+		expect(glassMesh).toBeDefined();
+		// One BoxGeometry is 24 unique-per-face vertices; four glass panes would be 96.
+		expect(glassMesh.geometry.getAttribute('position').count).toBe(24);
+		// Outer frame (4) + mullion + transom = 6 boxes.
+		expect(frameMesh.geometry.getAttribute('position').count).toBe(6 * 24);
+		const framePts = frameMesh.geometry.getAttribute('position');
+		const opening = wallWithWindow().openings[0];
+		const midU = (opening.minU + opening.maxU) / 2;
+		const midY = (opening.minY + opening.maxY) / 2;
+		let nearMullion = 0;
+		let nearTransom = 0;
+		for (let i = 0; i < framePts.count; i++) {
+			if (Math.abs(framePts.getX(i) - midU) < 0.05) nearMullion++;
+			if (Math.abs(framePts.getY(i) - midY) < 0.05) nearTransom++;
+		}
+		expect(nearMullion).toBeGreaterThan(0);
+		expect(nearTransom).toBeGreaterThan(0);
+	});
+
 	it('a straight wall with a window gets a matching frame + glass, parented under the wall mesh', () => {
 		const { manager } = makeManager();
 		manager.addWall(wallWithWindow());
@@ -95,6 +123,7 @@ describe('opening visuals: wall integration', () => {
 		const hingePivot = manager.getDoorHingePivot('door-1');
 		expect(hingePivot).toBeDefined();
 		expect(hingePivot!.children.some((c) => c.name === 'door-leaf')).toBe(true);
+		expect(hingePivot!.children.some((c) => c.name === 'door-handles')).toBe(true);
 		const frameMesh = group.children
 			.flatMap((c) => c.children.concat(c))
 			.find((c) => c.name === 'door-frame') as THREE.Mesh | undefined;
@@ -105,15 +134,79 @@ describe('opening visuals: wall integration', () => {
 		expect(triangleCount).toBeLessThanOrEqual(36);
 	});
 
-	it('wall thickness changes the frame/glass depth, never exceeding it', () => {
+	it('puts a handle on both door faces, on the latch side for left- and right-hinged leaves', () => {
 		const { manager } = makeManager();
-		manager.addWall(wallWithWindow({ thickness: 0.05 }));
+		const leftId = 'door-left-handle';
+		const rightId = 'door-right-handle';
+		// Stable hash: pick ids that actually resolve to each hinge side.
+		const ids = Array.from({ length: 40 }, (_, i) => `door-h-${i}`);
+		const left = ids.find((id) => hingeSideForOpening(id) === 'left') ?? leftId;
+		const right = ids.find((id) => hingeSideForOpening(id) === 'right') ?? rightId;
+		manager.addWall(
+			wallWithWindow({
+				openings: [
+					{ id: left, type: 'door', minU: 0.5, maxU: 1.5, minY: 0, maxY: 2.1 },
+					{ id: right, type: 'door', minU: 2.5, maxU: 3.5, minY: 0, maxY: 2.1 }
+				]
+			})
+		);
+		for (const [id, side] of [
+			[left, 'left'],
+			[right, 'right']
+		] as const) {
+			const pivot = manager.getDoorHingePivot(id)!;
+			const handles = pivot.children.find((c) => c.name === 'door-handles') as THREE.Mesh;
+			expect(handles).toBeDefined();
+			const pos = handles.geometry.getAttribute('position');
+			let minX = Infinity;
+			let maxX = -Infinity;
+			let maxZ = -Infinity;
+			let minZ = Infinity;
+			for (let i = 0; i < pos.count; i++) {
+				minX = Math.min(minX, pos.getX(i));
+				maxX = Math.max(maxX, pos.getX(i));
+				minZ = Math.min(minZ, pos.getZ(i));
+				maxZ = Math.max(maxZ, pos.getZ(i));
+			}
+			const leafWidth = pivot.userData.leafWidth as number;
+			const doorThickness = pivot.userData.doorThickness as number;
+			if (side === 'left') {
+				expect(minX).toBeGreaterThan(leafWidth * 0.5);
+			} else {
+				expect(maxX).toBeLessThan(-leafWidth * 0.5);
+			}
+			expect(maxZ).toBeGreaterThan(doorThickness / 2);
+			expect(minZ).toBeLessThan(-doorThickness / 2);
+		}
+	});
+
+	it('window and door frames are thicker than the wall and extrude past both faces', () => {
+		const { manager } = makeManager();
+		const wallThickness = 0.05;
+		manager.addWall(
+			wallWithWindow({
+				thickness: wallThickness,
+				openings: [
+					{ id: 'window-1', type: 'window', minU: 1, maxU: 2.2, minY: 0.9, maxY: 2.1 },
+					{ id: 'door-1', type: 'door', minU: 3, maxU: 4, minY: 0, maxY: 2.1 }
+				]
+			})
+		);
 		const mesh = manager.getMeshForWall('wall-1')!;
 		const group = openingVisualsOf(mesh);
-		const frameMesh = findByName(group, 'window-frame') as THREE.Mesh;
-		frameMesh.geometry.computeBoundingBox();
-		const depth = frameMesh.geometry.boundingBox!.max.z - frameMesh.geometry.boundingBox!.min.z;
-		expect(depth).toBeLessThanOrEqual(0.05 + 1e-6);
+		for (const name of ['window-frame', 'door-frame'] as const) {
+			const frameMesh = findByName(group, name) as THREE.Mesh;
+			expect(frameMesh).toBeDefined();
+			frameMesh.geometry.computeBoundingBox();
+			const depth =
+				frameMesh.geometry.boundingBox!.max.z - frameMesh.geometry.boundingBox!.min.z;
+			expect(depth).toBeGreaterThan(wallThickness);
+		}
+		const glassMesh = findByName(group, 'window-glass') as THREE.Mesh;
+		glassMesh.geometry.computeBoundingBox();
+		const glassDepth =
+			glassMesh.geometry.boundingBox!.max.z - glassMesh.geometry.boundingBox!.min.z;
+		expect(glassDepth).toBeLessThanOrEqual(wallThickness + 1e-6);
 	});
 
 	it('an upper-floor wall (baseY > 0) places its opening visuals at the correct foundation-local elevation via the wall mesh transform', () => {
@@ -168,6 +261,56 @@ describe('opening visuals: wall integration', () => {
 		manager.addWall({ ...wall, openings: [] });
 		const rebuiltMesh = manager.getMeshForWall('wall-1')!;
 		expect(openingVisualsOf(rebuiltMesh).children.length).toBe(0);
+	});
+
+	it('colours the window frame from the opening material', () => {
+		const { manager } = makeManager();
+		manager.addWall(
+			wallWithWindow({
+				openings: [
+					{
+						id: 'window-1',
+						type: 'window',
+						minU: 1,
+						maxU: 2.2,
+						minY: 0.9,
+						maxY: 2.1,
+						material: { type: 'color', color: '#FF3366' }
+					}
+				]
+			})
+		);
+		const frame = findByName(openingVisualsOf(manager.getMeshForWall('wall-1')!), 'window-frame') as
+			| THREE.Mesh
+			| undefined;
+		expect(frame).toBeDefined();
+		const material = frame!.material as THREE.MeshStandardMaterial;
+		expect(material.color.getHexString().toUpperCase()).toBe('FF3366');
+	});
+
+	it('colours the door leaf from the opening material', () => {
+		const { manager } = makeManager();
+		manager.addWall(
+			wallWithWindow({
+				openings: [
+					{
+						id: 'door-1',
+						type: 'door',
+						minU: 1,
+						maxU: 2,
+						minY: 0,
+						maxY: 2.1,
+						material: { type: 'color', color: '#00AACC' }
+					}
+				]
+			})
+		);
+		const leaf = findByName(openingVisualsOf(manager.getMeshForWall('wall-1')!), 'door-leaf') as
+			| THREE.Mesh
+			| undefined;
+		expect(leaf).toBeDefined();
+		const material = leaf!.material as THREE.MeshStandardMaterial;
+		expect(material.color.getHexString().toUpperCase()).toBe('00AACC');
 	});
 
 	it('disabling frames/glass in settings suppresses the visual entirely', () => {

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
-import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { MaterialKind } from './MaterialTypes';
 import { pointInPolygon2D, polygonsOverlap } from './slabMath';
 import {
@@ -10,6 +11,7 @@ import {
 	slabLocalPolygon,
 	slabOpeningLocalPolygon
 } from './SlabGeometryBuilder';
+import { buildSlabOpeningFrame, disposeSlabOpeningFrame } from './SlabOpeningFrameBuilder';
 import type { SlabDefinition, SlabOpeningDefinition } from './SlabTypes';
 import { slabBottomY } from './SlabTypes';
 import type { Point2D } from './wallPathMath';
@@ -25,6 +27,8 @@ interface SlabEntry {
 	definition: SlabDefinition;
 	mesh: THREE.Mesh;
 	boundsHelper: THREE.LineSegments | null;
+	/** Sibling groups on the foundation root — one timber trim per opening, never part of slab collision. */
+	openingFrames: THREE.Group[];
 	/** World-space X/Z polygon + world Y extents, cached alongside the mesh so point queries never re-derive them per call. */
 	worldPolygon: Point2D[];
 	/** World-space hole polygons (openings) — a point inside one of these is NOT covered by the slab, even though it's inside `worldPolygon`. */
@@ -39,6 +43,8 @@ export interface SlabManagerOptions {
 	getBuildingGridSize: () => number;
 	/** Optional — see FoundationManager's constructor doc comment for why tests can omit this and ThreeScene never does. */
 	materialManager?: BuildingMaterialManager;
+	/** Live opening-frame toggles/sizes, read at every rebuild. Optional so existing tests keep compiling. */
+	buildingSettings?: BuildingSettings;
 }
 
 /**
@@ -54,6 +60,7 @@ export class SlabManager {
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
 	private readonly roots: FoundationRootRegistry;
 
 	private readonly slabs = new Map<string, SlabEntry>();
@@ -64,6 +71,7 @@ export class SlabManager {
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
+		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
 	}
@@ -109,10 +117,36 @@ export class SlabManager {
 			hole.map((p) => ({ x: frame.originWorldX + p.x, z: frame.originWorldZ + p.z }))
 		);
 
+		if (existing?.openingFrames) {
+			for (const group of existing.openingFrames) disposeSlabOpeningFrame(group);
+		}
+		const openingFrames: THREE.Group[] = [];
+		for (const hole of localHoles) {
+			const xs = hole.map((p) => p.x);
+			const zs = hole.map((p) => p.z);
+			const frameGroup = buildSlabOpeningFrame(
+				{
+					minX: Math.min(...xs),
+					maxX: Math.max(...xs),
+					minZ: Math.min(...zs),
+					maxZ: Math.max(...zs)
+				},
+				definition.localY,
+				bottomLocalY,
+				this.buildingSettings,
+				this.materialManager
+			);
+			if (frameGroup) {
+				root.add(frameGroup);
+				openingFrames.push(frameGroup);
+			}
+		}
+
 		const entry: SlabEntry = {
 			definition,
 			mesh,
 			boundsHelper: existing?.boundsHelper ?? null,
+			openingFrames,
 			worldPolygon,
 			worldHoles,
 			topWorldY: frame.originWorldY + definition.localY,
@@ -120,6 +154,14 @@ export class SlabManager {
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
+	}
+
+	/** Rebuild every slab in place — used when live opening-frame settings change. */
+	rebuildAllSlabs(): void {
+		for (const entry of this.slabs.values()) {
+			const rebuilt = this.buildEntry(entry.definition, entry);
+			if (rebuilt) this.slabs.set(entry.definition.id, rebuilt);
+		}
 	}
 
 	addSlab(definition: SlabDefinition): void {
@@ -187,6 +229,7 @@ export class SlabManager {
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
+		for (const group of entry.openingFrames) disposeSlabOpeningFrame(group);
 		this.slabs.delete(id);
 		return true;
 	}

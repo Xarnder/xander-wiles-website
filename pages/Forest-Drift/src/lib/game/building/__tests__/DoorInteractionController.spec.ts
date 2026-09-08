@@ -64,7 +64,7 @@ function doorWall(): WallDefinition {
 	};
 }
 
-function setup() {
+function setup(onLookedAtDoorChange?: (openingId: string | null) => void) {
 	const foundations = new Map<string, FoundationDefinition>([['f1', foundation()]]);
 	const manager = new WallManager({
 		getFoundation: (id) => foundations.get(id),
@@ -82,7 +82,8 @@ function setup() {
 
 	const controller = new DoorInteractionController({
 		camera,
-		getHingePivots: () => manager.getDoorHingePivots()
+		getHingePivots: () => manager.getDoorHingePivots(),
+		onLookedAtDoorChange
 	});
 	return { manager, camera, controller };
 }
@@ -140,6 +141,25 @@ describe('DoorInteractionController', () => {
 		const through = resolvePlayerPositionAgainstWalls(1.5, 0, feetY, headY, radius, openRects);
 		expect(through.x).toBeCloseTo(1.5);
 		expect(through.z).toBeCloseTo(0);
+
+		controller.dispose();
+	});
+
+	it('reports the door under the crosshair and clears it when you look away', () => {
+		const onLookedAtDoorChange = vi.fn();
+		const { camera, controller } = setup(onLookedAtDoorChange);
+		expect(controller.getLookedAtDoor()).toBeNull();
+
+		controller.update(0);
+		expect(controller.getLookedAtDoor()).toBe('door-1');
+		expect(onLookedAtDoorChange).toHaveBeenCalledWith('door-1');
+
+		camera.position.set(20, 20, 20);
+		camera.lookAt(21, 20, 20);
+		camera.updateMatrixWorld();
+		controller.update(0);
+		expect(controller.getLookedAtDoor()).toBeNull();
+		expect(onLookedAtDoorChange).toHaveBeenCalledWith(null);
 
 		controller.dispose();
 	});

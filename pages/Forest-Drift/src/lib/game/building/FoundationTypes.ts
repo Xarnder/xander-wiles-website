@@ -4,7 +4,14 @@
  * building tools.
  */
 
+import type { BeamOrientation } from './beamMath';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
+import type {
+	FloorDetailPlankDirection,
+	FloorDetailRenderMode,
+	FloorDetailTilePattern
+} from './FloorDetailTypes';
+import { DEFAULT_FLOOR_DETAIL_COLORS } from './FloorDetailTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { RoofType } from './RoofTypes';
 
@@ -43,32 +50,183 @@ export type ToolId =
 	| 'wall'
 	| 'window'
 	| 'door'
+	| 'beam'
 	| 'polygon-wall'
 	| 'ceiling'
 	| 'floor'
 	| 'flat-roof'
 	| 'stairs'
+	| 'floor-carpet'
+	| 'floor-path'
+	| 'floor-planks'
+	| 'floor-tiles'
+	| 'torch'
 	| 'remove'
+	| 'music'
 	| 'paint'
 	| 'none';
 
-export interface HotbarSlot {
-	slot: number;
+export interface HotbarSlotVariant {
 	toolId: ToolId;
 	label: string;
 }
 
-export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlot[] = [
-	{ slot: 1, toolId: 'foundation', label: 'Foundation' },
-	{ slot: 2, toolId: 'wall', label: 'Wall' },
-	{ slot: 3, toolId: 'window', label: 'Window' },
-	{ slot: 4, toolId: 'door', label: 'Door' },
-	{ slot: 5, toolId: 'polygon-wall', label: 'Poly Wall' },
-	{ slot: 6, toolId: 'ceiling', label: 'Ceiling' },
-	{ slot: 7, toolId: 'floor', label: 'Floor' },
-	{ slot: 8, toolId: 'flat-roof', label: 'Roof' },
-	{ slot: 9, toolId: 'stairs', label: 'Stairs' }
+/** Source-of-truth grouping: one numbered key, one or more tools cycled with ↑/↓. Index 0 is the default. */
+export interface HotbarSlotDefinition {
+	slot: number;
+	variants: readonly HotbarSlotVariant[];
+}
+
+/**
+ * Resolved view of one hotbar button — `toolId`/`label` are whichever variant is currently
+ * selected. `variantCount > 1` means ↑/↓ will cycle this slot.
+ */
+export interface HotbarSlot {
+	slot: number;
+	toolId: ToolId;
+	label: string;
+	variantCount: number;
+	variantIndex: number;
+}
+
+/**
+ * 1 Foundation · 2 Poly Wall/Wall · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
+ * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Furniture (Torch). Slot 7 is unused.
+ */
+export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
+	{ slot: 1, variants: [{ toolId: 'foundation', label: 'Foundation' }] },
+	{
+		slot: 2,
+		variants: [
+			{ toolId: 'polygon-wall', label: 'Poly Wall' },
+			{ toolId: 'wall', label: 'Wall' }
+		]
+	},
+	{
+		slot: 3,
+		variants: [
+			{ toolId: 'door', label: 'Door' },
+			{ toolId: 'window', label: 'Window' },
+			{ toolId: 'beam', label: 'Beam' }
+		]
+	},
+	{
+		slot: 4,
+		variants: [
+			{ toolId: 'ceiling', label: 'Ceiling' },
+			{ toolId: 'floor', label: 'Floor' },
+			{ toolId: 'flat-roof', label: 'Roof' }
+		]
+	},
+	{ slot: 5, variants: [{ toolId: 'stairs', label: 'Stairs' }] },
+	{
+		slot: 6,
+		variants: [
+			{ toolId: 'floor-carpet', label: 'Carpet' },
+			{ toolId: 'floor-path', label: 'Path' },
+			{ toolId: 'floor-planks', label: 'Planks' },
+			{ toolId: 'floor-tiles', label: 'Tiles' }
+		]
+	},
+	{ slot: 8, variants: [{ toolId: 'torch', label: 'Torch' }] }
 ];
+
+export function cycleHotbarVariantIndex(
+	variantCount: number,
+	currentIndex: number,
+	delta: number
+): number {
+	if (variantCount <= 1) return 0;
+	return ((currentIndex + delta) % variantCount + variantCount) % variantCount;
+}
+
+export function resolveHotbarSlot(
+	definition: HotbarSlotDefinition,
+	variantIndex: number
+): HotbarSlot {
+	const max = Math.max(0, definition.variants.length - 1);
+	const index = Math.max(0, Math.min(max, variantIndex));
+	const variant = definition.variants[index] ?? definition.variants[0];
+	return {
+		slot: definition.slot,
+		toolId: variant?.toolId ?? 'none',
+		label: variant?.label ?? '',
+		variantCount: definition.variants.length,
+		variantIndex: variant ? index : 0
+	};
+}
+
+/** Tools whose next placement can be tuned with `E`. */
+export const FLOOR_DETAIL_TOOLS = [
+	'floor-carpet',
+	'floor-path',
+	'floor-planks',
+	'floor-tiles'
+] as const;
+export type FloorDetailToolId = (typeof FLOOR_DETAIL_TOOLS)[number];
+
+export function isFloorDetailTool(id: ToolId): id is FloorDetailToolId {
+	return (
+		id === 'floor-carpet' ||
+		id === 'floor-path' ||
+		id === 'floor-planks' ||
+		id === 'floor-tiles'
+	);
+}
+
+export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
+	'window',
+	'door',
+	'beam',
+	'wall',
+	'polygon-wall',
+	'floor-carpet',
+	'floor-path',
+	'floor-planks',
+	'floor-tiles'
+] as const;
+export type CustomizablePlacementToolId = (typeof CUSTOMIZABLE_PLACEMENT_TOOLS)[number];
+
+export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlacementToolId {
+	return (
+		id === 'window' ||
+		id === 'door' ||
+		id === 'beam' ||
+		id === 'wall' ||
+		id === 'polygon-wall' ||
+		isFloorDetailTool(id)
+	);
+}
+
+/** Slider ranges — match the debug GUI's Walls / Windows / Doors / Beams folders. */
+export const PLACEMENT_CUSTOMIZE_LIMITS = {
+	windowWidth: { min: 0.2, max: 4, step: 0.05 },
+	windowHeight: { min: 0.2, max: 3, step: 0.05 },
+	doorWidth: { min: 0.4, max: 3, step: 0.05 },
+	doorHeight: { min: 0.5, max: 4, step: 0.05 },
+	beamWidth: { min: 0.2, max: 4, step: 0.05 },
+	beamHeight: { min: 0.04, max: 0.8, step: 0.01 },
+	wallHeight: { min: 0.5, max: 6, step: 0.05 },
+	wallThickness: { min: 0.05, max: 0.5, step: 0.01 },
+	floorDetailPlankWidth: { min: 0.08, max: 0.5, step: 0.01 },
+	floorDetailTileSize: { min: 0.2, max: 1.2, step: 0.05 },
+	floorDetailPathWidth: { min: 0.4, max: 3, step: 0.05 }
+} as const;
+
+/** Default timber / door-leaf colours — same hex the unpainted templates already use. */
+export const DEFAULT_WINDOW_COLOR = '#5C4632';
+export const DEFAULT_DOOR_COLOR = '#8A5A35';
+export const DEFAULT_BEAM_COLOR = '#5C4632';
+
+export function placementColorForTool(
+	settings: BuildingSettings,
+	toolId: CustomizablePlacementToolId
+): string | undefined {
+	if (toolId === 'door') return settings.doorColor;
+	if (toolId === 'beam') return settings.beamColor;
+	if (toolId === 'window') return settings.windowColor;
+	return undefined;
+}
 
 export type FoundationToolState = 'idle' | 'first-corner-selected';
 
@@ -119,9 +277,26 @@ export interface BuildingSettings {
 	windowWidth: number;
 	windowHeight: number;
 	windowSillHeight: number;
+	/** Next-window frame colour (`#RRGGBB`). Copied onto the opening at place time. */
+	windowColor: string;
 
 	doorWidth: number;
 	doorHeight: number;
+	/** Next-door leaf colour (`#RRGGBB`). Copied onto the opening at place time. */
+	doorColor: string;
+
+	/**
+	 * Placeable wall timber (Beam tool) — same U snap / edge-margin rules as Window/Door.
+	 * `beamOrientation` defaults to vertical: a floor-to-top post whose along-wall size is
+	 * `beamHeight`. Horizontal keeps the older look-centred strip (`beamWidth` × `beamHeight`).
+	 * `beamDepthExtra` is visual-only (how far the board stands proud of each wall face).
+	 */
+	beamOrientation: BeamOrientation;
+	beamWidth: number;
+	beamHeight: number;
+	beamDepthExtra: number;
+	/** Next-beam timber colour (`#RRGGBB`). Copied onto the beam at place time. */
+	beamColor: string;
 
 	openingGridSize: number;
 	openingEdgeMargin: number;
@@ -130,9 +305,10 @@ export interface BuildingSettings {
 	/**
 	 * Procedural window/door visual inserts (see OpeningVisualBuilder.ts) — purely derived render
 	 * geometry sized from each opening's own `minU/maxU/minY/maxY`, never persisted. Every dimension
-	 * here is a PREFERRED size only: `openingVisualMath.clampFrameWidth`/`clampFrameDepth` scale it
-	 * down for an unusually small opening or a thin wall, so a tiny window never inherits a
-	 * comically oversized fixed frame.
+	 * here is a PREFERRED size only: `openingVisualMath.clampFrameWidth` scales width down for an
+	 * unusually small opening so a tiny window never inherits a comically oversized fixed frame.
+	 * Frame *depth* is the opposite — `clampFrameDepth` always produces a depth thicker than the
+	 * wall so window and door frames extrude past both faces.
 	 */
 	windowFramesEnabled: boolean;
 	windowFrameWidth: number;
@@ -144,8 +320,36 @@ export interface BuildingSettings {
 	doorFrameDepth: number;
 	/** The door leaf's own thickness (a thin solid box, never a zero-thickness plane). */
 	doorThickness: number;
-	/** Gap kept between the door leaf and its frame (top + both sides) so the leaf never intersects the jambs/lintel — never subtracted from the bottom, which always stays flush with the floor. */
+	/** Extra inset between the door leaf and its frame (top + both sides). `0` means the leaf fills the inner jambs and lintel with no visible gap. Never subtracted from the bottom, which always stays flush with the floor. */
 	doorClearance: number;
+
+	/**
+	 * Procedural wall edge framing (vertical corner posts + a top beam/cap — see WallFrameBuilder.ts)
+	 * — purely derived render geometry rebuilt from each wall/path's own length/height/thickness/
+	 * baseY, never persisted. `wallFrameWidth` is each post's along-wall face width; the top beam's
+	 * vertical thickness is twice that so the cap reads as the same timber on the wall face. The beam
+	 * top sits just below the authored wall height so it does not share a plane with a slab or the
+	 * wall body (see buildingVisualInsets.ts). For a standalone wall the top beam always spans exactly
+	 * the wall's length. `wallFrameDepthExtra`
+	 * is how far the frame protrudes past each wall face (added to `wallThickness / 2` on both sides,
+	 * never subtracted from it, so a frame never sinks INSIDE the wall).
+	 */
+	wallFrameEnabled: boolean;
+	wallFrameWidth: number;
+	wallFrameDepthExtra: number;
+	/** Dev-only: outlines every wall/path frame mesh's own bounding edges — useful for diagnosing diagonal/polygon corner joins. */
+	showWallFrameBounds: boolean;
+	/** Dev-only: small markers at every polygon-wall-path corner post's join point — see WallFrameBuilder's corner-post footprint derivation. */
+	showWallFrameJoins: boolean;
+
+	/**
+	 * Interior skirting (baseboards) — derived, never persisted. A ceiling / upper floor / flat roof
+	 * sitting on a wall's top is a lid over a room; only walls under that lid's edges get a board,
+	 * and only on the inside face. See skirtingMath.ts.
+	 */
+	skirtingEnabled: boolean;
+	skirtingHeight: number;
+	skirtingDepth: number;
 
 	/** Dev-only: outlines each opening's own logical `minU/maxU/minY/maxY` rect — the same bounds `OpeningVisualBuilder` derives everything from, useful for diagnosing procedural sizing. */
 	showOpeningBounds: boolean;
@@ -238,6 +442,16 @@ export interface BuildingSettings {
 	showStairDirection: boolean;
 	/** Minimum vertical clearance (world units) an automatically-generated upper-floor stair opening must leave above the topmost few treads — see the README's "Stair openings" section. */
 	stairHeadClearance: number;
+	/** Decorative timber on placed stairs (stringers, back frame, inner railings, nosings, newels) — see StairFrameBuilder.ts. */
+	stairFrameEnabled: boolean;
+	stairFrameWidth: number;
+	/** How far stair timber may sit past a width face or the back — not added on top of frame width. */
+	stairFrameDepthExtra: number;
+	/** Decorative timber lining a slab stairwell hole — sits inside the cut, see SlabOpeningFrameBuilder.ts. */
+	slabOpeningFrameEnabled: boolean;
+	slabOpeningFrameWidth: number;
+	/** How far the lining sits past the slab's top and underside — not a flange onto the floor. */
+	slabOpeningFrameDepthExtra: number;
 
 	/** Maximum crosshair-to-target distance Remove Mode will raycast — see RemoveTool.ts and the README's "Remove Mode" section. Reused, not duplicated, by any future removal target types. */
 	removeToolMaxDistance: number;
@@ -246,6 +460,23 @@ export interface BuildingSettings {
 
 	/** Maximum crosshair-to-target distance Paint Mode will raycast — same reasoning as `removeToolMaxDistance`, kept separate so each mode's range is independently tunable. */
 	paintToolMaxDistance: number;
+
+	/**
+	 * Floor detailing (hotbar 6) — stamped onto each piece at place time. Changing these after
+	 * placing never rebuilds existing carpets/paths/planks/tiles. `floorDetailRenderMode` is the
+	 * 3D-boards vs thin-plane default; E customise and this GUI both write the same field.
+	 */
+	floorDetailRenderMode: FloorDetailRenderMode;
+	floorDetailColorA: string;
+	floorDetailColorB: string;
+	floorDetailPlankWidth: number;
+	floorDetailPlankDirection: FloorDetailPlankDirection;
+	floorDetailTileSize: number;
+	floorDetailTilePattern: FloorDetailTilePattern;
+	floorDetailPathWidth: number;
+	floorDetailPathFraming: boolean;
+	floorDetailPreviewOpacity: number;
+	showFloorDetailBounds: boolean;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -270,9 +501,17 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		windowWidth: 1.2,
 		windowHeight: 1.2,
 		windowSillHeight: 0.9,
+		windowColor: DEFAULT_WINDOW_COLOR,
 
-		doorWidth: 0.9,
+		doorWidth: 1.2,
 		doorHeight: 2.1,
+		doorColor: DEFAULT_DOOR_COLOR,
+
+		beamOrientation: 'vertical',
+		beamWidth: 1.2,
+		beamHeight: 0.16,
+		beamDepthExtra: 0.05,
+		beamColor: DEFAULT_BEAM_COLOR,
 
 		openingGridSize: 0.1,
 		openingEdgeMargin: 0.1,
@@ -287,7 +526,17 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		doorFrameWidth: 0.08,
 		doorFrameDepth: 0.08,
 		doorThickness: 0.04,
-		doorClearance: 0.02,
+		doorClearance: 0,
+
+		wallFrameEnabled: true,
+		wallFrameWidth: 0.12,
+		wallFrameDepthExtra: 0.05,
+		showWallFrameBounds: false,
+		showWallFrameJoins: false,
+
+		skirtingEnabled: true,
+		skirtingHeight: 0.1,
+		skirtingDepth: 0.02,
 
 		showOpeningBounds: false,
 		showOpeningFrameBounds: false,
@@ -334,11 +583,29 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showStairBounds: false,
 		showStairDirection: true,
 		stairHeadClearance: 2.1,
+		stairFrameEnabled: true,
+		stairFrameWidth: 0.12,
+		stairFrameDepthExtra: 0.05,
+		slabOpeningFrameEnabled: true,
+		slabOpeningFrameWidth: 0.055,
+		slabOpeningFrameDepthExtra: 0.01,
 
 		removeToolMaxDistance: 12,
 		showRemovalPickingProxies: false,
 
-		paintToolMaxDistance: 12
+		paintToolMaxDistance: 12,
+
+		floorDetailRenderMode: '3d',
+		floorDetailColorA: DEFAULT_FLOOR_DETAIL_COLORS.planks[0],
+		floorDetailColorB: DEFAULT_FLOOR_DETAIL_COLORS.planks[1],
+		floorDetailPlankWidth: 0.2,
+		floorDetailPlankDirection: 'x',
+		floorDetailTileSize: 0.4,
+		floorDetailTilePattern: 'checker',
+		floorDetailPathWidth: 1,
+		floorDetailPathFraming: true,
+		floorDetailPreviewOpacity: 0.55,
+		showFloorDetailBounds: false
 	};
 }
 
@@ -349,6 +616,12 @@ export interface BuildUiState {
 	hintLines: string[];
 	/** The active draw-snap mode (see polygonDrawSnap.ts), for a dedicated on-screen badge near the crosshair — `undefined`/`'off'` shows nothing. Kept separate from `hintLines` so it can render as a prominent, differently-styled indicator rather than just another line of text. */
 	snapMode?: 'off' | 'axis' | 'axis-inline' | 'wall-corners';
+	/**
+	 * Window/Door/Beam wall-division snap label (see openingDivisionSnap.ts) — e.g. `QUARTER SNAP`. Shown
+	 * on the same crosshair badge as `snapMode`; `undefined` means metre-grid snap (the default) and
+	 * hides the badge, matching `'off'` for polygon tools.
+	 */
+	snapBadge?: string;
 	/**
 	 * Why the thing under the crosshair can't be placed on right now, rendered as a badge beside the
 	 * crosshair itself rather than only in the corner HUD. A blocking reason is useless where the
@@ -372,6 +645,12 @@ export interface HotbarUiState {
 	slots: readonly HotbarSlot[];
 	activeSlot: number;
 	/**
+	 * Whether Build Mode is on (`G`). The numbered hotbar and construction tools are shown/active
+	 * only while this is true — turning it off hides the hotbar and suspends placement without
+	 * forgetting `activeSlot`. Compose Mode (`M`) is independent and can stay on either way.
+	 */
+	buildModeActive: boolean;
+	/**
 	 * Which temporary GLOBAL editing overlay (if any) is currently active — `'remove'` or `'paint'`,
 	 * deliberately a single tri-state field rather than two independent booleans, so "both active at
 	 * once" is structurally unrepresentable rather than merely avoided by convention (see the
@@ -383,5 +662,5 @@ export interface HotbarUiState {
 	 * numbered tool was selected before the overlay was entered, and is restored to exactly that the
 	 * moment it exits. See BuildToolManager's class doc comment.
 	 */
-	globalMode: 'none' | 'remove' | 'paint';
+	globalMode: 'none' | 'remove' | 'music' | 'paint';
 }

@@ -19,6 +19,33 @@ describe('resolveRemovalTarget', () => {
 		});
 	});
 
+	it('resolves a beam proxy hit (beamId + wallId) to a beam target', () => {
+		const target = resolveRemovalTarget({
+			foundationId: 'f1',
+			wallId: 'wall-1',
+			beamId: 'beam-1'
+		});
+		expect(target).toEqual({
+			type: 'beam',
+			wallId: 'wall-1',
+			beamId: 'beam-1',
+			foundationId: 'f1'
+		});
+	});
+
+	it('resolves a floor-detail mesh hit (floorDetailId present) before a stair', () => {
+		const target = resolveRemovalTarget({
+			foundationId: 'f1',
+			floorDetailId: 'detail-1',
+			stairId: 'stair-1'
+		});
+		expect(target).toEqual({
+			type: 'floor-detail',
+			detailId: 'detail-1',
+			foundationId: 'f1'
+		});
+	});
+
 	it('resolves a stair mesh hit (stairId present) to a stair target, even if it also carried a wallId', () => {
 		const target = resolveRemovalTarget({ foundationId: 'f1', stairId: 'stair-1' });
 		expect(target).toEqual({ type: 'stair', stairId: 'stair-1', foundationId: 'f1' });

@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createAndEnterWorld, openPauseMenu, openWorldNamed, waitForSaved } from './worldHelpers';
+import {
+	createAndEnterWorld,
+	enableRenderStats,
+	openPauseMenu,
+	openWorldNamed,
+	waitForSaved
+} from './worldHelpers';
 
 const DB_NAME = 'forest-drift-worlds';
 
@@ -161,10 +167,14 @@ test('a saved world contains its definition and none of the regenerable world', 
 		'buildingLevels',
 		'buildings',
 		'createdAt',
+		'creatures',
 		'environment',
 		'foundations',
+		'furniture',
 		'id',
 		'lastPlayedAt',
+		'musicPlants',
+		'musicTrees',
 		'name',
 		'player',
 		'proceduralOverrides',
@@ -206,7 +216,7 @@ test('authored buildings are rebuilt into the scene when the world is loaded', a
 	// Reload so nothing about the previous session is reused, then open the world again.
 	await page.reload();
 	await openWorldNamed(page, 'Built World');
-	await expect(page.getByTestId('stats-overlay')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('save-indicator')).toBeVisible({ timeout: 20_000 });
 
 	// Every wall becomes a real mesh with its own geometry, rebuilt by the same managers the build
 	// tools use — so the geometry count jumps by roughly the wall count.
@@ -247,6 +257,7 @@ test('a manual save completes quickly enough to be invisible during play', async
 });
 
 async function readGeometries(page: Page): Promise<number> {
+	await enableRenderStats(page);
 	const text = await page.getByTestId('stats-overlay').innerText();
 	const match = /Geo (\d+)/.exec(text);
 	return match ? Number(match[1]) : 0;

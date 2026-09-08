@@ -1,3 +1,4 @@
+import { createDefaultCreatureState } from '../../creatures/CreaturePersistence';
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { createDefaultVegetationSettings } from '../../vegetation/VegetationTypes';
@@ -69,6 +70,7 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 							{ id: 'window-1', type: 'window', minU: 1, maxU: 2, minY: 0.9, maxY: 2 },
 							{ id: 'door-1', type: 'door', minU: 3, maxU: 4, minY: 0, maxY: 2.1 }
 						],
+						beams: [{ id: 'beam-1', minU: 4.5, maxU: 5.7, minY: 2.2, maxY: 2.36 }],
 						material: { type: 'color', color: '#d9d1c3' }
 					}
 				],
@@ -93,6 +95,7 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 								openings: [
 									{ id: 'window-2', type: 'window', minU: 1, maxU: 2, minY: 0.9, maxY: 2 }
 								],
+								beams: [{ id: 'beam-2', minU: 2.2, maxU: 3.2, minY: 1.4, maxY: 1.56 }],
 								material: { type: 'color', color: '#123456' }
 							},
 							{ id: 'segment-2', openings: [] }
@@ -176,12 +179,59 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 						profileSettings: createDefaultRoofProfileSettings(),
 						material: { type: 'color', color: '#6b4f3a' }
 					}
+				],
+				floorDetails: [
+					{
+						id: 'floor-detail-1',
+						foundationId: 'foundation-1',
+						levelIndex: 0,
+						kind: 'tiles',
+						hostY: 0,
+						renderMode: '3d',
+						points: [
+							{ gridX: 0, gridZ: 0 },
+							{ gridX: 2, gridZ: 0 },
+							{ gridX: 2, gridZ: 2 },
+							{ gridX: 0, gridZ: 2 }
+						],
+						colors: ['#C1443C', '#F4F0E6'],
+						plankWidth: 0.2,
+						plankDirection: 'x',
+						tileSize: 0.4,
+						tilePattern: 'checker',
+						pathWidth: 1,
+						pathFraming: true
+					}
 				]
 			}
 		],
 		buildingLevels: [
 			{ id: 'level-1', foundationId: 'foundation-1', index: 0, baseY: 0, wallHeight: 2.6 },
 			{ id: 'level-2', foundationId: 'foundation-1', index: 1, baseY: 2.6, wallHeight: 2.6 }
+		],
+		furniture: [
+			{
+				id: 'torch-1',
+				kind: 'torch',
+				foundationId: 'foundation-1',
+				x: 0,
+				y: 14.1,
+				z: -1.5,
+				nx: 0,
+				ny: 0,
+				nz: 1
+			},
+			{
+				id: 'torch-2',
+				kind: 'torch',
+				foundationId: null,
+				x: 8,
+				y: 13.2,
+				z: 4,
+				nx: 0,
+				ny: 1,
+				nz: 0
+			}
 		],
 		proceduralOverrides: { removedTreeIds: ['12:-7', '3:9'] },
 		player: {
@@ -197,10 +247,15 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 
 /** A minimal in-memory `WorldRuntime`, so serializer/autosave tests don't need Three.js or a DOM. */
 export class FakeWorldRuntime implements WorldRuntime {
+	creatures = createDefaultCreatureState();
+	getCreatureState() {
+		return this.creatures;
+	}
 	environment: WorldEnvironmentDefinition = defaultEnvironment();
 	foundations: WorldDefinition['foundations'] = [];
 	buildings: WorldDefinition['buildings'] = [];
 	buildingLevels: WorldDefinition['buildingLevels'] = [];
+	furniture: WorldDefinition['furniture'] = [];
 	player: SavedPlayerState = createDefaultPlayerState();
 	overrides: ProceduralWorldOverrides = createEmptyProceduralOverrides();
 	counters: WorldRevisionCounters = { structural: 0, environment: 0, procedural: 0 };
@@ -216,6 +271,9 @@ export class FakeWorldRuntime implements WorldRuntime {
 	}
 	getBuildingLevels() {
 		return this.buildingLevels;
+	}
+	getFurniture() {
+		return this.furniture;
 	}
 	getPlayerState() {
 		return this.player;
@@ -239,10 +297,12 @@ export class FakeWorldRuntime implements WorldRuntime {
 
 export function runtimeFromWorld(world: WorldDefinition): FakeWorldRuntime {
 	const runtime = new FakeWorldRuntime();
+	runtime.creatures = world.creatures;
 	runtime.environment = world.environment;
 	runtime.foundations = world.foundations;
 	runtime.buildings = world.buildings;
 	runtime.buildingLevels = world.buildingLevels;
+	runtime.furniture = world.furniture;
 	runtime.player = world.player;
 	runtime.overrides = world.proceduralOverrides;
 	return runtime;

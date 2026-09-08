@@ -1,7 +1,7 @@
 /**
  * Shared terrain configuration. This object is intentionally framework-free — it is read
  * directly by TerrainHeightSampler, TerrainChunk and TerrainManager, and mutated live by
- * TerrainDebugGui. Nothing in this file may depend on Svelte, the DOM, or Three.js.
+ * the settings menu. Nothing in this file may depend on Svelte, the DOM, or Three.js.
  *
  * Architecture: terrain is generated as a small set of large-scale *regions* (plains, rolling
  * hills, highlands, mountains) that are blended together by a very-low-frequency biome mask,

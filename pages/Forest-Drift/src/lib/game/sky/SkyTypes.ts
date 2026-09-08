@@ -92,12 +92,25 @@ export interface SkyDebugSettings {
 	showSkyOnly: boolean;
 }
 
+/**
+ * Real-time sun path. `timeOfDay` is 0 at midnight, 0.25 at sunrise, 0.5 at noon, 0.75 at sunset.
+ * Atmosphere elevation/azimuth are the noon pose of that path while the cycle is on, and the
+ * static sun pose when it is off.
+ */
+export interface DayCycleSettings {
+	enabled: boolean;
+	/** Real-time seconds for one midnight-to-midnight revolution. */
+	durationSeconds: number;
+	timeOfDay: number;
+}
+
 export interface SkySettings {
 	sky: VisibleSkySettings;
 	hdri: HdriSettings;
 	atmosphere: SunAtmosphereSettings;
 	clouds: CloudSettings;
 	debug: SkyDebugSettings;
+	dayCycle: DayCycleSettings;
 }
 
 /**
@@ -178,6 +191,12 @@ export function createDefaultSkySettings(): SkySettings {
 			showCloudBounds: false,
 			showCloudLayerWireframe: false,
 			showSkyOnly: false
+		},
+
+		dayCycle: {
+			enabled: true,
+			durationSeconds: 20 * 60,
+			timeOfDay: 0.34
 		}
 	};
 }

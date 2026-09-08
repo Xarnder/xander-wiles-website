@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
 	clampFrameDepth,
 	clampFrameWidth,
+	clampInteriorDepth,
+	FRAME_DEPTH_BEYOND_WALL,
+	WINDOW_GLASS_FRAME_OVERLAP,
 	computeDoorFrameLayout,
+	computeDoorHandlePlacement,
+	computeWindowCentreCross,
 	computeWindowFrameLayout,
 	hingeSideForOpening
 } from '../openingVisualMath';
@@ -25,8 +30,17 @@ describe('window fit', () => {
 		const opening = rect(0, 1.2, 0, 1.4);
 		const layout = computeWindowFrameLayout(opening, 0.08, 0.08, 0.15);
 
-		for (const piece of [layout.left, layout.right, layout.top, layout.bottom, layout.glass]) {
-			expectWithin(piece, opening);
+		for (const piece of [
+			layout.left,
+			layout.right,
+			layout.top,
+			layout.bottom,
+			layout.mullion,
+			layout.transom,
+			layout.glass
+		]) {
+			expect(piece).not.toBeNull();
+			expectWithin(piece!, opening);
 		}
 		// Left/right run the full opening height; top/bottom span only the gap between them.
 		expect(layout.left.minY).toBeCloseTo(opening.minY);
@@ -84,17 +98,69 @@ describe('small window', () => {
 	});
 });
 
-describe('clampFrameDepth', () => {
-	it('never exceeds the wall thickness', () => {
-		expect(clampFrameDepth(0.3, 0.1)).toBeLessThanOrEqual(0.1);
+describe('four-pane centre cross', () => {
+	it('places a vertical mullion and horizontal transom that meet at the glass centre', () => {
+		const opening = rect(0, 1.2, 0, 1.4);
+		const layout = computeWindowFrameLayout(opening, 0.08, 0.08, 0.15);
+		expect(layout.mullion).not.toBeNull();
+		expect(layout.transom).not.toBeNull();
+
+		const midU = (layout.glass.minU + layout.glass.maxU) / 2;
+		const midY = (layout.glass.minY + layout.glass.maxY) / 2;
+		expect((layout.mullion!.minU + layout.mullion!.maxU) / 2).toBeCloseTo(midU);
+		expect((layout.transom!.minY + layout.transom!.maxY) / 2).toBeCloseTo(midY);
+		expect(layout.mullion!.maxU - layout.mullion!.minU).toBeCloseTo(layout.frameWidth);
+		expect(layout.transom!.maxY - layout.transom!.minY).toBeCloseTo(layout.frameWidth);
+		expect(layout.mullion!.minY).toBeCloseTo(layout.bottom.maxY);
+		expect(layout.mullion!.maxY).toBeCloseTo(layout.top.minY);
+		expect(layout.transom!.minU).toBeCloseTo(layout.left.maxU);
+		expect(layout.transom!.maxU).toBeCloseTo(layout.right.minU);
 	});
 
-	it('prefers the configured depth when the wall is thick enough', () => {
-		expect(clampFrameDepth(0.08, 0.3)).toBeCloseTo(0.08);
+	it('overlaps the inner frame hole so glass edges sit inside the timber', () => {
+		const opening = rect(0, 1.2, 0, 1.4);
+		const layout = computeWindowFrameLayout(opening, 0.08, 0.08, 0.15);
+		expect(layout.glass.minU).toBeCloseTo(layout.left.maxU - WINDOW_GLASS_FRAME_OVERLAP);
+		expect(layout.glass.maxU).toBeCloseTo(layout.right.minU + WINDOW_GLASS_FRAME_OVERLAP);
+		expect(layout.glass.minY).toBeCloseTo(layout.bottom.maxY - WINDOW_GLASS_FRAME_OVERLAP);
+		expect(layout.glass.maxY).toBeCloseTo(layout.top.minY + WINDOW_GLASS_FRAME_OVERLAP);
+		expectWithin(layout.glass, opening);
+	});
+
+	it('does not shrink or split the glass rect — the cross sits inside one intact pane', () => {
+		const opening = rect(0, 1.2, 0, 1.4);
+		const layout = computeWindowFrameLayout(opening, 0.08, 0.08, 0.15);
+		expect(layout.glass.minU).toBeLessThan(layout.left.maxU);
+		expect(layout.glass.maxU).toBeGreaterThan(layout.right.minU);
+		expect(layout.glass.minY).toBeLessThan(layout.bottom.maxY);
+		expect(layout.glass.maxY).toBeGreaterThan(layout.top.minY);
+	});
+
+	it('omits the cross when the glass is too small to leave four panes', () => {
+		expect(computeWindowCentreCross(rect(0, 0.1, 0, 0.1), 0.08)).toBeNull();
+		expect(computeWindowCentreCross(rect(0, 0.16, 0, 0.16), 0.08)).toBeNull();
+	});
+});
+
+describe('clampFrameDepth', () => {
+	it('is always thicker than the wall so the frame sits proud of both faces', () => {
+		expect(clampFrameDepth(0.08, 0.15)).toBeGreaterThan(0.15);
+		expect(clampFrameDepth(0.08, 0.15)).toBeCloseTo(0.15 + FRAME_DEPTH_BEYOND_WALL);
+		expect(clampFrameDepth(0.01, 0.4)).toBeGreaterThan(0.4);
+	});
+
+	it('uses the configured depth when it is already thicker than the proud minimum', () => {
+		expect(clampFrameDepth(0.4, 0.1)).toBeCloseTo(0.4);
 	});
 
 	it('never returns zero or negative, even for a vanishingly thin wall', () => {
 		expect(clampFrameDepth(0.08, 0)).toBeGreaterThan(0);
+	});
+});
+
+describe('clampInteriorDepth', () => {
+	it('never exceeds the wall thickness', () => {
+		expect(clampInteriorDepth(0.3, 0.1)).toBeLessThanOrEqual(0.1);
 	});
 });
 
@@ -105,7 +171,19 @@ describe('clampFrameWidth', () => {
 });
 
 describe('door fit', () => {
-	it('the leaf fits inside the frame with the expected clearance, and never touches the jambs/lintel', () => {
+	it('the leaf fills the inner frame with no gap when clearance is 0', () => {
+		const opening = rect(0, 1.2, 0, 2.1);
+		const layout = computeDoorFrameLayout(opening, 0.08, 0.08, 0.15, 0, 'left');
+
+		expectWithin(layout.leaf, opening);
+		expect(layout.leaf.minU).toBeCloseTo(layout.left.maxU);
+		expect(layout.leaf.maxU).toBeCloseTo(layout.right.minU);
+		expect(layout.leaf.maxY).toBeCloseTo(layout.top.minY);
+		expect(layout.leaf.maxU - layout.leaf.minU).toBeCloseTo(1.2 - 0.16);
+		expect(layout.leaf.maxY - layout.leaf.minY).toBeCloseTo(2.1 - 0.08);
+	});
+
+	it('an explicit clearance insets the leaf from the jambs and lintel', () => {
 		const opening = rect(0, 1, 0, 2.1);
 		const layout = computeDoorFrameLayout(opening, 0.08, 0.08, 0.15, 0.02, 'left');
 
@@ -138,6 +216,28 @@ describe('door bottom', () => {
 		expect(layout.leaf.minY).toBeCloseTo(opening.minY);
 		expect(layout.left.minY).toBeCloseTo(opening.minY);
 		expect(layout.right.minY).toBeCloseTo(opening.minY);
+	});
+});
+
+describe('door handle placement', () => {
+	it('sits on the latch / swing half, never the hinge half', () => {
+		const left = computeDoorHandlePlacement(0.9, 2.1, 'left');
+		const right = computeDoorHandlePlacement(0.9, 2.1, 'right');
+		expect(left.localX).toBeGreaterThan(0.9 / 2);
+		expect(right.localX).toBeLessThan(-0.9 / 2);
+		expect(Math.abs(left.localX)).toBeCloseTo(Math.abs(right.localX));
+		expect(left.localX).toBeCloseTo(0.9 - 0.07);
+		expect(right.localX).toBeCloseTo(-(0.9 - 0.07));
+	});
+
+	it('aims the lever toward the hinge from the latch edge', () => {
+		expect(computeDoorHandlePlacement(0.9, 2.1, 'left').leverSign).toBe(-1);
+		expect(computeDoorHandlePlacement(0.9, 2.1, 'right').leverSign).toBe(1);
+	});
+
+	it('uses standing-reach height on a full door and mid-height on a short leaf', () => {
+		expect(computeDoorHandlePlacement(0.9, 2.1, 'left').localY).toBeCloseTo(1);
+		expect(computeDoorHandlePlacement(0.9, 0.8, 'left').localY).toBeCloseTo(0.4);
 	});
 });
 

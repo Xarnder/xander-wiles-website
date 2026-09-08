@@ -496,7 +496,7 @@ export class WallTool implements BuildTool {
 
 		const segments = computeSolidWallSegments(length, wallHeight, []);
 		this.previewGeometry?.dispose();
-		this.previewGeometry = buildWallGeometry(segments, wallThickness);
+		this.previewGeometry = buildWallGeometry(segments, wallThickness, wallHeight);
 		this.previewMesh.geometry = this.previewGeometry;
 
 		applyWallTransform(
@@ -557,7 +557,8 @@ export class WallTool implements BuildTool {
 				`Grid: ${this.buildingSettings.buildingGridSize.toFixed(2)}m`,
 				'Left click: Select start point',
 				...this.snapHudLines(),
-				'C: Cycle snap'
+				'C: Cycle snap',
+				'E customise'
 			]
 		};
 	}
@@ -618,6 +619,7 @@ export class WallTool implements BuildTool {
 				...this.snapHudLines(),
 				'Left click: Build',
 				'C: Cycle snap',
+				'E customise',
 				'Right click: Cancel'
 			]
 		};

@@ -81,9 +81,10 @@ function setup(foundationTopY = 0, terrainHeight = 0) {
 	);
 
 	const fakeDom = Object.assign(new FakeTarget(), { requestPointerLock: () => undefined });
+	const camera = new THREE.PerspectiveCamera();
 	const controller = new FirstPersonController({
 		domElement: fakeDom as unknown as HTMLElement,
-		camera: new THREE.PerspectiveCamera(),
+		camera,
 		getSupportingSurfaceY: (x, z, ref) => sampler.getSupportingSurfaceY(x, z, ref),
 		getCeilingBlockY: (x, z, from, to) => sampler.getCeilingBlockY(x, z, from, to),
 		settings: {
@@ -99,7 +100,7 @@ function setup(foundationTopY = 0, terrainHeight = 0) {
 			])
 	});
 
-	return { foundationManager, slabManager, stairManager, controller };
+	return { foundationManager, slabManager, stairManager, controller, camera };
 }
 
 /** Faces the controller toward +X ("forward" is -Z at yaw 0, rotated by yaw — see FirstPersonController.ts). */
@@ -248,5 +249,50 @@ describe('FirstPersonController — walking up/down stairs', () => {
 
 		expect(steppedOntoFoundation).toBe(true);
 		expect(reachedStairTop).toBe(true);
+	});
+});
+
+describe('FirstPersonController — walk bob', () => {
+	let fakeWindow: FakeTarget;
+	let fakeDocument: FakeTarget & { pointerLockElement: null; exitPointerLock: () => void };
+
+	beforeEach(() => {
+		fakeWindow = new FakeTarget();
+		fakeDocument = Object.assign(new FakeTarget(), {
+			pointerLockElement: null,
+			exitPointerLock: () => {}
+		});
+		vi.stubGlobal('window', fakeWindow);
+		vi.stubGlobal('document', fakeDocument);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('leaves the camera at eye height while standing still', () => {
+		const { controller, camera } = setup();
+		controller.spawn(0, 0);
+		for (let i = 0; i < 10; i++) controller.update(1 / 60);
+		expect(camera.position.y).toBeCloseTo(controller.worldPosition.y, 5);
+		expect(camera.rotation.z).toBeCloseTo(0, 5);
+	});
+
+	it('bobs the camera vertically without changing the logical player height, heading, or roll', () => {
+		const { controller, camera } = setup();
+		controller.spawn(0, 0);
+		const eye = controller.worldPosition.clone();
+		fakeWindow.dispatch('keydown', { code: 'KeyW' });
+
+		let maxAbsY = 0;
+		for (let i = 0; i < 45; i++) {
+			controller.update(1 / 60);
+			expect(controller.worldPosition.y).toBeCloseTo(eye.y, 5);
+			expect(camera.position.x).toBeCloseTo(controller.worldPosition.x, 5);
+			expect(camera.position.z).toBeCloseTo(controller.worldPosition.z, 5);
+			expect(camera.rotation.z).toBeCloseTo(0, 5);
+			maxAbsY = Math.max(maxAbsY, Math.abs(camera.position.y - eye.y));
+		}
+		expect(maxAbsY).toBeGreaterThan(0.015);
 	});
 });

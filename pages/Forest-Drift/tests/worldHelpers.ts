@@ -20,7 +20,17 @@ export async function createAndEnterWorld(
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible({
 		timeout: 20_000
 	});
-	await expect(page.getByTestId('stats-overlay')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('save-indicator')).toBeVisible({ timeout: 20_000 });
+}
+
+/** Turns on the optional render-stats overlay so tests can read FPS / geometry counts. */
+export async function enableRenderStats(page: Page): Promise<void> {
+	await page.getByTestId('settings-toggle').click();
+	await expect(page.getByTestId('settings-overlay')).toBeVisible();
+	await page.getByTestId('settings-search').fill('render stats');
+	await page.getByTestId('settings-field-graphics.stats').locator('input[type="checkbox"]').click();
+	await page.getByTestId('settings-close').click();
+	await expect(page.getByTestId('stats-overlay')).toBeVisible();
 }
 
 /** Opens an existing world from the Worlds list by its displayed name. */
@@ -50,6 +60,13 @@ export async function openWorldMenu(page: Page, name: string) {
 export async function openPauseMenu(page: Page): Promise<void> {
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('pause-menu')).toBeVisible();
+}
+
+/** Opens the in-game settings menu from the pause screen. */
+export async function openSettingsMenu(page: Page): Promise<void> {
+	await openPauseMenu(page);
+	await page.getByTestId('pause-settings').click();
+	await expect(page.getByTestId('settings-overlay')).toBeVisible();
 }
 
 /** Waits for autosave/manual save to settle, so assertions about stored data aren't racing a write. */

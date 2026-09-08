@@ -4,7 +4,11 @@ import { foundationLocalFrame } from './FoundationLocalMath';
 import type { BuildingSettings } from './FoundationTypes';
 import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { FoundationDefinition } from './FoundationTypes';
+import { buildBeamVisual } from './WallBeamBuilder';
 import { buildOpeningVisual, disposeOpeningVisual, getGlassMaterial } from './OpeningVisualBuilder';
+import { buildSkirtingForWall, disposeSkirting } from './SkirtingBuilder';
+import { wallEndpointsLocal, type RoomLid } from './skirtingMath';
+import { buildStandaloneWallFrame, disposeWallFrame } from './WallFrameBuilder';
 import type { WallCollisionRect } from './wallCollision';
 import {
 	applyWallTransform,
@@ -24,6 +28,12 @@ interface WallEntry {
 	boundsHelper: THREE.LineSegments | null;
 	/** Child of `mesh`, positioned/oriented for free by inheriting its parent's transform — holds one procedural window/door visual per opening (see OpeningVisualBuilder.ts). Rebuilt from scratch alongside the wall's own geometry, never incrementally patched, same convention as everything else here. */
 	openingVisuals: THREE.Group;
+	/** Child of `mesh` — decorative timber boards (see WallBeamBuilder.ts). Never cut into wall collision. */
+	beamVisuals: THREE.Group;
+	/** Child of `mesh`, same inherited-transform trick as `openingVisuals` — holds this wall's procedural edge framing (left/right posts + top beam, see WallFrameBuilder.ts). `null` when framing is disabled for this wall. */
+	edgeFraming: THREE.Group | null;
+	/** Child of `mesh` — interior baseboards on lid-facing faces only. `null` when this wall is not under a ceiling/floor/roof edge. */
+	skirting: THREE.Group | null;
 }
 
 export interface WallManagerOptions {
@@ -36,6 +46,8 @@ export interface WallManagerOptions {
 	buildingSettings?: BuildingSettings;
 	/** The one shared window-glass material — optional, defaulting to `getGlassMaterial()`'s own lazily-created singleton. */
 	glassMaterial?: THREE.Material;
+	/** Live lids (ceilings / floors / flat roofs) on a foundation — called at rebuild time so a slab added later can dress existing walls. Optional so tests that never place slabs can omit it. */
+	getRoomLids?: (foundationId: string) => readonly RoomLid[];
 }
 
 /**
@@ -58,6 +70,7 @@ export class WallManager {
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly glassMaterial: THREE.Material;
+	private readonly getRoomLids?: (foundationId: string) => readonly RoomLid[];
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly walls = new Map<string, WallEntry>();
@@ -72,6 +85,7 @@ export class WallManager {
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
+		this.getRoomLids = options.getRoomLids;
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -108,7 +122,7 @@ export class WallManager {
 			definition.height,
 			definition.openings
 		);
-		const geometry = buildWallGeometry(segments, definition.thickness);
+		const geometry = buildWallGeometry(segments, definition.thickness, definition.height);
 		const collisionRects = buildWallCollisionRects(segments, definition.thickness, transform);
 
 		const material = this.materialManager.getMaterial('wall', definition.material);
@@ -137,13 +151,24 @@ export class WallManager {
 		);
 
 		const openingVisuals = this.rebuildOpeningVisuals(definition, mesh, existing?.openingVisuals);
+		const beamVisuals = this.rebuildBeamVisuals(definition, mesh, existing?.beamVisuals);
+		const edgeFraming = this.rebuildEdgeFraming(
+			definition,
+			transform.length,
+			mesh,
+			existing?.edgeFraming
+		);
+		const skirting = this.rebuildSkirting(definition, mesh, existing?.skirting);
 
 		const entry: WallEntry = {
 			definition,
 			mesh,
 			collisionRects,
 			boundsHelper: existing?.boundsHelper ?? null,
-			openingVisuals
+			openingVisuals,
+			beamVisuals,
+			edgeFraming,
+			skirting
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
@@ -189,6 +214,77 @@ export class WallManager {
 		return group;
 	}
 
+	private rebuildBeamVisuals(
+		definition: WallDefinition,
+		mesh: THREE.Mesh,
+		existing: THREE.Group | undefined
+	): THREE.Group {
+		if (existing) disposeOpeningVisual(existing);
+
+		const group = new THREE.Group();
+		group.name = 'beam-visuals';
+		for (const beam of definition.beams ?? []) {
+			const visual = buildBeamVisual(
+				beam,
+				definition.thickness,
+				this.buildingSettings,
+				this.materialManager
+			);
+			if (visual) group.add(visual);
+		}
+		mesh.add(group);
+		return group;
+	}
+
+	/** Rebuilds this wall's procedural edge framing (left/right posts + top beam) — same "never incrementally patched" rebuild convention as `rebuildOpeningVisuals`, parented as a sibling child of `mesh` so it inherits the wall's own `applyWallTransform` for free. */
+	private rebuildEdgeFraming(
+		definition: WallDefinition,
+		length: number,
+		mesh: THREE.Mesh,
+		existing: THREE.Group | null | undefined
+	): THREE.Group | null {
+		if (existing) disposeWallFrame(existing);
+		const frame = buildStandaloneWallFrame(
+			length,
+			definition.height,
+			definition.thickness,
+			this.buildingSettings,
+			definition.frameStyle,
+			this.materialManager
+		);
+		if (frame) mesh.add(frame);
+		return frame;
+	}
+
+	private rebuildSkirting(
+		definition: WallDefinition,
+		mesh: THREE.Mesh,
+		existing: THREE.Group | null | undefined
+	): THREE.Group | null {
+		if (existing) disposeSkirting(existing);
+		const lids = this.getRoomLids?.(definition.foundationId) ?? [];
+		const { start, end } = wallEndpointsLocal(
+			definition.startGridX,
+			definition.startGridZ,
+			definition.endGridX,
+			definition.endGridZ,
+			this.getBuildingGridSize()
+		);
+		const group = buildSkirtingForWall(
+			start,
+			end,
+			definition.baseY,
+			definition.height,
+			definition.thickness,
+			definition.openings,
+			lids,
+			this.buildingSettings,
+			this.materialManager
+		);
+		if (group) mesh.add(group);
+		return group;
+	}
+
 	addWall(definition: WallDefinition): void {
 		const entry = this.rebuildEntry(definition);
 		if (entry) this.walls.set(definition.id, entry);
@@ -206,6 +302,9 @@ export class WallManager {
 		const entry = this.walls.get(wallId);
 		if (!entry) return false;
 		disposeOpeningVisual(entry.openingVisuals);
+		disposeOpeningVisual(entry.beamVisuals);
+		if (entry.edgeFraming) disposeWallFrame(entry.edgeFraming);
+		if (entry.skirting) disposeSkirting(entry.skirting);
 		for (const opening of entry.definition.openings) this.doorHingePivots.delete(opening.id);
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
@@ -217,6 +316,12 @@ export class WallManager {
 	/** Rebuilds every wall's opening visuals — used when a global `BuildingSettings` opening-visual default (frame width/depth, glass on/off, ...) changes in the debug GUI, per the class's "never incrementally patched" rebuild convention. */
 	rebuildAllWalls(): void {
 		for (const wallId of Array.from(this.walls.keys())) this.rebuildWall(wallId);
+	}
+
+	rebuildWallsForFoundation(foundationId: string): void {
+		for (const [wallId, entry] of this.walls) {
+			if (entry.definition.foundationId === foundationId) this.rebuildWall(wallId);
+		}
 	}
 
 	/** The hinge pivot for a door opening, if it has one — `undefined` for a window opening, a disabled/frame-less door, or an unknown id. */

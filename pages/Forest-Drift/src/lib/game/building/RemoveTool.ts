@@ -1,5 +1,7 @@
+import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import * as THREE from 'three';
 import type { BuildingManager } from './BuildingManager';
+import type { FurnitureManager } from './FurnitureManager';
 import type { BuildingRemovalManager } from './BuildingRemovalManager';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
@@ -7,7 +9,12 @@ import { applyWallTransform } from './WallGeometryBuilder';
 import { ROOF_TYPE_LABELS } from './RoofTypes';
 import { computeStairMetrics } from './stairMath';
 import { computeWallLength, wallLocalToWorld } from './wallGeometryMath';
-import type { WallDefinition, WallOpeningDefinition, WallOpeningType } from './WallTypes';
+import type {
+	WallBeamDefinition,
+	WallDefinition,
+	WallOpeningDefinition,
+	WallOpeningType
+} from './WallTypes';
 import type { BuildingPickUserData, RemovalTarget } from './RemovalTypes';
 import { removalTargetKey, resolveRemovalTarget } from './RemovalTypes';
 import type { BuildTool } from './BuildToolManager';
@@ -38,7 +45,18 @@ interface OpeningPickingProxy {
 	heightMeters: number;
 }
 
+interface BeamPickingProxy {
+	mesh: THREE.Mesh;
+	wallId: string;
+	beamId: string;
+	foundationId: string;
+	widthMeters: number;
+	heightMeters: number;
+}
+
 export interface RemoveToolOptions {
+	music?: MusicPlantPlacementTool;
+	furniture?: FurnitureManager;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	buildingManager: BuildingManager;
@@ -63,6 +81,13 @@ export interface RemoveToolOptions {
  */
 export class RemoveTool implements BuildTool {
 	readonly toolId: ToolId = 'remove';
+	private music?: MusicPlantPlacementTool;
+	private furniture?: FurnitureManager;
+	private musicId?: string;
+	private furnitureId?: string;
+	private musicHighlight = new THREE.BoxHelper(new THREE.Group(), 0xff6655);
+	private readonly furnitureHighlightMatrix = new THREE.Matrix4();
+	private readonly furnitureHighlight: THREE.Mesh;
 
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
@@ -95,12 +120,33 @@ export class RemoveTool implements BuildTool {
 	});
 
 	private openingProxies: OpeningPickingProxy[] = [];
+	private beamProxies: BeamPickingProxy[] = [];
 
 	private active = false;
 	private hoveredKey: string | null = null;
 	private hoveredTarget: RemovalTarget | null = null;
 
 	constructor(options: RemoveToolOptions) {
+		this.music = options.music;
+		this.furniture = options.furniture;
+		options.scene.add(this.musicHighlight);
+		this.musicHighlight.visible = false;
+		const furnitureHighlightGeometry = new THREE.BoxGeometry(0.14, 0.52, 0.14);
+		furnitureHighlightGeometry.translate(0, 0.26, 0);
+		this.furnitureHighlight = new THREE.Mesh(
+			furnitureHighlightGeometry,
+			new THREE.MeshBasicMaterial({
+				color: HIGHLIGHT_COLOR,
+				transparent: true,
+				opacity: 0.45,
+				depthWrite: false,
+				depthTest: false
+			})
+		);
+		this.furnitureHighlight.visible = false;
+		this.furnitureHighlight.renderOrder = 21;
+		this.furnitureHighlight.matrixAutoUpdate = false;
+		options.scene.add(this.furnitureHighlight);
 		this.scene = options.scene;
 		this.camera = options.camera;
 		this.buildingManager = options.buildingManager;
@@ -119,15 +165,19 @@ export class RemoveTool implements BuildTool {
 		this.hoveredKey = null;
 		this.hoveredTarget = null;
 		this.scene.add(this.overlayGroup);
-		this.rebuildOpeningProxies();
+		this.rebuildRemovalProxies();
 	}
 
 	deactivate(): void {
+		this.musicId = undefined;
+		this.furnitureId = undefined;
+		this.musicHighlight.visible = false;
+		this.furnitureHighlight.visible = false;
 		this.active = false;
 		this.hoveredKey = null;
 		this.hoveredTarget = null;
 		this.clearHighlight();
-		this.disposeOpeningProxies();
+		this.disposeRemovalProxies();
 		this.scene.remove(this.overlayGroup);
 		this.onHudChange?.(null);
 	}
@@ -142,10 +192,54 @@ export class RemoveTool implements BuildTool {
 			...this.buildingManager.getRaycastableWallMeshes(),
 			...this.buildingManager.getRaycastableStairMeshes(),
 			...this.buildingManager.getRaycastableRoofMeshes(),
-			...this.openingProxies.map((proxy) => proxy.mesh)
+			...this.buildingManager.getRaycastableFloorDetailMeshes(),
+			...this.openingProxies.map((proxy) => proxy.mesh),
+			...this.beamProxies.map((proxy) => proxy.mesh)
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
 		const hit = hits[0];
+		this.musicId = undefined;
+		this.furnitureId = undefined;
+		this.musicHighlight.visible = false;
+		this.furnitureHighlight.visible = false;
+		const plantHit = this.music
+			? this.raycaster.intersectObjects([...this.music.plants.visuals.values()], true)[0]
+			: undefined;
+		const furnitureHit = this.furniture
+			? this.raycaster.intersectObject(this.furniture.getPickMesh(), false)[0]
+			: undefined;
+		const furnitureCloser =
+			furnitureHit &&
+			furnitureHit.instanceId !== undefined &&
+			(!hit || furnitureHit.distance < hit.distance);
+		if (plantHit && (!hit || plantHit.distance < hit.distance) && (!furnitureHit || plantHit.distance <= furnitureHit.distance)) {
+			this.musicId = plantHit.object.userData.musicPlantId;
+			this.setHoveredTarget(null, null);
+			this.musicHighlight.setFromObject(this.music!.plants.visuals.get(this.musicId!)!);
+			this.musicHighlight.visible = true;
+			this.onHudChange?.({
+				toolId: 'remove',
+				crosshair: 'valid',
+				hintLines: ['REMOVE MUSIC PLANT', 'Click Remove · X Exit']
+			});
+			return;
+		}
+		if (furnitureCloser && furnitureHit && this.furniture) {
+			const id = this.furniture.idAtInstance(furnitureHit.instanceId!);
+			if (id && this.furniture.getInstanceWorldMatrix(furnitureHit.instanceId!, this.furnitureHighlightMatrix)) {
+				this.furnitureId = id;
+				this.setHoveredTarget(null, null);
+				this.furnitureHighlight.matrix.copy(this.furnitureHighlightMatrix);
+				this.furnitureHighlight.updateMatrixWorld(true);
+				this.furnitureHighlight.visible = true;
+				this.onHudChange?.({
+					toolId: 'remove',
+					crosshair: 'valid',
+					hintLines: ['REMOVE TORCH', 'Click Remove · X Exit']
+				});
+				return;
+			}
+		}
 		const target = hit ? resolveRemovalTarget(hit.object.userData as BuildingPickUserData) : null;
 
 		if (!target || !hit) {
@@ -159,12 +253,24 @@ export class RemoveTool implements BuildTool {
 	}
 
 	onPrimaryAction(): void {
+		if (this.active && this.musicId) {
+			this.music?.remove(this.musicId);
+			this.musicId = undefined;
+			this.musicHighlight.visible = false;
+			return;
+		}
+		if (this.active && this.furnitureId) {
+			this.furniture?.remove(this.furnitureId);
+			this.furnitureId = undefined;
+			this.furnitureHighlight.visible = false;
+			return;
+		}
 		if (!this.active || !this.hoveredTarget) return;
 		const removed = this.removalManager.remove(this.hoveredTarget);
 		if (!removed) return;
 
 		this.setHoveredTarget(null, null);
-		this.rebuildOpeningProxies();
+		this.rebuildRemovalProxies();
 	}
 
 	onSecondaryAction(): void {
@@ -176,6 +282,7 @@ export class RemoveTool implements BuildTool {
 	/** Called by BuildToolManager when the `showRemovalPickingProxies` GUI toggle changes — see its class doc comment. */
 	setShowPickingProxies(visible: boolean): void {
 		for (const proxy of this.openingProxies) proxy.mesh.visible = visible;
+		for (const proxy of this.beamProxies) proxy.mesh.visible = visible;
 	}
 
 	private setHoveredTarget(target: RemovalTarget | null, hitObject: THREE.Object3D | null): void {
@@ -219,17 +326,19 @@ export class RemoveTool implements BuildTool {
 	 * cheap at this prototype's expected opening counts, the same tradeoff every other manager in
 	 * this codebase already makes for its own rebuild-the-whole-thing operations).
 	 */
-	private rebuildOpeningProxies(): void {
-		this.disposeOpeningProxies();
+	private rebuildRemovalProxies(): void {
+		this.disposeRemovalProxies();
 
 		for (const wall of this.buildingManager.getAllWalls()) {
 			for (const opening of wall.openings) this.addOpeningProxy(wall, opening);
+			for (const beam of wall.beams ?? []) this.addBeamProxy(wall, beam);
 		}
 		for (const path of this.buildingManager.getAllWallPaths()) {
 			for (const segment of path.segments) {
 				const segmentWall = this.buildingManager.getWall(segment.id);
 				if (!segmentWall) continue;
 				for (const opening of segment.openings) this.addOpeningProxy(segmentWall, opening);
+				for (const beam of segment.beams ?? []) this.addBeamProxy(segmentWall, beam);
 			}
 		}
 	}
@@ -267,16 +376,56 @@ export class RemoveTool implements BuildTool {
 		});
 	}
 
-	private disposeOpeningProxies(): void {
+	private addBeamProxy(wall: WallDefinition, beam: WallBeamDefinition): void {
+		const transform = this.buildingManager.getWallTransform(wall.id);
+		if (!transform) return;
+
+		const width = beam.maxU - beam.minU;
+		const height = beam.maxY - beam.minY;
+		const depth = wall.thickness + OPENING_PROXY_DEPTH_BUFFER;
+
+		const geometry = new THREE.BoxGeometry(width, height, depth);
+		const mesh = new THREE.Mesh(geometry, this.proxyMaterial);
+		mesh.visible = this.buildingSettings.showRemovalPickingProxies;
+		mesh.userData.foundationId = wall.foundationId;
+		mesh.userData.wallId = wall.id;
+		mesh.userData.beamId = beam.id;
+
+		const centerU = (beam.minU + beam.maxU) / 2;
+		const centerY = (beam.minY + beam.maxY) / 2;
+		const center = wallLocalToWorld(transform, centerU, centerY, 0);
+		applyWallTransform(mesh, center.worldX, center.worldY, center.worldZ, transform.headingRadians);
+
+		this.overlayGroup.add(mesh);
+		this.beamProxies.push({
+			mesh,
+			wallId: wall.id,
+			beamId: beam.id,
+			foundationId: wall.foundationId,
+			widthMeters: width,
+			heightMeters: height
+		});
+	}
+
+	private disposeRemovalProxies(): void {
 		for (const proxy of this.openingProxies) {
 			proxy.mesh.geometry.dispose();
 			proxy.mesh.removeFromParent();
 		}
 		this.openingProxies = [];
+		for (const proxy of this.beamProxies) {
+			proxy.mesh.geometry.dispose();
+			proxy.mesh.removeFromParent();
+		}
+		this.beamProxies = [];
 	}
 
 	private findOpeningProxy(wallId: string, openingId: string): OpeningPickingProxy | undefined {
 		return this.openingProxies.find((p) => p.wallId === wallId && p.openingId === openingId);
+	}
+
+	private findBeamProxy(wallId: string, beamId: string): BeamPickingProxy | undefined {
+		return this.beamProxies.find((p) => p.wallId === wallId && p.beamId === beamId);
 	}
 
 	private buildNoTargetHud(): BuildUiState {
@@ -322,6 +471,11 @@ export class RemoveTool implements BuildTool {
 				if (!proxy) return [label];
 				return [label, `${proxy.widthMeters.toFixed(2)} × ${proxy.heightMeters.toFixed(2)}m`];
 			}
+			case 'beam': {
+				const proxy = this.findBeamProxy(target.wallId, target.beamId);
+				if (!proxy) return ['Beam'];
+				return ['Beam', `${proxy.widthMeters.toFixed(2)} × ${proxy.heightMeters.toFixed(2)}m`];
+			}
 			case 'stair': {
 				const stair = this.buildingManager.getStair(target.stairId);
 				if (!stair) return ['Stairs'];
@@ -337,6 +491,17 @@ export class RemoveTool implements BuildTool {
 				if (!roof) return ['Roof'];
 				return [ROOF_TYPE_LABELS[roof.type], `Rise ${roof.rise.toFixed(2)}m`];
 			}
+			case 'floor-detail': {
+				const detail = this.buildingManager.getFloorDetail(target.detailId);
+				if (!detail) return ['Floor detailing'];
+				const labels = {
+					carpet: 'Carpet',
+					path: 'Path',
+					planks: 'Planks',
+					tiles: 'Tiles'
+				} as const;
+				return ['Floor detailing', labels[detail.kind]];
+			}
 		}
 	}
 
@@ -348,16 +513,32 @@ export class RemoveTool implements BuildTool {
 				return 'Wall Segment';
 			case 'opening':
 				return target.openingType === 'window' ? 'Window' : 'Door';
+			case 'beam':
+				return 'Beam';
 			case 'stair':
 				return 'Stairs';
 			case 'roof': {
 				const roof = this.buildingManager.getRoof(target.roofId);
 				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';
 			}
+			case 'floor-detail': {
+				const detail = this.buildingManager.getFloorDetail(target.detailId);
+				if (!detail) return 'Floor detailing';
+				if (detail.kind === 'carpet') return 'Carpet';
+				if (detail.kind === 'path') return 'Path';
+				if (detail.kind === 'planks') return 'Planks';
+				return 'Tiles';
+			}
 		}
 	}
 
 	dispose(): void {
+		this.musicHighlight.removeFromParent();
+		this.musicHighlight.geometry.dispose();
+		(this.musicHighlight.material as THREE.Material).dispose();
+		this.furnitureHighlight.removeFromParent();
+		this.furnitureHighlight.geometry.dispose();
+		(this.furnitureHighlight.material as THREE.Material).dispose();
 		this.deactivate();
 		this.emptyGeometry.dispose();
 		this.highlightMaterial.dispose();

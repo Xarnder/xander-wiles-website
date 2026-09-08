@@ -43,6 +43,18 @@ describe('migrateWorld', () => {
 		expect(JSON.stringify(world)).toBe(before);
 	});
 
+	it('adds an empty furniture list when migrating schema 5 worlds', () => {
+		const old = { ...richWorld(), schemaVersion: 5 };
+		delete (old as { furniture?: unknown }).furniture;
+		const result = migrateWorld(old);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.migrated).toBe(true);
+		expect(result.value.schemaVersion).toBe(CURRENT_WORLD_SCHEMA_VERSION);
+		expect(result.value.furniture).toEqual([]);
+		expect(validateWorldDefinition(result.value).ok).toBe(true);
+	});
+
 	it('produces a world that still passes validation after migrating', () => {
 		const result = migrateWorld(richWorld());
 		expect(result.ok).toBe(true);

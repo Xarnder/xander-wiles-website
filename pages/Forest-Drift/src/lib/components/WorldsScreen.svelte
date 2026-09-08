@@ -131,6 +131,7 @@
 	class="worlds-screen"
 	data-testid="worlds-screen"
 	class:drag-active={dragActive}
+	aria-busy={busy}
 	role="presentation"
 	ondragover={(event) => {
 		event.preventDefault();
@@ -166,6 +167,10 @@
 			/>
 		</div>
 	</header>
+
+	{#if busy}
+		<div class="worlds-busy" data-testid="worlds-busy">Working…</div>
+	{/if}
 
 	{#if error}
 		<div class="worlds-error" data-testid="worlds-error" role="alert">
@@ -477,6 +482,18 @@
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		opacity: 0.7;
+	}
+
+	.worlds-busy {
+		max-width: 46rem;
+		margin: 0 auto 1rem;
+		padding: 0.5rem 0.9rem;
+		border-radius: 8px;
+		background: rgba(12, 28, 20, 0.8);
+		border: 1px solid rgba(159, 224, 184, 0.35);
+		color: #cfe8d8;
+		font-size: 0.82rem;
+		text-align: center;
 	}
 
 	.worlds-error {

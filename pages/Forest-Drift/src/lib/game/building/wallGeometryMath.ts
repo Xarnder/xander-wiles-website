@@ -1,6 +1,5 @@
 import { buildingGridToLocal } from './FoundationLocalMath';
 import type { FoundationLocalFrame } from './FoundationLocalMath';
-import type { WallOpeningDefinition } from './WallTypes';
 
 const EPSILON = 1e-6;
 
@@ -266,10 +265,10 @@ export function doOpeningsOverlap(a: OpeningRect, b: OpeningRect, spacing = 0): 
 }
 
 /** Every one of `existingOpenings` must not overlap `candidate`, honoring the configured minimum spacing. */
-export function findOverlappingOpening(
+export function findOverlappingOpening<T extends OpeningRect>(
 	candidate: OpeningRect,
-	existingOpenings: readonly WallOpeningDefinition[],
+	existingOpenings: readonly T[],
 	spacing: number
-): WallOpeningDefinition | undefined {
+): T | undefined {
 	return existingOpenings.find((existing) => doOpeningsOverlap(candidate, existing, spacing));
 }

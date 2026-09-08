@@ -4,7 +4,22 @@ import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUndoManager } from './BuildUndoManager';
-import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
+import {
+	isCustomizablePlacementTool,
+	placementColorForTool,
+	type BuildingSettings,
+	type BuildUiState,
+	type ToolId
+} from './FoundationTypes';
+import { colorMaterialFromHex } from './MaterialTypes';
+import {
+	cycleOpeningDivisionSnap,
+	openingDivisionPoints,
+	openingDivisionSnapBadge,
+	snapOpeningCenterU,
+	type OpeningDivisionSnapMode
+} from './openingDivisionSnap';
+import { cycleBeamOrientation } from './beamMath';
 import type { OpeningWallCandidate } from './openingWallPick';
 import { isWallOnLevel, pickOpeningWall } from './openingWallPick';
 import { applyWallTransform } from './WallGeometryBuilder';
@@ -28,13 +43,18 @@ export interface OpeningVerticalExtent {
 	maxY: number;
 }
 
-/** What differs between Window Tool and Door Tool — everything else (raycasting, snapping, overlap/bounds validation, preview, HUD) is shared. */
+/** What differs between Window, Door, and Beam tools — everything else (raycasting, snapping, overlap/bounds validation, preview, HUD) is shared. */
 export interface OpeningToolConfig {
-	toolId: 'window' | 'door';
-	openingType: WallOpeningType;
+	toolId: 'window' | 'door' | 'beam';
+	placeKind: 'opening' | 'beam';
+	openingType?: WallOpeningType;
 	label: string;
 	getWidth: (settings: BuildingSettings) => number;
-	getVerticalExtent: (settings: BuildingSettings) => OpeningVerticalExtent;
+	getVerticalExtent: (
+		settings: BuildingSettings,
+		lookY: number,
+		wallHeight: number
+	) => OpeningVerticalExtent;
 	dimensionsHint: (settings: BuildingSettings) => string;
 }
 
@@ -50,10 +70,11 @@ interface Target {
 }
 
 /**
- * Shared implementation behind WindowTool/DoorTool: raycast against wall meshes only (never
+ * Shared implementation behind WindowTool/DoorTool/BeamTool: raycast against wall meshes only (never
  * terrain/foundation), convert the hit into that wall's local (U, Y) coordinates, snap
- * horizontally to `openingGridSize`, validate against the SAME bounds/overlap rules
- * BuildingManager.addOpening enforces authoritatively, and preview/confirm. Stays in a single
+ * horizontally (`openingGridSize` by default, or even splits of this wall's length via `C` — see
+ * openingDivisionSnap.ts), validate against the SAME bounds/overlap rules
+ * BuildingManager.addOpening / addBeam enforces authoritatively, and preview/confirm. Stays in a single
  * "idle" state re-evaluated every frame, per the spec — there's no two-click sequence for openings.
  *
  * The wall an opening applies to is always the one directly in front of the crosshair, and it is
@@ -91,9 +112,40 @@ export class OpeningToolBase implements BuildTool {
 	private highlightGeometry: THREE.EdgesGeometry | null = null;
 	private readonly highlightMesh: THREE.LineSegments;
 
+	private readonly ticksMaterial = new THREE.LineBasicMaterial({
+		color: 0x7ad4c6,
+		transparent: true,
+		opacity: 0.9,
+		depthTest: false
+	});
+	private ticksGeometry: THREE.BufferGeometry | null = null;
+	private readonly ticksMesh: THREE.LineSegments;
+
 	private active = false;
 	private hoveredWallId: string | null = null;
 	private target: Target | null = null;
+	/**
+	 * Cycled by pressing `C` — see openingDivisionSnap.ts. Persists across deactivate/reactivate so
+	 * switching away from Window/Door and back doesn't dump you back to metre-grid snap.
+	 */
+	private snapMode: OpeningDivisionSnapMode = 'grid';
+
+	private readonly handleKeyDown = (event: KeyboardEvent) => {
+		if (!this.active || event.repeat) return;
+		if (event.metaKey || event.ctrlKey || event.altKey) return;
+		if (isTypingTarget(event.target)) return;
+		if (event.code === 'KeyC') {
+			this.snapMode = cycleOpeningDivisionSnap(this.snapMode);
+			this.update();
+			return;
+		}
+		if (event.code === 'KeyR' && this.config.toolId === 'beam') {
+			this.buildingSettings.beamOrientation = cycleBeamOrientation(
+				this.buildingSettings.beamOrientation
+			);
+			this.update();
+		}
+	};
 
 	constructor(
 		config: OpeningToolConfig,
@@ -126,7 +178,11 @@ export class OpeningToolBase implements BuildTool {
 		this.highlightMesh = new THREE.LineSegments(new THREE.BufferGeometry(), this.highlightMaterial);
 		this.highlightMesh.visible = false;
 
-		this.overlayGroup.add(this.previewMesh, this.highlightMesh);
+		this.ticksMesh = new THREE.LineSegments(new THREE.BufferGeometry(), this.ticksMaterial);
+		this.ticksMesh.renderOrder = 7;
+		this.ticksMesh.visible = false;
+
+		this.overlayGroup.add(this.previewMesh, this.highlightMesh, this.ticksMesh);
 	}
 
 	activate(): void {
@@ -134,6 +190,7 @@ export class OpeningToolBase implements BuildTool {
 		this.hoveredWallId = null;
 		this.target = null;
 		this.scene.add(this.overlayGroup);
+		window.addEventListener('keydown', this.handleKeyDown);
 		this.onHudChange?.(this.buildIdleHud());
 	}
 
@@ -143,7 +200,9 @@ export class OpeningToolBase implements BuildTool {
 		this.target = null;
 		this.previewMesh.visible = false;
 		this.highlightMesh.visible = false;
+		this.clearDivisionTicks();
 		this.scene.remove(this.overlayGroup);
+		window.removeEventListener('keydown', this.handleKeyDown);
 		this.onHudChange?.(null);
 	}
 
@@ -212,6 +271,7 @@ export class OpeningToolBase implements BuildTool {
 			this.setHoveredWall(null);
 			this.target = null;
 			this.previewMesh.visible = false;
+			this.clearDivisionTicks();
 			this.onHudChange?.(this.buildIdleHud());
 			return;
 		}
@@ -231,6 +291,7 @@ export class OpeningToolBase implements BuildTool {
 			// never quietly redirect the opening to some other wall the player isn't looking at.
 			this.target = null;
 			this.previewMesh.visible = false;
+			this.clearDivisionTicks();
 			this.onHudChange?.(
 				this.buildInvalidHud(
 					`Wall is on ${this.levelNameForWall(wall.foundationId, wall.baseY)}`,
@@ -244,17 +305,11 @@ export class OpeningToolBase implements BuildTool {
 		if (!transform) {
 			this.target = null;
 			this.previewMesh.visible = false;
+			this.clearDivisionTicks();
 			return;
 		}
 
 		const hitLocal = worldToWallLocal(transform, hit.point.x, hit.point.y, hit.point.z);
-		const gridSize = this.buildingSettings.openingGridSize;
-		const centerU = Math.round(hitLocal.u / gridSize) * gridSize;
-		const width = this.config.getWidth(this.buildingSettings);
-		const minU = centerU - width / 2;
-		const maxU = centerU + width / 2;
-		const { minY, maxY } = this.config.getVerticalExtent(this.buildingSettings);
-
 		const wallLength = computeWallLength(
 			{
 				startGridX: wall.startGridX,
@@ -264,6 +319,21 @@ export class OpeningToolBase implements BuildTool {
 			},
 			this.buildingSettings.buildingGridSize
 		);
+		const centerU = snapOpeningCenterU(
+			hitLocal.u,
+			wallLength,
+			this.snapMode,
+			this.buildingSettings.openingGridSize
+		);
+		const width = this.config.getWidth(this.buildingSettings);
+		const minU = centerU - width / 2;
+		const maxU = centerU + width / 2;
+		const { minY, maxY } = this.config.getVerticalExtent(
+			this.buildingSettings,
+			hitLocal.y,
+			wall.height
+		);
+		this.updateDivisionTicks(transform, wall.height, wallLength);
 
 		const candidate = { minU, maxU, minY, maxY };
 		const { startMargin, endMargin } = this.buildingManager.getOpeningMargins(
@@ -277,43 +347,75 @@ export class OpeningToolBase implements BuildTool {
 			startMargin,
 			endMargin
 		);
-		let reason = valid ? undefined : 'Opening does not fit';
+		const fitLabel = this.config.placeKind === 'beam' ? 'Beam' : 'Opening';
+		let reason = valid ? undefined : `${fitLabel} does not fit`;
 
 		if (valid) {
-			const overlap = wall.openings.find((existing) =>
-				doOpeningsOverlap(candidate, existing, this.buildingSettings.openingSpacing)
-			);
-			if (overlap) {
-				valid = false;
-				reason = `Opening overlaps existing ${overlap.type}`;
+			if (this.config.placeKind === 'beam') {
+				const overlap = (wall.beams ?? []).find((existing) =>
+					doOpeningsOverlap(candidate, existing, this.buildingSettings.openingSpacing)
+				);
+				if (overlap) {
+					valid = false;
+					reason = 'Beam overlaps existing beam';
+				}
+			} else {
+				const overlap = wall.openings.find((existing) =>
+					doOpeningsOverlap(candidate, existing, this.buildingSettings.openingSpacing)
+				);
+				if (overlap) {
+					valid = false;
+					reason = `Opening overlaps existing ${overlap.type}`;
+				}
 			}
 		}
 
 		this.target = { wallId, centerU, minU, maxU, minY, maxY, valid, reason };
-		this.updatePreview(transform);
+		this.updatePreview(transform, wall.thickness);
 		this.onHudChange?.(valid ? this.buildValidHud(wallLength) : this.buildInvalidHud(reason ?? ''));
 	}
 
 	onPrimaryAction(): void {
 		if (!this.active || !this.target || !this.target.valid) return;
 
-		const result = this.buildingManager.addOpening({
-			wallId: this.target.wallId,
-			type: this.config.openingType,
-			minU: this.target.minU,
-			maxU: this.target.maxU,
-			minY: this.target.minY,
-			maxY: this.target.maxY,
-			edgeMargin: this.buildingSettings.openingEdgeMargin,
-			spacing: this.buildingSettings.openingSpacing
-		});
-
-		if (!result.valid || !result.value) return;
-		this.undoManager.record({
-			kind: 'opening',
-			wallId: this.target.wallId,
-			openingId: result.value.id
-		});
+		if (this.config.placeKind === 'beam') {
+			const result = this.buildingManager.addBeam({
+				wallId: this.target.wallId,
+				minU: this.target.minU,
+				maxU: this.target.maxU,
+				minY: this.target.minY,
+				maxY: this.target.maxY,
+				edgeMargin: this.buildingSettings.openingEdgeMargin,
+				spacing: this.buildingSettings.openingSpacing,
+				material: this.placementMaterial()
+			});
+			if (!result.valid || !result.value) return;
+			this.undoManager.record({
+				kind: 'beam',
+				wallId: this.target.wallId,
+				beamId: result.value.id
+			});
+		} else {
+			const openingType = this.config.openingType;
+			if (!openingType) return;
+			const result = this.buildingManager.addOpening({
+				wallId: this.target.wallId,
+				type: openingType,
+				minU: this.target.minU,
+				maxU: this.target.maxU,
+				minY: this.target.minY,
+				maxY: this.target.maxY,
+				edgeMargin: this.buildingSettings.openingEdgeMargin,
+				spacing: this.buildingSettings.openingSpacing,
+				material: this.placementMaterial()
+			});
+			if (!result.valid || !result.value) return;
+			this.undoManager.record({
+				kind: 'opening',
+				wallId: this.target.wallId,
+				openingId: result.value.id
+			});
+		}
 		this.previewMesh.visible = false;
 		this.target = null;
 	}
@@ -346,14 +448,18 @@ export class OpeningToolBase implements BuildTool {
 		this.highlightMesh.visible = true;
 	}
 
-	private updatePreview(transform: WallTransform): void {
+	private updatePreview(transform: WallTransform, wallThickness: number): void {
 		if (!this.target) return;
 		const width = this.target.maxU - this.target.minU;
 		const height = this.target.maxY - this.target.minY;
 		const centerY = (this.target.minY + this.target.maxY) / 2;
+		const depth =
+			this.config.placeKind === 'beam'
+				? wallThickness + 2 * this.buildingSettings.beamDepthExtra + 0.02
+				: 0.19;
 
 		this.previewGeometry?.dispose();
-		this.previewGeometry = new THREE.BoxGeometry(width, height, 0.19);
+		this.previewGeometry = new THREE.BoxGeometry(width, height, depth);
 		this.previewMesh.geometry = this.previewGeometry;
 
 		const center = wallLocalToWorld(transform, this.target.centerU, centerY, 0);
@@ -381,6 +487,44 @@ export class OpeningToolBase implements BuildTool {
 		return foundationId ? this.levelManager.getLevelUiState(foundationId) : undefined;
 	}
 
+	private hudSnapFields(): Pick<BuildUiState, 'snapBadge'> {
+		const snapBadge = openingDivisionSnapBadge(this.snapMode);
+		return snapBadge ? { snapBadge } : {};
+	}
+
+	private updateDivisionTicks(
+		transform: WallTransform,
+		wallHeight: number,
+		wallLength: number
+	): void {
+		const points = openingDivisionPoints(wallLength, this.snapMode);
+		if (points.length === 0) {
+			this.clearDivisionTicks();
+			return;
+		}
+		const positions = new Float32Array(points.length * 6);
+		for (let i = 0; i < points.length; i++) {
+			const bottom = wallLocalToWorld(transform, points[i], 0.02, 0);
+			const top = wallLocalToWorld(transform, points[i], Math.max(0.04, wallHeight - 0.02), 0);
+			const offset = i * 6;
+			positions[offset] = bottom.worldX;
+			positions[offset + 1] = bottom.worldY;
+			positions[offset + 2] = bottom.worldZ;
+			positions[offset + 3] = top.worldX;
+			positions[offset + 4] = top.worldY;
+			positions[offset + 5] = top.worldZ;
+		}
+		this.ticksGeometry?.dispose();
+		this.ticksGeometry = new THREE.BufferGeometry();
+		this.ticksGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		this.ticksMesh.geometry = this.ticksGeometry;
+		this.ticksMesh.visible = true;
+	}
+
+	private clearDivisionTicks(): void {
+		this.ticksMesh.visible = false;
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: this.toolId,
@@ -392,8 +536,12 @@ export class OpeningToolBase implements BuildTool {
 				'',
 				this.config.dimensionsHint(this.buildingSettings),
 				'',
-				'Look at a wall'
-			]
+				'Look at a wall',
+				'C cycle snap',
+				...(this.config.toolId === 'beam' ? ['R rotate'] : []),
+				'E customise'
+			],
+			...this.hudSnapFields()
 		};
 	}
 
@@ -408,8 +556,12 @@ export class OpeningToolBase implements BuildTool {
 				`Wall: ${wallLength.toFixed(2)}m`,
 				this.config.dimensionsHint(this.buildingSettings),
 				'',
-				'Click wall to place'
-			]
+				'Click wall to place',
+				'C cycle snap',
+				...(this.config.toolId === 'beam' ? ['R rotate'] : []),
+				'E customise'
+			],
+			...this.hudSnapFields()
 		};
 	}
 
@@ -419,8 +571,16 @@ export class OpeningToolBase implements BuildTool {
 			level: this.currentLevelUiState(),
 			crosshair: 'invalid',
 			notice: hint ? `${reason} · ${hint}` : reason,
-			hintLines: hint ? [this.config.label, '', reason, '', hint] : [this.config.label, '', reason]
+			hintLines: hint ? [this.config.label, '', reason, '', hint] : [this.config.label, '', reason],
+			...this.hudSnapFields()
 		};
+	}
+
+	private placementMaterial() {
+		const toolId = this.config.toolId;
+		if (!isCustomizablePlacementTool(toolId)) return undefined;
+		const color = placementColorForTool(this.buildingSettings, toolId);
+		return color ? colorMaterialFromHex(color) : undefined;
 	}
 
 	dispose(): void {
@@ -429,5 +589,16 @@ export class OpeningToolBase implements BuildTool {
 		this.previewMaterial.dispose();
 		this.highlightGeometry?.dispose();
 		this.highlightMaterial.dispose();
+		this.ticksGeometry?.dispose();
+		this.ticksMaterial.dispose();
 	}
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+	if (!target || typeof target !== 'object') return false;
+	const element = target as { tagName?: string; isContentEditable?: boolean };
+	const tag = element.tagName;
+	return (
+		tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable === true
+	);
 }

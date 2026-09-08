@@ -14,6 +14,7 @@
 		onDuplicate: () => void;
 		onQuit: () => void;
 		onOpenSettings: () => void;
+		onOpenControls: () => void;
 	}
 
 	const {
@@ -28,7 +29,8 @@
 		onExport,
 		onDuplicate,
 		onQuit,
-		onOpenSettings
+		onOpenSettings,
+		onOpenControls
 	}: Props = $props();
 
 	type Panel = 'root' | 'world' | 'rename';
@@ -78,6 +80,7 @@
 				<button data-testid="pause-save" onclick={onSave} disabled={busy}>Save</button>
 				<button data-testid="pause-world" onclick={() => (panel = 'world')}>World</button>
 				<button data-testid="pause-settings" onclick={onOpenSettings}>Settings</button>
+				<button data-testid="pause-controls" onclick={onOpenControls}>Controls</button>
 				<button class="danger" data-testid="pause-quit" onclick={onQuit} disabled={busy}>
 					Quit to Worlds
 				</button>

@@ -7,8 +7,15 @@ export type BuildAction =
 	| { kind: 'wall'; wallId: string }
 	| { kind: 'wallPath'; pathId: string }
 	| { kind: 'opening'; wallId: string; openingId: string }
+	| { kind: 'beam'; wallId: string; beamId: string }
 	| { kind: 'slab'; slabId: string }
-	| { kind: 'roof'; roofId: string };
+	| { kind: 'roof'; roofId: string }
+	| { kind: 'floorDetail'; detailId: string }
+	| { kind: 'furniture'; furnitureId: string };
+
+export interface BuildUndoManagerOptions {
+	removeFurniture?: (id: string) => boolean;
+}
 
 /**
  * A small LIFO stack of the last few successful placements (wall, continuous/polygon wall,
@@ -24,6 +31,7 @@ export type BuildAction =
  */
 export class BuildUndoManager {
 	private readonly buildingManager: BuildingManager;
+	private readonly removeFurniture?: (id: string) => boolean;
 	private readonly history: BuildAction[] = [];
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
@@ -32,8 +40,9 @@ export class BuildUndoManager {
 		}
 	};
 
-	constructor(buildingManager: BuildingManager) {
+	constructor(buildingManager: BuildingManager, options: BuildUndoManagerOptions = {}) {
 		this.buildingManager = buildingManager;
+		this.removeFurniture = options.removeFurniture;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
@@ -54,10 +63,16 @@ export class BuildUndoManager {
 				return this.buildingManager.removeWallPath(action.pathId);
 			case 'opening':
 				return this.buildingManager.removeOpening(action.wallId, action.openingId);
+			case 'beam':
+				return this.buildingManager.removeBeam(action.wallId, action.beamId);
 			case 'slab':
 				return this.buildingManager.removeSlab(action.slabId);
 			case 'roof':
 				return this.buildingManager.removeRoof(action.roofId);
+			case 'floorDetail':
+				return this.buildingManager.removeFloorDetail(action.detailId);
+			case 'furniture':
+				return this.removeFurniture?.(action.furnitureId) ?? false;
 		}
 	}
 

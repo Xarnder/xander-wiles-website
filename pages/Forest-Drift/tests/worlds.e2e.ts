@@ -62,7 +62,7 @@ test('a created world survives a full page reload with its terrain seed intact',
 	await expect(card).toContainText('stubborn-ridge-77');
 
 	await openWorldNamed(page, 'Persisted World');
-	await expect(page.getByTestId('stats-overlay')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('save-indicator')).toBeVisible({ timeout: 20_000 });
 });
 
 test('the pause menu saves on demand and reports the result', async ({ page }) => {

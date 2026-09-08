@@ -1,3 +1,5 @@
+import { migrateCreaturesV4 } from '../creatures/CreaturePersistence';
+import { migrateMusicV3 } from '../music/MusicMigration';
 import { CURRENT_WORLD_SCHEMA_VERSION } from './WorldTypes';
 
 export type MigrationResult =
@@ -20,12 +22,30 @@ type MigrationStep = (world: Record<string, unknown>) => Record<string, unknown>
  * codebase should branch on schema version — the runtime managers only ever see current-schema data,
  * which is why migration lives here and not scattered through the building managers.
  *
- * Empty today because v1 is the first schema. It exists anyway, and is exercised by tests, so the
- * first real migration is a one-line addition rather than a retrofit.
+ * Version 2 adds deterministic Music Tree and plant definitions to version 1 saves.
+ * Version 3 adds `durationSteps` (sustained-note length) to every music plant from version 2 saves —
+ * defaulting to `1`, the shortest playable note, reproduces the exact one-shot behaviour those plants
+ * already had before sustain existed.
+ * Version 6 adds world-space furniture (torches first) to version 5 saves.
  */
 const MIGRATIONS: Record<number, MigrationStep> = {
-	// Example of the intended shape, for whoever adds v2:
-	// 1: (world) => ({ ...world, schemaVersion: 2, newField: defaultValue })
+	5: (world) => ({
+		...world,
+		schemaVersion: 6,
+		furniture: Array.isArray(world.furniture) ? world.furniture : []
+	}),
+	4: migrateCreaturesV4,
+	3: migrateMusicV3,
+	1: (world) => ({ ...world, schemaVersion: 2, musicTrees: [], musicPlants: [] }),
+	2: (world) => ({
+		...world,
+		schemaVersion: 3,
+		musicPlants: Array.isArray(world.musicPlants)
+			? world.musicPlants.map((p) =>
+					p && typeof p === 'object' && !('durationSteps' in p) ? { ...p, durationSteps: 1 } : p
+				)
+			: world.musicPlants
+	})
 };
 
 /**

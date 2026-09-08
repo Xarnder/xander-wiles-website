@@ -1,3 +1,6 @@
+import type { CreatureWorldState } from '../creatures/CreatureTypes';
+import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
+import type { FurnitureDefinition } from '../building/FurnitureTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
@@ -11,7 +14,7 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 1;
+export const CURRENT_WORLD_SCHEMA_VERSION = 6;
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';
@@ -95,6 +98,11 @@ export interface WorldDefinition {
 	environment: WorldEnvironmentDefinition;
 
 	/** Player-authored content — cannot be regenerated from the seed, so it is stored in full. */
+	/** Ecology settings and explicitly persistent recipes; ambient fauna are never saved. */
+	creatures: CreatureWorldState;
+	musicTrees: MusicTreeDefinition[];
+	musicPlants: MusicPlantDefinition[];
+	furniture: FurnitureDefinition[];
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
 	buildingLevels: BuildingLevelDefinition[];

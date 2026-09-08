@@ -22,9 +22,11 @@ export interface WorldSessionOptions {
 	onPointerLockChange?: (locked: boolean) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
+	onLookedAtDoorChange?: (openingId: string | null) => void;
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
+	onPlacementCustomizeChange?: (open: boolean) => void;
 }
 
 /**
@@ -61,9 +63,11 @@ export class WorldSession {
 			onPointerLockChange: options.onPointerLockChange,
 			onHotbarChange: options.onHotbarChange,
 			onBuildHudChange: options.onBuildHudChange,
+			onLookedAtDoorChange: options.onLookedAtDoorChange,
 			onPaintPaletteChange: options.onPaintPaletteChange,
 			onPaintStateChange: options.onPaintStateChange,
-			onGraphicsQualityChange: options.onGraphicsQualityChange
+			onGraphicsQualityChange: options.onGraphicsQualityChange,
+			onPlacementCustomizeChange: options.onPlacementCustomizeChange
 		});
 
 		this.autosave = new WorldAutosaveManager({
@@ -91,6 +95,7 @@ export class WorldSession {
 
 	/** Flushes and resolves once the world is actually written. Used by manual save, Cmd/Ctrl+S, the pause menu, and quitting. */
 	async saveNow(trigger: SaveTrigger = 'manual'): Promise<{ ok: boolean; error?: string }> {
+		this.scene.markClockDirtyIfNeeded();
 		return this.autosave.saveNow(trigger);
 	}
 
@@ -119,11 +124,13 @@ export class WorldSession {
 	 */
 	private readonly handleVisibilityChange = (): void => {
 		if (document.visibilityState !== 'hidden') return;
+		this.scene.markClockDirtyIfNeeded();
 		if (!this.autosave.hasUnsavedChanges()) return;
 		void this.autosave.saveNow('lifecycle');
 	};
 
 	private readonly handlePageHide = (): void => {
+		this.scene.markClockDirtyIfNeeded();
 		if (!this.autosave.hasUnsavedChanges()) return;
 		void this.autosave.saveNow('lifecycle');
 	};

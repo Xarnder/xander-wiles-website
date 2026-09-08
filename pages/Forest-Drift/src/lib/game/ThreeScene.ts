@@ -1,3 +1,6 @@
+import { timelineDefinition } from './music/MusicModel';
+import { MusicPlantPlacementTool } from './music/MusicPlantPlacementTool';
+import { createDefaultSustainSettings, type SustainSettings } from './music/SustainTrailBuilder';
 import * as THREE from 'three';
 import { BuildingLevelManager } from './building/BuildingLevelManager';
 import { BuildingMaterialManager } from './building/BuildingMaterialManager';
@@ -8,8 +11,14 @@ import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
 import { CeilingTool } from './building/CeilingTool';
 import { DoorInteractionController } from './building/DoorInteractionController';
+import { BeamTool } from './building/BeamTool';
 import { DoorTool } from './building/DoorTool';
+import { FloorDetailManager } from './building/FloorDetailManager';
+import { FloorDetailTool } from './building/FloorDetailTool';
 import { FloorTool } from './building/FloorTool';
+import { FurnitureManager } from './building/FurnitureManager';
+import { FurnitureTool } from './building/FurnitureTool';
+import type { FurnitureDefinition } from './building/FurnitureTypes';
 import { FoundationManager } from './building/FoundationManager';
 import { FoundationTool } from './building/FoundationTool';
 import type {
@@ -27,7 +36,9 @@ import { PolygonWallTool } from './building/PolygonWallTool';
 import { RemoveTool } from './building/RemoveTool';
 import { RoofManager } from './building/RoofManager';
 import { RoofTool } from './building/RoofTool';
+import { roomLidsFromSlabs } from './building/skirtingMath';
 import { SlabManager } from './building/SlabManager';
+import { StairLevelTrigger } from './building/StairLevelTrigger';
 import { StairManager, stairMaterial } from './building/StairManager';
 import { StairTool } from './building/StairTool';
 import { resolvePlayerPositionAgainstWalls } from './building/wallCollision';
@@ -36,8 +47,11 @@ import { WallPathManager } from './building/WallPathManager';
 import { WallTool } from './building/WallTool';
 import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
-import { TerrainDebugGui } from './debug/TerrainDebugGui';
 import { GraphicsPipeline } from './graphics/GraphicsPipeline';
+import {
+	createDefaultMusicVisualSettings,
+	type GameSettingsHost
+} from './settings/GameSettingsHost';
 import { GraphicsSettingsStore } from './graphics/GraphicsSettingsStore';
 import {
 	createDefaultGraphicsSettings,
@@ -49,6 +63,12 @@ import {
 } from './graphics/GraphicsTypes';
 import { FirstPersonController } from './player/FirstPersonController';
 import { resolveFogColor } from './sky/atmosphereMath';
+import {
+	advanceTimeOfDay,
+	ensureDayCycleSettings,
+	resolveEffectiveSky,
+	type EffectiveSkyLook
+} from './sky/dayNightMath';
 import { CloudSystem } from './sky/CloudSystem';
 import { HdriEnvironmentSystem } from './sky/HdriEnvironmentSystem';
 import { SkySystem } from './sky/SkySystem';
@@ -79,11 +99,11 @@ const SUN_LIGHT_DISTANCE = 300;
  * Recursively copies `source`'s own values into `target`, keeping `target`'s object identity at
  * every level.
  *
- * Loading a world must not swap the settings *objects*: every manager, build tool and lil-gui
- * controller captured a reference to the exact instances created at startup, so replacing them would
+ * Loading a world must not swap the settings *objects*: every manager, build tool and the settings
+ * menu captured a reference to the exact instances created at startup, so replacing them would
  * leave half the game reading a settings object nothing else can see. Assigning into them in place
- * keeps one authoritative instance per settings tree, which is the same reason the debug GUI mutates
- * these objects rather than emitting new ones.
+ * keeps one authoritative instance per settings tree, which is the same reason the settings menu
+ * mutates these objects rather than emitting new ones.
  */
 function deepAssign<T extends object>(target: T, source: Partial<T>): void {
 	for (const [key, value] of Object.entries(source)) {
@@ -134,6 +154,9 @@ export interface SceneStats {
 	aoEnabled: boolean;
 	aoQuality: AoQuality;
 	antialiasing: AntiAliasMode;
+	showRenderStats: boolean;
+	dayCycleEnabled: boolean;
+	timeOfDay: number;
 }
 
 export interface ThreeSceneOptions {
@@ -146,9 +169,11 @@ export interface ThreeSceneOptions {
 	onPointerLockChange?: (locked: boolean) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
+	onLookedAtDoorChange?: (openingId: string | null) => void;
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
+	onPlacementCustomizeChange?: (open: boolean) => void;
 	/**
 	 * The world to open. Its `environment` settings are copied into the live settings objects and
 	 * its authored content is loaded, so the scene starts as an exact reproduction of the save
@@ -171,6 +196,10 @@ export interface ThreeSceneOptions {
  * multiplayer-compatible. That rebasing step is intentionally not implemented yet.
  */
 export class ThreeScene implements WorldRuntime {
+	devPanelOpen = false;
+	/** Pause menu: the render loop keeps running, but the day/night clock does not. */
+	simulationPaused = false;
+	readonly buildingSettings: BuildingSettings;
 	private readonly container: HTMLElement;
 	private readonly settings: TerrainSettings;
 	private readonly vegetationSettings: VegetationSettings;
@@ -188,7 +217,10 @@ export class ThreeScene implements WorldRuntime {
 	private readonly wallPathManager: WallPathManager;
 	private readonly slabManager: SlabManager;
 	private readonly stairManager: StairManager;
+	private readonly stairLevelTrigger: StairLevelTrigger;
 	private readonly roofManager: RoofManager;
+	private readonly floorDetailManager: FloorDetailManager;
+	private readonly furnitureManager: FurnitureManager;
 	private readonly levelManager: BuildingLevelManager;
 	private readonly undoManager: BuildUndoManager;
 	private readonly buildingManager: BuildingManager;
@@ -199,16 +231,25 @@ export class ThreeScene implements WorldRuntime {
 	private readonly wallTool: WallTool;
 	private readonly windowTool: WindowTool;
 	private readonly doorTool: DoorTool;
+	private readonly beamTool: BeamTool;
 	private readonly doorInteraction: DoorInteractionController;
 	private readonly polygonWallTool: PolygonWallTool;
 	private readonly ceilingTool: CeilingTool;
 	private readonly floorTool: FloorTool;
 	private readonly roofTool: RoofTool;
 	private readonly stairTool: StairTool;
+	private readonly floorCarpetTool: FloorDetailTool;
+	private readonly floorPathTool: FloorDetailTool;
+	private readonly floorPlanksTool: FloorDetailTool;
+	private readonly floorTilesTool: FloorDetailTool;
+	private readonly furnitureTool: FurnitureTool;
+	readonly music: MusicPlantPlacementTool;
+	readonly sustainSettings: SustainSettings;
+	readonly musicVisual = createDefaultMusicVisualSettings();
+	readonly settingsHost: GameSettingsHost;
 	private readonly removeTool: RemoveTool;
 	private readonly paintTool: PaintTool;
 	private readonly buildToolManager: BuildToolManager;
-	private readonly gui: TerrainDebugGui;
 	private readonly resizeObserver: ResizeObserver;
 
 	private readonly graphicsSettings: GraphicsSettings;
@@ -234,6 +275,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly sunLight: THREE.DirectionalLight;
 
 	private lastFrameTimeMs = 0;
+	private dayNightLook: EffectiveSkyLook | null = null;
+	private dayCyclePersistAccum = 0;
+	private lastPersistedTimeOfDay = -1;
 
 	private animationFrameId = 0;
 	private disposed = false;
@@ -310,6 +354,7 @@ export class ThreeScene implements WorldRuntime {
 		this.graphicsPipeline.registerMaterial(glassMaterial);
 
 		const buildingSettings = options.buildingSettings;
+		this.buildingSettings = buildingSettings;
 		this.materialManager = new BuildingMaterialManager((material) =>
 			this.graphicsPipeline.registerMaterial(material)
 		);
@@ -326,7 +371,12 @@ export class ThreeScene implements WorldRuntime {
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
 			materialManager: this.materialManager,
 			buildingSettings,
-			glassMaterial
+			glassMaterial,
+			getRoomLids: (foundationId) =>
+				roomLidsFromSlabs(
+					this.slabManager.getSlabsForFoundation(foundationId),
+					buildingSettings.buildingGridSize
+				)
 		});
 		this.scene.add(this.wallManager.group);
 		this.wallPathManager = new WallPathManager({
@@ -336,7 +386,12 @@ export class ThreeScene implements WorldRuntime {
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
 			materialManager: this.materialManager,
 			buildingSettings,
-			glassMaterial
+			glassMaterial,
+			getRoomLids: (foundationId) =>
+				roomLidsFromSlabs(
+					this.slabManager.getSlabsForFoundation(foundationId),
+					buildingSettings.buildingGridSize
+				)
 		});
 		this.scene.add(this.wallPathManager.group);
 
@@ -347,16 +402,20 @@ export class ThreeScene implements WorldRuntime {
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
-			materialManager: this.materialManager
+			materialManager: this.materialManager,
+			buildingSettings
 		});
 		this.scene.add(this.slabManager.group);
 
 		this.stairManager = new StairManager({
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
 			getVertexSpacing: () =>
-				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution)
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			materialManager: this.materialManager,
+			buildingSettings
 		});
 		this.scene.add(this.stairManager.group);
+		this.stairLevelTrigger = new StairLevelTrigger(this.stairManager, this.levelManager);
 
 		this.roofManager = new RoofManager({
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
@@ -367,6 +426,20 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.scene.add(this.roofManager.group);
 
+		this.floorDetailManager = new FloorDetailManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize
+		});
+		this.scene.add(this.floorDetailManager.group);
+
+		this.furnitureManager = new FurnitureManager();
+		this.scene.add(this.furnitureManager.group);
+		for (const material of this.furnitureManager.getMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+
 		this.buildingManager = new BuildingManager({
 			foundationManager: this.foundationManager,
 			wallManager: this.wallManager,
@@ -374,13 +447,16 @@ export class ThreeScene implements WorldRuntime {
 			slabManager: this.slabManager,
 			stairManager: this.stairManager,
 			roofManager: this.roofManager,
+			floorDetailManager: this.floorDetailManager,
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
 			getCornerOpeningMargin: () => buildingSettings.cornerOpeningMargin
 		});
 
-		this.undoManager = new BuildUndoManager(this.buildingManager);
+		this.undoManager = new BuildUndoManager(this.buildingManager, {
+			removeFurniture: (id) => this.furnitureManager.remove(id)
+		});
 		this.removalManager = new BuildingRemovalManager(this.buildingManager);
 
 		this.worldSurfaceSampler = new WorldSurfaceSampler(
@@ -469,6 +545,16 @@ export class ThreeScene implements WorldRuntime {
 			onHudChange: options.onBuildHudChange
 		});
 
+		this.beamTool = new BeamTool({
+			scene: this.scene,
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			undoManager: this.undoManager,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
 		this.polygonWallTool = new PolygonWallTool({
 			scene: this.scene,
 			camera: this.camera,
@@ -531,7 +617,82 @@ export class ThreeScene implements WorldRuntime {
 			this.graphicsPipeline.registerMaterial(material);
 		}
 
+		const floorDetailToolOptions = {
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			buildingManager: this.buildingManager,
+			levelManager: this.levelManager,
+			undoManager: this.undoManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		};
+		this.floorCarpetTool = new FloorDetailTool({ ...floorDetailToolOptions, kind: 'carpet' });
+		this.floorPathTool = new FloorDetailTool({ ...floorDetailToolOptions, kind: 'path' });
+		this.floorPlanksTool = new FloorDetailTool({ ...floorDetailToolOptions, kind: 'planks' });
+		this.floorTilesTool = new FloorDetailTool({ ...floorDetailToolOptions, kind: 'tiles' });
+		for (const tool of [
+			this.floorCarpetTool,
+			this.floorPathTool,
+			this.floorPlanksTool,
+			this.floorTilesTool
+		]) {
+			for (const material of tool.getPreviewMaterials()) {
+				this.graphicsPipeline.registerMaterial(material);
+			}
+		}
+
+		this.furnitureTool = new FurnitureTool({
+			scene: this.scene,
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			furnitureManager: this.furnitureManager,
+			undoManager: this.undoManager,
+			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
+			onHudChange: options.onBuildHudChange
+		});
+		for (const material of this.furnitureTool.getPreviewMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+
+		this.sustainSettings = createDefaultSustainSettings();
+		let musicObstacleRevision = '';
+		let musicObstacles: THREE.Box3[] = [];
+		this.music = new MusicPlantPlacementTool({
+			scene: this.scene,
+			camera: this.camera,
+			surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
+			targets: () => [...this.terrainManager.getActiveMeshes()],
+			sustainSettings: this.sustainSettings,
+			blocked: (x, z, radius = 0.2, height = 2) => {
+				if (this.foundationManager.getTopYAt(x, z) !== null) return true;
+				const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity);
+				if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y, y + 2) !== null) return true;
+				const revision = `${this.buildingManager.getRevision()}:${this.foundationManager.getRevision()}`;
+				if (revision !== musicObstacleRevision) {
+					musicObstacleRevision = revision;
+					musicObstacles = [
+						...this.buildingManager.getRaycastableWallMeshes(),
+						...this.buildingManager.getRaycastableStairMeshes(),
+						...this.foundationManager.getMeshes()
+					].map((m) => new THREE.Box3().setFromObject(m).expandByScalar(0.25));
+				}
+				return musicObstacles.some(
+					(box) =>
+						x + radius >= box.min.x &&
+						x - radius <= box.max.x &&
+						z + radius >= box.min.z &&
+						z - radius <= box.max.z &&
+						y < box.max.y &&
+						y + height > box.min.y
+				);
+			},
+			hud: options.onBuildHudChange
+		});
 		this.removeTool = new RemoveTool({
+			music: this.music,
+			furniture: this.furnitureManager,
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
@@ -553,7 +714,8 @@ export class ThreeScene implements WorldRuntime {
 
 		this.doorInteraction = new DoorInteractionController({
 			camera: this.camera,
-			getHingePivots: () => this.buildingManager.getDoorHingePivots()
+			getHingePivots: () => this.buildingManager.getDoorHingePivots(),
+			onLookedAtDoorChange: options.onLookedAtDoorChange
 		});
 
 		this.buildToolManager = new BuildToolManager({
@@ -563,95 +725,140 @@ export class ThreeScene implements WorldRuntime {
 				wall: this.wallTool,
 				window: this.windowTool,
 				door: this.doorTool,
+				beam: this.beamTool,
 				'polygon-wall': this.polygonWallTool,
 				ceiling: this.ceilingTool,
 				floor: this.floorTool,
 				'flat-roof': this.roofTool,
-				stairs: this.stairTool
+				stairs: this.stairTool,
+				'floor-carpet': this.floorCarpetTool,
+				'floor-path': this.floorPathTool,
+				'floor-planks': this.floorPlanksTool,
+				'floor-tiles': this.floorTilesTool,
+				torch: this.furnitureTool
 			},
 			removeTool: this.removeTool,
 			paintTool: this.paintTool,
+			musicTool: this.music,
+			isInputBlocked: () =>
+				this.devPanelOpen || this.music.importPanelOpen || this.music.committing,
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
-			onHudChange: options.onBuildHudChange
+			onHudChange: options.onBuildHudChange,
+			onPlacementCustomizeChange: options.onPlacementCustomizeChange
 		});
 
-		this.gui = new TerrainDebugGui(this.settings, {
-			onTopologyChange: () => {
-				this.environmentRevision++;
-				this.dirty.topology = true;
-			},
-			onViewDistanceChange: () => {
-				// View distance is a local performance choice, not part of the world's definition, so
-				// it deliberately doesn't bump `environmentRevision` — see normalizeEnvironmentForSave.
-				this.baseTerrainViewDistance = this.settings.viewDistance;
-				this.dirty.viewDistance = true;
-			},
-			onSettingsChange: () => {
-				this.environmentRevision++;
-				this.dirty.settings = true;
-			},
-			onSeedChange: () => {
-				this.environmentRevision++;
-				this.dirty.seed = true;
-			},
-			onRenderingChange: () => {
-				this.dirty.rendering = true;
+		this.settingsHost = {
+			terrain: this.settings,
+			vegetation: this.vegetationSettings,
+			sky: this.skySettings,
+			graphics: this.graphicsSettings,
+			building: buildingSettings,
+			music: this.music,
+			sustain: this.sustainSettings,
+			musicVisual: this.musicVisual,
+			actions: {
+				terrainSeed: () => {
+					this.environmentRevision++;
+					this.dirty.seed = true;
+				},
+				terrainSettings: () => {
+					this.environmentRevision++;
+					this.dirty.settings = true;
+				},
+				terrainTopology: () => {
+					this.environmentRevision++;
+					this.dirty.topology = true;
+				},
+				terrainViewDistance: () => {
+					// View distance is a local performance choice, not part of the world's definition, so
+					// it deliberately doesn't bump `environmentRevision` — see normalizeEnvironmentForSave.
+					this.baseTerrainViewDistance = this.settings.viewDistance;
+					this.dirty.viewDistance = true;
+				},
+				terrainRendering: () => {
+					this.dirty.rendering = true;
+				},
+				foundationBounds: () => {
+					this.foundationManager.setShowBounds(buildingSettings.showFoundationBounds);
+				},
+				wallBounds: () => {
+					this.wallManager.setShowBounds(buildingSettings.showWallBounds);
+					this.wallPathManager.setShowBounds(buildingSettings.showWallBounds);
+				},
+				openingVisuals: () => {
+					this.wallManager.rebuildAllWalls();
+					this.wallPathManager.rebuildAllPaths();
+				},
+				wallFraming: () => {
+					this.wallManager.rebuildAllWalls();
+					this.wallPathManager.rebuildAllPaths();
+				},
+				stairwellFraming: () => {
+					this.stairManager.rebuildAllStairs();
+					this.slabManager.rebuildAllSlabs();
+				},
+				slabBounds: () => {
+					this.slabManager.setShowBounds(buildingSettings.showSlabBounds);
+				},
+				stairBounds: () => {
+					this.stairManager.setShowBounds(buildingSettings.showStairBounds);
+				},
+				roofBounds: () => {
+					this.roofManager.setShowBounds(buildingSettings.showRoofBounds);
+				},
+				floorDetailBounds: () => {
+					this.floorDetailManager.setShowBounds(buildingSettings.showFloorDetailBounds);
+				},
+				removalProxies: () => {
+					this.removeTool.setShowPickingProxies(buildingSettings.showRemovalPickingProxies);
+				},
+				vegetationSettings: () => {
+					this.environmentRevision++;
+					this.dirty.vegetationSettings = true;
+				},
+				vegetationViewDistance: () => {
+					this.baseTreeViewDistanceChunks = this.vegetationSettings.loading.treeViewDistanceChunks;
+					this.dirty.vegetationViewDistance = true;
+				},
+				vegetationBorders: () => {
+					this.treeManager.setBorderVisibility(this.vegetationSettings.debug.showTreeChunkBorders);
+				},
+				sky: () => {
+					this.environmentRevision++;
+					this.applySkySettings();
+				},
+				graphicsQuality: (quality) => {
+					this.graphicsPipeline.setQuality(quality as GraphicsQuality);
+				},
+				graphicsAdvanced: () => {
+					this.graphicsPipeline.refreshAdvancedSettings();
+					this.emitStats();
+				},
+				graphicsExposure: () =>
+					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
+				graphicsAo: () => this.graphicsPipeline.refreshAoTuning(),
+				graphicsExport: () => this.exportGraphicsSettings(),
+				musicLoop: (key, value) => {
+					this.music.changeLoop({ [key]: value });
+				},
+				musicWave: () => {
+					for (const runtime of this.music.runtimes.values()) {
+						runtime.wave.material.uniforms.width.value = this.musicVisual.waveWidth;
+						runtime.wave.material.uniforms.opacity.value = this.musicVisual.waveOpacity;
+						runtime.wave.material.uniforms.glow.value = this.musicVisual.waveGlow;
+					}
+				},
+				musicVolume: () => {
+					for (const runtime of this.music.runtimes.values())
+						runtime.sequencer.volume = this.musicVisual.masterMusicVolume;
+				},
+				musicTrails: () => this.music.rebuildAllTrails()
 			}
-		});
-		this.gui.addBuildingFolder(buildingSettings, {
-			onShowFoundationBoundsChange: () => {
-				this.foundationManager.setShowBounds(buildingSettings.showFoundationBounds);
-			},
-			onShowWallBoundsChange: () => {
-				this.wallManager.setShowBounds(buildingSettings.showWallBounds);
-				this.wallPathManager.setShowBounds(buildingSettings.showWallBounds);
-			},
-			onOpeningVisualSettingsChange: () => {
-				this.wallManager.rebuildAllWalls();
-				this.wallPathManager.rebuildAllPaths();
-			},
-			onShowSlabBoundsChange: () => {
-				this.slabManager.setShowBounds(buildingSettings.showSlabBounds);
-			},
-			onShowStairBoundsChange: () => {
-				this.stairManager.setShowBounds(buildingSettings.showStairBounds);
-			},
-			onShowRoofBoundsChange: () => {
-				this.roofManager.setShowBounds(buildingSettings.showRoofBounds);
-			},
-			onShowRemovalPickingProxiesChange: () => {
-				this.removeTool.setShowPickingProxies(buildingSettings.showRemovalPickingProxies);
-			}
-		});
-		this.gui.addVegetationFolder(options.vegetationSettings, {
-			onSettingsChange: () => {
-				this.environmentRevision++;
-				this.dirty.vegetationSettings = true;
-			},
-			onViewDistanceChange: () => {
-				// Local performance choice, not world definition — see onViewDistanceChange above.
-				this.baseTreeViewDistanceChunks = options.vegetationSettings.loading.treeViewDistanceChunks;
-				this.dirty.vegetationViewDistance = true;
-			},
-			onBorderToggle: () => {
-				this.treeManager.setBorderVisibility(options.vegetationSettings.debug.showTreeChunkBorders);
-			}
-		});
-		this.gui.addSkyFolder(this.skySettings, () => {
-			this.environmentRevision++;
-			this.applySkySettings();
-		});
-		this.gui.addGraphicsFolder(this.graphicsSettings, {
-			onQualityChange: () => this.graphicsPipeline.setQuality(this.graphicsSettings.quality),
-			onSettingsChange: () => this.graphicsPipeline.refreshAdvancedSettings(),
-			onExposureChange: (exposure) => this.graphicsPipeline.setToneMappingExposure(exposure),
-			onAoTuningChange: () => this.graphicsPipeline.refreshAoTuning(),
-			onExportSettings: () => this.exportGraphicsSettings()
-		});
+		};
 
 		// Sky/lights/fog are cheap to apply directly (no dirty-flag batching needed — see
-		// TerrainDebugGui.addSkyFolder's doc comment) and don't depend on the HDRI having finished
+		// the settings menu's sky actions) and don't depend on the HDRI having finished
 		// loading, so the world looks right from the very first frame. The HDRI itself loads async
 		// and only affects lighting/reflections (and optionally the background) once it resolves.
 		this.applySkySettings();
@@ -669,6 +876,8 @@ export class ThreeScene implements WorldRuntime {
 		// construction, which is what keeps load and play from drifting apart.
 		if (options.world) this.loadWorld(options.world);
 
+		if (new URLSearchParams(location.search).has('musicTest'))
+			(window as unknown as { forestScene: ThreeScene }).forestScene = this;
 		this.animationFrameId = requestAnimationFrame(this.animate);
 	}
 
@@ -687,6 +896,8 @@ export class ThreeScene implements WorldRuntime {
 		this.foundationManager.load(structuredClone(world.foundations));
 		this.buildingManager.load(structuredClone(world.buildings));
 		this.levelManager.load(structuredClone(world.buildingLevels));
+		this.music.load(world.musicTrees ?? [], world.musicPlants ?? []);
+		this.furnitureManager.load(world.furniture ?? []);
 
 		this.treeManager.setRemovedTreeIds(world.proceduralOverrides?.removedTreeIds ?? []);
 
@@ -719,6 +930,8 @@ export class ThreeScene implements WorldRuntime {
 		this.settings.seed = seed;
 		deepAssign(this.vegetationSettings, environment.vegetation);
 		deepAssign(this.skySettings, environment.sky);
+		ensureDayCycleSettings(this.skySettings);
+		this.lastPersistedTimeOfDay = this.skySettings.dayCycle.timeOfDay;
 
 		// The saved view distances are the world's own baseline; the active graphics preset re-applies
 		// its multiplier on top (see applyRenderDistanceForQuality), so a world never inherits the
@@ -760,6 +973,10 @@ export class ThreeScene implements WorldRuntime {
 	/** Lets the Svelte MaterialPalette's own Close button (or clicking outside it) close the palette without needing to simulate a `C` key press. */
 	closePaintPalette(): void {
 		this.paintTool.closePalette();
+	}
+
+	closePlacementCustomize(): void {
+		this.buildToolManager.closePlacementCustomize();
 	}
 
 	/** Lets the Svelte hotbar UI select a slot by click, in addition to the number-key shortcuts. */
@@ -839,6 +1056,18 @@ export class ThreeScene implements WorldRuntime {
 		return this.foundationManager.serialize();
 	}
 
+	getMusicTrees() {
+		return this.music.trees.map((t) => ({
+			...t,
+			loop: { ...t.loop, timeline: timelineDefinition(t.loop) }
+		}));
+	}
+	getMusicPlants() {
+		return this.music.plants.definitions;
+	}
+	getFurniture(): FurnitureDefinition[] {
+		return this.furnitureManager.serialize();
+	}
 	getBuildings(): FoundationBuildingDefinition[] {
 		return this.buildingManager.serialize();
 	}
@@ -868,9 +1097,11 @@ export class ThreeScene implements WorldRuntime {
 	getRevisionCounters(): WorldRevisionCounters {
 		return {
 			structural:
+				this.music.revision +
 				this.buildingManager.getRevision() +
 				this.foundationManager.getRevision() +
-				this.levelManager.getRevision(),
+				this.levelManager.getRevision() +
+				this.furnitureManager.getRevision(),
 			environment: this.environmentRevision,
 			procedural: this.treeManager.getOverrideRevision()
 		};
@@ -931,21 +1162,48 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	/**
+	 * Marks the clock dirty when time of day has moved since the last persisted value, so a quit or
+	 * pause flush writes the current hour even if nothing else in the world changed.
+	 */
+	markClockDirtyIfNeeded(): void {
+		const timeOfDay = ensureDayCycleSettings(this.skySettings).timeOfDay;
+		if (Math.abs(timeOfDay - this.lastPersistedTimeOfDay) < 1e-6) return;
+		this.lastPersistedTimeOfDay = timeOfDay;
+		this.environmentRevision++;
+	}
+
+	private updateDayCycle(deltaSeconds: number): void {
+		const cycle = ensureDayCycleSettings(this.skySettings);
+		if (!cycle.enabled || this.simulationPaused || deltaSeconds <= 0) return;
+		cycle.timeOfDay = advanceTimeOfDay(cycle.timeOfDay, deltaSeconds, cycle.durationSeconds);
+		this.applySkySettings();
+		this.dayCyclePersistAccum += deltaSeconds;
+		if (this.dayCyclePersistAccum >= 15) {
+			this.dayCyclePersistAccum = 0;
+			this.markClockDirtyIfNeeded();
+		}
+	}
+
+	/**
 	 * Re-applies every sky/HDRI/atmosphere/cloud setting. Called once at startup, once more when
 	 * the (async) HDRI finishes loading, and directly from the GUI on every change — all of these
 	 * are cheap scene-property/shader-uniform updates, never a scene rebuild.
 	 */
 	private applySkySettings(): void {
-		this.skySystem.applySettings(this.skySettings.sky, this.skySettings.atmosphere);
-		this.cloudSystem.applySettings(this.skySettings.clouds);
+		ensureDayCycleSettings(this.skySettings);
+		const look = resolveEffectiveSky(this.skySettings);
+		this.dayNightLook = look;
+		this.skySystem.applySettings(look.sky, look.atmosphere);
+		this.cloudSystem.applySettings(look.clouds);
 		this.cloudSystem.applyDebugSettings(this.skySettings.debug);
 		this.hdriSystem.applySettings();
+		this.scene.environmentIntensity = look.hdriIntensity;
 
-		this.hemisphereLight.intensity = this.skySettings.atmosphere.hemisphereIntensity;
-		this.sunLight.color.set(this.skySettings.atmosphere.sunColor);
-		this.sunLight.intensity = this.skySettings.atmosphere.sunEnabled
-			? this.skySettings.atmosphere.sunIntensity
-			: 0;
+		this.hemisphereLight.color.set(look.hemiSky);
+		this.hemisphereLight.groundColor.set(look.hemiGround);
+		this.hemisphereLight.intensity = look.atmosphere.hemisphereIntensity;
+		this.sunLight.color.set(look.atmosphere.sunColor);
+		this.sunLight.intensity = look.atmosphere.sunEnabled ? look.atmosphere.sunIntensity : 0;
 		this.graphicsPipeline.setSunColorIntensity(this.sunLight.color, this.sunLight.intensity);
 		this.updateSunLightPosition();
 
@@ -959,22 +1217,27 @@ export class ThreeScene implements WorldRuntime {
 		this.wallPathManager.group.visible = !showSkyOnly;
 		this.slabManager.group.visible = !showSkyOnly;
 		this.stairManager.group.visible = !showSkyOnly;
+		this.roofManager.group.visible = !showSkyOnly;
+		this.floorDetailManager.group.visible = !showSkyOnly;
+		this.furnitureManager.group.visible = !showSkyOnly;
 	}
 
 	/** `scene.background` is contested between "let the sky dome show" and "debug: show the raw HDRI" — this is the single place that decides. */
 	private applyBackgroundAndFog(): void {
+		const look = this.dayNightLook;
 		const backgroundTexture = this.hdriSystem.getBackgroundTexture();
 		this.scene.background =
-			backgroundTexture ?? new THREE.Color(this.skySettings.sky.groundHazeColor);
+			backgroundTexture ??
+			new THREE.Color(look?.sky.groundHazeColor ?? this.skySettings.sky.groundHazeColor);
 
-		const atmosphere = this.skySettings.atmosphere;
+		const atmosphere = look?.atmosphere ?? this.skySettings.atmosphere;
 		if (!atmosphere.fogEnabled) {
 			this.scene.fog = null;
 			return;
 		}
 
 		const fogColor = resolveFogColor(
-			this.skySystem.getHorizonColorHex(this.skySettings.sky),
+			look?.sky.horizonColor ?? this.skySystem.getHorizonColorHex(this.skySettings.sky),
 			atmosphere.fogColor,
 			atmosphere.fogMatchHorizon
 		);
@@ -1047,6 +1310,7 @@ export class ThreeScene implements WorldRuntime {
 	 * terrain chunks unnecessarily and vice versa.
 	 */
 	private flushDirtyFlags(): void {
+		const musicSurfaceChanged = this.dirty.topology || this.dirty.seed || this.dirty.settings;
 		if (this.dirty.topology) {
 			this.terrainManager.notifyTopologyChanged();
 			this.treeManager.notifyTerrainChanged();
@@ -1071,6 +1335,7 @@ export class ThreeScene implements WorldRuntime {
 			}
 		}
 
+		if (musicSurfaceChanged) this.music.refreshSurfaces();
 		if (this.dirty.rendering) {
 			this.terrainManager.applyRenderingSettings();
 			this.dirty.rendering = false;
@@ -1094,14 +1359,23 @@ export class ThreeScene implements WorldRuntime {
 			this.lastFrameTimeMs === 0 ? 0 : Math.min((nowMs - this.lastFrameTimeMs) / 1000, 0.1);
 		this.lastFrameTimeMs = nowMs;
 
+		if (this.devPanelOpen) return;
+		this.updateDayCycle(deltaSeconds);
 		this.flushDirtyFlags();
 
 		this.doorInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
 		this.suggestBuildingLevelFoundation();
+		this.stairLevelTrigger.update(
+			this.controller.worldPosition.x,
+			this.controller.worldPosition.y - this.settings.player.eyeHeight,
+			this.controller.worldPosition.z
+		);
 		this.terrainManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
+		this.music.animate();
+		this.furnitureManager.updateLights(this.camera.position, nowMs / 1000);
 
 		this.skySystem.update(this.camera.position);
 		this.cloudSystem.update(
@@ -1124,9 +1398,22 @@ export class ThreeScene implements WorldRuntime {
 		this.statsFrameCount++;
 		this.statsAccumSeconds += deltaSeconds;
 		if (this.statsAccumSeconds < 0.25) return;
+		this.emitStats();
+	}
 
-		const fps = this.statsFrameCount / this.statsAccumSeconds;
-		const frameTimeMs = (this.statsAccumSeconds / this.statsFrameCount) * 1000;
+	toggleRenderStats(): boolean {
+		this.graphicsSettings.showRenderStats = !this.graphicsSettings.showRenderStats;
+		this.emitStats();
+		return this.graphicsSettings.showRenderStats;
+	}
+
+	private emitStats(): void {
+		if (!this.onStatsUpdate) return;
+
+		const elapsed = this.statsAccumSeconds;
+		const frames = this.statsFrameCount;
+		const fps = elapsed > 0 && frames > 0 ? frames / elapsed : 0;
+		const frameTimeMs = frames > 0 && elapsed > 0 ? (elapsed / frames) * 1000 : 0;
 		this.statsFrameCount = 0;
 		this.statsAccumSeconds = 0;
 
@@ -1134,6 +1421,7 @@ export class ThreeScene implements WorldRuntime {
 		const vegetationStats = this.treeManager.getStats();
 		const graphicsStats = this.graphicsPipeline.getRenderStats();
 		const position = this.controller.worldPosition;
+		const cycle = ensureDayCycleSettings(this.skySettings);
 
 		this.onStatsUpdate({
 			fps: Math.round(fps),
@@ -1162,27 +1450,39 @@ export class ThreeScene implements WorldRuntime {
 			shadowDistance: graphicsStats.shadowDistance,
 			aoEnabled: graphicsStats.aoEnabled,
 			aoQuality: graphicsStats.aoQuality,
-			antialiasing: graphicsStats.antialiasing
+			antialiasing: graphicsStats.antialiasing,
+			showRenderStats: this.graphicsSettings.showRenderStats,
+			dayCycleEnabled: cycle.enabled,
+			timeOfDay: cycle.timeOfDay
 		});
 	}
 
 	dispose(): void {
 		this.disposed = true;
+		const debugWindow = window as unknown as { forestScene?: ThreeScene };
+		if (debugWindow.forestScene === this) delete debugWindow.forestScene;
 		cancelAnimationFrame(this.animationFrameId);
 		this.resizeObserver.disconnect();
-		this.gui.dispose();
 		this.buildToolManager.dispose();
 		this.foundationTool.dispose();
 		this.wallTool.dispose();
 		this.windowTool.dispose();
 		this.doorInteraction.dispose();
 		this.doorTool.dispose();
+		this.beamTool.dispose();
 		this.polygonWallTool.dispose();
 		this.ceilingTool.dispose();
 		this.floorTool.dispose();
 		this.roofTool.dispose();
 		this.stairTool.dispose();
+		this.floorCarpetTool.dispose();
+		this.floorPathTool.dispose();
+		this.floorPlanksTool.dispose();
+		this.floorTilesTool.dispose();
+		this.furnitureTool.dispose();
+		this.furnitureManager.dispose();
 		this.removeTool.dispose();
+		this.music.dispose();
 		this.paintTool.dispose();
 		this.materialManager.dispose();
 		this.treeManager.dispose();
@@ -1190,6 +1490,7 @@ export class ThreeScene implements WorldRuntime {
 		this.wallPathManager.dispose();
 		this.slabManager.dispose();
 		this.stairManager.dispose();
+		this.floorDetailManager.dispose();
 		this.levelManager.dispose();
 		this.undoManager.dispose();
 		this.foundationManager.dispose();

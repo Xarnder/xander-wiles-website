@@ -28,6 +28,7 @@ export class DoorTool implements BuildTool {
 		this.base = new OpeningToolBase(
 			{
 				toolId: 'door',
+				placeKind: 'opening',
 				openingType: 'door',
 				label: 'DOOR',
 				getWidth: (settings) => settings.doorWidth,
