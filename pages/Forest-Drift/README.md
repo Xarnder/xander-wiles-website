@@ -1291,9 +1291,13 @@ move to the opposite corner (rectangular footprint preview, mirroring Foundation
 confirm the footprint, then Left/Right Arrow cycles `StairDirection` while a live stepped preview
 (built with the real `StairGeometryBuilder`, not a placeholder box) updates immediately, with
 bottom/top markers when `showStairDirection` is on. Enter or another click confirms; right-click
-cancels back to idle. Uses the same level-aware `raycastLevelConstructionPlane` targeting as every
-other level-aware tool, so stairs can be started from any building level, with `baseY` frozen from
-the current level at first-corner time.
+cancels back to idle. Interior stairs use the same level-aware construction-plane targeting as
+every other storey-aware tool, with `baseY` frozen from the current level at first-corner time.
+Approach stairs (a flight up onto the pad from the ground) can also be aimed at terrain beside
+the foundation: the rectangle snaps flush to the nearest pad edge, sits fully outside it, and
+uses a typically-negative `baseY` sampled from terrain so the top landing meets the foundation
+surface. Green preview means the run length matches that height difference — the same
+"1 cell of run = 1 cell of rise" rule, never an automatic resize.
 
 The HUD shows width, run, step count, rise per step, total rise, and current direction as soon as
 the footprint is confirmed — and, if the stair's `topLocalY` lands within one grid increment of an
@@ -1473,8 +1477,8 @@ the topmost exposed tread and the underside, in all four directions. `StairManag
 tests) covers tread-surface queries (including a reversed-direction footprint), side collision
 rects — including an integration-level regression proving a player-radius circle can stand anywhere
 across a stair's walkable width without being pushed — and serialize/load. `BuildingManager.spec.ts`
-adds `addStair` validation (long-axis direction, min width/run, foundation containment, missing
-foundation, upper-level `baseY`) and the bidirectional auto-opening behavior: slab-then-stair,
+adds `addStair` validation (long-axis direction, min width/run, interior vs edge-attached
+approach placement, missing foundation, upper-level `baseY`) and the bidirectional auto-opening behavior: slab-then-stair,
 stair-then-slab, no opening when the stair never reaches the slab's underside, and the three
 "reaches into" regressions above (mid-thickness, past the top surface, short of the underside).
 `WorldSurfaceSampler.spec.ts` adds the step-up/step-down integration behavior directly: auto-climbing
@@ -2799,7 +2803,7 @@ loading a world never depends on a generated chunk cache existing.
 ### Worlds UI
 
 ```
-MY WORLDS                          in-world:  Esc → Resume / Save / World / Settings / Quit to Worlds
+MY WORLDS                          in-world:  Esc → Resume / Settings / Help / Creature Lab / Save / World / Quit
 [ + New World ] [ Import World ]              World → Rename / Export World / Duplicate World
 ┌─────────────────────────────┐
 │ [thumb]  Forest House       │
@@ -2920,3 +2924,7 @@ The wave uses a fixed 224×224-m ground patch with a 112×112 grid, translated i
 Schema **4** saves exact pitch, instrument, optional percussion identity, angle, onset, duration, vibrancy and timeline as JSON through the existing autosave/export pipeline. No MIDI bytes, workers or audio/render objects are saved. Migration from schema 3 computes each old growth-based note through the original scale algorithm, replaces growth with exact pitch and a fixed visual reference profile, preserving both its previous sound and size. Schema 1/2 migrations still pass through their existing music/duration defaults.
 
 MIDI unit tests cover format 0/1, malformed input, chromatic/full-range pitch, sustain pedal/repeated voices, section boundaries, all resolutions, changing tempo/meter, spacing, dense chords, deterministic layouts, migration and package round trips. Browser tests exercise local selection, preview options, cancellation, New/Replace/Add, save/reload and bounded rendering for 100/2,000/10,000 notes. `?musicTest` exposes the scene only for these tests. Performance measurements are documented in [MIDI performance](docs/midi-performance.md); rerun with `npx playwright test tests/midi.e2e.ts`.
+
+## Procedural creatures
+
+Forest Drift includes deterministic species and individual recipes, four skinned body plans, terrain-aware animation, streamed ecology, and a Creature Lab for generation, inspection and persistent placement. See the [creature engineering report](docs/creature-system.md) for architecture, controls, verification, measured 10/25/50/100-creature performance and current limitations.

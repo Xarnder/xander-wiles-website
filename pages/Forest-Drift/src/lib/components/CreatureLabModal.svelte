@@ -18,6 +18,7 @@
 		skeleton = $state(false),
 		collision = $state(false),
 		chains = $state(false),
+		crossSections = $state(false),
 		anchors = $state(false),
 		weights = $state(false);
 	let error = $state(''),
@@ -35,7 +36,7 @@
 		}
 	}
 	function overlays() {
-		Object.assign(lab, { wireframe, skeleton, collision, chains, anchors, weights });
+		Object.assign(lab, { wireframe, skeleton, collision, chains, crossSections, anchors, weights });
 		lab.updateHelpers();
 	}
 	async function sample() {
@@ -48,6 +49,8 @@
 	}
 	onMount(() => {
 		lab = new CreatureLab(viewport);
+		const testWindow = window as unknown as { creatureLab?: CreatureLab };
+		if (new URLSearchParams(location.search).has('musicTest')) testWindow.creatureLab = lab;
 		generate();
 		const timer = setInterval(() => {
 			const t = lab.telemetry;
@@ -56,6 +59,7 @@
 		return () => {
 			clearInterval(timer);
 			lab.dispose();
+			delete testWindow.creatureLab;
 		};
 	});
 </script>
@@ -136,7 +140,7 @@
 					></label
 				>
 				<div class="toggles">
-					{#each ['wireframe', 'skeleton', 'collision', 'chains', 'anchors', 'weights'] as key}<label
+					{#each ['wireframe', 'skeleton', 'collision', 'chains', 'crossSections', 'anchors', 'weights'] as key (key)}<label
 							><input
 								type="checkbox"
 								onchange={(e) => {
@@ -145,6 +149,7 @@
 									else if (key === 'skeleton') skeleton = v;
 									else if (key === 'collision') collision = v;
 									else if (key === 'chains') chains = v;
+									else if (key === 'crossSections') crossSections = v;
 									else if (key === 'anchors') anchors = v;
 									else weights = v;
 									overlays();
@@ -165,7 +170,7 @@
 			</aside>
 			<main>
 				<div class="views">
-					{#each ['front', 'side', 'top'] as view}<button
+					{#each ['front', 'side', 'top'] as view (view)}<button
 							onclick={() => lab.view(view as 'front' | 'side' | 'top')}>{view}</button
 						>{/each}<span>Drag to orbit · Scroll to zoom</span>
 				</div>

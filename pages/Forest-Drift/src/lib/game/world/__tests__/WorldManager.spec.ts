@@ -223,6 +223,7 @@ describe('importWorld', () => {
 		incoming.foundations = [];
 		incoming.buildings = [];
 		incoming.buildingLevels = [];
+		incoming.furniture = [];
 		incoming.player = { ...incoming.player, activeFoundationId: undefined };
 
 		const result = await manager.importWorld(await createWorldPackage(incoming));

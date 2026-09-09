@@ -12,6 +12,7 @@ import type { StairMetrics } from './stairMath';
 
 export interface StairFrameSettings {
 	stairFrameEnabled: boolean;
+	stairRailingsEnabled: boolean;
 	stairFrameWidth: number;
 	stairFrameDepthExtra: number;
 }
@@ -33,8 +34,8 @@ const MIN_SIZE = 0.005;
 /** How far a tread nosing sits above the walkable tread — keeps it from sharing the solid's top plane. */
 export const STAIR_NOSING_LIFT = 0.003;
 /**
- * How far last-step / back-top timber sits inside the last tread's walkable plane and back face.
- * Those boards overlap the solid on purpose; without this they share the step's own faces and flicker.
+ * How far step caps, last-step timber, and back-top timber sit inside the stair solid's own faces.
+ * Those boards overlap the solid on purpose; without this they share the step's planes and flicker.
  */
 export const STAIR_FRAME_FACE_INSET = 0.003;
 /** How far a newel continues above the top tread so it reads as meeting the landing / ceiling hole. */
@@ -53,7 +54,11 @@ function box(
 	maxWidth: number,
 	extra?: Pick<CanonicalStairBox, 'pitch' | 'role'>
 ): CanonicalStairBox | null {
-	if (maxRun - minRun < MIN_SIZE || maxRise - minRise < MIN_SIZE || maxWidth - minWidth < MIN_SIZE) {
+	if (
+		maxRun - minRun < MIN_SIZE ||
+		maxRise - minRise < MIN_SIZE ||
+		maxWidth - minWidth < MIN_SIZE
+	) {
 		return null;
 	}
 	return { minRun, maxRun, minRise, maxRise, minWidth, maxWidth, ...extra };
@@ -103,18 +108,23 @@ function railBands(
  * Sawtooth stringers on both sides, a picture-frame on the back vertical face, a nosing on every
  * tread, newel posts at the four footprint corners, and an inner railing on both width edges.
  *
- * Side and back boards sit mostly on the stair solid. Last-step and back-top timber is pulled
- * `STAIR_FRAME_FACE_INSET` inside the last tread so it cannot share that step's own faces.
+ * Side boards sit mostly on the stair solid, but every step's tread and riser caps are pulled
+ * `STAIR_FRAME_FACE_INSET` inside those faces so they cannot share the step's own planes (which
+ * flickers — cream step vs timber). Nosings sit above the tread and in front of the riser, never
+ * through it, and are inset from the width faces for the same reason.
  * Only `stairFrameDepthExtra` may pass a width face or the back (`runMeters`) — so stairs against a
  * wall do not punch timber through it.
  * Railings stay strictly inside `0..widthMeters` so they cannot poke out the far side of a wall.
- * Returns `[]` when framing is disabled or the stair is degenerate.
+ * Returns `[]` when both framing and railings are disabled, or the stair is degenerate.
  */
 export function computeStairFrameBoxes(
-	metrics: Pick<StairMetrics, 'stepCount' | 'stepRise' | 'stepRun' | 'widthMeters' | 'runMeters' | 'totalRise'>,
+	metrics: Pick<
+		StairMetrics,
+		'stepCount' | 'stepRise' | 'stepRun' | 'widthMeters' | 'runMeters' | 'totalRise'
+	>,
 	settings: StairFrameSettings
 ): CanonicalStairBox[] {
-	if (!settings.stairFrameEnabled) return [];
+	if (!settings.stairFrameEnabled && !settings.stairRailingsEnabled) return [];
 	const { stepCount, stepRise, stepRun, widthMeters, runMeters, totalRise } = metrics;
 	const width = Math.max(0, settings.stairFrameWidth);
 	const extra = Math.max(0, settings.stairFrameDepthExtra);
@@ -133,66 +143,72 @@ export function computeStairFrameBoxes(
 		[rightInner, rightOuter]
 	] as const;
 
-	const lastTreadCap = totalRise - STAIR_FRAME_FACE_INSET;
+	const face = STAIR_FRAME_FACE_INSET;
+	const lastTreadCap = totalRise - face;
+	const nosingThick = Math.min(Math.max(width * 0.2, 0.018), 0.03);
 
-	for (let i = 0; i < stepCount; i++) {
-		const run0 = i * stepRun;
-		const run1 = (i + 1) * stepRun;
-		const rise0 = i * stepRise;
-		const rise1 = (i + 1) * stepRise;
-		const isLast = i === stepCount - 1;
-		const treadCap = isLast ? lastTreadCap : rise1;
-		const runCap = isLast ? run1 - STAIR_FRAME_FACE_INSET : run1;
+	if (settings.stairFrameEnabled) {
+		for (let i = 0; i < stepCount; i++) {
+			const run0 = i * stepRun;
+			const run1 = (i + 1) * stepRun;
+			const rise0 = i * stepRise;
+			const rise1 = (i + 1) * stepRise;
+			const treadCap = rise1 - face;
+			const runCap = run1 - face;
+			const runFront = run0 + face;
+			const riseFloor = rise0 + face;
 
-		for (const [minW, maxW] of sides) {
-			push(boxes, box(run0, runCap, rise1 - width, treadCap, minW, maxW));
-			push(boxes, box(run0, run0 + width, rise0, treadCap, minW, maxW));
+			for (const [minW, maxW] of sides) {
+				push(boxes, box(runFront, runCap, rise1 - width, treadCap, minW, maxW));
+				push(boxes, box(runFront, run0 + width, riseFloor, rise1 - width - face, minW, maxW));
+			}
+
+			const lipBottom = rise1 + STAIR_NOSING_LIFT;
+			const nosingTop = lipBottom + nosingThick;
+			push(boxes, box(run0, run0 + width * 0.35, lipBottom, nosingTop, face, widthMeters - face));
+			push(
+				boxes,
+				box(run0 - extra, run0 - face, rise1 - width * 0.4, nosingTop, face, widthMeters - face)
+			);
 		}
 
-		push(
-			boxes,
-			box(
-				run0 - extra,
-				run0 + width * 0.35,
-				rise1 - width * 0.4,
-				rise1 + STAIR_NOSING_LIFT,
-				0,
-				widthMeters
-			)
-		);
+		for (const [minW, maxW] of sides) {
+			push(boxes, box(backInner, backOuter, 0, lastTreadCap, minW, maxW));
+		}
+		push(boxes, box(backInner, backOuter, 0, width, leftInner, rightInner));
+		push(boxes, box(backInner, backOuter, totalRise - width, lastTreadCap, leftInner, rightInner));
 	}
 
-	for (const [minW, maxW] of sides) {
-		push(boxes, box(backInner, backOuter, 0, lastTreadCap, minW, maxW));
-	}
-	push(boxes, box(backInner, backOuter, 0, width, leftInner, rightInner));
-	push(boxes, box(backInner, backOuter, totalRise - width, lastTreadCap, leftInner, rightInner));
+	if (settings.stairRailingsEnabled) {
+		const newelHeight = Math.min(0.9, Math.max(0.45, totalRise * 0.35 + 0.35));
+		for (const w0 of [leftOuter, rightOuter - width]) {
+			const w1 = w0 + width;
+			push(boxes, box(-extra, -extra + width, 0, newelHeight, w0, w1));
+			push(
+				boxes,
+				box(
+					runMeters - width + extra,
+					runMeters + extra,
+					totalRise - width,
+					totalRise + STAIR_TOP_NEWEL_OVERSHOOT,
+					w0,
+					w1
+				)
+			);
+		}
 
-	const newelHeight = Math.min(0.9, Math.max(0.45, totalRise * 0.35 + 0.35));
-	for (const w0 of [leftOuter, rightOuter - width]) {
-		const w1 = w0 + width;
-		push(boxes, box(-extra, -extra + width, 0, newelHeight, w0, w1));
-		push(
-			boxes,
-			box(
-				runMeters - width + extra,
-				runMeters + extra,
-				totalRise - width,
-				totalRise + STAIR_TOP_NEWEL_OVERSHOOT,
-				w0,
-				w1
-			)
-		);
+		pushRailings(boxes, metrics, width);
 	}
-
-	pushRailings(boxes, metrics, width);
 
 	return boxes;
 }
 
 function pushRailings(
 	boxes: CanonicalStairBox[],
-	metrics: Pick<StairMetrics, 'stepCount' | 'stepRise' | 'stepRun' | 'widthMeters' | 'runMeters' | 'totalRise'>,
+	metrics: Pick<
+		StairMetrics,
+		'stepCount' | 'stepRise' | 'stepRun' | 'widthMeters' | 'runMeters' | 'totalRise'
+	>,
 	frameWidth: number
 ): void {
 	const { stepCount, stepRise, stepRun, widthMeters, runMeters, totalRise } = metrics;
@@ -207,7 +223,10 @@ function pushRailings(
 	if (run1 - run0 < MIN_SIZE) return;
 
 	for (const band of bands) {
-		push(boxes, box(0, post, 0, railH + railThickness, band.minWidth, band.maxWidth, { role: 'rail' }));
+		push(
+			boxes,
+			box(0, post, 0, railH + railThickness, band.minWidth, band.maxWidth, { role: 'rail' })
+		);
 		push(
 			boxes,
 			box(
@@ -220,26 +239,23 @@ function pushRailings(
 				{ role: 'rail' }
 			)
 		);
-		push(boxes, slopedRail(run0, railH, run1, totalRise + railH, band.minWidth, band.maxWidth, railThickness));
+		push(
+			boxes,
+			slopedRail(run0, railH, run1, totalRise + railH, band.minWidth, band.maxWidth, railThickness)
+		);
 
 		for (let i = 0; i < stepCount; i++) {
 			const runC = (i + 0.5) * stepRun;
 			if (runC <= run0 || runC >= run1) continue;
 			const treadY = (i + 1) * stepRise;
-			const balusterStart = i === stepCount - 1 ? treadY - STAIR_FRAME_FACE_INSET : treadY;
+			const balusterStart = treadY - STAIR_FRAME_FACE_INSET;
 			const railY = railH + (runC / runMeters) * totalRise - railThickness * 0.5;
 			const balW = Math.min(railThickness * 0.7, post * 0.5);
 			push(
 				boxes,
-				box(
-					runC - balW / 2,
-					runC + balW / 2,
-					balusterStart,
-					railY,
-					band.minWidth,
-					band.maxWidth,
-					{ role: 'rail' }
-				)
+				box(runC - balW / 2, runC + balW / 2, balusterStart, railY, band.minWidth, band.maxWidth, {
+					role: 'rail'
+				})
 			);
 		}
 	}

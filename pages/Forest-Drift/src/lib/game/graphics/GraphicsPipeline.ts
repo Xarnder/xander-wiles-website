@@ -239,8 +239,16 @@ export class GraphicsPipeline {
 	}
 
 	render(): void {
-		if (this.composer) this.composer.render();
-		else this.renderer.render(this.scene, this.camera);
+		// Count the entire frame, including shadows and postprocessing rather than only its final quad.
+		const autoReset = this.renderer.info.autoReset;
+		this.renderer.info.autoReset = false;
+		this.renderer.info.reset();
+		try {
+			if (this.composer) this.composer.render();
+			else this.renderer.render(this.scene, this.camera);
+		} finally {
+			this.renderer.info.autoReset = autoReset;
+		}
 	}
 
 	getRenderStats(): GraphicsRenderStats {

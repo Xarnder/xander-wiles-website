@@ -34,6 +34,7 @@ export interface GameSettingsActions {
 	terrainRendering: () => void;
 	foundationBounds: () => void;
 	wallBounds: () => void;
+	collisionGeometry?: () => void;
 	slabBounds: () => void;
 	stairBounds: () => void;
 	roofBounds: () => void;

@@ -161,23 +161,28 @@ describe('pathCenterlineLocalSamples', () => {
 			GRID
 		);
 		expect(bent.length).toBeGreaterThan(2);
-		expect(pathBendIsStraight({ gridX: 0, gridZ: 0 }, { gridX: 4, gridZ: 0 }, { gridX: 8, gridZ: 0 }, GRID)).toBe(
-			true
-		);
-		expect(pathBendIsStraight({ gridX: 0, gridZ: 0 }, { gridX: 4, gridZ: 8 }, { gridX: 8, gridZ: 0 }, GRID)).toBe(
-			false
-		);
+		expect(
+			pathBendIsStraight(
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 4, gridZ: 0 },
+				{ gridX: 8, gridZ: 0 },
+				GRID
+			)
+		).toBe(true);
+		expect(
+			pathBendIsStraight(
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 4, gridZ: 8 },
+				{ gridX: 8, gridZ: 0 },
+				GRID
+			)
+		).toBe(false);
 	});
 });
 
 describe('pathStripLocalCorners', () => {
 	it('keeps a constant width on a diagonal, not a grid-snapped quad', () => {
-		const corners = pathStripLocalCorners(
-			{ gridX: 0, gridZ: 0 },
-			{ gridX: 4, gridZ: 4 },
-			1,
-			GRID
-		);
+		const corners = pathStripLocalCorners({ gridX: 0, gridZ: 0 }, { gridX: 4, gridZ: 4 }, 1, GRID);
 		expect(corners).toHaveLength(4);
 		const widthA = Math.hypot(corners[0].x - corners[3].x, corners[0].z - corners[3].z);
 		const widthB = Math.hypot(corners[1].x - corners[2].x, corners[1].z - corners[2].z);
@@ -245,6 +250,53 @@ describe('buildFloorDetailBoxes', () => {
 			GRID
 		);
 		expect(new Set(boxes.map((box) => box.color)).size).toBe(2);
+		expect(boxes.every((box) => box.yaw == null || box.yaw === 0)).toBe(true);
+	});
+
+	it('lays diamond tiles on a 45-degree lattice, distinct from checker', () => {
+		const points = rectanglePointsFromCorners({ gridX: 0, gridZ: 0 }, { gridX: 8, gridZ: 8 });
+		const diamond = buildFloorDetailBoxes(
+			detail({ kind: 'tiles', tilePattern: 'diamond', tileSize: 0.4, points }),
+			GRID
+		);
+		const checker = buildFloorDetailBoxes(
+			detail({ kind: 'tiles', tilePattern: 'checker', tileSize: 0.4, points }),
+			GRID
+		);
+		const yawed = diamond.filter((box) => box.yaw);
+		expect(yawed.length).toBeGreaterThan(1);
+		expect(yawed.every((box) => Math.abs((box.yaw ?? 0) - Math.PI / 4) < 1e-6)).toBe(true);
+		expect(
+			yawed.every((box) => Math.abs(box.maxX - box.minX - (box.maxZ - box.minZ)) < 1e-6)
+		).toBe(true);
+		expect(new Set(yawed.map((box) => box.color)).size).toBe(2);
+		expect(diamond.every((box) => box.yaw)).toBe(true);
+		expect(checker.every((box) => !box.yaw)).toBe(true);
+		expect(diamond.length).not.toBe(checker.length);
+
+		const tileSize = 0.4;
+		const width = 8 * GRID;
+		const depth = 8 * GRID;
+		const centers = yawed.map((box) => ({
+			x: (box.minX + box.maxX) / 2,
+			z: (box.minZ + box.maxZ) / 2,
+			color: box.color
+		}));
+		const edge = tileSize / Math.SQRT2;
+		let edgePairs = 0;
+		for (let a = 0; a < centers.length; a++) {
+			expect(centers[a].x - tileSize / 2).toBeGreaterThanOrEqual(-1e-4);
+			expect(centers[a].x + tileSize / 2).toBeLessThanOrEqual(width + 1e-4);
+			expect(centers[a].z - tileSize / 2).toBeGreaterThanOrEqual(-1e-4);
+			expect(centers[a].z + tileSize / 2).toBeLessThanOrEqual(depth + 1e-4);
+			for (let b = a + 1; b < centers.length; b++) {
+				const dist = Math.hypot(centers[a].x - centers[b].x, centers[a].z - centers[b].z);
+				if (Math.abs(dist - edge) > 0.02) continue;
+				edgePairs += 1;
+				expect(centers[a].color).not.toBe(centers[b].color);
+			}
+		}
+		expect(edgePairs).toBeGreaterThan(0);
 	});
 
 	it('adds framed path edges as extra yawed boxes', () => {
@@ -395,7 +447,12 @@ describe('buildFloorDetailBoxes', () => {
 
 describe('axisAlignedRectFromPoints', () => {
 	it('normalises opposite corners', () => {
-		expect(axisAlignedRectFromPoints([{ gridX: 4, gridZ: 1 }, { gridX: 0, gridZ: 5 }])).toEqual({
+		expect(
+			axisAlignedRectFromPoints([
+				{ gridX: 4, gridZ: 1 },
+				{ gridX: 0, gridZ: 5 }
+			])
+		).toEqual({
 			minGridX: 0,
 			maxGridX: 4,
 			minGridZ: 1,

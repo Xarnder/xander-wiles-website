@@ -208,9 +208,15 @@ export type MaterialKind =
 	| 'wall-frame'
 	/** Interior baseboards — see SkirtingBuilder.ts. Its own kind so skirting stays a timber colour instead of inheriting the wall's paint. */
 	| 'skirting'
+	/** Stair solid steps — see StairManager.ts. Own kind so E-customise / a later paint pass can recolour stairs without touching framing. */
+	| 'stair'
 	/** Stair stringers / railings / newels / nosings — see StairFrameBuilder.ts. Same timber family as wall frames, own kind so a later paint pass can recolour stairs without touching walls. */
 	| 'stair-frame'
 	/** Trim around a slab stairwell opening — see SlabOpeningFrameBuilder.ts. */
 	| 'slab-opening-frame'
 	/** Placeable wall timber (Beam tool) — same timber family as wall frames, own kind so a later paint pass can recolour beams without touching framing. */
-	| 'wall-beam';
+	| 'wall-beam'
+	/** Procedural furniture primary surfaces (wood, stone, metal) — see FurnitureManager.ts. */
+	| 'furniture'
+	/** Furniture secondary surfaces (fabric, mattress, door panels, metal trim). */
+	| 'furniture-accent';

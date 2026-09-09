@@ -240,6 +240,9 @@ function validateSlabOpening(
 	if (value.sourceStairId !== undefined && !isNonEmptyString(value.sourceStairId)) {
 		return fail(`${where}: slab opening sourceStairId must be a string when present`);
 	}
+	if (value.frameEnabled !== undefined && typeof value.frameEnabled !== 'boolean') {
+		return fail(`${where}: slab opening frameEnabled must be a boolean when present`);
+	}
 	return { ok: true, value: value as unknown as SlabOpeningDefinition };
 }
 
@@ -294,6 +297,18 @@ function validateStair(value: unknown, where: string): ValidationResult<StairDef
 	}
 	if ((value.gridSizeAtCreation as number) <= 0)
 		return fail(`${where}: stair gridSizeAtCreation must be positive`);
+	const material = validateMaterial(value.material, `${where}: stair`);
+	if (!material.ok) return material;
+	for (const key of [
+		'frameEnabled',
+		'railingsEnabled',
+		'openingEnabled',
+		'openingFrameEnabled'
+	] as const) {
+		if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+			return fail(`${where}: stair ${key} must be a boolean when present`);
+		}
+	}
 	return { ok: true, value: value as unknown as StairDefinition };
 }
 
@@ -347,7 +362,10 @@ function validateRoof(value: unknown, where: string): ValidationResult<RoofDefin
 	return { ok: true, value: value as unknown as RoofDefinition };
 }
 
-function validateFloorDetail(value: unknown, where: string): ValidationResult<FloorDetailDefinition> {
+function validateFloorDetail(
+	value: unknown,
+	where: string
+): ValidationResult<FloorDetailDefinition> {
 	if (!isRecord(value)) return fail(`${where}: floor detail must be an object`);
 	if (!isNonEmptyString(value.id)) return fail(`${where}: floor detail id missing`);
 	if (!isNonEmptyString(value.foundationId))

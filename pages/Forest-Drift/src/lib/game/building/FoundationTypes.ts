@@ -12,6 +12,8 @@ import type {
 	FloorDetailTilePattern
 } from './FloorDetailTypes';
 import { DEFAULT_FLOOR_DETAIL_COLORS } from './FloorDetailTypes';
+import { FURNITURE_KINDS, type FurnitureKind } from './FurnitureTypes';
+import { DEFAULT_FURNITURE_KIND, getFurnitureCatalogueEntry } from './furnitureCatalogue';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { RoofType } from './RoofTypes';
 
@@ -64,11 +66,13 @@ export type ToolId =
 	| 'remove'
 	| 'music'
 	| 'paint'
+	| 'move'
 	| 'none';
 
 export interface HotbarSlotVariant {
 	toolId: ToolId;
 	label: string;
+	furnitureKind?: FurnitureKind;
 }
 
 /** Source-of-truth grouping: one numbered key, one or more tools cycled with ↑/↓. Index 0 is the default. */
@@ -87,11 +91,12 @@ export interface HotbarSlot {
 	label: string;
 	variantCount: number;
 	variantIndex: number;
+	furnitureKind?: FurnitureKind;
 }
 
 /**
  * 1 Foundation · 2 Poly Wall/Wall · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
- * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Furniture (Torch). Slot 7 is unused.
+ * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Furniture objects. Slot 7 is unused.
  */
 export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 	{ slot: 1, variants: [{ toolId: 'foundation', label: 'Foundation' }] },
@@ -128,7 +133,14 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 			{ toolId: 'floor-tiles', label: 'Tiles' }
 		]
 	},
-	{ slot: 8, variants: [{ toolId: 'torch', label: 'Torch' }] }
+	{
+		slot: 8,
+		variants: FURNITURE_KINDS.map((kind) => ({
+			toolId: 'torch' as ToolId,
+			label: getFurnitureCatalogueEntry(kind).name,
+			furnitureKind: kind
+		}))
+	}
 ];
 
 export function cycleHotbarVariantIndex(
@@ -137,7 +149,7 @@ export function cycleHotbarVariantIndex(
 	delta: number
 ): number {
 	if (variantCount <= 1) return 0;
-	return ((currentIndex + delta) % variantCount + variantCount) % variantCount;
+	return (((currentIndex + delta) % variantCount) + variantCount) % variantCount;
 }
 
 export function resolveHotbarSlot(
@@ -152,7 +164,8 @@ export function resolveHotbarSlot(
 		toolId: variant?.toolId ?? 'none',
 		label: variant?.label ?? '',
 		variantCount: definition.variants.length,
-		variantIndex: variant ? index : 0
+		variantIndex: variant ? index : 0,
+		furnitureKind: variant?.furnitureKind
 	};
 }
 
@@ -167,10 +180,7 @@ export type FloorDetailToolId = (typeof FLOOR_DETAIL_TOOLS)[number];
 
 export function isFloorDetailTool(id: ToolId): id is FloorDetailToolId {
 	return (
-		id === 'floor-carpet' ||
-		id === 'floor-path' ||
-		id === 'floor-planks' ||
-		id === 'floor-tiles'
+		id === 'floor-carpet' || id === 'floor-path' || id === 'floor-planks' || id === 'floor-tiles'
 	);
 }
 
@@ -180,10 +190,12 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'beam',
 	'wall',
 	'polygon-wall',
+	'stairs',
 	'floor-carpet',
 	'floor-path',
 	'floor-planks',
-	'floor-tiles'
+	'floor-tiles',
+	'torch'
 ] as const;
 export type CustomizablePlacementToolId = (typeof CUSTOMIZABLE_PLACEMENT_TOOLS)[number];
 
@@ -194,13 +206,15 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'beam' ||
 		id === 'wall' ||
 		id === 'polygon-wall' ||
+		id === 'stairs' ||
+		id === 'torch' ||
 		isFloorDetailTool(id)
 	);
 }
 
 export type SlabHeightToolId = 'ceiling' | 'floor' | 'flat-roof';
 
-/** Ceiling / Floor / Roof — `C` opens the placement-height modal. */
+/** Ceiling / Floor / Roof — `E` opens the placement-height modal. */
 export function isSlabHeightTool(id: ToolId): id is SlabHeightToolId {
 	return id === 'ceiling' || id === 'floor' || id === 'flat-roof';
 }
@@ -209,8 +223,10 @@ export function isSlabHeightTool(id: ToolId): id is SlabHeightToolId {
 export const PLACEMENT_CUSTOMIZE_LIMITS = {
 	windowWidth: { min: 0.2, max: 4, step: 0.05 },
 	windowHeight: { min: 0.2, max: 3, step: 0.05 },
+	windowSillHeight: { min: 0, max: 3, step: 0.05 },
 	doorWidth: { min: 0.4, max: 3, step: 0.05 },
 	doorHeight: { min: 0.5, max: 4, step: 0.05 },
+	doorSillHeight: { min: 0, max: 3, step: 0.05 },
 	beamWidth: { min: 0.2, max: 4, step: 0.05 },
 	beamHeight: { min: 0.04, max: 0.8, step: 0.01 },
 	wallHeight: { min: 0.5, max: 6, step: 0.05 },
@@ -224,6 +240,8 @@ export const PLACEMENT_CUSTOMIZE_LIMITS = {
 export const DEFAULT_WINDOW_COLOR = '#5C4632';
 export const DEFAULT_DOOR_COLOR = '#8A5A35';
 export const DEFAULT_BEAM_COLOR = '#5C4632';
+/** Unpainted stair solid — same cream as the original shared `stairMaterial`. */
+export const DEFAULT_STAIR_COLOR = '#B9AC95';
 
 export function placementColorForTool(
 	settings: BuildingSettings,
@@ -232,6 +250,7 @@ export function placementColorForTool(
 	if (toolId === 'door') return settings.doorColor;
 	if (toolId === 'beam') return settings.beamColor;
 	if (toolId === 'window') return settings.windowColor;
+	if (toolId === 'stairs') return settings.stairColor;
 	return undefined;
 }
 
@@ -280,15 +299,19 @@ export interface BuildingSettings {
 	wallThickness: number;
 	minimumWallLength: number;
 	showWallBounds: boolean;
+	showCollisionGeometry: boolean;
 
 	windowWidth: number;
 	windowHeight: number;
+	/** Bottom of the next window, metres above the wall base. Copied onto the opening as `minY`. */
 	windowSillHeight: number;
 	/** Next-window frame colour (`#RRGGBB`). Copied onto the opening at place time. */
 	windowColor: string;
 
 	doorWidth: number;
 	doorHeight: number;
+	/** Bottom of the next door, metres above the wall base (`0` = this storey's floor). Copied onto the opening as `minY`. */
+	doorSillHeight: number;
 	/** Next-door leaf colour (`#RRGGBB`). Copied onto the opening at place time. */
 	doorColor: string;
 
@@ -327,19 +350,22 @@ export interface BuildingSettings {
 	doorFrameDepth: number;
 	/** The door leaf's own thickness (a thin solid box, never a zero-thickness plane). */
 	doorThickness: number;
-	/** Extra inset between the door leaf and its frame (top + both sides). `0` means the leaf fills the inner jambs and lintel with no visible gap. Never subtracted from the bottom, which always stays flush with the floor. */
+	/** Extra inset between the door leaf and its frame (top + both sides). `0` means the leaf fills the inner jambs and lintel with no visible gap. Never subtracted from the bottom, which always stays flush with the opening's `minY` (the storey floor when the sill is 0). */
 	doorClearance: number;
 
 	/**
 	 * Procedural wall edge framing (vertical corner posts + a top beam/cap — see WallFrameBuilder.ts)
 	 * — purely derived render geometry rebuilt from each wall/path's own length/height/thickness/
-	 * baseY, never persisted. `wallFrameWidth` is each post's along-wall face width; the top beam's
+	 * baseY, never persisted. The same timber is also applied to each placed foundation cuboid
+	 * (four corner posts + four top beams, flush with the foundation's outer faces). `wallFrameWidth`
+	 * is each post's along-wall face width; the top beam's
 	 * vertical thickness is twice that so the cap reads as the same timber on the wall face. The beam
 	 * top sits just below the authored wall height so it does not share a plane with a slab or the
-	 * wall body (see buildingVisualInsets.ts). For a standalone wall the top beam always spans exactly
-	 * the wall's length. `wallFrameDepthExtra`
-	 * is how far the frame protrudes past each wall face (added to `wallThickness / 2` on both sides,
-	 * never subtracted from it, so a frame never sinks INSIDE the wall).
+	 * wall body (see buildingVisualInsets.ts). For a standalone wall the top beam spans the wall's
+	 * length plus a small overhang past each end so its end faces are not coplanar with the wall's.
+	 * `wallFrameDepthExtra` is how far the frame protrudes past each wall face (added to
+	 * `wallThickness / 2` on both sides, never subtracted from it, so a frame never sinks INSIDE
+	 * the wall).
 	 */
 	wallFrameEnabled: boolean;
 	wallFrameWidth: number;
@@ -457,12 +483,30 @@ export interface BuildingSettings {
 	showStairDirection: boolean;
 	/** Minimum vertical clearance (world units) an automatically-generated upper-floor stair opening must leave above the topmost few treads — see the README's "Stair openings" section. */
 	stairHeadClearance: number;
-	/** Decorative timber on placed stairs (stringers, back frame, inner railings, nosings, newels) — see StairFrameBuilder.ts. */
+	/** Next-stair solid colour (`#RRGGBB`). Copied onto the stair at place time. */
+	stairColor: string;
+	/**
+	 * Next-stair decorative timber (stringers, back frame, nosings) — see StairFrameBuilder.ts.
+	 * Copied onto the stair at place time; changing this later does not rebuild existing stairs.
+	 */
 	stairFrameEnabled: boolean;
+	/**
+	 * Next-stair inner railings, balusters, and newels — independent of `stairFrameEnabled`.
+	 * Copied onto the stair at place time.
+	 */
+	stairRailingsEnabled: boolean;
+	/**
+	 * Next-stair slab hole — whether the stair cuts through the floor/ceiling it reaches.
+	 * Copied onto the stair at place time. Independent of `slabOpeningFrameEnabled` (the lining).
+	 */
+	stairOpeningEnabled: boolean;
 	stairFrameWidth: number;
 	/** How far stair timber may sit past a width face or the back — not added on top of frame width. */
 	stairFrameDepthExtra: number;
-	/** Decorative timber lining a slab stairwell hole — sits inside the cut, see SlabOpeningFrameBuilder.ts. */
+	/**
+	 * Next-stair timber lining in the slab hole the stair cuts — sits inside the cut, see
+	 * SlabOpeningFrameBuilder.ts. Copied onto the stair (and that opening) at place time.
+	 */
 	slabOpeningFrameEnabled: boolean;
 	slabOpeningFrameWidth: number;
 	/** How far the lining sits past the slab's top and underside — not a flange onto the floor. */
@@ -492,6 +536,21 @@ export interface BuildingSettings {
 	floorDetailPathFraming: boolean;
 	floorDetailPreviewOpacity: number;
 	showFloorDetailBounds: boolean;
+
+	/**
+	 * Place Object (hotbar 8) — stamped onto each item at place time. Changing these never rebuilds
+	 * already-placed furniture. Last-used kind/dimensions persist in FurniturePresetStore, not the world.
+	 */
+	furnitureKind: FurnitureKind;
+	furnitureRotationY: number;
+	furnitureWidth: number;
+	furnitureDepth: number;
+	furnitureHeight: number;
+	furnitureBackrest: boolean;
+	furnitureHeadboard: boolean;
+	furnitureShelfCount: number;
+	furniturePrimaryColor: string;
+	furnitureSecondaryColor: string;
 }
 
 export function createDefaultBuildingSettings(): BuildingSettings {
@@ -512,6 +571,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		wallThickness: 0.15,
 		minimumWallLength: 0.25,
 		showWallBounds: false,
+		showCollisionGeometry: false,
 
 		windowWidth: 1.2,
 		windowHeight: 1.2,
@@ -520,6 +580,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 
 		doorWidth: 1.2,
 		doorHeight: 2.1,
+		doorSillHeight: 0,
 		doorColor: DEFAULT_DOOR_COLOR,
 
 		beamOrientation: 'vertical',
@@ -600,7 +661,10 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showStairBounds: false,
 		showStairDirection: true,
 		stairHeadClearance: 2.1,
+		stairColor: DEFAULT_STAIR_COLOR,
 		stairFrameEnabled: true,
+		stairRailingsEnabled: true,
+		stairOpeningEnabled: true,
 		stairFrameWidth: 0.12,
 		stairFrameDepthExtra: 0.05,
 		slabOpeningFrameEnabled: true,
@@ -622,7 +686,37 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		floorDetailPathWidth: 1,
 		floorDetailPathFraming: true,
 		floorDetailPreviewOpacity: 0.55,
-		showFloorDetailBounds: false
+		showFloorDetailBounds: false,
+
+		...defaultFurnitureLiveSettings()
+	};
+}
+
+function defaultFurnitureLiveSettings(): Pick<
+	BuildingSettings,
+	| 'furnitureKind'
+	| 'furnitureRotationY'
+	| 'furnitureWidth'
+	| 'furnitureDepth'
+	| 'furnitureHeight'
+	| 'furnitureBackrest'
+	| 'furnitureHeadboard'
+	| 'furnitureShelfCount'
+	| 'furniturePrimaryColor'
+	| 'furnitureSecondaryColor'
+> {
+	const entry = getFurnitureCatalogueEntry(DEFAULT_FURNITURE_KIND);
+	return {
+		furnitureKind: DEFAULT_FURNITURE_KIND,
+		furnitureRotationY: 0,
+		furnitureWidth: entry.dimensions.defaultWidth,
+		furnitureDepth: entry.dimensions.defaultDepth,
+		furnitureHeight: entry.dimensions.defaultHeight,
+		furnitureBackrest: true,
+		furnitureHeadboard: true,
+		furnitureShelfCount: 4,
+		furniturePrimaryColor: entry.defaultPrimary,
+		furnitureSecondaryColor: entry.defaultSecondary
 	};
 }
 
@@ -679,5 +773,5 @@ export interface HotbarUiState {
 	 * numbered tool was selected before the overlay was entered, and is restored to exactly that the
 	 * moment it exits. See BuildToolManager's class doc comment.
 	 */
-	globalMode: 'none' | 'remove' | 'music' | 'paint';
+	globalMode: 'none' | 'remove' | 'music' | 'paint' | 'move';
 }

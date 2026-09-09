@@ -144,14 +144,17 @@ export type StairPreviewFit = 'too-small' | 'too-tall' | 'match' | 'neutral';
 export function classifyStairPreviewFit(input: {
 	xCells: number;
 	zCells: number;
+	/** When set, used instead of `max(x,z)` — approach stairs often run along the short axis. */
+	runCells?: number;
+	widthCells?: number;
 	estimatedTopLocalY: number;
 	ceilingLocalY: number | null;
 	minimumWidthCells: number;
 	minimumRunCells: number;
 	heightMatchTolerance: number;
 }): StairPreviewFit {
-	const runCells = Math.max(input.xCells, input.zCells);
-	const widthCells = Math.min(input.xCells, input.zCells);
+	const runCells = input.runCells ?? Math.max(input.xCells, input.zCells);
+	const widthCells = input.widthCells ?? Math.min(input.xCells, input.zCells);
 	if (
 		input.xCells <= 0 ||
 		input.zCells <= 0 ||

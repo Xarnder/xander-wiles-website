@@ -13,16 +13,9 @@ import {
 	type StairLevelTriggerVolume
 } from './stairLevelTriggerMath';
 import type { StairDefinition } from './StairTypes';
+import { stairFrameEnabledOf, stairRailingsEnabledOf } from './StairTypes';
 import type { WallCollisionRect } from './wallCollision';
 
-/** Exported so ThreeScene can register it with the graphics pipeline's cascaded-shadow system — see GraphicsPipeline.registerMaterial's doc comment for why every lit material must be registered. */
-export const stairMaterial = new THREE.MeshStandardMaterial({
-	color: 0xb9ac95,
-	roughness: 0.85,
-	metalness: 0.02,
-	side: THREE.DoubleSide,
-	flatShading: true
-});
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xff9d4d });
 
 /** Vertical extent (world units, above/below the run) each side-collision strip covers — generous enough to block a player at any point of the ascent, well past typical eye height. */
@@ -117,12 +110,14 @@ export class StairManager {
 
 		const geometry = buildStairGeometry(bounds, definition.direction, definition.baseY, metrics);
 
+		const material = this.materialManager.getMaterial('stair', definition.material);
 		let mesh = existing?.mesh;
 		if (mesh) {
 			mesh.geometry.dispose();
 			mesh.geometry = geometry;
+			mesh.material = material;
 		} else {
-			mesh = new THREE.Mesh(geometry, stairMaterial);
+			mesh = new THREE.Mesh(geometry, material);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.stairId = definition.id;
 			mesh.castShadow = true;
@@ -165,7 +160,12 @@ export class StairManager {
 			definition.direction,
 			definition.baseY,
 			metrics,
-			this.buildingSettings,
+			{
+				stairFrameEnabled: stairFrameEnabledOf(definition),
+				stairRailingsEnabled: stairRailingsEnabledOf(definition),
+				stairFrameWidth: this.buildingSettings.stairFrameWidth,
+				stairFrameDepthExtra: this.buildingSettings.stairFrameDepthExtra
+			},
 			this.materialManager
 		);
 		if (framing) root.add(framing);

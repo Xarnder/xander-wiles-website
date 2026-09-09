@@ -2,6 +2,7 @@ import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import * as THREE from 'three';
 import type { BuildingManager } from './BuildingManager';
 import type { FurnitureManager } from './FurnitureManager';
+import { getFurnitureCatalogueEntry } from './furnitureCatalogue';
 import type { BuildingRemovalManager } from './BuildingRemovalManager';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
@@ -9,6 +10,7 @@ import { applyWallTransform } from './WallGeometryBuilder';
 import { ROOF_TYPE_LABELS } from './RoofTypes';
 import { computeStairMetrics } from './stairMath';
 import { computeWallLength, wallLocalToWorld } from './wallGeometryMath';
+import type { SlabType } from './SlabTypes';
 import type {
 	WallBeamDefinition,
 	WallDefinition,
@@ -73,11 +75,12 @@ export interface RemoveToolOptions {
  * while remove mode is active, leaving the hotbar's own selection completely untouched underneath.
  *
  * Targeting is a single combined raycast against every standalone wall mesh, wall-path segment
- * picking mesh, stair mesh, and this tool's own OpeningPickingProxy meshes — nearest hit wins, with
- * an opening's proxy built deliberately thicker than its wall so it always resolves ahead of the
- * (opening-unaware) solid wall/segment box it physically overlaps. The nearest hit's `userData` is
- * resolved to a logical RemovalTarget (RemovalTypes.ts) — highlighting, HUD text, and the actual
- * removal call all operate on that logical target, never on the raw mesh.
+ * picking mesh, stair mesh, slab (ceiling/floor) mesh, roof mesh, floor-detail mesh, and this
+ * tool's own OpeningPickingProxy meshes — nearest hit wins, with an opening's proxy built
+ * deliberately thicker than its wall so it always resolves ahead of the (opening-unaware) solid
+ * wall/segment box it physically overlaps. The nearest hit's `userData` is resolved to a logical
+ * RemovalTarget (RemovalTypes.ts) — highlighting, HUD text, and the actual removal call all operate
+ * on that logical target, never on the raw mesh.
  */
 export class RemoveTool implements BuildTool {
 	readonly toolId: ToolId = 'remove';
@@ -86,7 +89,9 @@ export class RemoveTool implements BuildTool {
 	private musicId?: string;
 	private furnitureId?: string;
 	private musicHighlight = new THREE.BoxHelper(new THREE.Group(), 0xff6655);
-	private readonly furnitureHighlightMatrix = new THREE.Matrix4();
+	private readonly furnitureAabb = new THREE.Box3();
+	private readonly furnitureHighlightCenter = new THREE.Vector3();
+	private readonly furnitureHighlightSize = new THREE.Vector3();
 	private readonly furnitureHighlight: THREE.Mesh;
 
 	private readonly scene: THREE.Scene;
@@ -131,8 +136,7 @@ export class RemoveTool implements BuildTool {
 		this.furniture = options.furniture;
 		options.scene.add(this.musicHighlight);
 		this.musicHighlight.visible = false;
-		const furnitureHighlightGeometry = new THREE.BoxGeometry(0.14, 0.52, 0.14);
-		furnitureHighlightGeometry.translate(0, 0.26, 0);
+		const furnitureHighlightGeometry = new THREE.BoxGeometry(1, 1, 1);
 		this.furnitureHighlight = new THREE.Mesh(
 			furnitureHighlightGeometry,
 			new THREE.MeshBasicMaterial({
@@ -145,7 +149,6 @@ export class RemoveTool implements BuildTool {
 		);
 		this.furnitureHighlight.visible = false;
 		this.furnitureHighlight.renderOrder = 21;
-		this.furnitureHighlight.matrixAutoUpdate = false;
 		options.scene.add(this.furnitureHighlight);
 		this.scene = options.scene;
 		this.camera = options.camera;
@@ -191,6 +194,7 @@ export class RemoveTool implements BuildTool {
 		const candidates: THREE.Object3D[] = [
 			...this.buildingManager.getRaycastableWallMeshes(),
 			...this.buildingManager.getRaycastableStairMeshes(),
+			...this.buildingManager.getRaycastableSlabMeshes(),
 			...this.buildingManager.getRaycastableRoofMeshes(),
 			...this.buildingManager.getRaycastableFloorDetailMeshes(),
 			...this.openingProxies.map((proxy) => proxy.mesh),
@@ -205,14 +209,13 @@ export class RemoveTool implements BuildTool {
 		const plantHit = this.music
 			? this.raycaster.intersectObjects([...this.music.plants.visuals.values()], true)[0]
 			: undefined;
-		const furnitureHit = this.furniture
-			? this.raycaster.intersectObject(this.furniture.getPickMesh(), false)[0]
-			: undefined;
-		const furnitureCloser =
-			furnitureHit &&
-			furnitureHit.instanceId !== undefined &&
-			(!hit || furnitureHit.distance < hit.distance);
-		if (plantHit && (!hit || plantHit.distance < hit.distance) && (!furnitureHit || plantHit.distance <= furnitureHit.distance)) {
+		const furnitureHit = this.pickFurniture();
+		const furnitureCloser = furnitureHit && (!hit || furnitureHit.distance < hit.distance);
+		if (
+			plantHit &&
+			(!hit || plantHit.distance < hit.distance) &&
+			(!furnitureHit || plantHit.distance <= furnitureHit.distance)
+		) {
 			this.musicId = plantHit.object.userData.musicPlantId;
 			this.setHoveredTarget(null, null);
 			this.musicHighlight.setFromObject(this.music!.plants.visuals.get(this.musicId!)!);
@@ -225,20 +228,27 @@ export class RemoveTool implements BuildTool {
 			return;
 		}
 		if (furnitureCloser && furnitureHit && this.furniture) {
-			const id = this.furniture.idAtInstance(furnitureHit.instanceId!);
-			if (id && this.furniture.getInstanceWorldMatrix(furnitureHit.instanceId!, this.furnitureHighlightMatrix)) {
-				this.furnitureId = id;
-				this.setHoveredTarget(null, null);
-				this.furnitureHighlight.matrix.copy(this.furnitureHighlightMatrix);
+			this.furnitureId = furnitureHit.id;
+			this.setHoveredTarget(null, null);
+			if (this.furniture.getWorldAabb(furnitureHit.id, this.furnitureAabb)) {
+				this.furnitureAabb.getCenter(this.furnitureHighlightCenter);
+				this.furnitureAabb.getSize(this.furnitureHighlightSize);
+				this.furnitureHighlight.position.copy(this.furnitureHighlightCenter);
+				this.furnitureHighlight.scale.copy(this.furnitureHighlightSize);
+				this.furnitureHighlight.scale.x = Math.max(0.08, this.furnitureHighlight.scale.x);
+				this.furnitureHighlight.scale.y = Math.max(0.08, this.furnitureHighlight.scale.y);
+				this.furnitureHighlight.scale.z = Math.max(0.08, this.furnitureHighlight.scale.z);
 				this.furnitureHighlight.updateMatrixWorld(true);
 				this.furnitureHighlight.visible = true;
-				this.onHudChange?.({
-					toolId: 'remove',
-					crosshair: 'valid',
-					hintLines: ['REMOVE TORCH', 'Click Remove · X Exit']
-				});
-				return;
 			}
+			const kind = this.furniture.get(furnitureHit.id)?.kind;
+			const label = kind ? getFurnitureCatalogueEntry(kind).name.toUpperCase() : 'OBJECT';
+			this.onHudChange?.({
+				toolId: 'remove',
+				crosshair: 'valid',
+				hintLines: [`REMOVE ${label}`, 'Click Remove · X Exit']
+			});
+			return;
 		}
 		const target = hit ? resolveRemovalTarget(hit.object.userData as BuildingPickUserData) : null;
 
@@ -279,6 +289,20 @@ export class RemoveTool implements BuildTool {
 		// removal is a single click, never a multi-step placement.
 	}
 
+	private pickFurniture(): { id: string; distance: number } | undefined {
+		if (!this.furniture) return undefined;
+		const meshes = this.furniture.getPickMeshes();
+		if (meshes.length === 0) return undefined;
+		const hit = this.raycaster.intersectObjects(meshes, true)[0];
+		if (!hit) return undefined;
+		if (hit.object === this.furniture.getPickMesh() && hit.instanceId !== undefined) {
+			const id = this.furniture.idAtInstance(hit.instanceId);
+			return id ? { id, distance: hit.distance } : undefined;
+		}
+		const id = this.furniture.idFromObject(hit.object);
+		return id ? { id, distance: hit.distance } : undefined;
+	}
+
 	/** Called by BuildToolManager when the `showRemovalPickingProxies` GUI toggle changes — see its class doc comment. */
 	setShowPickingProxies(visible: boolean): void {
 		for (const proxy of this.openingProxies) proxy.mesh.visible = visible;
@@ -313,6 +337,7 @@ export class RemoveTool implements BuildTool {
 	private trackHighlightTransform(hitObject: THREE.Object3D): void {
 		hitObject.getWorldPosition(this.highlightMesh.position);
 		hitObject.getWorldQuaternion(this.highlightMesh.quaternion);
+		hitObject.getWorldScale(this.highlightMesh.scale);
 	}
 
 	private clearHighlight(): void {
@@ -486,6 +511,12 @@ export class RemoveTool implements BuildTool {
 					`${levelDisplayName(stair.levelIndex)} → ${levelDisplayName(stair.levelIndex + 1)}`
 				];
 			}
+			case 'slab': {
+				const slab = this.buildingManager.getSlab(target.slabId);
+				const label = slabTypeLabel(slab?.type);
+				if (!slab) return [label];
+				return [label, `${slab.thickness.toFixed(2)}m thick`];
+			}
 			case 'roof': {
 				const roof = this.buildingManager.getRoof(target.roofId);
 				if (!roof) return ['Roof'];
@@ -517,6 +548,8 @@ export class RemoveTool implements BuildTool {
 				return 'Beam';
 			case 'stair':
 				return 'Stairs';
+			case 'slab':
+				return slabTypeLabel(this.buildingManager.getSlab(target.slabId)?.type);
 			case 'roof': {
 				const roof = this.buildingManager.getRoof(target.roofId);
 				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';
@@ -544,4 +577,10 @@ export class RemoveTool implements BuildTool {
 		this.highlightMaterial.dispose();
 		this.proxyMaterial.dispose();
 	}
+}
+
+function slabTypeLabel(type: SlabType | undefined): string {
+	if (type === 'ceiling') return 'Ceiling';
+	if (type === 'flat-roof') return 'Flat Roof';
+	return 'Floor';
 }

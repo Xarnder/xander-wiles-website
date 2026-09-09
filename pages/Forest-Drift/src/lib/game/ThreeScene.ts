@@ -13,6 +13,7 @@ import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
 import { CeilingTool } from './building/CeilingTool';
 import { DoorInteractionController } from './building/DoorInteractionController';
+import { CollisionVisualizer } from './building/CollisionVisualizer';
 import { BeamTool } from './building/BeamTool';
 import { DoorTool } from './building/DoorTool';
 import { FloorDetailManager } from './building/FloorDetailManager';
@@ -36,12 +37,13 @@ import type { PaintUiState } from './building/PaintTool';
 import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
 import { RemoveTool } from './building/RemoveTool';
+import { MoveTool } from './building/MoveTool';
 import { RoofManager } from './building/RoofManager';
 import { RoofTool } from './building/RoofTool';
 import { roomLidsFromSlabs } from './building/skirtingMath';
 import { SlabManager } from './building/SlabManager';
 import { StairLevelTrigger } from './building/StairLevelTrigger';
-import { StairManager, stairMaterial } from './building/StairManager';
+import { StairManager } from './building/StairManager';
 import { StairTool } from './building/StairTool';
 import { resolvePlayerPositionAgainstWalls } from './building/wallCollision';
 import { WallManager } from './building/WallManager';
@@ -254,6 +256,8 @@ export class ThreeScene implements WorldRuntime {
 	readonly settingsHost: GameSettingsHost;
 	private readonly removeTool: RemoveTool;
 	private readonly paintTool: PaintTool;
+	private readonly moveTool: MoveTool;
+	private readonly collisionVisualizer: CollisionVisualizer;
 	private readonly buildToolManager: BuildToolManager;
 	private readonly resizeObserver: ResizeObserver;
 
@@ -354,7 +358,6 @@ export class ThreeScene implements WorldRuntime {
 		this.terrainManager = new TerrainManager(this.settings);
 		this.scene.add(this.terrainManager.group);
 		this.graphicsPipeline.registerMaterial(terrainMaterial);
-		this.graphicsPipeline.registerMaterial(stairMaterial);
 		const glassMaterial = getGlassMaterial();
 		this.graphicsPipeline.registerMaterial(glassMaterial);
 
@@ -365,7 +368,8 @@ export class ThreeScene implements WorldRuntime {
 		);
 		this.foundationManager = new FoundationManager(
 			() => vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
-			this.materialManager
+			this.materialManager,
+			buildingSettings
 		);
 		this.scene.add(this.foundationManager.group);
 
@@ -439,7 +443,7 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.scene.add(this.floorDetailManager.group);
 
-		this.furnitureManager = new FurnitureManager();
+		this.furnitureManager = new FurnitureManager(this.materialManager);
 		this.scene.add(this.furnitureManager.group);
 		for (const material of this.furnitureManager.getMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
@@ -507,7 +511,8 @@ export class ThreeScene implements WorldRuntime {
 						...this.wallManager.getAllCollisionRects(),
 						...this.wallPathManager.getAllCollisionRects(),
 						...this.stairManager.getAllCollisionRects(),
-						...(this.doorInteraction?.getCollisionRects() ?? [])
+						...(this.doorInteraction?.getCollisionRects() ?? []),
+						...this.furnitureManager.getCollisionRects()
 					]
 				);
 			}
@@ -623,6 +628,8 @@ export class ThreeScene implements WorldRuntime {
 			foundationManager: this.foundationManager,
 			buildingManager: this.buildingManager,
 			levelManager: this.levelManager,
+			terrainHeightSampler: this.terrainManager.getHeightSampler(),
+			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
@@ -661,9 +668,17 @@ export class ThreeScene implements WorldRuntime {
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
+			foundationManager: this.foundationManager,
 			furnitureManager: this.furnitureManager,
 			undoManager: this.undoManager,
+			buildingSettings,
+			worldSurfaceSampler: this.worldSurfaceSampler,
 			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
+			getWallRects: () => [
+				...this.wallManager.getAllCollisionRects(),
+				...this.wallPathManager.getAllCollisionRects(),
+				...(this.doorInteraction?.getCollisionRects() ?? [])
+			],
 			onHudChange: options.onBuildHudChange
 		});
 		for (const material of this.furnitureTool.getPreviewMaterials()) {
@@ -737,6 +752,25 @@ export class ThreeScene implements WorldRuntime {
 			onPaintStateChange: options.onPaintStateChange
 		});
 
+		this.moveTool = new MoveTool({
+			scene: this.scene,
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			foundationManager: this.foundationManager,
+			furnitureManager: this.furnitureManager,
+			undoManager: this.undoManager,
+			buildingSettings,
+			worldSurfaceSampler: this.worldSurfaceSampler,
+			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
+			getWallRects: () => [
+				...this.wallManager.getAllCollisionRects(),
+				...this.wallPathManager.getAllCollisionRects(),
+				...(this.doorInteraction?.getCollisionRects() ?? [])
+			],
+			onHudChange: options.onBuildHudChange,
+			openPlacementCustomize: () => this.buildToolManager.togglePlacementCustomize()
+		});
+
 		this.doorInteraction = new DoorInteractionController({
 			camera: this.camera,
 			getHingePivots: () => this.buildingManager.getDoorHingePivots(),
@@ -762,8 +796,10 @@ export class ThreeScene implements WorldRuntime {
 				'floor-tiles': this.floorTilesTool,
 				torch: this.furnitureTool
 			},
+			buildingSettings,
 			removeTool: this.removeTool,
 			paintTool: this.paintTool,
+			moveTool: this.moveTool,
 			musicTool: this.music,
 			isInputBlocked: () =>
 				this.devPanelOpen || this.music.importPanelOpen || this.music.committing,
@@ -772,6 +808,29 @@ export class ThreeScene implements WorldRuntime {
 			onHudChange: options.onBuildHudChange,
 			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
 			onPlacementHeightChange: options.onPlacementHeightChange
+		});
+
+		this.collisionVisualizer = new CollisionVisualizer(this.scene, {
+			getWallRects: () => this.wallManager.getAllCollisionRects(),
+			getWallPathRects: () => this.wallPathManager.getAllCollisionRects(),
+			getStairRects: () => this.stairManager.getAllCollisionRects(),
+			getDoorRects: () => this.doorInteraction?.getCollisionRects() ?? [],
+			getFurnitureRects: () => this.furnitureManager.getCollisionRects(),
+			getCreatureColliders: () => {
+				if (!this.creatures) return [];
+				const list = [];
+				for (const { compiled: c } of this.creatures.live.values()) {
+					const p = c.object.position;
+					list.push({
+						x: p.x,
+						y: p.y,
+						z: p.z,
+						radius: c.compilation.collision.radius + 0.3,
+						height: c.compilation.collision.height
+					});
+				}
+				return list;
+			}
 		});
 
 		this.settingsHost = {
@@ -816,6 +875,9 @@ export class ThreeScene implements WorldRuntime {
 					this.wallManager.setShowBounds(buildingSettings.showWallBounds);
 					this.wallPathManager.setShowBounds(buildingSettings.showWallBounds);
 				},
+				collisionGeometry: () => {
+					this.collisionVisualizer.setEnabled(buildingSettings.showCollisionGeometry);
+				},
 				openingVisuals: () => {
 					this.wallManager.rebuildAllWalls();
 					this.wallPathManager.rebuildAllPaths();
@@ -823,6 +885,7 @@ export class ThreeScene implements WorldRuntime {
 				wallFraming: () => {
 					this.wallManager.rebuildAllWalls();
 					this.wallPathManager.rebuildAllPaths();
+					this.foundationManager.rebuildAllFrames();
 				},
 				stairwellFraming: () => {
 					this.stairManager.rebuildAllStairs();
@@ -986,6 +1049,15 @@ export class ThreeScene implements WorldRuntime {
 		this.buildToolManager.togglePaintMode();
 	}
 
+	/** Lets the Svelte hotbar UI's move icon toggle Move Mode by click, in addition to the `M` key shortcut. */
+	toggleMoveMode(): void {
+		this.buildToolManager.toggleMoveMode();
+	}
+
+	isMoveModeActive(): boolean {
+		return this.buildToolManager.isMoveModeActive();
+	}
+
 	/** Lets the Svelte MaterialPalette select a colour (or `undefined` for "Default") by click. */
 	selectPaintMaterial(material: Parameters<PaintTool['selectMaterial']>[0]): void {
 		this.paintTool.selectMaterial(material);
@@ -1009,6 +1081,10 @@ export class ThreeScene implements WorldRuntime {
 		this.buildToolManager.closePlacementCustomize();
 	}
 
+	syncFurnitureVariant(): void {
+		this.buildToolManager.syncFurnitureVariant();
+	}
+
 	closePlacementHeight(): void {
 		this.buildToolManager.closePlacementHeight();
 	}
@@ -1021,6 +1097,16 @@ export class ThreeScene implements WorldRuntime {
 	/** Lets the on-screen floor selector's ▲ button move up a level by click, identically to Page Up. */
 	moveLevelUp(): void {
 		this.levelManager.moveUp();
+	}
+
+	/**
+	 * Resets the player to the start location (0, 0), landing cleanly on the highest
+	 * supporting surface at eye height, and primes the terrain around the spawn.
+	 */
+	respawn(): void {
+		this.controller.respawn(0, 0);
+		this.terrainManager.primeAround(0, 0, 1);
+		this.treeManager.update(0, 0);
 	}
 
 	/**
@@ -1429,6 +1515,9 @@ export class ThreeScene implements WorldRuntime {
 			this.graphicsPipeline.getQuality()
 		);
 		this.furnitureManager.updateLights(this.camera.position, nowMs / 1000);
+		if (this.collisionVisualizer.isEnabled()) {
+			this.collisionVisualizer.update();
+		}
 
 		this.skySystem.update(this.camera.position);
 		this.cloudSystem.update(
@@ -1539,7 +1628,9 @@ export class ThreeScene implements WorldRuntime {
 		this.music.dispose();
 		this.creatures.dispose();
 		this.paintTool.dispose();
+		this.moveTool.dispose();
 		this.materialManager.dispose();
+		this.collisionVisualizer.dispose();
 		this.treeManager.dispose();
 		this.wallManager.dispose();
 		this.wallPathManager.dispose();

@@ -25,7 +25,10 @@
 
 	function visibleFields(group: SettingsGroup) {
 		if (!normalizedQuery) return group.fields;
-		if (group.title.toLowerCase().includes(normalizedQuery) || group.id.toLowerCase().includes(normalizedQuery))
+		if (
+			group.title.toLowerCase().includes(normalizedQuery) ||
+			group.id.toLowerCase().includes(normalizedQuery)
+		)
 			return group.fields;
 		return group.fields.filter((field) => fieldMatchesQuery(field, normalizedQuery));
 	}
@@ -41,9 +44,7 @@
 		if (match) categoryId = match;
 	}
 
-	const activeHasResults = $derived(
-		!!active && active.groups.some((group) => showGroup(group))
-	);
+	const activeHasResults = $derived(!!active && active.groups.some((group) => showGroup(group)));
 </script>
 
 {#snippet fieldList(group: SettingsGroup)}
@@ -77,7 +78,9 @@
 					value={query}
 					oninput={onSearchInput}
 				/>
-				<button type="button" class="close" data-testid="settings-close" onclick={onClose}>Done</button>
+				<button type="button" class="close" data-testid="settings-close" onclick={onClose}
+					>Done</button
+				>
 			</div>
 		</header>
 

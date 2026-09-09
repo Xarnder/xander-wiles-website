@@ -57,7 +57,9 @@ export function floorDetailMeshMinY(hostY: number): number {
 	return hostY + FLOOR_DETAIL_HOST_LIFT;
 }
 
-export function axisAlignedRectFromPoints(points: readonly BuildingGridPoint[]): FloorDetailRect | null {
+export function axisAlignedRectFromPoints(
+	points: readonly BuildingGridPoint[]
+): FloorDetailRect | null {
 	if (points.length < 2) return null;
 	let minGridX = Infinity;
 	let maxGridX = -Infinity;
@@ -272,7 +274,10 @@ export function validateFloorDetailFootprint(
 		if (points.length > 3) return { valid: false, reason: 'Path can have a start, bend, and end' };
 		const authored = pathAuthoring(points);
 		if (!authored) return { valid: false, reason: 'Path needs a start and end' };
-		if (authored.start.gridX === authored.end.gridX && authored.start.gridZ === authored.end.gridZ) {
+		if (
+			authored.start.gridX === authored.end.gridX &&
+			authored.start.gridZ === authored.end.gridZ
+		) {
 			return { valid: false, reason: 'Path start and end must be different' };
 		}
 		if (!(pathWidth > 0) || !Number.isFinite(pathWidth)) {
@@ -310,12 +315,7 @@ function yRange(
 	return { minY, maxY: minY + floorDetailThickness(kind, renderMode) + extra };
 }
 
-function axisBox(
-	rect: LocalRect,
-	minY: number,
-	maxY: number,
-	color: string
-): FloorDetailBox {
+function axisBox(rect: LocalRect, minY: number, maxY: number, color: string): FloorDetailBox {
 	return {
 		minX: Math.min(rect.minX, rect.maxX),
 		maxX: Math.max(rect.minX, rect.maxX),
@@ -337,7 +337,7 @@ function insetRect(rect: LocalRect, amount: number): LocalRect | null {
 }
 
 function tileColor(
-	pattern: FloorDetailTilePattern,
+	pattern: Exclude<FloorDetailTilePattern, 'diamond'>,
 	ix: number,
 	iz: number,
 	colors: readonly string[]
@@ -347,14 +347,18 @@ function tileColor(
 			return colorAt(colors, 0);
 		case 'checker':
 			return colorAt(colors, (ix + iz) & 1);
-		case 'diamond':
-			return colorAt(colors, Math.abs(ix - iz) & 1);
 		case 'running-bond':
 			return colorAt(colors, (ix + (iz & 1)) & 1);
 	}
 }
 
-function rimBoxes(rect: LocalRect, inner: LocalRect, minY: number, maxY: number, color: string): FloorDetailBox[] {
+function rimBoxes(
+	rect: LocalRect,
+	inner: LocalRect,
+	minY: number,
+	maxY: number,
+	color: string
+): FloorDetailBox[] {
 	const parts: LocalRect[] = [
 		{ minX: rect.minX, maxX: rect.maxX, minZ: rect.minZ, maxZ: inner.minZ },
 		{ minX: rect.minX, maxX: rect.maxX, minZ: inner.maxZ, maxZ: rect.maxZ },
@@ -463,6 +467,8 @@ function buildTileBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 	const grid = axisAlignedRectFromPoints(def.points);
 	if (!grid) return [];
 	const rect = localRectFromGridRect(grid, gridSize);
+	if (def.tilePattern === 'diamond') return buildDiamondTileBoxes(def, rect);
+
 	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
 	const tileSize = Math.max(0.12, def.tileSize);
 	const groove = def.renderMode === '3d' ? FLOOR_DETAIL_3D_GROOVE : 0;
@@ -496,6 +502,51 @@ function buildTileBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 					tileColor(def.tilePattern, ix, iz, def.colors)
 				)
 			);
+		}
+	}
+	return boxes;
+}
+
+/** Squares rotated 45° on a diamond lattice so the pattern is distinct from axis-aligned checker. */
+function buildDiamondTileBoxes(def: FloorDetailDefinition, rect: LocalRect): FloorDetailBox[] {
+	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
+	const width = rect.maxX - rect.minX;
+	const depth = rect.maxZ - rect.minZ;
+	if (width < 1e-4 || depth < 1e-4) return [];
+
+	const requested = Math.max(0.12, def.tileSize);
+	const span = Math.min(width, depth);
+	const D = Math.min(requested, span);
+	const step = D / 2;
+	const side = D / Math.SQRT2;
+	const groove = def.renderMode === '3d' ? FLOOR_DETAIL_3D_GROOVE : 0;
+	const inner = Math.max(1e-3, side - groove);
+	const half = inner / 2;
+	const yaw = Math.PI / 4;
+	const halfExtent = D / 2;
+	const boxes: FloorDetailBox[] = [];
+
+	const iMax = Math.ceil(width / step) + 2;
+	const jMax = Math.ceil(depth / step) + 2;
+	let count = 0;
+	for (let j = 0; j <= jMax && count < MAX_BOARD_COUNT; j++) {
+		for (let i = 0; i <= iMax && count < MAX_BOARD_COUNT; i++) {
+			if (((i + j) & 1) !== 0) continue;
+			const cx = rect.minX + i * step;
+			const cz = rect.minZ + j * step;
+			if (cx - halfExtent < rect.minX - 1e-6 || cx + halfExtent > rect.maxX + 1e-6) continue;
+			if (cz - halfExtent < rect.minZ - 1e-6 || cz + halfExtent > rect.maxZ + 1e-6) continue;
+			boxes.push({
+				minX: cx - half,
+				maxX: cx + half,
+				minY,
+				maxY,
+				minZ: cz - half,
+				maxZ: cz + half,
+				color: colorAt(def.colors, i & 1),
+				yaw
+			});
+			count += 1;
 		}
 	}
 	return boxes;

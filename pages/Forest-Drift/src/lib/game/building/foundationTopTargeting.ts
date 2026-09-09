@@ -10,10 +10,13 @@ import {
 } from './FoundationLocalMath';
 import type { FoundationManager } from './FoundationManager';
 import type { FoundationDefinition } from './FoundationTypes';
+import { resolveSlabPlacementLocalY, type SlabPlacementHeightSettings } from './slabPlacementMath';
 import {
-	resolveSlabPlacementLocalY,
-	type SlabPlacementHeightSettings
-} from './slabPlacementMath';
+	distanceToFoundationLocal,
+	foundationGridCellCounts,
+	isStairGridPointNearFoundation,
+	MAX_STAIR_EXTERIOR_CELLS
+} from './stairPlacementMath';
 
 export interface FoundationTopHit {
 	foundationId: string;
@@ -132,7 +135,119 @@ export function raycastLevelConstructionPlane(
 	return null;
 }
 
-function intersectFoundationPlane(
+/**
+ * Stair-tool targeting: the current storey's construction plane *inside* the pad (same as
+ * `raycastLevelConstructionPlane`), plus terrain beside the pad so an approach flight can be
+ * aimed from the ground. Grid coordinates may fall outside the footprint; they stay in that
+ * foundation's local building grid so the stair can snap flush to an edge.
+ */
+export function raycastStairPlacement(
+	raycaster: THREE.Raycaster,
+	foundationManager: FoundationManager,
+	levelManager: BuildingLevelManager,
+	vertexSpacing: number,
+	buildingGridSize: number,
+	terrainMeshes: readonly THREE.Object3D[] = []
+): FoundationTopHit | null {
+	const meshHit = raycastFoundationTop(
+		raycaster,
+		foundationManager,
+		vertexSpacing,
+		buildingGridSize
+	);
+
+	const terrainHit =
+		terrainMeshes.length > 0
+			? raycaster.intersectObjects(terrainMeshes as THREE.Object3D[], false)[0]
+			: undefined;
+
+	let foundationId = meshHit?.foundationId;
+	if (!foundationId) {
+		const origin = raycaster.ray.origin;
+		foundationId = foundationManager.getFoundationContaining(origin.x, origin.z)?.id;
+	}
+	if (!foundationId) {
+		foundationId = levelManager.getActiveFoundationId() ?? undefined;
+	}
+	if (!foundationId && terrainHit) {
+		foundationId =
+			nearestFoundationIdForStair(
+				foundationManager,
+				terrainHit.point.x,
+				terrainHit.point.z,
+				vertexSpacing,
+				buildingGridSize
+			) ?? undefined;
+	}
+	if (!foundationId) return null;
+
+	const foundation = foundationManager.getFoundation(foundationId);
+	if (!foundation) return null;
+
+	const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+	const { cellsX, cellsZ } = foundationGridCellCounts(width, depth, buildingGridSize);
+	const currentLevelIndex = levelManager.getCurrentLevelIndex(foundationId);
+	const level = levelManager.getOrCreateLevel(foundationId, currentLevelIndex);
+	const planeGrid = planeGridAt(
+		raycaster,
+		foundation,
+		foundation.topY + level.baseY,
+		vertexSpacing,
+		buildingGridSize
+	);
+	const planeInside =
+		planeGrid && isBuildingGridPointInsideFoundation(planeGrid, buildingGridSize, width, depth)
+			? planeGrid
+			: null;
+
+	if (planeInside) return { foundationId, gridPoint: planeInside };
+	if (meshHit && meshHit.foundationId === foundationId) return meshHit;
+
+	if (terrainHit) {
+		const frame = foundationLocalFrame(foundation, vertexSpacing);
+		const local = worldToFoundationLocal(
+			frame,
+			terrainHit.point.x,
+			terrainHit.point.y,
+			terrainHit.point.z
+		);
+		const gridPoint = snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
+		if (isStairGridPointNearFoundation(gridPoint.gridX, gridPoint.gridZ, cellsX, cellsZ)) {
+			return { foundationId, gridPoint };
+		}
+	}
+
+	if (planeGrid && isStairGridPointNearFoundation(planeGrid.gridX, planeGrid.gridZ, cellsX, cellsZ)) {
+		return { foundationId, gridPoint: planeGrid };
+	}
+
+	return null;
+}
+
+function nearestFoundationIdForStair(
+	foundationManager: FoundationManager,
+	worldX: number,
+	worldZ: number,
+	vertexSpacing: number,
+	buildingGridSize: number
+): string | null {
+	const maxDist = MAX_STAIR_EXTERIOR_CELLS * buildingGridSize;
+	let bestId: string | null = null;
+	let bestDist = Infinity;
+	for (const foundation of foundationManager.getFoundations()) {
+		const frame = foundationLocalFrame(foundation, vertexSpacing);
+		const local = worldToFoundationLocal(frame, worldX, 0, worldZ);
+		const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+		const dist = distanceToFoundationLocal(local.localX, local.localZ, width, depth);
+		if (dist <= maxDist && dist < bestDist) {
+			bestDist = dist;
+			bestId = foundation.id;
+		}
+	}
+	return bestId;
+}
+
+function planeGridAt(
 	raycaster: THREE.Raycaster,
 	foundation: FoundationDefinition,
 	planeWorldY: number,
@@ -148,7 +263,24 @@ function intersectFoundationPlane(
 	const hitZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t;
 	const frame = foundationLocalFrame(foundation, vertexSpacing);
 	const local = worldToFoundationLocal(frame, hitX, planeWorldY, hitZ);
-	const gridPoint = snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
+	return snapLocalToBuildingGrid(local.localX, local.localZ, buildingGridSize);
+}
+
+function intersectFoundationPlane(
+	raycaster: THREE.Raycaster,
+	foundation: FoundationDefinition,
+	planeWorldY: number,
+	vertexSpacing: number,
+	buildingGridSize: number
+): BuildingGridPoint | null {
+	const gridPoint = planeGridAt(
+		raycaster,
+		foundation,
+		planeWorldY,
+		vertexSpacing,
+		buildingGridSize
+	);
+	if (!gridPoint) return null;
 	const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
 	if (!isBuildingGridPointInsideFoundation(gridPoint, buildingGridSize, width, depth)) return null;
 	return gridPoint;

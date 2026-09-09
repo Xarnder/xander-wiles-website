@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
+import { createDefaultBuildingSettings } from '../FoundationTypes';
 import { RoofManager } from '../RoofManager';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
@@ -161,5 +162,48 @@ describe('WorldSurfaceSampler', () => {
 		// referenceY (the player's current feet Y, from much lower ground) is well below the
 		// foundation top — it must still be returned, not the terrain height (0).
 		expect(sampler.getSupportingSurfaceY(0, 0, 1)).toBe(12);
+	});
+});
+
+describe('FoundationManager edge framing', () => {
+	function findByName(
+		root: { traverse: (fn: (child: { name: string }) => void) => void },
+		name: string
+	): { name: string } | undefined {
+		let found: { name: string } | undefined;
+		root.traverse((child) => {
+			if (!found && child.name === name) found = child;
+		});
+		return found;
+	}
+
+	it('adds wall-style timber as a sibling of the cuboid, not a raycast target', () => {
+		const manager = new FoundationManager(() => SPACING);
+		manager.addFoundation(makeDefinition());
+		expect(findByName(manager.group, 'foundation-frame')).toBeDefined();
+		expect(findByName(manager.group, 'wall-frame-solid')).toBeDefined();
+		const meshes = manager.getMeshes();
+		expect(meshes).toHaveLength(1);
+		expect(findByName(meshes[0], 'foundation-frame')).toBeUndefined();
+	});
+
+	it('drops framing when the shared wall-frame setting is turned off', () => {
+		const settings = createDefaultBuildingSettings();
+		const manager = new FoundationManager(() => SPACING, undefined, settings);
+		manager.addFoundation(makeDefinition());
+		expect(findByName(manager.group, 'foundation-frame')).toBeDefined();
+
+		settings.wallFrameEnabled = false;
+		manager.rebuildAllFrames();
+		expect(findByName(manager.group, 'foundation-frame')).toBeUndefined();
+	});
+
+	it('removes framing with the foundation', () => {
+		const manager = new FoundationManager(() => SPACING);
+		manager.addFoundation(makeDefinition());
+		expect(findByName(manager.group, 'foundation-frame')).toBeDefined();
+		manager.removeFoundation('test-foundation');
+		expect(findByName(manager.group, 'foundation-frame')).toBeUndefined();
+		expect(manager.group.children).toHaveLength(0);
 	});
 });

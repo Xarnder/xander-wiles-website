@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { BuildingManager } from '../BuildingManager';
 import { FoundationManager } from '../FoundationManager';
 import type { FoundationDefinition } from '../FoundationTypes';
 import { FloorDetailManager } from '../FloorDetailManager';
 import { RoofManager } from '../RoofManager';
+import { createDefaultRoofProfileSettings } from '../RoofTypes';
+import { resolveRemovalTarget } from '../RemovalTypes';
 import { roomLidsFromSlabs } from '../skirtingMath';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
@@ -30,7 +33,11 @@ function makeFoundation(overrides: Partial<FoundationDefinition> = {}): Foundati
 
 function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORNER_OPENING_MARGIN) {
 	const foundationManager = new FoundationManager(() => VERTEX_SPACING);
-	let slabManager!: SlabManager;
+	const slabManager = new SlabManager({
+		getFoundation: (id) => foundationManager.getFoundation(id),
+		getVertexSpacing: () => VERTEX_SPACING,
+		getBuildingGridSize: () => buildingGridSize
+	});
 	const getRoomLids = (foundationId: string) =>
 		roomLidsFromSlabs(slabManager.getSlabsForFoundation(foundationId), buildingGridSize);
 	const wallManager = new WallManager({
@@ -44,11 +51,6 @@ function setup(buildingGridSize = BUILDING_GRID_SIZE, cornerOpeningMargin = CORN
 		getVertexSpacing: () => VERTEX_SPACING,
 		getBuildingGridSize: () => buildingGridSize,
 		getRoomLids
-	});
-	slabManager = new SlabManager({
-		getFoundation: (id) => foundationManager.getFoundation(id),
-		getVertexSpacing: () => VERTEX_SPACING,
-		getBuildingGridSize: () => buildingGridSize
 	});
 	const stairManager = new StairManager({
 		getFoundation: (id) => foundationManager.getFoundation(id),
@@ -299,6 +301,27 @@ describe('BuildingManager.addOpening', () => {
 
 		expect(result.valid).toBe(true);
 		expect(result.value?.minY).toBe(0);
+	});
+
+	it('adds a door with a raised sill (minY > 0)', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+
+		const result = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'door',
+			minU: 4,
+			maxU: 4.9,
+			minY: 0.4,
+			maxY: 2.5,
+			edgeMargin: 0.1,
+			spacing: 0.15
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.minY).toBe(0.4);
+		expect(result.value?.maxY).toBe(2.5);
 	});
 });
 
@@ -1172,6 +1195,35 @@ describe('BuildingManager.addStair — validation', () => {
 		expect(result.value?.direction).toBe('+x');
 	});
 
+	it('stamps colour, framing, railings, hole, and hole framing onto a new stair', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 0,
+			maxGridX: 12,
+			minGridZ: 0,
+			maxGridZ: 4,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS,
+			material: { type: 'color', color: '#C1694F' },
+			frameEnabled: false,
+			railingsEnabled: true,
+			openingEnabled: false,
+			openingFrameEnabled: false
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.material).toEqual({ type: 'color', color: '#C1694F' });
+		expect(result.value?.frameEnabled).toBe(false);
+		expect(result.value?.railingsEnabled).toBe(true);
+		expect(result.value?.openingEnabled).toBe(false);
+		expect(result.value?.openingFrameEnabled).toBe(false);
+	});
+
 	it('rejects a direction running along the short axis', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
@@ -1229,7 +1281,7 @@ describe('BuildingManager.addStair — validation', () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it('rejects a footprint extending outside the foundation', () => {
+	it('rejects a footprint that is neither on the pad nor flush with an edge', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
 
@@ -1246,6 +1298,44 @@ describe('BuildingManager.addStair — validation', () => {
 		});
 
 		expect(result.valid).toBe(false);
+	});
+
+	it('accepts an approach stair snapped flush to a foundation edge, including outside the pad', () => {
+		const { foundationManager, buildingManager, stairManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		// Foundation is 20m × 12m at 0.5m grid → 40 × 24 cells. Landing on the min-X face.
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: -8,
+			maxGridX: 0,
+			minGridZ: 4,
+			maxGridZ: 8,
+			baseY: -4,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+
+		expect(result.valid).toBe(true);
+		expect(result.value?.minGridX).toBe(-8);
+		expect(stairManager.getStair(result.value!.id)?.baseY).toBe(-4);
+	});
+
+	it('accepts a wide short approach stair whose run is the short axis', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const result = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: -4,
+			maxGridX: 0,
+			minGridZ: 2,
+			maxGridZ: 14,
+			baseY: -2,
+			direction: '+x',
+			levelIndex: 0,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(result.valid).toBe(true);
 	});
 
 	it('rejects a foundation that does not exist', () => {
@@ -1331,6 +1421,83 @@ describe('BuildingManager auto stair-opening in slabs', () => {
 		});
 		expect(stairManager.group.getObjectByName('stair-frame')).toBeDefined();
 		expect(slabManager.group.getObjectByName('slab-opening-frame')).toBeDefined();
+		expect(slab.openings[0].frameEnabled).toBe(true);
+	});
+
+	it('copies hole-framing off onto the slab opening', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			openingFrameEnabled: false,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(1);
+		expect(slab.openings[0].frameEnabled).toBe(false);
+		expect(slabManager.group.getObjectByName('slab-opening-frame')).toBeUndefined();
+	});
+
+	it('does not cut a hole when the stair is stamped with the hole off', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			openingEnabled: false,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+		expect(stairResult.value?.openingEnabled).toBe(false);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(0);
+		expect(slabManager.group.getObjectByName('slab-opening-frame')).toBeUndefined();
 	});
 
 	it('opens a rectangular hole in a slab placed AFTER the stair already reaches it', () => {
@@ -1366,6 +1533,42 @@ describe('BuildingManager auto stair-opening in slabs', () => {
 
 		const slab = slabManager.getSlab(slabResult.value!.id)!;
 		expect(slab.openings).toHaveLength(1);
+	});
+
+	it('does not cut a hole into a slab placed after a stair stamped with the hole off', () => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const stairResult = buildingManager.addStair({
+			foundationId: 'foundation-a',
+			minGridX: 2,
+			maxGridX: 14,
+			minGridZ: 2,
+			maxGridZ: 6,
+			baseY: 0,
+			direction: '+x',
+			levelIndex: 0,
+			openingEnabled: false,
+			...DEFAULT_STAIR_PARAMS
+		});
+		expect(stairResult.valid).toBe(true);
+
+		const slabResult = buildingManager.addSlab({
+			points: [
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 0 },
+				{ foundationId: 'foundation-a', gridX: 20, gridZ: 20 },
+				{ foundationId: 'foundation-a', gridX: 0, gridZ: 20 }
+			],
+			type: 'floor',
+			levelIndex: 1,
+			localY: 6,
+			thickness: 0.2
+		});
+		expect(slabResult.valid).toBe(true);
+
+		const slab = slabManager.getSlab(slabResult.value!.id)!;
+		expect(slab.openings).toHaveLength(0);
 	});
 
 	it('does NOT open a slab at a different elevation than the stair top', () => {
@@ -2040,8 +2243,132 @@ describe('Remove Mode — BuildingManager.removeStair', () => {
 	});
 });
 
+describe('Remove Mode — BuildingManager.removeSlab / removeRoof', () => {
+	it('removes a floor slab and drops it from raycast picking', () => {
+		const { foundationManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const slab = buildingManager.addSlab({
+			points: [slabPoint(0, 0), slabPoint(8, 0), slabPoint(8, 8), slabPoint(0, 8)],
+			type: 'floor',
+			levelIndex: 0,
+			localY: 0.2,
+			thickness: 0.2
+		}).value!;
+		const meshes = buildingManager.getRaycastableSlabMeshes();
+		expect(meshes).toHaveLength(1);
+		expect(resolveRemovalTarget(meshes[0].userData)).toEqual({
+			type: 'slab',
+			slabId: slab.id,
+			foundationId: 'foundation-a'
+		});
+
+		expect(buildingManager.removeSlab(slab.id)).toBe(true);
+		expect(slabManager.getSlab(slab.id)).toBeUndefined();
+		expect(buildingManager.getRaycastableSlabMeshes()).toHaveLength(0);
+	});
+
+	it('removes a ceiling slab the same way', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const ceiling = buildingManager.addSlab({
+			points: [slabPoint(0, 0), slabPoint(8, 0), slabPoint(8, 8), slabPoint(0, 8)],
+			...DEFAULT_SLAB_PARAMS
+		}).value!;
+
+		expect(buildingManager.removeSlab(ceiling.id)).toBe(true);
+		expect(buildingManager.getSlab(ceiling.id)).toBeUndefined();
+	});
+
+	it('removes a pitched roof and drops it from raycast picking', () => {
+		const { foundationManager, roofManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+
+		const roof = buildingManager.addRoof({
+			points: [slabPoint(0, 0), slabPoint(16, 0), slabPoint(16, 12), slabPoint(0, 12)],
+			levelIndex: 0,
+			baseY: 3,
+			type: 'gable',
+			direction: 'x',
+			shedDirection: '+x',
+			rise: 2,
+			thickness: 0.2,
+			overhang: 0,
+			profileSettings: createDefaultRoofProfileSettings()
+		}).value!;
+		const meshes = buildingManager.getRaycastableRoofMeshes();
+		expect(meshes).toHaveLength(1);
+		expect(resolveRemovalTarget(meshes[0].userData)).toEqual({
+			type: 'roof',
+			roofId: roof.id,
+			foundationId: 'foundation-a'
+		});
+
+		expect(buildingManager.removeRoof(roof.id)).toBe(true);
+		expect(roofManager.getRoof(roof.id)).toBeUndefined();
+		expect(buildingManager.getRaycastableRoofMeshes()).toHaveLength(0);
+	});
+
+	it('looking up at a ceiling from below raycasts it as a slab removal target', () => {
+		const { foundationManager, slabManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		buildingManager.addSlab({
+			points: [slabPoint(0, 0), slabPoint(8, 0), slabPoint(8, 8), slabPoint(0, 8)],
+			...DEFAULT_SLAB_PARAMS
+		});
+		slabManager.group.updateWorldMatrix(true, true);
+
+		const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 50);
+		camera.position.set(2, 19.1, 2);
+		camera.lookAt(2, 20.4, 2);
+		camera.updateMatrixWorld();
+
+		const raycaster = new THREE.Raycaster();
+		raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+		const hits = raycaster.intersectObjects(buildingManager.getRaycastableSlabMeshes(), false);
+		expect(hits.length).toBeGreaterThan(0);
+		expect(resolveRemovalTarget(hits[0].object.userData)?.type).toBe('slab');
+	});
+
+	it('looking up at a pitched roof from below raycasts it as a roof removal target', () => {
+		const { foundationManager, roofManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		buildingManager.addRoof({
+			points: [slabPoint(0, 0), slabPoint(16, 0), slabPoint(16, 12), slabPoint(0, 12)],
+			levelIndex: 0,
+			baseY: 3,
+			type: 'gable',
+			direction: 'x',
+			shedDirection: '+x',
+			rise: 2,
+			thickness: 0.2,
+			overhang: 0,
+			profileSettings: createDefaultRoofProfileSettings()
+		});
+		roofManager.group.updateWorldMatrix(true, true);
+
+		const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 50);
+		camera.position.set(4, 19.1, 3);
+		camera.lookAt(4, 22, 3);
+		camera.updateMatrixWorld();
+
+		const raycaster = new THREE.Raycaster();
+		raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+		const hits = raycaster.intersectObjects(buildingManager.getRaycastableRoofMeshes(), false);
+		expect(hits.length).toBeGreaterThan(0);
+		expect(resolveRemovalTarget(hits[0].object.userData)?.type).toBe('roof');
+	});
+
+	it('returns false for an unknown slab or roof id', () => {
+		const { buildingManager } = setup();
+		expect(buildingManager.removeSlab('missing')).toBe(false);
+		expect(buildingManager.removeRoof('missing')).toBe(false);
+	});
+});
+
 describe('Remove Mode — serialization reflects removal', () => {
-	it('a removed wall, opening, wall-path segment, and stair all stay gone across a serialize/reload round trip', () => {
+	it('a removed wall, opening, wall-path segment, stair, slab, and roof all stay gone across a serialize/reload round trip', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
 
@@ -2071,10 +2398,28 @@ describe('Remove Mode — serialization reflects removal', () => {
 			levelIndex: 0,
 			...DEFAULT_STAIR_PARAMS
 		}).value!;
+		const slab = buildingManager.addSlab({
+			points: [slabPoint(0, 0), slabPoint(8, 0), slabPoint(8, 8), slabPoint(0, 8)],
+			...DEFAULT_SLAB_PARAMS
+		}).value!;
+		const roof = buildingManager.addRoof({
+			points: [slabPoint(0, 0), slabPoint(16, 0), slabPoint(16, 12), slabPoint(0, 12)],
+			levelIndex: 0,
+			baseY: 3,
+			type: 'gable',
+			direction: 'x',
+			shedDirection: '+x',
+			rise: 2,
+			thickness: 0.2,
+			overhang: 0,
+			profileSettings: createDefaultRoofProfileSettings()
+		}).value!;
 
 		buildingManager.removeWall(wall.id);
 		buildingManager.removeWallSegment(path.id, path.segments[0].id);
 		buildingManager.removeStair(stair.id);
+		buildingManager.removeSlab(slab.id);
+		buildingManager.removeRoof(roof.id);
 
 		const serialized = buildingManager.serialize();
 
@@ -2085,6 +2430,8 @@ describe('Remove Mode — serialization reflects removal', () => {
 		expect(reloaded.buildingManager.getWall(wall.id)).toBeUndefined();
 		expect(reloaded.buildingManager.getWall(survivingWall.id)).toBeDefined();
 		expect(reloaded.buildingManager.getStair(stair.id)).toBeUndefined();
+		expect(reloaded.buildingManager.getSlab(slab.id)).toBeUndefined();
+		expect(reloaded.buildingManager.getRoof(roof.id)).toBeUndefined();
 		expect(reloaded.buildingManager.serialize()).toEqual(serialized);
 	});
 });

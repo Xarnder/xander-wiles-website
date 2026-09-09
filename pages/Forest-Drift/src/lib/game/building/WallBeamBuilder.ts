@@ -25,10 +25,7 @@ export function buildBeamVisual(
 	const geometry = new THREE.BoxGeometry(width, height, depth);
 	geometry.translate((beam.minU + beam.maxU) / 2, (beam.minY + beam.maxY) / 2, 0);
 
-	const mesh = new THREE.Mesh(
-		geometry,
-		materialManager.getMaterial('wall-beam', beam.material)
-	);
+	const mesh = new THREE.Mesh(geometry, materialManager.getMaterial('wall-beam', beam.material));
 	mesh.name = 'wall-beam';
 	mesh.castShadow = true;
 	mesh.receiveShadow = true;

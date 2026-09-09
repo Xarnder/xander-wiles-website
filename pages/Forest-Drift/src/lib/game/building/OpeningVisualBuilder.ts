@@ -327,7 +327,10 @@ function buildDoorVisual(
  * axis (out of that face); `leverSign` aims the grip toward the hinge so the handle sits on the
  * swing edge, not the pivot. Built without a scale-flip so FrontSide winding stays outward.
  */
-function buildOneDoorHandleGeometry(leverSign: number, faceSign: number): THREE.BufferGeometry | null {
+function buildOneDoorHandleGeometry(
+	leverSign: number,
+	faceSign: number
+): THREE.BufferGeometry | null {
 	const plate = new THREE.BoxGeometry(0.034, 0.1, 0.01);
 	plate.translate(0, 0, faceSign * 0.005);
 	const stem = new THREE.CylinderGeometry(0.009, 0.009, 0.02, 8);

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { computeSlabOpeningFrameBoxes, SLAB_OPENING_FRAME_OUTER_MAX } from '../slabOpeningFrameMath';
+import {
+	computeSlabOpeningFrameBoxes,
+	SLAB_OPENING_FRAME_OUTER_MAX
+} from '../slabOpeningFrameMath';
 
 const SETTINGS = {
 	slabOpeningFrameEnabled: true,

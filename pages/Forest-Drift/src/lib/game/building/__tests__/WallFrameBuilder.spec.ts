@@ -4,10 +4,11 @@ import { BuildingMaterialManager } from '../BuildingMaterialManager';
 import { applyWallTransform } from '../WallGeometryBuilder';
 import { wallLocalToWorld, type WallTransform } from '../wallGeometryMath';
 import { signedArea2D } from '../slabMath';
-import { frameBeamTopY, framePostTopY } from '../buildingVisualInsets';
+import { FRAME_BEAM_END_OVERHANG, frameBeamTopY, framePostTopY } from '../buildingVisualInsets';
 import {
 	buildStandaloneWallFrame,
 	buildWallPathFrame,
+	buildFoundationFrame,
 	type WallFrameSettings
 } from '../WallFrameBuilder';
 import type { WallPathDefinition } from '../WallPathTypes';
@@ -87,7 +88,7 @@ describe('buildStandaloneWallFrame', () => {
 		const beamBottomY = beamTop - beamHeight;
 		const postTop = framePostTopY(beamBottomY, beamHeight);
 
-		// Posts share U=0 / U=length with the beam's end faces, so pick the post top by Y, not by max.
+		// Posts sit at U=0 / U=length; the beam overhangs those ends, so pick the post top by Y.
 		expect(pts.some((p) => Math.abs(p.x) < 0.1 && Math.abs(p.y - postTop) < 1e-5)).toBe(true);
 		expect(pts.some((p) => Math.abs(p.x) < 0.1 && Math.abs(p.y) < 1e-5)).toBe(true);
 		expect(pts.some((p) => Math.abs(p.x - length) < 0.1 && Math.abs(p.y - postTop) < 1e-5)).toBe(
@@ -175,6 +176,27 @@ describe('buildStandaloneWallFrame', () => {
 		expect(Math.min(...pts.map((p) => p.z))).toBeLessThan(-halfThickness);
 	});
 
+	it('the top beam overhangs each wall end so its end faces are not coplanar with the wall’s', () => {
+		const materialManager = new BuildingMaterialManager();
+		const length = 5;
+		const group = buildStandaloneWallFrame(
+			length,
+			HEIGHT,
+			THICKNESS,
+			settings(),
+			undefined,
+			materialManager
+		);
+		const pts = vertices(findMesh(group).geometry);
+		const beamTop = frameBeamTopY(HEIGHT);
+		const beamTopPts = pts.filter((p) => Math.abs(p.y - beamTop) < 1e-6);
+		expect(Math.min(...beamTopPts.map((p) => p.x))).toBeCloseTo(-FRAME_BEAM_END_OVERHANG, 5);
+		expect(Math.max(...beamTopPts.map((p) => p.x))).toBeCloseTo(
+			length + FRAME_BEAM_END_OVERHANG,
+			5
+		);
+	});
+
 	it('is disabled by a global default of false', () => {
 		const materialManager = new BuildingMaterialManager();
 		const group = buildStandaloneWallFrame(
@@ -220,7 +242,9 @@ describe('buildStandaloneWallFrame', () => {
 		const mesh = findMesh(group);
 		const pts = vertices(mesh.geometry);
 		const rightTop = pts.find(
-			(p) => Math.abs(p.x - length) < 1e-6 && Math.abs(p.y - frameBeamTopY(HEIGHT)) < 1e-6
+			(p) =>
+				Math.abs(p.x - (length + FRAME_BEAM_END_OVERHANG)) < 1e-6 &&
+				Math.abs(p.y - frameBeamTopY(HEIGHT)) < 1e-6
 		)!;
 		expect(rightTop).toBeDefined();
 
@@ -327,7 +351,9 @@ describe('buildWallPathFrame — corner handling', () => {
 			a.fromBufferAttribute(position, ia);
 			b.fromBufferAttribute(position, ib);
 			c.fromBufferAttribute(position, ic);
-			const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+			const normal = new THREE.Vector3()
+				.subVectors(b, a)
+				.cross(new THREE.Vector3().subVectors(c, a));
 			if (normal.lengthSq() < 1e-12) continue;
 			normal.normalize();
 			if (Math.abs(normal.y) > 0.2) {
@@ -339,9 +365,7 @@ describe('buildWallPathFrame — corner handling', () => {
 			}
 			const centroidX = (a.x + b.x + c.x) / 3;
 			const centroidZ = (a.z + b.z + c.z) / 3;
-			expect(
-				normal.x * (centroidX - cx) + normal.z * (centroidZ - cz)
-			).toBeGreaterThan(0);
+			expect(normal.x * (centroidX - cx) + normal.z * (centroidZ - cz)).toBeGreaterThan(0);
 			verticalSides++;
 		}
 		expect(verticalSides).toBeGreaterThan(0);
@@ -424,6 +448,21 @@ describe('buildWallPathFrame — corner handling', () => {
 		}
 	});
 
+	it('an open path’s top beam overhangs each free endpoint past the wall end', () => {
+		const materialManager = new BuildingMaterialManager();
+		const path = makePath({
+			points: [grid(0, 0), grid(4, 0)],
+			segments: [{ id: 'seg-a', openings: [] }]
+		});
+		const pts = vertices(
+			findMesh(buildWallPathFrame(path, BUILDING_GRID_SIZE, settings(), materialManager)).geometry
+		);
+		const beamTop = frameBeamTopY(HEIGHT);
+		const beamTopPts = pts.filter((p) => Math.abs(p.y - beamTop) < 1e-6);
+		expect(Math.min(...beamTopPts.map((p) => p.x))).toBeCloseTo(-FRAME_BEAM_END_OVERHANG, 5);
+		expect(Math.max(...beamTopPts.map((p) => p.x))).toBeCloseTo(4 + FRAME_BEAM_END_OVERHANG, 5);
+	});
+
 	it('an upper-storey path (baseY > 0) places posts and the top beam at the correct elevation, never at ground level', () => {
 		const materialManager = new BuildingMaterialManager();
 		const baseY = 6;
@@ -500,5 +539,53 @@ describe('wall/path frame style persistence', () => {
 		// Nothing mesh-shaped ever entered the definition to begin with — a plain JSON round trip of
 		// the WHOLE definition contains only logical numbers/strings.
 		expect(typeof roundTripped.frameStyle?.width).toBe('number');
+	});
+});
+
+describe('buildFoundationFrame', () => {
+	const bounds = {
+		id: 'f1',
+		minX: 0,
+		maxX: 10,
+		minZ: 0,
+		maxZ: 8,
+		bottomY: 2,
+		topY: 5
+	};
+
+	it('uses the closed-path wall recipe: four corner posts and four top beams', () => {
+		const materialManager = new BuildingMaterialManager();
+		const group = buildFoundationFrame(bounds, settings(), THICKNESS, 4, materialManager);
+		expect(group?.name).toBe('foundation-frame');
+		const pts = vertices(findMesh(group).geometry);
+		expect(pts.length).toBe(8 * 8);
+		expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(frameBeamTopY(bounds.topY), 5);
+		expect(Math.max(...pts.map((p) => p.y))).toBeLessThan(bounds.topY);
+		expect(Math.min(...pts.map((p) => p.y))).toBeCloseTo(bounds.bottomY, 5);
+	});
+
+	it('protrudes past each foundation face by depth-extra, matching wall frames', () => {
+		const materialManager = new BuildingMaterialManager();
+		const extra = settings().wallFrameDepthExtra;
+		const pts = vertices(
+			findMesh(buildFoundationFrame(bounds, settings(), THICKNESS, 4, materialManager)).geometry
+		);
+		expect(Math.min(...pts.map((p) => p.x))).toBeCloseTo(bounds.minX - extra, 5);
+		expect(Math.max(...pts.map((p) => p.x))).toBeCloseTo(bounds.maxX + extra, 5);
+		expect(Math.min(...pts.map((p) => p.z))).toBeCloseTo(bounds.minZ - extra, 5);
+		expect(Math.max(...pts.map((p) => p.z))).toBeCloseTo(bounds.maxZ + extra, 5);
+	});
+
+	it('returns null when wall framing is disabled', () => {
+		const materialManager = new BuildingMaterialManager();
+		expect(
+			buildFoundationFrame(
+				bounds,
+				settings({ wallFrameEnabled: false }),
+				THICKNESS,
+				4,
+				materialManager
+			)
+		).toBeNull();
 	});
 });

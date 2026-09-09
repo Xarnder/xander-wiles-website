@@ -101,10 +101,13 @@ describe('skirtingStripsForWall', () => {
 
 describe('subtractDoorwaysFromStrips', () => {
 	it('cuts a floor-reaching door out of the strip and leaves windows alone', () => {
-		const strips = subtractDoorwaysFromStrips([{ minU: 0, maxU: 4, faceSign: 1 }], [
-			{ minU: 1.5, maxU: 2.4, minY: 0 },
-			{ minU: 3, maxU: 3.5, minY: 0.9 }
-		]);
+		const strips = subtractDoorwaysFromStrips(
+			[{ minU: 0, maxU: 4, faceSign: 1 }],
+			[
+				{ minU: 1.5, maxU: 2.4, minY: 0 },
+				{ minU: 3, maxU: 3.5, minY: 0.9 }
+			]
+		);
 		expect(strips).toHaveLength(2);
 		expect(strips[0].minU).toBeCloseTo(0);
 		expect(strips[0].maxU).toBeCloseTo(1.5);

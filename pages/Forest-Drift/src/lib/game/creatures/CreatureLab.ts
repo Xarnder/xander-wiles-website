@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { jointWorldPositions } from './SkeletonGenerator';
+import { createCreatureState, decideCreature, advanceCreature } from './CreatureBehaviourSystem';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
 import { animateCreature } from './CreatureAnimationSystem';
@@ -24,6 +26,7 @@ export class CreatureLab {
 	skeleton = false;
 	collision = false;
 	chains = false;
+	crossSections = false;
 	anchors = false;
 	weights = false;
 	telemetry = {
@@ -77,7 +80,7 @@ export class CreatureLab {
 		const individual = generateIndividual(species, individualSeed);
 		const definition = { species, individual };
 		const start = performance.now();
-		const next = compileCreature(definition, lod);
+		const next = this.isolateMaterial(compileCreature(definition, lod));
 		this.creature?.dispose();
 		this.creature = next;
 		this.definition = definition;
@@ -90,6 +93,116 @@ export class CreatureLab {
 		this.updateHelpers();
 		return definition;
 	}
+	private isolateMaterial(c: CompiledCreature) {
+		const materials = c.skinnedMeshes.map((mesh) => {
+			const palette = c.compilation.definition.species.appearance.palette;
+			const m = new THREE.MeshStandardMaterial({
+				vertexColors: true,
+				roughness: palette.roughness,
+				metalness: palette.metalness
+			});
+			mesh.material = m;
+			return m;
+		});
+		const dispose = c.dispose;
+		c.dispose = () => {
+			materials.forEach((m) => m.dispose());
+			dispose();
+		};
+		return c;
+	}
+	async benchmark(count: number) {
+		if (![10, 25, 50, 100].includes(count)) throw Error('Choose 10,25,50 or100 creatures');
+		cancelAnimationFrame(this.raf);
+		const creatures: CompiledCreature[] = [];
+		const states: ReturnType<typeof createCreatureState>[] = [];
+		const access = { surface: () => 0, blocked: () => false };
+		const start = performance.now();
+		this.creature!.object.visible = false;
+		try {
+			for (let i = 0; i < count; i++) {
+				const species = generateSpecies(
+					i + 500,
+					(['quadruped', 'biped', 'hexapod', 'serpentine'] as const)[i % 4]
+				);
+				const p = species.proportions;
+				const scale = 1.4 / (p.legLength + p.bodyDepth + p.headSize + p.neckLength);
+				for (const key of Object.keys(p) as (keyof typeof p)[])
+					if (!['chestScale', 'waistScale', 'frontLegRatio'].includes(key)) p[key] *= scale;
+				const individual = generateIndividual(species, i + 80),
+					c = this.isolateMaterial(compileCreature({ species, individual }));
+				c.object.position.set((i % 10) * 4, 0, Math.floor(i / 10) * 4);
+				this.scene.add(c.object);
+				creatures.push(c);
+				states.push(
+					createCreatureState({
+						id: individual.id,
+						species,
+						individual,
+						position: { ...c.object.position },
+						heading: 0,
+						groupId: species.id,
+						groupCentre: { ...c.object.position },
+						cellX: 0,
+						cellZ: 0,
+						persistent: false
+					})
+				);
+				if (i % 5 === 4) await new Promise((r) => setTimeout(r, 0));
+			}
+			const compileMs = performance.now() - start;
+			this.controls.target.set(18, 0, Math.floor(count / 10) * 2);
+			this.camera.position.set(35, 35, 65);
+			this.controls.update();
+			let animationMs = 0,
+				behaviourMs = 0,
+				cpuMs = 0;
+			const elapsedStart = performance.now();
+			for (let frame = 0; frame < 45; frame++) {
+				await new Promise(requestAnimationFrame);
+				const cpuStart = performance.now(),
+					time = frame / 30;
+				let stamp = performance.now();
+				if (frame % 6 === 0)
+					for (const state of states)
+						decideCreature(state, { x: 18, y: 0, z: 18 }, states, time, access);
+				for (const state of states) advanceCreature(state, 1 / 30, access);
+				behaviourMs += performance.now() - stamp;
+				stamp = performance.now();
+				for (let i = 0; i < count; i++) {
+					creatures[i].object.position.copy(states[i].position);
+					animateCreature(
+						creatures[i],
+						{ ...states[i].intent, gait: 'walk' },
+						time,
+						1 / 30,
+						access.surface
+					);
+				}
+				animationMs += performance.now() - stamp;
+				this.renderer.render(this.scene, this.camera);
+				cpuMs += performance.now() - cpuStart;
+			}
+			return {
+				count,
+				compileMs,
+				fps: 45000 / (performance.now() - elapsedStart),
+				cpuFrameMs: cpuMs / 45,
+				animationMs: animationMs / 45,
+				behaviourMs: behaviourMs / 45,
+				drawCalls: this.renderer.info.render.calls,
+				triangles: this.renderer.info.render.triangles,
+				heapBytes: (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+					?.usedJSHeapSize
+			};
+		} finally {
+			creatures.forEach((c) => c.dispose());
+			this.creature!.object.visible = true;
+			this.view('front');
+			this.raf = requestAnimationFrame(this.frame);
+		}
+	}
+
 	view(side: 'front' | 'side' | 'top') {
 		if (!this.creature) return;
 		const b = this.creature.compilation.bounds;
@@ -152,6 +265,39 @@ export class CreatureLab {
 					0xd88846
 				)
 			);
+		}
+		if (this.crossSections) {
+			const positions = jointWorldPositions(c.compilation.skeleton);
+			for (const volume of c.compilation.skeleton.volumes) {
+				const curve = new THREE.CatmullRomCurve3(
+					volume.jointIds.map((id) => {
+						const p = positions.get(id)!;
+						return new THREE.Vector3(p.x, p.y, p.z);
+					})
+				);
+				for (const section of volume.sections) {
+					const center = curve.getPoint(section.t),
+						rotation = new THREE.Quaternion().setFromUnitVectors(
+							new THREE.Vector3(0, 0, 1),
+							curve.getTangent(section.t)
+						);
+					const points = Array.from({ length: 17 }, (_, i) =>
+						new THREE.Vector3(
+							Math.cos((i / 16) * Math.PI * 2) * section.radiusX,
+							Math.sin((i / 16) * Math.PI * 2) * section.radiusY,
+							0
+						)
+							.applyQuaternion(rotation)
+							.add(center)
+					);
+					this.helpers.add(
+						new THREE.Line(
+							new THREE.BufferGeometry().setFromPoints(points),
+							new THREE.LineBasicMaterial({ color: 0xe07432, depthTest: false })
+						)
+					);
+				}
+			}
 		}
 		if (this.chains || this.anchors) {
 			c.object.updateMatrixWorld(true);
@@ -242,6 +388,7 @@ export class CreatureLab {
 						z: this.gait === 'idle' ? 0 : this.definition!.species.behaviour.wanderSpeed
 					},
 					heading: 0,
+					angularVelocity: 0,
 					gait: this.gait,
 					lookTarget: { x: 2, y: 1, z: 4 }
 				},

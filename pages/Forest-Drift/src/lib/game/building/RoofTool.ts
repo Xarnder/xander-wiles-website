@@ -214,7 +214,7 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 
-		if (event.code === 'KeyC' && event.shiftKey) {
+		if (event.code === 'KeyC') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -343,7 +343,9 @@ export class RoofTool implements BuildTool {
 	}
 
 	isCapturingKey(code: string): boolean {
-		return this.active && this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown');
+		return (
+			this.active && this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown')
+		);
 	}
 
 	update(): void {
@@ -911,7 +913,8 @@ export class RoofTool implements BuildTool {
 				'',
 				'Look at the roof: click to start',
 				...this.snapHudLines(),
-				'C: Set height'
+				'C: Cycle snap',
+				'E set height'
 			]
 		};
 	}
@@ -933,7 +936,8 @@ export class RoofTool implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'C: Set height',
+					'C: Cycle snap',
+					'E set height',
 					'Click to close footprint'
 				]
 			};
@@ -953,7 +957,8 @@ export class RoofTool implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Set height',
+				'C: Cycle snap',
+				'E set height',
 				'Right click: Cancel'
 			]
 		};
@@ -974,7 +979,8 @@ export class RoofTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Set height',
+				'C: Cycle snap',
+				'E set height',
 				'Right click: Cancel'
 			]
 		};
@@ -1019,7 +1025,7 @@ export class RoofTool implements BuildTool {
 				'V: Cycle type',
 				...(hasOrientation ? ['R: Rotate'] : []),
 				...(hasSlope ? ['↑/↓: Adjust rise (Shift: fine)'] : []),
-				'C: Set height',
+				'E set height',
 				'Click: Place roof',
 				'Right click: Cancel'
 			]

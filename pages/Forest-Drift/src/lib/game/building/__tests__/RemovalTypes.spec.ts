@@ -51,6 +51,25 @@ describe('resolveRemovalTarget', () => {
 		expect(target).toEqual({ type: 'stair', stairId: 'stair-1', foundationId: 'f1' });
 	});
 
+	it('resolves a slab mesh hit (slabId present) to a slab target', () => {
+		const target = resolveRemovalTarget({ foundationId: 'f1', slabId: 'slab-1' });
+		expect(target).toEqual({ type: 'slab', slabId: 'slab-1', foundationId: 'f1' });
+	});
+
+	it('prioritizes a slab over a stray wallId on the same userData', () => {
+		const target = resolveRemovalTarget({
+			foundationId: 'f1',
+			slabId: 'slab-1',
+			wallId: 'wall-1'
+		});
+		expect(target).toEqual({ type: 'slab', slabId: 'slab-1', foundationId: 'f1' });
+	});
+
+	it('resolves a roof mesh hit (roofId present) to a roof target', () => {
+		const target = resolveRemovalTarget({ foundationId: 'f1', roofId: 'roof-1' });
+		expect(target).toEqual({ type: 'roof', roofId: 'roof-1', foundationId: 'f1' });
+	});
+
 	it('resolves a wall-path segment picking mesh hit (wallPathId + wallId) to a wall-segment target', () => {
 		const target = resolveRemovalTarget({
 			foundationId: 'f1',

@@ -39,6 +39,18 @@ export interface SlabOpeningDefinition {
 	 * optional-field migration in this codebase uses.
 	 */
 	sourceStairId?: string;
+	/**
+	 * Decorative lining inside this hole — copied from the source stair's `openingFrameEnabled`
+	 * when BuildingManager cuts the opening. Missing means on, so openings saved before this
+	 * field still render the original trim.
+	 */
+	frameEnabled?: boolean;
+}
+
+export function slabOpeningFrameEnabledOf(
+	opening: Pick<SlabOpeningDefinition, 'frameEnabled'>
+): boolean {
+	return opening.frameEnabled !== false;
 }
 
 export interface SlabDefinition {

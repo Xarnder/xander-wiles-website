@@ -55,6 +55,17 @@ function setup() {
 }
 
 describe('stair framing: StairManager integration', () => {
+	it('paints the solid with a stamped colour', () => {
+		const { manager } = setup();
+		manager.addStair({
+			...stair(),
+			material: { type: 'color', color: '#C1694F' }
+		});
+		const mesh = manager.getMeshesForRaycast()[0] as THREE.Mesh;
+		const material = mesh.material as THREE.MeshStandardMaterial;
+		expect(material.color.getHexString().toUpperCase()).toBe('C1694F');
+	});
+
 	it('adds a timber frame group as a sibling of the stair mesh', () => {
 		const { manager } = setup();
 		manager.addStair(stair());
@@ -65,13 +76,34 @@ describe('stair framing: StairManager integration', () => {
 	});
 
 	it('does not change side collision when framing is present', () => {
-		const { manager, settings } = setup();
+		const { manager } = setup();
 		manager.addStair(stair());
 		const withFrame = manager.getAllCollisionRects();
-		settings.stairFrameEnabled = false;
-		manager.rebuildAllStairs();
+		manager.removeStair('stair-1');
+		manager.addStair({ ...stair(), frameEnabled: false, railingsEnabled: false });
 		expect(findByName(manager.group, 'stair-frame')).toBeUndefined();
 		expect(manager.getAllCollisionRects()).toEqual(withFrame);
+	});
+
+	it('keeps railings when framing is stamped off', () => {
+		const { manager } = setup();
+		manager.addStair({ ...stair(), frameEnabled: false, railingsEnabled: true });
+		expect(findByName(manager.group, 'stair-frame')).toBeDefined();
+	});
+
+	it('keeps framing when railings are stamped off', () => {
+		const { manager } = setup();
+		manager.addStair({ ...stair(), frameEnabled: true, railingsEnabled: false });
+		expect(findByName(manager.group, 'stair-frame')).toBeDefined();
+	});
+
+	it('keeps an already-placed stair’s framing when live settings change', () => {
+		const { manager, settings } = setup();
+		manager.addStair({ ...stair(), frameEnabled: true, railingsEnabled: true });
+		settings.stairFrameEnabled = false;
+		settings.stairRailingsEnabled = false;
+		manager.rebuildAllStairs();
+		expect(findByName(manager.group, 'stair-frame')).toBeDefined();
 	});
 
 	it('does not let framing extend past a width or back face by more than depth-extra', () => {

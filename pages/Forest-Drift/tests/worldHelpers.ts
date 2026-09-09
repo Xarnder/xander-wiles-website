@@ -25,11 +25,13 @@ export async function createAndEnterWorld(
 
 /** Turns on the optional render-stats overlay so tests can read FPS / geometry counts. */
 export async function enableRenderStats(page: Page): Promise<void> {
-	await page.getByTestId('settings-toggle').click();
-	await expect(page.getByTestId('settings-overlay')).toBeVisible();
+	await openSettingsMenu(page);
 	await page.getByTestId('settings-search').fill('render stats');
 	await page.getByTestId('settings-field-graphics.stats').locator('input[type="checkbox"]').click();
 	await page.getByTestId('settings-close').click();
+	await expect(page.getByTestId('settings-overlay')).toBeHidden();
+	await page.getByTestId('pause-resume').click();
+	await expect(page.getByTestId('pause-menu')).toBeHidden();
 	await expect(page.getByTestId('stats-overlay')).toBeVisible();
 }
 
@@ -67,6 +69,13 @@ export async function openSettingsMenu(page: Page): Promise<void> {
 	await openPauseMenu(page);
 	await page.getByTestId('pause-settings').click();
 	await expect(page.getByTestId('settings-overlay')).toBeVisible();
+}
+
+/** Opens Creature Lab from the pause menu. */
+export async function openCreatureLab(page: Page): Promise<void> {
+	await openPauseMenu(page);
+	await page.getByTestId('pause-creature-lab').click();
+	await expect(page.getByTestId('creature-lab')).toBeVisible();
 }
 
 /** Waits for autosave/manual save to settle, so assertions about stored data aren't racing a write. */

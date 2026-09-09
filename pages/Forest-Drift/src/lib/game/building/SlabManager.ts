@@ -13,7 +13,7 @@ import {
 } from './SlabGeometryBuilder';
 import { buildSlabOpeningFrame, disposeSlabOpeningFrame } from './SlabOpeningFrameBuilder';
 import type { SlabDefinition, SlabOpeningDefinition } from './SlabTypes';
-import { slabBottomY } from './SlabTypes';
+import { slabBottomY, slabOpeningFrameEnabledOf } from './SlabTypes';
 import type { Point2D } from './wallPathMath';
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xffa64d });
@@ -121,7 +121,9 @@ export class SlabManager {
 			for (const group of existing.openingFrames) disposeSlabOpeningFrame(group);
 		}
 		const openingFrames: THREE.Group[] = [];
-		for (const hole of localHoles) {
+		for (let i = 0; i < localHoles.length; i++) {
+			const hole = localHoles[i];
+			const opening = definition.openings[i];
 			const xs = hole.map((p) => p.x);
 			const zs = hole.map((p) => p.z);
 			const frameGroup = buildSlabOpeningFrame(
@@ -133,7 +135,13 @@ export class SlabManager {
 				},
 				definition.localY,
 				bottomLocalY,
-				this.buildingSettings,
+				{
+					slabOpeningFrameEnabled: opening
+						? slabOpeningFrameEnabledOf(opening)
+						: this.buildingSettings.slabOpeningFrameEnabled,
+					slabOpeningFrameWidth: this.buildingSettings.slabOpeningFrameWidth,
+					slabOpeningFrameDepthExtra: this.buildingSettings.slabOpeningFrameDepthExtra
+				},
 				this.materialManager
 			);
 			if (frameGroup) {
@@ -218,7 +226,7 @@ export class SlabManager {
 		return this.slabs.get(slabId)?.mesh;
 	}
 
-	/** Every slab's real mesh, for Paint Mode's raycasting — already carries `userData.slabId`/`userData.foundationId` (see `buildEntry`). */
+	/** Every slab's real mesh, for Paint/Remove Mode raycasting — already carries `userData.slabId`/`userData.foundationId` (see `buildEntry`). */
 	getMeshesForRaycast(): THREE.Object3D[] {
 		return Array.from(this.slabs.values(), (entry) => entry.mesh);
 	}

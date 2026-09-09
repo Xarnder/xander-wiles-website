@@ -6,9 +6,11 @@
 		activeSlot: number;
 		removeModeActive?: boolean;
 		paintModeActive?: boolean;
+		moveModeActive?: boolean;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
 		onTogglePaintMode?: () => void;
+		onToggleMoveMode?: () => void;
 	}
 
 	let {
@@ -16,9 +18,11 @@
 		activeSlot,
 		removeModeActive = false,
 		paintModeActive = false,
+		moveModeActive = false,
 		onSelectSlot,
 		onToggleRemoveMode,
-		onTogglePaintMode
+		onTogglePaintMode,
+		onToggleMoveMode
 	}: Props = $props();
 
 	function reservedBetween(previous: number, next: number): number[] {
@@ -41,7 +45,10 @@
 		<button
 			type="button"
 			class="slot"
-			class:active={slot.slot === activeSlot && !removeModeActive && !paintModeActive}
+			class:active={slot.slot === activeSlot &&
+				!removeModeActive &&
+				!paintModeActive &&
+				!moveModeActive}
 			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
 			aria-label={slot.variantCount > 1
@@ -53,11 +60,18 @@
 				<span class="slot-label">{slot.label}</span>
 			{/if}
 			{#if slot.variantCount > 1}
-				<span class="slot-variants" aria-hidden="true">
-					{#each { length: slot.variantCount }, i}
-						<span class="slot-pip" class:current={i === slot.variantIndex}></span>
-					{/each}
-				</span>
+				{#if slot.variantCount <= 5}
+					<span class="slot-variants" aria-hidden="true">
+						{#each { length: slot.variantCount }, i}
+							<span class="slot-pip" class:current={i === slot.variantIndex}></span>
+						{/each}
+					</span>
+				{:else}
+					<span class="slot-variant-counter" aria-hidden="true">
+						<span class="slot-pip current"></span>
+						<span class="counter-text">{slot.variantIndex + 1}/{slot.variantCount}</span>
+					</span>
+				{/if}
 			{/if}
 		</button>
 	{/each}
@@ -89,6 +103,19 @@
 	>
 		<span class="slot-number">P</span>
 		<span class="slot-label">Paint</span>
+	</button>
+
+	<button
+		type="button"
+		class="slot move-slot"
+		class:active={moveModeActive}
+		data-testid="hotbar-move-toggle"
+		onclick={() => onToggleMoveMode?.()}
+		aria-label="Toggle Move Mode"
+		aria-pressed={moveModeActive}
+	>
+		<span class="slot-number">M</span>
+		<span class="slot-label">Move</span>
 	</button>
 </div>
 
@@ -164,6 +191,12 @@
 		box-shadow: 0 0 0 1px rgba(77, 166, 255, 0.5);
 	}
 
+	.move-slot.active {
+		border-color: #39d353;
+		background: rgba(15, 60, 25, 0.6);
+		box-shadow: 0 0 0 1px rgba(57, 211, 83, 0.5);
+	}
+
 	.slot-number {
 		font-size: 0.65rem;
 		opacity: 0.7;
@@ -171,8 +204,11 @@
 
 	.slot-label {
 		font-size: 0.6rem;
-		line-height: 1.1;
+		line-height: 1.05;
 		text-align: center;
+		padding: 0 0.12rem;
+		max-width: 100%;
+		overflow-wrap: break-word;
 	}
 
 	.slot-variants {
@@ -180,6 +216,38 @@
 		gap: 0.15rem;
 		margin-top: 0.12rem;
 		justify-content: center;
+	}
+
+	.slot-variant-counter {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.18rem;
+		font-size: 0.52rem;
+		font-variant-numeric: tabular-nums;
+		line-height: 1;
+		margin-top: 0.1rem;
+		padding: 0.06rem 0.22rem;
+		border-radius: 4px;
+		background: rgba(255, 255, 255, 0.08);
+		color: rgba(255, 255, 255, 0.78);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	.slot.active .slot-variant-counter {
+		background: rgba(255, 204, 51, 0.18);
+		color: #ffe066;
+		border-color: rgba(255, 204, 51, 0.35);
+	}
+
+	.slot-variant-counter .slot-pip {
+		width: 0.22rem;
+		height: 0.22rem;
+	}
+
+	.counter-text {
+		font-weight: 500;
+		letter-spacing: 0.02em;
 	}
 
 	.slot-pip {

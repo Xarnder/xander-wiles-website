@@ -215,6 +215,27 @@ describe('relationship integrity', () => {
 		(world.furniture[0] as { kind: string }).kind = 'throne';
 		expectRejected(world, /furniture kind/i);
 	});
+
+	it('accepts a procedural chair with optional dimensions and materials', () => {
+		const world = richWorld();
+		world.furniture.push({
+			id: 'chair-1',
+			kind: 'chair',
+			foundationId: null,
+			x: 2,
+			y: 3,
+			z: 4,
+			nx: 0,
+			ny: 1,
+			nz: 0,
+			rotationY: 1.5708,
+			dimensions: { width: 0.5, depth: 0.5, height: 0.9 },
+			material: { type: 'color', color: '#8B5A2B' },
+			secondaryMaterial: { type: 'color', color: '#E8DCC8' },
+			parameters: { backrest: true }
+		});
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
 });
 
 describe('malicious or corrupt size guards', () => {

@@ -18,9 +18,9 @@ export interface WindowToolOptions {
 
 /**
  * Cuts window openings into existing walls — a real rectangular hole (see
- * wallGeometryMath.computeSolidWallSegments), not a floating glass mesh. Fixed sill height + a
- * fixed window height from settings, horizontal position only comes from where you're looking —
- * the "preferred first version" the spec calls out, kept simple on purpose.
+ * wallGeometryMath.computeSolidWallSegments), not a floating glass mesh. Sill height + window
+ * height come from settings (the E customise panel); horizontal position only comes from where
+ * you're looking.
  */
 export class WindowTool implements BuildTool {
 	readonly toolId = 'window' as const;

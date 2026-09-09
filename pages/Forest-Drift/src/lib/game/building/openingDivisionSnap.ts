@@ -80,7 +80,9 @@ const DIVISION_BADGES: Record<Exclude<OpeningDivisionSnapMode, 'grid'>, string> 
 	sixteenths: 'SIXTEENTHS SNAP'
 };
 
-export function cycleOpeningDivisionSnap(current: OpeningDivisionSnapMode): OpeningDivisionSnapMode {
+export function cycleOpeningDivisionSnap(
+	current: OpeningDivisionSnapMode
+): OpeningDivisionSnapMode {
 	const index = OPENING_DIVISION_CYCLE.indexOf(current);
 	const from = index >= 0 ? index : 0;
 	return OPENING_DIVISION_CYCLE[(from + 1) % OPENING_DIVISION_CYCLE.length];
@@ -93,10 +95,7 @@ export function openingDivisionCount(mode: OpeningDivisionSnapMode): number | nu
 }
 
 /** Interior split points along a wall (never 0 or `wallLength` — those are the ends, not a division). */
-export function openingDivisionPoints(
-	wallLength: number,
-	mode: OpeningDivisionSnapMode
-): number[] {
+export function openingDivisionPoints(wallLength: number, mode: OpeningDivisionSnapMode): number[] {
 	const divisions = openingDivisionCount(mode);
 	if (!divisions || wallLength <= 0) return [];
 	const points: number[] = [];

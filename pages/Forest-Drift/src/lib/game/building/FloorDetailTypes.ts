@@ -20,12 +20,7 @@ export type FloorDetailPlankDirection = 'x' | 'z';
 
 export const FLOOR_DETAIL_KINDS = ['carpet', 'path', 'planks', 'tiles'] as const;
 export const FLOOR_DETAIL_RENDER_MODES = ['3d', '2d'] as const;
-export const FLOOR_DETAIL_TILE_PATTERNS = [
-	'solid',
-	'checker',
-	'diamond',
-	'running-bond'
-] as const;
+export const FLOOR_DETAIL_TILE_PATTERNS = ['solid', 'checker', 'diamond', 'running-bond'] as const;
 export const FLOOR_DETAIL_PLANK_DIRECTIONS = ['x', 'z'] as const;
 
 /** Lift above the construction plane so detailing never shares a plane with the floor/foundation. */
@@ -75,9 +70,7 @@ export function defaultFloorDetailColors(kind: FloorDetailKind): [string, string
 }
 
 export function isFloorDetailKind(value: unknown): value is FloorDetailKind {
-	return (
-		value === 'carpet' || value === 'path' || value === 'planks' || value === 'tiles'
-	);
+	return value === 'carpet' || value === 'path' || value === 'planks' || value === 'tiles';
 }
 
 export function isFloorDetailRenderMode(value: unknown): value is FloorDetailRenderMode {
@@ -86,10 +79,7 @@ export function isFloorDetailRenderMode(value: unknown): value is FloorDetailRen
 
 export function isFloorDetailTilePattern(value: unknown): value is FloorDetailTilePattern {
 	return (
-		value === 'solid' ||
-		value === 'checker' ||
-		value === 'diamond' ||
-		value === 'running-bond'
+		value === 'solid' || value === 'checker' || value === 'diamond' || value === 'running-bond'
 	);
 }
 
@@ -139,8 +129,8 @@ export interface FloorDetailBox {
 	maxZ: number;
 	color: string;
 	/**
-	 * Yaw around the box centre (radians). Used by diagonal paths so the strip keeps a constant
-	 * width instead of being forced onto the axis-aligned grid.
+	 * Yaw around the box centre (radians). Used by diagonal paths and diamond tiles so the
+	 * piece is not forced onto the axis-aligned grid.
 	 */
 	yaw?: number;
 }

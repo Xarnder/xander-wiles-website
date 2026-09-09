@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createAndEnterWorld, openWorldNamed } from './worldHelpers';
+import { createAndEnterWorld, enableRenderStats, openWorldNamed } from './worldHelpers';
 
 const STORAGE_KEY = 'forest-drift.graphics.v1';
 
@@ -9,6 +9,7 @@ test('defaults to HIGH graphics quality on a fresh visit', async ({ page }) => {
 
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
@@ -23,6 +24,7 @@ test('L cycles graphics quality HIGH → ULTRA → LOW → MEDIUM → HIGH', asy
 
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 	const stats = page.getByTestId('graphics-stats');
 	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 
@@ -40,6 +42,7 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 }) => {
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -84,6 +87,7 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 test('graphics quality persists across a reload', async ({ page }) => {
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -111,6 +115,7 @@ test('L does not change graphics quality while typing into the paint palette col
 
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics HIGH', {
 		timeout: 10_000
 	});
@@ -139,6 +144,7 @@ test('switching graphics quality repeatedly keeps the world running with no cons
 
 	await page.goto('/');
 	await createAndEnterWorld(page);
+	await enableRenderStats(page);
 	const stats = page.getByTestId('graphics-stats');
 	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 

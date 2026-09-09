@@ -37,12 +37,16 @@
 	import Hotbar from '$lib/components/Hotbar.svelte';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
+	import FurnitureCatalogueModal from '$lib/components/FurnitureCatalogueModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
-	import { isCustomizablePlacementTool, isSlabHeightTool } from '$lib/game/building/FoundationTypes';
+	import {
+		isCustomizablePlacementTool,
+		isSlabHeightTool
+	} from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
 	import { graphicsQualityLabel } from '$lib/game/graphics/GraphicsTypes';
 	import type { SceneStats } from '$lib/game/ThreeScene';
@@ -120,6 +124,7 @@
 	const customizeToolId = $derived.by(() => {
 		const current = hotbar;
 		if (!current) return undefined;
+		if (current.globalMode === 'move') return 'torch';
 		const id = current.slots.find((slot) => slot.slot === current.activeSlot)?.toolId;
 		return id && isCustomizablePlacementTool(id) ? id : undefined;
 	});
@@ -168,10 +173,14 @@
 	 * flush is fire-and-forget — the menu opens immediately either way, and a failure surfaces in the
 	 * status indicator the menu is already showing.
 	 */
+	let lastPauseToggleTime = 0;
+
 	function togglePause() {
+		lastPauseToggleTime = performance.now();
 		if (!paused) {
 			session?.scene.closePlacementCustomize();
 			session?.scene.closePlacementHeight();
+			document.exitPointerLock?.();
 		}
 		paused = !paused;
 		if (session) session.scene.simulationPaused = clockBlocked();
@@ -180,6 +189,7 @@
 
 	function openPause() {
 		if (paused) return;
+		lastPauseToggleTime = performance.now();
 		session?.scene.closePlacementCustomize();
 		session?.scene.closePlacementHeight();
 		document.exitPointerLock?.();
@@ -236,10 +246,11 @@
 		}
 
 		if (event.code === 'Escape') {
-			// Escape while pointer-locked is consumed by the browser to release the pointer; the menu
-			// opens on the next press, which is the moment the player can actually click it.
-			if (showHelp) showHelp = false;
-			else if (!pointerLocked) togglePause();
+			if (showHelp) {
+				showHelp = false;
+			} else if (performance.now() - lastPauseToggleTime > 150) {
+				togglePause();
+			}
 			return;
 		}
 		if (event.code === 'KeyH') {
@@ -353,7 +364,21 @@
 				saveError = error;
 			},
 			onStatsUpdate: (next) => (stats = next),
-			onPointerLockChange: (locked) => (pointerLocked = locked),
+			onPointerLockChange: (locked) => {
+				const wasLocked = pointerLocked;
+				pointerLocked = locked;
+				if (wasLocked && !locked) {
+					if (showHelp) {
+						showHelp = false;
+					} else if (!paused && !clockBlocked()) {
+						// Escape while pointer-locked is consumed natively by the browser to exit lock.
+						// Catching that transition here brings up the pause menu on the very first Escape press.
+						if (performance.now() - lastPauseToggleTime > 150) {
+							openPause();
+						}
+					}
+				}
+			},
 			onHotbarChange: (next) => (hotbar = next),
 			onBuildHudChange: (next) => (buildHud = next),
 			onLookedAtDoorChange: (id) => (lookedAtDoorId = id),
@@ -583,16 +608,16 @@
 			</div>
 		{/if}
 
-		{#if !pointerLocked}
+		{#if !pointerLocked && !clockBlocked() && !showHelp}
 			<div class="instructions" class:fading={pointerLocked}>
 				<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
 				<p class="headline">Click to explore</p>
 				<p>
-					WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc to release mouse
+					WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu
 				</p>
 				<p>
-					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc again for the menu
-					&middot; H for controls
+					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
+					(Settings, Help, Creature Lab) &middot; H for help
 				</p>
 			</div>
 		{/if}
@@ -600,30 +625,6 @@
 		<div class="utility-buttons">
 			<button class="help-toggle" data-testid="pause-toggle" onclick={openPause} aria-label="Pause">
 				Pause
-			</button>
-			<button
-				class="help-toggle"
-				data-testid="settings-toggle"
-				onclick={openSettings}
-				aria-label="Open settings"
-			>
-				Settings
-			</button>
-			<button
-				class="help-toggle"
-				data-testid="help-toggle"
-				onclick={() => (showHelp = !showHelp)}
-				aria-label="Toggle controls help"
-			>
-				? Help (H)
-			</button>
-			<button
-				class="help-toggle"
-				data-testid="open-creature-lab"
-				onclick={openCreatureLab}
-				aria-label="Creature Lab"
-			>
-				Creature Lab
 			</button>
 		</div>
 
@@ -659,13 +660,13 @@
 						<dt>1&ndash;6, 8</dt>
 						<dd>
 							Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
-							Detailing, 8 Furniture (Torch). Slot 7 is reserved.
+							Detailing, 8 Place Object. Slot 7 is reserved.
 						</dd>
 						<dt>↑ / ↓</dt>
 						<dd>
 							Cycle tools inside the selected slot — Poly Wall / Wall, Door / Window / Beam, Ceiling
-							/ Floor / Roof, Carpet / Path / Planks / Tiles. The last choice is remembered. While a
-							roof is being adjusted, ↑/↓ still change rise instead.
+							/ Floor / Roof, Carpet / Path / Planks / Tiles, and Furniture objects. The last choice
+							is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
 						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
@@ -684,16 +685,17 @@
 						</dd>
 						<dt>C</dt>
 						<dd>
-							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline) on Wall and Continuous
-							Wall. On Path, C cycles Axis snap &rarr; Free &rarr; Bezier. On Ceiling, Floor, or
-							Roof, C opens the height panel (metres above this storey's floor). Shift+C on those
-							tools still cycles snap, including Wall Corners onto the room below.
+							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
+							Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
+							snaps to the room's wall corners below. On Path, C cycles Axis snap &rarr; Free &rarr;
+							Bezier.
 						</dd>
 						<dt>E</dt>
 						<dd>
-							Customise the selected wall, window, door, beam, or floor detailing (carpets, paths,
-							planks, tiles) before placing. Esc or E again closes the panel. Settings apply to the
-							next piece, not ones already built.
+							Customise the selected wall, window, door, beam, stairs, or floor detailing (carpets,
+							paths, planks, tiles) before placing. On Ceiling, Floor, or Roof, set how high the
+							next piece sits above this storey's floor. Esc or E again closes the panel. Settings
+							apply to the next piece, not ones already built.
 						</dd>
 					</dl>
 
@@ -701,7 +703,8 @@
 					<dl>
 						<dt>E</dt>
 						<dd>
-							On Wall or Continuous Wall — set the next wall's height and width (thickness). Length
+							On Wall or Continuous Wall — set the next wall's height and width (thickness). On
+							Ceiling or Floor — set how high the next slab sits above this storey's floor. Length
 							still comes from the points you click.
 						</dd>
 						<dt>Backspace</dt>
@@ -710,11 +713,6 @@
 						<dd>Finish an open wall path (Continuous Wall only)</dd>
 						<dt>Click first point again</dt>
 						<dd>Close the loop / shape</dd>
-						<dt>C</dt>
-						<dd>
-							On Ceiling or Floor — set how high the next slab sits above this storey's floor. Reset
-							follows the top of the walls. Shift+C cycles draw-snap.
-						</dd>
 					</dl>
 
 					<h3>Roof</h3>
@@ -734,9 +732,11 @@
 							while you are adjusting a roof
 						</dd>
 						<dt>C</dt>
+						<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
+						<dt>E</dt>
 						<dd>
 							Set how high the roof eaves sit above this storey's floor. Reset follows the top of
-							the walls. Shift+C cycles draw-snap, including Wall Corners onto the room below
+							the walls
 						</dd>
 						<dt>Click / Right click</dt>
 						<dd>Place the roof, or cancel</dd>
@@ -751,8 +751,8 @@
 						<dt>E</dt>
 						<dd>
 							Customise the next window, door, or beam — width, height (windows, doors, and
-							horizontal beams), and colour. Applies to the next piece you place, not ones already
-							built.
+							horizontal beams), sill / from-floor height (windows and doors), and colour. Applies
+							to the next piece you place, not ones already built.
 						</dd>
 						<dt>C</dt>
 						<dd>
@@ -781,6 +781,11 @@
 						<dt>] / [</dt>
 						<dd>
 							Build on the selected storey. Stairs connect that floor to the one their rise reaches
+						</dd>
+						<dt>E</dt>
+						<dd>
+							Customise the next stair's colour, framing, railings, hole, and hole framing before
+							placing. Esc or E again closes. Applies to the next stair, not ones already built.
 						</dd>
 					</dl>
 
@@ -825,8 +830,8 @@
 						</dd>
 						<dt>Left click</dt>
 						<dd>
-							Remove the highlighted wall, wall segment, window, door, beam, roof, staircase, floor
-							detailing, or music plant
+							Remove the highlighted wall, wall segment, window, door, beam, ceiling, floor, roof,
+							staircase, floor detailing, or music plant
 						</dd>
 						<dt>X / Right click / Esc</dt>
 						<dd>Exit Remove Mode</dd>
@@ -848,17 +853,38 @@
 						<dd>Exit Paint Mode</dd>
 					</dl>
 
+					<h3>Move Mode</h3>
+					<dl>
+						<dt>M</dt>
+						<dd>
+							Toggle Move Mode — pick up existing objects, drag them around, rotate, and edit them
+						</dd>
+						<dt>Aim + Left click</dt>
+						<dd>
+							Pick up the highlighted object (or drag it). Click again to place it at the new
+							location
+						</dd>
+						<dt>R</dt>
+						<dd>Rotate the held object in 90° increments</dd>
+						<dt>E</dt>
+						<dd>Edit the object's dimensions, colors, and parameters in the catalogue modal</dd>
+						<dt>Right click / Esc</dt>
+						<dd>
+							Cancel the move and restore the object to its original position (or exit Move Mode)
+						</dd>
+					</dl>
+
 					<h3>Music Garden</h3>
 					<p>
 						Every world starts with a glowing Music Tree nearby (a tree with a soft teal-green
-						glow). Walk up to it and press <strong>M</strong> &mdash; faint rings appear on the ground
+						glow). Walk up to it and press <strong>N</strong> &mdash; faint rings appear on the ground
 						around the tree. Aim at the ground inside the rings and a ghost flower shows where it will
 						land; left click to plant it. Your aim angle is completely free, but the distance from the
 						tree always snaps to the nearest ring &mdash; each ring is a moment in the music's loop, so
 						flowers close to the tree play early and flowers further out play later.
 					</p>
 					<dl>
-						<dt>M</dt>
+						<dt>N</dt>
 						<dd>Enter / exit Compose Mode. The nearest Music Tree becomes active.</dd>
 						<dt>Aim + Left click</dt>
 						<dd>
@@ -901,7 +927,9 @@
 					<h3>Other</h3>
 					<dl>
 						<dt>H</dt>
-						<dd>Toggle this help · G toggles Build Mode · M opens Music Garden</dd>
+						<dd>
+							Toggle this help · G toggles Build Mode · N opens Music Garden · M toggles Move Mode
+						</dd>
 						<dt>Day / night</dt>
 						<dd>
 							The sun moves through a full day every 20 minutes of play. Pause, Settings, and other
@@ -909,12 +937,9 @@
 							night sets the hour or turns the cycle off.
 						</dd>
 						<dt>Settings</dt>
-						<dd>
-							Button next to Help, or Pause &rarr; Settings — world, terrain, building, music, sky,
-							and graphics
-						</dd>
+						<dd>Pause &rarr; Settings — world, terrain, building, music, sky, and graphics</dd>
 						<dt>Creature Lab</dt>
-						<dd>Button next to Help — design a creature, then place it in the world</dd>
+						<dd>Pause &rarr; Creature Lab — design a creature, then place it in the world</dd>
 						<dt>F3</dt>
 						<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
 						<dt>L</dt>
@@ -925,7 +950,7 @@
 						<dt>Esc</dt>
 						<dd>
 							Release the mouse, then press again for the pause menu — Save, World (rename / export
-							/ duplicate), Settings, and Quit to Worlds
+							/ duplicate), Settings, Help, Creature Lab, and Quit to Worlds
 						</dd>
 						<dt>Cmd / Ctrl + S</dt>
 						<dd>
@@ -943,6 +968,7 @@
 				onPlace={(definition) => {
 					session?.scene.placeCreature(definition);
 					closeCreatureLab();
+					paused = false;
 				}}
 			/>{/if}
 		{#if buildHud}
@@ -1037,9 +1063,11 @@
 				activeSlot={hotbar.activeSlot}
 				removeModeActive={hotbar.globalMode === 'remove'}
 				paintModeActive={hotbar.globalMode === 'paint'}
+				moveModeActive={hotbar.globalMode === 'move'}
 				onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
 				onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
 				onTogglePaintMode={() => session?.scene.togglePaintMode()}
+				onToggleMoveMode={() => session?.scene.toggleMoveMode()}
 			/>
 		{/if}
 
@@ -1085,11 +1113,18 @@
 		{/if}
 
 		{#if placementCustomizeOpen && session && customizeToolId}
-			<PlacementCustomizeModal
-				toolId={customizeToolId}
-				settings={session.scene.buildingSettings}
-				onClose={() => session?.scene.closePlacementCustomize()}
-			/>
+			{#if customizeToolId === 'torch'}
+				<FurnitureCatalogueModal
+					settings={session.scene.buildingSettings}
+					onClose={() => session?.scene.closePlacementCustomize()}
+				/>
+			{:else}
+				<PlacementCustomizeModal
+					toolId={customizeToolId}
+					settings={session.scene.buildingSettings}
+					onClose={() => session?.scene.closePlacementCustomize()}
+				/>
+			{/if}
 		{/if}
 		{#if placementHeightOpen && session && heightToolId}
 			<PlacementHeightModal
@@ -1111,6 +1146,10 @@
 				{saveError}
 				busy={worldsBusy}
 				onResume={() => (paused = false)}
+				onRespawn={() => {
+					session?.scene.respawn();
+					paused = false;
+				}}
 				onSave={() => void manualSave()}
 				onRename={(name) => {
 					const id = worldManager?.getCurrentWorldId();
@@ -1127,6 +1166,7 @@
 				onQuit={() => void quitToWorlds()}
 				onOpenSettings={openSettings}
 				onOpenControls={() => (showHelp = true)}
+				onOpenCreatureLab={openCreatureLab}
 			/>
 		{/if}
 		{#if settingsOpen && session}
@@ -1302,7 +1342,7 @@
 		}
 	}
 
-	/* Bottom-right stays clear of the help/settings cluster (bottom-left) and the hotbar. */
+	/* Bottom-right stays clear of the pause button (bottom-left) and the hotbar. */
 	.save-indicator {
 		position: absolute;
 		bottom: 0.75rem;
@@ -1469,7 +1509,7 @@
 		backdrop-filter: blur(2px);
 	}
 
-	/* Bottom-left, above the help/settings cluster; stats stay top-left and the hotbar is centred. */
+	/* Bottom-left, above the pause button; stats stay top-left and the hotbar is centred. */
 	.build-hud {
 		position: absolute;
 		bottom: 3.25rem;

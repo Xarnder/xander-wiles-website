@@ -173,8 +173,7 @@ export class FloorDetailTool implements BuildTool {
 			);
 			this.refreshVisuals();
 		} else if (this.kind === 'path') {
-			this.buildingSettings.floorDetailPathFraming =
-				!this.buildingSettings.floorDetailPathFraming;
+			this.buildingSettings.floorDetailPathFraming = !this.buildingSettings.floorDetailPathFraming;
 			this.refreshVisuals();
 		}
 	};
@@ -413,10 +412,7 @@ export class FloorDetailTool implements BuildTool {
 			levelIndex: this.activeLevelIndex,
 			hostY: this.activeBaseY,
 			renderMode: this.buildingSettings.floorDetailRenderMode,
-			colors: [
-				this.buildingSettings.floorDetailColorA,
-				this.buildingSettings.floorDetailColorB
-			],
+			colors: [this.buildingSettings.floorDetailColorA, this.buildingSettings.floorDetailColorB],
 			plankWidth: this.buildingSettings.floorDetailPlankWidth,
 			plankDirection: this.buildingSettings.floorDetailPlankDirection,
 			tileSize: this.buildingSettings.floorDetailTileSize,
@@ -572,10 +568,22 @@ export class FloorDetailTool implements BuildTool {
 				return;
 			}
 			corners = [
-				[frame.originWorldX + rect.minGridX * buildingGridSize, frame.originWorldZ + rect.minGridZ * buildingGridSize],
-				[frame.originWorldX + rect.maxGridX * buildingGridSize, frame.originWorldZ + rect.minGridZ * buildingGridSize],
-				[frame.originWorldX + rect.maxGridX * buildingGridSize, frame.originWorldZ + rect.maxGridZ * buildingGridSize],
-				[frame.originWorldX + rect.minGridX * buildingGridSize, frame.originWorldZ + rect.maxGridZ * buildingGridSize]
+				[
+					frame.originWorldX + rect.minGridX * buildingGridSize,
+					frame.originWorldZ + rect.minGridZ * buildingGridSize
+				],
+				[
+					frame.originWorldX + rect.maxGridX * buildingGridSize,
+					frame.originWorldZ + rect.minGridZ * buildingGridSize
+				],
+				[
+					frame.originWorldX + rect.maxGridX * buildingGridSize,
+					frame.originWorldZ + rect.maxGridZ * buildingGridSize
+				],
+				[
+					frame.originWorldX + rect.minGridX * buildingGridSize,
+					frame.originWorldZ + rect.maxGridZ * buildingGridSize
+				]
 			];
 		}
 
@@ -764,7 +772,8 @@ export class FloorDetailTool implements BuildTool {
 	private buildDrawingHud(valid: boolean, reason?: string): BuildUiState {
 		const settings = this.buildingSettings;
 		const extras: string[] = [];
-		if (this.kind === 'planks') extras.push(`Direction: ${settings.floorDetailPlankDirection.toUpperCase()}`);
+		if (this.kind === 'planks')
+			extras.push(`Direction: ${settings.floorDetailPlankDirection.toUpperCase()}`);
 		if (this.kind === 'tiles') extras.push(`Pattern: ${settings.floorDetailTilePattern}`);
 		if (this.kind === 'path') {
 			extras.push(`Mode: ${floorPathDrawModeLabel(this.pathDrawMode)}`);
@@ -773,7 +782,9 @@ export class FloorDetailTool implements BuildTool {
 		}
 		extras.push(settings.floorDetailRenderMode === '3d' ? '3D boards' : '2D plane');
 		const placeHint =
-			this.kind === 'path' && this.pathDrawMode === 'bezier' && this.state === 'first-point-selected'
+			this.kind === 'path' &&
+			this.pathDrawMode === 'bezier' &&
+			this.state === 'first-point-selected'
 				? 'Click: Set end'
 				: this.state === 'bending'
 					? 'Click: Set bend'

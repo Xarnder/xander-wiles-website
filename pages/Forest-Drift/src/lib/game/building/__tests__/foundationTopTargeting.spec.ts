@@ -6,7 +6,8 @@ import type { FoundationDefinition } from '../FoundationTypes';
 import { createDefaultBuildingSettings } from '../FoundationTypes';
 import {
 	raycastLevelConstructionPlane,
-	raycastSlabConstructionPlane
+	raycastSlabConstructionPlane,
+	raycastStairPlacement
 } from '../foundationTopTargeting';
 
 const SPACING = 2;
@@ -463,6 +464,70 @@ describe('raycastLevelConstructionPlane', () => {
 			BUILDING_GRID_SIZE
 		);
 
+		expect(hit).toBeNull();
+	});
+});
+
+describe('raycastStairPlacement', () => {
+	function makeTerrainPlane(): THREE.Mesh {
+		const mesh = new THREE.Mesh(
+			new THREE.PlaneGeometry(400, 400),
+			new THREE.MeshBasicMaterial()
+		);
+		mesh.rotation.x = -Math.PI / 2;
+		mesh.updateMatrixWorld(true);
+		return mesh;
+	}
+
+	it('still targets the construction plane when looking at the foundation top', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		const levelManager = new BuildingLevelManager(settings);
+		const hit = raycastStairPlacement(
+			makeRaycaster(new THREE.Vector3(0, 20, 0), new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			[makeTerrainPlane()]
+		);
+		expect(hit).not.toBeNull();
+		expect(hit?.foundationId).toBe('test-foundation');
+		expect(hit!.gridPoint.gridX).toBeGreaterThanOrEqual(0);
+	});
+
+	it('targets the building grid on terrain beside a foundation so approach stairs can be aimed from the ground', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		const levelManager = new BuildingLevelManager(settings);
+		const hit = raycastStairPlacement(
+			makeRaycaster(new THREE.Vector3(15, 1.7, 0), new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			[makeTerrainPlane()]
+		);
+		expect(hit).not.toBeNull();
+		expect(hit?.foundationId).toBe('test-foundation');
+		expect(hit!.gridPoint.gridX).toBeGreaterThan(80);
+	});
+
+	it('returns null when the terrain hit is far from every foundation', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		foundationManager.addFoundation(makeDefinition());
+		const settings = createDefaultBuildingSettings();
+		const levelManager = new BuildingLevelManager(settings);
+		const hit = raycastStairPlacement(
+			makeRaycaster(new THREE.Vector3(500, 1.7, 500), new THREE.Vector3(0, -1, 0)),
+			foundationManager,
+			levelManager,
+			SPACING,
+			BUILDING_GRID_SIZE,
+			[makeTerrainPlane()]
+		);
 		expect(hit).toBeNull();
 	});
 });

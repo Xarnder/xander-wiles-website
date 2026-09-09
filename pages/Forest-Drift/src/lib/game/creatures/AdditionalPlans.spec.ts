@@ -52,7 +52,12 @@ describe('additional body-plan acceptance', () => {
 			for (let seed = 0; seed < 25; seed++) {
 				const c = compileCreature(definition(seed, plan));
 				const period = 1 / c.compilation.definition.species.locomotion.gait.walkFrequency;
-				const intent = { velocity: { x: 0, y: 0, z: 1 }, heading: 0, gait: 'walk' as const };
+				const intent = {
+					velocity: { x: 0, y: 0, z: 1 },
+					heading: 0,
+					angularVelocity: 0,
+					gait: 'walk' as const
+				};
 				const pose = () =>
 					c.skeleton.bones.flatMap((b) => [...b.position.toArray(), ...b.quaternion.toArray()]);
 				const surface = (x: number, z: number) => x * 0.015 + z * 0.01;

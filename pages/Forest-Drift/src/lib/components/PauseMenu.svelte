@@ -8,6 +8,7 @@
 		saveError: string | null;
 		busy: boolean;
 		onResume: () => void;
+		onRespawn: () => void;
 		onSave: () => void;
 		onRename: (name: string) => void;
 		onExport: () => void;
@@ -15,6 +16,7 @@
 		onQuit: () => void;
 		onOpenSettings: () => void;
 		onOpenControls: () => void;
+		onOpenCreatureLab: () => void;
 	}
 
 	const {
@@ -24,13 +26,15 @@
 		saveError,
 		busy,
 		onResume,
+		onRespawn,
 		onSave,
 		onRename,
 		onExport,
 		onDuplicate,
 		onQuit,
 		onOpenSettings,
-		onOpenControls
+		onOpenControls,
+		onOpenCreatureLab
 	}: Props = $props();
 
 	type Panel = 'root' | 'world' | 'rename';
@@ -75,16 +79,30 @@
 				</div>
 			{/if}
 
-			<div class="menu-buttons">
-				<button class="primary" data-testid="pause-resume" onclick={onResume}>Resume</button>
+			<button class="primary" data-testid="pause-resume" onclick={onResume}>Resume</button>
+
+			<div class="section">
+				<p class="section-label">Explore</p>
+				<div class="tool-grid">
+					<button data-testid="pause-settings" onclick={onOpenSettings}>Settings</button>
+					<button data-testid="pause-controls" onclick={onOpenControls}>Help</button>
+					<button data-testid="pause-creature-lab" onclick={onOpenCreatureLab}>Creature Lab</button>
+				</div>
+			</div>
+
+			<div class="section">
+				<p class="section-label">World</p>
+				<button data-testid="pause-respawn" onclick={onRespawn} disabled={busy} title="Respawn at start location">
+					Respawn
+				</button>
 				<button data-testid="pause-save" onclick={onSave} disabled={busy}>Save</button>
 				<button data-testid="pause-world" onclick={() => (panel = 'world')}>World</button>
-				<button data-testid="pause-settings" onclick={onOpenSettings}>Settings</button>
-				<button data-testid="pause-controls" onclick={onOpenControls}>Controls</button>
 				<button class="danger" data-testid="pause-quit" onclick={onQuit} disabled={busy}>
 					Quit to Worlds
 				</button>
 			</div>
+
+			<p class="menu-hint">Esc to resume · H for help</p>
 		{:else if panel === 'world'}
 			<h2 data-testid="pause-world-panel">{worldName}</h2>
 			<div class="status-line">
@@ -148,7 +166,7 @@
 	}
 
 	.pause-panel {
-		width: min(20rem, 90vw);
+		width: min(24rem, 92vw);
 		display: flex;
 		flex-direction: column;
 		gap: 0.7rem;
@@ -215,6 +233,40 @@
 		border: 1px solid rgba(255, 122, 122, 0.5);
 		font-size: 0.75rem;
 		line-height: 1.35;
+	}
+
+	.section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.section-label {
+		margin: 0;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #9fd8b8;
+	}
+
+	.tool-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.4rem;
+	}
+
+	.tool-grid button {
+		padding: 0.5rem 0.35rem;
+		font-size: 0.75rem;
+		white-space: normal;
+	}
+
+	.menu-hint {
+		margin: 0.15rem 0 0;
+		text-align: center;
+		font-size: 0.7rem;
+		opacity: 0.55;
 	}
 
 	.error-actions {

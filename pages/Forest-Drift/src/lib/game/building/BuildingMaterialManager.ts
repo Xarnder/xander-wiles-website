@@ -56,9 +56,12 @@ const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 	'door-handle': { color: 0x2c2c2c, roughness: 0.4, metalness: 0.7 },
 	'wall-frame': TIMBER_FRAME,
 	skirting: { color: 0xc19a6b, roughness: 0.84, metalness: 0.02, flatShading: true },
+	stair: { color: 0xb9ac95, roughness: 0.85, metalness: 0.02, flatShading: true },
 	'stair-frame': TIMBER_FRAME,
 	'slab-opening-frame': TIMBER_FRAME,
-	'wall-beam': TIMBER_FRAME
+	'wall-beam': TIMBER_FRAME,
+	furniture: { color: 0x8b5a2b, roughness: 0.84, metalness: 0.04, flatShading: true },
+	'furniture-accent': { color: 0x5c3a22, roughness: 0.78, metalness: 0.08, flatShading: true }
 };
 
 /** `undefined` (no override — use the kind's own default look) collapses to a stable `'default'` key; a colour definition's key is its normalized hex, so two differently-cased/shorthand inputs that mean the same colour still share one cached material. */
@@ -110,10 +113,14 @@ export class BuildingMaterialManager {
 			color: definition?.type === 'color' ? normalizeColorHex(definition.color) : template.color,
 			roughness: template.roughness,
 			metalness: template.metalness,
-			flatShading: template.flatShading,
-			polygonOffset: template.polygonOffset,
-			polygonOffsetFactor: template.polygonOffsetFactor,
-			polygonOffsetUnits: template.polygonOffsetUnits
+			flatShading: template.flatShading ?? false,
+			...(template.polygonOffset
+				? {
+						polygonOffset: true,
+						polygonOffsetFactor: template.polygonOffsetFactor ?? 0,
+						polygonOffsetUnits: template.polygonOffsetUnits ?? 0
+					}
+				: {})
 		});
 		this.cache.set(key, material);
 		this.onMaterialCreated?.(material);

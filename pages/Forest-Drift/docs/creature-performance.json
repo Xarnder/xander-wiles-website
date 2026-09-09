@@ -1,0 +1,46 @@
+[
+	{
+		"count": 10,
+		"compileMs": 26.69999998807907,
+		"fps": 55.316533497234175,
+		"cpuFrameMs": 0.49555555714501276,
+		"animationMs": 0.24000000423855253,
+		"behaviourMs": 0.02666666375266181,
+		"drawCalls": 10,
+		"triangles": 53712,
+		"heapBytes": 31200000
+	},
+	{
+		"count": 25,
+		"compileMs": 45.5,
+		"fps": 27.548209366391184,
+		"cpuFrameMs": 0.6977777785725063,
+		"animationMs": 0.3022222227520413,
+		"behaviourMs": 0.035555553436279294,
+		"drawCalls": 25,
+		"triangles": 132264,
+		"heapBytes": 31200000
+	},
+	{
+		"count": 50,
+		"compileMs": 90.29999995231628,
+		"fps": 14.916962243570069,
+		"cpuFrameMs": 1.2844444460339017,
+		"animationMs": 0.6377777722146776,
+		"behaviourMs": 0.03777778281105889,
+		"drawCalls": 50,
+		"triangles": 261672,
+		"heapBytes": 31200000
+	},
+	{
+		"count": 100,
+		"compileMs": 215.70000004768372,
+		"fps": 7.543880236755426,
+		"cpuFrameMs": 2.535555554760827,
+		"animationMs": 1.224444450272454,
+		"behaviourMs": 0.10222222540113661,
+		"drawCalls": 100,
+		"triangles": 525384,
+		"heapBytes": 31200000
+	}
+]

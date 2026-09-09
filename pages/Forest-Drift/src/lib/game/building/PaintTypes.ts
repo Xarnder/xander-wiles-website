@@ -33,11 +33,11 @@ export function paintTargetKey(target: PaintTarget): string {
 /**
  * Picking metadata every paintable mesh carries on `object.userData` — the same fields
  * RemovalTypes.ts's `BuildingPickUserData` already defines (WallManager/WallPathManager/
- * SlabManager/FoundationMesh all set these once, for every consumer, not just Paint/Remove), plus
- * `slabId` isn't in that shape since Remove Mode never targets a slab. Kept as its own local
- * interface rather than importing RemovalTypes' one — the two pickers examine an overlapping but not
- * identical set of fields, and importing across the two would suggest a coupling that doesn't
- * actually exist (each is a self-contained, independently unit-tested resolution function).
+ * SlabManager/RoofManager/FoundationMesh all set these once, for every consumer, not just
+ * Paint/Remove). Kept as its own local interface rather than importing RemovalTypes' one — the two
+ * pickers examine an overlapping but not identical set of fields, and importing across the two would
+ * suggest a coupling that doesn't actually exist (each is a self-contained, independently
+ * unit-tested resolution function).
  */
 export interface PaintPickUserData {
 	foundationId?: string;

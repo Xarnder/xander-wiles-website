@@ -281,4 +281,26 @@ describe('WorldSurfaceSampler.getSupportingSurfaceY — stair step-up tolerance'
 		const surfaceY = sampler.getSupportingSurfaceY(0.1, 0.5, 3.0);
 		expect(surfaceY).toBeCloseTo(0.25);
 	});
+
+	it('supports an approach stair whose footprint sits outside the foundation', () => {
+		const { foundationManager, stairManager, sampler } = setup();
+		foundationManager.addFoundation(makeFoundation({ topY: 2, bottomY: -1 }));
+		stairManager.addStair({
+			id: 'approach-1',
+			foundationId: 'foundation-a',
+			minGridX: -8,
+			maxGridX: 0,
+			minGridZ: 4,
+			maxGridZ: 8,
+			baseY: -2,
+			direction: '+x',
+			levelIndex: 0,
+			gridSizeAtCreation: 0.25
+		});
+
+		// World Y = foundation.topY + (baseY + first step) = 2 + (-1.75) = 0.25, on the ground
+		// beside the pad (local X -2m → world X -2).
+		const surfaceY = sampler.getSupportingSurfaceY(-1.9, 1.5, 0);
+		expect(surfaceY).toBeCloseTo(0.25);
+	});
 });

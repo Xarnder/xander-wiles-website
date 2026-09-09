@@ -35,8 +35,8 @@ export interface WallFrameOverride {
  * A rectangular hole in a wall, stored in wall-local coordinates: U runs along the wall from its
  * start point (U=0) to its end point (U=wall length); Y is vertical, with Y=0 at the wall's own
  * base (`wall.baseY` above the foundation top — 0 for a ground-floor wall, the level's `baseY` for
- * an upper-storey wall) and Y=wallHeight at the wall's top. A door always has minY=0, i.e. it
- * always extends down to that storey's own floor, whichever level the wall is on.
+ * an upper-storey wall) and Y=wallHeight at the wall's top. A typical door has minY=0 (this
+ * storey's floor); a raised sill is allowed — the opening's own `minY` is the floor of the hole.
  */
 export interface WallOpeningDefinition {
 	id: string;

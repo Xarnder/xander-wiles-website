@@ -30,6 +30,17 @@ describe('computeStairLevelTriggerVolume', () => {
 		expect(box.maxY).toBeCloseTo(5 + STAIR_LEVEL_TRIGGER_VERTICAL_PADDING);
 	});
 
+	it('keeps an approach stair (negative baseY on level 0) on the ground-floor storey', () => {
+		const box = computeStairLevelTriggerVolume(
+			{ ...STAIR, baseY: -2 },
+			BOUNDS,
+			{ totalRise: 2 },
+			FRAME
+		);
+		expect(box.startLevelIndex).toBe(0);
+		expect(box.endLevelIndex).toBe(0);
+	});
+
 	it('uses the stair level as the lower storey and the next index as the upper', () => {
 		const box = computeStairLevelTriggerVolume(
 			{ ...STAIR, levelIndex: 2, baseY: 6 },

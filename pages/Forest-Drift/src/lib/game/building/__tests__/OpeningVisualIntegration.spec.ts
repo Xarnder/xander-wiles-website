@@ -198,8 +198,7 @@ describe('opening visuals: wall integration', () => {
 			const frameMesh = findByName(group, name) as THREE.Mesh;
 			expect(frameMesh).toBeDefined();
 			frameMesh.geometry.computeBoundingBox();
-			const depth =
-				frameMesh.geometry.boundingBox!.max.z - frameMesh.geometry.boundingBox!.min.z;
+			const depth = frameMesh.geometry.boundingBox!.max.z - frameMesh.geometry.boundingBox!.min.z;
 			expect(depth).toBeGreaterThan(wallThickness);
 		}
 		const glassMesh = findByName(group, 'window-glass') as THREE.Mesh;
@@ -280,9 +279,10 @@ describe('opening visuals: wall integration', () => {
 				]
 			})
 		);
-		const frame = findByName(openingVisualsOf(manager.getMeshForWall('wall-1')!), 'window-frame') as
-			| THREE.Mesh
-			| undefined;
+		const frame = findByName(
+			openingVisualsOf(manager.getMeshForWall('wall-1')!),
+			'window-frame'
+		) as THREE.Mesh | undefined;
 		expect(frame).toBeDefined();
 		const material = frame!.material as THREE.MeshStandardMaterial;
 		expect(material.color.getHexString().toUpperCase()).toBe('FF3366');
@@ -306,8 +306,7 @@ describe('opening visuals: wall integration', () => {
 			})
 		);
 		const leaf = findByName(openingVisualsOf(manager.getMeshForWall('wall-1')!), 'door-leaf') as
-			| THREE.Mesh
-			| undefined;
+			THREE.Mesh | undefined;
 		expect(leaf).toBeDefined();
 		const material = leaf!.material as THREE.MeshStandardMaterial;
 		expect(material.color.getHexString().toUpperCase()).toBe('00AACC');

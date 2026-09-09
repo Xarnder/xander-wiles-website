@@ -823,6 +823,15 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 			title: 'Building',
 			description: 'Defaults for the next piece you place, plus live visual overlays.',
 			groups: [
+				group('collision-debug', 'Collision debug', [
+					boolField(
+						'building.collision.show',
+						'Show all collision objects',
+						building,
+						'showCollisionGeometry',
+						actions.collisionGeometry
+					)
+				]),
 				group('foundation', 'Foundation', [
 					boolField(
 						'building.foundation.vertexGrid',
@@ -1070,6 +1079,7 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				group('doors', 'Doors', [
 					numberField('building.doors.width', 'Width', building, 'doorWidth', 0.4, 3, 0.05),
 					numberField('building.doors.height', 'Height', building, 'doorHeight', 0.5, 4, 0.05),
+					numberField('building.doors.sill', 'Sill height', building, 'doorSillHeight', 0, 3, 0.05),
 					numberField(
 						'building.doors.grid',
 						'Opening grid size',
@@ -1518,6 +1528,19 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 								building,
 								'stairFrameEnabled',
 								actions.stairwellFraming
+							),
+							boolField(
+								'building.stairs.railings.enabled',
+								'Railings',
+								building,
+								'stairRailingsEnabled',
+								actions.stairwellFraming
+							),
+							boolField(
+								'building.stairs.opening.enabled',
+								'Hole',
+								building,
+								'stairOpeningEnabled'
 							),
 							numberField(
 								'building.stairs.frame.width',
@@ -2513,6 +2536,15 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							{ value: 'terrainPlusForest', label: 'Terrain + forest' }
 						],
 						actions.terrainSettings
+					)
+				]),
+				group('rendering-collision', 'Collision debug', [
+					boolField(
+						'render.collision.show',
+						'Show all collision objects',
+						building,
+						'showCollisionGeometry',
+						actions.collisionGeometry
 					)
 				])
 			]

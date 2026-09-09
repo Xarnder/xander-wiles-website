@@ -209,4 +209,39 @@ describe('creature settings', () => {
 		expect(host.actions.creatureDemo).toHaveBeenCalledOnce();
 		expect(host.actions.creatureEndDemo).toHaveBeenCalledOnce();
 	});
+
+	it('exposes Show all collision objects in building and rendering categories and forwards action', () => {
+		const actionSpy = vi.fn();
+		const host = testHost();
+		host.actions.collisionGeometry = actionSpy;
+
+		const catalog = buildSettingsCatalog(host);
+		const building = catalog.find((c) => c.id === 'building')!;
+		const rendering = catalog.find((c) => c.id === 'rendering')!;
+
+		const buildingField = building.groups
+			.flatMap((g) => g.fields)
+			.find((f) => f.id === 'building.collision.show');
+		expect(buildingField).toBeDefined();
+		expect(buildingField?.kind).toBe('boolean');
+
+		const renderingField = rendering.groups
+			.flatMap((g) => g.fields)
+			.find((f) => f.id === 'render.collision.show');
+		expect(renderingField).toBeDefined();
+		expect(renderingField?.kind).toBe('boolean');
+
+		if (buildingField?.kind === 'boolean') {
+			expect(buildingField.get()).toBe(false);
+			buildingField.set(true);
+			expect(host.building.showCollisionGeometry).toBe(true);
+			buildingField.onChange?.();
+			expect(actionSpy).toHaveBeenCalledOnce();
+		}
+
+		// Verify searching "collision" matches building and rendering
+		expect(categoryMatchesQuery(building, 'collision')).toBe(true);
+		expect(categoryMatchesQuery(rendering, 'collision')).toBe(true);
+		expect(firstMatchingCategoryId(catalog, 'collision')).toBe('building');
+	});
 });

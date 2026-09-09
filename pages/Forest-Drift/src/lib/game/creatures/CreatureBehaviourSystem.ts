@@ -13,7 +13,12 @@ export function createCreatureState(spawn: CreatureSpawnDefinition): CreatureRun
 		position: { ...spawn.position },
 		heading: spawn.heading,
 		state: 'IDLE',
-		intent: { velocity: { x: 0, y: 0, z: 0 }, heading: spawn.heading, gait: 'idle' },
+		intent: {
+			velocity: { x: 0, y: 0, z: 0 },
+			heading: spawn.heading,
+			angularVelocity: 0,
+			gait: 'idle'
+		},
 		target: { ...spawn.position },
 		nextDecision: 0,
 		decisionIndex: 0
@@ -204,5 +209,8 @@ export function advanceCreature(
 		Math.sin(state.intent.heading - state.heading),
 		Math.cos(state.intent.heading - state.heading)
 	);
-	state.heading += delta * Math.min(1, elapsed * 6);
+	const turn = delta * Math.min(1, elapsed * 6);
+	state.heading += turn;
+	// Derived from this physics step, not the render cadence, so lean stays stable regardless of frame rate.
+	state.intent.angularVelocity = elapsed > 0 ? turn / elapsed : 0;
 }

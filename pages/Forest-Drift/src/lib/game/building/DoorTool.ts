@@ -17,8 +17,8 @@ export interface DoorToolOptions {
 }
 
 /**
- * Cuts door openings into existing walls — always extends to the wall's bottom (minY=0, the
- * foundation top), so there is no solid wall segment beneath a door and nothing to walk through.
+ * Cuts door openings into existing walls. Default sill is the wall base (`minY=0`, this storey's
+ * floor) so there is no solid wall under a typical door; `doorSillHeight` can raise it.
  */
 export class DoorTool implements BuildTool {
 	readonly toolId = 'door' as const;
@@ -32,9 +32,12 @@ export class DoorTool implements BuildTool {
 				openingType: 'door',
 				label: 'DOOR',
 				getWidth: (settings) => settings.doorWidth,
-				getVerticalExtent: (settings) => ({ minY: 0, maxY: settings.doorHeight }),
+				getVerticalExtent: (settings) => ({
+					minY: settings.doorSillHeight,
+					maxY: settings.doorSillHeight + settings.doorHeight
+				}),
 				dimensionsHint: (settings) =>
-					`${settings.doorWidth.toFixed(2)} × ${settings.doorHeight.toFixed(2)}m`
+					`${settings.doorWidth.toFixed(2)} × ${settings.doorHeight.toFixed(2)}m  ·  From floor: ${settings.doorSillHeight.toFixed(2)}m`
 			},
 			options
 		);

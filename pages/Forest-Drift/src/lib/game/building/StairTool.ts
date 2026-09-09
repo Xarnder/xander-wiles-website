@@ -11,11 +11,13 @@ import type { BuildingGridPoint } from './FoundationLocalMath';
 import {
 	buildingGridToLocal,
 	foundationLocalFrame,
-	foundationLocalSize
+	foundationLocalSize,
+	isBuildingGridPointInsideFoundation
 } from './FoundationLocalMath';
+import { colorMaterialFromHex } from './MaterialTypes';
 import type { FoundationManager } from './FoundationManager';
 import type { BuildingSettings, BuildUiState, StairToolState, ToolId } from './FoundationTypes';
-import { raycastLevelConstructionPlane } from './foundationTopTargeting';
+import { raycastStairPlacement } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
 import { pointInPolygon2D } from './slabMath';
 import { buildStairGeometry } from './StairGeometryBuilder';
@@ -24,10 +26,18 @@ import {
 	computeStairMetrics,
 	cycleStairDirection,
 	validDirectionsForFootprint,
-	validateStairFootprint,
 	type StairPreviewFit
 } from './stairMath';
+import {
+	approachStairBaseY,
+	foundationGridCellCounts,
+	MAX_STAIR_EXTERIOR_CELLS,
+	snapStairFootprintToFoundation,
+	stairBottomCenterLocal,
+	validateStairFoundationPlacement
+} from './stairPlacementMath';
 import type { StairDirection } from './StairTypes';
+import type { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
 
@@ -81,6 +91,8 @@ export interface StairToolOptions {
 	foundationManager: FoundationManager;
 	buildingManager: BuildingManager;
 	levelManager: BuildingLevelManager;
+	terrainHeightSampler: TerrainHeightSampler;
+	getTerrainMeshes: () => readonly THREE.Object3D[];
 	terrainSettings: TerrainSettings;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
@@ -88,10 +100,9 @@ export interface StairToolOptions {
 
 /**
  * The Stair Tool: a rectangular two-click footprint (mirrors FoundationTool) targeted on the
- * current building level's construction plane (mirrors SlabToolBase/WallTool — see
- * foundationTopTargeting.raycastLevelConstructionPlane), followed by a direction-selection step
- * (Left/Right Arrow cycles `StairDirection`, Enter or click confirms) — see the README's "Stairs"
- * section and StairTypes.ts/stairMath.ts for the underlying model.
+ * current building level's construction plane *or* the terrain beside a foundation (approach
+ * stairs onto the pad — see stairPlacementMath.ts), followed by a direction-selection step
+ * (Left/Right Arrow cycles `StairDirection`, Enter or click confirms).
  */
 export class StairTool implements BuildTool {
 	readonly toolId: ToolId = 'stairs';
@@ -101,6 +112,8 @@ export class StairTool implements BuildTool {
 	private readonly foundationManager: FoundationManager;
 	private readonly buildingManager: BuildingManager;
 	private readonly levelManager: BuildingLevelManager;
+	private readonly terrainHeightSampler: TerrainHeightSampler;
+	private readonly getTerrainMeshes: () => readonly THREE.Object3D[];
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
@@ -195,6 +208,8 @@ export class StairTool implements BuildTool {
 		this.foundationManager = options.foundationManager;
 		this.buildingManager = options.buildingManager;
 		this.levelManager = options.levelManager;
+		this.terrainHeightSampler = options.terrainHeightSampler;
+		this.getTerrainMeshes = options.getTerrainMeshes;
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
@@ -277,12 +292,13 @@ export class StairTool implements BuildTool {
 		if (!this.active || this.state === 'choosing-direction') return;
 
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
-		const hit = raycastLevelConstructionPlane(
+		const hit = raycastStairPlacement(
 			this.raycaster,
 			this.foundationManager,
 			this.levelManager,
 			this.vertexSpacing(),
-			this.buildingSettings.buildingGridSize
+			this.buildingSettings.buildingGridSize,
+			this.getTerrainMeshes()
 		);
 		this.levelManager.reportHoveredFoundation(hit?.foundationId ?? null);
 		const levelChanged = pullActiveLevelChange(this.levelManager, this.activeLevelWatch);
@@ -324,11 +340,22 @@ export class StairTool implements BuildTool {
 			this.foundationId = this.lastFoundationId;
 			this.levelManager.lockActiveFoundation(this.foundationId!);
 			this.firstCorner = this.hoverPoint;
-			this.activeLevelIndex = this.levelManager.getCurrentLevelIndex(this.foundationId!);
-			this.activeBaseY = this.levelManager.getOrCreateLevel(
-				this.foundationId!,
-				this.activeLevelIndex
-			).baseY;
+			const foundation = this.foundationManager.getFoundation(this.foundationId!);
+			if (foundation && this.isHoverInsideFoundation(foundation, this.hoverPoint)) {
+				this.activeLevelIndex = this.levelManager.getCurrentLevelIndex(this.foundationId!);
+				this.activeBaseY = this.levelManager.getOrCreateLevel(
+					this.foundationId!,
+					this.activeLevelIndex
+				).baseY;
+			} else {
+				this.activeLevelIndex = 0;
+				this.activeBaseY = foundation
+					? this.terrainHeightSampler.sample(
+							this.worldXzForGrid(foundation, this.hoverPoint).x,
+							this.worldXzForGrid(foundation, this.hoverPoint).z
+						) - foundation.topY
+					: 0;
+			}
 			this.lastStairTarget = null;
 			this.state = 'first-corner-selected';
 			this.refreshVisuals();
@@ -337,13 +364,19 @@ export class StairTool implements BuildTool {
 
 		if (this.state === 'first-corner-selected') {
 			if (!this.firstCorner) return;
-			this.secondCorner = this.hoverPoint;
-			const footprint = this.normalizedFootprint();
-			if (!footprint) return;
-			const xCells = footprint.maxGridX - footprint.minGridX;
-			const zCells = footprint.maxGridZ - footprint.minGridZ;
-			const valid = validDirectionsForFootprint(xCells, zCells);
-			this.direction = valid[0];
+			const placement = this.snappedPlacement();
+			if (!placement) return;
+			this.firstCorner = {
+				gridX: placement.footprint.minGridX,
+				gridZ: placement.footprint.minGridZ
+			};
+			this.secondCorner = {
+				gridX: placement.footprint.maxGridX,
+				gridZ: placement.footprint.maxGridZ
+			};
+			const xCells = placement.footprint.maxGridX - placement.footprint.minGridX;
+			const zCells = placement.footprint.maxGridZ - placement.footprint.minGridZ;
+			this.direction = placement.approach ?? validDirectionsForFootprint(xCells, zCells)[0];
 			this.state = 'choosing-direction';
 			this.refreshVisuals();
 			return;
@@ -365,10 +398,11 @@ export class StairTool implements BuildTool {
 	}
 
 	private rotateDirection(delta: 1 | -1): void {
-		const footprint = this.normalizedFootprint();
-		if (!footprint) return;
-		const xCells = footprint.maxGridX - footprint.minGridX;
-		const zCells = footprint.maxGridZ - footprint.minGridZ;
+		const placement = this.snappedPlacement();
+		if (!placement) return;
+		if (placement.approach) return;
+		const xCells = placement.footprint.maxGridX - placement.footprint.minGridX;
+		const zCells = placement.footprint.maxGridZ - placement.footprint.minGridZ;
 		this.direction = cycleStairDirection(this.direction, xCells, zCells, delta);
 		this.refreshVisuals();
 	}
@@ -415,7 +449,7 @@ export class StairTool implements BuildTool {
 		};
 	}
 
-	private normalizedFootprint(): {
+	private rawFootprint(): {
 		minGridX: number;
 		maxGridX: number;
 		minGridZ: number;
@@ -432,28 +466,120 @@ export class StairTool implements BuildTool {
 		};
 	}
 
+	private snappedPlacement(): {
+		footprint: {
+			minGridX: number;
+			maxGridX: number;
+			minGridZ: number;
+			maxGridZ: number;
+		};
+		approach: StairDirection | null;
+	} | null {
+		const raw = this.rawFootprint();
+		if (!raw || !this.foundationId) return null;
+		const foundation = this.foundationManager.getFoundation(this.foundationId);
+		if (!foundation) return null;
+		const { width, depth } = foundationLocalSize(foundation, this.vertexSpacing());
+		const { cellsX, cellsZ } = foundationGridCellCounts(
+			width,
+			depth,
+			this.buildingSettings.buildingGridSize
+		);
+		return snapStairFootprintToFoundation(raw, cellsX, cellsZ);
+	}
+
+	private normalizedFootprint(): {
+		minGridX: number;
+		maxGridX: number;
+		minGridZ: number;
+		maxGridZ: number;
+	} | null {
+		return this.snappedPlacement()?.footprint ?? null;
+	}
+
+	private isHoverInsideFoundation(
+		foundation: Parameters<typeof foundationLocalSize>[0],
+		point: BuildingGridPoint
+	): boolean {
+		const { width, depth } = foundationLocalSize(foundation, this.vertexSpacing());
+		return isBuildingGridPointInsideFoundation(
+			point,
+			this.buildingSettings.buildingGridSize,
+			width,
+			depth
+		);
+	}
+
+	private worldXzForGrid(
+		foundation: Parameters<typeof foundationLocalFrame>[0],
+		point: BuildingGridPoint
+	): { x: number; z: number } {
+		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
+		const buildingGridSize = this.buildingSettings.buildingGridSize;
+		return {
+			x: frame.originWorldX + point.gridX * buildingGridSize,
+			z: frame.originWorldZ + point.gridZ * buildingGridSize
+		};
+	}
+
+	private placementBaseY(
+		foundationId: string,
+		footprint: {
+			minGridX: number;
+			maxGridX: number;
+			minGridZ: number;
+			maxGridZ: number;
+		},
+		approach: StairDirection | null,
+		direction: StairDirection
+	): number {
+		if (!approach) return this.activeBaseY;
+		const foundation = this.foundationManager.getFoundation(foundationId);
+		if (!foundation) return this.activeBaseY;
+		const local = stairBottomCenterLocal(
+			footprint,
+			direction,
+			this.buildingSettings.buildingGridSize
+		);
+		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
+		const bottomY = this.terrainHeightSampler.sample(
+			frame.originWorldX + local.x,
+			frame.originWorldZ + local.z
+		);
+		return approachStairBaseY(bottomY, foundation.topY);
+	}
+
 	private confirmStair(): void {
 		if (!this.foundationId) return;
-		const footprint = this.normalizedFootprint();
-		if (!footprint) return;
+		const placement = this.snappedPlacement();
+		if (!placement) return;
+		const { footprint, approach } = placement;
+		const direction = approach ?? this.direction;
+		const baseY = this.placementBaseY(this.foundationId, footprint, approach, direction);
+		const levelIndex = approach ? 0 : this.activeLevelIndex;
 
 		const result = this.buildingManager.addStair({
 			foundationId: this.foundationId,
 			...footprint,
-			baseY: this.activeBaseY,
-			direction: this.direction,
-			levelIndex: this.activeLevelIndex,
+			baseY,
+			direction,
+			levelIndex,
 			gridSizeAtCreation: this.buildingSettings.buildingGridSize,
 			minimumStairWidthCells: this.buildingSettings.minimumStairWidthCells,
-			minimumStairRunCells: this.buildingSettings.minimumStairRunCells
+			minimumStairRunCells: this.buildingSettings.minimumStairRunCells,
+			material: colorMaterialFromHex(this.buildingSettings.stairColor),
+			frameEnabled: this.buildingSettings.stairFrameEnabled,
+			railingsEnabled: this.buildingSettings.stairRailingsEnabled,
+			openingEnabled: this.buildingSettings.stairOpeningEnabled,
+			openingFrameEnabled: this.buildingSettings.slabOpeningFrameEnabled
 		});
 		if (!result.valid) return;
 
 		const metrics = computeStairMetrics({
 			...footprint,
-			direction: this.direction,
+			direction,
 			gridSizeAtCreation: this.buildingSettings.buildingGridSize,
-			baseY: this.activeBaseY
+			baseY
 		});
 		const targetLevel = this.findMatchingLevel(metrics.topLocalY);
 		this.lastStairTarget =
@@ -493,8 +619,9 @@ export class StairTool implements BuildTool {
 
 		if (this.state === 'first-corner-selected') {
 			this.updateCornerMarker();
-			const footprint = this.normalizedFootprint();
-			if (!footprint || !this.foundationId) {
+			const placement = this.snappedPlacement();
+			const footprint = placement?.footprint;
+			if (!footprint || !this.foundationId || !placement) {
 				this.outline.visible = false;
 				this.hidePreview();
 				this.hideRoughBox();
@@ -504,13 +631,33 @@ export class StairTool implements BuildTool {
 
 			const xCells = footprint.maxGridX - footprint.minGridX;
 			const zCells = footprint.maxGridZ - footprint.minGridZ;
-			const runCells = Math.max(xCells, zCells);
+			const direction = placement.approach ?? this.direction;
+			const runCells = placement.approach
+				? placement.approach === '+x' || placement.approach === '-x'
+					? xCells
+					: zCells
+				: Math.max(xCells, zCells);
+			const widthCells = placement.approach
+				? placement.approach === '+x' || placement.approach === '-x'
+					? zCells
+					: xCells
+				: Math.min(xCells, zCells);
 			const estimatedTotalRise = runCells * this.buildingSettings.buildingGridSize;
-			const estimatedTopLocalY = this.activeBaseY + estimatedTotalRise;
-			const ceilingLocalY = this.ceilingAboveFootprint(this.foundationId, footprint);
+			const baseY = this.placementBaseY(
+				this.foundationId,
+				footprint,
+				placement.approach,
+				direction
+			);
+			const estimatedTopLocalY = baseY + estimatedTotalRise;
+			const ceilingLocalY = placement.approach
+				? 0
+				: this.ceilingAboveFootprint(this.foundationId, footprint);
 			const fit = classifyStairPreviewFit({
 				xCells,
 				zCells,
+				runCells,
+				widthCells,
 				estimatedTopLocalY,
 				ceilingLocalY,
 				minimumWidthCells: this.buildingSettings.minimumStairWidthCells,
@@ -519,14 +666,20 @@ export class StairTool implements BuildTool {
 			});
 
 			this.hidePreview();
-			this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit));
+			this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit), baseY);
 			if (xCells > 0 && zCells > 0) {
-				this.updateRoughBox(this.foundationId, footprint, estimatedTotalRise, fit);
+				this.updateRoughBox(this.foundationId, footprint, estimatedTotalRise, fit, baseY);
 			} else {
 				this.hideRoughBox();
 			}
 			this.onHudChange?.(
-				this.buildFootprintHud(footprint, estimatedTotalRise, ceilingLocalY, fit)
+				this.buildFootprintHud(
+					footprint,
+					estimatedTotalRise,
+					ceilingLocalY,
+					fit,
+					placement.approach
+				)
 			);
 			return;
 		}
@@ -534,16 +687,31 @@ export class StairTool implements BuildTool {
 		// choosing-direction
 		this.firstCornerMarker.visible = false;
 		this.hideRoughBox();
-		const footprint = this.normalizedFootprint();
-		if (!footprint || !this.foundationId) {
+		const placement = this.snappedPlacement();
+		const footprint = placement?.footprint;
+		if (!footprint || !this.foundationId || !placement) {
 			this.outline.visible = false;
 			this.hidePreview();
 			return;
 		}
 
-		const check = validateStairFootprint(
+		const foundation = this.foundationManager.getFoundation(this.foundationId);
+		if (!foundation) {
+			this.outline.visible = false;
+			this.hidePreview();
+			return;
+		}
+		const { width, depth } = foundationLocalSize(foundation, this.vertexSpacing());
+		const { cellsX, cellsZ } = foundationGridCellCounts(
+			width,
+			depth,
+			this.buildingSettings.buildingGridSize
+		);
+		const check = validateStairFoundationPlacement(
 			footprint,
 			this.direction,
+			cellsX,
+			cellsZ,
 			this.buildingSettings.minimumStairWidthCells,
 			this.buildingSettings.minimumStairRunCells
 		);
@@ -557,16 +725,28 @@ export class StairTool implements BuildTool {
 			return;
 		}
 
+		const baseY = this.placementBaseY(
+			this.foundationId,
+			footprint,
+			placement.approach,
+			this.direction
+		);
 		const metrics = computeStairMetrics({
 			...footprint,
 			direction: this.direction,
 			gridSizeAtCreation: this.buildingSettings.buildingGridSize,
-			baseY: this.activeBaseY
+			baseY
 		});
-		const ceilingLocalY = this.ceilingAboveFootprint(this.foundationId, footprint);
+		const ceilingLocalY = placement.approach
+			? 0
+			: this.ceilingAboveFootprint(this.foundationId, footprint);
+		const xCells = footprint.maxGridX - footprint.minGridX;
+		const zCells = footprint.maxGridZ - footprint.minGridZ;
 		const fit = classifyStairPreviewFit({
-			xCells: footprint.maxGridX - footprint.minGridX,
-			zCells: footprint.maxGridZ - footprint.minGridZ,
+			xCells,
+			zCells,
+			runCells: metrics.runCells,
+			widthCells: metrics.widthCells,
 			estimatedTopLocalY: metrics.topLocalY,
 			ceilingLocalY,
 			minimumWidthCells: this.buildingSettings.minimumStairWidthCells,
@@ -574,9 +754,9 @@ export class StairTool implements BuildTool {
 			heightMatchTolerance: HEIGHT_MATCH_TOLERANCE
 		});
 
-		this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit));
-		this.updateStairPreview(this.foundationId, footprint, fit);
-		this.onHudChange?.(this.buildDirectionHud(metrics, ceilingLocalY, fit));
+		this.updateOutline(this.foundationId, footprint, colorForPreviewFit(fit), baseY);
+		this.updateStairPreview(this.foundationId, footprint, fit, baseY);
+		this.onHudChange?.(this.buildDirectionHud(metrics, ceilingLocalY, fit, placement.approach));
 	}
 
 	/** The ceiling/floor slab directly above a footprint's centre point, at the tool's current active elevation — see `findCeilingLocalYAbove`. */
@@ -600,9 +780,15 @@ export class StairTool implements BuildTool {
 		}
 		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
+		const markerY = this.isHoverInsideFoundation(foundation, this.firstCorner)
+			? frame.originWorldY + this.activeBaseY + 0.08
+			: this.terrainHeightSampler.sample(
+					frame.originWorldX + this.firstCorner.gridX * buildingGridSize,
+					frame.originWorldZ + this.firstCorner.gridZ * buildingGridSize
+				) + 0.08;
 		this.firstCornerMarker.position.set(
 			frame.originWorldX + this.firstCorner.gridX * buildingGridSize,
-			frame.originWorldY + this.activeBaseY + 0.08,
+			markerY,
 			frame.originWorldZ + this.firstCorner.gridZ * buildingGridSize
 		);
 		this.firstCornerMarker.visible = true;
@@ -611,7 +797,8 @@ export class StairTool implements BuildTool {
 	private updateOutline(
 		foundationId: string,
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
-		color: number
+		color: number,
+		baseY = this.activeBaseY
 	): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -621,7 +808,7 @@ export class StairTool implements BuildTool {
 		const frame = foundationLocalFrame(foundation, this.vertexSpacing());
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const lift = 0.06;
-		const y = frame.originWorldY + this.activeBaseY + lift;
+		const y = frame.originWorldY + baseY + lift;
 		const minX = frame.originWorldX + footprint.minGridX * buildingGridSize;
 		const maxX = frame.originWorldX + footprint.maxGridX * buildingGridSize;
 		const minZ = frame.originWorldZ + footprint.minGridZ * buildingGridSize;
@@ -661,7 +848,8 @@ export class StairTool implements BuildTool {
 		foundationId: string,
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
 		estimatedTotalRise: number,
-		fit: StairPreviewFit
+		fit: StairPreviewFit,
+		baseY = this.activeBaseY
 	): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -674,7 +862,7 @@ export class StairTool implements BuildTool {
 		const maxX = frame.originWorldX + footprint.maxGridX * buildingGridSize;
 		const minZ = frame.originWorldZ + footprint.minGridZ * buildingGridSize;
 		const maxZ = frame.originWorldZ + footprint.maxGridZ * buildingGridSize;
-		const baseWorldY = frame.originWorldY + this.activeBaseY;
+		const baseWorldY = frame.originWorldY + baseY;
 
 		this.roughBoxMesh.scale.set(
 			Math.max(maxX - minX, 0.01),
@@ -699,7 +887,8 @@ export class StairTool implements BuildTool {
 	private updateStairPreview(
 		foundationId: string,
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
-		fit: StairPreviewFit
+		fit: StairPreviewFit,
+		baseY = this.activeBaseY
 	): void {
 		const foundation = this.foundationManager.getFoundation(foundationId);
 		if (!foundation) {
@@ -718,11 +907,11 @@ export class StairTool implements BuildTool {
 			...footprint,
 			direction: this.direction,
 			gridSizeAtCreation: buildingGridSize,
-			baseY: this.activeBaseY
+			baseY
 		});
 
 		this.previewGeometry?.dispose();
-		this.previewGeometry = buildStairGeometry(bounds, this.direction, this.activeBaseY, metrics);
+		this.previewGeometry = buildStairGeometry(bounds, this.direction, baseY, metrics);
 		this.previewMesh.geometry = this.previewGeometry;
 		this.previewMesh.position.set(frame.originWorldX, frame.originWorldY, frame.originWorldZ);
 		this.previewMaterial.color.setHex(colorForPreviewFit(fit));
@@ -734,7 +923,7 @@ export class StairTool implements BuildTool {
 			const topLocal = this.directionEndpoint(bounds, true);
 			this.bottomMarker.position.set(
 				frame.originWorldX + bottomLocal.x,
-				frame.originWorldY + this.activeBaseY + 0.15,
+				frame.originWorldY + baseY + 0.15,
 				frame.originWorldZ + bottomLocal.z
 			);
 			this.topMarker.position.set(
@@ -792,38 +981,44 @@ export class StairTool implements BuildTool {
 
 		const spacing = this.vertexSpacing();
 		const frame = foundationLocalFrame(foundation, spacing);
-		const y = frame.originWorldY + this.previewBaseY(foundationId);
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const { width, depth } = foundationLocalSize(foundation, spacing);
 
 		const fullCellsX = Math.floor(width / buildingGridSize);
 		const fullCellsZ = Math.floor(depth / buildingGridSize);
-		const fullPointCount = (fullCellsX + 1) * (fullCellsZ + 1);
+		const exteriorPad = Math.min(MAX_STAIR_EXTERIOR_CELLS, FALLBACK_RADIUS_CELLS);
+		const paddedCount =
+			(fullCellsX + 1 + exteriorPad * 2) * (fullCellsZ + 1 + exteriorPad * 2);
 
 		let minGridX: number;
 		let maxGridX: number;
 		let minGridZ: number;
 		let maxGridZ: number;
-		if (fullPointCount <= MAX_FULL_GRID_POINTS) {
-			minGridX = 0;
-			maxGridX = fullCellsX;
-			minGridZ = 0;
-			maxGridZ = fullCellsZ;
+		if (paddedCount <= MAX_FULL_GRID_POINTS) {
+			minGridX = -exteriorPad;
+			maxGridX = fullCellsX + exteriorPad;
+			minGridZ = -exteriorPad;
+			maxGridZ = fullCellsZ + exteriorPad;
 		} else {
-			minGridX = Math.max(0, centerPoint.gridX - FALLBACK_RADIUS_CELLS);
-			maxGridX = Math.min(fullCellsX, centerPoint.gridX + FALLBACK_RADIUS_CELLS);
-			minGridZ = Math.max(0, centerPoint.gridZ - FALLBACK_RADIUS_CELLS);
-			maxGridZ = Math.min(fullCellsZ, centerPoint.gridZ + FALLBACK_RADIUS_CELLS);
+			minGridX = centerPoint.gridX - FALLBACK_RADIUS_CELLS;
+			maxGridX = centerPoint.gridX + FALLBACK_RADIUS_CELLS;
+			minGridZ = centerPoint.gridZ - FALLBACK_RADIUS_CELLS;
+			maxGridZ = centerPoint.gridZ + FALLBACK_RADIUS_CELLS;
 		}
 
 		let i = 0;
 		const lift = 0.02;
+		const interiorY = frame.originWorldY + this.previewBaseY(foundationId);
 		for (let gz = minGridZ; gz <= maxGridZ && i < MAX_FULL_GRID_POINTS; gz++) {
 			for (let gx = minGridX; gx <= maxGridX && i < MAX_FULL_GRID_POINTS; gx++) {
 				const p = i * 3;
-				this.gridPositions[p] = frame.originWorldX + gx * buildingGridSize;
-				this.gridPositions[p + 1] = y + lift;
-				this.gridPositions[p + 2] = frame.originWorldZ + gz * buildingGridSize;
+				const worldX = frame.originWorldX + gx * buildingGridSize;
+				const worldZ = frame.originWorldZ + gz * buildingGridSize;
+				const onPad = gx >= 0 && gx <= fullCellsX && gz >= 0 && gz <= fullCellsZ;
+				this.gridPositions[p] = worldX;
+				this.gridPositions[p + 1] =
+					(onPad ? interiorY : this.terrainHeightSampler.sample(worldX, worldZ)) + lift;
+				this.gridPositions[p + 2] = worldZ;
 
 				const isNearest = gx === centerPoint.gridX && gz === centerPoint.gridZ;
 				const color = isNearest ? NEAREST_COLOR : FAR_COLOR;
@@ -875,11 +1070,12 @@ export class StairTool implements BuildTool {
 			level,
 			crosshair: this.hoverPoint ? 'valid' : 'default',
 			hintLines: [
-				level ? level.displayName.toUpperCase() : 'Look at a foundation',
+				level ? level.displayName.toUpperCase() : 'Look at a foundation or the ground beside it',
 				'',
 				'STAIRS',
 				'',
 				'Click first corner',
+				'E customise',
 				...hintExtra
 			]
 		};
@@ -896,6 +1092,7 @@ export class StairTool implements BuildTool {
 				'STAIRS',
 				'',
 				'Choose opposite corner',
+				'E customise',
 				'Right click: Cancel'
 			]
 		};
@@ -905,7 +1102,8 @@ export class StairTool implements BuildTool {
 		footprint: { minGridX: number; maxGridX: number; minGridZ: number; maxGridZ: number },
 		estimatedTotalRise: number,
 		ceilingLocalY: number | null,
-		fit: StairPreviewFit
+		fit: StairPreviewFit,
+		approach: StairDirection | null = null
 	): BuildUiState {
 		const buildingGridSize = this.buildingSettings.buildingGridSize;
 		const xCells = footprint.maxGridX - footprint.minGridX;
@@ -913,7 +1111,7 @@ export class StairTool implements BuildTool {
 		const lines = [
 			...this.activeLevelHudLines(),
 			'',
-			'STAIRS',
+			approach ? 'STAIRS · Approach' : 'STAIRS',
 			'',
 			`${(xCells * buildingGridSize).toFixed(2)}m × ${(zCells * buildingGridSize).toFixed(2)}m`,
 			`Est. rise: ${estimatedTotalRise.toFixed(2)}m`
@@ -921,7 +1119,23 @@ export class StairTool implements BuildTool {
 		const belowMinimums =
 			Math.min(xCells, zCells) < this.buildingSettings.minimumStairWidthCells ||
 			Math.max(xCells, zCells) < this.buildingSettings.minimumStairRunCells;
-		if (ceilingLocalY !== null) {
+		if (approach && ceilingLocalY !== null) {
+			const riseNeeded = ceilingLocalY - this.placementBaseY(
+				this.foundationId!,
+				footprint,
+				approach,
+				approach
+			);
+			lines.push(`Rise to foundation: ${Math.max(0, riseNeeded).toFixed(2)}m`);
+			if (fit === 'match') lines.push('Matches foundation height!');
+			else if (fit === 'too-tall') lines.push('Too long — stairs would overshoot the pad');
+			else if (fit === 'too-small' && belowMinimums) {
+				lines.push(
+					`Too small — need at least ${this.buildingSettings.minimumStairWidthCells} × ${this.buildingSettings.minimumStairRunCells} cells`
+				);
+			} else if (fit === 'too-small') lines.push('Too short to reach the foundation');
+			else lines.push('Drag to match foundation height');
+		} else if (ceilingLocalY !== null) {
 			lines.push(`Ceiling above: ${(ceilingLocalY - this.activeBaseY).toFixed(2)}m`);
 			if (fit === 'match') lines.push('Matches ceiling height!');
 			else if (fit === 'too-tall') lines.push('Too long — stairs would be too tall');
@@ -936,7 +1150,7 @@ export class StairTool implements BuildTool {
 				`Too small — need at least ${this.buildingSettings.minimumStairWidthCells} × ${this.buildingSettings.minimumStairRunCells} cells`
 			);
 		}
-		lines.push('', 'Click: Confirm footprint', 'Right click: Cancel');
+		lines.push('', 'Click: Confirm footprint', 'E customise', 'Right click: Cancel');
 		return {
 			toolId: 'stairs',
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
@@ -948,14 +1162,15 @@ export class StairTool implements BuildTool {
 	private buildDirectionHud(
 		metrics: ReturnType<typeof computeStairMetrics>,
 		ceilingLocalY: number | null,
-		fit: StairPreviewFit
+		fit: StairPreviewFit,
+		approach: StairDirection | null = null
 	): BuildUiState {
 		const targetLevel = this.findMatchingLevel(metrics.topLocalY);
 
 		const lines = [
 			...this.activeLevelHudLines(),
 			'',
-			'STAIRS',
+			approach ? 'STAIRS · Approach' : 'STAIRS',
 			'',
 			`Width: ${metrics.widthMeters.toFixed(2)}m`,
 			`Run: ${metrics.runMeters.toFixed(2)}m`,
@@ -965,21 +1180,31 @@ export class StairTool implements BuildTool {
 			'',
 			`Direction: ${this.direction.toUpperCase()}`
 		];
-		if (ceilingLocalY !== null) {
+		if (approach && ceilingLocalY !== null) {
+			if (fit === 'match') lines.push('Matches foundation height!');
+			else if (fit === 'too-tall') lines.push('Too long — stairs would overshoot the pad');
+			else if (fit === 'too-small') lines.push('Too short to reach the foundation');
+			else lines.push('Does not reach the foundation exactly');
+			lines.push('Climbs onto the foundation');
+		} else if (ceilingLocalY !== null) {
 			if (fit === 'match') lines.push('Matches ceiling above!');
 			else if (fit === 'too-tall') lines.push('Too long — stairs would be too tall');
 			else if (fit === 'too-small') lines.push('Too short to reach ceiling');
 			else lines.push('Does not reach ceiling exactly');
 		}
-		if (targetLevel !== null) {
-			lines.push(
-				'Stairs connect:',
-				`${levelDisplayName(this.activeLevelIndex)} → ${levelDisplayName(targetLevel)}`
-			);
+		if (!approach) {
+			if (targetLevel !== null) {
+				lines.push(
+					'Stairs connect:',
+					`${levelDisplayName(this.activeLevelIndex)} → ${levelDisplayName(targetLevel)}`
+				);
+			} else {
+				lines.push(`Top elevation: ${metrics.topLocalY.toFixed(2)}m`, 'No matching floor level');
+			}
+			lines.push('', '← / → Change direction', 'Enter / Click: Build', 'E customise', 'Right click: Cancel');
 		} else {
-			lines.push(`Top elevation: ${metrics.topLocalY.toFixed(2)}m`, 'No matching floor level');
+			lines.push('', 'Enter / Click: Build', 'E customise', 'Right click: Cancel');
 		}
-		lines.push('', '← / → Change direction', 'Enter / Click: Build', 'Right click: Cancel');
 		return {
 			toolId: 'stairs',
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,

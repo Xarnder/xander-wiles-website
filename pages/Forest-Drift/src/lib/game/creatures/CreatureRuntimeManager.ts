@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { CreatureSpatialIndex } from './CreatureSpatialIndex';
+import { CreatureEventBus } from './CreatureEventBus';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
 import { animateCreature } from './CreatureAnimationSystem';
 import { createDefaultCreatureState, validateCreatureWorldState } from './CreaturePersistence';
@@ -24,16 +26,21 @@ interface LiveCreature {
 	lastAnimation: number;
 	born: number;
 	debug?: THREE.SkeletonHelper;
+	label?: THREE.Sprite;
+	targetLine?: THREE.Line;
 }
 /** Bounded runtime window over an infinite deterministic ecology. Ambient state is never serialized. */
 export class CreatureRuntimeManager {
 	readonly group = new THREE.Group();
+	readonly events = new CreatureEventBus();
+	private spatial = new CreatureSpatialIndex<CreatureRuntimeDefinition>();
 	readonly logical = new Map<string, CreatureRuntimeDefinition>();
 	readonly live = new Map<string, LiveCreature>();
 	state: CreatureWorldState;
 	revision = 0;
 	private cells = new Map<string, CreatureSpawnDefinition[]>();
 	private scanAt = -1;
+	private scanCell = '';
 	private movementAt = 0;
 	private persistenceAt = 0;
 	private time = 0;
@@ -114,8 +121,20 @@ export class CreatureRuntimeManager {
 		const r = this.live.get(id);
 		r?.debug?.dispose();
 		r?.debug?.removeFromParent();
+		if (r?.label) {
+			r.label.material.map?.dispose();
+			r.label.material.dispose();
+			r.label.removeFromParent();
+		}
+		if (r?.targetLine) {
+			r.targetLine.geometry.dispose();
+			(r.targetLine.material as THREE.Material).dispose();
+			r.targetLine.removeFromParent();
+		}
 		r?.compiled.dispose();
 		this.live.delete(id);
+		this.spatial.remove(id);
+		if (r) this.events.emit({ type: 'despawn', id, position: { ...r.compiled.object.position } });
 	}
 	private scan(player: Vec3, quality: GraphicsQuality) {
 		const range = CREATURE_GRAPHICS_BUDGETS[quality].populationRadius;
@@ -158,7 +177,9 @@ export class CreatureRuntimeManager {
 			return;
 		}
 		const budget = CREATURE_GRAPHICS_BUDGETS[quality];
-		if (this.time >= this.scanAt) {
+		const cellKey = `${Math.floor(player.x / CREATURE_CELL_SIZE)},${Math.floor(player.z / CREATURE_CELL_SIZE)}:${quality}`;
+		if (this.time >= this.scanAt || cellKey !== this.scanCell) {
+			this.scanCell = cellKey;
 			this.scan(player, quality);
 			this.scanAt = this.time + 0.8;
 		}
@@ -194,7 +215,8 @@ export class CreatureRuntimeManager {
 		const moving = this.time - this.movementAt >= 0.05,
 			step = Math.min(0.15, this.time - this.movementAt);
 		if (moving) this.movementAt = this.time;
-		const nearStates = selected.map((p) => this.logical.get(p.id)!);
+		this.spatial.clear();
+		for (const item of selected) this.spatial.set(item.id, this.logical.get(item.id)!);
 		for (const item of selected) {
 			const r = this.logical.get(item.id)!;
 			let live = this.live.get(item.id);
@@ -216,6 +238,7 @@ export class CreatureRuntimeManager {
 					}
 					this.group.add(compiled.object);
 					this.live.set(item.id, live);
+					this.events.emit({ type: 'spawn', id: item.id, position: { ...r.position } });
 					const elapsed = performance.now() - start;
 					this.stats.averageCompileMs =
 						(this.stats.averageCompileMs * this.stats.compileCount + elapsed) /
@@ -231,7 +254,16 @@ export class CreatureRuntimeManager {
 			if (!live) continue;
 			const behaviourStart = performance.now();
 			if (this.time >= r.nextDecision) {
-				decideCreature(r, player, nearStates, this.time, this.access);
+				const oldState = r.state;
+				decideCreature(
+					r,
+					player,
+					this.spatial.query(r.position, Math.max(24, r.spawn.species.behaviour.awarenessRadius)),
+					this.time,
+					this.access
+				);
+				if (r.state !== oldState)
+					this.events.emit({ type: 'state', id: r.spawn.id, state: r.state });
 				r.nextDecision = Math.max(r.nextDecision, this.time + (item.distance > 160 ? 1.5 : 0.3));
 				this.stats.behaviourUpdates++;
 			}
@@ -260,6 +292,7 @@ export class CreatureRuntimeManager {
 			}
 			// Bounds already include articulation margin; grow-in is strictly a render effect.
 			c.object.scale.setScalar(Math.min(1, Math.max(0.01, (this.time - live.born) / 0.35)));
+			this.updateDebug(live, r);
 			if (this.debug.showSkeleton && !live.debug) {
 				live.debug = new THREE.SkeletonHelper(c.object);
 				this.group.add(live.debug);
@@ -286,6 +319,73 @@ export class CreatureRuntimeManager {
 			if (this.state.individuals.length) this.revision++;
 		}
 	}
+	private updateDebug(live: LiveCreature, r: CreatureRuntimeDefinition) {
+		const text = [
+			this.debug.showSpeciesId ? r.spawn.species.name + ' ' + r.spawn.species.id : '',
+			this.debug.showIndividualId ? r.spawn.individual.id : '',
+			this.debug.showBehaviourState ? r.state : '',
+			this.debug.showLOD ? `LOD${live.lod}` : ''
+		]
+			.filter(Boolean)
+			.join(' · ');
+		if (text) {
+			if (!live.label || live.label.userData.text !== text) {
+				if (live.label) {
+					live.label.material.map?.dispose();
+					live.label.material.dispose();
+					live.label.removeFromParent();
+				}
+				const canvas = document.createElement('canvas');
+				canvas.width = 1024;
+				canvas.height = 64;
+				const ctx = canvas.getContext('2d')!;
+				ctx.fillStyle = '#183327dc';
+				ctx.fillRect(0, 0, 1024, 64);
+				ctx.font = '22px system-ui';
+				ctx.fillStyle = '#f0ffe8';
+				ctx.fillText(text, 14, 42, 995);
+				const material = new THREE.SpriteMaterial({
+					map: new THREE.CanvasTexture(canvas),
+					depthTest: false
+				});
+				live.label = new THREE.Sprite(material);
+				live.label.userData.text = text;
+				this.group.add(live.label);
+			}
+			live.label.position.set(
+				r.position.x,
+				r.position.y + live.compiled.compilation.bounds.height + 0.4,
+				r.position.z
+			);
+			const width = Math.max(4, Math.min(20, live.compiled.compilation.bounds.height * 2));
+			live.label.scale.set(width, width / 16, 1);
+		} else if (live.label) {
+			live.label.material.map?.dispose();
+			live.label.material.dispose();
+			live.label.removeFromParent();
+			live.label = undefined;
+		}
+		if (this.debug.showTarget) {
+			if (!live.targetLine) {
+				live.targetLine = new THREE.Line(
+					new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+					new THREE.LineBasicMaterial({ color: 0xffcc66, depthTest: false })
+				);
+				this.group.add(live.targetLine);
+			}
+			const pos = live.targetLine.geometry.getAttribute('position');
+			pos.setXYZ(0, r.position.x, r.position.y + 0.15, r.position.z);
+			pos.setXYZ(1, r.target.x, r.target.y + 0.15, r.target.z);
+			pos.needsUpdate = true;
+			live.targetLine.geometry.computeBoundingSphere();
+		} else if (live.targetLine) {
+			live.targetLine.geometry.dispose();
+			(live.targetLine.material as THREE.Material).dispose();
+			live.targetLine.removeFromParent();
+			live.targetLine = undefined;
+		}
+	}
+
 	serialize(): CreatureWorldState {
 		return {
 			settings: { ...this.state.settings },
@@ -301,7 +401,10 @@ export class CreatureRuntimeManager {
 		};
 	}
 	place(definition: CreatureDefinition, position: Vec3) {
-		const id = `placed_${definition.individual.id}_${++this.placedIndex}`;
+		let id: string;
+		do {
+			id = `placed_${definition.individual.id}_${++this.placedIndex}`;
+		} while (this.state.individuals.some((p) => p.id === id));
 		const individual = { ...definition.individual, id };
 		const recipe = {
 			id,
@@ -365,5 +468,7 @@ export class CreatureRuntimeManager {
 		this.logical.clear();
 		this.cells.clear();
 		this.group.removeFromParent();
+		this.spatial.clear();
+		this.events.clear();
 	}
 }

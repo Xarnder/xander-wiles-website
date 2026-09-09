@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createAndEnterWorld, openSettingsMenu } from './worldHelpers';
+import { createAndEnterWorld, openPauseMenu, openSettingsMenu } from './worldHelpers';
 
 test('renders the world with no uncaught exceptions and loads at least one chunk', async ({
 	page
@@ -132,8 +132,8 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Slot 2 (Poly Wall), slot 2+↓ (Wall) still cycle snap. Slot 4 (Ceiling) opens the
-	// height panel on C — pressing it a few times must not throw.
+	// Slot 2 (Poly Wall), slot 2+↓ (Wall), slot 4 (Ceiling) — pressing C on each just
+	// needs to not throw; the resulting snap behavior itself is covered by polygonDrawSnap.spec.ts.
 	await page.keyboard.press('2');
 	for (let i = 0; i < 3; i++) await page.keyboard.press('c');
 	await page.keyboard.press('ArrowDown');
@@ -145,7 +145,7 @@ test('pressing C cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	expect(pageErrors).toEqual([]);
 });
 
-test('C opens the ceiling height modal and closes it again', async ({ page }) => {
+test('E opens the ceiling height modal and closes it again', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -156,14 +156,154 @@ test('C opens the ceiling height modal and closes it again', async ({ page }) =>
 	await expect(page.getByTestId('hotbar-slot-ceiling')).toHaveClass(/active/);
 	await expect(page.getByTestId('placement-height-modal')).not.toBeVisible();
 
-	await page.keyboard.press('c');
+	await page.keyboard.press('e');
 	const modal = page.getByTestId('placement-height-modal');
 	await expect(modal).toBeVisible();
 	await expect(modal).toContainText('Ceiling height');
 	await expect(modal).toContainText('Following top of walls');
 
-	await page.keyboard.press('c');
+	await page.keyboard.press('e');
 	await expect(modal).not.toBeVisible();
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('E opens window and door customise with a sill / from-floor height control', async ({
+	page
+}) => {
+	test.setTimeout(90_000);
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await createAndEnterWorld(page);
+
+	await page.keyboard.press('3');
+	await expect(page.getByTestId('hotbar-slot-door')).toHaveClass(/active/);
+	await page.keyboard.press('e');
+	const modal = page.getByTestId('placement-customize-modal');
+	await expect(modal).toBeVisible();
+	await expect(modal).toContainText('Customise Door');
+	await expect(page.getByTestId('placement-preview-canvas')).toBeVisible();
+	await expect(page.getByTestId('placement-sill')).toBeVisible();
+	await expect(modal).toContainText('From floor');
+	await expect(page.getByTestId('placement-sill-number')).toHaveValue('0');
+	await page.getByTestId('placement-sill').fill('0.4');
+	await expect(page.getByTestId('placement-sill-number')).toHaveValue('0.4');
+
+	await page.keyboard.press('e');
+	await expect(modal).not.toBeVisible();
+	await expect(page.getByTestId('placement-preview-canvas')).toHaveCount(0);
+
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-window')).toHaveClass(/active/);
+	await page.keyboard.press('e');
+	await expect(modal).toBeVisible();
+	await expect(modal).toContainText('Customise Window');
+	await expect(page.getByTestId('placement-sill')).toBeVisible();
+	await expect(modal.getByText('Sill', { exact: true })).toBeVisible();
+	await expect(page.getByTestId('placement-sill-number')).toHaveValue('0.9');
+	await page.getByTestId('placement-sill').fill('1.5');
+	await expect(page.getByTestId('placement-sill-number')).toHaveValue('1.5');
+
+	await page.keyboard.press('e');
+	await expect(modal).not.toBeVisible();
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('E opens stairs customise with colour, framing, railings, hole and hole framing', async ({
+	page
+}) => {
+	test.setTimeout(90_000);
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await createAndEnterWorld(page);
+
+	await page.keyboard.press('5');
+	await expect(page.getByTestId('hotbar-slot-stairs')).toHaveClass(/active/);
+	await page.keyboard.press('e');
+	const modal = page.getByTestId('placement-customize-modal');
+	await expect(modal).toBeVisible();
+	await expect(modal).toContainText('Customise Stairs');
+	await expect(page.getByTestId('placement-preview-canvas')).toBeVisible();
+	await expect(page.getByTestId('placement-color')).toBeVisible();
+	await expect(page.getByTestId('placement-stair-frame-on')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('placement-stair-railings-on')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(page.getByTestId('placement-stair-opening-on')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(page.getByTestId('placement-stair-opening-frame-on')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+
+	await page.getByTestId('placement-stair-frame-off').click();
+	await expect(page.getByTestId('placement-stair-frame-off')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.getByTestId('placement-stair-railings-off').click();
+	await expect(page.getByTestId('placement-stair-railings-off')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.getByTestId('placement-stair-opening-off').click();
+	await expect(page.getByTestId('placement-stair-opening-off')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.getByTestId('placement-stair-opening-frame-off').click();
+	await expect(page.getByTestId('placement-stair-opening-frame-off')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+
+	await page.keyboard.press('e');
+	await expect(modal).not.toBeVisible();
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('E opens the Place Object catalogue from hotbar slot 8', async ({ page }) => {
+	test.setTimeout(90_000);
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await createAndEnterWorld(page);
+
+	await page.keyboard.press('8');
+	await expect(page.getByTestId('hotbar-slot-torch')).toHaveClass(/active/);
+	await page.keyboard.press('e');
+	const objectsModal = page.getByTestId('furniture-catalogue-modal');
+	await expect(objectsModal).toBeVisible();
+	await expect(objectsModal).toContainText('Objects');
+	await expect(page.getByTestId('furniture-preview-canvas')).toBeVisible();
+	await expect(page.getByTestId('furniture-card-chair')).toHaveAttribute('aria-pressed', 'true');
+
+	await page.getByTestId('furniture-card-bed').click();
+	await expect(page.getByTestId('furniture-card-bed')).toHaveAttribute('aria-pressed', 'true');
+	await expect(objectsModal).toContainText('Bed');
+	await expect(page.getByTestId('furniture-width-number')).toHaveValue('1.4');
+	await page.getByTestId('furniture-preset-single').click();
+	await expect(page.getByTestId('furniture-width-number')).toHaveValue('0.9');
+
+	await page.getByTestId('furniture-card-kitchen-counter').click();
+	await expect(page.getByTestId('furniture-card-kitchen-counter')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(objectsModal).toContainText('Kitchen Counter');
+
+	await page.getByTestId('furniture-modal-done').click();
+	await expect(objectsModal).not.toBeVisible();
 
 	expect(pageErrors).toEqual([]);
 });
@@ -191,7 +331,7 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	expect(pageErrors).toEqual([]);
 });
 
-test('the build HUD does not sit underneath the help and settings buttons', async ({ page }) => {
+test('the build HUD does not sit underneath the pause button', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -203,15 +343,12 @@ test('the build HUD does not sit underneath the help and settings buttons', asyn
 	await expect(hud).toBeVisible();
 
 	const hudBox = await hud.boundingBox();
-	const helpBox = await page.getByTestId('help-toggle').boundingBox();
-	const settingsBox = await page.getByTestId('settings-toggle').boundingBox();
+	const pauseBox = await page.getByTestId('pause-toggle').boundingBox();
 	expect(hudBox).not.toBeNull();
-	expect(helpBox).not.toBeNull();
-	expect(settingsBox).not.toBeNull();
+	expect(pauseBox).not.toBeNull();
 	const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
 		a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-	expect(overlaps(hudBox!, helpBox!)).toBe(false);
-	expect(overlaps(hudBox!, settingsBox!)).toBe(false);
+	expect(overlaps(hudBox!, pauseBox!)).toBe(false);
 
 	expect(pageErrors).toEqual([]);
 });
@@ -256,7 +393,7 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it 
 	expect(pageErrors).toEqual([]);
 });
 
-test('toggles the help overlay with the H key and the help button, listing controls', async ({
+test('toggles the help overlay with the H key and from the pause menu, listing controls', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -266,7 +403,7 @@ test('toggles the help overlay with the H key and the help button, listing contr
 	await createAndEnterWorld(page);
 
 	const helpOverlay = page.getByTestId('help-overlay');
-	await expect(page.getByTestId('help-toggle')).toBeVisible();
+	await expect(page.getByTestId('pause-toggle')).toBeVisible();
 	await expect(helpOverlay).not.toBeVisible();
 
 	await page.keyboard.press('h');
@@ -277,11 +414,16 @@ test('toggles the help overlay with the H key and the help button, listing contr
 	await page.keyboard.press('Escape');
 	await expect(helpOverlay).not.toBeVisible();
 
-	await page.getByTestId('help-toggle').click();
+	await openPauseMenu(page);
+	await expect(page.getByTestId('pause-settings')).toBeVisible();
+	await expect(page.getByTestId('pause-creature-lab')).toBeVisible();
+	await expect(page.getByTestId('pause-respawn')).toBeVisible();
+	await page.getByTestId('pause-controls').click();
 	await expect(helpOverlay).toBeVisible();
 
-	await page.getByTestId('help-toggle').click();
+	await helpOverlay.getByRole('button', { name: 'Close' }).click();
 	await expect(helpOverlay).not.toBeVisible();
+	await expect(page.getByTestId('pause-menu')).toBeVisible();
 
 	expect(pageErrors).toEqual([]);
 });
@@ -591,7 +733,7 @@ test('selecting a colour swatch in the palette updates the HUD colour swatch', a
 	const palette = page.getByTestId('material-palette');
 	await expect(palette).toBeVisible();
 
-	await page.getByRole('button', { name: 'Red' }).click();
+	await page.getByRole('button', { name: 'Red', exact: true }).click();
 	await expect(palette).not.toBeVisible();
 
 	await expect(page.getByTestId('paint-color-swatch')).toHaveCSS(

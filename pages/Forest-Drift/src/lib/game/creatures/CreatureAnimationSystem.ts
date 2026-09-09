@@ -5,7 +5,6 @@ import type { CreatureIntent, LimbRigDefinition } from './CreatureTypes';
 const TAU = Math.PI * 2;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 interface PoseScratch {
-	previousHeading: number;
 	a: Vector3;
 	b: Vector3;
 	c: Vector3;
@@ -18,7 +17,6 @@ function scratch(creature: CompiledCreature): PoseScratch {
 	let result = poses.get(creature);
 	if (!result) {
 		result = {
-			previousHeading: creature.object.rotation.y,
 			a: new Vector3(),
 			b: new Vector3(),
 			c: new Vector3(),
@@ -89,11 +87,6 @@ export function animateCreature(
 	const frequency = running ? gait.runFrequency : gait.walkFrequency;
 	const cycle = time * frequency * TAU;
 	const strength = moving ? 1 : 0;
-	const turn = Math.atan2(
-		Math.sin(intent.heading - s.previousHeading),
-		Math.cos(intent.heading - s.previousHeading)
-	);
-	s.previousHeading = intent.heading;
 	creature.object.rotation.y = intent.heading;
 	if (surface) {
 		const ground = surface(creature.object.position.x, creature.object.position.z);
@@ -113,7 +106,7 @@ export function animateCreature(
 					: Math.sin(time * 1.8) * gait.bodyBob * 0.12;
 			bone.rotation.z =
 				Math.sin(cycle) * gait.bodySway * strength -
-				clamp(turn / Math.max(delta, 0.016), -2, 2) * 0.035;
+				clamp(intent.angularVelocity, -2, 2) * 0.035;
 		} else if (
 			serpentine &&
 			(joint.semantic === 'spine' ||

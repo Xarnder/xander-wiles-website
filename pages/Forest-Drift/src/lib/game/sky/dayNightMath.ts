@@ -89,7 +89,11 @@ export function sunAnglesForTimeOfDay(
 	const solar = solarElevationFactor(timeOfDay);
 	const peak = Number.isFinite(noonElevation) ? noonElevation : 45;
 	const elevation = solar >= 0 ? solar * peak : solar * 18;
-	const azimuth = ((Number.isFinite(noonAzimuth) ? noonAzimuth : 130) + (wrapTimeOfDay(timeOfDay) - 0.5) * 360 + 360) % 360;
+	const azimuth =
+		((Number.isFinite(noonAzimuth) ? noonAzimuth : 130) +
+			(wrapTimeOfDay(timeOfDay) - 0.5) * 360 +
+			360) %
+		360;
 	return { elevation, azimuth };
 }
 
@@ -217,7 +221,9 @@ function mixPalette<T extends Record<string, string>>(from: T, to: T, t: number)
 function parseHex(hex: string): { r: number; g: number; b: number } {
 	const raw = hex.startsWith('#') ? hex.slice(1) : hex;
 	const full =
-		raw.length === 3 ? `${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}` : raw.padEnd(6, '0');
+		raw.length === 3
+			? `${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`
+			: raw.padEnd(6, '0');
 	return {
 		r: Number.parseInt(full.slice(0, 2), 16) || 0,
 		g: Number.parseInt(full.slice(2, 4), 16) || 0,

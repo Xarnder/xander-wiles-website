@@ -45,7 +45,8 @@ export function computeStairLevelTriggerVolume(
 		stairId: stair.id,
 		foundationId: stair.foundationId,
 		startLevelIndex: stair.levelIndex,
-		endLevelIndex: stair.levelIndex + 1,
+		endLevelIndex:
+			stair.baseY < -1e-6 && stair.levelIndex === 0 ? stair.levelIndex : stair.levelIndex + 1,
 		minX: frame.originWorldX + bounds.minLocalX - padH,
 		maxX: frame.originWorldX + bounds.maxLocalX + padH,
 		minY: frame.originWorldY + stair.baseY - padV,

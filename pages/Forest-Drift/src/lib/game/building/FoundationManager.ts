@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { FoundationMesh } from './FoundationMesh';
-import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import { buildFoundationFrame, disposeWallFrame } from './WallFrameBuilder';
 
 /** World-unit tolerance on the containment test, so the player never flickers between terrain and foundation height right at an edge. */
 const EDGE_TOLERANCE = 0.001;
@@ -10,6 +12,8 @@ const EDGE_TOLERANCE = 0.001;
 interface FoundationEntry {
 	definition: FoundationDefinition;
 	mesh: FoundationMesh;
+	/** Sibling of the cuboid in `group` — same timber recipe as wall/path framing. `null` when off. */
+	frame: THREE.Group | null;
 }
 
 /**
@@ -29,6 +33,7 @@ export class FoundationManager {
 
 	private readonly getVertexSpacing: () => number;
 	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
 	private readonly foundations = new Map<string, FoundationEntry>();
 	private showBounds = false;
 	/** Monotonic change counter polled by world persistence — see BuildingManager.revision for why this exists rather than re-serializing to detect changes. */
@@ -41,10 +46,17 @@ export class FoundationManager {
 	 * paints anything itself (see BuildingMaterialManager's own caching, which is per-instance).
 	 * ThreeScene always passes the real shared one, so a foundation's material cache is shared with
 	 * every other building manager, per the README's "Paint Tool" section.
+	 * `buildingSettings` is the same live object WallManager reads for edge framing, so toggling
+	 * wall framing rebuilds foundation timber too.
 	 */
-	constructor(getVertexSpacing: () => number, materialManager?: BuildingMaterialManager) {
+	constructor(
+		getVertexSpacing: () => number,
+		materialManager?: BuildingMaterialManager,
+		buildingSettings?: BuildingSettings
+	) {
 		this.getVertexSpacing = getVertexSpacing;
 		this.materialManager = materialManager ?? new BuildingMaterialManager();
+		this.buildingSettings = buildingSettings ?? createDefaultBuildingSettings();
 	}
 
 	addFoundation(definition: FoundationDefinition): void {
@@ -53,7 +65,9 @@ export class FoundationManager {
 		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), material);
 		mesh.setBoundsVisible(this.showBounds);
 		this.group.add(mesh.object);
-		this.foundations.set(definition.id, { definition, mesh });
+		const entry: FoundationEntry = { definition, mesh, frame: null };
+		this.rebuildFrame(entry);
+		this.foundations.set(definition.id, entry);
 	}
 
 	/** Sets (or, given `undefined`, clears) a foundation's material override — visual only, never touching its grid footprint, `topY`/`bottomY`, or collision. A no-op returning `false` if the foundation isn't found. */
@@ -70,6 +84,7 @@ export class FoundationManager {
 		this.revision++;
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
+		if (entry.frame) disposeWallFrame(entry.frame);
 		this.group.remove(entry.mesh.object);
 		entry.mesh.dispose();
 		this.foundations.delete(id);
@@ -101,6 +116,42 @@ export class FoundationManager {
 	setShowBounds(visible: boolean): void {
 		this.showBounds = visible;
 		for (const entry of this.foundations.values()) entry.mesh.setBoundsVisible(visible);
+	}
+
+	/**
+	 * Rebuilds every foundation's edge framing from the live wall-frame settings — same trigger as
+	 * `WallManager.rebuildAllWalls` when the Framing GUI changes. Does not recreate the cuboid.
+	 */
+	rebuildAllFrames(): void {
+		for (const entry of this.foundations.values()) this.rebuildFrame(entry);
+	}
+
+	private rebuildFrame(entry: FoundationEntry): void {
+		if (entry.frame) {
+			disposeWallFrame(entry.frame);
+			entry.frame = null;
+		}
+		const spacing = this.getVertexSpacing();
+		const { definition } = entry;
+		const frame = buildFoundationFrame(
+			{
+				id: definition.id,
+				minX: definition.minGridX * spacing,
+				maxX: definition.maxGridX * spacing,
+				minZ: definition.minGridZ * spacing,
+				maxZ: definition.maxGridZ * spacing,
+				bottomY: definition.bottomY,
+				topY: definition.topY
+			},
+			this.buildingSettings,
+			this.buildingSettings.wallThickness,
+			this.buildingSettings.miterLimit,
+			this.materialManager
+		);
+		if (frame) {
+			this.group.add(frame);
+			entry.frame = frame;
+		}
 	}
 
 	/** Highest foundation top surface covering (worldX, worldZ), or null if no foundation covers it. */
@@ -151,7 +202,10 @@ export class FoundationManager {
 	}
 
 	dispose(): void {
-		for (const entry of this.foundations.values()) entry.mesh.dispose();
+		for (const entry of this.foundations.values()) {
+			if (entry.frame) disposeWallFrame(entry.frame);
+			entry.mesh.dispose();
+		}
 		this.foundations.clear();
 		this.group.clear();
 	}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { colorMaterialFromHex, DEFAULT_MATERIAL_PALETTE, normalizeColorHex } from '../MaterialTypes';
+import {
+	colorMaterialFromHex,
+	DEFAULT_MATERIAL_PALETTE,
+	normalizeColorHex
+} from '../MaterialTypes';
 
 describe('normalizeColorHex', () => {
 	it('uppercases an already-6-digit hex colour', () => {

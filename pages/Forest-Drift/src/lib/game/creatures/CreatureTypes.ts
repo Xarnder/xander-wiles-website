@@ -210,6 +210,8 @@ export type CreatureBehaviourState =
 export interface CreatureIntent {
 	velocity: Vec3;
 	heading: number;
+	/** Rad/s the heading is actually turning, computed once per physics step so animation lean stays stable regardless of render frame rate. */
+	angularVelocity: number;
 	gait: 'idle' | 'walk' | 'run';
 	lookTarget?: Vec3;
 }

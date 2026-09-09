@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	FRAME_BEAM_END_OVERHANG,
 	FRAME_TOP_VISUAL_INSET,
 	WALL_TOP_VISUAL_INSET,
 	frameBeamTopY,
@@ -24,6 +25,7 @@ describe('frame / wall / slab stacking', () => {
 		expect(slabTop).toBeGreaterThan(beamTop);
 		expect(beamTop).toBeGreaterThan(wallTop);
 		expect(FRAME_TOP_VISUAL_INSET).toBeLessThan(WALL_TOP_VISUAL_INSET);
+		expect(FRAME_BEAM_END_OVERHANG).toBeGreaterThan(0);
 	});
 
 	it('tucks the post top inside the beam rather than onto the beam underside', () => {

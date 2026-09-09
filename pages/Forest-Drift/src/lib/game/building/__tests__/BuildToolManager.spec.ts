@@ -109,6 +109,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	const domElement = new FakeElement();
 	const removeTool = makeFakeTool();
 	const paintTool = makeFakeTool('paint');
+	const moveTool = makeFakeTool('move');
 	const musicTool = makeFakeTool('music');
 	const polyWallTool = makeFakeTool('polygon-wall');
 	const wallTool = makeFakeTool('wall');
@@ -119,7 +120,15 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	const floorTool = makeFakeTool('floor');
 	const roofTool = makeFakeTool('flat-roof');
 	const torchTool = makeFakeTool('torch');
-	const hotbarStates: { buildModeActive: boolean; globalMode: string; toolId?: string }[] = [];
+	const hotbarStates: {
+		buildModeActive: boolean;
+		globalMode: string;
+		toolId?: string;
+		label?: string;
+		variantIndex?: number;
+		variantCount?: number;
+		furnitureKind?: string;
+	}[] = [];
 	const buildToolManager = new BuildToolManager({
 		domElement: domElement as unknown as HTMLElement,
 		tools: {
@@ -134,7 +143,9 @@ function buildHarness(pointerLocked: { value: boolean }) {
 			'flat-roof': roofTool,
 			torch: torchTool
 		},
+		buildingSettings,
 		removeTool,
+		moveTool,
 		musicTool,
 		paintTool,
 		isPointerLocked: () => pointerLocked.value,
@@ -143,7 +154,11 @@ function buildHarness(pointerLocked: { value: boolean }) {
 			hotbarStates.push({
 				buildModeActive: state.buildModeActive,
 				globalMode: state.globalMode,
-				toolId: active?.toolId
+				toolId: active?.toolId,
+				label: active?.label,
+				variantIndex: active?.variantIndex,
+				variantCount: active?.variantCount,
+				furnitureKind: active?.furnitureKind
 			});
 		}
 	});
@@ -159,14 +174,23 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		domElement.dispatch('mousedown', { button });
 	}
 
-	function key(code: string, extras: { shiftKey?: boolean } = {}): void {
-		fakeWindow.dispatch('keydown', { code, shiftKey: extras.shiftKey ?? false, preventDefault() {} });
+	function key(
+		code: string,
+		extras: { shiftKey?: boolean; target?: { tagName: string; type?: string } } = {}
+	): void {
+		fakeWindow.dispatch('keydown', {
+			code,
+			shiftKey: extras.shiftKey ?? false,
+			target: extras.target ?? null,
+			preventDefault() {}
+		});
 	}
 
 	return {
 		foundationManager,
 		buildToolManager,
 		removeTool,
+		moveTool,
 		musicTool,
 		paintTool,
 		polyWallTool,
@@ -179,6 +203,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		roofTool,
 		torchTool,
 		hotbarStates,
+		buildingSettings,
 		pointCrosshairAt,
 		click,
 		key
@@ -483,7 +508,7 @@ describe('Music global mode', () => {
 	it('suspends construction, routes locked clicks, switches to removal and restores the slot', () => {
 		const locked = { value: false };
 		const h = buildHarness(locked);
-		h.key('KeyM');
+		h.key('KeyN');
 		h.buildToolManager.update();
 		expect(h.musicTool.activateCount).toBe(1);
 		expect(h.musicTool.updateCount).toBe(1);
@@ -495,10 +520,65 @@ describe('Music global mode', () => {
 		h.key('KeyX');
 		expect(h.musicTool.deactivateCount).toBe(1);
 		expect(h.removeTool.activateCount).toBe(1);
-		h.key('KeyM');
+		h.key('KeyN');
 		expect(h.removeTool.deactivateCount).toBe(1);
 		h.key('Digit1');
 		expect(h.musicTool.deactivateCount).toBe(2);
+		h.buildToolManager.dispose();
+	});
+});
+
+describe('Move global mode (M)', () => {
+	it('toggles move mode on M, routes locked clicks, and exits on second M or Escape', () => {
+		const locked = { value: true };
+		const h = buildHarness(locked);
+		h.key('KeyM');
+		h.buildToolManager.update();
+		expect(h.moveTool.activateCount).toBe(1);
+		expect(h.moveTool.updateCount).toBe(1);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('move');
+
+		h.click(0);
+		expect(h.moveTool.primaryCount).toBe(1);
+
+		// Second M exits move mode
+		h.key('KeyM');
+		expect(h.moveTool.deactivateCount).toBe(1);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('none');
+
+		// Enter move mode again and exit with Escape
+		h.key('KeyM');
+		expect(h.moveTool.activateCount).toBe(2);
+		h.key('Escape');
+		expect(h.moveTool.deactivateCount).toBe(2);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('none');
+
+		h.buildToolManager.dispose();
+	});
+
+	it('switches seamlessly between Remove, Paint, and Move modes', () => {
+		const locked = { value: true };
+		const h = buildHarness(locked);
+
+		h.key('KeyM');
+		expect(h.moveTool.activateCount).toBe(1);
+
+		h.key('KeyX');
+		expect(h.moveTool.deactivateCount).toBe(1);
+		expect(h.removeTool.activateCount).toBe(1);
+
+		h.key('KeyP');
+		expect(h.removeTool.deactivateCount).toBe(1);
+		expect(h.paintTool.activateCount).toBe(1);
+
+		h.key('KeyM');
+		expect(h.paintTool.deactivateCount).toBe(1);
+		expect(h.moveTool.activateCount).toBe(2);
+
+		h.key('Digit1');
+		expect(h.moveTool.deactivateCount).toBe(2);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('none');
+
 		h.buildToolManager.dispose();
 	});
 });
@@ -571,16 +651,16 @@ describe('Build Mode toggle (G)', () => {
 		expect(foundationManager.getFoundations()).toHaveLength(0);
 	});
 
-	it('M still works while Build Mode is off, and exiting Compose Mode does not revive the hotbar tool', () => {
+	it('N still works while Build Mode is off, and exiting Compose Mode does not revive the hotbar tool', () => {
 		const { musicTool, foundationManager, hotbarStates, key, pointCrosshairAt, click } =
 			buildHarness(pointerLocked);
 
 		key('KeyG');
-		key('KeyM');
+		key('KeyN');
 		expect(musicTool.activateCount).toBe(1);
 		expect(hotbarStates.at(-1)?.buildModeActive).toBe(false);
 
-		key('KeyM');
+		key('KeyN');
 		expect(musicTool.deactivateCount).toBe(1);
 		expect(hotbarStates.at(-1)?.globalMode).toBe('none');
 
@@ -604,8 +684,7 @@ describe('Hotbar slot variants (↑/↓)', () => {
 	});
 
 	it('selects each group default from the number keys', () => {
-		const { polyWallTool, doorTool, ceilingTool, key, hotbarStates } =
-			buildHarness(pointerLocked);
+		const { polyWallTool, doorTool, ceilingTool, key, hotbarStates } = buildHarness(pointerLocked);
 
 		key('Digit2');
 		expect(polyWallTool.activateCount).toBe(1);
@@ -679,6 +758,49 @@ describe('Hotbar slot variants (↑/↓)', () => {
 		key('ArrowDown');
 		expect(hotbarStates.at(-1)?.toolId).toBe('foundation');
 	});
+
+	it('ArrowDown / ArrowUp cycle furniture variants on slot 8 and sync with buildingSettings', () => {
+		const { torchTool, key, hotbarStates, buildingSettings, buildToolManager } =
+			buildHarness(pointerLocked);
+
+		key('Digit8');
+		expect(torchTool.activateCount).toBe(1);
+		expect(hotbarStates.at(-1)?.toolId).toBe('torch');
+		expect(hotbarStates.at(-1)?.label).toBe('Chair');
+		expect(hotbarStates.at(-1)?.furnitureKind).toBe('chair');
+		expect(hotbarStates.at(-1)?.variantCount).toBe(19);
+
+		key('ArrowDown');
+		expect(hotbarStates.at(-1)?.label).toBe('Stool');
+		expect(hotbarStates.at(-1)?.furnitureKind).toBe('stool');
+		expect(buildingSettings.furnitureKind).toBe('stool');
+
+		key('ArrowDown');
+		expect(hotbarStates.at(-1)?.label).toBe('Bench');
+		expect(buildingSettings.furnitureKind).toBe('bench');
+
+		key('ArrowUp');
+		expect(hotbarStates.at(-1)?.label).toBe('Stool');
+		expect(buildingSettings.furnitureKind).toBe('stool');
+
+		// Cycling backwards past Bed (index 0) wraps around to Torch (index 18)
+		key('ArrowUp'); // Chair (3)
+		key('ArrowUp'); // Wardrobe (2)
+		key('ArrowUp'); // Bedside Table (1)
+		key('ArrowUp'); // Bed (0)
+		expect(hotbarStates.at(-1)?.label).toBe('Bed');
+		expect(buildingSettings.furnitureKind).toBe('bed');
+
+		key('ArrowUp'); // Wraps to Torch (18)
+		expect(hotbarStates.at(-1)?.label).toBe('Torch');
+		expect(buildingSettings.furnitureKind).toBe('torch');
+
+		// Syncing furniture variant from external change (e.g. catalogue modal)
+		buildingSettings.furnitureKind = 'table';
+		buildToolManager.syncFurnitureVariant();
+		expect(hotbarStates.at(-1)?.label).toBe('Table');
+		expect(hotbarStates.at(-1)?.furnitureKind).toBe('table');
+	});
 });
 
 describe('BuildToolManager placement customize (E)', () => {
@@ -707,6 +829,17 @@ describe('BuildToolManager placement customize (E)', () => {
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 	});
 
+	it('opens on Stairs', () => {
+		const { buildToolManager, key } = buildHarness(pointerLocked);
+
+		key('Digit5');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+		key('KeyE');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
+		key('Escape');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+	});
+
 	it('opens on Floor Detailing slot 6 variants', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 
@@ -729,6 +862,11 @@ describe('BuildToolManager placement customize (E)', () => {
 		key('KeyE');
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 		key('KeyE');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+
+		key('KeyE');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
+		key('KeyE', { target: { tagName: 'INPUT', type: 'range' } });
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
 
 		key('ArrowDown');
@@ -754,7 +892,7 @@ describe('BuildToolManager placement customize (E)', () => {
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
 
 		key('KeyG');
-		key('KeyM');
+		key('KeyN');
 		key('KeyE');
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
 	});
@@ -784,7 +922,7 @@ describe('BuildToolManager placement customize (E)', () => {
 	});
 });
 
-describe('BuildToolManager placement height (C)', () => {
+describe('BuildToolManager placement height (E)', () => {
 	const pointerLocked = { value: true };
 
 	beforeEach(() => {
@@ -795,44 +933,49 @@ describe('BuildToolManager placement height (C)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('opens on Ceiling, Floor, and Roof, and closes with C or Escape', () => {
+	it('opens on Ceiling, Floor, and Roof, and closes with E or Escape', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 
 		key('Digit4');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
-		key('KeyC');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
-		key('KeyC');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 
 		key('ArrowDown');
-		key('KeyC');
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 		key('Escape');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 
 		key('ArrowDown');
-		key('KeyC');
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 	});
 
-	it('does nothing on Wall, and Shift+C does not open it on Ceiling', () => {
+	it('does not open from C, and does not open on Wall (Wall E still customises)', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
+
+		key('Digit4');
+		key('KeyC');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 
 		key('Digit2');
 		key('KeyC');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
-
-		key('Digit4');
-		key('KeyC', { shiftKey: true });
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 	});
 
 	it('swallows placement clicks and digit keys while open', () => {
 		const { buildToolManager, ceilingTool, key, click } = buildHarness(pointerLocked);
 
 		key('Digit4');
-		key('KeyC');
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 		click(0);
 		expect(ceilingTool.primaryCount).toBe(0);
@@ -846,7 +989,7 @@ describe('BuildToolManager placement height (C)', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 
 		key('Digit4');
-		key('KeyC');
+		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 		key('KeyG');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);

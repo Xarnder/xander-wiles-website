@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { FirstPersonController } from '../FirstPersonController';
+import { FirstPersonController, ceilingCameraClearance } from '../FirstPersonController';
 import { FoundationManager } from '../../building/FoundationManager';
 import { RoofManager } from '../../building/RoofManager';
 import { SlabManager } from '../../building/SlabManager';
@@ -294,5 +294,81 @@ describe('FirstPersonController — walk bob', () => {
 			maxAbsY = Math.max(maxAbsY, Math.abs(camera.position.y - eye.y));
 		}
 		expect(maxAbsY).toBeGreaterThan(0.015);
+	});
+});
+
+describe('FirstPersonController — jumping into a ceiling', () => {
+	let fakeWindow: FakeTarget;
+	let fakeDocument: FakeTarget & { pointerLockElement: null; exitPointerLock: () => void };
+
+	beforeEach(() => {
+		fakeWindow = new FakeTarget();
+		fakeDocument = Object.assign(new FakeTarget(), {
+			pointerLockElement: null,
+			exitPointerLock: () => {}
+		});
+		vi.stubGlobal('window', fakeWindow);
+		vi.stubGlobal('document', fakeDocument);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('keeps the camera below the ceiling underside so the near plane cannot clip through', () => {
+		const { slabManager, controller, camera } = setup();
+		camera.near = 0.1;
+		const underside = 2.4;
+		const thickness = 0.2;
+		slabManager.addSlab({
+			id: 'ceiling-1',
+			foundationId: 'f1',
+			type: 'ceiling',
+			levelIndex: 0,
+			localY: underside + thickness,
+			thickness,
+			points: [
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 40, gridZ: 0 },
+				{ gridX: 40, gridZ: 40 },
+				{ gridX: 0, gridZ: 40 }
+			],
+			openings: []
+		});
+
+		controller.restoreState({ x: 1, y: EYE_HEIGHT, z: 1 }, 0, 0);
+		controller.update(1 / 60);
+		expect(controller.worldPosition.y).toBeCloseTo(EYE_HEIGHT, 5);
+
+		fakeWindow.dispatch('keydown', { code: 'Space' });
+		const dt = 1 / 60;
+		const clearance = ceilingCameraClearance(camera.near);
+		let maxCameraY = camera.position.y;
+		let maxEyeY = controller.worldPosition.y;
+		for (let frame = 0; frame < 180; frame++) {
+			controller.update(dt);
+			maxCameraY = Math.max(maxCameraY, camera.position.y);
+			maxEyeY = Math.max(maxEyeY, controller.worldPosition.y);
+			expect(camera.position.y).toBeLessThan(underside);
+			expect(controller.worldPosition.y).toBeLessThanOrEqual(underside - clearance + 1e-6);
+		}
+
+		expect(maxEyeY).toBeGreaterThan(EYE_HEIGHT + 0.3);
+		expect(maxCameraY).toBeLessThanOrEqual(underside - clearance + 1e-6);
+		expect(maxCameraY).toBeGreaterThan(underside - clearance - 0.2);
+	});
+
+	it('respawn resets position to (0, 0), resets yaw and pitch, and clears keys', () => {
+		const { controller } = setup();
+		controller.restoreState({ x: 15, y: 10, z: -20 }, 1.5, -0.5);
+		fakeWindow.dispatch('keydown', { code: 'KeyW' });
+
+		controller.respawn(0, 0);
+
+		expect(controller.worldPosition.x).toBeCloseTo(0, 5);
+		expect(controller.worldPosition.z).toBeCloseTo(0, 5);
+		expect(controller.worldPosition.y).toBeCloseTo(EYE_HEIGHT, 5);
+		expect(controller.getYaw()).toBe(0);
+		expect(controller.getPitch()).toBe(0);
 	});
 });

@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { buildingGridToLocal } from './FoundationLocalMath';
 import type { FoundationLocalFrame } from './FoundationLocalMath';
 import type { WallCollisionRect } from './wallCollision';
-import { visualSegmentTopY } from './buildingVisualInsets';
+import { collisionSegmentMaxY, visualSegmentTopY } from './buildingVisualInsets';
 import { computeSolidWallSegments } from './wallGeometryMath';
 import {
 	buildSegmentFootprint,
@@ -246,7 +246,8 @@ export function buildWallPath(
 				dirX: dir.x,
 				dirZ: dir.z,
 				minWorldY: frame.originWorldY + path.baseY + solid.minY,
-				maxWorldY: frame.originWorldY + path.baseY + solid.maxY
+				maxWorldY:
+					frame.originWorldY + path.baseY + collisionSegmentMaxY(solid.maxY, path.wallHeight)
 			};
 		});
 

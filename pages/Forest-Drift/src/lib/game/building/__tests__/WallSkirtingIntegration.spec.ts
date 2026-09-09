@@ -43,7 +43,13 @@ function ceilingLid(): Pick<SlabDefinition, 'localY' | 'thickness' | 'points'> {
 	};
 }
 
-function roomWall(id: string, startGridX: number, startGridZ: number, endGridX: number, endGridZ: number): WallDefinition {
+function roomWall(
+	id: string,
+	startGridX: number,
+	startGridZ: number,
+	endGridX: number,
+	endGridZ: number
+): WallDefinition {
 	return {
 		id,
 		foundationId: 'f1',
@@ -244,7 +250,6 @@ describe('interior skirting: BuildingManager add/remove ceiling', () => {
 			topY: 10,
 			bottomY: 0
 		});
-		let slabManager!: SlabManager;
 		const getRoomLids = (foundationId: string) =>
 			roomLidsFromSlabs(slabManager.getSlabsForFoundation(foundationId), GRID_SIZE);
 		const wallManager = new WallManager({
@@ -259,7 +264,7 @@ describe('interior skirting: BuildingManager add/remove ceiling', () => {
 			getBuildingGridSize: () => GRID_SIZE,
 			getRoomLids
 		});
-		slabManager = new SlabManager({
+		const slabManager = new SlabManager({
 			getFoundation: (id) => foundationManager.getFoundation(id),
 			getVertexSpacing: () => SPACING,
 			getBuildingGridSize: () => GRID_SIZE

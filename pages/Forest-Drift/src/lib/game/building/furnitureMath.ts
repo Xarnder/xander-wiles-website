@@ -94,3 +94,13 @@ export function torchLightWorldPosition(origin: Vec3, normal: Vec3): Vec3 {
 export function furnitureDistance(a: Vec3, b: Vec3): number {
 	return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
+
+/** World-space emissive point for lanterns and fireplaces (floor-placed, yaw ignored for light). */
+export function surfaceLightWorldPosition(
+	origin: Vec3,
+	kind: 'lantern' | 'fireplace',
+	height: number
+): Vec3 {
+	if (kind === 'lantern') return vecAdd(origin, { x: 0, y: height * 0.45, z: 0 });
+	return vecAdd(origin, { x: 0, y: Math.min(0.28, height * 0.22), z: 0 });
+}

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	decimalsForStep,
-	formatSettingsNumber,
-	snapSettingsNumber
-} from '../settingsFieldFormat';
+import { decimalsForStep, formatSettingsNumber, snapSettingsNumber } from '../settingsFieldFormat';
 
 describe('formatSettingsNumber', () => {
 	it('shows integers for whole-number steps', () => {

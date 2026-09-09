@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingMaterialManager } from './BuildingMaterialManager';
-import { frameBeamTopY, framePostTopY } from './buildingVisualInsets';
+import { FRAME_BEAM_END_OVERHANG, frameBeamTopY, framePostTopY } from './buildingVisualInsets';
 import { buildingGridToLocal } from './FoundationLocalMath';
 import type { WallFrameOverride } from './WallTypes';
 import type { WallPathDefinition } from './WallPathTypes';
@@ -117,7 +117,8 @@ export function disposeWallFrame(group: THREE.Object3D): void {
 
 /**
  * Builds one standalone wall's edge framing — a left post (centred at U=0), a right post (centred at
- * U=`length`), and a top beam (spanning the wall's full length). The beam caps the wall just below
+ * U=`length`), and a top beam that spans the wall and overhangs each end slightly so its end faces
+ * are not coplanar with the wall's (see `FRAME_BEAM_END_OVERHANG`). The beam caps the wall just below
  * the authored wall height so a slab sitting on that storey (and the wall body itself) never share
  * its top plane — see buildingVisualInsets.ts. Posts stop inside the beam rather than reaching the
  * same top. Merged into ONE mesh, entirely in the SAME wall-local (U along the wall, Y vertical, Z
@@ -154,7 +155,8 @@ export function buildStandaloneWallFrame(
 	right.translate(length, postTop / 2, 0);
 	boxes.push(right);
 
-	const beam = new THREE.BoxGeometry(length, topHeight, fullDepth);
+	const beamLength = length + FRAME_BEAM_END_OVERHANG * 2;
+	const beam = new THREE.BoxGeometry(beamLength, topHeight, fullDepth);
 	beam.translate(length / 2, (beamTop + beamBottom) / 2, 0);
 	boxes.push(beam);
 
@@ -237,7 +239,9 @@ function endPostFootprint(
  * whose horizontal footprint is derived from the SAME `buildSegmentFootprint`/`computeWallPathJoints`
  * miter/bevel math the wall body itself already uses (just with an expanded half-thickness —
  * `wallThickness/2 + depthExtra` — instead of the wall's own), so the beam automatically joins
- * cleanly at every corner without any separate join system. A joined corner is ONE post that
+ * cleanly at every corner without any separate join system. Open endpoints overhang the wall end
+ * (`FRAME_BEAM_END_OVERHANG`) so the beam's end face is not coplanar with it; joined corners stay
+ * on the miter. A joined corner is ONE post that
  * reaches both walls' outer faces (not two separate uprights). The top beam's vertical thickness
  * is twice the post face-width. All pieces are merged into ONE mesh, in FOUNDATION-LOCAL X/Z/Y
  * (matching `buildWallPath`'s own `visibleGeometry` convention), meant for a mesh added directly
@@ -278,7 +282,8 @@ export function buildWallPathFrame(
 	const joinMarkers: Point2D[] = [];
 
 	// Top beam: one piece per segment, footprint derived exactly like the wall body's own join
-	// handling (buildSegmentFootprint), just at the frame's own expanded half-thickness.
+	// handling (buildSegmentFootprint), just at the frame's own expanded half-thickness. Open
+	// endpoints overhang the wall end so the beam's end face is not coplanar with it.
 	for (let i = 0; i < segmentCount; i++) {
 		const start = localPoints[i];
 		const end = localPoints[(i + 1) % n];
@@ -286,7 +291,10 @@ export function buildWallPathFrame(
 		const endJointRaw = joints[(i + 1) % n];
 		const startJoin = startJointRaw ? orientJoinForSegmentEnd(startJointRaw, true) : null;
 		const endJoin = endJointRaw ? orientJoinForSegmentEnd(endJointRaw, false) : null;
-		const footprint = buildSegmentFootprint(start, end, startJoin, endJoin, halfThickness);
+		const dir = normalize2D(sub(end, start));
+		const beamStart = startJoin ? start : add(start, scale(dir, -FRAME_BEAM_END_OVERHANG));
+		const beamEnd = endJoin ? end : add(end, scale(dir, FRAME_BEAM_END_OVERHANG));
+		const footprint = buildSegmentFootprint(beamStart, beamEnd, startJoin, endJoin, halfThickness);
 		const geom = extrudePolygon(footprint, beamMinY, topY);
 		if (geom) pieces.push(geom);
 	}
@@ -337,4 +345,63 @@ export function buildWallPathFrame(
 	}
 
 	return wrapFrame(mesh, debugChildren);
+}
+
+const MIN_FOUNDATION_SPAN = 0.05;
+
+/**
+ * Edge framing for a foundation cuboid — the same closed-path recipe as polygon-wall framing
+ * (one post per corner, a top beam per side, mitered joins, identical timber insets). The path
+ * is inset by half the current wall thickness so each "wall" sits flush with the foundation's
+ * outer face, and `wallFrameDepthExtra` protrudes past that face exactly as it does on a real wall.
+ * Coordinates are world XZ / world Y, matching FoundationMesh. Returns `null` when framing is off
+ * or the footprint is degenerate.
+ */
+export function buildFoundationFrame(
+	bounds: {
+		id: string;
+		minX: number;
+		maxX: number;
+		minZ: number;
+		maxZ: number;
+		bottomY: number;
+		topY: number;
+	},
+	settings: WallFrameSettings,
+	wallThickness: number,
+	miterLimit: number,
+	materialManager: BuildingMaterialManager
+): THREE.Group | null {
+	const spanX = bounds.maxX - bounds.minX;
+	const spanZ = bounds.maxZ - bounds.minZ;
+	const height = bounds.topY - bounds.bottomY;
+	if (spanX < MIN_FOUNDATION_SPAN || spanZ < MIN_FOUNDATION_SPAN || height <= 0) return null;
+
+	const thickness = Math.min(Math.max(0, wallThickness), spanX * 0.45, spanZ * 0.45);
+	const inset = thickness / 2;
+	const path: WallPathDefinition = {
+		id: `foundation-frame-${bounds.id}`,
+		foundationId: bounds.id,
+		points: [
+			{ gridX: bounds.minX + inset, gridZ: bounds.minZ + inset },
+			{ gridX: bounds.maxX - inset, gridZ: bounds.minZ + inset },
+			{ gridX: bounds.maxX - inset, gridZ: bounds.maxZ - inset },
+			{ gridX: bounds.minX + inset, gridZ: bounds.maxZ - inset }
+		],
+		closed: true,
+		baseY: bounds.bottomY,
+		wallHeight: height,
+		wallThickness: thickness,
+		joinStyle: 'miter',
+		miterLimit,
+		segments: [
+			{ id: 'foundation-frame-n', openings: [] },
+			{ id: 'foundation-frame-e', openings: [] },
+			{ id: 'foundation-frame-s', openings: [] },
+			{ id: 'foundation-frame-w', openings: [] }
+		]
+	};
+	const group = buildWallPathFrame(path, 1, settings, materialManager);
+	if (group) group.name = 'foundation-frame';
+	return group;
 }

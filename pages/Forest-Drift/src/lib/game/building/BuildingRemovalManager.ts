@@ -42,6 +42,10 @@ export class BuildingRemovalManager {
 		return this.buildingManager.removeStair(stairId);
 	}
 
+	removeSlab(slabId: string): boolean {
+		return this.buildingManager.removeSlab(slabId);
+	}
+
 	removeRoof(roofId: string): boolean {
 		return this.buildingManager.removeRoof(roofId);
 	}
@@ -63,6 +67,8 @@ export class BuildingRemovalManager {
 				return this.removeBeam(target.wallId, target.beamId);
 			case 'stair':
 				return this.removeStair(target.stairId);
+			case 'slab':
+				return this.removeSlab(target.slabId);
 			case 'roof':
 				return this.removeRoof(target.roofId);
 			case 'floor-detail':

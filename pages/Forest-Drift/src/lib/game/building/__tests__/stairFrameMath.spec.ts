@@ -11,6 +11,7 @@ import {
 
 const SETTINGS = {
 	stairFrameEnabled: true,
+	stairRailingsEnabled: true,
 	stairFrameWidth: 0.12,
 	stairFrameDepthExtra: 0.05
 };
@@ -28,8 +29,36 @@ function metrics() {
 }
 
 describe('computeStairFrameBoxes', () => {
-	it('returns nothing when framing is disabled', () => {
-		expect(computeStairFrameBoxes(metrics(), { ...SETTINGS, stairFrameEnabled: false })).toEqual([]);
+	it('returns nothing when framing and railings are both disabled', () => {
+		expect(
+			computeStairFrameBoxes(metrics(), {
+				...SETTINGS,
+				stairFrameEnabled: false,
+				stairRailingsEnabled: false
+			})
+		).toEqual([]);
+	});
+
+	it('keeps railings and newels when framing is off', () => {
+		const m = metrics();
+		const boxes = computeStairFrameBoxes(m, { ...SETTINGS, stairFrameEnabled: false });
+		expect(boxes.length).toBeGreaterThan(0);
+		expect(boxes.some((b) => b.role === 'rail')).toBe(true);
+		const isPost = (b: (typeof boxes)[number]) =>
+			Math.abs(b.maxRun - b.minRun - SETTINGS.stairFrameWidth) < 1e-6 &&
+			Math.abs(b.maxWidth - b.minWidth - SETTINGS.stairFrameWidth) < 1e-6;
+		expect(boxes.filter((b) => isPost(b) && b.minRise === 0)).toHaveLength(2);
+	});
+
+	it('drops railings and newels when they are disabled', () => {
+		const m = metrics();
+		const boxes = computeStairFrameBoxes(m, { ...SETTINGS, stairRailingsEnabled: false });
+		expect(boxes.filter((b) => b.role === 'rail')).toEqual([]);
+		const isPost = (b: (typeof boxes)[number]) =>
+			Math.abs(b.maxRun - b.minRun - SETTINGS.stairFrameWidth) < 1e-6 &&
+			Math.abs(b.maxWidth - b.minWidth - SETTINGS.stairFrameWidth) < 1e-6;
+		expect(boxes.filter((b) => isPost(b))).toEqual([]);
+		expect(boxes.length).toBeGreaterThan(0);
 	});
 
 	it('keeps every board within depth-extra of the stair faces, overlapping the solid instead of hanging outside', () => {
@@ -43,7 +72,9 @@ describe('computeStairFrameBoxes', () => {
 		expect(axisAligned.every((b) => b.maxRun <= m.runMeters + extra + 1e-9)).toBe(true);
 
 		const left = boxes.filter((b) => b.maxWidth <= SETTINGS.stairFrameWidth + extra + 1e-6);
-		const right = boxes.filter((b) => b.minWidth >= m.widthMeters - SETTINGS.stairFrameWidth - extra - 1e-6);
+		const right = boxes.filter(
+			(b) => b.minWidth >= m.widthMeters - SETTINGS.stairFrameWidth - extra - 1e-6
+		);
 		expect(left.length).toBeGreaterThan(0);
 		expect(right.length).toBeGreaterThan(0);
 		expect(left.some((b) => b.minWidth < 0 && b.maxWidth > 0)).toBe(true);
@@ -55,7 +86,8 @@ describe('computeStairFrameBoxes', () => {
 		const boxes = computeStairFrameBoxes(m, SETTINGS);
 		const extra = SETTINGS.stairFrameDepthExtra;
 		const onBack = (b: (typeof boxes)[number]) =>
-			b.maxRun >= m.runMeters + extra - 1e-6 && b.minRun >= m.runMeters - SETTINGS.stairFrameWidth - 1e-6;
+			b.maxRun >= m.runMeters + extra - 1e-6 &&
+			b.minRun >= m.runMeters - SETTINGS.stairFrameWidth - 1e-6;
 		const back = boxes.filter(onBack);
 		const lastCap = m.totalRise - STAIR_FRAME_FACE_INSET;
 		const posts = back.filter((b) => b.minRise <= 1e-6 && b.maxRise >= lastCap - 1e-6);
@@ -110,12 +142,24 @@ describe('computeStairFrameBoxes', () => {
 		).toEqual([]);
 		expect(
 			boxes.some(
-				(b) =>
-					b.role !== 'rail' &&
-					overlapsLastTread(b) &&
-					Math.abs(b.maxRise - lastCap) < 1e-9
+				(b) => b.role !== 'rail' && overlapsLastTread(b) && Math.abs(b.maxRise - lastCap) < 1e-9
 			)
 		).toBe(true);
+	});
+
+	it('keeps every step end-cap off that step’s tread and riser faces', () => {
+		const m = metrics();
+		const boxes = computeStairFrameBoxes(m, SETTINGS);
+		const sideCaps = boxes.filter(
+			(b) => b.role !== 'rail' && (b.minWidth < -1e-9 || b.maxWidth > m.widthMeters + 1e-9)
+		);
+		expect(sideCaps.length).toBeGreaterThan(0);
+		for (let i = 0; i < m.stepCount; i++) {
+			const treadY = (i + 1) * m.stepRise;
+			const riser = i * m.stepRun;
+			expect(sideCaps.filter((b) => Math.abs(b.maxRise - treadY) < 1e-9)).toEqual([]);
+			expect(sideCaps.filter((b) => Math.abs(b.minRun - riser) < 1e-9)).toEqual([]);
+		}
 	});
 
 	it('puts a nosing on every tread, slightly above the walkable surface', () => {
@@ -123,14 +167,18 @@ describe('computeStairFrameBoxes', () => {
 		const boxes = computeStairFrameBoxes(m, SETTINGS);
 		for (let i = 0; i < m.stepCount; i++) {
 			const treadY = (i + 1) * m.stepRise;
+			const riser = i * m.stepRun;
 			const nosing = boxes.find(
 				(b) =>
-					b.minWidth <= 0 &&
-					b.maxWidth >= m.widthMeters &&
-					b.maxRise > treadY &&
-					Math.abs(b.maxRise - (treadY + STAIR_NOSING_LIFT)) < 1e-9
+					b.role !== 'rail' &&
+					b.minRise >= treadY + STAIR_NOSING_LIFT - 1e-9 &&
+					b.minRun <= riser + 1e-9 &&
+					b.maxRun > riser + 1e-9 &&
+					b.maxRise > treadY + STAIR_NOSING_LIFT + 1e-9
 			);
 			expect(nosing).toBeDefined();
+			expect(nosing!.minWidth).toBeGreaterThan(0);
+			expect(nosing!.maxWidth).toBeLessThan(m.widthMeters);
 		}
 	});
 
@@ -152,7 +200,8 @@ describe('computeStairFrameBoxes', () => {
 		expect(slopedLeft).toBeDefined();
 		expect(slopedRight).toBeDefined();
 		const railTop = (rail: NonNullable<typeof slopedLeft>) =>
-			(rail.minRise + rail.maxRise) / 2 + ((rail.maxRun - rail.minRun) / 2) * Math.sin(rail.pitch ?? 0);
+			(rail.minRise + rail.maxRise) / 2 +
+			((rail.maxRun - rail.minRun) / 2) * Math.sin(rail.pitch ?? 0);
 		expect(railTop(slopedLeft!)).toBeCloseTo(m.totalRise + STAIR_RAIL_HEIGHT, 2);
 		expect(railTop(slopedRight!)).toBeCloseTo(m.totalRise + STAIR_RAIL_HEIGHT, 2);
 		expect(left.some((b) => b.minRise === 0 && b.maxRise >= STAIR_RAIL_HEIGHT)).toBe(true);

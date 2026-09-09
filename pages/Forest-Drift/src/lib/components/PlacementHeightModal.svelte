@@ -36,17 +36,15 @@
 	let title = $derived(TITLES[toolId]);
 	let wallHeight = $derived(level?.wallHeight ?? settings.defaultStoreyHeight);
 	let followWalls = $derived.by(() => {
-		revision;
+		void revision;
 		return settings.slabPlacementFollowWalls;
 	});
 	let heightValue = $derived.by(() => {
-		revision;
+		void revision;
 		return resolveSlabPlacementHeightAboveFloor(wallHeight, settings);
 	});
 	let heightDisplay = $derived(heightValue.toFixed(2));
-	let absoluteElevation = $derived(
-		level ? (level.baseY + heightValue).toFixed(2) : null
-	);
+	let absoluteElevation = $derived(level ? (level.baseY + heightValue).toFixed(2) : null);
 
 	function applyHeight(raw: number) {
 		settings.slabPlacementFollowWalls = false;
@@ -134,10 +132,8 @@
 			</div>
 
 			<div class="presets" role="group" aria-label="Height presets">
-				<button
-					type="button"
-					data-testid="placement-height-floor"
-					onclick={() => setPreset(0)}>This floor</button
+				<button type="button" data-testid="placement-height-floor" onclick={() => setPreset(0)}
+					>This floor</button
 				>
 				<button
 					type="button"
@@ -160,7 +156,7 @@
 		</div>
 
 		<p class="hint">
-			C or Esc to close — metres above this storey's floor. Applies to the next piece, and to the
+			E or Esc to close — metres above this storey's floor. Applies to the next piece, and to the
 			live preview if you are already drawing.
 		</p>
 	</div>

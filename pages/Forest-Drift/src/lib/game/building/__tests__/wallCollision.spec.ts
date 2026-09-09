@@ -81,14 +81,24 @@ describe('resolvePlayerPositionAgainstWalls', () => {
 		expect(result.z).toBeCloseTo(0);
 	});
 
-	it('still blocks the solid parts beside a door opening', () => {
-		const leftOfDoor = makeRect({ centerX: -2, halfLength: 1 });
-		const rightOfDoor = makeRect({ centerX: 2, halfLength: 1 });
-		// Standing right at the inner edge of the right-hand solid segment, just off centre-line.
-		const result = resolvePlayerPositionAgainstWalls(1.1, 0.05, 17.5, 19, 0.35, [
-			leftOfDoor,
-			rightOfDoor
-		]);
-		expect(result.z).toBeGreaterThanOrEqual(0.075 + 0.35 - 1e-6);
+	it('does not block a player walking on the floor above over a wall on the storey below', () => {
+		// Wall on ground floor (baseY = 0, wallHeight = 3, top lowered by WALL_COLLISION_TOP_INSET to 2.9)
+		const groundWall = makeRect({
+			centerX: 0,
+			centerZ: 0,
+			halfLength: 5,
+			halfThickness: 0.1,
+			minWorldY: 0,
+			maxWorldY: 2.9 // lowered from 3.0
+		});
+
+		// Player walking on upper floor slab at Y = 3.0 (feet at 3.0, head at 4.7)
+		const feetY = 3.0;
+		const headY = 4.7;
+		const result = resolvePlayerPositionAgainstWalls(0, 0, feetY, headY, 0.35, [groundWall]);
+
+		// Player is completely unblocked and stands at (0, 0)
+		expect(result.x).toBeCloseTo(0);
+		expect(result.z).toBeCloseTo(0);
 	});
 });

@@ -6,7 +6,12 @@ import { generateSpecies } from './SpeciesGenerator';
 import { generateIndividual } from './IndividualGenerator';
 import type { CreatureIntent } from './CreatureTypes';
 
-const walk: CreatureIntent = { velocity: { x: 0, y: 0, z: 1 }, heading: 0, gait: 'walk' };
+const walk: CreatureIntent = {
+	velocity: { x: 0, y: 0, z: 1 },
+	heading: 0,
+	angularVelocity: 0,
+	gait: 'walk'
+};
 function make(seed: number) {
 	const species = generateSpecies(seed, 'quadruped');
 	return compileCreature({ species, individual: generateIndividual(species, seed + 700) });

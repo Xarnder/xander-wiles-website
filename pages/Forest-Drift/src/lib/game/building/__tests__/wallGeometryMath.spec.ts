@@ -156,6 +156,17 @@ describe('computeSolidWallSegments', () => {
 		expect(doorStripSegments.some((s) => s.minY === 0)).toBe(false);
 	});
 
+	it('leaves a solid strip below a raised door (minY > 0)', () => {
+		const segments = computeSolidWallSegments(6, 3, [{ minU: 2, maxU: 3, minY: 0.4, maxY: 2.5 }]);
+		const doorStripSegments = segments.filter((s) => s.minU >= 2 - 1e-9 && s.maxU <= 3 + 1e-9);
+		expect(
+			doorStripSegments.some((s) => Math.abs(s.minY) < 1e-9 && Math.abs(s.maxY - 0.4) < 1e-9)
+		).toBe(true);
+		expect(
+			doorStripSegments.some((s) => Math.abs(s.minY - 2.5) < 1e-9 && Math.abs(s.maxY - 3) < 1e-9)
+		).toBe(true);
+	});
+
 	it('handles two non-overlapping windows, leaving three solid vertical strips plus above/below', () => {
 		const segments = computeSolidWallSegments(10, 3, [
 			{ minU: 1, maxU: 2, minY: 1, maxY: 2 },

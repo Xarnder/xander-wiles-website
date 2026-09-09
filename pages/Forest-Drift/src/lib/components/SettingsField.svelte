@@ -168,7 +168,12 @@
 		</div>
 	</label>
 {:else if field.kind === 'button'}
-	<button class="action" type="button" data-testid="settings-field-{field.id}" onclick={field.onClick}>
+	<button
+		class="action"
+		type="button"
+		data-testid="settings-field-{field.id}"
+		onclick={field.onClick}
+	>
 		{field.label}
 	</button>
 {/if}

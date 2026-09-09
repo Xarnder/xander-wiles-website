@@ -123,7 +123,12 @@ export class WallManager {
 			definition.openings
 		);
 		const geometry = buildWallGeometry(segments, definition.thickness, definition.height);
-		const collisionRects = buildWallCollisionRects(segments, definition.thickness, transform);
+		const collisionRects = buildWallCollisionRects(
+			segments,
+			definition.thickness,
+			transform,
+			definition.height
+		);
 
 		const material = this.materialManager.getMaterial('wall', definition.material);
 		let mesh = existing?.mesh;

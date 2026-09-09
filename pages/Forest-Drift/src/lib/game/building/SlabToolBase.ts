@@ -138,7 +138,7 @@ export class SlabToolBase implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyC' && event.shiftKey) {
+		if (event.code === 'KeyC') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -725,7 +725,8 @@ export class SlabToolBase implements BuildTool {
 				'',
 				'Look at the slab: click to start',
 				...this.snapHudLines(),
-				'C: Set height'
+				'C: Cycle snap',
+				'E set height'
 			]
 		};
 	}
@@ -753,7 +754,8 @@ export class SlabToolBase implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'C: Set height',
+					'C: Cycle snap',
+					'E set height',
 					'Click to close slab'
 				]
 			};
@@ -773,7 +775,8 @@ export class SlabToolBase implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Set height',
+				'C: Cycle snap',
+				'E set height',
 				'Right click: Cancel'
 			]
 		};
@@ -794,7 +797,8 @@ export class SlabToolBase implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Set height',
+				'C: Cycle snap',
+				'E set height',
 				'Right click: Cancel'
 			]
 		};

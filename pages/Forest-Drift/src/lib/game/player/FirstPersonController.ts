@@ -5,6 +5,13 @@ import { createWalkBobState, stepWalkBob, walkBobOffset } from './walkBob';
 const GRAVITY = 18;
 const MOUSE_SENSITIVITY = 0.0022;
 const MAX_PITCH = Math.PI / 2 - 0.01;
+/** Extra gap below a ceiling underside, on top of the camera near plane, so looking up cannot clip. */
+const CEILING_CAMERA_SKIN = 0.05;
+
+/** How far below a ceiling the eye / camera must stay so the near clip plane never enters the slab. */
+export function ceilingCameraClearance(near: number): number {
+	return Math.max(0.08, near) + CEILING_CAMERA_SKIN;
+}
 
 /**
  * Max distance (world units) between samples when sweeping a frame's horizontal movement for
@@ -27,10 +34,10 @@ export interface FirstPersonControllerOptions {
 	 */
 	getSupportingSurfaceY: (worldX: number, worldZ: number, referenceY: number) => number;
 	/**
-	 * Optional: the lowest solid surface (a slab's underside) crossed while rising from `fromY` to
-	 * `toY` at (worldX, worldZ), or null if nothing blocks the rise — used to stop the player
-	 * jumping/rising up through a ceiling or floor from below. Checked only while actually moving
-	 * upward. Left undefined, upward movement is never blocked (pre-buildings behavior).
+	 * Optional: the lowest solid surface (a slab's underside) crossed while moving from `fromY` to
+	 * `toY` at (worldX, worldZ), or null if nothing blocks the move — used to stop the player
+	 * jumping/rising up through a ceiling or floor from below. Left undefined, upward movement is
+	 * never blocked (pre-buildings behavior).
 	 */
 	getCeilingBlockY?: (worldX: number, worldZ: number, fromY: number, toY: number) => number | null;
 	settings: PlayerSettings;
@@ -56,8 +63,8 @@ export interface FirstPersonControllerOptions {
  * terrain/foundation/slab meshes themselves use (via getSupportingSurfaceY), so the player never
  * clips into or floats above the surface actually shown, and is never snapped up onto a surface
  * that happens to be above them (e.g. a roof they're standing under) — see getSupportingSurfaceY's
-	 * doc comment above. A vertical-only view bob (walkBob.ts) is applied to the camera only while
-	 * walking on the ground; `worldPosition` stays the true eye height.
+ * doc comment above. A vertical-only view bob (walkBob.ts) is applied to the camera only while
+ * walking on the ground; `worldPosition` stays the true eye height.
  */
 export class FirstPersonController {
 	readonly worldPosition = new THREE.Vector3();
@@ -95,6 +102,9 @@ export class FirstPersonController {
 
 	private readonly handlePointerLockChange = () => {
 		this.pointerLocked = document.pointerLockElement === this.domElement;
+		if (!this.pointerLocked) {
+			this.keys.clear();
+		}
 		this.onPointerLockChange?.(this.pointerLocked);
 	};
 
@@ -149,10 +159,28 @@ export class FirstPersonController {
 	spawn(worldX: number, worldZ: number): void {
 		const groundHeight = this.getSupportingSurfaceY(worldX, worldZ, Infinity);
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
+		if (this.resolveHorizontalCollision) {
+			const feetY = this.worldPosition.y - this.settings.eyeHeight;
+			const headY = feetY + this.settings.eyeHeight;
+			const resolved = this.resolveHorizontalCollision(worldX, worldZ, feetY, headY);
+			this.worldPosition.x = resolved.x;
+			this.worldPosition.z = resolved.z;
+		}
 		this.grounded = true;
 		this.verticalVelocity = 0;
 		this.walkBob = createWalkBobState();
 		this.syncCamera();
+	}
+
+	/**
+	 * Resets player movement keys, view angles, and respawns at (worldX, worldZ)
+	 * on the highest supporting surface at eye height.
+	 */
+	respawn(worldX = 0, worldZ = 0): void {
+		this.keys.clear();
+		this.yaw = 0;
+		this.pitch = 0;
+		this.spawn(worldX, worldZ);
 	}
 
 	getYaw(): number {
@@ -250,11 +278,16 @@ export class FirstPersonController {
 			this.verticalVelocity -= GRAVITY * deltaSeconds;
 			let proposedY = this.worldPosition.y + this.verticalVelocity * deltaSeconds;
 
-			if (proposedY > this.worldPosition.y && this.getCeilingBlockY) {
-				const ceilingY = this.getCeilingBlockY(worldX, worldZ, this.worldPosition.y, proposedY);
+			if (this.getCeilingBlockY) {
+				const clearance = ceilingCameraClearance(this.camera.near);
+				const probeY = Math.max(this.worldPosition.y, proposedY) + clearance;
+				const ceilingY = this.getCeilingBlockY(worldX, worldZ, preStepFeetY, probeY);
 				if (ceilingY !== null) {
-					proposedY = ceilingY;
-					this.verticalVelocity = 0;
+					const maxEyeY = ceilingY - clearance;
+					if (proposedY > maxEyeY) {
+						proposedY = maxEyeY;
+						if (this.verticalVelocity > 0) this.verticalVelocity = 0;
+					}
 				}
 			}
 

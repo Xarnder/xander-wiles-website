@@ -5,9 +5,8 @@ import type { WallOpeningType } from './WallTypes';
  * Everything downstream (highlighting, HUD text, the actual removal call) operates on this, never
  * on `object.userData` directly, so a click always removes exactly the logical thing the player was
  * shown, regardless of which picking mesh happened to be hit. Deliberately structured to make
- * later target types (a whole wall path, a slab, a foundation) straightforward additions — same
- * `{type, ...ids}` shape, one new case in every `switch` — without needing to add support for any
- * of them now; see the README's "Remove Mode" section for why those are out of scope for v1.
+ * later target types (a whole wall path, a foundation) straightforward additions — same
+ * `{type, ...ids}` shape, one new case in every `switch`.
  */
 export type RemovalTarget =
 	| { type: 'wall'; wallId: string; foundationId: string }
@@ -21,6 +20,7 @@ export type RemovalTarget =
 	  }
 	| { type: 'beam'; wallId: string; beamId: string; foundationId: string }
 	| { type: 'stair'; stairId: string; foundationId: string }
+	| { type: 'slab'; slabId: string; foundationId: string }
 	| { type: 'roof'; roofId: string; foundationId: string }
 	| { type: 'floor-detail'; detailId: string; foundationId: string };
 
@@ -37,6 +37,8 @@ export function removalTargetKey(target: RemovalTarget): string {
 			return `beam:${target.wallId}:${target.beamId}`;
 		case 'stair':
 			return `stair:${target.stairId}`;
+		case 'slab':
+			return `slab:${target.slabId}`;
 		case 'roof':
 			return `roof:${target.roofId}`;
 		case 'floor-detail':
@@ -47,16 +49,17 @@ export function removalTargetKey(target: RemovalTarget): string {
 /**
  * Picking metadata every raycastable removal candidate carries on `object.userData` — read-only
  * shape, not a class, since it's just plain fields set once when each picking mesh/proxy is built
- * (WallManager, WallPathManager, StairManager, and RemoveTool's own OpeningPickingProxy meshes).
- * `resolveRemovalTarget` below is the ONLY place that interprets these fields into a RemovalTarget,
- * so identity resolution stays centralized in one pure, unit-testable function rather than scattered
- * string/shape checks at every call site.
+ * (WallManager, WallPathManager, SlabManager, RoofManager, StairManager, and RemoveTool's own
+ * OpeningPickingProxy meshes). `resolveRemovalTarget` below is the ONLY place that interprets these
+ * fields into a RemovalTarget, so identity resolution stays centralized in one pure, unit-testable
+ * function rather than scattered string/shape checks at every call site.
  */
 export interface BuildingPickUserData {
 	foundationId?: string;
 	wallId?: string;
 	wallPathId?: string;
 	stairId?: string;
+	slabId?: string;
 	roofId?: string;
 	floorDetailId?: string;
 	openingId?: string;
@@ -99,6 +102,9 @@ export function resolveRemovalTarget(userData: BuildingPickUserData): RemovalTar
 	}
 	if (userData.stairId) {
 		return { type: 'stair', stairId: userData.stairId, foundationId };
+	}
+	if (userData.slabId) {
+		return { type: 'slab', slabId: userData.slabId, foundationId };
 	}
 	if (userData.roofId) {
 		return { type: 'roof', roofId: userData.roofId, foundationId };

@@ -23,9 +23,14 @@ import type { SlabManager } from './SlabManager';
 import type { FloorDetailManager } from './FloorDetailManager';
 import { pathCenterlineLocalSamples, validateFloorDetailFootprint } from './floorDetailMath';
 import type { FloorDetailDefinition } from './FloorDetailTypes';
-import { computeStairMetrics, validateStairFootprint } from './stairMath';
+import { computeStairMetrics } from './stairMath';
+import {
+	foundationGridCellCounts,
+	validateStairFoundationPlacement
+} from './stairPlacementMath';
 import type { StairManager } from './StairManager';
 import type { StairDefinition, StairDirection } from './StairTypes';
+import { stairOpeningEnabledOf, stairOpeningFrameEnabledOf } from './StairTypes';
 import type { WallManager } from './WallManager';
 import {
 	computeWallLength,
@@ -102,6 +107,11 @@ export interface AddStairParams {
 	gridSizeAtCreation: number;
 	minimumStairWidthCells: number;
 	minimumStairRunCells: number;
+	material?: BuildingMaterialDefinition;
+	frameEnabled?: boolean;
+	railingsEnabled?: boolean;
+	openingEnabled?: boolean;
+	openingFrameEnabled?: boolean;
 }
 
 export interface AddFloorDetailParams {
@@ -609,11 +619,10 @@ export class BuildingManager {
 
 	/**
 	 * Validates and creates an axis-aligned straight staircase (see StairTypes.ts / stairMath.ts).
-	 * Footprint must be inside the foundation, must satisfy the minimum width/run cell counts, and
-	 * `direction` must run along the footprint's long axis (or either axis, for a square footprint)
-	 * — see `stairMath.validateStairFootprint`. Overlap against other stairs/walls is intentionally
-	 * NOT checked yet (see the README's "not implemented yet" list) — only the footprint-shape rules
-	 * above are enforced for v1.
+	 * The footprint may sit fully on the foundation (interior) or flush with one edge with the
+	 * flight outside (approach stairs onto the pad) — see `validateStairFoundationPlacement`.
+	 * Interior stairs must still run along the long axis; approach stairs may be wider than they
+	 * are long. Overlap against other stairs/walls is intentionally NOT checked yet.
 	 */
 	addStair(params: AddStairParams): BuildingMutationResult<StairDefinition> {
 		this.revision++;
@@ -621,22 +630,14 @@ export class BuildingManager {
 		if (!foundation) return { valid: false, reason: 'Foundation not found' };
 
 		const vertexSpacing = this.getVertexSpacing();
-		const buildingGridSize = this.getBuildingGridSize();
 		const { width, depth } = foundationLocalSize(foundation, vertexSpacing);
+		const { cellsX, cellsZ } = foundationGridCellCounts(width, depth, params.gridSizeAtCreation);
 
-		const corners: BuildingGridPoint[] = [
-			{ gridX: params.minGridX, gridZ: params.minGridZ },
-			{ gridX: params.maxGridX, gridZ: params.maxGridZ }
-		];
-		for (const corner of corners) {
-			if (!isBuildingGridPointInsideFoundation(corner, buildingGridSize, width, depth)) {
-				return { valid: false, reason: 'Stair must stay within the foundation' };
-			}
-		}
-
-		const footprintCheck = validateStairFootprint(
+		const footprintCheck = validateStairFoundationPlacement(
 			params,
 			params.direction,
+			cellsX,
+			cellsZ,
 			params.minimumStairWidthCells,
 			params.minimumStairRunCells
 		);
@@ -652,7 +653,12 @@ export class BuildingManager {
 			baseY: params.baseY,
 			direction: params.direction,
 			levelIndex: params.levelIndex,
-			gridSizeAtCreation: params.gridSizeAtCreation
+			gridSizeAtCreation: params.gridSizeAtCreation,
+			material: params.material,
+			frameEnabled: params.frameEnabled ?? true,
+			railingsEnabled: params.railingsEnabled ?? true,
+			openingEnabled: params.openingEnabled ?? true,
+			openingFrameEnabled: params.openingFrameEnabled ?? true
 		};
 
 		this.stairManager.addStair(stair);
@@ -753,6 +759,7 @@ export class BuildingManager {
 	 * that already reaches it) is `autoOpenStairsIntoSlab` below.
 	 */
 	private openSlabForStair(stair: StairDefinition): void {
+		if (!stairOpeningEnabledOf(stair)) return;
 		const ceiling = this.findCeilingSlabForStair(stair);
 		if (ceiling) this.addStairOpening(ceiling.id, stair);
 	}
@@ -765,6 +772,7 @@ export class BuildingManager {
 	 */
 	private autoOpenStairsIntoSlab(slab: SlabDefinition): void {
 		for (const stair of this.stairManager.getStairsForFoundation(slab.foundationId)) {
+			if (!stairOpeningEnabledOf(stair)) continue;
 			const ceiling = this.findCeilingSlabForStair(stair);
 			if (!ceiling || ceiling.id !== slab.id) continue;
 			this.removeStairOpeningsExcept(stair.foundationId, stair.id, slab.id);
@@ -780,7 +788,8 @@ export class BuildingManager {
 			maxGridX: stair.maxGridX,
 			minGridZ: stair.minGridZ,
 			maxGridZ: stair.maxGridZ,
-			sourceStairId: stair.id
+			sourceStairId: stair.id,
+			frameEnabled: stairOpeningFrameEnabledOf(stair)
 		};
 		this.slabManager.addOpening(slabId, opening);
 	}
@@ -1096,7 +1105,7 @@ export class BuildingManager {
 		return this.stairManager.getMeshesForRaycast();
 	}
 
-	/** Every slab's real mesh — for Paint Mode targeting (see SlabManager.getMeshesForRaycast). */
+	/** Every slab's real mesh — for Paint Mode and Remove Mode targeting (see SlabManager.getMeshesForRaycast). */
 	getRaycastableSlabMeshes() {
 		return this.slabManager.getMeshesForRaycast();
 	}
@@ -1321,7 +1330,8 @@ export class BuildingManager {
 			for (const slab of building.slabs ?? []) this.slabManager.addSlab(slab);
 			for (const stair of building.stairs ?? []) this.stairManager.addStair(stair);
 			for (const roof of building.roofs ?? []) this.roofManager.addRoof(roof);
-			for (const detail of building.floorDetails ?? []) this.floorDetailManager.addFloorDetail(detail);
+			for (const detail of building.floorDetails ?? [])
+				this.floorDetailManager.addFloorDetail(detail);
 		}
 		// Walls load before slabs, so skirting (which reads live lids) must rebuild once both exist.
 		this.wallManager.rebuildAllWalls();

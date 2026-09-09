@@ -13,7 +13,7 @@ describe('stepWalkBob', () => {
 	});
 
 	it('does not bob while airborne, even if WASD is held', () => {
-		let state = stepWalkBob(createWalkBobState(), 0.25, true, false, false);
+		const state = stepWalkBob(createWalkBobState(), 0.25, true, false, false);
 		expect(state.amount).toBe(0);
 		expect(state.phase).toBe(0);
 	});

@@ -107,15 +107,15 @@ describe('slab opening framing: SlabManager integration', () => {
 	});
 
 	it('removes the trim when the opening is removed or framing is disabled', () => {
-		const { manager, settings } = setup();
+		const { manager } = setup();
 		manager.addSlab(slab());
 		manager.addOpening('slab-1', opening());
-		settings.slabOpeningFrameEnabled = false;
-		manager.rebuildAllSlabs();
+		manager.removeOpening('slab-1', 'open-1');
+		manager.addOpening('slab-1', { ...opening(), frameEnabled: false });
 		expect(findByName(manager.group, 'slab-opening-frame')).toBeUndefined();
 
-		settings.slabOpeningFrameEnabled = true;
-		manager.rebuildAllSlabs();
+		manager.removeOpening('slab-1', 'open-1');
+		manager.addOpening('slab-1', { ...opening(), frameEnabled: true });
 		expect(findByName(manager.group, 'slab-opening-frame')).toBeDefined();
 
 		manager.removeOpening('slab-1', 'open-1');

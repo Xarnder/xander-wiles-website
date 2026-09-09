@@ -56,7 +56,10 @@ export function clampFrameDepth(configuredFrameDepth: number, wallThickness: num
 
 /** Depth for insets that must stay inside the wall (glass). Never thicker than the wall itself. */
 export function clampInteriorDepth(configuredDepth: number, wallThickness: number): number {
-	return Math.max(MIN_FRAME_DEPTH, Math.min(configuredDepth, Math.max(wallThickness, MIN_FRAME_DEPTH)));
+	return Math.max(
+		MIN_FRAME_DEPTH,
+		Math.min(configuredDepth, Math.max(wallThickness, MIN_FRAME_DEPTH))
+	);
 }
 
 /**

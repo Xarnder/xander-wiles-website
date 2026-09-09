@@ -5,7 +5,13 @@ import {
 	isSlabHeightTool,
 	resolveHotbarSlot
 } from './FoundationTypes';
-import type { BuildUiState, HotbarUiState, ToolId } from './FoundationTypes';
+import type {
+	BuildingSettings,
+	BuildUiState,
+	HotbarSlotVariant,
+	HotbarUiState,
+	ToolId
+} from './FoundationTypes';
 
 /** Contract every build tool implements. BuildToolManager only ever talks to tools through this. */
 export interface BuildTool {
@@ -23,6 +29,11 @@ export interface BuildTool {
 	 * while adjusting rise so those keys don't also switch to Floor/Ceiling.
 	 */
 	isCapturingKey?(code: string): boolean;
+	setVariant?(variant: HotbarSlotVariant): void;
+	canOpenCustomize?(): boolean;
+	prepareForCustomize?(): void;
+	onCustomizeClosed?(): void;
+	isHoldingObject?(): boolean;
 }
 
 const DIGIT_TO_SLOT: Record<string, number> = {
@@ -36,21 +47,23 @@ const DIGIT_TO_SLOT: Record<string, number> = {
 };
 
 /** Which temporary global editing overlay (if any) is active — see the class doc comment. */
-type GlobalMode = 'none' | 'remove' | 'paint' | 'music';
+type GlobalMode = 'none' | 'remove' | 'paint' | 'music' | 'move';
 
 export interface BuildToolManagerOptions {
 	domElement: HTMLElement;
 	tools: Partial<Record<ToolId, BuildTool>>;
+	buildingSettings?: BuildingSettings;
 	/** The global Remove Mode tool (`X` key) — always available, never placed in `tools`/the hotbar itself. See the class doc comment. */
 	removeTool: BuildTool;
 	/** The global Paint Mode tool (`P` key) — same treatment as `removeTool`. */
 	paintTool: BuildTool;
+	moveTool?: BuildTool;
 	musicTool?: BuildTool;
 	isPointerLocked: () => boolean;
 	isInputBlocked?: () => boolean;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onHudChange?: (hud: BuildUiState | null) => void;
-	/** Fires when the placement-customize modal opens or closes (`E` on Door / Window / Beam). */
+	/** Fires when the placement-customize modal opens or closes (`E` on Wall / Door / Window / Beam). */
 	onPlacementCustomizeChange?: (open: boolean) => void;
 	onPlacementHeightChange?: (open: boolean) => void;
 }
@@ -83,6 +96,7 @@ export class BuildToolManager {
 	private readonly tools: Partial<Record<ToolId, BuildTool>>;
 	private readonly removeTool: BuildTool;
 	private readonly paintTool: BuildTool;
+	private readonly moveTool?: BuildTool;
 	private readonly musicTool?: BuildTool;
 	private readonly isInputBlocked?: () => boolean;
 	private readonly isPointerLocked: () => boolean;
@@ -91,6 +105,7 @@ export class BuildToolManager {
 	private readonly onPlacementCustomizeChange?: (open: boolean) => void;
 	private readonly onPlacementHeightChange?: (open: boolean) => void;
 	private readonly domElement: HTMLElement;
+	private readonly buildingSettings?: BuildingSettings;
 
 	private activeSlotNumber = 1;
 	private globalMode: GlobalMode = 'none';
@@ -104,15 +119,27 @@ export class BuildToolManager {
 	private placementHeightOpen = false;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
-			(event.target as HTMLElement | null)?.tagName ?? ''
-		);
+		const target = event.target as HTMLElement | null;
+		const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '');
 		if (typing) {
-			if (this.placementCustomizeOpen && event.code === 'Escape') {
+			const inputType = target?.tagName === 'INPUT' ? (target as HTMLInputElement).type : '';
+			// Range/colour controls are inputs, but they don't consume E — keep the advertised
+			// "E to close" shortcut after dragging a slider. Number fields still swallow E
+			// (`1e2` scientific notation).
+			const eClosesOverlay = inputType === 'range' || inputType === 'color';
+			if (
+				this.placementCustomizeOpen &&
+				(event.code === 'Escape' || (event.code === 'KeyE' && eClosesOverlay))
+			) {
 				this.setPlacementCustomizeOpen(false);
+				return;
 			}
-			if (this.placementHeightOpen && event.code === 'Escape') {
+			if (
+				this.placementHeightOpen &&
+				(event.code === 'Escape' || (event.code === 'KeyE' && eClosesOverlay))
+			) {
 				this.setPlacementHeightOpen(false);
+				return;
 			}
 			return;
 		}
@@ -128,7 +155,7 @@ export class BuildToolManager {
 			this.togglePlacementCustomize();
 			return;
 		}
-		if (event.code === 'KeyC' && !event.shiftKey && this.canOpenPlacementHeight()) {
+		if (event.code === 'KeyE' && this.canOpenPlacementHeight()) {
 			this.setPlacementCustomizeOpen(false);
 			this.togglePlacementHeight();
 			return;
@@ -138,14 +165,16 @@ export class BuildToolManager {
 			return;
 		}
 		if (this.placementHeightOpen) {
-			if (event.code === 'Escape' || (event.code === 'KeyC' && !event.shiftKey)) {
-				this.setPlacementHeightOpen(false);
-			}
+			if (event.code === 'Escape') this.setPlacementHeightOpen(false);
 			return;
 		}
 		if (this.isInputBlocked?.()) return;
-		if (event.code === 'KeyM' && this.musicTool) {
+		if (event.code === 'KeyN' && this.musicTool) {
 			this.setGlobalMode(this.globalMode === 'music' ? 'none' : 'music');
+			return;
+		}
+		if (event.code === 'KeyM' && this.moveTool) {
+			this.toggleMoveMode();
 			return;
 		}
 		if (!this.buildModeActive) {
@@ -172,7 +201,13 @@ export class BuildToolManager {
 			return;
 		}
 		if (this.globalMode !== 'none') {
-			if (event.code === 'Escape') this.setGlobalMode('none');
+			if (event.code === 'Escape') {
+				if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
+					this.getGlobalTool()?.onSecondaryAction();
+					return;
+				}
+				this.setGlobalMode('none');
+			}
 			return;
 		}
 		if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
@@ -202,6 +237,10 @@ export class BuildToolManager {
 			this.getActiveTool()?.onPrimaryAction();
 		} else if (event.button === 2) {
 			if (this.globalMode !== 'none') {
+				if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
+					this.getGlobalTool()?.onSecondaryAction();
+					return;
+				}
 				this.setGlobalMode('none');
 				return;
 			}
@@ -217,8 +256,10 @@ export class BuildToolManager {
 	constructor(options: BuildToolManagerOptions) {
 		this.domElement = options.domElement;
 		this.tools = options.tools;
+		this.buildingSettings = options.buildingSettings;
 		this.removeTool = options.removeTool;
 		this.paintTool = options.paintTool;
+		this.moveTool = options.moveTool;
 		this.musicTool = options.musicTool;
 		this.isPointerLocked = options.isPointerLocked;
 		this.isInputBlocked = options.isInputBlocked;
@@ -226,6 +267,8 @@ export class BuildToolManager {
 		this.onHudChange = options.onHudChange;
 		this.onPlacementCustomizeChange = options.onPlacementCustomizeChange;
 		this.onPlacementHeightChange = options.onPlacementHeightChange;
+
+		this.syncFurnitureVariant();
 
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.domElement.addEventListener('mousedown', this.handleMouseDown);
@@ -266,6 +309,10 @@ export class BuildToolManager {
 		this.getActiveTool()?.onSecondaryAction();
 		this.getActiveTool()?.deactivate();
 		this.variantIndexBySlot.set(definition.slot, next);
+		const newVariant = definition.variants[next];
+		if (newVariant?.furnitureKind && this.buildingSettings) {
+			this.buildingSettings.furnitureKind = newVariant.furnitureKind;
+		}
 		this.activateCurrent();
 		this.syncPlacementCustomizeToActiveTool();
 		this.syncPlacementHeightToActiveTool();
@@ -286,12 +333,21 @@ export class BuildToolManager {
 		this.setGlobalMode(this.globalMode === 'paint' ? 'none' : 'paint');
 	}
 
+	toggleMoveMode(): void {
+		if (!this.buildModeActive) this.setBuildMode(true);
+		this.setGlobalMode(this.globalMode === 'move' ? 'none' : 'move');
+	}
+
 	isRemoveModeActive(): boolean {
 		return this.globalMode === 'remove';
 	}
 
 	isPaintModeActive(): boolean {
 		return this.globalMode === 'paint';
+	}
+
+	isMoveModeActive(): boolean {
+		return this.globalMode === 'move';
 	}
 
 	isPlacementCustomizeOpen(): boolean {
@@ -304,6 +360,10 @@ export class BuildToolManager {
 
 	closePlacementCustomize(): void {
 		this.setPlacementCustomizeOpen(false);
+		this.syncFurnitureVariant();
+		if (this.globalMode === 'move') {
+			this.moveTool?.onCustomizeClosed?.();
+		}
 	}
 
 	isPlacementHeightOpen(): boolean {
@@ -322,6 +382,7 @@ export class BuildToolManager {
 		if (this.globalMode === 'remove') return this.removeTool;
 		if (this.globalMode === 'paint') return this.paintTool;
 		if (this.globalMode === 'music') return this.musicTool;
+		if (this.globalMode === 'move') return this.moveTool;
 		return undefined;
 	}
 
@@ -336,7 +397,11 @@ export class BuildToolManager {
 		if (!active) {
 			this.setPlacementCustomizeOpen(false);
 			this.setPlacementHeightOpen(false);
-			if (this.globalMode === 'remove' || this.globalMode === 'paint') {
+			if (
+				this.globalMode === 'remove' ||
+				this.globalMode === 'paint' ||
+				this.globalMode === 'move'
+			) {
 				this.getGlobalTool()?.deactivate();
 				this.globalMode = 'none';
 			} else if (this.globalMode === 'none') {
@@ -396,20 +461,44 @@ export class BuildToolManager {
 	}
 
 	private activateCurrent(): void {
+		const definition = this.slotDefinition(this.activeSlotNumber);
+		const index = definition ? (this.variantIndexBySlot.get(definition.slot) ?? 0) : 0;
+		const variant = definition?.variants[index];
 		const tool = this.getActiveTool();
 		if (tool) {
+			if (variant && tool.setVariant) {
+				tool.setVariant(variant);
+			}
 			tool.activate();
 		} else {
 			this.onHudChange?.(null);
 		}
 	}
 
+	syncFurnitureVariant(): void {
+		if (!this.buildingSettings) return;
+		const slot8 = this.slotDefinition(8);
+		if (!slot8) return;
+		const targetKind = this.buildingSettings.furnitureKind;
+		const idx = slot8.variants.findIndex((v) => v.furnitureKind === targetKind);
+		if (idx >= 0 && this.variantIndexBySlot.get(8) !== idx) {
+			this.variantIndexBySlot.set(8, idx);
+			if (this.activeSlotNumber === 8 && this.buildModeActive && this.globalMode === 'none') {
+				this.activateCurrent();
+			}
+			this.emitHotbarChange();
+		}
+	}
+
 	private canOpenPlacementCustomize(): boolean {
+		if (this.isInputBlocked?.()) return false;
+		if (this.globalMode === 'move') {
+			return this.moveTool?.canOpenCustomize?.() ?? false;
+		}
 		return (
 			this.buildModeActive &&
 			this.globalMode === 'none' &&
-			isCustomizablePlacementTool(this.getActiveToolId()) &&
-			!this.isInputBlocked?.()
+			isCustomizablePlacementTool(this.getActiveToolId())
 		);
 	}
 
@@ -423,11 +512,17 @@ export class BuildToolManager {
 	}
 
 	private setPlacementCustomizeOpen(open: boolean): void {
+		if (open && this.globalMode === 'move') {
+			this.moveTool?.prepareForCustomize?.();
+		}
 		const next = open && this.canOpenPlacementCustomize();
 		if (next === this.placementCustomizeOpen) return;
 		this.placementCustomizeOpen = next;
 		if (next && typeof document !== 'undefined') document.exitPointerLock?.();
 		this.onPlacementCustomizeChange?.(next);
+		if (!next && this.globalMode === 'move') {
+			this.moveTool?.onCustomizeClosed?.();
+		}
 	}
 
 	/** Keep the modal up while cycling Door / Window / Beam; close it on Foundation, etc. */
@@ -484,6 +579,7 @@ export class BuildToolManager {
 		this.getActiveTool()?.deactivate();
 		this.removeTool.deactivate();
 		this.paintTool.deactivate();
+		this.moveTool?.deactivate();
 		this.musicTool?.deactivate();
 		window.removeEventListener('keydown', this.handleKeyDown);
 		this.domElement.removeEventListener('mousedown', this.handleMouseDown);

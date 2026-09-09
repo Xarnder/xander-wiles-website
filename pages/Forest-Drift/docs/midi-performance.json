@@ -1,0 +1,71 @@
+[
+	{
+		"count": 100,
+		"planningMs": 0.9395000000076834,
+		"reloadMs": 6731.684916999977,
+		"commitMs": 23.5,
+		"baselineFps": 3.1109521068750086,
+		"liveObjects": 218,
+		"terrainChunks": 81,
+		"outerRadius": 456.3009756898818,
+		"livePlants": 24,
+		"logicalNotes": 100,
+		"drawCalls": 253,
+		"geometries": 116,
+		"fps": 3.0865388325166867,
+		"saveBytes": 25663,
+		"jsonParseMs": 0.800000011920929,
+		"scheduler": {
+			"ticks": 24,
+			"totalMs": 2.300000011920929,
+			"maxMs": 0.800000011920929
+		},
+		"heapBytes": 44700000
+	},
+	{
+		"count": 2000,
+		"planningMs": 10.879916999983834,
+		"reloadMs": 6946.593874999991,
+		"commitMs": 7903,
+		"baselineFps": 3.3715441672285906,
+		"liveObjects": 218,
+		"terrainChunks": 81,
+		"outerRadius": 8028.648455321946,
+		"livePlants": 24,
+		"logicalNotes": 2000,
+		"drawCalls": 293,
+		"geometries": 137,
+		"fps": 3.2670930223028964,
+		"saveBytes": 498378,
+		"jsonParseMs": 1.300000011920929,
+		"scheduler": {
+			"ticks": 24,
+			"totalMs": 2.4999998807907104,
+			"maxMs": 0.8999999761581421
+		},
+		"heapBytes": 53500000
+	},
+	{
+		"count": 10000,
+		"planningMs": 77.86350000000675,
+		"reloadMs": 6163.263791999954,
+		"commitMs": 46487.19999998808,
+		"baselineFps": 3.2101182928529495,
+		"liveObjects": 218,
+		"terrainChunks": 81,
+		"outerRadius": 40114.86658935611,
+		"livePlants": 24,
+		"logicalNotes": 10000,
+		"drawCalls": 279,
+		"geometries": 129,
+		"fps": 3.335723935477151,
+		"saveBytes": 2492702,
+		"jsonParseMs": 5.100000023841858,
+		"scheduler": {
+			"ticks": 24,
+			"totalMs": 3.2000001072883606,
+			"maxMs": 1.100000023841858
+		},
+		"heapBytes": 86400000
+	}
+]

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { visualSegmentTopY } from './buildingVisualInsets';
+import { collisionSegmentMaxY, visualSegmentTopY } from './buildingVisualInsets';
 import type { WallCollisionRect } from './wallCollision';
 import type { SolidWallSegment, WallTransform } from './wallGeometryMath';
 
@@ -65,11 +65,16 @@ export function applyWallTransform(
 export function buildWallCollisionRects(
 	segments: readonly SolidWallSegment[],
 	thickness: number,
-	transform: WallTransform
+	transform: WallTransform,
+	wallHeight?: number
 ): WallCollisionRect[] {
 	const halfThickness = thickness / 2;
 	return segments.map((segment) => {
 		const centerU = (segment.minU + segment.maxU) / 2;
+		const effectiveMaxY =
+			wallHeight !== undefined
+				? collisionSegmentMaxY(segment.maxY, wallHeight)
+				: collisionSegmentMaxY(segment.maxY, segment.maxY);
 		return {
 			centerX: transform.originWorldX + transform.dirX * centerU,
 			centerZ: transform.originWorldZ + transform.dirZ * centerU,
@@ -78,7 +83,7 @@ export function buildWallCollisionRects(
 			dirX: transform.dirX,
 			dirZ: transform.dirZ,
 			minWorldY: transform.originWorldY + segment.minY,
-			maxWorldY: transform.originWorldY + segment.maxY
+			maxWorldY: transform.originWorldY + effectiveMaxY
 		};
 	});
 }
