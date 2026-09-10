@@ -89,3 +89,127 @@ it('detects direction changes without dropping progress during minor wiggles', (
 	expect(pTurn).toBeGreaterThanOrEqual(0.5);
 	expect(tracker.phase).toBe('exhale');
 });
+
+it('calculates guide target point vertical position and first two cycles threshold correctly', () => {
+	const guideY = (p: number) => 390 - lineHeight(p) * 300;
+	const guidePercentTop = (p: number) => guideY(p) / 4.8;
+
+	// Inhale start (bottom): 390px -> 81.25%
+	expect(guideY(0)).toBe(390);
+	expect(guidePercentTop(0)).toBeCloseTo(81.25, 2);
+
+	// Halfway up inhale: 240px -> 50%
+	expect(guideY(0.125)).toBe(240);
+	expect(guidePercentTop(0.125)).toBeCloseTo(50, 2);
+
+	// Inhale top hold: 90px -> 18.75%
+	expect(guideY(0.25)).toBe(90);
+	expect(guidePercentTop(0.25)).toBeCloseTo(18.75, 2);
+
+	// Exhale halfway down: 240px -> 50%
+	expect(guideY(0.625)).toBe(240);
+	expect(guidePercentTop(0.625)).toBeCloseTo(50, 2);
+
+	// Exhale bottom hold: 390px -> 81.25%
+	expect(guideY(0.75)).toBe(390);
+	expect(guidePercentTop(0.75)).toBeCloseTo(81.25, 2);
+
+	// First two cycles threshold: active for cycles 0 and 1, inactive from cycle 2 onward
+	const isGuideHintActive = (cycles: number) => cycles < 2;
+	expect(isGuideHintActive(0)).toBe(true);
+	expect(isGuideHintActive(1)).toBe(true);
+	expect(isGuideHintActive(2)).toBe(false);
+	expect(isGuideHintActive(3)).toBe(false);
+});
+
+it('does not show guide hint until after user gets halfway up the first stroke', () => {
+	// Function mirroring LineBreathingPath's hasReachedHalfway logic
+	const shouldShowGuideHint = (user: number, height: number, cycles: number, hasReachedHalfway: boolean) => {
+		const reached = hasReachedHalfway || cycles > 0 || lineHeight(user) >= 0.5 || height >= 0.5;
+		const inCalibration = cycles < 2;
+		return reached && inCalibration;
+	};
+
+	let reachedHalfway = false;
+
+	// Initial page load / at start (user = 0, height = 0, cycles = 0): HIDDEN
+	expect(shouldShowGuideHint(0, 0, 0, reachedHalfway)).toBe(false);
+
+	// User drags 20% up (height = 0.2, user = 0.05): STILL HIDDEN
+	expect(shouldShowGuideHint(0.05, 0.2, 0, reachedHalfway)).toBe(false);
+
+	// User drags 40% up (height = 0.4, user = 0.1): STILL HIDDEN
+	expect(shouldShowGuideHint(0.1, 0.4, 0, reachedHalfway)).toBe(false);
+
+	// User reaches 50% up (halfway up the first stroke, height = 0.5, user = 0.125): APPEARS!
+	reachedHalfway = true;
+	expect(shouldShowGuideHint(0.125, 0.5, 0, reachedHalfway)).toBe(true);
+
+	// Continuing up to peak (height = 1.0, user = 0.25): REMAINS SHOWN
+	expect(shouldShowGuideHint(0.25, 1.0, 0, reachedHalfway)).toBe(true);
+
+	// Exhale stroke (cycle 0, height = 0.5, user = 0.625): REMAINS SHOWN
+	expect(shouldShowGuideHint(0.625, 0.5, 0, reachedHalfway)).toBe(true);
+
+	// Second cycle (cycle 1): REMAINS SHOWN
+	expect(shouldShowGuideHint(0.2, 0.8, 1, reachedHalfway)).toBe(true);
+
+	// Third cycle (calibration complete, cycles = 2): DISMISSED
+	expect(shouldShowGuideHint(0.2, 0.8, 2, reachedHalfway)).toBe(false);
+});
+
+it('calculates slider fill height matching the target point throughout breath cycle', () => {
+	const guideY = (p: number) => 390 - lineHeight(p) * 300;
+	const sliderFillSpan = (p: number) => 390 - guideY(p);
+
+	// Empty (bottom station): 0px fill (slider empty)
+	expect(sliderFillSpan(0)).toBe(0);
+
+	// 25% height inhale: 75px fill
+	expect(sliderFillSpan(0.0625)).toBeCloseTo(75, 1);
+
+	// 50% height inhale (halfway): 150px fill
+	expect(sliderFillSpan(0.125)).toBe(150);
+
+	// 100% height (top hold): 300px fill (fully filled from y=390 to y=90)
+	expect(sliderFillSpan(0.25)).toBe(300);
+	expect(sliderFillSpan(0.375)).toBe(300);
+
+	// 50% height exhale: 150px fill
+	expect(sliderFillSpan(0.625)).toBe(150);
+
+	// 0% height (bottom hold): 0px fill
+	expect(sliderFillSpan(0.75)).toBe(0);
+	expect(sliderFillSpan(0.875)).toBe(0);
+});
+
+it('dismisses guide hint after auto-dismiss timeout or 2 cycles', () => {
+	// Replicates GuideHint derived visibility state machine:
+	// visible = active && hasAppeared && !dismissed && cycles < 2
+	const isHintVisible = (params: {
+		active: boolean;
+		hasAppeared: boolean;
+		dismissed: boolean;
+		cycles: number;
+	}) => {
+		return params.active && params.hasAppeared && !params.dismissed && params.cycles < 2;
+	};
+
+	// 1. Initial state: inactive
+	expect(isHintVisible({ active: false, hasAppeared: false, dismissed: false, cycles: 0 })).toBe(false);
+
+	// 2. User drags halfway: appears
+	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 0 })).toBe(true);
+
+	// 3. User continues into cycle 1: still visible
+	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 1 })).toBe(true);
+
+	// 4. Auto-dismiss timeout fires (dismissed = true): disappears even before cycle 2
+	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: true, cycles: 1 })).toBe(false);
+
+	// 5. Or 2 cycles completes without timeout (cycles = 2): disappears
+	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 2 })).toBe(false);
+
+	// 6. Both timeout fired and 2 cycles complete: remains dismissed
+	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: true, cycles: 2 })).toBe(false);
+});

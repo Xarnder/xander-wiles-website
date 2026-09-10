@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { pathData, nearestPosition, type PathPoint } from '$lib/geometry';
 	import { signedDistance, wrap } from '$lib/breathing';
+	import DragHint from './DragHint.svelte';
 	let { user, guide, running, calibrated, cycles, onmove, onbegin, onend } =
 		$props<{
 			user: number;
@@ -17,6 +18,7 @@
 	let path: SVGPathElement;
 	let points = $state<PathPoint[]>([]);
 	let dragging = $state(false);
+	let hasDraggedUp = $state(false);
 	let pointer: number | null = null;
 	let matrix: DOMMatrix | null = null;
 	onMount(() => {
@@ -26,6 +28,13 @@
 			return { x: p.x, y: p.y };
 		});
 	});
+
+	$effect(() => {
+		if (!running && cycles === 0 && user === 0 && !dragging) {
+			hasDraggedUp = false;
+		}
+	});
+
 	const point = (p: number) =>
 		points[Math.round(p * points.length) % points.length] ?? { x: 90, y: 390 };
 	let u = $derived(point(user)),
@@ -46,6 +55,9 @@
 		if (!dragging || pointer !== e.pointerId || !matrix || !running) return;
 		const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix);
 		const next = nearestPosition(points, p.x, p.y);
+		if (next >= 0.03 && next <= 0.28) {
+			hasDraggedUp = true;
+		}
 		const delta = signedDistance(next, user);
 		if (Math.abs(delta) > 0.06) {
 			const steps = Math.max(1, Math.ceil(Math.abs(delta) / 0.05));
@@ -65,6 +77,7 @@
 			return;
 		e.preventDefault();
 		if (!running) onbegin();
+		if (['ArrowUp', 'ArrowRight'].includes(e.key)) hasDraggedUp = true;
 		onmove(
 			(user +
 				(['ArrowRight', 'ArrowDown'].includes(e.key) ? 0.0125 : -0.0125) +
@@ -158,6 +171,17 @@
 	>
 		<span></span>
 	</button>
+	<DragHint
+		left={`calc(${u.x / 4.8}% + 36px)`}
+		top={`${u.y / 4.8}%`}
+		{dragging}
+		hasDragged={hasDraggedUp}
+		mode="square"
+		onpointerdown={start}
+		onpointermove={move}
+		onpointerup={end}
+		onpointercancel={end}
+	/>
 </div>
 
 <style>

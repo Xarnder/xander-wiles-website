@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { phases, signedDistance, wrap } from '$lib/breathing';
 	import { lineHeight, lineProgress, LineProgressTracker } from '$lib/line';
+	import DragHint from './DragHint.svelte';
+	import GuideHint from './GuideHint.svelte';
 	let { user, guide, running, calibrated, cycles, onmove, onbegin, onend } =
 		$props<{
 			user: number;
@@ -16,14 +18,75 @@
 	let pointer: number | null = null;
 	let inverse: DOMMatrix | null = null;
 	let dragging = $state(false);
+	let hasDraggedUp = $state(false);
+	let hasReachedHalfway = $state(false);
+	let guideCycles = $state(0);
+	let prevGuide = 0;
+	let userCycles = $state(0);
+	let prevUser = 0;
+	let strokeCycles = $state(0);
+	let lastTrackerPhase: 'inhale' | 'exhale' = 'inhale';
+
 	let tracker = new LineProgressTracker();
 	const y = (p: number) => 390 - lineHeight(p) * 300;
 	let uy = $derived(y(user)),
 		gy = $derived(y(guide));
 	let phase = $derived(Math.floor(guide * 4));
 	let sync = $derived(Math.abs(signedDistance(user, guide)) < 0.055);
+
+	const effectiveCycles = $derived(
+		Math.max(cycles, guideCycles, userCycles, strokeCycles)
+	);
+
+	$effect(() => {
+		if (!running && cycles === 0 && user === 0 && !dragging) {
+			hasDraggedUp = false;
+			hasReachedHalfway = false;
+			guideCycles = 0;
+			prevGuide = 0;
+			userCycles = 0;
+			prevUser = 0;
+			strokeCycles = 0;
+			lastTrackerPhase = 'inhale';
+		}
+	});
+
+	$effect(() => {
+		if (running) {
+			if (prevGuide > 0.75 && guide < 0.25) {
+				guideCycles++;
+			}
+			prevGuide = guide;
+		}
+	});
+
+	$effect(() => {
+		if (running) {
+			if (prevUser > 0.75 && user < 0.25) {
+				userCycles++;
+			}
+			prevUser = user;
+		}
+	});
+
+	$effect(() => {
+		if (effectiveCycles > 0 || lineHeight(user) >= 0.5 || (user >= 0.125 && user <= 0.875)) {
+			hasReachedHalfway = true;
+		}
+	});
+
 	function report(height: number) {
 		const next = tracker.update(user, height);
+		if (lineHeight(next) >= 0.05 || next >= 0.02) {
+			hasDraggedUp = true;
+		}
+		if (height >= 0.5 || lineHeight(next) >= 0.5 || next >= 0.125) {
+			hasReachedHalfway = true;
+		}
+		if (lastTrackerPhase === 'exhale' && tracker.phase === 'inhale') {
+			strokeCycles++;
+		}
+		lastTrackerPhase = tracker.phase;
 		// Holds have zero physical length. Advance their logical phase in small
 		// steps, preserving the engine's shortcut protection for ordinary dragging.
 		const delta = signedDistance(next, user),
@@ -65,7 +128,10 @@
 		if (!['ArrowUp', 'ArrowDown'].includes(e.key)) return;
 		e.preventDefault();
 		if (!running) onbegin();
-		report(lineHeight(user) + (e.key === 'ArrowUp' ? 0.04 : -0.04));
+		if (e.key === 'ArrowUp') hasDraggedUp = true;
+		const nextHeight = lineHeight(user) + (e.key === 'ArrowUp' ? 0.04 : -0.04);
+		if (nextHeight >= 0.5) hasReachedHalfway = true;
+		report(nextHeight);
 	}
 </script>
 
@@ -102,6 +168,26 @@
 			stroke-width="30"
 			stroke-linecap="round"
 		/>
+		<!-- Target slider fill: fills up the slider at the same height as the target point -->
+		{#if gy < 390}
+			<path
+				data-slider-fill
+				d={`M 240 390 L 240 ${gy}`}
+				stroke="var(--track-fill, rgba(56, 200, 255, 0.32))"
+				stroke-width="26"
+				stroke-linecap="round"
+			/>
+			<line
+				x1="225"
+				y1={gy}
+				x2="255"
+				y2={gy}
+				stroke="var(--theme-guide, #4fe3ff)"
+				stroke-width="2"
+				stroke-linecap="round"
+				opacity="0.85"
+			/>
+		{/if}
 		<!-- Active breathing segment between user and guide: 8px luminous beam -->
 		<path
 			d={`M 240 ${uy} L 240 ${gy}`}
@@ -161,6 +247,23 @@
 			if (!running) onbegin();
 		}}><span></span></button
 	>
+	<DragHint
+		left="calc(50% + 36px)"
+		top={`${uy / 4.8}%`}
+		{dragging}
+		hasDragged={hasDraggedUp}
+		mode="line"
+		onpointerdown={start}
+		onpointermove={move}
+		onpointerup={end}
+		onpointercancel={end}
+	/>
+	<GuideHint
+		cycles={effectiveCycles}
+		active={hasReachedHalfway}
+		top={`${gy / 4.8}%`}
+		right="calc(50% + 36px)"
+	/>
 </div>
 
 <style>

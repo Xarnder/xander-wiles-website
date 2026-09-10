@@ -32,11 +32,28 @@
 	--track-center: rgba(255, 255, 255, 0.14);
 	--track-center-opacity: 1;
 	--track-active: #4fe3ff;
+	--track-fill: rgba(56, 200, 255, 0.32);
 	--water-surface: rgba(85, 205, 255, 0.65);
 	--water-top: rgba(28, 125, 210, 0.26);
 	--water-bottom: rgba(0, 8, 24, 0.96);
 	--water-glow: rgba(60, 175, 255, 0.18);
 	--fish-silhouette: rgba(100, 210, 255, 0.42);
+
+	/* Drag up hint guidance tokens */
+	--hint-bg: rgba(0, 18, 29, 0.9);
+	--hint-border: rgba(56, 200, 255, 0.5);
+	--hint-shadow: rgba(0, 0, 0, 0.6);
+	--hint-glow: rgba(56, 200, 255, 0.3);
+	--hint-icon: #38c8ff;
+	--hint-text: #e0f6ff;
+
+	/* Guide point follow hint guidance tokens */
+	--guide-hint-bg: rgba(0, 18, 29, 0.9);
+	--guide-hint-border: rgba(79, 227, 255, 0.5);
+	--guide-hint-shadow: rgba(0, 0, 0, 0.6);
+	--guide-hint-glow: rgba(79, 227, 255, 0.28);
+	--guide-hint-icon: #4fe3ff;
+	--guide-hint-text: #eaf9ff;
 
 	/* Ink variables overridden to true black / oceanic blue */
 	--ink-101918: #000000;
@@ -145,11 +162,28 @@
 	--track-center: var(--ink-a0c5ad, #a0c5ad);
 	--track-center-opacity: 0.2;
 	--track-active: var(--ink-d4eed1, #d4eed1);
+	--track-fill: rgba(185, 241, 209, 0.28);
 	--water-surface: rgba(135, 210, 255, 0.6);
 	--water-top: rgba(35, 115, 185, 0.32);
 	--water-bottom: rgba(8, 24, 46, 0.85);
 	--water-glow: rgba(70, 175, 255, 0.22);
 	--fish-silhouette: rgba(145, 215, 255, 0.4);
+
+	/* Drag up hint guidance tokens */
+	--hint-bg: rgba(23, 36, 31, 0.92);
+	--hint-border: rgba(233, 201, 149, 0.45);
+	--hint-shadow: rgba(0, 0, 0, 0.45);
+	--hint-glow: rgba(233, 201, 149, 0.2);
+	--hint-icon: #e9c995;
+	--hint-text: #f5f4ed;
+
+	/* Guide point follow hint guidance tokens */
+	--guide-hint-bg: rgba(23, 36, 31, 0.92);
+	--guide-hint-border: rgba(185, 241, 209, 0.45);
+	--guide-hint-shadow: rgba(0, 0, 0, 0.45);
+	--guide-hint-glow: rgba(185, 241, 209, 0.25);
+	--guide-hint-icon: #b9f1d1;
+	--guide-hint-text: #f0faf3;
 
 	/* Restore original ink variables */
 	--ink-101918: #101918;
@@ -244,11 +278,28 @@
 	--track-center: rgba(30, 50, 35, 0.15);
 	--track-center-opacity: 1;
 	--track-active: #187a47;
+	--track-fill: rgba(24, 122, 71, 0.22);
 	--water-surface: rgba(24, 115, 185, 0.48);
 	--water-top: rgba(80, 160, 225, 0.28);
 	--water-bottom: rgba(175, 205, 235, 0.68);
 	--water-glow: rgba(65, 155, 235, 0.16);
 	--fish-silhouette: rgba(20, 70, 130, 0.32);
+
+	/* Drag up hint guidance tokens */
+	--hint-bg: rgba(255, 255, 255, 0.94);
+	--hint-border: rgba(184, 101, 18, 0.4);
+	--hint-shadow: rgba(30, 50, 35, 0.12);
+	--hint-glow: rgba(184, 101, 18, 0.15);
+	--hint-icon: #b86512;
+	--hint-text: #1d2c22;
+
+	/* Guide point follow hint guidance tokens */
+	--guide-hint-bg: rgba(255, 255, 255, 0.94);
+	--guide-hint-border: rgba(24, 122, 71, 0.4);
+	--guide-hint-shadow: rgba(30, 50, 35, 0.12);
+	--guide-hint-glow: rgba(24, 122, 71, 0.18);
+	--guide-hint-icon: #187a47;
+	--guide-hint-text: #1d2c22;
 
 	--ink-101918: #f6f5ee;
 	--ink-101e1c: #f6f5ee;

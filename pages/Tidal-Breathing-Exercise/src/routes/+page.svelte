@@ -80,7 +80,7 @@
 	function sync() {
 		user = session.user;
 		guide = session.guide;
-		cycles = session.cycles;
+		cycles = Math.max(session.cycles, session.guideCycles);
 		currentRate = session.currentRate;
 	}
 	function toggle() {

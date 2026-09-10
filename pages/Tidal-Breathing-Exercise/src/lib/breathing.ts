@@ -28,6 +28,7 @@ export class BreathingSession {
 	guideRate: number | null = null;
 	currentRate: number | null = null;
 	cycles = 0;
+	guideCycles = 0;
 	elapsed = 0;
 	private travel = 0;
 	private lapStarted: number | null = null;
@@ -84,6 +85,7 @@ export class BreathingSession {
 		this.guideRate ??= Math.max(targetPace + 2, 6);
 		const next = this.guideTime + (milliseconds * this.guideRate) / 60000;
 		if (next >= 1) {
+			this.guideCycles++;
 			if (this.measured !== null && (!this.calibrated || !this.learnedGuideRate)) {
 				// During active calibration, synchronize with user's baseline rate
 				this.guideRate = this.measured;

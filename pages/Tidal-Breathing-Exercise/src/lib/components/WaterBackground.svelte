@@ -99,9 +99,6 @@
 	style:--water-height="{level}%"
 	style:--surface-opacity={surfaceOpacity}
 >
-	<!-- Ambient atmospheric glow above the water line -->
-	<div class="water-glow"></div>
-
 	<!-- Water body container rising from bottom -->
 	<div class="water-stage">
 		<!-- Back Wave (softer, slower parallax drift, fixed 260px wavelength) -->
@@ -238,26 +235,6 @@
 
 	.water-viewport:not(.running) .water-stage {
 		transition: height 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-	}
-
-	.water-glow {
-		position: absolute;
-		left: 10%;
-		right: 10%;
-		bottom: calc(var(--water-height, 26%) - 40px);
-		height: 140px;
-		background: radial-gradient(
-			ellipse at 50% 60%,
-			var(--water-glow, rgba(70, 175, 255, 0.22)),
-			transparent 72%
-		);
-		opacity: var(--surface-opacity, 0.5);
-		pointer-events: none;
-		border-radius: 50%;
-	}
-
-	.water-viewport:not(.running) .water-glow {
-		transition: bottom 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s ease;
 	}
 
 	.wave-layer {
