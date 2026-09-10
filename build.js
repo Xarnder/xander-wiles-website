@@ -21,7 +21,7 @@ const taxHelperSrc = path.join(rootDir, 'pages', 'Tax-Helper');
 const logoDemoSrc = path.join(rootDir, 'pages', 'Logo-Demo');
 const routineSrc = path.join(rootDir, 'pages', 'Routine');
 const gifMakerSrc = path.join(rootDir, 'pages', 'GIF-Maker');
-const breathingAppSrc = path.join(rootDir, 'pages', 'Breathing-App');
+const breathingAppSrc = path.join(rootDir, 'pages', 'Tidal-Breathing-Exercise');
 const forestDriftSrc = path.join(rootDir, 'pages', 'Forest-Drift');
 
 /** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
@@ -140,7 +140,7 @@ for (const item of items) {
             ) {
                 return false;
             }
-            if (rel === path.join('pages', 'Breathing-App') || rel.startsWith(path.join('pages', 'Breathing-App') + path.sep)) {
+            if (rel === path.join('pages', 'Tidal-Breathing-Exercise') || rel.startsWith(path.join('pages', 'Tidal-Breathing-Exercise') + path.sep)) {
                 return false;
             }
             // Incomplete leftover folder (space in name) — never ship source/node_modules
@@ -436,17 +436,17 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
 
 // Build and inject the static breathing experience.
 try {
-    npmInstallAndBuild(breathingAppSrc, 'Breathing-App');
+    npmInstallAndBuild(breathingAppSrc, 'Tidal-Breathing-Exercise');
 } catch (error) {
-    console.error('Failed to build Breathing-App:', error);
+    console.error('Failed to build Tidal-Breathing-Exercise:', error);
     process.exit(1);
 } finally {
     process.chdir(rootDir);
 }
-const breathingAppDest = path.join(deployOut, 'pages', 'Breathing-App');
+const breathingAppDest = path.join(deployOut, 'pages', 'Tidal-Breathing-Exercise');
 fs.cpSync(path.join(breathingAppSrc, 'dist'), breathingAppDest, { recursive: true });
 
-for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+for (const name of ['favicon.svg', 'favicon-dark.svg', 'favicon-light.svg']) {
     const srcIcon = path.join(breathingAppSrc, name);
     if (fs.existsSync(srcIcon)) {
         fs.copyFileSync(srcIcon, path.join(breathingAppDest, name));

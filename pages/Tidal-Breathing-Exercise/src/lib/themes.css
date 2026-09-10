@@ -1,0 +1,397 @@
+/* ==========================================================================
+   Still — Breathing Theme System
+   Modes: Dark (Default) | OLED Pure Black | Light Mindful Stone
+   ========================================================================== */
+
+:root,
+:root[data-theme='oled'] {
+	color-scheme: dark;
+	--theme-bg: #000000;
+	--theme-surface: #000000;
+	--theme-border: rgba(255, 255, 255, 0.12);
+	--theme-text: #f0f4f1;
+	--theme-muted: #95a398;
+	--theme-accent: #c2ebd0;
+	--theme-accent-text: #000000;
+	--theme-guide: #6efac0;
+	--theme-user: #f5b958;
+	--theme-user-border: #000000;
+	--theme-node-fill: #000000;
+	--theme-line-dim: #ffffff;
+	--theme-line-active: #82f5c7;
+	--theme-divider: rgba(255, 255, 255, 0.08);
+	--track-rail: rgba(255, 255, 255, 0.26);
+	--track-rail-opacity: 1;
+	--track-bed: #000000;
+	--track-bed-opacity: 1;
+	--track-center: rgba(255, 255, 255, 0.14);
+	--track-center-opacity: 1;
+	--track-active: #6efac0;
+	--water-surface: rgba(85, 205, 255, 0.65);
+	--water-top: rgba(28, 125, 210, 0.26);
+	--water-bottom: rgba(0, 8, 24, 0.96);
+	--water-glow: rgba(60, 175, 255, 0.18);
+	--fish-silhouette: rgba(100, 210, 255, 0.42);
+
+	/* Ink variables overridden to true black / high contrast */
+	--ink-101918: #000000;
+	--ink-101e1c: #000000;
+	--ink-141a17: #000000;
+	--ink-17241f: #000000;
+	--ink-182a22: #000000;
+	--ink-202d25: #000000;
+	--ink-25271b: #000000;
+	--ink-26372c: #000000;
+	--ink-33403335: transparent;
+	--ink-75926a16: transparent;
+	--ink-e7e8d9: #f0f4f1;
+	--ink-e7eadd: #f5f8f5;
+	--ink-e1e4d1: #f0f4f1;
+	--ink-e1e8d1: #ffffff;
+	--ink-e8e8d9: #ffffff;
+	--ink-d9e3c2: #c2ebd0;
+	--ink-b8ebc6: #6efac0;
+	--ink-b9f1d1: #6efac0;
+	--ink-daffe5: #a8ffd7;
+	--ink-bcddbf: #8bf5c9;
+	--ink-d1f4d8: #8bf5c9;
+	--ink-bfedd0: #6efac0;
+	--ink-d6e9c7: #ffffff;
+	--ink-dbedca: #ffffff;
+	--ink-b3d9bc: #ffffff;
+	--ink-d4eed1: #8bf5c9;
+	--ink-b8c4a912: rgba(255, 255, 255, 0.08);
+	--ink-b8c4a915: rgba(255, 255, 255, 0.1);
+	--ink-b8c4a925: rgba(255, 255, 255, 0.16);
+	--ink-b9ceb129: rgba(255, 255, 255, 0.12);
+	--ink-c0d9bd18: rgba(255, 255, 255, 0.08);
+	--ink-a6c0a62e: rgba(255, 255, 255, 0.18);
+	--ink-bed4b505: rgba(255, 255, 255, 0.04);
+	--ink-c4ceb9: #e0e5de;
+	--ink-aab99c50: rgba(255, 255, 255, 0.22);
+	--ink-d4dfbd: #c2ebd0;
+	--ink-cbdcba08: rgba(194, 235, 208, 0.15);
+	--ink-cdd9b6: #c2ebd0;
+	--ink-e9c995: #f5b958;
+	--ink-e4c995: #f5b958;
+	--ink-e6c38d: #f5b958;
+}
+
+:root body,
+:root .experience,
+:root[data-theme='oled'] body,
+:root[data-theme='oled'] .experience {
+	background: #000000 !important;
+}
+
+:root aside,
+:root[data-theme='oled'] aside {
+	background: #000000 !important;
+	border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+:root .atmosphere,
+:root[data-theme='oled'] .atmosphere {
+	display: none !important;
+}
+
+:root #membrane stop,
+:root[data-theme='oled'] #membrane stop {
+	stop-opacity: 0 !important;
+}
+
+/* ==========================================================================
+   DARK SAGE MODE
+   Rich deep botanical dark theme
+   ========================================================================== */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--theme-bg: #101918;
+	--theme-surface: #17241f;
+	--theme-border: #a6c0a62e;
+	--theme-text: #e7e8d9;
+	--theme-muted: #a7b29f;
+	--theme-accent: #d9e3c2;
+	--theme-accent-text: #202d25;
+	--theme-guide: #b9f1d1;
+	--theme-user: #e9c995;
+	--theme-user-border: #26372c;
+	--theme-node-fill: #182a22;
+	--theme-line-dim: #b3d9bc;
+	--theme-line-active: #d4eed1;
+	--theme-divider: #c0d9bd18;
+	--track-rail: var(--ink-a0c5ad, #a0c5ad);
+	--track-rail-opacity: 0.35;
+	--track-bed: var(--ink-141a17, #141a17);
+	--track-bed-opacity: 0.65;
+	--track-center: var(--ink-a0c5ad, #a0c5ad);
+	--track-center-opacity: 0.2;
+	--track-active: var(--ink-d4eed1, #d4eed1);
+	--water-surface: rgba(135, 210, 255, 0.6);
+	--water-top: rgba(35, 115, 185, 0.32);
+	--water-bottom: rgba(8, 24, 46, 0.85);
+	--water-glow: rgba(70, 175, 255, 0.22);
+	--fish-silhouette: rgba(145, 215, 255, 0.4);
+
+	/* Restore original ink variables */
+	--ink-101918: #101918;
+	--ink-101e1c: #101e1c;
+	--ink-141a17: #141a17;
+	--ink-17241f: #17241f;
+	--ink-182a22: #182a22;
+	--ink-202d25: #202d25;
+	--ink-25271b: #25271b;
+	--ink-26372c: #26372c;
+	--ink-33403335: #33403335;
+	--ink-75926a16: #75926a16;
+	--ink-e7e8d9: #e7e8d9;
+	--ink-e7eadd: #e7eadd;
+	--ink-e1e4d1: #e1e4d1;
+	--ink-e1e8d1: #e1e8d1;
+	--ink-e8e8d9: #e8e8d9;
+	--ink-d9e3c2: #d9e3c2;
+	--ink-b8ebc6: #b8ebc6;
+	--ink-b9f1d1: #b9f1d1;
+	--ink-daffe5: #daffe5;
+	--ink-bcddbf: #bcddbf;
+	--ink-d1f4d8: #d1f4d8;
+	--ink-bfedd0: #bfedd0;
+	--ink-d6e9c7: #d6e9c7;
+	--ink-dbedca: #dbedca;
+	--ink-b3d9bc: #b3d9bc;
+	--ink-d4eed1: #d4eed1;
+	--ink-b8c4a912: rgba(184, 196, 169, 0.07);
+	--ink-b8c4a915: rgba(184, 196, 169, 0.09);
+	--ink-b8c4a925: rgba(184, 196, 169, 0.15);
+	--ink-b9ceb129: rgba(185, 206, 177, 0.16);
+	--ink-c0d9bd18: rgba(192, 217, 189, 0.1);
+	--ink-a6c0a62e: rgba(166, 192, 166, 0.18);
+	--ink-bed4b505: rgba(190, 212, 181, 0.02);
+	--ink-c4ceb9: #c4ceb9;
+	--ink-aab99c50: rgba(170, 185, 156, 0.31);
+	--ink-d4dfbd: #d4dfbd;
+	--ink-cbdcba08: rgba(203, 220, 186, 0.03);
+	--ink-cdd9b6: #cdd9b6;
+	--ink-e9c995: #e9c995;
+	--ink-e4c995: #e4c995;
+	--ink-e6c38d: #e6c38d;
+}
+
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .experience {
+	background: #101918 !important;
+}
+
+:root[data-theme='dark'] aside {
+	background: #17241f !important;
+	border-color: #a6c0a62e !important;
+}
+
+:root[data-theme='dark'] .atmosphere {
+	display: block !important;
+}
+
+:root[data-theme='dark'] #membrane stop {
+	stop-opacity: 1 !important;
+}
+
+/* ==========================================================================
+   LIGHT MINDFUL STONE MODE
+   Soft warm paper/stone canvas with crisp botanical tones
+   ========================================================================== */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--theme-bg: #f6f5ee;
+	--theme-surface: #ffffff;
+	--theme-border: rgba(30, 50, 35, 0.12);
+	--theme-text: #1d2c22;
+	--theme-muted: #56685a;
+	--theme-accent: #253b2c;
+	--theme-accent-text: #f7f6f0;
+	--theme-guide: #187a47;
+	--theme-user: #b86512;
+	--theme-user-border: #f6f5ee;
+	--theme-node-fill: #f6f5ee;
+	--theme-line-dim: #1e3325;
+	--theme-line-active: #187a47;
+	--theme-divider: rgba(30, 50, 35, 0.1);
+	--track-rail: rgba(30, 50, 35, 0.24);
+	--track-rail-opacity: 1;
+	--track-bed: rgba(30, 50, 35, 0.05);
+	--track-bed-opacity: 1;
+	--track-center: rgba(30, 50, 35, 0.15);
+	--track-center-opacity: 1;
+	--track-active: #187a47;
+	--water-surface: rgba(24, 115, 185, 0.48);
+	--water-top: rgba(80, 160, 225, 0.28);
+	--water-bottom: rgba(175, 205, 235, 0.68);
+	--water-glow: rgba(65, 155, 235, 0.16);
+	--fish-silhouette: rgba(20, 70, 130, 0.32);
+
+	--ink-101918: #f6f5ee;
+	--ink-101e1c: #f6f5ee;
+	--ink-141a17: #f6f5ee;
+	--ink-17241f: #ffffff;
+	--ink-182a22: #f6f5ee;
+	--ink-202d25: #fbfbf6;
+	--ink-25271b: #f6f5ee;
+	--ink-26372c: #f6f5ee;
+	--ink-33403335: transparent;
+	--ink-75926a16: rgba(70, 110, 80, 0.04);
+	--ink-84968a: #556658;
+	--ink-879580: #556658;
+	--ink-8ac5a8: #2a5a3d;
+	--ink-8c9985: #556658;
+	--ink-8d9b89: #556658;
+	--ink-97a291: #556658;
+	--ink-98a590: #556658;
+	--ink-98aa99: #556658;
+	--ink-9bac9f: #485c4c;
+	--ink-9cb69e: #2b4632;
+	--ink-9eaf9d: #4f6353;
+	--ink-9fab9e: #556658;
+	--ink-a0ad9f: #4a5e4e;
+	--ink-a0c5ad: #2d553b;
+	--ink-a4b4aa: #4b6050;
+	--ink-a6c0a62e: rgba(30, 50, 35, 0.18);
+	--ink-a7b29f: #3a4e3f;
+	--ink-a7dbbf: #2a5a3d;
+	--ink-a8b8a5: #3e5443;
+	--ink-a8edbf15: rgba(24, 122, 71, 0.15);
+	--ink-a9c49c: #264a32;
+	--ink-aab99c50: rgba(30, 50, 35, 0.22);
+	--ink-b3d9bc: #25442f;
+	--ink-b5bead: #485e4d;
+	--ink-b8c4a912: rgba(30, 50, 35, 0.08);
+	--ink-b8c4a915: rgba(30, 50, 35, 0.09);
+	--ink-b8c4a925: rgba(30, 50, 35, 0.15);
+	--ink-b8ebc6: #187a47;
+	--ink-b8ebc6aa: rgba(24, 122, 71, 0.4);
+	--ink-b9ceb129: rgba(30, 50, 35, 0.12);
+	--ink-b9f1d1: #187a47;
+	--ink-bac4b0: #3f5544;
+	--ink-bacbad: #3f5544;
+	--ink-bcddbf: #187a47;
+	--ink-bddcc0: #25442f;
+	--ink-bed4b505: rgba(30, 50, 35, 0.04);
+	--ink-bfedd0: #187a47;
+	--ink-c0ccb6: #2f4534;
+	--ink-c0d9bd18: rgba(30, 50, 35, 0.1);
+	--ink-c3c9b9: #455a4a;
+	--ink-c3d6ae: #2b4632;
+	--ink-c4ceb9: #2f4534;
+	--ink-c8d4b3: #2d4c35;
+	--ink-c9d5b6: #2b4632;
+	--ink-cbdcba08: rgba(30, 50, 35, 0.08);
+	--ink-cce3bc09: rgba(37, 59, 44, 0.14);
+	--ink-cdd9b6: #253b2c;
+	--ink-d1f4d8: #187a47;
+	--ink-d4dfbd: #253b2c;
+	--ink-d4eed1: #187a47;
+	--ink-d6e9c7: #1d2c22;
+	--ink-d9dfca: #1d2c22;
+	--ink-d9e3c2: #253b2c;
+	--ink-daffe5: #187a47;
+	--ink-dbedca: #1d2c22;
+	--ink-e1e4d1: #1d2c22;
+	--ink-e1e8d1: #1d2c22;
+	--ink-e2e9d0: #1a2a1f;
+	--ink-e4c995: #b86512;
+	--ink-e4c99515: rgba(184, 101, 18, 0.15);
+	--ink-e4c99544: rgba(184, 101, 18, 0.3);
+	--ink-e4c99555: rgba(184, 101, 18, 0.45);
+	--ink-e6c38d: #b86512;
+	--ink-e6c38d14: rgba(184, 101, 18, 0.14);
+	--ink-e7e8d9: #1d2c22;
+	--ink-e7eadd: #1d2c22;
+	--ink-e8e8d9: #1d2c22;
+	--ink-e9c995: #b86512;
+}
+
+:root[data-theme='light'] body,
+:root[data-theme='light'] .experience {
+	background: #f6f5ee !important;
+}
+
+:root[data-theme='light'] .atmosphere {
+	display: none !important;
+}
+
+:root[data-theme='light'] aside {
+	background: #ffffff !important;
+	border-color: rgba(30, 50, 35, 0.12) !important;
+	box-shadow: 0 4px 24px rgba(30, 50, 35, 0.05);
+}
+
+:root[data-theme='light'] .start {
+	color: #fbfbf6 !important;
+}
+
+/* ==========================================================================
+   Global Site Navigation Integration
+   ========================================================================== */
+
+#main-nav-placeholder {
+	position: sticky;
+	top: 0;
+	z-index: 10000;
+}
+
+:root,
+:root[data-theme='oled'] {
+	background-color: #000000 !important;
+	background-image: none !important;
+}
+
+:root[data-theme='oled'] #main-nav-placeholder .xw-main-nav-header,
+:root:not([data-theme]) #main-nav-placeholder .xw-main-nav-header {
+	background: #000000 !important;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+:root[data-theme='dark'] {
+	background-color: #101918 !important;
+	background-image: none !important;
+}
+
+:root[data-theme='dark'] #main-nav-placeholder .xw-main-nav-header {
+	background: rgba(16, 25, 24, 0.96) !important;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+:root[data-theme='light'] {
+	background-color: #f6f5ee !important;
+	background-image: none !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .xw-main-nav-header {
+	background: rgba(246, 245, 238, 0.96) !important;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+	color: #17241f !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .logo,
+:root[data-theme='light'] #main-nav-placeholder .nav-top-link,
+:root[data-theme='light'] #main-nav-placeholder .nav-disclosure,
+:root[data-theme='light'] #main-nav-placeholder .nav-toggle {
+	color: #17241f !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .nav-chevron path {
+	stroke: #17241f !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .nav-dropdown {
+	background: rgba(246, 245, 238, 0.98) !important;
+	border-color: rgba(0, 0, 0, 0.1) !important;
+	color: #17241f !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .nav-submenu a {
+	color: #26372c !important;
+}
+
+:root[data-theme='light'] #main-nav-placeholder .nav-submenu a:hover {
+	background: rgba(0, 0, 0, 0.06) !important;
+	color: #0d1613 !important;
+}

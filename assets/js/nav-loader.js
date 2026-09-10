@@ -468,7 +468,7 @@
 
     ensureViewportFit();
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function runNavLoader() {
         ensureRecentTracker().then((api) => {
             if (api && typeof api.recordCurrentPage === 'function') {
                 api.recordCurrentPage();
@@ -476,7 +476,7 @@
         });
 
         const placeholder = document.getElementById('main-nav-placeholder');
-        if (!placeholder) return;
+        if (!placeholder || placeholder.classList.contains('nav-is-ready')) return;
 
         placeholder.setAttribute('aria-busy', 'true');
 
@@ -493,5 +493,11 @@
                 console.error('Error loading site navigation:', error);
                 renderFallback(placeholder);
             });
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runNavLoader);
+    } else {
+        runNavLoader();
+    }
 })();
