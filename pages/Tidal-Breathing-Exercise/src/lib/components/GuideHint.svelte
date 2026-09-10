@@ -1,75 +1,114 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 
 	let {
 		cycles = 0,
 		active = false,
+		dragging = false,
 		top = '81.25%',
 		right = 'calc(50% + 36px)',
 		left,
 		text = 'Follow this point with your finger',
-		autoDismissMs = 7000
+		dragDismissMs = 2000,
+		idleReappearMs = 1000
 	} = $props<{
 		cycles?: number;
 		active?: boolean;
+		dragging?: boolean;
 		top?: string;
 		right?: string;
 		left?: string;
 		text?: string;
-		autoDismissMs?: number;
+		dragDismissMs?: number;
+		idleReappearMs?: number;
 	}>();
 
-	let hasAppeared = $state(false);
-	let dismissed = $state(false);
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let visible = $state(false);
+	let dragTimer: ReturnType<typeof setTimeout> | null = null;
+	let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
-	function clearTimer() {
-		if (timer !== null) {
-			clearTimeout(timer);
-			timer = null;
+	function clearDragTimer() {
+		if (dragTimer !== null) {
+			clearTimeout(dragTimer);
+			dragTimer = null;
 		}
 	}
 
-	// 1. Trigger appearance once when active (halfway up first stroke)
-	$effect(() => {
-		if (active && cycles < 2 && !hasAppeared && !dismissed) {
-			hasAppeared = true;
+	function clearIdleTimer() {
+		if (idleTimer !== null) {
+			clearTimeout(idleTimer);
+			idleTimer = null;
 		}
-	});
+	}
 
-	// 2. Once appeared, start the auto-dismiss timer so it cleanly goes away after some time
+	function clearAllTimers() {
+		clearDragTimer();
+		clearIdleTimer();
+	}
+
+	let wasActive = false;
+	let wasDragging = false;
+
 	$effect(() => {
-		if (hasAppeared && !dismissed && timer === null) {
-			timer = setTimeout(() => {
-				dismissed = true;
-				timer = null;
-			}, autoDismissMs);
+		const currentActive = active;
+		const currentDragging = dragging;
+
+		// Rule 1: Only show up after halfway after the first stroke up
+		if (!currentActive) {
+			visible = false;
+			clearAllTimers();
+			wasActive = false;
+			wasDragging = currentDragging;
+			return;
 		}
-	});
 
-	// 3. When two cycles complete, dismiss immediately
-	$effect(() => {
-		if (cycles >= 2 && !dismissed) {
-			dismissed = true;
-			clearTimer();
+		// Halfway reached for the first time
+		if (!wasActive && currentActive) {
+			wasActive = true;
+			clearAllTimers();
+			visible = true;
+			if (currentDragging) {
+				// Rule 2: Disappear after two seconds of dragging
+				dragTimer = setTimeout(() => {
+					visible = false;
+					dragTimer = null;
+				}, dragDismissMs);
+			}
+			wasDragging = currentDragging;
+			return;
 		}
-	});
 
-	// 4. Reset when whole session restarts
-	$effect(() => {
-		if (!active && cycles === 0) {
-			hasAppeared = false;
-			dismissed = false;
-			clearTimer();
+		// While active, respond to touch and drag transitions
+		if (currentDragging !== wasDragging) {
+			if (currentDragging) {
+				// User started dragging / touching
+				clearIdleTimer();
+				if (untrack(() => visible)) {
+					// Rule 2: If visible, disappear after two seconds of dragging
+					clearDragTimer();
+					dragTimer = setTimeout(() => {
+						visible = false;
+						dragTimer = null;
+					}, dragDismissMs);
+				}
+			} else {
+				// User let go / stopped touching
+				clearDragTimer();
+				// Rule 3: If they let go and stop touching it, after a second it should reappear
+				clearIdleTimer();
+				idleTimer = setTimeout(() => {
+					visible = true;
+					idleTimer = null;
+				}, idleReappearMs);
+			}
+			wasDragging = currentDragging;
 		}
 	});
 
 	onDestroy(() => {
-		clearTimer();
+		clearAllTimers();
 	});
-
-	const visible = $derived(active && hasAppeared && !dismissed && cycles < 2);
 </script>
 
 {#if visible}

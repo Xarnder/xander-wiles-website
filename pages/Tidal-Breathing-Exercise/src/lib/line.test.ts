@@ -183,33 +183,184 @@ it('calculates slider fill height matching the target point throughout breath cy
 	expect(sliderFillSpan(0.875)).toBe(0);
 });
 
-it('dismisses guide hint after auto-dismiss timeout or 2 cycles', () => {
-	// Replicates GuideHint derived visibility state machine:
-	// visible = active && hasAppeared && !dismissed && cycles < 2
-	const isHintVisible = (params: {
-		active: boolean;
-		hasAppeared: boolean;
-		dismissed: boolean;
-		cycles: number;
-	}) => {
-		return params.active && params.hasAppeared && !params.dismissed && params.cycles < 2;
-	};
+it('enforces the 3 guide hint rules: halfway threshold, 2s drag dismiss, 1s idle reappear', () => {
+	// State machine simulating GuideHint's 3 rules
+	class GuideHintSimulator {
+		visible = false;
+		wasActive = false;
+		wasDragging = false;
+		dragTimerActive = false;
+		idleTimerActive = false;
 
-	// 1. Initial state: inactive
-	expect(isHintVisible({ active: false, hasAppeared: false, dismissed: false, cycles: 0 })).toBe(false);
+		update(active: boolean, dragging: boolean) {
+			// Rule 1: Only show up after halfway after first stroke up
+			if (!active) {
+				this.visible = false;
+				this.dragTimerActive = false;
+				this.idleTimerActive = false;
+				this.wasActive = false;
+				this.wasDragging = dragging;
+				return;
+			}
 
-	// 2. User drags halfway: appears
-	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 0 })).toBe(true);
+			// First time reaching halfway
+			if (!this.wasActive && active) {
+				this.wasActive = true;
+				this.visible = true;
+				this.idleTimerActive = false;
+				if (dragging) {
+					// Rule 2: Disappear after 2s of dragging
+					this.dragTimerActive = true;
+				}
+				this.wasDragging = dragging;
+				return;
+			}
 
-	// 3. User continues into cycle 1: still visible
-	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 1 })).toBe(true);
+			// Touch / drag transitions
+			if (dragging !== this.wasDragging) {
+				if (dragging) {
+					// User touched / started dragging
+					this.idleTimerActive = false;
+					if (this.visible) {
+						// Rule 2: Disappear after 2s of dragging
+						this.dragTimerActive = true;
+					}
+				} else {
+					// User let go / stopped touching
+					this.dragTimerActive = false;
+					// Rule 3: Reappear after 1s of not touching
+					this.idleTimerActive = true;
+				}
+				this.wasDragging = dragging;
+			}
+		}
 
-	// 4. Auto-dismiss timeout fires (dismissed = true): disappears even before cycle 2
-	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: true, cycles: 1 })).toBe(false);
+		simulateDrag2sTimeout() {
+			if (this.dragTimerActive) {
+				this.visible = false;
+				this.dragTimerActive = false;
+			}
+		}
 
-	// 5. Or 2 cycles completes without timeout (cycles = 2): disappears
-	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: false, cycles: 2 })).toBe(false);
+		simulateIdle1sTimeout() {
+			if (this.idleTimerActive) {
+				this.visible = true;
+				this.idleTimerActive = false;
+			}
+		}
+	}
 
-	// 6. Both timeout fired and 2 cycles complete: remains dismissed
-	expect(isHintVisible({ active: true, hasAppeared: true, dismissed: true, cycles: 2 })).toBe(false);
+	const sim = new GuideHintSimulator();
+
+	// Case 1: Initial page load (not active, not dragging) -> Hidden (Rule 1)
+	sim.update(false, false);
+	expect(sim.visible).toBe(false);
+
+	// Case 2: Dragging starts before halfway -> Still hidden (Rule 1)
+	sim.update(false, true);
+	expect(sim.visible).toBe(false);
+
+	// Case 3: Reaches halfway while dragging -> Appears immediately, drag timer starts (Rule 1 & 2)
+	sim.update(true, true);
+	expect(sim.visible).toBe(true);
+	expect(sim.dragTimerActive).toBe(true);
+
+	// Case 4: Drags continuously for 2 seconds -> Disappears (Rule 2)
+	sim.simulateDrag2sTimeout();
+	expect(sim.visible).toBe(false);
+
+	// Case 5: Lets go / stops touching -> Idle timer starts (Rule 3)
+	sim.update(true, false);
+	expect(sim.visible).toBe(false);
+	expect(sim.idleTimerActive).toBe(true);
+
+	// Case 6: Stays idle for 1 second -> Reappears (Rule 3)
+	sim.simulateIdle1sTimeout();
+	expect(sim.visible).toBe(true);
+
+	// Case 7: Touches and drags again while visible -> Drag timer starts (Rule 2)
+	sim.update(true, true);
+	expect(sim.visible).toBe(true);
+	expect(sim.dragTimerActive).toBe(true);
+
+	// Case 8: Drags for 2 seconds -> Disappears again (Rule 2)
+	sim.simulateDrag2sTimeout();
+	expect(sim.visible).toBe(false);
+
+	// Case 9: Lets go and stops touching again -> Reappears after 1 second (Rule 3)
+	sim.update(true, false);
+	sim.simulateIdle1sTimeout();
+	expect(sim.visible).toBe(true);
+
+	// Case 10: Session reset -> Immediately hidden until halfway reached again (Rule 1)
+	sim.update(false, false);
+	expect(sim.visible).toBe(false);
 });
+
+it('detects when user reaches target bpm with smooth hysteresis', () => {
+	class TargetPaceTracker {
+		atTarget = false;
+
+		update(running: boolean, cycles: number, currentRate: number | null, guideRate: number | null, target: number) {
+			if (!running || cycles < 1) {
+				this.atTarget = false;
+				return;
+			}
+			const effectiveRate = currentRate ?? guideRate;
+			if (effectiveRate !== null) {
+				const diff = Math.abs(effectiveRate - target);
+				if (!this.atTarget && diff <= 0.75) {
+					this.atTarget = true;
+				} else if (this.atTarget && diff > 1.35) {
+					this.atTarget = false;
+				}
+			} else {
+				this.atTarget = false;
+			}
+		}
+	}
+
+	const tracker = new TargetPaceTracker();
+	const target = 4.0;
+
+	// 1. Not running: false
+	tracker.update(false, 0, null, null, target);
+	expect(tracker.atTarget).toBe(false);
+
+	// 2. Running at cycle 0 (baseline calibration): false
+	tracker.update(true, 0, 14.0, 10.0, target);
+	expect(tracker.atTarget).toBe(false);
+
+	// 3. Fast breathing (12 bpm) at cycle 2: diff 8.0 -> false
+	tracker.update(true, 2, 12.0, 8.0, target);
+	expect(tracker.atTarget).toBe(false);
+
+	// 4. Slowing down (6.0 bpm): diff 2.0 -> false
+	tracker.update(true, 3, 6.0, 5.0, target);
+	expect(tracker.atTarget).toBe(false);
+
+	// 5. Reaches 4.5 bpm (diff 0.5 <= 0.75): AT TARGET! -> true
+	tracker.update(true, 4, 4.5, 4.0, target);
+	expect(tracker.atTarget).toBe(true);
+
+	// 6. Natural minor breathing fluctuation to 4.9 bpm (diff 0.9, <= 1.35 hysteresis): stays true!
+	tracker.update(true, 5, 4.9, 4.0, target);
+	expect(tracker.atTarget).toBe(true);
+
+	// 7. Perfect match 4.0 bpm (diff 0.0): stays true!
+	tracker.update(true, 6, 4.0, 4.0, target);
+	expect(tracker.atTarget).toBe(true);
+
+	// 8. User speeds up significantly to 6.2 bpm (diff 2.2 > 1.35): loses target -> false
+	tracker.update(true, 7, 6.2, 4.0, target);
+	expect(tracker.atTarget).toBe(false);
+
+	// 9. Returns down to 4.2 bpm (diff 0.2 <= 0.75): recovers target -> true!
+	tracker.update(true, 8, 4.2, 4.0, target);
+	expect(tracker.atTarget).toBe(true);
+
+	// 10. Session reset -> false
+	tracker.update(false, 0, null, null, target);
+	expect(tracker.atTarget).toBe(false);
+});
+

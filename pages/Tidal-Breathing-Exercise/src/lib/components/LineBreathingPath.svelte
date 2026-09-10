@@ -3,13 +3,14 @@
 	import { lineHeight, lineProgress, LineProgressTracker } from '$lib/line';
 	import DragHint from './DragHint.svelte';
 	import GuideHint from './GuideHint.svelte';
-	let { user, guide, running, calibrated, cycles, onmove, onbegin, onend } =
+	let { user, guide, running, calibrated, cycles, atTarget = false, onmove, onbegin, onend } =
 		$props<{
 			user: number;
 			guide: number;
 			running: boolean;
 			calibrated: boolean;
 			cycles: number;
+			atTarget?: boolean;
 			onmove: (p: number) => void;
 			onbegin: () => void;
 			onend: () => void;
@@ -138,6 +139,7 @@
 <div
 	class="field"
 	class:dragging
+	class:at-target={atTarget}
 	role="region"
 	aria-label="Interactive breathing line"
 	onpointerdown={start}
@@ -151,9 +153,38 @@
 			<filter id="line-glow" x="-200%" y="-200%" width="500%" height="500%">
 				<feGaussianBlur stdDeviation="7" />
 			</filter>
+			<filter id="track-target-aura" x="-200%" y="-200%" width="500%" height="500%">
+				<feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blurWide" />
+				<feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blurTight" />
+				<feMerge>
+					<feMergeNode in="blurWide" />
+					<feMergeNode in="blurTight" />
+					<feMergeNode in="SourceGraphic" />
+				</feMerge>
+			</filter>
 		</defs>
+		<!-- Target pace pulse glow aura: shines behind the rails across the entire slider track -->
+		{#if atTarget}
+			<path
+				class="track-glow-pulse-wide"
+				d="M 240 390 L 240 90"
+				stroke="var(--track-target-aura, var(--theme-guide, #38c8ff))"
+				stroke-width="54"
+				stroke-linecap="round"
+				filter="url(#track-target-aura)"
+			/>
+			<path
+				class="track-glow-pulse-core"
+				d="M 240 390 L 240 90"
+				stroke="var(--track-target-highlight, #7ae4ff)"
+				stroke-width="38"
+				stroke-linecap="round"
+			/>
+		{/if}
 		<!-- Outer rail borders: 36px wide with rounded capsule ends, centered at x=240 -->
 		<path
+			class="track-rail-path"
+			class:at-target={atTarget}
 			d="M 240 390 L 240 90"
 			stroke="var(--track-rail, #a0c5ad)"
 			stroke-opacity="var(--track-rail-opacity, 0.35)"
@@ -205,6 +236,7 @@
 			stroke="var(--theme-node-stroke, var(--ink-b3d9bc, #b3d9bc))"
 			stroke-width="2"
 			stroke-opacity={phase === 1 ? 1 : 0.45}
+			class:at-target={atTarget}
 		/>
 		<circle
 			cx="240"
@@ -214,6 +246,7 @@
 			stroke="var(--theme-node-stroke, var(--ink-b3d9bc, #b3d9bc))"
 			stroke-width="2"
 			stroke-opacity={phase === 3 ? 1 : 0.45}
+			class:at-target={atTarget}
 		/>
 		<!-- Guide point -->
 		<circle
@@ -261,6 +294,7 @@
 	<GuideHint
 		cycles={effectiveCycles}
 		active={hasReachedHalfway}
+		{dragging}
 		top={`${gy / 4.8}%`}
 		right="calc(50% + 36px)"
 	/>
@@ -322,5 +356,66 @@
 	}
 	.user-point:focus-visible {
 		outline: 2px solid var(--theme-user, var(--ink-e9c995, #e9c995));
+	}
+
+	/* Slow glowing pulse of the entire slider track when at target speed */
+	.track-glow-pulse-wide {
+		opacity: 0.55;
+		animation: trackAuraSlowPulse 4.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		pointer-events: none;
+	}
+
+	.track-glow-pulse-core {
+		opacity: 0.3;
+		animation: trackCoreSlowPulse 4.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		pointer-events: none;
+	}
+
+	.track-rail-path.at-target {
+		stroke: var(--track-target-aura, var(--theme-guide, #38c8ff));
+		stroke-opacity: 0.55;
+		filter: drop-shadow(0 0 14px var(--track-target-glow, rgba(56, 200, 255, 0.5)));
+		transition: stroke 0.8s ease, stroke-opacity 0.8s ease, filter 0.8s ease;
+	}
+
+	.field.at-target svg {
+		filter: drop-shadow(0 0 24px var(--track-target-glow, rgba(56, 200, 255, 0.4)));
+		transition: filter 1s ease;
+	}
+
+	circle.at-target {
+		stroke: var(--track-target-highlight, #7ae4ff);
+		filter: drop-shadow(0 0 8px var(--track-target-glow, rgba(56, 200, 255, 0.6)));
+		transition: stroke 0.8s ease, filter 0.8s ease;
+	}
+
+	@keyframes trackAuraSlowPulse {
+		0%, 100% {
+			opacity: 0.35;
+			stroke-width: 48px;
+		}
+		50% {
+			opacity: 0.85;
+			stroke-width: 62px;
+		}
+	}
+
+	@keyframes trackCoreSlowPulse {
+		0%, 100% {
+			opacity: 0.22;
+			stroke-width: 34px;
+		}
+		50% {
+			opacity: 0.62;
+			stroke-width: 42px;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.track-glow-pulse-wide,
+		.track-glow-pulse-core {
+			animation: none !important;
+			opacity: 0.45;
+		}
 	}
 </style>

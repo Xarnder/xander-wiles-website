@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { cubicInOut } from 'svelte/easing';
-	import type { TransitionConfig } from 'svelte/transition';
+	import { fade, type TransitionConfig } from 'svelte/transition';
 	import ThemeSelect from '$lib/components/ThemeSelect.svelte';
 	import '$lib/themes.css';
 	import BreathingPath from '$lib/components/BreathingPath.svelte';
@@ -16,11 +16,31 @@
 	let user = $state(0),
 		guide = $state(0),
 		cycles = $state(0),
-		currentRate = $state<number | null>(null);
+		currentRate = $state<number | null>(null),
+		guideRate = $state<number | null>(null);
 	let mode = $state<'line' | 'square'>('line');
+	let atTarget = $state(false);
 
 	const calibrated = $derived(cycles >= 2);
 	const phase = $derived(Math.floor(guide * 4));
+
+	$effect(() => {
+		if (!running || cycles < 1) {
+			atTarget = false;
+			return;
+		}
+		const effectiveRate = currentRate ?? guideRate;
+		if (effectiveRate !== null) {
+			const diff = Math.abs(effectiveRate - target);
+			if (!atTarget && diff <= 0.75) {
+				atTarget = true;
+			} else if (atTarget && diff > 1.35) {
+				atTarget = false;
+			}
+		} else {
+			atTarget = false;
+		}
+	});
 	const expansion = $derived(
 		phase === 0
 			? guide * 4
@@ -82,6 +102,7 @@
 		guide = session.guide;
 		cycles = Math.max(session.cycles, session.guideCycles);
 		currentRate = session.currentRate;
+		guideRate = session.guideRate;
 	}
 	function toggle() {
 		running = !running;
@@ -92,6 +113,7 @@
 		session = new BreathingSession();
 		running = false;
 		started = false;
+		atTarget = false;
 		sync();
 	}
 
@@ -148,7 +170,13 @@
 					<h2 in:cubeIn out:cubeOut class="cube-face">{phaseText}</h2>
 				{/key}
 			</div>
-			{#if running && !calibrated}
+			{#if atTarget}
+				<div class="target-badge" in:fade={{ duration: 350 }} out:fade={{ duration: 250 }}>
+					<span class="target-badge-sparkle" aria-hidden="true">✦</span>
+					<span class="target-badge-text">Well done — perfect target speed</span>
+					<span class="target-badge-sparkle" aria-hidden="true">✦</span>
+				</div>
+			{:else if running && !calibrated}
 				<p class="calibration-note">{cycles} of 2 calibration breaths</p>
 			{/if}
 		</div>
@@ -161,6 +189,7 @@
 				{running}
 				{calibrated}
 				{cycles}
+				{atTarget}
 				onbegin={() => {
 					running = true;
 					started = true;
@@ -193,9 +222,16 @@
 				{started}
 				{target}
 				{currentRate}
+				{atTarget}
 				ontoggle={toggle}
 				onreset={reset}
-				onchange={(v) => (target = v)}
+				onchange={(v) => {
+					target = v;
+					const rate = currentRate ?? guideRate;
+					if (rate !== null && Math.abs(rate - v) > 1.35) {
+						atTarget = false;
+					}
+				}}
 			/>
 		</div>
 	</main>
@@ -351,6 +387,68 @@
 		color: var(--ink-a7b29f, #a7b29f);
 		margin: 4px 0 0;
 		letter-spacing: 0.02em;
+	}
+
+	.target-badge {
+		margin-top: 4px;
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding: 4px 13px 4px 11px;
+		border-radius: 999px;
+		background: var(--target-badge-bg, rgba(0, 24, 38, 0.88));
+		border: 1px solid var(--target-badge-border, rgba(79, 227, 255, 0.55));
+		box-shadow: 0 2px 12px var(--target-badge-glow, rgba(56, 200, 255, 0.35)),
+			0 0 16px var(--target-badge-glow, rgba(56, 200, 255, 0.25));
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		user-select: none;
+		-webkit-user-select: none;
+		animation: targetBadgeGlowPulse 4.2s ease-in-out infinite;
+	}
+
+	.target-badge-sparkle {
+		font-size: 11px;
+		color: var(--theme-guide, #4fe3ff);
+		animation: sparkleTwinkle 2.5s ease-in-out infinite;
+	}
+
+	.target-badge-text {
+		font-family: 'Quicksand', 'Nunito', ui-rounded, sans-serif;
+		font-size: 11.5px;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		color: var(--target-badge-text, #e0f7ff);
+		white-space: nowrap;
+	}
+
+	@keyframes targetBadgeGlowPulse {
+		0%, 100% {
+			box-shadow: 0 2px 10px var(--target-badge-glow, rgba(56, 200, 255, 0.3)),
+				0 0 14px var(--target-badge-glow, rgba(56, 200, 255, 0.2));
+		}
+		50% {
+			box-shadow: 0 2px 16px var(--target-badge-glow, rgba(56, 200, 255, 0.55)),
+				0 0 24px var(--target-badge-glow, rgba(56, 200, 255, 0.35));
+		}
+	}
+
+	@keyframes sparkleTwinkle {
+		0%, 100% {
+			transform: scale(0.9);
+			opacity: 0.7;
+		}
+		50% {
+			transform: scale(1.15);
+			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.target-badge,
+		.target-badge-sparkle {
+			animation: none !important;
+		}
 	}
 
 	.practice {

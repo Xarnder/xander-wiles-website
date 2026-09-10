@@ -36,8 +36,16 @@
 	--water-surface: rgba(85, 205, 255, 0.65);
 	--water-top: rgba(28, 125, 210, 0.26);
 	--water-bottom: rgba(0, 8, 24, 0.96);
-	--water-glow: rgba(60, 175, 255, 0.18);
 	--fish-silhouette: rgba(100, 210, 255, 0.42);
+
+	/* Target bpm achieved track glow & badge tokens */
+	--track-target-glow: rgba(56, 200, 255, 0.5);
+	--track-target-aura: #38c8ff;
+	--track-target-highlight: #7ae4ff;
+	--target-badge-bg: rgba(0, 24, 38, 0.88);
+	--target-badge-border: rgba(79, 227, 255, 0.55);
+	--target-badge-text: #e0f7ff;
+	--target-badge-glow: rgba(56, 200, 255, 0.4);
 
 	/* Drag up hint guidance tokens */
 	--hint-bg: rgba(0, 18, 29, 0.9);
@@ -166,8 +174,16 @@
 	--water-surface: rgba(135, 210, 255, 0.6);
 	--water-top: rgba(35, 115, 185, 0.32);
 	--water-bottom: rgba(8, 24, 46, 0.85);
-	--water-glow: rgba(70, 175, 255, 0.22);
 	--fish-silhouette: rgba(145, 215, 255, 0.4);
+
+	/* Target bpm achieved track glow & badge tokens */
+	--track-target-glow: rgba(185, 241, 209, 0.5);
+	--track-target-aura: #b9f1d1;
+	--track-target-highlight: #daffe5;
+	--target-badge-bg: rgba(18, 34, 27, 0.9);
+	--target-badge-border: rgba(185, 241, 209, 0.55);
+	--target-badge-text: #e8faee;
+	--target-badge-glow: rgba(110, 250, 192, 0.35);
 
 	/* Drag up hint guidance tokens */
 	--hint-bg: rgba(23, 36, 31, 0.92);
@@ -282,8 +298,16 @@
 	--water-surface: rgba(24, 115, 185, 0.48);
 	--water-top: rgba(80, 160, 225, 0.28);
 	--water-bottom: rgba(175, 205, 235, 0.68);
-	--water-glow: rgba(65, 155, 235, 0.16);
 	--fish-silhouette: rgba(20, 70, 130, 0.32);
+
+	/* Target bpm achieved track glow & badge tokens */
+	--track-target-glow: rgba(24, 122, 71, 0.35);
+	--track-target-aura: #187a47;
+	--track-target-highlight: #22c55e;
+	--target-badge-bg: rgba(255, 255, 255, 0.94);
+	--target-badge-border: rgba(24, 122, 71, 0.45);
+	--target-badge-text: #0f4f2c;
+	--target-badge-glow: rgba(24, 122, 71, 0.25);
 
 	/* Drag up hint guidance tokens */
 	--hint-bg: rgba(255, 255, 255, 0.94);

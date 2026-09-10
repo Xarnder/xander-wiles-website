@@ -1,9 +1,10 @@
 <script lang="ts">
-	let { running, started, target, currentRate = null, ontoggle, onreset, onchange } = $props<{
+	let { running, started, target, currentRate = null, atTarget = false, ontoggle, onreset, onchange } = $props<{
 		running: boolean;
 		started: boolean;
 		target: number;
 		currentRate?: number | null;
+		atTarget?: boolean;
 		ontoggle: () => void;
 		onreset: () => void;
 		onchange: (v: number) => void;
@@ -25,7 +26,7 @@
 		>↺</button>
 	</div>
 	<div class="target">
-		<div class="rates-bar">
+		<div class="rates-bar" class:at-target={atTarget}>
 			<div class="rate-stat">
 				<span class="rate-label" title="Current breathing speed based on last 3 cycles">Current</span>
 				<strong class="rate-value current-val">
@@ -148,6 +149,11 @@
 	}
 	.current-val {
 		color: var(--theme-user, #f5b958);
+	}
+	.rates-bar.at-target .current-val {
+		color: var(--theme-guide, #6efac0);
+		text-shadow: 0 0 12px var(--track-target-glow, rgba(56, 200, 255, 0.45));
+		transition: color 0.5s ease, text-shadow 0.5s ease;
 	}
 	.target-val {
 		color: var(--theme-guide, #6efac0);

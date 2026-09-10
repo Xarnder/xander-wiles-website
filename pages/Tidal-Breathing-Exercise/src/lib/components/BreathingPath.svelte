@@ -8,6 +8,7 @@
 		running: boolean;
 		calibrated: boolean;
 		cycles: number;
+		atTarget?: boolean;
 		onmove: (p: number) => void;
 		onbegin: () => void;
 		onend: () => void;

@@ -3,13 +3,14 @@
 	import { pathData, nearestPosition, type PathPoint } from '$lib/geometry';
 	import { signedDistance, wrap } from '$lib/breathing';
 	import DragHint from './DragHint.svelte';
-	let { user, guide, running, calibrated, cycles, onmove, onbegin, onend } =
+	let { user, guide, running, calibrated, cycles, atTarget = false, onmove, onbegin, onend } =
 		$props<{
 			user: number;
 			guide: number;
 			running: boolean;
 			calibrated: boolean;
 			cycles: number;
+			atTarget?: boolean;
 			onmove: (position: number) => void;
 			onbegin: () => void;
 			onend: () => void;
@@ -87,7 +88,7 @@
 	}
 </script>
 
-<div class="field" class:sync class:dragging>
+<div class="field" class:sync class:dragging class:at-target={atTarget}>
 	<svg bind:this={svg} viewBox="0 0 480 480" aria-hidden="true">
 		<defs>
 			<radialGradient id="membrane"
@@ -103,6 +104,15 @@
 			<filter id="soft" x="-100%" y="-100%" width="300%" height="300%"
 				><feGaussianBlur stdDeviation="6" /></filter
 			>
+			<filter id="square-target-aura" x="-200%" y="-200%" width="500%" height="500%">
+				<feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blurWide" />
+				<feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blurTight" />
+				<feMerge>
+					<feMergeNode in="blurWide" />
+					<feMergeNode in="blurTight" />
+					<feMergeNode in="SourceGraphic" />
+				</feMerge>
+			</filter>
 		</defs>
 		<!-- Membrane center backdrop -->
 		<path
@@ -110,8 +120,30 @@
 			fill="url(#membrane)"
 			stroke="none"
 		/>
+		<!-- Target pace pulse glow aura: shines behind the rails across the square perimeter -->
+		{#if atTarget}
+			<path
+				class="track-glow-pulse-wide"
+				d={pathData}
+				fill="none"
+				stroke="var(--track-target-aura, var(--theme-guide, #38c8ff))"
+				stroke-width="54"
+				stroke-linejoin="round"
+				filter="url(#square-target-aura)"
+			/>
+			<path
+				class="track-glow-pulse-core"
+				d={pathData}
+				fill="none"
+				stroke="var(--track-target-highlight, #7ae4ff)"
+				stroke-width="38"
+				stroke-linejoin="round"
+			/>
+		{/if}
 		<!-- Outer rail borders: 36px wide with smooth rounded joins -->
 		<path
+			class="track-rail-path"
+			class:at-target={atTarget}
 			d={pathData}
 			fill="none"
 			stroke="var(--track-rail, #a0c5ad)"
@@ -238,5 +270,60 @@
 	}
 	.sync svg {
 		filter: drop-shadow(0 0 3px var(--ink-a8edbf15, #a8edbf15));
+	}
+
+	/* Slow glowing pulse of the square track when at target speed */
+	.track-glow-pulse-wide {
+		opacity: 0.55;
+		animation: trackAuraSlowPulse 4.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		pointer-events: none;
+	}
+
+	.track-glow-pulse-core {
+		opacity: 0.3;
+		animation: trackCoreSlowPulse 4.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		pointer-events: none;
+	}
+
+	.track-rail-path.at-target {
+		stroke: var(--track-target-aura, var(--theme-guide, #38c8ff));
+		stroke-opacity: 0.55;
+		filter: drop-shadow(0 0 14px var(--track-target-glow, rgba(56, 200, 255, 0.5)));
+		transition: stroke 0.8s ease, stroke-opacity 0.8s ease, filter 0.8s ease;
+	}
+
+	.field.at-target svg {
+		filter: drop-shadow(0 0 24px var(--track-target-glow, rgba(56, 200, 255, 0.4)));
+		transition: filter 1s ease;
+	}
+
+	@keyframes trackAuraSlowPulse {
+		0%, 100% {
+			opacity: 0.35;
+			stroke-width: 48px;
+		}
+		50% {
+			opacity: 0.85;
+			stroke-width: 62px;
+		}
+	}
+
+	@keyframes trackCoreSlowPulse {
+		0%, 100% {
+			opacity: 0.22;
+			stroke-width: 34px;
+		}
+		50% {
+			opacity: 0.62;
+			stroke-width: 42px;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.track-glow-pulse-wide,
+		.track-glow-pulse-core {
+			animation: none !important;
+			opacity: 0.45;
+		}
 	}
 </style>
