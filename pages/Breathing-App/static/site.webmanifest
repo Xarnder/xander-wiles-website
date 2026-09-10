@@ -1,0 +1,21 @@
+{
+	"name": "Still \u2014 Adaptive Breathing",
+	"short_name": "Still",
+	"start_url": "./",
+	"scope": "./",
+	"display": "standalone",
+	"theme_color": "#101918",
+	"background_color": "#101918",
+	"icons": [
+		{
+			"src": "icons/android-chrome-192x192.png",
+			"sizes": "192x192",
+			"type": "image/png"
+		},
+		{
+			"src": "icons/android-chrome-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png"
+		}
+	]
+}
