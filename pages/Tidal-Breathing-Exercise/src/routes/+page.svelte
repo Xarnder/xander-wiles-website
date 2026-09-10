@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { cubicInOut } from 'svelte/easing';
 	import type { TransitionConfig } from 'svelte/transition';
-	import { base } from '$app/paths';
 	import ThemeSelect from '$lib/components/ThemeSelect.svelte';
 	import '$lib/themes.css';
 	import BreathingPath from '$lib/components/BreathingPath.svelte';
@@ -13,7 +12,7 @@
 	let session = new BreathingSession();
 	let running = $state(false),
 		started = $state(false),
-		target = $state(6);
+		target = $state(4);
 	let user = $state(0),
 		guide = $state(0),
 		cycles = $state(0),
@@ -137,21 +136,7 @@
 
 	<header>
 		<a href="/" rel="external" class="wordmark" title="Back to Xander Wiles Home">
-			<img
-				src="{base}/icons/favicon-dark.svg"
-				alt=""
-				class="title-icon favicon-dark"
-				width="22"
-				height="22"
-			/>
-			<img
-				src="{base}/icons/favicon-light.svg"
-				alt=""
-				class="title-icon favicon-light"
-				width="22"
-				height="22"
-			/>
-			Tidal Breathing<span class="period">.</span>
+			Tidal Breathing
 		</a>
 		<ThemeSelect />
 	</header>
@@ -305,24 +290,6 @@
 	.wordmark:hover {
 		opacity: 0.82;
 	}
-	.title-icon {
-		width: 22px;
-		height: 22px;
-		margin-right: 8px;
-		border-radius: 5px;
-		vertical-align: -2px;
-		flex-shrink: 0;
-		display: inline-block;
-	}
-	:global(:root[data-theme='light']) .favicon-dark {
-		display: none !important;
-	}
-	:global(:root:not([data-theme='light'])) .favicon-light {
-		display: none !important;
-	}
-	.period {
-		color: var(--ink-a9c49c, #a9c49c);
-	}
 
 	main {
 		position: relative;
@@ -425,8 +392,10 @@
 		font-weight: 600;
 	}
 	:global(:root[data-theme='oled']) .mode-switch button[aria-pressed='true'] {
-		background: rgba(255, 255, 255, 0.15);
-		color: #ffffff;
+		background: rgba(56, 200, 255, 0.18);
+		border-color: rgba(56, 200, 255, 0.45);
+		color: #38c8ff;
+		box-shadow: 0 0 12px rgba(56, 200, 255, 0.2);
 	}
 	:global(:root[data-theme='light']) .mode-switch button[aria-pressed='true'] {
 		background: #253b2c;

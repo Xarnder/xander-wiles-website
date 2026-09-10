@@ -45,7 +45,7 @@
 		<input
 			id="target"
 			type="range"
-			min="4"
+			min="2"
 			max="10"
 			step="0.5"
 			value={target}
@@ -204,5 +204,35 @@
 	input:focus-visible {
 		outline: 2px solid var(--ink-e9c995, #e9c995);
 		outline-offset: 3px;
+	}
+
+	:global(:root[data-theme='oled']) .start {
+		box-shadow: 0 0 24px rgba(56, 200, 255, 0.38);
+	}
+	:global(:root[data-theme='oled']) .start:hover {
+		box-shadow: 0 0 32px rgba(56, 200, 255, 0.6);
+	}
+	:global(:root[data-theme='oled']) .reset {
+		border-color: rgba(56, 200, 255, 0.3);
+		color: #88d4f5;
+	}
+	:global(:root[data-theme='oled']) .reset:hover {
+		border-color: rgba(56, 200, 255, 0.65);
+		color: #ffffff;
+		box-shadow: 0 0 16px rgba(56, 200, 255, 0.3);
+	}
+	:global(:root[data-theme='oled']) input::-webkit-slider-runnable-track {
+		background: rgba(56, 200, 255, 0.25);
+	}
+	:global(:root[data-theme='oled']) input::-webkit-slider-thumb {
+		background: #38c8ff;
+		box-shadow: 0 0 14px rgba(56, 200, 255, 0.5);
+	}
+	:global(:root[data-theme='oled']) input::-moz-range-track {
+		background: rgba(56, 200, 255, 0.25);
+	}
+	:global(:root[data-theme='oled']) input::-moz-range-thumb {
+		background: #38c8ff;
+		box-shadow: 0 0 14px rgba(56, 200, 255, 0.5);
 	}
 </style>

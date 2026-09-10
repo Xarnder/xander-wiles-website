@@ -116,7 +116,7 @@
 			cy="90"
 			r="11"
 			fill="var(--theme-node-fill, var(--ink-182a22, #182a22))"
-			stroke="var(--ink-b3d9bc, #b3d9bc)"
+			stroke="var(--theme-node-stroke, var(--ink-b3d9bc, #b3d9bc))"
 			stroke-width="2"
 			stroke-opacity={phase === 1 ? 1 : 0.45}
 		/>
@@ -125,7 +125,7 @@
 			cy="390"
 			r="11"
 			fill="var(--theme-node-fill, var(--ink-182a22, #182a22))"
-			stroke="var(--ink-b3d9bc, #b3d9bc)"
+			stroke="var(--theme-node-stroke, var(--ink-b3d9bc, #b3d9bc))"
 			stroke-width="2"
 			stroke-opacity={phase === 3 ? 1 : 0.45}
 		/>
@@ -201,18 +201,23 @@
 	.user-point span {
 		width: 18px;
 		height: 18px;
-		background: var(--ink-e9c995, #e9c995);
-		border: 3px solid var(--ink-26372c, #26372c);
+		background: var(--theme-user, var(--ink-e9c995, #e9c995));
+		border: 3px solid var(--theme-user-border, var(--ink-26372c, #26372c));
 		border-radius: 50%;
 		box-shadow:
-			0 0 0 1px var(--ink-e4c995, #e4c995),
-			0 0 24px var(--ink-e4c99544, #e4c99544);
+			0 0 0 1px var(--theme-user, var(--ink-e4c995, #e4c995)),
+			0 0 24px var(--theme-user-glow, var(--ink-e4c99544, #e4c99544));
 		pointer-events: none;
 	}
 	.dragging .user-point {
 		cursor: grabbing;
 	}
+	.dragging .user-point span {
+		box-shadow:
+			0 0 0 7px var(--theme-user-ring, var(--ink-e4c99515, #e4c99515)),
+			0 0 26px var(--theme-user-glow-active, var(--ink-e4c99555, #e4c99555));
+	}
 	.user-point:focus-visible {
-		outline: 2px solid var(--ink-e9c995, #e9c995);
+		outline: 2px solid var(--theme-user, var(--ink-e9c995, #e9c995));
 	}
 </style>

@@ -59,7 +59,7 @@ export class BreathingSession {
 		const duration = (this.elapsed - this.lapStarted!) / 1000;
 		this.travel = 0;
 		this.lapStarted = this.elapsed;
-		if (duration < 1.5 || duration > 32) return; // 2–40 breaths/minute measurement bounds.
+		if (duration < 1.5 || duration > 40) return; // 1.5–40 breaths/minute measurement bounds.
 		this.samples.push(duration);
 		if (this.samples.length > 5) this.samples.shift();
 		const sorted = [...this.samples].sort((a, b) => a - b);
@@ -79,9 +79,9 @@ export class BreathingSession {
 	}
 	tick(milliseconds: number, target: number) {
 		this.elapsed += milliseconds;
-		const targetPace = clamp(target, 4, 10);
+		const targetPace = clamp(target, 2, 10);
 		// Start with a natural initial pace that can actively lead down to target
-		this.guideRate ??= Math.max(targetPace + 4, 10);
+		this.guideRate ??= Math.max(targetPace + 2, 6);
 		const next = this.guideTime + (milliseconds * this.guideRate) / 60000;
 		if (next >= 1) {
 			if (this.measured !== null && (!this.calibrated || !this.learnedGuideRate)) {
@@ -97,7 +97,7 @@ export class BreathingSession {
 					const step = Math.max(1.0, (targetPace - this.guideRate) * 0.4);
 					this.guideRate = Math.min(targetPace, this.guideRate + step);
 				}
-				this.guideRate = clamp(this.guideRate, 3, 30);
+				this.guideRate = clamp(this.guideRate, 2, 30);
 			}
 		}
 		this.guideTime = wrap(next);

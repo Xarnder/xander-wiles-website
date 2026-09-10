@@ -139,6 +139,23 @@ describe('breathing engine', () => {
 		}
 		expect(s.guideRate!).toBeGreaterThan(rate);
 	});
+	it('allows target pace and guide rate down to 2 bpm and records slow 30s cycles', () => {
+		const s = new BreathingSession();
+		s.begin();
+		// Advance session toward target = 2 bpm (allowing laps to complete)
+		for (let i = 0; i < 60; i++) {
+			s.tick(1000, 2);
+		}
+		expect(s.guideRate!).toBe(2);
+		// Start a fresh 30s breath cycle (2 bpm)
+		s.begin();
+		for (let i = 0; i < 200; i++) {
+			s.tick(30000 / 200, 2);
+			s.move((s.user + 0.005) % 1);
+		}
+		expect(s.cycles).toBe(1);
+		expect(s.currentRate).toBeCloseTo(2, 0);
+	});
 	it('round-trips configurable phase timing, including wrap', () => {
 		for (let i = 0; i < 100; i++)
 			expect(pathToTime(timeToPath(i / 100))).toBeCloseTo(i / 100);
