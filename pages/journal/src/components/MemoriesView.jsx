@@ -4,9 +4,10 @@ import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, parseISO, startOfWeek, endOfWeek, getMonth, getYear } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { History, Star, Calendar, MessageSquare, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { History, Star, Calendar, MessageSquare, ChevronRight, Image as ImageIcon, Clock } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import { subEntriesToPlainText } from '../utils/entrySections';
+import DateOffsetTool from './DateOffsetTool';
 
 // Reuse stop words for extracting standard title pattern
 const extractTitle = (content, storedTitle) => {
@@ -285,6 +286,18 @@ export default function MemoriesView() {
                 <p className="text-text-muted mt-2 relative z-10 max-w-2xl">
                     Look back on your journey. Rediscover entries from exactly &quot;on this day&quot; in the past — a week, a month, or years ago — or browse your deepest thoughts from recent weeks and months.
                 </p>
+            </div>
+
+            {/* Custom Time Travel by Date Offset */}
+            <div className="glass-card p-5 sm:p-6 border border-white/10 space-y-4">
+                <div className="flex items-center gap-2.5">
+                    <Clock className="w-5 h-5 text-primary" />
+                    <div>
+                        <h3 className="text-lg font-serif font-bold text-white">Custom Time Travel</h3>
+                        <p className="text-xs text-text-muted">Jump back to an exact interval (e.g. 1 year, 2 months, 3 weeks ago) or the closest matching entry.</p>
+                    </div>
+                </div>
+                <DateOffsetTool autoFocus={false} />
             </div>
 
             {/* On This Day Section */}

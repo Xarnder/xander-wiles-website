@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, Settings } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, Settings, Clock } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
@@ -60,6 +60,7 @@ export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchInitialTab, setSearchInitialTab] = useState('search');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
@@ -162,6 +163,7 @@ export default function Layout() {
         const handleKeyDown = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
                 e.preventDefault();
+                setSearchInitialTab('search');
                 setIsSearchOpen(prev => !prev);
             }
         };
@@ -263,7 +265,11 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex flex-col font-body text-text">
-            <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+            <SearchModal
+                isOpen={isSearchOpen}
+                onClose={() => setIsSearchOpen(false)}
+                initialTab={searchInitialTab}
+            />
             <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
@@ -318,7 +324,10 @@ export default function Layout() {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setIsSearchOpen(true)}
+                                        onClick={() => {
+                                            setSearchInitialTab('search');
+                                            setIsSearchOpen(true);
+                                        }}
                                         className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                         title="Search (Cmd+K)"
                                         aria-label="Search journal"
@@ -392,6 +401,19 @@ export default function Layout() {
 
                         <button
                             type="button"
+                            onClick={() => {
+                                setSearchInitialTab('date-offset');
+                                setIsSearchOpen(true);
+                            }}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isSearchOpen && searchInitialTab === 'date-offset' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            title="Time Travel (Jump by date offset)"
+                            aria-label="Time travel by date offset"
+                        >
+                            <Clock className="h-5 w-5" />
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => navigate('/pdf-export')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/pdf-export' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Export PDF"
@@ -446,7 +468,10 @@ export default function Layout() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setIsSearchOpen(true)}
+                                    onClick={() => {
+                                        setSearchInitialTab('search');
+                                        setIsSearchOpen(true);
+                                    }}
                                     className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                     aria-label="Search journal"
                                     aria-expanded={isSearchOpen}
@@ -482,6 +507,18 @@ export default function Layout() {
                                 <NavItem path="/stats" icon={BarChart} label="Stats" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/tags" icon={Tag} label="Tags" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/memories" icon={History} label="Memories" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsMobileMenuOpen(false);
+                                        setSearchInitialTab('date-offset');
+                                        setIsSearchOpen(true);
+                                    }}
+                                    className="flex items-center w-full px-4 py-3 rounded-lg text-text-muted hover:bg-white/5 hover:text-white transition-all duration-200"
+                                >
+                                    <Clock className="h-5 w-5 mr-3 text-primary" />
+                                    <span className="font-medium">Time Travel</span>
+                                </button>
                                 <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/settings" icon={Settings} label="Settings" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                             </>

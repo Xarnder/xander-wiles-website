@@ -13,9 +13,10 @@ import {
     startAfter,
     documentId
 } from 'firebase/firestore';
-import { Search, X, Calendar, AlertTriangle } from 'lucide-react';
+import { Search, X, Calendar, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import Modal from './Modal';
+import DateOffsetTool from './DateOffsetTool';
 
 const BATCH_SIZE = 500;
 const INDEX_REQUEST_TIMEOUT_MS = 12000;
@@ -53,9 +54,15 @@ function mapEntryDoc(entryDoc) {
     };
 }
 
-export default function SearchModal({ isOpen, onClose }) {
+export default function SearchModal({ isOpen, onClose, initialTab = 'search' }) {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState(initialTab);
+    const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
+    if (initialTab !== prevInitialTab) {
+        setPrevInitialTab(initialTab);
+        setActiveTab(initialTab);
+    }
     const [queryText, setQueryText] = useState('');
     const [searchMode, setSearchMode] = useState('any'); // 'any' | 'phrase'
     const [entries, setEntries] = useState([]);
@@ -222,20 +229,23 @@ export default function SearchModal({ isOpen, onClose }) {
         indexStatusRef.current = 'idle';
     }, [currentUser?.uid]);
 
-    // Focus input when opened; index only once until ready/error (no auto-retry loop).
+    // Focus input when opened on search tab; index only once until ready/error (no auto-retry loop).
     useEffect(() => {
         if (!isOpen) return undefined;
 
-        const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 100);
+        if (activeTab === 'search') {
+            const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 100);
 
-        if (indexStatusRef.current === 'idle') {
-            indexEntriesRef.current?.();
+            if (indexStatusRef.current === 'idle') {
+                indexEntriesRef.current?.();
+            }
+
+            return () => {
+                window.clearTimeout(focusTimer);
+            };
         }
-
-        return () => {
-            window.clearTimeout(focusTimer);
-        };
-    }, [isOpen, currentUser?.uid]);
+        return undefined;
+    }, [isOpen, activeTab, currentUser?.uid]);
 
     // Cancel an in-flight index if the modal unmounts.
     useEffect(() => () => {
@@ -298,152 +308,192 @@ export default function SearchModal({ isOpen, onClose }) {
             isOpen={isOpen}
             onClose={onClose}
             labelledBy="journal-search-title"
-            initialFocusRef={inputRef}
-            containerClassName="items-start justify-center pt-20 px-4"
-            className="bg-surface w-full max-w-2xl rounded-xl shadow-2xl border border-border flex flex-col max-h-[80vh] overflow-hidden"
+            initialFocusRef={activeTab === 'search' ? inputRef : undefined}
+            containerClassName="items-start justify-center pt-6 sm:pt-20 px-2 sm:px-4"
+            className="bg-surface w-full max-w-2xl rounded-xl shadow-2xl border border-border flex flex-col max-h-[90vh] sm:max-h-[85vh] overflow-hidden"
         >
-            <div className="p-4 border-b border-border bg-white/5 space-y-4">
-                <div className="flex items-center justify-between">
-                    <h2 id="journal-search-title" className="text-lg font-bold text-text flex items-center">
-                        <Search className="w-5 h-5 mr-2 text-primary" />
-                        Search Journal
-                    </h2>
-                    <button type="button" onClick={onClose} aria-label="Close search" className="text-text-muted hover:text-text transition-colors">
-                        <X className="w-6 h-6" />
+            <div className="p-3 sm:p-4 border-b border-border bg-white/5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('search')}
+                            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                                activeTab === 'search'
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Search className="w-4 h-4" />
+                            <span>Search</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('date-offset')}
+                            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                                activeTab === 'date-offset'
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Clock className="w-4 h-4" />
+                            <span>Time Travel</span>
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close dialog"
+                        className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                    >
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={queryText}
-                        onChange={(e) => {
-                            setQueryText(e.target.value);
-                            setActiveIndex(e.target.value.trim() ? 0 : -1);
-                        }}
-                        onKeyDown={handleInputKeyDown}
-                        placeholder="Search your memories..."
-                        aria-controls="journal-search-results"
-                        aria-activedescendant={activeIndex >= 0 ? `search-result-${activeIndex}` : undefined}
-                        className="w-full glass-input py-3 pl-10 pr-4"
-                    />
-                </div>
+                {activeTab === 'search' && (
+                    <>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={queryText}
+                                onChange={(e) => {
+                                    setQueryText(e.target.value);
+                                    setActiveIndex(e.target.value.trim() ? 0 : -1);
+                                }}
+                                onKeyDown={handleInputKeyDown}
+                                placeholder="Search your memories..."
+                                aria-controls="journal-search-results"
+                                aria-activedescendant={activeIndex >= 0 ? `search-result-${activeIndex}` : undefined}
+                                className="w-full glass-input py-3 pl-10 pr-4"
+                            />
+                        </div>
 
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                        <label className="flex items-center space-x-2 text-sm text-text-muted cursor-pointer hover:text-white transition-colors group select-none">
-                            <div className="relative">
-                                <input
-                                    type="checkbox"
-                                    checked={searchMode === 'phrase'}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                <label className="flex items-center space-x-2 text-sm text-text-muted cursor-pointer hover:text-white transition-colors group select-none">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={searchMode === 'phrase'}
+                                            onChange={(e) => {
+                                                setSearchMode(e.target.checked ? 'phrase' : 'any');
+                                                setActiveIndex(0);
+                                            }}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-secondary/30 peer-checked:border-secondary/50 transition-all duration-300"></div>
+                                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-secondary"></div>
+                                    </div>
+                                    <span className={`${searchMode === 'phrase' ? 'text-secondary font-bold' : ''}`}>Exact Phrase</span>
+                                </label>
+
+                                <select
+                                    value={selectedYear}
                                     onChange={(e) => {
-                                        setSearchMode(e.target.checked ? 'phrase' : 'any');
+                                        setSelectedYear(e.target.value);
                                         setActiveIndex(0);
                                     }}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-secondary/30 peer-checked:border-secondary/50 transition-all duration-300"></div>
-                                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-secondary"></div>
+                                    className="glass-input py-1 px-2"
+                                >
+                                    {availableYears.map((year) => (
+                                        <option key={year} value={year}>{year}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <span className={`${searchMode === 'phrase' ? 'text-secondary font-bold' : ''}`}>Exact Phrase</span>
-                        </label>
-
-                        <select
-                            value={selectedYear}
-                            onChange={(e) => {
-                                setSelectedYear(e.target.value);
-                                setActiveIndex(0);
-                            }}
-                            className="glass-input py-1 px-2"
-                        >
-                            {availableYears.map((year) => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="text-xs text-text-muted">
-                        {results.length} results found
-                    </div>
-                </div>
+                            <div className="text-xs text-text-muted">
+                                {results.length} results found
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
-            {indexing && (
-                <div className="px-4 py-3 bg-primary/10 border-b border-primary/20">
-                    <div className="flex items-center justify-between text-xs text-primary mb-1 font-mono">
-                        <span>Indexing entries... {progress}%</span>
-                        <span>{timeEstimate}</span>
-                    </div>
-                    <div className="w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
-                        <div
-                            className="bg-primary h-full transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                        ></div>
-                    </div>
-                    {isLargeDataset && (
-                        <div className="flex items-center mt-2 text-xs text-orange-400">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Large journal ({totalEntries} items). This might take a moment.
+            {activeTab === 'date-offset' ? (
+                <div className="p-3 sm:p-4 overflow-y-auto custom-scrollbar flex-1">
+                    <DateOffsetTool onClose={onClose} />
+                </div>
+            ) : (
+                <>
+                    {indexing && (
+                        <div className="px-4 py-3 bg-primary/10 border-b border-primary/20">
+                            <div className="flex items-center justify-between text-xs text-primary mb-1 font-mono">
+                                <span>Indexing entries... {progress}%</span>
+                                <span>{timeEstimate}</span>
+                            </div>
+                            <div className="w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                    className="bg-primary h-full transition-all duration-300"
+                                    style={{ width: `${progress}%` }}
+                                ></div>
+                            </div>
+                            {isLargeDataset && (
+                                <div className="flex items-center mt-2 text-xs text-orange-400">
+                                    <AlertTriangle className="w-3 h-3 mr-1" />
+                                    Large journal ({totalEntries} items). This might take a moment.
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
-            )}
 
-            {indexError && !indexing && (
-                <div role="alert" className="px-4 py-3 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between gap-3">
-                    <p className="text-sm text-red-300">{indexError}</p>
-                    <button type="button" onClick={() => indexEntries()} className="shrink-0 glass-button px-3 py-1.5 text-sm text-text">
-                        Retry
-                    </button>
-                </div>
-            )}
-
-            <div id="journal-search-results" role="listbox" aria-label="Search results" className="flex-1 overflow-y-auto custom-scrollbar p-2">
-                {results.length === 0 && queryText && !indexing ? (
-                    <div className="text-center py-10 text-text-muted">
-                        <p>No matches found for "{queryText}"</p>
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {results.map((entry, index) => (
-                            <button
-                                key={entry.id}
-                                id={`search-result-${index}`}
-                                role="option"
-                                aria-selected={activeIndex === index}
-                                onMouseEnter={() => setActiveIndex(index)}
-                                onClick={() => openResult(entry)}
-                                className={`w-full text-left p-2 rounded-lg transition-colors group border ${activeIndex === index ? 'bg-primary/10 border-primary/30' : 'border-transparent hover:bg-white/5 hover:border-white/5'}`}
-                            >
-                                <div className="flex justify-between items-center gap-2">
-                                    <h3 className="font-medium text-text group-hover:text-primary transition-colors truncate">
-                                        {cleanTitle(entry.title)}
-                                    </h3>
-                                    <span className="text-xs text-text-muted flex items-center shrink-0">
-                                        <Calendar className="w-3 h-3 mr-1" />
-                                        {format(parseISO(entry.id), 'MMM d, yyyy')}
-                                    </span>
-                                </div>
-                                <p className="text-xs text-text-muted mt-1 line-clamp-1">
-                                    <HighlightedSnippet
-                                        content={entry.content}
-                                        query={queryText}
-                                        mode={searchMode}
-                                    />
-                                </p>
+                    {indexError && !indexing && (
+                        <div role="alert" className="px-4 py-3 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between gap-3">
+                            <p className="text-sm text-red-300">{indexError}</p>
+                            <button type="button" onClick={() => indexEntries()} className="shrink-0 glass-button px-3 py-1.5 text-sm text-text">
+                                Retry
                             </button>
-                        ))}
-                    </div>
-                )}
+                        </div>
+                    )}
 
-                {!queryText && !indexing && indexStatus !== 'error' && (
-                    <div className="text-center py-20 text-text-muted opacity-50 select-none">
-                        <Search className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                        <p>Type above to search your journal.</p>
+                    <div id="journal-search-results" role="listbox" aria-label="Search results" className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                        {results.length === 0 && queryText && !indexing ? (
+                            <div className="text-center py-10 text-text-muted">
+                                <p>No matches found for "{queryText}"</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                {results.map((entry, index) => (
+                                    <button
+                                        key={entry.id}
+                                        id={`search-result-${index}`}
+                                        role="option"
+                                        aria-selected={activeIndex === index}
+                                        onMouseEnter={() => setActiveIndex(index)}
+                                        onClick={() => openResult(entry)}
+                                        className={`w-full text-left p-2 rounded-lg transition-colors group border ${activeIndex === index ? 'bg-primary/10 border-primary/30' : 'border-transparent hover:bg-white/5 hover:border-white/5'}`}
+                                    >
+                                        <div className="flex justify-between items-center gap-2">
+                                            <h3 className="font-medium text-text group-hover:text-primary transition-colors truncate">
+                                                {cleanTitle(entry.title)}
+                                            </h3>
+                                            <span className="text-xs text-text-muted flex items-center shrink-0">
+                                                <Calendar className="w-3 h-3 mr-1" />
+                                                {format(parseISO(entry.id), 'MMM d, yyyy')}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-text-muted mt-1 line-clamp-1">
+                                            <HighlightedSnippet
+                                                content={entry.content}
+                                                query={queryText}
+                                                mode={searchMode}
+                                            />
+                                        </p>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {!queryText && !indexing && indexStatus !== 'error' && (
+                            <div className="text-center py-20 text-text-muted opacity-50 select-none">
+                                <Search className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                                <p>Type above to search your journal.</p>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
+                </>
+            )}
         </Modal>
     );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
@@ -230,6 +230,13 @@ export default function EntryEditor() {
     const { setIsEditingEntry } = useEntryUi();
     const { date } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const timeTravelState = location.state?.timeTravel;
+    const [isTimeTravelBannerDismissed, setIsTimeTravelBannerDismissed] = useState(false);
+
+    useEffect(() => {
+        setIsTimeTravelBannerDismissed(false);
+    }, [date]);
     const [content, setContent] = useState('');
     const [title, setTitle] = useState('');
     const [loading, setLoading] = useState(true);
@@ -1602,6 +1609,76 @@ export default function EntryEditor() {
 
     return (
         <div className={`flex flex-col relative text-text ${isEditing && stickySaveButton ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : isEditing ? '' : 'h-full'}`}>
+            {timeTravelState && !isTimeTravelBannerDismissed && (
+                <div
+                    role="status"
+                    className={`mb-3 p-3.5 sm:p-4 rounded-xl border backdrop-blur-md shadow-lg transition-all animation-slide-in ${
+                        timeTravelState.exactMatch
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-100'
+                            : 'bg-amber-500/15 border-amber-500/30 text-amber-100'
+                    }`}
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                            {timeTravelState.exactMatch ? (
+                                <span className="mt-0.5 p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                                    <Sparkles className="w-4 h-4" />
+                                </span>
+                            ) : (
+                                <span className="mt-0.5 p-1.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                                    <Clock className="w-4 h-4" />
+                                </span>
+                            )}
+                            <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-bold text-white text-sm sm:text-base">
+                                        {timeTravelState.exactMatch ? 'Exact Time Travel Match' : 'Closest Entry Found'}
+                                    </p>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold ${
+                                        timeTravelState.exactMatch
+                                            ? 'bg-emerald-500/30 text-emerald-200'
+                                            : 'bg-amber-500/30 text-amber-200'
+                                    }`}>
+                                        {timeTravelState.exactMatch
+                                            ? 'Exact date (0 days off)'
+                                            : `Off by ${timeTravelState.diffDays > 0 ? `+${timeTravelState.diffDays}` : timeTravelState.diffDays} ${Math.abs(timeTravelState.diffDays) === 1 ? 'day' : 'days'}`}
+                                    </span>
+                                </div>
+                                <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
+                                    {timeTravelState.exactMatch ? (
+                                        <>You traveled <strong className="text-white">{timeTravelState.offsetText}</strong> to <strong className="text-white">{timeTravelState.targetFormatted}</strong>.</>
+                                    ) : (
+                                        <>
+                                            You looked for <strong className="text-white">{timeTravelState.offsetText}</strong> (Target: <strong className="text-white">{timeTravelState.targetFormatted}</strong>).
+                                            This entry is <strong className="text-white">{Math.abs(timeTravelState.diffDays)} {Math.abs(timeTravelState.diffDays) === 1 ? 'day' : 'days'} {timeTravelState.diffDays > 0 ? 'later' : 'earlier'}</strong> ({displayDate}).
+                                        </>
+                                    )}
+                                </p>
+                                {!timeTravelState.exactMatch && timeTravelState.requestedTarget && (
+                                    <div className="pt-1.5 flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate(`/entry/${timeTravelState.requestedTarget}`)}
+                                            className="text-xs font-semibold text-primary hover:text-white underline transition-colors cursor-pointer"
+                                        >
+                                            Open exact target date ({timeTravelState.requestedTarget})
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsTimeTravelBannerDismissed(true)}
+                            aria-label="Dismiss time travel banner"
+                            className="p-1 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
             <div
                 className={isEditing && stickyWritingHeader
                     ? 'sticky z-40 -mt-1 pt-1 sm:-mt-2 sm:pt-2 lg:-mt-4 lg:pt-4 bg-bg mb-2 sm:mb-3'
@@ -2352,6 +2429,12 @@ export default function EntryEditor() {
                                     {timeSinceEntry && (
                                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold">
                                             <span>{timeSinceEntry}</span>
+                                        </div>
+                                    )}
+                                    {timeTravelState && !timeTravelState.exactMatch && (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 font-bold">
+                                            <Clock className="w-3.5 h-3.5" />
+                                            <span>Off by {timeTravelState.diffDays > 0 ? `+${timeTravelState.diffDays}` : timeTravelState.diffDays} {Math.abs(timeTravelState.diffDays) === 1 ? 'day' : 'days'}</span>
                                         </div>
                                     )}
                                 </div>
