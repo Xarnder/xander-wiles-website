@@ -62,6 +62,7 @@ interface ControlsProps {
     remaining: number
   }
   wpm: number | null
+  elapsedSeconds?: number
   isFullscreen: boolean
   compactChrome?: boolean
   recordingActive: boolean
@@ -264,6 +265,7 @@ export function Controls({
   howToOpen,
   progress,
   wpm,
+  elapsedSeconds = 0,
   isFullscreen,
   compactChrome = false,
   recordingActive,
@@ -325,7 +327,10 @@ export function Controls({
     statsEnabled &&
     (s.showProgressBar ||
       s.showPercent ||
+      s.showElapsedTime ||
       s.showWpm ||
+      s.showEstRemainingTime ||
+      s.showEstTotalTime ||
       s.showConfidence ||
       s.showWordsSaid ||
       s.showWordsRemaining ||
@@ -543,6 +548,7 @@ export function Controls({
       progress={progress}
       wpm={wpm}
       confidence={confidence}
+      elapsedSeconds={elapsedSeconds}
       settings={settings}
     />
   )
@@ -679,6 +685,26 @@ export function Controls({
                   }
                 />
                 <span>Bold text</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.multiColorSentences}
+                  onChange={(e) =>
+                    onUpdateSettings({ multiColorSentences: e.target.checked })
+                  }
+                />
+                <span>Multi-colour sentences</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.dashAsFullStop}
+                  onChange={(e) =>
+                    onUpdateSettings({ dashAsFullStop: e.target.checked })
+                  }
+                />
+                <span>Treat dashes (—, -) as full stops</span>
               </label>
 
               <p className="settings-section-label">Look</p>
@@ -980,6 +1006,26 @@ export function Controls({
                   <option value="tab">Insert tab space</option>
                   <option value="line">Insert line break</option>
                 </select>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.multiColorSentences}
+                  onChange={(e) =>
+                    onUpdateSettings({ multiColorSentences: e.target.checked })
+                  }
+                />
+                <span>Multi-colour sentences (cycle white / blue / yellow)</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.dashAsFullStop}
+                  onChange={(e) =>
+                    onUpdateSettings({ dashAsFullStop: e.target.checked })
+                  }
+                />
+                <span>Treat dashes (—, -) as full stops</span>
               </label>
             </>
           ) : null}
@@ -1445,6 +1491,45 @@ export function Controls({
                   }
                 />
                 <span>Words total</span>
+              </label>
+              <label
+                className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.showElapsedTime}
+                  disabled={!settings.showStats}
+                  onChange={(e) =>
+                    onUpdateSettings({ showElapsedTime: e.target.checked })
+                  }
+                />
+                <span>Time elapsed</span>
+              </label>
+              <label
+                className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.showEstRemainingTime}
+                  disabled={!settings.showStats}
+                  onChange={(e) =>
+                    onUpdateSettings({ showEstRemainingTime: e.target.checked })
+                  }
+                />
+                <span>Estimated time left</span>
+              </label>
+              <label
+                className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.showEstTotalTime}
+                  disabled={!settings.showStats}
+                  onChange={(e) =>
+                    onUpdateSettings({ showEstTotalTime: e.target.checked })
+                  }
+                />
+                <span>Estimated total time</span>
               </label>
             </>
           ) : null}

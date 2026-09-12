@@ -433,6 +433,7 @@ export default function App() {
         howToOpen={howToOpen}
         progress={tp.progress}
         wpm={tp.wpm}
+        elapsedSeconds={tp.elapsedSeconds}
         isFullscreen={isFullscreen}
         compactChrome={compactChrome}
         recordingActive={tp.speech.recordingActive}
@@ -515,6 +516,8 @@ export default function App() {
               mirror={tp.settings.mirror}
               preserveBreaks={tp.settings.preserveBreaks}
               sentenceBreak={tp.settings.sentenceBreak}
+              multiColorSentences={tp.settings.multiColorSentences}
+              dashAsFullStop={tp.settings.dashAsFullStop}
               displayMode={tp.settings.displayMode}
               showCursorHighlight={tp.settings.showCursorHighlight}
               scrollAnchor={tp.effectiveScrollAnchor}
@@ -543,6 +546,7 @@ export default function App() {
                 progress={tp.progress}
                 wpm={tp.wpm}
                 confidence={tp.confidence}
+                elapsedSeconds={tp.elapsedSeconds}
                 settings={tp.settings}
                 stacked
               />

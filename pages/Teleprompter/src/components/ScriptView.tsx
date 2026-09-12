@@ -1,4 +1,4 @@
-import type { CSSProperties, RefObject } from 'react'
+import { useMemo, type CSSProperties, type RefObject } from 'react'
 import type { ScriptWord } from '../utils/tokenize'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
 import type {
@@ -22,6 +22,8 @@ interface ScriptViewProps {
   mirror: boolean
   preserveBreaks: boolean
   sentenceBreak: SentenceBreakMode
+  multiColorSentences?: boolean
+  dashAsFullStop?: boolean
   displayMode: DisplayMode
   showCursorHighlight: boolean
   scrollAnchor: ScrollAnchorMode
@@ -30,47 +32,7 @@ interface ScriptViewProps {
   registerWordRef: (index: number, el: HTMLSpanElement | null) => void
 }
 
-type BreakKind = 'space' | 'tab' | 'line' | 'paragraph'
-
-/** True when a full stop appears between this word and the next (or at end of script). */
-function endsWithFullStop(
-  script: string,
-  word: ScriptWord,
-  next: ScriptWord | undefined,
-): boolean {
-  const between = next
-    ? script.slice(word.end, next.start)
-    : script.slice(word.end)
-  // Sentence period — not part of the tokenized word (punctuation lives in the gap).
-  return /\./.test(between)
-}
-
-function breakAfterWord(
-  script: string,
-  word: ScriptWord,
-  next: ScriptWord | undefined,
-  preserveBreaks: boolean,
-  sentenceBreak: SentenceBreakMode,
-): BreakKind {
-  if (!next) return 'space'
-
-  let br: BreakKind = 'space'
-  if (preserveBreaks) {
-    const between = script.slice(word.end, next.start)
-    if (/\n\s*\n/.test(between)) br = 'paragraph'
-    else if (/\n/.test(between)) br = 'line'
-  }
-
-  if (
-    sentenceBreak !== 'off' &&
-    endsWithFullStop(script, word, next) &&
-    br === 'space'
-  ) {
-    br = sentenceBreak === 'tab' ? 'tab' : 'line'
-  }
-
-  return br
-}
+import { formatScriptTokens } from '../utils/formatScriptTokens'
 
 /** Map font-size slider into a focus-mode scale (viewport does the heavy lifting). */
 function focusScaleFromFontSize(fontSize: number): number {
@@ -180,33 +142,29 @@ function FocusWordView({
               onSeek={onSeek}
               registerWordRef={registerWordRef}
             />
-            <FocusCueWord
-              word={upcomingWord}
-              className="script-focus-word is-neighbor is-next"
-              onSeek={onSeek}
-              registerWordRef={registerWordRef}
-            />
           </div>
         ) : (
-          <div className="script-focus-stack">
-            <span className="script-focus-label" aria-hidden>
-              Said
-            </span>
+          <div className="script-focus-stack script-focus-stack-two">
             <FocusCueWord
               word={pastWord}
-              className="script-focus-word is-past"
+              className="script-focus-word is-neighbor is-prev"
               onSeek={onSeek}
               registerWordRef={registerWordRef}
             />
-            <span className="script-focus-label" aria-hidden>
-              Next
-            </span>
-            <FocusCueWord
-              word={currentWord}
-              className={`script-focus-word is-current${frozen ? ' is-frozen' : ''}`}
-              onSeek={onSeek}
-              registerWordRef={registerWordRef}
-            />
+            <div className="script-focus-pair">
+              <FocusCueWord
+                word={currentWord}
+                className={`script-focus-word is-current${frozen ? ' is-frozen' : ''}`}
+                onSeek={onSeek}
+                registerWordRef={registerWordRef}
+              />
+              <FocusCueWord
+                word={upcomingWord}
+                className="script-focus-word is-neighbor is-next"
+                onSeek={onSeek}
+                registerWordRef={registerWordRef}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -226,6 +184,8 @@ export function ScriptView({
   mirror,
   preserveBreaks,
   sentenceBreak,
+  multiColorSentences = false,
+  dashAsFullStop = true,
   displayMode,
   showCursorHighlight,
   scrollAnchor,
@@ -233,6 +193,18 @@ export function ScriptView({
   containerRef,
   registerWordRef,
 }: ScriptViewProps) {
+  const formattedScript = useMemo(
+    () =>
+      formatScriptTokens(
+        script,
+        words,
+        preserveBreaks,
+        sentenceBreak,
+        dashAsFullStop,
+      ),
+    [script, words, preserveBreaks, sentenceBreak, dashAsFullStop],
+  )
+
   if (displayMode === 'one_word' || displayMode === 'two_word') {
     return (
       <FocusWordView
@@ -264,6 +236,7 @@ export function ScriptView({
       data-scroll-anchor={scrollAnchor}
       data-mirrored={mirror ? 'true' : undefined}
       data-script-scale={scriptScale}
+      data-multi-color={multiColorSentences ? 'true' : undefined}
       style={{
         fontSize: `${fontSize}px`,
         maxWidth: `${lineWidth}ch`,
@@ -275,7 +248,9 @@ export function ScriptView({
       <div className="script-mirror">
         <div className="script-pad script-pad-top" />
         <div className="script-text">
-          {words.map((word, i) => {
+          {formattedScript.prefix}
+          {formattedScript.tokens.map((token) => {
+            const word = token.word
             const isPast = showCursorHighlight && word.index < cursor
             const isCurrent = showCursorHighlight && word.index === cursor
             const className = [
@@ -288,20 +263,24 @@ export function ScriptView({
               .filter(Boolean)
               .join(' ')
 
-            const br = breakAfterWord(
-              script,
-              word,
-              words[i + 1],
-              preserveBreaks,
-              sentenceBreak,
-            )
-
             return (
-              <span key={word.index} className="script-token">
+              <span
+                key={word.index}
+                className="script-token"
+                data-sentence-color={
+                  multiColorSentences ? token.sentenceColor : undefined
+                }
+              >
                 <span
                   ref={(el) => registerWordRef(word.index, el)}
                   className={className}
                   data-index={word.index}
+                  data-sentence-color={
+                    multiColorSentences ? token.sentenceColor : undefined
+                  }
+                  data-sentence-index={
+                    multiColorSentences ? token.sentenceIndex : undefined
+                  }
                   onClick={
                     onSeek
                       ? (e) => {
@@ -313,25 +292,27 @@ export function ScriptView({
                   }
                   title={onSeek ? 'Click to jump here' : undefined}
                 >
+                  {token.leading}
                   {word.raw}
+                  {token.trailing}
                 </span>
-                {br === 'paragraph' ? (
+                {token.separator}
+                {token.br === 'paragraph' ? (
                   <>
                     <br />
                     <br />
                   </>
-                ) : br === 'line' ? (
+                ) : token.br === 'line' ? (
                   <br />
-                ) : br === 'tab' ? (
+                ) : token.br === 'tab' ? (
                   <span className="sentence-tab" aria-hidden>
                     {'\u00A0\u00A0\u00A0\u00A0'}
                   </span>
-                ) : (
-                  ' '
-                )}
+                ) : null}
               </span>
             )
           })}
+          {formattedScript.suffix}
         </div>
         <div className="script-pad script-pad-bottom" />
       </div>

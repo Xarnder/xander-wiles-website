@@ -1,4 +1,8 @@
 import type { TeleprompterSettings } from '../hooks/useTeleprompter'
+import {
+  calculateTimeEstimates,
+  formatTimeEstimate,
+} from '../utils/timeEstimates'
 
 export interface ScriptProgress {
   current: number
@@ -13,6 +17,7 @@ interface ScriptStatsProps {
   progress: ScriptProgress
   wpm: number | null
   confidence?: number
+  elapsedSeconds?: number
   settings: Pick<
     TeleprompterSettings,
     | 'showStats'
@@ -23,6 +28,9 @@ interface ScriptStatsProps {
     | 'showWordsRemaining'
     | 'showWordsTotal'
     | 'showConfidence'
+    | 'showElapsedTime'
+    | 'showEstRemainingTime'
+    | 'showEstTotalTime'
   >
   className?: string
   /** Stack chips vertically for narrow preview rails. */
@@ -33,16 +41,26 @@ export function ScriptStats({
   progress,
   wpm,
   confidence = 0,
+  elapsedSeconds = 0,
   settings,
   className = '',
   stacked = false,
 }: ScriptStatsProps) {
   const s = settings
+  const { totalSeconds, remainingSeconds } = calculateTimeEstimates(
+    progress.total,
+    progress.remaining,
+    wpm,
+  )
+
   const showAny =
     s.showStats &&
     (s.showProgressBar ||
       s.showPercent ||
+      s.showElapsedTime ||
       s.showWpm ||
+      s.showEstRemainingTime ||
+      s.showEstTotalTime ||
       s.showWordsSaid ||
       s.showWordsRemaining ||
       s.showWordsTotal ||
@@ -103,6 +121,33 @@ export function ScriptStats({
           <span className="stat-chip" title="Words per minute (last sentence)">
             <em>{wpm == null ? '—' : wpm}</em>
             <span>wpm</span>
+          </span>
+        )}
+        {s.showElapsedTime && (
+          <span
+            className="stat-chip"
+            title="Time elapsed since starting script"
+          >
+            <em>{formatTimeEstimate(elapsedSeconds)}</em>
+            <span>elapsed</span>
+          </span>
+        )}
+        {s.showEstRemainingTime && (
+          <span
+            className="stat-chip"
+            title="Estimated time to complete from current location (based on WPM)"
+          >
+            <em>{formatTimeEstimate(remainingSeconds)}</em>
+            <span>est. left</span>
+          </span>
+        )}
+        {s.showEstTotalTime && (
+          <span
+            className="stat-chip"
+            title="Estimated total script time from start (based on WPM)"
+          >
+            <em>{formatTimeEstimate(totalSeconds)}</em>
+            <span>est. total</span>
           </span>
         )}
         {s.showConfidence && (

@@ -39,6 +39,9 @@
   --font-script: 'Outfit', 'Helvetica Neue', sans-serif;
   --radius: 18px;
   --blur: 18px;
+  --sentence-white: #ffffff;
+  --sentence-blue: #38bdf8;
+  --sentence-yellow: #facc15;
 }
 
 html[data-theme='light'] {
@@ -73,6 +76,9 @@ html[data-theme='light'] {
   --atmosphere-3: rgba(230, 160, 100, 0.22);
   --primary-text: #1f140e;
   --current-word-text: #1f140e;
+  --sentence-white: #1f140e;
+  --sentence-blue: #0284c7;
+  --sentence-yellow: #b45309;
 }
 
 html[data-theme='oled'] {
@@ -105,6 +111,9 @@ html[data-theme='oled'] {
   --atmosphere-3: transparent;
   --primary-text: #000000;
   --current-word-text: #000000;
+  --sentence-white: #ffffff;
+  --sentence-blue: #38bdf8;
+  --sentence-yellow: #facc15;
 }
 
 html[data-theme='oled'] body,
@@ -3064,6 +3073,33 @@ html[data-bold-script='true'] .script-focus-word {
 .script-word.is-past {
   color: var(--text);
   opacity: var(--past-word-opacity, 0.38);
+}
+
+/* Multi-colour sentence cycling: white -> light blue -> yellow */
+.script-view[data-multi-color='true'] .script-word[data-sentence-color='white'],
+.script-view[data-multi-color='true'] .script-word.is-past[data-sentence-color='white'],
+.script-view[data-multi-color='true'] .script-token[data-sentence-color='white'] {
+  color: var(--sentence-white);
+}
+
+.script-view[data-multi-color='true'] .script-word[data-sentence-color='blue'],
+.script-view[data-multi-color='true'] .script-word.is-past[data-sentence-color='blue'],
+.script-view[data-multi-color='true'] .script-token[data-sentence-color='blue'] {
+  color: var(--sentence-blue);
+}
+
+.script-view[data-multi-color='true'] .script-word[data-sentence-color='yellow'],
+.script-view[data-multi-color='true'] .script-word.is-past[data-sentence-color='yellow'],
+.script-view[data-multi-color='true'] .script-token[data-sentence-color='yellow'] {
+  color: var(--sentence-yellow);
+}
+
+.script-view[data-multi-color='true'] .script-word.is-current {
+  color: var(--current-word-text);
+}
+
+.script-view[data-multi-color='true'] .script-word.is-current.is-frozen {
+  color: var(--text);
 }
 
 .script-word.is-seekable {

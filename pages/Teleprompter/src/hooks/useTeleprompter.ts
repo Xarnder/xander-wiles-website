@@ -93,6 +93,13 @@ export interface TeleprompterSettings {
    * (works even when preserveBreaks is off).
    */
   sentenceBreak: SentenceBreakMode
+  /** Alternate sentence colours (white, light blue, yellow) for clear boundary readability. */
+  multiColorSentences: boolean
+  /**
+   * Treat em-dashes (—, –) and spaced hyphens (" - ") as full stops,
+   * breaking sentences and cycling sentence colors.
+   */
+  dashAsFullStop: boolean
   /**
    * Full scrolling script, one giant next-word cue, or said+next cue.
    */
@@ -158,11 +165,17 @@ export interface TeleprompterSettings {
   showWordsTotal: boolean
   /** Show live alignment confidence in the stats strip. */
   showConfidence: boolean
+  /** Show elapsed time since pressing start script. */
+  showElapsedTime: boolean
+  /** Show estimated time to complete from current script position. */
+  showEstRemainingTime: boolean
+  /** Show estimated total script time from start. */
+  showEstTotalTime: boolean
 }
 
 export const DEFAULT_SETTINGS: TeleprompterSettings = {
   fontSize: 36,
-  lineWidth: 42,
+  lineWidth: 135,
   lineHeight: 0,
   mirror: false,
   uiMirror: false,
@@ -176,6 +189,8 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   scrollSensitivity: 1,
   preserveBreaks: true,
   sentenceBreak: 'off',
+  multiColorSentences: false,
+  dashAsFullStop: true,
   displayMode: 'script',
   cursorOffset: 0,
   showCursorHighlight: true,
@@ -204,12 +219,17 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   showWordsRemaining: true,
   showWordsTotal: true,
   showConfidence: false,
+  showElapsedTime: true,
+  showEstRemainingTime: true,
+  showEstTotalTime: true,
 }
 
 const SETTINGS_STORAGE_KEY = 'voice-follow-settings'
 const SETTINGS_PREVIEW_AUTO_MIGRATION_KEY = 'voice-follow-preview-auto-v1'
 const SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY =
   'voice-follow-reliable-video-v1'
+const SETTINGS_LINE_WIDTH_135_MIGRATION_KEY =
+  'voice-follow-line-width-135-v1'
 const SCRIPT_STORAGE_KEY = 'voice-follow-script'
 const DEVICE_STORAGE_KEY = 'voice-follow-mic'
 
@@ -336,6 +356,14 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
         ? p.preserveBreaks
         : DEFAULT_SETTINGS.preserveBreaks,
     sentenceBreak,
+    multiColorSentences:
+      typeof p.multiColorSentences === 'boolean'
+        ? p.multiColorSentences
+        : DEFAULT_SETTINGS.multiColorSentences,
+    dashAsFullStop:
+      typeof p.dashAsFullStop === 'boolean'
+        ? p.dashAsFullStop
+        : DEFAULT_SETTINGS.dashAsFullStop,
     displayMode,
     videoResolution,
     cameraPreviewSide,
@@ -412,6 +440,18 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.showConfidence === 'boolean'
         ? p.showConfidence
         : DEFAULT_SETTINGS.showConfidence,
+    showElapsedTime:
+      typeof p.showElapsedTime === 'boolean'
+        ? p.showElapsedTime
+        : DEFAULT_SETTINGS.showElapsedTime,
+    showEstRemainingTime:
+      typeof p.showEstRemainingTime === 'boolean'
+        ? p.showEstRemainingTime
+        : DEFAULT_SETTINGS.showEstRemainingTime,
+    showEstTotalTime:
+      typeof p.showEstTotalTime === 'boolean'
+        ? p.showEstTotalTime
+        : DEFAULT_SETTINGS.showEstTotalTime,
   }
 }
 
@@ -424,6 +464,7 @@ function loadStoredSettings(): TeleprompterSettings {
       try {
         localStorage.setItem(SETTINGS_PREVIEW_AUTO_MIGRATION_KEY, '1')
         localStorage.setItem(SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY, '1')
+        localStorage.setItem(SETTINGS_LINE_WIDTH_135_MIGRATION_KEY, '1')
       } catch {
         // ignore migration-marker failures
       }
@@ -471,6 +512,28 @@ function loadStoredSettings(): TeleprompterSettings {
           (rawObj.videoResolution === 'max' || rawObj.videoResolution == null)
         ) {
           settings = { ...settings, videoResolution: '720p' }
+          settingsChanged = true
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
+
+    // One-time: previous default was 42ch. Promote untouched installs to
+    // 135ch so text is as wide as possible by default.
+    try {
+      const migrated = localStorage.getItem(
+        SETTINGS_LINE_WIDTH_135_MIGRATION_KEY,
+      )
+      if (!migrated) {
+        localStorage.setItem(SETTINGS_LINE_WIDTH_135_MIGRATION_KEY, '1')
+        if (
+          !rawObj ||
+          rawObj.lineWidth === 42 ||
+          rawObj.lineWidth == null ||
+          typeof rawObj.lineWidth !== 'number'
+        ) {
+          settings = { ...settings, lineWidth: 135 }
           settingsChanged = true
         }
       }
@@ -548,6 +611,40 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
   const [liveScroll, setLiveScroll] = useState(false)
   /** Words-per-minute from the most recently completed sentence. */
   const [wpm, setWpm] = useState<number | null>(null)
+  /** Seconds elapsed since pressing start script. */
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const accumulatedMsRef = useRef(0)
+  const activeStartTsRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!isRunning) {
+      if (activeStartTsRef.current != null) {
+        accumulatedMsRef.current += performance.now() - activeStartTsRef.current
+        activeStartTsRef.current = null
+        setElapsedSeconds(Math.floor(accumulatedMsRef.current / 1000))
+      }
+      return
+    }
+
+    activeStartTsRef.current = performance.now()
+    const update = () => {
+      if (activeStartTsRef.current != null) {
+        const totalMs =
+          accumulatedMsRef.current + (performance.now() - activeStartTsRef.current)
+        setElapsedSeconds(Math.floor(totalMs / 1000))
+      }
+    }
+    update()
+    const timer = window.setInterval(update, 250)
+    return () => {
+      window.clearInterval(timer)
+      if (activeStartTsRef.current != null) {
+        accumulatedMsRef.current += performance.now() - activeStartTsRef.current
+        activeStartTsRef.current = null
+        setElapsedSeconds(Math.floor(accumulatedMsRef.current / 1000))
+      }
+    }
+  }, [isRunning])
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wordRefs = useRef<Map<number, HTMLSpanElement>>(new Map())
@@ -641,7 +738,15 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     if (listeningRef.current && next > prev) {
       const now = performance.now()
       for (let i = prev; i < next; i++) {
-        if (!isSentenceEnd(scriptRef.current, words, i)) continue
+        if (
+          !isSentenceEnd(
+            scriptRef.current,
+            words,
+            i,
+            settingsRef.current.dashAsFullStop,
+          )
+        )
+          continue
         const start = sentenceStartIndexRef.current
         const wordCount = i - start + 1
         const elapsedMs = now - sentenceStartTsRef.current
@@ -659,7 +764,10 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
 
   useEffect(() => {
     resetPaceTracking(0)
-  }, [script, resetPaceTracking])
+    accumulatedMsRef.current = 0
+    activeStartTsRef.current = isRunning ? performance.now() : null
+    setElapsedSeconds(0)
+  }, [script, resetPaceTracking, isRunning])
 
   const applyCursorOffset = useCallback(
     (detected: number) => {
@@ -816,6 +924,9 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     setIsRunning(false)
     resetScroll()
     resetPaceTracking(0)
+    accumulatedMsRef.current = 0
+    activeStartTsRef.current = null
+    setElapsedSeconds(0)
   }, [applyCursorOffset, resetPaceTracking, resetScroll, resetTranscript, stopSpeech])
 
   /** Jump the reading position to a display word (click-to-seek / keyboard nudge). */
@@ -857,10 +968,16 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
   /** Jump to the previous/next sentence start or end boundary. */
   const nudgeSentence = useCallback(
     (direction: 'up' | 'down') => {
-      const next = nextSentenceBoundary(script, scriptWords, cursor, direction)
+      const next = nextSentenceBoundary(
+        script,
+        scriptWords,
+        cursor,
+        direction,
+        settings.dashAsFullStop,
+      )
       seekTo(next)
     },
-    [cursor, script, scriptWords, seekTo],
+    [cursor, script, scriptWords, seekTo, settings.dashAsFullStop],
   )
 
   const updateSettings = useCallback(
@@ -935,6 +1052,7 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     nudgeSentence,
     progress,
     wpm,
+    elapsedSeconds,
     alignState,
     confidence,
     containerRef,
