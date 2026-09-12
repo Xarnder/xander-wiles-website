@@ -11,6 +11,7 @@ import {
     canShiftAllNestedKanban,
     hasIncompleteNested,
     taskMatchesSearch
+} from './nested.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -39,7 +40,7 @@ import {
     scanDuplicateTasks,
     removeListFromBoard,
     removeAllMultiBoardListsFromBoard,
-    removeTaskFromList,
+    removeTaskFromList as removeDuplicateTaskFromList,
     deleteTaskForever as deleteDuplicateTaskForever,
     mergeLists
 } from './duplicates.js';
@@ -5455,7 +5456,7 @@ function renderDedupTasksTab(container, taskScan) {
                     const lid = btn.dataset.listId;
                     btn.disabled = true;
                     try {
-                        await removeTaskFromList(tid, lid);
+                        await removeDuplicateTaskFromList(tid, lid);
                         showToast("Task removed from list", "success");
                         renderBoard();
                         renderDedupModal('tasks');
