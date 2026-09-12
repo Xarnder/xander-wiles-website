@@ -4043,7 +4043,11 @@ input:checked+.slider-small:before {
         }
 
         .app-header .tag-mode-btn.is-selected {
-            box-shadow: 0 0 0 1.5px oklch(0.623 0.188 259.8 / 0.7) !important;
+            border-color: currentColor !important;
+            box-shadow:
+                inset 0 0 0 1.5px currentColor,
+                inset 0 0 6px color-mix(in srgb, currentColor 30%, transparent) !important;
+            animation: tagSelectedPulse 2.8s ease-in-out infinite !important;
         }
 
         .app-header .floating-bar-buttons {
@@ -4582,6 +4586,8 @@ input:checked+.slider-small:before {
 }
 
 .tag-mode-btn {
+    position: relative;
+    overflow: hidden;
     flex: 0 0 auto;
     min-height: 28px;
     padding: 4px 10px;
@@ -4594,7 +4600,7 @@ input:checked+.slider-small:before {
     line-height: 1.1;
     white-space: nowrap;
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
     box-sizing: border-box;
 }
 
@@ -4610,13 +4616,65 @@ input:checked+.slider-small:before {
 }
 
 .tag-mode-btn.is-selected {
-    border-color: var(--accent-blue);
-    box-shadow: 0 0 0 2px oklch(0.623 0.188 259.8 / 0.55);
+    border-color: currentColor;
+    box-shadow:
+        inset 0 0 0 1.5px currentColor,
+        inset 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
     transform: none;
+    animation: tagSelectedPulse 2.8s ease-in-out infinite;
 }
 
 .tag-mode-btn.is-selected:hover {
     transform: none;
+}
+
+.tag-mode-btn.is-selected::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        color-mix(in srgb, currentColor 28%, transparent) 0,
+        color-mix(in srgb, currentColor 28%, transparent) 2.5px,
+        transparent 2.5px,
+        transparent 6.5px
+    );
+    opacity: 0.75;
+    animation: tagSelectedOverlayPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes tagSelectedPulse {
+    0%, 100% {
+        filter: brightness(1) saturate(1);
+        box-shadow:
+            inset 0 0 0 1.5px currentColor,
+            inset 0 0 4px color-mix(in srgb, currentColor 20%, transparent);
+    }
+    50% {
+        filter: brightness(1.22) saturate(1.28);
+        box-shadow:
+            inset 0 0 0 1.75px currentColor,
+            inset 0 0 10px color-mix(in srgb, currentColor 45%, transparent);
+    }
+}
+
+@keyframes tagSelectedOverlayPulse {
+    0%, 100% {
+        opacity: 0.45;
+    }
+    50% {
+        opacity: 0.85;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tag-mode-btn.is-selected,
+    .app-header .tag-mode-btn.is-selected,
+    .tag-mode-btn.is-selected::before {
+        animation: none !important;
+    }
 }
 
 .tag-mode-btn.is-filtering {
