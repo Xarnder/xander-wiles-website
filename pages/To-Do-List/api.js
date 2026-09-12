@@ -332,21 +332,37 @@ export function deleteList(id) {
     }).catch(e => handleSyncError(e));
 }
 
-export function emptyOrphans() {
+export async function emptyOrphans() {
     const activeIds = new Set();
-    state.appData.lists.forEach(l => {
+    // Must check all lists across ALL boards to avoid deleting tasks on other boards
+    (state.appData.rawLists || []).forEach(l => {
         if (l.taskIds && Array.isArray(l.taskIds)) {
             l.taskIds.forEach(id => activeIds.add(id));
         }
     });
-    const allIds = Object.keys(state.appData.tasks);
+    const allIds = Object.keys(state.appData.tasks || {});
     const orphans = allIds.filter(id => !activeIds.has(id));
 
-    const batch = writeBatch(db);
-    orphans.forEach(id => {
-        batch.delete(doc(db, "users", state.currentUser.uid, "tasks", id));
-    });
-    return batch.commit().catch(e => handleSyncError(e));
+    if (orphans.length === 0) {
+        showToast("No orphan tasks found.", "info");
+        return;
+    }
+
+    try {
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < orphans.length; i += CHUNK_SIZE) {
+            const chunk = orphans.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(id => {
+                batch.delete(doc(db, "users", state.currentUser.uid, "tasks", id));
+                delete state.appData.tasks[id];
+            });
+            await batch.commit();
+        }
+        showToast(`Deleted ${orphans.length} orphan task(s)`, "success");
+    } catch (e) {
+        handleSyncError(e);
+    }
 }
 
 export function addNewList() {
@@ -455,7 +471,12 @@ export function rescueOrphanLists() {
         return updateDoc(doc(db, "users", state.currentUser.uid, "boards", mainBoard.id), {
             listOrder: arrayUnion(...orphans)
         }).then(() => {
-            showToast(`${orphans.length} lists moved to ${mainBoard.title}`, "success");
+            mainBoard.listOrder = [...new Set([...(mainBoard.listOrder || []), ...orphans])];
+            if (state.appData.currentBoardId === mainBoard.id) {
+                state.appData.listOrder = mainBoard.listOrder;
+            }
+            if (typeof window.renderBoard === 'function') window.renderBoard();
+            showToast(`${orphans.length} list(s) moved to ${mainBoard.title}`, "success");
         }).catch(e => handleSyncError(e));
     };
 
@@ -471,6 +492,69 @@ export function rescueOrphanLists() {
     return Promise.resolve();
 }
 
+export function rescueOrphanTasks() {
+    const activeIds = new Set();
+    (state.appData.rawLists || []).forEach(l => {
+        if (l.taskIds && Array.isArray(l.taskIds)) {
+            l.taskIds.forEach(id => activeIds.add(id));
+        }
+    });
+    const allIds = Object.keys(state.appData.tasks || {});
+    const orphans = allIds.filter(id => !activeIds.has(id));
+
+    if (orphans.length === 0) {
+        showToast("No orphan tasks found.", "info");
+        return Promise.resolve();
+    }
+
+    const performRescue = async () => {
+        let targetList = (state.appData.lists || [])[0] || (state.appData.rawLists || [])[0];
+        if (!targetList) {
+            showToast("No list available to receive orphaned tasks.", "error");
+            return;
+        }
+
+        try {
+            const CHUNK_SIZE = 400;
+            for (let i = 0; i < orphans.length; i += CHUNK_SIZE) {
+                const chunk = orphans.slice(i, i + CHUNK_SIZE);
+                const batch = writeBatch(db);
+                if (i === 0) {
+                    batch.update(doc(db, "users", state.currentUser.uid, "lists", targetList.id), {
+                        taskIds: arrayUnion(...orphans)
+                    });
+                }
+                chunk.forEach(tid => {
+                    batch.update(doc(db, "users", state.currentUser.uid, "tasks", tid), {
+                        archived: false,
+                        [`listAddedAt.${targetList.id}`]: Date.now()
+                    });
+                    if (state.appData.tasks[tid]) {
+                        state.appData.tasks[tid].archived = false;
+                    }
+                });
+                await batch.commit();
+            }
+
+            targetList.taskIds = [...new Set([...(targetList.taskIds || []), ...orphans])];
+            if (typeof window.renderBoard === 'function') window.renderBoard();
+            showToast(`Rescued ${orphans.length} orphan task(s) into "${targetList.title}"!`, "success");
+        } catch (e) {
+            handleSyncError(e);
+        }
+    };
+
+    if (window.showConfirmModal) {
+        window.showConfirmModal(
+            "Rescue Orphan Tasks?",
+            `Move ${orphans.length} unassigned tasks into "${(state.appData.lists[0] || {}).title || 'first list'}"?`,
+            performRescue
+        );
+    } else if (confirm(`Move ${orphans.length} unassigned tasks into first list?`)) {
+        performRescue();
+    }
+    return Promise.resolve();
+}
 
 export function deleteBoard(boardId) {
     const board = state.appData.boards.find(b => b.id === boardId);

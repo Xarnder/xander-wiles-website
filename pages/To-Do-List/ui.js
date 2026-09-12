@@ -11,8 +11,7 @@ import {
     canShiftAllNestedKanban,
     hasIncompleteNested,
     taskMatchesSearch
-} from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag } from './api.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -35,6 +34,15 @@ import {
     getTagColorTone,
     DENSE_TAG_LAYOUT_MIN
 } from './tags.js';
+import {
+    scanDuplicateLists,
+    scanDuplicateTasks,
+    removeListFromBoard,
+    removeAllMultiBoardListsFromBoard,
+    removeTaskFromList,
+    deleteTaskForever as deleteDuplicateTaskForever,
+    mergeLists
+} from './duplicates.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
@@ -194,13 +202,109 @@ export function getSortedTaskIds(taskIds) {
 
 export function getOrphanedTaskIds() {
     const activeIds = new Set();
-    state.appData.lists.forEach(l => {
+    // Check all lists across ALL boards to avoid false positive orphans
+    (state.appData.rawLists || []).forEach(l => {
         if (l.taskIds && Array.isArray(l.taskIds)) {
             l.taskIds.forEach(id => activeIds.add(id));
         }
     });
-    const allIds = Object.keys(state.appData.tasks);
+    const allIds = Object.keys(state.appData.tasks || {});
     return allIds.filter(id => !activeIds.has(id));
+}
+
+export function getOrphanedListIds() {
+    const assignedListIds = new Set();
+    (state.appData.boards || []).forEach(b => {
+        if (b.listOrder) b.listOrder.forEach(id => assignedListIds.add(id));
+    });
+    const allLists = state.appData.rawLists || [];
+    return allLists.filter(l => !assignedListIds.has(l.id));
+}
+
+export function renderOrphansStatusInSettings() {
+    const orphanLists = getOrphanedListIds();
+    const orphanTasks = getOrphanedTaskIds();
+
+    const listsIcon = document.getElementById('orphan-lists-icon');
+    const listsBadge = document.getElementById('orphan-lists-badge');
+    const listsText = document.getElementById('orphan-lists-text');
+
+    const tasksIcon = document.getElementById('orphan-tasks-icon');
+    const tasksBadge = document.getElementById('orphan-tasks-badge');
+    const tasksText = document.getElementById('orphan-tasks-text');
+
+    if (listsBadge) {
+        listsBadge.textContent = orphanLists.length;
+        if (orphanLists.length > 0) {
+            listsBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+            listsBadge.style.color = '#f87171';
+            if (listsIcon) {
+                listsIcon.className = 'ph ph-warning-circle';
+                listsIcon.style.color = '#f87171';
+            }
+            if (listsText) listsText.textContent = `Orphan Lists (${orphanLists.length} unassigned - click to rescue)`;
+        } else {
+            listsBadge.style.background = 'rgba(34, 197, 94, 0.2)';
+            listsBadge.style.color = '#4ade80';
+            if (listsIcon) {
+                listsIcon.className = 'ph ph-check-circle';
+                listsIcon.style.color = '#4ade80';
+            }
+            if (listsText) listsText.textContent = 'Orphan Lists (All assigned to boards)';
+        }
+    }
+
+    if (tasksBadge) {
+        tasksBadge.textContent = orphanTasks.length;
+        if (orphanTasks.length > 0) {
+            tasksBadge.style.background = 'rgba(234, 179, 8, 0.2)';
+            tasksBadge.style.color = '#facc15';
+            if (tasksIcon) {
+                tasksIcon.className = 'ph ph-warning-circle';
+                tasksIcon.style.color = '#facc15';
+            }
+            if (tasksText) tasksText.textContent = `Orphan Tasks (${orphanTasks.length} unassigned - click to rescue)`;
+        } else {
+            tasksBadge.style.background = 'rgba(34, 197, 94, 0.2)';
+            tasksBadge.style.color = '#4ade80';
+            if (tasksIcon) {
+                tasksIcon.className = 'ph ph-check-circle';
+                tasksIcon.style.color = '#4ade80';
+            }
+            if (tasksText) tasksText.textContent = 'Orphan Tasks (All tasks in lists)';
+        }
+    }
+
+    // Update Duplicate Manager summary badge in Settings
+    const dedupBadge = document.getElementById('dedup-summary-badge');
+    if (dedupBadge) {
+        try {
+            const listScan = scanDuplicateLists();
+            const taskScan = scanDuplicateTasks();
+            const multiBoardCount = listScan.multiBoardLists.length;
+            const sameNameCount = listScan.sameNameLists.length;
+            const taskDupCount = taskScan.sameTextTasks.length;
+
+            if (multiBoardCount > 0 || sameNameCount > 0) {
+                dedupBadge.style.background = 'rgba(234, 179, 8, 0.2)';
+                dedupBadge.style.color = '#facc15';
+                const parts = [];
+                if (multiBoardCount > 0) parts.push(`${multiBoardCount} Multi-Board`);
+                if (sameNameCount > 0) parts.push(`${sameNameCount} Same Name`);
+                dedupBadge.textContent = parts.join(' · ');
+            } else if (taskDupCount > 0) {
+                dedupBadge.style.background = 'rgba(234, 179, 8, 0.2)';
+                dedupBadge.style.color = '#facc15';
+                dedupBadge.textContent = `${taskDupCount} Duplicate Tasks`;
+            } else {
+                dedupBadge.style.background = 'rgba(34, 197, 94, 0.2)';
+                dedupBadge.style.color = '#4ade80';
+                dedupBadge.textContent = 'All Clean ✓';
+            }
+        } catch (e) {
+            console.error("Error updating dedup summary badge:", e);
+        }
+    }
 }
 
 /**
@@ -545,11 +649,34 @@ export function handleKanbanDragEnd(evt, listId) {
     batch.commit().catch(e => handleSyncError(e));
 }
 
+// Cache for duplicate task text counts to make card rendering O(1)
+let duplicateTextCountsCache = null;
+export function invalidateDedupCaches() {
+    duplicateTextCountsCache = null;
+}
+function getDuplicateTextCounts() {
+    if (duplicateTextCountsCache) return duplicateTextCountsCache;
+    const map = new Map();
+    const tasks = state.appData.tasks || {};
+    for (const tid in tasks) {
+        const t = tasks[tid];
+        if (t && t.text && !t.archived) {
+            const norm = t.text.trim().toLowerCase();
+            if (norm) {
+                map.set(norm, (map.get(norm) || 0) + 1);
+            }
+        }
+    }
+    duplicateTextCountsCache = map;
+    return map;
+}
+
 // --- CORE RENDERING ---
 
 export function renderBoard() {
     if (!state.currentUser) return;
 
+    invalidateDedupCaches();
     document.body.classList.toggle('is-archived-view', state.showArchived);
     syncTagFilterChrome();
 
@@ -673,6 +800,28 @@ export function renderBoard() {
     }
 
     if (!kanbanRendered) {
+        // Unassigned / Orphan Lists Notice Banner: Ensures unassigned lists can NEVER silently disappear
+        const orphanListIds = getOrphanedListIds();
+        if (orphanListIds.length > 0) {
+            const banner = document.createElement('div');
+            banner.className = 'orphan-alert-banner';
+            banner.innerHTML = `
+                <div class="orphan-alert-content">
+                    <i class="ph ph-warning-circle orphan-alert-icon"></i>
+                    <div>
+                        <strong>Notice: ${orphanListIds.length} Unassigned List${orphanListIds.length === 1 ? '' : 's'}</strong>
+                        <p>These lists exist in your account but are not appearing on any board.</p>
+                    </div>
+                </div>
+                <button class="btn primary small" id="board-orphan-rescue-btn" style="white-space: nowrap;">
+                    <i class="ph ph-lifebuoy"></i> Rescue to Main Board
+                </button>
+            `;
+            const rescueBtn = banner.querySelector('#board-orphan-rescue-btn');
+            if (rescueBtn) rescueBtn.onclick = () => rescueOrphanLists();
+            boardContainer.appendChild(banner);
+        }
+
         // Render Lists
         state.appData.lists.forEach(list => renderListColumn(list, false, isCustomSort));
 
@@ -1679,11 +1828,43 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             </form>
         </div>`;
 
+    // Multi-Board & Duplicate Name Indicators
+    let multiBoardBadgeHtml = '';
+    let duplicateNameBadgeHtml = '';
+    if (!isOrphan) {
+        const assignedBoards = (state.appData.boards || []).filter(b => (b.listOrder || []).includes(list.id));
+        if (assignedBoards.length > 1) {
+            const boardNames = assignedBoards.map(b => b.title || 'Untitled Board').join(', ');
+            multiBoardBadgeHtml = `
+                <button type="button" class="list-indicator-badge multi-board" onclick="window.openDedupModal('lists')" title="This list appears on ${assignedBoards.length} boards (${escapeHtml(boardNames)}). Click to open Duplicate Manager.">
+                    <i class="ph ph-squares-four"></i> On ${assignedBoards.length} Boards
+                </button>
+            `;
+        }
+
+        const normTitle = (list.title || '').trim().toLowerCase();
+        if (normTitle) {
+            const sameNameLists = (state.appData.rawLists || []).filter(l => (l.title || '').trim().toLowerCase() === normTitle);
+            if (sameNameLists.length > 1) {
+                duplicateNameBadgeHtml = `
+                    <button type="button" class="list-indicator-badge duplicate-name" onclick="window.openDedupModal('lists')" title="${sameNameLists.length} separate lists share the name '${escapeHtml(list.title)}'. Click to open Duplicate Manager.">
+                        <i class="ph ph-copy"></i> Duplicate Name (${sameNameLists.length})
+                    </button>
+                `;
+            }
+        }
+    }
+
+    const listBadgesHtml = (multiBoardBadgeHtml || duplicateNameBadgeHtml)
+        ? `<div class="list-header-badges">${multiBoardBadgeHtml}${duplicateNameBadgeHtml}</div>`
+        : '';
+
     const listHeader = `
         <div class="list-header">
             ${headerLeft}
             ${headerButtons}
         </div>
+        ${listBadgesHtml}
         ${descriptionHtml}
     `;
 
@@ -2408,7 +2589,18 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     }
 
     let numberHtml = state.appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
-    let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
+
+    // Check for unlinked duplicate tasks (distinct task IDs with identical text)
+    const normText = (task.text || '').trim().toLowerCase();
+    const textCounts = getDuplicateTextCounts();
+    const hasUnlinkedDuplicate = normText ? ((textCounts.get(normText) || 0) > 1) : false;
+
+    let linkedIconHtml = isLinked
+        ? `<button type="button" class="task-indicator-badge linked-task" onclick="event.stopPropagation(); window.openDedupModal('tasks')" title="Linked across multiple lists (${listCount} lists). Click to open Duplicate Manager."><i class="ph ph-link"></i> Linked</button>`
+        : '';
+    let duplicateIconHtml = hasUnlinkedDuplicate
+        ? `<button type="button" class="task-indicator-badge unlinked-duplicate" onclick="event.stopPropagation(); window.openDedupModal('tasks')" title="Duplicate task detected with matching text. Click to open Duplicate Manager."><i class="ph ph-copy"></i> Duplicate</button>`
+        : '';
 
     let recentCompletedHtml = '';
     if (state.showRecentCompleted && task.completed && task.completedAt) {
@@ -2463,7 +2655,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
             ${checkboxHtml}
             ${numberHtml}
             <div class="task-content-wrapper">
-                <div class="task-text">${aiModifiedIconHtml}${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
+                <div class="task-text">${aiModifiedIconHtml}${escapeHtml(task.text)} ${linkedIconHtml} ${duplicateIconHtml} ${nestedIndicatorHtml}</div>
                 ${summaryHtml}
                 ${nestedHtml}
                 ${recentCompletedHtml}
@@ -4636,3 +4828,747 @@ export function flashInputBox(input) {
         input.classList.remove('input-alert-flash');
     }, 3000);
 }
+
+// ==========================================================================
+// DUPLICATE CLEANER MODAL CONTROLLER
+// ==========================================================================
+
+let dedupCurrentTab = 'lists';
+let dedupIncludeArchived = false;
+let dedupIncludeCompleted = true;
+let dedupEventsBound = false;
+
+export function openDedupModal(tab = 'lists') {
+    const modal = document.getElementById('dedup-modal-overlay');
+    if (!modal) return;
+    dedupCurrentTab = tab;
+    initDedupEventsOnce();
+    renderDedupModal(dedupCurrentTab);
+    modal.classList.remove('hidden');
+}
+window.openDedupModal = openDedupModal;
+
+export function closeDedupModal() {
+    const modal = document.getElementById('dedup-modal-overlay');
+    if (modal) modal.classList.add('hidden');
+}
+
+function initDedupEventsOnce() {
+    if (dedupEventsBound) return;
+    dedupEventsBound = true;
+
+    const modal = document.getElementById('dedup-modal-overlay');
+    const closeBtn = document.getElementById('close-dedup-modal-btn');
+    const doneBtn = document.getElementById('dedup-done-btn');
+    const refreshBtn = document.getElementById('dedup-refresh-btn');
+    const tabListsBtn = document.getElementById('dedup-tab-lists-btn');
+    const tabTasksBtn = document.getElementById('dedup-tab-tasks-btn');
+    const autoFixBtn = document.getElementById('dedup-auto-fix-main-board-btn');
+
+    if (closeBtn) closeBtn.onclick = () => closeDedupModal();
+    if (doneBtn) doneBtn.onclick = () => closeDedupModal();
+    if (modal) {
+        modal.onclick = (e) => {
+            if (e.target === modal) closeDedupModal();
+        };
+    }
+
+    if (refreshBtn) {
+        refreshBtn.onclick = () => renderDedupModal(dedupCurrentTab);
+    }
+
+    if (tabListsBtn) {
+        tabListsBtn.onclick = () => {
+            dedupCurrentTab = 'lists';
+            renderDedupModal('lists');
+        };
+    }
+
+    if (tabTasksBtn) {
+        tabTasksBtn.onclick = () => {
+            dedupCurrentTab = 'tasks';
+            renderDedupModal('tasks');
+        };
+    }
+
+    if (autoFixBtn) {
+        autoFixBtn.onclick = async () => {
+            try {
+                autoFixBtn.disabled = true;
+                const removedCount = await removeAllMultiBoardListsFromBoard('main_board');
+                showToast(`Removed ${removedCount} duplicate lists from Main Board`, "success");
+                renderBoard();
+                renderDedupModal('lists');
+            } catch (err) {
+                showToast(`Failed to clean Main Board: ${err.message}`, "error");
+            } finally {
+                autoFixBtn.disabled = false;
+            }
+        };
+    }
+}
+
+export function renderDedupModal(tab = 'lists') {
+    const modal = document.getElementById('dedup-modal-overlay');
+    const body = document.getElementById('dedup-modal-body');
+    const tabListsBtn = document.getElementById('dedup-tab-lists-btn');
+    const tabTasksBtn = document.getElementById('dedup-tab-tasks-btn');
+    const listsBadge = document.getElementById('dedup-lists-badge');
+    const tasksBadge = document.getElementById('dedup-tasks-badge');
+    const summaryText = document.getElementById('dedup-summary-text');
+    const autoFixBtn = document.getElementById('dedup-auto-fix-main-board-btn');
+
+    if (!modal || !body) return;
+
+    // Scan data
+    const listScan = scanDuplicateLists();
+    const taskScan = scanDuplicateTasks({
+        includeArchived: dedupIncludeArchived,
+        includeCompleted: dedupIncludeCompleted
+    });
+
+    const totalListDups = listScan.multiBoardLists.length + listScan.sameNameLists.length;
+    const totalTaskDups = taskScan.multiListTasks.length + taskScan.sameTextTasks.length;
+
+    if (listsBadge) listsBadge.textContent = totalListDups;
+    if (tasksBadge) tasksBadge.textContent = totalTaskDups;
+
+    // Tab active states
+    if (tabListsBtn) tabListsBtn.classList.toggle('active', tab === 'lists');
+    if (tabTasksBtn) tabTasksBtn.classList.toggle('active', tab === 'tasks');
+
+    // Auto-fix button visibility: show if any multi-board list is on main_board
+    const hasMainBoardDups = listScan.multiBoardLists.some(item => item.boards.some(b => b.id === 'main_board'));
+    if (autoFixBtn) {
+        autoFixBtn.classList.toggle('hidden', !hasMainBoardDups);
+    }
+
+    if (summaryText) {
+        summaryText.textContent = `Found ${totalListDups} list duplicate group${totalListDups === 1 ? '' : 's'}, ${totalTaskDups} task duplicate group${totalTaskDups === 1 ? '' : 's'}.`;
+    }
+
+    body.innerHTML = '';
+
+    if (tab === 'lists') {
+        renderDedupListsTab(body, listScan);
+    } else {
+        renderDedupTasksTab(body, taskScan);
+    }
+}
+
+function renderDedupListsTab(container, listScan) {
+    const { multiBoardLists, sameNameLists } = listScan;
+
+    if (multiBoardLists.length === 0 && sameNameLists.length === 0) {
+        container.innerHTML = `
+            <div class="dedup-empty-state">
+                <i class="ph ph-check-circle"></i>
+                <h3>No Duplicate Lists Found!</h3>
+                <p>All lists are uniquely assigned to one board and have distinct names.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // 1. Multi-board lists
+    if (multiBoardLists.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'dedup-section';
+        sec.innerHTML = `
+            <div class="dedup-section-header">
+                <h3 class="dedup-section-title"><i class="ph ph-squares-four" style="color: oklch(0.72 0.16 160);"></i> Lists Assigned to Multiple Boards (${multiBoardLists.length})</h3>
+                <p class="dedup-section-desc">These lists appear on more than one board. Removing a list from a board unlinks it from that board only — all its tasks remain safe.</p>
+            </div>
+        `;
+
+        multiBoardLists.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'dedup-card';
+
+            let boardsHtml = item.boards.map(b => `
+                <div class="dedup-board-tag ${b.id === state.appData.currentBoardId ? 'active-board' : ''}">
+                    <i class="ph ph-sidebar"></i>
+                    <span>${escapeHtml(b.title)}</span>
+                    <button class="dedup-action-pill danger" data-list-id="${item.listId}" data-board-id="${b.id}" title="Remove from this board">
+                        <i class="ph ph-x"></i> Remove
+                    </button>
+                </div>
+            `).join('');
+
+            card.innerHTML = `
+                <div class="dedup-card-header">
+                    <div class="dedup-card-title">
+                        <i class="ph ph-list-dashes"></i>
+                        <span>${escapeHtml(item.title)}</span>
+                    </div>
+                    <div class="dedup-card-meta">
+                        <span><i class="ph ph-check-square"></i> ${item.taskCount} task${item.taskCount === 1 ? '' : 's'}</span>
+                    </div>
+                </div>
+                <div class="dedup-board-tag-row">
+                    ${boardsHtml}
+                </div>
+                <div class="dedup-btn-group">
+                    <span style="font-size: 0.78rem; color: var(--text-secondary); align-self: center;">Keep only on:</span>
+                    ${item.boards.map(b => `
+                        <button class="dedup-action-pill success dedup-keep-only-btn" data-list-id="${item.listId}" data-keep-board-id="${b.id}" title="Remove from all other boards">
+                            <i class="ph ph-check"></i> ${escapeHtml(b.title)} only
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+
+            // Attach remove handlers
+            card.querySelectorAll('.dedup-action-pill.danger').forEach(btn => {
+                btn.onclick = async () => {
+                    const listId = btn.dataset.listId;
+                    const boardId = btn.dataset.boardId;
+                    btn.disabled = true;
+                    try {
+                        await removeListFromBoard(listId, boardId);
+                        showToast(`Removed from board`, "success");
+                        renderBoard();
+                        renderDedupModal('lists');
+                    } catch (err) {
+                        showToast(`Error: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            // Attach keep-only handlers
+            card.querySelectorAll('.dedup-keep-only-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const listId = btn.dataset.listId;
+                    const keepBoardId = btn.dataset.keepBoardId;
+                    btn.disabled = true;
+                    try {
+                        for (const b of item.boards) {
+                            if (b.id !== keepBoardId) {
+                                await removeListFromBoard(listId, b.id);
+                            }
+                        }
+                        showToast(`Kept only on selected board`, "success");
+                        renderBoard();
+                        renderDedupModal('lists');
+                    } catch (err) {
+                        showToast(`Error: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            sec.appendChild(card);
+        });
+
+        container.appendChild(sec);
+    }
+
+    // 2. Same-name lists
+    if (sameNameLists.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'dedup-section';
+        sec.innerHTML = `
+            <div class="dedup-section-header">
+                <h3 class="dedup-section-title"><i class="ph ph-text-aa" style="color: oklch(0.75 0.15 220);"></i> Different Lists with the Same Name (${sameNameLists.length})</h3>
+                <p class="dedup-section-desc">Separate list documents that have matching or nearly identical titles. Inspect duplicate tasks and choose which board to merge them into.</p>
+            </div>
+        `;
+
+        sameNameLists.forEach(group => {
+            const card = document.createElement('div');
+            card.className = 'dedup-card';
+
+            // Analyze task duplicates within this group
+            const listTasksMap = new Map();
+            const allTasksInGroup = [];
+            group.lists.forEach(l => {
+                const tasks = (l.taskIds || []).map(tid => state.appData.tasks[tid]).filter(Boolean);
+                listTasksMap.set(l.id, tasks);
+                allTasksInGroup.push(...tasks);
+            });
+
+            // Find duplicate task texts across lists in this group
+            const textToTaskMap = new Map();
+            allTasksInGroup.forEach(t => {
+                const norm = (t.text || '').trim().toLowerCase();
+                if (!norm) return;
+                if (!textToTaskMap.has(norm)) textToTaskMap.set(norm, []);
+                textToTaskMap.get(norm).push(t);
+            });
+
+            // How many tasks in the lists are duplicated across multiple lists?
+            let duplicateTasksInGroupCount = 0;
+            const duplicatedNormTexts = new Set();
+            textToTaskMap.forEach((tasksArr, norm) => {
+                if (tasksArr.length > 1) {
+                    duplicateTasksInGroupCount += tasksArr.length;
+                    duplicatedNormTexts.add(norm);
+                }
+            });
+
+            // Also check shared task IDs directly
+            const idCountMap = new Map();
+            group.lists.forEach(l => {
+                (l.taskIds || []).forEach(tid => {
+                    idCountMap.set(tid, (idCountMap.get(tid) || 0) + 1);
+                });
+            });
+            let sharedIdCount = 0;
+            idCountMap.forEach(c => {
+                if (c > 1) sharedIdCount++;
+            });
+
+            let taskOverlapNoticeHtml = '';
+            if (duplicateTasksInGroupCount > 0 || sharedIdCount > 0) {
+                taskOverlapNoticeHtml = `
+                    <div style="padding: 8px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 0.82rem; color: #fbbf24; display: flex; align-items: center; gap: 8px; margin: 8px 0 12px 0;">
+                        <i class="ph ph-warning-circle" style="font-size: 1.1rem; flex-shrink: 0;"></i>
+                        <span><strong>${duplicateTasksInGroupCount || (sharedIdCount * 2)} duplicated task(s)</strong> found across these lists. Merging will combine and organize them.</span>
+                    </div>
+                `;
+            } else {
+                taskOverlapNoticeHtml = `
+                    <div style="padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; font-size: 0.82rem; color: #93c5fd; display: flex; align-items: center; gap: 8px; margin: 8px 0 12px 0;">
+                        <i class="ph ph-info" style="font-size: 1.1rem; flex-shrink: 0;"></i>
+                        <span><strong>0 duplicate tasks</strong>: all tasks in these lists have unique titles.</span>
+                    </div>
+                `;
+            }
+
+            let listsRowsHtml = group.lists.map(l => {
+                const boardNames = l.boards.map(b => escapeHtml(b.title)).join(', ') || 'Unassigned (Orphan)';
+                const tasks = listTasksMap.get(l.id) || [];
+
+                let taskPreviewHtml = '';
+                if (tasks.length > 0) {
+                    const taskItemsHtml = tasks.map(t => {
+                        const norm = (t.text || '').trim().toLowerCase();
+                        const isShared = (idCountMap.get(t.id) > 1) || duplicatedNormTexts.has(norm);
+                        return `
+                            <div class="dedup-task-preview-item ${isShared ? 'is-shared' : ''}">
+                                <i class="${isShared ? 'ph ph-copy' : 'ph ph-circle'}" style="font-size: ${isShared ? '0.85rem' : '0.5rem'}; ${isShared ? 'color: #fbbf24;' : 'opacity: 0.5;'}"></i>
+                                <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(t.text)}</span>
+                                ${isShared ? '<span style="font-size: 0.68rem; padding: 1px 5px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #fbbf24;">Duplicate</span>' : ''}
+                            </div>
+                        `;
+                    }).join('');
+
+                    taskPreviewHtml = `
+                        <div style="margin-top: 6px;">
+                            <button type="button" class="dedup-task-preview-toggle" data-list-id="${l.id}">
+                                <i class="ph ph-caret-down"></i> Preview ${tasks.length} task${tasks.length === 1 ? '' : 's'}
+                            </button>
+                            <div class="dedup-task-preview-list hidden" id="task-preview-${l.id}">
+                                ${taskItemsHtml}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="dedup-task-instance-row" style="flex-direction: column; align-items: stretch; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                            <div class="dedup-task-info">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <strong>${escapeHtml(l.title)}</strong>
+                                    <span class="dedup-board-tag ${l.boards.some(b => b.id === state.appData.currentBoardId) ? 'active-board' : ''}">
+                                        <i class="ph ph-sidebar"></i> ${boardNames}
+                                    </span>
+                                </div>
+                                <span class="dedup-card-meta"><i class="ph ph-check-square"></i> ${l.taskCount} task${l.taskCount === 1 ? '' : 's'}</span>
+                            </div>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                ${l.taskCount === 0 ? `
+                                    <button class="dedup-action-pill danger dedup-del-empty-list-btn" data-list-id="${l.id}" title="Delete this empty list">
+                                        <i class="ph ph-trash"></i> Delete empty list
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ${taskPreviewHtml}
+                    </div>
+                `;
+            }).join('');
+
+            // Directional Merge Chooser
+            let directionalMergeHtml = '';
+            if (group.lists.length === 2) {
+                const listA = group.lists[0];
+                const listB = group.lists[1];
+                const boardA = listA.boards.map(b => b.title).join(', ') || 'Unassigned';
+                const boardB = listB.boards.map(b => b.title).join(', ') || 'Unassigned';
+
+                directionalMergeHtml = `
+                    <div class="dedup-merge-box">
+                        <div class="dedup-merge-box-header">
+                            <i class="ph ph-arrows-merge" style="color: #34d399; font-size: 1.1rem;"></i>
+                            <span>Choose Which Way to Merge:</span>
+                        </div>
+                        <button type="button" class="dedup-merge-direction-btn" data-source-id="${listB.id}" data-target-id="${listA.id}" data-source-board="${escapeHtml(boardB)}" data-target-board="${escapeHtml(boardA)}">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                    <i class="ph ph-arrow-circle-right"></i> Merge into ${escapeHtml(boardA)}
+                                </div>
+                                <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 2px;">
+                                    Keep list on <strong>${escapeHtml(boardA)}</strong> &bull; Move all ${listB.taskCount} task(s) from <strong>${escapeHtml(boardB)}</strong> here &bull; Safely remove duplicate list on ${escapeHtml(boardB)}
+                                </div>
+                            </div>
+                            <i class="ph ph-arrow-right merge-arrow-icon"></i>
+                        </button>
+                        <button type="button" class="dedup-merge-direction-btn" data-source-id="${listA.id}" data-target-id="${listB.id}" data-source-board="${escapeHtml(boardA)}" data-target-board="${escapeHtml(boardB)}">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                    <i class="ph ph-arrow-circle-right"></i> Merge into ${escapeHtml(boardB)}
+                                </div>
+                                <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 2px;">
+                                    Keep list on <strong>${escapeHtml(boardB)}</strong> &bull; Move all ${listA.taskCount} task(s) from <strong>${escapeHtml(boardA)}</strong> here &bull; Safely remove duplicate list on ${escapeHtml(boardA)}
+                                </div>
+                            </div>
+                            <i class="ph ph-arrow-right merge-arrow-icon"></i>
+                        </button>
+                    </div>
+                `;
+            } else if (group.lists.length > 2) {
+                directionalMergeHtml = `
+                    <div class="dedup-merge-box">
+                        <div class="dedup-merge-box-header">
+                            <i class="ph ph-arrows-merge" style="color: #34d399; font-size: 1.1rem;"></i>
+                            <span>Merge All Lists into One:</span>
+                        </div>
+                        ${group.lists.map(targetList => {
+                            const targetBoard = targetList.boards.map(b => b.title).join(', ') || 'Unassigned';
+                            const others = group.lists.filter(l => l.id !== targetList.id);
+                            const otherTasksCount = others.reduce((acc, l) => acc + (l.taskCount || 0), 0);
+                            return `
+                                <button type="button" class="dedup-merge-direction-btn dedup-merge-multi-btn" data-target-id="${targetList.id}" data-target-board="${escapeHtml(targetBoard)}">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="font-weight: 600; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                            <i class="ph ph-arrow-circle-right"></i> Merge all into ${escapeHtml(targetBoard)}
+                                        </div>
+                                        <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 2px;">
+                                            Keep list on <strong>${escapeHtml(targetBoard)}</strong> &bull; Move ${otherTasksCount} task(s) from other ${others.length} list(s) here &bull; Remove other empty duplicate lists
+                                        </div>
+                                    </div>
+                                    <i class="ph ph-arrow-right merge-arrow-icon"></i>
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="dedup-card-header">
+                    <div class="dedup-card-title">
+                        <i class="ph ph-folder"></i>
+                        <span>"${escapeHtml(group.title)}"</span>
+                    </div>
+                    <span class="dedup-badge">${group.count} separate lists</span>
+                </div>
+                ${taskOverlapNoticeHtml}
+                <div class="dedup-task-instances-list">
+                    ${listsRowsHtml}
+                </div>
+                ${directionalMergeHtml}
+            `;
+
+            // Attach preview toggles
+            card.querySelectorAll('.dedup-task-preview-toggle').forEach(toggleBtn => {
+                toggleBtn.onclick = () => {
+                    const listId = toggleBtn.dataset.listId;
+                    const previewList = card.querySelector(`#task-preview-${listId}`);
+                    if (previewList) {
+                        const isHidden = previewList.classList.toggle('hidden');
+                        toggleBtn.querySelector('i').className = isHidden ? 'ph ph-caret-down' : 'ph ph-caret-up';
+                    }
+                };
+            });
+
+            // Directional Merge 2-way handler
+            card.querySelectorAll('.dedup-merge-direction-btn:not(.dedup-merge-multi-btn)').forEach(btn => {
+                btn.onclick = async () => {
+                    const sourceId = btn.dataset.sourceId;
+                    const targetId = btn.dataset.targetId;
+                    const sourceBoard = btn.dataset.sourceBoard;
+                    const targetBoard = btn.dataset.targetBoard;
+
+                    if (!confirm(`Merge all tasks from "${group.title}" (${sourceBoard}) into "${group.title}" (${targetBoard})?\n\nAll tasks will be preserved safely on ${targetBoard}, and the empty duplicate list on ${sourceBoard} will be deleted.`)) {
+                        return;
+                    }
+
+                    btn.disabled = true;
+                    try {
+                        await mergeLists(sourceId, targetId, true);
+                        showToast(`Successfully merged into ${targetBoard}`, "success");
+                        renderBoard();
+                        renderDedupModal('lists');
+                        renderOrphansStatusInSettings();
+                    } catch (err) {
+                        showToast(`Merge failed: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            // Directional Merge multi (> 2 lists) handler
+            card.querySelectorAll('.dedup-merge-multi-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const targetId = btn.dataset.targetId;
+                    const targetBoard = btn.dataset.targetBoard;
+                    const others = group.lists.filter(l => l.id !== targetId);
+
+                    if (!confirm(`Merge all tasks from the other ${others.length} duplicate list(s) into "${group.title}" on ${targetBoard}?\n\nAll tasks will be kept safely, and the other duplicate lists will be deleted.`)) {
+                        return;
+                    }
+
+                    btn.disabled = true;
+                    try {
+                        for (const src of others) {
+                            await mergeLists(src.id, targetId, true);
+                        }
+                        showToast(`Successfully merged all lists into ${targetBoard}`, "success");
+                        renderBoard();
+                        renderDedupModal('lists');
+                        renderOrphansStatusInSettings();
+                    } catch (err) {
+                        showToast(`Merge failed: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            // Delete empty list handler
+            card.querySelectorAll('.dedup-del-empty-list-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const listId = btn.dataset.listId;
+                    if (!confirm(`Delete this empty list "${group.title}"?`)) return;
+                    btn.disabled = true;
+                    try {
+                        await deleteList(listId);
+                        showToast(`Empty list deleted`, "success");
+                        renderBoard();
+                        renderDedupModal('lists');
+                        renderOrphansStatusInSettings();
+                    } catch (err) {
+                        showToast(`Failed: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            sec.appendChild(card);
+        });
+
+        container.appendChild(sec);
+    }
+}
+
+function renderDedupTasksTab(container, taskScan) {
+    const { multiListTasks, sameTextTasks } = taskScan;
+
+    // Filter toolbar
+    const filterBar = document.createElement('div');
+    filterBar.className = 'dedup-filter-bar';
+    filterBar.innerHTML = `
+        <div style="display: flex; gap: 14px; align-items: center;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="dedup-inc-completed-chk" ${dedupIncludeCompleted ? 'checked' : ''}>
+                <span>Include Completed Tasks</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="dedup-inc-archived-chk" ${dedupIncludeArchived ? 'checked' : ''}>
+                <span>Include Archived Tasks</span>
+            </label>
+        </div>
+        <span style="font-size: 0.8rem; color: var(--text-secondary);">
+            Tip: Leave archived off to focus only on active daily tasks
+        </span>
+    `;
+
+    filterBar.querySelector('#dedup-inc-completed-chk').onchange = (e) => {
+        dedupIncludeCompleted = e.target.checked;
+        renderDedupModal('tasks');
+    };
+    filterBar.querySelector('#dedup-inc-archived-chk').onchange = (e) => {
+        dedupIncludeArchived = e.target.checked;
+        renderDedupModal('tasks');
+    };
+
+    container.appendChild(filterBar);
+
+    if (multiListTasks.length === 0 && sameTextTasks.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'dedup-empty-state';
+        empty.innerHTML = `
+            <i class="ph ph-check-circle"></i>
+            <h3>No Duplicate Tasks Found!</h3>
+            <p>No duplicate tasks matched your current filter.</p>
+        `;
+        container.appendChild(empty);
+        return;
+    }
+
+    // 1. Shared tasks across multiple lists
+    if (multiListTasks.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'dedup-section';
+        sec.innerHTML = `
+            <div class="dedup-section-header">
+                <h3 class="dedup-section-title"><i class="ph ph-link" style="color: oklch(0.72 0.16 160);"></i> Tasks in Multiple Lists (${multiListTasks.length})</h3>
+                <p class="dedup-section-desc">The same task appears in multiple lists simultaneously. Choose which list(s) to remove it from.</p>
+            </div>
+        `;
+
+        multiListTasks.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'dedup-card';
+
+            const listsHtml = item.lists.map(l => `
+                <div class="dedup-board-tag">
+                    <i class="ph ph-list"></i>
+                    <span>${escapeHtml(l.title)}</span>
+                    <button class="dedup-action-pill danger dedup-rm-task-from-list-btn" data-task-id="${item.taskId}" data-list-id="${l.id}" title="Remove from this list">
+                        <i class="ph ph-x"></i> Remove
+                    </button>
+                </div>
+            `).join('');
+
+            card.innerHTML = `
+                <div class="dedup-card-header">
+                    <div class="dedup-card-title">
+                        <span>${escapeHtml(item.text)}</span>
+                    </div>
+                    <div>
+                        ${item.completed ? '<span class="dedup-status-badge completed">Completed</span>' : '<span class="dedup-status-badge active">Active</span>'}
+                        ${item.archived ? '<span class="dedup-status-badge archived">Archived</span>' : ''}
+                    </div>
+                </div>
+                <div class="dedup-board-tag-row">
+                    ${listsHtml}
+                </div>
+            `;
+
+            card.querySelectorAll('.dedup-rm-task-from-list-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const tid = btn.dataset.taskId;
+                    const lid = btn.dataset.listId;
+                    btn.disabled = true;
+                    try {
+                        await removeTaskFromList(tid, lid);
+                        showToast("Task removed from list", "success");
+                        renderBoard();
+                        renderDedupModal('tasks');
+                    } catch (err) {
+                        showToast(`Failed: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            sec.appendChild(card);
+        });
+
+        container.appendChild(sec);
+    }
+
+    // 2. Different task IDs with identical text
+    if (sameTextTasks.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'dedup-section';
+        sec.innerHTML = `
+            <div class="dedup-section-header">
+                <h3 class="dedup-section-title"><i class="ph ph-copy" style="color: oklch(0.75 0.15 220);"></i> Tasks with Identical Text (${sameTextTasks.length})</h3>
+                <p class="dedup-section-desc">Different task entries that have the exact same text. Choose which copy to keep.</p>
+            </div>
+        `;
+
+        sameTextTasks.forEach(group => {
+            const card = document.createElement('div');
+            card.className = 'dedup-card';
+
+            const rowsHtml = group.tasks.map((t, idx) => {
+                const listNames = t.lists.map(l => escapeHtml(l.title)).join(', ') || 'Unassigned / Archive';
+                const isNewest = idx === 0;
+                const createdDateStr = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Unknown date';
+
+                return `
+                    <div class="dedup-task-instance-row">
+                        <div class="dedup-task-info">
+                            <span style="font-weight: 500;">Copy ${idx + 1}</span>
+                            ${isNewest ? '<span class="dedup-badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80;">Newest</span>' : ''}
+                            <span class="dedup-card-meta">in: ${listNames}</span>
+                            <span class="dedup-card-meta">Created: ${createdDateStr}</span>
+                            ${t.completed ? '<span class="dedup-status-badge completed">Completed</span>' : '<span class="dedup-status-badge active">Active</span>'}
+                            ${t.archived ? '<span class="dedup-status-badge archived">Archived</span>' : ''}
+                        </div>
+                        <button class="dedup-action-pill danger dedup-del-task-btn" data-task-id="${t.id}" title="Delete this specific task copy">
+                            <i class="ph ph-trash"></i> Delete
+                        </button>
+                    </div>
+                `;
+            }).join('');
+
+            card.innerHTML = `
+                <div class="dedup-card-header">
+                    <div class="dedup-card-title">
+                        <span>"${escapeHtml(group.text)}"</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span class="dedup-badge">${group.count} copies</span>
+                        <button class="dedup-action-pill success dedup-keep-newest-btn" title="Keep the newest copy and delete all older copies">
+                            <i class="ph ph-magic-wand"></i> Keep Newest & Delete Older
+                        </button>
+                    </div>
+                </div>
+                <div class="dedup-task-instances-list">
+                    ${rowsHtml}
+                </div>
+            `;
+
+            // Delete individual copy
+            card.querySelectorAll('.dedup-del-task-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const tid = btn.dataset.taskId;
+                    if (!confirm("Permanently delete this task copy?")) return;
+                    btn.disabled = true;
+                    try {
+                        await deleteDuplicateTaskForever(tid);
+                        showToast("Duplicate task deleted", "success");
+                        renderBoard();
+                        renderDedupModal('tasks');
+                    } catch (err) {
+                        showToast(`Failed: ${err.message}`, "error");
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            // Keep newest and delete older copies
+            const keepNewestBtn = card.querySelector('.dedup-keep-newest-btn');
+            if (keepNewestBtn) {
+                keepNewestBtn.onclick = async () => {
+                    const olderTasks = group.tasks.slice(1);
+                    if (!confirm(`Keep the newest copy and permanently delete the other ${olderTasks.length} older copy/copies?`)) return;
+                    keepNewestBtn.disabled = true;
+                    try {
+                        for (const ot of olderTasks) {
+                            await deleteDuplicateTaskForever(ot.id);
+                        }
+                        showToast(`Deleted ${olderTasks.length} duplicate copy/copies`, "success");
+                        renderBoard();
+                        renderDedupModal('tasks');
+                    } catch (err) {
+                        showToast(`Failed: ${err.message}`, "error");
+                        keepNewestBtn.disabled = false;
+                    }
+                };
+            }
+
+            sec.appendChild(card);
+        });
+
+        container.appendChild(sec);
+    }
+}
+

@@ -219,6 +219,40 @@
                 <button id="reorder-boards-btn" class="menu-action-item" title="Reorder Boards">
                     <i class="ph ph-squares-four"></i> Reorder Boards
                 </button>
+
+                <hr class="dropdown-divider options-span-all">
+                <!-- DATA HEALTH & DUPLICATE MANAGER -->
+                <div class="settings-section-title options-span-all" style="padding: 6px 12px 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="ph ph-shield-check"></i> Data Health &amp; Duplicates
+                </div>
+
+                <!-- DUPLICATE MANAGER -->
+                <button id="open-dedup-modal-btn" class="menu-action-item" style="color: oklch(0.78 0.16 160); font-weight: 600;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                        <i class="ph ph-copy" style="font-size: 1.15rem;"></i>
+                        <span>Duplicate Manager</span>
+                    </div>
+                    <span id="dedup-summary-badge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;">Checking...</span>
+                </button>
+
+                <!-- ORPHAN LISTS -->
+                <div id="orphan-lists-status-item" class="menu-action-item" style="cursor: pointer;" title="Click to rescue unassigned lists">
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                        <i id="orphan-lists-icon" class="ph ph-check-circle" style="color: #4ade80;"></i>
+                        <span id="orphan-lists-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Orphan Lists (All assigned to boards)</span>
+                    </div>
+                    <span id="orphan-lists-badge" class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;">0</span>
+                </div>
+
+                <!-- ORPHAN TASKS -->
+                <div id="orphan-tasks-status-item" class="menu-action-item" style="cursor: pointer;" title="Click to rescue unassigned tasks">
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                        <i id="orphan-tasks-icon" class="ph ph-check-circle" style="color: #4ade80;"></i>
+                        <span id="orphan-tasks-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Orphan Tasks (All tasks in lists)</span>
+                    </div>
+                    <span id="orphan-tasks-badge" class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;">0</span>
+                </div>
+                <hr class="dropdown-divider options-span-all">
                 <button id="time-automation-help-btn" class="menu-action-item" title="Time Automation Help">
                     <i class="ph ph-question"></i> Time Automation Help
                 </button>
@@ -1506,6 +1540,51 @@
             <div class="modal-actions centered-actions">
                 <button id="cancel-add-board-btn" class="btn secondary">Cancel</button>
                 <button id="confirm-add-board-btn" class="btn primary">Create Board</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DUPLICATE CLEANER MODAL -->
+    <div id="dedup-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel dedup-modal">
+            <div class="modal-header-row dedup-header-row">
+                <div class="dedup-title-area">
+                    <i class="ph ph-copy dedup-title-icon"></i>
+                    <div>
+                        <h2 class="dedup-title">Duplicate Manager</h2>
+                        <p class="dedup-subtitle">Detect, compare, and merge duplicate lists and tasks across your boards</p>
+                    </div>
+                </div>
+                <button id="close-dedup-modal-btn" class="icon-btn-large" aria-label="Close modal">&times;</button>
+            </div>
+
+            <!-- TAB CONTROLS -->
+            <div class="dedup-tabs-bar">
+                <button id="dedup-tab-lists-btn" class="btn primary dedup-tab-btn active" data-tab="lists">
+                    <i class="ph ph-list-dashes"></i> Duplicate Lists <span id="dedup-lists-badge" class="dedup-badge">0</span>
+                </button>
+                <button id="dedup-tab-tasks-btn" class="btn secondary dedup-tab-btn" data-tab="tasks">
+                    <i class="ph ph-check-square"></i> Duplicate Tasks <span id="dedup-tasks-badge" class="dedup-badge">0</span>
+                </button>
+                <button id="dedup-refresh-btn" class="btn secondary dedup-refresh-btn" title="Rescan for duplicates">
+                    <i class="ph ph-arrows-clockwise"></i> Rescan
+                </button>
+            </div>
+
+            <!-- SCROLLABLE BODY -->
+            <div id="dedup-modal-body" class="dedup-modal-body">
+                <!-- Content rendered dynamically by UI -->
+            </div>
+
+            <!-- FOOTER ACTIONS -->
+            <div class="modal-actions-bar dedup-footer-bar">
+                <div id="dedup-summary-text" class="dedup-summary-text">Ready</div>
+                <div class="dedup-footer-actions">
+                    <button id="dedup-auto-fix-main-board-btn" class="btn primary dedup-action-btn hidden">
+                        <i class="ph ph-magic-wand"></i> Remove Dev Lists From Main Board
+                    </button>
+                    <button id="dedup-done-btn" class="btn secondary">Done</button>
+                </div>
             </div>
         </div>
     </div>

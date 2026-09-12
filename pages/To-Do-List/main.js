@@ -103,6 +103,9 @@ function openSettingsPage() {
     if (typeof UI.renderTagsSettingsPanel === 'function') {
         UI.renderTagsSettingsPanel();
     }
+    if (typeof UI.renderOrphansStatusInSettings === 'function') {
+        UI.renderOrphansStatusInSettings();
+    }
 
     el.classList.remove('hidden');
     el.setAttribute('aria-hidden', 'false');
@@ -342,6 +345,7 @@ window.openQuickTagWalkthrough = UI.openQuickTagWalkthrough;
 window.closeQuickTagWalkthrough = UI.closeQuickTagWalkthrough;
 window.goBackQuickTagStep = UI.goBackQuickTagStep;
 window.openBoardManager = UI.openBoardManager;
+window.openDedupModal = UI.openDedupModal;
 window.clearCompletedInList = API.clearCompletedInList;
 window.groupListByTag = UI.groupListByTag;
 window.showConfirmModal = showConfirmModal;
@@ -603,8 +607,10 @@ function setupFirestoreListeners(uid) {
             }
 
             state.appData.projectTitle = data.projectTitle || (window.APP_CONFIG && window.APP_CONFIG.appName) || "Task Master";
-            if (!state.appData.currentBoardId) {
-                state.appData.listOrder = data.listOrder || [];
+            if (!state.appData.currentBoardId && (!state.appData.boards || state.appData.boards.length === 0)) {
+                if (data.listOrder && Array.isArray(data.listOrder)) {
+                    state.appData.listOrder = data.listOrder;
+                }
             }
 
             // If we have a listOrder but no boards, we need to migrate
@@ -697,21 +703,12 @@ function setupFirestoreListeners(uid) {
 
         const boards = [];
         snapshot.forEach(doc => boards.push({ id: doc.id, ...doc.data() }));
+        if (boards.length === 0 && state.appData.boards && state.appData.boards.length > 0 && snapshot.metadata.fromCache) {
+            console.warn("Ignoring temporary empty boards snapshot from cache to protect board data.");
+            return;
+        }
         state.appData.boards = boards;
         UI.syncBoardOrderInMemory();
-
-        // Migration logic: If user doc has listOrder but boards collection is empty
-        if (boards.length === 0 && state.appData.listOrder.length > 0) {
-            console.log("Migrating listOrder to default board...");
-            const boardId = 'main_board';
-            setDoc(doc(db, "users", uid, "boards", boardId), {
-                title: "Main Board",
-                listOrder: state.appData.listOrder,
-                createdAt: Date.now()
-            }).then(() => {
-                API.switchBoard(boardId);
-            });
-        }
 
         // Initialize currentBoardId if not set
         if (!state.appData.currentBoardId && boards.length > 0) {
@@ -1684,6 +1681,40 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
     document.getElementById('download-json-btn').onclick = () => triggerBackupDownload();
+
+    const openDedupBtn = document.getElementById('open-dedup-modal-btn');
+    if (openDedupBtn) {
+        openDedupBtn.onclick = () => {
+            closeSettingsPage();
+            UI.openDedupModal();
+        };
+    }
+
+    const orphanListsItem = document.getElementById('orphan-lists-status-item');
+    if (orphanListsItem) {
+        orphanListsItem.onclick = () => {
+            const orphans = UI.getOrphanedListIds();
+            if (orphans.length > 0) {
+                closeSettingsPage();
+                API.rescueOrphanLists();
+            } else {
+                Utils.showToast("All lists are safely assigned to boards. No orphan lists!", "success");
+            }
+        };
+    }
+
+    const orphanTasksItem = document.getElementById('orphan-tasks-status-item');
+    if (orphanTasksItem) {
+        orphanTasksItem.onclick = () => {
+            const orphans = UI.getOrphanedTaskIds();
+            if (orphans.length > 0) {
+                closeSettingsPage();
+                API.rescueOrphanTasks();
+            } else {
+                Utils.showToast("All tasks are linked inside lists. No orphan tasks!", "success");
+            }
+        };
+    }
 
     // Todoist Import
     document.getElementById('import-todoist-csv').onchange = (e) => {

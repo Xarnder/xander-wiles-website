@@ -7859,3 +7859,571 @@ body.kanban-dragging .kanban-column-pane {
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
+
+/* ==========================================================================
+   DUPLICATE CLEANER MODAL
+   ========================================================================== */
+
+.dedup-modal {
+    max-width: 860px;
+    width: 95vw;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    box-sizing: border-box;
+    background: var(--bg-surface, rgba(20, 24, 33, 0.85));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.dedup-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.dedup-title-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dedup-title-icon {
+    font-size: 1.8rem;
+    color: oklch(0.72 0.16 160);
+}
+
+.dedup-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.dedup-subtitle {
+    margin: 3px 0 0;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    opacity: 0.85;
+}
+
+.dedup-tabs-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.dedup-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    padding: 8px 16px;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.dedup-tab-btn.active {
+    background: var(--accent-blue, #3b82f6) !important;
+    color: #fff !important;
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+}
+
+.dedup-badge {
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.dedup-refresh-btn {
+    margin-left: auto;
+    font-size: 0.85rem;
+    padding: 7px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dedup-modal-body {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 250px;
+    max-height: 58vh;
+    padding-right: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.dedup-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dedup-section-header {
+    margin-bottom: 4px;
+}
+
+.dedup-section-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+}
+
+.dedup-section-desc {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.dedup-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.dedup-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.dedup-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.dedup-card-title {
+    font-weight: 600;
+    font-size: 0.98rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dedup-card-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dedup-board-tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.dedup-board-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.82rem;
+}
+
+.dedup-board-tag.active-board {
+    border-color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.dedup-btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.dedup-action-pill {
+    font-size: 0.8rem;
+    padding: 5px 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.dedup-action-pill.danger {
+    color: oklch(0.65 0.22 25);
+    border-color: rgba(255, 75, 75, 0.25);
+    background: rgba(255, 75, 75, 0.08);
+}
+
+.dedup-action-pill.danger:hover {
+    background: rgba(255, 75, 75, 0.18);
+}
+
+.dedup-action-pill.success {
+    color: oklch(0.72 0.18 150);
+    border-color: rgba(34, 197, 94, 0.25);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.dedup-action-pill.success:hover {
+    background: rgba(34, 197, 94, 0.18);
+}
+
+.dedup-task-instances-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dedup-task-instance-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85rem;
+}
+
+.dedup-task-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.dedup-status-badge {
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.dedup-status-badge.completed {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+}
+
+.dedup-status-badge.archived {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.dedup-status-badge.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.dedup-footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.dedup-summary-text {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.dedup-footer-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.dedup-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 10px;
+}
+
+.dedup-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.dedup-empty-state i {
+    font-size: 2.8rem;
+    color: oklch(0.72 0.18 150);
+}
+
+.dedup-empty-state h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.dedup-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+}
+
+/* Orphan Lists Alert Banner */
+.orphan-alert-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    margin: 8px 16px 16px;
+    border-radius: 12px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fca5a5;
+    flex-wrap: wrap;
+    width: calc(100% - 32px);
+    box-sizing: border-box;
+}
+
+.orphan-alert-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.orphan-alert-icon {
+    font-size: 1.6rem;
+    color: #ef4444;
+}
+
+.orphan-alert-content strong {
+    color: #fee2e2;
+    display: block;
+    font-size: 0.95rem;
+}
+
+.orphan-alert-content p {
+    margin: 2px 0 0 0;
+    font-size: 0.82rem;
+    color: #fca5a5;
+}
+
+/* List header duplicate & multi-board indicator badges */
+.list-header-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 6px 0;
+    width: 100%;
+}
+
+.list-indicator-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    line-height: 1.4;
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.list-indicator-badge.multi-board {
+    background: rgba(20, 184, 166, 0.15);
+    color: #2dd4bf;
+    border-color: rgba(20, 184, 166, 0.35);
+}
+
+.list-indicator-badge.multi-board:hover {
+    background: rgba(20, 184, 166, 0.28);
+    border-color: #2dd4bf;
+    transform: translateY(-1px);
+}
+
+.list-indicator-badge.duplicate-name {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border-color: rgba(168, 85, 247, 0.35);
+}
+
+.list-indicator-badge.duplicate-name:hover {
+    background: rgba(168, 85, 247, 0.28);
+    border-color: #c084fc;
+    transform: translateY(-1px);
+}
+
+/* Task Card Duplicate Badges */
+.task-indicator-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: all 0.2s ease;
+}
+
+.task-indicator-badge.unlinked-duplicate {
+    background: rgba(245, 158, 11, 0.18);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.task-indicator-badge.unlinked-duplicate:hover {
+    background: rgba(245, 158, 11, 0.3);
+    border-color: #fbbf24;
+}
+
+.task-indicator-badge.linked-task {
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.task-indicator-badge.linked-task:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: #60a5fa;
+}
+
+/* Merge Direction Chooser Styles */
+.dedup-merge-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dedup-merge-box-header {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dedup-merge-direction-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+    text-align: left;
+    font-family: inherit;
+}
+
+.dedup-merge-direction-btn:hover {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #34d399;
+    color: #34d399;
+    transform: translateY(-1px);
+}
+
+.dedup-merge-direction-btn .merge-arrow-icon {
+    font-size: 1.1rem;
+    color: #34d399;
+}
+
+.dedup-task-preview-toggle {
+    background: none;
+    border: none;
+    color: var(--accent-blue, #60a5fa);
+    font-size: 0.78rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    font-family: inherit;
+}
+
+.dedup-task-preview-toggle:hover {
+    text-decoration: underline;
+}
+
+.dedup-task-preview-list {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dedup-task-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+}
+
+.dedup-task-preview-item.is-shared {
+    color: #fbbf24;
+    font-weight: 500;
+}
+
+
+
