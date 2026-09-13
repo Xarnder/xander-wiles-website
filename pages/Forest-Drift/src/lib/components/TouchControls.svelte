@@ -18,6 +18,7 @@
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import openDoorIcon from '$lib/assets/icons/open.svg';
+	import musicIcon from '$lib/assets/icons/music.svg';
 
 	interface Props {
 		scene: ThreeScene | undefined;
@@ -212,6 +213,10 @@
 		scene?.toggleMoveMode();
 	}
 
+	function onToggleMusic() {
+		scene?.toggleMusicMode();
+	}
+
 	const isContinuousOrPath = $derived.by(() => {
 		const notice = buildHud?.notice ?? '';
 		return notice.includes('Continuous Wall') || notice.includes('Path') || notice.includes('Enter');
@@ -290,6 +295,18 @@
 			>
 				<img class="touch-icon" src={handPointIcon} alt="" />
 				<span>Move</span>
+			</button>
+
+			<button
+				type="button"
+				class="touch-mode-btn music"
+				class:active={hotbar?.globalMode === 'music'}
+				onclick={onToggleMusic}
+				data-testid="touch-music-toggle"
+				aria-label="Toggle Music Mode"
+			>
+				<img class="touch-icon" src={musicIcon} alt="" />
+				<span>Music</span>
 			</button>
 		</div>
 
@@ -617,6 +634,12 @@
 		background: rgba(220, 60, 60, 0.35);
 		border-color: rgba(255, 120, 120, 0.7);
 		color: #ffc4c4;
+	}
+
+	.touch-mode-btn.music.active {
+		background: rgba(179, 136, 255, 0.35);
+		border-color: rgba(179, 136, 255, 0.75);
+		color: #e2d1ff;
 	}
 
 	.touch-icon {

@@ -42,11 +42,24 @@ test.describe('Touch / iPad Controls', () => {
 		// Look swipe zone
 		await expect(page.getByTestId('touch-look-zone')).toBeVisible();
 
-		// Top mode buttons: Build, Remove, Paint, Move
+		// Top mode buttons: Build, Remove, Paint, Move, Music
 		await expect(page.getByTestId('touch-build-toggle')).toBeVisible();
 		await expect(page.getByTestId('touch-remove-toggle')).toBeVisible();
 		await expect(page.getByTestId('touch-paint-toggle')).toBeVisible();
 		await expect(page.getByTestId('touch-move-toggle')).toBeVisible();
+		const musicToggle = page.getByTestId('touch-music-toggle');
+		await expect(musicToggle).toBeVisible();
+		await expect(musicToggle.locator('img')).toHaveAttribute(
+			'src',
+			/(music.*\.svg|data:image\/svg\+xml)/
+		);
+
+		// Tapping Music toggle enters Music Mode and adds active class
+		await musicToggle.click();
+		await expect(musicToggle).toHaveClass(/active/);
+		// Tapping Music toggle again exits Music Mode
+		await musicToggle.click();
+		await expect(musicToggle).not.toHaveClass(/active/);
 
 		// Primary action buttons: Place, Cancel
 		await expect(page.getByTestId('touch-place-btn')).toBeVisible();
@@ -85,6 +98,25 @@ test.describe('Touch / iPad Controls', () => {
 		// Tap touch variant button to switch tool variant inside slot
 		await page.getByTestId('touch-variant-btn').click();
 		await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
+
+		// Verify Touch Edit button appears for customizable tools and opens scrollable edit modal
+		const editBtn = page.getByTestId('touch-edit-btn');
+		await expect(editBtn).toBeVisible();
+		await editBtn.click();
+
+		const customizeModal = page.getByTestId('placement-customize-modal');
+		await expect(customizeModal).toBeVisible();
+		const panel = customizeModal;
+
+		// Verify panel has scrollable overflow enabled
+		const panelOverflowY = await panel.evaluate((el) => window.getComputedStyle(el).overflowY);
+		expect(['auto', 'scroll']).toContain(panelOverflowY);
+
+		// Close edit modal via close button
+		const closeCustomiseBtn = customizeModal.locator('button[aria-label="Close customise"]');
+		await expect(closeCustomiseBtn).toBeVisible();
+		await closeCustomiseBtn.click();
+		await expect(customizeModal).not.toBeVisible();
 
 		// Verify hotbar slot labels are strictly single-line (never wrap to new line)
 		const slotLabels = page.locator('.slot-label');
@@ -207,6 +239,40 @@ test.describe('Touch / iPad Controls', () => {
 			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_landscape_screenshot.png'
 		});
 
+		// Switch to Stairs tool (which has rich options: railings, framing, hole, width, color)
+		await page.getByTestId('hotbar-slot-stairs').click();
+		await expect(page.getByTestId('hotbar-slot-stairs')).toHaveClass(/active/);
+
+		// Verify Edit Modal in Landscape on phone: fits inside viewport
+		await editBtn.click();
+		await expect(customizeModal).toBeVisible();
+		const landscapePanelBox = (await panel.boundingBox())!;
+		expect(landscapePanelBox.height).toBeLessThanOrEqual(390);
+		expect(landscapePanelBox.y).toBeGreaterThanOrEqual(0);
+
+		// Verify CSS scrollable overflow is enabled on the modal panel
+		const landscapeOverflowY = await panel.evaluate((el) => window.getComputedStyle(el).overflowY);
+		expect(['auto', 'scroll']).toContain(landscapeOverflowY);
+
+		// In short landscape viewport (e.g. 320px height with mobile browser address bars), verify scrollability
+		await page.setViewportSize({ width: 844, height: 320 });
+		await page.waitForTimeout(200);
+		const shortScrollable = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
+		expect(shortScrollable).toBe(true);
+
+		await panel.evaluate((el) => {
+			el.scrollTop = 50;
+		});
+		const shortScrolled = await panel.evaluate((el) => el.scrollTop);
+		expect(shortScrolled).toBeGreaterThan(0);
+
+		await page.screenshot({
+			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_landscape_edit_modal.png'
+		});
+
+		await closeCustomiseBtn.click();
+		await expect(customizeModal).not.toBeVisible();
+
 		// --- Test Phone Portrait (e.g. iPhone 13/14 portrait 390x844) ---
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.waitForTimeout(300);
@@ -225,6 +291,33 @@ test.describe('Touch / iPad Controls', () => {
 		await page.screenshot({
 			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_portrait_screenshot.png'
 		});
+
+		// In constrained portrait viewport (e.g. 390x600 phone with keyboard or browser bars):
+		await page.setViewportSize({ width: 390, height: 600 });
+		await page.waitForTimeout(200);
+
+		// Verify Edit Modal in Portrait on phone: fits inside viewport, is scrollable
+		await editBtn.click();
+		await expect(customizeModal).toBeVisible();
+		const portraitPanelBox = (await panel.boundingBox())!;
+		expect(portraitPanelBox.height).toBeLessThanOrEqual(600);
+		expect(portraitPanelBox.y).toBeGreaterThanOrEqual(0);
+
+		const portraitScrollable = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
+		expect(portraitScrollable).toBe(true);
+
+		await panel.evaluate((el) => {
+			el.scrollTop = 60;
+		});
+		const portraitScrolled = await panel.evaluate((el) => el.scrollTop);
+		expect(portraitScrolled).toBeGreaterThan(0);
+
+		await page.screenshot({
+			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_portrait_edit_modal.png'
+		});
+
+		await closeCustomiseBtn.click();
+		await expect(customizeModal).not.toBeVisible();
 
 		// Reset viewport
 		await page.setViewportSize({ width: 1280, height: 720 });

@@ -63,4 +63,10 @@
 	.preview-canvas:active {
 		cursor: grabbing;
 	}
+	@media (max-height: 560px) {
+		.preview,
+		.preview-canvas {
+			min-height: 10.5rem;
+		}
+	}
 </style>

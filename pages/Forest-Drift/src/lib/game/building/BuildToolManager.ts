@@ -370,6 +370,13 @@ export class BuildToolManager {
 		this.setGlobalMode(this.globalMode === 'move' ? 'none' : 'move');
 	}
 
+	toggleMusicMode(): void {
+		if (this.musicTool) {
+			if (!this.buildModeActive) this.setBuildMode(true);
+			this.setGlobalMode(this.globalMode === 'music' ? 'none' : 'music');
+		}
+	}
+
 	isRemoveModeActive(): boolean {
 		return this.globalMode === 'remove';
 	}
@@ -380,6 +387,10 @@ export class BuildToolManager {
 
 	isMoveModeActive(): boolean {
 		return this.globalMode === 'move';
+	}
+
+	isMusicModeActive(): boolean {
+		return this.globalMode === 'music';
 	}
 
 	isPlacementCustomizeOpen(): boolean {

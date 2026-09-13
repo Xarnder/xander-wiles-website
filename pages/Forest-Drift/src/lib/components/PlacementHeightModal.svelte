@@ -168,13 +168,27 @@
 		inset: 0;
 		z-index: 60;
 		background: #07140dd9;
-		display: grid;
-		place-items: center;
-		padding: 1rem;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		padding: 0.75rem;
+		box-sizing: border-box;
+		overflow-y: auto;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
 		backdrop-filter: blur(5px);
+		-webkit-backdrop-filter: blur(5px);
 	}
 	.placement-panel {
+		margin: auto;
 		width: min(500px, 94vw);
+		max-height: min(92vh, calc(100dvh - 1.5rem));
+		overflow-y: auto;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(126, 200, 154, 0.4) transparent;
 		background: #142a20;
 		color: #e3f5e8;
 		border: 1px solid #446553;
@@ -182,12 +196,20 @@
 		padding: 1.4rem;
 		font: 14px/1.5 system-ui;
 		box-shadow: 0 20px 100px #0007;
+		box-sizing: border-box;
 	}
 	header {
+		position: sticky;
+		top: -1.4rem;
+		z-index: 5;
+		background: #142a20;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
+		padding: 0.25rem 0 0.6rem;
+		margin-top: -0.25rem;
+		border-bottom: 1px solid rgba(68, 101, 83, 0.4);
 	}
 	header h2 {
 		margin: 0;
@@ -226,6 +248,7 @@
 		display: grid;
 		gap: 0.7rem;
 		margin: 1rem 0 0.8rem;
+		min-width: 0;
 	}
 	.status {
 		margin: 0;
@@ -239,6 +262,9 @@
 		grid-template-columns: 4.2rem 1fr 4.4rem 3.2rem auto;
 		align-items: center;
 		gap: 0.45rem;
+	}
+	.row > * {
+		min-width: 0;
 	}
 	.row label {
 		font-size: 12px;
@@ -277,5 +303,50 @@
 		margin: 0.2rem 0 0;
 		font-size: 12px;
 		color: #a0d9b7;
+	}
+	@media (max-width: 600px), (max-height: 560px) {
+		.placement-backdrop {
+			padding: 0.4rem;
+		}
+		.placement-panel {
+			padding: 0.75rem 0.85rem;
+			border-radius: 14px;
+			max-height: calc(100dvh - 0.8rem);
+		}
+		header {
+			top: -0.75rem;
+			padding: 0.15rem 0 0.4rem;
+			margin-top: -0.15rem;
+		}
+		header h2 {
+			font-size: 1.2rem;
+		}
+		.eyebrow {
+			font-size: 9px;
+			margin: 0 0 0.2rem;
+		}
+		.fields {
+			margin: 0.6rem 0 0.4rem;
+			gap: 0.45rem;
+		}
+		.presets {
+			gap: 0.35rem;
+		}
+		.presets button {
+			padding: 0.4rem 0.45rem;
+			font-size: 12px;
+		}
+		.hint {
+			font-size: 11px;
+		}
+	}
+	@media (max-width: 440px) {
+		.presets {
+			grid-template-columns: 1fr;
+		}
+		.row {
+			grid-template-columns: 3.8rem 1fr 3.6rem 2.8rem auto;
+			gap: 0.25rem;
+		}
 	}
 </style>

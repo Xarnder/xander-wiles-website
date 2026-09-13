@@ -1058,6 +1058,15 @@ export class ThreeScene implements WorldRuntime {
 		return this.buildToolManager.isMoveModeActive();
 	}
 
+	/** Lets the touch controls or UI toggle Music Mode by click. */
+	toggleMusicMode(): void {
+		this.buildToolManager.toggleMusicMode();
+	}
+
+	isMusicModeActive(): boolean {
+		return this.buildToolManager.isMusicModeActive();
+	}
+
 	/** Lets the Svelte MaterialPalette select a colour (or `undefined` for "Default") by click. */
 	selectPaintMaterial(material: Parameters<PaintTool['selectMaterial']>[0]): void {
 		this.paintTool.selectMaterial(material);

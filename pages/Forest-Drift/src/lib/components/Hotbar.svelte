@@ -7,6 +7,7 @@
 		removeModeActive?: boolean;
 		paintModeActive?: boolean;
 		moveModeActive?: boolean;
+		musicModeActive?: boolean;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
 		onTogglePaintMode?: () => void;
@@ -19,6 +20,7 @@
 		removeModeActive = false,
 		paintModeActive = false,
 		moveModeActive = false,
+		musicModeActive = false,
 		onSelectSlot,
 		onToggleRemoveMode,
 		onTogglePaintMode,
@@ -95,7 +97,8 @@
 			class:active={slot.slot === activeSlot &&
 				!removeModeActive &&
 				!paintModeActive &&
-				!moveModeActive}
+				!moveModeActive &&
+				!musicModeActive}
 			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
 			onclick={() => onSelectSlot?.(slot.slot)}
 			aria-label={slot.variantCount > 1

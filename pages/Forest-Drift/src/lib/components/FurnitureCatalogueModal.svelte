@@ -448,15 +448,27 @@
 		inset: 0;
 		z-index: 60;
 		background: #07140dd9;
-		display: grid;
-		place-items: center;
-		padding: 1rem;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		padding: 0.75rem;
+		box-sizing: border-box;
+		overflow-y: auto;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
 		backdrop-filter: blur(5px);
+		-webkit-backdrop-filter: blur(5px);
 	}
 	.placement-panel {
+		margin: auto;
 		width: min(1100px, 96vw);
-		max-height: min(920px, 94vh);
-		overflow: auto;
+		max-height: min(92vh, calc(100dvh - 1.5rem));
+		overflow-y: auto;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(126, 200, 154, 0.4) transparent;
 		background: #142a20;
 		color: #e3f5e8;
 		border: 1px solid #446553;
@@ -464,12 +476,20 @@
 		padding: 1.4rem;
 		font: 14px/1.5 system-ui;
 		box-shadow: 0 20px 100px #0007;
+		box-sizing: border-box;
 	}
 	header {
+		position: sticky;
+		top: -1.4rem;
+		z-index: 5;
+		background: #142a20;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
+		padding: 0.25rem 0 0.6rem;
+		margin-top: -0.25rem;
+		border-bottom: 1px solid rgba(68, 101, 83, 0.4);
 	}
 	header h2 {
 		margin: 0;
@@ -619,5 +639,39 @@
 		margin: 0;
 		font-size: 12px;
 		color: #a0d9b7;
+	}
+	@media (max-width: 600px), (max-height: 560px) {
+		.placement-backdrop {
+			padding: 0.4rem;
+		}
+		.placement-panel {
+			padding: 0.75rem 0.85rem;
+			border-radius: 14px;
+			max-height: calc(100dvh - 0.8rem);
+		}
+		header {
+			top: -0.75rem;
+			padding: 0.15rem 0 0.4rem;
+			margin-top: -0.15rem;
+		}
+		header h2 {
+			font-size: 1.2rem;
+		}
+		.eyebrow {
+			font-size: 9px;
+			margin: 0 0 0.2rem;
+		}
+		.toolbar {
+			margin: 0.6rem 0 0.35rem;
+			gap: 0.5rem;
+		}
+		.catalogue-body {
+			margin: 0.5rem 0 0;
+			gap: 0.6rem;
+		}
+		.hint,
+		.empty {
+			font-size: 11px;
+		}
 	}
 </style>

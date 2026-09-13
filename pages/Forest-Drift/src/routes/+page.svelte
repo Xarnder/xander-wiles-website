@@ -783,6 +783,8 @@
 						<dd>Cancel or deselect the current building placement.</dd>
 						<dt>Build Mode Button</dt>
 						<dd>Toggle build mode and show the hotbar along the bottom.</dd>
+						<dt>Music Button</dt>
+						<dd>Toggle Music Garden mode to compose and plant musical notes around the Music Tree.</dd>
 						<dt>Hotbar Slots</dt>
 						<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
 						<dt>Type Button</dt>
@@ -1236,6 +1238,7 @@
 				removeModeActive={hotbar.globalMode === 'remove'}
 				paintModeActive={hotbar.globalMode === 'paint'}
 				moveModeActive={hotbar.globalMode === 'move'}
+				musicModeActive={hotbar.globalMode === 'music'}
 				onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
 				onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
 				onTogglePaintMode={() => session?.scene.togglePaintMode()}
