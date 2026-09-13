@@ -17,6 +17,7 @@
 	import pauseIcon from '$lib/assets/icons/pause.svg';
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
+	import openDoorIcon from '$lib/assets/icons/open.svg';
 
 	interface Props {
 		scene: ThreeScene | undefined;
@@ -220,6 +221,11 @@
 		const notice = buildHud?.notice ?? '';
 		return notice.includes('Adjust rise') || notice.includes('Rise:');
 	});
+
+	const isDoorOpen = $derived.by(() => {
+		if (!lookedAtDoorId || !scene) return false;
+		return scene.isDoorOpen(lookedAtDoorId);
+	});
 </script>
 
 <div class="touch-controls-layer" data-testid="touch-controls">
@@ -310,17 +316,19 @@
 		</div>
 	</header>
 
-	<!-- Contextual Door Interact Button -->
+	<!-- Contextual Door Hover Button (appears right when aiming/hovering over a door) -->
 	{#if lookedAtDoorId}
 		<div class="touch-door-bar">
 			<button
 				type="button"
 				class="touch-door-btn"
 				onclick={onToggleDoor}
+				onpointerdown={(e) => e.stopPropagation()}
 				data-testid="touch-door-button"
+				aria-label={isDoorOpen ? 'Close door' : 'Open door'}
 			>
-				<img class="touch-icon" src={handPointIcon} alt="" />
-				<span>Toggle Door</span>
+				<img class="touch-icon" src={openDoorIcon} alt="" />
+				<span>{isDoorOpen ? 'Close Door' : 'Open Door'}</span>
 			</button>
 		</div>
 	{/if}
@@ -397,6 +405,23 @@
 				>
 					<img class="touch-icon" src={upArrowIcon} alt="" />
 					<span>Rise +</span>
+				</button>
+			</div>
+		{/if}
+
+		<!-- Contextual Door Action (also under the right thumb when hovering over a door) -->
+		{#if lookedAtDoorId}
+			<div class="touch-path-actions">
+				<button
+					type="button"
+					class="touch-pill-btn primary"
+					onclick={onToggleDoor}
+					onpointerdown={(e) => e.stopPropagation()}
+					data-testid="touch-door-cluster-btn"
+					aria-label={isDoorOpen ? 'Close door' : 'Open door'}
+				>
+					<img class="touch-icon" src={openDoorIcon} alt="" />
+					<span>{isDoorOpen ? 'Close Door' : 'Open Door'}</span>
 				</button>
 			</div>
 		{/if}
@@ -601,35 +626,49 @@
 		display: block;
 	}
 
-	/* Door Banner */
+	/* Door Hover Button */
 	.touch-door-bar {
 		position: absolute;
-		top: 75px;
+		top: calc(50% + 32px);
 		left: 50%;
 		transform: translateX(-50%);
 		pointer-events: auto;
-		z-index: 30;
+		z-index: 35;
+		animation: snap-badge-in 0.15s ease;
 	}
 
 	.touch-door-btn {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		min-height: 46px;
-		padding: 8px 18px;
+		min-height: 44px;
+		padding: 8px 20px;
 		border-radius: 999px;
-		background: rgba(57, 211, 83, 0.85);
-		border: 1px solid rgba(87, 226, 111, 0.9);
-		color: #04121f;
+		background: rgba(14, 28, 20, 0.92);
+		border: 1.5px solid rgba(57, 211, 83, 0.85);
+		color: #eaf6ff;
 		font-family: inherit;
-		font-size: 0.9rem;
+		font-size: 0.88rem;
 		font-weight: 700;
 		cursor: pointer;
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 16px rgba(57, 211, 83, 0.4);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 16px rgba(57, 211, 83, 0.35);
+		transition: transform 0.1s ease, background 0.15s ease;
+		touch-action: manipulation;
+		white-space: nowrap;
+	}
+
+	.touch-door-btn:active {
+		transform: scale(0.94);
+		background: rgba(57, 211, 83, 0.35);
+		border-color: rgba(57, 211, 83, 1);
 	}
 
 	.touch-door-btn .touch-icon {
-		filter: brightness(0);
+		width: 20px;
+		height: 20px;
+		filter: brightness(0) invert(1);
 	}
 
 	/* Bottom-Left Movement Area */
@@ -877,13 +916,19 @@
 		}
 
 		.touch-door-bar {
-			top: 48px;
+			top: calc(50% + 24px);
 		}
 
 		.touch-door-btn {
-			min-height: 38px;
-			padding: 6px 14px;
-			font-size: 0.8rem;
+			min-height: 36px;
+			padding: 5px 14px;
+			font-size: 0.78rem;
+			gap: 6px;
+		}
+
+		.touch-door-btn .touch-icon {
+			width: 16px;
+			height: 16px;
 		}
 
 		.touch-movement-cluster {
@@ -1043,6 +1088,22 @@
 			min-height: 42px;
 			padding: 6px 12px;
 			font-size: 0.8rem;
+		}
+
+		.touch-door-bar {
+			top: calc(50% + 28px);
+		}
+
+		.touch-door-btn {
+			min-height: 38px;
+			padding: 5px 14px;
+			font-size: 0.8rem;
+			gap: 6px;
+		}
+
+		.touch-door-btn .touch-icon {
+			width: 16px;
+			height: 16px;
 		}
 	}
 </style>

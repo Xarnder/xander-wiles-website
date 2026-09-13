@@ -30,6 +30,53 @@
 		for (let slot = previous + 1; slot < next; slot++) numbers.push(slot);
 		return numbers;
 	}
+
+	function autoScale(node: HTMLElement, _text?: string) {
+		function fit() {
+			node.style.transform = 'none';
+			const parent = node.parentElement;
+			if (!parent) return;
+
+			// Inside width of parent slot with small margin
+			const availableWidth = Math.max(10, parent.clientWidth - 4);
+			const scrollWidth = node.scrollWidth;
+
+			if (scrollWidth > availableWidth && availableWidth > 0) {
+				const scale = availableWidth / scrollWidth;
+				node.style.transform = `scale(${scale.toFixed(4)})`;
+				node.style.transformOrigin = 'center center';
+			} else {
+				node.style.transform = 'none';
+			}
+		}
+
+		fit();
+		if (typeof requestAnimationFrame !== 'undefined') {
+			requestAnimationFrame(fit);
+		}
+		if (typeof document !== 'undefined' && document.fonts) {
+			document.fonts.ready.then(fit);
+		}
+
+		let observer: ResizeObserver | null = null;
+		if (typeof ResizeObserver !== 'undefined') {
+			observer = new ResizeObserver(() => fit());
+			if (node.parentElement) observer.observe(node.parentElement);
+			observer.observe(node);
+		}
+
+		return {
+			update(_newText?: string) {
+				fit();
+				if (typeof requestAnimationFrame !== 'undefined') {
+					requestAnimationFrame(fit);
+				}
+			},
+			destroy() {
+				observer?.disconnect();
+			}
+		};
+	}
 </script>
 
 <div class="hotbar" data-testid="hotbar">
@@ -57,7 +104,7 @@
 		>
 			<span class="slot-number">{slot.slot}</span>
 			{#if slot.label}
-				<span class="slot-label">{slot.label}</span>
+				<span class="slot-label" use:autoScale={slot.label}>{slot.label}</span>
 			{/if}
 			{#if slot.variantCount > 1}
 				{#if slot.variantCount <= 5}
@@ -89,7 +136,7 @@
 		aria-pressed={removeModeActive}
 	>
 		<span class="slot-number">X</span>
-		<span class="slot-label">Remove</span>
+		<span class="slot-label" use:autoScale={'Remove'}>Remove</span>
 	</button>
 
 	<button
@@ -102,7 +149,7 @@
 		aria-pressed={paintModeActive}
 	>
 		<span class="slot-number">P</span>
-		<span class="slot-label">Paint</span>
+		<span class="slot-label" use:autoScale={'Paint'}>Paint</span>
 	</button>
 
 	<button
@@ -115,7 +162,7 @@
 		aria-pressed={moveModeActive}
 	>
 		<span class="slot-number">M</span>
-		<span class="slot-label">Move</span>
+		<span class="slot-label" use:autoScale={'Move'}>Move</span>
 	</button>
 </div>
 
@@ -138,7 +185,9 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 0.1rem;
+		gap: 0.04rem;
+		padding: 0.08rem 0.08rem;
+		box-sizing: border-box;
 		background: rgba(10, 20, 15, 0.5);
 		border: 1px solid rgba(255, 255, 255, 0.18);
 		border-radius: 8px;
@@ -152,6 +201,7 @@
 		transition:
 			border-color 0.15s ease,
 			background 0.15s ease;
+		overflow: hidden;
 	}
 
 	.slot:hover {
@@ -199,23 +249,31 @@
 	}
 
 	.slot-number {
-		font-size: 0.65rem;
+		font-size: 0.62rem;
+		line-height: 1;
 		opacity: 0.7;
+		padding: 0;
+		margin: 0;
 	}
 
 	.slot-label {
-		font-size: 0.6rem;
-		line-height: 1.05;
+		font-size: 0.58rem;
+		line-height: 1;
 		text-align: center;
-		padding: 0 0.12rem;
+		padding: 0;
+		margin: 0;
+		white-space: nowrap !important;
+		overflow-wrap: normal !important;
+		word-break: keep-all !important;
+		display: inline-block;
 		max-width: 100%;
-		overflow-wrap: break-word;
+		box-sizing: border-box;
 	}
 
 	.slot-variants {
 		display: flex;
-		gap: 0.15rem;
-		margin-top: 0.12rem;
+		gap: 0.12rem;
+		margin-top: 0.05rem;
 		justify-content: center;
 	}
 
@@ -223,12 +281,12 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.18rem;
-		font-size: 0.52rem;
+		gap: 0.15rem;
+		font-size: 0.5rem;
 		font-variant-numeric: tabular-nums;
 		line-height: 1;
-		margin-top: 0.1rem;
-		padding: 0.06rem 0.22rem;
+		margin-top: 0.04rem;
+		padding: 0.04rem 0.18rem;
 		border-radius: 4px;
 		background: rgba(255, 255, 255, 0.08);
 		color: rgba(255, 255, 255, 0.78);
@@ -283,14 +341,16 @@
 			min-width: 2.6rem;
 			flex-shrink: 0;
 			border-radius: 6px;
+			padding: 0.06rem 0.06rem;
 		}
 
 		.slot-number {
-			font-size: 0.55rem;
+			font-size: 0.52rem;
 		}
 
 		.slot-label {
-			font-size: 0.5rem;
+			font-size: 0.46rem;
+			padding: 0;
 		}
 
 		.remove-slot {
@@ -308,14 +368,16 @@
 			height: 2.2rem;
 			min-width: 2.2rem;
 			border-radius: 6px;
+			padding: 0.05rem 0.05rem;
 		}
 
 		.slot-number {
-			font-size: 0.48rem;
+			font-size: 0.46rem;
 		}
 
 		.slot-label {
-			font-size: 0.42rem;
+			font-size: 0.4rem;
+			padding: 0;
 		}
 
 		.remove-slot {
@@ -344,14 +406,16 @@
 			min-width: 2.15rem;
 			flex-shrink: 0;
 			border-radius: 6px;
+			padding: 0.05rem 0.05rem;
 		}
 
 		.slot-number {
-			font-size: 0.48rem;
+			font-size: 0.46rem;
 		}
 
 		.slot-label {
-			font-size: 0.42rem;
+			font-size: 0.4rem;
+			padding: 0;
 		}
 
 		.remove-slot {

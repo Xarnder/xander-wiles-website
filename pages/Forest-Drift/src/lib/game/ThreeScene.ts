@@ -1196,6 +1196,15 @@ export class ThreeScene implements WorldRuntime {
 		this.doorInteraction?.toggleLookedAtDoor();
 	}
 
+	isDoorOpen(openingId?: string): boolean {
+		const id = openingId ?? this.doorInteraction?.getLookedAtDoor();
+		return id ? (this.doorInteraction?.isOpen(id) ?? false) : false;
+	}
+
+	isLookedAtDoorOpen(openingId?: string): boolean {
+		return this.isDoorOpen(openingId);
+	}
+
 	simulateKey(code: string): void {
 		window.dispatchEvent(new KeyboardEvent('keydown', { code }));
 		window.dispatchEvent(new KeyboardEvent('keyup', { code }));

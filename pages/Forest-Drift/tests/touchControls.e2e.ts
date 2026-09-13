@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Touch / iPad Controls', () => {
 	test('displays iPad touch controls and starts gameplay with tap', async ({ page }) => {
-		test.setTimeout(200_000);
+		test.setTimeout(260_000);
 		const pageErrors: string[] = [];
 		page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -86,6 +86,16 @@ test.describe('Touch / iPad Controls', () => {
 		await page.getByTestId('touch-variant-btn').click();
 		await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
 
+		// Verify hotbar slot labels are strictly single-line (never wrap to new line)
+		const slotLabels = page.locator('.slot-label');
+		const labelCount = await slotLabels.count();
+		expect(labelCount).toBeGreaterThan(0);
+		for (let i = 0; i < labelCount; i++) {
+			const label = slotLabels.nth(i);
+			const whiteSpace = await label.evaluate((el) => window.getComputedStyle(el).whiteSpace);
+			expect(whiteSpace).toBe('nowrap');
+		}
+
 		// Floor selector is visible on the right side for level-aware tools
 		const floorSelector = page.getByTestId('floor-selector');
 		await expect(floorSelector).toBeVisible();
@@ -134,6 +144,31 @@ test.describe('Touch / iPad Controls', () => {
 		await expect(page.getByTestId('pause-menu')).not.toBeVisible();
 		await expect(touchControls).toBeVisible();
 
+		// Contextual Door Hover Button:
+		// When hovering/aiming at a door, Open Door buttons appear both under the crosshair and in action cluster
+		await expect(page.getByTestId('touch-door-button')).not.toBeVisible();
+		await page.evaluate(() => {
+			(window as any).__setTestLookedAtDoor?.('door-sample-1');
+		});
+		const doorHoverBtn = page.getByTestId('touch-door-button');
+		const doorClusterBtn = page.getByTestId('touch-door-cluster-btn');
+		await expect(doorHoverBtn).toBeVisible();
+		await expect(doorHoverBtn).toContainText('Open Door');
+		await expect(doorHoverBtn.locator('img')).toHaveAttribute('src', /(open.*\.svg|data:image\/svg\+xml)/);
+		await expect(doorClusterBtn).toBeVisible();
+		await expect(doorClusterBtn).toContainText('Open Door');
+
+		// Capture screenshot with the contextual door hover button visible
+		await page.screenshot({
+			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/touch_door_hover_screenshot.png'
+		});
+
+		// Clear door hover state
+		await page.evaluate(() => {
+			(window as any).__setTestLookedAtDoor?.(null);
+		});
+		await expect(doorHoverBtn).not.toBeVisible();
+
 		// Capture screenshot of the gameplay screen with raised UI elements
 		await page.screenshot({
 			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/touch_controls_screenshot.png'
@@ -153,6 +188,20 @@ test.describe('Touch / iPad Controls', () => {
 		expect(landscapeBox.x + landscapeBox.width).toBeGreaterThan(844 * 0.75);
 		const landscapeActionsBox = (await actionsCluster.boundingBox())!;
 		expect(landscapeBox.y + landscapeBox.height).toBeLessThan(landscapeActionsBox.y);
+
+		// Utility buttons (Touch: On/Off & Pause) sit completely above joystick and run button
+		const utilityBox = (await page.locator('.utility-buttons').boundingBox())!;
+		const joystickBox = (await page.getByTestId('touch-joystick').boundingBox())!;
+		const runBox = (await page.getByTestId('touch-run-btn').boundingBox())!;
+		expect(utilityBox.y + utilityBox.height).toBeLessThanOrEqual(joystickBox.y);
+		expect(utilityBox.y + utilityBox.height).toBeLessThanOrEqual(runBox.y);
+
+		// Instructions / Guide (Build HUD) is shrunk and sits above utility buttons without collision
+		const buildHud = page.getByTestId('build-hud');
+		if (await buildHud.isVisible()) {
+			const buildHudBox = (await buildHud.boundingBox())!;
+			expect(buildHudBox.y + buildHudBox.height).toBeLessThanOrEqual(utilityBox.y);
+		}
 
 		await page.screenshot({
 			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_landscape_screenshot.png'

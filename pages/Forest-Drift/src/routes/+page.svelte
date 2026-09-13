@@ -443,6 +443,9 @@
 		});
 		if (typeof window !== 'undefined') {
 			(window as any).__forestSession = session;
+			(window as any).__setTestLookedAtDoor = (id: string | null) => {
+				lookedAtDoorId = id;
+			};
 		}
 	}
 
@@ -461,6 +464,7 @@
 			session = undefined;
 			if (typeof window !== 'undefined') {
 				(window as any).__forestSession = null;
+				delete (window as any).__setTestLookedAtDoor;
 			}
 			lookedAtDoorId = null;
 			if (!result.ok) worldsError = result.error ?? 'Unable to save world before quitting.';
@@ -795,10 +799,10 @@
 						<dd>Contextual buttons to complete or step back continuous walls and paths.</dd>
 						<dt>Rise + / Rise −</dt>
 						<dd>Adjust pitched roof rise during roof shaping.</dd>
-						<dt>Toggle Door</dt>
-						<dd>Appears on screen when aiming at a door to open or close it.</dd>
+						<dt>Open / Close Door</dt>
+						<dd>Tap the Open Door button that appears when hovering over a door to open or close it.</dd>
 						<dt>Floor Selector</dt>
-						<dd>Tap the ▲ / ▼ buttons on the left edge of the screen to change storeys.</dd>
+						<dd>Tap the buttons on the right edge of the screen to change storeys.</dd>
 					</dl>
 
 					<h3>Movement</h3>
@@ -1277,7 +1281,20 @@
 		{/if}
 
 		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen}
-			<div class="door-toast" data-testid="door-toast">Press K to open the door</div>
+			{#if !showTouchControls}
+				<div
+					class="door-toast"
+					data-testid="door-toast"
+					role="button"
+					tabindex="0"
+					onclick={() => session?.scene.toggleLookedAtDoor()}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') session?.scene.toggleLookedAtDoor();
+					}}
+				>
+					Press K to open the door
+				</div>
+			{/if}
 		{/if}
 
 		{#if placementCustomizeOpen && session && customizeToolId}
@@ -2116,23 +2133,32 @@
 		}
 
 		.touch-mode .utility-buttons {
-			bottom: 5.4rem;
+			bottom: 7.2rem;
 			left: max(8px, env(safe-area-inset-left));
+			gap: 0.3rem;
 		}
 
 		.touch-mode .utility-buttons .help-toggle {
-			padding: 0.25rem 0.5rem;
-			font-size: 0.68rem;
+			padding: 0.2rem 0.45rem;
+			font-size: 0.62rem;
+			border-radius: 6px;
 		}
 
 		.touch-mode .build-hud {
-			bottom: 6.8rem;
+			bottom: 9.6rem;
 			left: max(8px, env(safe-area-inset-left));
-			font-size: 0.68rem;
-			line-height: 1.35;
-			padding: 0.3rem 0.5rem;
-			min-width: 8rem;
-			max-width: 13rem;
+			font-size: 0.52rem;
+			line-height: 1.25;
+			padding: 0.2rem 0.4rem;
+			min-width: 5.5rem;
+			max-width: 8.5rem;
+			border-radius: 6px;
+			backdrop-filter: blur(6px);
+			-webkit-backdrop-filter: blur(6px);
+		}
+
+		.touch-mode .build-hud .build-hud-spacer {
+			height: 0.15rem;
 		}
 
 		.touch-mode .save-indicator {

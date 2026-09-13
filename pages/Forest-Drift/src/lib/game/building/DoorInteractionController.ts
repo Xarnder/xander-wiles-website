@@ -78,7 +78,7 @@ export class DoorInteractionController {
 
 	/** Returns the opening id that toggled, or `null` if nothing was under the crosshair. */
 	toggleLookedAtDoor(): string | null {
-		const id = this.pickLookedAtDoor();
+		const id = this.lookedAtDoorId ?? this.pickLookedAtDoor();
 		if (!id) return null;
 		if (this.openById.has(id)) this.openById.delete(id);
 		else this.openById.add(id);
