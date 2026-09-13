@@ -99,6 +99,11 @@ export class FirstPersonController {
 
 	private readonly keys = new Set<string>();
 	private pointerLocked = false;
+	private touchMoveX = 0;
+	private touchMoveZ = 0;
+	private touchRunning = false;
+	private touchJump = false;
+	private touchActive = false;
 
 	private readonly handlePointerLockChange = () => {
 		this.pointerLocked = document.pointerLockElement === this.domElement;
@@ -217,11 +222,12 @@ export class FirstPersonController {
 		const backward = this.keys.has('KeyS') ? 1 : 0;
 		const left = this.keys.has('KeyA') ? 1 : 0;
 		const right = this.keys.has('KeyD') ? 1 : 0;
-		const running = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-		const jumpPressed = this.keys.has('Space');
+		const running = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning;
+		const jumpPressed = this.keys.has('Space') || this.touchJump;
+		this.touchJump = false;
 
-		const moveX = right - left;
-		const moveZ = forward - backward;
+		let moveX = right - left + this.touchMoveX;
+		let moveZ = forward - backward + this.touchMoveZ;
 
 		let worldX = this.worldPosition.x;
 		let worldZ = this.worldPosition.z;
@@ -238,7 +244,8 @@ export class FirstPersonController {
 			const dirX = normalizedX * cosYaw - normalizedZ * sinYaw;
 			const dirZ = -normalizedX * sinYaw - normalizedZ * cosYaw;
 
-			const speed = running ? this.settings.runSpeed : this.settings.walkSpeed;
+			const baseSpeed = running ? this.settings.runSpeed : this.settings.walkSpeed;
+			const speed = baseSpeed * Math.min(1, length);
 			worldX += dirX * speed * deltaSeconds;
 			worldZ += dirZ * speed * deltaSeconds;
 		}
@@ -368,8 +375,39 @@ export class FirstPersonController {
 		if (bob.y !== 0) this.camera.translateY(bob.y);
 	}
 
+	setTouchMovement(x: number, z: number): void {
+		this.touchMoveX = Math.max(-1, Math.min(1, x));
+		this.touchMoveZ = Math.max(-1, Math.min(1, z));
+	}
+
+	setTouchRunning(running: boolean): void {
+		this.touchRunning = running;
+	}
+
+	triggerTouchJump(): void {
+		this.touchJump = true;
+	}
+
+	addTouchLook(deltaX: number, deltaY: number): void {
+		const TOUCH_LOOK_SENSITIVITY = 0.0035;
+		this.yaw -= deltaX * TOUCH_LOOK_SENSITIVITY;
+		this.pitch -= deltaY * TOUCH_LOOK_SENSITIVITY;
+		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
+		this.syncCamera(this.touchRunning);
+	}
+
+	setTouchActive(active: boolean): void {
+		if (this.touchActive === active) return;
+		this.touchActive = active;
+		this.onPointerLockChange?.(this.isPointerLocked());
+	}
+
+	isTouchActive(): boolean {
+		return this.touchActive;
+	}
+
 	isPointerLocked(): boolean {
-		return this.pointerLocked;
+		return this.pointerLocked || this.touchActive;
 	}
 
 	dispose(): void {

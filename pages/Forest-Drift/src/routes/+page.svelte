@@ -34,6 +34,8 @@
 	}
 	import { onDestroy, onMount, tick } from 'svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
+	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
+	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
@@ -41,6 +43,7 @@
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
+	import TouchControls from '$lib/components/TouchControls.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
 	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import {
@@ -85,6 +88,9 @@
 	let placementHeightOpen = $state(false);
 	let paintState = $state<PaintUiState | null>(null);
 	let graphicsNotice = $state<string | null>(null);
+	let isTouchDevice = $state(false);
+	let touchControlsEnabled = $state<boolean | null>(null);
+	const showTouchControls = $derived(touchControlsEnabled ?? isTouchDevice);
 
 	/** Which top-level screen is showing. The game's Three.js scene only exists while this is `game`. */
 	let screen = $state<'worlds' | 'loading' | 'game'>('worlds');
@@ -181,9 +187,16 @@
 	 */
 	let lastPauseToggleTime = 0;
 
+	function startTouchGameplay() {
+		if (session) {
+			session.scene.setTouchActive(true);
+		}
+	}
+
 	function togglePause() {
 		lastPauseToggleTime = performance.now();
 		if (!paused) {
+			session?.scene.setTouchMovement(0, 0);
 			session?.scene.closePlacementCustomize();
 			session?.scene.closePlacementHeight();
 			document.exitPointerLock?.();
@@ -196,6 +209,7 @@
 	function openPause() {
 		if (paused) return;
 		lastPauseToggleTime = performance.now();
+		session?.scene.setTouchMovement(0, 0);
 		session?.scene.closePlacementCustomize();
 		session?.scene.closePlacementHeight();
 		document.exitPointerLock?.();
@@ -427,6 +441,9 @@
 				if (open) showHelp = false;
 			}
 		});
+		if (typeof window !== 'undefined') {
+			(window as any).__forestSession = session;
+		}
 	}
 
 	async function manualSave() {
@@ -442,6 +459,9 @@
 		await withBusy(async () => {
 			const result = await session!.dispose();
 			session = undefined;
+			if (typeof window !== 'undefined') {
+				(window as any).__forestSession = null;
+			}
 			lookedAtDoorId = null;
 			if (!result.ok) worldsError = result.error ?? 'Unable to save world before quitting.';
 			worldManager?.closeWorld();
@@ -527,6 +547,20 @@
 	}
 
 	onMount(() => {
+		const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+		if (urlParams?.has('touch')) {
+			touchControlsEnabled = urlParams.get('touch') === '1' || urlParams.get('touch') === 'true';
+		}
+		const checkTouch = () => {
+			return (
+				typeof window !== 'undefined' &&
+				('ontouchstart' in window ||
+					(navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+					Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches))
+			);
+		};
+		isTouchDevice = checkTouch();
+
 		window.addEventListener('keydown', handleKeyDown);
 
 		// IndexedDB is the real backend; the in-memory one keeps the game playable (for this session
@@ -582,8 +616,18 @@
 {#if screen === 'game'}
 	<!-- The renderer only exists while a world is open: quitting to the Worlds screen unmounts
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
-	<div class="game-shell">
-		<div class="canvas-container" data-testid="canvas-container" bind:this={container}></div>
+	<div class="game-shell" class:touch-mode={showTouchControls}>
+		<div
+			class="canvas-container"
+			data-testid="canvas-container"
+			role="presentation"
+			bind:this={container}
+			onclick={() => {
+				if (showTouchControls && !pointerLocked) {
+					startTouchGameplay();
+				}
+			}}
+		></div>
 
 		<div
 			class="crosshair"
@@ -592,28 +636,38 @@
 		></div>
 
 		{#if buildHud?.level}
-			<div class="floor-selector" data-testid="floor-selector">
+			<div
+				class="floor-selector"
+				data-testid="floor-selector"
+				role="region"
+				aria-label="Floor level selector"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
 				<button
+					type="button"
 					class="floor-arrow"
 					data-testid="floor-up"
 					disabled={!buildHud.level.canMoveUp}
 					onclick={() => session?.scene.moveLevelUp()}
+					onpointerdown={(e) => e.stopPropagation()}
 					aria-label="Move up one building level"
 				>
-					▲
+					<img class="floor-arrow-icon" src={upArrowIcon} alt="▲" />
 				</button>
 				<div class="floor-label">
 					<div class="floor-name" data-testid="floor-name">{buildHud.level.displayName}</div>
 					<div class="floor-elevation">{buildHud.level.baseY.toFixed(2)}m</div>
 				</div>
 				<button
+					type="button"
 					class="floor-arrow"
 					data-testid="floor-down"
 					disabled={!buildHud.level.canMoveDown}
 					onclick={() => session?.scene.moveLevelDown()}
+					onpointerdown={(e) => e.stopPropagation()}
 					aria-label="Move down one building level"
 				>
-					▼
+					<img class="floor-arrow-icon" src={downArrowIcon} alt="▼" />
 				</button>
 			</div>
 		{/if}
@@ -645,21 +699,60 @@
 			</div>
 		{/if}
 
+		{#if showTouchControls && pointerLocked && !clockBlocked() && !showHelp}
+			<TouchControls
+				scene={session?.scene}
+				{buildHud}
+				{hotbar}
+				{lookedAtDoorId}
+				{customizeToolId}
+				{heightToolId}
+				onOpenPause={openPause}
+				onOpenHelp={() => (showHelp = true)}
+			/>
+		{/if}
+
 		{#if !pointerLocked && !clockBlocked() && !showHelp}
 			<div class="instructions" class:fading={pointerLocked}>
 				<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
-				<p class="headline">Click to explore</p>
-				<p>
-					WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu
-				</p>
-				<p>
-					G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
-					(Settings, Help, Creature Lab) &middot; H for help
-				</p>
+				{#if showTouchControls}
+					<p class="headline">Tap to explore</p>
+					<p>
+						Virtual joystick &amp; buttons to move, run, jump, look, and build
+					</p>
+					<button
+						type="button"
+						class="touch-start-btn"
+						onclick={startTouchGameplay}
+						data-testid="touch-start-btn"
+					>
+						Tap to Play
+					</button>
+				{:else}
+					<p class="headline">Click to explore</p>
+					<p>
+						WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu
+					</p>
+					<p>
+						G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
+						(Settings, Help, Creature Lab) &middot; H for help
+					</p>
+				{/if}
 			</div>
 		{/if}
 
 		<div class="utility-buttons">
+			{#if isTouchDevice}
+				<button
+					class="help-toggle"
+					onclick={() => {
+						touchControlsEnabled = !showTouchControls;
+					}}
+					aria-label="Toggle touch screen controls"
+				>
+					{showTouchControls ? 'Touch: On' : 'Touch: Off'}
+				</button>
+			{/if}
 			<button class="help-toggle" data-testid="pause-toggle" onclick={openPause} aria-label="Pause">
 				Pause
 			</button>
@@ -669,6 +762,44 @@
 			<div class={['help-overlay', { 'over-menus': paused }]} data-testid="help-overlay">
 				<div class="help-panel">
 					<h2>Controls</h2>
+
+					<h3>Touch / iPad Controls</h3>
+					<dl>
+						<dt>Virtual Joystick</dt>
+						<dd>Drag thumb knob on the bottom-left in any direction to walk.</dd>
+						<dt>Run Button</dt>
+						<dd>Toggle sprint on or off next to the joystick.</dd>
+						<dt>Jump Button</dt>
+						<dd>Jump over obstacles and terrain.</dd>
+						<dt>Swipe to Look</dt>
+						<dd>Drag anywhere across the right side of the screen to turn and look.</dd>
+						<dt>Place Button</dt>
+						<dd>Place walls, roofs, openings, detailing, or objects.</dd>
+						<dt>Cancel Button</dt>
+						<dd>Cancel or deselect the current building placement.</dd>
+						<dt>Build Mode Button</dt>
+						<dd>Toggle build mode and show the hotbar along the bottom.</dd>
+						<dt>Hotbar Slots</dt>
+						<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
+						<dt>Type Button</dt>
+						<dd>Cycle tool variants within a slot, or switch roof shapes.</dd>
+						<dt>Rotate Button</dt>
+						<dd>Rotate roofs, timber beams, stairs, furniture, and floor detail patterns.</dd>
+						<dt>Snap Button</dt>
+						<dd>Cycle drawing snap modes (Axis &rarr; Axis + Inline &rarr; Wall Corners).</dd>
+						<dt>Edit Button</dt>
+						<dd>Customise dimensions, colours, or slab offset height before placing.</dd>
+						<dt>Undo Button</dt>
+						<dd>Undo the last placement.</dd>
+						<dt>Finish &amp; Undo Pt</dt>
+						<dd>Contextual buttons to complete or step back continuous walls and paths.</dd>
+						<dt>Rise + / Rise −</dt>
+						<dd>Adjust pitched roof rise during roof shaping.</dd>
+						<dt>Toggle Door</dt>
+						<dd>Appears on screen when aiming at a door to open or close it.</dd>
+						<dt>Floor Selector</dt>
+						<dd>Tap the ▲ / ▼ buttons on the left edge of the screen to change storeys.</dd>
+					</dl>
 
 					<h3>Movement</h3>
 					<dl>
@@ -1399,7 +1530,22 @@
 		letter-spacing: 0.02em;
 		pointer-events: none;
 		opacity: 0.55;
-		transition: opacity 0.2s ease;
+		transition: opacity 0.2s ease, bottom 0.2s ease;
+		z-index: 40;
+	}
+
+	.touch-mode .save-indicator {
+		bottom: 10.5rem;
+		right: 0.75rem;
+		background: rgba(10, 20, 15, 0.75);
+		backdrop-filter: blur(8px);
+		z-index: 40;
+	}
+
+	.touch-mode .save-error-chip {
+		bottom: 13rem;
+		right: 0.75rem;
+		z-index: 40;
 	}
 
 	.save-indicator[data-status='saving'],
@@ -1505,6 +1651,7 @@
 		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
 		pointer-events: none;
 		transition: opacity 0.3s ease;
+		z-index: 50;
 	}
 
 	.instructions.fading {
@@ -1529,6 +1676,70 @@
 
 	.instructions p {
 		margin: 0.2rem 0;
+	}
+
+	.touch-start-btn {
+		pointer-events: auto;
+		margin-top: 1rem;
+		padding: 0.75rem 2.2rem;
+		border-radius: 999px;
+		background: linear-gradient(135deg, #57e26f 0%, #2b7740 100%);
+		border: 2px solid rgba(255, 255, 255, 0.85);
+		color: #04121f;
+		font-family: inherit;
+		font-size: 1.1rem;
+		font-weight: 700;
+		cursor: pointer;
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(87, 226, 111, 0.45);
+		transition: transform 0.15s ease;
+	}
+
+	.touch-start-btn:active {
+		transform: scale(0.95);
+	}
+
+	@media (max-height: 500px) {
+		.title-mark {
+			width: min(13rem, 45vw);
+			margin: 0 auto 0.4rem;
+		}
+
+		.instructions .headline {
+			font-size: 1.15rem;
+			margin: 0 0 0.2rem;
+		}
+
+		.instructions p {
+			font-size: 0.78rem;
+			margin: 0.1rem 0;
+		}
+
+		.touch-start-btn {
+			margin-top: 0.5rem;
+			padding: 0.5rem 1.4rem;
+			font-size: 0.95rem;
+		}
+	}
+
+	@media (max-width: 500px) {
+		.title-mark {
+			width: min(16rem, 75vw);
+			margin: 0 auto 0.5rem;
+		}
+
+		.instructions .headline {
+			font-size: 1.25rem;
+		}
+
+		.instructions p {
+			font-size: 0.82rem;
+		}
+
+		.touch-start-btn {
+			margin-top: 0.75rem;
+			padding: 0.6rem 1.8rem;
+			font-size: 1rem;
+		}
 	}
 
 	.stats-overlay {
@@ -1566,6 +1777,17 @@
 		backdrop-filter: blur(2px);
 		min-width: 11rem;
 		text-align: left;
+		z-index: 40;
+		transition: bottom 0.2s ease;
+	}
+
+	.touch-mode .build-hud {
+		bottom: 13.5rem;
+		left: 0.75rem;
+		background: rgba(10, 20, 15, 0.8);
+		backdrop-filter: blur(8px);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+		z-index: 40;
 	}
 
 	.build-hud-spacer {
@@ -1653,7 +1875,8 @@
 	.floor-selector {
 		position: absolute;
 		top: 50%;
-		left: 0.75rem;
+		right: 1rem;
+		left: auto;
 		transform: translateY(-50%);
 		display: flex;
 		flex-direction: column;
@@ -1663,6 +1886,9 @@
 		background: rgba(10, 20, 15, 0.55);
 		border-radius: 10px;
 		backdrop-filter: blur(2px);
+		z-index: 35;
+		touch-action: manipulation;
+		pointer-events: auto;
 	}
 
 	.floor-arrow {
@@ -1675,6 +1901,18 @@
 		font-size: 0.9rem;
 		line-height: 1;
 		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+	}
+
+	.floor-arrow-icon {
+		width: 14px;
+		height: 14px;
+		filter: brightness(0) invert(1);
+		display: block;
+		pointer-events: none;
 	}
 
 	.floor-arrow:hover:not(:disabled) {
@@ -1695,6 +1933,7 @@
 		color: #eaf6ff;
 		line-height: 1.3;
 		padding: 0.15rem 0.1rem;
+		user-select: none;
 	}
 
 	.floor-name {
@@ -1708,6 +1947,71 @@
 	.floor-elevation {
 		font-size: 0.7rem;
 		opacity: 0.75;
+	}
+
+	/* Touch mode floor selector styling with generous space on the right side */
+	.touch-mode .floor-selector {
+		top: 50%;
+		right: max(16px, env(safe-area-inset-right));
+		left: auto;
+		transform: translateY(-50%);
+		padding: 0.75rem 0.65rem;
+		gap: 0.4rem;
+		min-width: 4.4rem;
+		background: rgba(14, 28, 20, 0.85);
+		border: 1px solid rgba(234, 246, 255, 0.32);
+		border-radius: 14px;
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+	}
+
+	.touch-mode .floor-selector .floor-arrow {
+		width: 2.6rem;
+		height: 2.6rem;
+		border-radius: 10px;
+		background: rgba(234, 246, 255, 0.14);
+		border: 1px solid rgba(234, 246, 255, 0.35);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s ease, transform 0.1s ease;
+	}
+
+	.touch-mode .floor-selector .floor-arrow:active:not(:disabled) {
+		transform: scale(0.92);
+		background: rgba(57, 211, 83, 0.35);
+		border-color: rgba(57, 211, 83, 0.8);
+	}
+
+	.touch-mode .floor-selector .floor-arrow-icon {
+		width: 18px;
+		height: 18px;
+	}
+
+	.touch-mode .floor-selector .floor-name {
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: #a4f5b9;
+	}
+
+	.touch-mode .floor-selector .floor-elevation {
+		font-size: 0.72rem;
+		opacity: 0.85;
+	}
+
+	.touch-mode .save-indicator {
+		top: max(58px, calc(env(safe-area-inset-top) + 50px));
+		left: max(14px, env(safe-area-inset-left));
+		right: auto;
+		bottom: auto;
+	}
+
+	.touch-mode .save-error-chip {
+		top: max(88px, calc(env(safe-area-inset-top) + 80px));
+		left: max(14px, env(safe-area-inset-left));
+		right: auto;
+		bottom: auto;
 	}
 
 	.snap-badge {
@@ -1759,9 +2063,16 @@
 		position: absolute;
 		bottom: 0.75rem;
 		left: 0.75rem;
-		z-index: 11;
+		z-index: 40;
 		display: flex;
 		gap: 0.4rem;
+		transition: bottom 0.2s ease;
+	}
+
+	.touch-mode .utility-buttons {
+		bottom: 10.75rem;
+		left: 0.75rem;
+		z-index: 40;
 	}
 
 	.help-toggle {
@@ -1778,6 +2089,169 @@
 		border-radius: 8px;
 		backdrop-filter: blur(2px);
 		cursor: pointer;
+	}
+
+	.touch-mode .help-toggle {
+		padding: 0.45rem 0.85rem;
+		font-size: 0.8rem;
+		background: rgba(14, 28, 20, 0.85);
+		border: 1px solid rgba(234, 246, 255, 0.35);
+		backdrop-filter: blur(8px);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	}
+
+	@media (max-height: 650px) and (min-height: 501px) {
+		.touch-mode .utility-buttons {
+			bottom: 9rem;
+		}
+		.touch-mode .build-hud {
+			bottom: 11.5rem;
+		}
+	}
+
+	@media (max-height: 500px) and (orientation: landscape) {
+		.touch-mode :global(.hotbar) {
+			bottom: max(6px, env(safe-area-inset-bottom));
+			max-width: calc(100vw - 310px);
+		}
+
+		.touch-mode .utility-buttons {
+			bottom: 5.4rem;
+			left: max(8px, env(safe-area-inset-left));
+		}
+
+		.touch-mode .utility-buttons .help-toggle {
+			padding: 0.25rem 0.5rem;
+			font-size: 0.68rem;
+		}
+
+		.touch-mode .build-hud {
+			bottom: 6.8rem;
+			left: max(8px, env(safe-area-inset-left));
+			font-size: 0.68rem;
+			line-height: 1.35;
+			padding: 0.3rem 0.5rem;
+			min-width: 8rem;
+			max-width: 13rem;
+		}
+
+		.touch-mode .save-indicator {
+			top: max(44px, calc(env(safe-area-inset-top) + 38px));
+			bottom: auto;
+			left: max(8px, env(safe-area-inset-left));
+			right: auto;
+			font-size: 0.68rem;
+			padding: 0.2rem 0.5rem;
+		}
+
+		.touch-mode .save-error-chip {
+			top: max(70px, calc(env(safe-area-inset-top) + 64px));
+			bottom: auto;
+			left: max(8px, env(safe-area-inset-left));
+			right: auto;
+		}
+
+		.touch-mode .floor-selector {
+			top: 38%;
+			transform: translateY(-50%);
+			right: max(10px, env(safe-area-inset-right));
+			left: auto;
+			padding: 0.5rem 0.45rem;
+			gap: 0.25rem;
+			min-width: 3.8rem;
+		}
+
+		.touch-mode .floor-selector .floor-arrow {
+			width: 2.2rem;
+			height: 2.2rem;
+			border-radius: 8px;
+		}
+
+		.touch-mode .floor-selector .floor-arrow-icon {
+			width: 15px;
+			height: 15px;
+		}
+
+		.touch-mode .floor-selector .floor-name {
+			font-size: 0.68rem;
+		}
+
+		.touch-mode .floor-selector .floor-elevation {
+			font-size: 0.64rem;
+		}
+	}
+
+	@media (max-width: 600px) and (orientation: portrait) {
+		.touch-mode :global(.hotbar) {
+			bottom: 6.8rem;
+			width: calc(100vw - 16px);
+			max-width: calc(100vw - 16px);
+			left: 50%;
+			transform: translateX(-50%);
+		}
+
+		.touch-mode .utility-buttons {
+			bottom: 9.6rem;
+			left: max(8px, env(safe-area-inset-left));
+		}
+
+		.touch-mode .utility-buttons .help-toggle {
+			padding: 0.25rem 0.5rem;
+			font-size: 0.68rem;
+		}
+
+		.touch-mode .build-hud {
+			bottom: 11.8rem;
+			left: max(8px, env(safe-area-inset-left));
+			font-size: 0.72rem;
+			padding: 0.35rem 0.6rem;
+			max-width: calc(100vw - 16px);
+		}
+
+		.touch-mode .save-indicator {
+			top: max(48px, calc(env(safe-area-inset-top) + 42px));
+			bottom: auto;
+			left: max(8px, env(safe-area-inset-left));
+			right: auto;
+			font-size: 0.68rem;
+			padding: 0.2rem 0.5rem;
+		}
+
+		.touch-mode .save-error-chip {
+			top: max(74px, calc(env(safe-area-inset-top) + 68px));
+			bottom: auto;
+			left: max(8px, env(safe-area-inset-left));
+			right: auto;
+		}
+
+		.touch-mode .floor-selector {
+			top: 38%;
+			transform: translateY(-50%);
+			right: max(10px, env(safe-area-inset-right));
+			left: auto;
+			padding: 0.6rem 0.5rem;
+			gap: 0.3rem;
+			min-width: 4.2rem;
+		}
+
+		.touch-mode .floor-selector .floor-arrow {
+			width: 2.4rem;
+			height: 2.4rem;
+			border-radius: 10px;
+		}
+
+		.touch-mode .floor-selector .floor-arrow-icon {
+			width: 16px;
+			height: 16px;
+		}
+
+		.touch-mode .floor-selector .floor-name {
+			font-size: 0.74rem;
+		}
+
+		.touch-mode .floor-selector .floor-elevation {
+			font-size: 0.68rem;
+		}
 	}
 
 	.help-toggle:hover {

@@ -1122,12 +1122,83 @@ export class ThreeScene implements WorldRuntime {
 			return;
 		}
 		const foundations = this.foundationManager.getFoundations();
-		if (foundations.length === 1) this.levelManager.suggestActiveFoundation(foundations[0].id);
+		if (foundations.length === 1) {
+			this.levelManager.suggestActiveFoundation(foundations[0].id);
+		} else if (foundations.length > 1) {
+			const spacing = vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution);
+			let closest = foundations[0];
+			let minDistSq = Infinity;
+			for (const f of foundations) {
+				const centerX = ((f.minGridX + f.maxGridX) / 2) * spacing;
+				const centerZ = ((f.minGridZ + f.maxGridZ) / 2) * spacing;
+				const dx = centerX - position.x;
+				const dz = centerZ - position.z;
+				const distSq = dx * dx + dz * dz;
+				if (distSq < minDistSq) {
+					minDistSq = distSq;
+					closest = f;
+				}
+			}
+			this.levelManager.suggestActiveFoundation(closest.id);
+		}
 	}
 
 	/** Lets the on-screen floor selector's ▼ button move down a level by click, identically to Page Down. */
 	moveLevelDown(): void {
 		this.levelManager.moveDown();
+	}
+
+	setTouchMovement(x: number, z: number): void {
+		this.controller.setTouchMovement(x, z);
+	}
+
+	setTouchRunning(running: boolean): void {
+		this.controller.setTouchRunning(running);
+	}
+
+	triggerTouchJump(): void {
+		this.controller.triggerTouchJump();
+	}
+
+	addTouchLook(deltaX: number, deltaY: number): void {
+		this.controller.addTouchLook(deltaX, deltaY);
+	}
+
+	setTouchActive(active: boolean): void {
+		this.controller.setTouchActive(active);
+	}
+
+	triggerPrimaryAction(): void {
+		this.buildToolManager.triggerPrimaryAction();
+	}
+
+	triggerSecondaryAction(): void {
+		this.buildToolManager.triggerSecondaryAction();
+	}
+
+	cycleSlotVariant(direction: -1 | 1): void {
+		this.buildToolManager.cycleSlotVariant(direction);
+	}
+
+	toggleBuildMode(): void {
+		this.buildToolManager.toggleBuildMode();
+	}
+
+	togglePlacementCustomize(): void {
+		this.buildToolManager.togglePlacementCustomize();
+	}
+
+	togglePlacementHeight(): void {
+		this.buildToolManager.togglePlacementHeight();
+	}
+
+	toggleLookedAtDoor(): void {
+		this.doorInteraction?.toggleLookedAtDoor();
+	}
+
+	simulateKey(code: string): void {
+		window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+		window.dispatchEvent(new KeyboardEvent('keyup', { code }));
 	}
 
 	getGraphicsQuality(): GraphicsQuality {

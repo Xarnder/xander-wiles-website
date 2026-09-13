@@ -167,6 +167,8 @@
 
 	.pause-panel {
 		width: min(24rem, 92vw);
+		max-height: 90vh;
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		gap: 0.7rem;

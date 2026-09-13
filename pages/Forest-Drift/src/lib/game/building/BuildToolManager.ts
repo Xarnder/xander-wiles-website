@@ -319,6 +319,38 @@ export class BuildToolManager {
 		this.emitHotbarChange();
 	}
 
+	triggerPrimaryAction(): void {
+		if (this.placementCustomizeOpen || this.placementHeightOpen) return;
+		if (this.isInputBlocked?.()) return;
+		if (this.globalMode !== 'none') {
+			this.getGlobalTool()?.onPrimaryAction();
+			return;
+		}
+		if (!this.buildModeActive) return;
+		this.getActiveTool()?.onPrimaryAction();
+	}
+
+	triggerSecondaryAction(): void {
+		if (this.placementCustomizeOpen) {
+			this.setPlacementCustomizeOpen(false);
+			return;
+		}
+		if (this.placementHeightOpen) {
+			this.setPlacementHeightOpen(false);
+			return;
+		}
+		if (this.globalMode !== 'none') {
+			if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
+				this.getGlobalTool()?.onSecondaryAction();
+				return;
+			}
+			this.setGlobalMode('none');
+			return;
+		}
+		if (!this.buildModeActive) return;
+		this.getActiveTool()?.onSecondaryAction();
+	}
+
 	toggleBuildMode(): void {
 		this.setBuildMode(!this.buildModeActive);
 	}

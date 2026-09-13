@@ -128,6 +128,7 @@
 		display: flex;
 		gap: 0.4rem;
 		pointer-events: auto;
+		z-index: 35;
 	}
 
 	.slot {
@@ -259,5 +260,102 @@
 
 	.slot-pip.current {
 		background: #ffcc33;
+	}
+
+	/* Responsive scaling for mobile / small screens */
+	@media (max-width: 850px) {
+		.hotbar {
+			gap: 0.25rem;
+			max-width: calc(100vw - 12px);
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: none;
+			padding: 2px 4px;
+		}
+
+		.hotbar::-webkit-scrollbar {
+			display: none;
+		}
+
+		.slot {
+			width: 2.6rem;
+			height: 2.6rem;
+			min-width: 2.6rem;
+			flex-shrink: 0;
+			border-radius: 6px;
+		}
+
+		.slot-number {
+			font-size: 0.55rem;
+		}
+
+		.slot-label {
+			font-size: 0.5rem;
+		}
+
+		.remove-slot {
+			margin-left: 0.25rem;
+		}
+	}
+
+	@media (max-width: 500px) {
+		.hotbar {
+			gap: 0.18rem;
+		}
+
+		.slot {
+			width: 2.2rem;
+			height: 2.2rem;
+			min-width: 2.2rem;
+			border-radius: 6px;
+		}
+
+		.slot-number {
+			font-size: 0.48rem;
+		}
+
+		.slot-label {
+			font-size: 0.42rem;
+		}
+
+		.remove-slot {
+			margin-left: 0.18rem;
+		}
+	}
+
+	@media (max-height: 500px) and (orientation: landscape) {
+		.hotbar {
+			bottom: max(6px, env(safe-area-inset-bottom));
+			gap: 0.18rem;
+			max-width: calc(100vw - 320px);
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: none;
+			padding: 2px 4px;
+		}
+
+		.hotbar::-webkit-scrollbar {
+			display: none;
+		}
+
+		.slot {
+			width: 2.15rem;
+			height: 2.15rem;
+			min-width: 2.15rem;
+			flex-shrink: 0;
+			border-radius: 6px;
+		}
+
+		.slot-number {
+			font-size: 0.48rem;
+		}
+
+		.slot-label {
+			font-size: 0.42rem;
+		}
+
+		.remove-slot {
+			margin-left: 0.18rem;
+		}
 	}
 </style>

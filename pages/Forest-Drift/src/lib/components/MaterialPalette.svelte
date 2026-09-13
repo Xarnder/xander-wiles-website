@@ -219,8 +219,8 @@
 
 <style>
 	.palette {
-		width: 25rem;
-		max-height: min(40rem, 78vh);
+		width: min(25rem, 94vw);
+		max-height: min(40rem, 82vh);
 		display: flex;
 		flex-direction: column;
 		background: rgba(14, 26, 20, 0.97);

@@ -963,4 +963,66 @@
 	.modal-spacer {
 		flex: 1 1 auto;
 	}
+
+	/* Responsive styling for small phone screens */
+	@media (max-width: 600px) {
+		.worlds-screen {
+			padding: 1.25rem 0.75rem 2.5rem;
+		}
+
+		.worlds-header {
+			gap: 0.75rem;
+			margin-bottom: 1.25rem;
+		}
+
+		.title-mark {
+			width: min(15rem, 72vw);
+		}
+
+		.default-world-card {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.85rem;
+			padding: 0.85rem;
+		}
+
+		.default-thumbnail {
+			width: 100%;
+			height: 120px;
+		}
+
+		.world-card {
+			gap: 0.75rem;
+			padding: 0.65rem;
+		}
+
+		.thumbnail {
+			width: 88px;
+			height: 52px;
+		}
+
+		.play-btn {
+			padding: 0.5rem 1rem;
+			font-size: 0.85rem;
+		}
+	}
+
+	@media (max-height: 500px) and (orientation: landscape) {
+		.worlds-screen {
+			padding: 0.75rem 1rem 2rem;
+		}
+
+		.worlds-header {
+			margin-bottom: 1rem;
+		}
+
+		.title-mark {
+			width: min(12rem, 35vw);
+		}
+
+		.default-thumbnail {
+			width: 110px;
+			height: 65px;
+		}
+	}
 </style>
