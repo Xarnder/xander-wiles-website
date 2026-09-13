@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <base href="/pages/Group-Availability/">
-  <title>Event — Group Availability</title>
+  <title>Event | Group Availability</title>
   <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
   <link rel="manifest" href="site.webmanifest">
   <meta name="theme-color" content="#eef4ff">
@@ -29,7 +29,7 @@
 <body>
   <div class="container">
     <div id="config-warning" class="alert" hidden>
-      Supabase is not configured. Add env vars and rebuild — see <code>PLAN.md</code>.
+      Supabase is not configured. Add env vars and rebuild. See <code>PLAN.md</code>.
     </div>
 
     <div id="loading" class="loading-screen">Loading event…</div>
@@ -127,7 +127,7 @@
         </div>
         <div id="guest-personal-link-box" class="guest-personal-link-box panel" hidden>
           <label class="share-link-label" for="guest-personal-link-input">Your private edit link</label>
-          <p class="guest-personal-link-hint muted">Save this somewhere safe (bookmarks, notes) so you can return and edit your availability later — even on another device. <strong>Do not share this link</strong>; anyone with it can change your submission.</p>
+          <p class="guest-personal-link-hint muted">Save this somewhere safe (bookmarks, notes) so you can return and edit your availability later, even on another device. <strong>Do not share this link</strong>; anyone with it can change your submission.</p>
           <div class="share-link-row">
             <input type="text" id="guest-personal-link-input" class="share-url-input" readonly aria-label="Your private edit link">
             <button type="button" id="guest-personal-link-copy" class="btn btn-primary">Copy link</button>
@@ -139,7 +139,7 @@
       <section id="paint-section">
         <div class="section-heading panel">
           <h2 class="section-title">Your availability</h2>
-          <p id="paint-section-lead" class="section-lead muted">Tap days on the calendar — green = likely free, orange = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong> (Ctrl+S). Keys <strong>1</strong>/<strong>2</strong>/<strong>3</strong> switch brushes.</p>
+          <p id="paint-section-lead" class="section-lead muted">Tap days on the calendar: green = likely free, orange = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong> (Ctrl+S). Keys <strong>1</strong>/<strong>2</strong>/<strong>3</strong> switch brushes.</p>
         </div>
 
         <div id="paint-toolbar" class="paint-toolbar panel">
@@ -257,7 +257,7 @@
       <section id="overlap-section" class="section-block-end" tabindex="-1">
         <div class="section-heading panel">
           <h2 class="section-title">Best times</h2>
-          <p class="section-lead muted">Ranked time windows — tap one to inspect that day above.</p>
+          <p class="section-lead muted">Ranked time windows. Tap one to inspect that day above.</p>
         </div>
         <div id="overlap-list" class="overlap-list"></div>
         <div class="overlap-actions overlap-actions-below">
@@ -274,7 +274,7 @@
       <section id="heatmap-section" hidden>
         <div class="section-heading panel">
           <h2 class="section-title">Best for everyone</h2>
-          <p class="section-lead muted heatmap-hint">Each day is coloured by how many people are free — red is fewest, bright green is most (scaled to this event).</p>
+          <p class="section-lead muted heatmap-hint">Each day is coloured by how many people are free: red is fewest, bright green is most (scaled to this event).</p>
         </div>
         <div id="heatmap-legend" class="heatmap-legend panel" hidden>
           <span class="heatmap-legend-label">Fewer</span>

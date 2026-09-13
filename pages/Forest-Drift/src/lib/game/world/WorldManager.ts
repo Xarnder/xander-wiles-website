@@ -1,5 +1,11 @@
 import { migrateWorld } from './WorldMigrationManager';
 import { generateWorldSeed, normalizeWorldName } from './seedGenerator';
+import {
+	DEFAULT_WORLD_ID,
+	getDefaultWorldBaseMetadata,
+	getDefaultWorldDefinition,
+	getDefaultWorldThumbnailBlob
+} from './DefaultWorld';
 import type { WorldRepository } from './WorldRepository';
 import {
 	applyContentToWorld,
@@ -55,11 +61,44 @@ export class WorldManager {
 	}
 
 	async listWorlds(): Promise<WorldMetadata[]> {
-		return this.repository.listWorlds();
+		const all = await this.repository.listWorlds();
+		return all.filter((w) => w.id !== DEFAULT_WORLD_ID);
+	}
+
+	async getDefaultWorldMetadata(): Promise<WorldMetadata> {
+		try {
+			const stored = await this.repository.getMetadata(DEFAULT_WORLD_ID);
+			if (stored) return stored;
+		} catch {
+			// Fallback to base metadata if storage is unreadable or empty
+		}
+		return getDefaultWorldBaseMetadata();
+	}
+
+	async resetDefaultWorld(): Promise<WorldOperationResult<WorldDefinition>> {
+		try {
+			const pristine = getDefaultWorldDefinition();
+			await this.repository.saveWorld(pristine);
+			try {
+				await this.repository.putThumbnail(DEFAULT_WORLD_ID, getDefaultWorldThumbnailBlob());
+			} catch {
+				// Non-fatal thumbnail failure
+			}
+			if (this.current?.id === DEFAULT_WORLD_ID) {
+				this.current = pristine;
+			}
+			return { ok: true, value: pristine };
+		} catch (error) {
+			return { ok: false, error: describeError(error, 'Unable to reset default world.') };
+		}
 	}
 
 	async getThumbnail(worldId: string): Promise<Blob | undefined> {
-		return this.repository.getThumbnail(worldId);
+		const stored = await this.repository.getThumbnail(worldId);
+		if (!stored && worldId === DEFAULT_WORLD_ID) {
+			return getDefaultWorldThumbnailBlob();
+		}
+		return stored;
 	}
 
 	async estimateStorage(): Promise<{ usage?: number; quota?: number }> {
@@ -93,6 +132,20 @@ export class WorldManager {
 			stored = await this.repository.loadWorld(worldId);
 		} catch (error) {
 			return { ok: false, error: describeError(error, 'Unable to read world.') };
+		}
+		if (!stored && worldId === DEFAULT_WORLD_ID) {
+			try {
+				const defaultWorld = getDefaultWorldDefinition();
+				await this.repository.saveWorld(defaultWorld);
+				try {
+					await this.repository.putThumbnail(DEFAULT_WORLD_ID, getDefaultWorldThumbnailBlob());
+				} catch {
+					// Non-fatal
+				}
+				stored = defaultWorld;
+			} catch (error) {
+				return { ok: false, error: describeError(error, 'Unable to initialize default world.') };
+			}
 		}
 		if (!stored) return { ok: false, error: 'World not found.' };
 
@@ -190,8 +243,11 @@ export class WorldManager {
 	 */
 	async duplicateWorld(worldId: string): Promise<WorldOperationResult<WorldDefinition>> {
 		try {
-			const source =
+			let source =
 				this.current?.id === worldId ? this.current : await this.repository.loadWorld(worldId);
+			if (!source && worldId === DEFAULT_WORLD_ID) {
+				source = getDefaultWorldDefinition();
+			}
 			if (!source) return { ok: false, error: 'World not found.' };
 
 			const now = new Date().toISOString();
@@ -206,7 +262,7 @@ export class WorldManager {
 			};
 			await this.repository.saveWorld(copy);
 
-			const thumbnail = await this.repository.getThumbnail(worldId);
+			const thumbnail = await this.getThumbnail(worldId);
 			if (thumbnail) await this.repository.putThumbnail(copy.id, thumbnail);
 
 			return { ok: true, value: copy };
@@ -216,6 +272,9 @@ export class WorldManager {
 	}
 
 	async deleteWorld(worldId: string): Promise<WorldOperationResult<void>> {
+		if (worldId === DEFAULT_WORLD_ID) {
+			return { ok: false, error: 'The default world cannot be deleted.' };
+		}
 		try {
 			await this.repository.deleteWorld(worldId);
 			if (this.current?.id === worldId) this.current = null;
@@ -229,10 +288,14 @@ export class WorldManager {
 		worldId: string
 	): Promise<WorldOperationResult<{ world: WorldDefinition; thumbnail?: Blob }>> {
 		try {
-			const world =
+			let world =
 				this.current?.id === worldId ? this.current : await this.repository.loadWorld(worldId);
+			let thumbnail = await this.repository.getThumbnail(worldId);
+			if (!world && worldId === DEFAULT_WORLD_ID) {
+				world = getDefaultWorldDefinition();
+				thumbnail = getDefaultWorldThumbnailBlob();
+			}
 			if (!world) return { ok: false, error: 'World not found.' };
-			const thumbnail = await this.repository.getThumbnail(worldId);
 			return { ok: true, value: { world, thumbnail } };
 		} catch (error) {
 			return { ok: false, error: describeError(error, 'Unable to export world.') };

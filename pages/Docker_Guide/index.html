@@ -221,7 +221,7 @@
                 <h4>2. How Does it Work? (The Magic Inside)</h4>
                 <ul>
                     <li>This is the coolest part.</li>
-                    <li>A traditional virtual machine (like VirtualBox) has to emulate an entire computer in software. This is like the translator having to build a fake Japanese office inside your English house—it's slow, separate, and uses a lot of resources.</li>
+                    <li>A traditional virtual machine (like VirtualBox) has to emulate an entire computer in software. This is like the translator having to build a fake Japanese office inside your English house. It's slow, separate, and uses a lot of resources.</li>
                     <li>WSL2 works differently. Microsoft has integrated a real, complete Linux kernel directly into Windows. This isn't an emulation or a fake; it's the genuine article.</li>
                     <li>Think of it this way: Windows and this new Linux kernel are running side-by-side as close partners. When a Linux command needs to be executed, Windows doesn't try to figure it out; it hands it directly to its expert Linux partner, who runs it at full speed and hands the result back. This deep integration is what makes it so fast and powerful.</li>
                 </ul>
@@ -422,12 +422,12 @@
                 <p>Imagine your Docker container is a perfectly clean, secure, locked room.</p>
                 <ol>
                     <li><strong>Copying Files In:</strong> When you <code>COPY . .</code> in your Dockerfile, you are making a one-time copy of your Python scripts into this locked room when it's built.</li>
-                    <li><strong>Working Inside:</strong> Your Python script runs inside this room. It can create new files—let's say it trains a model and saves it as <code>model.pth</code>. This new file now exists only inside the locked room.</li>
+                    <li><strong>Working Inside:</strong> Your Python script runs inside this room. It can create new files. Let's say it trains a model and saves it as <code>model.pth</code>. This new file now exists only inside the locked room.</li>
                     <li><strong>The Problem:</strong> When you are done, you might stop and remove the container (you "tear down" the room). Everything created inside that room is permanently deleted. Your <code>model.pth</code> is gone forever. There is no way to get it back.</li>
                 </ol>
                 <p>Without a volume, your container is a temporary black box. Data can't easily get in after it's been built, and anything created inside is destroyed along with the container.</p>
                 <h4>What is a Docker Volume? (The Solution: A Magic Portal)</h4>
-                <p>A Docker Volume—specifically a "bind mount" which we will use—is like opening a magic portal between a folder on your Windows PC and a folder inside your running container. It's a live, two-way link.</p>
+                <p>A Docker Volume, specifically a "bind mount" which we will use, is like opening a magic portal between a folder on your Windows PC and a folder inside your running container. It's a live, two-way link.</p>
                 <ul>
                     <li>If you add a file to the folder on your Windows D: drive, it instantly appears inside the container.</li>
                     <li>If your Python script inside the container saves a file to the linked folder, it instantly appears on your Windows D: drive.</li>

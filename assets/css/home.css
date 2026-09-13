@@ -1,0 +1,853 @@
+/* =====================================================================
+   Home page (v2) — standalone layout for index.html
+   Everything is prefixed .hx- so it cannot collide with style.css.
+   ===================================================================== */
+
+:root {
+    --hx-bg: #070a12;
+    --hx-surface: #0e131f;
+    --hx-surface-2: #131a29;
+    --hx-line: rgba(255, 255, 255, 0.08);
+    --hx-line-strong: rgba(255, 255, 255, 0.16);
+    --hx-text: #f3f6fb;
+    --hx-muted: #97a3b8;
+    --hx-dim: #6f7b91;
+    --hx-blue: #4d8dff;
+    --hx-violet: #8b5cf6;
+    --hx-green: #4ade80;
+    --hx-cyan: #35d6d0;
+    --hx-pink: #f472b6;
+    --hx-shell: min(1200px, 100% - 2.5rem);
+}
+
+/* The shared stylesheet paints a purple/cyan nebula — the home page is navy. */
+html:has(.hx-home) {
+    background-color: var(--hx-bg);
+    background-image: none;
+}
+
+body.hx-home {
+    background: var(--hx-bg);
+    color: var(--hx-text);
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+.hx-home main {
+    display: block;
+}
+
+.hx-shell {
+    width: var(--hx-shell);
+    margin-inline: auto;
+}
+
+.hx-home h1,
+.hx-home h2,
+.hx-home h3 {
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+}
+
+.hx-home p {
+    margin: 0;
+}
+
+.hx-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- Hero */
+
+.hx-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: clamp(520px, 64vw, 660px);
+    display: flex;
+    align-items: center;
+    background: var(--hx-bg);
+}
+
+.hx-hero-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+    overflow: hidden;
+}
+
+.hx-hero-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 80% center;
+}
+
+/* Wide desktop mode: hero-portrait-wide includes the portrait; hidden until slim mobile mode */
+.hx-hero-portrait {
+    display: none;
+}
+
+.hx-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        linear-gradient(100deg, rgba(6, 9, 17, 0.75) 0%, rgba(6, 9, 17, 0.5) 34%, rgba(6, 9, 17, 0.12) 62%, rgba(6, 9, 17, 0) 100%),
+        linear-gradient(to bottom, rgba(6, 9, 17, 0.25) 0%, transparent 30%, rgba(7, 10, 18, 0.35) 68%, rgba(7, 10, 18, 1) 100%);
+}
+
+.hx-hero-inner {
+    position: relative;
+    padding-block: clamp(3rem, 7vw, 5rem);
+    text-shadow: 0 1px 16px rgba(4, 7, 14, 0.75);
+}
+
+.hx-eyebrow {
+    display: block;
+    margin-bottom: 0.9rem;
+    color: #8fb4ff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+}
+
+.hx-hero h1 {
+    max-width: 20ch;
+    margin: 0 0 1.25rem;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+}
+
+.hx-hero h1 .hx-accent {
+    color: var(--hx-blue);
+}
+
+.hx-hero-lede {
+    max-width: 46ch;
+    margin-bottom: 2rem !important;
+    color: #cdd6e6;
+    font-size: clamp(1rem, 1.25vw, 1.12rem);
+    line-height: 1.65;
+}
+
+.hx-cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    margin-bottom: 2.6rem;
+}
+
+.hx-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1.5rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: var(--hx-text);
+    font-family: inherit;
+    font-size: 0.98rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.hx-btn-primary {
+    background: linear-gradient(100deg, var(--hx-violet) 0%, var(--hx-blue) 100%);
+    box-shadow: 0 12px 30px rgba(77, 141, 255, 0.32);
+}
+
+.hx-btn-ghost {
+    background: rgba(11, 16, 27, 0.72);
+    border-color: var(--hx-line-strong);
+    backdrop-filter: blur(6px);
+}
+
+.hx-btn:hover {
+    transform: translateY(-2px);
+}
+
+.hx-btn-ghost:hover {
+    background: rgba(24, 32, 48, 0.9);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.hx-btn .hx-arrow {
+    transition: transform 0.2s ease;
+}
+
+.hx-btn:hover .hx-arrow {
+    transform: translateX(3px);
+}
+
+/* Hero feature strip */
+
+.hx-hero-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(1.25rem, 3vw, 2.75rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.hx-feature {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.hx-feature svg {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+}
+
+.hx-feature-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.hx-feature-sub {
+    display: block;
+    color: var(--hx-dim);
+    font-size: 0.78rem;
+}
+
+/* Handwritten note over the artwork */
+
+.hx-signature-note {
+    position: absolute;
+    right: clamp(1.5rem, 5vw, 4.5rem);
+    bottom: clamp(2rem, 6vw, 4rem);
+    text-align: center;
+    color: #e8eefc;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+}
+
+.hx-signature {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: 'Dancing Script', 'Caveat', cursive;
+    font-size: 2.4rem;
+    font-weight: 600;
+}
+
+/* -------------------------------------------- Middle-section backdrop */
+
+.hx-mid {
+    position: relative;
+    isolation: isolate;
+    /* The sticky backdrop below would otherwise paint past this section and over
+       the footer, unveiled. `clip` (not `hidden`) clips without making this a
+       scroll container, which would break the stickiness; clip-path is the
+       fallback for engines without `overflow: clip`. */
+    overflow: clip;
+    clip-path: inset(0);
+}
+
+/* Sticky + negative margin keeps the backdrop one viewport tall, so a tall
+   middle section never upscales the image (it would be 2x+ on a phone). */
+.hx-mid-bg {
+    position: sticky;
+    top: 0;
+    display: block;
+    width: 100%;
+    height: 100vh;
+    margin-bottom: -100vh;
+    object-fit: cover;
+    z-index: -2;
+}
+
+/* Doubles as the readability veil and as the soft dissolve at both ends. */
+.hx-mid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(to bottom,
+            var(--hx-bg) 0%,
+            rgba(7, 10, 18, 0.62) 18%,
+            rgba(7, 10, 18, 0.7) 50%,
+            rgba(7, 10, 18, 0.62) 82%,
+            var(--hx-bg) 100%);
+}
+
+/* ------------------------------------------------------------ Sections */
+
+.hx-section {
+    padding-block: clamp(2.75rem, 6vw, 4.25rem);
+}
+
+.hx-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.hx-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin: 0;
+    font-size: clamp(1.35rem, 2.4vw, 1.65rem);
+}
+
+.hx-section-title::before {
+    content: '';
+    width: 4px;
+    height: 1.35em;
+    border-radius: 4px;
+    background: var(--hx-blue);
+}
+
+.hx-link-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--hx-blue);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.hx-link-more:hover {
+    text-decoration: underline;
+}
+
+.hx-link-more .hx-arrow {
+    transition: transform 0.2s ease;
+}
+
+.hx-link-more:hover .hx-arrow {
+    transform: translateX(3px);
+}
+
+/* ---------------------------------------------------- Featured projects */
+
+.hx-project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1.1rem;
+}
+
+.hx-project {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--hx-line);
+    border-radius: 16px;
+    background: var(--hx-surface);
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.hx-project:hover {
+    transform: translateY(-4px);
+    border-color: rgba(77, 141, 255, 0.45);
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
+}
+
+.hx-project-media {
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: var(--hx-surface-2);
+}
+
+.hx-project-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.35s ease;
+}
+
+.hx-project:hover .hx-project-media img {
+    transform: scale(1.04);
+}
+
+.hx-project-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 1rem 1.05rem 1.15rem;
+}
+
+.hx-project-top {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.hx-project-top h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+}
+
+.hx-project-top p {
+    color: var(--hx-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.hx-round-arrow {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    margin-left: auto;
+    border: 1px solid var(--hx-line-strong);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.95rem;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.hx-project:hover .hx-round-arrow,
+.hx-category:hover .hx-round-arrow {
+    background: var(--hx-blue);
+    border-color: var(--hx-blue);
+    transform: translateX(2px);
+}
+
+.hx-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: auto;
+}
+
+.hx-tag {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--hx-line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--hx-muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------ About me */
+
+.hx-about-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr 1.15fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.hx-about-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.4rem 1.35rem;
+    border: 1px solid var(--hx-line);
+    border-radius: 16px;
+    background: var(--hx-surface);
+}
+
+.hx-about-copy .hx-section-title {
+    margin-bottom: 0.5rem;
+}
+
+.hx-about-copy p {
+    color: var(--hx-muted);
+    font-size: 0.95rem;
+    line-height: 1.7;
+}
+
+.hx-about-copy strong {
+    color: var(--hx-text);
+    font-weight: 600;
+}
+
+.hx-about-copy .hx-btn {
+    align-self: flex-start;
+    margin-top: 0.35rem;
+}
+
+.hx-card {
+    border: 1px solid var(--hx-line);
+    border-radius: 16px;
+    background: var(--hx-surface);
+}
+
+.hx-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 1.4rem 1.35rem;
+}
+
+.hx-fact {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+}
+
+.hx-icon-tile {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.hx-icon-tile svg {
+    width: 20px;
+    height: 20px;
+}
+
+.hx-fact dt {
+    margin-bottom: 0.15rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.hx-fact dd {
+    margin: 0;
+    color: var(--hx-muted);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.hx-quote {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100%;
+    overflow: hidden;
+    padding: 2rem 1.9rem;
+    border: 1px solid var(--hx-line);
+    border-radius: 16px;
+}
+
+.hx-quote img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+}
+
+.hx-quote::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(7, 10, 18, 0.55) 0%, rgba(7, 10, 18, 0.78) 100%);
+}
+
+.hx-quote blockquote {
+    margin: 0;
+    font-size: clamp(1.1rem, 1.7vw, 1.35rem);
+    font-weight: 600;
+    line-height: 1.45;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.hx-quote figcaption {
+    margin-top: 0.9rem;
+    color: #c4cee0;
+    font-size: 0.88rem;
+}
+
+/* ----------------------------------------------------------- Categories */
+
+.hx-category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 1rem;
+}
+
+.hx-category {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 1.1rem 1.1rem 1.2rem;
+    border: 1px solid var(--hx-line);
+    border-radius: 16px;
+    background: var(--hx-surface);
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
+}
+
+.hx-category:hover {
+    transform: translateY(-3px);
+    border-color: rgba(77, 141, 255, 0.45);
+    background: var(--hx-surface-2);
+}
+
+.hx-category svg {
+    width: 26px;
+    height: 26px;
+}
+
+.hx-category h3 {
+    margin: 0.35rem 0 0;
+    font-size: 0.98rem;
+}
+
+.hx-category p {
+    color: var(--hx-dim);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    padding-right: 2.25rem;
+}
+
+.hx-category .hx-round-arrow {
+    position: absolute;
+    right: 0.9rem;
+    bottom: 1rem;
+    width: 30px;
+    height: 30px;
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+/* --------------------------------------------------------------- Footer */
+
+.hx-footer {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    margin-top: clamp(2rem, 6vw, 4rem);
+    padding-top: clamp(6rem, 18vw, 13rem);
+}
+
+.hx-footer-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+}
+
+.hx-footer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(to bottom,
+            rgba(7, 10, 18, 1) 0%,
+            rgba(7, 10, 18, 0.6) 18%,
+            rgba(7, 10, 18, 0.3) 42%,
+            rgba(7, 10, 18, 0.62) 76%,
+            rgba(7, 10, 18, 0.88) 100%);
+}
+
+.hx-footer-inner {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1.5rem;
+    padding-bottom: 1.75rem;
+}
+
+.hx-footer-copy {
+    text-align: center;
+}
+
+.hx-footer-copy h2 {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.2rem, 2.2vw, 1.5rem);
+}
+
+.hx-footer-copy p {
+    color: var(--hx-blue);
+    font-size: 0.9rem;
+}
+
+.hx-footer-copy .hx-signature {
+    color: #e8eefc;
+    font-size: 2.1rem;
+}
+
+.hx-socials {
+    position: absolute;
+    right: 0;
+    bottom: 2.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.hx-socials a {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    color: #d6deee;
+    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.hx-socials a:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.09);
+    transform: translateY(-2px);
+}
+
+.hx-socials svg {
+    width: 22px;
+    height: 22px;
+}
+
+.hx-footer-bar {
+    border-top: 1px solid var(--hx-line);
+    background: rgba(7, 10, 18, 0.62);
+    backdrop-filter: blur(4px);
+}
+
+.hx-footer-bar .hx-shell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 1rem;
+    color: var(--hx-dim);
+    font-size: 0.8rem;
+}
+
+.hx-photo-credit {
+    text-align: center;
+}
+
+/* ----------------------------------------------------------- Responsive */
+
+@media (max-width: 1024px) {
+    .hx-about-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .hx-about-copy {
+        grid-column: 1 / -1;
+    }
+
+    .hx-signature-note {
+        display: none;
+    }
+}
+
+@media (max-width: 760px) {
+    :root {
+        --hx-shell: min(1200px, 100% - 2rem);
+    }
+
+    /* Stack the hero: copy over the background art, portrait in its own band below. */
+    .hx-hero {
+        min-height: 0;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .hx-hero::after {
+        background: linear-gradient(to bottom, rgba(6, 9, 17, 0.5) 0%, rgba(6, 9, 17, 0.66) 45%, rgba(6, 9, 17, 0.72) 72%, rgba(7, 10, 18, 0.82) 94%, rgba(7, 10, 18, 1) 100%);
+    }
+
+    .hx-hero-inner {
+        order: 1;
+        padding-block: 3rem 2.25rem;
+    }
+
+    .hx-hero-bg img {
+        object-position: center center;
+    }
+
+    .hx-hero-portrait {
+        display: block;
+        order: 2;
+        position: relative;
+        z-index: 0;
+        inset: auto;
+        width: 100%;
+        height: clamp(320px, 92vw, 440px);
+        object-fit: cover;
+        object-position: center bottom;
+        opacity: 1;
+        /* Same 26% feather as the wide layout's leading edge, plus a fade out into the page. */
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 26%, #000 76%, transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0%, #000 26%, #000 76%, transparent 100%);
+    }
+
+    .hx-hero h1 {
+        max-width: none;
+    }
+
+    .hx-hero-features {
+        gap: 1rem 1.5rem;
+    }
+
+    .hx-about-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hx-footer-inner {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .hx-socials {
+        position: static;
+        bottom: auto;
+    }
+
+    .hx-footer-bar .hx-shell {
+        flex-direction: column;
+        gap: 0.35rem;
+        text-align: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .hx-btn,
+    .hx-project,
+    .hx-category,
+    .hx-project-media img,
+    .hx-round-arrow,
+    .hx-socials a,
+    .hx-arrow {
+        transition: none !important;
+    }
+
+    .hx-project:hover,
+    .hx-category:hover,
+    .hx-btn:hover,
+    .hx-socials a:hover {
+        transform: none;
+    }
+}

@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Xander Wiles</title>
+    <meta name="description"
+        content="Xander Wiles, software engineer and artist building games, 3D tools and useful applications.">
 
     <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
@@ -18,19 +20,19 @@
 
     <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#070a12">
 
-    <!-- Link to Shared CSS -->
-    <link rel="stylesheet" href="assets/css/style.css">
+    <!-- Shared site styles (navigation) + home page layout -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/home.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&family=Caveat:wght@500;600&family=Dancing+Script:wght@600;700&display=swap"
         rel="stylesheet">
 </head>
 
-<body class="loading">
+<body class="hx-home">
     <script>
       (function () {
         var hash = location.hash;
@@ -39,879 +41,414 @@
         location.replace(location.origin + '/pages/Group-Availability/auth-callback.html' + hash);
       })();
     </script>
-    <!-- Premium Loading Overlay -->
-    <div id="loading-overlay">
-        <svg class="premium-loader" viewBox="0 -25 100 125">
-            <g>
-                <path d="M 50,100 A 1,1 0 0 1 50,0" />
-            </g>
-            <g>
-                <path d="M 50,75 A 1,1 0 0 0 50,-25" />
-            </g>
-            <defs>
-                <linearGradient id="loader-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" style="stop-color:#FF56A1;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#FF9350;stop-opacity:1" />
-                </linearGradient>
-            </defs>
-        </svg>
-    </div>
 
-    <script>
-        // Immediately hide loader if it takes too long or when page is ready
-        window.addEventListener('load', () => {
-            const loader = document.getElementById('loading-overlay');
-            if (loader) {
-                loader.classList.add('hidden');
-                document.body.classList.remove('loading');
-                setTimeout(() => {
-                    if (loader.parentNode) loader.parentNode.removeChild(loader);
-                }, 1000);
-            }
-        });
-    </script>
-
-    <!-- Background elements from your original design -->
-    <div class="background-overlay"></div>
-    <canvas id="particle-canvas" aria-hidden="true"></canvas>
-    <div class="floating-shapes">
-        <div class="shape shape-1"></div>
-        <div class="shape shape-2"></div>
-        <div class="shape shape-3"></div>
-    </div>
-
-    <!-- The header now correctly contains the navigation again -->
+    <!-- Shared navigation (injected by nav-loader.js) -->
     <div id="main-nav-placeholder"></div>
 
-    <main class="app-container">
-        <nav class="section-jump-bar" aria-label="Page sections">
-            <div class="section-jump-search" role="search">
-                <label class="visually-hidden" for="page-card-search">Search pages</label>
-                <input id="page-card-search" class="section-jump-search-input" type="search"
-                    placeholder="Search pages…" autocomplete="off" spellcheck="false" enterkeyhint="search"
-                    aria-controls="page-card-search-status" aria-describedby="page-card-search-hint">
-                <button type="button" id="page-card-search-clear" class="section-jump-search-clear" hidden
-                    aria-label="Clear search">×</button>
-                <span id="page-card-search-hint" class="visually-hidden">Press Escape when finished. Use / or
-                    Command+K to focus search.</span>
-            </div>
-            <p id="page-card-search-status" class="section-jump-search-status" role="status" aria-live="polite"
-                hidden></p>
-            <div class="section-jump-bar-inner">
-                <a href="#recent" class="section-jump-link" data-section="recent" hidden>Recent</a>
-                <a href="#featured" class="section-jump-link" data-section="featured">Featured</a>
-                <a href="#utilities" class="section-jump-link" data-section="utilities">Utilities</a>
-                <a href="#images" class="section-jump-link" data-section="images">Images</a>
-                <a href="#games" class="section-jump-link" data-section="games">Games</a>
-                <a href="#guides" class="section-jump-link" data-section="guides">Guides</a>
-                <a href="#playlists" class="section-jump-link" data-section="playlists">Playlists</a>
-                <a href="#contact" class="section-jump-link" data-section="contact">Contact</a>
-            </div>
-        </nav>
+    <main>
+        <!-- ============================================================ HERO -->
+        <section class="hx-hero" aria-labelledby="hx-hero-title">
+            <picture class="hx-hero-bg">
+                <source media="(min-width: 761px)" srcset="/assets/images/placeholders/hero-portrait-wide.webp">
+                <img src="/assets/images/placeholders/hero-background.webp" alt="" aria-hidden="true"
+                    decoding="async" fetchpriority="high">
+            </picture>
+            <img class="hx-hero-portrait" src="/assets/images/placeholders/hero-portrait.webp" alt="" aria-hidden="true"
+                decoding="async">
 
-        <div class="top-section-grid">
-            <div class="hero-card glass-card">
-                <div class="profile-picture-wrapper">
-                    <picture>
-                        <!-- The browser tries to load this AVIF file first -->
-                        <source srcset="assets/images/xander Correted Edited V2.avif" type="image/avif">
+            <div class="hx-hero-inner hx-shell">
+                <span class="hx-eyebrow">Creative Developer</span>
+                <h1 id="hx-hero-title">Build. Play. <span class="hx-accent">Imagine.</span></h1>
+                <p class="hx-hero-lede">
+                    I'm Xander, a software engineer and artist exploring the intersection of code, creativity and AI.
+                    I build games, 3D tools, and useful applications that turn ideas into interactive experiences.
+                </p>
 
-                        <!-- If it can't, it tries this WebP file next -->
-                        <source srcset="assets/images/Xander Corrected Edited V2.webp" type="image/webp">
-
-                        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
-                        <img src="assets/images/Xander Corrected Edited V2.png" alt="A profile picture of Xander Wiles"
-                            class="profile-picture" width="300" height="300" loading="lazy">
-                    </picture>
+                <div class="hx-cta-row">
+                    <a class="hx-btn hx-btn-primary" href="/pages/All-Pages/">View My Work <span class="hx-arrow"
+                            aria-hidden="true">→</span></a>
+                    <a class="hx-btn hx-btn-ghost" href="/pages/About/">About Me</a>
                 </div>
-                <h1>Hi, I'm Xander</h1>
-                <p class="hero-contact">contact me at <a
-                        href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
-                <p>Select a game or page from the navigation menu above to get started. All projects are built with
-                    passion
-                    and a lot of JavaScript.</p>
+
+                <ul class="hx-hero-features">
+                    <li class="hx-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round"
+                            stroke-linejoin="round" aria-hidden="true">
+                            <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
+                            <rect x="2" y="6" width="20" height="12" rx="5" />
+                        </svg>
+                        <span>
+                            <span class="hx-feature-title">Games</span>
+                            <span class="hx-feature-sub">Play &amp; Explore</span>
+                        </span>
+                    </li>
+                    <li class="hx-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round"
+                            stroke-linejoin="round" aria-hidden="true">
+                            <path
+                                d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 0 1-4-4l9-9a4 4 0 0 0-1-1Z" />
+                        </svg>
+                        <span>
+                            <span class="hx-feature-title">Tools</span>
+                            <span class="hx-feature-sub">Make &amp; Create</span>
+                        </span>
+                    </li>
+                    <li class="hx-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#35d6d0" stroke-width="1.8" stroke-linecap="round"
+                            stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="4" width="18" height="16" rx="3" />
+                            <circle cx="9" cy="10" r="1.6" />
+                            <path d="m4 17 5-5 4 4 2.5-2.5L20 17" />
+                        </svg>
+                        <span>
+                            <span class="hx-feature-title">Art &amp; 3D</span>
+                            <span class="hx-feature-sub">Visual Stories</span>
+                        </span>
+                    </li>
+                    <li class="hx-feature">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#4d8dff" stroke-width="1.8" stroke-linecap="round"
+                            stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3v18M3 12h18M6.5 6.5l11 11M17.5 6.5l-11 11" />
+                        </svg>
+                        <span>
+                            <span class="hx-feature-title">AI</span>
+                            <span class="hx-feature-sub">Modern Tech</span>
+                        </span>
+                    </li>
+                </ul>
             </div>
 
-            <!-- Stacked Side Cards -->
-            <div class="hero-side-stack">
-                <a href="/pages/To-Do-List/" class="page-card glass-card top-feature-card">
-                    <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon"
-                        loading="lazy">
-                    <h3>To Do List</h3>
-                    <p>Manage tasks with drag-and-drop & linked lists.</p>
-                </a>
-
-                <div class="about-card glass-card">
-                    <div class="about-card-heading">
-                        <img class="about-card-icon" src="/favicon-dark.svg" alt="" width="40" height="40" decoding="async">
-                        <h3>About Me</h3>
-                    </div>
-                    <p class="tagline">"Curious. Ambitious. Technology Lover."</p>
-                    <p class="bio-text">
-                        Hi, I'm <strong>Xander</strong>. I'm a <span data-xw-age>24</span>-year-old software engineer and artist from the UK.
-                        I hold a degree in Computer Animation and Masters in
-                        <strong>Artificial
-                            Intelligence</strong>.
-                    </p>
-                    <p class="bio-text">
-                        I love bringing ideas to life, whether that’s coding up a new web app, designing a game, or
-                        training an AI Model. When I’m not at the keyboard, you’ll find me with my <span
-                            data-xw-camera>Canon R6 Mark II</span> in hand or
-                        adding
-                        to my journal, which has <span data-xw-journal-count>1,231</span> entries!
-                    </p>
-                    <div class="interests-tags">
-                        <span class="tag">AI & Tech</span>
-                        <span class="tag">Art</span>
-                        <span class="tag">Cello</span>
-                        <a href="/pages/journal/" class="tag">Daily Journal</a>
-                        <a href="/pages/video-portfolio/" class="tag">Video Portfolio</a>
-                    </div>
-                    <a href="/pages/About/" class="glow-button about-glow-button">Learn More About Me</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- === Recent (from local cache) === -->
-        <section id="recent-section" class="recent-section" hidden>
-            <h2 id="recent" class="section-title">Recent</h2>
-            <div id="recent-pages-grid" class="page-grid recent-pages-grid"></div>
+            <p class="hx-signature-note">
+                <span class="hx-signature">Xander</span>
+            </p>
         </section>
 
-        <!-- === Featured === -->
-        <h2 id="featured" class="section-title">Featured</h2>
-        <div class="page-grid best-pages-grid">
-            <a href="https://www.shoutitoutgame.com" class="page-card glass-card">
-                <img src="/pages/Shout-It-Out/favicon-dark.svg" class="page-icon" alt="Shout It Out Icon"
-                    loading="lazy">
-                <h3>Shout It Out!</h3>
-                <p>A game to play with friends and family at a party</p>
-            </a>
-            <a href="/pages/3d-Model-Viewer/" class="page-card glass-card">
-                <img src="/pages/3d-Model-Viewer/favicon-dark.svg" class="page-icon" alt="3D Model Viewer Icon"
-                    loading="lazy">
-                <h3>3D Model Viewer</h3>
-                <p>A tool for viewing 3D models.</p>
-            </a>
-            <a href="/games/rocket-lander/" class="page-card glass-card">
-                <img src="/games/rocket-lander/favicon.png" class="page-icon" alt="Rocket Lander Icon" loading="lazy">
-                <h3>Rocket Lander 2</h3>
-                <p>A challenging physics-based game. Can you land the rocket safely?</p>
-            </a>
-            <a href="/pages/Prompt-Manager/" class="page-card glass-card special-prompt-manager-card">
-                <img src="/pages/Prompt-Manager/favicon-dark.svg" class="page-icon" alt="Prompt Manager Icon"
-                    loading="lazy">
-                <h3>Prompt Manager</h3>
-                <p>A tool for managing prompts</p>
-            </a>
-            <a href="/pages/Arkonhex/" class="page-card glass-card special-social-network-card">
-                <img src="/pages/Arkonhex/favicon-dark.svg" class="page-icon" alt="Arkonhex Icon" loading="lazy">
-                <h3>Arkonhex</h3>
-                <p>A voxel game</p>
-            </a>
-            <a href="/pages/Forest-Drift/" class="page-card glass-card">
-                <img src="/pages/Forest-Drift/favicon-dark.svg" class="page-icon" alt="Forest Drift Icon" loading="lazy">
-                <h3>Forest Drift</h3>
-                <p>Explore infinite procedural forests and build on the terrain.</p>
-            </a>
-            <a href="/pages/Tidal-Breathing-Exercise/" class="page-card glass-card">
-                <img src="/pages/Tidal-Breathing-Exercise/favicon-dark.svg" class="page-icon" alt="Tidal Breathing Icon" loading="lazy">
-                <h3>Tidal Breathing</h3>
-                <p>Find your natural breathing rhythm and gently slow down with an adaptive guide.</p>
-            </a>
-            <a href="/pages/life-counter-extension/" class="page-card glass-card">
-                <img src="/pages/life-counter-extension/favicon-dark.svg" class="page-icon"
-                    alt="Your life in weeks Icon" loading="lazy">
-                <h3>Your life in weeks</h3>
-                <p>Visualize your life in weeks with this simple tool.</p>
-            </a>
-            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
-                <img src="/pages/tax_bracket_visualizer/favicon-dark.svg" class="page-icon"
-                    alt="Tax Bracket Visualiser Icon" loading="lazy">
-                <h3>Tax Bracket Visualiser</h3>
-                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
-            </a>
-            <a href="/pages/FOV-Screen-Calculator/" class="page-card glass-card">
-                <img src="/pages/FOV-Screen-Calculator/favicon-dark.svg" class="page-icon"
-                    alt="FOV Screen Calculator Icon" loading="lazy">
-                <h3>FOV Screen Calculator</h3>
-                <p>A tool for calculating the field of view of a screen.</p>
-            </a>
- 
+        <!-- ============================== MIDDLE SECTIONS (shared backdrop) -->
+        <div class="hx-mid">
+            <!-- PLACEHOLDER: swap for your own mid-page artwork -->
+            <img class="hx-mid-bg" src="/assets/images/placeholders/middle-background.webp" alt="" aria-hidden="true"
+                loading="lazy" decoding="async">
 
-        </div>
-
-
-
-        <!-- === UTILITIES & PRODUCTIVITY === -->
-        <h2 id="utilities" class="section-title">Utilities & Productivity</h2>
-        <div class="page-grid">
-            <a href="/pages/Prompt-Manager/" class="page-card glass-card special-prompt-manager-card">
-                <img src="/pages/Prompt-Manager/favicon-dark.svg" class="page-icon" alt="Prompt Manager Icon"
-                    loading="lazy">
-                <h3>Prompt Manager</h3>
-                <p>A tool for managing prompts</p>
-            </a>
-            <a href="/pages/Watch-Later/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/Watch-Later/favicon-dark.svg" class="page-icon" alt="Watch Later Icon" loading="lazy">
-                <h3>Watch Later</h3>
-                <p>Save and organize movies & TV shows for later viewing.</p>
-            </a>
-            <a href="/pages/Work-Tracker/" class="page-card glass-card special-work-tracker-card">
-                <img src="/pages/Work-Tracker/favicon-dark.svg" class="page-icon" alt="Work Tracker Icon"
-                    loading="lazy">
-                <h3>Work Tracker</h3>
-                <p>A tool for tracking work hours</p>
-            </a>
-            <a href="/pages/To-Do-List/" class="page-card glass-card">
-                <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
-                <h3>To Do List</h3>
-                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
-            </a>
-            <a href="/pages/Time-Pass/" class="page-card glass-card">
-                <img src="/pages/Time-Pass/favicon-dark.svg" class="page-icon" alt="Time Pass Icon" loading="lazy">
-                <h3>Time Pass</h3>
-                <p>Track time until and since the moments that matter.</p>
-            </a>
-            <a href="/pages/Story-Manager/" class="page-card glass-card">
-                <img src="/pages/Story-Manager/favicon-dark.svg" class="page-icon" alt="Story Manager Icon"
-                    loading="lazy">
-                <h3>Story Manager</h3>
-                <p>A tool for managing stories</p>
-            </a>
-            <a href="/pages/Local-AI/" class="page-card glass-card">
-                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Local AI Icon" loading="lazy">
-                <h3>Local AI</h3>
-                <p>A tool for running AI models locally.</p>
-            </a>
-            <a href="/pages/AI-Credit-Calculator/" class="page-card glass-card">
-                <img src="/pages/AI-Credit-Calculator/favicon-dark.svg" class="page-icon"
-                    alt="AI Credit Calculator Icon" loading="lazy">
-                <h3>AI Credit Calculator</h3>
-                <p>Turn credit packs into real money. See what a task costs and how many runs you get.</p>
-            </a>
-            <a href="/pages/Teleprompter/" class="page-card glass-card">
-                <img src="/pages/Teleprompter/favicon-dark.svg" class="page-icon" alt="Teleprompter Icon"
-                    loading="lazy">
-                <h3>Teleprompter Flow</h3>
-                <p>On-device voice-follow teleprompter that scrolls with your speech — no cloud speech API.</p>
-            </a>
-            <a href="/pages/z-image-turbo-sveltekit/" class="page-card glass-card">
-                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Z-Image Turbo Icon" loading="lazy">
-                <h3>Z-Image Turbo</h3>
-                <p>On-device text-to-image generation with ONNX Runtime Web and WebGPU.</p>
-            </a>
-            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
-                <img src="/pages/tax_bracket_visualizer/favicon-dark.svg" class="page-icon"
-                    alt="Tax Bracket Visualiser Icon" loading="lazy">
-                <h3>Tax Bracket Visualiser</h3>
-                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
-            </a>
-            <a href="/pages/Tax-Helper/" class="page-card glass-card">
-                <img src="/pages/Tax-Helper/favicon-dark.svg" class="page-icon" alt="Tax Helper Icon"
-                    loading="lazy">
-                <h3>Tax Helper</h3>
-                <p>Normalize CSV and OFX bank statements, isolate tax-relevant rows, and export clean tables.</p>
-            </a>
-            <a href="/pages/Tidal-Breathing-Exercise/" class="page-card glass-card">
-                <img src="/pages/Tidal-Breathing-Exercise/favicon-dark.svg" class="page-icon" alt="Tidal Breathing Icon" loading="lazy">
-                <h3>Tidal Breathing</h3>
-                <p>Find your natural breathing rhythm and gently slow down with an adaptive guide.</p>
-            </a>
-            <a href="/pages/Routine/" class="page-card glass-card">
-                <img src="/pages/Routine/favicon-dark.svg" class="page-icon" alt="Routine Manager Icon"
-                    loading="lazy">
-                <h3>Routine Manager</h3>
-                <p>Create step-by-step routines and run them one task at a time on your phone.</p>
-            </a>
-            <a href="/pages/Table_Extractor/" class="page-card glass-card">
-                <img src="/pages/Table_Extractor/favicon-dark.svg" class="page-icon" alt="Table Extractor Icon"
-                    loading="lazy">
-                <h3>Table Extractor</h3>
-                <p>A tool to extract tables from PDF and export as a CSV file.</p>
-            </a>
-            <a href="/pages/WhatsAppViewer/" class="page-card glass-card">
-                <img src="/pages/WhatsAppViewer/favicon.png" class="page-icon" alt="WhatsApp Chat Viewer Icon"
-                    loading="lazy">
-                <h3>WhatsApp Chat Viewer</h3>
-                <p>A Simple WhatsApp Chat Viewer</p>
-            </a>
-            <a href="pages/ringtone-trimmer/" class="page-card glass-card">
-                <img src="/pages/ringtone-trimmer/favicon-dark.svg" class="page-icon" alt="Ringtone Trimmer Icon"
-                    loading="lazy">
-                <h3>Ringtone Trimmer</h3>
-                <p>A tool for trimming audio files and creating ringtones.</p>
-            </a>
-            <a href="pages/Timeline_Generator/" class="page-card glass-card">
-                <img src="/pages/Timeline_Generator/favicon-dark.svg" class="page-icon" alt="Timeline Generator Icon"
-                    loading="lazy">
-                <h3>Timeline Generator</h3>
-                <p>With this tool, you can easily create a timeline from your text input.</p>
-            </a>
-            <a href="/pages/Flashcard_App/" class="page-card glass-card">
-                <img src="/pages/Flashcard_App/favicon.png" class="page-icon" alt="Flashcard App Icon" loading="lazy">
-                <h3>Flashcard App</h3>
-                <p>Simple Flashcard App</p>
-            </a>
-            <a href="/pages/life-counter-extension/" class="page-card glass-card">
-                <img src="/pages/life-counter-extension/favicon-dark.svg" class="page-icon"
-                    alt="Your life in weeks Icon" loading="lazy">
-                <h3>Your life in weeks</h3>
-                <p>Visualize your life in weeks with this simple tool.</p>
-            </a>
-            <a href="/pages/Ratio_Calculator/" class="page-card glass-card">
-                <img src="/pages/Ratio_Calculator/favicon-dark.svg" class="page-icon" alt="Ratio Calculator Icon"
-                    loading="lazy">
-                <h3>Ratio Calculator</h3>
-                <p>A tool for calculating ratios based on user-defined lines.</p>
-            </a>
-            <a href="/pages/Text-Compactor/" class="page-card glass-card">
-                <img src="/pages/Text-Compactor/favicon-dark.svg" class="page-icon" alt="Text Compactor Icon"
-                    loading="lazy">
-                <h3>Text Compactor</h3>
-                <p>A tool for compacting text into a printable format.</p>
-            </a>
-            <a href="/pages/Markdown-Editor/" class="page-card glass-card">
-                <img src="/pages/Markdown-Editor/favicon-dark.svg" class="page-icon" alt="Markdown Editor Icon"
-                    loading="lazy">
-                <h3>Markdown Editor</h3>
-                <p>Edit Markdown files from Google Drive.</p>
-            </a>
-            <a href="/pages/ultimate-christmas-playlist/" class="page-card glass-card">
-                <img src="/pages/ultimate-christmas-playlist/favicon-dark.svg" class="page-icon"
-                    alt="Ultimate Christmas Playlist Icon" loading="lazy">
-                <h3>Ultimate Christmas Playlist</h3>
-                <p>A curated list of festive songs for the holiday season.</p>
-            </a>
-            <a href="pages/Essential_Items/" class="page-card glass-card">
-                <img src="/pages/Essential_Items/favicon-dark.svg" class="page-icon"
-                    alt="Essential Items Checklist Icon" loading="lazy">
-                <h3>Essential Items Checklist</h3>
-                <p>A checklist of basic needs to ensure you're prepared.</p>
-            </a>
-            <a href="/pages/midi-editor/" class="page-card glass-card">
-                <img src="/pages/midi-editor/favicon-dark.svg" class="page-icon" alt="MIDI Editor Icon" loading="lazy">
-                <h3>MIDI Editor</h3>
-                <p>A tool for editing MIDI files.</p>
-            </a>
-            <a href="/pages/Youtube-Link-Extractor/" class="page-card glass-card">
-                <img src="/pages/Youtube-Link-Extractor/favicon-dark.svg" class="page-icon" alt="XR Viewer Icon"
-                    loading="lazy">
-                <h3>Youtube Link Extractor</h3>
-                <p>A tool for extracting links from a Youtube Playlists.</p>
-            </a>
-            <a href="/pages/FOV-Screen-Calculator/" class="page-card glass-card">
-                <img src="/pages/FOV-Screen-Calculator/favicon-dark.svg" class="page-icon"
-                    alt="FOV Screen Calculator Icon" loading="lazy">
-                <h3>FOV Screen Calculator</h3>
-                <p>A tool for calculating the field of view of a screen.</p>
-            </a>
-            <a href="/pages/PDF-Manger/" class="page-card glass-card">
-                <img src="/pages/PDF-Manger/favicon-dark.svg" class="page-icon" alt="FOV Screen Calculator Icon"
-                    loading="lazy">
-                <h3>PDF Manger</h3>
-                <p>A tool for managing PDFs</p>
-            </a>
-            <a href="/pages/Image_To_PDF_Converter/" class="page-card glass-card">
-                <img src="/pages/Image_To_PDF_Converter/favicon-dark.svg" class="page-icon"
-                    alt="Image To PDF Converter Icon" loading="lazy">
-                <h3>Lossless Image To PDF Converter</h3>
-                <p>A tool for converting images to PDFs without loss of quality.</p>
-            </a>
-            <a href="/pages/Story-Weaver-Canvas/" class="page-card glass-card">
-                <img src="/pages/Story-Weaver-Canvas/favicon-dark.svg" class="page-icon" alt="Story Weaver Canvas Icon"
-                    loading="lazy">
-                <h3>Story Weaver Canvas</h3>
-                <p>A tool for generating and managing crew members for a story.</p>
-            </a>
-            <a href="/pages/Steganography/" class="page-card glass-card">
-                <img src="/pages/Steganography/favicon-dark.svg" class="page-icon" alt="Steganography Icon"
-                    loading="lazy">
-                <h3>Steganography</h3>
-                <p>A tool for steganography.</p>
-            </a>
-            <a href="/pages/html-pdf-converter/" class="page-card glass-card">
-                <img src="/pages/html-pdf-converter/favicon-dark.svg" class="page-icon"
-                    alt="HTML/ASP to PDF Converter Icon" loading="lazy">
-                <h3>HTML/ASP to PDF Converter</h3>
-                <p>A tool for converting HTML/ASP files to PDFs.</p>
-            </a>
-            <a href="/pages/pdf-compare/" class="page-card glass-card">
-                <img src="/pages/pdf-compare/favicon-dark.svg" class="page-icon" alt="PDF Compare Icon" loading="lazy">
-                <h3>PDF Compare</h3>
-                <p>Compare the contents of two PDFs to find similarities and differences.</p>
-            </a>
-        </div>
-
-
-        <!-- === IMAGE & GRAPHICS TOOLS === -->
-        <h2 id="images" class="section-title">Image & Graphics Tools</h2>
-        <div class="page-grid">
-            <a href="/pages/Poster_Gen/" class="page-card glass-card">
-                <img src="/pages/Poster_Gen/favicon-dark.svg" class="page-icon" alt="Poster Maker Icon" loading="lazy">
-                <h3>Poster Maker</h3>
-                <p>A tool for creating custom posters with editable text and colors.</p>
-            </a>
-            <a href="/pages/Icon_Maker/" class="page-card glass-card">
-                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Icon Maker Icon" loading="lazy">
-                <h3>Icon Maker</h3>
-                <p>A tool for generating icons from images.</p>
-            </a>
-            <a href="/pages/Logo-Demo/" class="page-card glass-card">
-                <img src="/pages/Logo-Demo/favicon-dark.svg" class="page-icon" alt="Logo Demo Icon" loading="lazy">
-                <h3>Logo Demo</h3>
-                <p>Preview logo marks on black and white with name, font, and scale controls.</p>
-            </a>
-            <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
-                <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
-                    loading="lazy">
-                <h3>Batch Image Manger</h3>
-                <p>Simple Batch Image Manger</p>
-            </a>
-            <a href="/pages/Compare_Images/" class="page-card glass-card">
-                <img src="/pages/Compare_Images/favicon-dark.svg" class="page-icon" alt="Compare Images Icon"
-                    loading="lazy">
-                <h3>Compare Images</h3>
-                <p>Compare two images side by side.</p>
-            </a>
-            <a href="pages/replace_region/" class="page-card glass-card">
-                <img src="/pages/replace_region/favicon-dark.svg" class="page-icon" alt="Replace Image Region Icon"
-                    loading="lazy">
-                <h3>Replace Image Region</h3>
-                <p>A tool to replace a region in an image.</p>
-            </a>
-            <a href="/pages/image_align_tool/" class="page-card glass-card">
-                <img src="/pages/image_align_tool/favicon-dark.svg" class="page-icon" alt="Image Align Tool Icon"
-                    loading="lazy">
-                <h3>Image Align Tool</h3>
-                <p>A tool for aligning images based on user-defined points.</p>
-            </a>
-            <a href="/pages/360_image_viewer/" class="page-card glass-card">
-                <img src="/pages/360_image_viewer/favicon-dark.svg" class="page-icon" alt="360 Image Viewer Icon"
-                    loading="lazy">
-                <h3>360 Image Viewer</h3>
-                <p>A tool for viewing 360-degree images.</p>
-            </a>
-            <a href="/pages/XR_Viewer/" class="page-card glass-card">
-                <img src="/pages/XR_Viewer/favicon-dark.svg" class="page-icon" alt="XR Viewer Icon" loading="lazy">
-                <h3>AR Viewer</h3>
-                <p>A tool for viewing 3D models in AR in a headset.</p>
-            </a>
-            <a href="/pages/Face-Tool/" class="page-card glass-card">
-                <img src="/pages/Face-Tool/favicon-dark.svg" class="page-icon" alt="Face Crop Tool Icon" loading="lazy">
-                <h3>Face Tool</h3>
-                <p>A tool for modifying faces in images and videos.</p>
-            </a>
-
-            <a href="/pages/colour-pro/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/colour-pro/favicon-dark.svg" class="page-icon" alt="Colour Pro Icon" loading="lazy">
-                <h3>Colour Pro</h3>
-                <p>A tool for advanced colour theory.</p>
-            </a>
-            <a href="/pages/image-divider/" class="page-card glass-card">
-                <img src="/pages/image-divider/favicon-dark.svg" class="page-icon" alt="Image Divider Icon"
-                    loading="lazy">
-                <h3>Image Divider</h3>
-                <p>A tool for dividing images into smaller images.</p>
-            </a>
-            <a href="/pages/inpainting/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/inpainting/favicon-dark.svg" class="page-icon" alt="Inpainting Icon" loading="lazy">
-                <h3>Inpainting</h3>
-                <p>A tool for inpainting images.</p>
-            </a>
-            <a href="/pages/Video-Audio-Manger/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/Video-Audio-Manger/favicon-dark.svg" class="page-icon" alt="Video Audio Manger Icon"
-                    loading="lazy">
-                <h3>Video Audio Manger</h3>
-                <p>Manage video and audio files with ease.</p>
-            </a>
-            <a href="/pages/GIF-Maker/" class="page-card glass-card">
-                <img src="/pages/GIF-Maker/favicon-dark.svg" class="page-icon" alt="Smart Video to GIF Icon"
-                    loading="lazy">
-                <h3>Smart Video to GIF</h3>
-                <p>Turn a video into a size-capped GIF on this device. Nothing is uploaded.</p>
-            </a>
-        </div>
-
-
-        <!-- === GAMES === -->
-        <h2 id="games" class="section-title">Games</h2>
-        <div class="page-grid">
-            <a href="/pages/Forest-Drift/" class="page-card glass-card">
-                <img src="/pages/Forest-Drift/favicon-dark.svg" class="page-icon" alt="Forest Drift Icon" loading="lazy">
-                <h3>Forest Drift</h3>
-                <p>Explore infinite procedural forests and build on the terrain.</p>
-            </a>
-            <a href="/pages/Fighter-Jet/" class="page-card glass-card">
-                <img src="/pages/Fighter-Jet/favicon-dark.svg" class="page-icon" alt="Viper Strike Icon" loading="lazy">
-                <h3>Viper Strike</h3>
-                <p>Arcade 3D fighter jet missile-strike mission with squadron AI and lock-on weapons.</p>
-            </a>
-            <a href="/games/rocket-lander/" class="page-card glass-card">
-                <img src="/games/rocket-lander/favicon.png" class="page-icon" alt="Rocket Lander Icon" loading="lazy">
-                <h3>Rocket Lander 2</h3>
-                <p>A challenging physics-based game. Can you land the rocket safely?</p>
-            </a>
-            <a href="https://www.shoutitoutgame.com" class="page-card glass-card">
-                <img src="/pages/Shout-It-Out/favicon-dark.svg" class="page-icon" alt="Shout It Out Icon"
-                    loading="lazy">
-                <h3>Shout It Out</h3>
-                <p>A game to play with friends and family at a party</p>
-            </a>
-            <a href="/pages/3D-Game/" class="page-card glass-card">
-                <img src="/pages/3D-Game/favicon-dark.svg" class="page-icon" alt="3D Game Icon" loading="lazy">
-                <h3>3D Game</h3>
-                <p>A 3D game built with Three.js</p>
-            </a>
-            <a href="/pages/Machine-Learning-Explanation/" class="page-card glass-card">
-                <img src="/pages/Machine-Learning-Explanation/favicon-dark.svg" class="page-icon"
-                    alt="Machine Learning Toy Icon" loading="lazy">
-                <h3>Machine Learning Toy</h3>
-                <p>Interactive visualization of machine learning concepts.</p>
-            </a>
-            <a href="/pages/word-game/" class="page-card glass-card">
-                <img src="/pages/word-game/favicon-dark.svg" class="page-icon" alt="Word Game Icon" loading="lazy">
-                <h3>Word Game</h3>
-                <p>A classic word game with big buttons and flower rewards.</p>
-            </a>
-            <a href="/games/original-rocket-lander/" class="page-card glass-card">
-                <img src="/games/original-rocket-lander/favicon-dark.svg" class="page-icon"
-                    alt="Original Rocket Lander Icon" loading="lazy">
-                <h3>Original Rocket Lander (2012)</h3>
-                <p>The Original Rocket Lander game made at age 10</p>
-            </a>
-            <a href="/pages/Sensory-Experience/" class="page-card glass-card">
-                <img src="/pages/Sensory-Experience/favicon-dark.svg" class="page-icon" alt="Sensory Experience Icon"
-                    loading="lazy">
-                <h3>Sensory Experience</h3>
-                <p>Explore a unique sensory experience</p>
-            </a>
-            <a href="/pages/Puzzle-Game/" class="page-card glass-card special-puzzle-game-card">
-                <img src="/pages/Puzzle-Game/favicon-dark.svg" class="page-icon" alt="Puzzle Game Icon" loading="lazy">
-                <h3>Puzzle Game</h3>
-                <p>A puzzle game</p>
-            </a>
-            <a href="/pages/voxelizer/" class="page-card glass-card">
-                <img src="/pages/voxelizer/favicon-dark.svg" class="page-icon" alt="Voxelizer Icon" loading="lazy">
-                <h3>Voxelizer</h3>
-                <p>A tool for voxelizing 3D models.</p>
-            </a>
-
-
-
-        </div>
-
-        <!-- === GUIDES, DEMOS & MEMORIALS === -->
-        <h2 id="guides" class="section-title">Guides, Demos & More</h2>
-        <div class="page-grid">
-            <a href="/pages/Countdown/" class="page-card glass-card">
-                <img src="/pages/Countdown/favicon-dark.svg" class="page-icon" alt="Countdown Icon" loading="lazy">
-                <h3>Countdown</h3>
-                <p>A mystery countdown — and beyond.</p>
-            </a>
-            <a href="/pages/AI-Coding-Guidance/" class="page-card glass-card special-ai-coding-guidance-card">
-                <img src="/pages/AI-Coding-Guidance/favicon-dark.svg" class="page-icon" alt="AI Coding Guidance Icon"
-                    loading="lazy">
-                <h3>AI Coding Guidance</h3>
-                <p>How to use AI to help you code</p>
-            </a>
-            <a href="/pages/Akensile/" class="page-card glass-card special-akensile-card">
-                <img src="/pages/Akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
-                <h3>Akensile</h3>
-                <p>Discover more about the book Akensile</p>
-            </a>
-            <a href="/pages/Balanced-Life/" class="page-card glass-card special-balanced-life-card">
-                <img src="/pages/Balanced-Life/favicon-dark.svg" class="page-icon" alt="Balanced Life Icon"
-                    loading="lazy">
-                <h3>Balanced Life</h3>
-                <p>Discover more about the a Balanced Life</p>
-            </a>
-            <a href="/pages/Hypnagogia/" class="page-card glass-card special-balanced-life-card">
-                <img src="/pages/Hypnagogia/favicon-dark.svg" class="page-icon" alt="Hypnagogia Icon" loading="lazy">
-                <h3>Hypnagogia</h3>
-                <p>Discover more about the hypnagogic state</p>
-            </a>
-            <a href="/pages/3d-Model-Viewer/" class="page-card glass-card">
-                <img src="/pages/3d-Model-Viewer/favicon-dark.svg" class="page-icon" alt="3D Model Viewer Icon"
-                    loading="lazy">
-                <h3>3D Model Viewer</h3>
-                <p>A tool for viewing 3D models.</p>
-            </a>
-            <a href="pages/Docker_Guide/" class="page-card glass-card">
-                <img src="/pages/Docker_Guide/favicon-dark.svg" class="page-icon" alt="Docker Guide Icon"
-                    loading="lazy">
-                <h3>Docker Guide</h3>
-                <p>A guide for setting up Docker containers</p>
-            </a>
-            <a href="/pages/web_dev_sever/" class="page-card glass-card">
-                <img src="/pages/web_dev_sever/favicon-dark.svg" class="page-icon" alt="Web Dev Server Setup Icon"
-                    loading="lazy">
-                <h3>Web Dev Server Setup</h3>
-                <p>A guide for setting up a local development server with VS Code and Ngrok.</p>
-            </a>
-            <a href="/pages/Siewli/" class="page-card glass-card">
-                <img src="/pages/Siewli/favicon-dark.svg" class="page-icon" alt="Siewli Kok Memorial Icon"
-                    loading="lazy">
-                <h3>Siewli Kok Memorial</h3>
-                <p>A tribute page for Siewli Kok</p>
-            </a>
-            <a href="/pages/Gaussian_Splatting/" class="page-card glass-card">
-                <img src="/pages/Gaussian_Splatting/favicon-dark.svg" class="page-icon"
-                    alt="Gaussian Splatting Explainer Icon" loading="lazy">
-                <h3>Gaussian Splatting Explainer</h3>
-                <p>A project exploring Gaussian splatting techniques.</p>
-            </a>
-            <a href="/pages/Alignment_Game/" class="page-card glass-card">
-                <img src="/pages/Alignment_Game/favicon-dark.svg" class="page-icon" alt="Alignment Game Icon"
-                    loading="lazy">
-                <h3>Alignment Game</h3>
-                <p>A project focused on alignment techniques for machine learning.</p>
-            </a>
-            <a href="/pages/Convolution-Calculator/" class="page-card glass-card">
-                <img src="/pages/Convolution-Calculator/favicon-dark.svg" class="page-icon"
-                    alt="Convolution Calculator Icon" loading="lazy">
-                <h3>Convolution Calculator</h3>
-                <p>A tool for visualizing convolution operations.</p>
-            </a>
-            <a href="/pages/PDF-Question-Answer-Tool/" class="page-card glass-card">
-                <img src="/pages/PDF-Question-Answer-Tool/favicon-dark.svg" class="page-icon"
-                    alt="PDF Question Answer Tool Icon" loading="lazy">
-                <h3>PDF Question Answer Tool</h3>
-                <p>A tool for answering questions about PDFs</p>
-            </a>
-            <a href="http://www.akensile.com/" class="page-card glass-card">
-                <img src="/assets/icons/akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
-                <h3>Legacy Akensile Site</h3>
-                <p>The old webpage about the book Akensile</p>
-            </a>
-            <a href="/pages/auto-hide-chrome-extension/" class="page-card glass-card">
-                <img src="/pages/auto-hide-chrome-extension/favicon-dark.svg" class="page-icon"
-                    alt="Auto Hide Chrome Extension Icon" loading="lazy">
-                <h3>Auto Hide Chrome Extension</h3>
-                <p>A chrome extension that hides the chrome toolbar when scrolling down and shows it when scrolling
-                    up.</p>
-            </a>
-            <a href="/pages/Full-Page-Screenshot/" class="page-card glass-card">
-                <img src="/pages/Full-Page-Screenshot/favicon-dark.svg" class="page-icon"
-                    alt="Full Page Screenshot Icon" loading="lazy">
-                <h3>Full Page Screenshot Chrome Extension</h3>
-                <p>A chrome extension that takes a screenshot of the full page</p>
-            </a>
-        </div>
-
-
-
-
-
-        <!-- === MUSIC PLAYLISTS === -->
-        <h2 id="playlists" class="section-title">Music Playlists</h2>
-        <div id="homepage-playlist-grid" class="page-grid">
-            <!-- Dynamically populated from playlists.json -->
-            <div class="loading-spinner"></div>
-        </div>
-
-        <script>
-            document.addEventListener('DOMContentLoaded', async () => {
-                const grid = document.getElementById('homepage-playlist-grid');
-
-                // Helper to strip emojis from text (same as in playlist-viewer.js)
-                function stripEmojis(text) {
-                    return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
-                }
-
-                try {
-                    const response = await fetch('/assets/Music_CSV/playlists.json');
-                    const playlists = await response.json();
-
-                    grid.innerHTML = ''; // Clear spinner
-
-                    // Only show first 12 on home page to keep it clean
-                    const isImageIcon = (icon) =>
-                        icon.startsWith('/') || icon.startsWith('http') ||
-                        /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
-
-                    playlists.slice(0, 12).forEach(p => {
-                        const card = document.createElement('a');
-                        card.href = `/pages/Music_Playlists/?id=${p.id}`;
-                        card.className = 'page-card glass-card';
-
-                        const icon = p.icon || '🎵';
-                        const iconHtml = isImageIcon(icon)
-                            ? `<img src="${icon}" class="page-icon" alt="" loading="lazy">`
-                            : `<span class="page-icon page-icon-emoji" aria-hidden="true">${icon}</span>`;
-
-                        card.innerHTML = `
-                            ${iconHtml}
-                            <h3 class="playlist-card-title">Loading...</h3>
-                            <p>${p.description}</p>
-                        `;
-                        grid.appendChild(card);
-
-                        // Fetch real title from CSV asynchronously
-                        fetch(p.csvPath)
-                            .then(resp => resp.text())
-                            .then(text => {
-                                const firstLine = text.split('\n')[0];
-                                // Handle basic comma parsing for the first line
-                                let title = firstLine.split(',')[1] || firstLine;
-                                if (title.startsWith('"') && title.endsWith('"')) {
-                                    title = title.substring(1, title.length - 1);
-                                }
-                                card.querySelector('.playlist-card-title').textContent = stripEmojis(title);
-                            })
-                            .catch(err => {
-                                console.warn(`Could not load title for ${p.id}:`, err);
-                                card.querySelector('.playlist-card-title').textContent = 'Untitled Playlist';
-                            });
-                    });
-                } catch (e) {
-                    console.error('Error loading playlists for homepage:', e);
-                    grid.innerHTML = '<p>Error loading playlists.</p>';
-                }
-            });
-        </script>
-
-
-
-
-        <!-- Contact Card -->
-        <div id="contact" class="contact-card glass-card">
-            <div class="contact-icon" aria-hidden="true">
-                <img src="/assets/SVGs/link.svg" alt="" width="40" height="40" decoding="async">
+        <!-- ============================================== FEATURED PROJECTS -->
+        <section class="hx-section hx-shell" aria-labelledby="hx-featured-title">
+            <div class="hx-section-head">
+                <h2 class="hx-section-title" id="hx-featured-title">Featured Projects</h2>
+                <a class="hx-link-more" href="/pages/All-Pages/#featured">View all projects <span class="hx-arrow"
+                        aria-hidden="true">→</span></a>
             </div>
-            <div class="contact-content">
-                <h3>Get in Touch</h3>
-                <p>Please contact me at <a href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
+
+            <div class="hx-project-grid">
+                <a class="hx-project" href="https://www.shoutitoutgame.com" target="_blank" rel="noopener noreferrer">
+                    <div class="hx-project-media">
+                        <!-- PLACEHOLDER -->
+                        <img src="/assets/images/placeholders/project-1.webp" alt="" loading="lazy" decoding="async">
+                    </div>
+                    <div class="hx-project-body">
+                        <div class="hx-project-top">
+                            <div>
+                                <h3>Shout It Out!</h3>
+                                <p>A party game to play with friends and family.</p>
+                            </div>
+                            <span class="hx-round-arrow" aria-hidden="true">→</span>
+                        </div>
+                        <div class="hx-tags">
+                            <span class="hx-tag">Game</span>
+                            <span class="hx-tag">Party</span>
+                            <span class="hx-tag">Multiplayer</span>
+                        </div>
+                    </div>
+                </a>
+
+                <a class="hx-project" href="/games/rocket-lander/">
+                    <div class="hx-project-media">
+                        <!-- PLACEHOLDER -->
+                        <img src="/assets/images/placeholders/project-2.webp" alt="" loading="lazy" decoding="async">
+                    </div>
+                    <div class="hx-project-body">
+                        <div class="hx-project-top">
+                            <div>
+                                <h3>Rocket Lander 2</h3>
+                                <p>A challenging physics-based game. Can you land the rocket safely?</p>
+                            </div>
+                            <span class="hx-round-arrow" aria-hidden="true">→</span>
+                        </div>
+                        <div class="hx-tags">
+                            <span class="hx-tag">Game</span>
+                            <span class="hx-tag">Physics</span>
+                            <span class="hx-tag">Three.js</span>
+                        </div>
+                    </div>
+                </a>
+
+                <a class="hx-project" href="/pages/Tidal-Breathing-Exercise/">
+                    <div class="hx-project-media">
+                        <!-- PLACEHOLDER -->
+                        <img src="/assets/images/placeholders/project-3.webp" alt="" loading="lazy" decoding="async">
+                    </div>
+                    <div class="hx-project-body">
+                        <div class="hx-project-top">
+                            <div>
+                                <h3>Tidal Breathing</h3>
+                                <p>Find your natural breathing rhythm and slow down with an adaptive guide.</p>
+                            </div>
+                            <span class="hx-round-arrow" aria-hidden="true">→</span>
+                        </div>
+                        <div class="hx-tags">
+                            <span class="hx-tag">Wellbeing</span>
+                            <span class="hx-tag">Svelte</span>
+                            <span class="hx-tag">Web</span>
+                        </div>
+                    </div>
+                </a>
+
+                <a class="hx-project" href="/pages/Forest-Drift/">
+                    <div class="hx-project-media">
+                        <!-- PLACEHOLDER -->
+                        <img src="/assets/images/placeholders/project-4.webp" alt="" loading="lazy" decoding="async">
+                    </div>
+                    <div class="hx-project-body">
+                        <div class="hx-project-top">
+                            <div>
+                                <h3>Forest Drift</h3>
+                                <p>A musical world where you grow forests and make music.</p>
+                            </div>
+                            <span class="hx-round-arrow" aria-hidden="true">→</span>
+                        </div>
+                        <div class="hx-tags">
+                            <span class="hx-tag">Game</span>
+                            <span class="hx-tag">WebGL</span>
+                            <span class="hx-tag">Procedural</span>
+                        </div>
+                    </div>
+                </a>
             </div>
-        </div>
-
-        <div class="support-links-grid">
-            <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>GitHub</span>
-            </a>
-            <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>Instagram</span>
-            </a>
-            <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>YouTube</span>
-            </a>
-            <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>Buy Me a Coffee</span>
-            </a>
-            <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>LinkedIn</span>
-            </a>
-            <a href="https://www.youtube.com/watch?v=xvFZjo5PgG0" target="_blank" rel="noopener noreferrer"
-                class="support-card glass-card">
-                <span>Only Fans</span>
-            </a>
-        </div>
-
-        <section id="recent-editor" class="recent-editor glass-card" aria-labelledby="recent-editor-title">
-            <h2 id="recent-editor-title" class="recent-editor-title">Edit Recent Pages</h2>
-            <p class="recent-editor-copy">Search for a page and manually add it to your local Recent section.</p>
-
-            <label class="recent-editor-label" for="recent-editor-search">Search pages</label>
-            <input id="recent-editor-search" class="recent-editor-search" type="search" placeholder="Type a page name…"
-                autocomplete="off" spellcheck="false">
-
-            <div id="recent-editor-results" class="recent-editor-results" role="listbox"
-                aria-label="Search results"></div>
-
-            <div class="recent-editor-divider"></div>
-
-            <h3 class="recent-editor-subtitle">Currently in Recent</h3>
-            <p class="recent-editor-hint">Drag rows or use the arrows to reorder. Your order is saved in local cache.</p>
-            <div id="recent-editor-current" class="recent-editor-current" aria-live="polite"></div>
         </section>
 
-        <!-- Hidden Test Pages Section -->
-        <div id="hidden-test-pages" class="hidden-pages-container" style="display: none;">
-            <h2 class="section-title">Test Pages</h2>
-            <div class="page-grid">
+        <!-- ======================================================== ABOUT ME -->
+        <section class="hx-section hx-shell" aria-labelledby="hx-about-title">
+            <div class="hx-about-grid">
+                <div class="hx-about-copy">
+                    <h2 class="hx-section-title" id="hx-about-title">About Me</h2>
+                    <p>
+                        Hi, I'm <strong>Xander</strong>. I'm a <span data-xw-age>24</span>-year-old software engineer
+                        and artist from the UK. I hold a degree in Computer Animation and a Master's in Artificial
+                        Intelligence.
+                    </p>
+                    <p>
+                        I love building things, from games and 3D worlds to practical tools that make life easier.
+                        Whether it's coding up a new idea, designing a scene, or training an AI model, I'm happiest
+                        when I'm creating.
+                    </p>
+                    <a class="hx-btn hx-btn-ghost" href="/pages/About/">More about me</a>
+                </div>
 
-                <!-- <a href="/pages/journal/" class="page-card glass-card special-journal-card">
-                    <img src="/pages/journal/favicon-dark.svg" class="page-icon" alt="Journal Icon" loading="lazy">
-                    <h3>Journal App</h3>
-                    <p>A journal Application</p>
-                </a> -->
-                <a href="/pages/Pixel_Texture_Maker/" class="page-card glass-card special-pixel-texture-maker-card">
-                    <img src="/pages/Pixel_Texture_Maker/favicon-dark.svg" class="page-icon"
-                        alt="Pixel Texture Maker Icon" loading="lazy">
-                    <h3>Pixel Texture Maker</h3>
-                    <p>A tool for creating custom pixel textures</p>
-                </a>
-                <a href="/pages/Social-Network/" class="page-card glass-card special-social-network-card">
-                    <img src="/pages/Social-Network/favicon-dark.svg" class="page-icon" alt="Social Network Icon"
-                        loading="lazy">
-                    <h3>Social Network</h3>
-                    <p>A social network</p>
-                </a>
-                <a href="/pages/Akensile-Test/" class="page-card glass-card special-house-design-card">
-                    <img src="/pages/Akensile-Test/favicon-dark.svg" class="page-icon" alt="Akensile Test Icon"
-                        loading="lazy">
-                    <h3>Akensile Test</h3>
-                    <p>A test page for Akensile.</p>
-                </a>
-                <a href="/pages/PDF-Bullet-Extractor/" class="page-card glass-card special-house-design-card">
-                    <img src="/pages/PDF-Bullet-Extractor/favicon-dark.svg" class="page-icon"
-                        alt="PDF Bullet Extractor Icon" loading="lazy">
-                    <h3>PDF Bullet Extractor</h3>
-                    <p>Extract bullets from a PDF and create a hierarchy.</p>
-                </a>
-                <a href="/pages/image-playground/" class="page-card glass-card">
-                    <img src="/pages/image-playground/favicon-dark.svg" class="page-icon" alt="Image Playground Icon"
-                        loading="lazy">
-                    <h3>Image Playground</h3>
-                    <p>A tool for playing with images.</p>
-                </a>
-                <a href="/pages/driving-game/" class="page-card glass-card">
-                    <img src="/pages/driving-game/favicon-dark.svg" class="page-icon" alt="Driving Game Icon"
-                        loading="lazy">
-                    <h3>Driving Game</h3>
-                    <p>A 3D driving game</p>
-                </a>
-                <a href="/pages/image-text-promt/" class="page-card glass-card">
-                    <img src="/pages/image-text-promt/favicon-dark.svg" class="page-icon" alt="Image Text Prompt Icon"
-                        loading="lazy">
-                    <h3>Image Text Prompt</h3>
-                    <p>A tool for generating text prompts for images.</p>
-                </a>
-                <a href="/pages/Home-Design/" class="page-card glass-card">
-                    <img src="/pages/Home-Design/favicon-dark.svg" class="page-icon" alt="Beutifully Living icon"
-                        loading="lazy">
-                    <h3>Beutifully Living</h3>
-                    <p>A home design blog with ideas for layout, materials, and everyday living.</p>
-                </a>
-                <a href="/pages/Group-Availability/" class="page-card glass-card">
-                    <img src="/pages/Group-Availability/favicon-dark.svg" class="page-icon" alt="Group Availability icon"
-                        loading="lazy">
-                    <h3>Group Availability</h3>
-                    <p>A tool for finding the best time for a group to get together.</p>
-                </a>
-                
+                <dl class="hx-card hx-facts">
+                    <div class="hx-fact">
+                        <span class="hx-icon-tile" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.8"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 4 2 9l10 5 10-5-10-5Z" />
+                                <path d="M6 11.5V16c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-4.5" />
+                            </svg>
+                        </span>
+                        <span>
+                            <dt>Education</dt>
+                            <dd>BSc Computer Animation<br>MSc Artificial Intelligence</dd>
+                        </span>
+                    </div>
+                    <div class="hx-fact">
+                        <span class="hx-icon-tile" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z" />
+                                <circle cx="12" cy="10" r="2.6" />
+                            </svg>
+                        </span>
+                        <span>
+                            <dt>Based in</dt>
+                            <dd>Surrey, UK</dd>
+                        </span>
+                    </div>
+                    <div class="hx-fact">
+                        <span class="hx-icon-tile" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.8"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14" />
+                            </svg>
+                        </span>
+                        <span>
+                            <dt>Languages</dt>
+                            <dd>JavaScript, Python, C++</dd>
+                        </span>
+                    </div>
+                    <div class="hx-fact">
+                        <span class="hx-icon-tile" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="#f472b6" stroke="#f472b6" stroke-width="1.5"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.6 12 20 12 20Z" />
+                            </svg>
+                        </span>
+                        <span>
+                            <dt>Interests</dt>
+                            <dd>Games, 3D, AI, Film, Music</dd>
+                        </span>
+                    </div>
+                </dl>
 
-
-
-
+                <figure class="hx-quote">
+                    <!-- PLACEHOLDER -->
+                    <img src="/assets/images/placeholders/about-quote.webp" alt="" aria-hidden="true" loading="lazy"
+                        decoding="async">
+                    <blockquote>“The best way to predict the future is to create it.”</blockquote>
+                    <figcaption>Alan Kay</figcaption>
+                </figure>
             </div>
+        </section>
+
+        <!-- ============================================ EXPLORE BY CATEGORY -->
+        <section class="hx-section hx-shell" aria-labelledby="hx-explore-title">
+            <div class="hx-section-head">
+                <h2 class="hx-section-title" id="hx-explore-title">Explore by Category</h2>
+            </div>
+
+            <div class="hx-category-grid">
+                <a class="hx-category" href="/pages/All-Pages/#games">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
+                        <rect x="2" y="6" width="20" height="12" rx="5" />
+                    </svg>
+                    <h3>Games</h3>
+                    <p>Play my latest games</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a class="hx-category" href="/pages/All-Pages/#utilities">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 0 1-4-4l9-9a4 4 0 0 0-1-1Z" />
+                    </svg>
+                    <h3>Utilities</h3>
+                    <p>Tools that get things done</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a class="hx-category" href="/pages/All-Pages/#images">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                        <circle cx="9" cy="10" r="1.6" />
+                        <path d="m4 17 5-5 4 4 2.5-2.5L20 17" />
+                    </svg>
+                    <h3>Images</h3>
+                    <p>3D renders &amp; visual art</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a class="hx-category" href="/pages/3d-Model-Viewer/">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#35d6d0" stroke-width="1.8" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2.8 20.5 7v10L12 21.2 3.5 17V7L12 2.8Z" />
+                        <path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.6" />
+                    </svg>
+                    <h3>3D &amp; Models</h3>
+                    <p>Scenes, assets &amp; experiments</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a class="hx-category" href="/pages/All-Pages/#guides">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 6h.01M4 12h.01M4 18h.01M9 6h11M9 12h11M9 18h11" />
+                    </svg>
+                    <h3>Guides</h3>
+                    <p>Notes, tutorials &amp; thoughts</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a class="hx-category" href="/pages/Music_Playlists/">
+                    <svg viewBox="0 0 24 24" fill="#f472b6" stroke="#f472b6" stroke-width="1.5" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.6 12 20 12 20Z" />
+                    </svg>
+                    <h3>Playlists</h3>
+                    <p>Curated favourites</p>
+                    <span class="hx-round-arrow" aria-hidden="true">→</span>
+                </a>
+            </div>
+        </section>
+
         </div>
 
-        <div class="hidden-pages-toggle-container">
-            <button id="toggle-hidden-pages" class="glass-card toggle-button">Show Hidden Test Pages</button>
-        </div>
+        <!-- =========================================================== FOOTER -->
+        <footer class="hx-footer" id="contact">
+            <!-- PLACEHOLDER -->
+            <img class="hx-footer-bg" src="/assets/images/placeholders/footer-background.webp" alt="" aria-hidden="true"
+                loading="lazy" decoding="async">
+
+            <div class="hx-footer-inner hx-shell">
+                <div class="hx-footer-copy">
+                    <h2>Ideas are just the beginning.</h2>
+                    <p>Thanks for stopping by!</p>
+                    <span class="hx-signature">Xander</span>
+                </div>
+
+                <div class="hx-socials">
+                    <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path
+                                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.36 1.09 2.94.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" />
+                        </svg>
+                    </a>
+                    <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
+                        aria-label="YouTube">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path
+                                d="M21.6 7.2a2.5 2.5 0 0 0-1.76-1.77C18.25 5 12 5 12 5s-6.25 0-7.84.43A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.76 1.77C5.75 19 12 19 12 19s6.25 0 7.84-.43a2.5 2.5 0 0 0 1.76-1.77A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8ZM10 15.2V8.8l5.2 3.2-5.2 3.2Z" />
+                        </svg>
+                    </a>
+                    <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank"
+                        rel="noopener noreferrer" aria-label="LinkedIn">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path
+                                d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.7h.06c.53-.96 1.83-1.98 3.77-1.98C21.4 8.72 22 11 22 14.1V21h-4v-6.1c0-1.46-.03-3.34-2.03-3.34-2.03 0-2.34 1.59-2.34 3.23V21h-4V9Z" />
+                        </svg>
+                    </a>
+                    <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
+                        aria-label="Instagram">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="5" />
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M17.5 6.5h.01" />
+                        </svg>
+                    </a>
+                    <a href="mailto:xanderwileswork@gmail.com" aria-label="Email Xander">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                            <path d="m3.5 7.5 8.5 6 8.5-6" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="hx-footer-bar">
+                <div class="hx-shell">
+                    <span>© <span id="hx-year">2026</span> Xander Wiles</span>
+                    <span class="hx-photo-credit">Every background image on this page is a photo I took.</span>
+                    <span>Built with curiosity.</span>
+                </div>
+            </div>
+        </footer>
     </main>
 
+    <script>
+        document.getElementById('hx-year').textContent = new Date().getFullYear();
+    </script>
     <script src="/assets/js/recent-pages.js"></script>
-    <script src="assets/js/particle-background.js"></script>
-    <script src="assets/js/main.js"></script>
     <script src="/assets/js/age.js"></script>
-    <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
+    <script src="/assets/js/nav-loader.js"></script>
 </body>
 
 </html>

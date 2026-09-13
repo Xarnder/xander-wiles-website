@@ -60,6 +60,10 @@
 		requestPersistentStorage
 	} from '$lib/game/world/IndexedDbWorldRepository';
 	import {
+	DEFAULT_WORLD_ID,
+	DEFAULT_WORLD_THUMBNAIL_DATA_URL
+} from '$lib/game/world/DefaultWorld';
+	import {
 		createWorldPackage,
 		downloadWorldPackage,
 		worldFileName
@@ -86,6 +90,8 @@
 	let screen = $state<'worlds' | 'loading' | 'game'>('worlds');
 	let loadingLabel = $state('Loading world…');
 	let worlds = $state<WorldMetadata[]>([]);
+	let defaultWorld = $state<WorldMetadata | null>(null);
+	let defaultThumbnail = $state<string>(DEFAULT_WORLD_THUMBNAIL_DATA_URL);
 	let thumbnails = $state<Record<string, string>>({});
 	let storage = $state<{ usage?: number; quota?: number }>({});
 	let worldsBusy = $state(false);
@@ -271,12 +277,14 @@
 
 	async function refreshWorlds() {
 		if (!worldManager) return;
-		const [list, estimate] = await Promise.all([
+		const [list, estimate, defMeta] = await Promise.all([
 			worldManager.listWorlds(),
-			worldManager.estimateStorage()
+			worldManager.estimateStorage(),
+			worldManager.getDefaultWorldMetadata()
 		]);
 		worlds = list;
 		storage = estimate;
+		defaultWorld = defMeta;
 
 		for (const url of thumbnailUrls) URL.revokeObjectURL(url);
 		thumbnailUrls = [];
@@ -289,6 +297,15 @@
 			next[world.id] = url;
 		}
 		thumbnails = next;
+
+		const defBlob = await worldManager.getThumbnail(DEFAULT_WORLD_ID);
+		if (defBlob) {
+			const defUrl = URL.createObjectURL(defBlob);
+			thumbnailUrls.push(defUrl);
+			defaultThumbnail = defUrl;
+		} else {
+			defaultThumbnail = DEFAULT_WORLD_THUMBNAIL_DATA_URL;
+		}
 	}
 
 	async function withBusy<T>(work: () => Promise<T>): Promise<T | undefined> {
@@ -299,6 +316,22 @@
 		} finally {
 			worldsBusy = false;
 		}
+	}
+
+	async function playDefaultWorld() {
+		await openWorld(DEFAULT_WORLD_ID);
+	}
+
+	async function resetDefaultWorld() {
+		await withBusy(async () => {
+			const result = await worldManager!.resetDefaultWorld();
+			if (!result.ok) {
+				worldsError = result.error;
+				return;
+			}
+			await refreshWorlds();
+			showSaveToast('Reset Main World to default');
+		});
 	}
 
 	async function createWorld(name: string, seed: string) {
@@ -520,10 +553,14 @@
 	<WorldsScreen
 		{worlds}
 		{thumbnails}
+		{defaultWorld}
+		{defaultThumbnail}
 		{storage}
 		busy={worldsBusy}
 		error={worldsError}
 		onPlay={(id) => void openWorld(id)}
+		onPlayDefault={() => void playDefaultWorld()}
+		onResetDefault={() => void resetDefaultWorld()}
 		onCreate={(name, seed) => void createWorld(name, seed)}
 		onRename={(id, name) => void renameWorld(id, name)}
 		onDuplicate={(id) => void duplicateWorld(id)}

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Production-Ready AI Coding Workflow</title>
     <meta name="description"
-        content="A phased workflow for production-ready AI-assisted coding — planning, implementation, testing, and release.">
+        content="A phased workflow for production-ready AI-assisted coding: planning, implementation, testing, and release.">
     <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
@@ -60,7 +60,7 @@
                 </button>
             </div>
 
-            <p class="guide-note" style="margin-top: 1.25rem; margin-bottom: 0; border: none; background: rgba(5, 5, 10, 0.45); padding: 0.75rem 0.95rem;">You do not need to run every phase on every development cycle. Pick the steps that match the size and risk of the work — a small bug fix may only need a brief plan and a quick review, while a major feature should use the full workflow.</p>
+            <p class="guide-note" style="margin-top: 1.25rem; margin-bottom: 0; border: none; background: rgba(5, 5, 10, 0.45); padding: 0.75rem 0.95rem;">You do not need to run every phase on every development cycle. Pick the steps that match the size and risk of the work. A small bug fix may only need a brief plan and a quick review, while a major feature should use the full workflow.</p>
 
             <div id="core-rule-content" class="hidden" style="margin-top: 1.5rem;">
                 <p class="section-intro">Do not start writing implementation code until the AI has:</p>
@@ -108,8 +108,8 @@
                                 <button type="button" class="mode-toggle-btn active" data-mode="step-by-step" aria-pressed="true">Step by Step</button>
                                 <button type="button" class="mode-toggle-btn" data-mode="all-in-one" aria-pressed="false">All in One</button>
                             </div>
-                            <p id="mode-toggle-hint" class="mode-toggle-hint" data-workflow-mode="step-by-step">For larger features — plan, then implement in small, reviewable steps.</p>
-                            <p id="mode-toggle-hint-alt" class="mode-toggle-hint hidden" data-workflow-mode="all-in-one">For smaller tasks — same workflow, but implement everything in one go.</p>
+                            <p id="mode-toggle-hint" class="mode-toggle-hint" data-workflow-mode="step-by-step">For larger features: plan, then implement in small, reviewable steps.</p>
+                            <p id="mode-toggle-hint-alt" class="mode-toggle-hint hidden" data-workflow-mode="all-in-one">For smaller tasks: same workflow, but implement everything in one go.</p>
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                             <label for="parent-path-input" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Parent Path Prefix</label>
@@ -170,7 +170,7 @@
                 <section id="phase-1" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">1</span>
-                        <h2>Phase 1 — Project / Feature Brief</h2>
+                        <h2>Phase 1: Project / Feature Brief</h2>
                     </div>
 
                     <p class="section-intro">Use this prompt first.</p>
@@ -266,7 +266,7 @@ Important rules:
                 <section id="phase-2" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">2</span>
-                        <h2>Phase 2 — Answer Questions</h2>
+                        <h2>Phase 2: Answer Questions</h2>
                     </div>
 
                     <p class="section-intro">After reviewing
@@ -315,7 +315,7 @@ Do not start coding until I approve.</span></pre>
                 <section id="phase-3" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">3</span>
-                        <h2>Phase 3 — Implementation</h2>
+                        <h2>Phase 3: Implementation</h2>
                     </div>
 
                     <p class="section-intro" data-workflow-mode="step-by-step">Use this prompt when you are ready to let the AI code iteratively in small, safe steps.</p>
@@ -428,7 +428,7 @@ Now that you have read these documents, start implementing the entire feature pl
                 <section id="phase-4" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">4</span>
-                        <h2>Phase 4 — Self-Review Before Testing</h2>
+                        <h2>Phase 4: Self-Review Before Testing</h2>
                     </div>
 
                     <p class="section-intro" data-workflow-mode="step-by-step">Run this after each implementation step.</p>
@@ -478,7 +478,7 @@ Return:
                 <section id="phase-5" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">5</span>
-                        <h2>Phase 5 — Testing</h2>
+                        <h2>Phase 5: Testing</h2>
                     </div>
 
                     <p class="section-intro">Use this prompt before accepting the feature.</p>
@@ -560,7 +560,7 @@ End with a clear release confidence rating from 0–100%.</pre>
                 <section id="phase-6" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">6</span>
-                        <h2>Phase 6 — Production Release Checklist</h2>
+                        <h2>Phase 6: Production Release Checklist</h2>
                     </div>
 
                     <p class="section-intro">Use this before deploying.</p>
@@ -617,7 +617,7 @@ Do not say it is production ready unless the evidence supports it.</pre>
                 <section id="phase-7" class="glass-card">
                     <div class="section-header">
                         <span class="phase-badge" aria-hidden="true">7</span>
-                        <h2>Phase 7 — Post-Release Monitoring</h2>
+                        <h2>Phase 7: Post-Release Monitoring</h2>
                     </div>
 
                     <p class="section-intro">Use this after deployment.</p>

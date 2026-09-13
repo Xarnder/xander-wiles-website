@@ -2,6 +2,13 @@
 	"version": "0.0.1",
 	"configurations": [
 		{
+			"name": "site-dev",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": ["run", "dev"],
+			"port": 3000,
+			"autoPort": true
+		},
+		{
 			"name": "forest-drift-dev",
 			"runtimeExecutable": "npm",
 			"runtimeArgs": ["--prefix", "pages/Forest-Drift", "run", "dev"],

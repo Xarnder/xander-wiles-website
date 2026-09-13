@@ -7,10 +7,14 @@
 	interface Props {
 		worlds: WorldMetadata[];
 		thumbnails: Record<string, string>;
+		defaultWorld?: WorldMetadata | null;
+		defaultThumbnail?: string;
 		storage: { usage?: number; quota?: number };
 		busy: boolean;
 		error: string | null;
 		onPlay: (worldId: string) => void;
+		onPlayDefault?: () => void;
+		onResetDefault?: () => void;
 		onCreate: (name: string, seed: string) => void;
 		onRename: (worldId: string, name: string) => void;
 		onDuplicate: (worldId: string) => void;
@@ -23,10 +27,14 @@
 	const {
 		worlds,
 		thumbnails,
+		defaultWorld = null,
+		defaultThumbnail = '',
 		storage,
 		busy,
 		error,
 		onPlay,
+		onPlayDefault,
+		onResetDefault,
 		onCreate,
 		onRename,
 		onDuplicate,
@@ -40,7 +48,8 @@
 		| { kind: 'none' }
 		| { kind: 'create'; name: string; seed: string }
 		| { kind: 'rename'; worldId: string; name: string }
-		| { kind: 'delete'; worldId: string; name: string };
+		| { kind: 'delete'; worldId: string; name: string }
+		| { kind: 'reset-default' };
 
 	let dialog = $state<Dialog>({ kind: 'none' });
 	let openMenuId = $state<string | null>(null);
@@ -178,6 +187,119 @@
 			<button class="link" onclick={onDismissError}>Dismiss</button>
 		</div>
 	{/if}
+
+	<section class="default-world-section" data-testid="default-world-section">
+		<div class="section-header">
+			<h2 class="section-title">Default World</h2>
+			<span class="badge">Featured</span>
+		</div>
+
+		<div class="default-world-card" data-testid="default-world-card">
+			<div class="thumbnail default-thumbnail">
+				{#if defaultThumbnail || (defaultWorld && thumbnails[defaultWorld.id])}
+					<img
+						src={defaultThumbnail || (defaultWorld ? thumbnails[defaultWorld.id] : '')}
+						alt="Main World Preview"
+						width="320"
+						height="180"
+					/>
+				{:else}
+					<div class="thumbnail-placeholder" aria-hidden="true"></div>
+				{/if}
+			</div>
+
+			<div class="world-info">
+				<div class="world-name-row">
+					<div class="world-name" data-testid="default-world-name">{defaultWorld?.name ?? 'Main World'}</div>
+					<span class="pill-tag">Always Available</span>
+				</div>
+				<p class="world-desc">
+					Explore a crafted forest outpost featuring multi-tier buildings, stairs, roofs, and scenic woods.
+				</p>
+				<div class="world-meta subtle">
+					Seed <code>{defaultWorld?.seed ?? 'soft-lowlands-431'}</code>
+					{#if defaultWorld?.updatedAt}
+						&middot; Updated {relativeTime(defaultWorld.updatedAt)}
+					{/if}
+				</div>
+			</div>
+
+			<div class="world-buttons">
+				<button
+					class="primary play-btn"
+					data-testid="play-default-world"
+					onclick={() => {
+						if (onPlayDefault) {
+							onPlayDefault();
+						} else if (defaultWorld) {
+							onPlay(defaultWorld.id);
+						}
+					}}
+					disabled={busy}
+				>
+					<span class="play-icon" aria-hidden="true">▶</span> Play
+				</button>
+				<div class="menu-anchor">
+					<button
+						class="icon"
+						data-testid="default-world-menu-button"
+						aria-label="More actions for Default World"
+						aria-expanded={openMenuId === 'default-world'}
+						onclick={(event) => {
+							event.stopPropagation();
+							openMenuId = openMenuId === 'default-world' ? null : 'default-world';
+						}}
+					>
+						&hellip;
+					</button>
+					{#if openMenuId === 'default-world'}
+						<div class="menu" data-testid="default-world-menu" role="menu">
+							<button
+								role="menuitem"
+								onclick={() => {
+									if (onPlayDefault) {
+										onPlayDefault();
+									} else if (defaultWorld) {
+										onPlay(defaultWorld.id);
+									}
+								}}
+							>
+								Play
+							</button>
+							{#if defaultWorld}
+								<button
+									role="menuitem"
+									data-testid="default-world-menu-duplicate"
+									onclick={() => onDuplicate(defaultWorld.id)}
+								>
+									Duplicate to My Worlds
+								</button>
+								<button
+									role="menuitem"
+									data-testid="default-world-menu-export"
+									onclick={() => onExport(defaultWorld.id)}
+								>
+									Export
+								</button>
+							{/if}
+							{#if onResetDefault}
+								<button
+									role="menuitem"
+									class="danger"
+									data-testid="default-world-menu-reset"
+									onclick={() => (dialog = { kind: 'reset-default' })}
+								>
+									Reset to Original
+								</button>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<div class="section-divider" aria-hidden="true"></div>
 
 	<h2 class="section-title">My Worlds</h2>
 
@@ -382,6 +504,30 @@
 				</div>
 			</div>
 		</div>
+	{:else if dialog.kind === 'reset-default'}
+		<div class="modal-backdrop" role="presentation">
+			<div class="modal" data-testid="reset-default-dialog">
+				<h3>Reset &ldquo;Main World&rdquo; to Original?</h3>
+				<p class="modal-hint">
+					This will revert any buildings and changes made in Main World back to the pristine default
+					state. This cannot be undone.
+				</p>
+				<div class="modal-buttons">
+					<button type="button" onclick={() => (dialog = { kind: 'none' })}>Cancel</button>
+					<button
+						type="button"
+						class="danger"
+						data-testid="reset-default-confirm"
+						onclick={() => {
+							dialog = { kind: 'none' };
+							onResetDefault?.();
+						}}
+					>
+						Reset to Original
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>
 
@@ -482,6 +628,104 @@
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		opacity: 0.7;
+	}
+
+	.default-world-section {
+		max-width: 46rem;
+		margin: 0 auto;
+	}
+
+	.section-header {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.section-header .section-title {
+		margin: 0;
+	}
+
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: rgba(57, 211, 83, 0.18);
+		border: 1px solid rgba(57, 211, 83, 0.45);
+		color: #89f5a3;
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.default-world-card {
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		padding: 1rem;
+		border-radius: 14px;
+		background: linear-gradient(135deg, rgba(17, 38, 28, 0.75) 0%, rgba(10, 24, 18, 0.65) 100%);
+		border: 1px solid rgba(57, 211, 83, 0.35);
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(57, 211, 83, 0.08);
+		transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+	}
+
+	.default-world-card:hover {
+		border-color: rgba(87, 226, 111, 0.65);
+		box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5), 0 0 26px rgba(57, 211, 83, 0.18);
+		transform: translateY(-1px);
+	}
+
+	.default-thumbnail {
+		width: 140px;
+		height: 80px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	}
+
+	.world-name-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+
+	.pill-tag {
+		font-size: 0.68rem;
+		font-weight: 600;
+		padding: 0.1rem 0.45rem;
+		border-radius: 4px;
+		background: rgba(159, 232, 255, 0.12);
+		border: 1px solid rgba(159, 232, 255, 0.25);
+		color: #9fe8ff;
+	}
+
+	.world-desc {
+		margin: 0.25rem 0 0.35rem;
+		font-size: 0.8rem;
+		line-height: 1.35;
+		color: rgba(234, 246, 255, 0.75);
+	}
+
+	.play-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.6rem 1.2rem;
+		font-size: 0.9rem;
+		box-shadow: 0 4px 14px rgba(57, 211, 83, 0.3);
+	}
+
+	.play-icon {
+		font-size: 0.75rem;
+	}
+
+	.section-divider {
+		max-width: 46rem;
+		height: 1px;
+		margin: 2rem auto;
+		background: linear-gradient(90deg, transparent, rgba(234, 246, 255, 0.12), transparent);
 	}
 
 	.worlds-busy {

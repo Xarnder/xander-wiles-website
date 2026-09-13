@@ -357,7 +357,7 @@
             } catch (error) {
                 // Ignore private-mode storage failures.
             }
-            window.location.assign('/#page-card-search');
+            window.location.assign('/pages/All-Pages/#page-card-search');
         }
 
         toggle.addEventListener('click', () => {
@@ -457,7 +457,7 @@
                     </a>
                     <nav aria-label="Fallback navigation">
                         <a href="/">Home</a>
-                        <a href="/#featured">Projects</a>
+                        <a href="/pages/All-Pages/#featured">Projects</a>
                         <a href="/pages/About/">About</a>
                     </nav>
                 </div>
