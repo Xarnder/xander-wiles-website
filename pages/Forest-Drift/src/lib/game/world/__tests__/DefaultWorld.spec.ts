@@ -134,4 +134,3 @@ describe('DefaultWorld', () => {
 		expect(list[0].name).toBe(`${DEFAULT_WORLD_NAME} Copy`);
 	});
 });
-

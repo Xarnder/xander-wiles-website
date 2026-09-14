@@ -2538,6 +2538,15 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.terrainSettings
 					)
 				]),
+				...(host.miniBuildDisplay
+					? [
+							group(
+								'rendering-mini-build-chunks',
+								'Mini Build chunks',
+								miniBuildDisplayFields(host, 'render.miniBuilds')
+							)
+						]
+					: []),
 				group('rendering-collision', 'Collision debug', [
 					boolField(
 						'render.collision.show',
@@ -2546,6 +2555,108 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						'showCollisionGeometry',
 						actions.collisionGeometry
 					)
+				])
+			]
+		},
+		...miniBuildCategories(host)
+	];
+}
+
+/**
+ * Developer tooling for Mini Builds. Exact budget numbers, cache and batch statistics live in the
+ * render-stats overlay (F3); these buttons build stress scenes next to the player and log a
+ * performance report to the console.
+ */
+function miniBuildDisplayFields(host: GameSettingsHost, idPrefix: string): SettingsField[] {
+	const display = host.miniBuildDisplay;
+	const apply = host.actions.miniBuildDisplay;
+	if (!display || !apply) return [];
+	return [
+		boolField(
+			`${idPrefix}.boundaries`,
+			'Show Mini Build chunk boundaries (16m grid + usage labels)',
+			display,
+			'showChunkBoundaries',
+			apply
+		),
+		boolField(
+			`${idPrefix}.usage`,
+			'Show Mini Build primitives counter for the current chunk',
+			display,
+			'showChunkUsage',
+			apply
+		)
+	];
+}
+
+function miniBuildCategories(host: GameSettingsHost): SettingsCategory[] {
+	const run = host.actions.miniBuildBenchmark;
+	const clear = host.actions.miniBuildBenchmarkClear;
+	const displayFields = miniBuildDisplayFields(host, 'mini-builds.display');
+	if (!run || !clear) {
+		return displayFields.length === 0
+			? []
+			: [
+					{
+						id: 'mini-builds',
+						title: 'Mini Builds',
+						description: 'Chunk boundaries and detail budget readouts for player-built objects.',
+						groups: [group('mini-builds-display', 'Chunks & detail budget', displayFields)]
+					}
+				];
+	}
+	const button = (id: string, label: string, onClick: () => void): SettingsField => ({
+		kind: 'button',
+		id,
+		label,
+		onClick
+	});
+	return [
+		{
+			id: 'mini-builds',
+			title: 'Mini Builds',
+			description:
+				'Chunk boundaries, detail budget readouts, developer stats and stress scenes for player-built objects.',
+			groups: [
+				...(displayFields.length > 0
+					? [group('mini-builds-display', 'Chunks & detail budget', displayFields)]
+					: []),
+				group('mini-builds-stats', 'Debug stats', [
+					boolField(
+						'mini-builds.stats',
+						'Show render stats (Mini Build section)',
+						host.graphics,
+						'showRenderStats',
+						host.actions.graphicsAdvanced
+					)
+				]),
+				group('mini-builds-repeated', 'Repeated design (same 16-block chair)', [
+					...[10, 50, 100, 250, 500, 1000].map((count) =>
+						button(`mini-builds.bench.repeated.${count}`, `Place ${count} identical chairs`, () =>
+							run('repeated', count)
+						)
+					)
+				]),
+				group('mini-builds-unique', 'Unique designs', [
+					...[50, 100].map((count) =>
+						button(
+							`mini-builds.bench.unique.${count}`,
+							`Place ${count} unique 16-block designs`,
+							() => run('unique', count)
+						)
+					)
+				]),
+				group('mini-builds-simple', 'Simple objects and dense chunks', [
+					button('mini-builds.bench.simple.1000', 'Place 1000 simple 1–4 block props', () =>
+						run('simple', 1000)
+					),
+					button('mini-builds.bench.dense', 'Fill 4 chunks to the 512 budget', () =>
+						run('dense', 128)
+					),
+					button('mini-builds.bench.house', 'Furnish a large house (150 mixed defaults)', () =>
+						run('mixed', 150)
+					),
+					button('mini-builds.bench.clear', 'Clear benchmark objects', clear)
 				])
 			]
 		}

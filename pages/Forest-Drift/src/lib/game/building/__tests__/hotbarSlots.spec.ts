@@ -19,27 +19,18 @@ describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 1).toolId).toBe('floor-path');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 2).toolId).toBe('floor-planks');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 3).toolId).toBe('floor-tiles');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[6], 0).toolId).toBe('torch');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[6], 0).toolId).toBe('place-object');
 	});
 
 	it('keeps stairs on their own slot', () => {
 		expect(DEFAULT_HOTBAR_SLOTS[4].variants).toHaveLength(1);
 	});
 
-	it('includes all furniture kinds as variants for slot 8', () => {
+	it('makes slot 8 a single Place Object tool (objects are chosen in the Object Library)', () => {
 		const slot8 = DEFAULT_HOTBAR_SLOTS[6];
 		expect(slot8.slot).toBe(8);
-		expect(slot8.variants).toHaveLength(19);
-		for (const variant of slot8.variants) {
-			expect(variant.toolId).toBe('torch');
-			expect(variant.furnitureKind).toBeDefined();
-			expect(variant.label).toBeTruthy();
-		}
-		const chairSlot = resolveHotbarSlot(slot8, 3);
-		expect(chairSlot.label).toBe('Chair');
-		expect(chairSlot.furnitureKind).toBe('chair');
-		expect(chairSlot.variantCount).toBe(19);
-		expect(chairSlot.variantIndex).toBe(3);
+		expect(slot8.variants).toEqual([{ toolId: 'place-object', label: 'Place Object' }]);
+		expect(isCustomizablePlacementTool('place-object')).toBe(true);
 	});
 });
 

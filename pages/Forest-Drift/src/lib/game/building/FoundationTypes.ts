@@ -12,7 +12,7 @@ import type {
 	FloorDetailTilePattern
 } from './FloorDetailTypes';
 import { DEFAULT_FLOOR_DETAIL_COLORS } from './FloorDetailTypes';
-import { FURNITURE_KINDS, type FurnitureKind } from './FurnitureTypes';
+import type { FurnitureKind } from './FurnitureTypes';
 import { DEFAULT_FURNITURE_KIND, getFurnitureCatalogueEntry } from './furnitureCatalogue';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import type { RoofType } from './RoofTypes';
@@ -63,6 +63,7 @@ export type ToolId =
 	| 'floor-planks'
 	| 'floor-tiles'
 	| 'torch'
+	| 'place-object'
 	| 'remove'
 	| 'music'
 	| 'paint'
@@ -96,7 +97,8 @@ export interface HotbarSlot {
 
 /**
  * 1 Foundation · 2 Poly Wall/Wall · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
- * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Furniture objects. Slot 7 is unused.
+ * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Place Object (Mini Builds + lights, chosen in
+ * the Object Library with `E`). Slot 7 is unused.
  */
 export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 	{ slot: 1, variants: [{ toolId: 'foundation', label: 'Foundation' }] },
@@ -133,14 +135,7 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 			{ toolId: 'floor-tiles', label: 'Tiles' }
 		]
 	},
-	{
-		slot: 8,
-		variants: FURNITURE_KINDS.map((kind) => ({
-			toolId: 'torch' as ToolId,
-			label: getFurnitureCatalogueEntry(kind).name,
-			furnitureKind: kind
-		}))
-	}
+	{ slot: 8, variants: [{ toolId: 'place-object', label: 'Place Object' }] }
 ];
 
 export function cycleHotbarVariantIndex(
@@ -195,7 +190,8 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'floor-path',
 	'floor-planks',
 	'floor-tiles',
-	'torch'
+	'torch',
+	'place-object'
 ] as const;
 export type CustomizablePlacementToolId = (typeof CUSTOMIZABLE_PLACEMENT_TOOLS)[number];
 
@@ -208,6 +204,7 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'polygon-wall' ||
 		id === 'stairs' ||
 		id === 'torch' ||
+		id === 'place-object' ||
 		isFloorDetailTool(id)
 	);
 }

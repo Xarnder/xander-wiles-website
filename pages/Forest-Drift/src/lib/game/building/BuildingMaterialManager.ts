@@ -11,6 +11,8 @@ interface MaterialTemplate {
 	polygonOffset?: boolean;
 	polygonOffsetFactor?: number;
 	polygonOffsetUnits?: number;
+	transparent?: boolean;
+	opacity?: number;
 }
 
 /** Shared default for wall / window / door frames so they read as the same timber. */
@@ -61,7 +63,19 @@ const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 	'slab-opening-frame': TIMBER_FRAME,
 	'wall-beam': TIMBER_FRAME,
 	furniture: { color: 0x8b5a2b, roughness: 0.84, metalness: 0.04, flatShading: true },
-	'furniture-accent': { color: 0x5c3a22, roughness: 0.78, metalness: 0.08, flatShading: true }
+	'furniture-accent': { color: 0x5c3a22, roughness: 0.78, metalness: 0.08, flatShading: true },
+	'mini-build-wood': { color: 0x8b5a2b, roughness: 0.82, metalness: 0.02 },
+	'mini-build-fabric': { color: 0xe8dcc8, roughness: 0.95, metalness: 0 },
+	'mini-build-metal': { color: 0x4a4a4c, roughness: 0.42, metalness: 0.65 },
+	'mini-build-stone': { color: 0x8a8578, roughness: 0.92, metalness: 0.02 },
+	'mini-build-glass': {
+		color: 0xa8d0e0,
+		roughness: 0.08,
+		metalness: 0.1,
+		transparent: true,
+		opacity: 0.45
+	},
+	'mini-build-plain': { color: 0xcccccc, roughness: 0.7, metalness: 0 }
 };
 
 /** `undefined` (no override — use the kind's own default look) collapses to a stable `'default'` key; a colour definition's key is its normalized hex, so two differently-cased/shorthand inputs that mean the same colour still share one cached material. */
@@ -114,6 +128,7 @@ export class BuildingMaterialManager {
 			roughness: template.roughness,
 			metalness: template.metalness,
 			flatShading: template.flatShading ?? false,
+			...(template.transparent ? { transparent: true, opacity: template.opacity ?? 1 } : {}),
 			...(template.polygonOffset
 				? {
 						polygonOffset: true,

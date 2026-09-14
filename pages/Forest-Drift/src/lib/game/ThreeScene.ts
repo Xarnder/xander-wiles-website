@@ -2,6 +2,31 @@ import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
 import type { CreatureDefinition } from './creatures/CreatureTypes';
 import { timelineDefinition } from './music/MusicModel';
 import { MusicPlantPlacementTool } from './music/MusicPlantPlacementTool';
+import { MiniBuildPersonalLibrary } from './miniBuild/MiniBuildPersonalLibrary';
+import { MiniBuildPreferences } from './miniBuild/MiniBuildPreferences';
+import {
+	MiniBuildSystem,
+	type MiniBuildChunkReadout,
+	type MiniBuildDebugStats
+} from './miniBuild/MiniBuildSystem';
+import { MiniBuildChunkBoundaries } from './miniBuild/MiniBuildChunkBoundaries';
+import { MiniBuildThumbnailRenderer } from './miniBuild/MiniBuildThumbnails';
+import {
+	createEmptyMiniBuildWorldState,
+	MINI_BUILD_LIMITS,
+	MINI_BUILD_WORLD_LIMITS,
+	type MiniBuildWorldState,
+	type PlaceObjectSelection
+} from './miniBuild/MiniBuildTypes';
+import type { MiniBuildPlacementContext } from './miniBuild/MiniBuildPlacement';
+import { PlaceObjectTool } from './miniBuild/PlaceObjectTool';
+import { effectiveSize } from './miniBuild/miniBuildGrid';
+import {
+	clearMiniBuildBenchmark,
+	placeMiniBuildBenchmark,
+	type MiniBuildBenchmarkPlacement,
+	type MiniBuildBenchmarkScenario
+} from './miniBuild/MiniBuildBenchmark';
 import { createDefaultSustainSettings, type SustainSettings } from './music/SustainTrailBuilder';
 import * as THREE from 'three';
 import { BuildingLevelManager } from './building/BuildingLevelManager';
@@ -162,6 +187,60 @@ export interface SceneStats {
 	showRenderStats: boolean;
 	dayCycleEnabled: boolean;
 	timeOfDay: number;
+	/** Only populated while render stats are shown — see emitStats. */
+	miniBuilds?: MiniBuildDebugStats;
+	/** Debug info for the Mini Build under the crosshair (render stats only). */
+	miniBuildTarget?: MiniBuildTargetDebug;
+	/**
+	 * Mini Build primitive usage for the player's chunk — or, while placing/moving a Mini Build, the
+	 * chunk under the ghost including what it would add. Absent when the counter is turned off.
+	 */
+	miniBuildChunk?: MiniBuildChunkReadout & { placing: boolean };
+}
+
+export interface MiniBuildBenchmarkReport extends MiniBuildBenchmarkPlacement {
+	fps: number;
+	avgFrameMs: number;
+	p95FrameMs: number;
+	/** Main-thread CPU per frame: simulation update + render submission. */
+	cpuFrameMs: number;
+	/** Main-thread CPU inside the render call (draw submission, culling, shadow passes). */
+	cpuRenderMs: number;
+	drawCalls: number;
+	triangles: number;
+	geometries: number;
+	miniBuildInstancedMeshes: number;
+	miniBuildBatches: number;
+	renderedInstances: number;
+	cacheEntries: number;
+	cacheBytes: number;
+	collisionBoxesNearPlayer: number;
+	chunkActivationMs: number;
+	saveBytes: number;
+	jsHeapMb: number | null;
+	/** Present when `naiveComparison` was requested: the same objects as one Mesh per cuboid. */
+	naive?: {
+		meshes: number;
+		fps: number;
+		avgFrameMs: number;
+		cpuFrameMs: number;
+		cpuRenderMs: number;
+		drawCalls: number;
+	};
+}
+
+export interface MiniBuildTargetDebug {
+	instanceId: string;
+	designId: string;
+	designName: string;
+	revision: number;
+	blocks: number;
+	chunkId: string;
+	materialSlots: number;
+	vertices: number;
+	triangles: number;
+	collisionBoxes: number;
+	batchKey: string;
 }
 
 export interface ThreeSceneOptions {
@@ -180,6 +259,11 @@ export interface ThreeSceneOptions {
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 	onPlacementCustomizeChange?: (open: boolean) => void;
 	onPlacementHeightChange?: (open: boolean) => void;
+	/** `F` on a placed Mini Build in Place Object mode. */
+	onMiniBuildEditRequest?: (instanceId: string) => void;
+	/** Short player-facing Mini Build messages (copied, detail limit, load warnings). */
+	onMiniBuildNotice?: (message: string) => void;
+	onPlaceObjectSelectionChange?: (selection: PlaceObjectSelection) => void;
 	/**
 	 * The world to open. Its `environment` settings are copied into the live settings objects and
 	 * its authored content is loaded, so the scene starts as an exact reproduction of the save
@@ -211,6 +295,7 @@ export class ThreeScene implements WorldRuntime {
 	private readonly vegetationSettings: VegetationSettings;
 	private readonly skySettings: SkySettings;
 	private readonly onStatsUpdate?: (stats: SceneStats) => void;
+	private readonly onMiniBuildNotice?: (message: string) => void;
 
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
@@ -249,6 +334,15 @@ export class ThreeScene implements WorldRuntime {
 	private readonly floorPlanksTool: FloorDetailTool;
 	private readonly floorTilesTool: FloorDetailTool;
 	private readonly furnitureTool: FurnitureTool;
+	readonly miniBuilds: MiniBuildSystem;
+	readonly miniBuildPersonalLibrary = new MiniBuildPersonalLibrary();
+	readonly miniBuildPreferences = new MiniBuildPreferences();
+	readonly miniBuildThumbnails: MiniBuildThumbnailRenderer;
+	private readonly placeObjectTool: PlaceObjectTool;
+	private readonly miniBuildChunkBoundaries: MiniBuildChunkBoundaries;
+	/** Mini Build editor / Object Library overlays: world input is blocked, and the editor also pauses world rendering. */
+	miniBuildUiOpen = false;
+	miniBuildEditorOpen = false;
 	readonly music: MusicPlantPlacementTool;
 	readonly creatures: CreatureRuntimeManager;
 	readonly sustainSettings: SustainSettings;
@@ -284,6 +378,8 @@ export class ThreeScene implements WorldRuntime {
 	private readonly sunLight: THREE.DirectionalLight;
 
 	private lastFrameTimeMs = 0;
+	/** Non-null only while a benchmark samples main-thread CPU time per frame (update + render submission). */
+	private frameCpuSamples: { frame: number; render: number }[] | null = null;
 	private dayNightLook: EffectiveSkyLook | null = null;
 	private dayCyclePersistAccum = 0;
 	private lastPersistedTimeOfDay = -1;
@@ -310,6 +406,7 @@ export class ThreeScene implements WorldRuntime {
 		this.vegetationSettings = options.vegetationSettings;
 		this.skySettings = options.skySettings;
 		this.onStatsUpdate = options.onStatsUpdate;
+		this.onMiniBuildNotice = options.onMiniBuildNotice;
 		this.baseTerrainViewDistance = options.settings.viewDistance;
 		this.baseTreeViewDistanceChunks = options.vegetationSettings.loading.treeViewDistanceChunks;
 
@@ -445,6 +542,21 @@ export class ThreeScene implements WorldRuntime {
 
 		this.furnitureManager = new FurnitureManager(this.materialManager);
 		this.scene.add(this.furnitureManager.group);
+
+		this.miniBuilds = new MiniBuildSystem({
+			materialManager: this.materialManager,
+			getActivationRadius: () =>
+				MINI_BUILD_WORLD_LIMITS.activationRadius *
+				GRAPHICS_PRESETS[this.graphicsSettings.quality].terrainRenderDistanceMultiplier,
+			getPersonalDesign: (id) => this.miniBuildPersonalLibrary.get(id)
+		});
+		this.scene.add(this.miniBuilds.group);
+		this.miniBuildThumbnails = new MiniBuildThumbnailRenderer(
+			this.renderer,
+			this.miniBuilds.cache,
+			this.miniBuildPersonalLibrary
+		);
+		void this.miniBuildPersonalLibrary.ready();
 		for (const material of this.furnitureManager.getMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
 		}
@@ -464,7 +576,8 @@ export class ThreeScene implements WorldRuntime {
 		});
 
 		this.undoManager = new BuildUndoManager(this.buildingManager, {
-			removeFurniture: (id) => this.furnitureManager.remove(id)
+			removeFurniture: (id) => this.furnitureManager.remove(id),
+			removeMiniBuild: (id) => this.miniBuilds.removeInstance(id)
 		});
 		this.removalManager = new BuildingRemovalManager(this.buildingManager);
 
@@ -476,6 +589,16 @@ export class ThreeScene implements WorldRuntime {
 			this.roofManager,
 			() => buildingSettings.maxStepHeight
 		);
+
+		this.miniBuildChunkBoundaries = new MiniBuildChunkBoundaries({
+			camera: this.camera,
+			getLabelContainer: () => this.container,
+			getSurfaceY: (x, z, referenceY) =>
+				this.worldSurfaceSampler.getSupportingSurfaceY(x, z, referenceY),
+			getReadout: (x, z) => this.miniBuilds.getChunkReadout(x, z)
+		});
+		this.miniBuildChunkBoundaries.setEnabled(this.miniBuildPreferences.display.showChunkBoundaries);
+		this.scene.add(this.miniBuildChunkBoundaries.group);
 
 		this.treeManager = new TreeManager({
 			settings: options.vegetationSettings,
@@ -512,7 +635,8 @@ export class ThreeScene implements WorldRuntime {
 						...this.wallPathManager.getAllCollisionRects(),
 						...this.stairManager.getAllCollisionRects(),
 						...(this.doorInteraction?.getCollisionRects() ?? []),
-						...this.furnitureManager.getCollisionRects()
+						...this.furnitureManager.getCollisionRects(),
+						...this.miniBuilds.instances.getNearbyCollisionRects()
 					]
 				);
 			}
@@ -685,6 +809,38 @@ export class ThreeScene implements WorldRuntime {
 			this.graphicsPipeline.registerMaterial(material);
 		}
 
+		const miniBuildPlacement: MiniBuildPlacementContext = {
+			camera: this.camera,
+			buildingManager: this.buildingManager,
+			foundationManager: this.foundationManager,
+			furnitureManager: this.furnitureManager,
+			worldSurfaceSampler: this.worldSurfaceSampler,
+			system: this.miniBuilds,
+			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
+			getWallRects: () => [
+				...this.wallManager.getAllCollisionRects(),
+				...this.wallPathManager.getAllCollisionRects(),
+				...this.stairManager.getAllCollisionRects(),
+				...(this.doorInteraction?.getCollisionRects() ?? [])
+			],
+			getGridSize: () => buildingSettings.buildingGridSize
+		};
+		this.placeObjectTool = new PlaceObjectTool({
+			scene: this.scene,
+			placement: miniBuildPlacement,
+			system: this.miniBuilds,
+			furnitureTool: this.furnitureTool,
+			undoManager: this.undoManager,
+			preferences: this.miniBuildPreferences,
+			onHudChange: options.onBuildHudChange,
+			onSelectionChange: options.onPlaceObjectSelectionChange,
+			onEditInstanceRequest: options.onMiniBuildEditRequest,
+			onNotice: options.onMiniBuildNotice
+		});
+		for (const material of this.placeObjectTool.getPreviewMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+
 		this.sustainSettings = createDefaultSustainSettings();
 		let musicObstacleRevision = '';
 		let musicObstacles: THREE.Box3[] = [];
@@ -733,6 +889,7 @@ export class ThreeScene implements WorldRuntime {
 		this.removeTool = new RemoveTool({
 			music: this.music,
 			furniture: this.furnitureManager,
+			miniBuilds: this.miniBuilds,
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
@@ -768,7 +925,8 @@ export class ThreeScene implements WorldRuntime {
 				...(this.doorInteraction?.getCollisionRects() ?? [])
 			],
 			onHudChange: options.onBuildHudChange,
-			openPlacementCustomize: () => this.buildToolManager.togglePlacementCustomize()
+			openPlacementCustomize: () => this.buildToolManager.togglePlacementCustomize(),
+			miniBuildPlacement
 		});
 
 		this.doorInteraction = new DoorInteractionController({
@@ -794,7 +952,7 @@ export class ThreeScene implements WorldRuntime {
 				'floor-path': this.floorPathTool,
 				'floor-planks': this.floorPlanksTool,
 				'floor-tiles': this.floorTilesTool,
-				torch: this.furnitureTool
+				'place-object': this.placeObjectTool
 			},
 			buildingSettings,
 			removeTool: this.removeTool,
@@ -802,7 +960,11 @@ export class ThreeScene implements WorldRuntime {
 			moveTool: this.moveTool,
 			musicTool: this.music,
 			isInputBlocked: () =>
-				this.devPanelOpen || this.music.importPanelOpen || this.music.committing,
+				this.devPanelOpen ||
+				this.miniBuildUiOpen ||
+				this.miniBuildEditorOpen ||
+				this.music.importPanelOpen ||
+				this.music.committing,
 			isPointerLocked: () => this.controller.isPointerLocked(),
 			onHotbarChange: options.onHotbarChange,
 			onHudChange: options.onBuildHudChange,
@@ -815,7 +977,10 @@ export class ThreeScene implements WorldRuntime {
 			getWallPathRects: () => this.wallPathManager.getAllCollisionRects(),
 			getStairRects: () => this.stairManager.getAllCollisionRects(),
 			getDoorRects: () => this.doorInteraction?.getCollisionRects() ?? [],
-			getFurnitureRects: () => this.furnitureManager.getCollisionRects(),
+			getFurnitureRects: () => [
+				...this.furnitureManager.getCollisionRects(),
+				...this.miniBuilds.instances.getNearbyCollisionRects()
+			],
 			getCreatureColliders: () => {
 				if (!this.creatures) return [];
 				const list = [];
@@ -843,7 +1008,15 @@ export class ThreeScene implements WorldRuntime {
 			music: this.music,
 			sustain: this.sustainSettings,
 			musicVisual: this.musicVisual,
+			miniBuildDisplay: this.miniBuildPreferences.display,
 			actions: {
+				miniBuildDisplay: () => {
+					this.miniBuildChunkBoundaries.setEnabled(
+						this.miniBuildPreferences.display.showChunkBoundaries
+					);
+					this.miniBuildPreferences.saveDisplay();
+					this.emitStats();
+				},
 				creatureLab: () => window.dispatchEvent(new Event('forest:creature-lab')),
 				creatureDemo: () => this.creatures.showDemo(this.controller.worldPosition),
 				creatureEndDemo: () => this.creatures.endDemo(),
@@ -946,7 +1119,19 @@ export class ThreeScene implements WorldRuntime {
 					for (const runtime of this.music.runtimes.values())
 						runtime.sequencer.volume = this.musicVisual.masterMusicVolume;
 				},
-				musicTrails: () => this.music.rebuildAllTrails()
+				musicTrails: () => this.music.rebuildAllTrails(),
+				miniBuildBenchmark: (scenario, count) => {
+					void this.runMiniBuildBenchmark(scenario, count).then((report) => {
+						console.info('[mini-builds] benchmark', report);
+						this.onMiniBuildNotice?.(
+							`Benchmark ${scenario}: ${report.placed} placed · ${report.fps} FPS · ${report.miniBuildInstancedMeshes} Mini Build draws`
+						);
+					});
+				},
+				miniBuildBenchmarkClear: () => {
+					const removed = this.clearMiniBuildBenchmark();
+					this.onMiniBuildNotice?.(`Removed ${removed} benchmark objects`);
+				}
 			}
 		};
 
@@ -991,6 +1176,15 @@ export class ThreeScene implements WorldRuntime {
 		this.levelManager.load(structuredClone(world.buildingLevels));
 		this.music.load(world.musicTrees ?? [], world.musicPlants ?? []);
 		this.furnitureManager.load(world.furniture ?? []);
+		const miniBuildWarnings = this.miniBuilds.load(
+			world.miniBuilds ?? createEmptyMiniBuildWorldState()
+		);
+		if (miniBuildWarnings.length > 0) {
+			console.warn('[mini-builds]', ...miniBuildWarnings);
+			queueMicrotask(() => {
+				for (const warning of miniBuildWarnings) this.onMiniBuildNotice?.(warning);
+			});
+		}
 
 		this.treeManager.setRemovedTreeIds(world.proceduralOverrides?.removedTreeIds ?? []);
 
@@ -1088,6 +1282,249 @@ export class ThreeScene implements WorldRuntime {
 
 	closePlacementCustomize(): void {
 		this.buildToolManager.closePlacementCustomize();
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// Mini Builds — UI-facing API (Object Library, editor, edit dialogs, debug/benchmark tooling).
+	// ---------------------------------------------------------------------------------------------
+
+	getPlaceObjectSelection(): PlaceObjectSelection {
+		return this.placeObjectTool.getSelection();
+	}
+
+	selectPlaceObject(selection: PlaceObjectSelection): void {
+		this.placeObjectTool.setSelection(selection);
+	}
+
+	/** Selects hotbar 8 (Place Object) — used after saving a design from the editor. */
+	enterPlaceObjectMode(): void {
+		this.buildToolManager.selectSlot(8);
+	}
+
+	/** Blocks world input while a Mini Build overlay is open; the editor additionally pauses world rendering. */
+	setMiniBuildOverlay(state: { libraryOpen?: boolean; editorOpen?: boolean }): void {
+		if (state.libraryOpen !== undefined) this.miniBuildUiOpen = state.libraryOpen;
+		if (state.editorOpen !== undefined) {
+			this.miniBuildEditorOpen = state.editorOpen;
+			if (!state.editorOpen) this.lastFrameTimeMs = 0;
+		}
+		if ((this.miniBuildUiOpen || this.miniBuildEditorOpen) && typeof document !== 'undefined') {
+			document.exitPointerLock?.();
+		}
+	}
+
+	/** The Mini Build under the crosshair (any tool), for Edit / debug. */
+	getLookedAtMiniBuildId(maxDistance = 12): string | null {
+		const raycaster = new THREE.Raycaster();
+		raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+		raycaster.far = maxDistance;
+		return this.miniBuilds.instances.raycast(raycaster)?.id ?? null;
+	}
+
+	/**
+	 * Developer stress scene: places a benchmark set just east of the player through the normal
+	 * Mini Build API, then samples real frames. See MiniBuildBenchmark.ts and docs/MiniBuild.md.
+	 */
+	async runMiniBuildBenchmark(
+		scenario: MiniBuildBenchmarkScenario | 'baseline',
+		count: number,
+		options: { sampleMs?: number; naiveComparison?: boolean } = {}
+	): Promise<MiniBuildBenchmarkReport> {
+		const position = this.controller.worldPosition;
+		const placement: MiniBuildBenchmarkPlacement =
+			scenario === 'baseline' || count <= 0
+				? {
+						scenario: 'repeated',
+						requested: 0,
+						placed: 0,
+						rejectedByBudget: 0,
+						designsCreated: 0,
+						compiles: 0,
+						compileMs: 0,
+						placeMs: 0,
+						chunksUsed: 0,
+						primitiveUnits: 0
+					}
+				: placeMiniBuildBenchmark(this.miniBuilds, scenario, count, {
+						originX: position.x,
+						originZ: position.z,
+						surfaceY: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity)
+					});
+		// Chunk activation cost: stream everything out, then time bringing it all back in at once
+		// (normal play spreads this over frames, a few chunks at a time).
+		this.miniBuilds.instances.update(position.x + 1e6, position.z);
+		const activationStarted = performance.now();
+		this.miniBuilds.instances.update(position.x, position.z);
+		this.miniBuilds.instances.flushStreaming();
+		const chunkActivationMs = performance.now() - activationStarted;
+		const report = await this.measureFrames(options.sampleMs ?? 2000);
+		const debug = this.miniBuilds.getDebugStats();
+		const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+		const result: MiniBuildBenchmarkReport = {
+			...placement,
+			...report,
+			miniBuildInstancedMeshes: debug.instances.instancedMeshes,
+			miniBuildBatches: debug.instances.batches,
+			renderedInstances: debug.instances.renderedInstances,
+			cacheEntries: debug.cache.entries,
+			cacheBytes: debug.cache.estimatedBytes,
+			collisionBoxesNearPlayer: debug.instances.collisionBoxes,
+			chunkActivationMs: Math.round(chunkActivationMs * 100) / 100,
+			saveBytes: JSON.stringify(this.getMiniBuilds()).length,
+			jsHeapMb: memory ? Math.round(memory.usedJSHeapSize / 1048576) : null
+		};
+		if (options.naiveComparison)
+			result.naive = await this.measureNaiveMiniBuilds(options.sampleMs ?? 2000);
+		return result;
+	}
+
+	/**
+	 * Developer comparison only: temporarily renders every placed Mini Build as one Mesh per cuboid —
+	 * the architecture the system exists to avoid — to quantify what compiling + instancing saves.
+	 */
+	private async measureNaiveMiniBuilds(
+		sampleMs: number
+	): Promise<MiniBuildBenchmarkReport['naive']> {
+		const group = new THREE.Group();
+		const box = new THREE.BoxGeometry(1, 1, 1);
+		let meshes = 0;
+		for (const instance of this.miniBuilds.instances.getAll()) {
+			const definition = this.miniBuilds.getDesign(instance.designId);
+			if (!definition) continue;
+			const holder = new THREE.Group();
+			holder.position.set(instance.position.x, instance.position.y, instance.position.z);
+			holder.rotation.y = (instance.rotationY * Math.PI) / 180;
+			const g = MINI_BUILD_LIMITS.gridSize;
+			const anchorX = (definition.bounds.min.x + definition.bounds.max.x) / 2;
+			const anchorZ = (definition.bounds.min.z + definition.bounds.max.z) / 2;
+			for (const block of definition.blocks) {
+				const size = effectiveSize(block);
+				const mesh = new THREE.Mesh(
+					box,
+					this.miniBuilds.resolveMaterial(definition.materials[block.materialSlot])
+				);
+				// Planes (size 0 on one axis) get a sliver so the naive box keeps an invertible matrix.
+				mesh.scale.set(
+					Math.max(size.x * g, 1e-3),
+					Math.max(size.y * g, 1e-3),
+					Math.max(size.z * g, 1e-3)
+				);
+				mesh.position.set(
+					(block.positionGrid.x + size.x / 2 - anchorX) * g,
+					(block.positionGrid.y + size.y / 2 - definition.bounds.min.y) * g,
+					(block.positionGrid.z + size.z / 2 - anchorZ) * g
+				);
+				mesh.castShadow = true;
+				mesh.receiveShadow = true;
+				holder.add(mesh);
+				meshes++;
+			}
+			group.add(holder);
+		}
+		this.miniBuilds.group.visible = false;
+		this.scene.add(group);
+		try {
+			const frames = await this.measureFrames(sampleMs);
+			return {
+				meshes,
+				fps: frames.fps,
+				avgFrameMs: frames.avgFrameMs,
+				cpuFrameMs: frames.cpuFrameMs,
+				cpuRenderMs: frames.cpuRenderMs,
+				drawCalls: frames.drawCalls
+			};
+		} finally {
+			group.removeFromParent();
+			box.dispose();
+			this.miniBuilds.group.visible = true;
+		}
+	}
+
+	private async measureFrames(
+		sampleMs: number
+	): Promise<
+		Pick<
+			MiniBuildBenchmarkReport,
+			| 'fps'
+			| 'avgFrameMs'
+			| 'p95FrameMs'
+			| 'cpuFrameMs'
+			| 'cpuRenderMs'
+			| 'drawCalls'
+			| 'triangles'
+			| 'geometries'
+		>
+	> {
+		this.frameCpuSamples = [];
+		const frames = await this.sampleFrameTimes(sampleMs);
+		const cpu = this.frameCpuSamples;
+		this.frameCpuSamples = null;
+		const sorted = [...frames].sort((a, b) => a - b);
+		const avgFrameMs = frames.reduce((sum, value) => sum + value, 0) / Math.max(1, frames.length);
+		const average = (values: number[]) =>
+			Math.round(
+				(values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)) * 100
+			) / 100;
+		const render = this.graphicsPipeline.getRenderStats();
+		return {
+			fps: Math.round((1000 / Math.max(0.001, avgFrameMs)) * 10) / 10,
+			avgFrameMs: Math.round(avgFrameMs * 100) / 100,
+			p95FrameMs: Math.round((sorted[Math.floor(sorted.length * 0.95)] ?? 0) * 100) / 100,
+			cpuFrameMs: average(cpu.map((sample) => sample.frame)),
+			cpuRenderMs: average(cpu.map((sample) => sample.render)),
+			drawCalls: render.drawCalls,
+			triangles: render.triangles,
+			geometries: render.geometries
+		};
+	}
+
+	clearMiniBuildBenchmark(): number {
+		return clearMiniBuildBenchmark(this.miniBuilds);
+	}
+
+	private sampleFrameTimes(durationMs: number): Promise<number[]> {
+		return new Promise((resolve) => {
+			const samples: number[] = [];
+			const started = performance.now();
+			let last = started;
+			const step = (now: number) => {
+				samples.push(now - last);
+				last = now;
+				if (now - started < durationMs) requestAnimationFrame(step);
+				else resolve(samples.slice(1));
+			};
+			requestAnimationFrame(step);
+		});
+	}
+
+	/** Placement target while building (ghost chunk + object cost), otherwise the player's own chunk. */
+	private getMiniBuildChunkReadout(): MiniBuildChunkReadout & { placing: boolean } {
+		const target =
+			this.placeObjectTool.getPlacementReadout() ?? this.moveTool.getHeldMiniBuildReadout();
+		if (target) return { ...target, placing: true };
+		const position = this.controller.worldPosition;
+		return { ...this.miniBuilds.getChunkReadout(position.x, position.z), placing: false };
+	}
+
+	private getMiniBuildTargetDebug(): MiniBuildTargetDebug | undefined {
+		const id = this.getLookedAtMiniBuildId();
+		const instance = id ? this.miniBuilds.instances.get(id) : undefined;
+		const definition = instance ? this.miniBuilds.getDesign(instance.designId) : undefined;
+		if (!instance || !definition) return undefined;
+		const data = this.miniBuilds.cache.getData(definition);
+		return {
+			instanceId: instance.id,
+			designId: definition.id,
+			designName: definition.name,
+			revision: definition.revision,
+			blocks: definition.blocks.length,
+			chunkId: this.miniBuilds.instances.getChunkOf(instance.id) ?? '',
+			materialSlots: definition.materials.length,
+			vertices: data.stats.vertices,
+			triangles: data.stats.triangles,
+			collisionBoxes: data.collision.length,
+			batchKey: this.miniBuilds.instances.getBatchForInstance(instance.id)?.key ?? '(streamed out)'
+		};
 	}
 
 	syncFurnitureVariant(): void {
@@ -1289,6 +1726,9 @@ export class ThreeScene implements WorldRuntime {
 	getFurniture(): FurnitureDefinition[] {
 		return this.furnitureManager.serialize();
 	}
+	getMiniBuilds(): MiniBuildWorldState {
+		return this.miniBuilds.serialize();
+	}
 	getBuildings(): FoundationBuildingDefinition[] {
 		return this.buildingManager.serialize();
 	}
@@ -1323,7 +1763,8 @@ export class ThreeScene implements WorldRuntime {
 				this.buildingManager.getRevision() +
 				this.foundationManager.getRevision() +
 				this.levelManager.getRevision() +
-				this.furnitureManager.getRevision(),
+				this.furnitureManager.getRevision() +
+				this.miniBuilds.revision,
 			environment: this.environmentRevision,
 			procedural: this.treeManager.getOverrideRevision()
 		};
@@ -1442,6 +1883,7 @@ export class ThreeScene implements WorldRuntime {
 		this.roofManager.group.visible = !showSkyOnly;
 		this.floorDetailManager.group.visible = !showSkyOnly;
 		this.furnitureManager.group.visible = !showSkyOnly;
+		this.miniBuilds.group.visible = !showSkyOnly;
 	}
 
 	/** `scene.background` is contested between "let the sky dome show" and "debug: show the raw HDRI" — this is the single place that decides. */
@@ -1581,7 +2023,8 @@ export class ThreeScene implements WorldRuntime {
 			this.lastFrameTimeMs === 0 ? 0 : Math.min((nowMs - this.lastFrameTimeMs) / 1000, 0.1);
 		this.lastFrameTimeMs = nowMs;
 
-		if (this.devPanelOpen) return;
+		if (this.devPanelOpen || this.miniBuildEditorOpen) return;
+		const frameCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.updateDayCycle(deltaSeconds);
 		this.flushDirtyFlags();
 
@@ -1595,7 +2038,12 @@ export class ThreeScene implements WorldRuntime {
 		);
 		this.terrainManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
+		this.miniBuilds.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
+		this.miniBuildChunkBoundaries.update(
+			this.controller.worldPosition,
+			this.buildingManager.getRevision() + this.foundationManager.getRevision()
+		);
 		this.music.animate();
 		this.creatures.setSeed(this.settings.seed);
 		this.creatures.update(
@@ -1618,7 +2066,12 @@ export class ThreeScene implements WorldRuntime {
 		this.updateSunLightPosition();
 
 		this.graphicsPipeline.update(deltaSeconds);
+		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
+		if (this.frameCpuSamples) {
+			const end = performance.now();
+			this.frameCpuSamples.push({ frame: end - frameCpuStart, render: end - renderCpuStart });
+		}
 
 		this.updateStats(deltaSeconds);
 	};
@@ -1685,7 +2138,16 @@ export class ThreeScene implements WorldRuntime {
 			antialiasing: graphicsStats.antialiasing,
 			showRenderStats: this.graphicsSettings.showRenderStats,
 			dayCycleEnabled: cycle.enabled,
-			timeOfDay: cycle.timeOfDay
+			timeOfDay: cycle.timeOfDay,
+			...(this.miniBuildPreferences.display.showChunkUsage
+				? { miniBuildChunk: this.getMiniBuildChunkReadout() }
+				: {}),
+			...(this.graphicsSettings.showRenderStats
+				? {
+						miniBuilds: this.miniBuilds.getDebugStats(),
+						miniBuildTarget: this.getMiniBuildTargetDebug()
+					}
+				: {})
 		});
 	}
 
@@ -1711,8 +2173,12 @@ export class ThreeScene implements WorldRuntime {
 		this.floorPathTool.dispose();
 		this.floorPlanksTool.dispose();
 		this.floorTilesTool.dispose();
+		this.placeObjectTool.dispose();
 		this.furnitureTool.dispose();
 		this.furnitureManager.dispose();
+		this.miniBuildThumbnails.dispose();
+		this.miniBuildChunkBoundaries.dispose();
+		this.miniBuilds.dispose();
 		this.removeTool.dispose();
 		this.music.dispose();
 		this.creatures.dispose();

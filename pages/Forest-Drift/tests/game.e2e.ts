@@ -115,7 +115,7 @@ test('groups walls, openings and slabs on slots 2–4, with ↑/↓ cycling the 
 	await expect(page.getByTestId('hotbar-slot-floor-tiles')).toHaveClass(/active/);
 
 	await page.keyboard.press('8');
-	await expect(page.getByTestId('hotbar-slot-torch')).toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-place-object')).toHaveClass(/active/);
 
 	await page.keyboard.press('1');
 	await expect(page.getByTestId('hotbar-slot-foundation')).toHaveClass(/active/);
@@ -271,7 +271,7 @@ test('E opens stairs customise with colour, framing, railings, hole and hole fra
 	expect(pageErrors).toEqual([]);
 });
 
-test('E opens the Place Object catalogue from hotbar slot 8', async ({ page }) => {
+test('E opens the Object Library from hotbar slot 8', async ({ page }) => {
 	test.setTimeout(90_000);
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -280,30 +280,22 @@ test('E opens the Place Object catalogue from hotbar slot 8', async ({ page }) =
 	await createAndEnterWorld(page);
 
 	await page.keyboard.press('8');
-	await expect(page.getByTestId('hotbar-slot-torch')).toHaveClass(/active/);
+	await expect(page.getByTestId('hotbar-slot-place-object')).toHaveClass(/active/);
 	await page.keyboard.press('e');
-	const objectsModal = page.getByTestId('furniture-catalogue-modal');
-	await expect(objectsModal).toBeVisible();
-	await expect(objectsModal).toContainText('Objects');
-	await expect(page.getByTestId('furniture-preview-canvas')).toBeVisible();
-	await expect(page.getByTestId('furniture-card-chair')).toHaveAttribute('aria-pressed', 'true');
+	const library = page.getByTestId('object-library-modal');
+	await expect(library).toBeVisible();
+	await expect(library).toContainText('My Builds');
+	await expect(library).toContainText('Default Designs');
+	await expect(page.getByTestId('mini-build-create-new')).toBeVisible();
+	const chair = page.locator('[data-testid="mini-build-card"][data-name="Chair"]');
+	await expect(chair).toBeVisible();
 
-	await page.getByTestId('furniture-card-bed').click();
-	await expect(page.getByTestId('furniture-card-bed')).toHaveAttribute('aria-pressed', 'true');
-	await expect(objectsModal).toContainText('Bed');
-	await expect(page.getByTestId('furniture-width-number')).toHaveValue('1.4');
-	await page.getByTestId('furniture-preset-single').click();
-	await expect(page.getByTestId('furniture-width-number')).toHaveValue('0.9');
+	await page.getByTestId('object-library-search').fill('book');
+	await expect(page.locator('[data-testid="mini-build-card"][data-name="Bookcase"]')).toBeVisible();
+	await expect(chair).toHaveCount(0);
 
-	await page.getByTestId('furniture-card-kitchen-counter').click();
-	await expect(page.getByTestId('furniture-card-kitchen-counter')).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(objectsModal).toContainText('Kitchen Counter');
-
-	await page.getByTestId('furniture-modal-done').click();
-	await expect(objectsModal).not.toBeVisible();
+	await page.getByTestId('object-library-done').click();
+	await expect(library).not.toBeVisible();
 
 	expect(pageErrors).toEqual([]);
 });

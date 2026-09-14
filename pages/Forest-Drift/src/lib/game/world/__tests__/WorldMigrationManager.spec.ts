@@ -55,6 +55,19 @@ describe('migrateWorld', () => {
 		expect(validateWorldDefinition(result.value).ok).toBe(true);
 	});
 
+	it('adds empty Mini Builds to schema 6 worlds without touching existing furniture', () => {
+		const world = richWorld();
+		const old = { ...world, schemaVersion: 6 };
+		delete (old as { miniBuilds?: unknown }).miniBuilds;
+		const result = migrateWorld(old);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.fromVersion).toBe(6);
+		expect(result.value.miniBuilds).toEqual({ definitions: [], instances: [] });
+		expect(result.value.furniture).toEqual(world.furniture);
+		expect(validateWorldDefinition(result.value).ok).toBe(true);
+	});
+
 	it('produces a world that still passes validation after migrating', () => {
 		const result = migrateWorld(richWorld());
 		expect(result.ok).toBe(true);

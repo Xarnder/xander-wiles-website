@@ -2,6 +2,7 @@ import { validateCreatureWorldState } from '../creatures/CreaturePersistence';
 import { validateMusic } from '../music/MusicValidation';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import { validateFurniture } from '../building/FurnitureTypes';
+import { validateMiniBuildWorldState } from '../miniBuild/MiniBuildValidation';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
 import {
@@ -555,6 +556,13 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	}
 	const furnitureError = validateFurniture(value.furniture, foundationIds);
 	if (furnitureError) return fail(furnitureError);
+
+	// Mini Builds are untrusted like everything else: block limits, grid integers, bounds, materials
+	// and references are all re-checked here, independently of the editor. The sanitised copy
+	// (re-derived bounds, grounded designs) replaces the raw data.
+	const miniBuilds = validateMiniBuildWorldState(value.miniBuilds, foundationIds);
+	if (!miniBuilds.ok) return fail(miniBuilds.error);
+	value.miniBuilds = miniBuilds.value;
 
 	if (!Array.isArray(value.buildings)) return fail('World buildings must be an array');
 	const buildings: FoundationBuildingDefinition[] = [];

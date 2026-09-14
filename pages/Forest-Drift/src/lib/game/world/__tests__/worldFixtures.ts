@@ -3,6 +3,8 @@ import { createDefaultSkySettings } from '../../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { createDefaultVegetationSettings } from '../../vegetation/VegetationTypes';
 import { createDefaultRoofProfileSettings } from '../../building/RoofTypes';
+import { DEFAULT_MINI_BUILDS } from '../../miniBuild/defaultMiniBuilds';
+import { createEmptyMiniBuildWorldState } from '../../miniBuild/MiniBuildTypes';
 import type { WorldRevisionCounters, WorldRuntime } from '../WorldSerializer';
 import { createWorldDefinition } from '../WorldSerializer';
 import {
@@ -233,6 +235,32 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 				nz: 0
 			}
 		],
+		miniBuilds: {
+			definitions: [
+				{
+					...structuredClone(DEFAULT_MINI_BUILDS[0]),
+					id: 'mb-chair',
+					sourceDefaultId: DEFAULT_MINI_BUILDS[0].id
+				},
+				{
+					...structuredClone(DEFAULT_MINI_BUILDS[4]),
+					id: 'mb-table',
+					name: 'Long Table',
+					revision: 3
+				}
+			],
+			instances: [
+				{
+					id: 'mbi-1',
+					designId: 'mb-chair',
+					position: { x: 1.5, y: 12, z: 2 },
+					rotationY: 0,
+					foundationId: 'foundation-1'
+				},
+				{ id: 'mbi-2', designId: 'mb-chair', position: { x: 3.5, y: 12, z: 2 }, rotationY: 180 },
+				{ id: 'mbi-3', designId: 'mb-table', position: { x: 2.5, y: 12, z: 4 }, rotationY: 90 }
+			]
+		},
 		proceduralOverrides: { removedTreeIds: ['12:-7', '3:9'] },
 		player: {
 			position: { x: 123.456, y: 18.25, z: -987.654 },
@@ -256,6 +284,7 @@ export class FakeWorldRuntime implements WorldRuntime {
 	buildings: WorldDefinition['buildings'] = [];
 	buildingLevels: WorldDefinition['buildingLevels'] = [];
 	furniture: WorldDefinition['furniture'] = [];
+	miniBuilds: WorldDefinition['miniBuilds'] = createEmptyMiniBuildWorldState();
 	player: SavedPlayerState = createDefaultPlayerState();
 	overrides: ProceduralWorldOverrides = createEmptyProceduralOverrides();
 	counters: WorldRevisionCounters = { structural: 0, environment: 0, procedural: 0 };
@@ -274,6 +303,9 @@ export class FakeWorldRuntime implements WorldRuntime {
 	}
 	getFurniture() {
 		return this.furniture;
+	}
+	getMiniBuilds() {
+		return this.miniBuilds;
 	}
 	getPlayerState() {
 		return this.player;
@@ -303,6 +335,7 @@ export function runtimeFromWorld(world: WorldDefinition): FakeWorldRuntime {
 	runtime.buildings = world.buildings;
 	runtime.buildingLevels = world.buildingLevels;
 	runtime.furniture = world.furniture;
+	runtime.miniBuilds = world.miniBuilds;
 	runtime.player = world.player;
 	runtime.overrides = world.proceduralOverrides;
 	return runtime;

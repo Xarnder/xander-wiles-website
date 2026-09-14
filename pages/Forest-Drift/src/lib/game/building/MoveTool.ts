@@ -32,6 +32,15 @@ import type { BuildTool } from './BuildToolManager';
 import type { WorldSurfaceSampler } from './WorldSurfaceSampler';
 import type { WallCollisionRect } from './wallCollision';
 import { colorMaterialFromHex } from './MaterialTypes';
+import { nextQuarterTurn } from '../miniBuild/miniBuildGrid';
+import { MiniBuildGhost } from '../miniBuild/MiniBuildGhost';
+import {
+	solveMiniBuildPlacement,
+	type MiniBuildPlacementContext,
+	type MiniBuildPlacementPreview
+} from '../miniBuild/MiniBuildPlacement';
+import { formatAreaDetail, type MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
+import type { QuarterTurn } from '../miniBuild/MiniBuildTypes';
 
 const VALID_COLOR = 0x39d353;
 const INVALID_COLOR = 0xf85149;
@@ -51,6 +60,8 @@ export interface MoveToolOptions {
 	getWallRects: () => readonly WallCollisionRect[];
 	onHudChange?: (hud: BuildUiState | null) => void;
 	openPlacementCustomize?: () => void;
+	/** Mini Build placement context — when present, placed Mini Builds can be picked up and moved. */
+	miniBuildPlacement?: MiniBuildPlacementContext;
 }
 
 interface PlacementPreview {
@@ -85,6 +96,13 @@ export class MoveTool implements BuildTool {
 	private readonly getWallRects: () => readonly WallCollisionRect[];
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
 	private readonly openPlacementCustomize?: () => void;
+	private readonly miniBuildPlacement?: MiniBuildPlacementContext;
+	private readonly miniBuilds?: MiniBuildSystem;
+	private readonly miniBuildGhost?: MiniBuildGhost;
+	private hoveredMiniBuildId: string | null = null;
+	/** A placed Mini Build being moved: hidden in place (budget and index untouched) until dropped. */
+	private heldMiniBuild: { id: string; rotationY: QuarterTurn } | null = null;
+	private miniBuildPreview: MiniBuildPlacementPreview | null = null;
 
 	private readonly raycaster = new THREE.Raycaster();
 	private readonly screenCenter = new THREE.Vector2(0, 0);
@@ -134,6 +152,8 @@ export class MoveTool implements BuildTool {
 		// If the user held the button down for more than 250ms and dragged, drop the object on release
 		if (this.heldItem && elapsed > 250 && this.preview?.valid) {
 			this.placeHeldObject();
+		} else if (this.heldMiniBuild && elapsed > 250 && this.miniBuildPreview?.valid) {
+			this.placeHeldMiniBuild();
 		}
 	};
 
@@ -150,6 +170,9 @@ export class MoveTool implements BuildTool {
 		this.getWallRects = options.getWallRects;
 		this.onHudChange = options.onHudChange;
 		this.openPlacementCustomize = options.openPlacementCustomize;
+		this.miniBuildPlacement = options.miniBuildPlacement;
+		this.miniBuilds = options.miniBuildPlacement?.system;
+		if (this.miniBuilds) this.miniBuildGhost = new MiniBuildGhost(this.miniBuilds.cache);
 
 		// Hover highlight setup
 		const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -241,6 +264,8 @@ export class MoveTool implements BuildTool {
 
 		this.scene.add(this.hoverHighlight);
 		this.scene.add(this.overlay);
+		if (this.miniBuildGhost) this.scene.add(this.miniBuildGhost.group);
+		this.hoveredMiniBuildId = null;
 		if (typeof window !== 'undefined') {
 			window.addEventListener('keydown', this.handleKeyDown);
 			window.addEventListener('mouseup', this.handleMouseUp);
@@ -250,6 +275,10 @@ export class MoveTool implements BuildTool {
 
 	deactivate(): void {
 		this.cancelMove();
+		this.cancelMiniBuildMove();
+		this.hoveredMiniBuildId = null;
+		this.miniBuildGhost?.setVisible(false);
+		this.miniBuildGhost?.group.removeFromParent();
 		this.active = false;
 		this.pointerIsDown = false;
 		this.hoveredId = null;
@@ -267,7 +296,11 @@ export class MoveTool implements BuildTool {
 	}
 
 	isHoldingObject(): boolean {
-		return this.heldItem !== null;
+		return this.heldItem !== null || this.heldMiniBuild !== null;
+	}
+
+	getHeldMiniBuildId(): string | null {
+		return this.heldMiniBuild?.id ?? null;
 	}
 
 	getHeldItem(): FurnitureDefinition | null {
@@ -275,6 +308,8 @@ export class MoveTool implements BuildTool {
 	}
 
 	canOpenCustomize(): boolean {
+		// Mini Builds are edited in the Mini Build Editor (F in Place Object mode), not the furniture modal.
+		if (this.heldMiniBuild || (this.hoveredMiniBuildId && !this.hoveredId)) return false;
 		return this.active && (this.heldItem !== null || this.hoveredId !== null);
 	}
 
@@ -288,6 +323,14 @@ export class MoveTool implements BuildTool {
 
 	update(): void {
 		if (!this.active) return;
+
+		if (this.heldMiniBuild) {
+			this.hoverHighlight.visible = false;
+			this.overlay.visible = false;
+			this.updateHeldMiniBuild();
+			this.emitMiniBuildHud();
+			return;
+		}
 
 		if (this.heldItem) {
 			// In holding state: hide hover highlight, update placement preview & ghost
@@ -306,6 +349,17 @@ export class MoveTool implements BuildTool {
 
 	onPrimaryAction(): void {
 		if (!this.active) return;
+
+		if (this.heldMiniBuild) {
+			if (this.miniBuildPreview?.valid) this.placeHeldMiniBuild();
+			return;
+		}
+		if (!this.heldItem && this.hoveredMiniBuildId) {
+			this.pickUpMiniBuild(this.hoveredMiniBuildId);
+			this.pointerIsDown = true;
+			this.mouseDownTime = performance.now();
+			return;
+		}
 
 		if (!this.heldItem) {
 			// Try picking up hovered object
@@ -326,9 +380,144 @@ export class MoveTool implements BuildTool {
 		if (this.heldItem) {
 			this.cancelMove();
 		}
+		this.cancelMiniBuildMove();
+	}
+
+	pickUpMiniBuild(id: string): boolean {
+		const instance = this.miniBuilds?.instances.get(id);
+		if (!instance || !this.miniBuilds) return false;
+		this.heldMiniBuild = { id, rotationY: instance.rotationY };
+		this.miniBuilds.instances.setHidden(id, true);
+		this.hoveredMiniBuildId = null;
+		this.hoverHighlight.visible = false;
+		return true;
+	}
+
+	placeHeldMiniBuild(): boolean {
+		const held = this.heldMiniBuild;
+		const preview = this.miniBuildPreview;
+		if (!held || !preview?.valid || !this.miniBuilds) return false;
+		const moved = this.miniBuilds.moveInstance(held.id, preview.position, preview.rotationY);
+		if (!moved.ok) return false;
+		this.miniBuilds.instances.setHidden(held.id, false);
+		this.heldMiniBuild = null;
+		this.miniBuildPreview = null;
+		this.miniBuildGhost?.setVisible(false);
+		return true;
+	}
+
+	cancelMiniBuildMove(): void {
+		if (!this.heldMiniBuild) return;
+		this.miniBuilds?.instances.setHidden(this.heldMiniBuild.id, false);
+		this.heldMiniBuild = null;
+		this.miniBuildPreview = null;
+		this.miniBuildGhost?.setVisible(false);
+	}
+
+	/** Target-chunk usage for a held Mini Build (moving within its own chunk adds nothing). */
+	getHeldMiniBuildReadout() {
+		const held = this.heldMiniBuild;
+		const preview = this.miniBuildPreview;
+		const instance = held ? this.miniBuilds?.instances.get(held.id) : undefined;
+		const definition = instance ? this.miniBuilds?.getDesign(instance.designId) : undefined;
+		if (!held || !preview || !definition || !this.miniBuilds) return null;
+		return this.miniBuilds.getChunkReadout(
+			preview.position.x,
+			preview.position.z,
+			definition.blocks.length,
+			held.id
+		);
+	}
+
+	private updateHeldMiniBuild(): void {
+		const held = this.heldMiniBuild;
+		const instance = held ? this.miniBuilds?.instances.get(held.id) : undefined;
+		const definition = instance ? this.miniBuilds?.getDesign(instance.designId) : undefined;
+		if (!held || !definition || !this.miniBuildPlacement || !this.miniBuildGhost) {
+			this.cancelMiniBuildMove();
+			return;
+		}
+		this.miniBuildGhost.setDefinition(definition);
+		this.miniBuildPreview = solveMiniBuildPlacement(
+			this.miniBuildPlacement,
+			definition,
+			held.rotationY,
+			held.id
+		);
+		if (!this.miniBuildPreview) {
+			this.miniBuildGhost.setVisible(false);
+			return;
+		}
+		this.miniBuildGhost.setTransform(
+			this.miniBuildPreview.position,
+			this.miniBuildPreview.rotationY
+		);
+		this.miniBuildGhost.setValid(this.miniBuildPreview.valid);
+		this.miniBuildGhost.setVisible(true);
+	}
+
+	private emitMiniBuildHud(): void {
+		const id = this.heldMiniBuild?.id ?? this.hoveredMiniBuildId;
+		const instance = id ? this.miniBuilds?.instances.get(id) : undefined;
+		const name = instance
+			? (this.miniBuilds?.getDesign(instance.designId)?.name ?? 'Object')
+			: 'Object';
+		if (this.heldMiniBuild) {
+			const preview = this.miniBuildPreview;
+			const readout = this.getHeldMiniBuildReadout();
+			this.onHudChange?.({
+				toolId: 'move',
+				crosshair: preview?.valid ? 'valid' : 'invalid',
+				hintLines: [
+					'MOVE OBJECT',
+					name,
+					`Rotation: ${this.heldMiniBuild.rotationY}°`,
+					'',
+					preview
+						? preview.valid
+							? 'Click: Place object'
+							: (preview.reason ?? 'Cannot place here').split('\n')[0]
+						: 'Aim at a floor or the ground',
+					'R    Rotate',
+					'Right-Click / Esc: Cancel move',
+					...(readout ? ['', formatAreaDetail(readout)] : [])
+				],
+				notice: preview
+					? ((preview.valid ? preview.notice : preview.reason) ?? undefined)
+					: undefined
+			});
+			return;
+		}
+		this.onHudChange?.({
+			toolId: 'move',
+			crosshair: 'valid',
+			hintLines: [
+				'MOVE OBJECT',
+				name,
+				`Rotation: ${instance?.rotationY ?? 0}°`,
+				'',
+				'Click: Pick up / drag',
+				'R    Rotate in-place',
+				'M: Exit Move Mode'
+			]
+		});
 	}
 
 	rotate(): void {
+		if (this.heldMiniBuild) {
+			this.heldMiniBuild.rotationY = nextQuarterTurn(this.heldMiniBuild.rotationY);
+			return;
+		}
+		if (!this.heldItem && this.hoveredMiniBuildId && this.miniBuilds) {
+			const instance = this.miniBuilds.instances.get(this.hoveredMiniBuildId);
+			if (instance)
+				this.miniBuilds.moveInstance(
+					instance.id,
+					instance.position,
+					nextQuarterTurn(instance.rotationY)
+				);
+			return;
+		}
 		if (this.heldItem) {
 			this.buildingSettings.furnitureRotationY = cycleFurnitureRotation(
 				this.buildingSettings.furnitureRotationY
@@ -498,6 +687,28 @@ export class MoveTool implements BuildTool {
 
 	private updateHover(): void {
 		const hit = this.pickFurniture();
+		const miniBuildHit = this.pickMiniBuild();
+		if (miniBuildHit && (!hit || miniBuildHit.distance < hit.distance)) {
+			this.hoveredId = null;
+			this.hoveredMiniBuildId = miniBuildHit.id;
+			const box = this.miniBuilds!.instances.worldAabb(miniBuildHit.id);
+			if (box) {
+				this.hoverHighlight.position.set(
+					(box.minX + box.maxX) / 2,
+					(box.minY + box.maxY) / 2,
+					(box.minZ + box.maxZ) / 2
+				);
+				this.hoverHighlight.scale.set(
+					Math.max(0.1, box.maxX - box.minX),
+					Math.max(0.1, box.maxY - box.minY),
+					Math.max(0.1, box.maxZ - box.minZ)
+				);
+				this.hoverHighlight.updateMatrixWorld(true);
+				this.hoverHighlight.visible = true;
+			}
+			return;
+		}
+		this.hoveredMiniBuildId = null;
 		if (!hit) {
 			this.hoveredId = null;
 			this.hoverHighlight.visible = false;
@@ -516,6 +727,13 @@ export class MoveTool implements BuildTool {
 			this.hoverHighlight.updateMatrixWorld(true);
 			this.hoverHighlight.visible = true;
 		}
+	}
+
+	private pickMiniBuild(): { id: string; distance: number } | null {
+		if (!this.miniBuilds) return null;
+		this.raycaster.setFromCamera(this.screenCenter, this.camera);
+		this.raycaster.far = FURNITURE_PLACE_MAX_DISTANCE;
+		return this.miniBuilds.instances.raycast(this.raycaster);
 	}
 
 	private pickFurniture(): { id: string; distance: number } | undefined {
@@ -853,6 +1071,10 @@ export class MoveTool implements BuildTool {
 	}
 
 	private emitHud(): void {
+		if (this.hoveredMiniBuildId && !this.heldItem) {
+			this.emitMiniBuildHud();
+			return;
+		}
 		if (this.heldItem) {
 			const entry = getFurnitureCatalogueEntry(this.buildingSettings.furnitureKind);
 			const rotation = furnitureRotationDegrees(this.buildingSettings.furnitureRotationY);
@@ -936,6 +1158,7 @@ export class MoveTool implements BuildTool {
 		this.footprint.geometry.dispose();
 		(this.footprint.material as THREE.Material).dispose();
 		this.outlineMaterial.dispose();
+		this.miniBuildGhost?.dispose();
 		for (const material of Object.values(this.ghostMaterials)) material.dispose();
 	}
 }

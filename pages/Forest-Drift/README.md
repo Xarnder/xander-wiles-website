@@ -45,6 +45,9 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
   Wall, Ceiling, Floor and Roof — see "Draw-snap: axis, inline and wall-corner alignment" below
   (while Paint Mode is active, `C` instead opens the colour palette — see "Paint Tool")
+- `8` — Place Object (Mini Builds and lights). `E` opens the Object Library (My Builds, Default
+  Designs, Lights, `+ Create New`); `R` rotates 90°; `↑`/`↓` cycle recent objects; `C` copies the
+  looked-at Mini Build; `F` edits it (shared design or Make Unique) — see "Mini Builds"
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -1176,6 +1179,60 @@ every foundation, always renders simultaneously regardless of these settings. Wi
 teaching `WallManager`/`WallPathManager`/`SlabManager`/`StairManager` to compare each mesh's own
 `baseY` (or, for a slab, `localY`) against the active foundation's current level and adjust
 visibility/opacity accordingly, re-applied whenever the active foundation or level changes.
+
+## Mini Builds: player-created furniture and objects (`src/lib/game/miniBuild/`)
+
+Furniture and small objects are built by players from **at most 16 cuboids** on a **0.0625m grid**,
+within **4 × 4 × 4m**, using **up to 4 material slots** and **90° rotations**. Any one size of a cuboid
+can be dragged or typed down to 0 to make a **plane**, which compiles to a single two-sided quad pair
+(4 triangles) rather than a six-sided box. The limits are the
+creative rule, centralised in `MiniBuildTypes.ts` (`MINI_BUILD_LIMITS`, `MINI_BUILD_WORLD_LIMITS`).
+The default furniture (chair, bed, table, counters, stove, bookcase …) is authored in
+`defaultMiniBuilds.ts` under exactly the same rules — no private geometry. See `docs/MiniBuild.md`
+for the full design notes and performance results.
+
+### Design vs instance
+
+- `MiniBuildDefinition` — the reusable recipe (blocks in integer grid units, material slots,
+  `revision`). Stored once per world in `WorldDefinition.miniBuilds.definitions`.
+- `MiniBuildInstance` — a placed copy: `designId`, anchor position, quarter-turn yaw, optional
+  material overrides. Twenty chairs are twenty tiny instances referencing one definition.
+- **Save** bumps the revision and updates every placed copy (the editor warns how many); **Save As**
+  and **Duplicate Design** create a new id; **Make Unique** (press `F` on a placed copy) clones the
+  design and retargets only that copy. Deleting a design with placed copies requires explicitly
+  choosing "Delete Design and All Instances" — no instance ever references a missing design.
+
+### Runtime pipeline
+
+`MiniBuildCompiler` (pure, worker-ready) emits only exposed faces — each face is rasterised on the
+grid, cells covered by other blocks or owned by an earlier coplanar face are dropped, and the rest are
+greedily merged into quads — producing **one indexed geometry per material slot**. `MiniBuildAssetCache`
+compiles each `designId + revision + compilerVersion` once and reference-counts consumers.
+`MiniBuildInstanceManager` batches copies per **16m chunk + design + revision + material signature**
+into `InstancedMesh`es (one per material slot), keeps an `instanceIndex → instance id` map for picking,
+streams chunks in and out around the player, and provides simplified collision boxes
+(`MiniBuildCollisionCompiler`: decorative legs/handles ignored, boxes merged, ≤8 per design).
+
+### Budgets
+
+Each 16m Mini Build chunk allows **512 source cuboids** (a 12-block chair costs 12 wherever it is and
+however it renders) plus a technical ceiling of 256 instances. An instance is charged to the chunk
+containing its anchor; moves validate the destination first. Near the limit the HUD says "This area
+is becoming very detailed."; over it placement is refused. Exact numbers are in the render stats
+overlay (`F3`); in normal play a small top-right counter shows the current chunk's usage (switching
+to "Placing here: used + cost" while placing or moving), the Place Object and Move HUDs show the same
+"Area detail" line, and **Settings → Mini Builds (or Rendering) → Show Mini Build chunk boundaries**
+draws the 16m chunk grid on the ground with a usage label per chunk. Both toggles are saved locally.
+Loading an over-budget (hand-edited) world keeps the excess instances in the save but
+never instantiates them.
+
+### Persistence
+
+World schema **v7** adds `miniBuilds: { definitions, instances }` (older worlds migrate to empty
+lists; legacy furniture is left untouched and still renders through `FurnitureManager`). Worlds are
+self-contained: placing a design from the cross-world **My Builds** library (IndexedDB
+`forest-drift-mini-builds`) copies it into the world. Compiled geometry is never saved; every
+definition is re-validated on load and import (16 blocks, integer grid, bounds, materials).
 
 ## Undo: reverting the last few build actions (`BuildUndoManager.ts`)
 

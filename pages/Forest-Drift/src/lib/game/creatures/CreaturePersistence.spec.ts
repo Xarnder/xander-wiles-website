@@ -1,3 +1,4 @@
+import { CURRENT_WORLD_SCHEMA_VERSION } from '../world/WorldTypes';
 import { describe, expect, it } from 'vitest';
 import { createDefaultCreatureState, validateCreatureWorldState } from './CreaturePersistence';
 import { generateSpecies } from './SpeciesGenerator';
@@ -28,7 +29,7 @@ describe('creature world persistence', () => {
 		const migrated = migrateWorld(old);
 		expect(migrated.ok).toBe(true);
 		if (!migrated.ok) return;
-		expect(migrated.value.schemaVersion).toBe(6);
+		expect(migrated.value.schemaVersion).toBe(CURRENT_WORLD_SCHEMA_VERSION);
 		expect(migrated.value.creatures).toEqual(createDefaultCreatureState());
 		expect(migrated.value.musicTrees).toEqual(old.musicTrees);
 		expect(migrated.value.musicPlants).toEqual(old.musicPlants);

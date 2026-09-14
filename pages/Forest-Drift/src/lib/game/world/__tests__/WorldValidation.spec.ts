@@ -241,8 +241,9 @@ describe('relationship integrity', () => {
 describe('malicious or corrupt size guards', () => {
 	it('rejects a file declaring an impossible number of foundations before building any geometry', () => {
 		const world = richWorld();
+		const template = richWorld().foundations[0];
 		world.foundations = Array.from({ length: IMPORT_LIMITS.foundations + 1 }, (_, index) => ({
-			...richWorld().foundations[0],
+			...template,
 			id: `f-${index}`
 		}));
 		expectRejected(world, /too many foundations/i);

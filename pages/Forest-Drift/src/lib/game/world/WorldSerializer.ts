@@ -5,6 +5,10 @@ import { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { FurnitureDefinition } from '../building/FurnitureTypes';
+import {
+	createEmptyMiniBuildWorldState,
+	type MiniBuildWorldState
+} from '../miniBuild/MiniBuildTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
 import {
@@ -43,6 +47,7 @@ export interface WorldRuntime {
 	getMusicTrees?(): MusicTreeDefinition[];
 	getMusicPlants?(): MusicPlantDefinition[];
 	getFurniture?(): FurnitureDefinition[];
+	getMiniBuilds?(): MiniBuildWorldState;
 	getEnvironment(): WorldEnvironmentDefinition;
 	getFoundations(): FoundationDefinition[];
 	getBuildings(): FoundationBuildingDefinition[];
@@ -58,6 +63,7 @@ export interface WorldContentSnapshot {
 	musicTrees: MusicTreeDefinition[];
 	musicPlants: MusicPlantDefinition[];
 	furniture: FurnitureDefinition[];
+	miniBuilds: MiniBuildWorldState;
 	environment: WorldEnvironmentDefinition;
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
@@ -85,6 +91,7 @@ export function captureWorldContent(runtime: WorldRuntime): WorldContentSnapshot
 		musicTrees: runtime.getMusicTrees?.() ?? [],
 		musicPlants: runtime.getMusicPlants?.() ?? [],
 		furniture: runtime.getFurniture?.() ?? [],
+		miniBuilds: runtime.getMiniBuilds?.() ?? createEmptyMiniBuildWorldState(),
 		environment: runtime.getEnvironment(),
 		foundations: runtime.getFoundations(),
 		buildings: runtime.getBuildings(),
@@ -106,6 +113,7 @@ export function applyContentToWorld(
 		musicTrees: content.musicTrees,
 		musicPlants: content.musicPlants,
 		furniture: content.furniture,
+		miniBuilds: content.miniBuilds,
 		environment: content.environment,
 		foundations: content.foundations,
 		buildings: content.buildings,
@@ -163,6 +171,7 @@ export function createWorldDefinition({
 		],
 		musicPlants: [],
 		furniture: [],
+		miniBuilds: createEmptyMiniBuildWorldState(),
 		foundations: [],
 		buildings: [],
 		buildingLevels: [],

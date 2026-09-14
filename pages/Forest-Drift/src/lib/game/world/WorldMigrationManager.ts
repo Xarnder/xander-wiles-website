@@ -27,8 +27,18 @@ type MigrationStep = (world: Record<string, unknown>) => Record<string, unknown>
  * defaulting to `1`, the shortest playable note, reproduces the exact one-shot behaviour those plants
  * already had before sustain existed.
  * Version 6 adds world-space furniture (torches first) to version 5 saves.
+ * Version 7 adds `miniBuilds` (player-created designs + placed copies). Existing furniture is left
+ * exactly as it was — legacy furniture keeps rendering through FurnitureManager.
  */
 const MIGRATIONS: Record<number, MigrationStep> = {
+	6: (world) => ({
+		...world,
+		schemaVersion: 7,
+		miniBuilds:
+			world.miniBuilds && typeof world.miniBuilds === 'object'
+				? world.miniBuilds
+				: { definitions: [], instances: [] }
+	}),
 	5: (world) => ({
 		...world,
 		schemaVersion: 6,

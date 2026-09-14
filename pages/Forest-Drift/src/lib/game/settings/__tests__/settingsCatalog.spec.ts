@@ -210,6 +210,42 @@ describe('creature settings', () => {
 		expect(host.actions.creatureEndDemo).toHaveBeenCalledOnce();
 	});
 
+	it('offers Mini Build chunk boundary and counter toggles in Mini Builds and Rendering', () => {
+		const apply = vi.fn();
+		const host = testHost();
+		host.miniBuildDisplay = { showChunkUsage: true, showChunkBoundaries: false };
+		host.actions.miniBuildDisplay = apply;
+
+		const catalog = buildSettingsCatalog(host);
+		const fieldsOf = (id: string) =>
+			catalog.find((c) => c.id === id)?.groups.flatMap((g) => g.fields) ?? [];
+		const boundaries = fieldsOf('mini-builds').find(
+			(f) => f.id === 'mini-builds.display.boundaries'
+		);
+		const counter = fieldsOf('mini-builds').find((f) => f.id === 'mini-builds.display.usage');
+		const renderingBoundaries = fieldsOf('rendering').find(
+			(f) => f.id === 'render.miniBuilds.boundaries'
+		);
+		expect(counter?.kind).toBe('boolean');
+		expect(renderingBoundaries?.kind).toBe('boolean');
+		if (boundaries?.kind !== 'boolean') throw new Error('missing boundaries toggle');
+		expect(boundaries.get()).toBe(false);
+		boundaries.set(true);
+		boundaries.onChange?.();
+		expect(host.miniBuildDisplay.showChunkBoundaries).toBe(true);
+		expect(apply).toHaveBeenCalledOnce();
+	});
+
+	it('omits Mini Build display toggles when the scene does not provide them', () => {
+		const catalog = buildSettingsCatalog(testHost());
+		expect(catalog.find((c) => c.id === 'mini-builds')).toBeUndefined();
+		expect(
+			catalog
+				.find((c) => c.id === 'rendering')
+				?.groups.some((g) => g.id === 'rendering-mini-build-chunks')
+		).toBe(false);
+	});
+
 	it('exposes Show all collision objects in building and rendering categories and forwards action', () => {
 		const actionSpy = vi.fn();
 		const host = testHost();

@@ -1,4 +1,5 @@
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
+import type { MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
 import * as THREE from 'three';
 import type { BuildingManager } from './BuildingManager';
 import type { FurnitureManager } from './FurnitureManager';
@@ -59,6 +60,7 @@ interface BeamPickingProxy {
 export interface RemoveToolOptions {
 	music?: MusicPlantPlacementTool;
 	furniture?: FurnitureManager;
+	miniBuilds?: MiniBuildSystem;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	buildingManager: BuildingManager;
@@ -88,6 +90,8 @@ export class RemoveTool implements BuildTool {
 	private furniture?: FurnitureManager;
 	private musicId?: string;
 	private furnitureId?: string;
+	private miniBuilds?: MiniBuildSystem;
+	private miniBuildId?: string;
 	private musicHighlight = new THREE.BoxHelper(new THREE.Group(), 0xff6655);
 	private readonly furnitureAabb = new THREE.Box3();
 	private readonly furnitureHighlightCenter = new THREE.Vector3();
@@ -134,6 +138,7 @@ export class RemoveTool implements BuildTool {
 	constructor(options: RemoveToolOptions) {
 		this.music = options.music;
 		this.furniture = options.furniture;
+		this.miniBuilds = options.miniBuilds;
 		options.scene.add(this.musicHighlight);
 		this.musicHighlight.visible = false;
 		const furnitureHighlightGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -174,6 +179,7 @@ export class RemoveTool implements BuildTool {
 	deactivate(): void {
 		this.musicId = undefined;
 		this.furnitureId = undefined;
+		this.miniBuildId = undefined;
 		this.musicHighlight.visible = false;
 		this.furnitureHighlight.visible = false;
 		this.active = false;
@@ -204,8 +210,10 @@ export class RemoveTool implements BuildTool {
 		const hit = hits[0];
 		this.musicId = undefined;
 		this.furnitureId = undefined;
+		this.miniBuildId = undefined;
 		this.musicHighlight.visible = false;
 		this.furnitureHighlight.visible = false;
+		const miniBuildHit = this.miniBuilds?.instances.raycast(this.raycaster) ?? null;
 		const plantHit = this.music
 			? this.raycaster.intersectObjects([...this.music.plants.visuals.values()], true)[0]
 			: undefined;
@@ -214,7 +222,8 @@ export class RemoveTool implements BuildTool {
 		if (
 			plantHit &&
 			(!hit || plantHit.distance < hit.distance) &&
-			(!furnitureHit || plantHit.distance <= furnitureHit.distance)
+			(!furnitureHit || plantHit.distance <= furnitureHit.distance) &&
+			(!miniBuildHit || plantHit.distance <= miniBuildHit.distance)
 		) {
 			this.musicId = plantHit.object.userData.musicPlantId;
 			this.setHoveredTarget(null, null);
@@ -224,6 +233,47 @@ export class RemoveTool implements BuildTool {
 				toolId: 'remove',
 				crosshair: 'valid',
 				hintLines: ['REMOVE MUSIC PLANT', 'Click Remove · X Exit']
+			});
+			return;
+		}
+		if (
+			miniBuildHit &&
+			this.miniBuilds &&
+			(!hit || miniBuildHit.distance < hit.distance) &&
+			(!furnitureHit || miniBuildHit.distance < furnitureHit.distance)
+		) {
+			this.miniBuildId = miniBuildHit.id;
+			this.setHoveredTarget(null, null);
+			const box = this.miniBuilds.instances.worldAabb(miniBuildHit.id);
+			if (box) {
+				// A bounds overlay — instanced objects have no per-object mesh to recolour, and duplicating
+				// runtime geometry just for hover would defeat the batching.
+				this.furnitureHighlight.position.set(
+					(box.minX + box.maxX) / 2,
+					(box.minY + box.maxY) / 2,
+					(box.minZ + box.maxZ) / 2
+				);
+				this.furnitureHighlight.scale.set(
+					box.maxX - box.minX + 0.03,
+					box.maxY - box.minY + 0.03,
+					box.maxZ - box.minZ + 0.03
+				);
+				this.furnitureHighlight.updateMatrixWorld(true);
+				this.furnitureHighlight.visible = true;
+			}
+			const instance = this.miniBuilds.instances.get(miniBuildHit.id);
+			const name = instance
+				? (this.miniBuilds.getDesign(instance.designId)?.name ?? 'Object')
+				: 'Object';
+			this.onHudChange?.({
+				toolId: 'remove',
+				crosshair: 'valid',
+				notice: name,
+				hintLines: [
+					`REMOVE ${name.toUpperCase()}`,
+					'Removes this copy only — the design stays in your library',
+					'Click Remove · X Exit'
+				]
 			});
 			return;
 		}
@@ -267,6 +317,12 @@ export class RemoveTool implements BuildTool {
 			this.music?.remove(this.musicId);
 			this.musicId = undefined;
 			this.musicHighlight.visible = false;
+			return;
+		}
+		if (this.active && this.miniBuildId) {
+			this.miniBuilds?.removeInstance(this.miniBuildId);
+			this.miniBuildId = undefined;
+			this.furnitureHighlight.visible = false;
 			return;
 		}
 		if (this.active && this.furnitureId) {

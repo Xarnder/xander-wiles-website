@@ -40,6 +40,9 @@
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
 	import FurnitureCatalogueModal from '$lib/components/FurnitureCatalogueModal.svelte';
+	import MiniBuildChoiceDialog from '$lib/components/MiniBuildChoiceDialog.svelte';
+	import MiniBuildEditor, { type MiniBuildEditorLaunch } from '$lib/components/MiniBuildEditor.svelte';
+	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
@@ -109,6 +112,9 @@
 	let paused = $state(false);
 	let saveToast = $state<string | null>(null);
 	let lookedAtDoorId = $state<string | null>(null);
+	/** Mini Build editor launch (null = closed) and the placed-object Edit choice (`F` in Place Object mode). */
+	let miniBuildEditor = $state<MiniBuildEditorLaunch | null>(null);
+	let miniBuildEditChoice = $state<{ instanceId: string; name: string; copies: number } | null>(null);
 
 	let session = $state.raw<WorldSession>();
 
@@ -120,8 +126,30 @@
 			midiOpen ||
 			paintPaletteOpen ||
 			placementCustomizeOpen ||
-			placementHeightOpen
+			placementHeightOpen ||
+			miniBuildEditor !== null ||
+			miniBuildEditChoice !== null
 		);
+	}
+
+	function openMiniBuildEditor(launch: MiniBuildEditorLaunch) {
+		session?.scene.closePlacementCustomize();
+		showHelp = false;
+		miniBuildEditor = launch;
+	}
+
+	function requestMiniBuildEdit(instanceId: string) {
+		const system = session?.scene.miniBuilds;
+		const instance = system?.instances.get(instanceId);
+		const design = instance ? system?.getDesign(instance.designId) : undefined;
+		if (!system || !instance || !design) return;
+		const copies = system.placedCount(design.id);
+		if (copies <= 1) {
+			openMiniBuildEditor({ kind: 'edit', designId: design.id });
+			return;
+		}
+		document.exitPointerLock?.();
+		miniBuildEditChoice = { instanceId, name: design.name, copies };
 	}
 
 	$effect(() => {
@@ -252,6 +280,7 @@
 		}
 		if (screen !== 'game' || typing) return;
 		if (placementCustomizeOpen || placementHeightOpen) return;
+		if (miniBuildEditor || miniBuildEditChoice) return;
 		if (settingsOpen) {
 			if (event.code === 'Escape') closeSettings();
 			return;
@@ -439,7 +468,9 @@
 			onPlacementHeightChange: (open) => {
 				placementHeightOpen = open;
 				if (open) showHelp = false;
-			}
+			},
+			onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
+			onMiniBuildNotice: (message) => showSaveToast(message)
 		});
 		if (typeof window !== 'undefined') {
 			(window as any).__forestSession = session;
@@ -479,6 +510,8 @@
 			paintPaletteOpen = false;
 			placementCustomizeOpen = false;
 			placementHeightOpen = false;
+			miniBuildEditor = null;
+			miniBuildEditChoice = null;
 			stats = null;
 			hotbar = null;
 			buildHud = null;
@@ -836,11 +869,21 @@
 							Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
 							Detailing, 8 Place Object. Slot 7 is reserved.
 						</dd>
+						<dt>8 then E</dt>
+						<dd>
+							Open the Object Library — My Builds, Default Designs and Lights, or Create New to
+							build your own object from up to 16 cuboids in the Mini Build Editor.
+						</dd>
+						<dt>8: R / C / F</dt>
+						<dd>
+							Rotate the object 90° · Copy the object you are looking at (same design) · Edit the
+							object you are looking at (shared design or Make Unique).
+						</dd>
 						<dt>↑ / ↓</dt>
 						<dd>
 							Cycle tools inside the selected slot — Poly Wall / Wall, Door / Window / Beam, Ceiling
-							/ Floor / Roof, Carpet / Path / Planks / Tiles, and Furniture objects. The last choice
-							is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
+							/ Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently used
+							objects. The last choice is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
 						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
@@ -1186,6 +1229,38 @@
 			<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
 		{/if}
 
+		{#if stats?.miniBuildChunk && !miniBuildEditor}
+			{@const chunk = stats.miniBuildChunk}
+			{@const used = Math.min(1, chunk.primitives / chunk.budget)}
+			{@const adding = Math.max(0, Math.min(1 - used, chunk.added / chunk.budget))}
+			<div
+				class="mini-build-chunk"
+				class:below-clock={stats.dayCycleEnabled}
+				class:near={chunk.level === 'near'}
+				class:full={chunk.level === 'full'}
+				data-testid="mini-build-chunk-usage"
+				data-level={chunk.level}
+				title="Mini Build primitives in this 16m chunk ({chunk.instances} objects)"
+			>
+				<div class="mini-build-chunk-row">
+					<span class="mini-build-chunk-label">{chunk.placing ? 'Placing here' : 'Mini Builds'}</span>
+					<span class="mini-build-chunk-value" data-testid="mini-build-chunk-value">
+						{chunk.primitives}{#if chunk.added > 0}<span class="mini-build-chunk-added"
+								>&nbsp;+{chunk.added}</span
+							>{/if}&nbsp;/&nbsp;{chunk.budget}
+					</span>
+				</div>
+				<div class="mini-build-chunk-bar" aria-hidden="true">
+					<span class="mini-build-chunk-used" style:width="{used * 100}%"></span>
+					<span class="mini-build-chunk-adding" style:width="{adding * 100}%"></span>
+				</div>
+				<div class="mini-build-chunk-sub">
+					primitives · chunk {chunk.chunkId} · {chunk.instances}
+					{chunk.instances === 1 ? 'object' : 'objects'}
+				</div>
+			</div>
+		{/if}
+
 		{#if stats?.showRenderStats}
 			<div class="stats-overlay" data-testid="stats-overlay">
 				<div>{stats.fps} FPS &middot; {stats.frameTimeMs.toFixed(1)} ms</div>
@@ -1220,6 +1295,28 @@
 				<div>
 					Draws {stats.drawCalls} &middot; Geo {stats.geometries} &middot; Tex {stats.textures}
 				</div>
+				{#if stats.miniBuilds}
+					{@const mb = stats.miniBuilds}
+					<div data-testid="mini-build-stats">
+						Mini Builds {mb.definitions} designs &middot; cache {mb.cache.entries} ({(mb.cache.estimatedBytes / 1024).toFixed(0)} KB, {mb.cache.compiles} compiles)
+					</div>
+					<div>
+						Instances {mb.instances.renderedInstances}/{mb.instances.instances} rendered &middot; {mb.instances.batches} batches &middot; {mb.instances.instancedMeshes} draws
+					</div>
+					<div data-testid="mini-build-chunk-stats">
+						Chunk {mb.currentChunk.id}: primitives {mb.currentChunk.primitives} / {mb.currentChunk.budget} &middot; {mb.currentChunk.instances} objects
+					</div>
+					<div>
+						Geometry {mb.renderedVertices.toLocaleString()} verts &middot; {mb.renderedTriangles.toLocaleString()} tris &middot; collision {mb.instances.collisionBoxes} boxes
+					</div>
+				{/if}
+				{#if stats.miniBuildTarget}
+					{@const t = stats.miniBuildTarget}
+					<div data-testid="mini-build-target-stats">
+						Target {t.designName} r{t.revision} &middot; {t.blocks} blocks &middot; {t.materialSlots} mats &middot; {t.vertices}v/{t.triangles}t &middot; {t.collisionBoxes} col
+					</div>
+					<div class="stats-ids">inst {t.instanceId.slice(0, 8)} &middot; design {t.designId.slice(0, 8)} &middot; chunk {t.chunkId} &middot; {t.batchKey.length > 32 ? `${t.batchKey.slice(0, 32)}…` : t.batchKey}</div>
+				{/if}
 				<div>
 					{#if stats.shadowsEnabled}
 						Shadows {stats.shadowCascades} cascades &middot; {stats.shadowDistance}m
@@ -1301,7 +1398,13 @@
 		{/if}
 
 		{#if placementCustomizeOpen && session && customizeToolId}
-			{#if customizeToolId === 'torch'}
+			{#if customizeToolId === 'place-object'}
+				<ObjectLibraryModal
+					scene={session.scene}
+					onClose={() => session?.scene.closePlacementCustomize()}
+					onOpenEditor={openMiniBuildEditor}
+				/>
+			{:else if customizeToolId === 'torch'}
 				<FurnitureCatalogueModal
 					settings={session.scene.buildingSettings}
 					onClose={() => session?.scene.closePlacementCustomize()}
@@ -1320,6 +1423,50 @@
 				settings={session.scene.buildingSettings}
 				level={buildHud?.level}
 				onClose={() => session?.scene.closePlacementHeight()}
+			/>
+		{/if}
+		{#if miniBuildEditor && session}
+			<MiniBuildEditor
+				scene={session.scene}
+				launch={miniBuildEditor}
+				onClose={() => (miniBuildEditor = null)}
+				onSaved={(definition) => {
+					miniBuildEditor = null;
+					session?.scene.selectPlaceObject({ type: 'mini-build', designId: definition.id });
+					session?.scene.enterPlaceObjectMode();
+					showSaveToast(`Saved ${definition.name}`);
+				}}
+			/>
+		{/if}
+		{#if miniBuildEditChoice && session}
+			{@const choice = miniBuildEditChoice}
+			<MiniBuildChoiceDialog
+				testId="mini-build-edit-choice"
+				title={`Edit "${choice.name}"`}
+				lines={[`${choice.copies} placed copies use this design.`, 'Editing the shared design updates all of them.']}
+				options={[
+					{
+						label: 'Edit Shared Design',
+						testId: 'mini-build-edit-shared',
+						tone: 'primary',
+						onSelect: () => {
+							const instance = session?.scene.miniBuilds.instances.get(choice.instanceId);
+							miniBuildEditChoice = null;
+							if (instance) openMiniBuildEditor({ kind: 'edit', designId: instance.designId });
+						}
+					},
+					{
+						label: 'Make Unique and Edit',
+						testId: 'mini-build-make-unique',
+						onSelect: () => {
+							const result = session?.scene.miniBuilds.makeUnique(choice.instanceId);
+							miniBuildEditChoice = null;
+							if (result?.ok) openMiniBuildEditor({ kind: 'edit', designId: result.value.id });
+							else if (result) showSaveToast(result.error);
+						}
+					}
+				]}
+				onCancel={() => (miniBuildEditChoice = null)}
 			/>
 		{/if}
 		{#if midiOpen && session}<MidiImportModal
@@ -1400,6 +1547,87 @@
 		font-variant-numeric: tabular-nums;
 		backdrop-filter: blur(2px);
 		pointer-events: none;
+	}
+
+	.mini-build-chunk {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		z-index: 12;
+		min-width: 11rem;
+		padding: 0.4rem 0.65rem 0.45rem;
+		border-radius: 10px;
+		background: rgba(10, 20, 15, 0.55);
+		border: 1px solid rgba(234, 246, 255, 0.2);
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.72rem;
+		font-variant-numeric: tabular-nums;
+		backdrop-filter: blur(2px);
+		pointer-events: none;
+	}
+
+	.mini-build-chunk.below-clock {
+		top: 2.75rem;
+	}
+
+	.mini-build-chunk-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		align-items: baseline;
+	}
+
+	.mini-build-chunk-label {
+		font-weight: 650;
+		letter-spacing: 0.02em;
+	}
+
+	.mini-build-chunk-value {
+		font-weight: 700;
+		font-size: 0.8rem;
+	}
+
+	.mini-build-chunk-added {
+		color: #9be7b4;
+	}
+
+	.mini-build-chunk-bar {
+		display: flex;
+		height: 4px;
+		margin: 0.3rem 0 0.2rem;
+		border-radius: 999px;
+		background: rgba(234, 246, 255, 0.18);
+		overflow: hidden;
+	}
+
+	.mini-build-chunk-used {
+		background: #7ec89a;
+	}
+
+	.mini-build-chunk-adding {
+		background: rgba(155, 231, 180, 0.55);
+	}
+
+	.mini-build-chunk.near .mini-build-chunk-used {
+		background: #e0b23a;
+	}
+
+	.mini-build-chunk.full {
+		border-color: rgba(248, 81, 73, 0.7);
+	}
+
+	.mini-build-chunk.full .mini-build-chunk-used,
+	.mini-build-chunk.full .mini-build-chunk-adding {
+		background: #f85149;
+	}
+
+	.mini-build-chunk-sub {
+		opacity: 0.75;
+		font-size: 0.65rem;
 	}
 
 	.save-error-chip {

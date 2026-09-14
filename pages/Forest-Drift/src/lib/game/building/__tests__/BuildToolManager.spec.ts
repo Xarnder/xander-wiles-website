@@ -119,7 +119,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	const ceilingTool = makeFakeTool('ceiling');
 	const floorTool = makeFakeTool('floor');
 	const roofTool = makeFakeTool('flat-roof');
-	const torchTool = makeFakeTool('torch');
+	const torchTool = makeFakeTool('place-object');
 	const hotbarStates: {
 		buildModeActive: boolean;
 		globalMode: string;
@@ -141,7 +141,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 			ceiling: ceilingTool,
 			floor: floorTool,
 			'flat-roof': roofTool,
-			torch: torchTool
+			'place-object': torchTool
 		},
 		buildingSettings,
 		removeTool,
@@ -283,11 +283,12 @@ describe('BuildToolManager furniture slot 8', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('selects the torch tool by slot number 8, not by array index', () => {
+	it('selects the Place Object tool by slot number 8, not by array index', () => {
 		const { torchTool, key, hotbarStates } = buildHarness(pointerLocked);
 		key('Digit8');
 		expect(torchTool.activateCount).toBe(1);
-		expect(hotbarStates.at(-1)?.toolId).toBe('torch');
+		expect(hotbarStates.at(-1)?.toolId).toBe('place-object');
+		expect(hotbarStates.at(-1)?.label).toBe('Place Object');
 	});
 
 	it('does not treat empty slot 7 as the torch', () => {
@@ -759,47 +760,19 @@ describe('Hotbar slot variants (↑/↓)', () => {
 		expect(hotbarStates.at(-1)?.toolId).toBe('foundation');
 	});
 
-	it('ArrowDown / ArrowUp cycle furniture variants on slot 8 and sync with buildingSettings', () => {
-		const { torchTool, key, hotbarStates, buildingSettings, buildToolManager } =
-			buildHarness(pointerLocked);
+	it('slot 8 is a single Place Object tool that keeps ↑/↓ for its own recent-object cycling', () => {
+		const { torchTool, key, hotbarStates } = buildHarness(pointerLocked);
+		torchTool.isCapturingKey = (code: string) => code === 'ArrowUp' || code === 'ArrowDown';
 
 		key('Digit8');
 		expect(torchTool.activateCount).toBe(1);
-		expect(hotbarStates.at(-1)?.toolId).toBe('torch');
-		expect(hotbarStates.at(-1)?.label).toBe('Chair');
-		expect(hotbarStates.at(-1)?.furnitureKind).toBe('chair');
-		expect(hotbarStates.at(-1)?.variantCount).toBe(19);
+		expect(hotbarStates.at(-1)?.toolId).toBe('place-object');
+		expect(hotbarStates.at(-1)?.variantCount).toBe(1);
 
 		key('ArrowDown');
-		expect(hotbarStates.at(-1)?.label).toBe('Stool');
-		expect(hotbarStates.at(-1)?.furnitureKind).toBe('stool');
-		expect(buildingSettings.furnitureKind).toBe('stool');
-
-		key('ArrowDown');
-		expect(hotbarStates.at(-1)?.label).toBe('Bench');
-		expect(buildingSettings.furnitureKind).toBe('bench');
-
 		key('ArrowUp');
-		expect(hotbarStates.at(-1)?.label).toBe('Stool');
-		expect(buildingSettings.furnitureKind).toBe('stool');
-
-		// Cycling backwards past Bed (index 0) wraps around to Torch (index 18)
-		key('ArrowUp'); // Chair (3)
-		key('ArrowUp'); // Wardrobe (2)
-		key('ArrowUp'); // Bedside Table (1)
-		key('ArrowUp'); // Bed (0)
-		expect(hotbarStates.at(-1)?.label).toBe('Bed');
-		expect(buildingSettings.furnitureKind).toBe('bed');
-
-		key('ArrowUp'); // Wraps to Torch (18)
-		expect(hotbarStates.at(-1)?.label).toBe('Torch');
-		expect(buildingSettings.furnitureKind).toBe('torch');
-
-		// Syncing furniture variant from external change (e.g. catalogue modal)
-		buildingSettings.furnitureKind = 'table';
-		buildToolManager.syncFurnitureVariant();
-		expect(hotbarStates.at(-1)?.label).toBe('Table');
-		expect(hotbarStates.at(-1)?.furnitureKind).toBe('table');
+		expect(torchTool.deactivateCount).toBe(0);
+		expect(hotbarStates.at(-1)?.toolId).toBe('place-object');
 	});
 });
 

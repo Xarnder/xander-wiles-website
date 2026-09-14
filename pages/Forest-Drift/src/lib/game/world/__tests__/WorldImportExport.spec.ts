@@ -24,6 +24,31 @@ describe('package round trip', () => {
 		expect(result.world).toEqual(world);
 	});
 
+	it('carries every Mini Build design and instance, with no external library or compiled data', async () => {
+		const world = richWorld();
+		const bytes = await createWorldPackage(world);
+		const result = readWorldPackage(bytes);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.world.miniBuilds.definitions.map((d) => d.id)).toEqual(['mb-chair', 'mb-table']);
+		expect(result.world.miniBuilds.instances).toEqual(world.miniBuilds.instances);
+		expect(result.world.miniBuilds.definitions[1].revision).toBe(3);
+		const json = new TextDecoder().decode(unzipSync(bytes)['world.json']);
+		expect(json).not.toMatch(/positions|BufferGeometry|InstancedMesh|normals/);
+	});
+
+	it('rejects an imported world whose Mini Build exceeds the 16-block limit', async () => {
+		const world = richWorld();
+		const chair = world.miniBuilds.definitions[0];
+		chair.blocks = Array.from({ length: 17 }, (_, i) => ({
+			...chair.blocks[0],
+			id: `x${i}`,
+			positionGrid: { x: i, y: 0, z: 0 }
+		}));
+		const result = readWorldPackage(await createWorldPackage(world));
+		expect(result.ok).toBe(false);
+	});
+
 	it('includes a manifest with provenance and a checksum', async () => {
 		const world = richWorld();
 		const result = readWorldPackage(await createWorldPackage(world));

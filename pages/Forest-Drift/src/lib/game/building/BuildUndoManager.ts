@@ -11,10 +11,12 @@ export type BuildAction =
 	| { kind: 'slab'; slabId: string }
 	| { kind: 'roof'; roofId: string }
 	| { kind: 'floorDetail'; detailId: string }
-	| { kind: 'furniture'; furnitureId: string };
+	| { kind: 'furniture'; furnitureId: string }
+	| { kind: 'miniBuild'; instanceId: string };
 
 export interface BuildUndoManagerOptions {
 	removeFurniture?: (id: string) => boolean;
+	removeMiniBuild?: (instanceId: string) => boolean;
 }
 
 /**
@@ -32,9 +34,17 @@ export interface BuildUndoManagerOptions {
 export class BuildUndoManager {
 	private readonly buildingManager: BuildingManager;
 	private readonly removeFurniture?: (id: string) => boolean;
+	private readonly removeMiniBuild?: (instanceId: string) => boolean;
 	private readonly history: BuildAction[] = [];
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
+		// Typing "-" into a name or search field must never undo a build action.
+		const target = event.target as { tagName?: string; isContentEditable?: boolean } | null;
+		if (
+			target &&
+			(['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName ?? '') || target.isContentEditable)
+		)
+			return;
 		if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
 			this.undo();
 		}
@@ -43,6 +53,7 @@ export class BuildUndoManager {
 	constructor(buildingManager: BuildingManager, options: BuildUndoManagerOptions = {}) {
 		this.buildingManager = buildingManager;
 		this.removeFurniture = options.removeFurniture;
+		this.removeMiniBuild = options.removeMiniBuild;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
@@ -73,6 +84,8 @@ export class BuildUndoManager {
 				return this.buildingManager.removeFloorDetail(action.detailId);
 			case 'furniture':
 				return this.removeFurniture?.(action.furnitureId) ?? false;
+			case 'miniBuild':
+				return this.removeMiniBuild?.(action.instanceId) ?? false;
 		}
 	}
 

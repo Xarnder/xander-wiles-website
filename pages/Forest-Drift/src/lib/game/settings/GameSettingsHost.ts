@@ -59,6 +59,14 @@ export interface GameSettingsActions {
 	creatureLab?: () => void;
 	creatureDemo?: () => void;
 	creatureEndDemo?: () => void;
+	/** Developer Mini Build stress scenes — see miniBuild/MiniBuildBenchmark.ts. */
+	miniBuildBenchmark?: (
+		scenario: 'repeated' | 'unique' | 'simple' | 'dense' | 'mixed',
+		count: number
+	) => void;
+	miniBuildBenchmarkClear?: () => void;
+	/** Applies and persists `miniBuildDisplay` changes. */
+	miniBuildDisplay?: () => void;
 }
 
 /** Optional port keeps settings usable by scenes without an ecosystem runtime. */
@@ -85,6 +93,8 @@ export interface GameSettingsHost {
 	music: MusicPlantPlacementTool;
 	sustain: SustainSettings;
 	musicVisual: MusicVisualSettings;
+	/** Mini Build on-screen readouts (local preference, persisted by the action). */
+	miniBuildDisplay?: { showChunkUsage: boolean; showChunkBoundaries: boolean };
 	actions: GameSettingsActions;
 }
 

@@ -1,6 +1,7 @@
 import type { CreatureWorldState } from '../creatures/CreatureTypes';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { FurnitureDefinition } from '../building/FurnitureTypes';
+import type { MiniBuildWorldState } from '../miniBuild/MiniBuildTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
@@ -14,7 +15,7 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 6;
+export const CURRENT_WORLD_SCHEMA_VERSION = 7;
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';
@@ -103,6 +104,12 @@ export interface WorldDefinition {
 	musicTrees: MusicTreeDefinition[];
 	musicPlants: MusicPlantDefinition[];
 	furniture: FurnitureDefinition[];
+	/**
+	 * Player-authored Mini Build designs and their placed copies. Worlds are self-contained: every
+	 * definition an instance references is stored here, never only in a personal library. Compiled
+	 * geometry is never saved — it is regenerated from these recipes.
+	 */
+	miniBuilds: MiniBuildWorldState;
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
 	buildingLevels: BuildingLevelDefinition[];

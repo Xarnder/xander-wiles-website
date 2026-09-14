@@ -219,4 +219,11 @@ export type MaterialKind =
 	/** Procedural furniture primary surfaces (wood, stone, metal) — see FurnitureManager.ts. */
 	| 'furniture'
 	/** Furniture secondary surfaces (fabric, mattress, door panels, metal trim). */
-	| 'furniture-accent';
+	| 'furniture-accent'
+	/** Mini Build material slot finishes — see miniBuild/MiniBuildMaterials.ts. */
+	| 'mini-build-wood'
+	| 'mini-build-fabric'
+	| 'mini-build-metal'
+	| 'mini-build-stone'
+	| 'mini-build-glass'
+	| 'mini-build-plain';
