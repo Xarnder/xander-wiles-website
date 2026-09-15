@@ -2177,6 +2177,13 @@ function setupSettingListener(id, settingKey, isCheckbox, processVal) {
     el.onchange = (e) => {
         let val = isCheckbox ? e.target.checked : e.target.value;
         if (processVal) val = processVal(val);
+        if (!state.appData.settings) state.appData.settings = {};
+        state.appData.settings[settingKey] = val;
+        if (settingKey === 'dragEnabled') {
+            UI.enableSortables(val);
+        } else if (settingKey === 'sortMode' || settingKey === 'showNumbers' || settingKey === 'autoArchive' || settingKey === 'disableImportantPinning' || settingKey === 'addTaskLocation') {
+            UI.renderBoard();
+        }
         API.updateSetting(settingKey, val);
     };
 }

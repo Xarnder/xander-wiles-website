@@ -630,13 +630,18 @@ export function moveListToBoard(listId, targetBoardId) {
 }
 
 export function updateSetting(settingKey, value) {
-    // Nested field update support simply
-    const updateObj = {};
-    updateObj[`settings.${settingKey}`] = value;
+    if (!state.appData.settings) state.appData.settings = {};
+    state.appData.settings[settingKey] = value;
 
     if (settingKey === 'theme') {
         localStorage.setItem('theme', value);
     }
+
+    if (!state.currentUser) return Promise.resolve();
+
+    // Nested field update support simply
+    const updateObj = {};
+    updateObj[`settings.${settingKey}`] = value;
 
     return updateDoc(doc(db, "users", state.currentUser.uid), updateObj)
         .catch(e => handleSyncError(e));

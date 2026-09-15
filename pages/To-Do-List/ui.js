@@ -1967,13 +1967,15 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 put: true
             },
             animation: 150,
-            disabled: (!isCustomSort || !state.appData.settings.dragEnabled),
-            filter: '.archived-task',
+            disabled: !state.appData.settings.dragEnabled,
+            filter: '.archived-task, .kanban-stage-moves, .task-actions, .task-checkbox, .nested-idea-checkbox, .nested-kanban-stage-moves, .nested-idea-drag-handle, input, button, select',
             preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,
             fallbackOnBody: true,
             delay: 200,
             delayOnTouchOnly: true,
+            touchStartThreshold: 4,
+            fallbackTolerance: 4,
             onEnd: handleDragEnd
         });
         state.sortableInstances.push(sortable);
@@ -1984,7 +1986,9 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             animation: 150,
             sort: false,
             delay: 200,
-            delayOnTouchOnly: true
+            delayOnTouchOnly: true,
+            touchStartThreshold: 4,
+            fallbackTolerance: 4
         });
         state.sortableInstances.push(sortable);
     }
@@ -3102,6 +3106,16 @@ export function handleDragEnd(evt) {
     if (fromIdRaw === 'orphan-archive' && toIdRaw === 'orphan-archive') return;
 
     const taskId = evt.item.dataset.taskId;
+    if (!taskId) return;
+
+    // When tasks are reordered manually via drag, switch sortMode to 'custom'
+    // so the new manual order is preserved and doesn't get reverted by getSortedTaskIds
+    if (state.appData.settings.sortMode !== 'custom') {
+        state.appData.settings.sortMode = 'custom';
+        const sortSelect = document.getElementById('sort-select');
+        if (sortSelect) sortSelect.value = 'custom';
+        updateSetting('sortMode', 'custom');
+    }
 
     const getHiddenArchivedIds = (listId) => {
         if (state.showArchived) return [];
@@ -3135,59 +3149,123 @@ export function handleDragEnd(evt) {
         const frozenContainer = document.getElementById(`frozen-container-${listId}`);
         if (!frozenContainer) return [];
         return Array.from(frozenContainer.children)
-            .filter(el => el.classList.contains('task-card'))
-            .map(el => el.dataset.taskId);
+            .filter(el => el.classList?.contains('task-card'))
+            .map(el => el.dataset.taskId)
+            .filter(Boolean);
     };
 
-    const batch = writeBatch(db);
+    const updateDomTaskNumbers = (containerEl) => {
+        if (!state.appData.settings.showNumbers || !containerEl) return;
+        const cards = containerEl.querySelectorAll('.task-card');
+        cards.forEach((card, idx) => {
+            const numEl = card.querySelector('.task-number');
+            if (numEl) numEl.textContent = `${idx + 1}.`;
+        });
+    };
+
+    const batch = state.currentUser ? writeBatch(db) : null;
 
     if (toIdRaw !== 'orphan-archive') {
         const toContainer = document.getElementById(`container-${toIdRaw}`);
         const frozenToIds = getFrozenIds(toIdRaw);
-        const newToIds = Array.from(toContainer.children)
-            .filter(el => !el.classList.contains('sortable-ghost'))
-            .map(el => el.dataset.taskId);
+        const newToIds = toContainer ? Array.from(toContainer.children)
+            .filter(el => el.classList?.contains('task-card') && !el.classList.contains('sortable-ghost'))
+            .map(el => el.dataset.taskId)
+            .filter(Boolean) : [];
 
         const hiddenToIds = getHiddenTaskIds(toIdRaw);
         const finalToIds = [...frozenToIds, ...newToIds, ...hiddenToIds];
 
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
+        // Update in-memory lists immediately
+        const toList = state.appData.lists.find(l => l.id === toIdRaw);
+        if (toList) toList.taskIds = finalToIds;
+        const toRawList = state.appData.rawLists.find(l => l.id === toIdRaw);
+        if (toRawList) toRawList.taskIds = finalToIds;
 
-        let taskUpdates = {};
-        if (fromIdRaw !== toIdRaw) {
-            taskUpdates[`listAddedAt.${toIdRaw}`] = Date.now();
-            taskUpdates.lastAutoMovedAt = null;
-        }
-        if (fromIdRaw === 'orphan-archive') {
-            taskUpdates.archived = false;
-        }
-        if (Object.keys(taskUpdates).length > 0) {
-            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), taskUpdates);
+        if (toContainer) updateDomTaskNumbers(toContainer);
+
+        if (batch) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
+
+            let taskUpdates = {};
+            if (fromIdRaw !== toIdRaw) {
+                taskUpdates[`listAddedAt.${toIdRaw}`] = Date.now();
+                taskUpdates.lastAutoMovedAt = null;
+            }
+            if (fromIdRaw === 'orphan-archive') {
+                taskUpdates.archived = false;
+            }
+            if (Object.keys(taskUpdates).length > 0) {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), taskUpdates);
+            }
         }
     }
 
     if (fromIdRaw !== 'orphan-archive' && fromIdRaw !== toIdRaw) {
         const fromContainer = document.getElementById(`container-${fromIdRaw}`);
         const frozenFromIds = getFrozenIds(fromIdRaw);
-        const newFromIds = Array.from(fromContainer.children)
-            .map(el => el.dataset.taskId); // Note: Sortable already removed item from DOM if move
+        const newFromIds = fromContainer ? Array.from(fromContainer.children)
+            .filter(el => el.classList?.contains('task-card') && !el.classList.contains('sortable-ghost'))
+            .map(el => el.dataset.taskId)
+            .filter(Boolean) : [];
 
         const hiddenFromIds = getHiddenTaskIds(fromIdRaw);
         const finalFromIds = [...frozenFromIds, ...newFromIds, ...hiddenFromIds];
 
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalFromIds });
+        // Update in-memory lists immediately
+        const fromList = state.appData.lists.find(l => l.id === fromIdRaw);
+        if (fromList) fromList.taskIds = finalFromIds;
+        const fromRawList = state.appData.rawLists.find(l => l.id === fromIdRaw);
+        if (fromRawList) fromRawList.taskIds = finalFromIds;
+
+        if (fromContainer) updateDomTaskNumbers(fromContainer);
+
+        if (batch) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalFromIds });
+        }
     }
 
-    if (fromIdRaw === toIdRaw && fromIdRaw !== 'orphan-archive') {
-        const container = document.getElementById(`container-${fromIdRaw}`);
-        const frozenIds = getFrozenIds(fromIdRaw);
-        const newIds = Array.from(container.children).map(el => el.dataset.taskId);
-        const hiddenIds = getHiddenTaskIds(fromIdRaw);
-        const finalIds = [...frozenIds, ...newIds, ...hiddenIds];
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalIds });
-    }
+    const updateListCountBadge = (listId) => {
+        if (!listId || listId === 'orphan-archive') return;
+        const listEl = document.querySelector(`.list-column[data-list-id="${listId}"]`);
+        if (!listEl) return;
+        const countBadge = listEl.querySelector('.list-count-badge');
+        const cards = listEl.querySelectorAll('.task-card');
+        const visibleCount = cards.length;
+        let doneCount = 0;
+        cards.forEach(card => {
+            const tId = card.dataset.taskId;
+            const task = state.appData.tasks[tId];
+            if (task && task.completed) doneCount++;
+        });
+        if (countBadge) {
+            countBadge.textContent = visibleCount > 0 ? `${doneCount}/${visibleCount}` : '0';
+            countBadge.classList.toggle('all-done', visibleCount > 0 && doneCount === visibleCount);
+        }
 
-    batch.commit().catch(e => handleSyncError(e));
+        const normalContainer = document.getElementById(`container-${listId}`);
+        if (normalContainer) {
+            let emptyMsg = normalContainer.querySelector('.empty-list-msg');
+            if (visibleCount === 0 && !emptyMsg) {
+                emptyMsg = document.createElement('div');
+                emptyMsg.className = 'empty-list-msg';
+                emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
+                normalContainer.appendChild(emptyMsg);
+            } else if (visibleCount > 0 && emptyMsg) {
+                emptyMsg.remove();
+            }
+        }
+    };
+
+    updateListCountBadge(toIdRaw);
+    if (fromIdRaw !== toIdRaw) {
+        updateListCountBadge(fromIdRaw);
+    }
+    updateTotalTaskCount();
+
+    if (batch) {
+        batch.commit().catch(e => handleSyncError(e));
+    }
 }
 
 // --- MODALS & INTERACTIONS ---
@@ -3668,29 +3746,12 @@ export function closeQuickMoveModal() {
 }
 
 export function enableSortables(enable) {
-    const isCustomSort = state.appData.settings.sortMode === 'custom';
-    const isDragEnabled = state.appData.settings.dragEnabled;
-    const shouldDisableList = !enable || !isDragEnabled;
+    const isDragEnabled = !!state.appData.settings.dragEnabled;
+    const shouldDisable = !enable || !isDragEnabled;
 
-    if (state.listSortable) state.listSortable.option("disabled", shouldDisableList);
+    if (state.listSortable) state.listSortable.option("disabled", shouldDisable);
     state.sortableInstances.forEach(s => {
-        const el = s.el;
-        const isOrphan = el?.closest?.('.orphan-list') !== null;
-        const isKanbanZone = !!(
-            el?.id?.startsWith('kanban-') ||
-            el?.classList?.contains('kanban-stage-tasks') ||
-            el?.classList?.contains('kanban-pinned-zone')
-        );
-        let shouldDisableTasks;
-        if (!enable || !isDragEnabled) {
-            shouldDisableTasks = true;
-        } else if (isKanbanZone || isOrphan) {
-            // Kanban drag is independent of custom-sort mode
-            shouldDisableTasks = false;
-        } else {
-            shouldDisableTasks = !isCustomSort;
-        }
-        s.option("disabled", shouldDisableTasks);
+        s.option("disabled", shouldDisable);
     });
 
     const nestedDragEnabled = enable && isNestedDragEnabled();

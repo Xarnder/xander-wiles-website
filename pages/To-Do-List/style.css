@@ -1818,6 +1818,11 @@ body {
     border-color: var(--glass-border);
 }
 
+.task-card:active,
+.task-card.sortable-chosen {
+    cursor: grabbing;
+}
+
 [data-theme="light"] .task-card {
     border: 1px solid oklch(0 0 0 / 0.05);
 }
