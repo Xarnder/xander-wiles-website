@@ -50,7 +50,8 @@
 					icon: found.icon ?? '',
 					tasks: found.tasks.map((task) => ({
 						...task,
-						description: task.description ?? ''
+						description: task.description ?? '',
+						important: task.important === true ? true : undefined
 					}))
 				};
 			}
@@ -80,7 +81,8 @@
 					.map((task) => ({
 						...task,
 						title: task.title.trim(),
-						description: task.description?.trim() || undefined
+						description: task.description?.trim() || undefined,
+						important: task.important === true ? true : undefined
 					}))
 					.filter((task) => task.title.length > 0)
 			),
@@ -142,7 +144,8 @@
 						...task,
 						id: createId(),
 						title: task.title.trim(),
-						description: task.description?.trim() || undefined
+						description: task.description?.trim() || undefined,
+						important: task.important === true ? true : undefined
 					}))
 					.filter((task) => task.title.length > 0)
 			),

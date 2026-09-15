@@ -17,14 +17,15 @@ function routinesPath(uid: string) {
 	return collection(getDb()!, 'users', uid, 'routines');
 }
 
-function fromDoc(id: string, data: DocumentData): Routine {
+export function fromDoc(id: string, data: DocumentData): Routine {
 	const tasks = Array.isArray(data.tasks)
 		? (data.tasks as RoutineTask[]).map((task, index) => ({
 				id: String(task.id),
 				title: String(task.title ?? ''),
 				description: task.description ? String(task.description) : undefined,
 				order: typeof task.order === 'number' ? task.order : index,
-				disabled: task.disabled === true ? true : undefined
+				disabled: task.disabled === true ? true : undefined,
+				important: task.important === true ? true : undefined
 			}))
 		: [];
 
@@ -40,7 +41,7 @@ function fromDoc(id: string, data: DocumentData): Routine {
 	};
 }
 
-function toDoc(routine: Routine): DocumentData {
+export function toDoc(routine: Routine): DocumentData {
 	return {
 		name: routine.name,
 		description: routine.description ?? null,
@@ -50,7 +51,8 @@ function toDoc(routine: Routine): DocumentData {
 			title: task.title,
 			description: task.description ?? null,
 			order: task.order,
-			disabled: task.disabled === true
+			disabled: task.disabled === true,
+			important: task.important === true
 		})),
 		sortOrder: routine.sortOrder,
 		createdAt: routine.createdAt,

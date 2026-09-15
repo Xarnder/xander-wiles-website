@@ -78,7 +78,8 @@ export function normalizeTasks(tasks: RoutineTask[]): RoutineTask[] {
 			title: task.title.trim(),
 			description: task.description?.trim() || undefined,
 			order: index,
-			disabled: task.disabled === true ? true : undefined
+			disabled: task.disabled === true ? true : undefined,
+			important: task.important === true ? true : undefined
 		}))
 		.filter((task) => task.title.length > 0);
 }

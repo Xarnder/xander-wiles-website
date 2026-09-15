@@ -44,7 +44,8 @@
 					.map((task) => ({
 						...task,
 						title: task.title.trim(),
-						description: task.description?.trim() || undefined
+						description: task.description?.trim() || undefined,
+						important: task.important === true ? true : undefined
 					}))
 					.filter((task) => task.title.length > 0)
 			),

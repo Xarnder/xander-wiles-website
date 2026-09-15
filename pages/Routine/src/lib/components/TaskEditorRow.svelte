@@ -36,6 +36,7 @@
 	let addingDescription = $state(false);
 
 	const isOff = $derived(isTaskDisabled(task));
+	const isImportant = $derived(task.important === true);
 	const hasDescription = $derived(Boolean(task.description?.trim()));
 	const showDescription = $derived(addingDescription || hasDescription);
 
@@ -101,7 +102,7 @@
 <svelte:window onpointerdown={onWindowPointerDown} onkeydown={onWindowKeydown} />
 
 <div
-	class={['row', 'card', dragging && 'dragging', isOff && 'is-off', menuOpen && 'menu-open']}
+	class={['row', 'card', dragging && 'dragging', isOff && 'is-off', isImportant && 'is-important', menuOpen && 'menu-open']}
 	data-testid={`task-row-${index}`}
 >
 	<div class="main">
@@ -125,22 +126,53 @@
 			<label class="sr-only" for={`task-title-${task.id}`}>Task title</label>
 			<input
 				id={`task-title-${task.id}`}
-				class={[isOff && 'is-off', isOff && 'has-chip']}
+				class={[
+					isOff && 'is-off',
+					isOff && isImportant
+						? 'has-both-chips'
+						: isImportant
+							? 'has-important-chip'
+							: isOff
+								? 'has-off-chip'
+								: ''
+				]}
 				bind:this={titleInput}
 				value={task.title}
 				placeholder="Task title"
 				oninput={(event) => onupdate({ title: event.currentTarget.value })}
 			/>
-			{#if isOff}
-				<span
-					class="off-chip"
-					data-testid={`task-off-banner-${task.id}`}
-					title="Skipped when this routine runs"
-				>
-					Off
-				</span>
-			{/if}
+			<div class="chips-wrap">
+				{#if isImportant}
+					<span
+						class="important-chip"
+						data-testid={`task-important-badge-${task.id}`}
+						title="Marked as important (double check)"
+					>
+						★ Important
+					</span>
+				{/if}
+				{#if isOff}
+					<span
+						class="off-chip"
+						data-testid={`task-off-banner-${task.id}`}
+						title="Skipped when this routine runs"
+					>
+						Off
+					</span>
+				{/if}
+			</div>
 		</div>
+
+		<button
+			type="button"
+			class={['star-btn', isImportant && 'is-active']}
+			onclick={() => onupdate({ important: !isImportant })}
+			aria-label={isImportant ? `Unmark task ${index + 1} as important` : `Mark task ${index + 1} as important`}
+			title={isImportant ? 'Unmark as important' : 'Mark as important (double check)'}
+			data-testid={`quick-toggle-important-${index}`}
+		>
+			<span class="star-glyph" aria-hidden="true">{isImportant ? '★' : '☆'}</span>
+		</button>
 
 		<div class="menu-wrap">
 			<button
@@ -185,6 +217,15 @@
 						disabled={isLast}
 					>
 						Move down
+					</button>
+					<button
+						type="button"
+						class="menu-item"
+						role="menuitem"
+						onclick={() => runAndClose(() => onupdate({ important: !isImportant }))}
+						data-testid={`toggle-task-important-${index}`}
+					>
+						{isImportant ? 'Unmark as important' : 'Mark as important'}
 					</button>
 					<button
 						type="button"
@@ -269,9 +310,19 @@
 		opacity: 0.86;
 	}
 
+	.row.is-important {
+		border-color: color-mix(in srgb, #ef4444 38%, var(--line));
+		box-shadow: 0 0 12px rgba(239, 68, 68, 0.12), var(--shadow-soft);
+	}
+
+	:global([data-theme='light']) .row.is-important {
+		border-color: #fca5a5;
+		box-shadow: 0 0 10px rgba(239, 68, 68, 0.08), var(--shadow-soft);
+	}
+
 	.main {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
 		gap: 0.35rem;
 		align-items: center;
 	}
@@ -281,11 +332,18 @@
 		min-width: 0;
 	}
 
-	.off-chip {
+	.chips-wrap {
 		position: absolute;
 		right: 0.4rem;
 		top: 50%;
 		transform: translateY(-50%);
+		display: flex;
+		align-items: center;
+		gap: 0.28rem;
+		pointer-events: none;
+	}
+
+	.off-chip {
 		padding: 0.08rem 0.4rem;
 		border-radius: 999px;
 		background: var(--mark-muted);
@@ -297,8 +355,30 @@
 		pointer-events: none;
 	}
 
+	.important-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.08rem 0.42rem;
+		border-radius: 999px;
+		background: rgba(239, 68, 68, 0.16);
+		color: #f87171;
+		border: 1px solid rgba(239, 68, 68, 0.32);
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		pointer-events: none;
+		white-space: nowrap;
+	}
+
+	:global([data-theme='light']) .important-chip {
+		background: #fee2e2;
+		color: #b91c1c;
+		border-color: #fca5a5;
+	}
+
 	.handle,
-	.menu-btn {
+	.menu-btn,
+	.star-btn {
 		appearance: none;
 		border: 1px solid var(--line);
 		background: var(--surface-strong);
@@ -311,6 +391,34 @@
 		place-items: center;
 		padding: 0;
 		flex-shrink: 0;
+	}
+
+	.star-btn {
+		cursor: pointer;
+		color: var(--muted);
+		transition:
+			transform 120ms ease,
+			color 140ms ease,
+			border-color 140ms ease,
+			background 140ms ease;
+	}
+
+	.star-btn:hover {
+		color: #f59e0b;
+		border-color: color-mix(in srgb, #f59e0b 45%, var(--line));
+		transform: scale(1.04);
+	}
+
+	.star-btn.is-active {
+		color: #f59e0b;
+		background: color-mix(in srgb, #f59e0b 14%, var(--surface-strong));
+		border-color: rgba(245, 158, 11, 0.45);
+		box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+	}
+
+	.star-glyph {
+		font-size: 1.15rem;
+		line-height: 1;
 	}
 
 	.handle {
@@ -377,8 +485,16 @@
 		min-height: 2.35rem;
 	}
 
-	.title-wrap input.has-chip {
-		padding-right: 2.6rem;
+	.title-wrap input.has-off-chip {
+		padding-right: 2.8rem;
+	}
+
+	.title-wrap input.has-important-chip {
+		padding-right: 5.2rem;
+	}
+
+	.title-wrap input.has-both-chips {
+		padding-right: 7.4rem;
 	}
 
 	input.is-off,

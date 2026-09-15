@@ -235,9 +235,14 @@
 	/>
 {:else if session && activeTask}
 	<section
-		class={['run', forceLandscapeRun && 'force-landscape']}
+		class={[
+			'run',
+			forceLandscapeRun && 'force-landscape',
+			activeTask?.important && 'run-important'
+		]}
 		data-testid="run-screen"
 		data-force-landscape={forceLandscapeRun ? 'true' : 'false'}
+		data-important={activeTask?.important ? 'true' : 'false'}
 	>
 		<header class="chrome">
 			<div class="chrome-left">
@@ -307,6 +312,68 @@
 		max-width: none;
 		margin: 0 auto;
 		box-sizing: border-box;
+		transition: background-color 300ms ease;
+	}
+
+	.run.run-important {
+		animation: pulse-bg-dark 2.4s ease-in-out infinite;
+	}
+
+	:global([data-theme='light']) .run.run-important {
+		animation: pulse-bg-light 2.4s ease-in-out infinite;
+	}
+
+	@keyframes pulse-bg-dark {
+		0%,
+		100% {
+			background-color: #000000;
+		}
+		50% {
+			background-color: #3f080d;
+		}
+	}
+
+	@keyframes pulse-bg-light {
+		0%,
+		100% {
+			background-color: #ffffff;
+		}
+		50% {
+			background-color: #fed7d7;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.run.run-important {
+			animation: none;
+			background-color: #1a0305;
+		}
+		:global([data-theme='light']) .run.run-important {
+			animation: none;
+			background-color: #fee2e2;
+		}
+	}
+
+	.run.run-important .exit-link {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: rgba(255, 255, 255, 0.16);
+		color: #f5f5f5;
+	}
+
+	:global([data-theme='light']) .run.run-important .exit-link {
+		background: rgba(255, 255, 255, 0.85);
+		border-color: rgba(220, 38, 38, 0.25);
+		color: #7f1d1d;
+	}
+
+	.run.run-important .routine-name {
+		color: #fca5a5;
+		text-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+	}
+
+	:global([data-theme='light']) .run.run-important .routine-name {
+		color: #991b1b;
+		text-shadow: none;
 	}
 
 	.run.force-landscape {

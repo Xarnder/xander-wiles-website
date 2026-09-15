@@ -83,6 +83,13 @@
 		</button>
 		<button
 			type="button"
+			class="btn back"
+			onclick={onback}
+			disabled={!canBack}
+			data-testid="back-task">Back</button
+		>
+		<button
+			type="button"
 			class="btn not-today"
 			onclick={notToday}
 			title="Remove this from today's list"
@@ -90,13 +97,6 @@
 		>
 			Not Today
 		</button>
-		<button
-			type="button"
-			class="btn back"
-			onclick={onback}
-			disabled={!canBack}
-			data-testid="back-task">Back</button
-		>
 		{#if hintsVisible}
 			<p class="hint" data-testid="keyboard-hints" aria-hidden="true">
 				Space complete · L later · N not today · ← back · Esc exit
@@ -224,23 +224,23 @@
 		font-size: clamp(0.9rem, 2.4vw, 1.1rem);
 	}
 
-	.not-today {
+	.back {
 		grid-column: 1;
+		grid-row: 2;
+		border: 1px solid var(--line);
+		background: var(--surface);
+		color: var(--ink-soft);
+		font-weight: 600;
+	}
+
+	.not-today {
+		grid-column: 2;
 		grid-row: 2;
 		background: var(--not-today);
 		color: var(--on-not-today);
 		border: none;
 		font-weight: 700;
 		font-size: clamp(0.9rem, 2.4vw, 1.1rem);
-	}
-
-	.back {
-		grid-column: 2;
-		grid-row: 2;
-		border: 1px solid var(--line);
-		background: var(--surface);
-		color: var(--ink-soft);
-		font-weight: 600;
 	}
 
 	.later:disabled,

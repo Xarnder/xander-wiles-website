@@ -69,7 +69,8 @@
 				title: task.title,
 				description: task.description ?? '',
 				order: task.order,
-				disabled: task.disabled === true
+				disabled: task.disabled === true,
+				important: task.important === true
 			}))
 		});
 	}
@@ -354,6 +355,9 @@
 					<span class={['overview-title', !task.title.trim() && 'untitled']}>
 						{task.title.trim() || 'Untitled task'}
 					</span>
+					{#if task.important}
+						<span class="overview-important" title="Important (double check)">★</span>
+					{/if}
 					{#if isTaskDisabled(task)}
 						<span class="overview-off">off</span>
 					{/if}
@@ -504,6 +508,13 @@
 		font-weight: 800;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
+	}
+
+	.overview-important {
+		color: #f59e0b;
+		font-size: 0.85rem;
+		line-height: 1;
+		margin-left: auto;
 	}
 
 	.overview-list li:last-child {
