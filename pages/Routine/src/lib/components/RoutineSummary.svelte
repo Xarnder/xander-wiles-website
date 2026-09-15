@@ -56,10 +56,24 @@
 
 	<ul class="results">
 		{#each summary.results as result (result.taskId)}
-			<li class={resultClass(result.status)}>
+			<li
+				class={[
+					resultClass(result.status),
+					result.important && 'is-important'
+				]}
+				data-important={result.important ? 'true' : 'false'}
+			>
 				<span class="mark" aria-hidden="true">{resultMark(result.status)}</span>
-				<span>
-					<strong>{result.title}</strong>
+				<span class="result-body">
+					<span class="title-row">
+						<strong>{result.title}</strong>
+						{#if result.important}
+							<span class="summary-important-tag" data-testid="summary-important-tag">
+								<span class="tag-star" aria-hidden="true">★</span>
+								Important
+							</span>
+						{/if}
+					</span>
 					<small>{statusCaption(result.status)}</small>
 				</span>
 			</li>
@@ -251,6 +265,87 @@
 		color: var(--on-not-today);
 	}
 
+	.results li.is-important {
+		border: 1.5px solid #f59e0b;
+		box-shadow:
+			0 0 16px rgba(245, 158, 11, 0.2),
+			0 0 6px rgba(239, 68, 68, 0.15);
+	}
+
+	.results li.is-important.completed {
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, #ef4444 18%, var(--surface)),
+			color-mix(in srgb, #f59e0b 14%, var(--surface-strong))
+		);
+	}
+
+	.results li.is-important.later {
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, #ef4444 24%, var(--later)),
+			var(--later)
+		);
+	}
+
+	.results li.is-important.skipped {
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, #ef4444 24%, var(--not-today)),
+			var(--not-today)
+		);
+	}
+
+	:global([data-theme='light']) .results li.is-important {
+		border-color: #f97316;
+		box-shadow: 0 4px 14px rgba(239, 68, 68, 0.12);
+	}
+
+	:global([data-theme='light']) .results li.is-important.completed {
+		background: linear-gradient(135deg, #fff7ed, #fee2e2);
+	}
+
+	.result-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.summary-important-tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		font-size: 0.65rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		background: rgba(245, 158, 11, 0.2);
+		color: #fcd34d;
+		border: 1px solid rgba(245, 158, 11, 0.5);
+	}
+
+	:global([data-theme='light']) .summary-important-tag {
+		background: #fef3c7;
+		color: #b45309;
+		border-color: #f59e0b;
+	}
+
+	.tag-star {
+		font-size: 0.72rem;
+		line-height: 1;
+		color: #f59e0b;
+	}
+
 	.mark {
 		width: 1.6rem;
 		height: 1.6rem;
@@ -265,14 +360,31 @@
 		color: var(--on-accent);
 	}
 
+	.is-important.completed .mark {
+		background: linear-gradient(135deg, #ef4444, #f59e0b);
+		color: #fff;
+		box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+	}
+
 	.later .mark,
 	.skipped .mark {
 		background: color-mix(in srgb, #fff 18%, transparent);
 		color: #fff;
 	}
 
+	.is-important.later .mark,
+	.is-important.skipped .mark {
+		border: 1.5px solid #f59e0b;
+		background: rgba(0, 0, 0, 0.3);
+		color: #fef08a;
+	}
+
 	li strong {
 		display: block;
+	}
+
+	li.is-important strong {
+		font-weight: 800;
 	}
 
 	li.completed strong {
@@ -290,6 +402,14 @@
 
 	li.completed small {
 		color: var(--accent-strong);
+	}
+
+	:global([data-theme='light']) li.is-important.completed strong {
+		color: #991b1b;
+	}
+
+	:global([data-theme='light']) li.is-important.completed small {
+		color: #b45309;
 	}
 
 	li.later small,

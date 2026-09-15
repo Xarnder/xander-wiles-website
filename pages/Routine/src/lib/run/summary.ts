@@ -6,10 +6,14 @@ export function statusCaption(status: TaskStatus): 'Complete' | 'Later' | 'Not T
 	return 'Not Today';
 }
 
-function resultPriority(status: RunTaskResult['status']): number {
-	if (status === 'later' || status === 'pending') return 0;
-	if (status === 'completed') return 1;
-	return 2;
+function resultPriority(result: RunTaskResult): number {
+	const isLater = result.status === 'later' || result.status === 'pending';
+	if (isLater) {
+		return result.important ? 0 : 1;
+	}
+	if (result.important) return 2;
+	if (result.status === 'completed') return 3;
+	return 4;
 }
 
 export function deriveSummary(session: RunSession): RoutineSummaryStats {
@@ -19,13 +23,14 @@ export function deriveSummary(session: RunSession): RoutineSummaryStats {
 			taskId: task.id,
 			title: task.title,
 			description: task.description,
-			status: session.statuses[task.id] ?? 'pending'
+			status: session.statuses[task.id] ?? 'pending',
+			important: task.important === true
 		} satisfies RunTaskResult
 	}));
 
 	ranked.sort((a, b) => {
-		const byStatus = resultPriority(a.result.status) - resultPriority(b.result.status);
-		if (byStatus !== 0) return byStatus;
+		const byPriority = resultPriority(a.result) - resultPriority(b.result);
+		if (byPriority !== 0) return byPriority;
 		return a.order - b.order;
 	});
 

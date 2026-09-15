@@ -13,6 +13,7 @@ import {
 } from './run-session';
 import { deriveSummary } from './summary';
 import type { Routine, RoutineTask } from '$lib/types/routine';
+import type { RunSession } from '$lib/types/run';
 
 function makeRoutine(tasks: RoutineTask[]): Routine {
 	return {
@@ -224,6 +225,39 @@ describe('run-session', () => {
 		expect(summary.completed).toBe(1);
 		expect(summary.results.map((r) => r.status)).toEqual(['later', 'completed', 'skipped']);
 		expect(summary.results.map((r) => r.taskId)).toEqual(['t1', 't3', 't2']);
+	});
+
+	it('sorts later tasks first, then important tasks, then remaining tasks in summary', () => {
+		const customTasks: RoutineTask[] = [
+			{ id: 't1', title: 'Regular complete', order: 0 },
+			{ id: 't2', title: 'Regular later', order: 1 },
+			{ id: 't3', title: 'Important complete', order: 2, important: true },
+			{ id: 't4', title: 'Regular skipped', order: 3 },
+			{ id: 't5', title: 'Important later', order: 4, important: true }
+		];
+		const routine = makeRoutine(customTasks);
+		const session: RunSession = {
+			routineId: routine.id,
+			routineName: routine.name,
+			tasks: customTasks,
+			statuses: {
+				t1: 'completed',
+				t2: 'later',
+				t3: 'completed',
+				t4: 'skipped',
+				t5: 'later'
+			},
+			currentIndex: 4,
+			phase: 'summary'
+		};
+
+		const summary = deriveSummary(session);
+		// Later tasks at the top (t5 important later, then t2 regular later)
+		// Then important tasks (t3 important complete)
+		// Then remaining tasks (t1 regular complete, then t4 regular skipped)
+		expect(summary.results.map((r) => r.taskId)).toEqual(['t5', 't2', 't3', 't1', 't4']);
+		expect(summary.results[2].important).toBe(true);
+		expect(summary.results[2].taskId).toBe('t3');
 	});
 
 	it('distributes percents with largest remainder so they sum to 100', () => {

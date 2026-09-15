@@ -99,6 +99,12 @@ test('important task marks double check, animated border, extra bold, and pulses
 	await page.getByTestId('complete-task').click();
 	await expect(page.getByTestId('routine-summary')).toBeVisible();
 	await expect(page.getByTestId('summary-complete')).toContainText('2');
+
+	// Important task is sorted to the top under later tasks in summary
+	const firstResult = page.locator('.results li').first();
+	await expect(firstResult).toHaveClass(/is-important/);
+	await expect(firstResult).toContainText('Turn off the oven and lock the door');
+	await expect(firstResult.getByTestId('summary-important-tag')).toBeVisible();
 });
 
 test('editing an existing routine and marking task as important persists on save', async ({ page }) => {

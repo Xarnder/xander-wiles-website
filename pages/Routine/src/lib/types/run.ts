@@ -8,6 +8,7 @@ export interface RunTaskResult {
 	title: string;
 	description?: string;
 	status: TaskStatus;
+	important?: boolean;
 }
 
 export interface RunSession {
