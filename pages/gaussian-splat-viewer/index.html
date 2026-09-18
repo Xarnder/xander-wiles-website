@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaussian Splat 3D Viewer — Interactive 3DGS Player</title>
+    <meta name="description" content="A powerful 3D Gaussian Splatting viewer supporting .ply, .splat, .ksplat, and .spz files. Features orbit inspection, walk-around WASD mode, flip and rotate orientation tools.">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Local Viewer CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Import Map for Three.js & GaussianSplats3D -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+                "@mkkellogg/gaussian-splats-3d": "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <!-- Global Header Injection -->
+    <div id="main-nav-placeholder"></div>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" tabindex="0"></div>
+
+    <!-- Walk-Around Crosshair -->
+    <div id="walk-crosshair" class="walk-crosshair">
+        <div class="walk-crosshair-dot"></div>
+    </div>
+
+    <!-- Walk Mode Hint Badge -->
+    <div id="walk-hint-badge" class="walk-hint-badge">
+        <span>Click canvas to look around</span>
+        <span class="key-tag">W A S D</span> to walk
+        <span class="key-tag">Space</span> fly up
+        <span class="key-tag">Shift</span> sprint
+        <span class="key-tag">Esc</span> unlock
+    </div>
+
+    <!-- Pick Ground Surface Mode Banner -->
+    <div id="pick-ground-banner" class="pick-ground-banner">
+        <span>📍 Click any point on the splat to align it with the ground</span>
+        <button id="cancel-pick-btn" class="cancel-pick-btn">Cancel (Esc)</button>
+    </div>
+
+    <!-- Fullscreen Drag & Drop Visual Overlay -->
+    <div id="drop-overlay" class="drop-overlay">
+        <svg class="drop-overlay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <h2 class="drop-overlay-title">Drop Gaussian Splat Here</h2>
+        <p class="drop-overlay-subtitle">Drag and release your 3D Gaussian Splat scene to view</p>
+        <div class="drop-overlay-formats">
+            <span class="format-tag">.PLY</span>
+            <span class="format-tag">.SPLAT</span>
+            <span class="format-tag">.KSPLAT</span>
+            <span class="format-tag">.SPZ</span>
+        </div>
+    </div>
+
+    <!-- Floating Expand Button (When Panel Collapsed) -->
+    <button id="toggle-panel-btn" class="toggle-panel-btn" title="Open Controls Panel (H)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+        <span>Splat Controls</span>
+    </button>
+
+    <!-- Floating Glassmorphic Controls Panel -->
+    <aside id="controls-panel" class="controls-panel" aria-label="Gaussian Splat Controls">
+        <div class="panel-header">
+            <div class="panel-brand">
+                <div class="brand-dot"></div>
+                <h1 class="panel-title">Gaussian Splat Viewer</h1>
+            </div>
+            <button id="panel-collapse-btn" class="panel-collapse-btn" title="Collapse Panel (H)" aria-label="Collapse panel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="panel-tabs" role="tablist">
+            <button class="tab-btn active" data-tab="nav" role="tab" aria-selected="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                <span>Navigate</span>
+            </button>
+            <button class="tab-btn" data-tab="transform" role="tab" aria-selected="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="7"/></svg>
+                <span>Ground & Align</span>
+            </button>
+            <button class="tab-btn" data-tab="scene" role="tab" aria-selected="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span>Scene</span>
+            </button>
+        </nav>
+
+        <div class="panel-body">
+            <!-- TAB 1: NAVIGATION & CAMERA -->
+            <div id="tab-nav" class="tab-content active" role="tabpanel">
+                <!-- Mode Switch -->
+                <div class="control-group">
+                    <span class="section-label">Navigation Mode</span>
+                    <div class="mode-switch-container">
+                        <button id="orbit-mode-btn" class="mode-btn active">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            <span>Orbit</span>
+                        </button>
+                        <button id="walk-mode-btn" class="mode-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="m9 20 3-6-3-2V9h4l2 4-2 3 2 4"/></svg>
+                            <span>Walk (WASD)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Camera Angle Presets -->
+                <div class="control-group">
+                    <span class="section-label">Camera Angle</span>
+                    <div class="grid-presets">
+                        <button class="btn-chip" data-view-preset="iso">Isometric</button>
+                        <button class="btn-chip" data-view-preset="front">Front</button>
+                        <button class="btn-chip" data-view-preset="back">Back</button>
+                        <button class="btn-chip" data-view-preset="left">Left</button>
+                        <button class="btn-chip" data-view-preset="right">Right</button>
+                        <button class="btn-chip" data-view-preset="top">Top</button>
+                    </div>
+                </div>
+
+                <!-- Reset Camera Button -->
+                <button id="reset-camera-btn" class="btn-action">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    <span>Frame Scene / Reset (R)</span>
+                </button>
+
+                <!-- Speed Slider -->
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span>Walk / Fly Speed</span>
+                        <span id="speed-val" class="slider-val">4.0 m/s</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0.5" max="15.0" step="0.5" value="4.0">
+                </div>
+
+                <!-- Mouse Look Sensitivity -->
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span>Mouse Look Sensitivity</span>
+                        <span id="sensitivity-val" class="slider-val">2.2x</span>
+                    </div>
+                    <input type="range" id="sensitivity-slider" min="0.5" max="6.0" step="0.2" value="2.2">
+                </div>
+
+                <!-- FOV Slider -->
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span>Field of View</span>
+                        <span id="fov-val" class="slider-val">65°</span>
+                    </div>
+                    <input type="range" id="fov-slider" min="30" max="100" step="1" value="65">
+                </div>
+            </div>
+
+            <!-- TAB 2: GROUND & AXIS ALIGNMENT (FLIP, ROTATE & LEVEL) -->
+            <div id="tab-transform" class="tab-content" role="tabpanel">
+                <!-- Quick Alignment Fixes -->
+                <div class="control-group">
+                    <span class="section-label">Quick Alignment Fixes</span>
+                    <div class="quick-fix-grid">
+                        <button id="fix-upside-down-btn" class="quick-fix-btn highlight" title="Fix upside-down models (Inverts Y axis)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            <span>Fix Upside Down</span>
+                        </button>
+                        <button id="drop-to-floor-btn" class="quick-fix-btn highlight" title="Automatically align lowest point to the 3D ground plane (Y = 0)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4M3 21h18"/></svg>
+                            <span>Drop to Floor</span>
+                        </button>
+                        <button id="reset-position-btn" class="quick-fix-btn highlight" title="Reset splat position back to center origin and ground floor (Key: X)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>Reset Position</span>
+                        </button>
+                        <button id="center-origin-btn" class="quick-fix-btn" title="Center model horizontally on scene origin (0, 0)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+                            <span>Center on Origin</span>
+                        </button>
+                        <button id="level-tilt-btn" class="quick-fix-btn" title="Zero out pitch and roll tilt to make model parallel to floor">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20M12 2a10 10 0 0 0-10 10m20 0a10 10 0 0 1-10 10"/></svg>
+                            <span>Auto-Level Tilt</span>
+                        </button>
+                    </div>
+                    <button id="pick-ground-btn" class="quick-fix-btn" style="margin-top: 4px; width: 100%; justify-content: center;" title="Click on the model in the canvas to set that exact surface point as ground level">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span>📍 Pick Ground Point on Model</span>
+                    </button>
+                </div>
+
+                <!-- 3D Transform Gizmo -->
+                <div class="control-group">
+                    <span class="section-label">Interactive 3D Handles</span>
+                    <div class="gizmo-toolbar">
+                        <div class="toggle-row">
+                            <span style="font-size: 0.82rem; font-weight: 600;">Show 3D Gizmo (G)</span>
+                            <label class="switch">
+                                <input type="checkbox" id="gizmo-toggle">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <div id="gizmo-modes" class="gizmo-mode-group">
+                            <button id="gizmo-mode-translate" class="gizmo-btn active" data-mode="translate">Move (Pos)</button>
+                            <button id="gizmo-mode-rotate" class="gizmo-btn" data-mode="rotate">Tilt (Rot)</button>
+                            <button id="gizmo-mode-scale" class="gizmo-btn" data-mode="scale">Scale</button>
+                        </div>
+                        <button id="gizmo-reset-pos-btn" class="btn-action" style="margin-top: 6px; padding: 7px 10px; font-size: 0.78rem;" title="Reset splat position to scene origin and floor plane">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>Reset Splat Position</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ground Elevation (Height Y) -->
+                <div class="control-group">
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span>Ground Elevation (Height Y)</span>
+                            <span id="pos-y-val" class="slider-val">0.00 m</span>
+                        </div>
+                        <input type="range" id="pos-y-slider" min="-8.0" max="8.0" step="0.01" value="0.0">
+                    </div>
+                    <!-- Micro Height Nudges -->
+                    <div class="nudge-grid">
+                        <button class="nudge-btn" data-nudge-y="-1.0">-1.0m</button>
+                        <button class="nudge-btn" data-nudge-y="-0.1">-0.1m</button>
+                        <button class="nudge-btn" data-nudge-y="-0.02">-2cm</button>
+                        <button class="nudge-btn" data-nudge-y="0.02">+2cm</button>
+                        <button class="nudge-btn" data-nudge-y="0.1">+0.1m</button>
+                        <button class="nudge-btn" data-nudge-y="1.0">+1.0m</button>
+                    </div>
+                </div>
+
+                <!-- Tilt & Leveling (Pitch & Roll) -->
+                <div class="control-group">
+                    <span class="section-label">Tilt & Axis Leveling</span>
+                    <div class="rotate-stepper-grid">
+                        <div class="stepper-card">
+                            <span class="stepper-label">Pitch (X)</span>
+                            <div class="stepper-btns">
+                                <button class="stepper-btn" data-axis="x" data-rotate-step="-5">-5°</button>
+                                <button class="stepper-btn" data-axis="x" data-rotate-step="-1">-1°</button>
+                                <button class="stepper-btn" data-axis="x" data-rotate-step="1">+1°</button>
+                                <button class="stepper-btn" data-axis="x" data-rotate-step="5">+5°</button>
+                            </div>
+                        </div>
+                        <div class="stepper-card">
+                            <span class="stepper-label">Roll (Z)</span>
+                            <div class="stepper-btns">
+                                <button class="stepper-btn" data-axis="z" data-rotate-step="-5">-5°</button>
+                                <button class="stepper-btn" data-axis="z" data-rotate-step="-1">-1°</button>
+                                <button class="stepper-btn" data-axis="z" data-rotate-step="1">+1°</button>
+                                <button class="stepper-btn" data-axis="z" data-rotate-step="5">+5°</button>
+                            </div>
+                        </div>
+                        <div class="stepper-card">
+                            <span class="stepper-label">Yaw (Y)</span>
+                            <div class="stepper-btns">
+                                <button class="stepper-btn" data-axis="y" data-rotate-step="-15">-15°</button>
+                                <button class="stepper-btn" data-axis="y" data-rotate-step="-90">-90°</button>
+                                <button class="stepper-btn" data-axis="y" data-rotate-step="15">+15°</button>
+                                <button class="stepper-btn" data-axis="y" data-rotate-step="90">+90°</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Continuous Rotation Sliders -->
+                <div class="control-group">
+                    <span class="section-label">Fine Rotation Sliders</span>
+
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span>Pitch (X)</span>
+                            <span id="rot-x-val" class="slider-val">0°</span>
+                        </div>
+                        <input type="range" id="rot-x-slider" min="0" max="360" step="1" value="0">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span>Yaw (Y)</span>
+                            <span id="rot-y-val" class="slider-val">0°</span>
+                        </div>
+                        <input type="range" id="rot-y-slider" min="0" max="360" step="1" value="0">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <span>Roll (Z)</span>
+                            <span id="rot-z-val" class="slider-val">0°</span>
+                        </div>
+                        <input type="range" id="rot-z-slider" min="0" max="360" step="1" value="0">
+                    </div>
+                </div>
+
+                <!-- Flip Tools -->
+                <div class="control-group">
+                    <span class="section-label">Axis Inversion (Flip)</span>
+                    <div class="flip-grid">
+                        <button id="flip-y-btn" class="flip-btn" title="Invert Y (Up/Down) — Standard fix for COLMAP/OpenCV">
+                            <span class="flip-axis-tag">↕ Flip Y</span>
+                            <span class="flip-desc">Invert Up/Down</span>
+                        </button>
+                        <button id="flip-z-btn" class="flip-btn" title="Invert Z (Depth/Forward)">
+                            <span class="flip-axis-tag">⤢ Flip Z</span>
+                            <span class="flip-desc">Invert Depth</span>
+                        </button>
+                        <button id="flip-x-btn" class="flip-btn" title="Invert X (Left/Right)">
+                            <span class="flip-axis-tag">↔ Flip X</span>
+                            <span class="flip-desc">Mirror Left/Right</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scale Slider -->
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span>Splat Model Scale</span>
+                        <span id="scale-val" class="slider-val">1.0x</span>
+                    </div>
+                    <input type="range" id="scale-slider" min="0.1" max="4.0" step="0.1" value="1.0">
+                </div>
+
+                <!-- Coordinate Presets -->
+                <div class="control-group">
+                    <span class="section-label">Coordinate System Preset</span>
+                    <select id="coord-preset-select" class="custom-select">
+                        <option value="standard">Standard (Three.js Y-Up)</option>
+                        <option value="colmap">COLMAP / OpenCV (+Y Down)</option>
+                        <option value="blender">Blender (+Z Up)</option>
+                        <option value="nerf">NeRF / Nerfstudio</option>
+                    </select>
+                </div>
+
+                <!-- Reset Transform -->
+                <button id="reset-transform-btn" class="btn-action">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    <span>Reset Orientation & Position</span>
+                </button>
+            </div>
+
+            <!-- TAB 3: SCENE & RENDERING -->
+            <div id="tab-scene" class="tab-content" role="tabpanel">
+                <!-- Splat Alpha Removal Threshold -->
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span>Alpha Removal Filter</span>
+                        <span id="alpha-val" class="slider-val">1</span>
+                    </div>
+                    <input type="range" id="alpha-slider" min="0" max="50" step="1" value="1">
+                    <small style="color: var(--text-muted); font-size: 0.72rem;">Removes floating transparent noise</small>
+                </div>
+
+                <!-- Demo Scene Picker -->
+                <div class="control-group">
+                    <span class="section-label">Demo Preset Scenes</span>
+                    <select id="demo-select" class="custom-select">
+                        <option value="torus">🌌 Cosmic Torus (12k Splats)</option>
+                        <option value="bloom">🌸 Neon Lotus Bloom (10k Splats)</option>
+                        <option value="helix">🧬 Quantum Double Helix (9k Splats)</option>
+                    </select>
+                </div>
+
+                <!-- File Upload Fallback -->
+                <div class="control-group">
+                    <span class="section-label">Open Splat File</span>
+                    <input type="file" id="file-input" accept=".ply,.splat,.ksplat,.spz" style="display: none;">
+                    <button id="choose-file-btn" class="btn-action primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span>Choose File (.ply / .splat / .spz)</span>
+                    </button>
+                </div>
+
+                <!-- Scene Environment Toggles -->
+                <div class="control-group" style="gap: 12px;">
+                    <span class="section-label">Display Elements</span>
+                    <div class="toggle-row">
+                        <span>Show Floor Grid</span>
+                        <label class="switch">
+                            <input type="checkbox" id="grid-toggle" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-row">
+                        <span>Show 3D Origin Axes</span>
+                        <label class="switch">
+                            <input type="checkbox" id="axes-toggle" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Background Color Swatches -->
+                <div class="control-group">
+                    <span class="section-label">Background Color</span>
+                    <div class="color-swatches">
+                        <div class="color-swatch active" data-color="#111115" style="background: #111115;" title="Obsidian Dark"></div>
+                        <div class="color-swatch" data-color="#090d16" style="background: #090d16;" title="Deep Space Navy"></div>
+                        <div class="color-swatch" data-color="#1f2937" style="background: #1f2937;" title="Studio Slate"></div>
+                        <div class="color-swatch" data-color="#000000" style="background: #000000;" title="Pure Black"></div>
+                        <div class="color-swatch" data-color="#f8fafc" style="background: #f8fafc;" title="Studio Light"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Floating HUD (Telemetry & Quick Actions) -->
+    <div class="floating-hud">
+        <div class="hud-pill" title="Current Navigation Mode">
+            <span>Mode:</span>
+            <strong id="hud-mode-text">Orbit</strong>
+        </div>
+        <div class="hud-pill" title="Total Gaussian Splat Count">
+            <span>Splats:</span>
+            <strong id="hud-splat-count">0</strong>
+        </div>
+        <div class="hud-pill" title="Rendering Frame Rate">
+            <span>FPS:</span>
+            <strong id="hud-fps">60</strong>
+        </div>
+
+        <!-- Action Buttons -->
+        <button id="hud-reset-pos-btn" class="hud-icon-btn" title="Reset Splat Position to Origin & Floor (Key: X)" aria-label="Reset splat position">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button id="hud-snapshot-btn" class="hud-icon-btn" title="Take HD Screenshot" aria-label="Take screenshot">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <button id="hud-fullscreen-btn" class="hud-icon-btn" title="Toggle Fullscreen" aria-label="Toggle fullscreen">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+        <button id="hud-help-btn" class="hud-icon-btn" title="Keyboard Shortcuts" aria-label="Shortcuts">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="splat-loading-overlay" class="splat-loading-overlay">
+        <div class="spinner"></div>
+        <div id="splat-loading-text" class="splat-loading-text">Loading Splats...</div>
+        <div id="splat-loading-subtext" class="splat-loading-subtext">Preparing 3D representation</div>
+    </div>
+
+    <!-- Keybinds / Shortcuts Modal -->
+    <div id="keybinds-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Viewer Shortcuts</h3>
+                <button class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcut-row">
+                    <span>Toggle Walk / Orbit Mode</span>
+                    <span class="key-tag">O</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Reset Splat Position</span>
+                    <span class="key-tag">X</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Toggle 3D Gizmo Handles</span>
+                    <span class="key-tag">G</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Walk Forward / Back</span>
+                    <span class="key-tag">W / S</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Strafe Left / Right</span>
+                    <span class="key-tag">A / D</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Fly Up / Down</span>
+                    <span class="key-tag">Space / C</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Sprint (2.5x speed)</span>
+                    <span class="key-tag">Shift (Hold)</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Look Around in Walk Mode</span>
+                    <span class="key-tag">Click Canvas</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Unlock Mouse Cursor</span>
+                    <span class="key-tag">Esc</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Frame Scene / Reset Camera</span>
+                    <span class="key-tag">R</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Toggle UI Panel</span>
+                    <span class="key-tag">H</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Modules & Global Navigation Loader -->
+    <script type="module" src="app.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+</body>
+
+</html>
