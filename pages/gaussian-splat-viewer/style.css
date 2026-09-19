@@ -265,6 +265,28 @@ html, body {
   color: #ffffff;
 }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-drag-handle {
+  display: none;
+}
+
+.drawer-mode-btn {
+  display: none;
+}
+
+.icon-collapse-down {
+  display: none;
+}
+
+.icon-collapse-arrow {
+  display: block;
+}
+
 .panel-collapse-btn {
   background: transparent;
   border: none;
@@ -1071,23 +1093,7 @@ select.custom-select option {
   color: var(--text-secondary);
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .controls-panel {
-    top: 64px;
-    left: 10px;
-    right: 10px;
-    width: auto;
-    max-height: calc(100vh - 140px);
-  }
-
-  .floating-hud {
-    bottom: 16px;
-    right: 16px;
-    left: 16px;
-    justify-content: space-between;
-  }
-}
+/* Responsive adjustments handled in Mobile Touch & Drawer Architecture section below */
 
 /* =========================================================
    Ground & Axis Alignment Specific Tools
@@ -1264,4 +1270,504 @@ select.custom-select option {
   0%, 100% { transform: translateX(-50%) scale(1); }
   50% { transform: translateX(-50%) scale(1.02); }
 }
+
+/* Desktop default: mobile gizmo bar is hidden on desktop screens */
+.mobile-gizmo-bar {
+  display: none;
+}
+
+/* =========================================================
+   Mobile Touch & Drawer Architecture (iPhone 16 Pro & Mobile)
+   ========================================================= */
+@media (max-width: 768px) {
+  /* Prevent body scroll bounce on iOS Safari */
+  html, body {
+    overflow: hidden;
+    height: 100%;
+    position: fixed;
+    width: 100%;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  #canvas-container,
+  #canvas-container canvas {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Bottom Sheet Controls Panel */
+  .controls-panel {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    border-radius: 26px 26px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.75);
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    z-index: 1000;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+
+  /* 1. Collapsed State: Hidden offscreen downward */
+  .controls-panel.mobile-collapsed {
+    transform: translateY(100%) !important;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* 2. Half-Screen Mode: ~48vh tall, leaving top 52% open for 3D scene */
+  .controls-panel.mobile-half {
+    transform: translateY(0) !important;
+    height: 48vh !important;
+    max-height: 48vh !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* 3. Full-Height Mode: ~88vh tall for viewing more settings */
+  .controls-panel.mobile-full {
+    transform: translateY(0) !important;
+    height: 88vh !important;
+    max-height: calc(100vh - 54px - env(safe-area-inset-top, 0px)) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Sheet Drag Handle */
+  .sheet-drag-handle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 0 4px;
+    cursor: grab;
+    touch-action: none;
+    width: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sheet-drag-pill {
+    width: 48px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 999px;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .sheet-drag-handle:active .sheet-drag-pill {
+    background: var(--accent-cyan);
+    transform: scaleX(1.15);
+  }
+
+  /* Header adjustments */
+  .panel-header {
+    padding: 4px 16px 10px;
+  }
+
+  .panel-title {
+    font-size: 0.95rem;
+  }
+
+  .brand-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Drawer Mode Toggle Button */
+  .drawer-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    min-height: 38px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 20px;
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .drawer-mode-btn:active {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: var(--accent-cyan);
+    transform: scale(0.96);
+  }
+
+  .controls-panel.mobile-half .icon-expand {
+    display: block;
+  }
+
+  .controls-panel.mobile-half .icon-contract {
+    display: none;
+  }
+
+  .controls-panel.mobile-full .icon-expand {
+    display: none;
+  }
+
+  .controls-panel.mobile-full .icon-contract {
+    display: block;
+  }
+
+  /* Collapse button on mobile */
+  .icon-collapse-arrow {
+    display: none;
+  }
+
+  .icon-collapse-down {
+    display: block;
+  }
+
+  .panel-collapse-btn {
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Panel body scroll container */
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: none;
+    padding: 12px 16px max(24px, env(safe-area-inset-bottom, 16px));
+    gap: 16px;
+  }
+
+  /* Floating Expand Button (When panel is collapsed to small button) */
+  .toggle-panel-btn {
+    position: fixed;
+    top: auto;
+    bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    left: 16px;
+    z-index: 999;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    min-height: 44px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 16px rgba(56, 189, 248, 0.35);
+    color: #ffffff;
+    font-size: 0.88rem;
+    font-weight: 700;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .toggle-panel-btn.visible {
+    display: flex;
+  }
+
+  .toggle-panel-btn:active {
+    transform: scale(0.96);
+    background: rgba(56, 189, 248, 0.25);
+  }
+
+  /* Mobile Tabs */
+  .panel-tabs {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .tab-btn {
+    padding: 10px 6px;
+    min-height: 42px;
+    font-size: 0.76rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Touch Target & Button Improvements */
+  .quick-fix-btn {
+    min-height: 46px;
+    padding: 10px;
+    font-size: 0.78rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mode-btn {
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-action {
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .stepper-btn {
+    min-height: 40px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nudge-btn {
+    min-height: 38px;
+    font-size: 0.75rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Floating HUD repositioning on mobile */
+  .floating-hud {
+    z-index: 900;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* When drawer is in half mode, place HUD in top-right corner to keep 3D view clear */
+  body:has(.controls-panel.mobile-half) .floating-hud {
+    top: calc(56px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    right: 12px;
+    left: auto;
+    flex-direction: row;
+    gap: 6px;
+    transform: scale(0.92);
+    transform-origin: top right;
+  }
+
+  /* When drawer is in full mode, hide HUD to avoid overlay collisions */
+  body:has(.controls-panel.mobile-full) .floating-hud {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+  }
+
+  /* When drawer is collapsed, position HUD nicely above safe-area bottom */
+  body:has(.controls-panel.mobile-collapsed) .floating-hud {
+    bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    right: 16px;
+    left: auto;
+    top: auto;
+    gap: 8px;
+  }
+
+  .hud-pill {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .hud-icon-btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Mobile Touch-Friendly 3D Gizmo Bar */
+  .mobile-gizmo-bar {
+    position: fixed;
+    top: calc(60px + env(safe-area-inset-top, 0px));
+    left: 12px;
+    right: 12px;
+    max-width: 390px;
+    margin: 0 auto;
+    z-index: 950;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 20px rgba(56, 189, 248, 0.15);
+    animation: slideDownMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .mobile-gizmo-bar.active {
+    display: flex;
+  }
+
+  @keyframes slideDownMobile {
+    from { transform: translateY(-16px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .mobile-gizmo-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 6px;
+  }
+
+  .mobile-gizmo-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+  }
+
+  .mobile-gizmo-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mobile-gizmo-mini-btn {
+    padding: 5px 10px;
+    min-height: 28px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    color: #ffffff;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-gizmo-mini-btn.close {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    border-radius: 50%;
+  }
+
+  .mobile-gizmo-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .mobile-gizmo-modes {
+    display: flex;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .mobile-gizmo-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    min-height: 38px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-gizmo-btn.active {
+    background: rgba(56, 189, 248, 0.25);
+    color: #ffffff;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+  }
+
+  .mobile-gizmo-axes {
+    display: flex;
+    gap: 3px;
+  }
+
+  .mobile-axis-btn {
+    min-width: 32px;
+    height: 38px;
+    padding: 0 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-axis-btn.active {
+    background: rgba(56, 189, 248, 0.3);
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+  }
+
+  .mobile-axis-btn.axis-x.active {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  .mobile-axis-btn.axis-y.active {
+    background: rgba(34, 197, 94, 0.3);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+
+  .mobile-axis-btn.axis-z.active {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: #3b82f6;
+    color: #3b82f6;
+  }
+
+  .mobile-gizmo-nudges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mobile-nudge-btn {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+    color: #ffffff;
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s ease, background 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nudge-btn:active {
+    transform: scale(0.9);
+    background: var(--accent-cyan);
+    color: #000000;
+  }
+
+  .mobile-nudge-label {
+    display: none;
+  }
+}
+
 

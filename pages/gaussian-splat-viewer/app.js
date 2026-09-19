@@ -78,6 +78,10 @@ let frameCount = 0;
 let fpsLastTime = performance.now();
 let dragCounter = 0;
 
+// Mobile Drawer State ('collapsed' | 'half' | 'full')
+let mobileDrawerState = 'half';
+let selectedMobileAxis = 'all';
+
 // Pitch & Yaw for first-person walk mode
 let pitch = 0;
 let yaw = 0;
@@ -90,12 +94,21 @@ window.addEventListener('DOMContentLoaded', init);
 async function init() {
     cacheDomElements();
     setupUIEventListeners();
+    setupMobileDrawerGestures();
     setupKeyboardListeners();
     setupDragAndDrop();
+
+    // Set initial drawer state on mobile screens
+    if (window.innerWidth <= 768) {
+        setMobileDrawerState('half');
+    }
 
     initViewer();
     setupSceneHelpers();
     setupTransformControls();
+
+    // Responsive window listener
+    window.addEventListener('resize', handleWindowResize);
 
     // Start FPS tracking loop
     requestAnimationFrame(renderLoop);
@@ -104,11 +117,115 @@ async function init() {
     await loadPresetScene('torus');
 }
 
+function handleWindowResize() {
+    if (window.innerWidth <= 768) {
+        if (!dom.controlsPanel.classList.contains('mobile-collapsed') &&
+            !dom.controlsPanel.classList.contains('mobile-half') &&
+            !dom.controlsPanel.classList.contains('mobile-full')) {
+            setMobileDrawerState('half');
+        }
+    } else {
+        dom.controlsPanel.classList.remove('mobile-collapsed', 'mobile-half', 'mobile-full');
+    }
+
+    if (transformControls) {
+        const isTouchOrMobile = window.innerWidth <= 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+        transformControls.size = isTouchOrMobile ? 1.35 : 0.85;
+    }
+}
+
+function setMobileDrawerState(newState) {
+    mobileDrawerState = newState;
+    if (!dom.controlsPanel) return;
+
+    dom.controlsPanel.classList.remove('mobile-collapsed', 'mobile-half', 'mobile-full', 'collapsed');
+    dom.controlsPanel.classList.add(`mobile-${newState}`);
+
+    if (dom.togglePanelBtn) {
+        dom.togglePanelBtn.classList.toggle('visible', newState === 'collapsed');
+    }
+
+    if (dom.drawerModeText) {
+        dom.drawerModeText.textContent = (newState === 'full') ? 'Half' : 'Full';
+    }
+
+    if ('vibrate' in navigator) {
+        try { navigator.vibrate(8); } catch (_) {}
+    }
+}
+
+function toggleDrawerMode() {
+    if (mobileDrawerState === 'full') {
+        setMobileDrawerState('half');
+    } else {
+        setMobileDrawerState('full');
+    }
+}
+
+function setupMobileDrawerGestures() {
+    if (!dom.controlsPanel) return;
+
+    let touchStartY = 0;
+    let touchStartX = 0;
+    let isDraggingHandle = false;
+
+    const dragTargets = [dom.sheetDragHandle, dom.controlsPanel.querySelector('.panel-header')].filter(Boolean);
+
+    dragTargets.forEach(target => {
+        target.addEventListener('touchstart', (e) => {
+            if (e.target.closest('button') || e.target.closest('input')) return;
+            touchStartY = e.touches[0].clientY;
+            touchStartX = e.touches[0].clientX;
+            isDraggingHandle = true;
+        }, { passive: true });
+
+        target.addEventListener('touchend', (e) => {
+            if (!isDraggingHandle) return;
+            isDraggingHandle = false;
+
+            const touchEndY = e.changedTouches[0].clientY;
+            const touchEndX = e.changedTouches[0].clientX;
+            const deltaY = touchEndY - touchStartY;
+            const deltaX = touchEndX - touchStartX;
+
+            // Detect vertical swipe gestures
+            if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 35) {
+                if (deltaY > 0) {
+                    // Swiped Downwards
+                    if (mobileDrawerState === 'full') {
+                        setMobileDrawerState('half');
+                    } else if (mobileDrawerState === 'half') {
+                        setMobileDrawerState('collapsed');
+                    }
+                } else {
+                    // Swiped Upwards
+                    if (mobileDrawerState === 'half') {
+                        setMobileDrawerState('full');
+                    }
+                }
+            } else if (Math.abs(deltaY) < 10 && Math.abs(deltaX) < 10 && e.target.closest('#sheet-drag-handle')) {
+                // Tapped on the drag handle pill
+                toggleDrawerMode();
+            }
+        }, { passive: true });
+    });
+}
+
 function cacheDomElements() {
     dom.canvasContainer = document.getElementById('canvas-container');
     dom.controlsPanel = document.getElementById('controls-panel');
     dom.togglePanelBtn = document.getElementById('toggle-panel-btn');
     dom.panelCollapseBtn = document.getElementById('panel-collapse-btn');
+    dom.sheetDragHandle = document.getElementById('sheet-drag-handle');
+    dom.drawerModeBtn = document.getElementById('drawer-mode-btn');
+    dom.drawerModeText = document.getElementById('drawer-mode-text');
+    dom.mobileGizmoBar = document.getElementById('mobile-gizmo-bar');
+    dom.mobileGizmoBtns = document.querySelectorAll('.mobile-gizmo-btn');
+    dom.mobileAxisBtns = document.querySelectorAll('.mobile-axis-btn');
+    dom.mobileNudgeDecBtn = document.getElementById('mobile-nudge-dec-btn');
+    dom.mobileNudgeIncBtn = document.getElementById('mobile-nudge-inc-btn');
+    dom.mobileGizmoResetBtn = document.getElementById('mobile-gizmo-reset-btn');
+    dom.mobileGizmoCloseBtn = document.getElementById('mobile-gizmo-close-btn');
     dom.dropOverlay = document.getElementById('drop-overlay');
     dom.walkCrosshair = document.getElementById('walk-crosshair');
     dom.walkHintBadge = document.getElementById('walk-hint-badge');
@@ -287,13 +404,62 @@ function setupTransformControls() {
     viewer.threeScene.add(transformProxy);
 
     transformControls = new TransformControls(viewer.camera, viewer.renderer.domElement);
-    transformControls.size = 0.85;
+    const isTouchOrMobile = window.innerWidth <= 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    transformControls.size = isTouchOrMobile ? 1.35 : 0.85;
     transformControls.space = 'local';
     transformControls.attach(transformProxy);
 
     const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
     viewer.threeScene.add(helper);
     helper.visible = false; // Hidden initially until enabled
+
+    // Enlarge pickers on mobile for easy touch
+    if (helper && helper._gizmo && helper._gizmo.picker) {
+        try {
+            Object.values(helper._gizmo.picker).forEach(pickerGroup => {
+                if (pickerGroup && pickerGroup.traverse) {
+                    pickerGroup.traverse(child => {
+                        if (child.isMesh) {
+                            child.scale.multiplyScalar(1.5);
+                        }
+                    });
+                }
+            });
+        } catch (_) {}
+    }
+
+    // Touch / Pointer Down Capture on canvas:
+    // Prevent camera OrbitControls from stealing the touch if touching a gizmo handle
+    viewer.renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (!state.showGizmo || !transformControls || !helper.visible) return;
+
+        const rect = viewer.renderer.domElement.getBoundingClientRect();
+        const pointer = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, viewer.camera);
+
+        const currentPicker = helper._gizmo && helper._gizmo.picker && helper._gizmo.picker[state.gizmoMode];
+        if (currentPicker) {
+            const hits = raycaster.intersectObjects(currentPicker.children, true);
+            if (hits.length > 0) {
+                if (viewer.controls) viewer.controls.enabled = false;
+                if ('vibrate' in navigator) {
+                    try { navigator.vibrate(10); } catch (_) {}
+                }
+            }
+        }
+    }, { capture: true });
+
+    viewer.renderer.domElement.addEventListener('pointerup', () => {
+        setTimeout(() => {
+            if (!transformControls.dragging && state.navMode === 'orbit' && viewer.controls) {
+                viewer.controls.enabled = true;
+            }
+        }, 50);
+    });
 
     transformControls.addEventListener('dragging-changed', (event) => {
         if (viewer.controls) {
@@ -332,16 +498,28 @@ function setupUIEventListeners() {
         });
     });
 
-    // Panel Collapse / Expand
+    // Panel Collapse / Expand (Mobile Drawer & Desktop Sidebar)
     dom.panelCollapseBtn.addEventListener('click', () => {
-        dom.controlsPanel.classList.add('collapsed');
-        dom.togglePanelBtn.classList.add('visible');
+        if (window.innerWidth <= 768) {
+            setMobileDrawerState('collapsed');
+        } else {
+            dom.controlsPanel.classList.add('collapsed');
+            dom.togglePanelBtn.classList.add('visible');
+        }
     });
 
     dom.togglePanelBtn.addEventListener('click', () => {
-        dom.controlsPanel.classList.remove('collapsed');
-        dom.togglePanelBtn.classList.remove('visible');
+        if (window.innerWidth <= 768) {
+            setMobileDrawerState('half');
+        } else {
+            dom.controlsPanel.classList.remove('collapsed');
+            dom.togglePanelBtn.classList.remove('visible');
+        }
     });
+
+    if (dom.drawerModeBtn) {
+        dom.drawerModeBtn.addEventListener('click', toggleDrawerMode);
+    }
 
     // Navigation Mode Switch
     dom.orbitModeBtn.addEventListener('click', () => setNavigationMode('orbit'));
@@ -395,6 +573,9 @@ function setupUIEventListeners() {
             helper.visible = state.showGizmo;
             viewer.forceRenderNextFrame();
         }
+        if (dom.mobileGizmoBar) {
+            dom.mobileGizmoBar.classList.toggle('active', state.showGizmo && window.innerWidth <= 768);
+        }
         showToast(`3D Gizmo ${state.showGizmo ? 'Enabled' : 'Disabled'}`, 'info');
     });
 
@@ -405,14 +586,78 @@ function setupUIEventListeners() {
             state.gizmoMode = btn.dataset.mode;
             if (transformControls) {
                 transformControls.setMode(state.gizmoMode);
-                // Automatically ensure gizmo is visible
                 dom.gizmoToggle.checked = true;
                 const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
                 helper.visible = true;
                 state.showGizmo = true;
                 viewer.forceRenderNextFrame();
             }
+            if (dom.mobileGizmoBtns) {
+                dom.mobileGizmoBtns.forEach(b => b.classList.toggle('active', b.dataset.gizmoMode === state.gizmoMode));
+            }
+            if (dom.mobileGizmoBar) {
+                dom.mobileGizmoBar.classList.toggle('active', state.showGizmo && window.innerWidth <= 768);
+            }
         });
+    });
+
+    // Mobile Gizmo Bar Handlers
+    if (dom.mobileGizmoBtns) {
+        dom.mobileGizmoBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                dom.mobileGizmoBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const mode = btn.dataset.gizmoMode;
+                state.gizmoMode = mode;
+                if (transformControls) {
+                    transformControls.setMode(mode);
+                    viewer.forceRenderNextFrame();
+                }
+                dom.gizmoModeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+                showToast(`Gizmo: ${mode.toUpperCase()}`, 'info');
+            });
+        });
+    }
+
+    if (dom.mobileAxisBtns) {
+        dom.mobileAxisBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                dom.mobileAxisBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedMobileAxis = btn.dataset.gizmoAxis;
+                showToast(`Axis: ${selectedMobileAxis.toUpperCase()}`, 'info');
+            });
+        });
+    }
+
+    function applyMobileNudge(dir) {
+        if (state.gizmoMode === 'translate') {
+            const step = 0.08 * dir;
+            if (selectedMobileAxis === 'all' || selectedMobileAxis === 'y') state.posY = Math.round((state.posY + step) * 100) / 100;
+            if (selectedMobileAxis === 'x') state.posX = Math.round((state.posX + step) * 100) / 100;
+            if (selectedMobileAxis === 'z') state.posZ = Math.round((state.posZ + step) * 100) / 100;
+        } else if (state.gizmoMode === 'rotate') {
+            const step = 5 * dir;
+            if (selectedMobileAxis === 'all' || selectedMobileAxis === 'y') state.rotY = (state.rotY + step + 360) % 360;
+            if (selectedMobileAxis === 'x') state.rotX = (state.rotX + step + 360) % 360;
+            if (selectedMobileAxis === 'z') state.rotZ = (state.rotZ + step + 360) % 360;
+        } else if (state.gizmoMode === 'scale') {
+            const step = 0.1 * dir;
+            state.scale = Math.max(0.1, Math.min(4.0, Math.round((state.scale + step) * 10) / 10));
+        }
+        syncTransformUI();
+        applySceneTransform();
+        if ('vibrate' in navigator) {
+            try { navigator.vibrate(8); } catch (_) {}
+        }
+    }
+
+    if (dom.mobileNudgeDecBtn) dom.mobileNudgeDecBtn.addEventListener('click', () => applyMobileNudge(-1));
+    if (dom.mobileNudgeIncBtn) dom.mobileNudgeIncBtn.addEventListener('click', () => applyMobileNudge(1));
+    if (dom.mobileGizmoResetBtn) dom.mobileGizmoResetBtn.addEventListener('click', resetPosition);
+    if (dom.mobileGizmoCloseBtn) dom.mobileGizmoCloseBtn.addEventListener('click', () => {
+        dom.gizmoToggle.checked = false;
+        dom.gizmoToggle.dispatchEvent(new Event('change'));
     });
 
     // Reset Position Buttons (Toolbar, Quick Alignment, HUD)
@@ -582,8 +827,12 @@ function setupKeyboardListeners() {
                 dom.gizmoToggle.dispatchEvent(new Event('change'));
                 break;
             case 'KeyH':
-                dom.controlsPanel.classList.toggle('collapsed');
-                dom.togglePanelBtn.classList.toggle('visible', dom.controlsPanel.classList.contains('collapsed'));
+                if (window.innerWidth <= 768) {
+                    setMobileDrawerState(mobileDrawerState === 'collapsed' ? 'half' : 'collapsed');
+                } else {
+                    dom.controlsPanel.classList.toggle('collapsed');
+                    dom.togglePanelBtn.classList.toggle('visible', dom.controlsPanel.classList.contains('collapsed'));
+                }
                 break;
             case 'Escape':
                 if (state.isPickingGround) {
