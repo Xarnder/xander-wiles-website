@@ -136,6 +136,8 @@ function handleWindowResize() {
 
 function setMobileDrawerState(newState) {
     mobileDrawerState = newState;
+    window.mobileDrawerState = newState;
+    window.setMobileDrawerState = setMobileDrawerState;
     if (!dom.controlsPanel) return;
 
     dom.controlsPanel.classList.remove('mobile-collapsed', 'mobile-half', 'mobile-full', 'collapsed');
@@ -332,6 +334,8 @@ function initViewer() {
     viewer.init();
     viewer.start();
     window.viewer = viewer;
+    window.state = state;
+    window.transformControls = transformControls;
 
     // Configure Orbit controls
     if (viewer.controls) {
@@ -404,6 +408,7 @@ function setupTransformControls() {
     viewer.threeScene.add(transformProxy);
 
     transformControls = new TransformControls(viewer.camera, viewer.renderer.domElement);
+    window.transformControls = transformControls;
     const isTouchOrMobile = window.innerWidth <= 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     transformControls.size = isTouchOrMobile ? 1.35 : 0.85;
     transformControls.space = 'local';
