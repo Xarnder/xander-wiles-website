@@ -13,5 +13,16 @@
             "destination": "/pages/journal/index.html"
         }
     ],
-    "cleanUrls": true
+    "cleanUrls": true,
+    "headers": [
+        {
+            "source": "**",
+            "headers": [
+                {
+                    "key": "Permissions-Policy",
+                    "value": "xr-spatial-tracking=*"
+                }
+            ]
+        }
+    ]
 }

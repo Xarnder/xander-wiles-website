@@ -25,5 +25,16 @@
             "destination": "/pages/Group-Availability/auth-callback.html"
         }
     ],
-    "cleanUrls": true
+    "cleanUrls": true,
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Permissions-Policy",
+                    "value": "xr-spatial-tracking=*"
+                }
+            ]
+        }
+    ]
 }

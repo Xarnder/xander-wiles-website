@@ -213,6 +213,77 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.xr-enter-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 16px;
+    pointer-events: auto;
+    background: rgba(8, 10, 16, 0.92);
+    border: 1px solid rgba(0, 243, 255, 0.35);
+    border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.xr-bar-status,
+.xr-start-status {
+    margin: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-amber);
+}
+
+.xr-enter-ar-main,
+.xr-enter-vr-main {
+    min-width: 240px !important;
+    min-height: 64px !important;
+    font-size: 20px !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0, 243, 255, 0.35);
+}
+
+.xr-start-status:empty {
+    display: none;
+}
+
+.xr-dom-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10000;
+}
+
+.xr-dom-overlay.active {
+    display: block;
+}
+
+.xr-dom-overlay button {
+    pointer-events: auto;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(10, 12, 20, 0.75);
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
 }
 
 .xr-btn-mount,
@@ -223,30 +294,38 @@ body {
 }
 
 button#ARButton,
-button#VRButton {
+button#VRButton,
+.xr-enter-ar,
+.xr-enter-vr {
     position: static !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     width: auto !important;
+    min-width: 132px !important;
+    min-height: 48px !important;
     height: auto !important;
     left: auto !important;
     bottom: auto !important;
-    padding: 9px 18px !important;
+    padding: 12px 22px !important;
     border-radius: 12px !important;
     font-family: var(--font-sans) !important;
-    font-weight: 700 !important;
-    font-size: 13px !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
     letter-spacing: 0.8px !important;
     text-transform: uppercase !important;
     cursor: pointer !important;
     transition: all var(--transition-fast) !important;
     white-space: nowrap !important;
-    z-index: 101 !important;
+    z-index: 200 !important;
     border: none !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(0, 243, 255, 0.35);
 }
 
-button#ARButton {
+button#ARButton,
+.xr-enter-ar {
     /* Vibrant Cyan & Blue Gradient with Pulsing Glow */
     background: linear-gradient(135deg, #00f3ff, #0284c7) !important;
     color: #000000 !important;
@@ -255,16 +334,19 @@ button#ARButton {
     animation: pulse-glow-ar 3s infinite ease-in-out;
 }
 
-button#ARButton:hover {
+button#ARButton:hover,
+.xr-enter-ar:hover {
     transform: translateY(-1px) scale(1.03) !important;
     box-shadow: 0 0 30px rgba(0, 243, 255, 0.75) !important;
 }
 
-button#ARButton:active {
+button#ARButton:active,
+.xr-enter-ar:active {
     transform: scale(0.96) !important;
 }
 
-button#VRButton {
+button#VRButton,
+.xr-enter-vr {
     /* Radiant Violet & Indigo Gradient with Pulsing Glow */
     background: linear-gradient(135deg, #a855f7, #6366f1) !important;
     color: #ffffff !important;
@@ -273,12 +355,14 @@ button#VRButton {
     animation: pulse-glow-vr 3s infinite ease-in-out;
 }
 
-button#VRButton:hover {
+button#VRButton:hover,
+.xr-enter-vr:hover {
     transform: translateY(-1px) scale(1.03) !important;
     box-shadow: 0 0 30px rgba(168, 85, 247, 0.75) !important;
 }
 
-button#VRButton:active {
+button#VRButton:active,
+.xr-enter-vr:active {
     transform: scale(0.96) !important;
 }
 
@@ -293,7 +377,7 @@ button#VRButton[disabled] {
     box-shadow: none !important;
     animation: none !important;
     cursor: not-allowed !important;
-    opacity: 0.7 !important;
+    opacity: 0.85 !important;
 }
 
 @keyframes pulse-glow-ar {
@@ -780,9 +864,14 @@ button#VRButton[disabled] {
     }
 
     .telemetry-card {
-        bottom: 12px;
+        bottom: 168px;
         left: 12px;
         right: 12px;
         width: auto;
+    }
+
+    .xr-enter-bar {
+        bottom: 12px;
+        width: min(94vw, 420px);
     }
 }

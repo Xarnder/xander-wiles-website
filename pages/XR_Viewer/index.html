@@ -8,7 +8,7 @@
     <!-- GLOBAL WEBSITE STYLES -->
     <link rel="stylesheet" href="/assets/css/style.css">
     <!-- LOCAL XR VIEWER STYLES -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260920-quest3">
 
     <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -22,6 +22,10 @@
 
     <link rel="manifest" href="site.webmanifest">
     <meta name="theme-color" content="#111115">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Permissions-Policy" content="xr-spatial-tracking=*">
+    <meta http-equiv="Feature-Policy" content="xr-spatial-tracking *">
 
     <!-- Import Map for Three.js & GaussianSplats3D -->
     <script type="importmap">
@@ -108,10 +112,15 @@
             </button>
         </div>
 
-        <!-- WebXR AR & VR Button Mount Points -->
+        <!-- WebXR AR & VR buttons stay in the HTML so they cannot disappear if JS is slow -->
         <div id="xr-buttons-mount" class="xr-buttons-mount">
-            <div id="ar-button-mount" class="xr-btn-mount"></div>
-            <div id="vr-button-mount" class="xr-btn-mount"></div>
+            <div id="ar-button-mount" class="xr-btn-mount">
+                <button id="ARButton" class="xr-enter-ar" type="button" title="Enter Quest 3 Passthrough AR" onpointerdown="enterQuestXR('immersive-ar', event)" ontouchstart="enterQuestXR('immersive-ar', event)" onclick="enterQuestXR('immersive-ar', event)">Enter AR</button>
+            </div>
+            <div id="vr-button-mount" class="xr-btn-mount">
+                <button id="VRButton" class="xr-enter-vr" type="button" title="Enter Quest 3 Virtual Reality" onpointerdown="enterQuestXR('immersive-vr', event)" ontouchstart="enterQuestXR('immersive-vr', event)" onclick="enterQuestXR('immersive-vr', event)">Enter VR</button>
+            </div>
+            <p id="xr-start-status" class="xr-start-status" aria-live="polite">Tap the big Enter AR button at the bottom</p>
         </div>
     </header>
 
@@ -197,7 +206,11 @@
                         </li>
                         <li>
                             <span class="ctrl-key">Trigger</span>
-                            <span class="ctrl-desc">Aim reticle at real floor or desk and spawn selected model</span>
+                            <span class="ctrl-desc">Aim at the scanned floor or furniture and spawn the selected model</span>
+                        </li>
+                        <li>
+                            <span class="ctrl-key">Room Scan</span>
+                            <span class="ctrl-desc">Uses Quest Space Setup / room mesh. If none is found, Space Setup opens so you can scan the room</span>
                         </li>
                         <li>
                             <span class="ctrl-key">Hold Button 'A' / Grip</span>
@@ -242,7 +255,26 @@
     <!-- FLOATING TOAST NOTIFICATION -->
     <div id="toast" class="toast"></div>
 
+    <div id="xr-dom-overlay" class="xr-dom-overlay">
+        <button type="button" id="xr-overlay-exit" aria-label="Exit XR" onclick="if(window.__xrSession)window.__xrSession.end()">Exit</button>
+    </div>
+
+    <!-- Large Quest hit-targets. Controller rays often miss the small toolbar buttons. -->
+    <div id="xr-enter-bar" class="xr-enter-bar">
+        <p id="xr-bar-status" class="xr-bar-status" aria-live="polite">Tap Enter AR</p>
+        <button type="button" class="xr-enter-ar xr-enter-ar-main" onpointerdown="enterQuestXR('immersive-ar', event)" ontouchstart="enterQuestXR('immersive-ar', event)" onclick="enterQuestXR('immersive-ar', event)">Enter AR</button>
+        <button type="button" class="xr-enter-vr xr-enter-vr-main" onpointerdown="enterQuestXR('immersive-vr', event)" ontouchstart="enterQuestXR('immersive-vr', event)" onclick="enterQuestXR('immersive-vr', event)">Enter VR</button>
+    </div>
+
+    <!-- XR entry must not depend on the Three.js module loading. -->
+    <script>
+    window.enterQuestXR = window.enterQuestXR || function (mode) {
+        var el = document.getElementById('xr-bar-status') || document.getElementById('xr-start-status');
+        if (el) el.textContent = 'Loading XR starter…';
+    };
+    </script>
+    <script src="xr-entry.js?v=20260920-splatfix2"></script>
     <!-- MAIN VIEWER LOGIC -->
-    <script type="module" src="script.js"></script>
+    <script type="module" src="script.js?v=20260920-splatfix2"></script>
 </body>
 </html>
