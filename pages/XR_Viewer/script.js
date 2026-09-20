@@ -157,6 +157,7 @@ function init() {
 function cacheDomElements() {
     dom.canvasContainer = document.getElementById('canvas-container');
     dom.loadDefaultBtn = document.getElementById('load-default-btn');
+    dom.loadDefaultSplatBtn = document.getElementById('load-default-splat-btn');
     dom.uploadBtn = document.getElementById('upload-btn');
     dom.fileInput = document.getElementById('file-input');
     dom.helpToggleBtn = document.getElementById('help-toggle-btn');
@@ -264,19 +265,22 @@ function setupDesktopControls() {
 
         if (dropInViewer && dropInViewer.viewer) {
             dropInViewer.viewer.webXRActive = true;
+            const xrCam = renderer.xr.getCamera();
+            dropInViewer.viewer.updateForDropInMode(renderer, xrCam);
         }
     });
 
     renderer.xr.addEventListener('sessionend', () => {
         xrMode = 'none';
-        gridHelper.visible = true;
+        if (orbitControls) orbitControls.enabled = true;
+        if (gridHelper) gridHelper.visible = true;
         scene.background = null;
         if (dropInViewer && dropInViewer.viewer) {
             dropInViewer.viewer.webXRActive = false;
+            dropInViewer.viewer.updateForDropInMode(renderer, camera);
         }
-        if (orbitControls) orbitControls.enabled = true;
-        showToast('XR Session Ended');
-        updateStatusText("Desktop Mode — Use Toolbar or Enter AR/VR");
+        updateStatusText("Ready (Desktop Preview)");
+        showToast('Returned to Desktop 2D Preview');
     });
 }
 
@@ -611,6 +615,9 @@ function getDropInViewer() {
             logLevel: GaussianSplats3D.LogLevel.None
         });
         scene.add(dropInViewer);
+        // Bind renderer & camera immediately so DropInViewer initializes and primes WebGL structures
+        const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+        dropInViewer.viewer.updateForDropInMode(renderer, activeCam);
         if (renderer.xr.isPresenting && dropInViewer.viewer) {
             dropInViewer.viewer.webXRActive = true;
         }
@@ -671,6 +678,9 @@ async function loadModel(name, positionMatrix) {
             const viewerGroup = getDropInViewer();
             viewerGroup.visible = true;
 
+            const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+            viewerGroup.viewer.updateForDropInMode(renderer, activeCam);
+
             const prevCount = viewerGroup.getSceneCount();
             if (prevCount > 0) {
                 const indices = Array.from({ length: prevCount }, (_, i) => i);
@@ -697,12 +707,22 @@ async function loadModel(name, positionMatrix) {
             viewerGroup.quaternion.set(0, 0, 0, 1);
             viewerGroup.scale.set(1.0, 1.0, 1.0);
 
+            // Force initial splat sort so GPU index buffer is populated immediately
+            await viewerGroup.viewer.runSplatSort(true, true);
+
             // currentModel now points directly to DropInViewer
             currentModel = viewerGroup;
 
+            // In 2D desktop preview, position camera and orbitControls to frame the scan center
+            if (!renderer.xr.isPresenting && orbitControls) {
+                orbitControls.target.set(0, 0.85, 0);
+                camera.position.set(0, 1.0, 2.2);
+                orbitControls.update();
+            }
+
             const count = splatBuffer.getSplatCount();
             dom.statSplatCount.textContent = `${count.toLocaleString()} splats`;
-            dom.statFileSize.textContent = 'Custom Splat';
+            dom.statFileSize.textContent = 'Gaussian Splat';
             updateLoadingBar(1.0);
             finishLoading(name);
         } catch (err) {
@@ -932,6 +952,12 @@ function render(timestamp, frame) {
         if (orbitControls) orbitControls.update();
     }
 
+    // Explicitly update Gaussian Splat viewer before render pass
+    if (dropInViewer && dropInViewer.visible && dropInViewer.viewer && dropInViewer.viewer.initialized) {
+        const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+        dropInViewer.viewer.update(renderer, activeCam);
+    }
+
     renderer.render(scene, camera);
 
     // FPS Telemetry
@@ -1071,6 +1097,13 @@ function setup2DEventListeners() {
         }
     });
 
+    // Select / Load default Gaussian Splat
+    if (dom.loadDefaultSplatBtn) {
+        dom.loadDefaultSplatBtn.addEventListener('click', () => {
+            loadDefaultGaussianSplat();
+        });
+    }
+
     // File input trigger
     dom.uploadBtn.addEventListener('click', () => {
         dom.fileInput.click();
@@ -1096,7 +1129,21 @@ function setup2DEventListeners() {
     // Quick actions on telemetry card
     dom.recenterBtn.addEventListener('click', () => {
         if (currentModel) {
-            currentModel.position.set(0, 0.8, -1.8);
+            if (currentModel === dropInViewer) {
+                currentModel.position.set(0, 0, 0);
+                if (orbitControls) {
+                    orbitControls.target.set(0, 0.85, 0);
+                    camera.position.set(0, 1.0, 2.2);
+                    orbitControls.update();
+                }
+            } else {
+                currentModel.position.set(0, 0.5, 0);
+                if (orbitControls) {
+                    orbitControls.target.set(0, 0.5, 0);
+                    camera.position.set(0, 1.2, 2.0);
+                    orbitControls.update();
+                }
+            }
             showToast('Recentered model');
         }
     });
@@ -1207,7 +1254,7 @@ async function handleUploadedFile(file) {
             hideLoadingBar();
 
             if (!renderer.xr.isPresenting) {
-                const m = new THREE.Matrix4().setPosition(0, 0, -1.5);
+                const m = new THREE.Matrix4().setPosition(0, 0, 0);
                 loadModel(file.name, m);
             } else {
                 updateStatusText(`Ready: ${file.name} (${count.toLocaleString()} splats) — Pull Trigger to Place`);
@@ -1242,4 +1289,103 @@ function showToast(message, duration = 3500) {
     toastTimer = setTimeout(() => {
         dom.toast.classList.remove('show');
     }, duration);
+}
+
+async function loadDefaultGaussianSplat() {
+    const splatUrl = '/assets/Gaussian-Splats/Default Gaussian.ply';
+    const splatName = 'Default Gaussian.ply';
+
+    // If already in memory:
+    if (customSplatsMap.has(splatName)) {
+        modelName = splatName;
+        dom.modelFilename.textContent = splatName;
+        selectedIndex = menuItems.indexOf(splatName);
+        redrawMenuCanvas();
+        if (!renderer.xr.isPresenting) {
+            const m = new THREE.Matrix4().setPosition(0, 0, 0);
+            loadModel(splatName, m);
+        } else {
+            updateStatusText(`Selected ${splatName} — Pull Trigger to Place`);
+            showToast(`Selected ${splatName} (Pull Trigger in XR to place)`);
+        }
+        return;
+    }
+
+    if (isLoading) return;
+    isLoading = true;
+    updateStatusText('Fetching Default Gaussian Splat (127 MB)...');
+    showToast('Fetching Default Gaussian Splat...');
+    updateLoadingBar(0.05);
+
+    try {
+        const response = await fetch(splatUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Splat file not found on server. Use 'Upload Model / Splat' to select your local .ply file.`);
+        }
+
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 133200000;
+        let loaded = 0;
+
+        const reader = response.body.getReader();
+        const chunks = [];
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            loaded += value.byteLength;
+            if (total > 0) {
+                const pct = (loaded / total) * 0.55; // 0% to 55% during download
+                updateLoadingBar(pct);
+                const mb = (loaded / (1024 * 1024)).toFixed(1);
+                const totalMb = (total / (1024 * 1024)).toFixed(1);
+                updateStatusText(`Downloading Splat: ${mb} / ${totalMb} MB`);
+            }
+        }
+
+        updateStatusText('Parsing PLY binary data...');
+        updateLoadingBar(0.65);
+
+        // Combine chunks into single ArrayBuffer
+        const combined = new Uint8Array(loaded);
+        let offset = 0;
+        for (const chunk of chunks) {
+            combined.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+
+        updateLoadingBar(0.75);
+        const splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(combined.buffer, 0, 0, false);
+        updateLoadingBar(0.85);
+
+        customSplatsMap.set(splatName, splatBuffer);
+        modelName = splatName;
+        dom.modelFilename.textContent = splatName;
+        dom.statFileSize.textContent = formatBytes(loaded);
+        const count = splatBuffer.getSplatCount();
+        dom.statSplatCount.textContent = `${count.toLocaleString()} splats`;
+
+        buildMenuItems();
+        selectedIndex = menuItems.indexOf(splatName);
+        createMenuMesh();
+
+        // Release loading lock before calling loadModel
+        isLoading = false;
+
+        if (!renderer.xr.isPresenting) {
+            const m = new THREE.Matrix4().setPosition(0, 0, 0);
+            loadModel(splatName, m);
+        } else {
+            hideLoadingBar();
+            updateStatusText(`Ready: ${splatName} — Pull Trigger to Place`);
+            showToast(`Ready! Pull Trigger in XR to place ${splatName}.`);
+        }
+    } catch (e) {
+        console.error('Failed to load default splat:', e);
+        isLoading = false;
+        hideLoadingBar();
+        updateStatusText(`Splat Error: ${e.message}`, true);
+        showToast(`Error: ${e.message}`, 5000);
+    }
 }
