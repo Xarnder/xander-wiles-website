@@ -19,6 +19,7 @@ let currentModel = null;
 let dropInViewer = null;
 let modelName = 'Fighter Jet'; // Default selected model
 let xrMode = 'none'; // 'none', 'ar', 'vr'
+let isPlaced = false; // Tracks if the current model/splat has been placed in the room
 
 // Custom uploaded assets (stored for 3D in-game menu selection & spawning)
 const customModelsMap = new Map();
@@ -251,16 +252,26 @@ function setupDesktopControls() {
         const isAR = session && session.mode === 'immersive-ar';
         xrMode = isAR ? 'ar' : 'vr';
 
+        isPlaced = false;
+
+        // Ensure splat/model is NOT rendered or stuck to view before placing
+        if (dropInViewer) {
+            dropInViewer.visible = false;
+        }
+        if (currentModel && currentModel !== dropInViewer) {
+            currentModel.visible = false;
+        }
+
         if (isAR) {
             gridHelper.visible = false;
             scene.background = null;
             showToast('Quest 3 AR Passthrough Active');
-            updateStatusText("AR Mode: Point at floor/table & Pull Trigger (B for Menu)");
+            updateStatusText(`AR Mode: Point at floor/table & Pull Trigger to Place ${modelName}`);
         } else {
             gridHelper.visible = true;
             scene.background = new THREE.Color(0x0a0c16);
             showToast('Quest 3 VR Mode Active');
-            updateStatusText("VR Mode: Pull Trigger to Place Model (B for Menu)");
+            updateStatusText(`VR Mode: Pull Trigger to Place ${modelName} (B for Menu)`);
         }
 
         if (dropInViewer && dropInViewer.viewer) {
@@ -278,6 +289,19 @@ function setupDesktopControls() {
         if (dropInViewer && dropInViewer.viewer) {
             dropInViewer.viewer.webXRActive = false;
             dropInViewer.viewer.updateForDropInMode(renderer, camera);
+            // Restore visibility in 2D desktop preview if splat was loaded
+            if (customSplatsMap.has(modelName)) {
+                dropInViewer.position.set(0, 0, 0);
+                dropInViewer.visible = true;
+                if (orbitControls) {
+                    orbitControls.target.set(0, 0.85, 0);
+                    camera.position.set(0, 1.0, 2.2);
+                    orbitControls.update();
+                }
+            }
+        }
+        if (currentModel && currentModel !== dropInViewer) {
+            currentModel.visible = true;
         }
         updateStatusText("Ready (Desktop Preview)");
         showToast('Returned to Desktop 2D Preview');
@@ -590,7 +614,7 @@ function onSelect() {
     if (reticle.visible) {
         spawnMatrix.copy(reticle.matrix);
     } else {
-        // VR Mode or non-surface fallback: 1.5m in front of the active camera
+        // VR Mode or non-surface fallback: 1.5m in front of the active camera, standing on floor grid (y = 0)
         const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(activeCam.quaternion);
         forward.y = 0;
@@ -598,7 +622,7 @@ function onSelect() {
         forward.normalize();
 
         const spawnPos = new THREE.Vector3().copy(activeCam.position).addScaledVector(forward, 1.5);
-        spawnPos.y = Math.max(0, activeCam.position.y - 1.2);
+        spawnPos.y = 0; // Grounded on virtual floor grid
         spawnMatrix.setPosition(spawnPos);
     }
 
@@ -660,6 +684,8 @@ async function loadModel(name, positionMatrix) {
             }
         });
 
+        currentModel.visible = true;
+        isPlaced = true;
         scene.add(currentModel);
         dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
         dom.statFileSize.textContent = 'Custom 3D';
@@ -709,6 +735,10 @@ async function loadModel(name, positionMatrix) {
 
             // Force initial splat sort so GPU index buffer is populated immediately
             await viewerGroup.viewer.runSplatSort(true, true);
+
+            // ONLY NOW make it visible and rendered in the scene!
+            viewerGroup.visible = true;
+            isPlaced = true;
 
             // currentModel now points directly to DropInViewer
             currentModel = viewerGroup;
@@ -780,6 +810,8 @@ async function loadModel(name, positionMatrix) {
             }
         });
 
+        currentModel.visible = true;
+        isPlaced = true;
         scene.add(currentModel);
         dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
         dom.statFileSize.textContent = name === 'Fighter Jet' ? '2.1 MB' : '3D Mesh';
@@ -936,7 +968,7 @@ function render(timestamp, frame) {
                     const pose = hits[0].getPose(refSpace);
                     reticle.visible = true;
                     reticle.matrix.fromArray(pose.transform.matrix);
-                    if (isDragging && currentModel) {
+                    if (isDragging && currentModel && isPlaced) {
                         const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
                         currentModel.position.x = THREE.MathUtils.lerp(currentModel.position.x, pos.x, 0.2);
                         currentModel.position.z = THREE.MathUtils.lerp(currentModel.position.z, pos.z, 0.2);
@@ -952,10 +984,12 @@ function render(timestamp, frame) {
         if (orbitControls) orbitControls.update();
     }
 
-    // Explicitly update Gaussian Splat viewer before render pass
+    // Explicitly update Gaussian Splat viewer before render pass ONLY if visible and placed (or in 2D preview)
     if (dropInViewer && dropInViewer.visible && dropInViewer.viewer && dropInViewer.viewer.initialized) {
-        const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-        dropInViewer.viewer.update(renderer, activeCam);
+        if (!renderer.xr.isPresenting || isPlaced) {
+            const activeCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+            dropInViewer.viewer.update(renderer, activeCam);
+        }
     }
 
     renderer.render(scene, camera);
@@ -1028,6 +1062,9 @@ function handleGamepadInput(source) {
                 // SELECT MODEL / SPLAT TO SPAWN
                 modelName = menuItems[selectedIndex];
                 dom.modelFilename.textContent = modelName;
+                isPlaced = false;
+                if (dropInViewer) dropInViewer.visible = false;
+                if (currentModel && currentModel !== dropInViewer) currentModel.visible = false;
                 updateStatusText(`Selected: ${modelName} — Pull Trigger to Place`);
                 setTimeout(() => {
                     isMenuOpen = false;
@@ -1039,7 +1076,9 @@ function handleGamepadInput(source) {
         lastButtonState[hand + 'A'] = aPressed;
 
     } else {
-        // MODEL CONTROLS IN 3D SPACE
+        // MODEL CONTROLS IN 3D SPACE (Only active if model is placed and visible)
+        if (!isPlaced) return;
+
         const targetObj = currentModel;
 
         // DRAG: Hold Button 'A' or Grip
@@ -1092,6 +1131,9 @@ function setup2DEventListeners() {
             const m = new THREE.Matrix4().setPosition(0, 0.5, 0);
             loadModel('Fighter Jet', m);
         } else {
+            isPlaced = false;
+            if (dropInViewer) dropInViewer.visible = false;
+            if (currentModel && currentModel !== dropInViewer) currentModel.visible = false;
             updateStatusText("Selected Fighter Jet — Pull Trigger to Place");
             showToast("Selected Fighter Jet (Pull Trigger in XR to place)");
         }
@@ -1257,6 +1299,9 @@ async function handleUploadedFile(file) {
                 const m = new THREE.Matrix4().setPosition(0, 0, 0);
                 loadModel(file.name, m);
             } else {
+                isPlaced = false;
+                if (dropInViewer) dropInViewer.visible = false;
+                hideLoadingBar();
                 updateStatusText(`Ready: ${file.name} (${count.toLocaleString()} splats) — Pull Trigger to Place`);
                 showToast(`Ready! Pull Trigger in XR to place ${file.name}.`);
             }
@@ -1305,6 +1350,9 @@ async function loadDefaultGaussianSplat() {
             const m = new THREE.Matrix4().setPosition(0, 0, 0);
             loadModel(splatName, m);
         } else {
+            isPlaced = false;
+            if (dropInViewer) dropInViewer.visible = false;
+            if (currentModel && currentModel !== dropInViewer) currentModel.visible = false;
             updateStatusText(`Selected ${splatName} — Pull Trigger to Place`);
             showToast(`Selected ${splatName} (Pull Trigger in XR to place)`);
         }
@@ -1377,6 +1425,8 @@ async function loadDefaultGaussianSplat() {
             const m = new THREE.Matrix4().setPosition(0, 0, 0);
             loadModel(splatName, m);
         } else {
+            isPlaced = false;
+            if (dropInViewer) dropInViewer.visible = false;
             hideLoadingBar();
             updateStatusText(`Ready: ${splatName} — Pull Trigger to Place`);
             showToast(`Ready! Pull Trigger in XR to place ${splatName}.`);
