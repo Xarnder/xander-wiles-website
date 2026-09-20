@@ -206,14 +206,20 @@ body {
 }
 
 /* =========================================================
-   WebXR VR Button Custom Styling
+   WebXR AR & VR Buttons Custom Styling
    ========================================================= */
 
+.xr-buttons-mount {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.xr-btn-mount,
 .vr-button-mount,
 .ar-button-mount {
     display: flex;
     align-items: center;
-    gap: 8px;
 }
 
 button#ARButton,
@@ -226,11 +232,11 @@ button#VRButton {
     height: auto !important;
     left: auto !important;
     bottom: auto !important;
-    padding: 10px 22px !important;
+    padding: 9px 18px !important;
     border-radius: 12px !important;
     font-family: var(--font-sans) !important;
     font-weight: 700 !important;
-    font-size: 14px !important;
+    font-size: 13px !important;
     letter-spacing: 0.8px !important;
     text-transform: uppercase !important;
     cursor: pointer !important;
@@ -245,16 +251,34 @@ button#ARButton {
     background: linear-gradient(135deg, #00f3ff, #0284c7) !important;
     color: #000000 !important;
     font-weight: 800 !important;
-    box-shadow: 0 0 24px rgba(0, 243, 255, 0.5) !important;
-    animation: pulse-glow 3s infinite ease-in-out;
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.45) !important;
+    animation: pulse-glow-ar 3s infinite ease-in-out;
 }
 
 button#ARButton:hover {
     transform: translateY(-1px) scale(1.03) !important;
-    box-shadow: 0 0 35px rgba(0, 243, 255, 0.75) !important;
+    box-shadow: 0 0 30px rgba(0, 243, 255, 0.75) !important;
 }
 
 button#ARButton:active {
+    transform: scale(0.96) !important;
+}
+
+button#VRButton {
+    /* Radiant Violet & Indigo Gradient with Pulsing Glow */
+    background: linear-gradient(135deg, #a855f7, #6366f1) !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.45) !important;
+    animation: pulse-glow-vr 3s infinite ease-in-out;
+}
+
+button#VRButton:hover {
+    transform: translateY(-1px) scale(1.03) !important;
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.75) !important;
+}
+
+button#VRButton:active {
     transform: scale(0.96) !important;
 }
 
@@ -272,12 +296,21 @@ button#VRButton[disabled] {
     opacity: 0.7 !important;
 }
 
-@keyframes pulse-glow {
+@keyframes pulse-glow-ar {
     0%, 100% {
         box-shadow: 0 0 16px rgba(0, 243, 255, 0.35);
     }
     50% {
-        box-shadow: 0 0 28px rgba(168, 85, 247, 0.55), 0 0 12px rgba(0, 243, 255, 0.4);
+        box-shadow: 0 0 26px rgba(0, 243, 255, 0.65), 0 0 10px rgba(0, 243, 255, 0.4);
+    }
+}
+
+@keyframes pulse-glow-vr {
+    0%, 100% {
+        box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
+    }
+    50% {
+        box-shadow: 0 0 26px rgba(168, 85, 247, 0.65), 0 0 10px rgba(99, 102, 241, 0.4);
     }
 }
 
@@ -722,7 +755,8 @@ button#VRButton[disabled] {
     transition: all var(--transition-fast);
 }
 
-.toast.active {
+.toast.active,
+.toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
