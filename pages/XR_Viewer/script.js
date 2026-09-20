@@ -1,85 +1,52 @@
-/**
- * script.js — Unified Quest 3 XR Studio
- * 
- * Combines:
- *   1. Full Diegetic in-VR UI (Floating HUD, 3D Menu Mesh, 3D Controls Guide, 3D Loading Bar)
- *   2. Standard 3D Models Library (GLB / GLTF / OBJ: Mercedes, Cute Robot, Fighter Jet, etc.)
- *   3. 3D Gaussian Splats (.ply / .splat / .ksplat / .spz)
- *   4. Default Gaussian Splat (Default Gaussian.ply — 535,144 splats)
- *   5. Room Mesh Detection (Occlusion, Projected Shadows, Wireframe) & Hit-Test Reticle
- *   6. 6-DoF Quest 3 Controller Manipulation (Dual-hand pinch, Drag, Sticks, Snap turns)
- *   7. 2D Desktop Fallback & Control Deck
- */
-
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
 
 // IMPORT CONFIG
 import { models } from '../../assets/models_config.js';
 
-// --- APPLICATION STATE ---
+// --- GLOBALS ---
 let camera, scene, renderer;
 let controller1, controller2;
 let reticle;
-let orbitControls;
-
-// Active Models
-let currentModel = null;     // Active standard GLTF/GLB/OBJ model
-let splatViewer = null;      // GaussianSplats3D Viewer instance
+let currentModel = null;
 let currentSplatScene = null;
-let currentModelName = 'Fighter Jet';
-let uploadedModelName = '';
-let uploadedModelObject = null;
-let customSplatBuffer = null;
-let customSplatFileName = '';
+let splatViewer = null;
+let modelName = 'Fighter Jet'; // Default to Fighter Jet
 
-// Diegetic VR HUD & UI Elements
+// Custom uploaded assets
+const customModelsMap = new Map();
+const customSplatsMap = new Map();
+
+// UI Groups (Floating in 3D AR Space)
 let hudGroup, statusMesh, loadingGroup, loadingFill, menuMesh, controlsMesh;
-let menuItems = [];
-let isMenuOpen = false;
-let isDragging = false;
-let isLoading = false;
-let selectedIndex = 2; // Default to Fighter Jet
-let scoreValue = 0;
-let lastScrollTime = 0;
-let lastButtonState = {};
-let isScalingEnabled = true;
 
-// Two-Handed Manipulation
-let twoHandActive = false;
-let twoHandStartDist = 0;
-let twoHandStartScale = 1.0;
-let twoHandStartPos = new THREE.Vector3();
-let twoHandStartMidpoint = new THREE.Vector3();
-let twoHandStartAngle = 0;
-let twoHandStartRotY = 0;
-let lastSnapTurnTime = 0;
-
-// Room Mesh State (Occlusion, Shadow, Wireframe)
+// Room Mesh State (Mapping xrMesh -> THREE.Group containing occlusion, shadow, and wireframe)
 const roomMeshes = new Map();
 let roomGroup;
 let meshMode = 0; // 0 = Occlusion+Shadow, 1 = Wireframe, 2 = Off
 let isMeshAvailable = true;
 
-// Materials for Room Mesh
+// --- MATERIALS ---
+
+// 1. Occlusion Material (The "Invisible Wall" for real walls/furniture)
 const matOcclusion = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: true,
     side: THREE.DoubleSide
 });
 
+// 2. Shadow Material (The "Projected Shadow" on real floor/desks)
 const matShadow = new THREE.ShadowMaterial({
     opacity: 0.5,
     depthWrite: false,
     side: THREE.DoubleSide
 });
 
+// 3. Wireframe Material (Debug room boundaries)
 const matWireframe = new THREE.MeshBasicMaterial({
     color: 0x00ffff,
     wireframe: true,
@@ -87,37 +54,37 @@ const matWireframe = new THREE.MeshBasicMaterial({
     opacity: 0.3
 });
 
-// Floor Reference Grid
-let floorGrid = null;
-let showFloorGrid = true;
+// Menu State
+let menuItems = [];
+let isMenuOpen = false;
+let isDragging = false;
+let isLoading = false;
+let selectedIndex = 2; // Default to 'Fighter Jet'
+let scoreValue = 0;
+let lastScrollTime = 0;
+let lastButtonState = {};
+let isScalingEnabled = true;
 
-// Telemetry
-let lastFrameTime = performance.now();
-let frameCount = 0;
-let fpsLastTime = performance.now();
-let dragCounter = 0;
-
-// DOM Cache
-const dom = {};
-
-// Initialize App
-window.addEventListener('DOMContentLoaded', init);
+init();
+animate();
 
 function init() {
     try {
-        cacheDomElements();
+        const container = document.getElementById('ar-button-container');
+        if (!container) throw new Error("Missing #ar-button-container");
+
+        // 1. Prepare Menu Items (Fighter Jet first among models)
         buildMenuItems();
-        setup2DUIEventListeners();
-        setupDragAndDrop();
 
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
-        camera.position.set(0, 1.6, 2.5);
+        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
         // --- LIGHTING & SHADOWS ---
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
-        dirLight.position.set(0, 5, 0);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+        dirLight.position.set(0, 5, 0); // Overhead light for passthrough realism
         dirLight.castShadow = true;
+
+        // High Quality Shadows
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.1;
@@ -130,285 +97,88 @@ function init() {
 
         scene.add(dirLight);
         scene.add(dirLight.target);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
-        // Renderer
+        // Renderer (alpha: true is critical for Quest 3 Passthrough AR)
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         renderer.xr.setReferenceSpaceType('local-floor');
+
+        // ENABLE SHADOWS
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        dom.canvasContainer.appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
-        // Environment
-        const pmremGenerator = new THREE.PMREMGenerator(renderer);
-        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        // --- AR BUTTON ONLY (Pure Quest 3 Passthrough AR) ---
+        const arBtn = ARButton.createButton(renderer, {
+            requiredFeatures: ['hit-test', 'local-floor', 'mesh-detection'],
+            optionalFeatures: ['bounded-floor', 'plane-detection']
+        });
+        arBtn.style.position = 'static';
+        container.appendChild(arBtn);
 
-        // --- WEBXR BUTTONS (AR & VR) ---
-        setupWebXRButtons();
+        // Controllers
+        controller1 = renderer.xr.getController(0);
+        controller1.addEventListener('select', onSelect);
+        scene.add(controller1);
 
-        // --- CONTROLLERS ---
-        setupControllers();
+        controller2 = renderer.xr.getController(1);
+        controller2.addEventListener('select', onSelect);
+        scene.add(controller2);
 
-        // --- RETICLE ---
+        // Reticle (Surface marker on floor/table)
         reticle = new THREE.Mesh(
             new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
         );
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
         scene.add(reticle);
 
+        // Environment reflections
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
         // --- ROOM GROUP ---
         roomGroup = new THREE.Group();
         scene.add(roomGroup);
 
-        // --- FLOOR GRID ---
-        floorGrid = new THREE.GridHelper(20, 40, 0x00f3ff, 0x1e293b);
-        floorGrid.material.transparent = true;
-        floorGrid.material.opacity = 0.45;
-        floorGrid.visible = showFloorGrid;
-        scene.add(floorGrid);
+        // --- SETUP FLOATING IN-GAME HUD ---
+        createHUD();
 
-        // --- DIEGETIC IN-VR HUD ---
-        createDiegeticHUD();
+        // --- SETUP FILE UPLOADER (GLB / PLY / SPLAT) ---
+        setupUploadListeners();
 
-        // --- DESKTOP ORBIT CONTROLS ---
-        setupDesktopControls();
-
-        // --- INITIALIZE GAUSSIAN SPLATS VIEWER ---
-        initGaussianSplatEngine();
-
-        // Start Animation Loop
-        renderer.setAnimationLoop(render);
-
-        // Auto-load default model: Fighter Jet
-        setTimeout(() => {
-            loadStandard3DModel('Fighter Jet');
-        }, 150);
-
+        window.addEventListener('resize', onWindowResize);
     } catch (e) {
-        console.error('Initialization error:', e);
+        console.error(e);
     }
 }
 
-function cacheDomElements() {
-    dom.canvasContainer = document.getElementById('canvas-container');
-    dom.loadDefaultBtn = document.getElementById('load-default-btn');
-    dom.uploadBtn = document.getElementById('upload-btn');
-    dom.fileInput = document.getElementById('file-input');
-    dom.helpToggleBtn = document.getElementById('help-toggle-btn');
-    dom.vrButtonMount = document.getElementById('vr-button-mount');
-
-    dom.dropOverlay = document.getElementById('drop-overlay');
-
-    dom.modelFilename = document.getElementById('model-filename');
-    dom.statusDot = document.getElementById('status-dot');
-    dom.statSplatCount = document.getElementById('stat-splat-count');
-    dom.statFileSize = document.getElementById('stat-file-size');
-    dom.statFps = document.getElementById('stat-fps');
-    dom.statScale = document.getElementById('stat-scale');
-
-    dom.recenterBtn = document.getElementById('recenter-btn');
-    dom.resetScaleBtn = document.getElementById('reset-scale-btn');
-    dom.flipYBtn = document.getElementById('flip-y-btn');
-    dom.gridToggleBtn = document.getElementById('grid-toggle-btn');
-
-    dom.loadingDialog = document.getElementById('loading-dialog');
-    dom.loadingTitle = document.getElementById('loading-title');
-    dom.loadingPercent = document.getElementById('loading-percent');
-    dom.loadingBarFill = document.getElementById('loading-bar-fill');
-    dom.loadingSubtitle = document.getElementById('loading-subtitle');
-
-    dom.controlsModal = document.getElementById('controls-modal');
-    dom.closeModalBtn = document.getElementById('close-modal-btn');
-    dom.toast = document.getElementById('toast');
-}
-
 function buildMenuItems() {
+    const customNames = [...customModelsMap.keys(), ...customSplatsMap.keys()];
     menuItems = [
         'Room Mode',
         'Scaling: On',
         'Fighter Jet',
-        ...(uploadedModelName ? [uploadedModelName] : []),
-        ...(customSplatFileName ? [customSplatFileName] : []),
-        ...models.filter(m => m.name !== 'Fighter Jet').map(m => m.name),
-        'Default Gaussian.ply'
+        ...customNames,
+        ...models.filter(m => m.name !== 'Fighter Jet').map(m => m.name)
     ];
 }
 
-function setupWebXRButtons() {
-    // 1. AR Button (supports Quest 3 passthrough, hit-test, and room mesh)
-    const sessionInit = {
-        requiredFeatures: ['hit-test', 'local-floor'],
-        optionalFeatures: ['bounded-floor', 'mesh-detection', 'plane-detection', 'hand-tracking']
-    };
-
-    const arBtn = ARButton.createButton(renderer, sessionInit);
-    arBtn.id = 'ARButton';
-    arBtn.title = 'Enter Quest 3 Passthrough AR';
-
-    // 2. VR Button (supports immersive VR)
-    const vrBtn = VRButton.createButton(renderer, {
-        requiredFeatures: ['local-floor'],
-        optionalFeatures: ['bounded-floor', 'hand-tracking']
-    });
-    vrBtn.id = 'VRButton';
-    vrBtn.title = 'Enter Quest 3 Immersive VR';
-
-    if (dom.vrButtonMount) {
-        dom.vrButtonMount.appendChild(arBtn);
-        dom.vrButtonMount.appendChild(vrBtn);
-    }
-}
-
-function setupControllers() {
-    controller1 = renderer.xr.getController(0);
-    controller1.addEventListener('select', onSelect);
-    controller1.addEventListener('connected', (e) => {
-        controller1.userData.handedness = e.data.handedness;
-        controller1.userData.inputSource = e.data;
-    });
-    scene.add(controller1);
-
-    controller2 = renderer.xr.getController(1);
-    controller2.addEventListener('select', onSelect);
-    controller2.addEventListener('connected', (e) => {
-        controller2.userData.handedness = e.data.handedness;
-        controller2.userData.inputSource = e.data;
-    });
-    scene.add(controller2);
-
-    // Attach laser pointers
-    controller1.add(createLaser());
-    controller2.add(createLaser());
-}
-
-function createLaser() {
-    const geo = new THREE.CylinderGeometry(0.0015, 0.003, 3, 8);
-    geo.rotateX(-Math.PI / 2);
-    geo.translate(0, 0, -1.5);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.6 });
-    return new THREE.Mesh(geo, mat);
-}
-
-function setupDesktopControls() {
-    orbitControls = new OrbitControls(camera, renderer.domElement);
-    orbitControls.enableDamping = true;
-    orbitControls.dampingFactor = 0.08;
-    orbitControls.rotateSpeed = 0.7;
-    orbitControls.panSpeed = 0.8;
-    orbitControls.zoomSpeed = 1.2;
-    orbitControls.target.set(0, 1.2, 0);
-
-    renderer.xr.addEventListener('sessionstart', () => {
-        if (orbitControls) orbitControls.enabled = false;
-        showToast('XR Session Active');
-    });
-
-    renderer.xr.addEventListener('sessionend', () => {
-        if (orbitControls) orbitControls.enabled = true;
-        showToast('XR Session Ended');
-    });
-}
-
-function setup2DUIEventListeners() {
-    dom.loadDefaultBtn.addEventListener('click', () => {
-        loadStandard3DModel('Fighter Jet');
-    });
-
-    dom.uploadBtn.addEventListener('click', () => {
-        dom.fileInput.click();
-    });
-
-    dom.fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            handleFileUpload(file);
-            dom.fileInput.value = '';
-        }
-    });
-
-    dom.helpToggleBtn.addEventListener('click', () => {
-        dom.controlsModal.classList.add('active');
-    });
-
-    dom.closeModalBtn.addEventListener('click', () => {
-        dom.controlsModal.classList.remove('active');
-    });
-
-    dom.controlsModal.addEventListener('click', (e) => {
-        if (e.target === dom.controlsModal) dom.controlsModal.classList.remove('active');
-    });
-
-    dom.recenterBtn.addEventListener('click', () => {
-        recenterActiveObject();
-        showToast('Model recentered');
-    });
-
-    dom.resetScaleBtn.addEventListener('click', () => {
-        resetActiveObjectScale();
-        showToast('Scale reset to 1.0x');
-    });
-
-    dom.flipYBtn.addEventListener('click', () => {
-        flipActiveObjectY();
-    });
-
-    dom.gridToggleBtn.addEventListener('click', () => {
-        showFloorGrid = !showFloorGrid;
-        if (floorGrid) floorGrid.visible = showFloorGrid;
-        dom.gridToggleBtn.classList.toggle('active', showFloorGrid);
-        showToast(`Ground Grid ${showFloorGrid ? 'On' : 'Off'}`);
-    });
-
-    window.addEventListener('resize', onWindowResize);
-}
-
-function setupDragAndDrop() {
-    window.addEventListener('dragenter', (e) => {
-        e.preventDefault();
-        dragCounter++;
-        dom.dropOverlay.classList.add('active');
-    });
-
-    window.addEventListener('dragover', (e) => {
-        e.preventDefault();
-    });
-
-    window.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dragCounter--;
-        if (dragCounter <= 0) {
-            dragCounter = 0;
-            dom.dropOverlay.classList.remove('active');
-        }
-    });
-
-    window.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dragCounter = 0;
-        dom.dropOverlay.classList.remove('active');
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            handleFileUpload(e.dataTransfer.files[0]);
-        }
-    });
-}
-
 /* =========================================================
-   Diegetic In-VR UI (Floating HUD, Menu Mesh, Controls)
+   Diegetic In-Game 3D HUD & Controls
    ========================================================= */
 
-function createDiegeticHUD() {
+function createHUD() {
     hudGroup = new THREE.Group();
     scene.add(hudGroup);
 
     // 1. Status Text
-    statusMesh = createTextLabel("Ready — Press 'B' for Menu", 40, null, '#00ff00');
+    statusMesh = createTextLabel("Ready - Aim & Pull Trigger to Spawn", 40, null, '#00ff00');
     statusMesh.position.set(-0.4, 0.3, -1.0);
     hudGroup.add(statusMesh);
 
@@ -423,7 +193,7 @@ function createDiegeticHUD() {
 
     const fillGeo = new THREE.PlaneGeometry(0.6, 0.05);
     fillGeo.translate(0.3, 0, 0);
-    loadingFill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: 0x00f3ff }));
+    loadingFill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: 0x4a90e2 }));
     loadingFill.position.x = -0.3;
     loadingFill.position.z = 0.001;
     loadingFill.scale.x = 0;
@@ -438,14 +208,14 @@ function createDiegeticHUD() {
 
 function createMenuMesh() {
     const headerHeight = 150;
-    const itemHeight = 58;
+    const itemHeight = 60;
     const footerPadding = 40;
     const totalContentHeight = headerHeight + (menuItems.length * itemHeight) + footerPadding;
 
     const canvasWidth = 512;
     const canvasHeight = Math.max(totalContentHeight, 512);
 
-    const planeWidth = 0.65;
+    const planeWidth = 0.6;
     const planeHeight = planeWidth * (canvasHeight / canvasWidth);
 
     const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
@@ -458,8 +228,8 @@ function createMenuMesh() {
 
     if (menuMesh) {
         hudGroup.remove(menuMesh);
-        menuMesh.geometry.dispose();
-        menuMesh.material.dispose();
+        if (menuMesh.geometry) menuMesh.geometry.dispose();
+        if (menuMesh.material) menuMesh.material.dispose();
     }
 
     menuMesh = new THREE.Mesh(geometry, material);
@@ -472,19 +242,18 @@ function createMenuMesh() {
 }
 
 function createControlsMesh() {
-    const geometry = new THREE.PlaneGeometry(0.55, 0.75);
+    const geometry = new THREE.PlaneGeometry(0.5, 0.7);
     const material = new THREE.MeshBasicMaterial({
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.90,
         depthTest: false,
         side: THREE.DoubleSide
     });
     controlsMesh = new THREE.Mesh(geometry, material);
-    controlsMesh.position.set(-0.75, 0, -1.8);
-    controlsMesh.rotation.y = 0.22;
+    controlsMesh.position.set(-0.7, 0, -1.8);
+    controlsMesh.rotation.y = 0.2;
     controlsMesh.visible = false;
     hudGroup.add(controlsMesh);
-
     redrawControlsCanvas();
 }
 
@@ -496,20 +265,19 @@ function redrawControlsCanvas() {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = 'rgba(10, 12, 20, 0.9)';
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.88)';
     ctx.beginPath();
     ctx.roundRect(10, 10, width - 20, height - 20, 30);
     ctx.fill();
-    ctx.strokeStyle = '#00f3ff';
+    ctx.strokeStyle = '#4a90e2';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.font = 'bold 46px Outfit, sans-serif';
-    ctx.fillStyle = '#00f3ff';
+    ctx.font = 'bold 50px Arial';
+    ctx.fillStyle = '#4a90e2';
     ctx.textAlign = 'center';
-    ctx.fillText("Quest 3 Controls", width / 2, 70);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillText("AR Controls", width / 2, 70);
+    ctx.strokeStyle = '#555';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(40, 90);
@@ -517,28 +285,28 @@ function redrawControlsCanvas() {
     ctx.stroke();
 
     const lines = [
-        { label: "Trigger (Click)", val: "Spawn / Place Model" },
-        { label: "Hold Button 'A' / Grip", val: "Drag Model / Splat" },
-        { label: "Dual Grips (Hold Both)", val: "Pinch-to-Scale & Rotate" },
+        { label: "Trigger", val: "Spawn Model on Surface" },
+        { label: "Hold Button A", val: "Drag Model" },
         { label: "Left Stick ↕", val: "Lift / Lower" },
-        { label: "Right Stick ↔", val: "Snap Turn 45°" },
+        { label: "Right Stick ↔", val: "Rotate" },
         { label: "Right Stick ↕", val: "Scale Size" },
-        { label: "Button 'B' / 'Y'", val: "Toggle Menu" }
+        { label: "Button B", val: "Open / Close Menu" }
     ];
 
     ctx.textAlign = 'left';
     let y = 140;
     lines.forEach(line => {
-        ctx.font = 'bold 30px Outfit, sans-serif';
+        ctx.font = 'bold 32px Arial';
         ctx.fillStyle = '#ffcc00';
         ctx.fillText(line.label, 40, y);
-        y += 38;
-        ctx.font = '26px Outfit, sans-serif';
+        y += 40;
+        ctx.font = '28px Arial';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(line.val, 55, y);
-        y += 44;
+        ctx.fillText(line.val, 60, y);
+        y += 45;
     });
 
+    if (controlsMesh.material.map) controlsMesh.material.map.dispose();
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
     controlsMesh.material.map = tex;
@@ -556,20 +324,20 @@ function redrawMenuCanvas() {
 
     ctx.clearRect(0, 0, width, height);
 
-    ctx.fillStyle = 'rgba(12, 14, 24, 0.94)';
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
     ctx.beginPath();
     ctx.roundRect(10, 10, width - 20, height - 20, 30);
     ctx.fill();
-    ctx.strokeStyle = '#00f3ff';
+    ctx.strokeStyle = 'white';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.font = 'bold 46px Outfit, sans-serif';
-    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 50px Arial';
+    ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
-    ctx.fillText("Model & Splat Library", width / 2, 70);
+    ctx.fillText("Model Library", width / 2, 70);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = '#555';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(40, 90);
@@ -577,8 +345,7 @@ function redrawMenuCanvas() {
     ctx.stroke();
 
     const startY = 150;
-    const itemHeight = 58;
-
+    const itemHeight = 60;
     menuItems.forEach((itemText, i) => {
         const yPos = startY + (i * itemHeight);
         let displayLabel = itemText;
@@ -597,22 +364,22 @@ function redrawMenuCanvas() {
         } else if (i === 1) {
             displayLabel = isScalingEnabled ? "Scaling: On" : "Scaling: Off";
             textColor = isScalingEnabled ? '#00ff00' : '#ffaa00';
-        } else if (itemText.includes('Gaussian') || itemText.includes('.ply') || itemText.includes('.splat')) {
-            textColor = '#00f3ff'; // Highlight splats in cyan
+        } else {
+            if (customModelsMap.has(itemText)) displayLabel = `[3D] ${itemText}`;
+            else if (customSplatsMap.has(itemText)) displayLabel = `[Splat] ${itemText}`;
         }
 
         if (i === selectedIndex) {
-            ctx.fillStyle = '#00f3ff';
+            ctx.fillStyle = '#4a90e2';
             ctx.beginPath();
             ctx.roundRect(40, yPos - 35, width - 80, 50, 10);
             ctx.fill();
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 32px Outfit, sans-serif';
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 34px Arial';
         } else {
             ctx.fillStyle = textColor;
-            ctx.font = '32px Outfit, sans-serif';
+            ctx.font = '34px Arial';
         }
-
         ctx.fillText(displayLabel, width / 2, yPos);
     });
 
@@ -624,26 +391,19 @@ function redrawMenuCanvas() {
 }
 
 function updateStatusText(text, isError = false) {
-    const color = isError ? '#ff4444' : '#00ff00';
-    if (statusMesh.material.map) statusMesh.material.map.dispose();
-    statusMesh.material.map = createTexture(text, 40, null, color);
-    statusMesh.material.needsUpdate = true;
+    const color = isError ? '#ff0000' : '#00ff00';
+    if (statusMesh && statusMesh.material.map) statusMesh.material.map.dispose();
+    if (statusMesh) {
+        statusMesh.material.map = createTexture(text, 40, null, color);
+        statusMesh.material.needsUpdate = true;
+    }
 }
 
 function updateLoadingBar(percent) {
+    if (!loadingGroup) return;
     loadingGroup.visible = true;
     loadingFill.scale.x = Math.min(Math.max(percent, 0.01), 1);
     updateStatusText(`Loading: ${(percent * 100).toFixed(0)}%`);
-
-    // Sync 2D Loading Dialog
-    dom.loadingDialog.classList.add('active');
-    dom.loadingPercent.textContent = `${(percent * 100).toFixed(0)}%`;
-    dom.loadingBarFill.style.width = `${(percent * 100).toFixed(0)}%`;
-}
-
-function hideLoadingBar() {
-    loadingGroup.visible = false;
-    dom.loadingDialog.classList.remove('active');
 }
 
 function createTexture(text, fontSize, bgColor, textColor) {
@@ -658,7 +418,7 @@ function createTexture(text, fontSize, bgColor, textColor) {
         ctx.fillRect(0, 0, 512, 128);
     }
 
-    ctx.font = `Bold ${fontSize}px Outfit, sans-serif`;
+    ctx.font = `Bold ${fontSize}px Arial`;
     ctx.fillStyle = textColor || 'white';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -677,211 +437,98 @@ function createTextLabel(text, fontSize, bgColor, textColor) {
 }
 
 /* =========================================================
-   Gaussian Splat Engine Setup
-   ========================================================= */
-
-function initGaussianSplatEngine() {
-    splatViewer = new GaussianSplats3D.Viewer({
-        camera: camera,
-        renderer: renderer,
-        threeScene: scene,
-        dynamicScene: true,
-        gpuAcceleratedSort: false, // WASM sort is most stable on Quest 3
-        sharedMemoryForWorkers: false,
-        useBuiltInControls: false,
-        selfDrivenMode: false,     // Driven by renderer.setAnimationLoop
-        renderMode: GaussianSplats3D.RenderMode.Always,
-        sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant,
-        logLevel: GaussianSplats3D.LogLevel.None
-    });
-
-    splatViewer.init();
-}
-
-/* =========================================================
-   Model & Splat Loading Logic
+   Model & Splat Placement and Loading Logic
    ========================================================= */
 
 function onSelect() {
-    if (!isMenuOpen && !isLoading && reticle.visible && currentModelName && !isDragging) {
-        loadSelectedModel(currentModelName, reticle.matrix);
+    // Spawns the selected model onto the hit-tested surface reticle
+    if (!isMenuOpen && !isLoading && reticle.visible && modelName && !isDragging) {
+        loadModel(modelName, reticle.matrix);
     }
 }
 
-function loadSelectedModel(name, positionMatrix) {
-    if (!name || isLoading) return;
-
-    if (name === uploadedModelName && uploadedModelObject) {
-        loadUploaded3DModel(uploadedModelObject, uploadedModelName, positionMatrix);
-    } else if (name === customSplatFileName && customSplatBuffer) {
-        loadUploadedSplatBuffer(customSplatBuffer, customSplatFileName, positionMatrix);
-    } else if (name === 'Default Gaussian.ply') {
-        loadDefaultGaussianSplat(positionMatrix);
-    } else {
-        loadStandard3DModel(name, positionMatrix);
-    }
-}
-
-async function loadDefaultGaussianSplat(positionMatrix) {
-    if (isLoading) return;
-    isLoading = true;
-    currentModelName = 'Default Gaussian.ply';
-    dom.modelFilename.textContent = 'Default Gaussian.ply';
-    dom.statFileSize.textContent = '127 MB';
-
-    updateStatusText("Streaming Default Gaussian...");
-    updateLoadingBar(0.01);
-    dom.loadingTitle.textContent = 'Loading Default Gaussian Splat...';
-    dom.loadingSubtitle.textContent = 'Streaming 127 MB binary PLY data';
-
-    if (currentModel) {
-        scene.remove(currentModel);
-        currentModel = null;
-    }
-
-    if (splatViewer && splatViewer.splatMesh) {
-        splatViewer.splatMesh.visible = true;
-    }
-
-    try {
-        // Clear previous splat scenes if any
-        if (splatViewer && splatViewer.splatMesh && splatViewer.splatMesh.scenes) {
-            const scenesCount = splatViewer.splatMesh.scenes.length;
-            if (scenesCount > 0) {
-                const indices = Array.from({ length: scenesCount }, (_, i) => i);
-                await splatViewer.removeSplatScenes(indices, false);
-            }
-        }
-
-        const splatUrl = new URL('../../assets/Gaussian-Splats/Default Gaussian.ply', import.meta.url).href;
-
-        // Perform head check to give a crisp error if missing on remote host
-        const headCheck = await fetch(splatUrl, {
-            method: 'HEAD',
-            headers: { 'ngrok-skip-browser-warning': 'true' }
-        });
-
-        if (!headCheck.ok) {
-            if (headCheck.status === 404) {
-                throw new Error("Default Gaussian.ply (127MB) is not on GitHub due to the 100MB limit. Run locally via ngrok to view it, or upload your own file!");
-            }
-            throw new Error(`HTTP ${headCheck.status}`);
-        }
-
-        await splatViewer.addSplatScene(splatUrl, {
-            showLoadingUI: false,
-            progressiveLoad: true,
-            headers: { 'ngrok-skip-browser-warning': 'true' },
-            onProgress: (percent, percentLabel, loaderStatus) => {
-                const pct = Math.min(100, Math.max(1, percent || 0));
-                updateLoadingBar(pct / 100);
-                updateStatusText(`Loading ${percentLabel || pct + '%'}...`);
-                dom.loadingTitle.textContent = 'Streaming Default Gaussian Splat...';
-                dom.loadingSubtitle.textContent = `Downloaded: ${percentLabel || pct + '%'}`;
-            }
-        });
-
-        currentSplatScene = splatViewer.getSplatScene(0);
-        if (currentSplatScene) {
-            if (positionMatrix) {
-                currentSplatScene.position.setFromMatrixPosition(positionMatrix);
-            } else {
-                currentSplatScene.position.set(0, 0.8, -1.8);
-            }
-            currentSplatScene.scale.set(1.0, 1.0, 1.0);
-            currentSplatScene.updateTransform(true);
-        }
-
-        const splatMesh = splatViewer.getSplatMesh();
-        const splatBuffer = splatMesh?.getSplatTree()?.splatBuffer;
-        const count = splatBuffer?.getSplatCount() || 535144;
-        dom.statSplatCount.textContent = count.toLocaleString();
-        scoreValue += 15;
-        updateStatusText(`Loaded! Score: ${scoreValue}`);
-        showToast(`Loaded Default Gaussian (${count.toLocaleString()} splats)`);
-
-        closeMenu();
-
-    } catch (err) {
-        console.error('Error loading default splat:', err);
-        updateStatusText("Load Error", true);
-        showToast(err.message, 8000);
-    } finally {
-        isLoading = false;
-        hideLoadingBar();
-    }
-}
-
-async function loadUploadedSplatBuffer(splatBuffer, filename, positionMatrix) {
-    if (isLoading) return;
-    isLoading = true;
-    currentModelName = filename;
-    dom.modelFilename.textContent = filename;
-
-    updateStatusText(`Building ${filename}...`);
-    updateLoadingBar(0.5);
-
-    if (currentModel) {
-        scene.remove(currentModel);
-        currentModel = null;
-    }
-
-    try {
-        await splatViewer.addSplatBuffers([splatBuffer], [{}], true, false, false, true, true);
-
-        currentSplatScene = splatViewer.getSplatScene(0);
-        if (currentSplatScene) {
-            if (positionMatrix) {
-                currentSplatScene.position.setFromMatrixPosition(positionMatrix);
-            } else {
-                currentSplatScene.position.set(0, 0.8, -1.8);
-            }
-            currentSplatScene.scale.set(1.0, 1.0, 1.0);
-            currentSplatScene.updateTransform(true);
-        }
-
-        const count = splatBuffer.getSplatCount();
-        dom.statSplatCount.textContent = count.toLocaleString();
-        scoreValue += 15;
-        updateStatusText(`Loaded ${filename}!`);
-        showToast(`Loaded ${filename} (${count.toLocaleString()} splats)`);
-
-        closeMenu();
-
-    } catch (err) {
-        console.error('Error adding splat buffer:', err);
-        updateStatusText("Load Error", true);
-    } finally {
-        isLoading = false;
-        hideLoadingBar();
-    }
-}
-
-function loadStandard3DModel(name, positionMatrix) {
+async function loadModel(name, positionMatrix) {
     if (!name || isLoading) return;
     isLoading = true;
     updateLoadingBar(0.01);
 
+    // Remove existing 3D model
     if (currentModel) {
         scene.remove(currentModel);
         currentModel = null;
     }
 
-    // Hide splats when viewing standard models
+    // Hide splat viewer mesh if switching
     if (splatViewer && splatViewer.splatMesh) {
         splatViewer.splatMesh.visible = false;
     }
 
-    const selectedModel = models.find(m => m.name === name);
-    if (!selectedModel) {
-        console.error("Model not found:", name);
-        isLoading = false;
+    // --- CASE 1: Uploaded Custom 3D Model (GLB/GLTF) ---
+    if (customModelsMap.has(name)) {
+        const customObj = customModelsMap.get(name);
+        currentModel = customObj.clone(true);
+        currentModel.position.setFromMatrixPosition(positionMatrix);
+
+        const box = new THREE.Box3().setFromObject(currentModel);
+        const size = box.getSize(new THREE.Vector3()).length();
+        const scalar = size > 0 ? (1.5 / size) : 1;
+        currentModel.scale.set(scalar, scalar, scalar);
+
+        currentModel.traverse((node) => {
+            if (node.isMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
+            }
+        });
+
+        scene.add(currentModel);
+        finishLoading(name);
         return;
     }
 
-    currentModelName = name;
-    dom.modelFilename.textContent = name;
+    // --- CASE 2: Uploaded Custom Gaussian Splat ---
+    if (customSplatsMap.has(name)) {
+        const splatBuffer = customSplatsMap.get(name);
+        try {
+            initSplatEngineIfNeeded();
+            splatViewer.splatMesh.visible = true;
+
+            // Remove previous splat scenes
+            const mesh = splatViewer.getSplatMesh();
+            if (mesh && mesh.scenes && mesh.scenes.length > 0) {
+                const count = mesh.scenes.length;
+                await splatViewer.removeSplatScenes(Array.from({ length: count }, (_, i) => i), false);
+            }
+
+            await splatViewer.addSplatBuffers([splatBuffer], [{}], true, false, false, true, true);
+            currentSplatScene = splatViewer.getSplatScene(0);
+            if (currentSplatScene) {
+                currentSplatScene.position.setFromMatrixPosition(positionMatrix);
+                currentSplatScene.scale.set(1.0, 1.0, 1.0);
+                currentSplatScene.updateTransform(true);
+            }
+
+            finishLoading(name);
+        } catch (err) {
+            console.error('Error adding splat buffer:', err);
+            isLoading = false;
+            if (loadingGroup) loadingGroup.visible = false;
+            updateStatusText("Load Error", true);
+        }
+        return;
+    }
+
+    // --- CASE 3: Standard Model from models_config.js ---
+    const selectedModel = models.find(m => m.name === name);
+    if (!selectedModel) {
+        console.error("Model not found in config:", name);
+        isLoading = false;
+        if (loadingGroup) loadingGroup.visible = false;
+        return;
+    }
+
     const rawPath = selectedModel.path;
+    // Resolve relative to module so it works across root, subpaths, ngrok, and local
     const assetPath = new URL(rawPath.startsWith('/') ? '../../' + rawPath.slice(1) : rawPath, import.meta.url).href;
 
     const onProgress = (xhr) => {
@@ -890,200 +537,98 @@ function loadStandard3DModel(name, positionMatrix) {
 
     const onError = (e) => {
         isLoading = false;
-        hideLoadingBar();
+        if (loadingGroup) loadingGroup.visible = false;
         console.error(e);
         updateStatusText("Load Error", true);
-        showToast(`Failed loading ${name}`);
     };
 
     const onLoad = (obj) => {
         currentModel = obj;
-        if (positionMatrix) {
-            currentModel.position.setFromMatrixPosition(positionMatrix);
-        } else {
-            currentModel.position.set(0, 0.8, -1.8);
-        }
+        currentModel.position.setFromMatrixPosition(positionMatrix);
 
         const box = new THREE.Box3().setFromObject(currentModel);
         const size = box.getSize(new THREE.Vector3()).length();
         const scalar = size > 0 ? (1.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
 
-        let polyCount = 0;
+        // Shadow Casting for Models on Room Mesh
         currentModel.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
-                if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
-                    polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
-                }
             }
         });
 
         scene.add(currentModel);
-
-        isLoading = false;
-        closeMenu();
-        hideLoadingBar();
-
-        scoreValue += 10;
-        updateStatusText(`Loaded! Score: ${scoreValue}`);
-        showToast(`Loaded ${name}`);
-
-        dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
-        dom.statFileSize.textContent = name === 'Fighter Jet' ? '2.1 MB' : '3D Mesh';
+        finishLoading(name);
     };
 
     const ext = rawPath.split('.').pop().toLowerCase();
     if (ext === 'glb' || ext === 'gltf') {
         new GLTFLoader().load(assetPath, (g) => onLoad(g.scene), onProgress, onError);
     } else if (ext === 'obj') {
-        new OBJLoader().load(assetPath, (o) => onLoad(o), onProgress, onError);
+        new OBJLoader().load(assetPath, (o) => {
+            o.traverse(c => { if (c.isMesh) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }); });
+            onLoad(o);
+        }, onProgress, onError);
     }
 }
 
-function loadUploaded3DModel(modelObj, name, positionMatrix) {
-    if (isLoading) return;
-    isLoading = true;
-    updateLoadingBar(0.5);
-
-    if (currentModel) {
-        scene.remove(currentModel);
-        currentModel = null;
-    }
-
-    if (splatViewer && splatViewer.splatMesh) {
-        splatViewer.splatMesh.visible = false;
-    }
-
-    currentModelName = name;
-    dom.modelFilename.textContent = name;
-
-    const clone = modelObj.clone(true);
-    currentModel = clone;
-
-    if (positionMatrix) {
-        currentModel.position.setFromMatrixPosition(positionMatrix);
-    } else {
-        currentModel.position.set(0, 0.8, -1.8);
-    }
-
-    const box = new THREE.Box3().setFromObject(currentModel);
-    const size = box.getSize(new THREE.Vector3()).length();
-    const scalar = size > 0 ? (1.5 / size) : 1;
-    currentModel.scale.set(scalar, scalar, scalar);
-
-    let polyCount = 0;
-    currentModel.traverse((node) => {
-        if (node.isMesh) {
-            node.castShadow = true;
-            node.receiveShadow = true;
-            if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
-                polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
-            }
-        }
-    });
-
-    scene.add(currentModel);
-
+function finishLoading(name) {
     isLoading = false;
-    closeMenu();
-    hideLoadingBar();
+    isMenuOpen = false;
+    if (menuMesh) menuMesh.visible = false;
+    if (controlsMesh) controlsMesh.visible = false;
+    if (loadingGroup) loadingGroup.visible = false;
 
     scoreValue += 10;
-    updateStatusText(`Loaded! Score: ${scoreValue}`);
-    showToast(`Loaded ${name}`);
-
-    dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
-    dom.statFileSize.textContent = 'Custom 3D';
+    updateStatusText(`Loaded ${name}! Score: ${scoreValue}`);
 }
 
-async function handleFileUpload(file) {
-    if (!file) return;
-    const ext = file.name.split('.').pop().toLowerCase();
-
-    if (['ply', 'splat', 'ksplat', 'spz'].includes(ext)) {
-        showToast(`Parsing ${file.name}...`);
-        updateStatusText(`Reading ${file.name}...`);
-        updateLoadingBar(0.2);
-
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            updateLoadingBar(0.6);
-
-            let splatBuffer;
-            if (ext === 'ply') splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-            else if (ext === 'splat') splatBuffer = await GaussianSplats3D.SplatLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-            else if (ext === 'ksplat') splatBuffer = await GaussianSplats3D.KSplatLoader.loadFromFileData(arrayBuffer);
-            else if (ext === 'spz') splatBuffer = await GaussianSplats3D.SpzLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-
-            customSplatBuffer = splatBuffer;
-            customSplatFileName = file.name;
-
-            // Rebuild menu to include uploaded splat
-            buildMenuItems();
-            createMenuMesh();
-
-            await loadUploadedSplatBuffer(splatBuffer, file.name);
-
-        } catch (err) {
-            console.error('Failed to parse uploaded splat:', err);
-            showToast(`Error: ${err.message}`);
-            hideLoadingBar();
-        }
-    } else if (['glb', 'gltf'].includes(ext)) {
-        showToast(`Parsing ${file.name}...`);
-        updateStatusText(`Reading ${file.name}...`);
-        updateLoadingBar(0.3);
-
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            updateLoadingBar(0.6);
-
-            new GLTFLoader().parse(arrayBuffer, '', (gltf) => {
-                uploadedModelObject = gltf.scene;
-                uploadedModelName = file.name;
-
-                // Rebuild menu to include uploaded model
-                buildMenuItems();
-                createMenuMesh();
-
-                loadUploaded3DModel(gltf.scene, file.name);
-            }, (err) => {
-                console.error('Failed to parse GLTF:', err);
-                showToast(`Error parsing ${file.name}`);
-                hideLoadingBar();
-            });
-        } catch (err) {
-            console.error('Failed to read 3D model:', err);
-            showToast(`Error reading ${file.name}`);
-            hideLoadingBar();
-        }
-    } else {
-        showToast(`Unsupported format .${ext}`);
-    }
+function initSplatEngineIfNeeded() {
+    if (splatViewer) return;
+    splatViewer = new GaussianSplats3D.Viewer({
+        camera: camera,
+        renderer: renderer,
+        threeScene: scene,
+        dynamicScene: true,
+        gpuAcceleratedSort: false,
+        sharedMemoryForWorkers: false,
+        useBuiltInControls: false,
+        selfDrivenMode: false,
+        renderMode: GaussianSplats3D.RenderMode.Always,
+        sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant,
+        logLevel: GaussianSplats3D.LogLevel.None
+    });
+    splatViewer.init();
 }
 
-function closeMenu() {
-    isMenuOpen = false;
-    menuMesh.visible = false;
-    controlsMesh.visible = false;
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+    renderer.setAnimationLoop(render);
 }
 
 /* =========================================================
-   Render Loop & Room Meshing
+   Render Loop & Room Meshing (Occlusion & Shadows)
    ========================================================= */
 
 function render(timestamp, frame) {
     if (frame) {
-        // 1. Follow camera with diegetic HUD
+        // Follow camera with diegetic HUD
         if (hudGroup) {
             hudGroup.position.lerp(camera.position, 0.1);
             hudGroup.quaternion.slerp(camera.quaternion, 0.1);
         }
 
-        // 2. Room Mesh Detection (Occlusion + Shadows)
-        if (frame.detectedMeshes) {
+        // Room Mesh Detection
+        if (!frame.detectedMeshes && isMeshAvailable) {
+            // No meshes
+        } else if (frame.detectedMeshes) {
             isMeshAvailable = true;
             for (const [xrMesh, threeGroup] of roomMeshes) {
                 if (!frame.detectedMeshes.has(xrMesh)) {
@@ -1092,7 +637,6 @@ function render(timestamp, frame) {
                     roomMeshes.delete(xrMesh);
                 }
             }
-
             for (const xrMesh of frame.detectedMeshes) {
                 let threeGroup = roomMeshes.get(xrMesh);
                 let meshOcclusion, meshShadow, meshWireframe;
@@ -1101,15 +645,18 @@ function render(timestamp, frame) {
                     threeGroup = new THREE.Group();
                     const geometry = new THREE.BufferGeometry();
 
+                    // 1. Occlusion Mesh
                     meshOcclusion = new THREE.Mesh(geometry, matOcclusion);
                     meshOcclusion.renderOrder = -2;
                     threeGroup.add(meshOcclusion);
 
+                    // 2. Shadow Mesh
                     meshShadow = new THREE.Mesh(geometry, matShadow);
                     meshShadow.receiveShadow = true;
                     meshShadow.renderOrder = -1;
                     threeGroup.add(meshShadow);
 
+                    // 3. Wireframe Mesh
                     meshWireframe = new THREE.Mesh(geometry, matWireframe);
                     meshWireframe.renderOrder = 0;
                     threeGroup.add(meshWireframe);
@@ -1122,6 +669,7 @@ function render(timestamp, frame) {
                     meshWireframe = threeGroup.children[2];
                 }
 
+                // Visibility logic
                 if (meshMode === 2) {
                     threeGroup.visible = false;
                 } else {
@@ -1155,16 +703,13 @@ function render(timestamp, frame) {
             }
         }
 
-        // 3. Process WebXR Gamepad Inputs
+        // WebXR Controllers Input
         const session = renderer.xr.getSession();
         for (const source of session.inputSources) {
-            if (source.gamepad) handleGamepadInput(source);
+            if (source.gamepad) handleInput(source);
         }
 
-        // 4. Two-Handed Manipulation Check
-        handleTwoHandedPinch();
-
-        // 5. Hit Testing & Surface Reticle
+        // Surface Hit-Testing & Reticle Placement
         if (!isMenuOpen && !isLoading) {
             const refSpace = renderer.xr.getReferenceSpace();
             if (!renderer.xr.hitTestSourceRequested) {
@@ -1173,24 +718,21 @@ function render(timestamp, frame) {
                 });
                 renderer.xr.hitTestSourceRequested = true;
             }
-
             if (renderer.xr.hitTestSource) {
                 const hits = frame.getHitTestResults(renderer.xr.hitTestSource);
                 if (hits.length > 0) {
                     const pose = hits[0].getPose(refSpace);
                     reticle.visible = true;
                     reticle.matrix.fromArray(pose.transform.matrix);
-
-                    if (isDragging) {
-                        const targetPos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
-                        if (currentModel) {
-                            currentModel.position.x = THREE.MathUtils.lerp(currentModel.position.x, targetPos.x, 0.2);
-                            currentModel.position.z = THREE.MathUtils.lerp(currentModel.position.z, targetPos.z, 0.2);
-                        } else if (currentSplatScene) {
-                            currentSplatScene.position.x = THREE.MathUtils.lerp(currentSplatScene.position.x, targetPos.x, 0.2);
-                            currentSplatScene.position.z = THREE.MathUtils.lerp(currentSplatScene.position.z, targetPos.z, 0.2);
-                            currentSplatScene.updateTransform(true);
-                        }
+                    if (isDragging && currentModel) {
+                        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+                        currentModel.position.x = THREE.MathUtils.lerp(currentModel.position.x, pos.x, 0.2);
+                        currentModel.position.z = THREE.MathUtils.lerp(currentModel.position.z, pos.z, 0.2);
+                    } else if (isDragging && currentSplatScene) {
+                        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+                        currentSplatScene.position.x = THREE.MathUtils.lerp(currentSplatScene.position.x, pos.x, 0.2);
+                        currentSplatScene.position.z = THREE.MathUtils.lerp(currentSplatScene.position.z, pos.z, 0.2);
+                        currentSplatScene.updateTransform(true);
                     }
                 } else {
                     reticle.visible = false;
@@ -1199,42 +741,40 @@ function render(timestamp, frame) {
         } else {
             reticle.visible = false;
         }
-    } else {
-        if (orbitControls) orbitControls.update();
     }
 
-    // 6. Update Gaussian Splat Viewer
-    if (splatViewer) {
+    // Update splats if active
+    if (splatViewer && currentSplatScene && splatViewer.splatMesh?.visible) {
         splatViewer.update(renderer, camera);
     }
 
-    // 7. Render Scene
     renderer.render(scene, camera);
-    updateFPS();
 }
 
 /* =========================================================
-   Quest 3 Controller Input Handling
+   Quest 3 Controller Input Handling (AR Mode)
    ========================================================= */
 
-function handleGamepadInput(source) {
+function handleInput(source) {
     if (isLoading) return;
     const gp = source.gamepad;
     const hand = source.handedness;
     const now = Date.now();
 
-    // MENU TOGGLE (Button 'B' on right hand, Button 'Y' on left hand)
+    // MENU TOGGLE: Button 'B' on right controller, or Button 'Y' on left controller
     const bPressed = (gp.buttons.length > 5 && gp.buttons[5].pressed);
     if (bPressed && !lastButtonState[hand + 'B']) {
         isMenuOpen = !isMenuOpen;
+
         menuMesh.visible = isMenuOpen;
         controlsMesh.visible = isMenuOpen;
-        updateStatusText(isMenuOpen ? "Menu Open" : "Menu Closed");
+
+        updateStatusText(isMenuOpen ? "Menu Open - Stick ↕ to Scroll, A to Select" : "Menu Closed");
     }
     lastButtonState[hand + 'B'] = bPressed;
 
     if (isMenuOpen) {
-        // MENU SCROLL (Thumbstick Y)
+        // MENU NAV: Right stick Y (or Left stick Y)
         const dy = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
         if (Math.abs(dy) > 0.6 && now - lastScrollTime > 280) {
             selectedIndex = (dy > 0) ? selectedIndex + 1 : selectedIndex - 1;
@@ -1244,18 +784,19 @@ function handleGamepadInput(source) {
             lastScrollTime = now;
         }
 
-        // MENU SELECT (Button 'A' on right hand, 'X' on left hand)
+        // MENU SELECT: Button 'A' on right controller, or Button 'X' on left controller
         const aPressed = (gp.buttons.length > 4 && gp.buttons[4].pressed);
         if (aPressed && !lastButtonState[hand + 'A']) {
             if (selectedIndex === 0) {
-                // TOGGLE ROOM MODE (0 -> 1 -> 2 -> 0)
+                // TOGGLE MODE (0 = Occlusion/Shadow -> 1 = Wireframe -> 2 = Off)
                 if (isMeshAvailable) {
                     meshMode = (meshMode + 1) % 3;
                     redrawMenuCanvas();
-                    let msg = "Mode: Shadow/Occlusion";
-                    if (meshMode === 1) msg = "Mode: Wireframe";
-                    if (meshMode === 2) msg = "Mode: Off";
-                    updateStatusText(msg);
+
+                    let statusMsg = "Mode: Shadow/Occlusion";
+                    if (meshMode === 1) statusMsg = "Mode: Wireframe";
+                    if (meshMode === 2) statusMsg = "Mode: Off";
+                    updateStatusText(statusMsg);
                 } else {
                     updateStatusText("Error: No Mesh Data", true);
                 }
@@ -1265,161 +806,133 @@ function handleGamepadInput(source) {
                 redrawMenuCanvas();
                 updateStatusText(isScalingEnabled ? "Scaling Enabled" : "Scaling Disabled");
             } else {
-                // LOAD MODEL OR SPLAT
-                const selected = menuItems[selectedIndex];
-                updateStatusText(`Selected: ${selected}`);
-                loadSelectedModel(selected);
+                // SELECT MODEL / SPLAT TO SPAWN
+                modelName = menuItems[selectedIndex];
+                updateStatusText(`Selected: ${modelName} — Aim & Pull Trigger`);
+                setTimeout(() => {
+                    isMenuOpen = false;
+                    menuMesh.visible = false;
+                    controlsMesh.visible = false;
+                }, 200);
             }
         }
         lastButtonState[hand + 'A'] = aPressed;
 
     } else {
-        // DRAG HOLD (Button 'A' or Grip)
-        const gripPressed = (gp.buttons.length > 1 && gp.buttons[1].pressed);
+        // MODEL CONTROLS IN AR SPACE
+        const targetObj = currentModel || currentSplatScene;
+
+        // DRAG: Hold Button 'A' or Grip
         const aPressed = (gp.buttons.length > 4 && gp.buttons[4].pressed);
-        isDragging = gripPressed || aPressed;
+        const gripPressed = (gp.buttons.length > 1 && gp.buttons[1].pressed);
+        isDragging = aPressed || gripPressed;
 
-        const targetObject = currentModel || currentSplatScene;
+        if (targetObj && gp.axes.length >= 4) {
+            const dx = gp.axes[2];
+            const dy = gp.axes[3];
 
-        // SINGLE-HAND STICK ADJUSTMENTS
-        if (targetObject && gp.axes.length >= 2) {
-            const dx = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0];
-            const dy = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
-
-            // Left Stick: Height Adjust
-            if (hand === 'left' && Math.abs(dy) > 0.12) {
-                targetObject.position.y -= dy * 0.02;
-                if (targetObject.updateTransform) targetObject.updateTransform(true);
+            // Left Stick ↕: Adjust height
+            if (hand === 'left' && Math.abs(dy) > 0.1) {
+                targetObj.position.y -= dy * 0.02;
+                if (targetObj.updateTransform) targetObj.updateTransform(true);
             }
 
-            // Right Stick: Rotate & Scale
+            // Right Stick: Rotate and Scale
             if (hand === 'right') {
-                if (Math.abs(dx) > 0.12) {
-                    targetObject.rotation.y -= dx * 0.05;
-                    if (targetObject.updateTransform) targetObject.updateTransform(true);
+                // Right Stick ↔: Rotate
+                if (Math.abs(dx) > 0.1) {
+                    targetObj.rotation.y -= dx * 0.05;
+                    if (targetObj.updateTransform) targetObj.updateTransform(true);
                 }
-                if (Math.abs(dy) > 0.12 && isScalingEnabled) {
+
+                // Right Stick ↕: Scale
+                if (Math.abs(dy) > 0.1 && isScalingEnabled) {
                     const s = 1 - (dy * 0.02);
-                    targetObject.scale.multiplyScalar(s).clampScalar(0.01, 50);
-                    if (targetObject.updateTransform) targetObject.updateTransform(true);
-                    const scaleVal = targetObject.scale.x.toFixed(2);
+                    targetObj.scale.multiplyScalar(s).clampScalar(0.01, 50);
+                    if (targetObj.updateTransform) targetObj.updateTransform(true);
+                    const scaleVal = targetObj.scale.x.toFixed(2);
                     updateStatusText(`Scale: ${scaleVal}x`);
-                    dom.statScale.textContent = `${scaleVal}x`;
                 }
             }
         }
-    }
-}
-
-function handleTwoHandedPinch() {
-    if (!controller1 || !controller2) return;
-
-    const targetObject = currentModel || currentSplatScene;
-    if (!targetObject || !isScalingEnabled) return;
-
-    const gp1 = controller1.userData.inputSource?.gamepad;
-    const gp2 = controller2.userData.inputSource?.gamepad;
-
-    const grip1 = gp1 && gp1.buttons[1] && gp1.buttons[1].pressed;
-    const grip2 = gp2 && gp2.buttons[1] && gp2.buttons[1].pressed;
-
-    if (grip1 && grip2) {
-        const p1 = controller1.position;
-        const p2 = controller2.position;
-        const currentDist = p1.distanceTo(p2);
-
-        if (!twoHandActive) {
-            twoHandActive = true;
-            twoHandStartDist = Math.max(currentDist, 0.02);
-            twoHandStartScale = targetObject.scale.x;
-            twoHandStartPos.copy(targetObject.position);
-            twoHandStartMidpoint.addVectors(p1, p2).multiplyScalar(0.5);
-            twoHandStartAngle = Math.atan2(p2.z - p1.z, p2.x - p1.x);
-            twoHandStartRotY = targetObject.rotation.y;
-        } else {
-            // Scale
-            const scaleRatio = currentDist / twoHandStartDist;
-            const newScale = THREE.MathUtils.clamp(twoHandStartScale * scaleRatio, 0.02, 50.0);
-            targetObject.scale.set(newScale, newScale, newScale);
-
-            // Translation
-            const currMid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-            const midDelta = currMid.sub(twoHandStartMidpoint);
-            targetObject.position.copy(twoHandStartPos).add(midDelta);
-
-            // Twist Rotate
-            const currAngle = Math.atan2(p2.z - p1.z, p2.x - p1.x);
-            const angleDelta = currAngle - twoHandStartAngle;
-            targetObject.rotation.y = twoHandStartRotY - angleDelta;
-
-            if (targetObject.updateTransform) targetObject.updateTransform(true);
-            dom.statScale.textContent = `${newScale.toFixed(2)}x`;
-        }
-    } else {
-        twoHandActive = false;
     }
 }
 
 /* =========================================================
-   Transform & Helper Operations
+   Upload Custom 3D Models & Gaussian Splats
    ========================================================= */
 
-function recenterActiveObject() {
-    const target = currentModel || currentSplatScene;
-    if (!target) return;
+function setupUploadListeners() {
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadStatus = document.getElementById('upload-status');
 
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    dir.y = 0;
-    dir.normalize();
-
-    target.position.copy(camera.position).addScaledVector(dir, 1.8);
-    target.position.y = Math.max(0.6, camera.position.y - 0.4);
-    target.rotation.set(0, 0, 0);
-
-    if (target.updateTransform) target.updateTransform(true);
-}
-
-function resetActiveObjectScale() {
-    const target = currentModel || currentSplatScene;
-    if (!target) return;
-    target.scale.set(1, 1, 1);
-    if (target.updateTransform) target.updateTransform(true);
-    dom.statScale.textContent = '1.0x';
-}
-
-function flipActiveObjectY() {
-    if (currentSplatScene) {
-        currentSplatScene.scale.y *= -1;
-        currentSplatScene.updateTransform(true);
-        showToast(`Splat Y Axis ${currentSplatScene.scale.y > 0 ? 'Normal' : 'Inverted'}`);
-    } else if (currentModel) {
-        currentModel.scale.y *= -1;
-        showToast('Model Y Inverted');
+    if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleUploadedFile(file, uploadStatus);
+        });
     }
+
+    // Drag & Drop
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.files.length > 0) {
+            handleUploadedFile(e.dataTransfer.files[0], uploadStatus);
+        }
+    });
 }
 
-function updateFPS() {
-    frameCount++;
-    const now = performance.now();
-    if (now - fpsLastTime >= 1000) {
-        const fps = Math.round((frameCount * 1000) / (now - fpsLastTime));
-        dom.statFps.textContent = fps;
-        frameCount = 0;
-        fpsLastTime = now;
+async function handleUploadedFile(file, uploadStatus) {
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (uploadStatus) uploadStatus.textContent = `Reading ${file.name}...`;
+
+    if (['glb', 'gltf'].includes(ext)) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            new GLTFLoader().parse(arrayBuffer, '', (gltf) => {
+                customModelsMap.set(file.name, gltf.scene);
+                modelName = file.name;
+                buildMenuItems();
+                selectedIndex = menuItems.indexOf(file.name);
+                createMenuMesh();
+
+                if (uploadStatus) uploadStatus.textContent = `Ready: ${file.name} (Enter AR, aim & Trigger to spawn)`;
+                updateStatusText(`Loaded ${file.name} — Pull Trigger to Place`);
+            }, (err) => {
+                console.error(err);
+                if (uploadStatus) uploadStatus.textContent = `Error parsing ${file.name}`;
+            });
+        } catch (e) {
+            console.error(e);
+            if (uploadStatus) uploadStatus.textContent = `Error reading ${file.name}`;
+        }
+    } else if (['ply', 'splat', 'ksplat', 'spz'].includes(ext)) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            let splatBuffer;
+            if (ext === 'ply') splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+            else if (ext === 'splat') splatBuffer = await GaussianSplats3D.SplatLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+            else if (ext === 'ksplat') splatBuffer = await GaussianSplats3D.KSplatLoader.loadFromFileData(arrayBuffer);
+            else if (ext === 'spz') splatBuffer = await GaussianSplats3D.SpzLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+
+            customSplatsMap.set(file.name, splatBuffer);
+            modelName = file.name;
+            buildMenuItems();
+            selectedIndex = menuItems.indexOf(file.name);
+            createMenuMesh();
+
+            if (uploadStatus) uploadStatus.textContent = `Ready: ${file.name} (${splatBuffer.getSplatCount().toLocaleString()} splats)`;
+            updateStatusText(`Loaded ${file.name} — Pull Trigger to Place`);
+        } catch (e) {
+            console.error(e);
+            if (uploadStatus) uploadStatus.textContent = `Error loading splat: ${e.message}`;
+        }
+    } else {
+        if (uploadStatus) uploadStatus.textContent = `Unsupported format: .${ext}`;
     }
-}
-
-function showToast(message, duration = 3000) {
-    dom.toast.textContent = message;
-    dom.toast.classList.add('active');
-    setTimeout(() => {
-        dom.toast.classList.remove('active');
-    }, duration);
-}
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
 }

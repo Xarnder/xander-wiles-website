@@ -3,20 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Quest 3 VR Splat Studio — 3D Gaussian Splatting in Virtual Reality</title>
-    <meta name="description" content="View and interact with 3D Gaussian Splats (.ply, .splat) in immersive WebXR Virtual Reality on the Meta Oculus Quest 3 with 6DoF controller locomotion, two-handed manipulation, and real-time GPU rendering.">
+    <title>Quest 3 AR Studio</title>
     
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
-    <!-- GLOBAL SITE HEADER CSS -->
+    <!-- YOUR SITE HEADER CSS -->
     <link rel="stylesheet" href="/assets/css/style.css">
-    <!-- LOCAL XR VIEWER STYLES -->
+    <!-- LOCAL AR STYLES -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Theme-aware SVG icons -->
+    <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
@@ -26,10 +20,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 
+    <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#111115">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 
-    <!-- Import Map for Three.js & GaussianSplats3D -->
     <script type="importmap">
         {
             "imports": {
@@ -41,209 +36,32 @@
     </script>
 </head>
 <body>
-    <!-- GLOBAL WEBSITE NAVIGATION -->
-    <div id="main-nav-placeholder"></div>
+    <!-- YOUR SITE NAVIGATION -->
+    <div id="main-nav-placeholder"></div> 
     <script src="/assets/js/nav-loader.js"></script>
 
-    <!-- 3D CANVAS CONTAINER -->
-    <div id="canvas-container" tabindex="0"></div>
-
-    <!-- DRAG AND DROP OVERLAY -->
-    <div id="drop-overlay" class="drop-overlay">
-        <div class="drop-overlay-content">
-            <div class="drop-icon-wrapper">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-            </div>
-            <h2 class="drop-title">Drop 3D Model or Gaussian Splat Here</h2>
-            <p class="drop-subtitle">Accepts <code>.glb</code>, <code>.gltf</code>, <code>.ply</code>, <code>.splat</code>, <code>.ksplat</code>, <code>.spz</code></p>
-        </div>
-    </div>
-
-    <!-- 2D TOP CONTROL DECK -->
-    <header class="xr-toolbar xr-panel" id="xr-toolbar">
-        <div class="toolbar-brand">
-            <div class="brand-badge">QUEST 3 VR</div>
-            <h1 class="brand-title">XR Studio</h1>
-        </div>
-
-        <div class="toolbar-actions">
-            <!-- Hidden File Input for GLB, GLTF, PLY, SPLAT, etc. -->
+    <!-- 2D INSTRUCTIONS CARD -->
+    <div id="instructions-card">
+        <h2>AR Controls</h2>
+        <ul>
+            <li><strong>Trigger</strong>: Spawn Model on Surface</li>
+            <li><strong>Hold 'A'</strong>: Drag Model</li>
+            <li><strong>Left Stick ↕</strong>: Adjust Height</li>
+            <li><strong>Right Stick ↕</strong>: Scale Size</li>
+            <li><strong>Right Stick ↔</strong>: Rotate</li>
+            <li><strong>Button 'B'</strong>: Open / Close 3D Menu</li>
+        </ul>
+        <div style="margin-top: 20px; text-align: center; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 16px;">
             <input type="file" id="file-input" accept=".glb,.gltf,.ply,.splat,.ksplat,.spz" style="display: none;">
-
-            <!-- Load Default Fighter Jet Button -->
-            <button id="load-default-btn" class="btn btn-secondary" title="Reset to default Fighter Jet model">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2L2 19l10-3 10 3-10-17z"/>
-                </svg>
-                <span>Fighter Jet</span>
-                <span class="btn-pill">Default</span>
-            </button>
-
-            <!-- Upload Custom 3D Model / Splat Button -->
-            <button id="upload-btn" class="btn btn-primary" title="Upload custom .glb, .gltf, .ply, or .splat file">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-                <span>Upload Model / Splat</span>
-            </button>
-
-            <!-- Help / Controls Modal Toggle -->
-            <button id="help-toggle-btn" class="btn btn-ghost" title="VR & Desktop Controls Guide">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                <span>Controls</span>
-            </button>
-        </div>
-
-        <!-- WebXR VR Button Mount Point -->
-        <div id="vr-button-mount" class="vr-button-mount"></div>
-    </header>
-
-    <!-- FLOATING TELEMETRY & QUICK ACTIONS CARD -->
-    <aside class="telemetry-card xr-panel" id="telemetry-card">
-        <div class="telemetry-header">
-            <span class="status-indicator live" id="status-dot"></span>
-            <span class="active-filename" id="model-filename">Fighter Jet</span>
-        </div>
-
-        <div class="telemetry-stats">
-            <div class="stat-item">
-                <span class="stat-label">SPLATS</span>
-                <span class="stat-value" id="stat-splat-count">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">FILE SIZE</span>
-                <span class="stat-value" id="stat-file-size">—</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">FPS</span>
-                <span class="stat-value" id="stat-fps">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">SCALE</span>
-                <span class="stat-value" id="stat-scale">1.0x</span>
-            </div>
-        </div>
-
-        <div class="telemetry-quick-actions">
-            <button id="recenter-btn" class="btn-micro" title="Recenter splat to origin">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-                Recenter
-            </button>
-            <button id="reset-scale-btn" class="btn-micro" title="Reset scale to 1.0x">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
-                Reset Scale
-            </button>
-            <button id="flip-y-btn" class="btn-micro" title="Flip Y Axis (Fix upside-down COLMAP orientation)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                Flip Y
-            </button>
-            <button id="grid-toggle-btn" class="btn-micro active" title="Toggle ground floor grid">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
-                Grid
-            </button>
-        </div>
-    </aside>
-
-    <!-- LOADING PROGRESS CARD -->
-    <div id="loading-dialog" class="loading-dialog xr-panel">
-        <div class="loading-spinner"></div>
-        <div class="loading-details">
-            <div class="loading-title-row">
-                <span id="loading-title" class="loading-title">Loading 3D Gaussian Splat...</span>
-                <span id="loading-percent" class="loading-percent">0%</span>
-            </div>
-            <div class="loading-bar-track">
-                <div id="loading-bar-fill" class="loading-bar-fill"></div>
-            </div>
-            <p id="loading-subtitle" class="loading-subtitle">Streaming binary PLY data</p>
+            <button id="upload-btn" class="upload-btn">Upload Custom Model / Splat</button>
+            <div id="upload-status" style="font-size: 0.85rem; color: #4a90e2; margin-top: 10px;">Default: Fighter Jet</div>
         </div>
     </div>
 
-    <!-- CONTROLS CHEAT SHEET MODAL -->
-    <div id="controls-modal" class="controls-modal">
-        <div class="controls-modal-card xr-panel">
-            <div class="modal-header">
-                <h2>Controls Guide</h2>
-                <button id="close-modal-btn" class="btn-close" aria-label="Close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="controls-section">
-                    <div class="section-badge vr">META QUEST 3 CONTROLLERS</div>
-                    <ul class="controls-list">
-                        <li>
-                            <span class="ctrl-key">Grip (Hold)</span>
-                            <span class="ctrl-desc">Direct Grab: Move & position splat freely in 3D</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Dual Grips (Hold Both)</span>
-                            <span class="ctrl-desc">Pinch-to-Scale: Pull apart to enlarge, push together to shrink; twist to rotate!</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Left Thumbstick (↕ ↔)</span>
-                            <span class="ctrl-desc">Smooth Locomotion: Walk forward/backward & strafe</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Right Thumbstick (↔)</span>
-                            <span class="ctrl-desc">Comfort Snap-Turn: 45° instant rotation</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Right Thumbstick (↕)</span>
-                            <span class="ctrl-desc">Elevation: Raise or lower height</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Button 'A'</span>
-                            <span class="ctrl-desc">Recenter & Focus Splat directly in front of you</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Button 'B' / 'Y'</span>
-                            <span class="ctrl-desc">Toggle In-VR 3D Floating Menu</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Button 'X'</span>
-                            <span class="ctrl-desc">Toggle Ground Grid</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Trigger</span>
-                            <span class="ctrl-desc">Aim laser pointer & click in-VR menu buttons</span>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="controls-section">
-                    <div class="section-badge desktop">DESKTOP / MOUSE CONTROLS</div>
-                    <ul class="controls-list">
-                        <li>
-                            <span class="ctrl-key">Left Click + Drag</span>
-                            <span class="ctrl-desc">Orbit camera around splat</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Right Click + Drag</span>
-                            <span class="ctrl-desc">Pan camera horizontally & vertically</span>
-                        </li>
-                        <li>
-                            <span class="ctrl-key">Scroll Wheel</span>
-                            <span class="ctrl-desc">Zoom in & out</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- FLOATING TOAST NOTIFICATION -->
-    <div id="toast" class="toast"></div>
-
-    <!-- MAIN VIEWER LOGIC -->
+    <!-- AR UI CONTAINER (Holds START AR button) -->
+    <div id="ar-button-container"></div>
+    
+    <!-- MAIN APP SCRIPT -->
     <script type="module" src="script.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 {
-    "name": "Quest 3 VR Splat Studio",
-    "short_name": "VR Splat",
+    "name": "Quest 3 AR Studio",
+    "short_name": "AR Studio",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
