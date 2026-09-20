@@ -315,6 +315,13 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
+                <label class="dropdown-item-toggle" title="Disable Important Task Pulse & Animation">
+                    <span>Disable Important Task Pulse</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="disable-important-animation-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
 
                 <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
@@ -1022,6 +1029,27 @@
                 <button id="edit-list-save-desc-btn" class="btn secondary full-width">
                     <i class="ph ph-floppy-disk"></i> Save Info
                 </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3 style="margin: 0; display: flex; align-items: center; gap: 6px;">
+                            <i class="ph ph-push-pin"></i> Freeze Important Tasks
+                        </h3>
+                        <p class="kanban-labels-hint" style="margin: 4px 0 0 0;">
+                            Pin important tasks (marked with !) to the top of this list
+                        </p>
+                    </div>
+                    <label class="dropdown-item-toggle" style="margin: 0; padding: 0; background: none;">
+                        <div class="switch-small">
+                            <input type="checkbox" id="edit-list-freeze-important-toggle">
+                            <span class="slider-small round"></span>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div class="modal-divider"></div>

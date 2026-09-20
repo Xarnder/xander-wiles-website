@@ -12,11 +12,11 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
+import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
-import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask } from './kanban.js';
+import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask, isListFreezeImportantEnabled } from './kanban.js';
 import {
     MISC_TAG_ID,
     ensureDefaultTags,
@@ -322,7 +322,7 @@ function populateKanbanFocus(list) {
 
     const stretchPinned = [];
     const stretchNormal = [];
-    const pinningDisabled = !!state.appData.settings.disableImportantPinning;
+    const isFrozen = isListFreezeImportantEnabled(list);
     const taskIds = list.taskIds || [];
 
     taskIds.forEach((taskId) => {
@@ -330,7 +330,7 @@ function populateKanbanFocus(list) {
         if (!task || task.archived) return;
         if (!taskMatchesTagFilter(task)) return;
 
-        const shouldPin = isImportantTask(task) && !pinningDisabled;
+        const shouldPin = isImportantTask(task) && isFrozen;
 
         if (isMultiColumnKanbanStretch(task)) {
             const placement = getParentKanbanSpan(task);
@@ -1809,10 +1809,15 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const kanbanBtn = (!isOrphan && workToolsOn)
         ? `<button type="button" class="icon-btn kanban-toggle-btn" onclick="window.toggleKanbanFocus('${list.id}')" title="Open Kanban" aria-pressed="false" aria-label="Open Kanban"><i class="ph ph-kanban"></i></button>`
         : '';
+    const isFrozen = isListFreezeImportantEnabled(list);
+    const freezeBtn = !isOrphan
+        ? `<button type="button" class="icon-btn freeze-list-btn ${isFrozen ? 'active' : ''}" onclick="window.toggleListFreezeImportant('${list.id}')" title="${isFrozen ? 'Important tasks frozen at top (click to unfreeze)' : 'Important tasks unfrozen (click to freeze at top)'}" aria-label="Toggle freeze important tasks" aria-pressed="${isFrozen}"><i class="${isFrozen ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i></button>`
+        : '';
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
              ${kanbanBtn}
+             ${freezeBtn}
              <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag"><i class="ph ph-stack"></i></button>
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
               <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
@@ -1915,9 +1920,10 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             }
 
             if (show) {
-                const isImportant = task.text.includes('!!') || task.text.includes('!');
+                const isImportant = isImportantTask(task);
                 const taskEl = createTaskElement(task, list.id, visibleIndex);
-                const shouldPin = isImportant && !state.appData.settings.disableImportantPinning;
+                const isFrozen = isListFreezeImportantEnabled(list);
+                const shouldPin = isImportant && isFrozen;
                 if (shouldPin) {
                     frozenContainer.appendChild(taskEl);
                     pinnedCount++;
@@ -1934,7 +1940,15 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     if (pinnedCount > 0) {
         const pHeader = document.createElement('div');
         pHeader.className = 'frozen-tasks-header';
-        pHeader.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
+        pHeader.innerHTML = `
+            <div class="frozen-tasks-header-left">
+                <i class="ph ph-push-pin-simple-fill"></i>
+                <span>Frozen at Top (${pinnedCount})</span>
+            </div>
+            <button type="button" class="frozen-unpin-btn" onclick="window.toggleListFreezeImportant('${list.id}')" title="Unfreeze important tasks in this list" aria-label="Unfreeze important tasks">
+                <i class="ph ph-x"></i>
+            </button>
+        `;
         frozenContainer.insertBefore(pHeader, frozenContainer.firstChild);
     }
 
@@ -2015,9 +2029,11 @@ function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEna
         const completedClass = idea.completed ? ' nested-idea-completed' : '';
         const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
         const showDragHandle = dragEnabled && nodeId;
+        const isIdeaImportant = typeof idea.text === 'string' && (idea.text.includes('!') || idea.text.includes('!!'));
+        const importantClass = isIdeaImportant ? ' important' : '';
         const depthClass = depth > 1 ? ` nested-depth-${Math.min(depth, 3)}` : '';
 
-        html += `<div class="nested-idea-display-item${completedClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
+        html += `<div class="nested-idea-display-item${completedClass}${importantClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
         html += '<div class="nested-idea-row">';
 
         if (showDragHandle) {
@@ -2080,7 +2096,9 @@ function renderNestedKanbanItem(node, taskId, depth = 1) {
     const stage = isValidKanbanStatus(node.kanbanStatus) ? node.kanbanStatus : 'new';
     const { prev, next } = getAdjacentKanbanStages(stage);
 
-    let html = `<div class="nested-idea-display-item${completedClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
+    const isNodeImportant = typeof node.text === 'string' && (node.text.includes('!') || node.text.includes('!!'));
+    const importantClass = isNodeImportant ? ' important' : '';
+    let html = `<div class="nested-idea-display-item${completedClass}${importantClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
     html += '<div class="nested-idea-row">';
 
     if (!hideCheckboxes && nodeId) {
@@ -2489,7 +2507,7 @@ export function serializeNestedEditorListForSave(container, parentKanbanStatus =
 export function createTaskElement(task, sourceListId, number, options = {}) {
     const el = document.createElement('div');
     const isLocked = state.appData.settings.sortMode !== 'custom';
-    const isImportant = task.text.includes('!') || task.text.includes('!!');
+    const isImportant = isImportantTask(task);
     const kanbanStretch = options.kanbanStretch || null;
 
     let listCount = 0;
@@ -2515,28 +2533,37 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
 
     const tagsById = getTagsById(state.appData.settings.tags);
     const glowColor = resolveTaskGlow(task, tagsById);
+    const isAnimDisabled = !!(state.appData.settings && state.appData.settings.disableImportantAnimation);
+    const animateImportant = isImportant && !isAnimDisabled;
+    const categoryColor = glowColor || 'oklch(0.850 0.160 85)';
+    el.style.setProperty('--task-category-color', categoryColor);
+
     if (glowColor) {
         const displayMode = getTagDisplayMode(state.appData.settings);
         const tone = getTagColorTone(glowColor);
         el.style.setProperty('--tag-color', glowColor);
         if (tone === 'black' || tone === 'white') el.dataset.tagTone = tone;
         if (displayMode === TAG_DISPLAY_MODE_FILL) {
-            const ink = getContrastingInk(glowColor);
+            const ink = animateImportant ? '#000000' : getContrastingInk(glowColor);
             el.classList.add('tag-fill');
             el.style.setProperty('--tag-fill-color', glowColor);
             el.style.setProperty('--tag-fill-ink', ink);
-            el.style.backgroundColor = glowColor;
-            el.style.borderColor = tone === 'white'
-                ? 'oklch(0 0 0 / 0.35)'
-                : (tone === 'black' ? 'oklch(1 0 0 / 0.35)' : glowColor);
-            el.style.color = ink;
-            el.style.boxShadow = `0 1px 4px color-mix(in oklch, ${glowColor} 40%, transparent)`;
+            if (!animateImportant) {
+                el.style.backgroundColor = glowColor;
+                el.style.borderColor = tone === 'white'
+                    ? 'oklch(0 0 0 / 0.35)'
+                    : (tone === 'black' ? 'oklch(1 0 0 / 0.35)' : glowColor);
+                el.style.color = ink;
+                el.style.boxShadow = `0 1px 4px color-mix(in oklch, ${glowColor} 40%, transparent)`;
+            }
         } else {
             el.classList.add('tag-glow');
             if (tone === 'black') el.classList.add('tag-glow-black');
             if (tone === 'white') el.classList.add('tag-glow-white');
-            el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px color-mix(in oklch, ${glowColor} 12%, transparent)`;
-            el.style.borderColor = glowColor;
+            if (!animateImportant) {
+                el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px color-mix(in oklch, ${glowColor} 12%, transparent)`;
+                el.style.borderColor = glowColor;
+            }
         }
     }
 
@@ -4476,6 +4503,40 @@ export function syncOpenEditListAutomation() {
         if (list.timeAutomated) container.classList.remove('hidden');
         else container.classList.add('hidden');
     }
+
+    const freezeToggle = document.getElementById('edit-list-freeze-important-toggle');
+    if (freezeToggle) {
+        freezeToggle.checked = isListFreezeImportantEnabled(list);
+    }
+}
+
+export async function toggleListFreezeImportant(listId) {
+    const list = (state.appData.rawLists || []).find(l => l.id === listId);
+    if (!list) return;
+
+    const currentFrozen = isListFreezeImportantEnabled(list);
+    const nextVal = !currentFrozen;
+
+    list.freezeImportant = nextVal;
+    const listInLists = (state.appData.lists || []).find(l => l.id === listId);
+    if (listInLists) {
+        listInLists.freezeImportant = nextVal;
+    }
+
+    renderBoard();
+    if (isKanbanFocused() && state.focusedKanbanListId === listId) {
+        renderKanbanFocus(list);
+    }
+
+    showToast(nextVal ? "Important tasks frozen at top of list" : "Important tasks unfrozen in list", "info");
+
+    if (state.currentUser?.uid) {
+        try {
+            await updateListFreezeImportant(listId, nextVal);
+        } catch (e) {
+            console.error("Failed to update freezeImportant", e);
+        }
+    }
 }
 
 export function openEditListModal(listId) {
@@ -4496,6 +4557,31 @@ export function openEditListModal(listId) {
     titleEl.textContent = `Manage: ${list.title}`;
     descInput.value = list.description || '';
     bulkInput.value = '';
+
+    const freezeToggle = document.getElementById('edit-list-freeze-important-toggle');
+    if (freezeToggle) {
+        freezeToggle.checked = isListFreezeImportantEnabled(list);
+        freezeToggle.onchange = async (e) => {
+            const nextVal = e.target.checked;
+            list.freezeImportant = nextVal;
+            const listInLists = (state.appData.lists || []).find(l => l.id === listId);
+            if (listInLists) {
+                listInLists.freezeImportant = nextVal;
+            }
+            renderBoard();
+            if (isKanbanFocused() && state.focusedKanbanListId === listId) {
+                renderKanbanFocus(list);
+            }
+            showToast(nextVal ? "Important tasks frozen at top of list" : "Important tasks unfrozen in list", "info");
+            if (state.currentUser?.uid) {
+                try {
+                    await updateListFreezeImportant(listId, nextVal);
+                } catch (err) {
+                    console.error("Failed to update freezeImportant", err);
+                }
+            }
+        };
+    }
 
     // Populate Boards Select
     boardSelect.innerHTML = '<option value="" disabled selected>Select Board...</option>';

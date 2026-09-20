@@ -312,6 +312,20 @@ export function updateListDescription(id, val) {
         .catch(e => handleSyncError(e));
 }
 
+export function updateListFreezeImportant(id, val) {
+    const list = (state.appData.rawLists || []).find(l => l.id === id);
+    if (list) {
+        list.freezeImportant = val;
+    }
+    const listInLists = (state.appData.lists || []).find(l => l.id === id);
+    if (listInLists) {
+        listInLists.freezeImportant = val;
+    }
+    if (!state.currentUser?.uid) return Promise.resolve();
+    return updateDoc(doc(db, "users", state.currentUser.uid, "lists", id), { freezeImportant: val })
+        .catch(e => handleSyncError(e));
+}
+
 export function deleteList(id) {
     if (state.focusedKanbanListId === id) {
         state.focusedKanbanListId = null;

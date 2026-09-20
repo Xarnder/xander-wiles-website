@@ -1583,6 +1583,23 @@ body {
     color: var(--accent-blue);
 }
 
+.freeze-list-btn {
+    transition: all 0.2s ease;
+}
+
+.freeze-list-btn.active {
+    color: oklch(0.790 0.160 75);
+}
+
+.freeze-list-btn:hover {
+    color: oklch(0.790 0.160 75);
+}
+
+[data-theme="light"] .freeze-list-btn.active,
+[data-theme="light"] .freeze-list-btn:hover {
+    color: oklch(0.550 0.140 55);
+}
+
 .list-title {
     background: transparent;
     border: none;
@@ -1898,10 +1915,252 @@ body {
     background: oklch(0 0 0 / 0.05);
 }
 
+/* ===================================================================
+   IMPORTANT TASKS - CATEGORY COLOR TO WHITE PULSE ANIMATION
+   =================================================================== */
+
 .task-card.important {
     background: var(--card-important-bg);
     border: 1px solid var(--card-important-border);
 }
+
+body:not(.disable-important-animation) .task-card.important {
+    position: relative;
+    --task-category-fallback: var(--task-category-color, var(--tag-color, oklch(0.850 0.160 85)));
+    background-color: color-mix(in oklch, var(--task-category-fallback) 78%, white 22%);
+    border: 2px solid var(--task-category-fallback);
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+}
+
+/* In dark modes: crisp black text for clear legibility on category colour and white */
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed),
+[data-theme="oled"] body:not(.disable-important-animation) .task-card.important:not(.task-completed),
+[data-theme="fancy"] body:not(.disable-important-animation) .task-card.important:not(.task-completed) {
+    color: #000000 !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-text,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-number,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-summary,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-idea-label,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) span,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) p,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) label,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .icon-btn,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .icon-btn i,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .kanban-arrow-btn,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-kanban-arrow-btn,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .ph {
+    color: #000000 !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .icon-btn:hover,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .kanban-arrow-btn:hover,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-kanban-arrow-btn:hover {
+    background: oklch(0 0 0 / 0.12) !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-checkbox,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-idea-checkbox {
+    border-color: #000000 !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-checkbox:checked,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-idea-checkbox:checked {
+    border-color: #000000 !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-checkbox:checked::before,
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .nested-idea-checkbox:checked::before {
+    background: #000000 !important;
+}
+
+:root:not([data-theme="light"]) body:not(.disable-important-animation) .task-card.important:not(.task-completed) .task-indicator-badge {
+    color: #000000 !important;
+    border-color: oklch(0 0 0 / 0.35) !important;
+    background: oklch(0 0 0 / 0.08) !important;
+}
+
+/* Active Important Tasks: Dual pulse — 0.5s rest on category colour + quick fill pulse & out-of-sync border pulse */
+body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task) {
+    animation:
+        importantFillGlowPulse 2.0s ease-in-out infinite,
+        importantBorderPulse 2.0s ease-in-out infinite;
+}
+
+body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task):hover {
+    animation-play-state: paused;
+    box-shadow:
+        0 0 18px oklch(1 0 0 / 0.95),
+        0 0 35px var(--task-category-fallback),
+        0 2px 8px oklch(0 0 0 / 0.3);
+    border-color: oklch(1 0 0);
+    outline-color: color-mix(in oklch, var(--task-category-fallback) 80%, transparent);
+}
+
+.task-card.important.task-completed,
+.task-card.important.archived-task {
+    animation: none;
+    opacity: 0.55;
+    outline: none;
+    background: var(--card-important-bg);
+    border-color: color-mix(in oklch, var(--card-important-border) 40%, transparent);
+}
+
+/* Important nested subtasks */
+body:not(.disable-important-animation) .nested-idea-display-item.important {
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: color-mix(in oklch, var(--task-category-fallback) 75%, white 25%);
+    border: 1.5px solid var(--task-category-fallback);
+}
+
+body:not(.disable-important-animation) .nested-idea-display-item.important:not(.nested-idea-completed) {
+    animation:
+        importantFillGlowPulse 2.0s ease-in-out infinite,
+        importantBorderPulse 2.0s ease-in-out infinite;
+}
+
+.nested-idea-display-item.important.nested-idea-completed {
+    animation: none;
+    opacity: 0.5;
+    outline: none;
+}
+
+/* Disabled Important Task Pulse overrides */
+body.disable-important-animation .task-card.important {
+    animation: none !important;
+    outline: none !important;
+}
+
+body.disable-important-animation .task-card.important:not(.tag-fill):not(.tag-glow) {
+    background: var(--card-important-bg) !important;
+    border: 1px solid var(--card-important-border) !important;
+    box-shadow: none !important;
+}
+
+body.disable-important-animation .nested-idea-display-item.important {
+    animation: none !important;
+    outline: none !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Fill & Glow Pulse: Holds original category colour for 0.5s (0% to 25% of 2.0s cycle), then pulses to white */
+@keyframes importantFillGlowPulse {
+    0%, 25% {
+        background-color: color-mix(in oklch, var(--task-category-fallback) 78%, white 22%);
+        box-shadow:
+            0 0 14px var(--task-category-fallback),
+            0 0 28px color-mix(in oklch, var(--task-category-fallback) 50%, transparent),
+            0 2px 6px oklch(0 0 0 / 0.25);
+    }
+    60% {
+        background-color: oklch(1 0 0);
+        box-shadow:
+            0 0 20px oklch(1 0 0 / 0.95),
+            0 0 38px oklch(1 0 0 / 0.5),
+            0 2px 8px oklch(0 0 0 / 0.3);
+    }
+    100% {
+        background-color: color-mix(in oklch, var(--task-category-fallback) 78%, white 22%);
+        box-shadow:
+            0 0 14px var(--task-category-fallback),
+            0 0 28px color-mix(in oklch, var(--task-category-fallback) 50%, transparent),
+            0 2px 6px oklch(0 0 0 / 0.25);
+    }
+}
+
+/* Border Pulse: Out of sync with the main fill color, rests on category colour for 0.5s then pulses */
+@keyframes importantBorderPulse {
+    0%, 25% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 75%, transparent);
+        outline-offset: 1px;
+    }
+    45% {
+        border-color: oklch(1 0 0);
+        outline-color: oklch(1 0 0 / 0.9);
+        outline-offset: 1px;
+    }
+    80% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 75%, transparent);
+        outline-offset: 2.5px;
+    }
+    100% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 75%, transparent);
+        outline-offset: 1px;
+    }
+}
+
+/* Light Theme: Subtle light category pulse with clean contrast and 0.5s category hold */
+[data-theme="light"] body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task),
+[data-theme="light"] body:not(.disable-important-animation) .nested-idea-display-item.important:not(.nested-idea-completed) {
+    animation:
+        importantFillGlowPulseLight 2.0s ease-in-out infinite,
+        importantBorderPulseLight 2.0s ease-in-out infinite;
+}
+
+@keyframes importantFillGlowPulseLight {
+    0%, 25% {
+        background-color: color-mix(in oklch, var(--task-category-fallback) 35%, white 65%);
+        box-shadow:
+            0 0 10px color-mix(in oklch, var(--task-category-fallback) 45%, transparent),
+            0 1px 4px oklch(0 0 0 / 0.1);
+    }
+    60% {
+        background-color: oklch(1 0 0);
+        box-shadow:
+            0 0 0 1px oklch(1 0 0 / 0.9),
+            0 0 14px color-mix(in oklch, var(--task-category-fallback) 50%, transparent),
+            0 3px 10px oklch(0 0 0 / 0.12);
+    }
+    100% {
+        background-color: color-mix(in oklch, var(--task-category-fallback) 35%, white 65%);
+        box-shadow:
+            0 0 10px color-mix(in oklch, var(--task-category-fallback) 45%, transparent),
+            0 1px 4px oklch(0 0 0 / 0.1);
+    }
+}
+
+@keyframes importantBorderPulseLight {
+    0%, 25% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 60%, transparent);
+        outline-offset: 1px;
+    }
+    45% {
+        border-color: oklch(0.25 0 0 / 0.9);
+        outline-color: oklch(1 0 0 / 0.8);
+        outline-offset: 1px;
+    }
+    80% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 60%, transparent);
+        outline-offset: 2.5px;
+    }
+    100% {
+        border-color: var(--task-category-fallback);
+        outline-color: color-mix(in oklch, var(--task-category-fallback) 60%, transparent);
+        outline-offset: 1px;
+    }
+}
+
+/* Accessibility: respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task),
+    body:not(.disable-important-animation) .nested-idea-display-item.important:not(.nested-idea-completed) {
+        animation: none !important;
+        background-color: color-mix(in oklch, var(--task-category-fallback) 78%, white 22%) !important;
+        box-shadow: 0 0 14px var(--task-category-fallback) !important;
+        border-color: var(--task-category-fallback) !important;
+        outline: none !important;
+    }
+}
+
 
 .task-number {
     font-size: 0.85rem;
@@ -5677,6 +5936,10 @@ button.tags-settings-swatch.is-selected {
     display: none;
 }
 
+.multi-edit-active .freeze-list-btn {
+    display: none;
+}
+
 /* --- MOBILE SCROLLBAR OVERRIDES --- */
 @media (max-width: 600px) {
 
@@ -6727,44 +6990,101 @@ body.theme-story-manager .nested-idea-editor-row.selected {
     color: oklch(0.550 0.015 260);
 }
 
-/* --- FROZEN PINNED TASKS STYLING --- */
+/* --- FROZEN PINNED TASKS STYLING (STICKY AT TOP) --- */
 .frozen-tasks-container {
+    position: sticky;
+    top: -4px;
+    z-index: 20;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 8px;
-    padding: 6px;
-    background: oklch(0.837 0.164 84.4 / 0.05);
-    border: 1px dashed oklch(0.837 0.164 84.4 / 0.25);
-    border-radius: 8px;
-    transition: all 0.3s ease;
+    margin: -4px -6px 12px -6px;
+    padding: 8px 8px 10px 8px;
+    background: color-mix(in oklch, var(--glass-bg, oklch(0.20 0.015 260)) 90%, oklch(0.837 0.164 84.4 / 0.12));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px dashed oklch(0.837 0.164 84.4 / 0.4);
+    border-bottom: 2px solid oklch(0.837 0.164 84.4 / 0.65);
+    border-radius: 10px;
+    box-shadow: 0 6px 18px oklch(0 0 0 / 0.45);
+    max-height: 48vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Hide when empty */
+/* Hide completely when empty */
 .frozen-tasks-container:empty {
-    display: none;
+    display: none !important;
 }
 
 .frozen-tasks-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: oklch(0.790 0.160 75); /* Golden/Amber color */
     margin-bottom: 4px;
-    padding-left: 2px;
+    padding: 0 2px;
+    user-select: none;
+}
+
+.frozen-tasks-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.frozen-unpin-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.frozen-unpin-btn:hover {
+    color: oklch(0.790 0.160 75);
+    background: oklch(0.790 0.160 75 / 0.15);
+}
+
+[data-theme="oled"] .frozen-tasks-container {
+    background: oklch(0.06 0 0 / 0.96);
+    border: 1px dashed oklch(0.837 0.164 84.4 / 0.45);
+    border-bottom: 2px solid oklch(0.837 0.164 84.4 / 0.7);
+    box-shadow: 0 6px 20px oklch(0 0 0 / 0.85);
+}
+
+[data-theme="fancy"] .frozen-tasks-container {
+    background: color-mix(in oklch, oklch(0.16 0.03 285 / 0.94) 88%, oklch(0.837 0.164 84.4 / 0.12));
+    border-bottom: 2px solid oklch(0.837 0.164 84.4 / 0.65);
+    box-shadow: 0 6px 18px oklch(0 0 0 / 0.5);
 }
 
 [data-theme="light"] .frozen-tasks-container {
-    background: oklch(0.666 0.157 58.3 / 0.05);
-    border: 1px dashed oklch(0.666 0.157 58.3 / 0.25);
+    background: color-mix(in oklch, oklch(0.96 0 0 / 0.96) 88%, oklch(0.666 0.157 58.3 / 0.1));
+    border: 1px dashed oklch(0.666 0.157 58.3 / 0.35);
+    border-bottom: 2px solid oklch(0.666 0.157 58.3 / 0.6);
+    box-shadow: 0 4px 14px oklch(0 0 0 / 0.15);
 }
 
 [data-theme="light"] .frozen-tasks-header {
     color: oklch(0.550 0.140 55);
+}
+
+[data-theme="light"] .frozen-unpin-btn:hover {
+    color: oklch(0.550 0.140 55);
+    background: oklch(0.666 0.157 58.3 / 0.15);
 }
 
 /* --- WORK TOOLS / KANBAN FOCUS (Phase 2 shell) --- */
@@ -7019,16 +7339,22 @@ body.kanban-focus-mode .board-container.kanban-focus-board {
 /* Board-wide pinned section — stretches across all columns */
 .kanban-pinned-band {
     grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     flex-direction: column;
     gap: var(--kanban-task-gap);
-    padding: 8px 0 12px;
-    background: oklch(0.837 0.164 84.4 / 0.05);
-    border-bottom: 1px solid oklch(0.837 0.164 84.4 / 0.22);
+    padding: 8px 12px 12px;
+    background: color-mix(in oklch, var(--glass-bg, oklch(0.20 0.015 260)) 92%, oklch(0.837 0.164 84.4 / 0.12));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 2px solid oklch(0.837 0.164 84.4 / 0.45);
+    box-shadow: 0 4px 16px oklch(0 0 0 / 0.35);
 }
 
 .kanban-pinned-band.hidden {
-    display: none;
+    display: none !important;
 }
 
 .kanban-pinned-band > .kanban-pinned-header {

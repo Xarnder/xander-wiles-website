@@ -81,6 +81,14 @@ export function isImportantTask(task) {
     return task.text.includes('!!') || task.text.includes('!');
 }
 
+export function isListFreezeImportantEnabled(list) {
+    if (!list) return false;
+    if (typeof list.freezeImportant === 'boolean') {
+        return list.freezeImportant;
+    }
+    return !state.appData.settings?.disableImportantPinning;
+}
+
 export function partitionListTasksByStage(list) {
     const buckets = {};
     KANBAN_STAGES.forEach((stage) => {
@@ -88,14 +96,14 @@ export function partitionListTasksByStage(list) {
     });
 
     const taskIds = list.taskIds || [];
-    const pinningDisabled = !!state.appData.settings.disableImportantPinning;
+    const isFrozen = isListFreezeImportantEnabled(list);
 
     taskIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
         if (!task || task.archived) return;
 
         const stage = resolveKanbanStatus(task);
-        const shouldPin = isImportantTask(task) && !pinningDisabled;
+        const shouldPin = isImportantTask(task) && isFrozen;
         if (shouldPin) {
             buckets[stage].pinned.push(task);
         } else {
@@ -213,6 +221,9 @@ export function renderKanbanFocus(boardContainer, list) {
                     aria-label="List title">
             </div>
             <div class="kanban-focus-bar-right">
+                <button type="button" class="icon-btn freeze-list-btn ${isListFreezeImportantEnabled(list) ? 'active' : ''}" onclick="window.toggleListFreezeImportant('${list.id}')" title="${isListFreezeImportantEnabled(list) ? 'Important tasks frozen at top (click to unfreeze)' : 'Important tasks unfrozen (click to freeze at top)'}" aria-label="Toggle freeze important tasks" aria-pressed="${isListFreezeImportantEnabled(list)}">
+                    <i class="${isListFreezeImportantEnabled(list) ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i>
+                </button>
                 <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">
                     <i class="ph ph-stack"></i>
                 </button>

@@ -348,6 +348,8 @@ window.openBoardManager = UI.openBoardManager;
 window.openDedupModal = UI.openDedupModal;
 window.clearCompletedInList = API.clearCompletedInList;
 window.groupListByTag = UI.groupListByTag;
+window.toggleListFreezeImportant = UI.toggleListFreezeImportant;
+window.updateListFreezeImportant = API.updateListFreezeImportant;
 window.showConfirmModal = showConfirmModal;
 window.triggerSingleListCSVExport = triggerSingleListCSVExport;
 window.triggerSingleListJSONExport = triggerSingleListJSONExport;
@@ -638,6 +640,8 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
+            if (document.getElementById('disable-important-animation-toggle')) document.getElementById('disable-important-animation-toggle').checked = !!state.appData.settings.disableImportantAnimation;
+            document.body.classList.toggle('disable-important-animation', !!state.appData.settings.disableImportantAnimation);
             if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
             if (document.getElementById('ai-summary-on-cards-toggle')) document.getElementById('ai-summary-on-cards-toggle').checked = !!state.appData.settings.aiSummaryOnCards;
             const featuredHeaderSelect = document.getElementById('mobile-featured-header-btn');
@@ -973,6 +977,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupSettingListener('add-bottom-toggle', 'addTaskLocation', true, (checked) => checked ? 'bottom' : 'top');
     setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
+    setupSettingListener('disable-important-animation-toggle', 'disableImportantAnimation', true, (checked) => {
+        document.body.classList.toggle('disable-important-animation', !!checked);
+        return !!checked;
+    });
     setupSettingListener('mobile-featured-header-btn', 'mobileFeaturedHeaderBtn', false, (val) => {
         const valid = UI.MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === val);
         const next = valid ? val : 'multi-edit';
@@ -2181,7 +2189,7 @@ function setupSettingListener(id, settingKey, isCheckbox, processVal) {
         state.appData.settings[settingKey] = val;
         if (settingKey === 'dragEnabled') {
             UI.enableSortables(val);
-        } else if (settingKey === 'sortMode' || settingKey === 'showNumbers' || settingKey === 'autoArchive' || settingKey === 'disableImportantPinning' || settingKey === 'addTaskLocation') {
+        } else if (settingKey === 'sortMode' || settingKey === 'showNumbers' || settingKey === 'autoArchive' || settingKey === 'disableImportantPinning' || settingKey === 'disableImportantAnimation' || settingKey === 'addTaskLocation') {
             UI.renderBoard();
         }
         API.updateSetting(settingKey, val);

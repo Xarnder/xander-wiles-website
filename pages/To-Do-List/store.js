@@ -24,6 +24,7 @@ export const state = {
             dailyResetTime: '04:00',
             timeAutomationConfirm: true,
             disableImportantPinning: false,
+            disableImportantAnimation: false,
             workToolsEnabled: false,
             aiSummaryOnCards: false,
             kanbanColumnLabels: {
@@ -103,6 +104,7 @@ export function resetState() {
             dailyResetTime: '04:00',
             timeAutomationConfirm: true,
             disableImportantPinning: false,
+            disableImportantAnimation: false,
             workToolsEnabled: false,
             aiSummaryOnCards: false,
             kanbanColumnLabels: {
