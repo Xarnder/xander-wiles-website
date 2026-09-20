@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
 
@@ -15,43 +16,39 @@ let reticle;
 let currentModel = null;
 let currentSplatScene = null;
 let splatViewer = null;
-let modelName = 'Fighter Jet'; // Default to Fighter Jet
+let modelName = 'Fighter Jet'; // Default selected model
 
-// Custom uploaded assets
+// Custom uploaded assets (stored for 3D in-game menu selection & spawning)
 const customModelsMap = new Map();
 const customSplatsMap = new Map();
 
-// UI Groups (Floating in 3D AR Space)
+// Diegetic Floating UI in 3D AR Space
 let hudGroup, statusMesh, loadingGroup, loadingFill, menuMesh, controlsMesh;
 
-// Room Mesh State (Mapping xrMesh -> THREE.Group containing occlusion, shadow, and wireframe)
+// Room Mesh State (Quest 3 real-world occlusion & shadows)
 const roomMeshes = new Map();
 let roomGroup;
 let meshMode = 0; // 0 = Occlusion+Shadow, 1 = Wireframe, 2 = Off
 let isMeshAvailable = true;
 
-// --- MATERIALS ---
-
-// 1. Occlusion Material (The "Invisible Wall" for real walls/furniture)
+// Materials for Real Room Integration
 const matOcclusion = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: true,
     side: THREE.DoubleSide
 });
 
-// 2. Shadow Material (The "Projected Shadow" on real floor/desks)
 const matShadow = new THREE.ShadowMaterial({
     opacity: 0.5,
     depthWrite: false,
     side: THREE.DoubleSide
 });
 
-// 3. Wireframe Material (Debug room boundaries)
 const matWireframe = new THREE.MeshBasicMaterial({
-    color: 0x00ffff,
+    color: 0x00f3ff,
     wireframe: true,
     transparent: true,
-    opacity: 0.3
+    opacity: 0.35
 });
 
 // Menu State
@@ -59,32 +56,35 @@ let menuItems = [];
 let isMenuOpen = false;
 let isDragging = false;
 let isLoading = false;
-let selectedIndex = 2; // Default to 'Fighter Jet'
+let selectedIndex = 2; // Defaults to 'Fighter Jet'
 let scoreValue = 0;
 let lastScrollTime = 0;
 let lastButtonState = {};
 let isScalingEnabled = true;
+
+// Desktop controls
+let orbitControls;
+
+// Cached DOM Elements
+const dom = {};
 
 init();
 animate();
 
 function init() {
     try {
-        const container = document.getElementById('ar-button-container');
-        if (!container) throw new Error("Missing #ar-button-container");
-
-        // 1. Prepare Menu Items (Fighter Jet first among models)
+        cacheDomElements();
         buildMenuItems();
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        camera.position.set(0, 1.2, 2.0);
 
-        // --- LIGHTING & SHADOWS ---
+        // --- LIGHTING & REALISTIC PASSTHROUGH SHADOWS ---
         const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-        dirLight.position.set(0, 5, 0); // Overhead light for passthrough realism
+        dirLight.position.set(0, 5, 0); // Overhead sun/room light
         dirLight.castShadow = true;
 
-        // High Quality Shadows
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.1;
@@ -97,7 +97,7 @@ function init() {
 
         scene.add(dirLight);
         scene.add(dirLight.target);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
         // Renderer (alpha: true is critical for Quest 3 Passthrough AR)
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -105,57 +105,77 @@ function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         renderer.xr.setReferenceSpaceType('local-floor');
-
-        // ENABLE SHADOWS
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        document.body.appendChild(renderer.domElement);
+        dom.canvasContainer.appendChild(renderer.domElement);
 
-        // --- AR BUTTON ONLY (Pure Quest 3 Passthrough AR) ---
-        const arBtn = ARButton.createButton(renderer, {
-            requiredFeatures: ['hit-test', 'local-floor', 'mesh-detection'],
-            optionalFeatures: ['bounded-floor', 'plane-detection']
-        });
-        arBtn.style.position = 'static';
-        container.appendChild(arBtn);
+        // PBR Room Environment
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
-        // Controllers
-        controller1 = renderer.xr.getController(0);
-        controller1.addEventListener('select', onSelect);
-        scene.add(controller1);
+        // --- AR BUTTON (Mount into modern header toolbar) ---
+        setupWebXRButton();
 
-        controller2 = renderer.xr.getController(1);
-        controller2.addEventListener('select', onSelect);
-        scene.add(controller2);
+        // --- CONTROLLERS ---
+        setupControllers();
 
-        // Reticle (Surface marker on floor/table)
+        // --- SURFACE RETICLE ---
         reticle = new THREE.Mesh(
             new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ color: 0xffffff })
+            new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide })
         );
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
         scene.add(reticle);
 
-        // Environment reflections
-        const pmremGenerator = new THREE.PMREMGenerator(renderer);
-        scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-
         // --- ROOM GROUP ---
         roomGroup = new THREE.Group();
         scene.add(roomGroup);
 
-        // --- SETUP FLOATING IN-GAME HUD ---
-        createHUD();
+        // --- FLOATING IN-AR DIEGETIC HUD ---
+        createDiegeticHUD();
 
-        // --- SETUP FILE UPLOADER (GLB / PLY / SPLAT) ---
-        setupUploadListeners();
+        // --- DESKTOP CONTROLS & 2D LISTENERS ---
+        setupDesktopControls();
+        setup2DEventListeners();
 
         window.addEventListener('resize', onWindowResize);
+
     } catch (e) {
-        console.error(e);
+        console.error('Initialization error:', e);
     }
+}
+
+function cacheDomElements() {
+    dom.canvasContainer = document.getElementById('canvas-container');
+    dom.loadDefaultBtn = document.getElementById('load-default-btn');
+    dom.uploadBtn = document.getElementById('upload-btn');
+    dom.fileInput = document.getElementById('file-input');
+    dom.helpToggleBtn = document.getElementById('help-toggle-btn');
+    dom.arButtonMount = document.getElementById('ar-button-mount') || document.getElementById('vr-button-mount');
+
+    dom.dropOverlay = document.getElementById('drop-overlay');
+    dom.modelFilename = document.getElementById('model-filename');
+    dom.statusDot = document.getElementById('status-dot');
+    dom.statSplatCount = document.getElementById('stat-splat-count');
+    dom.statFileSize = document.getElementById('stat-file-size');
+    dom.statFps = document.getElementById('stat-fps');
+    dom.statScale = document.getElementById('stat-scale');
+
+    dom.recenterBtn = document.getElementById('recenter-btn');
+    dom.resetScaleBtn = document.getElementById('reset-scale-btn');
+    dom.flipYBtn = document.getElementById('flip-y-btn');
+
+    dom.loadingDialog = document.getElementById('loading-dialog');
+    dom.loadingTitle = document.getElementById('loading-title');
+    dom.loadingPercent = document.getElementById('loading-percent');
+    dom.loadingBarFill = document.getElementById('loading-bar-fill');
+    dom.loadingSubtitle = document.getElementById('loading-subtitle');
+
+    dom.controlsModal = document.getElementById('controls-modal');
+    dom.closeModalBtn = document.getElementById('close-modal-btn');
+    dom.toast = document.getElementById('toast');
 }
 
 function buildMenuItems() {
@@ -169,22 +189,67 @@ function buildMenuItems() {
     ];
 }
 
+function setupWebXRButton() {
+    // WebXR 'immersive-ar' Session for Meta Quest 3 Passthrough
+    const sessionInit = {
+        requiredFeatures: ['hit-test', 'local-floor', 'mesh-detection'],
+        optionalFeatures: ['bounded-floor', 'plane-detection', 'hand-tracking']
+    };
+
+    const arBtn = ARButton.createButton(renderer, sessionInit);
+    arBtn.id = 'ARButton';
+    arBtn.title = 'Enter Quest 3 Passthrough AR';
+
+    if (dom.arButtonMount) {
+        dom.arButtonMount.innerHTML = '';
+        dom.arButtonMount.appendChild(arBtn);
+    }
+}
+
+function setupControllers() {
+    controller1 = renderer.xr.getController(0);
+    controller1.addEventListener('select', onSelect);
+    scene.add(controller1);
+
+    controller2 = renderer.xr.getController(1);
+    controller2.addEventListener('select', onSelect);
+    scene.add(controller2);
+}
+
+function setupDesktopControls() {
+    orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.08;
+    orbitControls.target.set(0, 0.8, 0);
+
+    renderer.xr.addEventListener('sessionstart', () => {
+        if (orbitControls) orbitControls.enabled = false;
+        showToast('Quest 3 AR Passthrough Active');
+        updateStatusText("Ready — Aim & Trigger to Place (B for Menu)");
+    });
+
+    renderer.xr.addEventListener('sessionend', () => {
+        if (orbitControls) orbitControls.enabled = true;
+        showToast('AR Session Ended');
+    });
+}
+
 /* =========================================================
-   Diegetic In-Game 3D HUD & Controls
+   Diegetic In-Game 3D Floating Menu & HUD
    ========================================================= */
 
-function createHUD() {
+function createDiegeticHUD() {
     hudGroup = new THREE.Group();
     scene.add(hudGroup);
 
-    // 1. Status Text
-    statusMesh = createTextLabel("Ready - Aim & Pull Trigger to Spawn", 40, null, '#00ff00');
-    statusMesh.position.set(-0.4, 0.3, -1.0);
+    // 1. Floating Status Text
+    statusMesh = createTextLabel("Ready — Aim & Trigger to Place (B for Menu)", 38, null, '#00ff00');
+    statusMesh.position.set(-0.4, 0.32, -1.0);
     hudGroup.add(statusMesh);
 
-    // 2. Loading Bar
+    // 2. 3D Loading Bar
     loadingGroup = new THREE.Group();
-    loadingGroup.position.set(0, 0.1, -1.0);
+    loadingGroup.position.set(0, 0.12, -1.0);
     loadingGroup.visible = false;
     hudGroup.add(loadingGroup);
 
@@ -193,16 +258,16 @@ function createHUD() {
 
     const fillGeo = new THREE.PlaneGeometry(0.6, 0.05);
     fillGeo.translate(0.3, 0, 0);
-    loadingFill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: 0x4a90e2 }));
+    loadingFill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: 0x00f3ff }));
     loadingFill.position.x = -0.3;
     loadingFill.position.z = 0.001;
     loadingFill.scale.x = 0;
     loadingGroup.add(loadingFill);
 
-    // 3. Main Menu Mesh
+    // 3. 3D Model Library Menu Mesh
     createMenuMesh();
 
-    // 4. Controls Guide Mesh
+    // 4. 3D Controls Guide Mesh
     createControlsMesh();
 }
 
@@ -215,7 +280,7 @@ function createMenuMesh() {
     const canvasWidth = 512;
     const canvasHeight = Math.max(totalContentHeight, 512);
 
-    const planeWidth = 0.6;
+    const planeWidth = 0.62;
     const planeHeight = planeWidth * (canvasHeight / canvasWidth);
 
     const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
@@ -242,16 +307,16 @@ function createMenuMesh() {
 }
 
 function createControlsMesh() {
-    const geometry = new THREE.PlaneGeometry(0.5, 0.7);
+    const geometry = new THREE.PlaneGeometry(0.55, 0.75);
     const material = new THREE.MeshBasicMaterial({
         transparent: true,
-        opacity: 0.90,
+        opacity: 0.92,
         depthTest: false,
         side: THREE.DoubleSide
     });
     controlsMesh = new THREE.Mesh(geometry, material);
-    controlsMesh.position.set(-0.7, 0, -1.8);
-    controlsMesh.rotation.y = 0.2;
+    controlsMesh.position.set(-0.72, 0, -1.8);
+    controlsMesh.rotation.y = 0.22;
     controlsMesh.visible = false;
     hudGroup.add(controlsMesh);
     redrawControlsCanvas();
@@ -265,45 +330,45 @@ function redrawControlsCanvas() {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = 'rgba(10, 10, 10, 0.88)';
+    ctx.fillStyle = 'rgba(12, 14, 22, 0.92)';
     ctx.beginPath();
-    ctx.roundRect(10, 10, width - 20, height - 20, 30);
+    ctx.roundRect(10, 10, width - 20, height - 20, 28);
     ctx.fill();
-    ctx.strokeStyle = '#4a90e2';
+    ctx.strokeStyle = '#00f3ff';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.font = 'bold 50px Arial';
-    ctx.fillStyle = '#4a90e2';
+    ctx.font = 'bold 46px Arial';
+    ctx.fillStyle = '#00f3ff';
     ctx.textAlign = 'center';
     ctx.fillText("AR Controls", width / 2, 70);
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = '#444';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(40, 90);
-    ctx.lineTo(width - 40, 90);
+    ctx.moveTo(40, 92);
+    ctx.lineTo(width - 40, 92);
     ctx.stroke();
 
     const lines = [
         { label: "Trigger", val: "Spawn Model on Surface" },
-        { label: "Hold Button A", val: "Drag Model" },
-        { label: "Left Stick ↕", val: "Lift / Lower" },
-        { label: "Right Stick ↔", val: "Rotate" },
+        { label: "Hold Button A / Grip", val: "Drag Model in Room" },
+        { label: "Left Stick ↕", val: "Lift / Lower Height" },
+        { label: "Right Stick ↔", val: "Rotate Model" },
         { label: "Right Stick ↕", val: "Scale Size" },
-        { label: "Button B", val: "Open / Close Menu" }
+        { label: "Button B / Y", val: "Open / Close 3D Menu" }
     ];
 
     ctx.textAlign = 'left';
-    let y = 140;
+    let y = 145;
     lines.forEach(line => {
-        ctx.font = 'bold 32px Arial';
-        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 30px Arial';
+        ctx.fillStyle = '#f59e0b';
         ctx.fillText(line.label, 40, y);
-        y += 40;
-        ctx.font = '28px Arial';
+        y += 38;
+        ctx.font = '26px Arial';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(line.val, 60, y);
-        y += 45;
+        ctx.fillText(line.val, 55, y);
+        y += 48;
     });
 
     if (controlsMesh.material.map) controlsMesh.material.map.dispose();
@@ -324,24 +389,24 @@ function redrawMenuCanvas() {
 
     ctx.clearRect(0, 0, width, height);
 
-    ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
+    ctx.fillStyle = 'rgba(16, 18, 28, 0.94)';
     ctx.beginPath();
-    ctx.roundRect(10, 10, width - 20, height - 20, 30);
+    ctx.roundRect(10, 10, width - 20, height - 20, 28);
     ctx.fill();
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.font = 'bold 50px Arial';
+    ctx.font = 'bold 46px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.fillText("Model Library", width / 2, 70);
 
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = '#444';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(40, 90);
-    ctx.lineTo(width - 40, 90);
+    ctx.moveTo(40, 92);
+    ctx.lineTo(width - 40, 92);
     ctx.stroke();
 
     const startY = 150;
@@ -349,36 +414,36 @@ function redrawMenuCanvas() {
     menuItems.forEach((itemText, i) => {
         const yPos = startY + (i * itemHeight);
         let displayLabel = itemText;
-        let textColor = '#aaaaaa';
+        let textColor = '#cbd5e1';
 
         if (i === 0) {
             if (!isMeshAvailable) {
-                displayLabel = "Mesh Unavailable";
-                textColor = '#ff4444';
+                displayLabel = "Mesh: Unavailable";
+                textColor = '#f43f5e';
             } else {
-                if (meshMode === 0) displayLabel = "Mode: Shadow/Occlusion";
-                else if (meshMode === 1) displayLabel = "Mode: Wireframe";
-                else if (meshMode === 2) displayLabel = "Mode: Off";
-                textColor = '#ffff00';
+                if (meshMode === 0) displayLabel = "Room: Shadows & Occlusion";
+                else if (meshMode === 1) displayLabel = "Room: Wireframe Mesh";
+                else if (meshMode === 2) displayLabel = "Room: Off";
+                textColor = '#f59e0b';
             }
         } else if (i === 1) {
             displayLabel = isScalingEnabled ? "Scaling: On" : "Scaling: Off";
-            textColor = isScalingEnabled ? '#00ff00' : '#ffaa00';
+            textColor = isScalingEnabled ? '#10b981' : '#f59e0b';
         } else {
             if (customModelsMap.has(itemText)) displayLabel = `[3D] ${itemText}`;
             else if (customSplatsMap.has(itemText)) displayLabel = `[Splat] ${itemText}`;
         }
 
         if (i === selectedIndex) {
-            ctx.fillStyle = '#4a90e2';
+            ctx.fillStyle = '#0284c7';
             ctx.beginPath();
-            ctx.roundRect(40, yPos - 35, width - 80, 50, 10);
+            ctx.roundRect(40, yPos - 36, width - 80, 52, 12);
             ctx.fill();
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 34px Arial';
         } else {
             ctx.fillStyle = textColor;
-            ctx.font = '34px Arial';
+            ctx.font = '33px Arial';
         }
         ctx.fillText(displayLabel, width / 2, yPos);
     });
@@ -391,10 +456,10 @@ function redrawMenuCanvas() {
 }
 
 function updateStatusText(text, isError = false) {
-    const color = isError ? '#ff0000' : '#00ff00';
+    const color = isError ? '#f43f5e' : '#10b981';
     if (statusMesh && statusMesh.material.map) statusMesh.material.map.dispose();
     if (statusMesh) {
-        statusMesh.material.map = createTexture(text, 40, null, color);
+        statusMesh.material.map = createTexture(text, 38, null, color);
         statusMesh.material.needsUpdate = true;
     }
 }
@@ -404,6 +469,18 @@ function updateLoadingBar(percent) {
     loadingGroup.visible = true;
     loadingFill.scale.x = Math.min(Math.max(percent, 0.01), 1);
     updateStatusText(`Loading: ${(percent * 100).toFixed(0)}%`);
+
+    if (dom.loadingDialog) {
+        dom.loadingDialog.classList.add('active');
+        const pctText = `${Math.round(percent * 100)}%`;
+        if (dom.loadingPercent) dom.loadingPercent.textContent = pctText;
+        if (dom.loadingBarFill) dom.loadingBarFill.style.width = pctText;
+    }
+}
+
+function hideLoadingBar() {
+    if (loadingGroup) loadingGroup.visible = false;
+    if (dom.loadingDialog) dom.loadingDialog.classList.remove('active');
 }
 
 function createTexture(text, fontSize, bgColor, textColor) {
@@ -422,7 +499,7 @@ function createTexture(text, fontSize, bgColor, textColor) {
     ctx.fillStyle = textColor || 'white';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = "black";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
     ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 2;
     ctx.shadowOffsetY = 2;
@@ -433,7 +510,7 @@ function createTexture(text, fontSize, bgColor, textColor) {
 function createTextLabel(text, fontSize, bgColor, textColor) {
     const texture = createTexture(text, fontSize, bgColor, textColor);
     const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
-    return new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), mat);
+    return new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.11), mat);
 }
 
 /* =========================================================
@@ -451,6 +528,7 @@ async function loadModel(name, positionMatrix) {
     if (!name || isLoading) return;
     isLoading = true;
     updateLoadingBar(0.01);
+    dom.modelFilename.textContent = name;
 
     // Remove existing 3D model
     if (currentModel) {
@@ -458,7 +536,7 @@ async function loadModel(name, positionMatrix) {
         currentModel = null;
     }
 
-    // Hide splat viewer mesh if switching
+    // Hide splat mesh if switching
     if (splatViewer && splatViewer.splatMesh) {
         splatViewer.splatMesh.visible = false;
     }
@@ -474,14 +552,20 @@ async function loadModel(name, positionMatrix) {
         const scalar = size > 0 ? (1.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
 
+        let polyCount = 0;
         currentModel.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
+                if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
+                    polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
+                }
             }
         });
 
         scene.add(currentModel);
+        dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
+        dom.statFileSize.textContent = 'Custom 3D';
         finishLoading(name);
         return;
     }
@@ -493,7 +577,6 @@ async function loadModel(name, positionMatrix) {
             initSplatEngineIfNeeded();
             splatViewer.splatMesh.visible = true;
 
-            // Remove previous splat scenes
             const mesh = splatViewer.getSplatMesh();
             if (mesh && mesh.scenes && mesh.scenes.length > 0) {
                 const count = mesh.scenes.length;
@@ -508,12 +591,16 @@ async function loadModel(name, positionMatrix) {
                 currentSplatScene.updateTransform(true);
             }
 
+            const count = splatBuffer.getSplatCount();
+            dom.statSplatCount.textContent = `${count.toLocaleString()} splats`;
+            dom.statFileSize.textContent = 'Custom Splat';
             finishLoading(name);
         } catch (err) {
             console.error('Error adding splat buffer:', err);
             isLoading = false;
-            if (loadingGroup) loadingGroup.visible = false;
+            hideLoadingBar();
             updateStatusText("Load Error", true);
+            showToast(`Failed: ${err.message}`);
         }
         return;
     }
@@ -523,12 +610,11 @@ async function loadModel(name, positionMatrix) {
     if (!selectedModel) {
         console.error("Model not found in config:", name);
         isLoading = false;
-        if (loadingGroup) loadingGroup.visible = false;
+        hideLoadingBar();
         return;
     }
 
     const rawPath = selectedModel.path;
-    // Resolve relative to module so it works across root, subpaths, ngrok, and local
     const assetPath = new URL(rawPath.startsWith('/') ? '../../' + rawPath.slice(1) : rawPath, import.meta.url).href;
 
     const onProgress = (xhr) => {
@@ -537,9 +623,10 @@ async function loadModel(name, positionMatrix) {
 
     const onError = (e) => {
         isLoading = false;
-        if (loadingGroup) loadingGroup.visible = false;
+        hideLoadingBar();
         console.error(e);
         updateStatusText("Load Error", true);
+        showToast(`Failed loading ${name}`);
     };
 
     const onLoad = (obj) => {
@@ -551,15 +638,20 @@ async function loadModel(name, positionMatrix) {
         const scalar = size > 0 ? (1.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
 
-        // Shadow Casting for Models on Room Mesh
+        let polyCount = 0;
         currentModel.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
+                if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
+                    polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
+                }
             }
         });
 
         scene.add(currentModel);
+        dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
+        dom.statFileSize.textContent = name === 'Fighter Jet' ? '2.1 MB' : '3D Mesh';
         finishLoading(name);
     };
 
@@ -579,10 +671,11 @@ function finishLoading(name) {
     isMenuOpen = false;
     if (menuMesh) menuMesh.visible = false;
     if (controlsMesh) controlsMesh.visible = false;
-    if (loadingGroup) loadingGroup.visible = false;
+    hideLoadingBar();
 
     scoreValue += 10;
     updateStatusText(`Loaded ${name}! Score: ${scoreValue}`);
+    showToast(`Loaded ${name} into room`);
 }
 
 function initSplatEngineIfNeeded() {
@@ -614,20 +707,24 @@ function animate() {
 }
 
 /* =========================================================
-   Render Loop & Room Meshing (Occlusion & Shadows)
+   Render Loop & Room Meshing (Occlusion & Soft Shadows)
    ========================================================= */
+
+let lastTime = performance.now();
+let frameCount = 0;
 
 function render(timestamp, frame) {
     if (frame) {
-        // Follow camera with diegetic HUD
-        if (hudGroup) {
-            hudGroup.position.lerp(camera.position, 0.1);
-            hudGroup.quaternion.slerp(camera.quaternion, 0.1);
+        // Track Headset in AR Space for Diegetic 3D HUD
+        const xrCam = renderer.xr.getCamera();
+        if (xrCam && hudGroup) {
+            hudGroup.position.lerp(xrCam.position, 0.15);
+            hudGroup.quaternion.slerp(xrCam.quaternion, 0.15);
         }
 
-        // Room Mesh Detection
+        // Room Mesh Detection (Real walls occlusion & real floor shadows)
         if (!frame.detectedMeshes && isMeshAvailable) {
-            // No meshes
+            // No meshes detected yet
         } else if (frame.detectedMeshes) {
             isMeshAvailable = true;
             for (const [xrMesh, threeGroup] of roomMeshes) {
@@ -645,12 +742,12 @@ function render(timestamp, frame) {
                     threeGroup = new THREE.Group();
                     const geometry = new THREE.BufferGeometry();
 
-                    // 1. Occlusion Mesh
+                    // 1. Occlusion Mesh (Invisible barrier behind walls)
                     meshOcclusion = new THREE.Mesh(geometry, matOcclusion);
                     meshOcclusion.renderOrder = -2;
                     threeGroup.add(meshOcclusion);
 
-                    // 2. Shadow Mesh
+                    // 2. Shadow Mesh (Projects shadow onto real desk/floor)
                     meshShadow = new THREE.Mesh(geometry, matShadow);
                     meshShadow.receiveShadow = true;
                     meshShadow.renderOrder = -1;
@@ -706,7 +803,7 @@ function render(timestamp, frame) {
         // WebXR Controllers Input
         const session = renderer.xr.getSession();
         for (const source of session.inputSources) {
-            if (source.gamepad) handleInput(source);
+            if (source.gamepad) handleGamepadInput(source);
         }
 
         // Surface Hit-Testing & Reticle Placement
@@ -741,6 +838,8 @@ function render(timestamp, frame) {
         } else {
             reticle.visible = false;
         }
+    } else {
+        if (orbitControls) orbitControls.update();
     }
 
     // Update splats if active
@@ -749,13 +848,22 @@ function render(timestamp, frame) {
     }
 
     renderer.render(scene, camera);
+
+    // FPS Telemetry
+    frameCount++;
+    const now = performance.now();
+    if (now - lastTime >= 1000) {
+        if (dom.statFps) dom.statFps.textContent = frameCount.toString();
+        frameCount = 0;
+        lastTime = now;
+    }
 }
 
 /* =========================================================
-   Quest 3 Controller Input Handling (AR Mode)
+   Quest 3 Controller Input Handling (In-AR Controls)
    ========================================================= */
 
-function handleInput(source) {
+function handleGamepadInput(source) {
     if (isLoading) return;
     const gp = source.gamepad;
     const hand = source.handedness;
@@ -774,9 +882,9 @@ function handleInput(source) {
     lastButtonState[hand + 'B'] = bPressed;
 
     if (isMenuOpen) {
-        // MENU NAV: Right stick Y (or Left stick Y)
+        // MENU NAV: Thumbstick Y
         const dy = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes.length >= 2 ? gp.axes[1] : 0);
-        if (Math.abs(dy) > 0.6 && now - lastScrollTime > 280) {
+        if (Math.abs(dy) > 0.5 && now - lastScrollTime > 260) {
             selectedIndex = (dy > 0) ? selectedIndex + 1 : selectedIndex - 1;
             if (selectedIndex < 0) selectedIndex = menuItems.length - 1;
             if (selectedIndex >= menuItems.length) selectedIndex = 0;
@@ -788,17 +896,17 @@ function handleInput(source) {
         const aPressed = (gp.buttons.length > 4 && gp.buttons[4].pressed);
         if (aPressed && !lastButtonState[hand + 'A']) {
             if (selectedIndex === 0) {
-                // TOGGLE MODE (0 = Occlusion/Shadow -> 1 = Wireframe -> 2 = Off)
+                // TOGGLE ROOM MODE (0 = Occlusion/Shadow -> 1 = Wireframe -> 2 = Off)
                 if (isMeshAvailable) {
                     meshMode = (meshMode + 1) % 3;
                     redrawMenuCanvas();
 
-                    let statusMsg = "Mode: Shadow/Occlusion";
-                    if (meshMode === 1) statusMsg = "Mode: Wireframe";
-                    if (meshMode === 2) statusMsg = "Mode: Off";
+                    let statusMsg = "Room: Shadows & Occlusion";
+                    if (meshMode === 1) statusMsg = "Room: Wireframe Mesh";
+                    if (meshMode === 2) statusMsg = "Room: Off";
                     updateStatusText(statusMsg);
                 } else {
-                    updateStatusText("Error: No Mesh Data", true);
+                    updateStatusText("Error: No Room Mesh Data", true);
                 }
             } else if (selectedIndex === 1) {
                 // TOGGLE SCALING
@@ -808,6 +916,7 @@ function handleInput(source) {
             } else {
                 // SELECT MODEL / SPLAT TO SPAWN
                 modelName = menuItems[selectedIndex];
+                dom.modelFilename.textContent = modelName;
                 updateStatusText(`Selected: ${modelName} — Aim & Pull Trigger`);
                 setTimeout(() => {
                     isMenuOpen = false;
@@ -852,6 +961,7 @@ function handleInput(source) {
                     if (targetObj.updateTransform) targetObj.updateTransform(true);
                     const scaleVal = targetObj.scale.x.toFixed(2);
                     updateStatusText(`Scale: ${scaleVal}x`);
+                    if (dom.statScale) dom.statScale.textContent = `${scaleVal}x`;
                 }
             }
         }
@@ -859,61 +969,134 @@ function handleInput(source) {
 }
 
 /* =========================================================
-   Upload Custom 3D Models & Gaussian Splats
+   2D UI & Custom File Upload Listeners
    ========================================================= */
 
-function setupUploadListeners() {
-    const fileInput = document.getElementById('file-input');
-    const uploadBtn = document.getElementById('upload-btn');
-    const uploadStatus = document.getElementById('upload-status');
+function setup2DEventListeners() {
+    // Select default Fighter Jet
+    dom.loadDefaultBtn.addEventListener('click', () => {
+        modelName = 'Fighter Jet';
+        dom.modelFilename.textContent = 'Fighter Jet';
+        dom.statFileSize.textContent = '2.1 MB';
+        selectedIndex = menuItems.indexOf('Fighter Jet');
+        redrawMenuCanvas();
+        updateStatusText("Selected Fighter Jet — Aim & Trigger to Place");
+        showToast("Selected Fighter Jet (Pull Trigger in AR to place)");
+    });
 
-    if (uploadBtn && fileInput) {
-        uploadBtn.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) handleUploadedFile(file, uploadStatus);
-        });
-    }
+    // File input trigger
+    dom.uploadBtn.addEventListener('click', () => {
+        dom.fileInput.click();
+    });
+
+    dom.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleUploadedFile(file);
+            dom.fileInput.value = '';
+        }
+    });
+
+    // Help modal
+    dom.helpToggleBtn.addEventListener('click', () => {
+        dom.controlsModal.classList.add('active');
+    });
+
+    dom.closeModalBtn.addEventListener('click', () => {
+        dom.controlsModal.classList.remove('active');
+    });
+
+    // Quick actions on telemetry card
+    dom.recenterBtn.addEventListener('click', () => {
+        const target = currentModel || currentSplatScene;
+        if (target) {
+            target.position.set(0, 0.8, -1.8);
+            if (target.updateTransform) target.updateTransform(true);
+            showToast('Recentered model');
+        }
+    });
+
+    dom.resetScaleBtn.addEventListener('click', () => {
+        const target = currentModel || currentSplatScene;
+        if (target) {
+            target.scale.set(1.0, 1.0, 1.0);
+            if (target.updateTransform) target.updateTransform(true);
+            dom.statScale.textContent = '1.0x';
+            showToast('Reset scale to 1.0x');
+        }
+    });
+
+    dom.flipYBtn.addEventListener('click', () => {
+        const target = currentModel || currentSplatScene;
+        if (target) {
+            target.rotation.x += Math.PI;
+            if (target.updateTransform) target.updateTransform(true);
+            showToast('Flipped Y axis');
+        }
+    });
 
     // Drag & Drop
-    window.addEventListener('dragover', (e) => e.preventDefault());
-    window.addEventListener('drop', (e) => {
+    window.addEventListener('dragenter', (e) => {
         e.preventDefault();
+        dom.dropOverlay.classList.add('active');
+    });
+
+    dom.dropOverlay.addEventListener('dragover', (e) => e.preventDefault());
+
+    dom.dropOverlay.addEventListener('dragleave', (e) => {
+        if (e.relatedTarget === null) dom.dropOverlay.classList.remove('active');
+    });
+
+    dom.dropOverlay.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dom.dropOverlay.classList.remove('active');
         if (e.dataTransfer.files.length > 0) {
-            handleUploadedFile(e.dataTransfer.files[0], uploadStatus);
+            handleUploadedFile(e.dataTransfer.files[0]);
         }
     });
 }
 
-async function handleUploadedFile(file, uploadStatus) {
+async function handleUploadedFile(file) {
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
 
-    if (uploadStatus) uploadStatus.textContent = `Reading ${file.name}...`;
+    updateStatusText(`Reading ${file.name}...`);
+    showToast(`Reading ${file.name}...`);
+    updateLoadingBar(0.25);
 
     if (['glb', 'gltf'].includes(ext)) {
         try {
             const arrayBuffer = await file.arrayBuffer();
+            updateLoadingBar(0.6);
+
             new GLTFLoader().parse(arrayBuffer, '', (gltf) => {
                 customModelsMap.set(file.name, gltf.scene);
                 modelName = file.name;
+                dom.modelFilename.textContent = file.name;
+                dom.statFileSize.textContent = formatBytes(file.size);
+
                 buildMenuItems();
                 selectedIndex = menuItems.indexOf(file.name);
                 createMenuMesh();
+                hideLoadingBar();
 
-                if (uploadStatus) uploadStatus.textContent = `Ready: ${file.name} (Enter AR, aim & Trigger to spawn)`;
-                updateStatusText(`Loaded ${file.name} — Pull Trigger to Place`);
+                updateStatusText(`Ready: ${file.name} — Aim & Trigger to Place`);
+                showToast(`Loaded ${file.name}! Enter AR & pull Trigger to place.`);
             }, (err) => {
                 console.error(err);
-                if (uploadStatus) uploadStatus.textContent = `Error parsing ${file.name}`;
+                hideLoadingBar();
+                showToast(`Error parsing ${file.name}`);
             });
         } catch (e) {
             console.error(e);
-            if (uploadStatus) uploadStatus.textContent = `Error reading ${file.name}`;
+            hideLoadingBar();
+            showToast(`Error reading ${file.name}`);
         }
     } else if (['ply', 'splat', 'ksplat', 'spz'].includes(ext)) {
         try {
             const arrayBuffer = await file.arrayBuffer();
+            updateLoadingBar(0.6);
+
             let splatBuffer;
             if (ext === 'ply') splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
             else if (ext === 'splat') splatBuffer = await GaussianSplats3D.SplatLoader.loadFromFileData(arrayBuffer, 0, 0, false);
@@ -922,17 +1105,43 @@ async function handleUploadedFile(file, uploadStatus) {
 
             customSplatsMap.set(file.name, splatBuffer);
             modelName = file.name;
+            dom.modelFilename.textContent = file.name;
+            dom.statFileSize.textContent = formatBytes(file.size);
+            dom.statSplatCount.textContent = `${splatBuffer.getSplatCount().toLocaleString()} splats`;
+
             buildMenuItems();
             selectedIndex = menuItems.indexOf(file.name);
             createMenuMesh();
+            hideLoadingBar();
 
-            if (uploadStatus) uploadStatus.textContent = `Ready: ${file.name} (${splatBuffer.getSplatCount().toLocaleString()} splats)`;
-            updateStatusText(`Loaded ${file.name} — Pull Trigger to Place`);
+            updateStatusText(`Ready: ${file.name} — Aim & Trigger to Place`);
+            showToast(`Loaded ${file.name}! Enter AR & pull Trigger to place.`);
         } catch (e) {
             console.error(e);
-            if (uploadStatus) uploadStatus.textContent = `Error loading splat: ${e.message}`;
+            hideLoadingBar();
+            showToast(`Error reading splat: ${e.message}`);
         }
     } else {
-        if (uploadStatus) uploadStatus.textContent = `Unsupported format: .${ext}`;
+        hideLoadingBar();
+        showToast(`Unsupported format: .${ext}`);
     }
+}
+
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+let toastTimer = null;
+function showToast(message, duration = 3500) {
+    if (!dom.toast) return;
+    dom.toast.textContent = message;
+    dom.toast.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        dom.toast.classList.remove('show');
+    }, duration);
 }
