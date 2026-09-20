@@ -28,3 +28,6 @@ secrets/
 .vercel
 
 pages/Face-Tool/models/
+
+# Large Gaussian Splat files (>100MB exceeds GitHub limit)
+assets/Gaussian-Splats/
