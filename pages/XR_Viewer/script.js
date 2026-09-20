@@ -33,7 +33,9 @@ let orbitControls;
 let currentModel = null;     // Active standard GLTF/GLB/OBJ model
 let splatViewer = null;      // GaussianSplats3D Viewer instance
 let currentSplatScene = null;
-let currentModelName = 'Default Gaussian.ply';
+let currentModelName = 'Fighter Jet';
+let uploadedModelName = '';
+let uploadedModelObject = null;
 let customSplatBuffer = null;
 let customSplatFileName = '';
 
@@ -43,7 +45,7 @@ let menuItems = [];
 let isMenuOpen = false;
 let isDragging = false;
 let isLoading = false;
-let selectedIndex = 2; // Default to Default Gaussian
+let selectedIndex = 2; // Default to Fighter Jet
 let scoreValue = 0;
 let lastScrollTime = 0;
 let lastButtonState = {};
@@ -183,10 +185,10 @@ function init() {
         // Start Animation Loop
         renderer.setAnimationLoop(render);
 
-        // Auto-load default Gaussian Splat
+        // Auto-load default model: Fighter Jet
         setTimeout(() => {
-            loadDefaultGaussianSplat();
-        }, 300);
+            loadStandard3DModel('Fighter Jet');
+        }, 150);
 
     } catch (e) {
         console.error('Initialization error:', e);
@@ -230,9 +232,11 @@ function buildMenuItems() {
     menuItems = [
         'Room Mode',
         'Scaling: On',
-        'Default Gaussian.ply',
+        'Fighter Jet',
+        ...(uploadedModelName ? [uploadedModelName] : []),
         ...(customSplatFileName ? [customSplatFileName] : []),
-        ...models.map(m => m.name)
+        ...models.filter(m => m.name !== 'Fighter Jet').map(m => m.name),
+        'Default Gaussian.ply'
     ];
 }
 
@@ -313,7 +317,7 @@ function setupDesktopControls() {
 
 function setup2DUIEventListeners() {
     dom.loadDefaultBtn.addEventListener('click', () => {
-        loadDefaultGaussianSplat();
+        loadStandard3DModel('Fighter Jet');
     });
 
     dom.uploadBtn.addEventListener('click', () => {
@@ -707,10 +711,12 @@ function onSelect() {
 function loadSelectedModel(name, positionMatrix) {
     if (!name || isLoading) return;
 
-    if (name === 'Default Gaussian.ply') {
-        loadDefaultGaussianSplat(positionMatrix);
+    if (name === uploadedModelName && uploadedModelObject) {
+        loadUploaded3DModel(uploadedModelObject, uploadedModelName, positionMatrix);
     } else if (name === customSplatFileName && customSplatBuffer) {
         loadUploadedSplatBuffer(customSplatBuffer, customSplatFileName, positionMatrix);
+    } else if (name === 'Default Gaussian.ply') {
+        loadDefaultGaussianSplat(positionMatrix);
     } else {
         loadStandard3DModel(name, positionMatrix);
     }
@@ -875,7 +881,8 @@ function loadStandard3DModel(name, positionMatrix) {
 
     currentModelName = name;
     dom.modelFilename.textContent = name;
-    const assetPath = selectedModel.path;
+    const rawPath = selectedModel.path;
+    const assetPath = new URL(rawPath.startsWith('/') ? '../../' + rawPath.slice(1) : rawPath, import.meta.url).href;
 
     const onProgress = (xhr) => {
         if (xhr.lengthComputable) updateLoadingBar(xhr.loaded / xhr.total);
@@ -886,6 +893,7 @@ function loadStandard3DModel(name, positionMatrix) {
         hideLoadingBar();
         console.error(e);
         updateStatusText("Load Error", true);
+        showToast(`Failed loading ${name}`);
     };
 
     const onLoad = (obj) => {
@@ -901,10 +909,14 @@ function loadStandard3DModel(name, positionMatrix) {
         const scalar = size > 0 ? (1.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
 
+        let polyCount = 0;
         currentModel.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
+                if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
+                    polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
+                }
             }
         });
 
@@ -918,16 +930,72 @@ function loadStandard3DModel(name, positionMatrix) {
         updateStatusText(`Loaded! Score: ${scoreValue}`);
         showToast(`Loaded ${name}`);
 
-        dom.statSplatCount.textContent = 'Polygonal';
-        dom.statFileSize.textContent = 'GLB Mesh';
+        dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
+        dom.statFileSize.textContent = name === 'Fighter Jet' ? '2.1 MB' : '3D Mesh';
     };
 
-    const ext = assetPath.split('.').pop().toLowerCase();
+    const ext = rawPath.split('.').pop().toLowerCase();
     if (ext === 'glb' || ext === 'gltf') {
         new GLTFLoader().load(assetPath, (g) => onLoad(g.scene), onProgress, onError);
     } else if (ext === 'obj') {
         new OBJLoader().load(assetPath, (o) => onLoad(o), onProgress, onError);
     }
+}
+
+function loadUploaded3DModel(modelObj, name, positionMatrix) {
+    if (isLoading) return;
+    isLoading = true;
+    updateLoadingBar(0.5);
+
+    if (currentModel) {
+        scene.remove(currentModel);
+        currentModel = null;
+    }
+
+    if (splatViewer && splatViewer.splatMesh) {
+        splatViewer.splatMesh.visible = false;
+    }
+
+    currentModelName = name;
+    dom.modelFilename.textContent = name;
+
+    const clone = modelObj.clone(true);
+    currentModel = clone;
+
+    if (positionMatrix) {
+        currentModel.position.setFromMatrixPosition(positionMatrix);
+    } else {
+        currentModel.position.set(0, 0.8, -1.8);
+    }
+
+    const box = new THREE.Box3().setFromObject(currentModel);
+    const size = box.getSize(new THREE.Vector3()).length();
+    const scalar = size > 0 ? (1.5 / size) : 1;
+    currentModel.scale.set(scalar, scalar, scalar);
+
+    let polyCount = 0;
+    currentModel.traverse((node) => {
+        if (node.isMesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+            if (node.geometry && node.geometry.attributes && node.geometry.attributes.position) {
+                polyCount += (node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3);
+            }
+        }
+    });
+
+    scene.add(currentModel);
+
+    isLoading = false;
+    closeMenu();
+    hideLoadingBar();
+
+    scoreValue += 10;
+    updateStatusText(`Loaded! Score: ${scoreValue}`);
+    showToast(`Loaded ${name}`);
+
+    dom.statSplatCount.textContent = `${Math.round(polyCount).toLocaleString()} polys`;
+    dom.statFileSize.textContent = 'Custom 3D';
 }
 
 async function handleFileUpload(file) {
@@ -961,17 +1029,38 @@ async function handleFileUpload(file) {
         } catch (err) {
             console.error('Failed to parse uploaded splat:', err);
             showToast(`Error: ${err.message}`);
+            hideLoadingBar();
         }
     } else if (['glb', 'gltf'].includes(ext)) {
-        const url = URL.createObjectURL(file);
-        new GLTFLoader().load(url, (g) => {
-            if (currentModel) scene.remove(currentModel);
-            if (splatViewer && splatViewer.splatMesh) splatViewer.splatMesh.visible = false;
-            currentModel = g.scene;
-            currentModel.position.set(0, 0.8, -1.8);
-            scene.add(currentModel);
-            showToast(`Loaded ${file.name}`);
-        });
+        showToast(`Parsing ${file.name}...`);
+        updateStatusText(`Reading ${file.name}...`);
+        updateLoadingBar(0.3);
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            updateLoadingBar(0.6);
+
+            new GLTFLoader().parse(arrayBuffer, '', (gltf) => {
+                uploadedModelObject = gltf.scene;
+                uploadedModelName = file.name;
+
+                // Rebuild menu to include uploaded model
+                buildMenuItems();
+                createMenuMesh();
+
+                loadUploaded3DModel(gltf.scene, file.name);
+            }, (err) => {
+                console.error('Failed to parse GLTF:', err);
+                showToast(`Error parsing ${file.name}`);
+                hideLoadingBar();
+            });
+        } catch (err) {
+            console.error('Failed to read 3D model:', err);
+            showToast(`Error reading ${file.name}`);
+            hideLoadingBar();
+        }
+    } else {
+        showToast(`Unsupported format .${ext}`);
     }
 }
 
