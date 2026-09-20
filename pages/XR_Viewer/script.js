@@ -728,37 +728,52 @@ async function loadDefaultGaussianSplat(positionMatrix) {
     dom.loadingTitle.textContent = 'Loading Default Gaussian Splat...';
     dom.loadingSubtitle.textContent = 'Streaming 127 MB binary PLY data';
 
-    // Clear existing standard model
     if (currentModel) {
         scene.remove(currentModel);
         currentModel = null;
     }
 
+    if (splatViewer && splatViewer.splatMesh) {
+        splatViewer.splatMesh.visible = true;
+    }
+
     try {
-        const response = await fetch('/assets/Gaussian-Splats/Default Gaussian.ply');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const contentLength = response.headers.get('content-length');
-        const total = contentLength ? parseInt(contentLength, 10) : 132717323;
-
-        const combined = new Uint8Array(total);
-        const reader = response.body.getReader();
-        let offset = 0;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            combined.set(value, offset);
-            offset += value.length;
-            updateLoadingBar(offset / total);
+        // Clear previous splat scenes if any
+        if (splatViewer && splatViewer.splatMesh && splatViewer.splatMesh.scenes) {
+            const scenesCount = splatViewer.splatMesh.scenes.length;
+            if (scenesCount > 0) {
+                const indices = Array.from({ length: scenesCount }, (_, i) => i);
+                await splatViewer.removeSplatScenes(indices, false);
+            }
         }
 
-        updateStatusText("Parsing 535k Gaussians...");
-        const arrayBuffer = combined.buffer.slice(0, offset);
-        const splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+        const splatUrl = new URL('../../assets/Gaussian-Splats/Default Gaussian.ply', import.meta.url).href;
 
-        updateStatusText("Uploading to GPU...");
-        await splatViewer.addSplatBuffers([splatBuffer], [{}], true, false, false, true, true);
+        // Perform head check to give a crisp error if missing on remote host
+        const headCheck = await fetch(splatUrl, {
+            method: 'HEAD',
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+
+        if (!headCheck.ok) {
+            if (headCheck.status === 404) {
+                throw new Error("Default Gaussian.ply (127MB) is not on GitHub due to the 100MB limit. Run locally via ngrok to view it, or upload your own file!");
+            }
+            throw new Error(`HTTP ${headCheck.status}`);
+        }
+
+        await splatViewer.addSplatScene(splatUrl, {
+            showLoadingUI: false,
+            progressiveLoad: true,
+            headers: { 'ngrok-skip-browser-warning': 'true' },
+            onProgress: (percent, percentLabel, loaderStatus) => {
+                const pct = Math.min(100, Math.max(1, percent || 0));
+                updateLoadingBar(pct / 100);
+                updateStatusText(`Loading ${percentLabel || pct + '%'}...`);
+                dom.loadingTitle.textContent = 'Streaming Default Gaussian Splat...';
+                dom.loadingSubtitle.textContent = `Downloaded: ${percentLabel || pct + '%'}`;
+            }
+        });
 
         currentSplatScene = splatViewer.getSplatScene(0);
         if (currentSplatScene) {
@@ -771,7 +786,9 @@ async function loadDefaultGaussianSplat(positionMatrix) {
             currentSplatScene.updateTransform(true);
         }
 
-        const count = splatBuffer.getSplatCount();
+        const splatMesh = splatViewer.getSplatMesh();
+        const splatBuffer = splatMesh?.getSplatTree()?.splatBuffer;
+        const count = splatBuffer?.getSplatCount() || 535144;
         dom.statSplatCount.textContent = count.toLocaleString();
         scoreValue += 15;
         updateStatusText(`Loaded! Score: ${scoreValue}`);
@@ -782,7 +799,7 @@ async function loadDefaultGaussianSplat(positionMatrix) {
     } catch (err) {
         console.error('Error loading default splat:', err);
         updateStatusText("Load Error", true);
-        showToast(`Failed: ${err.message}`);
+        showToast(err.message, 8000);
     } finally {
         isLoading = false;
         hideLoadingBar();
