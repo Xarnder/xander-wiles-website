@@ -30,6 +30,8 @@ import {
     isStickySaveButtonEnabled,
     setStickySaveButtonEnabled
 } from '../lib/editorChrome';
+import { isAutoTitleEnabled, setAutoTitleEnabled as setAutoTitleEnabledPreference } from '../lib/autoTitle';
+import { isMissingTitleReminderEnabled, setMissingTitleReminderEnabled as setMissingTitleReminderEnabledPreference } from '../lib/titleReminder';
 
 const THEME_OPTIONS = [
     {
@@ -95,6 +97,8 @@ export default function SettingsView() {
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
     const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
     const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
+    const [autoTitleEnabled, setAutoTitleEnabled] = useState(isAutoTitleEnabled);
+    const [missingTitleReminderEnabled, setMissingTitleReminderEnabled] = useState(isMissingTitleReminderEnabled);
     const [entrySections, setEntrySections] = useState([]);
     const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
@@ -777,7 +781,7 @@ export default function SettingsView() {
             <section className="glass-card overflow-hidden">
                 <div className="border-b border-white/10 px-4 py-4 sm:px-6">
                     <h3 className="text-base font-bold text-white">Writing</h3>
-                    <p className="mt-1 text-sm text-text-muted">Free up space on small screens while the keyboard is open.</p>
+                    <p className="mt-1 text-sm text-text-muted">Customize editor behavior and screen layout while writing.</p>
                 </div>
                 <div className="px-4 py-4 sm:px-6">
                     <button
@@ -830,6 +834,58 @@ export default function SettingsView() {
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={stickySaveButton}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${stickySaveButton ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !autoTitleEnabled;
+                            setAutoTitleEnabled(nextEnabled);
+                            setAutoTitleEnabledPreference(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={autoTitleEnabled}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${autoTitleEnabled ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Type className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Auto-title from journal entry</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Automatically extract and populate the entry title from your main journal entry when no title is provided. Off by default so you can save entries without a title.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={autoTitleEnabled}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${autoTitleEnabled ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !missingTitleReminderEnabled;
+                            setMissingTitleReminderEnabled(nextEnabled);
+                            setMissingTitleReminderEnabledPreference(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={missingTitleReminderEnabled}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${missingTitleReminderEnabled ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Bell className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Missing title reminder</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Show a confirmation popup if you try to save an entry without a title. On by default.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={missingTitleReminderEnabled}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${missingTitleReminderEnabled ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                 </div>

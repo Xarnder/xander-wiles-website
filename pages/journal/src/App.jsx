@@ -12,6 +12,7 @@ import MonthView from './components/MonthView';
 import EntryEditor from './components/EntryEditor';
 import StatsView from './components/StatsView';
 import PdfExportView from './components/PdfExportView';
+import ClipboardView from './components/ClipboardView';
 import ImageView from './components/ImageView';
 import MemoriesView from './components/MemoriesView';
 import TagsView from './components/TagsView';
@@ -58,6 +59,7 @@ function App() {
               <Route path="/tags" element={<TagsView />} />
               <Route path="/memories" element={<MemoriesView />} />
               <Route path="/pdf-export" element={<PdfExportView />} />
+              <Route path="/clipboard" element={<ClipboardView />} />
               <Route path="/settings" element={<SettingsView />} />
             </Route>
           </Routes>

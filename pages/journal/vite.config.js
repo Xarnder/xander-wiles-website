@@ -41,9 +41,44 @@ function siteLocalLLMPlugin({ externaliseForBuild }) {
   }
 }
 
+function harperWasmPlugin() {
+  const slimWasmPath = path.resolve(__dirname, 'node_modules/harper.js/dist/harper_wasm_slim_bg.wasm')
+  const wasmPath = path.resolve(__dirname, 'node_modules/harper.js/dist/harper_wasm_bg.wasm')
+
+  return {
+    name: 'harper-wasm',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = new URL(req.url, 'http://localhost').pathname
+        if (pathname.endsWith('/harper_wasm_slim_bg.wasm')) {
+          if (fs.existsSync(slimWasmPath)) {
+            res.setHeader('Content-Type', 'application/wasm')
+            fs.createReadStream(slimWasmPath).pipe(res)
+            return
+          }
+        } else if (pathname.endsWith('/harper_wasm_bg.wasm')) {
+          if (fs.existsSync(wasmPath)) {
+            res.setHeader('Content-Type', 'application/wasm')
+            fs.createReadStream(wasmPath).pipe(res)
+            return
+          }
+        }
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  plugins: [react(), siteLocalLLMPlugin({ externaliseForBuild: command === 'build' })],
+  plugins: [
+    react(),
+    siteLocalLLMPlugin({ externaliseForBuild: command === 'build' }),
+    harperWasmPlugin(),
+  ],
+  optimizeDeps: {
+    exclude: ['harper.js'],
+  },
   base: '/pages/journal/',
   build: {
     chunkSizeWarningLimit: 1000,

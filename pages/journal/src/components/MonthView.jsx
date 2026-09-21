@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, documentId } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar, Star } from 'lucide-react';
+import { isAutoTitleEnabled } from '../lib/autoTitle';
 
 export default function MonthView() {
     const { currentUser } = useAuth();
@@ -43,7 +44,7 @@ export default function MonthView() {
 
                         // If no title field, or to be safe, try to extract from content like EntryEditor does
                         // Format: ++Title++ or **++Title++**
-                        if (data.content) {
+                        if (data.content && isAutoTitleEnabled()) {
                             const match = data.content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
                             if (match && match[1]) {
                                 // Check if it has " - " separator like "Date - Title"
@@ -210,7 +211,7 @@ export default function MonthView() {
                                     <div className="flex-1 min-w-0">
                                         {entryData ? (
                                             <h3 className="text-sm sm:text-lg font-medium text-white whitespace-normal sm:truncate leading-tight sm:leading-normal">
-                                                {entryData.title}
+                                                {entryData.title || <span className="italic text-text-muted/60">Untitled</span>}
                                             </h3>
                                         ) : (
                                             <h3 className="text-sm italic text-text-muted/50">No entry</h3>
@@ -222,7 +223,7 @@ export default function MonthView() {
                                         <div className="w-12 h-12 shrink-0 rounded-md overflow-hidden bg-white/5 border border-white/10 relative group">
                                             <img
                                                 src={entryData.imageUrl}
-                                                alt={`${entryData.title} thumbnail`}
+                                                alt={`${entryData.title || 'Entry'} thumbnail`}
                                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 loading="lazy"
                                             />

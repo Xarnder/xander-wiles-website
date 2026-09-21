@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, Settings, Clock } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Clipboard, Image as ImageIcon, History, Tag, Settings, Clock } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
@@ -22,6 +22,7 @@ function getWorkspaceTitle(pathname) {
     if (pathname === '/tags') return 'Tags';
     if (pathname === '/memories') return 'Memories';
     if (pathname === '/pdf-export') return 'PDF Export';
+    if (pathname === '/clipboard') return 'Clipboard';
     if (pathname === '/settings') return 'Settings';
     if (pathname === '/') return 'Calendar';
     return 'Journal';
@@ -248,6 +249,7 @@ export default function Layout() {
         if (fromPath === '/tags') return 'Back to tags';
         if (fromPath === '/month') return 'Back to month view';
         if (fromPath === '/memories') return 'Back to memories';
+        if (fromPath === '/clipboard') return 'Back to clipboard';
         if (fromPath === '/') return 'Back to calendar';
         if (fromPath?.startsWith('/entry/')) return 'Back to previous entry';
         if (fromPath) return 'Go back';
@@ -424,6 +426,16 @@ export default function Layout() {
 
                         <button
                             type="button"
+                            onClick={() => navigate('/clipboard')}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/clipboard' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            title="Clipboard"
+                            aria-label="Clipboard"
+                        >
+                            <Clipboard className="h-5 w-5" />
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => navigate('/settings')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/settings' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Settings"
@@ -520,6 +532,7 @@ export default function Layout() {
                                     <span className="font-medium">Time Travel</span>
                                 </button>
                                 <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/clipboard" icon={Clipboard} label="Clipboard" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/settings" icon={Settings} label="Settings" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                             </>
                         }

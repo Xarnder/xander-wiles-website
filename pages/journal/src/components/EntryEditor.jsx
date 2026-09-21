@@ -12,7 +12,7 @@ import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
 import { useEntryUi } from '../context/EntryUiContext';
-import { Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
+import { AlertCircle, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -32,6 +32,15 @@ import {
     subscribeStickyWritingHeader,
     subscribeStickySaveButton
 } from '../lib/editorChrome';
+import {
+    isAutoTitleEnabled,
+    subscribeAutoTitle
+} from '../lib/autoTitle';
+import {
+    isMissingTitleReminderEnabled,
+    setMissingTitleReminderEnabled as setMissingTitleReminderEnabledPreference,
+    subscribeMissingTitleReminder
+} from '../lib/titleReminder';
 import {
     cleanSubEntriesForSave,
     cleanNumericEntriesForSave,
@@ -284,6 +293,10 @@ export default function EntryEditor() {
     const [entryImageColumns, setEntryImageColumns] = useState(2);
     const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
     const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
+    const [autoTitleEnabled, setAutoTitleEnabled] = useState(isAutoTitleEnabled);
+    const [missingTitleReminderEnabled, setMissingTitleReminderEnabled] = useState(isMissingTitleReminderEnabled);
+    const [showMissingTitleConfirm, setShowMissingTitleConfirm] = useState(false);
+    const [dontShowMissingTitleAgain, setDontShowMissingTitleAgain] = useState(false);
 
     // Drag and Drop State
     const [draggedImageIndex, setDraggedImageIndex] = useState(null);
@@ -505,6 +518,8 @@ export default function EntryEditor() {
 
     useEffect(() => subscribeStickyWritingHeader(setStickyWritingHeader), []);
     useEffect(() => subscribeStickySaveButton(setStickySaveButton), []);
+    useEffect(() => subscribeAutoTitle(setAutoTitleEnabled), []);
+    useEffect(() => subscribeMissingTitleReminder(setMissingTitleReminderEnabled), []);
 
     // Auto-resize title textarea
     useEffect(() => {
@@ -551,6 +566,8 @@ export default function EntryEditor() {
                     setEditingCaptionIndex(null);
                 } else if (showDeleteConfirm) {
                     setShowDeleteConfirm(false);
+                } else if (showMissingTitleConfirm) {
+                    setShowMissingTitleConfirm(false);
                 } else if (showDuplicateConfirm) {
                     setShowDuplicateConfirm(false);
                 } else if (isEditing) {
@@ -565,7 +582,7 @@ export default function EntryEditor() {
                 target.isContentEditable ||
                 target.closest('.CodeMirror')
             );
-            if (isTyping || lightboxImage || editingCaptionIndex !== null || showDeleteConfirm || showDuplicateConfirm) return;
+            if (isTyping || lightboxImage || editingCaptionIndex !== null || showDeleteConfirm || showDuplicateConfirm || showMissingTitleConfirm) return;
 
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
@@ -579,7 +596,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, stopClipboardTyping]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, showMissingTitleConfirm, stopClipboardTyping]);
 
     // Auto-save logic
     useEffect(() => {
@@ -600,7 +617,7 @@ export default function EntryEditor() {
         return () => {
             if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
-    }, [content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing]);
+    }, [content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing, autoTitleEnabled]);
 
     async function handleAutoSave() {
         if (!currentUser || !isEditing) return;
@@ -608,7 +625,7 @@ export default function EntryEditor() {
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
             const trimmedTitle = title.trim();
-            const inferredTitle = content.split('\n')[0].replace('#', '').trim();
+            const inferredTitle = autoTitleEnabled ? content.split('\n')[0].replace('#', '').trim() : '';
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
             const mainImage = images.length > 0 ? images[0] : null;
@@ -823,9 +840,9 @@ export default function EntryEditor() {
     }, [date]);
 
     const isInferredTitle = useMemo(() => {
-        if (!content) return false;
+        if (!autoTitleEnabled || !content) return false;
         return !!content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
-    }, [content]);
+    }, [autoTitleEnabled, content]);
 
     useEffect(() => {
         let cancelled = false;
@@ -971,7 +988,7 @@ export default function EntryEditor() {
 
     // Parse title logic
     useEffect(() => {
-        if (!content) return;
+        if (!autoTitleEnabled || !content) return;
         const match = content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
         if (match && match[1]) {
             const parts = match[1].split(' - ');
@@ -982,7 +999,7 @@ export default function EntryEditor() {
                 setTitle(parts[0].trim());
             }
         }
-    }, [content]);
+    }, [autoTitleEnabled, content]);
 
     const uploadImageFiles = async (files) => {
         if (files.length === 0 || !currentUser) return;
@@ -1320,8 +1337,53 @@ export default function EntryEditor() {
         }
     };
 
-    async function handleSave(skipDuplicateCheck = false) {
+    const handleGoBackToAddTitle = () => {
+        if (dontShowMissingTitleAgain) {
+            setMissingTitleReminderEnabled(false);
+            setMissingTitleReminderEnabledPreference(false);
+        }
+        setShowMissingTitleConfirm(false);
+        setTimeout(() => {
+            if (titleTextareaRef.current) {
+                titleTextareaRef.current.focus();
+                titleTextareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 80);
+    };
+
+    const handleConfirmSaveWithoutTitle = () => {
+        if (dontShowMissingTitleAgain) {
+            setMissingTitleReminderEnabled(false);
+            setMissingTitleReminderEnabledPreference(false);
+        }
+        setShowMissingTitleConfirm(false);
+        handleSave(false, true);
+    };
+
+    async function handleSave(skipDuplicateCheck = false, skipMissingTitleCheck = false) {
         if (!currentUser) return;
+
+        const trimmedTitle = title.trim();
+        const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
+        const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
+        const hasDataToSave = Boolean(
+            content.trim() ||
+            trimmedTitle ||
+            images.length > 0 ||
+            hasSubEntryContent(cleanedSubEntries) ||
+            hasNumericEntryValues(cleanedNumericEntries) ||
+            mood !== null ||
+            (selectedTags && selectedTags.length > 0) ||
+            isSpecial
+        );
+
+        const willHaveNoTitle = !trimmedTitle && (!autoTitleEnabled || !content.trim());
+
+        if (!skipMissingTitleCheck && willHaveNoTitle && hasDataToSave && missingTitleReminderEnabled) {
+            setDontShowMissingTitleAgain(false);
+            setShowMissingTitleConfirm(true);
+            return;
+        }
 
         // Duplicate sentence check
         const duplicateCheckText = [content, subEntriesToPlainText(subEntries)].filter(Boolean).join('. ');
@@ -1350,11 +1412,22 @@ export default function EntryEditor() {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
             const trimmedContent = content.trim();
             const trimmedTitle = title.trim();
-            const inferredTitle = content.split('\n')[0].replace('#', '').trim();
+            const inferredTitle = autoTitleEnabled ? content.split('\n')[0].replace('#', '').trim() : '';
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
 
-            if (!trimmedContent && !trimmedTitle && images.length === 0 && !hasSubEntryContent(cleanedSubEntries) && !hasNumericEntryValues(cleanedNumericEntries)) {
+            const hasDataToSave = Boolean(
+                trimmedContent ||
+                trimmedTitle ||
+                images.length > 0 ||
+                hasSubEntryContent(cleanedSubEntries) ||
+                hasNumericEntryValues(cleanedNumericEntries) ||
+                mood !== null ||
+                (selectedTags && selectedTags.length > 0) ||
+                isSpecial
+            );
+
+            if (!hasDataToSave) {
                 await deleteDoc(docRef);
             } else {
                 const textSize = new Blob([
@@ -2587,6 +2660,59 @@ export default function EntryEditor() {
                 cancelText="Go back to editing"
                 isDangerous={false}
             />
+
+            {/* Missing Title Reminder Modal */}
+            <Modal
+                isOpen={showMissingTitleConfirm}
+                onClose={handleGoBackToAddTitle}
+                labelledBy="missing-title-modal-heading"
+                containerClassName="items-center justify-center p-3 sm:p-4"
+                backdropClassName="bg-black/80"
+                className="glass-card w-full max-w-[340px] sm:max-w-md p-4 sm:p-6 bg-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            >
+                <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-400 mt-0.5">
+                        <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <h3 id="missing-title-modal-heading" className="text-base sm:text-lg font-bold text-white leading-tight">
+                            Save without a title?
+                        </h3>
+                        <p className="text-xs sm:text-sm text-text-muted mt-1.5 leading-relaxed">
+                            You haven’t added a title for this journal entry. You can save it as an untitled entry, or go back to add one.
+                        </p>
+                    </div>
+                </div>
+
+                <label className="flex items-center gap-2.5 mt-4 p-2.5 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 cursor-pointer select-none transition-colors">
+                    <input
+                        type="checkbox"
+                        checked={dontShowMissingTitleAgain}
+                        onChange={(e) => setDontShowMissingTitleAgain(e.target.checked)}
+                        className="w-4 h-4 rounded border-white/20 bg-black/40 text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer shrink-0"
+                    />
+                    <span className="text-xs sm:text-sm text-text-muted leading-tight">
+                        Don't show me this warning again
+                    </span>
+                </label>
+
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-4 pt-3 border-t border-white/10">
+                    <button
+                        type="button"
+                        onClick={handleGoBackToAddTitle}
+                        className="w-full sm:w-auto px-4 py-2.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs sm:text-sm font-medium transition-colors flex items-center justify-center min-h-[44px]"
+                    >
+                        Go back to add a title
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleConfirmSaveWithoutTitle}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-secondary text-white text-xs sm:text-sm font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] transition-all flex items-center justify-center min-h-[44px]"
+                    >
+                        Save
+                    </button>
+                </div>
+            </Modal>
 
             {/* Caption Edit Modal */}
             <Modal
