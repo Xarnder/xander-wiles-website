@@ -8,7 +8,7 @@
     <!-- GLOBAL WEBSITE STYLES -->
     <link rel="stylesheet" href="/assets/css/style.css">
     <!-- LOCAL XR VIEWER STYLES -->
-    <link rel="stylesheet" href="style.css?v=20260920-quest3">
+    <link rel="stylesheet" href="style.css?v=20260922-snap2">
 
     <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -99,6 +99,15 @@
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
                 <span>Upload Model / Splat</span>
+            </button>
+
+            <!-- Compare two Gaussian splats at the same camera pose -->
+            <button id="compare-splats-btn" class="btn btn-secondary" title="Compare two Gaussian splats from the same camera">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="7" height="16" rx="1.5"/>
+                    <rect x="14" y="4" width="7" height="16" rx="1.5"/>
+                </svg>
+                <span>Compare Splats</span>
             </button>
 
             <!-- Help / Controls Modal Toggle -->
@@ -248,8 +257,131 @@
                         </li>
                     </ul>
                 </div>
+
+                <div class="controls-section">
+                    <div class="section-badge desktop">SPLAT COMPARE</div>
+                    <ul class="controls-list">
+                        <li>
+                            <span class="ctrl-key">Compare Splats</span>
+                            <span class="ctrl-desc">Pick two Gaussian splats, then view them from one shared camera</span>
+                        </li>
+                        <li>
+                            <span class="ctrl-key">Dual windows</span>
+                            <span class="ctrl-desc">Both splats on screen; orbiting one view moves the other identically</span>
+                        </li>
+                        <li>
+                            <span class="ctrl-key">Single view</span>
+                            <span class="ctrl-desc">One splat on the GPU at a time. Space / 1 / 2 to switch without moving the camera</span>
+                        </li>
+                        <li>
+                            <span class="ctrl-key">P / Snapshot</span>
+                            <span class="ctrl-desc">Save PNGs of both splats from the current shared camera pose</span>
+                        </li>
+                        <li>
+                            <span class="ctrl-key">Esc</span>
+                            <span class="ctrl-desc">Close compare setup or exit compare</span>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
+    </div>
+
+    <!-- SPLAT COMPARE SETUP -->
+    <div id="compare-setup-modal" class="compare-setup-modal" role="dialog" aria-modal="true" aria-labelledby="compare-setup-title">
+        <div class="compare-setup-card xr-panel">
+            <div class="modal-header">
+                <h2 id="compare-setup-title">Compare Gaussian Splats</h2>
+                <button id="compare-setup-close-btn" class="btn-close" aria-label="Close">&times;</button>
+            </div>
+            <p class="compare-setup-lead">Choose two splats first. Both stay locked to one shared camera so you can inspect the same pose. Use Single view if Dual is too heavy on GPU memory.</p>
+
+            <div class="compare-slots">
+                <article id="compare-slot-a" class="compare-slot" data-slot="a" data-state="empty">
+                    <div class="compare-slot-top">
+                        <span class="compare-slot-badge">A</span>
+                        <span id="compare-slot-status-a" class="compare-slot-status" data-state="empty">Empty</span>
+                    </div>
+                    <h3 id="compare-slot-name-a" class="compare-slot-name">No splat selected</h3>
+                    <p id="compare-slot-meta-a" class="compare-slot-meta">Upload a file or pick one already loaded in XR Studio</p>
+                    <select id="compare-library-a" class="compare-select" aria-label="Choose loaded splat for A">
+                        <option value="">Choose a loaded splat…</option>
+                    </select>
+                    <div class="compare-slot-actions">
+                        <button type="button" id="compare-upload-a" class="btn btn-secondary">Upload splat</button>
+                        <button type="button" id="compare-default-a" class="btn btn-ghost">Default splat</button>
+                    </div>
+                    <input type="file" id="compare-file-a" accept=".ply,.splat,.ksplat,.spz" hidden>
+                </article>
+
+                <article id="compare-slot-b" class="compare-slot" data-slot="b" data-state="empty">
+                    <div class="compare-slot-top">
+                        <span class="compare-slot-badge alt">B</span>
+                        <span id="compare-slot-status-b" class="compare-slot-status" data-state="empty">Empty</span>
+                    </div>
+                    <h3 id="compare-slot-name-b" class="compare-slot-name">No splat selected</h3>
+                    <p id="compare-slot-meta-b" class="compare-slot-meta">Upload a file or pick one already loaded in XR Studio</p>
+                    <select id="compare-library-b" class="compare-select" aria-label="Choose loaded splat for B">
+                        <option value="">Choose a loaded splat…</option>
+                    </select>
+                    <div class="compare-slot-actions">
+                        <button type="button" id="compare-upload-b" class="btn btn-secondary">Upload splat</button>
+                        <button type="button" id="compare-default-b" class="btn btn-ghost">Default splat</button>
+                    </div>
+                    <input type="file" id="compare-file-b" accept=".ply,.splat,.ksplat,.spz" hidden>
+                </article>
+            </div>
+
+            <div class="compare-mode-picker" role="radiogroup" aria-label="Compare view mode">
+                <label class="compare-mode-option">
+                    <input type="radio" name="compare-mode" value="dual" checked>
+                    <span>
+                        <strong>Dual windows</strong>
+                        Both splats loaded and shown side by side, locked to one camera. Best on a stronger PC.
+                    </span>
+                </label>
+                <label class="compare-mode-option">
+                    <input type="radio" name="compare-mode" value="single">
+                    <span>
+                        <strong>Single view (low power)</strong>
+                        Only one splat is loaded and rendered. Switch A/B; the camera pose does not change.
+                    </span>
+                </label>
+            </div>
+
+            <p id="compare-setup-error" class="compare-setup-error" hidden></p>
+
+            <div class="compare-setup-footer">
+                <button type="button" id="compare-swap-btn" class="btn btn-ghost">Swap A / B</button>
+                <button type="button" id="compare-start-btn" class="btn btn-primary" disabled>Start compare</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SPLAT COMPARE SESSION OVERLAY (labels + toolbar; 3D stays on the main canvas) -->
+    <div id="compare-session" class="compare-session mode-dual" data-active="a">
+        <header class="compare-session-bar xr-panel">
+            <div class="compare-session-brand">
+                <span class="brand-badge">COMPARE</span>
+                <span class="compare-session-title">Shared camera</span>
+            </div>
+            <div class="compare-session-actions">
+                <button type="button" id="compare-mode-dual-btn" class="btn-micro active" title="Show both splats in two windows">Dual</button>
+                <button type="button" id="compare-mode-single-btn" class="btn-micro" title="Show one splat at a time">Single</button>
+                <button type="button" id="compare-show-a-btn" class="btn-micro" title="Show splat A (1)">A</button>
+                <button type="button" id="compare-show-b-btn" class="btn-micro" title="Show splat B (2)">B</button>
+                <button type="button" id="compare-recenter-btn" class="btn-micro" title="Recenter the shared camera">Recenter</button>
+                <button type="button" id="compare-snapshot-btn" class="btn-micro" title="Save PNGs of both splats from this camera (P)">Snapshot</button>
+                <button type="button" id="compare-change-btn" class="btn-micro" title="Change which splats are compared">Change</button>
+                <button type="button" id="compare-exit-btn" class="btn-micro" title="Exit compare (Esc)">Exit</button>
+            </div>
+        </header>
+        <div class="compare-labels">
+            <div id="compare-label-a" class="compare-label compare-label-a"><strong>A</strong> Splat A</div>
+            <div id="compare-label-b" class="compare-label compare-label-b"><strong>B</strong> Splat B</div>
+        </div>
+        <div class="compare-divider" aria-hidden="true"></div>
+        <p id="compare-session-hint" class="compare-session-hint">Orbit anywhere — both windows share this camera pose</p>
     </div>
 
     <!-- FLOATING TOAST NOTIFICATION -->
@@ -273,8 +405,8 @@
         if (el) el.textContent = 'Loading XR starter…';
     };
     </script>
-    <script src="xr-entry.js?v=20260920-splatfix2"></script>
+    <script src="xr-entry.js?v=20260922-compare"></script>
     <!-- MAIN VIEWER LOGIC -->
-    <script type="module" src="script.js?v=20260920-splatfix2"></script>
+    <script type="module" src="script.js?v=20260922-snap2"></script>
 </body>
 </html>

@@ -20,6 +20,8 @@ import * as THREE from 'three';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { createSampleSplatFile } from './sample-generator.js';
+import { initSplatCompare, isCompareActive, isCompareSetupOpen } from './compare.js';
+import { parseCameraPose, poseToJSON, poseToString, readCameraPose, writeCameraPose } from './camera-pose.js';
 
 // Application State
 const state = {
@@ -77,6 +79,10 @@ let lastFrameTime = performance.now();
 let frameCount = 0;
 let fpsLastTime = performance.now();
 let dragCounter = 0;
+let viewerLoadGen = 0;
+let mainViewerSuspended = false;
+let lastSplatSource = null;
+let parkedMainRenderer = null;
 
 // Mobile Drawer State ('collapsed' | 'half' | 'full')
 let mobileDrawerState = 'half';
@@ -109,6 +115,15 @@ async function init() {
 
     // Responsive window listener
     window.addEventListener('resize', handleWindowResize);
+
+    initSplatCompare({
+        showToast,
+        showLoading,
+        hideLoading,
+        getCurrentSplatSource: () => lastSplatSource,
+        onEnter: suspendMainViewerForCompare,
+        onExit: resumeMainViewerAfterCompare
+    });
 
     // Start FPS tracking loop
     requestAnimationFrame(renderLoop);
@@ -263,6 +278,13 @@ function cacheDomElements() {
     dom.fovSlider = document.getElementById('fov-slider');
     dom.fovVal = document.getElementById('fov-val');
     dom.resetCameraBtn = document.getElementById('reset-camera-btn');
+    dom.cameraPoseInput = document.getElementById('camera-pose-input');
+    dom.cameraPoseCopyString = document.getElementById('camera-pose-copy-string');
+    dom.cameraPoseCopyJSON = document.getElementById('camera-pose-copy-json');
+    dom.cameraPoseSaveJSON = document.getElementById('camera-pose-save-json');
+    dom.cameraPoseLoadJSON = document.getElementById('camera-pose-load-json');
+    dom.cameraPoseApply = document.getElementById('camera-pose-apply');
+    dom.cameraPoseFile = document.getElementById('camera-pose-file');
 
     // Preset Views
     dom.presetViewBtns = document.querySelectorAll('[data-view-preset]');
@@ -551,6 +573,35 @@ function setupUIEventListeners() {
         }
     });
 
+    dom.cameraPoseCopyString?.addEventListener('click', () => shareCameraPose('string'));
+    dom.cameraPoseCopyJSON?.addEventListener('click', () => shareCameraPose('json'));
+    dom.cameraPoseSaveJSON?.addEventListener('click', () => {
+        try {
+            const pose = currentCameraPose();
+            downloadPoseJSON(poseToJSON(pose), 'camera-pose.json');
+            if (dom.cameraPoseInput) dom.cameraPoseInput.value = poseToJSON(pose);
+            showToast('Saved camera pose JSON', 'success');
+        } catch (err) {
+            showToast(err.message || 'Could not save the camera pose', 'error');
+        }
+    });
+    dom.cameraPoseLoadJSON?.addEventListener('click', () => dom.cameraPoseFile?.click());
+    dom.cameraPoseFile?.addEventListener('change', async (event) => {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+            const text = await file.text();
+            if (dom.cameraPoseInput) dom.cameraPoseInput.value = text.trim();
+            applyCameraPoseText(text);
+        } catch (err) {
+            showToast(err.message || 'Could not read that file', 'error');
+        }
+    });
+    dom.cameraPoseApply?.addEventListener('click', () => {
+        applyCameraPoseText(dom.cameraPoseInput ? dom.cameraPoseInput.value : '');
+    });
+
     // Preset Views
     dom.presetViewBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -810,6 +861,7 @@ function setupUIEventListeners() {
 
 function setupKeyboardListeners() {
     window.addEventListener('keydown', (e) => {
+        if (isCompareActive() || isCompareSetupOpen()) return;
         if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
         if (keys.hasOwnProperty(e.code)) {
@@ -902,6 +954,7 @@ function syncWalkAnglesFromCamera() {
 }
 
 function onMouseMove(e) {
+    if (isCompareActive() || isCompareSetupOpen()) return;
     if (state.mode !== 'walk') return;
 
     if (state.isPointerLocked || (e.buttons === 1 && !state.isPointerLocked)) {
@@ -1011,6 +1064,72 @@ function resetCameraView() {
     showToast('Camera reset to center', 'info');
 }
 
+function currentCameraPose() {
+    if (isCompareActive()) throw new Error('Use Pose in compare for the shared camera');
+    if (!viewer.camera) throw new Error('Camera is not ready');
+    return readCameraPose(viewer.camera, viewer.controls);
+}
+
+async function shareCameraPose(kind) {
+    try {
+        const pose = currentCameraPose();
+        const text = kind === 'json' ? poseToJSON(pose) : poseToString(pose);
+        if (dom.cameraPoseInput) dom.cameraPoseInput.value = text;
+        const copied = await copyPoseText(text);
+        showToast(copied ? `Copied camera ${kind === 'json' ? 'JSON' : 'string'}` : 'Camera pose is in the box', 'success');
+    } catch (err) {
+        showToast(err.message || 'Could not copy the camera pose', 'error');
+    }
+}
+
+function applyCameraPoseText(text) {
+    try {
+        if (isCompareActive()) throw new Error('Use Pose in compare for the shared camera');
+        if (!viewer.camera) throw new Error('Camera is not ready');
+        const pose = parseCameraPose(text);
+        writeCameraPose(viewer.camera, viewer.controls, pose);
+        state.fov = pose.fov;
+        if (dom.fovVal) {
+            const shown = Math.abs(pose.fov - Math.round(pose.fov)) < 1e-6 ? String(Math.round(pose.fov)) : String(pose.fov);
+            dom.fovVal.textContent = `${shown}°`;
+        }
+        if (dom.fovSlider) {
+            const min = Number(dom.fovSlider.min);
+            const max = Number(dom.fovSlider.max);
+            dom.fovSlider.value = String(Math.min(max, Math.max(min, pose.fov)));
+        }
+        syncWalkAnglesFromCamera();
+        if (viewer.forceRenderNextFrame) viewer.forceRenderNextFrame();
+        showToast('Camera restored', 'success');
+    } catch (err) {
+        showToast(err.message || 'Could not apply that camera pose', 'error');
+    }
+}
+
+function downloadPoseJSON(text, filename) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function copyPoseText(text) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (err) {
+        console.warn(err);
+    }
+    return false;
+}
+
 /* =========================================================
    Ground & Axis Alignment Suite
    ========================================================= */
@@ -1023,6 +1142,7 @@ function fixUpsideDown() {
 }
 
 function dropToFloor() {
+    if (mainViewerSuspended) return;
     if (!viewer.splatMesh || viewer.getSceneCount() === 0) {
         showToast('No splat model loaded to ground', 'error');
         return;
@@ -1290,6 +1410,7 @@ function applySceneTransform() {
 function setupDragAndDrop() {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
+        if (isCompareActive() || isCompareSetupOpen()) return;
         dragCounter++;
         dom.dropOverlay.classList.add('active');
     });
@@ -1312,6 +1433,7 @@ function setupDragAndDrop() {
         dragCounter = 0;
         dom.dropOverlay.classList.remove('active');
 
+        if (isCompareActive() || isCompareSetupOpen()) return;
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
             loadSplatFile(file);
@@ -1320,6 +1442,11 @@ function setupDragAndDrop() {
 }
 
 async function loadSplatFile(file) {
+    if (isCompareActive() || mainViewerSuspended) {
+        showToast('Exit compare before loading a new scene', 'info');
+        return;
+    }
+
     const name = file.name.toLowerCase();
     const isPly = name.endsWith('.ply');
     const isSplat = name.endsWith('.splat');
@@ -1331,28 +1458,29 @@ async function loadSplatFile(file) {
         return;
     }
 
+    const gen = ++viewerLoadGen;
     state.currentFileName = file.name;
     showLoading(`Loading ${file.name}...`, 'Reading binary data');
 
     try {
-        const arrayBuffer = await file.arrayBuffer();
         showLoading(`Processing ${file.name}...`, 'Parsing 3D Gaussians');
-
-        let splatBuffer;
-        if (isSplat) {
-            splatBuffer = await GaussianSplats3D.SplatLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-        } else if (isPly) {
-            splatBuffer = await GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-        } else if (isKsplat) {
-            splatBuffer = await GaussianSplats3D.KSplatLoader.loadFromFileData(arrayBuffer);
-        } else if (isSpz) {
-            splatBuffer = await GaussianSplats3D.SpzLoader.loadFromFileData(arrayBuffer, 0, 0, false);
-        }
+        const splatBuffer = await parseSplatFile(file);
+        lastSplatSource = { name: file.name, file };
+        if (gen !== viewerLoadGen || mainViewerSuspended || isCompareActive()) return;
 
         showLoading('Building 3D Scene...', 'Uploading to GPU');
 
         // Cleanly replace any existing scene with the new splat buffer
-        await viewer.addSplatBuffers([splatBuffer], [{}], true, false, false, true, true);
+        await viewer.addSplatBuffers(
+            [splatBuffer],
+            [{ splatAlphaRemovalThreshold: state.alphaThreshold }],
+            true,
+            false,
+            false,
+            true,
+            true
+        );
+        if (gen !== viewerLoadGen || mainViewerSuspended || isCompareActive()) return;
 
         applySceneTransform();
         updateSplatStats();
@@ -1364,10 +1492,22 @@ async function loadSplatFile(file) {
         }, 150);
     } catch (err) {
         console.error('Error loading splat file:', err);
-        showToast(`Failed to load file: ${err.message || 'Parser error'}`, 'error');
+        if (gen === viewerLoadGen && !mainViewerSuspended && !isCompareActive()) {
+            showToast(`Failed to load file: ${err.message || 'Parser error'}`, 'error');
+        }
     } finally {
-        hideLoading();
+        if (gen === viewerLoadGen && !mainViewerSuspended && !isCompareActive()) hideLoading();
     }
+}
+
+async function parseSplatFile(file) {
+    const name = file.name.toLowerCase();
+    const arrayBuffer = await file.arrayBuffer();
+    if (name.endsWith('.splat')) return GaussianSplats3D.SplatLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+    if (name.endsWith('.ply')) return GaussianSplats3D.PlyLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+    if (name.endsWith('.ksplat')) return GaussianSplats3D.KSplatLoader.loadFromFileData(arrayBuffer);
+    if (name.endsWith('.spz')) return GaussianSplats3D.SpzLoader.loadFromFileData(arrayBuffer, 0, 0, false);
+    throw new Error('Unsupported format');
 }
 
 async function loadPresetScene(presetName) {
@@ -1379,7 +1519,104 @@ async function loadPresetScene(presetName) {
         console.error('Error loading preset:', err);
         showToast('Error generating preset: ' + err.message, 'error');
     } finally {
+        if (!mainViewerSuspended && !isCompareActive()) hideLoading();
+    }
+}
+
+async function suspendMainViewerForCompare() {
+    mainViewerSuspended = true;
+    viewerLoadGen++;
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (dom.dropOverlay) dom.dropOverlay.classList.remove('active');
+    dragCounter = 0;
+
+    try {
+        if (viewer && typeof viewer.isLoadingOrUnloading === 'function') {
+            for (let i = 0; i < 40 && viewer.isLoadingOrUnloading(); i++) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+        }
+        const count = viewer && typeof viewer.getSceneCount === 'function' ? viewer.getSceneCount() : 0;
+        if (count > 0) {
+            const indexes = [];
+            for (let i = 0; i < count; i++) indexes.push(i);
+            await viewer.removeSplatScenes(indexes, false);
+        }
+    } catch (err) {
+        console.warn('Could not unload the main splat for compare', err);
+    }
+
+    if (viewer && viewer.selfDrivenModeRunning && typeof viewer.stop === 'function') {
+        viewer.stop();
+    }
+    parkMainRenderer();
+}
+
+function parkMainRenderer() {
+    const gl = viewer && viewer.renderer;
+    if (!gl || parkedMainRenderer) return;
+    try {
+        parkedMainRenderer = { ratio: gl.getPixelRatio() };
+        gl.setPixelRatio(1);
+        gl.setSize(1, 1, false);
+    } catch (err) {
+        parkedMainRenderer = null;
+        console.warn('Could not shrink the main view while comparing', err);
+    }
+}
+
+function unparkMainRenderer() {
+    const gl = viewer && viewer.renderer;
+    const parked = parkedMainRenderer;
+    parkedMainRenderer = null;
+    if (!gl || !parked) return;
+    try {
+        const ratio = parked.ratio || Math.min(window.devicePixelRatio || 1, 2);
+        gl.setPixelRatio(ratio);
+        const width = Math.max(1, dom.canvasContainer ? dom.canvasContainer.clientWidth : 1);
+        const height = Math.max(1, dom.canvasContainer ? dom.canvasContainer.clientHeight : 1);
+        gl.setSize(width, height, false);
+    } catch (err) {
+        console.warn('Could not restore the main view after compare', err);
+    }
+}
+
+async function resumeMainViewerAfterCompare() {
+    if (!mainViewerSuspended) {
+        startMainViewerLoop();
+        return;
+    }
+    mainViewerSuspended = false;
+    unparkMainRenderer();
+
+    try {
+        if (viewer && lastSplatSource && lastSplatSource.file) {
+            showLoading(`Restoring ${lastSplatSource.name}...`, 'Returning from compare');
+            const splatBuffer = await parseSplatFile(lastSplatSource.file);
+            await viewer.addSplatBuffers(
+                [splatBuffer],
+                [{ splatAlphaRemovalThreshold: state.alphaThreshold }],
+                true,
+                false,
+                false,
+                true,
+                true
+            );
+            applySceneTransform();
+            updateSplatStats();
+        }
+    } catch (err) {
+        console.error('Could not restore the scene after compare', err);
+        showToast('Could not restore the scene after compare', 'error');
+    } finally {
         hideLoading();
+        startMainViewerLoop();
+    }
+}
+
+function startMainViewerLoop() {
+    if (viewer && viewer.selfDrivenMode && !viewer.selfDrivenModeRunning && typeof viewer.start === 'function') {
+        viewer.start();
     }
 }
 
@@ -1404,7 +1641,7 @@ function renderLoop(now) {
     lastFrameTime = now;
 
     // Update walk controls
-    if (state.mode === 'walk' && delta < 0.25) {
+    if (state.mode === 'walk' && !isCompareActive() && !isCompareSetupOpen() && delta < 0.25) {
         updateWalkMovement(delta);
     }
 

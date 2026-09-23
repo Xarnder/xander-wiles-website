@@ -2671,7 +2671,7 @@ textarea.add-task-input.is-expanded {
 
 /* Add Task Countdown Bar Styles */
 .add-task-countdown-bar-container {
-    height: 4px;
+    height: 6px;
     background: oklch(1 0 0 / 0.1);
     border-radius: 2px;
     margin-top: 8px;
@@ -2691,6 +2691,29 @@ textarea.add-task-input.is-expanded {
     transform-origin: left;
     transform: scaleX(1);
     transition: transform 0.1s linear;
+}
+
+.countdown-marks {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.countdown-mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    transform: translateX(-50%);
+    background: oklch(0.99 0.01 100);
+    box-shadow: 0 0 0 1px oklch(0 0 0 / 0.55);
+    pointer-events: none;
+}
+
+[data-theme="light"] .countdown-mark {
+    background: oklch(0.18 0 0);
+    box-shadow: 0 0 0 1px oklch(1 0 0 / 0.8);
 }
 
 .add-task-input:focus {
@@ -2713,8 +2736,260 @@ textarea.add-task-input.is-expanded {
     }
 }
 .add-task-input.input-alert-flash,
-.add-task-input.input-alert-flash:focus {
+.add-task-input.input-alert-flash:focus,
+.add-task-composer-input.input-alert-flash,
+.add-task-composer-input.input-alert-flash:focus {
     animation: add-task-input-alert-glow 3s ease-in-out !important;
+}
+
+/* Readonly only routes taps into the full-screen editor; keep the normal field look */
+textarea.add-task-input[readonly] {
+    cursor: pointer;
+    opacity: 1;
+    color: var(--text-primary);
+    -webkit-text-fill-color: var(--text-primary);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+    pointer-events: none;
+}
+
+.add-task-composer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    background: var(--bg-gradient);
+    color: var(--text-primary);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow: hidden;
+    min-height: 0;
+    overscroll-behavior: none;
+}
+
+html.add-task-composer-open,
+html.add-task-composer-open body {
+    overflow: hidden;
+}
+
+.add-task-composer-top {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 8px 4px;
+}
+
+.add-task-composer-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--glass-border);
+    background: color-mix(in oklch, var(--dropdown-bg, oklch(0.16 0 0)) 88%, transparent);
+    touch-action: manipulation;
+}
+
+.add-task-composer-exit,
+.add-task-composer-add {
+    flex: 1 1 0;
+    min-height: 48px;
+    min-width: 0;
+    padding: 10px 16px;
+    font-size: 1rem;
+    touch-action: manipulation;
+}
+
+.add-task-composer-add.is-empty {
+    opacity: 0.45;
+}
+
+.add-task-composer-list {
+    flex: 1 1 auto;
+    display: block;
+    min-width: 0;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--text-secondary);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.add-task-composer-font {
+    position: relative;
+    flex: 0 0 auto;
+    align-self: center;
+    box-sizing: border-box;
+    width: 2.15em;
+    height: 1.15em;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    touch-action: manipulation;
+    cursor: pointer;
+}
+
+.add-task-composer-font::after {
+    content: "";
+    position: absolute;
+    inset: -12px -6px;
+}
+
+.add-task-composer-font:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+.add-task-composer-input {
+    flex: 1 1 0%;
+    height: 0;
+    max-height: 100%;
+    width: 100%;
+    margin: 0;
+    border: none;
+    outline: none;
+    resize: none;
+    field-sizing: fixed;
+    background: transparent;
+    color: var(--text-primary);
+    caret-color: var(--accent-blue);
+    font-family: inherit;
+    font-size: 17px;
+    line-height: 1.5;
+    padding: 12px 16px;
+    min-height: min(72px, 18%);
+    box-sizing: border-box;
+    color-scheme: dark;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+[data-theme="light"] .add-task-composer-input {
+    color-scheme: light;
+}
+
+.add-task-composer-input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.add-task-composer-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.75;
+}
+
+.add-task-composer-footer {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+.add-task-composer-countdown-row {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 16px 10px;
+    min-height: 22px;
+}
+
+.add-task-composer-countdown {
+    position: relative;
+    flex: 1 1 auto;
+    height: 8px;
+    min-width: 0;
+    border-radius: 999px;
+    background: oklch(1 0 0 / 0.12);
+    overflow: hidden;
+}
+
+[data-theme="light"] .add-task-composer-countdown {
+    background: oklch(0 0 0 / 0.08);
+}
+
+.add-task-composer-countdown-bar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--accent-blue), oklch(0.606 0.215 292));
+    transform-origin: left;
+    transform: scaleX(0);
+    transition: transform 0.1s linear;
+}
+
+.add-task-composer-countdown-time {
+    flex: 0 0 auto;
+    min-width: 4.5em;
+    text-align: right;
+    font-size: 15px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--text-primary);
+}
+
+.add-task-composer-tags {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    margin: 0 12px 8px;
+    overflow: visible;
+    touch-action: manipulation;
+}
+
+.add-task-composer-tags .tag-mode-btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: min(100%, 8.75rem);
+    max-width: 100%;
+    min-height: 44px;
+    height: auto;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: unset;
 }
 
 

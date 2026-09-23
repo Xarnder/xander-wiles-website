@@ -308,6 +308,13 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
+                <label class="dropdown-item-toggle" title="Tap the add-task box to write in a full-screen editor. Turn off to type in the list.">
+                    <span>Full-Screen Add Task</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="fullscreen-add-toggle" checked>
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
                 <label class="dropdown-item-toggle" title="Disable Important Task Pinning">
                     <span>Disable Important Task Pinning</span>
                     <div class="switch-small">
@@ -1614,6 +1621,29 @@
                     <button id="dedup-done-btn" class="btn secondary">Done</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="add-task-composer" class="add-task-composer hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="add-task-composer-title">
+        <div class="add-task-composer-top">
+            <button type="button" id="add-task-composer-font-down" class="add-task-composer-font" aria-label="Decrease text size" title="Smaller text">A−</button>
+            <span id="add-task-composer-list" class="add-task-composer-list"></span>
+            <button type="button" id="add-task-composer-font-up" class="add-task-composer-font" aria-label="Increase text size" title="Larger text">A+</button>
+        </div>
+        <h2 id="add-task-composer-title" class="visually-hidden">Add task</h2>
+        <textarea id="add-task-composer-input" class="add-task-composer-input" placeholder="Type an idea to add" rows="8" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences" enterkeyhint="enter" inputmode="text" aria-label="New task"></textarea>
+        <div class="add-task-composer-footer">
+            <div class="add-task-composer-countdown-row">
+                <div id="add-task-composer-countdown" class="add-task-composer-countdown" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Auto-add countdown">
+                    <div class="add-task-composer-countdown-bar"></div>
+                </div>
+                <span id="add-task-composer-countdown-time" class="add-task-composer-countdown-time" aria-hidden="true"></span>
+            </div>
+            <div id="add-task-composer-tags" class="add-task-composer-tags" role="radiogroup" aria-label="Category for this task"></div>
+        </div>
+        <div class="add-task-composer-bar">
+            <button type="button" id="add-task-composer-exit" class="btn secondary add-task-composer-exit">Exit</button>
+            <button type="button" id="add-task-composer-add" class="btn primary add-task-composer-add" title="Add task">Add</button>
         </div>
     </div>
 

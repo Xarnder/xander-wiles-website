@@ -4,6 +4,14 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
+import {
+    initSplatCompare,
+    isCompareActive,
+    isCompareSetupOpen,
+    renderCompare,
+    handleCompareResize,
+    exitCompare
+} from './compare.js?v=20260922-snap2';
 
 // IMPORT CONFIG
 let models = [];
@@ -233,6 +241,7 @@ function init() {
         // --- DESKTOP CONTROLS & 2D LISTENERS ---
         setupDesktopControls();
         setup2DEventListeners();
+        setupSplatCompare();
 
         window.addEventListener('resize', onWindowResize);
 
@@ -364,6 +373,9 @@ function setupDesktopControls() {
     orbitControls.target.set(0, 0.8, 0);
 
     renderer.xr.addEventListener('sessionstart', () => {
+        if (isCompareActive()) {
+            exitCompare().catch((err) => console.warn('[XR] compare exit on XR start failed', err));
+        }
         if (orbitControls) orbitControls.enabled = false;
         const session = renderer.xr.getSession();
         const isAR = isArSession(session);
@@ -1300,9 +1312,13 @@ function finishLoading(name) {
 }
 
 function onWindowResize() {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (isCompareActive()) {
+        handleCompareResize();
+        return;
+    }
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
@@ -2063,6 +2079,18 @@ let lastTime = performance.now();
 let frameCount = 0;
 
 function render(timestamp, frame) {
+    if (isCompareActive()) {
+        renderCompare();
+        frameCount++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            if (dom.statFps) dom.statFps.textContent = frameCount.toString();
+            frameCount = 0;
+            lastTime = now;
+        }
+        return;
+    }
+
     if (frame) {
         // Track Headset in AR Space for Diegetic 3D HUD
         const xrCam = renderer.xr.getCamera();
@@ -2352,6 +2380,7 @@ function setup2DEventListeners() {
     // Drag & Drop
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
+        if (isCompareActive() || isCompareSetupOpen()) return;
         dom.dropOverlay.classList.add('active');
     });
 
@@ -2366,6 +2395,52 @@ function setup2DEventListeners() {
         dom.dropOverlay.classList.remove('active');
         if (e.dataTransfer.files.length > 0) {
             handleUploadedFile(e.dataTransfer.files[0]);
+        }
+    });
+}
+
+function setupSplatCompare() {
+    let compareVis = null;
+    initSplatCompare({
+        THREE,
+        GaussianSplats3D,
+        getRenderer: () => renderer,
+        getCamera: () => camera,
+        getOrbitControls: () => orbitControls,
+        getCustomSplats: () => customSplatsMap,
+        isXrPresenting: () => !!(renderer && renderer.xr && renderer.xr.isPresenting),
+        showToast,
+        updateLoadingBar,
+        hideLoadingBar,
+        updateStatusText,
+        onEnterCompare() {
+            compareVis = {
+                grid: gridHelper ? gridHelper.visible : false,
+                hud: hudGroup ? hudGroup.visible : false,
+                drop: dropInViewer ? dropInViewer.visible : false,
+                model: currentModel && currentModel !== dropInViewer ? currentModel.visible : null,
+                room: roomGroup ? roomGroup.visible : false,
+                floor: arFloorMarker ? arFloorMarker.visible : false
+            };
+            if (gridHelper) gridHelper.visible = false;
+            if (hudGroup) hudGroup.visible = false;
+            if (dropInViewer) dropInViewer.visible = false;
+            if (currentModel && currentModel !== dropInViewer) currentModel.visible = false;
+            if (roomGroup) roomGroup.visible = false;
+            if (arFloorMarker) arFloorMarker.visible = false;
+            if (orbitControls) orbitControls.enabled = true;
+        },
+        onExitCompare() {
+            if (gridHelper) gridHelper.visible = compareVis ? compareVis.grid : true;
+            if (hudGroup) hudGroup.visible = compareVis ? compareVis.hud : true;
+            if (dropInViewer) dropInViewer.visible = compareVis ? compareVis.drop : false;
+            if (currentModel && currentModel !== dropInViewer && compareVis && compareVis.model !== null) {
+                currentModel.visible = compareVis.model;
+            }
+            if (roomGroup) roomGroup.visible = compareVis ? compareVis.room : true;
+            if (arFloorMarker) arFloorMarker.visible = compareVis ? compareVis.floor : false;
+            if (orbitControls) orbitControls.enabled = !renderer.xr.isPresenting;
+            compareVis = null;
         }
     });
 }

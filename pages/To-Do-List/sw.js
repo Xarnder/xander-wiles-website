@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v92';
+const CACHE_NAME = 'taskmaster-todo-v102';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -145,7 +145,8 @@ self.addEventListener('fetch', (event) => {
         'task-import.js',
         'utils.js',
         'firebase-config.js',
-        'sw.js'
+        'sw.js',
+        'style.css'
     ];
     const isCoreAppJs = NETWORK_FIRST_JS.some((file) => event.request.url.includes(file));
 

@@ -17,6 +17,12 @@ export interface RunSession {
 	tasks: RoutineTask[];
 	statuses: Record<string, TaskStatus>;
 	currentIndex: number;
+	/**
+	 * Furthest index the user backed away from during this retreat.
+	 * Forward steps visit every task through this index, including ones
+	 * that already have a status, before skipping resolved tasks again.
+	 */
+	revisitThroughIndex?: number;
 	phase: 'running' | 'summary';
 	startMode?: StartMode;
 	/** Last statuses already written to first-pass stats, if any. */

@@ -1010,26 +1010,24 @@ export function renderMarkdown(markdown, options = {}) {
                 rows.push(parseTableRow(lines[i]));
                 i += 1;
             }
+            const cell = (tag, align, text, extra = '') => {
+                const a = align ? ` style="text-align:${align}"` : '';
+                return `<${tag}${extra}${a}><div class="md-table-cell">${renderInline(text, inlineOpts)}</div></${tag}>`;
+            };
             const th = headerCells
-                .map((c, idx) => {
-                    const a = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
-                    return `<th${a}>${renderInline(c, inlineOpts)}</th>`;
-                })
+                .map((c, idx) => cell('th', aligns[idx], c, ' scope="col"'))
                 .join('');
             const body = rows
                 .map((row) => {
                     const tds = headerCells
-                        .map((_, idx) => {
-                            const a = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
-                            return `<td${a}>${renderInline(row[idx] ?? '', inlineOpts)}</td>`;
-                        })
+                        .map((_, idx) => cell('td', aligns[idx], row[idx] ?? ''))
                         .join('');
                     return `<tr>${tds}</tr>`;
                 })
                 .join('');
             out.push(
                 withSourceLine(
-                    `<div class="md-table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`,
+                    `<div class="md-table-wrap" tabindex="0"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`,
                     startLine
                 )
             );

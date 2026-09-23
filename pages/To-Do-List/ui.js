@@ -885,7 +885,7 @@ export function renderBoard() {
     // Restore Focus/Typing State
     if (activeEl && activeEl.id) {
         const newEl = document.getElementById(activeEl.id);
-        if (newEl) {
+        if (newEl && newEl !== activeEl) {
             if (isTextInput) {
                 newEl.value = focusedValue;
                 newEl.focus();
@@ -1343,28 +1343,30 @@ function getTagButtonStyle(tag) {
     return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${border}; --tag-btn-text: ${ink};`;
 }
 
-function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId = null } = {}) {
+function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId = null, labelMode = 'mode', bindClick = true } = {}) {
     const btn = document.createElement('button');
     const isSelected = tag.id === selectedId;
-    const isFiltering = !!filterId && tag.id === filterId;
+    const isFiltering = labelMode !== 'composer' && !!filterId && tag.id === filterId;
     btn.type = 'button';
     btn.className = `tag-mode-btn${compact ? ' tag-mode-btn-compact' : ''}${isSelected ? ' is-selected' : ''}${isFiltering ? ' is-filtering' : ''}`;
     btn.dataset.tagId = tag.id;
     btn.setAttribute('role', 'radio');
     btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
-    let aria = `Tag mode: ${tag.name}`;
+    let aria = labelMode === 'composer' ? tag.name : `Tag mode: ${tag.name}`;
     if (isSelected) aria += ', selected';
     if (isFiltering) aria += ', filtering board';
-    else if (isSelected) aria += '. Press again to filter board by this tag';
+    else if (isSelected && labelMode !== 'composer') aria += '. Press again to filter board by this tag';
     btn.setAttribute('aria-label', aria);
     btn.style.cssText = getTagButtonStyle(tag);
     const tone = getTagColorTone(tag.glowColor);
     if (tone === 'black' || tone === 'white') btn.dataset.tagTone = tone;
     btn.textContent = tag.name;
-    btn.onclick = (e) => {
-        e.preventDefault();
-        onSelect(tag.id);
-    };
+    if (bindClick && onSelect) {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            onSelect(tag.id);
+        };
+    }
     return btn;
 }
 
@@ -1412,6 +1414,40 @@ export function renderTagModeBar() {
 
     syncTagFilterChrome();
     requestAnimationFrame(() => layoutSlimChrome());
+    renderComposerTagBar();
+}
+
+export function renderComposerTagBar() {
+    const container = document.getElementById('add-task-composer-tags');
+    const root = document.getElementById('add-task-composer');
+    if (!container || !root || root.classList.contains('hidden')) return;
+
+    const ensured = ensureDefaultTags(state.appData.settings);
+    const tags = sortTags(ensured.tags);
+    const activeId = ensured.activeTagId || MISC_TAG_ID;
+
+    container.innerHTML = '';
+    tags.forEach((tag) => {
+        container.appendChild(buildTagButton(tag, activeId, null, {
+            labelMode: 'composer',
+            bindClick: false
+        }));
+    });
+}
+
+export function selectComposerTag(tagId) {
+    const ensured = ensureDefaultTags(state.appData.settings);
+    const tags = sortTags(ensured.tags);
+    if (!tags.some((tag) => tag.id === tagId)) return;
+
+    const activeId = ensured.activeTagId || MISC_TAG_ID;
+    if (tagId === activeId) return;
+
+    const hadFilter = !!state.tagFilterId;
+    clearTagFilter({ rerender: false });
+    setActiveTagId(tagId);
+    renderTagModeBar();
+    if (hadFilter) renderBoard();
 }
 
 export function renderTaskTagPicker(containerId, selectedId, onSelect) {

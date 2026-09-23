@@ -169,16 +169,16 @@ window.handleAddTask = function (e, listId) {
     const input = e.target.elements.taskText;
     if (input && !input.value.trim()) {
         UI.flashInputBox(input);
-        return;
+        return Promise.resolve(null);
     }
 
-    API.handleAddTask(e, listId).then((newCount) => {
-        if (newCount === null) return; // Silent return if add was skipped/invalid
+    return API.handleAddTask(e, listId).then((newCount) => {
+        if (newCount == null) return null; // Silent return if add was skipped/invalid
         console.log("DEBUG: handleAddTask finished. New Count:", newCount, "Limit:", state.appData.settings.backupFreq);
         if (newCount && newCount >= state.appData.settings.backupFreq) {
             if (Utils.isUserTyping()) {
                 console.log("[Backup] User is typing another task, suppressing backup popup.");
-                return;
+                return newCount;
             }
             console.log("DEBUG: Triggering Backup Modal. Element:", document.getElementById('backup-modal-overlay'));
             // Updated API to return newCount
@@ -186,6 +186,7 @@ window.handleAddTask = function (e, listId) {
             if (modal) modal.classList.remove('hidden');
             // Reset count in DB handled by "I'll do it later" or actual backup
         }
+        return newCount;
     });
 };
 window.archiveTask = (taskId) => {
@@ -639,6 +640,8 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
+            if (document.getElementById('fullscreen-add-toggle')) document.getElementById('fullscreen-add-toggle').checked = state.appData.settings.fullscreenAddTask !== false;
+            applyFullscreenAddFieldMode();
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('disable-important-animation-toggle')) document.getElementById('disable-important-animation-toggle').checked = !!state.appData.settings.disableImportantAnimation;
             document.body.classList.toggle('disable-important-animation', !!state.appData.settings.disableImportantAnimation);
@@ -976,6 +979,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     setupSettingListener('add-bottom-toggle', 'addTaskLocation', true, (checked) => checked ? 'bottom' : 'top');
+    setupSettingListener('fullscreen-add-toggle', 'fullscreenAddTask', true, (checked) => {
+        const enabled = !!checked;
+        if (!enabled) closeAddTaskComposer({ restore: true });
+        applyFullscreenAddFieldMode(enabled);
+        return enabled;
+    });
     setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
     setupSettingListener('disable-important-animation-toggle', 'disableImportantAnimation', true, (checked) => {
         document.body.classList.toggle('disable-important-animation', !!checked);
@@ -2187,6 +2196,7 @@ function setupSettingListener(id, settingKey, isCheckbox, processVal) {
         if (processVal) val = processVal(val);
         if (!state.appData.settings) state.appData.settings = {};
         state.appData.settings[settingKey] = val;
+        if (settingKey === 'autoAddIdleTime') refreshIdleCountdownMarks();
         if (settingKey === 'dragEnabled') {
             UI.enableSortables(val);
         } else if (settingKey === 'sortMode' || settingKey === 'showNumbers' || settingKey === 'autoArchive' || settingKey === 'disableImportantPinning' || settingKey === 'disableImportantAnimation' || settingKey === 'addTaskLocation') {
@@ -3047,6 +3057,18 @@ async function performBulkDeleteForever() {
 
 // --- GLOBAL KEYBOARD SHORTCUTS ---
 window.addEventListener('keydown', (e) => {
+    if (isAddTaskComposerOpen()) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeAddTaskComposer({ restore: true });
+        } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+            e.preventDefault();
+            submitAddTaskComposer();
+        } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+        }
+        return;
+    }
     // 1. Esc to close topmost modal overlays first, then settings page, then Kanban focus
     if (e.key === 'Escape') {
         const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
@@ -3105,6 +3127,43 @@ function getAutoAddIdleTimeMs() {
     return seconds * 1000;
 }
 
+const COUNTDOWN_MARK_MS = 15 * 1000;
+
+function renderCountdownMarks(track, totalMs) {
+    if (!track) return;
+    let layer = track.querySelector(':scope > .countdown-marks');
+    if (!layer) {
+        layer = document.createElement('div');
+        layer.className = 'countdown-marks';
+        layer.setAttribute('aria-hidden', 'true');
+        track.appendChild(layer);
+    }
+    const fractions = [];
+    if (totalMs > COUNTDOWN_MARK_MS) {
+        for (let ms = COUNTDOWN_MARK_MS; ms < totalMs; ms += COUNTDOWN_MARK_MS) {
+            fractions.push(ms / totalMs);
+        }
+    }
+    const signature = fractions.map((fraction) => fraction.toFixed(5)).join(',');
+    if (layer.dataset.marks === signature) return;
+    layer.dataset.marks = signature;
+    layer.replaceChildren();
+    fractions.forEach((fraction) => {
+        const mark = document.createElement('span');
+        mark.className = 'countdown-mark';
+        mark.style.left = `${fraction * 100}%`;
+        const seconds = Math.round((fraction * totalMs) / 1000);
+        mark.title = `${seconds}s left`;
+        layer.appendChild(mark);
+    });
+}
+
+function refreshIdleCountdownMarks() {
+    if (!isAddTaskComposerOpen()) return;
+    if (composerCountdown && composerCountdown.intervalId) return;
+    renderCountdownMarks(document.getElementById('add-task-composer-countdown'), getAutoAddIdleTimeMs());
+}
+
 function getOrCreateCountdownBar(listCol) {
     const container = listCol.querySelector('.add-task-container');
     if (!container) return null;
@@ -3149,6 +3208,7 @@ function startCountdownForList(input, listId) {
     const listCol = input.closest('.list-column');
     if (!listCol) return;
 
+    const totalMs = getAutoAddIdleTimeMs();
     const barContainer = getOrCreateCountdownBar(listCol);
     if (barContainer) {
         barContainer.style.display = 'block';
@@ -3156,9 +3216,9 @@ function startCountdownForList(input, listId) {
         if (bar) {
             bar.style.transform = 'scaleX(1)';
         }
+        renderCountdownMarks(barContainer, totalMs);
     }
 
-    const totalMs = getAutoAddIdleTimeMs();
     const timerData = {
         listId: listId,
         text: value,
@@ -3216,6 +3276,529 @@ function isAddTaskTextField(el) {
     return el && el.name === 'taskText' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
 }
 
+function isInlineAddTaskField(el) {
+    return isAddTaskTextField(el) && el.id !== 'add-task-composer-input';
+}
+
+function isFullscreenAddEnabled() {
+    return !state.appData?.settings || state.appData.settings.fullscreenAddTask !== false;
+}
+
+let composerSession = null;
+let composerSubmitting = false;
+let composerToggleAt = 0;
+const COMPOSER_TOGGLE_GUARD_MS = 300;
+let suppressAddTaskBlur = false;
+let composerBound = false;
+let composerViewportRaf = 0;
+let composerViewportKey = '';
+let composerCountdown = null;
+const addTaskDrafts = new Map();
+
+function isAddTaskComposerOpen() {
+    const root = document.getElementById('add-task-composer');
+    return !!(root && !root.classList.contains('hidden'));
+}
+
+function getAddTaskContext(input) {
+    if (!input || !input.closest) return null;
+    const host = input.closest('.list-column, .kanban-focus-shell');
+    if (!host || !host.dataset.listId) return null;
+    return { host, listId: host.dataset.listId };
+}
+
+function findAddTaskInput(listId) {
+    if (!listId) return null;
+    let selectorId = listId;
+    if (window.CSS && typeof CSS.escape === 'function') selectorId = CSS.escape(listId);
+    const host = document.querySelector(
+        `.list-column[data-list-id="${selectorId}"], .kanban-focus-shell[data-list-id="${selectorId}"]`
+    );
+    if (!host) return null;
+    return host.querySelector('textarea[name="taskText"]');
+}
+
+function rememberDraft(listId, text) {
+    if (!listId) return;
+    if (text) addTaskDrafts.set(listId, text);
+    else addTaskDrafts.delete(listId);
+}
+
+function applyFullscreenAddFieldMode(enabled = isFullscreenAddEnabled()) {
+    document.querySelectorAll('textarea[name="taskText"]').forEach((input) => {
+        if (input.id === 'add-task-composer-input') return;
+        input.readOnly = !!enabled;
+        if (enabled) {
+            input.inputMode = 'none';
+            input.setAttribute('aria-haspopup', 'dialog');
+        } else {
+            input.readOnly = false;
+            input.inputMode = 'text';
+            input.removeAttribute('aria-haspopup');
+        }
+    });
+}
+
+function setComposerCountdownScale(scale, remainingMs) {
+    const track = document.getElementById('add-task-composer-countdown');
+    const bar = track ? track.querySelector('.add-task-composer-countdown-bar') : null;
+    const timeEl = document.getElementById('add-task-composer-countdown-time');
+    const clamped = Math.max(0, Math.min(1, scale));
+    if (bar) bar.style.transform = `scaleX(${clamped})`;
+    if (track) track.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
+    if (!timeEl) return;
+    if (remainingMs == null || remainingMs <= 0) {
+        timeEl.textContent = '';
+        timeEl.setAttribute('aria-hidden', 'true');
+        if (track) track.removeAttribute('aria-valuetext');
+        return;
+    }
+    const seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const label = `${seconds}s`;
+    if (timeEl.textContent !== label) timeEl.textContent = label;
+    timeEl.setAttribute('aria-hidden', 'false');
+    if (track) track.setAttribute('aria-valuetext', `${seconds} seconds`);
+}
+
+function resetComposerAutoAdd() {
+    if (composerCountdown) {
+        if (composerCountdown.debounceId) clearTimeout(composerCountdown.debounceId);
+        if (composerCountdown.intervalId) clearInterval(composerCountdown.intervalId);
+        composerCountdown = null;
+    }
+    setComposerCountdownScale(0);
+}
+
+function beginComposerAutoAdd() {
+    if (!composerCountdown || !isAddTaskComposerOpen() || composerSubmitting) return;
+    const data = composerCountdown;
+    data.debounceId = null;
+    data.remainingMs = data.totalMs;
+    setComposerCountdownScale(1, data.remainingMs);
+    data.intervalId = setInterval(() => {
+        if (!composerCountdown || composerCountdown !== data) return;
+        data.remainingMs -= 100;
+        setComposerCountdownScale(data.remainingMs / data.totalMs, data.remainingMs);
+        if (data.remainingMs > 0) return;
+        clearInterval(data.intervalId);
+        composerCountdown = null;
+        setComposerCountdownScale(0);
+        submitAddTaskComposer({ auto: true });
+    }, 100);
+}
+
+function scheduleComposerAutoAdd() {
+    resetComposerAutoAdd();
+    if (!composerSession || !isAddTaskComposerOpen() || composerSubmitting) return;
+    const totalMs = getAutoAddIdleTimeMs();
+    renderCountdownMarks(document.getElementById('add-task-composer-countdown'), totalMs);
+    const field = document.getElementById('add-task-composer-input');
+    const text = field ? field.value : '';
+    if (!text.trim()) return;
+    const data = {
+        listId: composerSession.listId,
+        text,
+        totalMs,
+        remainingMs: totalMs,
+        debounceId: null,
+        intervalId: null
+    };
+    composerCountdown = data;
+    setComposerCountdownScale(0, totalMs);
+    data.debounceId = setTimeout(() => beginComposerAutoAdd(), 1500);
+}
+
+function syncComposerAddState() {
+    const addBtn = document.getElementById('add-task-composer-add');
+    const field = document.getElementById('add-task-composer-input');
+    if (!addBtn || !field) return;
+    const empty = !field.value.trim();
+    addBtn.classList.toggle('is-empty', empty || composerSubmitting);
+    addBtn.setAttribute('aria-disabled', empty ? 'true' : 'false');
+}
+
+function positionAddTaskComposer() {
+    const el = document.getElementById('add-task-composer');
+    if (!el || el.classList.contains('hidden')) return;
+    const vv = window.visualViewport;
+    const top = vv ? vv.offsetTop : 0;
+    const left = vv ? vv.offsetLeft : 0;
+    const width = vv ? vv.width : window.innerWidth;
+    const height = vv ? vv.height : window.innerHeight;
+    const keyboardOpen = vv ? (window.innerHeight - vv.height) > 80 : false;
+    const key = `${Math.round(top)}|${Math.round(left)}|${Math.round(width)}|${Math.round(height)}|${keyboardOpen}`;
+    if (key === composerViewportKey) return;
+    composerViewportKey = key;
+    el.style.width = `${Math.round(width)}px`;
+    el.style.height = `${Math.round(height)}px`;
+    el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    el.style.paddingBottom = keyboardOpen ? '0px' : '';
+}
+
+function startComposerViewportWatch() {
+    stopComposerViewportWatch();
+    const tick = () => {
+        positionAddTaskComposer();
+        composerViewportRaf = requestAnimationFrame(tick);
+    };
+    composerViewportRaf = requestAnimationFrame(tick);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', positionAddTaskComposer);
+        window.visualViewport.addEventListener('scroll', positionAddTaskComposer);
+    }
+    window.addEventListener('resize', positionAddTaskComposer);
+    window.addEventListener('orientationchange', positionAddTaskComposer);
+}
+
+function stopComposerViewportWatch() {
+    if (composerViewportRaf) cancelAnimationFrame(composerViewportRaf);
+    composerViewportRaf = 0;
+    composerViewportKey = '';
+    if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', positionAddTaskComposer);
+        window.visualViewport.removeEventListener('scroll', positionAddTaskComposer);
+    }
+    window.removeEventListener('resize', positionAddTaskComposer);
+    window.removeEventListener('orientationchange', positionAddTaskComposer);
+}
+
+function bindComposerAction(btn, action) {
+    let fromPointer = false;
+    btn.addEventListener('pointerdown', (e) => {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+    });
+    btn.addEventListener('pointerup', (e) => {
+        if (e.button != null && e.button !== 0) return;
+        const rect = btn.getBoundingClientRect();
+        const inside = e.clientX >= rect.left && e.clientX <= rect.right
+            && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!inside) return;
+        fromPointer = true;
+        action();
+        setTimeout(() => { fromPointer = false; }, 400);
+    });
+    btn.addEventListener('pointercancel', () => { fromPointer = false; });
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (fromPointer) {
+            fromPointer = false;
+            return;
+        }
+        action();
+    });
+}
+
+const COMPOSER_FONT_KEY = 'taskmasterComposerFontPx';
+const COMPOSER_FONT_MIN = 8;
+const COMPOSER_FONT_MAX = 240;
+const COMPOSER_FONT_DEFAULT = 17;
+
+function readComposerFontSize() {
+    let stored = COMPOSER_FONT_DEFAULT;
+    try {
+        const parsed = parseInt(localStorage.getItem(COMPOSER_FONT_KEY), 10);
+        if (Number.isFinite(parsed)) stored = parsed;
+    } catch (_) {}
+    return Math.min(COMPOSER_FONT_MAX, Math.max(COMPOSER_FONT_MIN, stored));
+}
+
+function applyComposerFontSize(px) {
+    const size = Math.min(COMPOSER_FONT_MAX, Math.max(COMPOSER_FONT_MIN, Math.round(px)));
+    const field = document.getElementById('add-task-composer-input');
+    if (field) {
+        field.style.fontSize = `${size}px`;
+        field.style.lineHeight = '1.2';
+    }
+    const down = document.getElementById('add-task-composer-font-down');
+    const up = document.getElementById('add-task-composer-font-up');
+    if (down) down.disabled = size <= COMPOSER_FONT_MIN;
+    if (up) up.disabled = size >= COMPOSER_FONT_MAX;
+    return size;
+}
+
+function stepComposerFont(direction) {
+    const current = readComposerFontSize();
+    const scaled = direction > 0 ? current * 1.18 : current / 1.18;
+    let next = Math.round(scaled);
+    if (next === current) next = current + direction;
+    const size = applyComposerFontSize(next);
+    try { localStorage.setItem(COMPOSER_FONT_KEY, String(size)); } catch (_) {}
+    const field = document.getElementById('add-task-composer-input');
+    scrollComposerFieldToCaret(field);
+}
+
+function bindComposerOnce() {
+    if (composerBound) return;
+    const root = document.getElementById('add-task-composer');
+    const field = document.getElementById('add-task-composer-input');
+    const exitBtn = document.getElementById('add-task-composer-exit');
+    const addBtn = document.getElementById('add-task-composer-add');
+    if (!root || !field || !exitBtn || !addBtn) return;
+    composerBound = true;
+
+    bindComposerAction(exitBtn, () => closeAddTaskComposer({ restore: true }));
+    bindComposerAction(addBtn, () => submitAddTaskComposer());
+    const fontDown = document.getElementById('add-task-composer-font-down');
+    const fontUp = document.getElementById('add-task-composer-font-up');
+    if (fontDown) bindComposerAction(fontDown, () => stepComposerFont(-1));
+    if (fontUp) bindComposerAction(fontUp, () => stepComposerFont(1));
+    applyComposerFontSize(readComposerFontSize());
+
+    field.addEventListener('input', () => {
+        if (!composerSession) return;
+        rememberDraft(composerSession.listId, field.value);
+        const source = findAddTaskInput(composerSession.listId);
+        if (source) source.value = field.value;
+        syncComposerAddState();
+        scrollComposerFieldToCaret(field);
+        scheduleComposerAutoAdd();
+    });
+
+    root.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const items = [fontDown, fontUp, field, exitBtn, addBtn].filter(Boolean);
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+
+    const bar = root.querySelector('.add-task-composer-bar');
+    if (bar) {
+        bar.addEventListener('touchmove', (e) => {
+            if (e.cancelable) e.preventDefault();
+        }, { passive: false });
+    }
+
+    const tagRow = document.getElementById('add-task-composer-tags');
+    const tagFooter = root.querySelector('.add-task-composer-footer');
+    if (tagRow) {
+        let tagFromPointer = false;
+        let tagPointer = null;
+        tagRow.addEventListener('pointerdown', (e) => {
+            if (e.button != null && e.button !== 0) return;
+            if (!e.target.closest('button')) return;
+            tagPointer = { x: e.clientX, y: e.clientY, id: e.pointerId };
+            const scroller = tagFooter || tagRow;
+            const canScroll = scroller.scrollHeight > scroller.clientHeight + 1;
+            if (!canScroll) e.preventDefault();
+        });
+        tagRow.addEventListener('pointerup', (e) => {
+            if (e.button != null && e.button !== 0) return;
+            const start = tagPointer;
+            tagPointer = null;
+            if (start && start.id === e.pointerId) {
+                if (Math.abs(e.clientX - start.x) > 8 || Math.abs(e.clientY - start.y) > 8) return;
+            }
+            const btn = e.target.closest('button[data-tag-id]');
+            if (!btn || !tagRow.contains(btn)) return;
+            const rect = btn.getBoundingClientRect();
+            const inside = e.clientX >= rect.left && e.clientX <= rect.right
+                && e.clientY >= rect.top && e.clientY <= rect.bottom;
+            if (!inside) return;
+            tagFromPointer = true;
+            UI.selectComposerTag(btn.dataset.tagId);
+            setTimeout(() => { tagFromPointer = false; }, 400);
+        });
+        tagRow.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-tag-id]');
+            if (!btn || !tagRow.contains(btn)) return;
+            e.preventDefault();
+            if (tagFromPointer) {
+                tagFromPointer = false;
+                return;
+            }
+            UI.selectComposerTag(btn.dataset.tagId);
+        });
+    }
+}
+
+function openAddTaskComposer(sourceInput) {
+    if (!isFullscreenAddEnabled() || composerSubmitting) return;
+    const rootEl = document.getElementById('add-task-composer');
+    const openingFresh = !rootEl || rootEl.classList.contains('hidden');
+    if (openingFresh && Date.now() - composerToggleAt < COMPOSER_TOGGLE_GUARD_MS) return;
+    bindComposerOnce();
+    const ctx = getAddTaskContext(sourceInput);
+    const root = document.getElementById('add-task-composer');
+    const field = document.getElementById('add-task-composer-input');
+    if (!ctx || !root || !field) return;
+
+    if (composerSession && composerSession.listId !== ctx.listId) {
+        rememberDraft(composerSession.listId, field.value);
+        const prev = findAddTaskInput(composerSession.listId);
+        if (prev) prev.value = field.value;
+        resetTimerForList(composerSession.listId);
+    }
+
+    const already = composerSession
+        && composerSession.listId === ctx.listId
+        && !root.classList.contains('hidden');
+
+    if (!already) {
+        composerSession = { listId: ctx.listId };
+        field.value = sourceInput.value || addTaskDrafts.get(ctx.listId) || '';
+        rememberDraft(ctx.listId, field.value);
+        const titleEl = document.getElementById('add-task-composer-list');
+        const titleInput = ctx.host.querySelector('input.list-title');
+        const title = titleInput ? titleInput.value.trim() : '';
+        if (titleEl) titleEl.textContent = title;
+        composerToggleAt = Date.now();
+        root.classList.remove('hidden');
+        root.setAttribute('aria-hidden', 'false');
+        document.documentElement.classList.add('add-task-composer-open');
+        resetTimerForList(ctx.listId);
+        startComposerViewportWatch();
+        positionAddTaskComposer();
+        syncComposerAddState();
+        scheduleComposerAutoAdd();
+        UI.renderComposerTagBar();
+        applyComposerFontSize(readComposerFontSize());
+        refreshIdleCountdownMarks();
+    }
+
+    focusComposerField(field, sourceInput, !already);
+}
+
+function scrollComposerFieldToCaret(field) {
+    if (!field) return;
+    const atEnd = field.selectionEnd == null || field.selectionEnd === field.value.length;
+    if (!atEnd) return;
+    if (field.scrollHeight > field.clientHeight + 1) {
+        field.scrollTop = field.scrollHeight;
+    }
+}
+
+function focusComposerField(field, sourceInput, moveCaretToEnd) {
+    const place = () => {
+        if (!isAddTaskComposerOpen() || !field) return;
+        suppressAddTaskBlur = true;
+        if (sourceInput && document.activeElement === sourceInput) sourceInput.blur();
+        if (document.activeElement !== field) {
+            try { field.focus({ preventScroll: true }); }
+            catch (_) { field.focus(); }
+            if (moveCaretToEnd) {
+                const len = field.value.length;
+                try { field.setSelectionRange(len, len); } catch (_) {}
+            }
+            scrollComposerFieldToCaret(field);
+        }
+        setTimeout(() => { suppressAddTaskBlur = false; }, 0);
+    };
+    place();
+    setTimeout(place, 0);
+    setTimeout(place, 60);
+}
+
+function closeAddTaskComposer({ restore = false } = {}) {
+    if (composerSubmitting && restore) return;
+    if (restore && Date.now() - composerToggleAt < COMPOSER_TOGGLE_GUARD_MS) return;
+    const root = document.getElementById('add-task-composer');
+    const field = document.getElementById('add-task-composer-input');
+    if (!root) return;
+    resetComposerAutoAdd();
+    const session = composerSession;
+    const text = field ? field.value : '';
+    if (session && restore) {
+        rememberDraft(session.listId, text);
+        const source = findAddTaskInput(session.listId);
+        if (source) {
+            source.value = text;
+            syncAddTaskInputHeight(source);
+        }
+        resetTimerForList(session.listId);
+    }
+    composerSession = null;
+    if (field && document.activeElement === field) field.blur();
+    composerToggleAt = Date.now();
+    root.classList.add('hidden');
+    root.setAttribute('aria-hidden', 'true');
+    document.documentElement.classList.remove('add-task-composer-open');
+    stopComposerViewportWatch();
+    root.style.width = '';
+    root.style.height = '';
+    root.style.transform = '';
+    root.style.paddingBottom = '';
+    if (field && !restore) field.value = '';
+}
+
+function submitAddTaskComposer({ auto = false } = {}) {
+    if (!composerSession || composerSubmitting) return;
+    resetComposerAutoAdd();
+    const field = document.getElementById('add-task-composer-input');
+    if (!field) return;
+    const text = field.value;
+    if (!text.trim()) {
+        UI.flashInputBox(field);
+        try { field.focus({ preventScroll: true }); } catch (_) { field.focus(); }
+        return;
+    }
+    const listId = composerSession.listId;
+    const fakeInput = { value: text, focus() {} };
+    composerSubmitting = true;
+    syncComposerAddState();
+    const pending = window.handleAddTask({
+        preventDefault() {},
+        target: { elements: { taskText: fakeInput } }
+    }, listId);
+    Promise.resolve(pending).then((newCount) => {
+        composerSubmitting = false;
+        syncComposerAddState();
+        if (newCount == null) return;
+        if (auto) {
+            const term = Utils.getTerm(true, true);
+            Utils.showToast(`${term} automatically added`, "success");
+        }
+        addTaskDrafts.delete(listId);
+        resetTimerForList(listId);
+        const source = findAddTaskInput(listId);
+        if (source) source.value = '';
+        closeAddTaskComposer({ restore: false });
+    }, () => {
+        composerSubmitting = false;
+        syncComposerAddState();
+    });
+}
+
+function syncRenderedAddInputs() {
+    applyFullscreenAddFieldMode();
+    document.querySelectorAll('textarea[name="taskText"]').forEach((input) => {
+        if (input.id === 'add-task-composer-input') return;
+        const ctx = getAddTaskContext(input);
+        if (!ctx) return;
+        if (composerSession && composerSession.listId === ctx.listId) {
+            const field = document.getElementById('add-task-composer-input');
+            if (field) input.value = field.value;
+            return;
+        }
+        if (!input.value && addTaskDrafts.has(ctx.listId) && document.activeElement !== input) {
+            input.value = addTaskDrafts.get(ctx.listId);
+        }
+    });
+}
+
+document.addEventListener('pointerdown', (e) => {
+    if (!isFullscreenAddEnabled() || composerSubmitting) return;
+    const input = e.target;
+    if (!isInlineAddTaskField(input)) return;
+    if (e.button != null && e.button !== 0) return;
+    e.preventDefault();
+    openAddTaskComposer(input);
+}, true);
+
+document.addEventListener('click', (e) => {
+    if (!isFullscreenAddEnabled() || composerSubmitting) return;
+    const input = e.target;
+    if (!isInlineAddTaskField(input)) return;
+    openAddTaskComposer(input);
+}, true);
+
 function syncAddTaskInputHeight(input) {
     if (!input || input.tagName !== 'TEXTAREA') return;
     const expanded = document.activeElement === input;
@@ -3233,7 +3816,8 @@ function syncAddTaskInputHeight(input) {
 // Event Delegation for input events
 document.addEventListener('input', (e) => {
     const input = e.target;
-    if (isAddTaskTextField(input)) {
+    if (isInlineAddTaskField(input)) {
+        if (isFullscreenAddEnabled()) return;
         syncAddTaskInputHeight(input);
         const listCol = input.closest('.list-column');
         if (!listCol) return;
@@ -3266,34 +3850,42 @@ document.addEventListener('input', (e) => {
 // Focus/Blur Delegation
 document.addEventListener('focusin', (e) => {
     const input = e.target;
-    if (isAddTaskTextField(input)) {
-        requestAnimationFrame(() => syncAddTaskInputHeight(input));
-        const listCol = input.closest('.list-column');
-        if (!listCol) return;
-        const listId = listCol.dataset.listId;
-        if (listId) {
-            resetTimerForList(listId);
-        }
+    if (!isInlineAddTaskField(input)) return;
+    if (isFullscreenAddEnabled()) {
+        openAddTaskComposer(input);
+        return;
+    }
+    requestAnimationFrame(() => syncAddTaskInputHeight(input));
+    const listCol = input.closest('.list-column');
+    if (!listCol) return;
+    const listId = listCol.dataset.listId;
+    if (listId) {
+        resetTimerForList(listId);
     }
 });
 
 document.addEventListener('focusout', (e) => {
     const input = e.target;
-    if (isAddTaskTextField(input)) {
+    if (!isInlineAddTaskField(input)) return;
+    if (suppressAddTaskBlur || isAddTaskComposerOpen()) {
         syncAddTaskInputHeight(input);
-        const listCol = input.closest('.list-column');
-        if (!listCol) return;
-        const listId = listCol.dataset.listId;
-        if (listId && input.value.trim()) {
-            startCountdownForList(input, listId);
-        }
+        return;
+    }
+    syncAddTaskInputHeight(input);
+    if (isFullscreenAddEnabled()) return;
+    const listCol = input.closest('.list-column');
+    if (!listCol) return;
+    const listId = listCol.dataset.listId;
+    if (listId && input.value.trim()) {
+        startCountdownForList(input, listId);
     }
 });
 
 // Enter submits add-task; Shift+Enter inserts a newline in the textarea
 document.addEventListener('keydown', (e) => {
     const input = e.target;
-    if (!isAddTaskTextField(input) || input.tagName !== 'TEXTAREA') return;
+    if (!isInlineAddTaskField(input) || input.tagName !== 'TEXTAREA') return;
+    if (isFullscreenAddEnabled()) return;
     if (e.key !== 'Enter' || e.shiftKey) return;
     e.preventDefault();
     const form = input.closest('form.add-task-form');
@@ -3344,11 +3936,13 @@ window.onBoardRendered = function() {
                                 const percentage = Math.max(0, (timerData.remainingMs / timerData.totalMs) * 100);
                                 bar.style.transform = `scaleX(${percentage / 100})`;
                             }
+                            renderCountdownMarks(barContainer, timerData.totalMs);
                         }
                     }
                 }
             }
         }
     }
+    syncRenderedAddInputs();
 };
 

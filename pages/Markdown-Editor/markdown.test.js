@@ -137,3 +137,14 @@ test('copying a task item keeps the checkbox prefix', () => {
         ['- [ ] Parent', '  - [x] Child'].join('\n')
     );
 });
+
+test('markdown tables wrap cells and keep column alignment', async () => {
+    const { renderMarkdown } = await import('./markdown.js');
+    const html = renderMarkdown(
+        ['| Item | Amount |', '| :--- | ---: |', '| Long note | 12 |'].join('\n')
+    );
+    assert.match(html, /class="md-table-wrap"/);
+    assert.match(html, /<th scope="col" style="text-align:left"><div class="md-table-cell">Item<\/div><\/th>/);
+    assert.match(html, /<th scope="col" style="text-align:right"><div class="md-table-cell">Amount<\/div><\/th>/);
+    assert.match(html, /<td style="text-align:right"><div class="md-table-cell">12<\/div><\/td>/);
+});

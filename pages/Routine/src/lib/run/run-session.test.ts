@@ -66,6 +66,97 @@ describe('run-session', () => {
 		expect(session.currentIndex).toBe(1);
 	});
 
+	it('walks forward through every task the user backed over', () => {
+		const longer: RoutineTask[] = [
+			...tasks,
+			{ id: 't4', title: 'Four', order: 3 },
+			{ id: 't5', title: 'Five', order: 4 }
+		];
+		let session = createRunSession(makeRoutine(longer));
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t5');
+
+		session = goBack(session);
+		session = goBack(session);
+		session = goBack(session);
+		session = goBack(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t1');
+		expect(session.statuses.t2).toBe('completed');
+		expect(session.statuses.t3).toBe('completed');
+		expect(session.statuses.t4).toBe('completed');
+
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t2');
+		session = laterCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
+		session = notTodayCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t4');
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t5');
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+		expect(session.statuses).toEqual({
+			t1: 'completed',
+			t2: 'later',
+			t3: 'skipped',
+			t4: 'completed',
+			t5: 'completed'
+		});
+		expect(session.revisitThroughIndex).toBeUndefined();
+	});
+
+	it('keeps later backed-over tasks when the user backs up again mid-replay', () => {
+		const longer: RoutineTask[] = [...tasks, { id: 't4', title: 'Four', order: 3 }];
+		let session = createRunSession(makeRoutine(longer));
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t4');
+
+		session = goBack(session);
+		session = goBack(session);
+		session = goBack(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t1');
+
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t2');
+		session = goBack(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t1');
+
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t2');
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t4');
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+	});
+
+	it('revisits tasks after leaving the summary and backing further', () => {
+		let session = createRunSession(makeRoutine(tasks));
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+
+		session = goBack(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
+		session = goBack(session);
+		session = goBack(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t1');
+
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t2');
+		session = completeCurrent(session);
+		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
+		session = completeCurrent(session);
+		expect(session.phase).toBe('summary');
+	});
+
 	it('moves to summary after the final task', () => {
 		let session = createRunSession(makeRoutine(tasks));
 		session = completeCurrent(session);

@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
-import { doc, getDoc, getDocFromCache, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
+import { doc, getDocFromCache, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import EasyMDE from 'easymde';
 import SimpleMdeReact from 'react-simplemde-editor';
@@ -52,24 +52,12 @@ import {
     numericEntriesToPlainText,
     subEntriesToPlainText
 } from '../utils/entrySections';
-
-const ENTRY_LOAD_TIMEOUT_MS = 12000;
-const ENTRY_LOAD_TIMEOUT_CODE = 'journal/entry-load-timeout';
-
-function getDocWithTimeout(docRef) {
-    let timeoutId;
-
-    return Promise.race([
-        getDoc(docRef),
-        new Promise((_, reject) => {
-            timeoutId = window.setTimeout(() => {
-                const error = new Error('Entry load timed out');
-                error.code = ENTRY_LOAD_TIMEOUT_CODE;
-                reject(error);
-            }, ENTRY_LOAD_TIMEOUT_MS);
-        })
-    ]).finally(() => window.clearTimeout(timeoutId));
-}
+import {
+    ENTRY_LOAD_TIMEOUT_CODE,
+    ENTRY_LOAD_TIMEOUT_MS,
+    entryLoadErrorMessage,
+    isUsableEntrySnapshot
+} from '../utils/entryLoad';
 
 function shouldUseNativeEditor() {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -310,6 +298,8 @@ export default function EntryEditor() {
     const autoSaveTimerRef = useRef(null);
     const lastSavedSignature = useRef('');
     const isFirstLoad = useRef(true);
+    const isEditingRef = useRef(false);
+    isEditingRef.current = isEditing;
     const lastWordMilestoneRef = useRef(0);
     const wordMilestoneTimerRef = useRef(null);
     const [wordMilestoneFlash, setWordMilestoneFlash] = useState(null);
@@ -846,107 +836,150 @@ export default function EntryEditor() {
 
     useEffect(() => {
         let cancelled = false;
+        let delivered = false;
+        let attempt = 0;
+        let unsubscribe = () => {};
+        let timeoutId = 0;
 
-        async function fetchEntry() {
-            setLoading(true);
-            setLoadError('');
-            if (!currentUser) {
-                setLoading(false);
+        const clearListen = () => {
+            window.clearTimeout(timeoutId);
+            unsubscribe();
+            unsubscribe = () => {};
+        };
+
+        const applySnapshot = (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const normalizedContent = normalizeEntryText(data.content);
+                const normalizedTitle = normalizeEntryText(data.title);
+                const normalizedTags = Array.isArray(data.tags) ? data.tags : [];
+                const normalizedMood = normalizeMood(data.mood);
+                const normalizedSubEntries = normalizeEntryRecord(data.subEntries);
+                const normalizedNumericEntries = normalizeEntryRecord(data.numericEntries);
+                const normalizedImages = normalizeImages(data);
+
+                setContent(normalizedContent);
+                setTitle(normalizedTitle);
+                setSelectedTags(normalizedTags);
+                setIsSpecial(Boolean(data.isSpecial));
+                setMood(normalizedMood);
+                setLocalAiSummaryRecord(data.aiSummary?.local || null);
+                setSubEntries(normalizedSubEntries);
+                setNumericEntries(normalizedNumericEntries);
+                setImages(normalizedImages);
+                lastSavedSignature.current = createEntrySignature({
+                    content: normalizedContent,
+                    title: normalizedTitle,
+                    selectedTags: normalizedTags,
+                    mood: normalizedMood,
+                    isSpecial: Boolean(data.isSpecial),
+                    images: normalizedImages,
+                    subEntries: normalizedSubEntries,
+                    numericEntries: normalizedNumericEntries,
+                    numericFields: [],
+                    entrySettingsLoaded: false
+                });
+                isFirstLoad.current = true;
+                setIsEditing(false);
                 return;
             }
 
-            try {
-                const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
-                let docSnap;
+            setIsEditing(true);
+            setContent('');
+            setTitle('');
+            setImages([]);
+            setSelectedTags([]);
+            setIsSpecial(false);
+            setMood(null);
+            setLocalAiSummaryRecord(null);
+            setSubEntries({});
+            setNumericEntries({});
+            lastSavedSignature.current = createEntrySignature({
+                content: '',
+                title: '',
+                selectedTags: [],
+                mood: null,
+                isSpecial: false,
+                subEntries: {},
+                numericEntries: {},
+                numericFields: [],
+                entrySettingsLoaded: false
+            });
+            isFirstLoad.current = true;
+        };
 
-                try {
-                    docSnap = await getDocWithTimeout(docRef);
-                } catch (networkError) {
-                    try {
-                        docSnap = await getDocFromCache(docRef);
-                    } catch {
-                        throw networkError;
-                    }
+        const fail = (error) => {
+            if (cancelled || delivered) return;
+            console.error("Error fetching entry:", error);
+            setLoadError(entryLoadErrorMessage(error));
+            setLoading(false);
+        };
+
+        const startListen = () => {
+            if (cancelled || !currentUser || delivered) return;
+            clearListen();
+            attempt += 1;
+            setLoading(true);
+            setLoadError('');
+
+            const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
+
+            // The calendar listener has usually already stored this day. Paint
+            // that copy immediately. getDoc() will not: while iOS still looks
+            // online it ignores cache and waits for a server event that the
+            // first home-screen launch often never delivers.
+            getDocFromCache(docRef).then((cached) => {
+                if (cancelled || delivered || !isUsableEntrySnapshot(cached, { alreadyApplied: delivered })) return;
+                applySnapshot(cached);
+                delivered = true;
+                setLoading(false);
+            }).catch(() => {});
+
+            unsubscribe = onSnapshot(docRef, (snapshot) => {
+                if (cancelled || !isUsableEntrySnapshot(snapshot, { alreadyApplied: delivered })) return;
+                if (delivered && isEditingRef.current) {
+                    clearListen();
+                    return;
                 }
+                applySnapshot(snapshot);
+                delivered = true;
+                setLoading(false);
+                if (!snapshot.metadata.fromCache) clearListen();
+            }, (error) => {
+                clearListen();
+                fail(error);
+            });
 
-                if (cancelled) return;
+            timeoutId = window.setTimeout(() => {
+                if (delivered) return;
+                clearListen();
+                const error = new Error('Entry load timed out');
+                error.code = ENTRY_LOAD_TIMEOUT_CODE;
+                fail(error);
+            }, ENTRY_LOAD_TIMEOUT_MS);
+        };
 
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    const normalizedContent = normalizeEntryText(data.content);
-                    const normalizedTitle = normalizeEntryText(data.title);
-                    const normalizedTags = Array.isArray(data.tags) ? data.tags : [];
-                    const normalizedMood = normalizeMood(data.mood);
-                    const normalizedSubEntries = normalizeEntryRecord(data.subEntries);
-                    const normalizedNumericEntries = normalizeEntryRecord(data.numericEntries);
-                    const normalizedImages = normalizeImages(data);
-
-                    setContent(normalizedContent);
-                    setTitle(normalizedTitle);
-                    setSelectedTags(normalizedTags);
-                    setIsSpecial(Boolean(data.isSpecial));
-                    setMood(normalizedMood);
-                    setLocalAiSummaryRecord(data.aiSummary?.local || null);
-                    setSubEntries(normalizedSubEntries);
-                    setNumericEntries(normalizedNumericEntries);
-                    setImages(normalizedImages);
-                    lastSavedSignature.current = createEntrySignature({
-                        content: normalizedContent,
-                        title: normalizedTitle,
-                        selectedTags: normalizedTags,
-                        mood: normalizedMood,
-                        isSpecial: Boolean(data.isSpecial),
-                        images: normalizedImages,
-                        subEntries: normalizedSubEntries,
-                        numericEntries: normalizedNumericEntries,
-                        numericFields: [],
-                        entrySettingsLoaded: false
-                    });
-                    isFirstLoad.current = true;
-
-                    setIsEditing(false); // Ensure we start in view mode for existing entries
-                } else {
-                    // New entry
-                    setIsEditing(true);
-                    setContent('');
-                    setTitle('');
-                    setImages([]);
-                    setSelectedTags([]);
-                    setIsSpecial(false);
-                    setMood(null);
-                    setLocalAiSummaryRecord(null);
-                    setSubEntries({});
-                    setNumericEntries({});
-                    lastSavedSignature.current = createEntrySignature({
-                        content: '',
-                        title: '',
-                        selectedTags: [],
-                        mood: null,
-                        isSpecial: false,
-                        subEntries: {},
-                        numericEntries: {},
-                        numericFields: [],
-                        entrySettingsLoaded: false
-                    });
-                    isFirstLoad.current = true;
-                }
-            } catch (error) {
-                if (cancelled) return;
-                console.error("Error fetching entry:", error);
-                setLoadError(
-                    error?.code === ENTRY_LOAD_TIMEOUT_CODE
-                        ? 'This entry took too long to load. iOS may have paused the connection. Try again.'
-                        : 'This entry could not be loaded. Check your connection and try again.'
-                );
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
+        if (!currentUser) {
+            setLoading(false);
+            return undefined;
         }
 
-        fetchEntry();
+        startListen();
+
+        const retryIfStuck = () => {
+            if (cancelled || delivered || attempt >= 3) return;
+            if (document.visibilityState !== 'visible') return;
+            startListen();
+        };
+
+        document.addEventListener('visibilitychange', retryIfStuck);
+        window.addEventListener('pageshow', retryIfStuck);
 
         return () => {
             cancelled = true;
+            clearListen();
+            document.removeEventListener('visibilitychange', retryIfStuck);
+            window.removeEventListener('pageshow', retryIfStuck);
         };
     }, [date, currentUser, reloadKey]);
 

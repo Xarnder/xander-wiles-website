@@ -159,6 +159,24 @@ function advanceAfterStatus(
 	if (!current || session.phase !== 'running') return session;
 
 	const statuses = { ...session.statuses, [current.id]: status };
+	const revisitThrough = session.revisitThroughIndex;
+	const mustWalkForward =
+		typeof revisitThrough === 'number' &&
+		revisitThrough > session.currentIndex &&
+		revisitThrough < session.tasks.length;
+
+	// After Back, replay each task the user retreated through. Skipping
+	// already-resolved tasks here would jump to the frontier and drop the rest.
+	if (mustWalkForward) {
+		return {
+			...session,
+			statuses,
+			currentIndex: session.currentIndex + 1,
+			phase: 'running',
+			revisitThroughIndex: revisitThrough
+		};
+	}
+
 	const nextIndex = nextPendingIndex(session, statuses, session.currentIndex);
 
 	if (nextIndex === -1) {
@@ -166,7 +184,8 @@ function advanceAfterStatus(
 			...session,
 			statuses,
 			currentIndex: session.currentIndex,
-			phase: 'summary'
+			phase: 'summary',
+			revisitThroughIndex: undefined
 		};
 	}
 
@@ -174,7 +193,8 @@ function advanceAfterStatus(
 		...session,
 		statuses,
 		currentIndex: nextIndex,
-		phase: 'running'
+		phase: 'running',
+		revisitThroughIndex: undefined
 	};
 }
 
@@ -206,10 +226,12 @@ export function goBack(session: RunSession): RunSession {
 		};
 	}
 	if (session.currentIndex <= 0) return session;
+	const revisitThroughIndex = Math.max(session.revisitThroughIndex ?? -1, session.currentIndex);
 	return {
 		...session,
 		currentIndex: session.currentIndex - 1,
-		phase: 'running'
+		phase: 'running',
+		revisitThroughIndex
 	};
 }
 
