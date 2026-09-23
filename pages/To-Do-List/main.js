@@ -3419,20 +3419,35 @@ function syncComposerAddState() {
 
 function positionAddTaskComposer() {
     const el = document.getElementById('add-task-composer');
-    if (!el || el.classList.contains('hidden')) return;
+    const shield = document.getElementById('add-task-composer-shield');
+    if (!el || el.classList.contains('hidden')) {
+        if (shield) shield.hidden = true;
+        return;
+    }
     const vv = window.visualViewport;
     const top = vv ? vv.offsetTop : 0;
     const left = vv ? vv.offsetLeft : 0;
     const width = vv ? vv.width : window.innerWidth;
     const height = vv ? vv.height : window.innerHeight;
-    const keyboardOpen = vv ? (window.innerHeight - vv.height) > 80 : false;
-    const key = `${Math.round(top)}|${Math.round(left)}|${Math.round(width)}|${Math.round(height)}|${keyboardOpen}`;
+    const below = Math.max(0, window.innerHeight - (top + height));
+    const keyboardOpen = below > 80 || (window.innerHeight - height) > 80;
+    const cover = keyboardOpen ? Math.max(Math.ceil(below), 96) : 0;
+    const key = `${Math.round(top)}|${Math.round(left)}|${Math.round(width)}|${Math.round(height)}|${cover}`;
     if (key === composerViewportKey) return;
     composerViewportKey = key;
     el.style.width = `${Math.round(width)}px`;
     el.style.height = `${Math.round(height)}px`;
-    el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    el.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
     el.style.paddingBottom = keyboardOpen ? '0px' : '';
+    if (!shield) return;
+    if (!cover) {
+        shield.hidden = true;
+        return;
+    }
+    shield.hidden = false;
+    shield.style.width = `${Math.round(width)}px`;
+    shield.style.height = `${cover}px`;
+    shield.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top + height)}px, 0)`;
 }
 
 function startComposerViewportWatch() {
@@ -3725,6 +3740,8 @@ function closeAddTaskComposer({ restore = false } = {}) {
     root.style.height = '';
     root.style.transform = '';
     root.style.paddingBottom = '';
+    const shield = document.getElementById('add-task-composer-shield');
+    if (shield) shield.hidden = true;
     if (field && !restore) field.value = '';
 }
 

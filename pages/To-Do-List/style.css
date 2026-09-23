@@ -2800,21 +2800,31 @@ html.add-task-composer-open body {
 .add-task-composer-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-shrink: 0;
-    padding: 8px 12px 12px;
+    padding: 4px 12px 6px;
     border-top: 1px solid var(--glass-border);
-    background: color-mix(in oklch, var(--dropdown-bg, oklch(0.16 0 0)) 88%, transparent);
+    background: var(--dropdown-bg, oklch(0.16 0 0));
     touch-action: manipulation;
+}
+
+.add-task-composer-shield {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10049;
+    pointer-events: none;
+    background: var(--dropdown-bg, oklch(0.16 0 0));
 }
 
 .add-task-composer-exit,
 .add-task-composer-add {
     flex: 1 1 0;
-    min-height: 48px;
+    min-height: 24px;
     min-width: 0;
-    padding: 10px 16px;
-    font-size: 1rem;
+    padding: 2px 12px;
+    font-size: 0.8rem;
+    line-height: 1.1;
     touch-action: manipulation;
 }
 
@@ -2928,9 +2938,9 @@ html.add-task-composer-open body {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin: 0 16px 10px;
-    min-height: 22px;
+    gap: 8px;
+    margin: 0 12px 4px;
+    min-height: 16px;
 }
 
 .add-task-composer-countdown {
@@ -2972,24 +2982,26 @@ html.add-task-composer-open body {
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
-    gap: 8px;
-    margin: 0 12px 8px;
+    justify-content: center;
+    gap: 4px;
+    margin: 0 12px 4px;
     overflow: visible;
     touch-action: manipulation;
 }
 
 .add-task-composer-tags .tag-mode-btn {
-    flex: 1 1 calc(50% - 8px);
-    min-width: min(100%, 8.75rem);
-    max-width: 100%;
-    min-height: 44px;
+    flex: 1 1 calc(25% - 4px);
+    min-width: min(100%, 4rem);
+    max-width: calc(50% - 2px);
+    min-height: 24px;
     height: auto;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    line-height: 1.25;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    text-overflow: unset;
+    padding: 2px 6px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 

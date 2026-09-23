@@ -1429,6 +1429,7 @@ export function renderComposerTagBar() {
     container.innerHTML = '';
     tags.forEach((tag) => {
         container.appendChild(buildTagButton(tag, activeId, null, {
+            compact: true,
             labelMode: 'composer',
             bindClick: false
         }));
