@@ -2102,6 +2102,17 @@ body.disable-important-animation .nested-idea-display-item.important {
     animation:
         importantFillGlowPulseLight 2.0s ease-in-out infinite,
         importantBorderPulseLight 2.0s ease-in-out infinite;
+    animation-delay:
+        calc((sibling-index() - 1) * 0.22s),
+        calc((sibling-index() - 1) * 0.22s);
+}
+
+/* Stagger the pulse by list position so a wave travels down the important tasks. */
+body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task),
+body:not(.disable-important-animation) .nested-idea-display-item.important:not(.nested-idea-completed) {
+    animation-delay:
+        calc((sibling-index() - 1) * 0.22s),
+        calc((sibling-index() - 1) * 0.22s);
 }
 
 @keyframes importantFillGlowPulseLight {
