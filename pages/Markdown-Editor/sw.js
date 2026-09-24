@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v134';
+const CACHE_NAME = 'md-editor-shell-v137';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -31,6 +31,8 @@ const ASSETS = [
     './Assets/SVGs/open-folder-outline-icon.svg',
     './Assets/SVGs/Up-ArrowIcons.svg',
     './Assets/SVGs/Down-ArrowIcons.svg',
+    './Assets/SVGs/To-TopIcons.svg',
+    './Assets/SVGs/To-BottomIcons.svg',
     './Assets/SVGs/Left-ArrowIcons.svg',
     './Assets/SVGs/Right-ArrowIcons.svg',
     './Assets/SVGs/search.svg',

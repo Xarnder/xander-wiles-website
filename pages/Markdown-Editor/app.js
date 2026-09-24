@@ -857,6 +857,7 @@ function readPwaTopGap() {
 
 function writePwaTopGap(gapPx) {
     const n = clampPwaTopGap(gapPx);
+    spacingEdited = true;
     try {
         localStorage.setItem(PWA_TOP_GAP_KEY, String(n));
         localStorage.setItem(PWA_TOP_GAP_MIGRATED_KEY, '1');
@@ -923,6 +924,7 @@ function readPwaBottomOffset() {
 
 function writePwaBottomOffset(offsetPx) {
     const n = clampPwaBottomOffset(offsetPx);
+    spacingEdited = true;
     try {
         localStorage.setItem(PWA_BOTTOM_OFFSET_KEY, String(n));
         localStorage.setItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY, '1');
@@ -1094,40 +1096,85 @@ function applySavedBlockingSave() {
 }
 
 function buildSettingsSnapshot() {
-    return {
-        theme: readTheme(),
-        previewTocSticky: readPreviewTocSticky(),
-        previewTocOpen: readPreviewTocOpen(),
-        pwaTopGap: readPwaTopGap(),
-        pwaBottomOffset: readPwaBottomOffset(),
-        previewFontScale: readPreviewFontScale(),
-        listStripe: readListStripe(),
-        listLayout: readListLayout(),
-        defaultEditView: readDefaultEditView(),
-        doubleTapCopy: readDoubleTapCopyEnabled(),
-        showFileExtensions: readShowFileExtensionsEnabled(),
-        blockingSave: readBlockingSaveEnabled(),
-        showDates: readShowDatesEnabled(),
-        finderMdOrder: readFinderLayoutPrefs(),
-        finderSort: readFinderSort(),
+    const snap = {
         pinnedItems: readPinnedItems(),
         pinnedTombs: readPinnedTombs(),
-        openedFiles: openedFilesSnapshot(),
         fileTextColors: Object.fromEntries(readFileTextColorsMap()),
         fileTextColorAt: readFileTextColorAtMap(),
         fileTextBold: Object.fromEntries(readFileTextBoldMap()),
         fileTextBoldAt: readFileTextBoldAtMap(),
     };
+    const opened = openedFilesSnapshot();
+    if (opened && Object.keys(opened).length) snap.openedFiles = opened;
+    try {
+        if (localStorage.getItem(THEME_KEY)) snap.theme = readTheme();
+        if (localStorage.getItem(PREVIEW_TOC_STICKY_KEY)) snap.previewTocSticky = readPreviewTocSticky();
+        if (localStorage.getItem(PREVIEW_TOC_OPEN_KEY)) snap.previewTocOpen = readPreviewTocOpen();
+        if (spacingEdited || storedGapIsCustom(PWA_TOP_GAP_KEY, PWA_TOP_GAP_DEFAULT)) {
+            if (localStorage.getItem(PWA_TOP_GAP_KEY)) snap.pwaTopGap = readPwaTopGap();
+        }
+        if (spacingEdited || storedGapIsCustom(PWA_BOTTOM_OFFSET_KEY, PWA_BOTTOM_OFFSET_DEFAULT)) {
+            if (localStorage.getItem(PWA_BOTTOM_OFFSET_KEY)) snap.pwaBottomOffset = readPwaBottomOffset();
+        }
+        if (localStorage.getItem(PREVIEW_FONT_SCALE_KEY)) snap.previewFontScale = readPreviewFontScale();
+        if (localStorage.getItem(LIST_STRIPE_KEY)) snap.listStripe = readListStripe();
+        if (localStorage.getItem(LIST_LAYOUT_KEY)) snap.listLayout = readListLayout();
+        if (localStorage.getItem(DEFAULT_EDIT_VIEW_KEY)) snap.defaultEditView = readDefaultEditView();
+        if (localStorage.getItem(DOUBLE_TAP_COPY_KEY)) snap.doubleTapCopy = readDoubleTapCopyEnabled();
+        if (localStorage.getItem(SHOW_FILE_EXTENSIONS_KEY)) snap.showFileExtensions = readShowFileExtensionsEnabled();
+        if (localStorage.getItem(BLOCKING_SAVE_KEY)) snap.blockingSave = readBlockingSaveEnabled();
+        if (localStorage.getItem(SHOW_DATES_KEY)) snap.showDates = readShowDatesEnabled();
+        if (
+            localStorage.getItem(FINDER_MD_ORDER_MOBILE_KEY) ||
+            localStorage.getItem(FINDER_MD_ORDER_DESKTOP_KEY)
+        ) {
+            snap.finderMdOrder = readFinderLayoutPrefs();
+        }
+        if (localStorage.getItem(FINDER_SORT_KEY)) snap.finderSort = readFinderSort();
+        if (
+            localStorage.getItem(PWA_TOP_GAP_MIGRATED_KEY) === '1' ||
+            localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1'
+        ) {
+            snap.pwaSpacingMigrated = true;
+        }
+    } catch {
+        // ignore
+    }
+    return snap;
 }
 
-/** True after a successful cloud apply, so pagehide cannot flush empty defaults. */
-let settingsHydratedFromCloud = false;
+/** True after the sign-in Drive pull finishes. Pushes before that can overwrite cloud with boot defaults. */
+let settingsCloudPullDone = false;
+/** A local edit happened before the pull finished and still needs a cloud write. */
+let pushAfterPull = false;
+/** True after the user changes a setting this session (not the boot-script gap defaults). */
+let userEditedSettings = false;
+/** True after the user moves a spacing slider, so a default gap can still be saved. */
+let spacingEdited = false;
 
-function localSettingsAreMeaningful() {
+function storedGapIsCustom(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw == null || raw === '') return false;
+        const n = Math.round(Number(raw));
+        return Number.isFinite(n) && n !== fallback;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Prefs worth restoring or uploading.
+ * Ignores the status-bar gap keys the boot script writes on every cold start,
+ * unless the user actually moved them off the default.
+ */
+function hasRestorableUserSettings() {
     if (readPinnedItems().length) return true;
     if (Object.keys(readPinnedTombs()).length) return true;
     if (readFileTextColorsMap().size) return true;
     if (readFileTextBoldMap().size) return true;
+    if (storedGapIsCustom(PWA_TOP_GAP_KEY, PWA_TOP_GAP_DEFAULT)) return true;
+    if (storedGapIsCustom(PWA_BOTTOM_OFFSET_KEY, PWA_BOTTOM_OFFSET_DEFAULT)) return true;
     try {
         if (localStorage.getItem(THEME_KEY)) return true;
         if (localStorage.getItem(LIST_STRIPE_KEY)) return true;
@@ -1135,8 +1182,6 @@ function localSettingsAreMeaningful() {
         if (localStorage.getItem(DEFAULT_EDIT_VIEW_KEY)) return true;
         if (localStorage.getItem(SHOW_FILE_EXTENSIONS_KEY)) return true;
         if (localStorage.getItem(DOUBLE_TAP_COPY_KEY)) return true;
-        if (localStorage.getItem(PWA_TOP_GAP_KEY)) return true;
-        if (localStorage.getItem(PWA_BOTTOM_OFFSET_KEY)) return true;
         if (localStorage.getItem(PREVIEW_FONT_SCALE_KEY)) return true;
         if (localStorage.getItem(FINDER_SORT_KEY)) return true;
         if (localStorage.getItem(FINDER_MD_ORDER_MOBILE_KEY)) return true;
@@ -1152,10 +1197,16 @@ function localSettingsAreMeaningful() {
 }
 
 function canPushSettingsToCloud() {
-    return settingsHydratedFromCloud || localSettingsAreMeaningful();
+    return settingsCloudPullDone && (userEditedSettings || hasRestorableUserSettings());
 }
 
 function queueSettingsCloudSync(options = {}) {
+    userEditedSettings = true;
+    if (hasRestorableUserSettings()) {
+        saveLastGoodSettings(buildSettingsSnapshot());
+        pushAfterPull = true;
+    }
+    if (!settingsCloudPullDone) return;
     if (!isSignedIn()) return;
     if (!canPushSettingsToCloud()) return;
     scheduleCloudSettingsSave(buildSettingsSnapshot, {
@@ -1205,7 +1256,9 @@ function applyCloudSettings(cloud) {
 
         if (cloud.pwaTopGap != null) {
             let n = clampPwaTopGap(cloud.pwaTopGap);
-            const alreadyTotal = localStorage.getItem(PWA_TOP_GAP_MIGRATED_KEY) === '1';
+            const alreadyTotal =
+                cloud.pwaSpacingMigrated === true ||
+                localStorage.getItem(PWA_TOP_GAP_MIGRATED_KEY) === '1';
             if (!alreadyTotal) {
                 const safe = measureSafeTopPx();
                 // Pre-migration cloud values were EXTRA on top of safe-area.
@@ -1222,7 +1275,9 @@ function applyCloudSettings(cloud) {
 
         if (cloud.pwaBottomOffset != null) {
             let n = clampPwaBottomOffset(cloud.pwaBottomOffset);
-            const alreadyInset = localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1';
+            const alreadyInset =
+                cloud.pwaSpacingMigrated === true ||
+                localStorage.getItem(PWA_BOTTOM_OFFSET_MIGRATED_KEY) === '1';
             if (!alreadyInset) {
                 const safe = measureSafeBottomPx();
                 // Pre-migration cloud values were "pull down" amounts.
@@ -1426,7 +1481,8 @@ async function applyCachedSettingsFallback() {
 }
 
 async function restoreSettingsFromLastGood() {
-    if (localSettingsAreMeaningful()) return;
+    // Gap keys written by the boot script must not hide a saved pin list.
+    if (hasRestorableUserSettings()) return;
     await applyCachedSettingsFallback();
 }
 
@@ -1435,41 +1491,60 @@ function sleepMs(ms) {
 }
 
 async function syncSettingsFromCloudOnce() {
-    const result = await pullCloudSettings(buildSettingsSnapshot);
+    const result = await pullCloudSettings(buildSettingsSnapshot, {
+        seedIfMissing: hasRestorableUserSettings(),
+    });
     if (result.fromCloud) {
         applyMergedCloudSettings(result.settings);
-        settingsHydratedFromCloud = true;
         await saveLastGoodSettings(buildSettingsSnapshot());
-        if (canPushSettingsToCloud()) {
-            await flushCloudSettingsSave(buildSettingsSnapshot);
-        }
-        return;
+        return { write: true };
     }
     if (result.readFailed) {
         await applyCachedSettingsFallback();
-        return;
+        return { write: false };
     }
-    if (result.created && localSettingsAreMeaningful()) {
-        settingsHydratedFromCloud = true;
+    if (result.created) {
         await saveLastGoodSettings(buildSettingsSnapshot());
+        return { write: true };
     }
+    // No Drive file yet. Write only if the user pinned or changed settings during this pull.
+    return { write: pushAfterPull };
 }
 
 async function syncSettingsFromCloud() {
-    if (!isSignedIn()) return;
+    if (!isSignedIn()) {
+        settingsCloudPullDone = true;
+        return;
+    }
+    let write = false;
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-            await syncSettingsFromCloudOnce();
-            return;
+            const result = await syncSettingsFromCloudOnce();
+            write = Boolean(result?.write);
+            lastErr = null;
+            break;
         } catch (err) {
             lastErr = err;
             console.warn('[md-editor] settings cloud load failed', err);
             if (attempt < 2) await sleepMs(400 * (attempt + 1));
         }
     }
-    await applyCachedSettingsFallback();
-    if (lastErr) console.warn('[md-editor] settings cloud load gave up', lastErr);
+    if (lastErr) {
+        await applyCachedSettingsFallback();
+        console.warn('[md-editor] settings cloud load gave up', lastErr);
+        write = false;
+    }
+    settingsCloudPullDone = true;
+    if (write && hasRestorableUserSettings()) {
+        pushAfterPull = false;
+        try {
+            await flushCloudSettingsSave(buildSettingsSnapshot);
+            await saveLastGoodSettings(buildSettingsSnapshot());
+        } catch (err) {
+            console.warn('[md-editor] settings cloud save after restore failed', err);
+        }
+    }
 }
 
 function readRecentFiles() {
@@ -4647,13 +4722,18 @@ async function signOut() {
             if (state.editor.dirty) return;
         }
     }
-    try {
-        await flushCloudSettingsSave(buildSettingsSnapshot);
-    } catch {
-        // ignore
+    if (canPushSettingsToCloud()) {
+        try {
+            await flushCloudSettingsSave(buildSettingsSnapshot);
+        } catch {
+            // ignore
+        }
     }
     resetCloudSettingsState();
-    settingsHydratedFromCloud = false;
+    settingsCloudPullDone = false;
+    pushAfterPull = false;
+    userEditedSettings = false;
+    spacingEdited = false;
     pinnedMetaCache.clear();
     clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
@@ -4715,6 +4795,22 @@ async function afterSignedIn() {
 
 function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
+    // Only reload when an already-controlling worker is replaced (app update).
+    // The first install must not refresh, or sign-in and the settings pull restart.
+    if (navigator.serviceWorker.controller) {
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            const reload = () => window.location.reload();
+            if (canPushSettingsToCloud()) {
+                flushCloudSettingsSave(buildSettingsSnapshot).finally(reload);
+                window.setTimeout(reload, 1200);
+                return;
+            }
+            reload();
+        });
+    }
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').catch((err) => {
             console.warn('SW registration failed', err);

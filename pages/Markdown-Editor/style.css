@@ -3281,16 +3281,24 @@ html.is-pure-reader-preview #btn-insert-list {
     mask-image: url('./Assets/SVGs/Left-ArrowIcons.svg');
 }
 
-.mdplain-mini-icon-btn-icon--top,
 .mdplain-mini-icon-btn-icon--up {
     -webkit-mask-image: url('./Assets/SVGs/Up-ArrowIcons.svg');
     mask-image: url('./Assets/SVGs/Up-ArrowIcons.svg');
 }
 
-.mdplain-mini-icon-btn-icon--bottom,
 .mdplain-mini-icon-btn-icon--down {
     -webkit-mask-image: url('./Assets/SVGs/Down-ArrowIcons.svg');
     mask-image: url('./Assets/SVGs/Down-ArrowIcons.svg');
+}
+
+.mdplain-mini-icon-btn-icon--top {
+    -webkit-mask-image: url('./Assets/SVGs/To-TopIcons.svg');
+    mask-image: url('./Assets/SVGs/To-TopIcons.svg');
+}
+
+.mdplain-mini-icon-btn-icon--bottom {
+    -webkit-mask-image: url('./Assets/SVGs/To-BottomIcons.svg');
+    mask-image: url('./Assets/SVGs/To-BottomIcons.svg');
 }
 
 .mdplain-mini-icon-btn-icon--delete {

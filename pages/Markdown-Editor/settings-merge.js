@@ -312,6 +312,7 @@ export function normalizeCloudSettings(parsed) {
             typeof parsed.previewTocOpen === 'boolean' ? parsed.previewTocOpen : undefined,
         pwaTopGap: parsed.pwaTopGap,
         pwaBottomOffset: parsed.pwaBottomOffset,
+        pwaSpacingMigrated: parsed.pwaSpacingMigrated === true ? true : undefined,
         previewFontScale: parsed.previewFontScale,
         listStripe: parsed.listStripe,
         listLayout: parsed.listLayout,

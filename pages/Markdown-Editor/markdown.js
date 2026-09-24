@@ -769,6 +769,63 @@ export function movePlainListItemAmongSiblings(items, fromIndex, delta) {
 }
 
 /**
+ * First or last sibling index at the same indent under the same parent.
+ * @param {Array<{ indent?: string }>} items
+ * @param {number} index
+ * @param {'top'|'bottom'} edge
+ * @returns {number} the index itself when it is already at that edge
+ */
+export function plainListSiblingEdgeIndex(items, index, edge) {
+    const list = items || [];
+    if (index < 0 || index >= list.length) return -1;
+    const dir = edge === 'top' ? -1 : edge === 'bottom' ? 1 : 0;
+    if (!dir) return -1;
+    const depth = plainListDepthFromIndent(list[index].indent);
+    let edgeIndex = index;
+    if (dir < 0) {
+        for (let i = index - 1; i >= 0; i -= 1) {
+            const d = plainListDepthFromIndent(list[i].indent);
+            if (d < depth) break;
+            if (d === depth) edgeIndex = i;
+        }
+        return edgeIndex;
+    }
+    let i = plainListInsertIndexAfterSubtree(list, index);
+    while (i < list.length) {
+        const d = plainListDepthFromIndent(list[i].indent);
+        if (d < depth) break;
+        if (d !== depth) break;
+        edgeIndex = i;
+        i = plainListInsertIndexAfterSubtree(list, i);
+    }
+    return edgeIndex;
+}
+
+/**
+ * Move an item and its nested descendants to the first or last sibling
+ * at the same indent. Stays under the same parent.
+ * @param {Array<object>} items
+ * @param {number} fromIndex
+ * @param {'top'|'bottom'} edge
+ */
+export function movePlainListItemToSiblingEdge(items, fromIndex, edge) {
+    const next = [...(items || [])];
+    const edgeIndex = plainListSiblingEdgeIndex(next, fromIndex, edge);
+    if (edgeIndex < 0 || edgeIndex === fromIndex) return next;
+    const fromEnd = plainListInsertIndexAfterSubtree(next, fromIndex);
+    const block = next.slice(fromIndex, fromEnd);
+    if (edge === 'top') {
+        next.splice(fromIndex, block.length);
+        next.splice(edgeIndex, 0, ...block);
+        return next;
+    }
+    const edgeEnd = plainListInsertIndexAfterSubtree(next, edgeIndex);
+    next.splice(fromIndex, block.length);
+    next.splice(edgeEnd - block.length, 0, ...block);
+    return next;
+}
+
+/**
  * @param {{ task?: boolean, checked?: boolean, text?: string, depth?: number, children?: object[] }} node
  * @param {{ showDates?: boolean }} inlineOpts
  * @returns {string}

@@ -13,6 +13,9 @@ import {
 import {
     cloudHasPrefs,
     cloudSettingsScore,
+    mergeFileTextBold,
+    mergeFileTextColors,
+    mergePinnedState,
     parseCloudSettingsText,
 } from './settings-merge.js';
 import { saveLastGoodSettings } from './settings-cache.js';
@@ -116,11 +119,17 @@ export function withCloudApplyGuard(fn) {
  *   readFailed: boolean,
  * }>}
  */
-export async function pullCloudSettings(getLocalSnapshot) {
+export async function pullCloudSettings(getLocalSnapshot, options = {}) {
     const local = stampSettingsSnapshot(getLocalSnapshot);
     const files = await listAppDataFiles(SETTINGS_CLOUD_FILE_NAME);
+    // After a PWA update, local storage is often only boot defaults. Do not
+    // create a new Drive file from those — that hides the real settings file.
+    const seedIfMissing = options.seedIfMissing !== false;
 
     if (!files.length) {
+        if (!seedIfMissing) {
+            return { settings: local, created: false, fromCloud: false, readFailed: false };
+        }
         const created = await createAppDataFile(
             SETTINGS_CLOUD_FILE_NAME,
             JSON.stringify(local, null, 2)
@@ -149,53 +158,163 @@ export async function pullCloudSettings(getLocalSnapshot) {
         return { settings: best.settings, created: false, fromCloud: true, readFailed: false };
     }
 
-    // Files exist but none had usable prefs — keep them; do not seed-overwrite.
-    settingsFileId = files[0].id;
+    // Files exist but none had usable prefs — keep them; do not seed-overwrite
+    // and do not remember an id that a later push would clobber.
     return { settings: local, created: false, fromCloud: false, readFailed: true };
+}
+
+/**
+ * Union pins and colours so a thin local snapshot cannot wipe Drive.
+ * Scalar prefs on `local` win when present; pin lists are merged by timestamp.
+ * @param {CloudSettings} cloud
+ * @param {CloudSettings} local
+ * @returns {CloudSettings}
+ */
+function mergeSnapshotForPush(cloud, local) {
+    const pins = mergePinnedState({
+        localItems: local.pinnedItems,
+        localTombs: local.pinnedTombs,
+        cloudItems: cloud.pinnedItems,
+        cloudTombs: cloud.pinnedTombs,
+    });
+    const colors = mergeFileTextColors({
+        localColors: local.fileTextColors,
+        localAt: local.fileTextColorAt,
+        cloudColors: cloud.fileTextColors,
+        cloudAt: cloud.fileTextColorAt,
+    });
+    const bold = mergeFileTextBold({
+        localBold: local.fileTextBold,
+        localAt: local.fileTextBoldAt,
+        cloudBold: cloud.fileTextBold,
+        cloudAt: cloud.fileTextBoldAt,
+    });
+    return {
+        ...cloud,
+        ...local,
+        pinnedItems: pins.items,
+        pinnedTombs: pins.tombs,
+        fileTextColors: colors.colors,
+        fileTextColorAt: colors.at,
+        fileTextBold: bold.bold,
+        fileTextBoldAt: bold.at,
+        version: SETTINGS_CLOUD_VERSION,
+        updatedAt: Date.now(),
+    };
 }
 
 /**
  * @param {CloudSettings} snapshot
  */
+/**
+ * Read every settings copy and fold it into `next`.
+ * A network failure aborts the save. Unreadable JSON is skipped so we never
+ * replace those bytes with a thinner snapshot.
+ * @param {Array<{ id: string }>} files
+ * @param {CloudSettings} next
+ * @returns {Promise<{ next: CloudSettings, bestId: string | null, networkFailed: boolean }>}
+ */
+async function mergeExistingSettingsFiles(files, next) {
+    let bestId = null;
+    let bestScore = -1;
+    let networkFailed = false;
+    let merged = next;
+    for (const file of files) {
+        if (!file?.id) continue;
+        try {
+            const cloud = parseCloudSettingsText(await getFileContent(file.id));
+            if (!cloud) continue;
+            const score = cloudSettingsScore(cloud);
+            if (bestId == null || score > bestScore) {
+                bestScore = score;
+                bestId = file.id;
+            }
+            merged = mergeSnapshotForPush(cloud, merged);
+        } catch (err) {
+            if (err?.status === 404) continue;
+            networkFailed = true;
+            console.warn('[md-editor] settings file unreadable during save', file.id, err);
+        }
+    }
+    return { next: merged, bestId, networkFailed };
+}
+
+/**
+ * @param {CloudSettings} snapshot
+ * @returns {Promise<CloudSettings>} the snapshot actually written (cloud pins included)
+ */
 export async function pushCloudSettings(snapshot, options = {}) {
-    const body = JSON.stringify(
-        {
-            ...snapshot,
-            version: SETTINGS_CLOUD_VERSION,
-            updatedAt: snapshot.updatedAt || Date.now(),
-        },
-        null,
-        2
-    );
-    const writeOpts = { keepalive: Boolean(options.keepalive) };
+    let next = {
+        ...snapshot,
+        version: SETTINGS_CLOUD_VERSION,
+        updatedAt: snapshot.updatedAt || Date.now(),
+    };
+
+    if (settingsFileId) {
+        try {
+            const cloud = parseCloudSettingsText(await getFileContent(settingsFileId));
+            if (cloud) next = mergeSnapshotForPush(cloud, next);
+            else settingsFileId = null;
+        } catch (err) {
+            if (err?.status === 404) settingsFileId = null;
+            else throw err;
+        }
+    }
 
     if (!settingsFileId) {
         const existing = await listAppDataFiles(SETTINGS_CLOUD_FILE_NAME);
         if (existing.length) {
-            settingsFileId = existing[0].id;
-        } else {
-            const file = await createAppDataFile(SETTINGS_CLOUD_FILE_NAME, body);
-            settingsFileId = file.id;
-            return file;
+            const merged = await mergeExistingSettingsFiles(existing, next);
+            next = merged.next;
+            if (!merged.bestId) {
+                if (merged.networkFailed) {
+                    throw new Error('Could not read saved settings before writing');
+                }
+            } else {
+                settingsFileId = merged.bestId;
+            }
         }
     }
 
+    const body = JSON.stringify(next, null, 2);
+    const writeOpts = { keepalive: Boolean(options.keepalive) };
+
+    if (!settingsFileId) {
+        const file = await createAppDataFile(SETTINGS_CLOUD_FILE_NAME, body);
+        settingsFileId = file.id;
+        return next;
+    }
+
     try {
-        return await updateFileContent(settingsFileId, body, 'application/json', writeOpts);
+        await updateFileContent(settingsFileId, body, 'application/json', writeOpts);
+        return next;
     } catch (err) {
-        // File may have been deleted — reuse another copy or create one.
-        if (err?.status === 404) {
-            settingsFileId = null;
-            const existing = await listAppDataFiles(SETTINGS_CLOUD_FILE_NAME);
-            if (existing.length) {
-                settingsFileId = existing[0].id;
-                return await updateFileContent(settingsFileId, body, 'application/json', writeOpts);
+        if (err?.status !== 404) throw err;
+        const staleId = settingsFileId;
+        settingsFileId = null;
+        const others = (await listAppDataFiles(SETTINGS_CLOUD_FILE_NAME)).filter(
+            (file) => file.id !== staleId
+        );
+        if (others.length) {
+            const merged = await mergeExistingSettingsFiles(others, next);
+            next = merged.next;
+            if (merged.networkFailed && !merged.bestId) {
+                throw new Error('Could not read saved settings before writing');
             }
-            const file = await createAppDataFile(SETTINGS_CLOUD_FILE_NAME, body);
-            settingsFileId = file.id;
-            return file;
+            if (merged.bestId) {
+                settingsFileId = merged.bestId;
+                await updateFileContent(
+                    merged.bestId,
+                    JSON.stringify(next, null, 2),
+                    'application/json',
+                    writeOpts
+                );
+                return next;
+            }
         }
-        throw err;
+        const file = await createAppDataFile(SETTINGS_CLOUD_FILE_NAME, JSON.stringify(next, null, 2));
+        settingsFileId = file.id;
+        return next;
     }
 }
 
@@ -204,8 +323,8 @@ async function pushSnapshotWithRetry(getSnapshot, options = {}) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
             const snap = stampSettingsSnapshot(getSnapshot);
-            await pushCloudSettings(snap, { keepalive: Boolean(options.keepalive) });
-            await saveLastGoodSettings(snap);
+            const saved = await pushCloudSettings(snap, { keepalive: Boolean(options.keepalive) });
+            await saveLastGoodSettings(saved || snap);
             return;
         } catch (err) {
             lastErr = err instanceof Error ? err : new Error(String(err));

@@ -8,7 +8,9 @@ import test from 'node:test';
 import {
     formatPlainItemSubtreeClipboard,
     movePlainListItemAmongSiblings,
+    movePlainListItemToSiblingEdge,
     plainListIndentForDepth,
+    plainListSiblingEdgeIndex,
     plainListSiblingMoveTarget,
 } from './markdown.js';
 
@@ -96,6 +98,49 @@ test('top-level items move among top-level siblings with nested children attache
     const a = items.findIndex((it) => it.id === 'A');
     const next = movePlainListItemAmongSiblings(items, a, 1);
     assert.deepEqual(ids(next), ['B', 'b1', 'A', 'a1', 'a2', 'a2x', 'a2y', 'a3']);
+});
+
+test('move to the top or bottom of the same indent level keeps children and parent', () => {
+    const items = sampleTree();
+    const a2 = items.findIndex((it) => it.id === 'a2');
+    const a1 = items.findIndex((it) => it.id === 'a1');
+    const a = items.findIndex((it) => it.id === 'A');
+    assert.equal(plainListSiblingEdgeIndex(items, a2, 'top'), a1);
+    assert.equal(plainListSiblingEdgeIndex(items, a2, 'bottom'), items.findIndex((it) => it.id === 'a3'));
+    assert.deepEqual(ids(movePlainListItemToSiblingEdge(items, a2, 'top')), [
+        'A',
+        'a2',
+        'a2x',
+        'a2y',
+        'a1',
+        'a3',
+        'B',
+        'b1',
+    ]);
+    assert.deepEqual(ids(movePlainListItemToSiblingEdge(items, a2, 'bottom')), [
+        'A',
+        'a1',
+        'a3',
+        'a2',
+        'a2x',
+        'a2y',
+        'B',
+        'b1',
+    ]);
+    assert.deepEqual(ids(movePlainListItemToSiblingEdge(items, a, 'bottom')), [
+        'B',
+        'b1',
+        'A',
+        'a1',
+        'a2',
+        'a2x',
+        'a2y',
+        'a3',
+    ]);
+    assert.deepEqual(ids(movePlainListItemToSiblingEdge(items, a1, 'top')), ids(items));
+    const b1 = items.findIndex((it) => it.id === 'b1');
+    assert.equal(plainListSiblingEdgeIndex(items, b1, 'bottom'), b1);
+    assert.deepEqual(ids(movePlainListItemToSiblingEdge(items, b1, 'bottom')), ids(items));
 });
 
 test('copying a leaf item stays a single line', () => {

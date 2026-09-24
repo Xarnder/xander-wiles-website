@@ -539,13 +539,17 @@ export async function listChildFolders(parentId = ROOT_FOLDER_ID) {
  * @param {string} name
  * @returns {Promise<Array<{ id: string, name: string, modifiedTime?: string }>>}
  */
-export async function listAppDataFiles(name) {
-    const safeName = String(name || '').replace(/'/g, "\\'");
+async function listAppDataFolder(name) {
+    const clauses = ["trashed = false", "'appDataFolder' in parents"];
+    if (name) {
+        const safeName = String(name).replace(/'/g, "\\'");
+        clauses.unshift(`name = '${safeName}'`);
+    }
     const files = [];
     let pageToken = '';
     do {
         const params = new URLSearchParams({
-            q: `name = '${safeName}' and trashed = false`,
+            q: clauses.join(' and '),
             spaces: 'appDataFolder',
             pageSize: '100',
             fields: 'nextPageToken, files(id, name, modifiedTime)',
@@ -560,6 +564,15 @@ export async function listAppDataFiles(name) {
     } while (pageToken);
     files.sort((a, b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')));
     return files;
+}
+
+export async function listAppDataFiles(name) {
+    const wanted = String(name || '');
+    const named = await listAppDataFolder(wanted);
+    if (named.length || !wanted) return named;
+    // Some accounts return an empty name query even when the file is in appDataFolder.
+    const all = await listAppDataFolder('');
+    return all.filter((file) => file.name === wanted);
 }
 
 /**
