@@ -2810,9 +2810,16 @@ html.add-task-composer-open body {
     padding: calc(12px + env(safe-area-inset-top, 0px)) 8px 4px;
 }
 
+.add-task-composer-dock {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .add-task-composer-bar {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 8px;
     flex-shrink: 0;
     padding: 4px 12px 6px;
@@ -2833,12 +2840,20 @@ html.add-task-composer-open body {
 .add-task-composer-exit,
 .add-task-composer-add {
     flex: 1 1 0;
-    min-height: 24px;
     min-width: 0;
     padding: 2px 12px;
     font-size: 0.8rem;
     line-height: 1.1;
     touch-action: manipulation;
+}
+
+.add-task-composer-exit {
+    min-height: 24px;
+    height: 24px;
+}
+
+.add-task-composer-add {
+    min-height: 48px;
 }
 
 .add-task-composer-add.is-empty {
@@ -2992,10 +3007,8 @@ html.add-task-composer-open body {
 
 .add-task-composer-tags {
     flex: 0 0 auto;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     margin: 0 12px 4px;
     overflow: visible;
@@ -3003,9 +3016,9 @@ html.add-task-composer-open body {
 }
 
 .add-task-composer-tags .tag-mode-btn {
-    flex: 1 1 calc(25% - 4px);
-    min-width: min(100%, 4rem);
-    max-width: calc(50% - 2px);
+    width: auto;
+    min-width: 0;
+    max-width: none;
     min-height: 24px;
     height: auto;
     padding: 2px 6px;
@@ -3015,6 +3028,52 @@ html.add-task-composer-open body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Ten categories: last two stay the same size, on the left of row 3.
+   Add stays on the right, twice as tall, filling that side. */
+.add-task-composer.tags-packed .add-task-composer-dock {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0;
+    padding: 4px 12px 6px;
+    border-top: 1px solid var(--glass-border);
+    background: var(--dropdown-bg, oklch(0.16 0 0));
+}
+
+.add-task-composer.tags-packed .add-task-composer-tags,
+.add-task-composer.tags-packed .add-task-composer-bar {
+    display: contents;
+}
+
+.add-task-composer.tags-packed .add-task-composer-tags .tag-mode-btn:nth-child(9):last-child {
+    grid-column: 1;
+    grid-row: 3;
+}
+
+.add-task-composer.tags-packed .add-task-composer-tags .tag-mode-btn:nth-child(9):nth-last-child(2) {
+    grid-column: 1;
+    grid-row: 3;
+}
+
+.add-task-composer.tags-packed .add-task-composer-tags .tag-mode-btn:nth-child(10) {
+    grid-column: 2;
+    grid-row: 3;
+}
+
+.add-task-composer.tags-packed .add-task-composer-add {
+    grid-column: 3 / 5;
+    grid-row: 3 / 5;
+    height: auto;
+    min-height: 0;
+    align-self: stretch;
+}
+
+.add-task-composer.tags-packed .add-task-composer-exit {
+    grid-column: 1 / 3;
+    grid-row: 4;
+    align-self: end;
 }
 
 

@@ -1434,6 +1434,7 @@ export function renderComposerTagBar() {
             bindClick: false
         }));
     });
+    root.classList.toggle('tags-packed', tags.length >= 9);
 }
 
 export function selectComposerTag(tagId) {
