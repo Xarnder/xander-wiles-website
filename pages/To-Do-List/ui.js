@@ -1435,6 +1435,50 @@ export function renderComposerTagBar() {
         }));
     });
     root.classList.toggle('tags-packed', tags.length >= 9);
+    const activeTag = tags.find((tag) => tag.id === activeId) || tags[0];
+    syncComposerCategoryLabel(activeTag);
+    syncComposerTaskPreview(activeTag);
+}
+
+function syncComposerCategoryLabel(tag) {
+    const categoryEl = document.getElementById('add-task-composer-category');
+    if (!categoryEl) return;
+    if (!tag) {
+        categoryEl.hidden = true;
+        categoryEl.textContent = '';
+        return;
+    }
+    categoryEl.hidden = false;
+    categoryEl.textContent = tag.name;
+    categoryEl.title = tag.name;
+    categoryEl.setAttribute('aria-label', `Category: ${tag.name}`);
+    categoryEl.style.cssText = getTagButtonStyle(tag);
+}
+
+function syncComposerTaskPreview(tag) {
+    const field = document.getElementById('add-task-composer-input');
+    if (!field) return;
+    const color = tag && tag.glowColor;
+    if (!color) {
+        field.style.backgroundColor = '';
+        field.style.color = '';
+        field.style.caretColor = '';
+        field.style.borderColor = '';
+        field.style.boxShadow = '';
+        field.style.webkitTextFillColor = '';
+        return;
+    }
+    const ink = getContrastingInk(color);
+    const tone = getTagColorTone(color);
+    const border = tone === 'white'
+        ? 'oklch(0 0 0 / 0.35)'
+        : (tone === 'black' ? 'oklch(1 0 0 / 0.35)' : color);
+    field.style.backgroundColor = color;
+    field.style.color = ink;
+    field.style.caretColor = ink;
+    field.style.webkitTextFillColor = ink;
+    field.style.borderColor = border;
+    field.style.boxShadow = `0 1px 4px color-mix(in oklch, ${color} 40%, transparent)`;
 }
 
 export function selectComposerTag(tagId) {

@@ -3524,6 +3524,7 @@ function applyComposerFontSize(px) {
     if (field) {
         field.style.fontSize = `${size}px`;
         field.style.lineHeight = '1.2';
+        resizeComposerField(field);
     }
     const down = document.getElementById('add-task-composer-font-down');
     const up = document.getElementById('add-task-composer-font-up');
@@ -3566,6 +3567,7 @@ function bindComposerOnce() {
         const source = findAddTaskInput(composerSession.listId);
         if (source) source.value = field.value;
         syncComposerAddState();
+        resizeComposerField(field);
         scrollComposerFieldToCaret(field);
         scheduleComposerAutoAdd();
     });
@@ -3681,12 +3683,20 @@ function openAddTaskComposer(sourceInput) {
     focusComposerField(field, sourceInput, !already);
 }
 
+function resizeComposerField(field) {
+    const el = field || document.getElementById('add-task-composer-input');
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = `${el.scrollHeight}px`;
+}
+
 function scrollComposerFieldToCaret(field) {
     if (!field) return;
     const atEnd = field.selectionEnd == null || field.selectionEnd === field.value.length;
     if (!atEnd) return;
-    if (field.scrollHeight > field.clientHeight + 1) {
-        field.scrollTop = field.scrollHeight;
+    const stage = field.closest('.add-task-composer-stage');
+    if (stage && stage.scrollHeight > stage.clientHeight + 1) {
+        stage.scrollTop = stage.scrollHeight;
     }
 }
 
