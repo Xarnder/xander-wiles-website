@@ -92,7 +92,7 @@ export function isListFreezeImportantEnabled(list) {
 export function partitionListTasksByStage(list) {
     const buckets = {};
     KANBAN_STAGES.forEach((stage) => {
-        buckets[stage] = { pinned: [], normal: [] };
+        buckets[stage] = { pinned: [], lead: [], normal: [] };
     });
 
     const taskIds = list.taskIds || [];
@@ -103,9 +103,12 @@ export function partitionListTasksByStage(list) {
         if (!task || task.archived) return;
 
         const stage = resolveKanbanStatus(task);
-        const shouldPin = isImportantTask(task) && isFrozen;
+        const isImportant = isImportantTask(task);
+        const shouldPin = isImportant && isFrozen;
         if (shouldPin) {
             buckets[stage].pinned.push(task);
+        } else if (isImportant) {
+            buckets[stage].lead.push(task);
         } else {
             buckets[stage].normal.push(task);
         }
@@ -156,6 +159,8 @@ export function toggleKanbanFocus(listId) {
     }
 
     clearExclusiveViewModes();
+    state.focusedMasonryListId = null;
+    document.body.classList.remove('masonry-focus-mode', 'masonry-slim');
     state.focusedKanbanListId = listId;
     document.body.classList.add('kanban-focus-mode');
     showToast('Kanban view');

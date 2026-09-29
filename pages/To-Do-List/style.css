@@ -9215,5 +9215,96 @@ body.kanban-dragging .kanban-column-pane {
     font-weight: 500;
 }
 
+.masonry-layout-btn.active,
+.masonry-layout-btn[aria-pressed="true"] {
+    color: var(--accent-blue);
+    background: oklch(0.623 0.188 259.8 / 0.15);
+}
+
+.masonry-font-btn {
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.masonry-font-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+body.masonry-focus-mode .task-text {
+    font-size: var(--masonry-task-font, 0.9rem);
+    line-height: 1.35;
+}
+
+body.masonry-focus-mode .board-container.masonry-focus-board {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    scroll-snap-type: none;
+}
+
+body.masonry-focus-mode .list-column {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    flex: 1 1 auto;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    scroll-snap-align: none;
+}
+
+body.masonry-focus-mode .task-list {
+    overflow-x: hidden;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+body.masonry-focus-mode .normal-tasks-container {
+    column-width: 280px;
+    column-gap: 12px;
+    width: 100%;
+}
+
+body.masonry-focus-mode .normal-tasks-container > .task-card,
+body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    width: 100%;
+    display: inline-flex;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+
+@media (max-width: 500px) {
+    body.masonry-focus-mode .board-container.masonry-focus-board {
+        overflow: hidden !important;
+    }
+
+    body.masonry-focus-mode .task-list {
+        overflow: auto;
+        touch-action: pan-x pan-y;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.masonry-focus-mode .normal-tasks-container {
+        column-count: 4;
+        column-gap: 8px;
+        column-width: auto;
+        width: calc(4 * 240px + 3 * 8px);
+        max-width: none;
+    }
+}
+
 
 

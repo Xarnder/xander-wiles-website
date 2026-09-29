@@ -317,10 +317,11 @@ export function renderOrphansStatusInSettings() {
 function populateKanbanFocus(list) {
     const buckets = {};
     KANBAN_STAGES.forEach((stage) => {
-        buckets[stage] = { pinned: [], normal: [] };
+        buckets[stage] = { pinned: [], lead: [], normal: [] };
     });
 
     const stretchPinned = [];
+    const stretchLead = [];
     const stretchNormal = [];
     const isFrozen = isListFreezeImportantEnabled(list);
     const taskIds = list.taskIds || [];
@@ -330,18 +331,22 @@ function populateKanbanFocus(list) {
         if (!task || task.archived) return;
         if (!taskMatchesTagFilter(task)) return;
 
-        const shouldPin = isImportantTask(task) && isFrozen;
+        const isImportant = isImportantTask(task);
+        const shouldPin = isImportant && isFrozen;
 
         if (isMultiColumnKanbanStretch(task)) {
             const placement = getParentKanbanSpan(task);
             if (shouldPin) stretchPinned.push({ task, placement });
+            else if (isImportant) stretchLead.push({ task, placement });
             else stretchNormal.push({ task, placement });
             return;
         }
 
         const stage = getKanbanPlacementStage(task);
         if (!buckets[stage]) return;
-        buckets[stage][shouldPin ? 'pinned' : 'normal'].push(task);
+        if (shouldPin) buckets[stage].pinned.push(task);
+        else if (isImportant) buckets[stage].lead.push(task);
+        else buckets[stage].normal.push(task);
     });
 
     let number = 1;
@@ -389,9 +394,10 @@ function populateKanbanFocus(list) {
         const column = document.querySelector(`.kanban-column-pane[data-stage="${stage}"]`);
         if (!pinnedZone || !normalZone) return;
 
-        const { pinned = [], normal = [] } = buckets[stage] || { pinned: [], normal: [] };
+        const { pinned = [], lead = [], normal = [] } = buckets[stage] || { pinned: [], lead: [], normal: [] };
         const stretchStartsHere = [
             ...stretchPinned.filter((s) => s.placement.columns[0] === stage),
+            ...stretchLead.filter((s) => s.placement.columns[0] === stage),
             ...stretchNormal.filter((s) => s.placement.columns[0] === stage)
         ].length;
 
@@ -403,17 +409,18 @@ function populateKanbanFocus(list) {
         pinnedTotalAll += pinned.length;
 
         normalZone.innerHTML = '';
-        normal.forEach((task) => {
+        [...lead, ...normal].forEach((task) => {
             normalZone.appendChild(createTaskElement(task, list.id, number++));
         });
 
-        const total = pinned.length + normal.length + stretchStartsHere;
+        const scrollingCount = lead.length + normal.length;
+        const total = pinned.length + scrollingCount + stretchStartsHere;
         if (countEl) countEl.textContent = String(total);
-        normalZone.classList.toggle('is-empty', normal.length === 0 && stretchStartsHere === 0);
+        normalZone.classList.toggle('is-empty', scrollingCount === 0 && stretchStartsHere === 0);
         if (column) column.classList.toggle('is-column-empty', total === 0);
     });
 
-    stretchNormal.forEach(({ task, placement }) => {
+    [...stretchLead, ...stretchNormal].forEach(({ task, placement }) => {
         if (!stretchGrid) return;
         const card = createStretchCard(task, list.id, number++, placement);
         card.style.gridColumn = `${placement.startIndex + 1} / span ${placement.span}`;
@@ -433,8 +440,9 @@ function populateKanbanFocus(list) {
         pinnedZonesRow.classList.toggle('hidden', !anySinglePinned);
     }
     if (stretchGrid) {
-        stretchGrid.classList.toggle('hidden', stretchNormal.length === 0);
-        stretchGrid.classList.toggle('has-stretch', stretchNormal.length > 0);
+        const stretchScrolling = stretchLead.length + stretchNormal.length;
+        stretchGrid.classList.toggle('hidden', stretchScrolling === 0);
+        stretchGrid.classList.toggle('has-stretch', stretchScrolling > 0);
     }
 
     initKanbanSortables(list.id);
@@ -730,7 +738,7 @@ export function renderBoard() {
     }
 
     boardContainer.innerHTML = '';
-    boardContainer.classList.remove('kanban-focus-board');
+    boardContainer.classList.remove('kanban-focus-board', 'masonry-focus-board');
 
     // Work Tools off clears any leftover focus session
     if (!isWorkToolsEnabled()) {
@@ -797,6 +805,29 @@ export function renderBoard() {
         } else {
             state.focusedKanbanListId = null;
             document.body.classList.remove('kanban-focus-mode');
+        }
+    }
+
+    if (!kanbanRendered && state.focusedMasonryListId) {
+        const focusedList = state.appData.lists.find(l => l.id === state.focusedMasonryListId)
+            || (state.appData.rawLists || []).find(l => l.id === state.focusedMasonryListId);
+        if (focusedList) {
+            boardContainer.classList.add('masonry-focus-board');
+            document.body.classList.add('masonry-focus-mode');
+            renderListColumn(focusedList, false, isCustomSort);
+            applyMasonryFontSize(readMasonryFontSize());
+            const savedScroll = scrollMap.get(focusedList.id);
+            const masonryScroller = document.getElementById(`task-list-${focusedList.id}`);
+            if (masonryScroller && savedScroll) masonryScroller.scrollTop = savedScroll;
+            updateBoardUI();
+            updateTotalTaskCount();
+            applyStaticLayouts();
+            layoutSlimChrome();
+            renderTagModeBar();
+            kanbanRendered = true;
+        } else {
+            state.focusedMasonryListId = null;
+            document.body.classList.remove('masonry-focus-mode', 'masonry-slim');
         }
     }
 
@@ -1215,7 +1246,17 @@ export function layoutSlimChrome() {
     applyListTopGap();
 
     const root = document.documentElement;
-    if (!window.matchMedia('(max-width: 500px)').matches) {
+    const slim = window.matchMedia('(max-width: 500px)').matches;
+    document.body.classList.toggle('masonry-slim', slim && !!state.focusedMasonryListId);
+    if (state.focusedMasonryListId) {
+        const blockDrag = slim || !state.appData.settings.dragEnabled;
+        state.sortableInstances.forEach((sortable) => {
+            if (sortable?.el?.id === `container-${state.focusedMasonryListId}`) {
+                sortable.option('disabled', blockDrag);
+            }
+        });
+    }
+    if (!slim) {
         root.style.removeProperty('--slim-bottom-clearance');
         root.style.removeProperty('--tool-panel-bottom-offset');
         return;
@@ -1791,6 +1832,61 @@ export function groupListByTag(listId) {
     });
 }
 
+function isMasonrySlim() {
+    return !!state.focusedMasonryListId && window.matchMedia('(max-width: 500px)').matches;
+}
+
+const MASONRY_FONT_KEY = 'taskmasterMasonryFontPx';
+const MASONRY_FONT_MIN = 11;
+const MASONRY_FONT_MAX = 48;
+const MASONRY_FONT_DEFAULT = 15;
+
+function readMasonryFontSize() {
+    let stored = MASONRY_FONT_DEFAULT;
+    try {
+        const parsed = parseInt(localStorage.getItem(MASONRY_FONT_KEY), 10);
+        if (Number.isFinite(parsed)) stored = parsed;
+    } catch (_) {}
+    return Math.min(MASONRY_FONT_MAX, Math.max(MASONRY_FONT_MIN, stored));
+}
+
+function applyMasonryFontSize(px) {
+    const size = Math.min(MASONRY_FONT_MAX, Math.max(MASONRY_FONT_MIN, Math.round(px)));
+    document.documentElement.style.setProperty('--masonry-task-font', `${size}px`);
+    const down = document.getElementById('masonry-font-down');
+    const up = document.getElementById('masonry-font-up');
+    if (down) down.disabled = size <= MASONRY_FONT_MIN;
+    if (up) up.disabled = size >= MASONRY_FONT_MAX;
+    return size;
+}
+
+export function stepMasonryFont(direction) {
+    const current = readMasonryFontSize();
+    const scaled = direction > 0 ? current * 1.18 : current / 1.18;
+    let next = Math.round(scaled);
+    if (next === current) next = current + direction;
+    const size = applyMasonryFontSize(next);
+    try { localStorage.setItem(MASONRY_FONT_KEY, String(size)); } catch (_) {}
+    return size;
+}
+
+export function toggleMasonryFocus(listId) {
+    if (!listId) return;
+    if (state.focusedMasonryListId === listId) {
+        state.focusedMasonryListId = null;
+        document.body.classList.remove('masonry-focus-mode', 'masonry-slim');
+        renderBoard();
+        return;
+    }
+    if (state.focusedKanbanListId) {
+        state.focusedKanbanListId = null;
+        document.body.classList.remove('kanban-focus-mode');
+    }
+    state.focusedMasonryListId = listId;
+    document.body.classList.add('masonry-focus-mode');
+    renderBoard();
+}
+
 export function initTagsSettingsUI() {
     const addBtn = document.getElementById('add-tag-btn');
     const addForm = document.getElementById('add-tag-form');
@@ -1895,9 +1991,18 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const freezeBtn = !isOrphan
         ? `<button type="button" class="icon-btn freeze-list-btn ${isFrozen ? 'active' : ''}" onclick="window.toggleListFreezeImportant('${list.id}')" title="${isFrozen ? 'Important tasks frozen at top (click to unfreeze)' : 'Important tasks unfrozen (click to freeze at top)'}" aria-label="Toggle freeze important tasks" aria-pressed="${isFrozen}"><i class="${isFrozen ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i></button>`
         : '';
+    const masonryOn = state.focusedMasonryListId === list.id;
+    const masonryBtn = !isOrphan
+        ? `<button type="button" class="icon-btn masonry-layout-btn ${masonryOn ? 'active' : ''}" onclick="window.toggleMasonryFocus('${list.id}')" title="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}" aria-pressed="${masonryOn}" aria-label="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}"><i class="ph ph-grid-four"></i></button>`
+        : '';
+    const masonryFontBtns = masonryOn
+        ? `<button type="button" id="masonry-font-down" class="icon-btn masonry-font-btn" onclick="window.stepMasonryFont(-1)" title="Smaller task text" aria-label="Smaller task text">A−</button><button type="button" id="masonry-font-up" class="icon-btn masonry-font-btn" onclick="window.stepMasonryFont(1)" title="Larger task text" aria-label="Larger task text">A+</button>`
+        : '';
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
+             ${masonryBtn}
+             ${masonryFontBtns}
              ${kanbanBtn}
              ${freezeBtn}
              <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag"><i class="ph ph-stack"></i></button>
@@ -1980,6 +2085,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const normalContainer = listEl.querySelector('.normal-tasks-container');
     const taskIds = list.taskIds || [];
     const sortedIds = getSortedTaskIds(taskIds);
+    const leadingTasks = [];
+    const trailingTasks = [];
 
     let visibleCount = 0;
     let visibleIndex = 1;
@@ -2004,13 +2111,14 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             if (show) {
                 const isImportant = isImportantTask(task);
                 const taskEl = createTaskElement(task, list.id, visibleIndex);
-                const isFrozen = isListFreezeImportantEnabled(list);
-                const shouldPin = isImportant && isFrozen;
-                if (shouldPin) {
+                const masonryOpen = state.focusedMasonryListId === list.id;
+                if (isImportant && isFrozen && !masonryOpen) {
                     frozenContainer.appendChild(taskEl);
                     pinnedCount++;
+                } else if (isImportant) {
+                    leadingTasks.push(taskEl);
                 } else {
-                    normalContainer.appendChild(taskEl);
+                    trailingTasks.push(taskEl);
                 }
                 if (task.completed) doneCount++;
                 visibleIndex++;
@@ -2018,6 +2126,9 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             }
         }
     });
+
+    leadingTasks.forEach((taskEl) => normalContainer.appendChild(taskEl));
+    trailingTasks.forEach((taskEl) => normalContainer.appendChild(taskEl));
 
     if (pinnedCount > 0) {
         const pHeader = document.createElement('div');
@@ -2063,7 +2174,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 put: true
             },
             animation: 150,
-            disabled: !state.appData.settings.dragEnabled,
+            disabled: !state.appData.settings.dragEnabled || (state.focusedMasonryListId === list.id && isMasonrySlim()),
             filter: '.archived-task, .kanban-stage-moves, .task-actions, .task-checkbox, .nested-idea-checkbox, .nested-kanban-stage-moves, .nested-idea-drag-handle, input, button, select',
             preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,

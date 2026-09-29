@@ -56,6 +56,7 @@ export const state = {
     tagFilterId: null,
     compactView: true,
     focusedKanbanListId: null,
+    focusedMasonryListId: null,
     sortableInstances: [],
     nestedSortableInstances: [],
     listSortable: null,
