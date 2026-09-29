@@ -845,7 +845,7 @@ export function syncFinderLayoutControls(prefs) {
  * @param {{ metaColor?: string }} [options]
  */
 export function applyTheme(theme, options = {}) {
-    const next = theme === 'oled' || theme === 'light' || theme === 'blue' ? theme : 'blue';
+    const next = theme === 'oled' || theme === 'light' || theme === 'blue' ? theme : 'oled';
     document.documentElement.setAttribute('data-theme', next);
     const meta = document.getElementById('meta-theme-color');
     if (meta && options.metaColor) {
@@ -1159,8 +1159,11 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         const folder = isFolder(file);
         const fullName = file.name || '(unnamed)';
         const displayName = displayFileListName(file.name, { isFolder: folder, showExtension });
+        const fileId = file?.id ? String(file.id) : '';
+        const isBold = Boolean(fileId && textBold.has(fileId));
         const row = document.createElement('div');
         row.className = folder ? 'file-row file-row--folder' : 'file-row file-row--markdown';
+        if (isBold) row.classList.add('file-row--important');
         row.setAttribute('role', 'listitem');
 
         const openBtn = document.createElement('button');
@@ -1168,7 +1171,9 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         openBtn.className = 'file-row-main';
         openBtn.setAttribute(
             'aria-label',
-            folder ? `Open folder ${displayName}` : `Open ${displayName}`
+            folder
+                ? `Open ${isBold ? 'important ' : ''}folder ${displayName}`
+                : `Open ${isBold ? 'important ' : ''}${displayName}`
         );
 
         const icon = document.createElement('span');
@@ -1184,6 +1189,13 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         img.height = 28;
         img.decoding = 'async';
         icon.appendChild(img);
+        if (isBold) {
+            icon.classList.add('file-row-icon--important');
+            const star = document.createElement('span');
+            star.className = 'file-row-star';
+            star.title = 'Important';
+            icon.appendChild(star);
+        }
 
         const label = document.createElement('span');
         label.className = 'file-row-label';
@@ -1192,14 +1204,13 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         name.className = 'file-row-name';
         name.textContent = displayName;
         if (fullName && fullName !== displayName) name.title = fullName;
-        const fileId = file?.id ? String(file.id) : '';
         const customColor = fileId ? textColors.get(fileId) : '';
         if (customColor) {
             name.classList.add('file-row-name--custom');
             name.style.setProperty('--file-text-color', customColor);
             name.style.color = customColor;
         }
-        if (fileId && textBold.has(fileId)) {
+        if (isBold) {
             name.classList.add('file-row-name--bold');
         }
         label.appendChild(name);
@@ -2346,7 +2357,7 @@ export function promptItemActions(file, options = {}) {
         els.itemActionPin.textContent = pinned ? 'Unpin' : 'Pin';
     }
     if (els.itemActionBold) {
-        els.itemActionBold.textContent = existingBold ? 'Regular text' : 'Bold text';
+        els.itemActionBold.textContent = existingBold ? 'Unmark' : 'Mark Special';
     }
     if (els.itemActionCopy) els.itemActionCopy.hidden = !canCopy;
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;

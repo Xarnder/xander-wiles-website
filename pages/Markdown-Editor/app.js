@@ -804,7 +804,7 @@ function writeTheme(theme) {
 
 function applySavedTheme() {
     const theme = readTheme();
-    applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
+    applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS[THEME_DEFAULT] });
     syncThemeControl(theme);
 }
 
@@ -1233,7 +1233,7 @@ function applyCloudSettings(cloud) {
                 // ignore
             }
             applyTheme(cloud.theme, {
-                metaColor: THEME_META_COLORS[cloud.theme] || THEME_META_COLORS.blue,
+                metaColor: THEME_META_COLORS[cloud.theme] || THEME_META_COLORS[THEME_DEFAULT],
             });
             syncThemeControl(cloud.theme);
         }
@@ -2806,7 +2806,7 @@ async function handleFileTextColour(file) {
     refreshFileNameDisplays();
     const parts = [];
     if (next.color !== current) parts.push(next.color ? 'Text colour saved' : 'Text colour reset');
-    if (next.bold !== currentBold) parts.push(next.bold ? 'Bold on' : 'Bold off');
+    if (next.bold !== currentBold) parts.push(next.bold ? 'Marked special' : 'Unmarked');
     setStatus(parts.join(' · ') || 'Text style saved', 'ok');
 }
 
@@ -2816,7 +2816,7 @@ function handleFileTextBold(file) {
     writeFileTextBold(file.id, next);
     queueSettingsCloudSync({ immediate: true });
     refreshFileNameDisplays();
-    setStatus(next ? 'Bold text on' : 'Regular text', 'ok');
+    setStatus(next ? 'Marked special' : 'Unmarked', 'ok');
 }
 
 /**
@@ -5071,7 +5071,7 @@ function wireEvents() {
         els.prefTheme.addEventListener('change', () => {
             const theme = THEME_VALUES.has(els.prefTheme.value) ? els.prefTheme.value : THEME_DEFAULT;
             writeTheme(theme);
-            applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
+            applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS[THEME_DEFAULT] });
             setStatus('Theme saved', 'ok');
         });
     }

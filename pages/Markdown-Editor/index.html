@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="blue">
+<html lang="en" data-theme="oled">
 
 <head>
     <meta charset="UTF-8">
@@ -17,20 +17,20 @@
 
     <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" id="meta-theme-color" content="#0b1020">
+    <meta name="theme-color" id="meta-theme-color" content="#000000">
 
     <script>
         (function () {
             try {
                 var key = 'md-editor:theme';
                 var theme = localStorage.getItem(key);
-                if (theme !== 'blue' && theme !== 'oled' && theme !== 'light') theme = 'blue';
+                if (theme !== 'blue' && theme !== 'oled' && theme !== 'light') theme = 'oled';
                 document.documentElement.setAttribute('data-theme', theme);
                 var colors = { blue: '#0b1020', oled: '#000000', light: '#e8ecf4' };
                 var meta = document.getElementById('meta-theme-color');
-                if (meta) meta.setAttribute('content', colors[theme] || colors.blue);
+                if (meta) meta.setAttribute('content', colors[theme] || colors.oled);
             } catch (e) {
-                document.documentElement.setAttribute('data-theme', 'blue');
+                document.documentElement.setAttribute('data-theme', 'oled');
             }
             try {
                 var standalone = window.navigator.standalone === true
@@ -135,7 +135,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=20260924-move">
     <style>
         /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
@@ -311,7 +311,7 @@
                             <span class="settings-pref-label">Theme</span>
                             <select id="pref-theme" class="settings-select">
                                 <option value="blue">Blue</option>
-                                <option value="oled">Pure black (OLED)</option>
+                                <option value="oled" selected>Pure black (OLED)</option>
                                 <option value="light">Light</option>
                             </select>
                         </label>
@@ -566,7 +566,7 @@
             <div class="item-actions-list">
                 <button type="submit" value="pin" id="item-action-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
                 <button type="submit" value="colour" id="item-action-colour" class="btn btn-ghost btn-block item-action-btn">Change text colour</button>
-                <button type="submit" value="bold" id="item-action-bold" class="btn btn-ghost btn-block item-action-btn">Bold text</button>
+                <button type="submit" value="bold" id="item-action-bold" class="btn btn-ghost btn-block item-action-btn">Mark Special</button>
                 <button type="submit" value="copy" id="item-action-copy" class="btn btn-ghost btn-block item-action-btn">Copy</button>
                 <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
                 <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
@@ -582,7 +582,7 @@
             <p id="file-color-name" class="dialog-hint"></p>
             <p id="file-color-preview" class="file-color-preview" aria-live="polite">Preview</p>
             <label class="file-color-bold" for="file-color-bold">
-                <span>Bold text</span>
+                <span>Mark Special</span>
                 <input id="file-color-bold" class="settings-toggle" type="checkbox">
             </label>
             <p class="file-color-label">Presets</p>

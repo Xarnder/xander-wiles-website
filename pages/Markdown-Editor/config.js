@@ -47,7 +47,7 @@ export const FINDER_SORT_VALUES = new Set(FINDER_SORT_OPTIONS.map((o) => o.value
 
 /** App color theme: 'blue' | 'oled' | 'light' */
 export const THEME_KEY = 'md-editor:theme';
-export const THEME_DEFAULT = 'blue';
+export const THEME_DEFAULT = 'oled';
 export const THEME_VALUES = new Set(['blue', 'oled', 'light']);
 export const THEME_META_COLORS = {
     blue: '#0b1020',
