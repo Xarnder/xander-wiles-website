@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passive Income Calculator</title>
+    <meta name="description" content="Work out what an investment pot pays each year and month, or how much you need invested to hit a target income.">
+
+    <link rel="icon" href="../favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="../favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="calculator.css">
+</head>
+<body>
+    <div class="background-blobs"></div>
+    <div id="main-nav-placeholder"></div>
+
+    <div class="container">
+        <header>
+            <h1>Passive Income Calculator</h1>
+            <p>Start from the money you already have invested, or from the income you want, before or after tax.</p>
+            <p>Nothing is stored. The maths runs in your browser.</p>
+        </header>
+
+        <nav class="mode-selector" aria-label="Tax tools">
+            <a class="mode-tab" href="../">Tax Visualiser</a>
+            <a class="mode-tab" href="../?view=interest">Compound Interest</a>
+            <a class="mode-tab active" href="./" aria-current="page">Income Calculator</a>
+        </nav>
+
+        <form class="card input-card" id="calculator">
+            <fieldset class="choice-group">
+                <legend>What do you already know?</legend>
+                <label class="choice">
+                    <input type="radio" name="direction" value="invested" checked>
+                    <span class="choice-title">I have money invested</span>
+                    <span class="choice-desc">See what it pays each year and each month.</span>
+                </label>
+                <label class="choice">
+                    <input type="radio" name="direction" value="income">
+                    <span class="choice-title">I want a set income</span>
+                    <span class="choice-desc">See how much you need invested.</span>
+                </label>
+            </fieldset>
+
+            <div class="fields" id="investedFields">
+                <div class="field">
+                    <label for="investedInput">Amount invested</label>
+                    <div class="adorned">
+                        <span class="prefix" aria-hidden="true">£</span>
+                        <input id="investedInput" name="invested" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="600000" placeholder="600000">
+                    </div>
+                    <p class="field-hint" id="investedHint">You can type 600k or 1.2m.</p>
+                </div>
+            </div>
+
+            <div class="fields" id="incomeFields" hidden>
+                <div class="field">
+                    <label for="incomeInput">Income you want</label>
+                    <div class="income-row">
+                        <div class="adorned">
+                            <span class="prefix" aria-hidden="true">£</span>
+                            <input id="incomeInput" name="income" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="1200" placeholder="1200">
+                        </div>
+                        <div class="period" role="group" aria-label="Is this income each month or each year?">
+                            <button type="button" class="period-btn" id="periodMonth" aria-pressed="true">Each month</button>
+                            <button type="button" class="period-btn" id="periodYear" aria-pressed="false">Each year</button>
+                        </div>
+                    </div>
+                    <p class="field-hint" id="incomeHint">£1,200 each month is the target. Switch to each year if you mean a yearly amount.</p>
+                </div>
+            </div>
+
+            <div class="field">
+                <label id="taxBasisLabel">Tax</label>
+                <div class="period tax-period" role="group" aria-labelledby="taxBasisLabel">
+                    <button type="button" class="period-btn" id="taxBefore" aria-pressed="true">Before tax</button>
+                    <button type="button" class="period-btn" id="taxAfter" aria-pressed="false">After tax</button>
+                </div>
+                <p class="field-hint" id="taxHint">Income figures are before Income Tax and National Insurance.</p>
+            </div>
+
+            <div class="field">
+                <label for="rateInput">Growth rate</label>
+                <div class="adorned rate-adorned">
+                    <input id="rateInput" name="rate" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="4" placeholder="4">
+                    <span class="suffix">% each year</span>
+                </div>
+                <div class="chips" role="group" aria-label="Common yearly rates">
+                    <button type="button" class="rate-chip" data-rate="3">3%</button>
+                    <button type="button" class="rate-chip" data-rate="4">4%</button>
+                    <button type="button" class="rate-chip" data-rate="5">5%</button>
+                    <button type="button" class="rate-chip" data-rate="7">7%</button>
+                </div>
+            </div>
+        </form>
+
+        <section class="card result-card" aria-live="polite">
+            <p class="result-lead" id="resultLead"></p>
+
+            <div id="payoutResults">
+                <div class="pair">
+                    <article>
+                        <h2 id="yearLabel">Each year</h2>
+                        <p class="payout-figure" id="yearOut">£0</p>
+                    </article>
+                    <article>
+                        <h2 id="monthLabel">Each month</h2>
+                        <p class="payout-figure" id="monthOut">£0</p>
+                    </article>
+                </div>
+            </div>
+
+            <div id="potResults" hidden>
+                <p class="result-kicker">You need invested</p>
+                <p class="hero" id="potOut">£0</p>
+                <div class="pair pair-quiet">
+                    <article>
+                        <h2 id="potYearLabel">Pays each year</h2>
+                        <p id="potYear">£0</p>
+                    </article>
+                    <article>
+                        <h2 id="potMonthLabel">Pays each month</h2>
+                        <p id="potMonth">£0</p>
+                    </article>
+                </div>
+            </div>
+
+            <div class="equation" id="equation" hidden></div>
+        </section>
+
+        <section class="card working-card">
+            <h2>How this is worked out</h2>
+            <ol id="workingSteps"></ol>
+            <p class="caveat">After tax uses the same UK Income Tax and National Insurance as the Tax Visualiser for a standard salary (NI category A), with no student loan. Fees and inflation are not included. For a full breakdown, use the <a href="../">Tax Visualiser</a>.</p>
+        </section>
+    </div>
+
+    <script src="../tax-math.js"></script>
+    <script src="calculator.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+</body>
+</html>

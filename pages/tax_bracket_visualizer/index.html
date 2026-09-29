@@ -32,19 +32,19 @@
 <body>
 
     <div class="background-blobs"></div>
+    <div id="main-nav-placeholder"></div>
 
     <div class="container">
-        <div id="main-nav-placeholder"></div> 
-
         <header>
             <h1>UK Tax Visualiser</h1>
             <p>Visualise your take-home pay or your investment growth.</p>
             <p>No personal data is collected or stored. Everything is processed locally in your browser.</p>
         </header>
 
-        <nav class="mode-selector">
+        <nav class="mode-selector" aria-label="Tax tools">
             <button class="mode-tab active" id="taxModeBtn">Tax Visualiser</button>
             <button class="mode-tab" id="interestModeBtn">Compound Interest</button>
+            <a class="mode-tab" href="calculator/">Income Calculator</a>
         </nav>
 
         <div id="taxView">
@@ -52,9 +52,17 @@
             <div class="card input-card" id="standardInputCard">
             <div class="input-row">
                 <div class="input-group" id="standardIncomeGroup">
-                    <label for="incomeInput">Annual Income (£)</label>
+                    <label for="incomeInput" id="incomeInputLabel">Annual Income (£)</label>
                     <div class="input-wrapper">
                         <input type="number" id="incomeInput" placeholder="e.g. 45000" value="30000" min="0">
+                    </div>
+                </div>
+
+                <div class="input-group" id="incomeBasisGroup">
+                    <label id="incomeBasisLabel">This amount is</label>
+                    <div class="basis-toggle" role="group" aria-labelledby="incomeBasisLabel">
+                        <button type="button" class="basis-btn" id="incomeBeforeTax" aria-pressed="true">Before tax</button>
+                        <button type="button" class="basis-btn" id="incomeAfterTax" aria-pressed="false">After tax</button>
                     </div>
                 </div>
 
@@ -154,6 +162,8 @@
                 </div>
             </div>
 
+            <p class="income-basis-hint" id="incomeBasisHint" hidden>Type the take-home you want each year. The salary is before Income Tax and National Insurance.</p>
+
             <div class="input-row student-loan-row" id="studentLoanOptions" style="display: none;">
                 <div class="input-group" style="max-width: 180px;">
                     <label for="studentLoanPlan">Plan</label>
@@ -234,6 +244,11 @@
 
         <!-- Standard Summary Section -->
         <div class="card summary-card" id="standardSummaryCard">
+            <p class="net-target-line" id="netTargetLine" hidden></p>
+            <div class="stat highlight" id="requiredGrossStat" hidden>
+                <h3>Salary before tax</h3>
+                <p id="requiredGrossDisplay">£0</p>
+            </div>
             <div class="stat">
                 <h3>Total Deductions</h3>
                 <p id="totalTaxDisplay">£0</p>
@@ -405,6 +420,7 @@
 
     </div>
 
+    <script src="tax-math.js"></script>
     <script src="script.js"></script>
     <script src="/assets/js/nav-loader.js"></script> 
 

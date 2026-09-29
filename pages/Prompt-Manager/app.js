@@ -77,6 +77,7 @@ const categoryPreviewTag = document.getElementById('category-preview-tag');
 const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
+const addNegativePromptBtn = document.getElementById('add-negative-prompt-btn');
 const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
 const loginLoader = document.getElementById('login-loader-container');
 const autoArchiveSelect = document.getElementById('auto-archive-select');
@@ -130,6 +131,7 @@ const charCount = document.getElementById('char-count');
 const tokenCount = document.getElementById('token-count');
 const promptContentArea = document.getElementById('prompt-content');
 const promptCodeArea = document.getElementById('prompt-code');
+const promptCodeTitleInput = document.getElementById('prompt-code-title');
 const promptCodeContainer = document.getElementById('prompt-code-container');
 const removePrimaryCodeBtn = document.getElementById('remove-primary-code-btn');
 
@@ -186,6 +188,43 @@ let currentMode = 'prompt'; // 'prompt' or 'command'
 let selectedCategory = 'all'; // Default filter category
 let currentSort = 'custom'; // Default sort criteria
 let pendingMoves = {}; // Track scheduled reorders: { id: { timeout, startTime, barContainer } }
+
+const inlineCopyIconSVG = `<svg viewBox="0 0 24 24" class="inline-copy-icon"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
+
+function blockTitleMarkup(title, searchTerm, extraClass = '') {
+    if (!title) return '';
+    const classes = extraClass ? `extra-block-label ${extraClass}` : 'extra-block-label';
+    return `<span class="${classes}">${highlightSearch(escapeHTML(title), searchTerm)}</span>`;
+}
+
+function collectAdditionalBlocks() {
+    const additionalBlocks = [];
+    dynamicBlocksContainer.querySelectorAll('.dynamic-block-item').forEach(block => {
+        const entry = {
+            type: block.dataset.type,
+            content: block.querySelector('textarea').value
+        };
+        const title = block.querySelector('.block-title-input')?.value.trim() || '';
+        if (title) entry.title = title;
+        additionalBlocks.push(entry);
+    });
+    return additionalBlocks;
+}
+
+function fillBlockVariables(rawContent, container, collectedValues) {
+    if (!rawContent) return '';
+    const inputs = container ? container.querySelectorAll('.prompt-input') : [];
+    let inputIdx = 0;
+    return rawContent.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+        const val = inputs[inputIdx++]?.textContent || '';
+        const trimmedVal = val.trim();
+        if (trimmedVal) {
+            if (collectedValues) collectedValues.push(trimmedVal);
+            return trimmedVal;
+        }
+        return resolveVariablePlaceholder(p1);
+    });
+}
 
 const historyIconSVG = `
     <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512.584" class="history-icon-svg">
@@ -383,7 +422,7 @@ openModalBtn.addEventListener('click', () => {
 });
 
 // Dynamic Blocks Modal Logic
-const addDynamicBlock = (type, content = '') => {
+const addDynamicBlock = (type, content = '', title = '') => {
     const blockId = Date.now() + Math.random().toString(36).substr(2, 9);
     const blockDiv = document.createElement('div');
     blockDiv.className = 'dynamic-block-item';
@@ -397,16 +436,24 @@ const addDynamicBlock = (type, content = '') => {
     } else if (type === 'remember') {
         blockLabel = 'Things to Remember (Internal Note)';
         placeholder = 'Enter notes...';
+    } else if (title === 'Negative Prompt') {
+        blockLabel = 'Negative Prompt';
+        placeholder = 'What to avoid...';
     } else {
         blockLabel = 'Additional Text Block';
         placeholder = 'Enter text...';
     }
+
+    const titleField = (type === 'text' || type === 'code')
+        ? `<input type="text" class="block-title-input" placeholder="Optional title (not copied)" value="${escapeHTML(title)}" autocomplete="off">`
+        : '';
 
     blockDiv.innerHTML = `
         <div class="dynamic-block-header">
             <label>${blockLabel}</label>
             <button type="button" class="remove-block-btn" data-id="${blockId}">Remove</button>
         </div>
+        ${titleField}
         <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${placeholder}" rows="${type === 'code' ? 3 : 2}">${escapeHTML(content)}</textarea>
     `;
 
@@ -426,6 +473,7 @@ const addDynamicBlock = (type, content = '') => {
 removePrimaryCodeBtn.addEventListener('click', () => {
     promptCodeContainer.classList.add('hidden');
     promptCodeArea.value = '';
+    if (promptCodeTitleInput) promptCodeTitleInput.value = '';
     if (!isEditing) saveDraft();
     updateCounters();
 });
@@ -441,6 +489,13 @@ addCodeBlockBtn.addEventListener('click', () => {
     }
 });
 addRememberBlockBtn.addEventListener('click', () => addDynamicBlock('remember'));
+addNegativePromptBtn.addEventListener('click', () => {
+    addDynamicBlock('text', '', 'Negative Prompt');
+    const blocks = dynamicBlocksContainer.querySelectorAll('.dynamic-block-item');
+    const textarea = blocks[blocks.length - 1]?.querySelector('textarea');
+    if (textarea) textarea.focus();
+    if (!isEditing) saveDraft();
+});
 
 closeModalBtn.addEventListener('click', () => {
     addPromptModal.classList.add('hidden');
@@ -780,6 +835,7 @@ function handleExport(format = 'json', scope = 'all', categoryFilter = 'all') {
         category: item.data.category || '',
         content: item.data.content,
         codeSnippet: item.data.codeSnippet || '',
+        codeSnippetTitle: item.data.codeSnippetTitle || '',
         isPinned: item.data.isPinned || false,
         additionalBlocks: item.data.additionalBlocks || []
     }));
@@ -812,11 +868,13 @@ function convertToCSV(data) {
     if (data.length === 0) return '';
 
     // Define headers
-    const headers = ['Mode', 'Title', 'Category', 'Main Content', 'Code Snippet', 'Pinned', 'Additional Blocks'];
+    const headers = ['Mode', 'Title', 'Category', 'Main Content', 'Code Snippet', 'Code Title', 'Pinned', 'Additional Blocks'];
     
     const rows = data.map(item => {
-        // Flatten additional blocks for CSV
-        const blocksStr = item.additionalBlocks.map(b => `[${b.type}] ${b.content}`).join(' | ');
+        const blocksStr = item.additionalBlocks.map(b => {
+            const label = b.title ? `(${b.title}) ` : '';
+            return `[${b.type}] ${label}${b.content}`;
+        }).join(' | ');
         
         return [
             item.mode,
@@ -824,6 +882,7 @@ function convertToCSV(data) {
             item.category,
             item.content,
             item.codeSnippet,
+            item.codeSnippetTitle || '',
             item.isPinned ? 'Yes' : 'No',
             blocksStr
         ].map(val => {
@@ -923,15 +982,8 @@ addPromptForm.addEventListener('submit', async (e) => {
     const categoryTextColor = document.getElementById('category-text-color').value;
     const content = document.getElementById('prompt-content').value;
     const code = document.getElementById('prompt-code').value;
-
-    // Collect Dynamic Blocks
-    const additionalBlocks = [];
-    dynamicBlocksContainer.querySelectorAll('.dynamic-block-item').forEach(block => {
-        additionalBlocks.push({
-            type: block.dataset.type,
-            content: block.querySelector('textarea').value
-        });
-    });
+    const codeTitle = promptCodeTitleInput ? promptCodeTitleInput.value.trim() : '';
+    const additionalBlocks = collectAdditionalBlocks();
 
     // Auto-Archive Logic
     const autoArchiveDuration = autoArchiveSelect ? autoArchiveSelect.value : 'none';
@@ -960,6 +1012,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
+                codeSnippetTitle: codeTitle,
                 additionalBlocks: additionalBlocks,
                 mode: currentMode,
                 lastEdited: serverTimestamp()
@@ -984,6 +1037,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
+                codeSnippetTitle: codeTitle,
                 additionalBlocks: additionalBlocks,
                 mode: currentMode,
                 userId: auth.currentUser.uid,
@@ -1374,19 +1428,29 @@ function createPromptCard(item, searchTerm = '') {
             if (block.type === 'code') {
                 additionalBlocksHTML += `
                     <div class="prompt-code-block additional-block">
-                        <button class="code-copy-btn" title="Copy Code">
-                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                        ${blockTitleMarkup(block.title, searchTerm, 'code-block-label')}
+                        <button type="button" class="code-copy-btn" title="Copy Code">
+                            ${inlineCopyIconSVG}
                         </button>
                         <div class="code-content">${renderContentWithInputs(block.content, searchTerm)}</div>
                     </div>`;
             } else if (block.type === 'remember') {
                 additionalBlocksHTML += `
                     <div class="prompt-remember-note">
-                        <span class="remember-label">Things to Remember</span>
+                        <span class="remember-label">${block.title ? highlightSearch(escapeHTML(block.title), searchTerm) : 'Things to Remember'}</span>
                         <div class="remember-content">${highlightSearch(escapeHTML(block.content), searchTerm)}</div>
                     </div>`;
             } else {
-                additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content, searchTerm)}</p>`;
+                additionalBlocksHTML += `
+                    <div class="prompt-extra-text additional-block">
+                        <div class="extra-block-toolbar">
+                            ${blockTitleMarkup(block.title, searchTerm)}
+                            <button type="button" class="block-copy-btn" title="Copy this block">
+                                ${inlineCopyIconSVG}
+                            </button>
+                        </div>
+                        <div class="extra-block-content">${renderContentWithInputs(block.content, searchTerm)}</div>
+                    </div>`;
             }
         });
     }
@@ -1493,8 +1557,9 @@ function createPromptCard(item, searchTerm = '') {
             ${contentHTML}
             ${data.codeSnippet ? `
                 <div class="prompt-code-block">
-                    <button class="code-copy-btn" title="Copy Code">
-                        <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    ${blockTitleMarkup(data.codeSnippetTitle, searchTerm, 'code-block-label')}
+                    <button type="button" class="code-copy-btn" title="Copy Code">
+                        ${inlineCopyIconSVG}
                     </button>
                     <div class="code-content">${renderContentWithInputs(data.codeSnippet, searchTerm)}</div>
                 </div>` : ''}
@@ -1504,6 +1569,7 @@ function createPromptCard(item, searchTerm = '') {
             </div>
         </div>
     `;
+    attachVariableMirrors(card);
     if (data.isPinned) card.classList.add('pinned-card');
     if (isPromptArchived(item)) card.classList.add('archived-card');
     
@@ -1572,8 +1638,8 @@ function createPromptCard(item, searchTerm = '') {
     card.querySelectorAll('.code-copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const codeContainer = btn.nextElementSibling;
-            const inputs = codeContainer.querySelectorAll('.prompt-input');
+            const codeContainer = btn.parentElement.querySelector('.code-content');
+            const inputs = codeContainer ? codeContainer.querySelectorAll('.prompt-input') : [];
             
             if (inputs.length > 0) {
                 // Find which block this is to get the raw content for accurate reconstruction
@@ -1600,6 +1666,22 @@ function createPromptCard(item, searchTerm = '') {
             } else {
                 copyToClipboard(codeContainer.innerText, btn);
             }
+        });
+    });
+
+    card.querySelectorAll('.block-copy-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const blockEl = btn.closest('.additional-block');
+            const textBlockEls = Array.from(card.querySelectorAll('.prompt-extra-text.additional-block'));
+            const blockIdx = textBlockEls.indexOf(blockEl);
+            const textBlocks = (data.additionalBlocks || []).filter(b => b.type !== 'code' && b.type !== 'remember');
+            const rawContent = textBlocks[blockIdx]?.content || '';
+            const contentEl = blockEl.querySelector('.extra-block-content');
+            const collected = [];
+            const processed = fillBlockVariables(rawContent, contentEl, collected);
+            if (collected.length > 0) saveInputHistory(id, collected);
+            copyToClipboard(processed, btn);
         });
     });
     
@@ -1715,7 +1797,9 @@ function createPromptCard(item, searchTerm = '') {
                 if (!blockEl) return;
 
                 let blockContent = block.content;
-                const inputContainer = block.type === 'code' ? blockEl.querySelector('.code-content') : blockEl;
+                const inputContainer = block.type === 'code'
+                    ? blockEl.querySelector('.code-content')
+                    : (blockEl.querySelector('.extra-block-content') || blockEl);
 
                 if (inputContainer) {
                     const inputs = inputContainer.querySelectorAll('.prompt-input');
@@ -1800,6 +1884,7 @@ function createPromptCard(item, searchTerm = '') {
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
+            if (promptCodeTitleInput) promptCodeTitleInput.value = data.codeSnippetTitle || '';
             
             if (data.codeSnippet) {
                 promptCodeContainer.classList.remove('hidden');
@@ -1810,7 +1895,7 @@ function createPromptCard(item, searchTerm = '') {
             dynamicBlocksContainer.innerHTML = '';
             if (data.additionalBlocks && data.additionalBlocks.length > 0) {
                 data.additionalBlocks.forEach(block => {
-                    addDynamicBlock(block.type, block.content);
+                    addDynamicBlock(block.type, block.content, block.title || '');
                 });
             }
             
@@ -1867,6 +1952,7 @@ function createPromptCard(item, searchTerm = '') {
         updateCategoryTagPreview();
         document.getElementById('prompt-content').value = data.content;
         document.getElementById('prompt-code').value = data.codeSnippet || '';
+        if (promptCodeTitleInput) promptCodeTitleInput.value = data.codeSnippetTitle || '';
         document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : (itemMode === 'link' ? "Optional notes..." : "Optional Code Snippets...");
         
         if (data.codeSnippet) {
@@ -1921,7 +2007,7 @@ function createPromptCard(item, searchTerm = '') {
         dynamicBlocksContainer.innerHTML = '';
         if (data.additionalBlocks && data.additionalBlocks.length > 0) {
             data.additionalBlocks.forEach(block => {
-                addDynamicBlock(block.type, block.content);
+                addDynamicBlock(block.type, block.content, block.title || '');
             });
         }
 
@@ -2211,6 +2297,91 @@ function renderContentWithInputs(content, searchTerm = '') {
     return html;
 }
 
+function variableMirrorLabel(input, occurrence, total) {
+    const placeholder = (input.dataset.placeholder || '').trim();
+    const base = !placeholder || placeholder === '...' ? 'Blank' : placeholder;
+    return total > 1 ? `${base} ${occurrence}` : base;
+}
+
+function mirrorFieldHTML(input, index, label) {
+    const suggestionItems = input.closest('.prompt-variable-wrapper')?.querySelectorAll('.suggestion-item');
+    if (suggestionItems && suggestionItems.length) {
+        const optionsHtml = [...suggestionItems]
+            .map(opt => `<span class="suggestion-item">${escapeHTML(opt.textContent)}</span>`)
+            .join('');
+        return `
+            <div class="variable-mirror-row">
+                <span class="variable-mirror-label">${escapeHTML(label)}</span>
+                <div class="variable-mirror-field">
+                    <span class="prompt-variable-wrapper" contenteditable="false">
+                        <span contenteditable="plaintext-only" class="variable-mirror-input has-suggestions" data-variable-index="${index}" data-placeholder="Type here"></span>
+                        <span class="suggestions-toggle" contenteditable="false" title="Show suggestions">▾</span>
+                        <span class="suggestions-menu hidden" contenteditable="false">${optionsHtml}</span>
+                    </span>
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="variable-mirror-row">
+            <span class="variable-mirror-label">${escapeHTML(label)}</span>
+            <span contenteditable="plaintext-only" class="variable-mirror-input" data-variable-index="${index}" data-placeholder="Type here"></span>
+        </div>`;
+}
+
+function syncVariableMirrors(card) {
+    card.querySelectorAll('.variable-mirror-input').forEach(mirror => {
+        const inline = card.querySelector(`.prompt-input[data-variable-index="${mirror.dataset.variableIndex}"]`);
+        if (inline) mirror.textContent = inline.textContent;
+    });
+}
+
+function attachVariableMirrors(card) {
+    const body = card.querySelector('.prompt-body');
+    if (!body) return;
+
+    const inlineInputs = [...body.querySelectorAll('.prompt-input')];
+    if (!inlineInputs.length) return;
+
+    const rawLabels = inlineInputs.map(input => {
+        const placeholder = (input.dataset.placeholder || '').trim();
+        return !placeholder || placeholder === '...' ? 'Blank' : placeholder;
+    });
+    const totals = {};
+    rawLabels.forEach(label => {
+        totals[label] = (totals[label] || 0) + 1;
+    });
+    const seen = {};
+
+    const rows = inlineInputs.map((input, index) => {
+        input.dataset.variableIndex = String(index);
+        const base = rawLabels[index];
+        seen[base] = (seen[base] || 0) + 1;
+        return mirrorFieldHTML(input, index, variableMirrorLabel(input, seen[base], totals[base]));
+    }).join('');
+
+    const bar = document.createElement('div');
+    bar.className = 'variable-mirror-bar';
+    bar.innerHTML = `<div class="variable-mirror-heading">Fill in variables</div>${rows}`;
+    body.insertBefore(bar, body.firstChild);
+
+    card.addEventListener('input', (e) => {
+        const field = e.target.closest?.('.prompt-input, .variable-mirror-input');
+        if (!field || !card.contains(field)) return;
+        const index = field.dataset.variableIndex;
+        if (index == null || index === '') return;
+
+        const isMirror = field.classList.contains('variable-mirror-input');
+        const partner = card.querySelector(
+            isMirror
+                ? `.prompt-input[data-variable-index="${CSS.escape(index)}"]`
+                : `.variable-mirror-input[data-variable-index="${CSS.escape(index)}"]`
+        );
+        if (!partner || partner === field || partner.textContent === field.textContent) return;
+        partner.textContent = field.textContent;
+    });
+}
+
 // Logic for "Time Ago" formatting
 function timeAgo(date) {
     const now = new Date();
@@ -2339,12 +2510,13 @@ function restoreHistory(promptId, inputsArr) {
     const card = document.querySelector(`.glass-card[data-id="${promptId}"]`);
     if (!card) return;
 
-    const inputs = card.querySelectorAll('.prompt-input');
+    const inputs = card.querySelectorAll('.prompt-body .prompt-input');
     inputs.forEach((input, index) => {
         if (inputsArr[index] !== undefined) {
             input.textContent = inputsArr[index];
         }
     });
+    syncVariableMirrors(card);
 }
 
 // History Modal Close Handlers
@@ -2402,15 +2574,9 @@ function saveDraft() {
         text: document.getElementById('category-text-color').value,
         content: document.getElementById('prompt-content').value,
         code: document.getElementById('prompt-code').value,
-        blocks: []
+        codeTitle: promptCodeTitleInput ? promptCodeTitleInput.value : '',
+        blocks: collectAdditionalBlocks()
     };
-    
-    dynamicBlocksContainer.querySelectorAll('.dynamic-block-item').forEach(block => {
-        draftData.blocks.push({
-            type: block.dataset.type,
-            content: block.querySelector('textarea').value
-        });
-    });
     
     localStorage.setItem(`prompt_draft_${currentMode}`, JSON.stringify(draftData));
 }
@@ -2423,7 +2589,7 @@ function checkAndRestoreDraft() {
     
     const data = JSON.parse(draft);
     // Simple check if draft is empty
-    if (!data.title && !data.content && !data.code && data.blocks.length === 0) return;
+    if (!data.title && !data.content && !data.code && !data.codeTitle && (!data.blocks || data.blocks.length === 0)) return;
     
     // Auto-restore but maybe we should ask? For now let's just do it.
     document.getElementById('prompt-title').value = data.title;
@@ -2446,11 +2612,12 @@ function checkAndRestoreDraft() {
     
     document.getElementById('prompt-content').value = data.content;
     document.getElementById('prompt-code').value = data.code;
+    if (promptCodeTitleInput) promptCodeTitleInput.value = data.codeTitle || '';
     
-    if (data.code) promptCodeContainer.classList.remove('hidden');
+    if (data.code || data.codeTitle) promptCodeContainer.classList.remove('hidden');
     
     dynamicBlocksContainer.innerHTML = '';
-    data.blocks.forEach(b => addDynamicBlock(b.type, b.content));
+    (data.blocks || []).forEach(b => addDynamicBlock(b.type, b.content, b.title || ''));
     
     updateCounters();
     updateCategoryTagPreview();
@@ -2463,7 +2630,7 @@ function clearDraft() {
 
 // Listen for inputs to save draft
 [
-    'prompt-title', 'prompt-category', 'prompt-content', 'prompt-code'
+    'prompt-title', 'prompt-category', 'prompt-content', 'prompt-code', 'prompt-code-title'
 ].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
         if (!isEditing) saveDraft();
@@ -2519,7 +2686,7 @@ shortcutModal.innerHTML = `
         <div class="help-section">
             <h4>Interactive Variables</h4>
             <p class="help-description">
-                Add dynamic placeholders to your prompts or commands. They become editable fields when you view the card!
+                Add dynamic placeholders to your prompts or commands. They become editable fields in the text, and the same fields appear at the top when you expand the card. Typing in either place updates the other immediately. Each variable gets its own pair.
             </p>
             
             <div class="variable-type">
@@ -2539,6 +2706,13 @@ shortcutModal.innerHTML = `
                 <p>Provide multiple options separated by <code>||</code>. Choose from a dropdown list or type a custom input. If left empty, copying the prompt randomly picks one of the suggestions.</p>
                 <span class="variable-example">Write a story about a {{Robot||Wizard||Dragon}}.</span>
             </div>
+        </div>
+
+        <div class="help-section">
+            <h4>Extra Blocks</h4>
+            <p class="help-description">
+                Text and code blocks can have an optional title. The title shows on the card and is left out of every copy. Expand a prompt to copy an extra block on its own. Negative Prompt adds a titled text field in one click.
+            </p>
         </div>
     </div>
 `;
@@ -2628,7 +2802,7 @@ document.addEventListener('click', (e) => {
     if (suggestionItem) {
         e.stopPropagation();
         const wrapper = suggestionItem.closest('.prompt-variable-wrapper');
-        const input = wrapper.querySelector('.prompt-input');
+        const input = wrapper.querySelector('.prompt-input, .variable-mirror-input');
         
         input.textContent = suggestionItem.textContent;
         // Trigger input event for any auto-resize or counters if applicable

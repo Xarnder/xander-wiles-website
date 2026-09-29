@@ -1,73 +1,19 @@
 console.log("Debug: Script loaded successfully.");
 
-// --- Constants (Tax 2024/25) ---
-const PERSONAL_ALLOWANCE_DEFAULT = 12570;
-const TAPER_THRESHOLD = 100000;
-const BASIC_RATE_LIMIT = 50270;
-const HIGHER_RATE_LIMIT = 125140;
-
-const RATE_BASIC = 0.20;
-const RATE_HIGHER = 0.40;
-const RATE_ADDITIONAL = 0.45;
-
-// --- Constants (Dividends & CGT) ---
-const DIVIDEND_ALLOWANCE = 500;
-const DIVIDEND_RATE_BASIC = 0.0875;
-const DIVIDEND_RATE_HIGHER = 0.3375;
-const DIVIDEND_RATE_ADDITIONAL = 0.3935;
-
-const CGT_ALLOWANCE = 3000;
-const CGT_RATE_BASIC = 0.18;
-const CGT_RATE_HIGHER = 0.24;
-
-// --- Constants (NI 2024/25) ---
-const NI_PRIMARY_THRESHOLD = 12570;
-const NI_UPPER_LIMIT = 50270;
-
-// --- Constants (Student Loan 2026/27) ---
-const PGL_THRESHOLD = 21000;
-const PGL_RATE = 0.06;
-const STUDENT_LOAN_PLANS = {
-    plan1: {
-        label: 'Plan 1',
-        threshold: 26900,
-        rate: 0.09,
-        hint: 'Plan 1 (2026/27): repay 9% of income above £26,900. Based on gross pay before tax & NI.'
-    },
-    plan2: {
-        label: 'Plan 2',
-        threshold: 29385,
-        rate: 0.09,
-        hint: 'Plan 2 (2026/27): repay 9% of income above £29,385. Based on gross pay before tax & NI.'
-    },
-    plan4: {
-        label: 'Plan 4',
-        threshold: 33795,
-        rate: 0.09,
-        hint: 'Plan 4 / Scotland (2026/27): repay 9% of income above £33,795. Based on gross pay before tax & NI.'
-    },
-    plan5: {
-        label: 'Plan 5',
-        threshold: 25000,
-        rate: 0.09,
-        hint: 'Plan 5 (2026/27): repay 9% of income above £25,000. Based on gross pay before tax & NI.'
-    },
-    pgl: {
-        label: 'Postgraduate Loan',
-        threshold: PGL_THRESHOLD,
-        rate: PGL_RATE,
-        hint: 'Postgraduate Loan: repay 6% of income above £21,000. Can stack with an undergraduate plan.'
-    },
-    custom: {
-        label: 'Custom',
-        threshold: 29385,
-        rate: 0.09,
-        hint: 'Custom estimate: set any repayment threshold and percentage cut. Still applied to gross income.'
-    }
-};
+// Tax constants and the pure tax functions live in tax-math.js.
 
 // --- Elements ---
 const incomeInput = document.getElementById('incomeInput');
+const incomeInputLabel = document.getElementById('incomeInputLabel');
+const incomeBasisHint = document.getElementById('incomeBasisHint');
+const incomeBasisGroup = document.getElementById('incomeBasisGroup');
+const incomeBeforeTax = document.getElementById('incomeBeforeTax');
+const incomeAfterTax = document.getElementById('incomeAfterTax');
+const requiredGrossStat = document.getElementById('requiredGrossStat');
+const requiredGrossDisplay = document.getElementById('requiredGrossDisplay');
+const netTargetLine = document.getElementById('netTargetLine');
+let incomeBasis = 'gross';
+let visualisedGross = 30000;
 const niLetterSelect = document.getElementById('niLetter');
 const calculateBtn = document.getElementById('calculateBtn');
 const viewToggle = document.getElementById('viewToggle'); // Green bottom / Red bottom
@@ -154,38 +100,6 @@ const formatCurrency = (amount, decimals = 0) => {
     }).format(amount);
 };
 
-// --- Logic: Dynamic Personal Allowance (The Taper) ---
-function getPersonalAllowance(income) {
-    if (income <= TAPER_THRESHOLD) return PERSONAL_ALLOWANCE_DEFAULT;
-    const reduction = (income - TAPER_THRESHOLD) / 2;
-    return Math.max(0, PERSONAL_ALLOWANCE_DEFAULT - reduction);
-}
-
-// --- Logic: NI Rates based on Letter ---
-function getNIRates(letter) {
-    switch (letter) {
-        case 'A':
-        case 'H':
-        case 'M':
-        case 'V':
-            return { main: 0.08, upper: 0.02, name: 'Standard (8%)' };
-        case 'B':
-        case 'I':
-        case 'E':
-            return { main: 0.0185, upper: 0.02, name: 'Reduced (1.85%)' };
-        case 'C':
-        case 'S':
-        case 'K':
-            return { main: 0, upper: 0, name: 'Exempt (0%)' };
-        case 'J':
-        case 'Z':
-        case 'L':
-            return { main: 0.02, upper: 0.02, name: 'Deferred (2%)' };
-        default:
-            return { main: 0.08, upper: 0.02, name: 'Standard (8%)' };
-    }
-}
-
 // --- Logic: Student Loan config & calculation ---
 function isStudentLoanEnabled() {
     return !!(studentLoanToggle && studentLoanToggle.checked);
@@ -212,22 +126,7 @@ function getStudentLoanConfig() {
 }
 
 function calculateStudentLoan(income, type = 'paye') {
-    // Student loan deductions apply to earned/PAYE-style income estimates only.
-    if (type !== 'paye') return 0;
-
-    const cfg = getStudentLoanConfig();
-    if (!cfg.enabled) return 0;
-
-    let repayment = 0;
-    if (cfg.planKey === 'pgl') {
-        repayment += Math.max(0, income - cfg.threshold) * cfg.rate;
-    } else {
-        repayment += Math.max(0, income - cfg.threshold) * cfg.rate;
-        if (cfg.includePgl) {
-            repayment += Math.max(0, income - cfg.pglThreshold) * cfg.pglRate;
-        }
-    }
-    return repayment;
+    return UKTax.studentLoan(income, type, getStudentLoanConfig());
 }
 
 function getMarginalStudentLoanRate(incomePoint, type = 'paye') {
@@ -290,108 +189,19 @@ function recalculateCurrentView() {
     }
 }
 
-// --- Reverse Calculation: Gross from Net ---
+function currentTaxOptions() {
+    return {
+        niLetter: niLetterSelect ? niLetterSelect.value : 'A',
+        studentLoan: getStudentLoanConfig()
+    };
+}
+
 function calculateGrossFromNet(targetNet, type = 'paye') {
-    if (targetNet <= 0) return 0;
-    
-    let low = 0;
-    let high = targetNet * 3; // safe upper bound
-    let currentGross = 0;
-    
-    for (let i = 0; i < 60; i++) { // binary search iterations
-        currentGross = (low + high) / 2;
-        const tax = calculateIncomeTax(currentGross, type);
-        const ni = calculateNI(currentGross, type);
-        const loan = calculateStudentLoan(currentGross, type);
-        const net = currentGross - tax - ni - loan;
-        
-        if (Math.abs(net - targetNet) < 0.01) break;
-        
-        if (net < targetNet) {
-            low = currentGross;
-        } else {
-            high = currentGross;
-        }
-    }
-    return currentGross;
+    return UKTax.grossFromNet(targetNet, type, currentTaxOptions());
 }
 
-// --- Calculation: Income Tax ---
-function calculateIncomeTax(income, type = 'paye') {
-    let tempIncome = income;
-    let tax = 0;
-
-    if (type === 'cgt') {
-        const exemptChunk = Math.min(tempIncome, CGT_ALLOWANCE);
-        tempIncome -= exemptChunk;
-        
-        const basicChunk = Math.min(tempIncome, BASIC_RATE_LIMIT);
-        tax += basicChunk * CGT_RATE_BASIC;
-        tempIncome -= basicChunk;
-        
-        if (tempIncome > 0) {
-            tax += tempIncome * CGT_RATE_HIGHER;
-        }
-        return tax;
-    }
-
-    const allowance = getPersonalAllowance(income);
-    const paChunk = Math.min(tempIncome, allowance);
-    tempIncome -= paChunk;
-
-    if (type === 'dividends') {
-        const daChunk = Math.min(tempIncome, DIVIDEND_ALLOWANCE);
-        tempIncome -= daChunk;
-        
-        const basicBandRemaining = Math.max(0, 37700 - daChunk);
-        const basicChunk = Math.min(tempIncome, basicBandRemaining);
-        tax += basicChunk * DIVIDEND_RATE_BASIC;
-        tempIncome -= basicChunk;
-        
-        const accountedSoFar = allowance + daChunk + basicChunk;
-        const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
-        const higherChunk = Math.min(tempIncome, higherBandSize);
-        tax += higherChunk * DIVIDEND_RATE_HIGHER;
-        tempIncome -= higherChunk;
-        
-        if (tempIncome > 0) {
-            tax += tempIncome * DIVIDEND_RATE_ADDITIONAL;
-        }
-        return tax;
-    }
-
-    // Default PAYE logic
-    const basicChunk = Math.min(tempIncome, 37700);
-    tax += basicChunk * RATE_BASIC;
-    tempIncome -= basicChunk;
-    
-    const accountedSoFar = allowance + basicChunk;
-    const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
-    const higherChunk = Math.min(tempIncome, higherBandSize);
-    tax += higherChunk * RATE_HIGHER;
-    tempIncome -= higherChunk;
-    
-    if (tempIncome > 0) {
-        tax += tempIncome * RATE_ADDITIONAL;
-    }
-
-    return tax;
-}
-
-// --- Calculation: NI ---
 function calculateNI(income, type = 'paye') {
-    if (type === 'dividends' || type === 'cgt') return 0;
-    
-    const rates = getNIRates(niLetterSelect.value);
-    let ni = 0;
-
-    if (income > NI_PRIMARY_THRESHOLD) {
-        ni += (Math.min(income, NI_UPPER_LIMIT) - NI_PRIMARY_THRESHOLD) * rates.main;
-    }
-    if (income > NI_UPPER_LIMIT) {
-        ni += (income - NI_UPPER_LIMIT) * rates.upper;
-    }
-    return ni;
+    return UKTax.nationalInsurance(income, type, niLetterSelect ? niLetterSelect.value : 'A');
 }
 
 // --- UI: Breakdown ---
@@ -1277,11 +1087,10 @@ function setupRateModeToggle() {
     if (rateModeToggle) {
         rateModeToggle.addEventListener('change', () => {
             updateRateModeCaption();
-            const income = parseFloat(incomeInput.value) || 0;
             const type = (passiveModeToggle && passiveModeToggle.checked && passiveIncomeTypeSelect)
                 ? passiveIncomeTypeSelect.value
                 : 'paye';
-            updateChart(income, type);
+            updateChart(currentChartIncome(), type);
         });
     }
 }
@@ -1296,12 +1105,26 @@ function updateRateModeCaption() {
 }
 
 // --- Main ---
-function processInput() {
-    const income = parseFloat(incomeInput.value);
-    if (isNaN(income) || income < 0) {
-        alert('Invalid income');
+function wantsNetIncome() {
+    return incomeBasis === 'net';
+}
+
+function currentChartIncome() {
+    if (passiveModeToggle && passiveModeToggle.checked) {
+        return parseFloat(incomeInput.value) || 0;
+    }
+    return visualisedGross;
+}
+
+function processInput(options = {}) {
+    const typed = parseFloat(incomeInput.value);
+    if (isNaN(typed) || typed < 0) {
+        if (!options.quiet) alert('Invalid income');
         return;
     }
+
+    const income = wantsNetIncome() ? calculateGrossFromNet(typed, 'paye') : typed;
+    visualisedGross = income;
     const tax = calculateIncomeTax(income);
     const ni = calculateNI(income);
     const loan = calculateStudentLoan(income);
@@ -1313,10 +1136,50 @@ function processInput() {
     takeHomeDisplay.textContent = formatCurrency(takeHome);
     effectiveRateDisplay.textContent = rate.toFixed(1) + '%';
 
+    if (wantsNetIncome()) {
+        const loanOn = studentLoanToggle && studentLoanToggle.checked;
+        const deductions = loanOn
+            ? 'Income Tax, National Insurance, and student loan'
+            : 'Income Tax and National Insurance';
+        if (incomeBasisHint) {
+            incomeBasisHint.textContent = loanOn
+                ? 'Type the take-home you want each year. The salary includes Income Tax, National Insurance, and your student loan.'
+                : 'Type the take-home you want each year. The salary is before Income Tax and National Insurance.';
+        }
+        requiredGrossStat.hidden = false;
+        requiredGrossDisplay.textContent = formatCurrency(income);
+        netTargetLine.hidden = false;
+        netTargetLine.textContent = `To take home ${formatCurrency(typed)}, you need to earn ${formatCurrency(income)} before ${deductions}.`;
+    } else {
+        requiredGrossStat.hidden = true;
+        netTargetLine.hidden = true;
+    }
+
     updateBreakdownUI(income, tax, ni, 'paye', loan);
     generateFormula(income);
     updateChart(income);
     updateComparisonChart(income);
+}
+
+function setIncomeBasis(next) {
+    incomeBasis = next === 'net' ? 'net' : 'gross';
+    const afterTax = wantsNetIncome();
+    if (incomeBeforeTax) incomeBeforeTax.setAttribute('aria-pressed', afterTax ? 'false' : 'true');
+    if (incomeAfterTax) incomeAfterTax.setAttribute('aria-pressed', afterTax ? 'true' : 'false');
+    if (incomeInputLabel) {
+        incomeInputLabel.textContent = afterTax ? 'Take-home you want (£)' : 'Annual Income (£)';
+    }
+    if (incomeInput) {
+        incomeInput.placeholder = afterTax ? 'e.g. 40000' : 'e.g. 45000';
+    }
+    if (incomeBasisHint) {
+        incomeBasisHint.hidden = !afterTax;
+        const loanOn = studentLoanToggle && studentLoanToggle.checked;
+        incomeBasisHint.textContent = loanOn
+            ? 'Type the take-home you want each year. The salary includes Income Tax, National Insurance, and your student loan.'
+            : 'Type the take-home you want each year. The salary is before Income Tax and National Insurance.';
+    }
+    if (!(passiveModeToggle && passiveModeToggle.checked)) processInput({ quiet: true });
 }
 
 // --- Passive Logic ---
@@ -1688,15 +1551,21 @@ niLetterSelect.addEventListener('change', () => {
     }
 });
 viewToggle.addEventListener('change', () => {
-    const income = parseFloat(incomeInput.value) || 0;
     const type = (passiveModeToggle && passiveModeToggle.checked && passiveIncomeTypeSelect)
         ? passiveIncomeTypeSelect.value
         : 'paye';
-    updateChart(income, type);
+    updateChart(currentChartIncome(), type);
 });
 incomeInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') processInput();
 });
+incomeInput.addEventListener('input', () => {
+    if (wantsNetIncome() && !(passiveModeToggle && passiveModeToggle.checked)) {
+        processInput({ quiet: true });
+    }
+});
+if (incomeBeforeTax) incomeBeforeTax.addEventListener('click', () => setIncomeBasis('gross'));
+if (incomeAfterTax) incomeAfterTax.addEventListener('click', () => setIncomeBasis('net'));
 
 // Student Loan Event Listeners
 if (studentLoanToggle) {
@@ -1740,6 +1609,7 @@ if (passiveModeToggle) {
             // Disable annual income input
             incomeInput.disabled = true;
             incomeInput.parentElement.style.opacity = '0.5';
+            if (incomeBasisGroup) incomeBasisGroup.hidden = true;
             
             // Show passive inputs in the same row
             if (passiveIncomeTypeGroup) passiveIncomeTypeGroup.style.display = 'block';
@@ -1756,6 +1626,7 @@ if (passiveModeToggle) {
             // Enable annual income input
             incomeInput.disabled = false;
             incomeInput.parentElement.style.opacity = '1';
+            if (incomeBasisGroup) incomeBasisGroup.hidden = false;
             
             // Hide passive inputs
             if (passiveIncomeTypeGroup) passiveIncomeTypeGroup.style.display = 'none';
@@ -1813,6 +1684,10 @@ if (passiveRateInput) {
 // Interest Mode Event Listeners
 if (taxModeBtn) taxModeBtn.addEventListener('click', () => switchMode('tax'));
 if (interestModeBtn) interestModeBtn.addEventListener('click', () => switchMode('interest'));
+
+if (new URLSearchParams(window.location.search).get('view') === 'interest') {
+    switchMode('interest');
+}
 
 if (contributionToggle) {
     contributionToggle.addEventListener('change', () => {

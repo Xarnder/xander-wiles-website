@@ -14,6 +14,8 @@
 
 .mode-selector {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
     background: var(--glass-bg);
     padding: 6px;
@@ -47,11 +49,27 @@
     color: #0f172a;
 }
 
+a.mode-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: #94a3b8;
+}
+
+a.mode-tab:hover {
+    color: white;
+}
+
+a.mode-tab.active,
+a.mode-tab.active:hover {
+    color: #0f172a;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 body {
@@ -59,10 +77,21 @@ body {
     color: var(--text-color);
     min-height: 100vh;
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 40px 20px 100px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 0 100px;
     overflow-x: hidden;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* The site header must stay viewport-wide. Only the page column is narrowed. */
+body > #main-nav-placeholder {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    margin-bottom: 36px;
+    align-self: stretch;
 }
 
 .background-blobs {
@@ -77,8 +106,10 @@ body {
 }
 
 .container {
-    width: 100%;
+    width: min(900px, calc(100% - 40px));
     max-width: 900px;
+    margin-inline: auto;
+    align-self: center;
     display: flex;
     flex-direction: column;
     gap: 35px;
@@ -90,19 +121,19 @@ body {
     gap: 35px;
 }
 
-header {
+.container > header {
     text-align: center;
     margin-bottom: 10px;
 }
 
-header h1 {
+.container > header h1 {
     font-size: 2.5rem;
     background: linear-gradient(90deg, #38bdf8, #818cf8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
-header p { color: #94a3b8; }
+.container > header p { color: #94a3b8; }
 
 .card {
     background: var(--card-bg);
@@ -185,6 +216,67 @@ input:checked + .slider.loan-slider { background-color: var(--highlight-loan); }
     color: #94a3b8;
     line-height: 1.45;
     margin: 0;
+}
+
+#incomeBasisGroup {
+    flex: 1.1;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+.basis-toggle {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+}
+
+.basis-btn {
+    flex: 1;
+    height: auto;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.basis-btn:hover {
+    transform: none;
+    filter: none;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.basis-btn[aria-pressed="true"] {
+    background: var(--accent);
+    color: #0f172a;
+}
+
+.basis-btn[aria-pressed="true"]:hover {
+    background: var(--accent);
+    filter: brightness(1.08);
+}
+
+.income-basis-hint,
+.net-target-line {
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    line-height: 1.45;
+}
+
+.income-basis-hint {
+    margin: 14px 0 0;
+}
+
+.net-target-line {
+    grid-column: 1 / -1;
+    margin: 0;
+    text-align: center;
 }
 
 /* Summary */
@@ -282,7 +374,7 @@ canvas { width: 100% !important; height: 100% !important; }
 }
 
 @media (max-width: 600px) {
-    header h1 { font-size: 2rem; }
+    .container > header h1 { font-size: 2rem; }
     .input-row { flex-direction: column; align-items: stretch; }
     button { padding: 15px; }
     .graph-card { height: 450px; }

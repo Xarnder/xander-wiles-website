@@ -35,7 +35,7 @@
 
     <link rel="stylesheet" href="/assets/css/style.css?v=1.1">
 
-    <link rel="stylesheet" href="/pages/Prompt-Manager/style.css?v=1.2">
+    <link rel="stylesheet" href="/pages/Prompt-Manager/style.css?v=1.7">
 
     <!-- SortableJS for Touch-Friendly Drag and Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
@@ -184,6 +184,7 @@
                                 <label>Optional Code Snippets</label>
                                 <button type="button" id="remove-primary-code-btn" class="remove-block-btn">Remove</button>
                             </div>
+                            <input type="text" id="prompt-code-title" class="block-title-input" placeholder="Optional title (not copied)" autocomplete="off">
                             <textarea id="prompt-code" class="code-textarea" rows="3" placeholder="Optional Code Snippets..." style="margin-bottom: 0;"></textarea>
                         </div>
 
@@ -195,6 +196,8 @@
                                 Block</button>
                             <button type="button" id="add-code-block-btn" class="outline-btn small-btn">+ Add Code
                                 Block</button>
+                            <button type="button" id="add-negative-prompt-btn" class="outline-btn small-btn">+ Negative
+                                Prompt</button>
                             <button type="button" id="add-remember-block-btn" class="outline-btn small-btn">+ Add Things
                                 to Remember</button>
                         </div>
@@ -475,7 +478,7 @@
         </div>
     </main>
 
-    <script type="module" src="/pages/Prompt-Manager/app.js?v=1.2"></script>
+    <script type="module" src="/pages/Prompt-Manager/app.js?v=1.7"></script>
     <div id="toast-container" class="toast-container"></div>
 </body>
 
