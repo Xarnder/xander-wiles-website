@@ -3738,6 +3738,10 @@ html.is-mdlist-sorting body {
     gap: 6px;
 }
 
+.mdplain-convert-btn {
+    width: 100%;
+}
+
 .mdplain-title {
     margin: 0;
     min-width: 0;

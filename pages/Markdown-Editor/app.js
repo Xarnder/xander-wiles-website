@@ -105,9 +105,9 @@ import {
     writeDraft,
 } from './editor.js';
 import {
-    addItem,
-    appendEmptyList,
+    appendPlainMarkdownList,
     countItemsMissingDates,
+    locateLastPlainList,
     fillMissingListDates,
     offsetFromPreviewAnchor,
     parseDocument,
@@ -2109,13 +2109,9 @@ function syncEditorActionLocks() {
 function syncInsertListButton() {
     const els = getEls();
     if (!els.btnInsertList) return;
-    const placing = state.viewMode === 'preview' && state.placingList && !state.pendingImportList;
-    els.btnInsertList.title = placing ? 'Cancel' : 'Add list';
-    els.btnInsertList.setAttribute(
-        'aria-label',
-        placing ? 'Cancel placing list' : 'Add ranked list'
-    );
-    els.btnInsertList.classList.toggle('btn-insert-list--cancel', placing);
+    els.btnInsertList.title = 'Add list';
+    els.btnInsertList.setAttribute('aria-label', 'Add list');
+    els.btnInsertList.classList.remove('btn-insert-list--cancel');
     syncEditorActionLocks();
 }
 
@@ -3904,48 +3900,62 @@ function syncPureReaderChrome() {
     syncEditorActionLocks();
 }
 
-function insertRankedList() {
+function pinLocatedPlainList(doc, located) {
+    if (!located || !doc) return;
+    const seg = doc.segments?.[located.segIndex];
+    if (!seg || seg.type !== 'markdown') return;
+    seg._plainBlocks = located.blocks;
+    seg._plainBlocksSource = located.sourceText;
+}
+
+function insertMarkdownList() {
     if (!state.editor.fileId) return;
     if (readPureReaderEnabled() && state.viewMode === 'preview') {
         setStatus('Turn off Pure reader to edit Preview', 'warn');
         return;
     }
-
-    if (state.viewMode === 'preview' && state.placingList) {
-        cancelListPlacement();
-        return;
-    }
+    if (state.placingList && state.pendingImportList) return;
 
     flushCurrentEditorContent();
     refreshDocumentModelFromText(state.editor.editorContent);
 
-    if (state.viewMode === 'preview') {
-        state.clickEdit = false;
-        state.pendingImportList = null;
-        state.placingList = true;
-        applyEditingLists(state.documentModel, state.editingListIds);
-        applyTagFilters(state.documentModel, state.tagFilters);
-        renderStructuredEditor();
-        syncImportListButton();
-        setStatus('Tap content to place the list, or Cancel', 'ok');
-        return;
-    }
-
-    const list = appendEmptyList(state.documentModel);
-    const item = addItem(list, '');
-    state.editingListIds = { ...state.editingListIds, [list.id]: true };
-    state.placingList = false;
-    state.pendingImportList = null;
-    state.clickEdit = false;
-    applyEditingLists(state.documentModel, state.editingListIds);
+    noteUserEditBoundary(state.editor.editorContent);
+    appendPlainMarkdownList(state.documentModel);
     const serialized = serializeDocument(state.documentModel);
     setEditorText(state.editor, serialized);
     const els = getEls();
     els.editor.value = serialized;
-    applyViewMode('list', { persist: true });
-    renderStructuredEditor({ focusItemId: item.id });
+    editHistory.touch(serialized);
+
+    state.clickEdit = false;
+    state.placingList = false;
+    state.pendingImportList = null;
+
+    const openInList = state.viewMode === 'list';
+    if (!openInList && state.viewMode !== 'preview') {
+        applyViewMode('preview', { persist: true });
+    } else {
+        refreshDocumentModelFromText(serialized);
+    }
+
+    const located = locateLastPlainList(state.documentModel);
+    pinLocatedPlainList(state.documentModel, located);
+    if (openInList && located) {
+        state.editingPlainLists = {
+            ...state.editingPlainLists,
+            [`${located.segIndex}:${located.listIndex}`]: true,
+        };
+        applyEditingPlainLists(state.documentModel, state.editingPlainLists);
+    }
+
+    showParseWarnings();
+    renderStructuredEditor(
+        openInList
+            ? { focusPlainItemId: located?.itemId || null }
+            : { openMiniPlainItemId: located?.itemId || null }
+    );
     syncEditorChrome(state.editor);
-    setStatus('Added ranked list', 'ok');
+    setStatus(located ? 'Added list' : 'Could not add list', located ? 'ok' : 'error');
 }
 
 function toggleClickEdit() {
@@ -5027,7 +5037,7 @@ function wireEvents() {
     }
     if (els.btnInsertList) {
         els.btnInsertList.addEventListener('click', () => {
-            insertRankedList();
+            insertMarkdownList();
         });
     }
     if (els.importListFile) {

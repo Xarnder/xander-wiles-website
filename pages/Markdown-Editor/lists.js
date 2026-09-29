@@ -853,6 +853,137 @@ export function appendEmptyList(doc, title) {
 }
 
 /**
+ * Append a one-item standard markdown bullet list at the end of the document.
+ * A blank line keeps it from merging into a list already at the end.
+ * The item is stamped with today’s date tag, same as other new list items.
+ * @param {object} doc
+ */
+export function appendPlainMarkdownList(doc) {
+    if (!doc || typeof doc !== 'object') return;
+    const stamped = stampNewItemText('').replace(/^\s+/, '');
+    const line = `- ${stamped}`;
+    if (!Array.isArray(doc.segments)) doc.segments = [];
+    const segments = doc.segments;
+    const last = segments[segments.length - 1];
+    if (last && last.type === 'markdown') {
+        const base = String(last.text ?? '').replace(/\s+$/, '');
+        last.text = base ? `${base}\n\n${line}\n` : `${line}\n`;
+        delete last._plainBlocks;
+        delete last._plainBlocksSource;
+        return;
+    }
+    segments.push({ type: 'markdown', text: `${line}\n` });
+}
+
+/**
+ * Last plain list in document order, plus the split blocks for its segment
+ * so the caller can reuse those item ids for the next render.
+ * @param {object} doc
+ * @returns {{ segIndex: number, listIndex: number, itemId: string, blocks: Array<object>, sourceText: string } | null}
+ */
+export function locateLastPlainList(doc) {
+    let found = null;
+    (doc?.segments || []).forEach((seg, segIndex) => {
+        if (!seg || seg.type !== 'markdown') return;
+        const sourceText = stripMdlistAgentNotes(seg.text || '');
+        const blocks = splitMarkdownBlocks(sourceText);
+        let listIndex = -1;
+        for (const block of blocks) {
+            if (block.type !== 'plainlist') continue;
+            listIndex += 1;
+            const itemId = block.items?.[0]?.id || '';
+            if (!itemId) continue;
+            found = { segIndex, listIndex, itemId, blocks, sourceText };
+        }
+    });
+    return found;
+}
+
+/**
+ * Checkbox state lives beside the text on plain items. Keep it visible
+ * when those items become custom-list text.
+ * @param {object} item
+ * @returns {string}
+ */
+function plainItemTextForCustom(item) {
+    let text = String(item?.text ?? '');
+    if (item?.checked === true || item?.checked === false) {
+        const mark = item.checked ? '[x]' : '[ ]';
+        const body = text.trim();
+        text = body ? `${mark} ${body}` : mark;
+    }
+    return stampNewItemText(text);
+}
+
+function withMarkdownBreak(text) {
+    const value = String(text ?? '');
+    if (!value) return '';
+    if (value.endsWith('\n\n')) return value;
+    if (value.endsWith('\n')) return `${value}\n`;
+    return `${value}\n\n`;
+}
+
+/**
+ * Replace one plain markdown list with a ranked mdlist, keeping surrounding prose.
+ * Nested items are flattened in reading order. Scores follow that order.
+ * @param {object} doc
+ * @param {number} segIndex
+ * @param {number} listIndex index among plain lists inside the markdown segment
+ * @returns {object | null} the new list
+ */
+export function convertPlainListToCustom(doc, segIndex, listIndex) {
+    if (!doc || !Array.isArray(doc.segments)) return null;
+    const index = Number(segIndex);
+    const which = Number(listIndex);
+    if (!Number.isInteger(index) || !Number.isInteger(which) || which < 0) return null;
+    const segments = [...doc.segments];
+    const seg = segments[index];
+    if (!seg || seg.type !== 'markdown') return null;
+
+    const sourceText = stripMdlistAgentNotes(seg.text || '');
+    const blocks = splitMarkdownBlocks(sourceText);
+    let seen = -1;
+    let blockPos = -1;
+    for (let i = 0; i < blocks.length; i += 1) {
+        if (blocks[i].type !== 'plainlist') continue;
+        seen += 1;
+        if (seen === which) {
+            blockPos = i;
+            break;
+        }
+    }
+    if (blockPos < 0) return null;
+
+    const block = blocks[blockPos];
+    const beforeText = joinMarkdownBlocks(blocks.slice(0, blockPos)).replace(/\s+$/, '');
+    const afterText = joinMarkdownBlocks(blocks.slice(blockPos + 1)).replace(/^\s+/, '');
+    const title = String(block.title || '').trim() || nextDefaultListTitle(doc);
+    const rawItems = (block.items || []).map((item) => ({
+        id: createId('item'),
+        text: plainItemTextForCustom(item),
+        tags: [],
+    }));
+    const list = {
+        version: 1,
+        id: createId('list'),
+        title,
+        items: rerankScoresInOrder(rawItems),
+    };
+
+    const parts = [];
+    if (beforeText) {
+        parts.push({ type: 'markdown', text: withMarkdownBreak(beforeText) });
+    }
+    parts.push({ type: 'mdlist', raw: '', list, repaired: false, error: null });
+    if (afterText) {
+        parts.push({ type: 'markdown', text: afterText });
+    }
+    segments.splice(index, 1, ...parts);
+    doc.segments = segments;
+    return list;
+}
+
+/**
  * Normalize an imported mdlist and ensure a unique id in the document.
  * @param {object} doc
  * @param {object} list

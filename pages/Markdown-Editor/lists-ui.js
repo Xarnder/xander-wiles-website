@@ -11,6 +11,7 @@ import {
     deleteListFromDocument,
     filterItemsByTag,
     formatTagsInput,
+    convertPlainListToCustom,
     insertEmptyListAt,
     insertImportedListAt,
     mdlistAgentNotePlain,
@@ -473,7 +474,6 @@ export function renderListsUi(root, options) {
 
     ensureEditingForFocus(doc, focusItemId);
 
-    const validLists = (doc.segments || []).filter((s) => s.type === 'mdlist' && s.list);
     const errorLists = (doc.segments || []).filter((s) => s.type === 'mdlist' && !s.list);
 
     if (errorLists.length && mode !== 'contents') {
@@ -494,39 +494,7 @@ export function renderListsUi(root, options) {
     }
 
     if (mode === 'list') {
-        if (!validLists.length) {
-            const empty = document.createElement('div');
-            empty.className = 'lists-empty';
-            const p = document.createElement('p');
-            p.textContent = 'No valid custom lists in this file.';
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'btn btn-primary';
-            btn.textContent = 'Add list';
-            btn.addEventListener('click', () => {
-                const list = appendEmptyList(doc);
-                const item = addItem(list, '');
-                const seg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
-                if (seg) seg._editing = true;
-                onChange(doc, {
-                    focusItemId: item.id,
-                    editingListIds: collectEditingLists(doc),
-                    tagFilters: collectTagFilters(doc),
-                });
-            });
-            empty.append(p, btn);
-            root.appendChild(empty);
-            restoreScroll(root, scrollTop, plainListScroll);
-            return;
-        }
-        for (const seg of validLists) {
-            root.appendChild(renderListStack(seg, doc, onChange, onStatus, focusItemId));
-        }
-        const addList = document.createElement('button');
-        addList.type = 'button';
-        addList.className = 'btn btn-ghost btn-block';
-        addList.textContent = '+ Add another list';
-        addList.addEventListener('click', () => {
+        const addCustomList = () => {
             const list = appendEmptyList(doc);
             const item = addItem(list, '');
             const seg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
@@ -536,10 +504,60 @@ export function renderListsUi(root, options) {
                 editingListIds: collectEditingLists(doc),
                 tagFilters: collectTagFilters(doc),
             });
-        });
+        };
+
+        let showedList = false;
+        const segments = doc.segments || [];
+        for (let segIndex = 0; segIndex < segments.length; segIndex += 1) {
+            const seg = segments[segIndex];
+            if (seg.type === 'markdown') {
+                const count = renderSegmentPlainLists(root, {
+                    seg,
+                    segIndex,
+                    doc,
+                    onChange,
+                    onStatus,
+                    focusPlainItemId,
+                    showConvertToCustom: true,
+                });
+                if (count) showedList = true;
+                continue;
+            }
+            if (seg.type === 'mdlist' && seg.list) {
+                root.appendChild(renderListStack(seg, doc, onChange, onStatus, focusItemId));
+                showedList = true;
+            }
+        }
+
+        if (!showedList) {
+            const empty = document.createElement('div');
+            empty.className = 'lists-empty';
+            const p = document.createElement('p');
+            p.textContent = 'No lists in this file.';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-primary';
+            btn.textContent = 'Add custom list';
+            btn.addEventListener('click', addCustomList);
+            empty.append(p, btn);
+            root.appendChild(empty);
+            restoreScroll(root, scrollTop, plainListScroll);
+            return;
+        }
+
+        const addList = document.createElement('button');
+        addList.type = 'button';
+        addList.className = 'btn btn-ghost btn-block';
+        addList.textContent = '+ Add custom list';
+        addList.addEventListener('click', addCustomList);
         root.appendChild(addList);
-        restoreScroll(root, scrollTop, plainListScroll);
+        if (focusPlainItemId || focusItemId) {
+            // New/focused item handlers scroll the target into view.
+        } else {
+            restoreScroll(root, scrollTop, plainListScroll);
+        }
         focusItem(root, focusItemId);
+        focusPlainItem(root, focusPlainItemId);
         return;
     }
 
@@ -1082,6 +1100,76 @@ function jumpToTocTarget(root, id) {
     }
 }
 
+function convertPlainListFromUi({ segIndex, listIndex, doc, onChange, onStatus }) {
+    if (typeof closeActivePlainMiniEditor === 'function') {
+        closeActivePlainMiniEditor({ commit: true, deferRefresh: true });
+    }
+    const list = convertPlainListToCustom(doc, segIndex, listIndex);
+    if (!list) {
+        onStatus?.('Could not convert list', 'error');
+        return;
+    }
+    const newSeg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
+    if (newSeg) {
+        newSeg._editing = true;
+        newSeg._reordering = false;
+    }
+    onChange(doc, changeOpts(doc, {
+        soft: true,
+        persist: true,
+        focusItemId: list.items?.[0]?.id || null,
+        statusMessage: 'Converted to custom list',
+        statusKind: 'ok',
+    }));
+}
+
+/**
+ * Plain lists inside one markdown segment. Returns how many were rendered.
+ * @param {HTMLElement} root
+ */
+function renderSegmentPlainLists(root, {
+    seg,
+    segIndex,
+    doc,
+    onChange,
+    onStatus,
+    focusPlainItemId = null,
+    openMiniPlainItemId = null,
+    showConvertToCustom = false,
+}) {
+    const blocks = getCachedPlainBlocks(seg);
+    const editingMap = seg._editingPlainLists || {};
+    const reorderingMap = seg._reorderingPlainLists || {};
+    let plainListIndex = 0;
+    let count = 0;
+    for (const block of blocks) {
+        if (block.type !== 'plainlist') continue;
+        const listIndex = plainListIndex;
+        plainListIndex += 1;
+        count += 1;
+        const editing = Boolean(editingMap[listIndex]);
+        root.appendChild(
+            renderPlainListBlock({
+                block,
+                listIndex,
+                seg,
+                segIndex,
+                doc,
+                onChange,
+                onStatus,
+                editing,
+                reordering: Boolean(reorderingMap[listIndex]) && !editing,
+                focusPlainItemId,
+                openMiniPlainItemId: editing ? null : openMiniPlainItemId,
+                onConvertToCustom: showConvertToCustom
+                    ? () => convertPlainListFromUi({ segIndex, listIndex, doc, onChange, onStatus })
+                    : null,
+            })
+        );
+    }
+    return count;
+}
+
 function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
     const placingList = Boolean(options.placingList);
     const clickEdit = Boolean(options.clickEdit);
@@ -1261,6 +1349,20 @@ function applyPlainListTitleEl(titleEl, block, segIndex) {
     }
 }
 
+function appendPlainConvertButton(header, onConvertToCustom) {
+    if (typeof onConvertToCustom !== 'function') return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost btn-small mdplain-convert-btn';
+    btn.textContent = 'Convert to custom list';
+    btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onConvertToCustom();
+    });
+    header.appendChild(btn);
+}
+
 function renderPlainListBlock({
     block,
     listIndex,
@@ -1273,6 +1375,7 @@ function renderPlainListBlock({
     reordering = false,
     focusPlainItemId,
     openMiniPlainItemId = null,
+    onConvertToCustom = null,
 }) {
     if (previewPureReaderActive) {
         editing = false;
@@ -1294,6 +1397,7 @@ function renderPlainListBlock({
         wrap.appendChild(
             renderPlainListViewHeader(block, seg, segIndex, listIndex, doc, onChange, onStatus, {
                 reordering,
+                onConvertToCustom,
             })
         );
         if (reordering) {
@@ -1384,6 +1488,7 @@ function renderPlainListBlock({
 
     titleRow.append(title, count, doneBtn);
     header.appendChild(titleRow);
+    appendPlainConvertButton(header, onConvertToCustom);
 
     const hint = document.createElement('p');
     hint.className = 'mdplain-hint';
@@ -1472,7 +1577,7 @@ function renderPlainListViewHeader(
     doc,
     onChange,
     onStatus,
-    { reordering = false } = {}
+    { reordering = false, onConvertToCustom = null } = {}
 ) {
     const header = document.createElement('div');
     header.className = 'mdplain-header';
@@ -1598,6 +1703,7 @@ function renderPlainListViewHeader(
     actions.append(addTopBtn, addBottomBtn, copyBtn, reorderBtn, editBtn);
     titleRow.append(title, count, actions);
     header.appendChild(titleRow);
+    appendPlainConvertButton(header, onConvertToCustom);
     return header;
 }
 
@@ -2481,6 +2587,7 @@ function openPlainItemMiniEditor({
         // Clicks inside this item (including its mini editor) stay here.
         if (li.contains(target)) return;
         if (target instanceof Element && target.closest('dialog')) return;
+        if (target instanceof Element && target.closest('.mdplain-convert-btn')) return;
         // Another nested item under the same parent — let that item take over;
         // don't treat it as a blur that then races with its long-press.
         if (
