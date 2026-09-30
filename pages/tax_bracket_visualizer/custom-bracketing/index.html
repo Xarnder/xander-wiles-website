@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Bracketing</title>
+    <meta name="description" content="Model your own income brackets and percentage deductions, then see the marginal net income.">
+
+    <link rel="icon" href="../favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="../favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="bracketing.css">
+</head>
+<body>
+    <div class="background-blobs"></div>
+    <div id="main-nav-placeholder"></div>
+
+    <div class="container">
+        <header>
+            <h1>Custom Bracketing</h1>
+            <p>Set your own income bands and the percentages taken inside each one.</p>
+            <p>The starting bands are an example you can change. They are not current UK tax rules.</p>
+        </header>
+
+        <nav class="mode-selector" aria-label="Tax tools">
+            <a class="mode-tab" href="../">Tax Visualiser</a>
+            <a class="mode-tab" href="../?view=interest">Compound Interest</a>
+            <a class="mode-tab" href="../calculator/">Income Calculator</a>
+            <a class="mode-tab active" href="./" aria-current="page">Custom Bracketing</a>
+        </nav>
+
+        <form id="bracketing" class="bracket-app">
+            <section class="card gross-card">
+                <div class="basis-toggle" role="group" aria-label="What to calculate">
+                    <button type="button" class="basis-btn" id="modeTotal" aria-pressed="true">Total income</button>
+                    <button type="button" class="basis-btn" id="modeAdditional" aria-pressed="false">Additional income</button>
+                    <button type="button" class="basis-btn" id="modeDifference" aria-pressed="false">Salary difference</button>
+                </div>
+
+                <div id="totalFields">
+                    <label for="grossInput">Total gross income</label>
+                    <div class="adorned gross-adorned">
+                        <span class="prefix" aria-hidden="true">£</span>
+                        <input id="grossInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="45000" aria-describedby="grossError">
+                    </div>
+                    <p class="field-error" id="grossError" hidden></p>
+                </div>
+
+                <div id="additionalFields" hidden>
+                    <p class="section-note" id="additionalHint">See how much of your next earnings you will actually keep based on the income you've already earned.</p>
+                    <div class="income-pair">
+                        <div>
+                            <label for="earnedInput">Already earned</label>
+                            <div class="adorned gross-adorned">
+                                <span class="prefix" aria-hidden="true">£</span>
+                                <input id="earnedInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="13000" aria-describedby="earnedError">
+                            </div>
+                            <p class="field-error" id="earnedError" hidden></p>
+                        </div>
+                        <div>
+                            <label for="extraInput">Extra income</label>
+                            <div class="adorned gross-adorned">
+                                <span class="prefix" aria-hidden="true">£</span>
+                                <input id="extraInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="7000" aria-describedby="extraError">
+                            </div>
+                            <p class="field-error" id="extraError" hidden></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="differenceFields" hidden>
+                    <p class="section-note" id="differenceHint">Compare two gross incomes and see how much of the change you actually keep.</p>
+                    <div class="income-pair">
+                        <div>
+                            <label for="currentInput">Current salary</label>
+                            <div class="adorned gross-adorned">
+                                <span class="prefix" aria-hidden="true">£</span>
+                                <input id="currentInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="30000" aria-describedby="currentError">
+                            </div>
+                            <p class="field-error" id="currentError" hidden></p>
+                        </div>
+                        <div>
+                            <label for="newInput">New salary</label>
+                            <div class="adorned gross-adorned">
+                                <span class="prefix" aria-hidden="true">£</span>
+                                <input id="newInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="40000" aria-describedby="newError">
+                            </div>
+                            <p class="field-error" id="newError" hidden></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" aria-labelledby="bandsHeading">
+                <h2 id="bandsHeading">Income brackets</h2>
+                <p class="section-note" id="bandNote">Drag a boundary, or type an exact amount and press Enter. The last band continues upward with no limit. Each percentage applies only to the income inside its band.</p>
+
+                <div class="band-scroll" id="bandScroll">
+                    <div class="band" id="band">
+                        <div class="band-track" id="bandTrack">
+                            <div id="bandSegments"></div>
+                        </div>
+                        <div class="band-end band-end-start">£0</div>
+                        <div class="band-end band-end-open">and above</div>
+                        <div class="income-span" id="incomeSpan" hidden></div>
+                        <button type="button" class="income-mark" id="incomeMark" hidden>
+                            <span id="incomeMarkLabel">Income</span>
+                        </button>
+                        <button type="button" class="income-mark" id="incomeMarkEnd" hidden>
+                            <span id="incomeMarkEndLabel">After</span>
+                        </button>
+                        <div id="bandHandles"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card result-card" aria-live="polite">
+                <p class="result-message" id="resultMessage" hidden></p>
+                <p class="result-kicker" id="netKicker">Net income</p>
+                <p class="hero" id="netHero">£0</p>
+                <p class="change-sentence" id="changeSentence" hidden></p>
+                <div class="salary-compare" id="salaryCompare" hidden></div>
+                <div class="stats" id="stats"></div>
+                <div class="comparison" id="comparison" hidden></div>
+                <div class="equivalents" id="equivalents"></div>
+            </section>
+
+            <section class="card" aria-labelledby="editHeading">
+                <div class="section-head">
+                    <h2 id="editHeading">Edit brackets</h2>
+                    <div class="section-actions">
+                        <button type="button" id="addBoundary">Add boundary</button>
+                        <button type="button" class="quiet-btn" id="resetBrackets">Reset brackets</button>
+                    </div>
+                </div>
+                <p class="field-error" id="structureError" hidden></p>
+                <div id="cards"></div>
+            </section>
+
+            <section class="card breakdown-card" aria-labelledby="breakdownHeading">
+                <h2 id="breakdownHeading">How this is worked out</h2>
+                <p class="section-note" id="breakdownNote">Each row is only the income that falls inside that band. The cut is not applied to the whole salary.</p>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Bracket</th>
+                                <th scope="col" id="sliceHeading">Income in bracket</th>
+                                <th scope="col">Cut</th>
+                                <th scope="col">Deducted</th>
+                                <th scope="col">Kept</th>
+                            </tr>
+                        </thead>
+                        <tbody id="breakdownBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card formula-card" aria-labelledby="formulaHeading">
+                <h2 id="formulaHeading">Take-home equation</h2>
+                <p class="section-note" id="formulaNote">Each band is multiplied by the share you keep. The cut applies only to the income inside that band.</p>
+                <div id="formulaDisplay" class="formula-box">—</div>
+            </section>
+
+            <section class="card breakdown-card" aria-labelledby="deductionHeading">
+                <h2 id="deductionHeading">Deductions breakdown</h2>
+                <p class="section-note" id="deductionNote">Each deduction is worked out on the income that falls inside its band.</p>
+                <div id="deductionBreakdown"></div>
+            </section>
+
+            <section class="card graph-card" aria-labelledby="shareHeading">
+                <div class="chart-header">
+                    <h2 id="shareHeading">Income visualisation</h2>
+                    <div class="chart-toolbar">
+                        <div class="basis-toggle" role="group" aria-label="Chart view">
+                            <button type="button" class="basis-btn" id="chartAverage" aria-pressed="true">Average</button>
+                            <button type="button" class="basis-btn" id="chartMarginal" aria-pressed="false">Marginal</button>
+                        </div>
+                        <button type="button" class="btn-small" id="chartPng">Save PNG</button>
+                        <button type="button" class="btn-small" id="chartJpeg">Save JPEG</button>
+                    </div>
+                </div>
+                <p class="section-note" id="shareChartNote">Each colour is that deduction's share of everything earned up to that income.</p>
+                <div class="chart-container">
+                    <canvas id="shareChart"></canvas>
+                </div>
+                <div class="legend-custom" id="shareLegend"></div>
+            </section>
+
+            <section class="card graph-card" aria-labelledby="curveHeading">
+                <h2 id="curveHeading">Take-home curve</h2>
+                <p class="section-note" id="curveNote">How much you keep as income rises through your brackets.</p>
+                <div class="chart-container">
+                    <canvas id="netChart"></canvas>
+                </div>
+            </section>
+        </form>
+    </div>
+
+    <script src="/assets/js/nav-loader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="bracket-math.js"></script>
+    <script src="bracketing.js"></script>
+</body>
+</html>

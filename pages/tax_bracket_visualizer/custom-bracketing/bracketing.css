@@ -1,0 +1,646 @@
+.container {
+    width: min(1040px, calc(100% - 32px));
+    max-width: 1040px;
+}
+
+.bracket-app {
+    display: flex;
+    flex-direction: column;
+    gap: 35px;
+}
+
+.gross-card label,
+.bracket-card h3,
+.section-head h2,
+.breakdown-card h2 {
+    color: #e2e8f0;
+}
+
+.gross-card label {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #94a3b8;
+}
+
+.gross-card .basis-toggle {
+    margin-top: 0;
+    margin-bottom: 18px;
+}
+
+.income-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 14px;
+}
+
+#additionalFields .section-note,
+#differenceFields .section-note {
+    margin-top: 0;
+}
+
+.gross-card .basis-btn {
+    font-size: 0.92rem;
+    line-height: 1.25;
+    padding: 10px 8px;
+}
+
+.hero.is-decrease {
+    color: var(--highlight-red);
+}
+
+.change-sentence {
+    text-align: center;
+    color: #cbd5e1;
+    line-height: 1.5;
+    margin: 10px auto 0;
+    max-width: 42rem;
+}
+
+.salary-compare {
+    margin-top: 18px;
+    overflow-x: auto;
+}
+
+.salary-compare table {
+    min-width: 0;
+}
+
+.adorned {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 0 16px;
+}
+
+.adorned:focus-within {
+    border-color: var(--accent);
+}
+
+.gross-adorned input {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: white;
+    padding: 16px 8px;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    font-weight: 700;
+    outline: none;
+}
+
+.prefix {
+    color: #94a3b8;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.section-head h2,
+#bandsHeading,
+.breakdown-card h2,
+.formula-card h2,
+.graph-card h2 {
+    font-size: 1.15rem;
+    color: var(--accent);
+}
+
+.section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.section-actions button,
+.quiet-btn,
+.text-btn,
+.band-handle,
+.icon-btn {
+    height: auto;
+    min-height: 0;
+}
+
+.section-actions button {
+    min-height: 42px;
+    padding: 10px 16px;
+}
+
+.quiet-btn,
+.text-btn,
+.icon-btn {
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.quiet-btn:hover,
+.text-btn:hover,
+.icon-btn:hover,
+.band-handle:hover {
+    transform: none;
+    filter: none;
+}
+
+.quiet-btn:hover,
+.text-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: white;
+}
+
+.section-note {
+    margin-top: 10px;
+    color: #94a3b8;
+    line-height: 1.5;
+    font-size: 0.92rem;
+}
+
+.band-scroll {
+    overflow-x: auto;
+    margin-top: 22px;
+    padding: 36px 0 8px;
+}
+
+.band-scroll.has-income-labels {
+    padding-top: 58px;
+}
+
+.band {
+    position: relative;
+    height: 58px;
+    min-width: 100%;
+    box-sizing: border-box;
+}
+
+.band-track {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 16px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+#bandSegments {
+    position: absolute;
+    inset: 0;
+}
+
+.band-segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    opacity: 0.85;
+}
+
+.band-end {
+    position: absolute;
+    top: 42px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.band-end-start { left: 12px; }
+.band-end-open { right: 12px; }
+
+.band-handle {
+    position: absolute;
+    top: 7px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    border: 3px solid #0f172a;
+    background: var(--accent);
+    color: #0f172a;
+    transform: translateX(-50%);
+    cursor: grab;
+    touch-action: none;
+    z-index: 2;
+}
+
+.band-handle:hover,
+.band-handle:active {
+    transform: translateX(-50%);
+    background: var(--accent);
+}
+
+.band-handle:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 3px;
+}
+
+.band-handle.is-active {
+    cursor: grabbing;
+}
+
+.handle-label {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    white-space: nowrap;
+    color: #e2e8f0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.income-mark {
+    position: absolute;
+    top: 10px;
+    width: 2px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: var(--highlight-green);
+    transform: translateX(-50%);
+    z-index: 1;
+    pointer-events: none;
+    min-height: 0;
+}
+
+.income-mark span {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--highlight-green);
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.income-mark.is-handle {
+    top: 1px;
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 50%;
+    border: 3px solid #0f172a;
+    z-index: 4;
+    cursor: grab;
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.income-mark.is-handle:hover,
+.income-mark.is-handle:active,
+.income-mark.is-handle.is-active {
+    transform: translateX(-50%);
+    background: var(--highlight-green);
+    filter: none;
+}
+
+.income-mark.is-handle span {
+    top: auto;
+    bottom: calc(100% + 26px);
+}
+
+.income-span {
+    position: absolute;
+    top: 16px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(74, 222, 128, 0.38);
+    box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.95);
+    z-index: 1;
+    pointer-events: none;
+}
+
+.income-span.is-wide {
+    top: 10px;
+    height: 22px;
+    background: rgba(74, 222, 128, 0.72);
+}
+
+.bracket-card {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--card-border);
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.bracket-card h3 {
+    font-size: 1.05rem;
+}
+
+.boundary-field,
+.deduction-row label,
+.totals label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.boundary-field {
+    margin-top: 14px;
+    max-width: 280px;
+}
+
+.bracket-card input[type="text"] {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--card-border);
+    color: white;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 1rem;
+    outline: none;
+}
+
+.bracket-card input[type="text"]:focus {
+    border-color: var(--accent);
+}
+
+.deduction-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.deduction-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) 140px auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.rate-wrap {
+    position: relative;
+}
+
+.rate-wrap input {
+    padding-right: 28px;
+}
+
+.rate-suffix {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    color: #94a3b8;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.icon-btn {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 12px;
+}
+
+.totals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.keep-note {
+    margin-top: 10px;
+    color: #cbd5e1;
+    font-size: 0.92rem;
+}
+
+.field-error,
+.result-message {
+    color: var(--highlight-red);
+    font-size: 0.88rem;
+    line-height: 1.4;
+    margin-top: 8px;
+}
+
+.result-kicker {
+    text-align: center;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+.hero {
+    text-align: center;
+    margin-top: 6px;
+    font-size: clamp(2.6rem, 7vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--highlight-green);
+}
+
+.stats,
+.comparison,
+.equivalents {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.stat,
+.equivalent {
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 14px 12px;
+    text-align: center;
+}
+
+.stat h3,
+.equivalent h3 {
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.stat p,
+.equivalent p {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.stat.highlight p,
+.equivalent.highlight p {
+    color: var(--highlight-green);
+}
+
+.table-scroll {
+    overflow-x: auto;
+    margin-top: 14px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: top;
+}
+
+th {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+td {
+    color: #e2e8f0;
+}
+
+.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+th:not(:first-child) {
+    text-align: right;
+}
+
+details summary {
+    cursor: pointer;
+    color: var(--accent);
+    margin-top: 6px;
+    font-size: 0.82rem;
+}
+
+.part-list {
+    list-style: none;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    white-space: normal;
+}
+
+.formula-box {
+    margin-top: 14px;
+}
+
+.chart-header {
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.chart-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-toolbar .basis-toggle {
+    width: auto;
+    margin: 0;
+}
+
+.chart-toolbar .basis-btn,
+.chart-toolbar .btn-small {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 36px;
+    margin: 0;
+    padding: 8px 12px;
+}
+
+.chart-toolbar .btn-small:hover {
+    transform: none;
+}
+
+.bracket-app .graph-card {
+    height: auto;
+    min-height: 0;
+}
+
+.bracket-app .chart-container {
+    height: 380px;
+    flex: none;
+}
+
+#deductionBreakdown {
+    margin-top: 8px;
+}
+
+#deductionBreakdown .breakdown-header:first-child {
+    margin-top: 0;
+}
+
+@media (max-width: 700px) {
+    .deduction-row {
+        grid-template-columns: minmax(0, 1fr) 42px;
+    }
+
+    .deduction-row > label:first-child {
+        grid-column: 1 / -1;
+    }
+
+    .deduction-row .icon-btn {
+        width: 42px;
+        align-self: end;
+    }
+
+    .totals {
+        grid-template-columns: 1fr;
+    }
+
+    .income-pair {
+        grid-template-columns: 1fr;
+    }
+
+    .gross-card .basis-toggle {
+        flex-direction: column;
+    }
+
+    .gross-card .basis-btn {
+        white-space: normal;
+    }
+
+    .bracket-app .chart-container {
+        height: 280px;
+    }
+
+    .container > header h1 {
+        font-size: 2rem;
+    }
+}
