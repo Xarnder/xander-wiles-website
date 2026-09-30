@@ -9,6 +9,16 @@
     gap: 35px;
 }
 
+.bracket-app > section,
+.table-scroll,
+.salary-compare,
+.formula-box,
+.chart-container,
+.legend-custom {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .gross-card label,
 .bracket-card h3,
 .section-head h2,
@@ -185,6 +195,13 @@
     height: 58px;
     min-width: 100%;
     box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body.is-dragging-bracket {
+    overflow: hidden;
+    touch-action: none;
 }
 
 .band-track {
@@ -640,7 +657,120 @@ details summary {
         height: 280px;
     }
 
+    .container {
+        width: min(1040px, calc(100% - 20px));
+    }
+
     .container > header h1 {
         font-size: 2rem;
+    }
+
+    .band-scroll {
+        overflow: hidden;
+        padding-top: 44px;
+    }
+
+    .band-scroll.has-income-labels {
+        padding-top: 86px;
+    }
+
+    .band {
+        height: 74px;
+        touch-action: pan-y;
+    }
+
+    .band-track {
+        top: 24px;
+        height: 16px;
+    }
+
+    .income-span {
+        top: 24px;
+        height: 16px;
+    }
+
+    .income-span.is-wide {
+        top: 18px;
+        height: 28px;
+    }
+
+    .band-end {
+        top: 52px;
+    }
+
+    .band-handle {
+        top: 10px;
+        width: 44px;
+        height: 44px;
+    }
+
+    .income-mark.is-handle {
+        top: 8px;
+        width: 48px;
+        height: 48px;
+        min-height: 48px;
+    }
+
+    .income-mark.is-handle span {
+        bottom: calc(100% + 32px);
+        max-width: 42vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .handle-label {
+        max-width: 28vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .hero {
+        font-size: 2.15rem;
+    }
+
+    .gross-adorned input {
+        font-size: 1.7rem;
+    }
+
+    .stats,
+    .comparison,
+    .equivalents {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .stat h3,
+    .equivalent h3 {
+        font-size: 0.75rem;
+    }
+
+    .stat p,
+    .equivalent p {
+        font-size: 1.05rem;
+        overflow-wrap: anywhere;
+    }
+
+    .salary-compare {
+        overflow-x: hidden;
+    }
+
+    .salary-compare table {
+        width: 100%;
+    }
+
+    .salary-compare th,
+    .salary-compare td {
+        padding: 8px 4px;
+        font-size: 0.78rem;
+        white-space: normal;
+    }
+
+    .salary-compare td {
+        white-space: nowrap;
+    }
+
+    .chart-toolbar .basis-btn,
+    .chart-toolbar .btn-small,
+    .section-actions button {
+        min-height: 44px;
     }
 }

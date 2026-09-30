@@ -361,7 +361,10 @@ function positionHandles() {
     const scroll = document.getElementById('bandScroll');
     const scrollStyle = window.getComputedStyle(scroll);
     const contentWidth = (scroll.clientWidth || 0) - parseFloat(scrollStyle.paddingLeft) - parseFloat(scrollStyle.paddingRight);
-    const minWidth = Math.max(contentWidth, (state.brackets.length - 1) * 130, 280);
+    const narrow = window.innerWidth < 700;
+    const minWidth = narrow
+        ? contentWidth
+        : Math.max(contentWidth, (state.brackets.length - 1) * 130, 280);
     band.style.minWidth = minWidth + 'px';
 
     segmentsEl.replaceChildren();
@@ -389,10 +392,12 @@ function positionHandles() {
         const label = handle.querySelector('.handle-label');
         label.textContent = formatMoney(value);
         const previous = positions[positions.length - 2];
-        label.hidden = previous != null && percent - previous < 8;
+        const crowded = narrow ? 18 : 8;
+        label.hidden = previous != null && percent - previous < crowded;
     });
 
     placeIncomeMarks(map);
+    fitSliderLabels();
 }
 
 function placeIncomeMarks(map) {
@@ -1067,7 +1072,33 @@ function cell(text, numeric) {
     return node;
 }
 
+function fitSliderLabels() {
+    const labels = band.querySelectorAll('.handle-label, .income-mark span');
+    labels.forEach(function (label) {
+        label.style.transform = '';
+    });
+    const bandRect = band.getBoundingClientRect();
+    if (bandRect.width < 20) return;
+    labels.forEach(function (label) {
+        if (label.hidden || !label.offsetParent) return;
+        const rect = label.getBoundingClientRect();
+        let shift = 0;
+        if (rect.left < bandRect.left + 2) shift = (bandRect.left + 2) - rect.left;
+        const shiftedRight = rect.right + shift;
+        if (shiftedRight > bandRect.right - 2) shift -= shiftedRight - (bandRect.right - 2);
+        if (shift) label.style.transform = 'translateX(calc(-50% + ' + shift + 'px))';
+    });
+    const endLabel = document.getElementById('incomeMarkEndLabel');
+    if (!incomeMarkLabel.hidden && endLabel && !endLabel.hidden && incomeMarkLabel.offsetParent && endLabel.offsetParent) {
+        const first = incomeMarkLabel.getBoundingClientRect();
+        const second = endLabel.getBoundingClientRect();
+        const overlap = first.left < second.right - 4 && first.right > second.left + 4 && first.top < second.bottom && first.bottom > second.top;
+        if (overlap) incomeMarkLabel.hidden = true;
+    }
+}
+
 function onHandlePointerDown(event) {
+    if (event.cancelable) event.preventDefault();
     const handle = event.currentTarget;
     const index = Number(handle.dataset.handle);
     drag = {
@@ -1081,6 +1112,7 @@ function onHandlePointerDown(event) {
         handle: handle
     };
     handle.classList.add('is-active');
+    document.body.classList.add('is-dragging-bracket');
     try {
         handle.setPointerCapture(event.pointerId);
     } catch (error) {
@@ -1090,6 +1122,7 @@ function onHandlePointerDown(event) {
 
 function onHandlePointerMove(event) {
     if (!drag || event.pointerId !== drag.pointerId) return;
+    if (event.cancelable) event.preventDefault();
     if (Math.abs(event.clientX - drag.startX) > 4) drag.moved = true;
     const rect = bandTrack.getBoundingClientRect();
     const ratio = rect.width ? (event.clientX - rect.left) / rect.width : 0;
@@ -1155,6 +1188,7 @@ function onIncomePointerDown(event) {
         handle: handle
     };
     handle.classList.add('is-active');
+    document.body.classList.add('is-dragging-bracket');
     try {
         handle.setPointerCapture(event.pointerId);
     } catch (error) {
@@ -1209,6 +1243,7 @@ function onHandlePointerUp(event) {
     const index = drag.index;
     drag = null;
     handle.classList.remove('is-active');
+    document.body.classList.remove('is-dragging-bracket');
     persist();
     renderResults();
     if (!moved) {
@@ -2092,7 +2127,7 @@ incomeMark.addEventListener('pointerdown', onIncomePointerDown);
 incomeMarkEnd.addEventListener('pointerdown', onIncomePointerDown);
 incomeMark.addEventListener('keydown', onIncomeKeyDown);
 incomeMarkEnd.addEventListener('keydown', onIncomeKeyDown);
-document.addEventListener('pointermove', onHandlePointerMove);
+document.addEventListener('pointermove', onHandlePointerMove, { passive: false });
 document.addEventListener('pointerup', onHandlePointerUp);
 document.addEventListener('pointercancel', onHandlePointerUp);
 window.addEventListener('resize', positionHandles);
