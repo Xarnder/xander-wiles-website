@@ -247,6 +247,7 @@ import {
 } from './ui.js';
 import { initViewModePicker, isSlimViewModePicker } from './view-mode-picker.js';
 import { attachAiFile, captureAiSelection, initAiPanel, syncAiPanel } from './ai-panel.js';
+import { initAiUsage, renderAiUsage } from './ai-usage.js';
 
 const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
 const VIEW_MODES = new Set(['list', 'preview', 'contents', 'raw']);
@@ -4806,6 +4807,7 @@ async function switchAppMode(mode) {
 
     if (mode === 'settings') {
         showAppView('settings');
+        renderAiUsage();
     }
 }
 
@@ -4953,6 +4955,7 @@ function wireEvents() {
     });
     editorSearch.bind();
 
+    initAiUsage();
     initAiPanel({
         getDocument() {
             return {

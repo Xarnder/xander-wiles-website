@@ -136,7 +136,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261001-ai-cost">
+    <link rel="stylesheet" href="style.css?v=20261001-ai-usage">
     <style>
         /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
         html[data-theme="oled"] #saving-dialog,
@@ -322,6 +322,7 @@
                         <span id="ai-instruction-label">Message</span>
                         <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
                     </label>
+                    <p id="ai-cost-preview" class="ai-cost" hidden></p>
                     <button type="button" id="ai-run" class="btn btn-primary">Send</button>
                     <p id="ai-status" class="ai-status" role="status" hidden></p>
                     <p id="ai-cost" class="ai-cost" hidden></p>
@@ -344,6 +345,11 @@
                         <button type="button" id="btn-mode-search" class="btn btn-primary btn-large">Find .md</button>
                         <button type="button" id="btn-sign-out" class="btn btn-ghost btn-large">Sign out</button>
                     </div>
+                    <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                        <button type="button" id="settings-tab-general" class="settings-tab is-active" role="tab" aria-selected="true" aria-controls="settings-panel-general">General</button>
+                        <button type="button" id="settings-tab-ai" class="settings-tab" role="tab" aria-selected="false" aria-controls="settings-panel-ai">AI</button>
+                    </div>
+                    <div id="settings-panel-general">
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Appearance</h3>
                         <p class="settings-prefs-lede">Choose a color theme for the editor. Settings sync to your Google account (Drive app data) after sign-in.</p>
@@ -459,6 +465,30 @@
                         <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder. Pinned opens first after sign-in.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
+                    </div>
+                    <div id="settings-panel-ai" hidden>
+                        <div class="settings-prefs">
+                            <h3 class="settings-subheading">AI usage</h3>
+                            <p class="settings-prefs-lede">Each Gemini call on this device, with an estimated cost from the token counts. Today, this week (from Monday), and this month add those estimates up.</p>
+                            <div class="ai-usage-totals">
+                                <div class="ai-usage-total">
+                                    <span>Today</span>
+                                    <strong id="ai-usage-today">$0.0000</strong>
+                                </div>
+                                <div class="ai-usage-total">
+                                    <span>This week</span>
+                                    <strong id="ai-usage-week">$0.0000</strong>
+                                </div>
+                                <div class="ai-usage-total">
+                                    <span>This month</span>
+                                    <strong id="ai-usage-month">$0.0000</strong>
+                                </div>
+                            </div>
+                            <p id="ai-usage-empty" class="settings-prefs-lede">No AI calls yet.</p>
+                            <ul id="ai-usage-list" class="ai-usage-list"></ul>
+                            <button type="button" id="ai-usage-clear" class="btn btn-ghost" hidden>Clear history</button>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -907,7 +937,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js?v=139"></script>
+    <script type="module" src="app.js?v=140"></script>
 </body>
 
 </html>

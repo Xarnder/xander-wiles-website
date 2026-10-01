@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyAiProposal, diffLines, formatGeminiCost, stripWrappingFence } from './ai.js';
+import { applyAiProposal, diffLines, formatGeminiCost, previewGeminiCost, stripWrappingFence } from './ai.js';
 
 const LIST = [
     '<!-- For LLMs / coding agents: keep the mdlist JSON. -->',
@@ -90,13 +90,29 @@ test('diffLines is empty of changes when the text matches', () => {
 test('formatGeminiCost bills thinking tokens at the output rate', () => {
     assert.equal(
         formatGeminiCost({ inputTokens: 3000, outputTokens: 3000, thoughtTokens: 0 }),
-        'Estimated cost $0.0053 (3,000 in, 3,000 out).'
+        'This reply $0.0053 (3,000 in, 3,000 out).'
     );
     assert.equal(
         formatGeminiCost({ inputTokens: 1000, outputTokens: 100, thoughtTokens: 400 }),
-        'Estimated cost $0.0010 (1,000 in, 100 out, 400 thinking).'
+        'This reply $0.0010 (1,000 in, 100 out, 400 thinking).'
     );
     assert.equal(formatGeminiCost(null), '');
+});
+
+test('previewGeminiCost is higher for a full rewrite than a question', () => {
+    const note = '# Ideas\n\n'.padEnd(4000, 'Ship the editor. ');
+    const rewrite = previewGeminiCost({ task: 'revise', markdown: note, instruction: 'Tighten it.' });
+    const question = previewGeminiCost({
+        task: 'context',
+        instruction: 'What is this about?',
+        contextFiles: [{ name: 'Ideas.md', markdown: note }],
+    });
+    assert.match(rewrite, /^About \$/);
+    assert.match(rewrite, /before sending\.$/);
+    assert.match(question, /before sending\.$/);
+    const amount = (text) => Number(text.match(/\$(\d+(?:\.\d+)?)/)[1]);
+    assert.ok(amount(rewrite) > amount(question));
+    assert.equal(previewGeminiCost({ task: 'revise' }), '');
 });
 
 test('revise refuses a dropped custom list', () => {

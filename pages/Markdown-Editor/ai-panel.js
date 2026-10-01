@@ -3,7 +3,8 @@
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
  */
 
-import { applyAiProposal, diffLines, formatGeminiCost } from './ai.js';
+import { applyAiProposal, diffLines, formatGeminiCost, previewGeminiCost } from './ai.js';
+import { recordAiCall, renderAiUsage } from './ai-usage.js';
 import { displayNoteTitle } from './ui.js';
 
 const TASK_COPY = {
@@ -67,6 +68,7 @@ function readEls() {
         instructionLabel: document.getElementById('ai-instruction-label'),
         instruction: document.getElementById('ai-instruction'),
         run: document.getElementById('ai-run'),
+        preview: document.getElementById('ai-cost-preview'),
         status: document.getElementById('ai-status'),
         cost: document.getElementById('ai-cost'),
         resultWrap: document.getElementById('ai-result-wrap'),
@@ -131,6 +133,24 @@ function showCost(usage) {
     const text = formatGeminiCost(usage);
     nodes.cost.hidden = !text;
     nodes.cost.textContent = text;
+}
+
+function refreshCostPreview() {
+    if (!nodes?.preview || !deps) return;
+    const doc = deps.getDocument();
+    const editing = editAttachment();
+    const contexts = attachments.filter((file) => file.role === 'context');
+    const asking = contexts.length > 0 && !editing;
+    const source = asking ? null : editing || (doc?.fileId ? doc : null);
+    const text = previewGeminiCost({
+        task: asking ? 'context' : task,
+        markdown: source?.content || '',
+        selection: nodes.selection?.value || '',
+        instruction: nodes.instruction?.value || '',
+        contextFiles: contexts.map((file) => ({ name: file.name, markdown: file.content })),
+    });
+    nodes.preview.hidden = !text;
+    nodes.preview.textContent = text;
 }
 
 function editAttachment() {
@@ -350,6 +370,7 @@ export function syncAiPanel() {
     if (nodes.run) nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
     if (nodes.accept) nodes.accept.disabled = Boolean(blocked) || pending?.kind !== 'edit';
     if (nodes.accept) nodes.accept.hidden = pending?.kind === 'reply';
+    refreshCostPreview();
 }
 
 /**
@@ -399,6 +420,9 @@ export function initAiPanel(options) {
     nodes.accept?.addEventListener('click', () => {
         acceptProposal().catch((err) => setStatus(err?.message || 'Could not apply the edit', 'error'));
     });
+    const refreshPreview = () => refreshCostPreview();
+    nodes.instruction?.addEventListener('input', refreshPreview);
+    nodes.selection?.addEventListener('input', refreshPreview);
     nodes.run.addEventListener('click', () => {
         runProposal().catch((err) => {
             running = false;
@@ -509,6 +533,16 @@ async function runProposal() {
         }
         throw new Error(payload.error || `AI request failed (${response.status})`);
     }
+
+    recordAiCall({
+        at: Date.now(),
+        task: sentTask,
+        fileName: source.name,
+        inputTokens: payload.usage?.inputTokens,
+        outputTokens: payload.usage?.outputTokens,
+        thoughtTokens: payload.usage?.thoughtTokens,
+    });
+    renderAiUsage();
 
     if (sentTask === 'context') {
         const reply = String(payload.reply || '').trim();

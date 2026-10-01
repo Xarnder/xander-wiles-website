@@ -11,6 +11,41 @@ export const AI_TASKS = Object.freeze(['expand', 'header', 'summarize', 'revise'
 /** Paid standard rates for gemini-3.1-flash-lite. Thinking tokens bill as output. */
 const INPUT_USD_PER_TOKEN = 0.25 / 1_000_000;
 const OUTPUT_USD_PER_TOKEN = 1.5 / 1_000_000;
+const CHARS_PER_TOKEN = 4;
+/** Allowance for thinking_level "minimal" before the real count comes back. */
+const PREVIEW_THOUGHT_TOKENS = 100;
+
+function formatUsd(usd) {
+    return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+}
+
+/** @param {number} usd */
+export function formatGeminiUsd(usd) {
+    const amount = Number(usd);
+    if (!Number.isFinite(amount) || amount < 0) return '';
+    return formatUsd(amount);
+}
+
+/**
+ * Dollar estimate from Gemini token counts. Thinking tokens bill as output.
+ * @param {{ inputTokens?: number, outputTokens?: number, thoughtTokens?: number } | null | undefined} usage
+ * @returns {number | null}
+ */
+export function geminiCostUsd(usage) {
+    const inputTokens = Number(usage?.inputTokens);
+    const outputTokens = Number(usage?.outputTokens);
+    const thoughtTokens = Number(usage?.thoughtTokens) || 0;
+    if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return null;
+    if (inputTokens < 0 || outputTokens < 0 || thoughtTokens < 0) return null;
+    return costUsd(inputTokens, outputTokens, thoughtTokens);
+}
+
+function costUsd(inputTokens, outputTokens, thoughtTokens = 0) {
+    return (
+        inputTokens * INPUT_USD_PER_TOKEN +
+        (outputTokens + thoughtTokens) * OUTPUT_USD_PER_TOKEN
+    );
+}
 
 /**
  * @param {{ inputTokens?: number, outputTokens?: number, thoughtTokens?: number } | null | undefined} usage
@@ -20,15 +55,54 @@ export function formatGeminiCost(usage) {
     const inputTokens = Number(usage?.inputTokens);
     const outputTokens = Number(usage?.outputTokens);
     const thoughtTokens = Number(usage?.thoughtTokens) || 0;
-    if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return '';
-    if (inputTokens < 0 || outputTokens < 0 || thoughtTokens < 0) return '';
-    const usd =
-        inputTokens * INPUT_USD_PER_TOKEN +
-        (outputTokens + thoughtTokens) * OUTPUT_USD_PER_TOKEN;
-    const amount = usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+    const usd = geminiCostUsd(usage);
+    if (usd == null) return '';
+    const amount = formatUsd(usd);
     const thinking =
         thoughtTokens > 0 ? `, ${thoughtTokens.toLocaleString('en-US')} thinking` : '';
-    return `Estimated cost ${amount} (${inputTokens.toLocaleString('en-US')} in, ${outputTokens.toLocaleString('en-US')} out${thinking}).`;
+    return `This reply ${amount} (${inputTokens.toLocaleString('en-US')} in, ${outputTokens.toLocaleString('en-US')} out${thinking}).`;
+}
+
+/**
+ * Rough cost before the request, from the text that will be sent.
+ * Revise bills a full-file reply. Expand, header, summarize, and questions bill a short reply.
+ * @param {{ task?: string, markdown?: string, selection?: string, instruction?: string, contextFiles?: Array<{ name?: string, markdown?: string }> }} input
+ * @returns {string}
+ */
+export function previewGeminiCost(input) {
+    const task = input?.task === 'edit' ? 'revise' : String(input?.task || '');
+    const note = String(input?.markdown || '');
+    const passage = String(input?.selection || '');
+    const instruction = String(input?.instruction || '');
+    const files = Array.isArray(input?.contextFiles) ? input.contextFiles : [];
+    const contextChars = files.reduce(
+        (sum, file) => sum + String(file?.name || '').length + String(file?.markdown || '').length,
+        0
+    );
+    if (!note.trim() && !contextChars && !instruction.trim() && !passage.trim()) return '';
+
+    let inputChars = instruction.length + contextChars + 200;
+    let outputChars = 400;
+    if (task === 'context') {
+        outputChars = Math.min(1600, Math.max(240, instruction.length * 4 || 400));
+    } else if (task === 'expand') {
+        inputChars += note.length + passage.length + 180;
+        outputChars = Math.max(passage.trim().length, 80) * 2;
+    } else if (task === 'header') {
+        inputChars += note.length + 140;
+        outputChars = 500;
+    } else if (task === 'summarize') {
+        inputChars += note.length + 160;
+        outputChars = 800;
+    } else {
+        inputChars += note.length + 140;
+        outputChars = Math.max(note.length, 40);
+    }
+
+    const inputTokens = Math.ceil(inputChars / CHARS_PER_TOKEN);
+    const outputTokens = Math.ceil(outputChars / CHARS_PER_TOKEN);
+    const amount = formatUsd(costUsd(inputTokens, outputTokens, PREVIEW_THOUGHT_TOKENS));
+    return `About ${amount} before sending.`;
 }
 
 /**
