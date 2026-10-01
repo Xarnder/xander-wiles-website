@@ -136,7 +136,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260924-move">
+    <link rel="stylesheet" href="style.css?v=20261001-ai-diff">
     <style>
         /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
         html[data-theme="oled"] #saving-dialog,
@@ -296,6 +296,45 @@
                 </div>
             </section>
 
+            <section id="view-ai" class="view view-ai" hidden>
+                <div id="ai-empty" class="empty-panel">
+                    <p class="empty-panel-title">No note in the chat</p>
+                    <p class="empty-panel-copy">In Finder or Pinned, open a markdown file’s menu and choose Open in AI. Then mark it as context, or as the only file to edit.</p>
+                    <button type="button" id="ai-go-edit" class="btn btn-primary">Go to Finder</button>
+                </div>
+                <div id="ai-active" class="ai-active" hidden>
+                    <h2 id="ai-file-title" class="editor-file-title"></h2>
+                    <p class="ai-lede">Context answers a question and leaves the file alone. Edit rewrites that one note and shows the previous text beside the proposal.</p>
+                    <div class="ai-tasks" role="radiogroup" aria-label="AI task">
+                        <button type="button" class="ai-task is-active" data-ai-task="expand" role="radio" aria-checked="true">Expand</button>
+                        <button type="button" class="ai-task" data-ai-task="header" role="radio" aria-checked="false">Header</button>
+                        <button type="button" class="ai-task" data-ai-task="summarize" role="radio" aria-checked="false">Summarize</button>
+                        <button type="button" class="ai-task" data-ai-task="revise" role="radio" aria-checked="false">Revise</button>
+                    </div>
+                    <div id="ai-attachments" class="ai-attachments" hidden></div>
+                    <button type="button" id="ai-use-open" class="btn btn-ghost" hidden>Use the open note</button>
+                    <div id="ai-thread" class="ai-thread" hidden></div>
+                    <label class="ai-field" id="ai-selection-field">
+                        <span>Passage to expand</span>
+                        <textarea id="ai-selection" rows="4" placeholder="Paste a paragraph, or select it in Raw before opening AI"></textarea>
+                    </label>
+                    <label class="ai-field">
+                        <span id="ai-instruction-label">Message</span>
+                        <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
+                    </label>
+                    <button type="button" id="ai-run" class="btn btn-primary">Send</button>
+                    <p id="ai-status" class="ai-status" role="status" hidden></p>
+                    <div id="ai-result-wrap" class="ai-result" hidden>
+                        <div id="ai-reply" class="ai-reply" hidden></div>
+                        <div id="ai-diff" class="ai-diff" hidden></div>
+                        <div class="ai-result-actions">
+                            <button type="button" id="ai-accept" class="btn btn-primary">Accept</button>
+                            <button type="button" id="ai-discard" class="btn btn-ghost">Discard</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="view-settings" class="view view-settings" hidden>
                 <div class="settings-card">
                     <h2 class="settings-heading">Settings</h2>
@@ -415,6 +454,7 @@
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here. Tap Preview content and choose Above / Below to place it.</li>
                         <li>The toolbar <strong>Add list</strong> inserts a normal markdown list. In <strong>Preview</strong> it stays there and opens the first point. In <strong>List</strong>, <strong>Convert to custom list</strong> turns that list into a ranked <code>mdlist</code>.</li>
+                        <li>In Finder or Pinned, open a note’s menu and choose <strong>Open in AI</strong>. Mark it <strong>Context</strong> to ask about it, or <strong>Edit</strong> to rewrite only that file. An edit shows the previous text and the proposal with removals and additions highlighted. Accept writes the note; Drive still updates through the normal save.</li>
                         <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder. Pinned opens first after sign-in.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
@@ -492,6 +532,9 @@
                 <button type="button" id="tab-editor" class="nav-tab" role="tab" aria-selected="false" data-mode="editor">
                     <span class="nav-tab-label">Edit</span>
                 </button>
+                <button type="button" id="tab-ai" class="nav-tab" role="tab" aria-selected="false" data-mode="ai">
+                    <span class="nav-tab-label">AI</span>
+                </button>
                 <button type="button" id="tab-settings" class="nav-tab" role="tab" aria-selected="false" data-mode="settings">
                     <span class="nav-tab-label">Settings</span>
                 </button>
@@ -565,6 +608,7 @@
             <p id="item-actions-name" class="dialog-hint"></p>
             <div class="item-actions-list">
                 <button type="submit" value="pin" id="item-action-pin" class="btn btn-ghost btn-block item-action-btn">Pin</button>
+                <button type="submit" value="ai" id="item-action-ai" class="btn btn-ghost btn-block item-action-btn">Open in AI</button>
                 <button type="submit" value="colour" id="item-action-colour" class="btn btn-ghost btn-block item-action-btn">Change text colour</button>
                 <button type="submit" value="bold" id="item-action-bold" class="btn btn-ghost btn-block item-action-btn">Mark Special</button>
                 <button type="submit" value="copy" id="item-action-copy" class="btn btn-ghost btn-block item-action-btn">Copy</button>
@@ -862,7 +906,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js?v=137"></script>
+    <script type="module" src="app.js?v=139"></script>
 </body>
 
 </html>

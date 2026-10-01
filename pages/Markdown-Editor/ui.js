@@ -39,6 +39,7 @@ export function bindUi() {
     els.tabPinned = document.getElementById('tab-pinned');
     els.tabFinder = document.getElementById('tab-finder');
     els.tabEditor = document.getElementById('tab-editor');
+    els.tabAi = document.getElementById('tab-ai');
     els.tabSettings = document.getElementById('tab-settings');
     els.btnUp = document.getElementById('btn-up');
     els.finderPathBar = document.getElementById('finder-path-bar');
@@ -120,6 +121,7 @@ export function bindUi() {
     els.viewPinned = document.getElementById('view-pinned');
     els.viewFinder = document.getElementById('view-finder');
     els.viewEditor = document.getElementById('view-editor');
+    els.viewAi = document.getElementById('view-ai');
     els.viewSettings = document.getElementById('view-settings');
     els.pinnedList = document.getElementById('pinned-list');
     els.pinnedEmpty = document.getElementById('pinned-empty');
@@ -178,6 +180,7 @@ export function bindUi() {
     els.itemActionsTitle = document.getElementById('item-actions-title');
     els.itemActionsName = document.getElementById('item-actions-name');
     els.itemActionPin = document.getElementById('item-action-pin');
+    els.itemActionAi = document.getElementById('item-action-ai');
     els.itemActionColour = document.getElementById('item-action-colour');
     els.itemActionBold = document.getElementById('item-action-bold');
     els.itemActionCopy = document.getElementById('item-action-copy');
@@ -378,6 +381,7 @@ function setActiveTab(mode) {
         [els.tabPinned, 'pinned'],
         [els.tabFinder, 'finder'],
         [els.tabEditor, 'editor'],
+        [els.tabAi, 'ai'],
         [els.tabSettings, 'settings'],
     ];
     for (const [tab, name] of tabs) {
@@ -427,7 +431,7 @@ export function syncNavLayout() {
 
 /**
  * Show the contextual action strip above mode tabs when the current view has buttons.
- * @param {'login' | 'pinned' | 'finder' | 'editor' | 'settings'} mode
+ * @param {'login' | 'pinned' | 'finder' | 'editor' | 'ai' | 'settings'} mode
  * @param {{ hasOpenFile?: boolean }} [options]
  */
 function syncNavActions(mode, options = {}) {
@@ -435,7 +439,7 @@ function syncNavActions(mode, options = {}) {
     const showFinder = mode === 'finder';
     const showPinned = mode === 'pinned';
     const showFinderChrome = showFinder || showPinned;
-    const showEditor = mode === 'editor' && hasOpenFile;
+    const showEditor = (mode === 'editor' || mode === 'ai') && hasOpenFile;
 
     if (els.navActionsFinder) {
         els.navActionsFinder.hidden = !showFinderChrome;
@@ -451,7 +455,7 @@ function syncNavActions(mode, options = {}) {
 }
 
 /**
- * @param {'login' | 'pinned' | 'finder' | 'editor' | 'settings'} name
+ * @param {'login' | 'pinned' | 'finder' | 'editor' | 'ai' | 'settings'} name
  * @param {{ hasOpenFile?: boolean, loading?: boolean }} [options]
  */
 export function showView(name, options = {}) {
@@ -461,6 +465,7 @@ export function showView(name, options = {}) {
     if (els.viewPinned) els.viewPinned.hidden = name !== 'pinned';
     els.viewFinder.hidden = name !== 'finder';
     els.viewEditor.hidden = name !== 'editor';
+    if (els.viewAi) els.viewAi.hidden = name !== 'ai';
     els.viewSettings.hidden = name !== 'settings';
 
     if (name === 'login') {
@@ -499,6 +504,10 @@ export function showView(name, options = {}) {
         els.viewTitle.removeAttribute('title');
     } else if (name === 'finder') {
         els.viewTitle.textContent = 'Finder';
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
+    } else if (name === 'ai') {
+        els.viewTitle.textContent = 'AI';
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
     } else if (name === 'settings') {
@@ -1643,6 +1652,16 @@ export function syncEditorChrome(state, options = {}) {
     }
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
     if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId;
+    if (els.viewAi && !els.viewAi.hidden) {
+        if (els.btnInsertList) els.btnInsertList.hidden = true;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = true;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = true;
+        if (els.editorSearchBar) {
+            els.editorSearchBar.hidden = true;
+            els.editorSearchBar.setAttribute('aria-hidden', 'true');
+        }
+    }
     // Disabled state is owned by syncEditorActionLocks in app.js when a
     // cancelable Edit action is active; otherwise apply the base rules here.
     const actionLocked = Boolean(els.app?.classList.contains('is-action-locked'));
@@ -2329,7 +2348,7 @@ export function promptFillListDates(options) {
  * Action sheet for a Finder / Pinned row.
  * @param {object} file
  * @param {{ isPinned?: boolean }} [options]
- * @returns {Promise<'pin'|'unpin'|'colour'|'bold'|'copy'|'rename'|'move'|'download'|null>}
+ * @returns {Promise<'pin'|'unpin'|'ai'|'colour'|'bold'|'copy'|'rename'|'move'|'download'|null>}
  */
 export function promptItemActions(file, options = {}) {
     const dialog = els.itemActionsDialog;
@@ -2361,6 +2380,7 @@ export function promptItemActions(file, options = {}) {
     }
     if (els.itemActionCopy) els.itemActionCopy.hidden = !canCopy;
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;
+    if (els.itemActionAi) els.itemActionAi.hidden = !canDownload;
 
     return new Promise((resolve) => {
         const onClose = () => {
@@ -2369,6 +2389,7 @@ export function promptItemActions(file, options = {}) {
             if (
                 value === 'pin' ||
                 value === 'unpin' ||
+                value === 'ai' ||
                 value === 'colour' ||
                 value === 'bold' ||
                 value === 'copy' ||

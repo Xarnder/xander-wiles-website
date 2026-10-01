@@ -61,7 +61,9 @@ import {
 } from './config.js';
 import {
     clearToken,
+    getAccessToken,
     isSignedIn,
+    refreshAccessToken,
     requestAccessToken,
     tryRestoreSession,
 } from './auth.js';
@@ -244,6 +246,7 @@ import {
     syncUndoRedoButtons,
 } from './ui.js';
 import { initViewModePicker, isSlimViewModePicker } from './view-mode-picker.js';
+import { attachAiFile, captureAiSelection, initAiPanel, syncAiPanel } from './ai-panel.js';
 
 const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
 const VIEW_MODES = new Set(['list', 'preview', 'contents', 'raw']);
@@ -522,6 +525,13 @@ function msUntilAutosaveAllowed() {
  * True when the user is mid-edit in a text field (Raw textarea or list inputs).
  * Autosave should stay in the background and must not rebuild that DOM.
  */
+function isDocumentSurfaceVisible() {
+    const els = getEls();
+    if (els.viewEditor && !els.viewEditor.hidden) return true;
+    if (els.viewAi && !els.viewAi.hidden) return true;
+    return false;
+}
+
 function isEditorTextFieldFocused() {
     const els = getEls();
     if (!els.viewEditor || els.viewEditor.hidden) return false;
@@ -613,7 +623,7 @@ function startAutosaveCountdown() {
 function syncAutosaveFromEditorState() {
     const ed = state.editor;
     const els = getEls();
-    const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
+    const editorVisible = isDocumentSurfaceVisible();
 
     if (
         !autosaveEnabled ||
@@ -651,7 +661,7 @@ async function runAutosave() {
     const ed = state.editor;
     if (!autosaveEnabled || autosaveInFlight || restoreInFlight || pendingConflict) return;
     const els = getEls();
-    const editorVisible = Boolean(els.viewEditor && !els.viewEditor.hidden);
+    const editorVisible = isDocumentSurfaceVisible();
     if (
         !ed?.fileId ||
         !ed.dirty ||
@@ -2698,6 +2708,52 @@ async function switchToSearchMode() {
     await loadSearch(true);
 }
 
+async function openEntryInAi(file) {
+    if (!file?.id || isFolder(file) || !isMarkdownCandidate(file)) {
+        setStatus('Choose a markdown file.', 'error');
+        return;
+    }
+    setStatus('Opening in AI…');
+    try {
+        let name = file.name || 'note.md';
+        let content = '';
+        if (state.editor.fileId === file.id) {
+            flushCurrentEditorContent();
+            content = state.editor.editorContent;
+            name = state.editor.fileName || name;
+        } else {
+            const meta = await getFileMetadata(file.id);
+            name = meta.name || name;
+            content = await getFileContent(file.id);
+        }
+        attachAiFile({ id: file.id, name, content, role: 'edit' });
+        await switchAppMode('ai');
+        setStatus(`Added “${name}”. Choose Context or Edit, then send a message.`, 'ok');
+    } catch (err) {
+        setStatus(err.message || 'Could not open that file in AI', 'error');
+    }
+}
+
+async function acceptAiFile({ fileId, fileName, markdown }) {
+    if (state.editor.fileId !== fileId) {
+        await openMarkdownFile({
+            id: fileId,
+            name: fileName,
+            mimeType: 'text/markdown',
+        });
+        if (state.editor.fileId !== fileId) return false;
+    }
+    applyAcceptedAiMarkdown(markdown);
+    const els = getEls();
+    if (els.viewAi?.hidden) {
+        showAppView('ai');
+        syncEditorChrome(state.editor);
+        syncAutosaveFromEditorState();
+        syncAiPanel();
+    }
+    return true;
+}
+
 async function handleOpenEntry(file) {
     if (isFolder(file)) {
         await enterFolder(file);
@@ -2708,6 +2764,10 @@ async function handleOpenEntry(file) {
 
 async function handleItemMenu(file) {
     const action = await promptItemActions(file, { isPinned: isPinned(file.id) });
+    if (action === 'ai') {
+        await openEntryInAi(file);
+        return;
+    }
     if (action === 'pin') {
         // Prefer fresh parent metadata when available
         let toPin = file;
@@ -2754,6 +2814,10 @@ async function handleItemMenu(file) {
 
 async function handlePinnedItemMenu(file) {
     const action = await promptItemActions(file, { isPinned: true });
+    if (action === 'ai') {
+        await openEntryInAi(file);
+        return;
+    }
     if (action === 'unpin' || action === 'pin') {
         // From Pinned tab the control is Unpin
         unpinItem(file.id);
@@ -4149,6 +4213,18 @@ function hasOpenFile() {
     return Boolean(state.editor.fileId);
 }
 
+function applyAcceptedAiMarkdown(markdown) {
+    const els = getEls();
+    noteUserEditBoundary(state.editor.editorContent);
+    setEditorText(state.editor, markdown);
+    if (els.editor) els.editor.value = markdown;
+    editHistory.touch(markdown);
+    refreshDocumentModelFromText(markdown);
+    syncEditorChrome(state.editor);
+    syncAutosaveFromEditorState();
+    syncAiPanel();
+}
+
 function showAppView(name, extra = {}) {
     showView(name, { hasOpenFile: hasOpenFile(), ...extra });
     if (name === 'editor' && hasOpenFile() && !extra.loading) {
@@ -4666,8 +4742,8 @@ async function resolvePendingConflict() {
 }
 
 /**
- * Switch app mode tabs. Open files stay in memory across Pinned / Finder / Edit / Settings.
- * @param {'pinned' | 'finder' | 'editor' | 'settings'} mode
+ * Switch app mode tabs. Open files stay in memory across Pinned / Finder / Edit / AI / Settings.
+ * @param {'pinned' | 'finder' | 'editor' | 'ai' | 'settings'} mode
  */
 async function switchAppMode(mode) {
     if (mode === 'editor') {
@@ -4675,13 +4751,36 @@ async function switchAppMode(mode) {
         if (hasOpenFile()) {
             syncEditorChrome(state.editor);
             applyViewMode(state.viewMode, { persist: false });
+            syncAutosaveFromEditorState();
         }
         return;
     }
 
     const els = getEls();
-    const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
-    if (leavingEditor && hasOpenFile()) {
+    const leavingEditor = Boolean(els.viewEditor && !els.viewEditor.hidden);
+    const leavingAi = Boolean(els.viewAi && !els.viewAi.hidden);
+
+    if (mode === 'ai') {
+        if (leavingEditor && hasOpenFile()) {
+            flushCurrentEditorContent();
+            if (state.viewMode === 'raw' && els.editor) {
+                const start = Number(els.editor.selectionStart) || 0;
+                const end = Number(els.editor.selectionEnd) || 0;
+                if (end > start) captureAiSelection(els.editor.value.slice(start, end));
+            }
+        }
+        editorSearch?.close({ restoreFocus: false });
+        showAppView('ai');
+        syncAiPanel();
+        if (hasOpenFile()) {
+            syncEditorChrome(state.editor);
+            syncAutosaveFromEditorState();
+            syncAiPanel();
+        }
+        return;
+    }
+
+    if ((leavingEditor || leavingAi) && hasOpenFile()) {
         persistOpenEditorInBackground();
     }
 
@@ -4689,6 +4788,8 @@ async function switchAppMode(mode) {
         state.placingList = false;
         state.pendingImportList = null;
         state.clickEdit = false;
+        stopAutosaveCountdown();
+    } else if (leavingAi) {
         stopAutosaveCountdown();
     }
 
@@ -4852,6 +4953,30 @@ function wireEvents() {
     });
     editorSearch.bind();
 
+    initAiPanel({
+        getDocument() {
+            return {
+                fileId: state.editor.fileId,
+                fileName: state.editor.fileName,
+                content: state.editor.editorContent,
+                status: state.editor.status,
+            };
+        },
+        async getToken() {
+            if (getAccessToken()) return getAccessToken();
+            try {
+                await refreshAccessToken();
+            } catch {
+                return null;
+            }
+            return getAccessToken();
+        },
+        onAcceptFile: acceptAiFile,
+        onGoFinder() {
+            switchAppMode('finder');
+        },
+    });
+
     els.tabPinned?.addEventListener('click', () => {
         editorSearch?.close({ restoreFocus: false });
         switchAppMode('pinned');
@@ -4862,6 +4987,10 @@ function wireEvents() {
     });
     els.tabEditor.addEventListener('click', () => {
         switchAppMode('editor');
+    });
+    els.tabAi?.addEventListener('click', () => {
+        editorSearch?.close({ restoreFocus: false });
+        switchAppMode('ai');
     });
     els.tabSettings.addEventListener('click', () => {
         editorSearch?.close({ restoreFocus: false });
