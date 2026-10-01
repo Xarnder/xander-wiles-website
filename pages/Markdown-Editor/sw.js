@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v149';
+const CACHE_NAME = 'md-editor-shell-v150';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [

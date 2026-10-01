@@ -9,7 +9,7 @@ export const config = {
     maxDuration: 60,
 };
 
-const MODEL = 'gemini-2.5-flash-lite';
+const MODEL = 'gemini-3.1-flash-lite';
 /** Exact Google account. Dots and plus-aliases do not match. */
 const ALLOWED_EMAIL = 'xanderwiles@gmail.com';
 const MAX_MARKDOWN = 400_000;
@@ -240,8 +240,23 @@ export default async function handler(request) {
     if (!markdownOut) {
         return json({ error: 'Gemini returned an empty response.' }, 502);
     }
-    if (task === 'context') return json({ reply: markdownOut }, 200);
-    return json({ markdown: markdownOut }, 200);
+    const usage = usageFrom(payload);
+    if (task === 'context') return json({ reply: markdownOut, usage }, 200);
+    return json({ markdown: markdownOut, usage }, 200);
+}
+
+function usageFrom(interaction) {
+    const usage = interaction?.usage;
+    if (!usage || typeof usage !== 'object') return null;
+    const inputTokens = Number(usage.total_input_tokens);
+    const outputTokens = Number(usage.total_output_tokens);
+    const thoughtTokens = Number(usage.total_thought_tokens);
+    if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return null;
+    return {
+        inputTokens,
+        outputTokens,
+        thoughtTokens: Number.isFinite(thoughtTokens) && thoughtTokens > 0 ? thoughtTokens : 0,
+    };
 }
 
 function normalizeContextFiles(value) {

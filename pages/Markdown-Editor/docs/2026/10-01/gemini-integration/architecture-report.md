@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-01  
 **Scope:** `pages/Markdown-Editor/`  
-**SDK checked:** `@google/genai` Interactions API (`client.interactions.create`). The editor calls `gemini-2.5-flash-lite`, the cheapest Flash model on the current pricing page.  
+**SDK checked:** `@google/genai` Interactions API (`client.interactions.create`). The editor calls `gemini-3.1-flash-lite`, the cheapest Flash model still open to new users.  
 **Verdict:** Feasible. Gemini should propose Markdown. The existing editor save pipeline should be the only writer. The Mac folder is a Google Drive for Desktop mirror of that write, not a second place for the model to save.
 
 ---
@@ -67,9 +67,9 @@ Each feature sends the open note, or a selection plus enough surrounding context
 
 The model reads text the browser already loaded and returns replacement text. The browser commits through `updateFileContent`. The Mac file changes only because Drive for Desktop downloads that revision.
 
-Sending the whole vault on every call is unnecessary and expensive. The open file, or the current selection, is the context. `gemini-2.5-flash-lite` can take a long note, but selection-scoped edits keep latency, cost, and blast radius small.
+Sending the whole vault on every call is unnecessary and expensive. The open file, or the current selection, is the context. `gemini-3.1-flash-lite` can take a long note, but selection-scoped edits keep latency, cost, and blast radius small.
 
-The editor uses `gemini-2.5-flash-lite` because it is the cheapest Flash model on the current Gemini pricing page ($0.10 / 1M input tokens, $0.40 / 1M output tokens). `@google/genai` must be **2.3.0 or newer** for `interactions.create`.
+The editor uses `gemini-3.1-flash-lite` because `gemini-2.5-flash-lite` is closed to new users, and 3.1 Flash-Lite is the cheapest Flash model still available ($0.25 / 1M input tokens, $1.50 / 1M output tokens). `@google/genai` must be **2.3.0 or newer** for `interactions.create`.
 
 ---
 
@@ -247,7 +247,7 @@ node rewrite-markdown.mjs
 ```javascript
 import { GoogleGenAI } from "@google/genai";
 
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-3.1-flash-lite";
 
 const SYSTEM = `You edit one Markdown note.
 Return only the requested Markdown. No preamble, no closing comment.

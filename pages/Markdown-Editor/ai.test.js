@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyAiProposal, diffLines, stripWrappingFence } from './ai.js';
+import { applyAiProposal, diffLines, formatGeminiCost, stripWrappingFence } from './ai.js';
 
 const LIST = [
     '<!-- For LLMs / coding agents: keep the mdlist JSON. -->',
@@ -85,6 +85,18 @@ test('diffLines marks an inserted and a removed line', () => {
 test('diffLines is empty of changes when the text matches', () => {
     const ops = diffLines('same\n', 'same\n');
     assert.deepEqual(ops, [{ type: 'equal', text: 'same' }]);
+});
+
+test('formatGeminiCost bills thinking tokens at the output rate', () => {
+    assert.equal(
+        formatGeminiCost({ inputTokens: 3000, outputTokens: 3000, thoughtTokens: 0 }),
+        'Estimated cost $0.0053 (3,000 in, 3,000 out).'
+    );
+    assert.equal(
+        formatGeminiCost({ inputTokens: 1000, outputTokens: 100, thoughtTokens: 400 }),
+        'Estimated cost $0.0010 (1,000 in, 100 out, 400 thinking).'
+    );
+    assert.equal(formatGeminiCost(null), '');
 });
 
 test('revise refuses a dropped custom list', () => {

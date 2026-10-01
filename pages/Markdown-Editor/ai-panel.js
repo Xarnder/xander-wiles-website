@@ -3,7 +3,7 @@
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
  */
 
-import { applyAiProposal, diffLines } from './ai.js';
+import { applyAiProposal, diffLines, formatGeminiCost } from './ai.js';
 import { displayNoteTitle } from './ui.js';
 
 const TASK_COPY = {
@@ -68,6 +68,7 @@ function readEls() {
         instruction: document.getElementById('ai-instruction'),
         run: document.getElementById('ai-run'),
         status: document.getElementById('ai-status'),
+        cost: document.getElementById('ai-cost'),
         resultWrap: document.getElementById('ai-result-wrap'),
         reply: document.getElementById('ai-reply'),
         diff: document.getElementById('ai-diff'),
@@ -116,6 +117,20 @@ function clearProposal() {
         nodes.diff.hidden = true;
         nodes.diff.replaceChildren();
     }
+    hideCost();
+}
+
+function hideCost() {
+    if (!nodes?.cost) return;
+    nodes.cost.hidden = true;
+    nodes.cost.textContent = '';
+}
+
+function showCost(usage) {
+    if (!nodes?.cost) return;
+    const text = formatGeminiCost(usage);
+    nodes.cost.hidden = !text;
+    nodes.cost.textContent = text;
 }
 
 function editAttachment() {
@@ -516,6 +531,7 @@ async function runProposal() {
         };
         appendTurn(reply, 'assistant');
         setStatus('Answered from the attached note. The file was not changed.', 'ok');
+        showCost(payload.usage);
         syncAiPanel();
         return;
     }
@@ -523,6 +539,7 @@ async function runProposal() {
     const live = targetFile();
     if (!live || live.id !== source.id || live.content !== source.content) {
         setStatus('That note changed. Send again.', 'error');
+        showCost(payload.usage);
         syncAiPanel();
         return;
     }
@@ -535,6 +552,7 @@ async function runProposal() {
     });
     if (!applied.ok) {
         setStatus(applied.error, 'error');
+        showCost(payload.usage);
         syncAiPanel();
         return;
     }
@@ -542,6 +560,7 @@ async function runProposal() {
     const hasChanges = renderDiff(source.content, applied.markdown);
     if (!hasChanges) {
         setStatus('The model returned the same text.', 'ok');
+        showCost(payload.usage);
         syncAiPanel();
         return;
     }
@@ -558,6 +577,7 @@ async function runProposal() {
         markdown: applied.markdown,
     };
     setStatus('Removed lines are struck through. Added lines are highlighted. Accept writes this note.', 'ok');
+    showCost(payload.usage);
     syncAiPanel();
 }
 

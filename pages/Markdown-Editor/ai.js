@@ -8,6 +8,29 @@ import { parseDocument } from './lists.js';
 
 export const AI_TASKS = Object.freeze(['expand', 'header', 'summarize', 'revise']);
 
+/** Paid standard rates for gemini-3.1-flash-lite. Thinking tokens bill as output. */
+const INPUT_USD_PER_TOKEN = 0.25 / 1_000_000;
+const OUTPUT_USD_PER_TOKEN = 1.5 / 1_000_000;
+
+/**
+ * @param {{ inputTokens?: number, outputTokens?: number, thoughtTokens?: number } | null | undefined} usage
+ * @returns {string}
+ */
+export function formatGeminiCost(usage) {
+    const inputTokens = Number(usage?.inputTokens);
+    const outputTokens = Number(usage?.outputTokens);
+    const thoughtTokens = Number(usage?.thoughtTokens) || 0;
+    if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return '';
+    if (inputTokens < 0 || outputTokens < 0 || thoughtTokens < 0) return '';
+    const usd =
+        inputTokens * INPUT_USD_PER_TOKEN +
+        (outputTokens + thoughtTokens) * OUTPUT_USD_PER_TOKEN;
+    const amount = usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+    const thinking =
+        thoughtTokens > 0 ? `, ${thoughtTokens.toLocaleString('en-US')} thinking` : '';
+    return `Estimated cost ${amount} (${inputTokens.toLocaleString('en-US')} in, ${outputTokens.toLocaleString('en-US')} out${thinking}).`;
+}
+
 /**
  * @param {string} text
  * @returns {string}
