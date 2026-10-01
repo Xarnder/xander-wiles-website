@@ -42,7 +42,22 @@
 
 		const slotEl = () => slide.parentElement;
 
-		const fits = (slot: HTMLElement) => slide.scrollHeight <= slot.clientHeight + 1;
+		/**
+		 * Height of the slide with no max-height clamp. The clamped box can
+		 * report a fitting scrollHeight while the title still spills out and
+		 * gets sliced by the action row.
+		 */
+		const contentHeight = () => {
+			const prev = slide.style.maxHeight;
+			slide.style.maxHeight = 'none';
+			// offsetHeight stays in layout space. getBoundingClientRect is the
+			// rotated box in force-landscape and would look far too tall.
+			const height = slide.offsetHeight;
+			slide.style.maxHeight = prev;
+			return height;
+		};
+
+		const fits = (slot: HTMLElement) => contentHeight() <= slot.clientHeight + 1;
 
 		const show = () => {
 			cancelAnimationFrame(revealFrame);
@@ -171,15 +186,12 @@
 				<span class="marker-hint">Double check required</span>
 			</div>
 		{/if}
+		{#if statusLabel}
+			<p class={['status-chip', priorStatus]} data-testid="prior-status">
+				{statusLabel}
+			</p>
+		{/if}
 	</div>
-	{#if statusLabel}
-		<p
-			class={['status-chip', priorStatus]}
-			data-testid="prior-status"
-		>
-			{statusLabel}
-		</p>
-	{/if}
 	<div class={['title-frame', isImportant && 'has-animated-border']} data-testid="task-title-frame">
 		{#if isImportant}
 			<div class="double-check-badge" data-testid="double-check-badge">
@@ -211,8 +223,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem;
-		margin: 0 0 0.5rem;
+		gap: 0.4rem 0.5rem;
+		margin: 0 0 0.35rem;
+		flex: 0 0 auto;
 	}
 
 	.eyebrow {
@@ -282,13 +295,13 @@
 	}
 
 	.status-chip {
-		margin: 0 0 0.65rem;
-		align-self: flex-start;
-		padding: 0.28rem 0.7rem;
+		margin: 0;
+		padding: 0.26rem 0.7rem;
 		border-radius: 999px;
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 		font-weight: 700;
 		border: 1px solid var(--line);
+		line-height: 1.2;
 	}
 
 	.status-chip.completed {
@@ -312,6 +325,7 @@
 		position: relative;
 		min-width: 0;
 		width: 100%;
+		flex: 0 0 auto;
 	}
 
 	.title-frame.has-animated-border {
@@ -452,5 +466,79 @@
 
 	:global([data-theme='light']) .is-important .desc {
 		color: #450a0a;
+	}
+
+	/* Phone landscape, including the rotated force-landscape run. */
+	@media (orientation: landscape) and (max-height: 520px) {
+		.slide {
+			padding: 0.1rem 0.1rem 0.2rem;
+		}
+
+		.meta-row {
+			margin-bottom: 0.2rem;
+		}
+
+		.title-frame.has-animated-border {
+			padding: 0.4rem 0.75rem 0.45rem;
+			margin: 0.1rem 0 0.2rem;
+		}
+
+		.double-check-badge {
+			margin-bottom: 0.2rem;
+		}
+
+		h1 {
+			line-height: 1.16;
+		}
+	}
+
+	:global(html.routine-force-landscape) .slide {
+		padding: 0.1rem 0.1rem 0.15rem;
+	}
+
+	:global(html.routine-force-landscape) .meta-row {
+		margin-bottom: 0.2rem;
+		flex-wrap: nowrap;
+		min-width: 0;
+	}
+
+	:global(html.routine-force-landscape) .eyebrow {
+		flex-shrink: 0;
+		font-size: 0.72rem;
+	}
+
+	:global(html.routine-force-landscape) .important-marker {
+		flex-shrink: 1;
+		min-width: 0;
+		font-size: 0.68rem;
+		letter-spacing: 0.02em;
+		padding: 0.16rem 0.55rem;
+		gap: 0.28rem;
+	}
+
+	:global(html.routine-force-landscape) .marker-hint {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:global(html.routine-force-landscape) .status-chip {
+		flex-shrink: 0;
+		font-size: 0.68rem;
+		padding: 0.16rem 0.5rem;
+	}
+
+	:global(html.routine-force-landscape) .title-frame.has-animated-border {
+		padding: 0.4rem 0.75rem 0.45rem;
+		margin: 0.1rem 0 0.15rem;
+	}
+
+	:global(html.routine-force-landscape) .double-check-badge {
+		margin-bottom: 0.2rem;
+	}
+
+	:global(html.routine-force-landscape) h1 {
+		line-height: 1.16;
 	}
 </style>
