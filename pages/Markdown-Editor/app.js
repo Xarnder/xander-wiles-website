@@ -243,6 +243,7 @@ import {
     syncFinderSortControl,
     syncUndoRedoButtons,
 } from './ui.js';
+import { initViewModePicker, isSlimViewModePicker } from './view-mode-picker.js';
 
 const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
 const VIEW_MODES = new Set(['list', 'preview', 'contents', 'raw']);
@@ -5279,7 +5280,8 @@ function wireEvents() {
     const modeButtons = [els.modeList, els.modePreview, els.modeContents, els.modeRaw];
     for (const btn of modeButtons) {
         if (!btn) continue;
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (event) => {
+            if (isSlimViewModePicker() && event.isTrusted) return;
             if (!hasOpenFile()) return;
             const next = btn.dataset.viewMode;
             applyViewMode(next, {
@@ -5288,6 +5290,7 @@ function wireEvents() {
             });
         });
     }
+    initViewModePicker(els.viewModeBar);
 
     window.addEventListener('keydown', (event) => {
         const key = event.key?.toLowerCase();
