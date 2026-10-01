@@ -4980,6 +4980,31 @@ input:checked+.slider-small:before {
     order: 1;
 }
 
+.tag-filter-toggle {
+    appearance: none;
+    border: 1px solid var(--glass-border);
+    background: oklch(0 0 0 / 0.2);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.tag-filter-toggle.is-on {
+    color: var(--tag-filter-color, var(--accent-blue));
+    border-color: var(--tag-filter-color, var(--accent-blue));
+    background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 18%, transparent);
+}
+
+[data-theme="light"] .tag-filter-toggle {
+    background: oklch(0 0 0 / 0.05);
+}
+
 .header-action-slots {
     flex-shrink: 0;
     order: 3;
@@ -9303,6 +9328,361 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
         column-width: auto;
         width: calc(4 * 240px + 3 * 8px);
         max-width: none;
+    }
+}
+
+/* Slim full-screen editor: one large category, press-drag drop-up for the rest. */
+.add-task-composer-tag-slot {
+    display: contents;
+}
+
+@media (max-width: 500px) {
+    .add-task-composer-tag-slot {
+        display: block;
+        position: relative;
+        flex: 0 0 auto;
+        min-height: 44px;
+        margin: 4px 12px;
+    }
+
+    .add-task-composer.tags-packed .add-task-composer-dock {
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        gap: 0;
+        background: transparent;
+        border-top: 0;
+    }
+
+    .add-task-composer.tags-packed .add-task-composer-tag-slot {
+        display: block;
+    }
+
+    .add-task-composer.tags-packed .add-task-composer-tags,
+    .add-task-composer.tags-packed .add-task-composer-bar {
+        display: flex;
+    }
+
+    .add-task-composer.tags-packed .add-task-composer-tags .tag-mode-btn {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .add-task-composer.tags-packed .add-task-composer-add,
+    .add-task-composer.tags-packed .add-task-composer-exit {
+        grid-column: auto;
+        grid-row: auto;
+        align-self: auto;
+    }
+
+    .add-task-composer-bar {
+        align-items: flex-end;
+    }
+
+    .add-task-composer-exit,
+    .add-task-composer-add,
+    .add-task-composer.tags-packed .add-task-composer-exit,
+    .add-task-composer.tags-packed .add-task-composer-add {
+        height: 76px;
+        min-height: 76px;
+        padding: 0 16px;
+        font-size: 1.15rem;
+        font-weight: 800;
+        line-height: 1;
+        border-radius: 14px;
+    }
+
+    .add-task-composer-tags {
+        position: relative;
+        display: block;
+        min-height: 44px;
+        margin: 0;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    .add-task-composer-tags .tag-mode-btn:not(.is-selected) {
+        display: none;
+    }
+
+    .add-task-composer-tags .tag-mode-btn.is-selected {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 44px;
+        height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        font-size: 1.15rem;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: clip;
+        animation: none;
+        box-shadow: 0 8px 22px -16px oklch(0 0 0 / 0.7);
+    }
+
+    .add-task-composer-tags .tag-mode-btn.is-selected::after {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-top: 2px solid currentColor;
+        border-right: 2px solid currentColor;
+        transform: translateY(2px) rotate(-45deg);
+        opacity: 0.8;
+        flex: 0 0 auto;
+    }
+
+    .add-task-composer-tags:not(.is-picking) .tag-mode-btn.is-selected:active {
+        transform: scale(0.985);
+    }
+
+    .add-task-composer-tags.is-picking {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 8;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 4px;
+        min-height: 0;
+        margin: 0;
+        padding: 6px;
+        border-radius: 16px;
+        border: 1px solid var(--glass-border);
+        background: color-mix(in oklch, var(--dropdown-bg, oklch(0.16 0 0)) 94%, transparent);
+        box-shadow:
+            0 -18px 40px oklch(0 0 0 / 0.45),
+            0 0 0 1px color-mix(in oklch, var(--glass-border) 70%, transparent);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        overflow: hidden;
+    }
+
+    .add-task-composer-tags.is-picking .tag-mode-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: var(--category-row-h, 44px);
+        height: var(--category-row-h, 44px);
+        max-width: none;
+        padding: 0 14px;
+        border-radius: 12px;
+        font-size: 1.05rem;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: clip;
+        animation: category-drop-up 140ms ease-out;
+    }
+
+    .add-task-composer-tags.is-picking .tag-mode-btn.is-selected {
+        order: 1;
+        box-shadow: inset 0 0 0 2px currentColor;
+    }
+
+    .add-task-composer-tags.is-picking .tag-mode-btn.is-selected::after {
+        opacity: 0;
+    }
+
+    .add-task-composer-tags.is-picking .tag-mode-btn.is-drag-over {
+        outline: 3px solid var(--text-primary);
+        outline-offset: -3px;
+        transform: none;
+        filter: brightness(1.12);
+    }
+
+    .add-task-composer.is-category-picking .add-task-composer-stage,
+    .add-task-composer.is-category-picking .add-task-composer-input {
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        overflow: hidden;
+    }
+}
+
+@keyframes category-drop-up {
+    from {
+        opacity: 0.35;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .add-task-composer-tags.is-picking .tag-mode-btn,
+    #tag-mode-buttons.is-picking .tag-mode-btn {
+        animation: none;
+    }
+}
+
+/* Slim tool panel: one large category, same press-drag drop-up as the editor. */
+@media (max-width: 500px) {
+    .app-header.has-dense-tags .tag-tools-block {
+        flex-direction: column !important;
+        flex-wrap: nowrap !important;
+    }
+
+    .app-header.has-dense-tags .header-row-meta,
+    .app-header.has-dense-tags .header-row.tag-mode-row,
+    .app-header.has-dense-tags .tag-mode-buttons {
+        display: flex !important;
+    }
+
+    .app-header .header-row-meta .header-meta-control,
+    .app-header.has-dense-tags .header-row-meta .header-meta-control {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        max-width: none !important;
+        min-height: 40px !important;
+        height: 40px !important;
+        max-height: none !important;
+    }
+
+    .app-header .header-row-meta .glass-select,
+    .app-header .header-row-meta .label,
+    .app-header .tag-filter-toggle {
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+    }
+
+    .app-header .tag-filter-toggle.is-on {
+        color: var(--tag-filter-color, var(--accent-blue)) !important;
+        border-color: var(--tag-filter-color, var(--accent-blue)) !important;
+        background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 22%, transparent) !important;
+    }
+
+    .app-header.is-category-picking {
+        overflow: visible !important;
+    }
+
+    .header-row.tag-mode-row {
+        position: relative;
+        min-height: 44px;
+        z-index: 2;
+    }
+
+    #tag-mode-buttons {
+        position: relative;
+        display: block !important;
+        width: 100% !important;
+        min-height: 44px;
+        margin: 0;
+        overflow: visible !important;
+        flex-wrap: nowrap !important;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    #tag-mode-buttons .tag-mode-btn:not(.is-selected) {
+        display: none !important;
+    }
+
+    #tag-mode-buttons .tag-mode-btn.is-selected {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100% !important;
+        max-width: none !important;
+        flex: none !important;
+        min-height: 44px !important;
+        height: 44px !important;
+        max-height: none !important;
+        padding: 0 16px !important;
+        border-radius: 14px !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        white-space: nowrap;
+        overflow: hidden;
+        animation: none !important;
+        box-shadow: 0 8px 22px -16px oklch(0 0 0 / 0.7) !important;
+    }
+
+    #tag-mode-buttons .tag-mode-btn.is-selected::after {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-top: 2px solid currentColor;
+        border-right: 2px solid currentColor;
+        transform: translateY(2px) rotate(-45deg);
+        opacity: 0.8;
+        flex: 0 0 auto;
+    }
+
+    #tag-mode-buttons:not(.is-picking) .tag-mode-btn.is-selected:active {
+        transform: scale(0.985);
+    }
+
+    #tag-mode-buttons.is-picking {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        display: flex !important;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 4px;
+        min-height: 0;
+        padding: 6px;
+        border-radius: 16px;
+        border: 1px solid var(--glass-border);
+        background: color-mix(in oklch, var(--dropdown-bg, oklch(0.16 0 0)) 94%, transparent);
+        box-shadow:
+            0 -18px 40px oklch(0 0 0 / 0.45),
+            0 0 0 1px color-mix(in oklch, var(--glass-border) 70%, transparent);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        overflow: hidden !important;
+    }
+
+    #tag-mode-buttons.is-picking .tag-mode-btn {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 100% !important;
+        max-width: none !important;
+        flex: none !important;
+        min-height: var(--category-row-h, 44px) !important;
+        height: var(--category-row-h, 44px) !important;
+        max-height: none !important;
+        padding: 0 14px !important;
+        border-radius: 12px !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        white-space: nowrap;
+        overflow: hidden;
+        animation: category-drop-up 140ms ease-out;
+    }
+
+    #tag-mode-buttons.is-picking .tag-mode-btn.is-selected {
+        order: 1;
+        box-shadow: inset 0 0 0 2px currentColor !important;
+    }
+
+    #tag-mode-buttons.is-picking .tag-mode-btn.is-selected::after {
+        opacity: 0;
+    }
+
+    #tag-mode-buttons.is-picking .tag-mode-btn.is-drag-over {
+        outline: 3px solid var(--text-primary);
+        outline-offset: -3px;
+        filter: brightness(1.12);
     }
 }
 

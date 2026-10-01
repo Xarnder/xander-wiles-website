@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v113';
+const CACHE_NAME = 'taskmaster-todo-v118';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
     './nested.js',
     './tags.js',
     './kanban.js',
+    './category-dropup.js',
     './task-import.js',
     './utils.js',
     './local-ai.js',
@@ -142,6 +143,7 @@ self.addEventListener('fetch', (event) => {
         'ui.js',
         'nested.js',
         'kanban.js',
+        'category-dropup.js',
         'task-import.js',
         'utils.js',
         'firebase-config.js',

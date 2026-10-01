@@ -1,4 +1,5 @@
 import { state } from './store.js';
+import { fitCategoryDropupText, initCategoryDropup, isSlimCategoryDropup } from './category-dropup.js';
 import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping, debounce } from './utils.js';
 import {
     sanitizeNestedForSave,
@@ -86,11 +87,21 @@ function syncTagFilterChrome() {
         row.setAttribute(
             'aria-label',
             filtering
-                ? `${baseLabel}. Board filtered to tag ${filterTag?.name || 'selected'}. Press the selected tag again to clear filter.`
-                : baseLabel
+                ? `${baseLabel}. Board filtered to tag ${filterTag?.name || 'selected'}. Press Filter to show every task.`
+                : `${baseLabel}. Press Filter to show only the selected category.`
         );
     }
     if (tools) tools.classList.toggle('is-filtering', filtering);
+
+    const filterBtn = document.getElementById('tag-filter-toggle');
+    if (filterBtn) {
+        filterBtn.classList.toggle('is-on', filtering);
+        filterBtn.setAttribute('aria-pressed', filtering ? 'true' : 'false');
+        const name = filterTag?.name || 'category';
+        filterBtn.title = filtering
+            ? `Filtering by ${name}. Press to show every task.`
+            : 'Filter the board by the selected category';
+    }
 
     const filterLabel = document.getElementById('tag-filter-label');
     if (filterLabel) {
@@ -108,6 +119,23 @@ function syncTagFilterChrome() {
 
     updateTotalTaskCount();
     requestAnimationFrame(() => layoutSlimChrome());
+}
+
+function toggleBoardTagFilter() {
+    const activeId = state.appData.settings.activeTagId || MISC_TAG_ID;
+    state.tagFilterId = state.tagFilterId ? null : activeId;
+    renderTagModeBar();
+    debouncedRenderBoardForTagFilter();
+}
+
+function selectHeaderCategory(tagId) {
+    const activeId = state.appData.settings.activeTagId || MISC_TAG_ID;
+    if (!tagId || tagId === activeId) return;
+    const filtering = !!state.tagFilterId;
+    setActiveTagId(tagId);
+    if (filtering) state.tagFilterId = tagId;
+    renderTagModeBar();
+    if (filtering) debouncedRenderBoardForTagFilter();
 }
 
 function clearTagFilter(options = {}) {
@@ -1405,6 +1433,8 @@ function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId =
     if (bindClick && onSelect) {
         btn.onclick = (e) => {
             e.preventDefault();
+            const bar = btn.closest('#tag-mode-buttons');
+            if (bar && (bar.dataset.suppressClick === '1' || isSlimCategoryDropup())) return;
             onSelect(tag.id);
         };
     }
@@ -1431,6 +1461,17 @@ export function renderTagModeBar() {
     const header = document.querySelector('.app-header');
     if (header) header.classList.toggle('has-dense-tags', tags.length >= DENSE_TAG_LAYOUT_MIN);
 
+    const filterBtn = document.getElementById('tag-filter-toggle');
+    if (filterBtn && filterBtn.dataset.bound !== '1') {
+        filterBtn.dataset.bound = '1';
+        filterBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggleBoardTagFilter();
+        });
+    }
+
+    initCategoryDropup(container, selectHeaderCategory);
+
     container.innerHTML = '';
     tags.forEach((tag) => {
         container.appendChild(buildTagButton(tag, activeId, (tagId) => {
@@ -1454,7 +1495,11 @@ export function renderTagModeBar() {
     });
 
     syncTagFilterChrome();
-    requestAnimationFrame(() => layoutSlimChrome());
+    fitCategoryDropupText(container);
+    requestAnimationFrame(() => {
+        layoutSlimChrome();
+        fitCategoryDropupText(container);
+    });
     renderComposerTagBar();
 }
 
@@ -1479,6 +1524,7 @@ export function renderComposerTagBar() {
     const activeTag = tags.find((tag) => tag.id === activeId) || tags[0];
     syncComposerCategoryLabel(activeTag);
     syncComposerTaskPreview(activeTag);
+    fitCategoryDropupText(container);
 }
 
 function syncComposerCategoryLabel(tag) {

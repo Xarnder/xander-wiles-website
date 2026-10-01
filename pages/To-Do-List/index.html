@@ -150,6 +150,8 @@
                             <span class="slider-small round"></span>
                         </label>
                     </div>
+
+                    <button type="button" id="tag-filter-toggle" class="tag-filter-toggle header-meta-control" aria-pressed="false" title="Filter the board by the selected category">Filter</button>
                 </div>
 
                 <div id="tag-mode-row" class="header-row tag-mode-row" role="radiogroup" aria-label="Tag mode for new tasks">
@@ -1258,18 +1260,15 @@
                     <summary><i class="ph ph-tag"></i> <span class="features-help-title">Tags &amp; filtering</span></summary>
                     <div class="features-help-content">
                         <h4>Tag Mode (new tasks)</h4>
-                        <p>The coloured tag pills in the header set which tag <strong>new</strong> tasks get. Tap a tag once to select it. That tag stays selected until you pick another.</p>
-                        <h4>Filter the board by tag</h4>
+                        <p>The category control sets which category <strong>new</strong> tasks get. On a phone, press and hold it, drag to another category, and release. On a wider screen, tap a category. It stays selected until you pick another.</p>
+                        <h4>Filter the board by category</h4>
                         <ol>
-                            <li>Select a tag in the header (first press).</li>
-                            <li>Press that <strong>same selected tag again</strong> to turn filtering on. Only tasks with that tag stay visible.</li>
+                            <li>Select a category.</li>
+                            <li>Press <strong>Filter</strong>, next to Custom and Drag. Only tasks in that category stay visible.</li>
                             <li>A bordered <strong>Filtering: …</strong> label appears, and the header count shows matching tasks vs the board total (e.g. <code>12/40</code>).</li>
                         </ol>
                         <h4>Turn filtering off</h4>
-                        <ul>
-                            <li>Press the filtering tag <strong>a third time</strong>, or</li>
-                            <li>Press <strong>any other</strong> tag (that also switches Tag Mode).</li>
-                        </ul>
+                        <p>Press <strong>Filter</strong> again to show every task.</p>
                         <h4>Group a list by tag</h4>
                         <p>Tap the <strong>stack</strong> button at the top of a list to pull matching tags together (e.g. all Work tasks). Order follows the tag order in Settings.</p>
                         <h4>Reorder tag categories</h4>
@@ -1646,7 +1645,9 @@
             </div>
         </div>
         <div class="add-task-composer-dock">
-            <div id="add-task-composer-tags" class="add-task-composer-tags" role="radiogroup" aria-label="Category for this task"></div>
+            <div class="add-task-composer-tag-slot">
+                <div id="add-task-composer-tags" class="add-task-composer-tags" role="radiogroup" aria-label="Category for this task" aria-expanded="false"></div>
+            </div>
             <div class="add-task-composer-bar">
                 <button type="button" id="add-task-composer-exit" class="btn secondary add-task-composer-exit">Exit</button>
                 <button type="button" id="add-task-composer-add" class="btn primary add-task-composer-add" title="Add task">Add</button>

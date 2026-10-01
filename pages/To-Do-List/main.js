@@ -23,6 +23,7 @@ import {
     allSubtasksComplete
 } from './nested.js';
 import { MISC_TAG_ID, ensureDefaultTags, getTagsById, getTagNameForTask } from './tags.js';
+import { initCategoryDropup, isSlimCategoryDropup, closeCategoryDropup } from './category-dropup.js';
 import { buildXanderListV1, xanderListToMarkdown } from './list-interchange.js';
 
 const nestedRollupPromptedTaskIds = new Set();
@@ -3598,9 +3599,11 @@ function bindComposerOnce() {
     const tagRow = document.getElementById('add-task-composer-tags');
     const tagFooter = root.querySelector('.add-task-composer-footer');
     if (tagRow) {
+        initCategoryDropup(tagRow, (tagId) => UI.selectComposerTag(tagId));
         let tagFromPointer = false;
         let tagPointer = null;
         tagRow.addEventListener('pointerdown', (e) => {
+            if (isSlimCategoryDropup()) return;
             if (e.button != null && e.button !== 0) return;
             if (!e.target.closest('button')) return;
             tagPointer = { x: e.clientX, y: e.clientY, id: e.pointerId };
@@ -3609,6 +3612,7 @@ function bindComposerOnce() {
             if (!canScroll) e.preventDefault();
         });
         tagRow.addEventListener('pointerup', (e) => {
+            if (isSlimCategoryDropup()) return;
             if (e.button != null && e.button !== 0) return;
             const start = tagPointer;
             tagPointer = null;
@@ -3629,6 +3633,8 @@ function bindComposerOnce() {
             const btn = e.target.closest('button[data-tag-id]');
             if (!btn || !tagRow.contains(btn)) return;
             e.preventDefault();
+            if (tagRow.dataset.suppressClick === '1') return;
+            if (isSlimCategoryDropup()) return;
             if (tagFromPointer) {
                 tagFromPointer = false;
                 return;
@@ -3744,6 +3750,7 @@ function closeAddTaskComposer({ restore = false } = {}) {
     composerSession = null;
     if (field && document.activeElement === field) field.blur();
     composerToggleAt = Date.now();
+    closeCategoryDropup(document.getElementById('add-task-composer-tags'));
     root.classList.add('hidden');
     root.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('add-task-composer-open');
