@@ -29,9 +29,11 @@
     <!-- App Styles -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- SortableJS & Icons -->
+    <!-- SortableJS & Icons. Stylesheets, not the unpkg loader, so the font is
+         requested directly and is not intercepted as app CSS. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/fill/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <!-- INITIAL THEME APPLY -->
     <script>

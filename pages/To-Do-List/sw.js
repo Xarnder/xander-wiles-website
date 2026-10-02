@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v118';
+const CACHE_NAME = 'taskmaster-todo-v119';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -22,7 +22,6 @@ const ASSETS_TO_CACHE = [
     './favicon-light.svg',
     './favicon-dark.svg',
     'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js',
-    'https://unpkg.com/@phosphor-icons/web',
     'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js',
     'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js',
     'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
@@ -150,7 +149,16 @@ self.addEventListener('fetch', (event) => {
         'sw.js',
         'style.css'
     ];
-    const isCoreAppJs = NETWORK_FIRST_JS.some((file) => event.request.url.includes(file));
+    // Match only this app's own files. A substring check would also catch the
+    // Phosphor icon stylesheets, which are named style.css on the CDN.
+    const appScopePath = new URL('./', self.registration.scope).pathname;
+    const isCoreAppJs = NETWORK_FIRST_JS.some((file) => {
+        let url;
+        try { url = new URL(event.request.url); } catch (_) { return false; }
+        return url.origin === self.location.origin
+            && url.pathname.startsWith(appScopePath)
+            && url.pathname.endsWith('/' + file);
+    });
 
     if (isCoreAppJs && event.request.method === 'GET') {
         event.respondWith(
@@ -168,10 +176,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Cache-First for everything else
+    // Cache-First for everything else. External icon CSS/fonts are left to the
+    // browser; matching them here was dropping the font on some loads.
     const isStaticAsset = ASSETS_TO_CACHE.some(asset => {
-        const clean = asset.replace('./', '');
-        return clean.length > 0 && event.request.url.includes(clean);
+        if (!asset.startsWith('http')) return false;
+        return event.request.url === asset || event.request.url.startsWith(asset + '?');
     });
     const isSelf = event.request.url.startsWith(self.location.origin);
     const isFirebase = event.request.url.includes('gstatic.com/firebasejs');
