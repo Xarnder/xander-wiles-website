@@ -1319,6 +1319,111 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
     flex-direction: column;
     gap: 8px;
     min-width: 0;
+    --ai-diff-del: #ff5c5c;
+    --ai-diff-add: #3ddc97;
+    --ai-diff-del-bg: color-mix(in srgb, var(--ai-diff-del) 38%, transparent);
+    --ai-diff-add-bg: color-mix(in srgb, var(--ai-diff-add) 38%, transparent);
+}
+
+html[data-theme="light"] .ai-diff {
+    --ai-diff-del: #c62828;
+    --ai-diff-add: #0d7a45;
+    --ai-diff-del-bg: color-mix(in srgb, #e53935 30%, transparent);
+    --ai-diff-add-bg: color-mix(in srgb, #1f9d66 30%, transparent);
+}
+
+html[data-theme="oled"] .ai-diff {
+    --ai-diff-del-bg: color-mix(in srgb, #ff5c5c 16%, #000000);
+    --ai-diff-add-bg: color-mix(in srgb, #3ddc97 14%, #000000);
+}
+
+.ai-diff-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-diff-counts {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.ai-diff-jumps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ai-diff-jump-label {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.ai-diff-jump {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    width: 100%;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ai-diff-jump:hover,
+.ai-diff-jump:focus-visible {
+    border-color: var(--accent-border);
+}
+
+.ai-diff-jump-line {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+
+.ai-diff-jump-kind {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.ai-diff-jump--del .ai-diff-jump-kind {
+    color: var(--ai-diff-del);
+}
+
+.ai-diff-jump--add .ai-diff-jump-kind {
+    color: var(--ai-diff-add);
+}
+
+.ai-diff-jump-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.ai-diff-row.is-ai-jump .ai-diff-cell--del,
+.ai-diff-row.is-ai-jump .ai-diff-cell--add {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 .ai-diff-legend {
@@ -1343,12 +1448,20 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
     border-radius: 2px;
 }
 
+.ai-diff-swatch--del {
+    color: var(--ai-diff-del);
+}
+
+.ai-diff-swatch--add {
+    color: var(--ai-diff-add);
+}
+
 .ai-diff-swatch--del::before {
-    background: var(--danger);
+    background: var(--ai-diff-del);
 }
 
 .ai-diff-swatch--add::before {
-    background: var(--ok);
+    background: var(--ai-diff-add);
 }
 
 .ai-diff-scroll {
@@ -1398,45 +1511,39 @@ html[data-theme="light"] .btn-save.is-flashing:not(:disabled) {
 }
 
 .ai-diff-cell--del {
-    background: color-mix(in srgb, var(--danger) 24%, transparent);
-    box-shadow: inset 3px 0 0 var(--danger);
+    background: var(--ai-diff-del-bg);
+    box-shadow: inset 4px 0 0 var(--ai-diff-del);
 }
 
 .ai-diff-cell--add {
-    background: color-mix(in srgb, var(--ok) 24%, transparent);
-    box-shadow: inset 3px 0 0 var(--ok);
+    background: var(--ai-diff-add-bg);
+    box-shadow: inset 4px 0 0 var(--ai-diff-add);
 }
 
 .ai-diff-cell--del .ai-diff-mark {
-    color: var(--danger);
+    color: var(--ai-diff-del);
 }
 
 .ai-diff-cell--add .ai-diff-mark {
-    color: var(--ok);
+    color: var(--ai-diff-add);
 }
 
 .ai-diff-cell--del .ai-diff-text {
     text-decoration: line-through;
 }
 
-html[data-theme="oled"] .ai-diff-cell--del {
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 3px 0 0 #6a6a6a;
-    color: #8a8a8a;
+.ai-diff-line {
+    flex: 0 0 auto;
+    min-width: 2.1rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    text-align: right;
 }
 
-html[data-theme="oled"] .ai-diff-cell--del .ai-diff-mark {
-    color: #8a8a8a;
-}
-
-html[data-theme="oled"] .ai-diff-cell--add {
-    background: rgba(255, 255, 255, 0.16);
-    box-shadow: inset 3px 0 0 #ffffff;
-    color: #ffffff;
-}
-
-html[data-theme="oled"] .ai-diff-cell--add .ai-diff-mark {
-    color: #ffffff;
+.ai-diff-cell--del .ai-diff-line,
+.ai-diff-cell--add .ai-diff-line {
+    color: inherit;
 }
 
 .ai-diff-mark {

@@ -157,6 +157,97 @@ export function diffLines(before, after) {
 }
 
 /**
+ * Number each side of a line diff and group neighbouring edits into sections.
+ * A section is one contiguous run of added and/or removed lines.
+ * @param {string} before
+ * @param {string} after
+ * @returns {{
+ *   ops: Array<{ type: 'equal' | 'add' | 'del', text: string, beforeLine?: number, afterLine?: number }>,
+ *   removedLines: number,
+ *   addedLines: number,
+ *   removedSections: number,
+ *   addedSections: number,
+ *   changes: Array<{ type: 'add' | 'del', line: number, text: string }>,
+ * }}
+ */
+export function annotateDiff(before, after) {
+    const raw = diffLines(before, after);
+    let beforeLine = 1;
+    let afterLine = 1;
+    let removedLines = 0;
+    let addedLines = 0;
+    let removedSections = 0;
+    let addedSections = 0;
+    let open = false;
+    let hunkRemoved = false;
+    let hunkAdded = false;
+    /** @type {Array<{ type: 'add' | 'del', line: number, text: string }>} */
+    const changes = [];
+
+    const closeHunk = () => {
+        if (!open) return;
+        if (hunkRemoved) removedSections += 1;
+        if (hunkAdded) addedSections += 1;
+        open = false;
+        hunkRemoved = false;
+        hunkAdded = false;
+    };
+
+    const ops = raw.map((op) => {
+        if (op.type === 'equal') {
+            closeHunk();
+            const next = { type: 'equal', text: op.text, beforeLine, afterLine };
+            beforeLine += 1;
+            afterLine += 1;
+            return next;
+        }
+        if (!open) open = true;
+        if (op.type === 'del') {
+            removedLines += 1;
+            hunkRemoved = true;
+            const next = { type: 'del', text: op.text, beforeLine };
+            changes.push({ type: 'del', line: beforeLine, text: op.text });
+            beforeLine += 1;
+            return next;
+        }
+        addedLines += 1;
+        hunkAdded = true;
+        const next = { type: 'add', text: op.text, afterLine };
+        changes.push({ type: 'add', line: afterLine, text: op.text });
+        afterLine += 1;
+        return next;
+    });
+    closeHunk();
+    return { ops, removedLines, addedLines, removedSections, addedSections, changes };
+}
+
+/**
+ * @param {{ removedLines: number, addedLines: number, removedSections: number, addedSections: number }} summary
+ * @returns {string}
+ */
+export function formatDiffCounts(summary) {
+    const parts = [];
+    if (summary.removedLines) {
+        parts.push(formatDiffSide('Removed', summary.removedLines, summary.removedSections));
+    }
+    if (summary.addedLines) {
+        parts.push(formatDiffSide('Added', summary.addedLines, summary.addedSections));
+    }
+    return parts.join(' · ');
+}
+
+/**
+ * @param {string} verb
+ * @param {number} lines
+ * @param {number} sections
+ */
+function formatDiffSide(verb, lines, sections) {
+    const lineWord = lines === 1 ? 'line' : 'lines';
+    const sectionWord = sections === 1 ? 'section' : 'sections';
+    return `${verb} ${lines} ${lineWord} in ${sections} ${sectionWord}`;
+}
+
+/**
  * @param {string[]} a
  * @param {string[]} b
  */

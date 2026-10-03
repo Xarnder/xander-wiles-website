@@ -4,7 +4,15 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyAiProposal, diffLines, formatGeminiCost, previewGeminiCost, stripWrappingFence } from './ai.js';
+import {
+    annotateDiff,
+    applyAiProposal,
+    diffLines,
+    formatDiffCounts,
+    formatGeminiCost,
+    previewGeminiCost,
+    stripWrappingFence,
+} from './ai.js';
 
 const LIST = [
     '<!-- For LLMs / coding agents: keep the mdlist JSON. -->',
@@ -85,6 +93,56 @@ test('diffLines marks an inserted and a removed line', () => {
 test('diffLines is empty of changes when the text matches', () => {
     const ops = diffLines('same\n', 'same\n');
     assert.deepEqual(ops, [{ type: 'equal', text: 'same' }]);
+});
+
+test('annotateDiff counts lines, sections, and preview line numbers', () => {
+    const summary = annotateDiff('alpha\nbeta\ngamma\n', 'alpha\nBETA\ngamma\nextra\n');
+    assert.equal(summary.removedLines, 1);
+    assert.equal(summary.addedLines, 2);
+    assert.equal(summary.removedSections, 1);
+    assert.equal(summary.addedSections, 2);
+    assert.equal(
+        formatDiffCounts(summary),
+        'Removed 1 line in 1 section · Added 2 lines in 2 sections'
+    );
+    assert.deepEqual(
+        summary.changes.map((change) => `${change.type}:${change.line}:${change.text}`),
+        ['del:2:beta', 'add:2:BETA', 'add:4:extra']
+    );
+    assert.deepEqual(
+        summary.ops.filter((op) => op.type === 'equal').map((op) => [op.text, op.beforeLine, op.afterLine]),
+        [
+            ['alpha', 1, 1],
+            ['gamma', 3, 3],
+        ]
+    );
+});
+
+test('annotateDiff keeps neighbouring edits in one section and separates later ones', () => {
+    const summary = annotateDiff('a\nb\nc\nd\ne\n', 'a\nc\ne\n');
+    assert.equal(summary.removedLines, 2);
+    assert.equal(summary.removedSections, 2);
+    assert.equal(summary.addedLines, 0);
+    assert.equal(formatDiffCounts(summary), 'Removed 2 lines in 2 sections');
+    assert.deepEqual(
+        summary.changes.map((change) => change.line),
+        [2, 4]
+    );
+});
+
+test('annotateDiff line numbers diverge after an insertion', () => {
+    const summary = annotateDiff('a\nb\nc\n', 'a\nX\nb\nc\n');
+    const equals = summary.ops.filter((op) => op.type === 'equal');
+    assert.deepEqual(
+        equals.map((op) => [op.text, op.beforeLine, op.afterLine]),
+        [
+            ['a', 1, 1],
+            ['b', 2, 3],
+            ['c', 3, 4],
+        ]
+    );
+    assert.equal(summary.changes[0].line, 2);
+    assert.equal(summary.addedSections, 1);
 });
 
 test('formatGeminiCost bills thinking tokens at the output rate', () => {

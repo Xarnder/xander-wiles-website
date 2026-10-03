@@ -3,7 +3,7 @@
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
  */
 
-import { applyAiProposal, diffLines, formatGeminiCost, previewGeminiCost } from './ai.js';
+import { annotateDiff, applyAiProposal, formatDiffCounts, formatGeminiCost, previewGeminiCost } from './ai.js';
 import { recordAiCall, renderAiUsage } from './ai-usage.js';
 import { displayNoteTitle } from './ui.js';
 
@@ -271,16 +271,71 @@ function appendTurn(text, kind) {
     bubble.scrollIntoView({ block: 'nearest' });
 }
 
+const AI_DIFF_JUMP_LIMIT = 4;
+
 function renderDiff(before, after) {
     const host = nodes?.diff;
     if (!host) return;
+    return fillAiDiff(host, before, after);
+}
+
+/**
+ * Paint the review: counts and the first changed lines, then the numbered preview.
+ * @param {HTMLElement} host
+ * @param {string} before
+ * @param {string} after
+ * @returns {boolean}
+ */
+export function fillAiDiff(host, before, after) {
     host.replaceChildren();
-    const ops = diffLines(before, after);
-    const changed = ops.some((op) => op.type !== 'equal');
-    if (!changed) {
+    const summary = annotateDiff(before, after);
+    if (!summary.changes.length) {
         host.hidden = true;
         return false;
     }
+
+    const intro = document.createElement('div');
+    intro.className = 'ai-diff-summary';
+
+    const counts = document.createElement('p');
+    counts.className = 'ai-diff-counts';
+    counts.textContent = formatDiffCounts(summary);
+    intro.append(counts);
+
+    const jumps = document.createElement('div');
+    jumps.className = 'ai-diff-jumps';
+    const jumpLabel = document.createElement('p');
+    jumpLabel.className = 'ai-diff-jump-label';
+    const shown = summary.changes.slice(0, AI_DIFF_JUMP_LIMIT);
+    jumpLabel.textContent =
+        summary.changes.length > shown.length
+            ? `First ${shown.length} changed lines`
+            : 'Changed lines';
+    jumps.append(jumpLabel);
+    for (let index = 0; index < shown.length; index += 1) {
+        const change = shown[index];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `ai-diff-jump ai-diff-jump--${change.type}`;
+        btn.dataset.aiJump = String(index);
+
+        const line = document.createElement('span');
+        line.className = 'ai-diff-jump-line';
+        line.textContent = `Line ${change.line}`;
+
+        const kind = document.createElement('span');
+        kind.className = 'ai-diff-jump-kind';
+        kind.textContent = change.type === 'del' ? 'removed' : 'added';
+
+        const snippet = document.createElement('span');
+        snippet.className = 'ai-diff-jump-text';
+        snippet.textContent = diffSnippet(change.text);
+
+        btn.append(line, kind, snippet);
+        btn.addEventListener('click', () => focusDiffChange(host, index));
+        jumps.append(btn);
+    }
+    intro.append(jumps);
 
     const legend = document.createElement('p');
     legend.className = 'ai-diff-legend';
@@ -305,34 +360,73 @@ function renderDiff(before, after) {
     }
     scroll.append(head);
 
-    for (const op of ops) {
+    let changeIndex = 0;
+    for (const op of summary.ops) {
         const row = document.createElement('div');
         row.className = 'ai-diff-row';
         if (op.type === 'equal') {
-            row.append(diffCell('equal', op.text), diffCell('equal', op.text));
+            row.append(
+                diffCell('equal', op.text, op.beforeLine),
+                diffCell('equal', op.text, op.afterLine)
+            );
         } else if (op.type === 'del') {
-            row.append(diffCell('del', op.text), diffCell('pad', ''));
+            row.dataset.aiChange = String(changeIndex);
+            changeIndex += 1;
+            row.append(diffCell('del', op.text, op.beforeLine), diffCell('pad', '', null));
         } else {
-            row.append(diffCell('pad', ''), diffCell('add', op.text));
+            row.dataset.aiChange = String(changeIndex);
+            changeIndex += 1;
+            row.append(diffCell('pad', '', null), diffCell('add', op.text, op.afterLine));
         }
         scroll.append(row);
     }
 
-    host.append(legend, scroll);
+    host.append(intro, legend, scroll);
     host.hidden = false;
     return true;
 }
 
-function diffCell(kind, text) {
+/**
+ * @param {HTMLElement} host
+ * @param {number} index
+ */
+function focusDiffChange(host, index) {
+    const row = host.querySelector(`[data-ai-change="${index}"]`);
+    if (!(row instanceof HTMLElement)) return;
+    host.querySelectorAll('.ai-diff-row.is-ai-jump').forEach((node) => {
+        node.classList.remove('is-ai-jump');
+    });
+    row.classList.add('is-ai-jump');
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/**
+ * @param {string} text
+ */
+function diffSnippet(text) {
+    const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+    if (!flat) return '(blank line)';
+    return flat.length > 72 ? `${flat.slice(0, 71)}…` : flat;
+}
+
+/**
+ * @param {'equal' | 'add' | 'del' | 'pad'} kind
+ * @param {string} text
+ * @param {number | null | undefined} lineNo
+ */
+function diffCell(kind, text, lineNo) {
     const cell = document.createElement('div');
     cell.className = `ai-diff-cell ai-diff-cell--${kind}`;
+    const line = document.createElement('span');
+    line.className = 'ai-diff-line';
+    line.textContent = lineNo ? String(lineNo) : '';
     const mark = document.createElement('span');
     mark.className = 'ai-diff-mark';
     mark.textContent = kind === 'del' ? '−' : kind === 'add' ? '+' : '';
     const body = document.createElement('span');
     body.className = 'ai-diff-text';
     body.textContent = text;
-    cell.append(mark, body);
+    cell.append(line, mark, body);
     return cell;
 }
 
