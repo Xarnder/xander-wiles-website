@@ -2838,22 +2838,42 @@ html.add-task-composer-open body {
 }
 
 .add-task-composer-exit,
+.add-task-composer-subtask,
 .add-task-composer-add {
     flex: 1 1 0;
     min-width: 0;
-    padding: 2px 12px;
-    font-size: 0.8rem;
+    height: 52px;
+    min-height: 52px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 800;
     line-height: 1.1;
     touch-action: manipulation;
 }
 
 .add-task-composer-exit {
-    min-height: 24px;
-    height: 24px;
+    background: oklch(0.58 0.16 25);
+    color: white;
+}
+
+.add-task-composer-subtask {
+    background: oklch(0.78 0.14 85);
+    color: oklch(0.22 0.04 70);
+}
+
+.add-task-composer-subtask:disabled,
+.add-task-composer-subtask.is-disabled {
+    background: oklch(0.45 0.012 270);
+    color: oklch(0.74 0.01 270);
+    opacity: 1;
+    cursor: default;
 }
 
 .add-task-composer-add {
-    min-height: 48px;
+    background: var(--accent-blue);
+    color: var(--on-accent, white);
 }
 
 .add-task-composer-add.is-empty {
@@ -2947,6 +2967,46 @@ html.add-task-composer-open body {
     padding: 10px 12px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.composer-outline {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: min-content;
+}
+
+.composer-outline-spacer {
+    flex: 0 0 auto;
+    width: 100%;
+    pointer-events: none;
+}
+
+.composer-outline-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.composer-outline-kicker {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.composer-outline-item.is-subtask {
+    margin-left: 16px;
+    padding-left: 10px;
+    border-left: 2px solid color-mix(in oklch, var(--accent-blue) 55%, var(--glass-border));
+}
+
+.composer-outline-item.is-active .add-task-composer-input {
+    outline: 2px solid color-mix(in oklch, var(--accent-blue) 70%, white);
+    outline-offset: 1px;
 }
 
 .add-task-composer-input {
@@ -3084,9 +3144,15 @@ html.add-task-composer-open body {
     background: var(--dropdown-bg, oklch(0.16 0 0));
 }
 
-.add-task-composer.tags-packed .add-task-composer-tags,
-.add-task-composer.tags-packed .add-task-composer-bar {
+.add-task-composer.tags-packed .add-task-composer-tags {
     display: contents;
+}
+
+.add-task-composer.tags-packed .add-task-composer-bar {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 4;
+    align-items: stretch;
 }
 
 .add-task-composer.tags-packed .add-task-composer-tags .tag-mode-btn:nth-child(9):last-child {
@@ -3104,18 +3170,14 @@ html.add-task-composer-open body {
     grid-row: 3;
 }
 
-.add-task-composer.tags-packed .add-task-composer-add {
-    grid-column: 3 / 5;
-    grid-row: 3 / 5;
-    height: auto;
-    min-height: 0;
+.add-task-composer.tags-packed .add-task-composer-add,
+.add-task-composer.tags-packed .add-task-composer-exit,
+.add-task-composer.tags-packed .add-task-composer-subtask {
+    grid-column: auto;
+    grid-row: auto;
+    height: 52px;
+    min-height: 52px;
     align-self: stretch;
-}
-
-.add-task-composer.tags-packed .add-task-composer-exit {
-    grid-column: 1 / 3;
-    grid-row: 4;
-    align-self: end;
 }
 
 
@@ -7089,7 +7151,8 @@ body.compact-view .nested-ideas-list {
     width: 100%;
 }
 
-.nested-idea-drag-handle {
+.nested-idea-drag-handle,
+.nested-idea-editor-drag-handle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7109,12 +7172,15 @@ body.compact-view .nested-ideas-list {
 }
 
 .nested-idea-drag-handle:hover,
-.nested-idea-drag-handle:focus-visible {
+.nested-idea-drag-handle:focus-visible,
+.nested-idea-editor-drag-handle:hover,
+.nested-idea-editor-drag-handle:focus-visible {
     opacity: 1;
     background: oklch(1 0 0 / 0.06);
 }
 
-.nested-idea-drag-handle:active {
+.nested-idea-drag-handle:active,
+.nested-idea-editor-drag-handle:active {
     cursor: grabbing;
 }
 
@@ -7201,6 +7267,7 @@ body.compact-view .nested-ideas-list {
     align-items: flex-start;
 }
 
+.nested-idea-editor-row .nested-idea-editor-drag-handle,
 .nested-idea-editor-row .nested-level-badge,
 .nested-idea-editor-row .icon-btn {
     margin-top: 6px;
@@ -9369,7 +9436,8 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
     }
 
     .add-task-composer.tags-packed .add-task-composer-add,
-    .add-task-composer.tags-packed .add-task-composer-exit {
+    .add-task-composer.tags-packed .add-task-composer-exit,
+    .add-task-composer.tags-packed .add-task-composer-subtask {
         grid-column: auto;
         grid-row: auto;
         align-self: auto;
@@ -9380,15 +9448,17 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
     }
 
     .add-task-composer-exit,
+    .add-task-composer-subtask,
     .add-task-composer-add,
     .add-task-composer.tags-packed .add-task-composer-exit,
+    .add-task-composer.tags-packed .add-task-composer-subtask,
     .add-task-composer.tags-packed .add-task-composer-add {
         height: 76px;
         min-height: 76px;
-        padding: 0 16px;
-        font-size: 1.15rem;
+        padding: 0 8px;
+        font-size: 1.05rem;
         font-weight: 800;
-        line-height: 1;
+        line-height: 1.1;
         border-radius: 14px;
     }
 

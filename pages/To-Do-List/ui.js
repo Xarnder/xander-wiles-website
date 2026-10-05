@@ -13,7 +13,7 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
+import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -973,62 +973,6 @@ export function renderBoard() {
     if (window.onBoardRendered) {
         window.onBoardRendered();
     }
-
-    initNestedSortables();
-}
-
-function isNestedDragEnabled() {
-    return !isKanbanFocused()
-        && state.appData.settings.sortMode === 'custom'
-        && !!state.appData.settings.dragEnabled
-        && !state.multiEditMode
-        && !state.showArchived;
-}
-
-function handleNestedDragEnd(evt) {
-    const list = evt.from;
-    const taskId = list?.dataset?.taskId;
-    const parentNodeId = list?.dataset?.parentNodeId;
-
-    if (!taskId || evt.oldIndex === evt.newIndex) return;
-
-    const orderedIds = Array.from(list.children)
-        .filter((el) => el.classList.contains('nested-idea-display-item'))
-        .map((el) => el.dataset.nodeId)
-        .filter(Boolean);
-
-    if (orderedIds.length === 0) return;
-
-    const apiParentId = parentNodeId === 'root' ? null : parentNodeId;
-    reorderNestedSiblings(taskId, apiParentId, orderedIds).catch(() => {});
-}
-
-function initNestedSortables() {
-    if (!isNestedDragEnabled() || typeof Sortable === 'undefined') return;
-
-    document.querySelectorAll('.nested-ideas-list[data-task-id]').forEach((listEl) => {
-        const taskId = listEl.dataset.taskId;
-        const parentNodeId = listEl.dataset.parentNodeId || 'root';
-        if (!taskId) return;
-
-        const sortable = new Sortable(listEl, {
-            group: {
-                name: `nested-${taskId}-${parentNodeId}`,
-                pull: false,
-                put: false
-            },
-            draggable: '.nested-idea-display-item',
-            handle: '.nested-idea-drag-handle',
-            animation: 150,
-            delay: 150,
-            delayOnTouchOnly: true,
-            forceFallback: true,
-            fallbackOnBody: true,
-            onEnd: handleNestedDragEnd
-        });
-
-        state.nestedSortableInstances.push(sortable);
-    });
 }
 
 export function updateBoardUI() {
@@ -2247,12 +2191,12 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     }
 }
 
-export function generateNestedIdeasHtml(nestedIdeas, taskId, depth = 1, dragEnabled = false) {
+export function generateNestedIdeasHtml(nestedIdeas, taskId, depth = 1) {
     if (!nestedIdeas || nestedIdeas.length === 0 || !taskId) return '';
-    return renderNestedIdeasList(nestedIdeas, taskId, depth, 'root', dragEnabled);
+    return renderNestedIdeasList(nestedIdeas, taskId, depth, 'root');
 }
 
-function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEnabled) {
+function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId) {
     // Flat visual hierarchy: nesting is for Sortable/sibling order only — no indent.
     const listClass = depth === 1
         ? 'nested-ideas-list'
@@ -2267,17 +2211,12 @@ function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEna
         const checkboxId = `nested-cb-${taskId}-${nodeId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
         const completedClass = idea.completed ? ' nested-idea-completed' : '';
         const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
-        const showDragHandle = dragEnabled && nodeId;
         const isIdeaImportant = typeof idea.text === 'string' && (idea.text.includes('!') || idea.text.includes('!!'));
         const importantClass = isIdeaImportant ? ' important' : '';
         const depthClass = depth > 1 ? ` nested-depth-${Math.min(depth, 3)}` : '';
 
         html += `<div class="nested-idea-display-item${completedClass}${importantClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
         html += '<div class="nested-idea-row">';
-
-        if (showDragHandle) {
-            html += `<button type="button" class="nested-idea-drag-handle" title="Reorder subtask" aria-label="Reorder subtask" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()"><i class="ph ph-dots-six-vertical"></i></button>`;
-        }
 
         if (!hideCheckboxes && nodeId) {
             html += `<input type="checkbox" class="nested-idea-checkbox" id="${escapeHtml(checkboxId)}"
@@ -2296,7 +2235,7 @@ function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEna
         const children = Array.isArray(idea.nestedIdeas) ? idea.nestedIdeas : [];
         if (children.length > 0) {
             if (depth < BOARD_NESTED_MAX_DEPTH) {
-                html += renderNestedIdeasList(children, taskId, depth + 1, nodeId, dragEnabled);
+                html += renderNestedIdeasList(children, taskId, depth + 1, nodeId);
             } else {
                 const deeperCount = countNestedNodes(children);
                 if (deeperCount > 0) {
@@ -2433,6 +2372,7 @@ function generateNestedKanbanHtml(nestedIdeas, task, options = {}) {
 }
 
 export function renderNestedEditorList(container, dataArray, level = 1) {
+    destroyNestedEditorSortables(container);
     container.innerHTML = '';
     dataArray.forEach((data) => {
         // Ensure each item has a persistent tempId for this edit session
@@ -2441,6 +2381,51 @@ export function renderNestedEditorList(container, dataArray, level = 1) {
         }
         container.appendChild(createNestedIdeaEditorItem(data, level));
     });
+    bindNestedEditorSortable(container);
+}
+
+function destroyNestedEditorSortable(container) {
+    if (!container) return;
+    if (container._nestedEditorSortable) {
+        container._nestedEditorSortable.destroy();
+        container._nestedEditorSortable = null;
+    }
+    if (container._nestedEditorStop) {
+        container.removeEventListener('pointerdown', container._nestedEditorStop);
+        container.removeEventListener('mousedown', container._nestedEditorStop);
+        container._nestedEditorStop = null;
+    }
+}
+
+function destroyNestedEditorSortables(container) {
+    if (!container) return;
+    container.querySelectorAll('.nested-ideas-child-container').forEach(destroyNestedEditorSortable);
+    destroyNestedEditorSortable(container);
+}
+
+function bindNestedEditorSortable(container) {
+    if (!container || typeof Sortable === 'undefined') return;
+    destroyNestedEditorSortable(container);
+    container._nestedEditorSortable = new Sortable(container, {
+        group: { name: 'nested-editor', pull: false, put: false },
+        draggable: '.nested-idea-editor-item',
+        handle: '.nested-idea-editor-drag-handle',
+        animation: 150,
+        delay: 0,
+        touchStartThreshold: 4,
+        fallbackTolerance: 4,
+        forceFallback: true,
+        fallbackOnBody: true,
+        disabled: !!state.nestedMultiSelectMode
+    });
+    const keepDragLocal = (event) => {
+        if (event.target.closest && event.target.closest('.nested-idea-editor-drag-handle')) {
+            event.stopPropagation();
+        }
+    };
+    container._nestedEditorStop = keepDragLocal;
+    container.addEventListener('pointerdown', keepDragLocal);
+    container.addEventListener('mousedown', keepDragLocal);
 }
 
 export function createNestedIdeaEditorItem(data, level = 1) {
@@ -2464,6 +2449,15 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     levelBadge.className = 'nested-level-badge';
     levelBadge.textContent = level;
     levelBadge.title = `Nesting Level ${level}`;
+
+    const dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.className = 'nested-idea-editor-drag-handle';
+    dragHandle.draggable = false;
+    dragHandle.title = 'Reorder subtask';
+    dragHandle.setAttribute('aria-label', 'Reorder subtask');
+    dragHandle.innerHTML = '<i class="ph ph-dots-six-vertical"></i>';
+    dragHandle.addEventListener('click', (event) => event.stopPropagation());
     
     const input = document.createElement('textarea');
     input.rows = 1;
@@ -2510,6 +2504,7 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     delBtn.innerHTML = '<i class="ph ph-trash"></i>';
     delBtn.title = 'Delete';
     
+    row.appendChild(dragHandle);
     row.appendChild(levelBadge);
     row.appendChild(input);
     row.appendChild(addBtn);
@@ -2523,6 +2518,8 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     
     if (data.nestedIdeas && data.nestedIdeas.length > 0) {
         renderNestedEditorList(childContainer, data.nestedIdeas, level + 1);
+    } else {
+        bindNestedEditorSortable(childContainer);
     }
     
     // Toggle Selection in Multi-Select Mode
@@ -2911,7 +2908,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
                 spanColumns: kanbanStretch?.span > 1 ? kanbanStretch.columns : null
             });
         } else {
-            nestedHtml = generateNestedIdeasHtml(task.nestedIdeas, task.id, 1, isNestedDragEnabled());
+            nestedHtml = generateNestedIdeasHtml(task.nestedIdeas, task.id, 1);
         }
     }
     const hasNested = task.nestedIdeas && task.nestedIdeas.length > 0;
@@ -4018,11 +4015,6 @@ export function enableSortables(enable) {
     if (state.listSortable) state.listSortable.option("disabled", shouldDisable);
     state.sortableInstances.forEach(s => {
         s.option("disabled", shouldDisable);
-    });
-
-    const nestedDragEnabled = enable && isNestedDragEnabled();
-    state.nestedSortableInstances.forEach((s) => {
-        s.option('disabled', !nestedDragEnabled);
     });
 }
 

@@ -1635,8 +1635,13 @@
             <button type="button" id="add-task-composer-font-up" class="add-task-composer-font" aria-label="Increase text size" title="Larger text">A+</button>
         </div>
         <h2 id="add-task-composer-title" class="visually-hidden">Add task</h2>
-        <div class="add-task-composer-stage">
-            <textarea id="add-task-composer-input" class="add-task-composer-input" placeholder="Type an idea to add" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences" enterkeyhint="enter" inputmode="text" aria-label="New task"></textarea>
+        <div class="add-task-composer-stage" id="add-task-composer-stage">
+            <div class="composer-outline" id="add-task-composer-outline">
+                <div class="composer-outline-item is-parent is-active" data-role="parent">
+                    <span class="composer-outline-kicker">Task</span>
+                    <textarea id="add-task-composer-input" class="add-task-composer-input" placeholder="Type an idea to add" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences" enterkeyhint="enter" inputmode="text" aria-label="New task"></textarea>
+                </div>
+            </div>
         </div>
         <div class="add-task-composer-footer">
             <div class="add-task-composer-countdown-row">
@@ -1651,8 +1656,9 @@
                 <div id="add-task-composer-tags" class="add-task-composer-tags" role="radiogroup" aria-label="Category for this task" aria-expanded="false"></div>
             </div>
             <div class="add-task-composer-bar">
-                <button type="button" id="add-task-composer-exit" class="btn secondary add-task-composer-exit">Exit</button>
-                <button type="button" id="add-task-composer-add" class="btn primary add-task-composer-add" title="Add task">Add</button>
+                <button type="button" id="add-task-composer-exit" class="btn add-task-composer-exit">Exit</button>
+                <button type="button" id="add-task-composer-subtask" class="btn add-task-composer-subtask is-disabled" disabled title="Add a sub task" aria-disabled="true">Sub task</button>
+                <button type="button" id="add-task-composer-add" class="btn add-task-composer-add" title="Add task">Add</button>
             </div>
         </div>
     </div>

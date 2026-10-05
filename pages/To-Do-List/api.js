@@ -10,7 +10,8 @@ import {
     reorderNestedSiblings as reorderNestedSiblingsInTree,
     getParentKanbanStatus,
     canShiftAllNestedKanban,
-    shiftAllNestedKanbanStatuses
+    shiftAllNestedKanbanStatuses,
+    sanitizeNestedForSave
 } from './nested.js';
 import {
     MISC_TAG_ID,
@@ -40,7 +41,7 @@ export function handleSyncError(error) {
 
 // --- ACTIONS ---
 
-export function handleAddTask(e, listId) {
+export function handleAddTask(e, listId, nestedIdeas) {
     e.preventDefault();
     const input = e.target.elements.taskText;
     const text = input.value.trim();
@@ -67,6 +68,11 @@ export function handleAddTask(e, listId) {
         tagId,
         listAddedAt: { [listId]: Date.now() }
     };
+
+    if (Array.isArray(nestedIdeas) && nestedIdeas.length) {
+        const saved = sanitizeNestedForSave(nestedIdeas, 'new');
+        if (saved.length) newTask.nestedIdeas = saved;
+    }
 
     const batch = writeBatch(db);
     batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
