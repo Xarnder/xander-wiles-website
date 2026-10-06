@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v122';
+const CACHE_NAME = 'taskmaster-todo-v124';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
     './style.css',
     './main.js',
     './api.js',
+    './archive-retention.js',
     './store.js',
     './ui.js',
     './nested.js',
@@ -137,6 +138,7 @@ self.addEventListener('fetch', (event) => {
     const NETWORK_FIRST_JS = [
         'main.js',
         'api.js',
+        'archive-retention.js',
         'tags.js',
         'store.js',
         'ui.js',

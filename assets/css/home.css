@@ -348,7 +348,7 @@ body.hx-home {
 
 .hx-project-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.1rem;
 }
 
@@ -382,6 +382,25 @@ body.hx-home {
     object-fit: cover;
     display: block;
     transition: transform 0.35s ease;
+}
+
+.hx-project-ember {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at 20% 30%, rgba(255, 120, 40, 0.45), transparent 55%),
+        radial-gradient(circle at 80% 75%, rgba(255, 70, 16, 0.35), transparent 50%),
+        linear-gradient(180deg, #2a1208 0%, #0c0705 100%);
+}
+
+.hx-ember-digits {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: clamp(1.4rem, 2vw, 1.8rem);
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #fff4ea;
+    text-shadow: 0 0 12px rgba(255, 148, 64, 0.8), 0 0 28px rgba(255, 96, 28, 0.45);
 }
 
 .hx-project:hover .hx-project-media img {

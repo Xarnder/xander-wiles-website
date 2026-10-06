@@ -1,7 +1,8 @@
 import { db } from './firebase-config.js';
-import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc, collection, query, where, onSnapshot, getDocsFromServer, deleteField, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state } from './store.js';
 import { generateId, showToast } from './utils.js';
+import { ARCHIVE_RETENTION_MS, archivedTaskRetentionAction } from './archive-retention.js';
 import { buildKanbanStatusUpdate, isValidKanbanStatus, KANBAN_STAGES } from './kanban.js';
 import {
     migrateNestedTree,
@@ -110,8 +111,12 @@ export function handleAddTask(e, listId, nestedIdeas) {
     }).catch(e => handleSyncError(e));
 }
 
+export function archivedTaskPatch() {
+    return { archived: true, archivedAt: Date.now() };
+}
+
 export function archiveTask(taskId) {
-    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: true })
+    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), archivedTaskPatch())
         .catch(e => handleSyncError(e));
 }
 
@@ -123,7 +128,10 @@ export function unarchiveTask(taskId) {
     });
 
     const batch = writeBatch(db);
-    batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: false });
+    batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+        archived: false,
+        archivedAt: deleteField()
+    });
 
     let restoredToFirst = false;
     if (isOrphan && state.appData.lists.length > 0) {
@@ -1048,7 +1056,7 @@ export function clearCompletedInList(listId) {
     list.taskIds.forEach(taskId => {
         const task = state.appData.tasks[taskId];
         if (task && task.completed && !task.archived) {
-            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: true });
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), archivedTaskPatch());
             count++;
         }
     });
@@ -1060,5 +1068,176 @@ export function clearCompletedInList(listId) {
     }).catch(e => handleSyncError(e));
 }
 
+let archivedHolds = 0;
+let archivedUnsub = null;
+let archivedReady = Promise.resolve();
+let archivedTasksListener = null;
+let purgeInFlight = false;
+
+export function setArchivedTasksListener(listener) {
+    archivedTasksListener = listener;
+}
+
+function mergeArchivedSnapshot(snapshot) {
+    const incoming = {};
+    snapshot.forEach((docSnap) => {
+        incoming[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+    });
+    const next = {};
+    Object.entries(state.appData.tasks || {}).forEach(([id, task]) => {
+        if (task && !task.archived) next[id] = task;
+    });
+    Object.assign(next, incoming);
+    state.appData.tasks = next;
+}
+
+export function holdArchivedTasks() {
+    if (!state.currentUser) return Promise.resolve();
+    archivedHolds += 1;
+    if (archivedUnsub) return archivedReady;
+
+    const tasksCol = collection(db, "users", state.currentUser.uid, "tasks");
+    archivedReady = new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+        };
+        archivedUnsub = onSnapshot(query(tasksCol, where("archived", "==", true)), (snapshot) => {
+            mergeArchivedSnapshot(snapshot);
+            finish();
+            if (typeof archivedTasksListener === "function") archivedTasksListener();
+        }, (error) => {
+            console.warn("[Archived tasks]", error);
+            finish();
+        });
+    });
+    return archivedReady;
+}
+
+export function releaseArchivedTasks() {
+    archivedHolds = Math.max(0, archivedHolds - 1);
+    if (archivedHolds > 0) return;
+    forceReleaseArchivedTasks();
+}
+
+export function forceReleaseArchivedTasks() {
+    archivedHolds = 0;
+    if (archivedUnsub) {
+        archivedUnsub();
+        archivedUnsub = null;
+    }
+    archivedReady = Promise.resolve();
+    const next = {};
+    Object.entries(state.appData.tasks || {}).forEach(([id, task]) => {
+        if (task && !task.archived) next[id] = task;
+    });
+    state.appData.tasks = next;
+}
+
+async function applyRetentionOnServer(uid, taskId, now) {
+    if (typeof taskId !== "string" || !taskId) return false;
+    const ref = doc(db, "users", uid, "tasks", taskId);
+    return runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        if (!snap.exists()) return false;
+        const action = archivedTaskRetentionAction(snap.data(), now);
+        if (action === "delete") {
+            transaction.delete(ref);
+            return true;
+        }
+        if (action === "stamp") {
+            transaction.update(ref, { archivedAt: now });
+            return false;
+        }
+        if (action === "clear-stamp") {
+            transaction.update(ref, { archivedAt: deleteField() });
+            return false;
+        }
+        return false;
+    });
+}
+
+async function eachWithLimit(items, limit, worker) {
+    if (!items.length) return;
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (cursor < items.length) {
+            const index = cursor;
+            cursor += 1;
+            await worker(items[index]);
+        }
+    });
+    await Promise.all(runners);
+}
+
+async function removeDeletedIdsFromLists(uid, deletedIds) {
+    const deleteSet = new Set(deletedIds);
+    const jobs = [];
+    (state.appData.rawLists || []).forEach((list) => {
+        if (!list || typeof list.id !== "string" || !Array.isArray(list.taskIds)) return;
+        const present = list.taskIds.filter((id) => deleteSet.has(id));
+        for (let index = 0; index < present.length; index += 100) {
+            jobs.push({ listId: list.id, ids: present.slice(index, index + 100) });
+        }
+    });
+    for (const job of jobs) {
+        try {
+            await updateDoc(doc(db, "users", uid, "lists", job.listId), {
+                taskIds: arrayRemove(...job.ids)
+            });
+        } catch (error) {
+            console.warn("[Archive purge] list cleanup", error);
+        }
+    }
+}
+
+export async function purgeExpiredArchivedTasks() {
+    if (!state.currentUser || purgeInFlight) return { removed: 0, legacy: false };
+    purgeInFlight = true;
+    const legacy = !state.appData.settings?.legacyArchiveSweepAt;
+    try {
+        const uid = state.currentUser.uid;
+        const tasksCol = collection(db, "users", uid, "tasks");
+        const now = Date.now();
+        const cutoff = now - ARCHIVE_RETENTION_MS;
+        // Both queries can only suggest candidates. A transaction re-reads each
+        // document and deletes it only if it is still archived and 60 days old.
+        const snap = legacy
+            ? await getDocsFromServer(query(tasksCol, where("archived", "==", true)))
+            : await getDocsFromServer(query(tasksCol, where("archivedAt", "<", cutoff)));
+
+        const candidateIds = [];
+        snap.forEach((docSnap) => {
+            const action = archivedTaskRetentionAction(docSnap.data(), now);
+            if (action === "delete" || action === "stamp" || action === "clear-stamp") {
+                candidateIds.push(docSnap.id);
+            }
+        });
+
+        const deletedIds = [];
+        let failed = false;
+        await eachWithLimit(candidateIds, 8, async (taskId) => {
+            try {
+                const deleted = await applyRetentionOnServer(uid, taskId, now);
+                if (deleted) deletedIds.push(taskId);
+            } catch (error) {
+                failed = true;
+                console.warn("[Archive purge] skipped", taskId, error);
+            }
+        });
+
+        await removeDeletedIdsFromLists(uid, deletedIds);
+        if (legacy && !failed) await updateSetting("legacyArchiveSweepAt", now);
+        return { removed: deletedIds.length, legacy };
+    } catch (error) {
+        console.warn("[Archive purge]", error);
+        return { removed: 0, legacy };
+    } finally {
+        purgeInFlight = false;
+    }
+}
+
 // Export raw firestore functions and db for UI helpers that need direct access (e.g. glow color, automated lists)
-export { updateDoc, doc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc, db };
+export { updateDoc, doc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc, db, ARCHIVE_RETENTION_MS };

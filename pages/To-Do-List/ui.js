@@ -13,7 +13,7 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks } from './api.js';
+import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks, holdArchivedTasks, releaseArchivedTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -5216,6 +5216,13 @@ let dedupCurrentTab = 'lists';
 let dedupIncludeArchived = false;
 let dedupIncludeCompleted = true;
 let dedupEventsBound = false;
+let dedupHoldingArchived = false;
+
+function releaseDedupArchivedHold() {
+    if (!dedupHoldingArchived) return;
+    dedupHoldingArchived = false;
+    releaseArchivedTasks();
+}
 
 export function openDedupModal(tab = 'lists') {
     const modal = document.getElementById('dedup-modal-overlay');
@@ -5230,6 +5237,7 @@ window.openDedupModal = openDedupModal;
 export function closeDedupModal() {
     const modal = document.getElementById('dedup-modal-overlay');
     if (modal) modal.classList.add('hidden');
+    releaseDedupArchivedHold();
 }
 
 function initDedupEventsOnce() {
@@ -5771,6 +5779,12 @@ function renderDedupTasksTab(container, taskScan) {
     };
     filterBar.querySelector('#dedup-inc-archived-chk').onchange = (e) => {
         dedupIncludeArchived = e.target.checked;
+        if (dedupIncludeArchived) {
+            dedupHoldingArchived = true;
+            holdArchivedTasks().then(() => renderDedupModal('tasks'));
+            return;
+        }
+        releaseDedupArchivedHold();
         renderDedupModal('tasks');
     };
 

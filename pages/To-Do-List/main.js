@@ -1,7 +1,7 @@
 
 import { app, auth, db } from './firebase-config.js';
 import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
 import * as UI from './ui.js';
@@ -494,6 +494,10 @@ onAuthStateChanged(auth, (user) => {
         syncConsoleEl.classList.add('hidden');
         stopSyncTimer();
         stopAutomationTimer();
+        archivePurgeStarted = false;
+        serverSettingsReady = false;
+        serverListsReady = false;
+        API.forceReleaseArchivedTasks();
         cleanupListeners();
         dateReset();
         hideLoadingOverlay();
@@ -538,6 +542,21 @@ function stopAutomationTimer() {
     if (automationInterval) clearInterval(automationInterval);
 }
 
+let serverSettingsReady = false;
+let serverListsReady = false;
+let archivePurgeStarted = false;
+
+function maybePurgeExpiredArchives() {
+    if (archivePurgeStarted || !serverSettingsReady || !serverListsReady || !state.currentUser) return;
+    archivePurgeStarted = true;
+    API.purgeExpiredArchivedTasks().then((result) => {
+        if (result && result.removed > 0) {
+            const count = result.removed;
+            Utils.showToast(`Removed ${count} archived ${count === 1 ? "task" : "tasks"} older than 60 days.`);
+        }
+    });
+}
+
 // --- FANCY THEME ORBS & META ---
 function manageFancyOrbs(theme) {
     const existingOrbs = document.querySelectorAll('.fancy-orb');
@@ -568,6 +587,15 @@ function manageFancyOrbs(theme) {
 
 // --- FIRESTORE LISTENERS ---
 function setupFirestoreListeners(uid) {
+    API.setArchivedTasksListener(() => {
+        if (state.showArchived) UI.renderBoard();
+        const searchModal = document.getElementById('search-modal-overlay');
+        const searchInput = document.getElementById('search-input');
+        if (searchModal && searchInput && !searchModal.classList.contains('hidden') && state.searchShowArchived) {
+            UI.performSearch(searchInput.value);
+        }
+    });
+
     // 1. User Settings & Project Title
     const userDocRef = doc(db, "users", uid);
 
@@ -692,6 +720,11 @@ function setupFirestoreListeners(uid) {
             UI.renderTagModeBar();
             UI.renderTagsSettingsPanel();
 
+            if (!docSnap.metadata.fromCache && !docSnap.metadata.hasPendingWrites) {
+                serverSettingsReady = true;
+                maybePurgeExpiredArchives();
+            }
+
         } else {
             setDoc(userDocRef, {
                 settings: state.appData.settings,
@@ -754,17 +787,22 @@ function setupFirestoreListeners(uid) {
         const lists = [];
         snapshot.forEach(doc => lists.push({ id: doc.id, ...doc.data() }));
         state.appData.rawLists = lists;
+        if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+            serverListsReady = true;
+            maybePurgeExpiredArchives();
+        }
         UI.renderBoard();
         if (typeof UI.syncOpenEditListAutomation === 'function') UI.syncOpenEditListAutomation();
     }, (error) => API.handleSyncError(error)));
 
-    // 3. Tasks
+    // 3. Tasks — active tasks only. Archived tasks are loaded on demand.
     const tasksColRef = collection(db, "users", uid, "tasks");
+    const activeTasksQuery = query(tasksColRef, where("archived", "==", false));
 
-    state.listeners.push(onSnapshot(tasksColRef, { includeMetadataChanges: true }, (snapshot) => {
+    state.listeners.push(onSnapshot(activeTasksQuery, { includeMetadataChanges: true }, (snapshot) => {
         state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
         if (!snapshot.metadata.fromCache) updateLastSync();
-        state.appData.tasks = {};
+        const incoming = {};
         const migrationUpdates = [];
         const tagMigrationUpdates = [];
 
@@ -782,8 +820,14 @@ function setupFirestoreListeners(uid) {
                 tagMigrationUpdates.push({ id: task.id, tagId: MISC_TAG_ID });
             }
 
-            state.appData.tasks[docSnap.id] = task;
+            incoming[docSnap.id] = task;
         });
+
+        const next = { ...incoming };
+        Object.entries(state.appData.tasks || {}).forEach(([id, task]) => {
+            if (task && task.archived && !incoming[id]) next[id] = task;
+        });
+        state.appData.tasks = next;
 
         // Migrations must wait for a server snapshot. Cache-first PWA opens can
         // see pre-tag task docs and wrongly write tag_misc over real tagIds.
@@ -859,7 +903,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('orientationchange', scheduleSlimChrome);
 
     // Toggle Archive View
-    document.getElementById('archive-mode-btn').onclick = function () {
+    document.getElementById('archive-mode-btn').onclick = async function () {
         if (isKanbanFocused()) {
             exitKanbanFocus({ render: false, silent: true });
         }
@@ -872,9 +916,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.showArchived) {
             btn.classList.add('active');
             Utils.showToast("Viewing Archived Tasks");
+            await API.holdArchivedTasks();
         } else {
             btn.classList.remove('active');
             Utils.showToast("Viewing Active Tasks");
+            API.releaseArchivedTasks();
         }
         UI.renderBoard();
     };
@@ -1307,7 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
             () => {
                 const batch = writeBatch(db);
                 state.selectedTaskIds.forEach(id => {
-                    batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), { archived: true });
+                    batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), API.archivedTaskPatch());
                 });
                 batch.commit().then(() => {
                     Utils.showToast("Tasks archived.");
@@ -1618,16 +1664,22 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderBoard();
     };
 
-    document.getElementById('search-show-archived-toggle').onchange = (e) => {
+    document.getElementById('search-show-archived-toggle').onchange = async (e) => {
         state.searchShowArchived = e.target.checked;
+        if (e.target.checked) await API.holdArchivedTasks();
+        else API.releaseArchivedTasks();
         UI.performSearch(searchInput.value);
     };
-    document.getElementById('search-btn').onclick = () => {
+    document.getElementById('search-btn').onclick = async () => {
         searchModal.classList.remove('hidden');
         searchInput.focus();
+        if (state.searchShowArchived) await API.holdArchivedTasks();
         UI.performSearch(searchInput.value);
     };
-    document.getElementById('close-search-btn').onclick = () => searchModal.classList.add('hidden');
+    document.getElementById('close-search-btn').onclick = () => {
+        searchModal.classList.add('hidden');
+        if (state.searchShowArchived) API.releaseArchivedTasks();
+    };
 
     let searchTimeout;
     searchInput.addEventListener('input', (e) => {
@@ -2324,7 +2376,16 @@ function bindCloudLayoutSlider(elementId, { key, clamp, sync, apply }) {
     el.onchange = (e) => applyValue(e.target.value, { persistImmediate: true });
 }
 
-function triggerBackupDownload() {
+async function triggerBackupDownload() {
+    await API.holdArchivedTasks();
+    try {
+        downloadBackupFile();
+    } finally {
+        API.releaseArchivedTasks();
+    }
+}
+
+function downloadBackupFile() {
     // Generate JSON backup data
     // Map tasks to ensure clean structure (tagId, images, etc)
     const backupTags = ensureDefaultTags(state.appData.settings);
