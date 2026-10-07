@@ -164,6 +164,9 @@ export function bindUi() {
     els.modePreview = document.getElementById('mode-preview');
     els.modeContents = document.getElementById('mode-contents');
     els.modeRaw = document.getElementById('mode-raw');
+    els.modeMore = document.getElementById('mode-more');
+    els.modeMoreLabel = document.getElementById('mode-more-label');
+    els.viewModeMenu = document.getElementById('view-mode-menu');
     els.appToast = document.getElementById('app-toast');
     els.autosaveBar = document.getElementById('autosave-bar');
     els.autosaveBarFill = document.getElementById('autosave-bar-fill');
@@ -1787,6 +1790,12 @@ export function setViewModeUi(mode) {
         btn.classList.toggle('is-active', active);
         btn.setAttribute('aria-checked', active ? 'true' : 'false');
     }
+    const secondary = mode === 'contents' || mode === 'list';
+    if (els.modeMoreLabel) {
+        els.modeMoreLabel.textContent =
+            mode === 'contents' ? 'Contents' : mode === 'list' ? 'List' : 'More';
+    }
+    if (els.modeMore) els.modeMore.classList.toggle('is-active', secondary);
 }
 
 /**

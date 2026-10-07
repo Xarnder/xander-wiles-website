@@ -210,7 +210,8 @@ export const OAUTH_SESSION_KEY = 'md-editor:oauthSession';
 /** Prefer auto-restore on next open after a successful sign-in. */
 export const REMEMBER_SIGNIN_KEY = 'md-editor:rememberSignIn';
 
-export const PAGE_SIZE = 50;
+/** Drive files.list maximum. Load more only appears after a full thousand items. */
+export const PAGE_SIZE = 1000;
 export const LARGE_FILE_BYTES = 2 * 1024 * 1024;
 
 export function isConfigured() {

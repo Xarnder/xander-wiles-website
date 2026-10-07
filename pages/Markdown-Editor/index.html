@@ -263,11 +263,16 @@
                 </div>
                 <div id="editor-active" class="editor-active" hidden>
                     <div class="view-mode-dock">
-                        <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
-                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="contents" id="mode-contents">Contents</button>
-                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
-                            <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
-                            <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
+                        <div id="view-mode-bar" class="view-mode-bar" role="toolbar" aria-label="Editor display mode" hidden>
+                            <button type="button" class="view-mode-btn view-mode-btn--main" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
+                            <button type="button" class="view-mode-btn view-mode-btn--main is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
+                            <button type="button" class="view-mode-more" id="mode-more" aria-expanded="false" aria-controls="view-mode-menu" aria-haspopup="true">
+                                <span id="mode-more-label" class="view-mode-more-label">More</span>
+                            </button>
+                            <div id="view-mode-menu" class="view-mode-menu" role="group" aria-label="More display modes" hidden>
+                                <button type="button" class="view-mode-btn view-mode-btn--menu" role="radio" aria-checked="false" data-view-mode="contents" id="mode-contents">Contents</button>
+                                <button type="button" class="view-mode-btn view-mode-btn--menu" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
+                            </div>
                         </div>
                         <div
                             id="autosave-bar"

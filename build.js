@@ -23,6 +23,7 @@ const routineSrc = path.join(rootDir, 'pages', 'Routine');
 const gifMakerSrc = path.join(rootDir, 'pages', 'GIF-Maker');
 const breathingAppSrc = path.join(rootDir, 'pages', 'Tidal-Breathing-Exercise');
 const forestDriftSrc = path.join(rootDir, 'pages', 'Forest-Drift');
+const silenceCutterSrc = path.join(rootDir, 'pages', 'Silence-Cutter');
 
 /** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
 const nestedBuildEnv = {
@@ -141,6 +142,12 @@ for (const item of items) {
                 return false;
             }
             if (rel === path.join('pages', 'Tidal-Breathing-Exercise') || rel.startsWith(path.join('pages', 'Tidal-Breathing-Exercise') + path.sep)) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Silence-Cutter') ||
+                rel.startsWith(path.join('pages', 'Silence-Cutter') + path.sep)
+            ) {
                 return false;
             }
             // Incomplete leftover folder (space in name) — never ship source/node_modules
@@ -450,6 +457,31 @@ for (const name of ['favicon.svg', 'favicon-dark.svg', 'favicon-light.svg']) {
     const srcIcon = path.join(breathingAppSrc, name);
     if (fs.existsSync(srcIcon)) {
         fs.copyFileSync(srcIcon, path.join(breathingAppDest, name));
+    }
+}
+
+// Build and inject Silence Cutter (SvelteKit, fully client-side). CrisperWhisper (non-commercial
+// model licence) is only offered when CRISPERWHISPER=enabled is set in the build environment.
+console.log('Building Silence-Cutter App...');
+try {
+    npmInstallAndBuild(silenceCutterSrc, 'Silence-Cutter');
+} catch (error) {
+    console.error('Failed to build Silence-Cutter:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+const silenceCutterDest = path.join(deployOut, 'pages', 'Silence-Cutter');
+const silenceCutterDist = path.join(silenceCutterSrc, 'dist');
+if (!fs.existsSync(silenceCutterDist)) {
+    console.error('Silence-Cutter dist folder not found!');
+    process.exit(1);
+}
+fs.cpSync(silenceCutterDist, silenceCutterDest, { recursive: true });
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(silenceCutterSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(silenceCutterDest, name));
     }
 }
 

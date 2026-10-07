@@ -21,6 +21,14 @@ export function initViewModePicker(bar) {
 
     let session = null;
 
+    function menuEl() {
+        return bar.querySelector('.view-mode-menu');
+    }
+
+    function moreEl() {
+        return bar.querySelector('.view-mode-more');
+    }
+
     function buttonAt(x, y) {
         const el = document.elementFromPoint(x, y);
         const btn = el && el.closest ? el.closest('.view-mode-btn') : null;
@@ -38,14 +46,18 @@ export function initViewModePicker(bar) {
     function openMenu(latched) {
         bar.classList.add('is-picking');
         bar.dataset.pickLatch = latched ? '1' : '';
-        bar.setAttribute('aria-expanded', 'true');
+        const menu = menuEl();
+        if (menu) menu.hidden = false;
+        moreEl()?.setAttribute('aria-expanded', 'true');
         document.documentElement.classList.add('is-view-mode-picking');
     }
 
     function closeMenu() {
         bar.classList.remove('is-picking');
         delete bar.dataset.pickLatch;
-        bar.setAttribute('aria-expanded', 'false');
+        const menu = menuEl();
+        if (menu) menu.hidden = true;
+        moreEl()?.setAttribute('aria-expanded', 'false');
         document.documentElement.classList.remove('is-view-mode-picking');
         setHighlight(null);
     }
@@ -63,6 +75,11 @@ export function initViewModePicker(bar) {
         if (!isSlimViewModePicker()) return;
         if (event.button != null && event.button !== 0) return;
         if (session) return;
+        const main = event.target instanceof Element ? event.target.closest('.view-mode-btn--main') : null;
+        if (main && bar.contains(main)) {
+            if (bar.classList.contains('is-picking')) closeMenu();
+            return;
+        }
 
         const latched = bar.classList.contains('is-picking') && bar.dataset.pickLatch === '1';
         session = {
@@ -122,7 +139,7 @@ export function initViewModePicker(bar) {
         endSession(event.pointerId);
 
         if (opened) {
-            if (highlight) highlight.click();
+            if (highlight?.dataset.viewMode) highlight.click();
             closeMenu();
             return;
         }

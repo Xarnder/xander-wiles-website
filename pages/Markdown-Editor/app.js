@@ -5413,7 +5413,13 @@ function wireEvents() {
     for (const btn of modeButtons) {
         if (!btn) continue;
         btn.addEventListener('click', (event) => {
-            if (isSlimViewModePicker() && event.isTrusted) return;
+            if (
+                isSlimViewModePicker() &&
+                event.isTrusted &&
+                !btn.classList.contains('view-mode-btn--main')
+            ) {
+                return;
+            }
             if (!hasOpenFile()) return;
             const next = btn.dataset.viewMode;
             applyViewMode(next, {

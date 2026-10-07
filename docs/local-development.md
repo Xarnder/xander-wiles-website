@@ -16,7 +16,7 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 | **Static page + Google auth** | Markdown-Editor, Time Pass | `npm run build` → `npm run preview` (Client ID / Firebase is injected at build time) |
 | **Vite app** (React) | Journal, Teleprompter | `cd pages/<app>` → `npm run dev` |
 | **Vite app** (Svelte) | Logo-Demo | `cd pages/<app>` → `npm run dev` |
-| **SvelteKit app** | Fighter-Jet, Forest-Drift, Z-Image Turbo, Tax-Helper | `cd pages/<app>` → `npm run dev` |
+| **SvelteKit app** | Fighter-Jet, Forest-Drift, Z-Image Turbo, Tax-Helper, Silence Cutter | `cd pages/<app>` → `npm run dev` (Silence Cutter: see [section 7](#7-silence-cutter-sveltekit-local-ai-video-editor)) |
 | **Full site** (nav + built apps) | Homepage → Journal link, etc. | `npm run build` → `npm run preview` |
 
 Root `npm run dev` is **`npx serve .`** — it only serves files on disk. It does **not** compile TypeScript/JSX or run Vite. Opening a Vite app’s source `index.html` that way will look **blank** (browser tries to load `/src/main.tsx` and fails).
@@ -46,6 +46,7 @@ Copy-paste the **From repo root** command while your shell is in the website rep
 | **Logo Demo** | `pages/Logo-Demo/` | `http://localhost:5173/pages/Logo-Demo/` | `cd pages/Logo-Demo && npm install && npm run dev` |
 | **Fighter-Jet** | `pages/Fighter-Jet/` | Vite prints URL (often `http://localhost:5173/`) | `cd pages/Fighter-Jet && npm install && npm run dev` |
 | **Forest Drift** | `pages/Forest-Drift/` | Vite prints URL (often `http://localhost:5173/`) | `cd pages/Forest-Drift && npm install && npm run dev` |
+| **Silence Cutter** | `pages/Silence-Cutter/` | Vite prints URL (often `http://localhost:5173/`) | `cd pages/Silence-Cutter && npm install && npm run dev` — tests and details in [section 7](#7-silence-cutter-sveltekit-local-ai-video-editor) |
 | **Z-Image Turbo** | `pages/z-image-turbo-sveltekit/` | Vite prints URL | `cd pages/z-image-turbo-sveltekit && npm install && npm run dev` |
 | **Tax Helper** | `pages/Tax-Helper/` | Vite prints URL | `cd pages/Tax-Helper && npm install && npm run dev` |
 | **Full site** | `deploy_out/` | `http://localhost:3000/` | `npm install && npm run build && npm run preview` |
@@ -229,9 +230,100 @@ Use the URL Vite prints in the terminal. These apps are built and injected into 
 
 ---
 
-## 7. Full website preview (navigation + built apps)
+## 7. Silence Cutter (SvelteKit, local AI video editor)
 
-This matches what Vercel deploys: homepage, `assets/`, nav, static pages, **and** compiled Journal / Teleprompter / Fighter-Jet / Forest-Drift / Z-Image.
+Removes silence from spoken MP4/MOV video entirely in the browser (audio analysis, speech recognition, preview and export all run on your machine). Source: `pages/Silence-Cutter/`. Live path: `/pages/Silence-Cutter/`. Deeper docs: `pages/Silence-Cutter/README.md` (features, shortcuts), `ARCHITECTURE.md`, `MODEL.md`, `PERF.md`.
+
+**Requirements:** Node 22+ (repo `.nvmrc`), **Google Chrome or Edge** (WebGPU, WebCodecs and File System Access are best there; Safari/Firefox are untested), `ffmpeg` only if you want to regenerate test videos.
+
+### Launch it
+
+```bash
+cd pages/Silence-Cutter
+npm install
+npm run dev
+```
+
+Open the URL Vite prints (usually **`http://localhost:5173/`** — in dev the app lives at `/`, not `/pages/Silence-Cutter/`).
+
+| URL | What it is |
+|-----|------------|
+| `http://localhost:5173/` | The editor |
+| `http://localhost:5173/?asr=mock` | The editor with a **fake transcription engine** — no model download, instant. Best for UI work |
+| `http://localhost:5173/spike/` | Technical-spike / benchmark harness (decode → ASR → export, with metrics) |
+
+The dev server sends the cross-origin-isolation headers the app needs (the header bar shows *"AI acceleration: WebGPU — …"* or *"… using CPU"*; **Diagnostics** shows "Cross-origin isolated (WASM threads): yes").
+
+### Try it by hand
+
+1. Open `http://localhost:5173/?asr=mock` and drop in `pages/Silence-Cutter/tests/fixtures/speech-pattern.mp4` (a 12 s synthetic test video: tones with pauses — it has no real words).
+2. The waveform and proposed cuts appear immediately. Click **Transcribe** (mock engine) to fill the transcript lane.
+3. Edit: click a segment in the top strip and press **Delete**; drag on the waveform to select; **S** splits at the playhead; **U** restores; **⌘/Ctrl+Z** undoes; drag the ends of the **zoom scrollbar** under the timeline to zoom. Press **?** for every shortcut.
+4. Switch **Original / Edited** and press **Space** to preview, then **Export & download** to get the MP4.
+
+**Real speech recognition:** use the editor *without* `?asr=mock` and a video with actual speech (any of your own MP4/MOV recordings, or the public-domain NASA clip from `npm run fixtures -- --bench`, see below). In dev the verbatim **CrisperWhisper** models are offered: tick the licence box (non-commercial research licence), then **Download model & transcribe**. The first run downloads 0.9–1.8 GB from Hugging Face (*"Downloading speech recognition model to this device"*); later runs load it from the browser's cache in a few seconds. Your video is never uploaded. The MIT-licensed Whisper models (not verbatim, 150–500 MB) are also listed.
+
+### Test it
+
+All from `pages/Silence-Cutter/`:
+
+```bash
+npm run check          # TypeScript + svelte-check
+npm run lint           # Prettier + ESLint
+npm run test:unit -- --run   # Vitest unit tests once (omit `-- --run` for watch mode)
+npm run test:e2e       # Playwright end-to-end tests (mock ASR, no model download)
+npm test               # unit + e2e together
+```
+
+`npm run test:e2e` builds a production bundle and serves it on **`http://127.0.0.1:4173`** automatically (with the production security headers), then drives your installed **Google Chrome**. It takes roughly 20–30 s. Useful variants:
+
+```bash
+npx playwright test tests/editing.e2e.ts        # one file
+npx playwright test -g "zoom scrollbar"         # tests whose name matches
+npx playwright test --headed                    # watch the browser
+npx playwright test --ui                        # interactive runner
+npx playwright show-trace test-results/<test>/trace.zip   # inspect a failure
+```
+
+No Google Chrome? Install Playwright's own browser once with `npx playwright install chromium`, then run with `PW_CHANNEL=chromium npm run test:e2e` (on CI the bundled browser is used automatically). Note the export test needs a browser that can encode H.264/AAC; branded Chrome can.
+
+**Real-model integration test** (opt-in; downloads a model on first run):
+
+```bash
+npm run fixtures -- --bench                     # one-off: 2-min public-domain NASA speech clip (~110 MB, needs ffmpeg)
+npm run test:asr                                # Whisper Base (~150 MB, MIT)
+ASR_MODEL=crisperwhisper-2-turbo npm run test:asr   # verbatim model (~900 MB)
+ASR_FILE=/path/to/your-video.mp4 npm run test:asr   # use your own recording instead
+```
+
+### Production build of just this app
+
+```bash
+npm run build && npm run preview                # http://localhost:4173 — CrisperWhisper NOT offered
+npm run build:bench && npm run preview          # same, but with CrisperWhisper enabled
+```
+
+`npm run build` matches what the live site ships (CrisperWhisper only appears when the build environment sets `CRISPERWHISPER=enabled`). The preview server applies the same COOP/COEP + Content-Security-Policy headers as Vercel.
+
+### Benchmarks (optional)
+
+```bash
+npm run fixtures -- --bench          # 2-min clip; use --bench-long for the 37/60-min videos (~2.2 GB more)
+npm run build:bench
+npm run bench -- --file fixtures/local/apollo-2min-720p.mp4 --model crisperwhisper-2-turbo
+```
+
+Results are written as JSON to `bench-results/`. `fixtures/local/` and `bench-results/` are git-ignored and can be deleted any time (`bench-results/.chrome-profile` holds the cached models used by benchmarks).
+
+### Inside the full site
+
+The root `npm run build` (section 8) builds Silence Cutter and serves it at **`http://localhost:3000/pages/Silence-Cutter/`**. Root `npm run dev` (`npx serve .`) does **not** work for it — that serves the source folder, not the built app. To include CrisperWhisper in a full-site build: `CRISPERWHISPER=enabled npm run build`.
+
+---
+
+## 8. Full website preview (navigation + built apps)
+
+This matches what Vercel deploys: homepage, `assets/`, nav, static pages, **and** compiled Journal / Teleprompter / Fighter-Jet / Forest-Drift / Z-Image / Silence Cutter.
 
 ```bash
 # From repo root
@@ -246,6 +338,7 @@ npm run preview    # same as: npx serve deploy_out
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
 - Time Pass: `http://localhost:3000/pages/Time-Pass/`
 - Markdown-Editor: `http://localhost:3000/pages/Markdown-Editor/`
+- Silence Cutter: `http://localhost:3000/pages/Silence-Cutter/`
 
 Click through the homepage grid and the loaded nav bar to verify links and “recent pages” behavior.
 
@@ -262,7 +355,7 @@ cd deploy_out && python3 -m http.server 3000
 
 ---
 
-## 8. Two-terminal workflow (common day)
+## 9. Two-terminal workflow (common day)
 
 | Terminal A | Terminal B |
 |------------|------------|
@@ -274,7 +367,7 @@ cd deploy_out && python3 -m http.server 3000
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
@@ -287,4 +380,10 @@ cd deploy_out && python3 -m http.server 3000
 | Time Pass: “Firebase is not configured” on Sign in | Root `npm run dev` does not inject `.env.local` | Put `PUBLIC_TIME_PASS_FIREBASE_*` in `.env.local`, then `npm run build && npm run preview` |
 | Time Pass: `auth/unauthorized-domain` | `localhost` missing from Firebase Auth | Firebase Console → Authentication → Settings → Authorized domains → add `localhost` |
 | Time Pass: popup closes / blocked | Browser popup blocker | Allow popups for `localhost:3000`, or retry (the app falls back to redirect sign-in) |
+| Silence Cutter: blank page from root `npm run dev` | Root serve shows source, not the SvelteKit build | `cd pages/Silence-Cutter && npm run dev`, or the full-site build (section 8) |
+| Silence Cutter: header says "using CPU" / transcription very slow | No WebGPU in this browser, or the page is not cross-origin isolated | Use Chrome/Edge; check **Diagnostics** → "Cross-origin isolated (WASM threads): yes" (served by `npm run dev`/`preview`, not by other static servers) |
+| Silence Cutter: model downloads again every time | Browser storage too small or site data cleared | The model panel shows free storage; free disk space or delete another cached model |
+| Silence Cutter: `npm run test:e2e` fails with "Executable doesn't exist" | Google Chrome not installed | Install Chrome, or `npx playwright install chromium` and run with `PW_CHANNEL=chromium` |
+| Silence Cutter: `npm run test:e2e` port 4173 in use | Another `vite preview` is running | Stop it, or `PLAYWRIGHT_PORT=4199 npm run test:e2e` |
+| Silence Cutter: `npm run test:asr` cannot find the video | `fixtures/local/` was deleted | `npm run fixtures -- --bench`, or `ASR_FILE=/path/to/video.mp4 npm run test:asr` |
 | Wrong folder name | Typo | **`deploy_out`**, not `depoloy_out` |
