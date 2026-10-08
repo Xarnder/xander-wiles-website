@@ -340,8 +340,6 @@ export class ProceduralMaterialLibrary {
 		).defaultAttributeValues = {
 			color: [1, 1, 1]
 		};
-		if (style.mapping === 'native') clearSurfaceMappingSpec(material);
-		else this.binder?.watch(material, { mode: style.mapping, weathering: style.type !== 'glass' });
 		this.applyBinding(binding);
 	}
 
@@ -383,6 +381,15 @@ export class ProceduralMaterialLibrary {
 			binding.wantedKey = null;
 			this.restoreFlat(binding);
 			return;
+		}
+		// Only procedural surfaces need binder mapping; flat (and native-UV) materials are left alone.
+		const style = binding.style;
+		if (style.mapping === 'native') clearSurfaceMappingSpec(binding.material);
+		else {
+			this.binder?.watch(binding.material, {
+				mode: style.mapping,
+				weathering: style.type !== 'glass'
+			});
 		}
 		let recipe = this.resolveRecipe(binding.style);
 		const shaderKind = this.antiTiling ? surfaceShaderKindFor(recipe) : null;
@@ -559,6 +566,7 @@ export class ProceduralMaterialLibrary {
 		const material = binding.material;
 		const flat = binding.flat;
 		applySurfaceShader(material, null, binding.uniforms, 0);
+		clearSurfaceMappingSpec(material);
 		const programChanged =
 			material.map !== flat.map ||
 			material.normalMap !== flat.normalMap ||

@@ -12,11 +12,12 @@ export interface SurfaceMappingSpec {
 
 const SPEC_KEY = 'surfaceMapping';
 /**
- * Faces are subdivided until no edge exceeds this (metres) so the per-vertex macro variation and
- * weathering in `surfaceMapping.ts` has enough resolution to break up texture repetition on big
- * walls, roofs and courtyards.
+ * Faces are subdivided until no edge exceeds this (metres) so the per-vertex macro tint and ground
+ * grime in `surfaceMapping.ts` have some resolution on big walls and roofs. Kept coarse: stone and
+ * ground anti-tiling happens per pixel in `shader/surfaceShader.ts`, so this only carries
+ * low-frequency colour and costs few extra triangles.
  */
-const MAX_MAPPED_EDGE = 1.6;
+const MAX_MAPPED_EDGE = 3;
 /** Upper bound on segments per edge, so a degenerate giant face can't explode the vertex count. */
 const MAX_SEGMENTS = 40;
 const GEOMETRY_KEY = 'surfaceMappingApplied';

@@ -136,6 +136,11 @@ float fsFbm(vec2 p) {
 // non-periodic index field picks a random offset per region and regions cross-fade, so the texture
 // tile grid disappears. textureGrad keeps mip selection continuous across region changes.
 vec4 fsNoTile(sampler2D tex, vec2 uv) {
+	#if FS_QUALITY == 0
+	// Low tier: one fetch with a per-region offset hashed on a coarse world grid would seam, so the
+	// lightweight path keeps plain sampling; macro layers still break up the repeat.
+	return texture2D(tex, uv);
+	#endif
 	float k = fsNoise(uv * 0.55 + 31.7);
 	float l = k * 8.0;
 	float ia = floor(l);
@@ -428,8 +433,12 @@ struct FsSurface {
 // domain-warped so patch edges are organic rather than blobby.
 FsSurface fsEvaluate(vec2 uvMetres) {
 	vec2 p = uvMetres;
+	#if FS_QUALITY > 0
 	vec2 warp = vec2(fsFbm(p * 0.015), fsFbm(p * 0.015 + 7.7)) - 0.5;
 	vec2 q = p + warp * 24.0;
+	#else
+	vec2 q = p + (vec2(fsNoise(p * 0.02), fsNoise(p * 0.02 + 7.7)) - 0.5) * 18.0;
+	#endif
 	float broad = fsFbm(q * 0.028);
 	float mid = fsFbm(q * 0.21 + 3.3);
 	float fine = fsNoise(p * 1.9);
