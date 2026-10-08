@@ -41,9 +41,9 @@ const ALPINE: MaterialPaletteDefinition = {
 	label: 'Alpine timber-framed',
 	colors: {
 		plaster: {
-			base: '#DCCDAE',
-			light: '#E9DFC8',
-			dark: '#C3B190',
+			base: '#DCCAA6',
+			light: '#E9DCC0',
+			dark: '#C4AE88',
 			dirt: '#7A6E5E',
 			stain: '#9A8C73',
 			moss: '#6B7646'
@@ -56,9 +56,9 @@ const ALPINE: MaterialPaletteDefinition = {
 			knot: '#24170F'
 		},
 		slate: {
-			base: '#3C434B',
-			dark: '#272C32',
-			light: '#56606A',
+			base: '#404448',
+			dark: '#2A2D31',
+			light: '#5A5F64',
 			rust: '#6A5C4D',
 			lichen: '#7F8366',
 			gap: '#16191C'

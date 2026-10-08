@@ -240,18 +240,17 @@ export interface GraphicsSettings {
 
 /** The adjustments `enhancedLighting` applies — multipliers and tints, so day/night and every saved sky setting still drive the result. */
 export const ENHANCED_LIGHTING = {
-	// Daylight is roughly 3–5× more direct sun than skylight; the default balance had ambient
-	// (hemisphere + environment) outweighing the sun on horizontal surfaces, which is what made
-	// everything flat and cyan.
-	sunIntensityScale: 1.45,
-	hemisphereIntensityScale: 0.75,
+	// Conservative: a little more warm sun against a slightly lower, less blue ambient, so surface
+	// texture and relief read in sunlight without changing the scene's overall exposure.
+	sunIntensityScale: 1.12,
+	hemisphereIntensityScale: 0.82,
 	/** Hemisphere sky colour is pulled this far toward a neutral daylight white. */
-	hemisphereSkyNeutral: '#f1eee6',
-	hemisphereSkyNeutralAmount: 0.5,
+	hemisphereSkyNeutral: '#f3ede0',
+	hemisphereSkyNeutralAmount: 0.45,
 	/** Ground bounce pulled toward grass-lit green-brown. */
 	hemisphereGround: '#4f5a2e',
 	hemisphereGroundAmount: 0.45,
-	environmentIntensityScale: 0.8
+	environmentIntensityScale: 0.85
 } as const;
 
 /**
