@@ -209,7 +209,31 @@ export interface GraphicsSettings {
 	showRenderStats: boolean;
 	/** Live-tunable GTAO look parameters — see `AoTuning`'s own doc comment. */
 	aoTuning: AoTuning;
+	/** Procedural PBR materials on buildings and terrain (see `materials/`). Off = the original flat-colour look, kept for comparison and for very weak devices. */
+	proceduralMaterials: boolean;
+	/**
+	 * Conservative lighting balance on top of the world's own sky settings (never written into saved
+	 * worlds): a slightly stronger warm sun against a less blue, lower ambient, so surface relief
+	 * reads and colours stop drifting cyan. See `ENHANCED_LIGHTING`. Off = the original balance.
+	 */
+	enhancedLighting: boolean;
 }
+
+/** The adjustments `enhancedLighting` applies — multipliers and tints, so day/night and every saved sky setting still drive the result. */
+export const ENHANCED_LIGHTING = {
+	// Daylight is roughly 3–5× more direct sun than skylight; the default balance had ambient
+	// (hemisphere + environment) outweighing the sun on horizontal surfaces, which is what made
+	// everything flat and cyan.
+	sunIntensityScale: 1.45,
+	hemisphereIntensityScale: 0.75,
+	/** Hemisphere sky colour is pulled this far toward a neutral daylight white. */
+	hemisphereSkyNeutral: '#f1eee6',
+	hemisphereSkyNeutralAmount: 0.5,
+	/** Ground bounce pulled toward grass-lit green-brown. */
+	hemisphereGround: '#4f5a2e',
+	hemisphereGroundAmount: 0.45,
+	environmentIntensityScale: 0.8
+} as const;
 
 /**
  * HIGH is the default on the (reasonable) assumption that most players are on capable desktop
@@ -224,7 +248,9 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		targetFps: 60,
 		toneMappingExposure: 1.0,
 		showRenderStats: false,
-		aoTuning: createDefaultAoTuning()
+		aoTuning: createDefaultAoTuning(),
+		proceduralMaterials: true,
+		enhancedLighting: true
 	};
 }
 

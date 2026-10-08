@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
+import { InlineMaterialMapSource } from '../../materials/MaterialMapSource';
+import { ProceduralMaterialLibrary } from '../../materials/ProceduralMaterialLibrary';
 import { BuildingMaterialManager } from '../BuildingMaterialManager';
 
 /** getMaterial() returns the base THREE.Material type (all callers just assign it to `mesh.material`) — narrow it here since only this test cares about reading `.color` back. */
@@ -106,5 +108,63 @@ describe('BuildingMaterialManager.dispose', () => {
 		expect(disposeSpy).toHaveBeenCalled();
 		const after = manager.getMaterial('wall', { type: 'color', color: '#D9D1C3' });
 		expect(after).not.toBe(before);
+	});
+});
+
+describe('BuildingMaterialManager with procedural materials', () => {
+	function create() {
+		const library = new ProceduralMaterialLibrary({
+			source: new InlineMaterialMapSource(),
+			quality: 'low'
+		});
+		return { library, manager: new BuildingMaterialManager(undefined, library) };
+	}
+
+	it('dresses each semantic surface with its procedural material automatically', async () => {
+		const { library, manager } = create();
+		const wall = asStandard(manager.getMaterial('wall', undefined));
+		const beam = asStandard(manager.getMaterial('wall-frame', undefined));
+		const handle = asStandard(manager.getMaterial('door-handle', undefined));
+		await library.whenIdle();
+		expect(wall.map).not.toBeNull();
+		expect(beam.map).not.toBeNull();
+		expect(wall.map).not.toBe(beam.map);
+		// Player-authored or metal surfaces keep their flat look.
+		expect(handle.map).toBeNull();
+	});
+
+	it('keeps a painted colour as a tint over the procedural texture', async () => {
+		const { library, manager } = create();
+		const painted = asStandard(manager.getMaterial('wall', { type: 'color', color: '#3E6FA6' }));
+		const plain = asStandard(manager.getMaterial('wall', undefined));
+		await library.whenIdle();
+		expect(painted.map).toBe(plain.map);
+		expect(painted.color.getHex()).not.toBe(plain.color.getHex());
+	});
+
+	it('gives a foundation paving on top and masonry on its sides, sharing the paint override', () => {
+		const { manager } = create();
+		const materials = manager.getFoundationMaterials(undefined);
+		expect(materials).toHaveLength(6);
+		expect(materials[2]).toBe(manager.getMaterial('foundation-top', undefined));
+		for (const index of [0, 1, 3, 4, 5]) {
+			expect(materials[index]).toBe(manager.getMaterial('foundation', undefined));
+		}
+		const painted = manager.getFoundationMaterials({ type: 'color', color: '#5A5A5A' });
+		expect(painted[2]).toBe(
+			manager.getMaterial('foundation-top', { type: 'color', color: '#5A5A5A' })
+		);
+	});
+
+	it('renders identically to before when procedural materials are switched off', async () => {
+		const { library, manager } = create();
+		const wall = asStandard(manager.getMaterial('wall', undefined));
+		await library.whenIdle();
+		library.setEnabled(false);
+		const reference = asStandard(new BuildingMaterialManager().getMaterial('wall', undefined));
+		expect(wall.map).toBeNull();
+		expect(wall.color.getHex()).toBe(reference.color.getHex());
+		expect(wall.roughness).toBe(reference.roughness);
+		expect(wall.flatShading).toBe(reference.flatShading);
 	});
 });

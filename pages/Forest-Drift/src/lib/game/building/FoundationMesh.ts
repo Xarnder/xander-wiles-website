@@ -19,7 +19,12 @@ export class FoundationMesh {
 	private readonly geometry: THREE.BoxGeometry;
 	private boundsHelper: THREE.LineSegments | null = null;
 
-	constructor(definition: FoundationDefinition, vertexSpacing: number, material: THREE.Material) {
+	/** `material` may be per-face (`BoxGeometry` group order) — see `BuildingMaterialManager.getFoundationMaterials`. */
+	constructor(
+		definition: FoundationDefinition,
+		vertexSpacing: number,
+		material: THREE.Material | THREE.Material[]
+	) {
 		const minX = definition.minGridX * vertexSpacing;
 		const maxX = definition.maxGridX * vertexSpacing;
 		const minZ = definition.minGridZ * vertexSpacing;
@@ -41,7 +46,7 @@ export class FoundationMesh {
 		this.object.userData.foundationId = definition.id;
 	}
 
-	setMaterial(material: THREE.Material): void {
+	setMaterial(material: THREE.Material | THREE.Material[]): void {
 		this.object.material = material;
 	}
 

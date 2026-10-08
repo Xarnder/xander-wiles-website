@@ -176,7 +176,7 @@ export class TerrainChunk {
 						break;
 					}
 					default:
-						writeTerrainColor(sample.height, sample.normalY, this.colors, p);
+						writeTerrainColor(sample.height, sample.normalY, this.colors, p, worldX, worldZ);
 				}
 
 				const uvIndex = vertexIndex * 2;

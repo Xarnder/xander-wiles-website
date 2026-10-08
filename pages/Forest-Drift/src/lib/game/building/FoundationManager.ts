@@ -61,8 +61,8 @@ export class FoundationManager {
 
 	addFoundation(definition: FoundationDefinition): void {
 		this.revision++;
-		const material = this.materialManager.getMaterial('foundation', definition.material);
-		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), material);
+		const materials = this.materialManager.getFoundationMaterials(definition.material);
+		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), materials);
 		mesh.setBoundsVisible(this.showBounds);
 		this.group.add(mesh.object);
 		const entry: FoundationEntry = { definition, mesh, frame: null };
@@ -76,7 +76,7 @@ export class FoundationManager {
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
 		entry.definition = { ...entry.definition, material };
-		entry.mesh.setMaterial(this.materialManager.getMaterial('foundation', material));
+		entry.mesh.setMaterial(this.materialManager.getFoundationMaterials(material));
 		return true;
 	}
 

@@ -292,7 +292,10 @@ export class PaintTool implements BuildTool {
 		const mesh = this.resolveSingleMesh(target);
 		if (!mesh) return;
 		this.highlighted = { mesh, originalMaterial: mesh.material };
-		mesh.material = previewMaterial;
+		mesh.material =
+			target.type === 'foundation'
+				? this.materialManager.getFoundationMaterials(this.selectedMaterial)
+				: previewMaterial;
 
 		const edges = new THREE.EdgesGeometry(mesh.geometry);
 		this.highlightOutline = new THREE.LineSegments(edges, this.highlightOutlineMaterial);

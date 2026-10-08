@@ -8,11 +8,50 @@ const MID = [0.27, 0.38, 0.17];
 const HIGH = [0.52, 0.52, 0.44];
 const ROCK = [0.38, 0.36, 0.32];
 
+/**
+ * Ground-cover variation (lush/dry patches, occasional bare earth) layered over the elevation
+ * colours. Part of the procedural-materials look — `ThreeScene` turns it off together with the
+ * procedural toggle so the flat comparison stays the original look.
+ */
+export const terrainColorOptions = { groundVariation: true };
+
+const WARM_GRASS = [0.27, 0.4, 0.1];
+const DRY = [0.42, 0.42, 0.2];
+const LUSH = [0.18, 0.32, 0.11];
+const EARTH = [0.3, 0.23, 0.15];
+
+function latticeHash(x: number, z: number, seed: number): number {
+	let h = seed | 0;
+	h = Math.imul(h ^ x, 0x27d4eb2d);
+	h = Math.imul(h ^ z, 0x165667b1);
+	h ^= h >>> 15;
+	h = Math.imul(h, 0x85ebca6b);
+	h ^= h >>> 13;
+	return (h >>> 0) / 4294967296;
+}
+
+/** Smooth 2D value noise in [0, 1] from absolute world coordinates — seamless across chunks. */
+function groundNoise(x: number, z: number, seed: number): number {
+	const ix = Math.floor(x);
+	const iz = Math.floor(z);
+	const fx = x - ix;
+	const fz = z - iz;
+	const ux = fx * fx * (3 - 2 * fx);
+	const uz = fz * fz * (3 - 2 * fz);
+	const a = latticeHash(ix, iz, seed);
+	const b = latticeHash(ix + 1, iz, seed);
+	const c = latticeHash(ix, iz + 1, seed);
+	const d = latticeHash(ix + 1, iz + 1, seed);
+	return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+
 export function writeTerrainColor(
 	height: number,
 	normalY: number,
 	out: Float32Array,
-	offset: number
+	offset: number,
+	worldX = 0,
+	worldZ = 0
 ): void {
 	const lowToMid = smoothstep(-4, 4, height);
 	const midToHigh = smoothstep(6, 26, height);
@@ -24,6 +63,31 @@ export function writeTerrainColor(
 	r += (HIGH[0] - r) * midToHigh;
 	g += (HIGH[1] - g) * midToHigh;
 	b += (HIGH[2] - b) * midToHigh;
+
+	if (terrainColorOptions.groundVariation) {
+		// Richer, warmer meadow greens than the flat look's blue-leaning ramp.
+		const grass = 1 - midToHigh;
+		r += (WARM_GRASS[0] - r) * 0.45 * grass;
+		g += (WARM_GRASS[1] - g) * 0.45 * grass;
+		b += (WARM_GRASS[2] - b) * 0.45 * grass;
+		const broad =
+			groundNoise(worldX / 23, worldZ / 23, 0x5f3759df) * 0.7 +
+			groundNoise(worldX / 7, worldZ / 7, 0x2c1b3c6d) * 0.3;
+		const dryness = smoothstep(0.55, 0.85, broad);
+		const lushness = smoothstep(0.45, 0.15, broad);
+		const grassy = 1 - midToHigh;
+		r += (DRY[0] - r) * dryness * 0.45 * grassy;
+		g += (DRY[1] - g) * dryness * 0.45 * grassy;
+		b += (DRY[2] - b) * dryness * 0.45 * grassy;
+		r += (LUSH[0] - r) * lushness * 0.35 * grassy;
+		g += (LUSH[1] - g) * lushness * 0.35 * grassy;
+		b += (LUSH[2] - b) * lushness * 0.35 * grassy;
+		const earth =
+			smoothstep(0.8, 0.93, groundNoise(worldX / 4.5, worldZ / 4.5, 0x1b873593)) * grassy;
+		r += (EARTH[0] - r) * earth * 0.55;
+		g += (EARTH[1] - g) * earth * 0.55;
+		b += (EARTH[2] - b) * earth * 0.55;
+	}
 
 	// Steep slopes (low normalY) read as bare rock rather than grass.
 	const steepness = smoothstep(0.55, 0.85, 1 - normalY);

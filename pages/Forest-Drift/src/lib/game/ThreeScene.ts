@@ -77,6 +77,14 @@ import { WallTool } from './building/WallTool';
 import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
 import { GraphicsPipeline } from './graphics/GraphicsPipeline';
+import { foundationLocalFrame } from './building/FoundationLocalMath';
+import { GLASS_SURFACE_STYLE, TERRAIN_SURFACE_STYLE } from './materials/buildingSurfaceStyles';
+import {
+	ProceduralMaterialLibrary,
+	type ProceduralMaterialStats
+} from './materials/ProceduralMaterialLibrary';
+import { materialQualityForGraphics } from './materials/ProceduralMaterialTypes';
+import { SurfaceMappingBinder } from './materials/SurfaceMappingBinder';
 import {
 	createDefaultMusicVisualSettings,
 	type GameSettingsHost
@@ -84,6 +92,7 @@ import {
 import { GraphicsSettingsStore } from './graphics/GraphicsSettingsStore';
 import {
 	createDefaultGraphicsSettings,
+	ENHANCED_LIGHTING,
 	GRAPHICS_PRESETS,
 	type AntiAliasMode,
 	type AoQuality,
@@ -104,6 +113,7 @@ import { SkySystem } from './sky/SkySystem';
 import { createDefaultSkySettings, type SkySettings } from './sky/SkyTypes';
 import { worldToChunkCoord } from './terrain/chunkKey';
 import { terrainMaterial } from './terrain/TerrainChunk';
+import { terrainColorOptions } from './terrain/terrainColor';
 import { TerrainManager } from './terrain/TerrainManager';
 import { createDefaultTerrainSettings, type TerrainSettings } from './terrain/TerrainSettings';
 import { TreeManager } from './vegetation/TreeManager';
@@ -303,6 +313,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly terrainManager: TerrainManager;
 	private readonly treeManager: TreeManager;
 	private readonly materialManager: BuildingMaterialManager;
+	/** Procedural textures for buildings and terrain — see the README's "Procedural materials" section. */
+	private readonly materialLibrary: ProceduralMaterialLibrary;
+	private readonly surfaceBinder: SurfaceMappingBinder;
 	private readonly foundationManager: FoundationManager;
 	private readonly wallManager: WallManager;
 	private readonly wallPathManager: WallPathManager;
@@ -445,6 +458,8 @@ export class ThreeScene implements WorldRuntime {
 			settings: this.graphicsSettings,
 			onQualityChange: (quality) => {
 				this.graphicsSettingsStore.setQuality(quality);
+				this.materialLibrary.setQuality(materialQualityForGraphics(quality));
+				this.materialLibrary.setAnisotropy(this.materialAnisotropy());
 				this.applyRenderDistanceForQuality(quality);
 				options.onGraphicsQualityChange?.(quality);
 			}
@@ -458,10 +473,42 @@ export class ThreeScene implements WorldRuntime {
 		const glassMaterial = getGlassMaterial();
 		this.graphicsPipeline.registerMaterial(glassMaterial);
 
+		// `?materials=flat` starts with the original flat look — for side-by-side comparisons.
+		const lookParams = new URLSearchParams(location.search);
+		if (lookParams.get('materials') === 'flat') this.graphicsSettings.proceduralMaterials = false;
+		if (lookParams.get('lighting') === 'classic') this.graphicsSettings.enhancedLighting = false;
+		this.surfaceBinder = new SurfaceMappingBinder({
+			getFoundationOrigin: (foundationId) => {
+				const foundation = this.foundationManager.getFoundation(foundationId);
+				if (!foundation) return null;
+				const frame = foundationLocalFrame(
+					foundation,
+					vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution)
+				);
+				return new THREE.Vector3(frame.originWorldX, frame.originWorldY, frame.originWorldZ);
+			},
+			getWorldSeed: () => this.settings.seed
+		});
+		this.materialLibrary = new ProceduralMaterialLibrary({
+			binder: this.surfaceBinder,
+			quality: materialQualityForGraphics(this.graphicsSettings.quality),
+			enabled: this.graphicsSettings.proceduralMaterials,
+			anisotropy: this.materialAnisotropy(),
+			onMaterialCreated: (material) => this.graphicsPipeline.registerMaterial(material)
+		});
+		this.materialLibrary.setWorldSeed(this.settings.seed);
+		terrainColorOptions.groundVariation = this.graphicsSettings.proceduralMaterials;
+		this.materialLibrary.bindMaterial(terrainMaterial, TERRAIN_SURFACE_STYLE, {
+			detail: true,
+			uvUnitMeters: 8
+		});
+		this.materialLibrary.bindMaterial(glassMaterial, GLASS_SURFACE_STYLE);
+
 		const buildingSettings = options.buildingSettings;
 		this.buildingSettings = buildingSettings;
-		this.materialManager = new BuildingMaterialManager((material) =>
-			this.graphicsPipeline.registerMaterial(material)
+		this.materialManager = new BuildingMaterialManager(
+			(material) => this.graphicsPipeline.registerMaterial(material),
+			this.materialLibrary
 		);
 		this.foundationManager = new FoundationManager(
 			() => vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
@@ -1105,6 +1152,9 @@ export class ThreeScene implements WorldRuntime {
 					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
 				graphicsAo: () => this.graphicsPipeline.refreshAoTuning(),
 				graphicsExport: () => this.exportGraphicsSettings(),
+				graphicsMaterials: () =>
+					this.setProceduralMaterialsEnabled(this.graphicsSettings.proceduralMaterials),
+				graphicsLighting: () => this.applySkySettings(),
 				musicLoop: (key, value) => {
 					this.music.changeLoop({ [key]: value });
 				},
@@ -1215,6 +1265,7 @@ export class ThreeScene implements WorldRuntime {
 
 		deepAssign(this.settings, environment.terrain);
 		this.settings.seed = seed;
+		this.materialLibrary.setWorldSeed(seed);
 		deepAssign(this.vegetationSettings, environment.vegetation);
 		deepAssign(this.skySettings, environment.sky);
 		ensureDayCycleSettings(this.skySettings);
@@ -1656,6 +1707,37 @@ export class ThreeScene implements WorldRuntime {
 		window.dispatchEvent(new KeyboardEvent('keyup', { code }));
 	}
 
+	/** Turns procedural materials on/off (same as the Graphics settings toggle). */
+	setProceduralMaterialsEnabled(enabled: boolean): void {
+		this.graphicsSettings.proceduralMaterials = enabled;
+		this.materialLibrary.setEnabled(enabled);
+		if (terrainColorOptions.groundVariation !== enabled) {
+			terrainColorOptions.groundVariation = enabled;
+			this.dirty.settings = true;
+		}
+	}
+
+	/** Resolves once every procedural texture requested so far is generated, applied and mapped — used by screenshot tests. */
+	async whenMaterialsReady(): Promise<void> {
+		await this.materialLibrary.whenIdle();
+		this.surfaceBinder.flush();
+	}
+
+	getMaterialStats(): ProceduralMaterialStats & { mappedGeometries: number } {
+		return {
+			...this.materialLibrary.getStats(),
+			mappedGeometries: this.surfaceBinder.getMappedGeometryCount()
+		};
+	}
+
+	/** Texture anisotropy for procedural maps: the preset's value, capped by the GPU. */
+	private materialAnisotropy(): number {
+		return Math.min(
+			GRAPHICS_PRESETS[this.graphicsSettings.quality].anisotropy,
+			this.renderer.capabilities.getMaxAnisotropy()
+		);
+	}
+
 	getGraphicsQuality(): GraphicsQuality {
 		return this.graphicsPipeline.getQuality();
 	}
@@ -1867,6 +1949,20 @@ export class ThreeScene implements WorldRuntime {
 		this.hemisphereLight.intensity = look.atmosphere.hemisphereIntensity;
 		this.sunLight.color.set(look.atmosphere.sunColor);
 		this.sunLight.intensity = look.atmosphere.sunEnabled ? look.atmosphere.sunIntensity : 0;
+		if (this.graphicsSettings.enhancedLighting) {
+			const lighting = ENHANCED_LIGHTING;
+			this.hemisphereLight.color.lerp(
+				new THREE.Color(lighting.hemisphereSkyNeutral),
+				lighting.hemisphereSkyNeutralAmount
+			);
+			this.hemisphereLight.groundColor.lerp(
+				new THREE.Color(lighting.hemisphereGround),
+				lighting.hemisphereGroundAmount
+			);
+			this.hemisphereLight.intensity *= lighting.hemisphereIntensityScale;
+			this.sunLight.intensity *= lighting.sunIntensityScale;
+			this.scene.environmentIntensity *= lighting.environmentIntensityScale;
+		}
 		this.graphicsPipeline.setSunColorIntensity(this.sunLight.color, this.sunLight.intensity);
 		this.updateSunLightPosition();
 
@@ -2066,6 +2162,8 @@ export class ThreeScene implements WorldRuntime {
 		this.updateSunLightPosition();
 
 		this.graphicsPipeline.update(deltaSeconds);
+		// Gives meshes built since last frame their real-world UVs before they are drawn again.
+		this.surfaceBinder.flush();
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
 		if (this.frameCpuSamples) {
@@ -2185,6 +2283,8 @@ export class ThreeScene implements WorldRuntime {
 		this.paintTool.dispose();
 		this.moveTool.dispose();
 		this.materialManager.dispose();
+		this.materialLibrary.dispose();
+		this.surfaceBinder.dispose();
 		this.collisionVisualizer.dispose();
 		this.treeManager.dispose();
 		this.wallManager.dispose();

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { BUILDING_SURFACE_STYLES } from '../materials/buildingSurfaceStyles';
+import type { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
 import type { BuildingMaterialDefinition, MaterialKind } from './MaterialTypes';
 import { normalizeColorHex } from './MaterialTypes';
 
@@ -23,17 +25,20 @@ const TIMBER_FRAME: MaterialTemplate = {
 	flatShading: true
 };
 
+const FOUNDATION: MaterialTemplate = {
+	color: 0x8a8578,
+	roughness: 0.92,
+	metalness: 0.04,
+	flatShading: true,
+	polygonOffset: true,
+	polygonOffsetFactor: -1,
+	polygonOffsetUnits: -1
+};
+
 const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 	wall: { color: 0xcfc6b3, roughness: 0.88, metalness: 0.02, flatShading: true },
-	foundation: {
-		color: 0x8a8578,
-		roughness: 0.92,
-		metalness: 0.04,
-		flatShading: true,
-		polygonOffset: true,
-		polygonOffsetFactor: -1,
-		polygonOffsetUnits: -1
-	},
+	foundation: FOUNDATION,
+	'foundation-top': FOUNDATION,
 	'slab-floor': {
 		color: 0xd8d2c4,
 		roughness: 0.9,
@@ -108,10 +113,22 @@ function definitionKey(definition: BuildingMaterialDefinition | undefined): stri
 export class BuildingMaterialManager {
 	private readonly cache = new Map<string, THREE.MeshStandardMaterial>();
 	private readonly onMaterialCreated?: (material: THREE.Material) => void;
+	private readonly procedural?: ProceduralMaterialLibrary;
 
-	/** `onMaterialCreated` fires exactly once per newly-allocated material (never for a cache hit) — ThreeScene uses it to register every building material with the graphics pipeline's cascaded-shadow system as soon as painting a new colour creates it, without needing to know about painting at all. */
-	constructor(onMaterialCreated?: (material: THREE.Material) => void) {
+	/**
+	 * `onMaterialCreated` fires exactly once per newly-allocated material (never for a cache hit) — ThreeScene uses it to register every building material with the graphics pipeline's cascaded-shadow system as soon as painting a new colour creates it, without needing to know about painting at all.
+	 *
+	 * `procedural` (optional — tests and previews work without it) dresses each new material with the
+	 * procedural look `BUILDING_SURFACE_STYLES` assigns its kind. The material keeps its identity and
+	 * its flat template look is captured, so switching procedural materials off restores it exactly.
+	 * A painted colour tints the texture rather than replacing it.
+	 */
+	constructor(
+		onMaterialCreated?: (material: THREE.Material) => void,
+		procedural?: ProceduralMaterialLibrary
+	) {
 		this.onMaterialCreated = onMaterialCreated;
+		this.procedural = procedural;
 	}
 
 	getMaterial(
@@ -139,7 +156,24 @@ export class BuildingMaterialManager {
 		});
 		this.cache.set(key, material);
 		this.onMaterialCreated?.(material);
+		const style = BUILDING_SURFACE_STYLES[kind];
+		if (style && this.procedural) {
+			this.procedural.bindMaterial(material, style, {
+				tint: definition?.type === 'color' ? normalizeColorHex(definition.color) : undefined
+			});
+		}
 		return material;
+	}
+
+	/**
+	 * A foundation box's per-face materials, in `BoxGeometry` group order (+X, −X, +Y, −Y, +Z, −Z):
+	 * paving on the top face, masonry on the retaining sides and underside. A paint override applies
+	 * to both, exactly as painting a foundation did before it had two looks.
+	 */
+	getFoundationMaterials(definition: BuildingMaterialDefinition | undefined): THREE.Material[] {
+		const sides = this.getMaterial('foundation', definition);
+		const top = this.getMaterial('foundation-top', definition);
+		return [sides, sides, top, sides, sides, sides];
 	}
 
 	dispose(): void {

@@ -1536,12 +1536,7 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 								'stairRailingsEnabled',
 								actions.stairwellFraming
 							),
-							boolField(
-								'building.stairs.opening.enabled',
-								'Hole',
-								building,
-								'stairOpeningEnabled'
-							),
+							boolField('building.stairs.opening.enabled', 'Hole', building, 'stairOpeningEnabled'),
 							numberField(
 								'building.stairs.frame.width',
 								'Frame width',
@@ -2373,6 +2368,20 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						graphics,
 						'showRenderStats',
 						actions.graphicsAdvanced
+					),
+					boolField(
+						'graphics.materials',
+						'Procedural materials',
+						graphics,
+						'proceduralMaterials',
+						actions.graphicsMaterials
+					),
+					boolField(
+						'graphics.lighting',
+						'Enhanced lighting',
+						graphics,
+						'enhancedLighting',
+						actions.graphicsLighting
 					),
 					{
 						kind: 'button',

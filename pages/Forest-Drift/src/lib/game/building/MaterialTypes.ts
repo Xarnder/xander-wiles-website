@@ -197,6 +197,8 @@ export const DEFAULT_MATERIAL_PALETTE: readonly MaterialPaletteGroup[] = [
 export type MaterialKind =
 	| 'wall'
 	| 'foundation'
+	/** The walkable top face of a foundation (courtyard paving) — its own kind so it can be dressed differently from the retaining sides; see FoundationMesh. Painting a foundation still paints both. */
+	| 'foundation-top'
 	| 'slab-floor'
 	| 'slab-roof'
 	| 'window-frame'
