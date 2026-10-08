@@ -57,7 +57,7 @@ import type {
 } from './building/FoundationTypes';
 import type { BuildingLevelDefinition } from './building/BuildingLevelTypes';
 import type { FoundationBuildingDefinition } from './building/WallTypes';
-import { vertexSpacingFor } from './building/foundationMath';
+import { regroundedFoundationBottom, vertexSpacingFor } from './building/foundationMath';
 import type { PaintUiState } from './building/PaintTool';
 import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
@@ -1268,7 +1268,17 @@ export class ThreeScene implements WorldRuntime {
 	private loadWorld(world: WorldDefinition): void {
 		this.applyEnvironment(world.environment, world.seed);
 
-		this.foundationManager.load(structuredClone(world.foundations));
+		// Terrain under a foundation may have changed since it was placed: re-ground each one so its
+		// block always reaches half a metre below the lowest terrain point under it.
+		const spacing = vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution);
+		const sampler = this.terrainManager.getHeightSampler();
+		const sample = (x: number, z: number) => sampler.sample(x, z);
+		this.foundationManager.load(
+			structuredClone(world.foundations).map((foundation) => ({
+				...foundation,
+				bottomY: regroundedFoundationBottom(foundation, spacing, sample)
+			}))
+		);
 		this.buildingManager.load(structuredClone(world.buildings));
 		this.levelManager.load(structuredClone(world.buildingLevels));
 		this.music.load(world.musicTrees ?? [], world.musicPlants ?? []);

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	FOUNDATION_LOAD_EXTRA_DEPTH,
+	lowestTerrainUnderFoundation,
+	regroundedFoundationBottom,
 	computeFoundationSelection,
 	gridToWorldCoord,
 	vertexSpacingFor,
@@ -277,5 +280,33 @@ describe('maximum size', () => {
 			1
 		);
 		expect(tooDeep.valid).toBe(false);
+	});
+});
+
+describe('re-grounding a loaded foundation', () => {
+	const foundation = {
+		id: 'f',
+		minGridX: 0,
+		maxGridX: 4,
+		minGridZ: 0,
+		maxGridZ: 3,
+		topY: 5,
+		bottomY: 1
+	};
+	// A bowl whose lowest vertex is at grid (4, 3) — a footprint corner.
+	const sample = (x: number, z: number) => 4 - x * 0.5 - z * 0.25;
+
+	it('finds the lowest terrain vertex under the footprint, edges included', () => {
+		expect(lowestTerrainUnderFoundation(foundation, 2, sample)).toBeCloseTo(4 - 4 - 1.5);
+	});
+
+	it('extends the block half a metre below the current lowest point when the terrain dropped', () => {
+		expect(regroundedFoundationBottom(foundation, 2, sample)).toBeCloseTo(-1.5 - 0.5);
+		expect(FOUNDATION_LOAD_EXTRA_DEPTH).toBe(0.5);
+	});
+
+	it('never shortens a block that already reaches deep enough', () => {
+		const deep = { ...foundation, bottomY: -10 };
+		expect(regroundedFoundationBottom(deep, 2, sample)).toBe(-10);
 	});
 });

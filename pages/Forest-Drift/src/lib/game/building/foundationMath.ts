@@ -1,4 +1,4 @@
-import type { TerrainGridPoint } from './FoundationTypes';
+import type { FoundationDefinition, TerrainGridPoint } from './FoundationTypes';
 
 export type HeightSampleFn = (worldX: number, worldZ: number) => number;
 
@@ -125,4 +125,44 @@ export function computeFoundationSelection(
 		bottomY: minHeight - foundationUndergroundDepth,
 		highestPoint: sampleGridPoint(highestGridX, highestGridZ, spacing, sample)
 	};
+}
+
+/** How far below the lowest terrain point a loaded foundation is re-extended (metres). */
+export const FOUNDATION_LOAD_EXTRA_DEPTH = 0.5;
+
+/**
+ * Lowest terrain height under a foundation's footprint — every terrain grid vertex inside it,
+ * edges included (the terrain mesh is linear between vertices, so nothing in between is lower).
+ */
+export function lowestTerrainUnderFoundation(
+	foundation: Pick<FoundationDefinition, 'minGridX' | 'maxGridX' | 'minGridZ' | 'maxGridZ'>,
+	spacing: number,
+	sample: HeightSampleFn
+): number {
+	let lowest = Infinity;
+	for (let gx = foundation.minGridX; gx <= foundation.maxGridX; gx++) {
+		for (let gz = foundation.minGridZ; gz <= foundation.maxGridZ; gz++) {
+			const height = sample(gridToWorldCoord(gx, spacing), gridToWorldCoord(gz, spacing));
+			if (height < lowest) lowest = height;
+		}
+	}
+	return lowest;
+}
+
+/**
+ * The bottom a foundation should have in the CURRENT terrain. `bottomY` is computed when a
+ * foundation is placed, but the terrain under it can change afterwards (terrain settings or
+ * generator changes), which would leave the block floating above lowered ground. On world load the
+ * lowest point is re-sampled and the block extended to `extraDepth` below it. It is only ever
+ * extended, never shortened: a deeper bottom is invisible underground, a shorter one could open a gap.
+ */
+export function regroundedFoundationBottom(
+	foundation: FoundationDefinition,
+	spacing: number,
+	sample: HeightSampleFn,
+	extraDepth = FOUNDATION_LOAD_EXTRA_DEPTH
+): number {
+	const lowest = lowestTerrainUnderFoundation(foundation, spacing, sample);
+	if (!Number.isFinite(lowest)) return foundation.bottomY;
+	return Math.min(foundation.bottomY, lowest - extraDepth);
 }
