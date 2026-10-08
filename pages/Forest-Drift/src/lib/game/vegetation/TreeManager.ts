@@ -126,7 +126,7 @@ export class TreeManager {
 	private readonly treePlacementGenerator: TreePlacementGenerator;
 
 	private readonly prototypes: TreePrototypeCache;
-	private readonly material: THREE.MeshStandardMaterial;
+	private readonly material: THREE.MeshLambertMaterial;
 	private readonly wind: TreeWindUniforms;
 	private quality: TreeQualityProfile = { ...DEFAULT_QUALITY };
 

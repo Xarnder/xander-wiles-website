@@ -32,17 +32,17 @@ const WIND_VERTEX = /* glsl */ `
  * The ONE material every tree in the world uses: trunk and foliage are a single merged mesh per
  * prototype, coloured by baked vertex colours (bark gradient, canopy light-to-dark, occlusion) and
  * a per-instance tint (`InstancedMesh.instanceColor`). No textures at all.
+ *
+ * Lambert, not PBR: stylised foliage has no meaningful specular, and a PBR material's Fresnel
+ * reflection of the bright sky made tier undersides and grazing canopy edges read as pale blue-grey
+ * sheets. Lambert drops that term entirely and is cheaper per pixel; sun, hemisphere light,
+ * cascaded shadows and fog all behave the same.
  */
 export function createTreeMaterial(): {
-	material: THREE.MeshStandardMaterial;
+	material: THREE.MeshLambertMaterial;
 	wind: TreeWindUniforms;
 } {
-	const material = new THREE.MeshStandardMaterial({
-		vertexColors: true,
-		roughness: 0.9,
-		metalness: 0,
-		envMapIntensity: 0.6
-	});
+	const material = new THREE.MeshLambertMaterial({ vertexColors: true });
 	material.name = 'stylised-tree';
 	const wind: TreeWindUniforms = {
 		uTreeTime: { value: 0 },
