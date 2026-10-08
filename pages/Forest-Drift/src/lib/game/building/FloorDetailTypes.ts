@@ -60,7 +60,7 @@ export const FLOOR_DETAIL_CARPET_PILE = 0.006;
 export const DEFAULT_FLOOR_DETAIL_COLORS: Record<FloorDetailKind, readonly [string, string]> = {
 	carpet: ['#6B2E1F', '#4A1F14'],
 	path: ['#8A8680', '#5C4632'],
-	planks: ['#3A2418', '#432A1C'],
+	planks: ['#7A5639', '#8A6443'],
 	tiles: ['#C1443C', '#F4F0E6']
 };
 

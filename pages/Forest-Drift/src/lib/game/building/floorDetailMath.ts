@@ -616,7 +616,15 @@ function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 	if (samples.length < 2) return [];
 	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
 	const halfW = def.pathWidth / 2;
-	const boxes = boxesAlongPolyline(samples, halfW, minY, maxY, colorAt(def.colors, 0));
+	// The fill is solid wood too (a boardwalk run along the path), one log laid end to end.
+	const idHash = hashStringToUint32(def.id);
+	const fillSeed = hashStringToUint32('fill', idHash);
+	let fillAlong = 0;
+	const boxes: FloorDetailBox[] = [];
+	for (const fill of boxesAlongPolyline(samples, halfW, minY, maxY, colorAt(def.colors, 0))) {
+		boxes.push({ ...fill, wood: { grain: 'z', seed: fillSeed, along: fillAlong } });
+		fillAlong += fill.maxZ - fill.minZ;
+	}
 	if (!def.pathFraming) return boxes;
 
 	const frameHalf = FLOOR_DETAIL_PATH_FRAME_WIDTH / 2;
@@ -625,7 +633,6 @@ function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 	const offset = halfW - frameHalf;
 	const frame = yRange(def.hostY, def.kind, def.renderMode, FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA);
 	const railColor = colorAt(def.colors, 1);
-	const idHash = hashStringToUint32(def.id);
 	for (const sign of [-1, 1] as const) {
 		// Each rail is one length of timber: its segments share a log, laid end to end along it.
 		const seed = hashStringToUint32(`rail${sign}`, idHash);

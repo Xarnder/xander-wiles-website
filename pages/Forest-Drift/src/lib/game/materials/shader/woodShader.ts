@@ -276,8 +276,8 @@ export const GAME_WOOD_PRESETS: Readonly<
 	'dark-oak': {
 		base: 'walnut',
 		overrides: {
-			darkGrainColor: '#1d120b',
-			lightGrainColor: '#4a3121',
+			darkGrainColor: '#3b2617',
+			lightGrainColor: '#8c623f',
 			ringBias: 0.3,
 			splotchIntensity: 1.2
 		},
@@ -296,7 +296,7 @@ export const GAME_WOOD_PRESETS: Readonly<
 	fresh: { base: 'pine', overrides: {}, finish: 'raw' },
 	'dark-stained': {
 		base: 'mahogany',
-		overrides: { darkGrainColor: '#1a0d08', lightGrainColor: '#3f2116' },
+		overrides: { darkGrainColor: '#2a160d', lightGrainColor: '#5e331f' },
 		finish: 'matte'
 	}
 };
@@ -548,7 +548,11 @@ export function applySolidWoodShader(
 		vec3 woodMean = mix(uWoodDark, uWoodLight, 0.75) * (WOOD_QUALITY > 0 ? 1.407 : 1.0);
 		const vec3 woodLuma = vec3(0.2126, 0.7152, 0.0722);
 		float woodRelative = dot(wood, woodLuma) / max(dot(woodMean, woodLuma), 0.002);
-		diffuseColor.rgb *= mix(wood, vec3(woodRelative), uWoodTintMode);
+		// A very dark chosen colour would swallow the grain: lift it (same hue) to a minimum
+		// brightness — linear luminance ~0.12, about #7E5A3E for a brown.
+		float woodTintLuma = max(dot(diffuseColor.rgb, woodLuma), 1e-4);
+		float woodLift = mix(1.0, clamp(0.12 / woodTintLuma, 1.0, 6.0), uWoodTintMode);
+		diffuseColor.rgb *= mix(wood, vec3(woodRelative), uWoodTintMode) * woodLift;
 	}`
 			);
 	};

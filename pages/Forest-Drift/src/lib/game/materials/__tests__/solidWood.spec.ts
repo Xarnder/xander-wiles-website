@@ -235,7 +235,7 @@ describe('floor-detail wood', () => {
 		expect(new Set(boxes.map((b) => b.wood?.seed)).size).toBe(boxes.length);
 	});
 
-	it('makes path rails continuous solid wood, and leaves the path fill, carpet and tiles flat', () => {
+	it('makes the path fill and rails continuous solid wood, and leaves carpet and tiles flat', () => {
 		const path = buildFloorDetailBoxes(
 			base({
 				kind: 'path',
@@ -248,13 +248,12 @@ describe('floor-detail wood', () => {
 			0.25
 		);
 		const rails = path.filter((b) => b.wood);
-		expect(rails.length).toBeGreaterThan(0);
-		expect(path.some((b) => !b.wood)).toBe(true);
-		// One log per rail; segments laid end to end along it.
+		expect(rails.length).toBe(path.length);
+		// One log each for the fill and the two rails; segments laid end to end along it.
 		const bySeed = new Map<number, number[]>();
 		for (const rail of rails)
 			bySeed.set(rail.wood!.seed, [...(bySeed.get(rail.wood!.seed) ?? []), rail.wood!.along ?? 0]);
-		expect(bySeed.size).toBe(2);
+		expect(bySeed.size).toBe(3);
 		for (const alongs of bySeed.values()) expect(alongs).toEqual([...alongs].sort((a, b) => a - b));
 		for (const kind of ['carpet', 'tiles'] as const) {
 			expect(buildFloorDetailBoxes(base({ kind }), 0.25).some((b) => b.wood)).toBe(false);

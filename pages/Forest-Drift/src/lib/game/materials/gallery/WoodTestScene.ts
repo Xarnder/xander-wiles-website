@@ -241,7 +241,7 @@ export class WoodTestScene {
 					maxY: 0.03,
 					minZ: 0.25 + row * 0.18,
 					maxZ: 0.25 + row * 0.18 + 0.174,
-					color: (row + board) % 2 ? '#432A1C' : '#3A2418',
+					color: (row + board) % 2 ? '#8A6443' : '#7A5639',
 					wood: { grain: 'x', seed: row * 31 + board }
 				});
 				x = end;
