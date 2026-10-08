@@ -291,11 +291,15 @@ export class PaintTool implements BuildTool {
 
 		const mesh = this.resolveSingleMesh(target);
 		if (!mesh) return;
-		this.highlighted = { mesh, originalMaterial: mesh.material };
+		const original = mesh.material;
+		this.highlighted = { mesh, originalMaterial: original };
 		mesh.material =
 			target.type === 'foundation'
 				? this.materialManager.getFoundationMaterials(this.selectedMaterial)
-				: previewMaterial;
+				: Array.isArray(original)
+					? // A pitched roof's plaster end walls (group 1) aren't part of the roof's paint.
+						[previewMaterial, ...original.slice(1)]
+					: previewMaterial;
 
 		const edges = new THREE.EdgesGeometry(mesh.geometry);
 		this.highlightOutline = new THREE.LineSegments(edges, this.highlightOutlineMaterial);

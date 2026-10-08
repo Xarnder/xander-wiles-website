@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildRoofGeometry,
 	isFootprintCompatibleWithRoofType,
+	ROOF_END_WALL_GROUP,
+	ROOF_SKIN_GROUP,
 	RoofFootprintError
 } from '../RoofGeometryBuilder';
 import { createDefaultRoofProfileSettings, type RoofDefinition } from '../RoofTypes';
@@ -397,5 +399,16 @@ describe('isFootprintCompatibleWithRoofType', () => {
 		expect(isFootprintCompatibleWithRoofType(rectangle, 'gable')).toBe(true);
 		expect(isFootprintCompatibleWithRoofType(triangle, 'gable')).toBe(false);
 		expect(isFootprintCompatibleWithRoofType(triangle, 'hip')).toBe(false);
+	});
+});
+
+describe('roof draw groups', () => {
+	it('puts the vertical gable ends in their own (plaster) group after the roof skin', () => {
+		const geometry = buildRoofGeometry(baseRoof({ overhang: 0.4 }), 0.25, { endWallOffset: 0.1 });
+		const [skin, walls] = geometry.groups;
+		expect(skin).toMatchObject({ start: 0, materialIndex: ROOF_SKIN_GROUP });
+		expect(walls).toMatchObject({ start: skin.count, materialIndex: ROOF_END_WALL_GROUP });
+		expect(walls.count).toBeGreaterThan(0);
+		expect(skin.count + walls.count).toBe(geometry.getAttribute('position').count);
 	});
 });

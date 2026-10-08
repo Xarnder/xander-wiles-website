@@ -645,6 +645,148 @@ function facePerimeter(face: RoofFace): number {
 }
 
 /**
+ * Gives a pitched roof a real overhang at its vertical ends. `buildRoofFaces` is called with the
+ * overhung rectangle, so every vertical face (gable ends, the shed's tall wall) would otherwise sit
+ * flush with the roof's outer edge — no overhang over it. Each vertical face lying on that outer
+ * edge is moved back to the building's wall line (the original footprint, pushed out by
+ * `wallOffset` — half the wall thickness, so it lines up with the wall's outer face below), clipped
+ * to the building's width, and its upper vertices re-fitted to the roof surface at the new line.
+ * Their fascia strips are dropped: the walls below meet them. No-op without an overhang.
+ */
+export function insetVerticalRoofFaces(
+	faces: readonly RoofFace[],
+	rect: AxisAlignedRect,
+	overhang: number,
+	wallOffset: number
+): RoofFace[] {
+	if (overhang <= EPSILON) return faces.slice();
+	const offset = Math.max(0, Math.min(wallOffset, overhang));
+	const outer = expandRect(rect, overhang);
+	const slopes = faces.filter((face) => !face.vertical);
+	const heightAt = (x: number, z: number) => roofHeightAt(slopes, x, z);
+	const result: RoofFace[] = [];
+	for (const face of faces) {
+		if (!face.vertical) {
+			result.push(face);
+			continue;
+		}
+		const normal = horizontalNormal(face.points);
+		const axis: 'x' | 'z' = Math.abs(normal.x) >= Math.abs(normal.z) ? 'x' : 'z';
+		const along: 'x' | 'z' = axis === 'x' ? 'z' : 'x';
+		const plane = face.points[0][axis];
+		const outerMin = axis === 'x' ? outer.minX : outer.minZ;
+		const outerMax = axis === 'x' ? outer.maxX : outer.maxZ;
+		const onMin = Math.abs(plane - outerMin) < 1e-6;
+		const onMax = Math.abs(plane - outerMax) < 1e-6;
+		if (!onMin && !onMax) {
+			result.push(face); // an inner cap (dutch-gable top) — not on the overhang edge
+			continue;
+		}
+		const target = onMin
+			? (axis === 'x' ? rect.minX : rect.minZ) - offset
+			: (axis === 'x' ? rect.maxX : rect.maxZ) + offset;
+		const lo = (along === 'x' ? rect.minX : rect.minZ) - offset;
+		const hi = (along === 'x' ? rect.maxX : rect.maxZ) + offset;
+		const profile = clipProfile(
+			face.points.map((p) => ({ s: p[along], y: p.y })),
+			lo,
+			hi
+		);
+		if (profile.length < 3) continue;
+		const at = (planeCoord: number, s: number) =>
+			axis === 'x' ? heightAt(planeCoord, s) : heightAt(s, planeCoord);
+		const points = profile.map(({ s: sv, y }) => {
+			const before = at(plane, sv);
+			const onRoof = Number.isFinite(before) && Math.abs(y - before) < 1e-4;
+			const after = onRoof ? at(target, sv) : NaN;
+			const newY = Number.isFinite(after) ? after : y;
+			return axis === 'x' ? { x: target, y: newY, z: sv } : { x: sv, y: newY, z: target };
+		});
+		result.push({ points, fasciaEdges: points.map(() => false), vertical: true });
+	}
+	return result;
+}
+
+/** Highest roof skin at (x, z) — the slope faces' planes, where their XZ footprint contains the point. */
+function roofHeightAt(slopes: readonly RoofFace[], x: number, z: number): number {
+	let best = -Infinity;
+	for (const face of slopes) {
+		if (!containsXZ(face.points, x, z)) continue;
+		const a = face.points[0];
+		const n = newell(face.points);
+		if (Math.abs(n.y) < 1e-9) continue;
+		const y = a.y - (n.x * (x - a.x) + n.z * (z - a.z)) / n.y;
+		if (y > best) best = y;
+	}
+	return best;
+}
+
+function containsXZ(points: readonly RoofVertex[], x: number, z: number): boolean {
+	let sign = 0;
+	for (let i = 0; i < points.length; i++) {
+		const a = points[i];
+		const b = points[(i + 1) % points.length];
+		const cross = (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x);
+		if (Math.abs(cross) < 1e-7) continue;
+		const current = cross > 0 ? 1 : -1;
+		if (sign === 0) sign = current;
+		else if (sign !== current) return false;
+	}
+	return true;
+}
+
+function newell(points: readonly RoofVertex[]): RoofVertex {
+	const n = { x: 0, y: 0, z: 0 };
+	for (let i = 0; i < points.length; i++) {
+		const c = points[i];
+		const d = points[(i + 1) % points.length];
+		n.x += (c.y - d.y) * (c.z + d.z);
+		n.y += (c.z - d.z) * (c.x + d.x);
+		n.z += (c.x - d.x) * (c.y + d.y);
+	}
+	return n;
+}
+
+function horizontalNormal(points: readonly RoofVertex[]): { x: number; z: number } {
+	const n = newell(points);
+	return { x: n.x, z: n.z };
+}
+
+/** Clips a (s, y) polygon to lo ≤ s ≤ hi (two Sutherland–Hodgman passes). */
+function clipProfile(
+	points: { s: number; y: number }[],
+	lo: number,
+	hi: number
+): { s: number; y: number }[] {
+	const pass = (
+		input: { s: number; y: number }[],
+		inside: (s: number) => boolean,
+		edge: number
+	) => {
+		const out: { s: number; y: number }[] = [];
+		for (let i = 0; i < input.length; i++) {
+			const a = input[i];
+			const b = input[(i + 1) % input.length];
+			const aIn = inside(a.s);
+			const bIn = inside(b.s);
+			if (aIn) out.push(a);
+			if (aIn !== bIn) {
+				const t = (edge - a.s) / (b.s - a.s);
+				out.push({ s: edge, y: a.y + (b.y - a.y) * t });
+			}
+		}
+		return out;
+	};
+	const first = pass(points, (s) => s >= lo - 1e-9, lo);
+	const clipped = pass(first, (s) => s <= hi + 1e-9, hi);
+	// Drop consecutive duplicates (a vertex exactly on the clip line is emitted twice).
+	return clipped.filter((p, i) => {
+		const prev = clipped[(i + clipped.length - 1) % clipped.length];
+		return clipped.length === 1 || Math.hypot(p.s - prev.s, p.y - prev.y) > 1e-7;
+	});
+}
+
+/**
  * The single dispatch point from `RoofDefinition.type` to its face list — every geometry-consuming
  * caller (`RoofGeometryBuilder`, and any future debug visualisation) goes through this rather than
  * switching on `type` itself. `'flat'` is handled by the caller instead (see

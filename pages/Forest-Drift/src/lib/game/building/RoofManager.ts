@@ -3,6 +3,7 @@ import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
 import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingMaterialDefinition } from './MaterialTypes';
 import {
 	axisAlignedRectangleOf,
 	buildRoofFaces,
@@ -35,6 +36,14 @@ export interface RoofManagerOptions {
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
 	materialManager?: BuildingMaterialManager;
+	/**
+	 * The walls a pitched roof's vertical end walls (gables) should match on a foundation: their
+	 * paint and thickness. Optional — without it gables are unpainted plaster on the footprint line.
+	 */
+	getEndWallStyle?: (foundationId: string) => {
+		material?: BuildingMaterialDefinition;
+		wallThickness: number;
+	};
 }
 
 export type RoofBuildResult = { ok: true; roof: RoofDefinition } | { ok: false; reason: string };
@@ -55,6 +64,7 @@ export class RoofManager {
 	private readonly getFoundation: (foundationId: string) => FoundationDefinition | undefined;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
+	private readonly getEndWallStyle?: RoofManagerOptions['getEndWallStyle'];
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly roots: FoundationRootRegistry;
 
@@ -66,6 +76,7 @@ export class RoofManager {
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
+		this.getEndWallStyle = options.getEndWallStyle;
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
 	}
@@ -78,9 +89,18 @@ export class RoofManager {
 		const frame = foundationLocalFrame(foundation, this.getVertexSpacing());
 		const buildingGridSize = this.getBuildingGridSize();
 
-		const geometry = buildRoofGeometry(definition, buildingGridSize);
+		const endWalls = this.getEndWallStyle?.(definition.foundationId);
+		const geometry = buildRoofGeometry(definition, buildingGridSize, {
+			endWallOffset: (endWalls?.wallThickness ?? 0) / 2
+		});
 
-		const material = this.materialManager.getMaterial('slab-roof', definition.material);
+		const roofMaterial = this.materialManager.getMaterial('slab-roof', definition.material);
+		// Pitched roofs: group 0 is the roof, group 1 the vertical end walls (gables) — plaster,
+		// matching the walls below. Flat roofs are a single slab with no groups.
+		const material =
+			definition.type === 'flat'
+				? roofMaterial
+				: [roofMaterial, this.materialManager.getMaterial('wall', endWalls?.material)];
 		let mesh = existing?.mesh;
 		if (mesh) {
 			mesh.geometry.dispose();

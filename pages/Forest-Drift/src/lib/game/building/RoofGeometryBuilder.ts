@@ -4,6 +4,7 @@ import {
 	axisAlignedRectangleOf,
 	buildRoofFaces,
 	expandRect,
+	insetVerticalRoofFaces,
 	type RoofFace,
 	type RoofVertex
 } from './roofMath';
@@ -27,6 +28,18 @@ import type { RoofDefinition } from './RoofTypes';
  */
 export class RoofFootprintError extends Error {}
 
+/** Draw groups of a pitched roof: 0 = roof skin, fascias and soffits; 1 = vertical end walls (plaster). */
+export const ROOF_SKIN_GROUP = 0;
+export const ROOF_END_WALL_GROUP = 1;
+
+export interface RoofGeometryOptions {
+	/**
+	 * How far outside the footprint line the vertical end walls sit — half the wall thickness, so a
+	 * gable lines up with the outer face of the wall below. Only matters with an overhang.
+	 */
+	endWallOffset?: number;
+}
+
 export function buildRoofGeometry(
 	roof: Pick<
 		RoofDefinition,
@@ -40,7 +53,8 @@ export function buildRoofGeometry(
 		| 'overhang'
 		| 'profileSettings'
 	>,
-	buildingGridSize: number
+	buildingGridSize: number,
+	options: RoofGeometryOptions = {}
 ): THREE.BufferGeometry {
 	const footprint: Point2D[] = roof.points.map((p) => ({
 		x: p.gridX * buildingGridSize,
@@ -59,14 +73,21 @@ export function buildRoofGeometry(
 	}
 	const overhungRect = roof.overhang > 0 ? expandRect(rect, roof.overhang) : rect;
 
-	const faces = buildRoofFaces(
-		roof.type,
-		overhungRect,
-		roof.direction,
-		roof.shedDirection,
-		roof.baseY,
-		roof.rise,
-		roof.profileSettings
+	// The slopes overhang on every side; vertical end walls are pulled back to the wall line so the
+	// roof overhangs them too.
+	const faces = insetVerticalRoofFaces(
+		buildRoofFaces(
+			roof.type,
+			overhungRect,
+			roof.direction,
+			roof.shedDirection,
+			roof.baseY,
+			roof.rise,
+			roof.profileSettings
+		),
+		rect,
+		roof.overhang,
+		options.endWallOffset ?? 0
 	);
 	return buildRoofSolidGeometry(faces, roof.thickness);
 }
@@ -105,11 +126,12 @@ export function isFootprintCompatibleWithRoofType(
  * instead of being smoothed across by `computeVertexNormals` (see the README's "Normals" section).
  */
 function buildRoofSolidGeometry(faces: RoofFace[], thickness: number): THREE.BufferGeometry {
-	const positions: number[] = [];
-	const normals: number[] = [];
-	const uvs: number[] = [];
+	const skin = { positions: [] as number[], normals: [] as number[], uvs: [] as number[] };
+	const walls = { positions: [] as number[], normals: [] as number[], uvs: [] as number[] };
+	let target = skin;
 
 	const pushTriangle = (a: RoofVertex, b: RoofVertex, c: RoofVertex) => {
+		const { positions, normals, uvs } = target;
 		const normal = triangleNormal(a, b, c);
 		for (const p of [a, b, c]) {
 			positions.push(p.x, p.y, p.z);
@@ -135,10 +157,12 @@ function buildRoofSolidGeometry(faces: RoofFace[], thickness: number): THREE.Buf
 		const top = vertical
 			? ensureOutwardWinding(face.points, interior)
 			: ensureUpwardWinding(face.points);
+		target = vertical ? walls : skin;
 		pushFan(top);
 
 		if (vertical) {
 			pushFan(top.slice().reverse());
+			target = skin;
 		} else {
 			const bottom = top
 				.slice()
@@ -173,9 +197,19 @@ function buildRoofSolidGeometry(faces: RoofFace[], thickness: number): THREE.Buf
 	}
 
 	const geometry = new THREE.BufferGeometry();
-	geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-	geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+	const skinVertices = skin.positions.length / 3;
+	const wallVertices = walls.positions.length / 3;
+	geometry.setAttribute(
+		'position',
+		new THREE.Float32BufferAttribute([...skin.positions, ...walls.positions], 3)
+	);
+	geometry.setAttribute(
+		'normal',
+		new THREE.Float32BufferAttribute([...skin.normals, ...walls.normals], 3)
+	);
+	geometry.setAttribute('uv', new THREE.Float32BufferAttribute([...skin.uvs, ...walls.uvs], 2));
+	geometry.addGroup(0, skinVertices, ROOF_SKIN_GROUP);
+	geometry.addGroup(skinVertices, wallVertices, ROOF_END_WALL_GROUP);
 	return geometry;
 }
 

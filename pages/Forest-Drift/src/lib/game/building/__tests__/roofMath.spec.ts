@@ -9,7 +9,9 @@ import {
 	buildMShapedFaces,
 	buildMansardFaces,
 	buildShedFaces,
+	expandRect,
 	hipRidgeDirection,
+	insetVerticalRoofFaces,
 	pitchDegrees,
 	pitchFromRiseAndRun,
 	rectDepth,
@@ -412,5 +414,56 @@ describe('roofTypeHasOrientationControl', () => {
 		expect(roofTypeHasOrientationControl('butterfly')).toBe(true);
 		expect(roofTypeHasOrientationControl('m-shaped')).toBe(true);
 		expect(roofTypeHasOrientationControl('dutch-gable')).toBe(true);
+	});
+});
+
+describe('insetVerticalRoofFaces (roof overhang over gable ends)', () => {
+	const rect: AxisAlignedRect = { minX: 0, maxX: 10, minZ: 0, maxZ: 6 };
+	const overhang = 0.5;
+	// Gable along x: the slopes climb in z to a ridge at z = 3; caps at x = −0.5 and 10.5.
+	const faces = buildGableFaces(expandRect(rect, overhang), 'x', 3, 2);
+	const inset = insetVerticalRoofFaces(faces, rect, overhang, 0.1);
+
+	it('keeps the slopes overhanging, and moves gable ends back to the wall line', () => {
+		expect(inset.filter((f) => !f.vertical)).toEqual(faces.filter((f) => !f.vertical));
+		const caps = inset.filter((f) => f.vertical);
+		expect(caps).toHaveLength(2);
+		const xs = caps.map((c) => c.points[0].x).sort((a, b) => a - b);
+		expect(xs[0]).toBeCloseTo(-0.1);
+		expect(xs[1]).toBeCloseTo(10.1);
+		for (const cap of caps) {
+			for (const p of cap.points) {
+				expect(p.x).toBeCloseTo(cap.points[0].x);
+				expect(p.z).toBeGreaterThanOrEqual(-0.1 - 1e-6);
+				expect(p.z).toBeLessThanOrEqual(6.1 + 1e-6);
+			}
+			expect(cap.fasciaEdges.every((edge) => !edge)).toBe(true);
+		}
+	});
+
+	it('fits each gable under the roof line: eave corners at the slope height, apex at the ridge', () => {
+		const cap = inset.find((f) => f.vertical)!;
+		const ys = cap.points.map((p) => p.y);
+		expect(Math.max(...ys)).toBeCloseTo(5); // ridge
+		expect(Math.min(...ys)).toBeCloseTo(3); // wall top / eave baseline
+		// Slope: 2 m rise over 3.5 m (overhung half-span) → at z = −0.1 the roof is 0.4 m in.
+		const eaveTop = cap.points.find((p) => Math.abs(p.z + 0.1) < 1e-6 && p.y > 3.01)!;
+		expect(eaveTop.y).toBeCloseTo(3 + (2 / 3.5) * 0.4);
+	});
+
+	it("pulls a shed's tall wall back under the overhang and drops its top to the roof there", () => {
+		const shed = buildShedFaces(expandRect(rect, overhang), 3, 2, '+z');
+		const result = insetVerticalRoofFaces(shed, rect, overhang, 0);
+		const tall = result.filter(
+			(f) => f.vertical && f.points.every((p) => Math.abs(p.z - 6) < 1e-6)
+		);
+		expect(tall).toHaveLength(1);
+		const top = Math.max(...tall[0].points.map((p) => p.y));
+		expect(top).toBeCloseTo(3 + 2 * (6.5 / 7));
+	});
+
+	it('changes nothing without an overhang', () => {
+		const flush = buildGableFaces(rect, 'x', 3, 2);
+		expect(insetVerticalRoofFaces(flush, rect, 0, 0.1)).toEqual(flush);
 	});
 });

@@ -78,6 +78,7 @@ import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
 import { GraphicsPipeline } from './graphics/GraphicsPipeline';
 import { foundationLocalFrame } from './building/FoundationLocalMath';
+import type { BuildingMaterialDefinition } from './building/MaterialTypes';
 import {
 	FLOOR_DETAIL_WOOD_STYLE,
 	GLASS_SURFACE_STYLE,
@@ -610,7 +611,8 @@ export class ThreeScene implements WorldRuntime {
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
-			materialManager: this.materialManager
+			materialManager: this.materialManager,
+			getEndWallStyle: (foundationId) => this.endWallStyleFor(foundationId)
 		});
 		this.scene.add(this.roofManager.group);
 
@@ -1775,6 +1777,35 @@ export class ThreeScene implements WorldRuntime {
 			)
 		);
 		return this.treeManager.getRenderStats(frustum);
+	}
+
+	/**
+	 * What a pitched roof's gable ends on a foundation should look like: the paint most of that
+	 * foundation's walls use (unpainted when there are none) and their thickness.
+	 */
+	private endWallStyleFor(foundationId: string): {
+		material?: BuildingMaterialDefinition;
+		wallThickness: number;
+	} {
+		const counts = new Map<string, { material?: BuildingMaterialDefinition; count: number }>();
+		let thickness = 0;
+		const add = (material: BuildingMaterialDefinition | undefined, wallThickness: number) => {
+			const key = material ? JSON.stringify(material) : '';
+			const entry = counts.get(key) ?? { material, count: 0 };
+			entry.count++;
+			counts.set(key, entry);
+			thickness = Math.max(thickness, wallThickness);
+		};
+		for (const wall of this.wallManager.getWallsForFoundation(foundationId))
+			add(wall.material, wall.thickness);
+		for (const path of this.wallPathManager.getPathsForFoundation(foundationId))
+			for (const segment of path.segments) add(segment.material, path.wallThickness);
+		let best: { material?: BuildingMaterialDefinition; count: number } | undefined;
+		for (const entry of counts.values()) if (!best || entry.count > best.count) best = entry;
+		return {
+			material: best?.material,
+			wallThickness: thickness || this.buildingSettings.wallThickness
+		};
 	}
 
 	/** Turns procedural materials on/off (same as the Graphics settings toggle). */

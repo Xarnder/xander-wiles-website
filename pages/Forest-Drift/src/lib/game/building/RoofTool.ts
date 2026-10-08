@@ -667,7 +667,8 @@ export class RoofTool implements BuildTool {
 					overhang: this.buildingSettings.roofOverhang,
 					profileSettings: this.currentProfileSettings()
 				},
-				buildingGridSize
+				buildingGridSize,
+				{ endWallOffset: this.buildingSettings.wallThickness / 2 }
 			);
 		} catch (error) {
 			if (error instanceof RoofFootprintError) {
