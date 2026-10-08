@@ -568,5 +568,5 @@ export function applySurfaceShader(
 		}
 		shader.fragmentShader = fragment;
 	};
-	setOwnShaderHook(material, hook, `fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}`);
+	setOwnShaderHook(material, hook, `fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}`, uniforms);
 }

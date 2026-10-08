@@ -59,7 +59,8 @@ export function createTreeMaterial(): {
 				)
 				.replace('#include <begin_vertex>', `#include <begin_vertex>\n${WIND_VERTEX}`);
 		},
-		'stylised-tree-wind'
+		'stylised-tree-wind',
+		wind
 	);
 	return { material, wind };
 }
