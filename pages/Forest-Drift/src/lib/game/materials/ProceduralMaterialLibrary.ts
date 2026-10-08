@@ -12,7 +12,19 @@ import type {
 	ResolvedMaterialRecipe,
 	SurfaceStyle
 } from './ProceduralMaterialTypes';
-import type { SurfaceMappingBinder } from './SurfaceMappingBinder';
+import {
+	applySurfaceShader,
+	createSurfaceShaderUniforms,
+	type SurfaceShaderKind,
+	type SurfaceShaderUniforms
+} from './shader/surfaceShader';
+import {
+	configureSurfaceUniforms,
+	isShaderLaidOut,
+	shaderQualityFor,
+	surfaceShaderKindFor
+} from './shader/surfaceShaderPresets';
+import { clearSurfaceMappingSpec, type SurfaceMappingBinder } from './SurfaceMappingBinder';
 
 /**
  * Number of distinct texture variations per material type a world can draw from. The world seed
@@ -23,7 +35,7 @@ import type { SurfaceMappingBinder } from './SurfaceMappingBinder';
 export const MATERIAL_SEED_SLOTS = 4;
 
 /** Unreferenced texture sets kept around (LRU) before being disposed — covers toggling quality/palette back and forth. */
-const MAX_IDLE_TEXTURE_SETS = 6;
+const MAX_IDLE_TEXTURE_SETS = 4;
 
 export interface ProceduralBindingOptions {
 	/** Painted colour (`#RRGGBB`): the texture is tinted so its average equals this colour. */
@@ -69,6 +81,10 @@ interface Binding {
 	applied: TextureSet | null;
 	/** Key of the texture set this binding currently wants (guards against stale async results). */
 	wantedKey: string | null;
+	/** World-scale shader treatment for the wanted recipe (null = plain texture sampling). */
+	shaderKind: SurfaceShaderKind | null;
+	shaderRecipe: ResolvedMaterialRecipe | null;
+	uniforms: SurfaceShaderUniforms;
 }
 
 export interface ProceduralMaterialLibraryOptions {
@@ -77,6 +93,12 @@ export interface ProceduralMaterialLibraryOptions {
 	quality?: MaterialQuality;
 	palette?: MaterialPaletteId;
 	enabled?: boolean;
+	/**
+	 * World-scale anti-tiling (default on): masonry and paving are laid out per pixel in the shader,
+	 * grass gets macro ground-cover variation, and stochastic textures are sampled without a tile
+	 * grid. Off = the original repeated texture tiles, kept for comparison.
+	 */
+	antiTiling?: boolean;
 	anisotropy?: number;
 	/** Fired once per material this library creates itself (CSM registration). */
 	onMaterialCreated?: (material: THREE.Material) => void;
@@ -132,6 +154,7 @@ export class ProceduralMaterialLibrary {
 	private quality: MaterialQuality;
 	private palette: MaterialPaletteId;
 	private enabled: boolean;
+	private antiTiling: boolean;
 	private anisotropy: number;
 	private worldSeed = '';
 	private disposed = false;
@@ -143,6 +166,7 @@ export class ProceduralMaterialLibrary {
 		this.quality = options.quality ?? 'medium';
 		this.palette = options.palette ?? DEFAULT_MATERIAL_PALETTE_ID;
 		this.enabled = options.enabled ?? true;
+		this.antiTiling = options.antiTiling ?? true;
 		this.anisotropy = options.anisotropy ?? 1;
 	}
 
@@ -156,6 +180,17 @@ export class ProceduralMaterialLibrary {
 	setEnabled(enabled: boolean): void {
 		if (this.enabled === enabled) return;
 		this.enabled = enabled;
+		this.refreshAll();
+	}
+
+	isAntiTiling(): boolean {
+		return this.antiTiling;
+	}
+
+	/** Switches between world-scale non-repeating surfaces and the original tiled textures. */
+	setAntiTiling(antiTiling: boolean): void {
+		if (this.antiTiling === antiTiling) return;
+		this.antiTiling = antiTiling;
 		this.refreshAll();
 	}
 
@@ -217,6 +252,19 @@ export class ProceduralMaterialLibrary {
 		};
 	}
 
+	/** The texture set currently applied to a bound material (debug/gallery inspection), or `null` while it is flat. */
+	getAppliedMaps(material: THREE.Material): {
+		key: string;
+		map: THREE.DataTexture;
+		normalMap: THREE.DataTexture;
+		ormMap: THREE.DataTexture;
+	} | null {
+		const applied = this.bindings.get(material)?.applied;
+		return applied
+			? { key: applied.key, map: applied.map, normalMap: applied.normalMap, ormMap: applied.ormMap }
+			: null;
+	}
+
 	/** The recipe a style resolves to under the current quality/palette/world seed. */
 	resolveRecipe(style: Pick<SurfaceStyle, 'type' | 'options'>): ResolvedMaterialRecipe {
 		const options: ProceduralMaterialOptions = { palette: this.palette, ...style.options };
@@ -275,7 +323,10 @@ export class ProceduralMaterialLibrary {
 				options,
 				flat: captureFlatLook(material),
 				applied: null,
-				wantedKey: null
+				wantedKey: null,
+				shaderKind: null,
+				shaderRecipe: null,
+				uniforms: createSurfaceShaderUniforms()
 			};
 			this.bindings.set(material, binding);
 			material.addEventListener('dispose', () => this.unbind(material, false));
@@ -289,9 +340,8 @@ export class ProceduralMaterialLibrary {
 		).defaultAttributeValues = {
 			color: [1, 1, 1]
 		};
-		if (style.mapping !== 'native' && this.binder) {
-			this.binder.watch(material, { mode: style.mapping, weathering: style.type !== 'glass' });
-		}
+		if (style.mapping === 'native') clearSurfaceMappingSpec(material);
+		else this.binder?.watch(material, { mode: style.mapping, weathering: style.type !== 'glass' });
 		this.applyBinding(binding);
 	}
 
@@ -334,7 +384,17 @@ export class ProceduralMaterialLibrary {
 			this.restoreFlat(binding);
 			return;
 		}
-		const recipe = this.resolveRecipe(binding.style);
+		let recipe = this.resolveRecipe(binding.style);
+		const shaderKind = this.antiTiling ? surfaceShaderKindFor(recipe) : null;
+		if (isShaderLaidOut(shaderKind)) {
+			// The shader places the stones; the texture only needs to supply stone grain.
+			recipe = this.resolveRecipe({
+				...binding.style,
+				options: { ...binding.style.options, structure: false }
+			});
+		}
+		binding.shaderKind = shaderKind;
+		binding.shaderRecipe = recipe;
 		const uvUnit = binding.style.mapping === 'native' ? (binding.options.uvUnitMeters ?? 1) : 1;
 		const key = this.textureKey(recipe, uvUnit);
 		binding.wantedKey = key;
@@ -446,7 +506,12 @@ export class ProceduralMaterialLibrary {
 		material.metalness = 0;
 
 		const mean = set.meanLinear;
-		if (binding.options.tint) {
+		const laidOut = isShaderLaidOut(binding.shaderKind);
+		if (laidOut) {
+			// The shader multiplies in palette colours (and any paint as a ratio); the grain map is
+			// normalised to an average of 1 so it only adds detail.
+			material.color.setRGB(1 / mean[0], 1 / mean[1], 1 / mean[2]);
+		} else if (binding.options.tint) {
 			const tint = new THREE.Color(binding.options.tint);
 			material.color.setRGB(tint.r / mean[0], tint.g / mean[1], tint.b / mean[2]);
 		} else if (binding.options.detail) {
@@ -472,12 +537,28 @@ export class ProceduralMaterialLibrary {
 			// surfaces get theirs from the binder's weathering pass.
 			material.vertexColors = true;
 		}
+		if (binding.shaderKind && binding.shaderRecipe) {
+			const uvUnit = binding.style.mapping === 'native' ? (binding.options.uvUnitMeters ?? 1) : 1;
+			configureSurfaceUniforms(
+				binding.uniforms,
+				binding.shaderRecipe,
+				uvUnit,
+				laidOut && binding.options.tint ? new THREE.Color(binding.options.tint) : null
+			);
+		}
+		applySurfaceShader(
+			material,
+			binding.shaderKind,
+			binding.uniforms,
+			shaderQualityFor(this.quality)
+		);
 		if (programChanged) material.needsUpdate = true;
 	}
 
 	private restoreFlat(binding: Binding): void {
 		const material = binding.material;
 		const flat = binding.flat;
+		applySurfaceShader(material, null, binding.uniforms, 0);
 		const programChanged =
 			material.map !== flat.map ||
 			material.normalMap !== flat.normalMap ||

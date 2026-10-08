@@ -8,6 +8,7 @@ import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { setBaseShaderHook } from '../materials/shader/shaderHooks';
 import {
 	GRAPHICS_PRESETS,
 	nextGraphicsQuality,
@@ -128,7 +129,13 @@ export class GraphicsPipeline {
 			this.registeredMaterials.delete(material);
 			this.csm?.shaders.delete(material);
 		});
-		this.csm?.setupMaterial(material);
+		if (this.csm) this.setupCsmMaterial(this.csm, material);
+	}
+
+	/** CSM overwrites `onBeforeCompile`; record its hook so it composes with any procedural shader extension (see shaderHooks.ts). */
+	private setupCsmMaterial(csm: CSM, material: THREE.Material): void {
+		csm.setupMaterial(material);
+		setBaseShaderHook(material, material.onBeforeCompile);
 	}
 
 	getQuality(): GraphicsQuality {
@@ -352,7 +359,7 @@ export class GraphicsPipeline {
 				light.intensity = this.sunIntensity;
 			});
 
-			for (const material of this.registeredMaterials) csm.setupMaterial(material);
+			for (const material of this.registeredMaterials) this.setupCsmMaterial(csm, material);
 			this.csm = csm;
 		} catch (error) {
 			// Graceful fallback: an unsupported combination (extremely old/limited WebGL context)
@@ -479,6 +486,8 @@ export class GraphicsPipeline {
 		this.csm.remove();
 		this.csm.dispose();
 		this.csm = null;
+		// CSM.dispose deletes every material's onBeforeCompile; re-compose any procedural extension.
+		for (const material of this.registeredMaterials) setBaseShaderHook(material, null);
 	}
 
 	private disposeComposer(): void {

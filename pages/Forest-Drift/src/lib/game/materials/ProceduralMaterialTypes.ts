@@ -116,6 +116,11 @@ export interface ProceduralMaterialOptions<
 	quality?: MaterialQuality;
 	/** Timber only: lay the texture out as separate boards with seams (floors, door leaves). */
 	planks?: boolean;
+	/**
+	 * Masonry/paving: `false` generates structureless stone grain only — used when the world-scale
+	 * shader lays out the stones itself (see `shader/surfaceShader.ts`). Default `true`.
+	 */
+	structure?: boolean;
 }
 
 /** An sRGB colour as `[r, g, b]` in 0..1 — plain data so recipes survive `postMessage` and JSON hashing. */
@@ -140,6 +145,8 @@ export interface ResolvedMaterialRecipe {
 	moss: number;
 	variation: number;
 	planks: boolean;
+	/** False → stone generators omit joints and layout (detail-only map for the world-scale shader). */
+	structure: boolean;
 	quality: MaterialQuality;
 	/** Multiplier applied to height-derived normals. */
 	normalStrength: number;

@@ -82,7 +82,7 @@ export const MATERIAL_PRESETS: Readonly<Record<ProceduralMaterialType, MaterialP
 		seed: 0x9a71,
 		tileWidth: 3,
 		tileHeight: 3,
-		roughness: 0.88,
+		roughness: 0.93,
 		weathering: 0.4,
 		dirt: 0.4,
 		moss: 0.2,
@@ -182,6 +182,7 @@ export function resolveMaterialRecipe<T extends ProceduralMaterialType>(
 		moss: quantize(clampUnit(options.moss, preset.moss)),
 		variation: quantize(clampUnit(options.variation, preset.variation)),
 		planks,
+		structure: options.structure !== false,
 		quality: options.quality ?? defaultQuality,
 		normalStrength: preset.normalStrength,
 		colors: resolvePaletteColors(palette, type, variant)
@@ -211,6 +212,7 @@ export function recipeCacheKey(recipe: ResolvedMaterialRecipe): string {
 		recipe.moss,
 		recipe.variation,
 		recipe.planks ? 'planks' : 'solid',
+		recipe.structure ? 'structured' : 'detail',
 		recipe.quality,
 		recipe.normalStrength,
 		colors

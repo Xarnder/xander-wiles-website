@@ -54,6 +54,7 @@ export interface GameSettingsActions {
 	graphicsExport: () => void;
 	graphicsMaterials: () => void;
 	graphicsLighting: () => void;
+	graphicsAntiTiling: () => void;
 	musicLoop: (key: string, value: number) => void;
 	musicWave: () => void;
 	musicVolume: () => void;

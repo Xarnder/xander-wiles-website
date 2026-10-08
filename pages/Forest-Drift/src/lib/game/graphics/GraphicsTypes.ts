@@ -211,6 +211,8 @@ export interface GraphicsSettings {
 	aoTuning: AoTuning;
 	/** Procedural PBR materials on buildings and terrain (see `materials/`). Off = the original flat-colour look, kept for comparison and for very weak devices. */
 	proceduralMaterials: boolean;
+	/** World-scale, non-repeating masonry/paving/grass (see `materials/shader/`). Off = repeated texture tiles, for comparison. */
+	antiTiling: boolean;
 	/**
 	 * Conservative lighting balance on top of the world's own sky settings (never written into saved
 	 * worlds): a slightly stronger warm sun against a less blue, lower ambient, so surface relief
@@ -250,6 +252,7 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		showRenderStats: false,
 		aoTuning: createDefaultAoTuning(),
 		proceduralMaterials: true,
+		antiTiling: true,
 		enhancedLighting: true
 	};
 }

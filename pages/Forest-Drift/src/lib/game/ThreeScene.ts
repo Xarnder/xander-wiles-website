@@ -477,6 +477,7 @@ export class ThreeScene implements WorldRuntime {
 		const lookParams = new URLSearchParams(location.search);
 		if (lookParams.get('materials') === 'flat') this.graphicsSettings.proceduralMaterials = false;
 		if (lookParams.get('lighting') === 'classic') this.graphicsSettings.enhancedLighting = false;
+		if (lookParams.get('tiling') === 'legacy') this.graphicsSettings.antiTiling = false;
 		this.surfaceBinder = new SurfaceMappingBinder({
 			getFoundationOrigin: (foundationId) => {
 				const foundation = this.foundationManager.getFoundation(foundationId);
@@ -493,6 +494,7 @@ export class ThreeScene implements WorldRuntime {
 			binder: this.surfaceBinder,
 			quality: materialQualityForGraphics(this.graphicsSettings.quality),
 			enabled: this.graphicsSettings.proceduralMaterials,
+			antiTiling: this.graphicsSettings.antiTiling,
 			anisotropy: this.materialAnisotropy(),
 			onMaterialCreated: (material) => this.graphicsPipeline.registerMaterial(material)
 		});
@@ -1155,6 +1157,7 @@ export class ThreeScene implements WorldRuntime {
 				graphicsMaterials: () =>
 					this.setProceduralMaterialsEnabled(this.graphicsSettings.proceduralMaterials),
 				graphicsLighting: () => this.applySkySettings(),
+				graphicsAntiTiling: () => this.setAntiTilingEnabled(this.graphicsSettings.antiTiling),
 				musicLoop: (key, value) => {
 					this.music.changeLoop({ [key]: value });
 				},
@@ -1715,6 +1718,12 @@ export class ThreeScene implements WorldRuntime {
 			terrainColorOptions.groundVariation = enabled;
 			this.dirty.settings = true;
 		}
+	}
+
+	/** Switches between world-scale non-repeating surfaces and the original tiled textures. */
+	setAntiTilingEnabled(enabled: boolean): void {
+		this.graphicsSettings.antiTiling = enabled;
+		this.materialLibrary.setAntiTiling(enabled);
 	}
 
 	/** Resolves once every procedural texture requested so far is generated, applied and mapped — used by screenshot tests. */

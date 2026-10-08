@@ -56,6 +56,15 @@ interface StoneStyle {
 
 type StoneLocator = (u: number, v: number, s: number, t: number, out: StoneHit) => void;
 
+/** No layout at all — one endless stone face. Used for detail-only maps (`recipe.structure === false`). */
+const plainLocator: StoneLocator = (_u, _v, _s, _t, out) => {
+	out.edge = 1;
+	out.id = 0.5;
+	out.id2 = 0.5;
+	out.localX = 0;
+	out.localY = 0;
+};
+
 /** Running-bond courses: course heights vary, each course has its own random block lengths and offset. */
 function coursedLocator(
 	tileWidth: number,
@@ -125,11 +134,16 @@ function cellularLocator(
 function paintStones(
 	canvas: SurfaceCanvas,
 	recipe: ResolvedMaterialRecipe,
-	locate: StoneLocator,
+	requestedLocate: StoneLocator,
 	style: StoneStyle,
 	colors: { stone: RgbColor; dark: RgbColor; light: RgbColor; dirt: RgbColor; moss: RgbColor }
 ): void {
 	const { size, tileWidth, tileHeight } = canvas;
+	// Detail-only: the world-scale shader supplies layout, dirt and moss; this map is pure grain.
+	const detailOnly = !recipe.structure;
+	const locate = detailOnly ? plainLocator : requestedLocate;
+	const dirtAmount = detailOnly ? 0 : recipe.dirt;
+	const mossAmount = detailOnly ? 0 : recipe.moss;
 	const seeds = layerSeeds(recipe.seed, LAYER);
 	const variation = recipe.variation;
 	const weathering = recipe.weathering;
@@ -180,10 +194,10 @@ function paintStones(
 			// Worn, slightly lighter arrises.
 			canvas.mixColor(i, colors.light, (1 - bevel) * stoneMask * 0.22 * (0.4 + weathering));
 			if (style.worn) canvas.mixColor(i, colors.light, bevel * 0.08 * (1 - hit.id2));
-			canvas.mixColor(i, colors.dirt, smoothstep(0.55, 0.95, dirtField) * recipe.dirt * 0.18);
+			canvas.mixColor(i, colors.dirt, smoothstep(0.55, 0.95, dirtField) * dirtAmount * 0.18);
 
 			// Joint fill: mortar or sand/soil, dirtier and mossier than the stones.
-			const jointColor = mixRgb(style.jointColor, colors.dirt, recipe.dirt * 0.45);
+			const jointColor = mixRgb(style.jointColor, colors.dirt, dirtAmount * 0.45);
 			// Joints read darker than the stone faces: shadowed, damp and dirt-filled.
 			const jointShade = 0.72 + grit * 0.08;
 			const jr = jointColor[0] * jointShade;
@@ -192,7 +206,7 @@ function paintStones(
 			canvas.mixColor(i, [jr, jg, jb], 1 - stoneMask);
 
 			// Moss: in joints and creeping onto the edges of stones in damp patches.
-			const mossPatch = smoothstep(0.45, 0.8, mossField) * recipe.moss;
+			const mossPatch = smoothstep(0.45, 0.8, mossField) * mossAmount;
 			const mossInJoint = (1 - stoneMask) * mossPatch;
 			const mossOnEdge =
 				stoneMask * (1 - bevel) * mossPatch * 0.5 * smoothstep(0.3, 0.7, grit * 0.5 + 0.5);

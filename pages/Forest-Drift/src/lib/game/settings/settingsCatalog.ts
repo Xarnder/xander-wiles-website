@@ -2377,6 +2377,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.graphicsMaterials
 					),
 					boolField(
+						'graphics.antiTiling',
+						'Non-repeating surfaces',
+						graphics,
+						'antiTiling',
+						actions.graphicsAntiTiling
+					),
+					boolField(
 						'graphics.lighting',
 						'Enhanced lighting',
 						graphics,

@@ -64,18 +64,18 @@ const ALPINE: MaterialPaletteDefinition = {
 			gap: '#16191C'
 		},
 		masonry: {
-			stone: '#9D968A',
-			dark: '#787266',
-			light: '#B6AFA2',
-			mortar: '#8E8778',
+			stone: '#968C7C',
+			dark: '#70685C',
+			light: '#AFA594',
+			mortar: '#857D6E',
 			dirt: '#5C5346',
 			moss: '#56633A'
 		},
 		paving: {
-			stone: '#978B79',
-			dark: '#74695A',
-			light: '#B1A693',
-			joint: '#6B5F50',
+			stone: '#9C8C75',
+			dark: '#776955',
+			light: '#B8A78B',
+			joint: '#7A6D5A',
 			moss: '#55633A'
 		},
 		ground: {
