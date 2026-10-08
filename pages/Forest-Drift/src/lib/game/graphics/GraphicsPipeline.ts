@@ -239,7 +239,11 @@ export class GraphicsPipeline {
 	/** Advances CSM's per-frame light placement and the dynamic-resolution controller. Call once per frame before `render()`. */
 	update(deltaSeconds: number): void {
 		if (this.csm) {
-			this.csm.lightDirection.copy(this.sunDirection);
+			// CSM's lightDirection is the direction light TRAVELS (its default, (1,-1,1), points down);
+			// sunDirection points TOWARD the sun, so it must be negated. Copying it unnegated lit
+			// the world from below: every up-facing surface (terrain, roofs, paving) lost direct sun
+			// whenever shadows were on, leaving only blue skylight.
+			this.csm.lightDirection.copy(this.sunDirection).negate();
 			this.csm.update();
 		}
 		this.updateDynamicResolution(deltaSeconds);
@@ -338,7 +342,7 @@ export class GraphicsPipeline {
 				maxFar: preset.shadowDistance,
 				mode: 'practical',
 				shadowMapSize: preset.shadowMapSizes[0] ?? 2048,
-				lightDirection: this.sunDirection.clone(),
+				lightDirection: this.sunDirection.clone().negate(),
 				lightIntensity: this.sunIntensity,
 				lightNear: 1,
 				lightFar: 2000,
