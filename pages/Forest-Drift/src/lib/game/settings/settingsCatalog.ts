@@ -2384,6 +2384,20 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.graphicsAntiTiling
 					),
 					boolField(
+						'graphics.relief',
+						'Surface relief (bump maps)',
+						graphics,
+						'surfaceRelief',
+						actions.graphicsSurfaceDetail
+					),
+					boolField(
+						'graphics.subdivision',
+						'Surface subdivision (more triangles)',
+						graphics,
+						'surfaceSubdivision',
+						actions.graphicsSurfaceDetail
+					),
+					boolField(
 						'graphics.lighting',
 						'Enhanced lighting',
 						graphics,

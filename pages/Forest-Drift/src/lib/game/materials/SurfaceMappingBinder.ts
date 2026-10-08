@@ -39,6 +39,15 @@ export interface SurfaceMappingBinderOptions {
 	getFoundationOrigin: (foundationId: string) => THREE.Vector3 | null;
 	/** World seed — combined with each foundation id for per-building variation. */
 	getWorldSeed: () => string;
+	/** Subdivide large faces for finer vertex colour variation (default off — see `GraphicsPreset.materialSubdivision`). */
+	subdivide?: boolean;
+}
+
+const BASE_GEOMETRY_KEY = 'surfaceMappingBaseGeometry';
+
+interface BaseGeometry {
+	attributes: Record<string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute>;
+	groups: { start: number; count: number; materialIndex?: number }[];
 }
 
 /** Stops the binder mapping meshes of this material (it now keeps its own UVs). */
@@ -74,8 +83,18 @@ export class SurfaceMappingBinder {
 	/** Bumped by `invalidateAll` — part of every signature, so all geometry re-maps lazily. */
 	private generation = 0;
 
+	private subdivide: boolean;
+
 	constructor(options: SurfaceMappingBinderOptions) {
 		this.options = options;
+		this.subdivide = options.subdivide ?? false;
+	}
+
+	/** Turns face subdivision on/off; every watched geometry re-maps (and un-subdivides) lazily. */
+	setSubdivide(subdivide: boolean): void {
+		if (this.subdivide === subdivide) return;
+		this.subdivide = subdivide;
+		this.invalidateAll();
 	}
 
 	watch(material: THREE.Material, spec: SurfaceMappingSpec): void {
@@ -179,7 +198,14 @@ export class SurfaceMappingBinder {
 		const signature = this.signatureFor(mesh);
 		if (signature === '') return;
 		if (geometry.index) deindexInPlace(geometry);
-		subdivideLargeTriangles(geometry, MAX_MAPPED_EDGE);
+		restoreBaseGeometry(geometry);
+		if (this.subdivide) {
+			geometry.userData[BASE_GEOMETRY_KEY] = {
+				attributes: { ...geometry.attributes },
+				groups: geometry.groups.map((group) => ({ ...group }))
+			} satisfies BaseGeometry;
+			subdivideLargeTriangles(geometry, MAX_MAPPED_EDGE);
+		}
 		const position = geometry.getAttribute('position');
 		const vertexCount = position.count;
 		if (vertexCount < 3) return;
@@ -227,6 +253,19 @@ export class SurfaceMappingBinder {
 			positionVersion: (geometry.getAttribute('position') as THREE.BufferAttribute).version
 		} satisfies AppliedRecord;
 	}
+}
+
+/** Undoes a previous `subdivideLargeTriangles` done by the binder (subdivision switched off). */
+function restoreBaseGeometry(geometry: THREE.BufferGeometry): void {
+	const base = geometry.userData[BASE_GEOMETRY_KEY] as BaseGeometry | undefined;
+	if (!base) return;
+	for (const name of Object.keys(geometry.attributes)) {
+		if (!(name in base.attributes)) geometry.deleteAttribute(name);
+	}
+	for (const [name, attribute] of Object.entries(base.attributes))
+		geometry.setAttribute(name, attribute);
+	geometry.groups = base.groups.map((group) => ({ ...group }));
+	delete geometry.userData[BASE_GEOMETRY_KEY];
 }
 
 /**

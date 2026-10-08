@@ -94,6 +94,8 @@ export class MaterialGalleryScene {
 
 		this.library = new ProceduralMaterialLibrary({
 			binder: this.binder,
+			// An inspection tool: always show surface relief (the game enables it at Ultra).
+			relief: true,
 			anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
 		});
 

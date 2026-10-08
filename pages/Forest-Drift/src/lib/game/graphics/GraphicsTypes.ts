@@ -44,6 +44,11 @@ export interface GraphicsPreset {
 
 	/** Lower bound `renderScale` dynamic resolution may drop to for this preset (see GraphicsSettings.dynamicResolutionEnabled). 1 disables downscaling headroom entirely. */
 	readonly minDynamicResolutionScale: number;
+
+	/** Procedural surface relief (normal maps + shader bump) by default at this preset — see GraphicsSettings.surfaceRelief. */
+	readonly materialRelief: boolean;
+	/** Subdivide large building faces for finer colour variation by default — see GraphicsSettings.surfaceSubdivision. */
+	readonly materialSubdivision: boolean;
 }
 
 export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>> = {
@@ -69,7 +74,9 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		terrainRenderDistanceMultiplier: 0.75,
 		treeRenderDistanceMultiplier: 0.6,
 		// Never dynamic-resolution-downscale below full res at LOW either — see pixelRatioCap's comment.
-		minDynamicResolutionScale: 1
+		minDynamicResolutionScale: 1,
+		materialRelief: false,
+		materialSubdivision: false
 	},
 	medium: {
 		label: 'Medium',
@@ -88,7 +95,9 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		bloomThreshold: 1,
 		terrainRenderDistanceMultiplier: 0.85,
 		treeRenderDistanceMultiplier: 0.8,
-		minDynamicResolutionScale: 0.65
+		minDynamicResolutionScale: 0.65,
+		materialRelief: false,
+		materialSubdivision: false
 	},
 	high: {
 		label: 'High',
@@ -107,7 +116,9 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		bloomThreshold: 1,
 		terrainRenderDistanceMultiplier: 1,
 		treeRenderDistanceMultiplier: 1,
-		minDynamicResolutionScale: 0.7
+		minDynamicResolutionScale: 0.7,
+		materialRelief: false,
+		materialSubdivision: false
 	},
 	ultra: {
 		label: 'Ultra',
@@ -129,7 +140,9 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		bloomThreshold: 0.92,
 		terrainRenderDistanceMultiplier: 1,
 		treeRenderDistanceMultiplier: 1,
-		minDynamicResolutionScale: 0.75
+		minDynamicResolutionScale: 0.75,
+		materialRelief: true,
+		materialSubdivision: true
 	}
 };
 
@@ -219,6 +232,10 @@ export interface GraphicsSettings {
 	 * reads and colours stop drifting cyan. See `ENHANCED_LIGHTING`. Off = the original balance.
 	 */
 	enhancedLighting: boolean;
+	/** Procedural surface relief: normal maps and stone bump. Reset to the preset's `materialRelief` on every quality change; toggle freely in between. */
+	surfaceRelief: boolean;
+	/** Extra triangles on large faces for finer colour variation. Reset to the preset's `materialSubdivision` on every quality change. */
+	surfaceSubdivision: boolean;
 }
 
 /** The adjustments `enhancedLighting` applies — multipliers and tints, so day/night and every saved sky setting still drive the result. */
@@ -253,7 +270,9 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		aoTuning: createDefaultAoTuning(),
 		proceduralMaterials: true,
 		antiTiling: true,
-		enhancedLighting: true
+		enhancedLighting: true,
+		surfaceRelief: GRAPHICS_PRESETS.high.materialRelief,
+		surfaceSubdivision: GRAPHICS_PRESETS.high.materialSubdivision
 	};
 }
 

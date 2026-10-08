@@ -31,6 +31,18 @@ describe('nextGraphicsQuality', () => {
 });
 
 describe('GRAPHICS_PRESETS', () => {
+	it('keeps surface relief and subdivision off by default, on only at Ultra', () => {
+		for (const quality of ['low', 'medium', 'high'] as const) {
+			expect(GRAPHICS_PRESETS[quality].materialRelief).toBe(false);
+			expect(GRAPHICS_PRESETS[quality].materialSubdivision).toBe(false);
+		}
+		expect(GRAPHICS_PRESETS.ultra.materialRelief).toBe(true);
+		expect(GRAPHICS_PRESETS.ultra.materialSubdivision).toBe(true);
+		const defaults = createDefaultGraphicsSettings();
+		expect(defaults.surfaceRelief).toBe(false);
+		expect(defaults.surfaceSubdivision).toBe(false);
+	});
+
 	it('defines exactly the four quality levels', () => {
 		expect(Object.keys(GRAPHICS_PRESETS).sort()).toEqual([...QUALITIES].sort());
 	});

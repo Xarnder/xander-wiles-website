@@ -460,6 +460,9 @@ export class ThreeScene implements WorldRuntime {
 				this.graphicsSettingsStore.setQuality(quality);
 				this.materialLibrary.setQuality(materialQualityForGraphics(quality));
 				this.materialLibrary.setAnisotropy(this.materialAnisotropy());
+				this.graphicsSettings.surfaceRelief = GRAPHICS_PRESETS[quality].materialRelief;
+				this.graphicsSettings.surfaceSubdivision = GRAPHICS_PRESETS[quality].materialSubdivision;
+				this.applySurfaceDetail();
 				this.applyRenderDistanceForQuality(quality);
 				options.onGraphicsQualityChange?.(quality);
 			}
@@ -478,6 +481,10 @@ export class ThreeScene implements WorldRuntime {
 		if (lookParams.get('materials') === 'flat') this.graphicsSettings.proceduralMaterials = false;
 		if (lookParams.get('lighting') === 'classic') this.graphicsSettings.enhancedLighting = false;
 		if (lookParams.get('tiling') === 'legacy') this.graphicsSettings.antiTiling = false;
+		// Relief and subdivision follow the active preset (on at Ultra); the settings toggles override.
+		const startPreset = GRAPHICS_PRESETS[this.graphicsSettings.quality];
+		this.graphicsSettings.surfaceRelief = startPreset.materialRelief;
+		this.graphicsSettings.surfaceSubdivision = startPreset.materialSubdivision;
 		this.surfaceBinder = new SurfaceMappingBinder({
 			getFoundationOrigin: (foundationId) => {
 				const foundation = this.foundationManager.getFoundation(foundationId);
@@ -488,13 +495,15 @@ export class ThreeScene implements WorldRuntime {
 				);
 				return new THREE.Vector3(frame.originWorldX, frame.originWorldY, frame.originWorldZ);
 			},
-			getWorldSeed: () => this.settings.seed
+			getWorldSeed: () => this.settings.seed,
+			subdivide: this.graphicsSettings.surfaceSubdivision
 		});
 		this.materialLibrary = new ProceduralMaterialLibrary({
 			binder: this.surfaceBinder,
 			quality: materialQualityForGraphics(this.graphicsSettings.quality),
 			enabled: this.graphicsSettings.proceduralMaterials,
 			antiTiling: this.graphicsSettings.antiTiling,
+			relief: this.graphicsSettings.surfaceRelief,
 			anisotropy: this.materialAnisotropy(),
 			onMaterialCreated: (material) => this.graphicsPipeline.registerMaterial(material)
 		});
@@ -1158,6 +1167,7 @@ export class ThreeScene implements WorldRuntime {
 					this.setProceduralMaterialsEnabled(this.graphicsSettings.proceduralMaterials),
 				graphicsLighting: () => this.applySkySettings(),
 				graphicsAntiTiling: () => this.setAntiTilingEnabled(this.graphicsSettings.antiTiling),
+				graphicsSurfaceDetail: () => this.applySurfaceDetail(),
 				musicLoop: (key, value) => {
 					this.music.changeLoop({ [key]: value });
 				},
@@ -1718,6 +1728,12 @@ export class ThreeScene implements WorldRuntime {
 			terrainColorOptions.groundVariation = enabled;
 			this.dirty.settings = true;
 		}
+	}
+
+	/** Applies the relief / subdivision settings (bump maps and extra triangles). */
+	applySurfaceDetail(): void {
+		this.materialLibrary.setRelief(this.graphicsSettings.surfaceRelief);
+		this.surfaceBinder.setSubdivide(this.graphicsSettings.surfaceSubdivision);
 	}
 
 	/** Switches between world-scale non-repeating surfaces and the original tiled textures. */

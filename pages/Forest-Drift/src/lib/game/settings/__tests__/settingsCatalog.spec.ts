@@ -46,6 +46,7 @@ function noopActions(): GameSettingsActions {
 		graphicsMaterials: () => {},
 		graphicsLighting: () => {},
 		graphicsAntiTiling: () => {},
+		graphicsSurfaceDetail: () => {},
 		musicLoop: () => {},
 		musicWave: () => {},
 		musicVolume: () => {},

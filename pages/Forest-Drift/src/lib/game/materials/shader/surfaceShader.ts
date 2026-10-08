@@ -384,6 +384,7 @@ FsSurface fsEvaluate(vec2 uvMetres) {
 	float far = smoothstep(jointHalf * 1.5, jointHalf * 6.0, px);
 	color = mix(color, mix(stone, joint, 0.2), far * 0.4);
 
+	#if FS_RELIEF
 	// Relief as an ANALYTIC slope (metres of height per metre of surface), projected to screen
 	// space below. Differentiating a per-pixel height with dFdx would only resolve 2×2-pixel blocks;
 	// the layout knows exactly how far and in which direction the nearest joint is, so the chamfer,
@@ -404,6 +405,9 @@ FsSurface fsEvaluate(vec2 uvMetres) {
 	float fine = 1.0 - smoothstep(0.25, 0.6, px * 32.0);
 	slope += fsNoiseGrad(p * 9.0 + cell.id * 3.1) * 9.0 * faceAmp * coarse * s1;
 	slope += fsNoiseGrad(p * 32.0 + cell.id * 1.7) * 32.0 * faceAmp * 0.3 * fine * s1;
+	#else
+	vec2 slope = vec2(0.0);
+	#endif
 
 	FsSurface surface;
 	surface.color = color * uFsTint;
@@ -496,7 +500,9 @@ export function applySurfaceShader(
 	material: THREE.Material,
 	kind: SurfaceShaderKind | null,
 	uniforms: SurfaceShaderUniforms,
-	quality: SurfaceShaderQuality
+	quality: SurfaceShaderQuality,
+	/** Bump relief (stone chamfers, bevels, rough faces). Off = flat shading of the same layout. */
+	relief = true
 ): void {
 	if (!kind) {
 		setOwnShaderHook(material, null);
@@ -508,6 +514,7 @@ export function applySurfaceShader(
 		const defines = [
 			`#define FS_QUALITY ${quality}`,
 			`#define FS_OCTAVES ${quality === 0 ? 2 : quality === 1 ? 3 : 4}`,
+			`#define FS_RELIEF ${relief ? 1 : 0}`,
 			kind === 'coursed' ? '#define FS_COURSED' : ''
 		].join('\n');
 
@@ -535,7 +542,9 @@ export function applySurfaceShader(
 				)
 				.replace(
 					'#include <normal_fragment_maps>',
-					'#include <normal_fragment_maps>\nnormal = fsPerturbNormal(-vViewPosition, normal, fsSurface.dHdxy, faceDirection);'
+					relief
+						? '#include <normal_fragment_maps>\nnormal = fsPerturbNormal(-vViewPosition, normal, fsSurface.dHdxy, faceDirection);'
+						: '#include <normal_fragment_maps>'
 				)
 				.replace(
 					'#include <aomap_fragment>',
@@ -544,5 +553,5 @@ export function applySurfaceShader(
 		}
 		shader.fragmentShader = fragment;
 	};
-	setOwnShaderHook(material, hook, `fs:${kind}:${quality}`);
+	setOwnShaderHook(material, hook, `fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}`);
 }

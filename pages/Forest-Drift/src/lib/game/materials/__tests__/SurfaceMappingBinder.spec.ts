@@ -133,6 +133,23 @@ describe('SurfaceMappingBinder', () => {
 		expect(mesh.geometry.getAttribute('uv')).toBeDefined();
 	});
 
+	it('does not subdivide by default, and restores the original triangles when switched off', () => {
+		const { binder, material, root } = setup();
+		const mesh = new THREE.Mesh(new THREE.BoxGeometry(12, 3, 0.3), material);
+		root.add(mesh);
+		binder.mapNow(root);
+		expect(mesh.geometry.getAttribute('position').count).toBe(36);
+
+		binder.setSubdivide(true);
+		binder.mapNow(root);
+		expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(36);
+
+		binder.setSubdivide(false);
+		binder.mapNow(root);
+		expect(mesh.geometry.getAttribute('position').count).toBe(36);
+		expect(mesh.geometry.getAttribute('uv').count).toBe(36);
+	});
+
 	it('ignores meshes whose materials are not procedural', () => {
 		const { binder, root } = setup();
 		const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial());

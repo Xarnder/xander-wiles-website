@@ -56,7 +56,9 @@ interface TextureSet {
 	ormMap: THREE.DataTexture;
 	meanLinear: readonly [number, number, number];
 	references: number;
+	/** GPU bytes (with mips) of the albedo + ORM maps, and of the normal map separately — normal maps are only uploaded when relief is on. */
 	bytes: number;
+	normalBytes: number;
 }
 
 /** Everything a binding may change, captured before it does, so disabling restores the exact legacy look. */
@@ -99,6 +101,8 @@ export interface ProceduralMaterialLibraryOptions {
 	 * grid. Off = the original repeated texture tiles, kept for comparison.
 	 */
 	antiTiling?: boolean;
+	/** Normal maps and shader bump relief (default off — see `GraphicsPreset.materialRelief`). */
+	relief?: boolean;
 	anisotropy?: number;
 	/** Fired once per material this library creates itself (CSM registration). */
 	onMaterialCreated?: (material: THREE.Material) => void;
@@ -155,6 +159,7 @@ export class ProceduralMaterialLibrary {
 	private palette: MaterialPaletteId;
 	private enabled: boolean;
 	private antiTiling: boolean;
+	private relief: boolean;
 	private anisotropy: number;
 	private worldSeed = '';
 	private disposed = false;
@@ -167,6 +172,7 @@ export class ProceduralMaterialLibrary {
 		this.palette = options.palette ?? DEFAULT_MATERIAL_PALETTE_ID;
 		this.enabled = options.enabled ?? true;
 		this.antiTiling = options.antiTiling ?? true;
+		this.relief = options.relief ?? false;
 		this.anisotropy = options.anisotropy ?? 1;
 	}
 
@@ -191,6 +197,17 @@ export class ProceduralMaterialLibrary {
 	setAntiTiling(antiTiling: boolean): void {
 		if (this.antiTiling === antiTiling) return;
 		this.antiTiling = antiTiling;
+		this.refreshAll();
+	}
+
+	isRelief(): boolean {
+		return this.relief;
+	}
+
+	/** Normal maps + shader bump relief on/off. Off keeps textures and anti-tiling, shades surfaces flat. */
+	setRelief(relief: boolean): void {
+		if (this.relief === relief) return;
+		this.relief = relief;
 		this.refreshAll();
 	}
 
@@ -242,7 +259,9 @@ export class ProceduralMaterialLibrary {
 
 	getStats(): ProceduralMaterialStats {
 		let gpuBytes = 0;
-		for (const set of this.textureSets.values()) gpuBytes += set.bytes;
+		for (const set of this.textureSets.values()) {
+			gpuBytes += set.bytes + (this.relief ? set.normalBytes : 0);
+		}
 		return {
 			textureSets: this.textureSets.size,
 			idleTextureSets: this.idleSets.length,
@@ -474,9 +493,8 @@ export class ProceduralMaterialLibrary {
 			return texture;
 		};
 		// ×4/3 for the mip chain.
-		const bytes = Math.round(
-			(data.albedo.byteLength + data.normal.byteLength + data.orm.byteLength) * (4 / 3)
-		);
+		const bytes = Math.round((data.albedo.byteLength + data.orm.byteLength) * (4 / 3));
+		const normalBytes = Math.round(data.normal.byteLength * (4 / 3));
 		return {
 			key,
 			map: make(data.albedo, data.size, THREE.SRGBColorSpace),
@@ -484,7 +502,8 @@ export class ProceduralMaterialLibrary {
 			ormMap: make(data.orm, data.ormSize, THREE.NoColorSpace),
 			meanLinear: data.meanLinear,
 			references: 0,
-			bytes
+			bytes,
+			normalBytes
 		};
 	}
 
@@ -502,12 +521,13 @@ export class ProceduralMaterialLibrary {
 	private assignLook(binding: Binding, set: TextureSet): void {
 		const material = binding.material;
 		const glass = binding.style.type === 'glass';
+		const normalMap = this.relief ? set.normalMap : null;
 		const programChanged =
 			material.map !== set.map ||
 			material.vertexColors !== (glass ? false : true) ||
-			material.normalMap === null;
+			material.normalMap !== normalMap;
 		material.map = set.map;
-		material.normalMap = set.normalMap;
+		material.normalMap = normalMap;
 		material.roughnessMap = set.ormMap;
 		material.roughness = 1;
 		material.metalness = 0;
@@ -557,7 +577,8 @@ export class ProceduralMaterialLibrary {
 			material,
 			binding.shaderKind,
 			binding.uniforms,
-			shaderQualityFor(this.quality)
+			shaderQualityFor(this.quality),
+			this.relief
 		);
 		if (programChanged) material.needsUpdate = true;
 	}

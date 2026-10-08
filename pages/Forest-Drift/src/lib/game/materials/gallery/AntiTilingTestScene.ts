@@ -87,6 +87,8 @@ export class AntiTilingTestScene {
 		terrainColorOptions.groundVariation = true;
 		this.library = new ProceduralMaterialLibrary({
 			binder: this.binder,
+			// An inspection tool: always show surface relief (the game enables it at Ultra).
+			relief: true,
 			quality: options.quality,
 			antiTiling: options.antiTiling,
 			anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy())

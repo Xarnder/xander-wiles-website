@@ -30,9 +30,22 @@ describe('ProceduralMaterialLibrary', () => {
 		expect(material.map).toBeNull(); // flat until ready
 		await lib.whenIdle();
 		expect(material.map).toBeInstanceOf(THREE.DataTexture);
-		expect(material.normalMap).toBeInstanceOf(THREE.DataTexture);
+		// Relief (normal maps) is off by default; only higher render settings enable it.
+		expect(material.normalMap).toBeNull();
 		expect(material.roughnessMap).toBe(material.aoMap);
 		expect(material.vertexColors).toBe(true);
+	});
+
+	it('adds normal maps only when surface relief is enabled', async () => {
+		const { lib } = library();
+		const material = new THREE.MeshStandardMaterial();
+		lib.bindMaterial(material, { type: 'plaster', mapping: 'planar' });
+		await lib.whenIdle();
+		lib.setRelief(true);
+		expect(material.normalMap).toBeInstanceOf(THREE.DataTexture);
+		lib.setRelief(false);
+		expect(material.normalMap).toBeNull();
+		expect(material.map).not.toBeNull();
 	});
 
 	it('shares one texture set between materials with the same recipe, and generates it once', async () => {
