@@ -2355,13 +2355,10 @@ or bare, and a forest belt can run straight through all four without caring.
   says "no forest", and the other two only ever modulate around that base.
 - **`TreePlacementGenerator.ts`** — turns density into actual deterministic tree candidates. See
   "deterministic tree candidates" below.
-- **`TreeManager.ts`** — the Three.js side: loads/unloads vegetation chunks around the player
-  (aligned to terrain's `chunkSize` purely for loading granularity — see below) and renders
-  everything through instanced meshes. See "instanced rendering" below.
-- **`treeGeometry.ts`** — three simple procedural tree variants (trunk cylinder + cone/sphere
-  foliage, low-poly), built once and shared by every instance.
+- **`TreeManager.ts`** — the runtime side: loads/unloads vegetation chunks around the player
+  (aligned to terrain's `chunkSize` purely for loading granularity — see below), budgeted LOD
+  updates, wind and stats. Rendering lives in **`trees/`** — see "Stylised trees" below.
 - **`cellHash.ts`** — the address-independent per-cell hash every deterministic roll is built on.
-- **`InstancedTreeLayer.ts`** — packed-instance bookkeeping (see below).
 
 ### Independence from terrain biome
 
@@ -2398,7 +2395,8 @@ at most one candidate. `TreePlacementGenerator.evaluateCell(cellX, cellZ)`:
    `TerrainHeightSampler.sampleWithNormal`'s normal, converted to degrees) exceeds
    `maxTreeSlopeDegrees`. This is real geometry, never a biome-based proxy — a mountain slope
    shallow enough to plant on keeps its trees; a cliff doesn't, regardless of what biome it's in.
-4. **Scale/rotation/variant** — three more independent hashed rolls.
+4. **Species/prototype/scale/width/rotation/tint** — independent hashed rolls; species comes from
+   `TreeSpeciesSelector` (see "Stylised trees").
 
 `hashCellToFloat01` (`cellHash.ts`) is a pure integer bit-mixer, not a sequential PRNG — it needs no
 prior state, so cell `(12, -7)` always evaluates identically no matter what order chunks load in,
@@ -2441,21 +2439,16 @@ boundaries" above for why that alignment never leaks into tree placement itself.
 
 ### Instanced rendering
 
-Three tree variants × two components (trunk, foliage) = six `THREE.InstancedMesh` objects total,
-each with a fixed capacity — the _entire_ visible forest, however many thousand trees, costs six
-draw calls, not thousands of individual `Mesh` objects. `InstancedTreeLayer` keeps each mesh's
-active instances packed into `[0, mesh.count)` (a hard InstancedMesh requirement): removing an
-instance from the middle swaps the _last_ active instance into its place — O(1), no shifting pass —
-and reports which owner moved so `TreeManager` can update that specific tree's stored instance
-index. A tree's trunk and foliage share one computed transform (position/yaw/uniform-scale); the
-relative trunk-to-foliage offset is baked into each variant's base geometry instead, so placing a
-tree is one matrix, not two.
+See "Stylised trees" below: trees render as per-chunk `InstancedMesh` batches, one per
+(prototype, LOD) present in the chunk, all sharing one material.
 
 ### Foundations exclude trees
 
 Before a candidate becomes a live instance, `TreeManager` checks
 `foundationManager.getTopYAt(worldX, worldZ) !== null` — the same containment test
-`WorldSurfaceSampler` already uses for player grounding. A covered candidate is simply skipped for
+`WorldSurfaceSampler` already uses for player grounding — and, with `buildingClearance` on (the
+default), eight more points around the tree at its crown radius, so canopies never grow through
+walls. A covered candidate is simply skipped for
 _this_ generation pass; the underlying deterministic forest map is never modified, so removing the
 foundation later (not implemented yet, but the data model supports it) would let that tree reappear
 on the next regeneration. `TreeManager.spec.ts` covers this directly: an identical dense-forest
@@ -2484,6 +2477,154 @@ terrain shape/seed/topology change also calls `TreeManager.notifyTerrainChanged(
 stay planted on the ground you're currently looking at rather than floating over stale heights — a
 development convenience the brief explicitly allows ("acceptable" to rebuild vegetation when terrain
 geometry changes), not a hard coupling of the two systems' actual generation logic.
+
+## Stylised trees: species, prototypes, chunk batches and LOD (`vegetation/trees/`)
+
+The forest is a runtime ecosystem, not hand-placed hero trees:
+
+```
+species definition (rules + ranges)            trees/treeSpecies.ts
+  → a few seeded prototype designs per species  trees/treePrototypeGenerator.ts
+    → compiled once per LOD, shared world-wide  trees/TreePrototypeCache.ts
+      → lightweight deterministic instances     TreePlacementGenerator + trees/TreeSpeciesSelector.ts
+        → per-chunk InstancedMesh batches        trees/TreeChunk.ts
+          (one per prototype × LOD, real bounds)
+            → budgeted LOD updates, wind, stats  TreeManager.ts, trees/treeLod.ts, trees/treeMaterial.ts
+```
+
+### Species
+
+| Species      | Family          | Silhouette                                               | Prototypes | Triangles LOD0 / 1 / 2 / 3  |
+| ------------ | --------------- | -------------------------------------------------------- | ---------- | --------------------------- |
+| `oak`        | broadleaf       | single trunk, 4–6 rounded cluster masses, branch stubs   | 4          | 416–536 / 100–120 / 48 / 26 |
+| `pine`       | conifer         | straight trunk, 5–7 jagged drooping tiers                | 4          | 416–560 / 140 / 68 / 18     |
+| `cypress`    | slim conifer    | narrow lathed spindle, trunk mostly hidden               | 3          | 392 / 148 / 56 / 30         |
+| `ornamental` | small broadleaf | short trunk, 2–4 clusters; one autumn-coloured prototype | 3          | 256–396 / 60–100 / 48 / 26  |
+
+A species is a `TreeSpeciesDefinition`: trunk rules (height, radius, taper, bend, branches), a
+canopy rule (`blobs`, `tiers` or `spindle` with their ranges), a colour style, prototype count,
+per-instance width/scale ranges, wind response and a triangle budget per LOD that the tests
+enforce. A new species is a new entry — no meshes are authored.
+
+### Prototype generation
+
+`designTree(species, variant, worldSeed)` makes every random choice for one prototype once
+(seeded mulberry32 from `hash(worldSeed, species, variant)` — never `Math.random()`), and
+`buildTreeMesh(species, design, lod)` tessellates that same design per LOD, so LODs share a
+silhouette and switching barely pops. Each LOD is ONE merged mesh — trunk, branches and foliage —
+with per-vertex: position, normal, linear colour and a `treeWind` weight.
+
+The stylised look comes from shading, not polygons: foliage cluster normals are blended toward the
+whole canopy's centre so many clusters shade as one soft volume; vertex colours carry a dark-to-light
+vertical gradient, a sunlit top, interior/underside occlusion and a bark gradient with a darker,
+flared, sunk base.
+
+### Instances, chunks and batching
+
+A placed tree is a `TreeInstanceDefinition`: cell id, species, variant, position, scale, width scale,
+yaw and tint roll — about 40 bytes of runtime data, regenerated from `(worldSeed, cellX, cellZ)`,
+never saved. `TreeChunk` stores a chunk's trees as typed arrays (precomputed instance matrices and
+tints) and groups them into `InstancedMesh` batches keyed **chunk × prototype × LOD**, each with a
+computed bounding sphere — so camera **and shadow** frustum culling work per batch. (The old system
+used six world-spanning instanced meshes with culling disabled, which is why trees could not cast
+shadows.) LOD3 silhouettes are shared per species, so a far chunk needs one batch per species.
+Per-instance variety without more prototypes: non-uniform scale (canopy width), yaw and a subtle
+colour tint (`instanceColor`).
+
+### LOD and the far-distance representation
+
+LOD is per tree, measured to mid-canopy, with **hysteresis** (`lodHysteresis`, 8%): a tree moves
+farther only once it is past the threshold by the band, and back only once inside it. Per frame,
+`TreeManager.updateView` checks each chunk's distance range; chunks entirely inside one LOD band are
+uniform and skip per-tree work, and chunks are only re-evaluated after the camera has moved
+`lodUpdateDistance` (4 m), at most `lodRebuildsPerFrame` (3) per frame, nearest first. Default
+distances: LOD1 45 m, LOD2 95 m, LOD3 170 m, scaled by the graphics preset.
+
+**LOD3 is a 18–30 triangle silhouette mesh, not a billboard.** Billboards/cross-planes need an
+alpha-tested texture atlas: alpha-test disables early-Z (overdraw cost on dense far forests),
+mip-mapped alpha thins trees out with distance, cross-planes look flat from above, and lighting
+would differ from the geometric LODs. A tiny silhouette mesh has none of those problems, no texture
+memory, the same shading as LOD0–2, and at 18–30 triangles × a few thousand far trees it costs far
+less than the old full-detail placeholders (scene D: 1.70M → 0.99M triangles).
+
+### Material, wind and shadows
+
+Every tree uses ONE `MeshLambertMaterial` (vertex colours × instance tint, no textures). Lambert,
+not PBR: foliage has no meaningful specular, and a PBR Fresnel reflection of the sky made tier
+undersides read as pale sheets. Wind is vertex-shader only: a crown sway plus small flutter,
+weighted by `treeWind` and phase-shifted by the instance's position, driven by one shared time
+uniform; it is installed through `materials/shader/shaderHooks.ts` so it composes with CSM. Shadows:
+LODs ≤ the preset's `treeShadowMaxLod` cast (Medium/High: LOD0; Ultra: LOD0–1; Low: none); LOD0–2
+receive; silhouettes neither.
+
+### Quality presets and developer controls
+
+| Preset | LOD distance scale | Density scale | Tree shadows | Wind |
+| ------ | ------------------ | ------------- | ------------ | ---- |
+| Low    | 0.65               | 0.75          | none         | off  |
+| Medium | 0.85               | 0.9           | LOD0         | on   |
+| High   | 1                  | 1             | LOD0         | on   |
+| Ultra  | 1.3                | 1             | LOD0–1       | on   |
+
+A lower density scale keeps a stable subset of the same trees (same rolls, lower threshold).
+Settings → Vegetation adds: minimum spacing (enforced deterministically by keeping each candidate
+`spacing / 2` inside its cell), max trees per chunk, crown clearance from buildings, species weights,
+conifer region scale and elevation band, LOD distances, hysteresis, LOD update distance and budget,
+wind on/off and strength, tree shadows, prototypes per species. With **Show render stats** on, the
+overlay shows visible trees per LOD, visible/active batches (visible batches = tree draw calls in the
+main pass), prototype count and triangles, tree memory, and the last chunk build time.
+
+### Species placement
+
+`TreeSpeciesSelector` (placement layer only) weights species by a seed-named, low-frequency
+conifer/broadleaf region map plus elevation (broadleaf woods, pine forests, mixed woodland between),
+and puts ornamentals on open, gentle, low ground (density², so never deep forest). No water or
+hydrology system exists yet, so there is no water avoidance.
+
+### Performance
+
+1920×1080, High, vsync off, dynamic resolution off, Chromium + Metal on the development Mac; same
+scenes on the parent commit (placeholder trees) vs this system. See
+`docs/stylised-trees-performance.json`.
+
+| Scene                            | Trees | Old frame | New frame | Old → new triangles (all passes) | Tree batches visible / active | Tree memory |
+| -------------------------------- | ----- | --------- | --------- | -------------------------------- | ----------------------------- | ----------- |
+| A sparse (density 0.35)          | 1.6k  | 7.43 ms   | 7.89 ms   | 0.82M → 0.78M                    | 111 / 172                     | 0.48 MB     |
+| B typical forest                 | 4.8k  | 7.41 ms   | 7.99 ms   | 0.99M → 1.10M                    | 144 / 247                     | 1.18 MB     |
+| C dense stress (×3, 4.5 m cells) | 14.5k | 8.44 ms   | 8.73 ms   | 2.30M → 2.01M                    | 197 / 340                     | 2.95 MB     |
+| D far landscape (7-chunk radius) | 9.3k  | 8.63 ms   | 8.46 ms   | 1.70M → 0.99M                    | 196 / 325                     | 1.66 MB     |
+
+The new trees also cast shadows (the old ones could not), which accounts for most of the small
+near-scene cost. At **Low** the same scenes run at 3.8–4.4 ms (226–264 fps) with 120–186 total draw
+calls; at **Ultra** at 18–21 ms (49–55 fps — dominated by Ultra's 2× pixel ratio, four cascades and
+material relief). Chunk streaming builds a chunk in ~0.5 ms; a full 49–149 chunk area streams in
+0.3–0.9 s. Every scene is well above the 30 fps minimum target on this machine.
+
+**Tuning recommendations:** draw calls scale with prototypes per species — keep 3–4. On weak GPUs,
+lower LOD distances (or the preset) before density. Shadow cost is the largest tree cost at
+High/Ultra; `treeShadowMaxLod = 0` is the right default. If far forests ever dominate, raise
+`lod3Distance`'s hysteresis rather than adding detail.
+
+### Tests
+
+`trees/__tests__/treePrototypeGenerator.spec.ts` (budgets per LOD, LODs strictly cheaper, valid
+finite geometry, outward winding, determinism, silhouette consistency across LODs);
+`trees/__tests__/treeRuntime.spec.ts` (LOD thresholds and hysteresis, uniform-range skipping,
+shadow policy, prototype cache reuse and per-species LOD3 sharing, batch grouping covering every
+tree once, bounding spheres containing instances, far chunks collapsing to one batch per species,
+batch reuse, disposal, species selection determinism and rules); `TreePlacementGenerator.spec.ts`
+(minimum spacing, deterministic species/variant/variation, density-scale subsets, prototype count);
+`TreeManager.spec.ts` (foundation exclusion, chunk load/unload releasing batches, no prototype
+duplication across chunks, per-chunk cap, crown clearance).
+
+### Limitations and next steps
+
+- No crossfade between LODs (hysteresis and shared silhouettes keep popping small); a dithered fade
+  would add a second draw per transitioning batch.
+- Shadow depth passes don't apply wind, so shadows don't sway.
+- Far chunks still cost one batch per species; merging LOD3 batches across 2×2 chunk regions would
+  cut far draw calls further if needed.
+- Optional species (dead, bent, flowering, willow) are not implemented.
 
 ## Sky: HDRI lighting, a procedural sky dome, and layered cloud sheets
 

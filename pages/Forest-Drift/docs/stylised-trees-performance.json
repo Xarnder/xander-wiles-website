@@ -1,0 +1,569 @@
+{
+  "description": "Stylised tree system benchmark: four scenes at 1920x1080, vsync off, dynamic resolution off, Chromium + ANGLE Metal on the development Mac (load average 2.3-3.4 for High; rising to 7.5 during Ultra). OLD = parent commit with placeholder trees.",
+  "high": {
+    "old": [
+      {
+        "label": "OLD",
+        "scene": "A sparse",
+        "quality": "high",
+        "errors": 1,
+        "fps": 134.7,
+        "avgFrameMs": 7.43,
+        "p95FrameMs": 8.5,
+        "cpuFrameMs": 7.27,
+        "cpuRenderMs": 6.49,
+        "drawCalls": 1838,
+        "triangles": 823260,
+        "geometries": 366,
+        "streamMs": 329.19999999552965,
+        "trees": null,
+        "treeInstances": 1569,
+        "chunks": 49,
+        "heapMB": 156.8266305923462
+      },
+      {
+        "label": "OLD",
+        "scene": "B typical forest",
+        "quality": "high",
+        "errors": 1,
+        "fps": 135,
+        "avgFrameMs": 7.41,
+        "p95FrameMs": 8.2,
+        "cpuFrameMs": 7.3,
+        "cpuRenderMs": 6.53,
+        "drawCalls": 1054,
+        "triangles": 985492,
+        "geometries": 358,
+        "streamMs": 322.80000000447035,
+        "trees": null,
+        "treeInstances": 4768,
+        "chunks": 49,
+        "heapMB": 163.7380838394165
+      },
+      {
+        "label": "OLD",
+        "scene": "C dense stress",
+        "quality": "high",
+        "errors": 1,
+        "fps": 118.5,
+        "avgFrameMs": 8.44,
+        "p95FrameMs": 9.3,
+        "cpuFrameMs": 8.33,
+        "cpuRenderMs": 7.52,
+        "drawCalls": 1056,
+        "triangles": 2301568,
+        "geometries": 359,
+        "streamMs": 394.70000000298023,
+        "trees": null,
+        "treeInstances": 15686,
+        "chunks": 81,
+        "heapMB": 170.10345554351807
+      },
+      {
+        "label": "OLD",
+        "scene": "D far landscape",
+        "quality": "high",
+        "errors": 1,
+        "fps": 115.8,
+        "avgFrameMs": 8.63,
+        "p95FrameMs": 9.7,
+        "cpuFrameMs": 8.53,
+        "cpuRenderMs": 7.42,
+        "drawCalls": 1083,
+        "triangles": 1701080,
+        "geometries": 373,
+        "streamMs": 340.1000000014901,
+        "trees": null,
+        "treeInstances": 9286,
+        "chunks": 149,
+        "heapMB": 166.5641918182373
+      }
+    ],
+    "new": [
+      {
+        "label": "NEW",
+        "scene": "A sparse",
+        "quality": "high",
+        "errors": 1,
+        "fps": 126.8,
+        "avgFrameMs": 7.89,
+        "p95FrameMs": 9,
+        "cpuFrameMs": 7.72,
+        "cpuRenderMs": 6.7,
+        "drawCalls": 2108,
+        "triangles": 778504,
+        "geometries": 394,
+        "streamMs": 315.40000000596046,
+        "trees": {
+          "visibleTreesByLod": [
+            13,
+            48,
+            185,
+            1068
+          ],
+          "visibleTrees": 1314,
+          "visibleBatches": 111,
+          "activeBatches": 172,
+          "activeChunks": 49,
+          "prototypeGeometries": 37,
+          "prototypeTriangles": 5924,
+          "memoryBytes": 503264,
+          "loadedTreesByLod": [
+            15,
+            57,
+            247,
+            1245
+          ],
+          "lastChunkBuildMs": 0.5
+        },
+        "treeInstances": 1564,
+        "chunks": 49,
+        "heapMB": 169.69983673095703
+      },
+      {
+        "label": "NEW",
+        "scene": "B typical forest",
+        "quality": "high",
+        "errors": 1,
+        "fps": 125.1,
+        "avgFrameMs": 7.99,
+        "p95FrameMs": 9,
+        "cpuFrameMs": 7.83,
+        "cpuRenderMs": 6.81,
+        "drawCalls": 1460,
+        "triangles": 1095796,
+        "geometries": 391,
+        "streamMs": 309.79999999701977,
+        "trees": {
+          "visibleTreesByLod": [
+            99,
+            309,
+            581,
+            2451
+          ],
+          "visibleTrees": 3440,
+          "visibleBatches": 144,
+          "activeBatches": 247,
+          "activeChunks": 49,
+          "prototypeGeometries": 41,
+          "prototypeTriangles": 7652,
+          "memoryBytes": 1234984,
+          "loadedTreesByLod": [
+            112,
+            323,
+            856,
+            3465
+          ],
+          "lastChunkBuildMs": 2.899999998509884
+        },
+        "treeInstances": 4756,
+        "chunks": 49,
+        "heapMB": 177.07718086242676
+      },
+      {
+        "label": "NEW",
+        "scene": "C dense stress",
+        "quality": "high",
+        "errors": 1,
+        "fps": 114.5,
+        "avgFrameMs": 8.73,
+        "p95FrameMs": 9.8,
+        "cpuFrameMs": 8.57,
+        "cpuRenderMs": 7.51,
+        "drawCalls": 1550,
+        "triangles": 2010484,
+        "geometries": 395,
+        "streamMs": 410.70000000298023,
+        "trees": {
+          "visibleTreesByLod": [
+            225,
+            653,
+            1044,
+            8584
+          ],
+          "visibleTrees": 10506,
+          "visibleBatches": 197,
+          "activeBatches": 340,
+          "activeChunks": 81,
+          "prototypeGeometries": 45,
+          "prototypeTriangles": 8544,
+          "memoryBytes": 3095846,
+          "loadedTreesByLod": [
+            233,
+            675,
+            1801,
+            11761
+          ],
+          "lastChunkBuildMs": 0.9000000059604645
+        },
+        "treeInstances": 14470,
+        "chunks": 81,
+        "heapMB": 177.108962059021
+      },
+      {
+        "label": "NEW",
+        "scene": "D far landscape",
+        "quality": "high",
+        "errors": 1,
+        "fps": 118.2,
+        "avgFrameMs": 8.46,
+        "p95FrameMs": 9.2,
+        "cpuFrameMs": 8.32,
+        "cpuRenderMs": 6.62,
+        "drawCalls": 1463,
+        "triangles": 986848,
+        "geometries": 395,
+        "streamMs": 313.1000000014901,
+        "trees": {
+          "visibleTreesByLod": [
+            0,
+            72,
+            554,
+            6430
+          ],
+          "visibleTrees": 7056,
+          "visibleBatches": 196,
+          "activeBatches": 325,
+          "activeChunks": 149,
+          "prototypeGeometries": 30,
+          "prototypeTriangles": 2452,
+          "memoryBytes": 1741382,
+          "loadedTreesByLod": [
+            0,
+            94,
+            607,
+            8573
+          ],
+          "lastChunkBuildMs": 2.4000000059604645
+        },
+        "treeInstances": 9274,
+        "chunks": 149,
+        "heapMB": 183.86064338684082
+      }
+    ]
+  },
+  "low": [
+    {
+      "label": "NEW-low",
+      "scene": "A sparse",
+      "quality": "low",
+      "errors": 0,
+      "fps": 256.1,
+      "avgFrameMs": 3.9,
+      "p95FrameMs": 6.4,
+      "cpuFrameMs": 1.7,
+      "cpuRenderMs": 0.82,
+      "drawCalls": 120,
+      "triangles": 165936,
+      "geometries": 349,
+      "streamMs": 319.29999999701977,
+      "trees": {
+        "visibleTreesByLod": [
+          7,
+          15,
+          53,
+          981
+        ],
+        "visibleTrees": 1056,
+        "visibleBatches": 91,
+        "activeBatches": 126,
+        "activeChunks": 49,
+        "prototypeGeometries": 29,
+        "prototypeTriangles": 4328,
+        "memoryBytes": 365328,
+        "loadedTreesByLod": [
+          8,
+          15,
+          63,
+          1094
+        ],
+        "lastChunkBuildMs": 0.6000000014901161
+      },
+      "treeInstances": 1180,
+      "chunks": 49,
+      "heapMB": 75.04152011871338
+    },
+    {
+      "label": "NEW-low",
+      "scene": "B typical forest",
+      "quality": "low",
+      "errors": 0,
+      "fps": 263.6,
+      "avgFrameMs": 3.79,
+      "p95FrameMs": 5.4,
+      "cpuFrameMs": 3.54,
+      "cpuRenderMs": 1.9,
+      "drawCalls": 127,
+      "triangles": 203024,
+      "geometries": 349,
+      "streamMs": 417.1000000014901,
+      "trees": {
+        "visibleTreesByLod": [
+          31,
+          90,
+          212,
+          2301
+        ],
+        "visibleTrees": 2634,
+        "visibleBatches": 104,
+        "activeBatches": 178,
+        "activeChunks": 49,
+        "prototypeGeometries": 33,
+        "prototypeTriangles": 5000,
+        "memoryBytes": 853372,
+        "loadedTreesByLod": [
+          33,
+          100,
+          284,
+          3131
+        ],
+        "lastChunkBuildMs": 1.5
+      },
+      "treeInstances": 3548,
+      "chunks": 49,
+      "heapMB": 69.81721878051758
+    },
+    {
+      "label": "NEW-low",
+      "scene": "C dense stress",
+      "quality": "low",
+      "errors": 0,
+      "fps": 248.1,
+      "avgFrameMs": 4.03,
+      "p95FrameMs": 5.7,
+      "cpuFrameMs": 3.75,
+      "cpuRenderMs": 1.96,
+      "drawCalls": 186,
+      "triangles": 471304,
+      "geometries": 354,
+      "streamMs": 720.7000000029802,
+      "trees": {
+        "visibleTreesByLod": [
+          99,
+          309,
+          557,
+          9723
+        ],
+        "visibleTrees": 10688,
+        "visibleBatches": 163,
+        "activeBatches": 268,
+        "activeChunks": 81,
+        "prototypeGeometries": 38,
+        "prototypeTriangles": 5668,
+        "memoryBytes": 2825907,
+        "loadedTreesByLod": [
+          101,
+          322,
+          783,
+          12871
+        ],
+        "lastChunkBuildMs": 1.2000000029802322
+      },
+      "treeInstances": 14077,
+      "chunks": 81,
+      "heapMB": 73.06321907043457
+    },
+    {
+      "label": "NEW-low",
+      "scene": "D far landscape",
+      "quality": "low",
+      "errors": 0,
+      "fps": 225.8,
+      "avgFrameMs": 4.43,
+      "p95FrameMs": 6.3,
+      "cpuFrameMs": 4.16,
+      "cpuRenderMs": 1.9,
+      "drawCalls": 185,
+      "triangles": 253160,
+      "geometries": 343,
+      "streamMs": 454.79999999701977,
+      "trees": {
+        "visibleTreesByLod": [
+          0,
+          0,
+          101,
+          5259
+        ],
+        "visibleTrees": 5360,
+        "visibleBatches": 156,
+        "activeBatches": 262,
+        "activeChunks": 149,
+        "prototypeGeometries": 24,
+        "prototypeTriangles": 1756,
+        "memoryBytes": 1250396,
+        "loadedTreesByLod": [
+          0,
+          4,
+          110,
+          6794
+        ],
+        "lastChunkBuildMs": 3.3000000044703484
+      },
+      "treeInstances": 6908,
+      "chunks": 149,
+      "heapMB": 72.5321273803711
+    }
+  ],
+  "ultra": [
+    {
+      "label": "NEW-ultra",
+      "scene": "A sparse",
+      "quality": "ultra",
+      "errors": 1,
+      "fps": 54,
+      "avgFrameMs": 18.52,
+      "p95FrameMs": 34.1,
+      "cpuFrameMs": 18.16,
+      "cpuRenderMs": 15.34,
+      "drawCalls": 3311,
+      "triangles": 1347361,
+      "geometries": 396,
+      "streamMs": 417.8999999985099,
+      "trees": {
+        "visibleTreesByLod": [
+          23,
+          105,
+          285,
+          514
+        ],
+        "visibleTrees": 927,
+        "visibleBatches": 107,
+        "activeBatches": 162,
+        "activeChunks": 33,
+        "prototypeGeometries": 40,
+        "prototypeTriangles": 6948,
+        "memoryBytes": 453764,
+        "loadedTreesByLod": [
+          24,
+          124,
+          369,
+          547
+        ],
+        "lastChunkBuildMs": 0.7999999970197678
+      },
+      "treeInstances": 1064,
+      "chunks": 33,
+      "heapMB": 160.84931755065918
+    },
+    {
+      "label": "NEW-ultra",
+      "scene": "B typical forest",
+      "quality": "ultra",
+      "errors": 1,
+      "fps": 54.6,
+      "avgFrameMs": 18.3,
+      "p95FrameMs": 34.2,
+      "cpuFrameMs": 17.92,
+      "cpuRenderMs": 14.87,
+      "drawCalls": 2531,
+      "triangles": 2256189,
+      "geometries": 390,
+      "streamMs": 538.2000000029802,
+      "trees": {
+        "visibleTreesByLod": [
+          167,
+          400,
+          791,
+          1297
+        ],
+        "visibleTrees": 2655,
+        "visibleBatches": 128,
+        "activeBatches": 232,
+        "activeChunks": 37,
+        "prototypeGeometries": 42,
+        "prototypeTriangles": 7732,
+        "memoryBytes": 1014628,
+        "loadedTreesByLod": [
+          179,
+          529,
+          1078,
+          1746
+        ],
+        "lastChunkBuildMs": 6.399999998509884
+      },
+      "treeInstances": 3532,
+      "chunks": 37,
+      "heapMB": 171.9311933517456
+    },
+    {
+      "label": "NEW-ultra",
+      "scene": "C dense stress",
+      "quality": "ultra",
+      "errors": 1,
+      "fps": 48.7,
+      "avgFrameMs": 20.52,
+      "p95FrameMs": 34.4,
+      "cpuFrameMs": 20.11,
+      "cpuRenderMs": 16.79,
+      "drawCalls": 2797,
+      "triangles": 4295269,
+      "geometries": 394,
+      "streamMs": 877.8000000044703,
+      "trees": {
+        "visibleTreesByLod": [
+          374,
+          817,
+          1462,
+          5973
+        ],
+        "visibleTrees": 8626,
+        "visibleBatches": 174,
+        "activeBatches": 347,
+        "activeChunks": 61,
+        "prototypeGeometries": 45,
+        "prototypeTriangles": 8544,
+        "memoryBytes": 2616151,
+        "loadedTreesByLod": [
+          398,
+          1144,
+          2316,
+          7715
+        ],
+        "lastChunkBuildMs": 1.6000000014901161
+      },
+      "treeInstances": 11573,
+      "chunks": 61,
+      "heapMB": 184.96058464050293
+    },
+    {
+      "label": "NEW-ultra",
+      "scene": "D far landscape",
+      "quality": "ultra",
+      "errors": 1,
+      "fps": 49.4,
+      "avgFrameMs": 20.26,
+      "p95FrameMs": 33.5,
+      "cpuFrameMs": 19.91,
+      "cpuRenderMs": 16.09,
+      "drawCalls": 2500,
+      "triangles": 1552661,
+      "geometries": 403,
+      "streamMs": 699.1000000014901,
+      "trees": {
+        "visibleTreesByLod": [
+          0,
+          212,
+          802,
+          5104
+        ],
+        "visibleTrees": 6118,
+        "visibleBatches": 193,
+        "activeBatches": 322,
+        "activeChunks": 127,
+        "prototypeGeometries": 35,
+        "prototypeTriangles": 3984,
+        "memoryBytes": 1603049,
+        "loadedTreesByLod": [
+          1,
+          236,
+          1021,
+          6785
+        ],
+        "lastChunkBuildMs": 3.5
+      },
+      "treeInstances": 8043,
+      "chunks": 127,
+      "heapMB": 177.1528196334839
+    }
+  ]
+}
