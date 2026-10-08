@@ -489,6 +489,8 @@ export class ProceduralMaterialLibrary {
 		const tint = binding.options.tint;
 		setWoodUniforms(uniforms, resolveWoodParameters(preset.base, preset.overrides), {
 			tintMode: tint || binding.options.ownWoodCoords ? 'relative' : 'absolute',
+			// Floor details: lift very dark chosen colours (~#7E5A3E) so the grain stays visible.
+			minLuma: binding.options.ownWoodCoords ? 0.12 : 0,
 			finish: preset.finish
 		});
 		const programChanged =

@@ -276,8 +276,8 @@ export const GAME_WOOD_PRESETS: Readonly<
 	'dark-oak': {
 		base: 'walnut',
 		overrides: {
-			darkGrainColor: '#3b2617',
-			lightGrainColor: '#8c623f',
+			darkGrainColor: '#1d120b',
+			lightGrainColor: '#4a3121',
 			ringBias: 0.3,
 			splotchIntensity: 1.2
 		},
@@ -321,6 +321,11 @@ export interface WoodUniforms {
 	uWoodScale: { value: number };
 	/** 0 = absolute wood colour; 1 = relative (tinted by the vertex colour, e.g. a player-chosen plank colour). */
 	uWoodTintMode: { value: number };
+	/**
+	 * Relative mode only: minimum linear luminance of the tint colour (0 = none). Floor details lift
+	 * very dark player-chosen colours so the grain stays visible; building frames keep their paint.
+	 */
+	uWoodMinLuma: { value: number };
 	/** Finish darkening (the original's clearcoat darken). */
 	uWoodDarken: { value: number };
 }
@@ -336,6 +341,7 @@ export function createWoodUniforms(): WoodUniforms {
 		uWoodLight: { value: new THREE.Color() },
 		uWoodScale: { value: 1 },
 		uWoodTintMode: { value: 0 },
+		uWoodMinLuma: { value: 0 },
 		uWoodDarken: { value: 1 }
 	};
 }
@@ -344,7 +350,12 @@ export function createWoodUniforms(): WoodUniforms {
 export function setWoodUniforms(
 	uniforms: WoodUniforms,
 	p: WoodParameters,
-	options: { scale?: number; tintMode?: 'absolute' | 'relative'; finish?: WoodFinish } = {}
+	options: {
+		scale?: number;
+		tintMode?: 'absolute' | 'relative';
+		finish?: WoodFinish;
+		minLuma?: number;
+	} = {}
 ): void {
 	uniforms.uWoodA.value.set(
 		p.centerSize,
@@ -365,6 +376,7 @@ export function setWoodUniforms(
 	uniforms.uWoodLight.value.set(p.lightGrainColor);
 	if (options.scale !== undefined) uniforms.uWoodScale.value = options.scale;
 	uniforms.uWoodTintMode.value = options.tintMode === 'relative' ? 1 : 0;
+	uniforms.uWoodMinLuma.value = options.minLuma ?? 0;
 	uniforms.uWoodDarken.value = WOOD_FINISHES[options.finish ?? 'raw'].darken;
 }
 
@@ -377,6 +389,7 @@ uniform vec3 uWoodDark;
 uniform vec3 uWoodLight;
 uniform float uWoodScale;
 uniform float uWoodTintMode;
+uniform float uWoodMinLuma;
 uniform float uWoodDarken;
 varying vec3 vWoodCoord;
 
@@ -548,10 +561,9 @@ export function applySolidWoodShader(
 		vec3 woodMean = mix(uWoodDark, uWoodLight, 0.75) * (WOOD_QUALITY > 0 ? 1.407 : 1.0);
 		const vec3 woodLuma = vec3(0.2126, 0.7152, 0.0722);
 		float woodRelative = dot(wood, woodLuma) / max(dot(woodMean, woodLuma), 0.002);
-		// A very dark chosen colour would swallow the grain: lift it (same hue) to a minimum
-		// brightness — linear luminance ~0.12, about #7E5A3E for a brown.
+		// A very dark chosen colour would swallow the grain: lift it (same hue) to uWoodMinLuma.
 		float woodTintLuma = max(dot(diffuseColor.rgb, woodLuma), 1e-4);
-		float woodLift = mix(1.0, clamp(0.12 / woodTintLuma, 1.0, 6.0), uWoodTintMode);
+		float woodLift = mix(1.0, clamp(uWoodMinLuma / woodTintLuma, 1.0, 6.0), uWoodTintMode);
 		diffuseColor.rgb *= mix(wood, vec3(woodRelative), uWoodTintMode) * woodLift;
 	}`
 			);
