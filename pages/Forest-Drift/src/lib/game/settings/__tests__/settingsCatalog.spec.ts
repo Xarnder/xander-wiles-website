@@ -44,6 +44,7 @@ function noopActions(): GameSettingsActions {
 		graphicsAo: () => {},
 		graphicsExport: () => {},
 		graphicsMaterials: () => {},
+		vegetationRendering: () => {},
 		graphicsLighting: () => {},
 		graphicsAntiTiling: () => {},
 		graphicsSurfaceDetail: () => {},

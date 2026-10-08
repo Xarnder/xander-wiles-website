@@ -41,7 +41,9 @@
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
 	import FurnitureCatalogueModal from '$lib/components/FurnitureCatalogueModal.svelte';
 	import MiniBuildChoiceDialog from '$lib/components/MiniBuildChoiceDialog.svelte';
-	import MiniBuildEditor, { type MiniBuildEditorLaunch } from '$lib/components/MiniBuildEditor.svelte';
+	import MiniBuildEditor, {
+		type MiniBuildEditorLaunch
+	} from '$lib/components/MiniBuildEditor.svelte';
 	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
@@ -65,10 +67,7 @@
 		isIndexedDbAvailable,
 		requestPersistentStorage
 	} from '$lib/game/world/IndexedDbWorldRepository';
-	import {
-	DEFAULT_WORLD_ID,
-	DEFAULT_WORLD_THUMBNAIL_DATA_URL
-} from '$lib/game/world/DefaultWorld';
+	import { DEFAULT_WORLD_ID, DEFAULT_WORLD_THUMBNAIL_DATA_URL } from '$lib/game/world/DefaultWorld';
 	import {
 		createWorldPackage,
 		downloadWorldPackage,
@@ -114,7 +113,9 @@
 	let lookedAtDoorId = $state<string | null>(null);
 	/** Mini Build editor launch (null = closed) and the placed-object Edit choice (`F` in Place Object mode). */
 	let miniBuildEditor = $state<MiniBuildEditorLaunch | null>(null);
-	let miniBuildEditChoice = $state<{ instanceId: string; name: string; copies: number } | null>(null);
+	let miniBuildEditChoice = $state<{ instanceId: string; name: string; copies: number } | null>(
+		null
+	);
 
 	let session = $state.raw<WorldSession>();
 
@@ -584,7 +585,8 @@
 	}
 
 	onMount(() => {
-		const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+		const urlParams =
+			typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 		if (urlParams?.has('touch')) {
 			touchControlsEnabled = urlParams.get('touch') === '1' || urlParams.get('touch') === 'true';
 		}
@@ -754,9 +756,7 @@
 				<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
 				{#if showTouchControls}
 					<p class="headline">Tap to explore</p>
-					<p>
-						Virtual joystick &amp; buttons to move, run, jump, look, and build
-					</p>
+					<p>Virtual joystick &amp; buttons to move, run, jump, look, and build</p>
 					<button
 						type="button"
 						class="touch-start-btn"
@@ -767,9 +767,7 @@
 					</button>
 				{:else}
 					<p class="headline">Click to explore</p>
-					<p>
-						WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu
-					</p>
+					<p>WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu</p>
 					<p>
 						G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
 						(Settings, Help, Creature Lab) &middot; H for help
@@ -817,7 +815,9 @@
 						<dt>Build Mode Button</dt>
 						<dd>Toggle build mode and show the hotbar along the bottom.</dd>
 						<dt>Music Button</dt>
-						<dd>Toggle Music Garden mode to compose and plant musical notes around the Music Tree.</dd>
+						<dd>
+							Toggle Music Garden mode to compose and plant musical notes around the Music Tree.
+						</dd>
 						<dt>Hotbar Slots</dt>
 						<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
 						<dt>Type Button</dt>
@@ -835,7 +835,9 @@
 						<dt>Rise + / Rise −</dt>
 						<dd>Adjust pitched roof rise during roof shaping.</dd>
 						<dt>Open / Close Door</dt>
-						<dd>Tap the Open Door button that appears when hovering over a door to open or close it.</dd>
+						<dd>
+							Tap the Open Door button that appears when hovering over a door to open or close it.
+						</dd>
 						<dt>Floor Selector</dt>
 						<dd>Tap the buttons on the right edge of the screen to change storeys.</dd>
 					</dl>
@@ -882,8 +884,9 @@
 						<dt>↑ / ↓</dt>
 						<dd>
 							Cycle tools inside the selected slot — Poly Wall / Wall, Door / Window / Beam, Ceiling
-							/ Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently used
-							objects. The last choice is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
+							/ Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently
+							used objects. The last choice is remembered. While a roof is being adjusted, ↑/↓ still
+							change rise instead.
 						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
@@ -1243,7 +1246,9 @@
 				title="Mini Build primitives in this 16m chunk ({chunk.instances} objects)"
 			>
 				<div class="mini-build-chunk-row">
-					<span class="mini-build-chunk-label">{chunk.placing ? 'Placing here' : 'Mini Builds'}</span>
+					<span class="mini-build-chunk-label"
+						>{chunk.placing ? 'Placing here' : 'Mini Builds'}</span
+					>
 					<span class="mini-build-chunk-value" data-testid="mini-build-chunk-value">
 						{chunk.primitives}{#if chunk.added > 0}<span class="mini-build-chunk-added"
 								>&nbsp;+{chunk.added}</span
@@ -1278,6 +1283,19 @@
 					trees
 				</div>
 				<div>Vegetation rev {stats.vegetationRevision}</div>
+				{#if stats.trees}
+					{@const t = stats.trees}
+					<div data-testid="tree-stats">
+						Trees visible {t.visibleTrees.toLocaleString()} (LOD {t.visibleTreesByLod.join('/')})
+						&middot; {t.visibleBatches}/{t.activeBatches} batches
+					</div>
+					<div>
+						Tree prototypes {t.prototypeGeometries} &middot; {t.prototypeTriangles.toLocaleString()} tris
+						&middot; {(t.memoryBytes / 1048576).toFixed(1)} MB &middot; chunk {t.lastChunkBuildMs.toFixed(
+							1
+						)} ms
+					</div>
+				{/if}
 				<div>
 					Creatures {stats.creatures.rendered}/{stats.creatures.active} active · {stats.creatures
 						.sleeping} sleeping · LOD {stats.creatures.lod0}/{stats.creatures.lod1}
@@ -1298,24 +1316,33 @@
 				{#if stats.miniBuilds}
 					{@const mb = stats.miniBuilds}
 					<div data-testid="mini-build-stats">
-						Mini Builds {mb.definitions} designs &middot; cache {mb.cache.entries} ({(mb.cache.estimatedBytes / 1024).toFixed(0)} KB, {mb.cache.compiles} compiles)
+						Mini Builds {mb.definitions} designs &middot; cache {mb.cache.entries} ({(
+							mb.cache.estimatedBytes / 1024
+						).toFixed(0)} KB, {mb.cache.compiles} compiles)
 					</div>
 					<div>
-						Instances {mb.instances.renderedInstances}/{mb.instances.instances} rendered &middot; {mb.instances.batches} batches &middot; {mb.instances.instancedMeshes} draws
+						Instances {mb.instances.renderedInstances}/{mb.instances.instances} rendered &middot; {mb
+							.instances.batches} batches &middot; {mb.instances.instancedMeshes} draws
 					</div>
 					<div data-testid="mini-build-chunk-stats">
-						Chunk {mb.currentChunk.id}: primitives {mb.currentChunk.primitives} / {mb.currentChunk.budget} &middot; {mb.currentChunk.instances} objects
+						Chunk {mb.currentChunk.id}: primitives {mb.currentChunk.primitives} / {mb.currentChunk
+							.budget} &middot; {mb.currentChunk.instances} objects
 					</div>
 					<div>
-						Geometry {mb.renderedVertices.toLocaleString()} verts &middot; {mb.renderedTriangles.toLocaleString()} tris &middot; collision {mb.instances.collisionBoxes} boxes
+						Geometry {mb.renderedVertices.toLocaleString()} verts &middot; {mb.renderedTriangles.toLocaleString()}
+						tris &middot; collision {mb.instances.collisionBoxes} boxes
 					</div>
 				{/if}
 				{#if stats.miniBuildTarget}
 					{@const t = stats.miniBuildTarget}
 					<div data-testid="mini-build-target-stats">
-						Target {t.designName} r{t.revision} &middot; {t.blocks} blocks &middot; {t.materialSlots} mats &middot; {t.vertices}v/{t.triangles}t &middot; {t.collisionBoxes} col
+						Target {t.designName} r{t.revision} &middot; {t.blocks} blocks &middot; {t.materialSlots}
+						mats &middot; {t.vertices}v/{t.triangles}t &middot; {t.collisionBoxes} col
 					</div>
-					<div class="stats-ids">inst {t.instanceId.slice(0, 8)} &middot; design {t.designId.slice(0, 8)} &middot; chunk {t.chunkId} &middot; {t.batchKey.length > 32 ? `${t.batchKey.slice(0, 32)}…` : t.batchKey}</div>
+					<div class="stats-ids">
+						inst {t.instanceId.slice(0, 8)} &middot; design {t.designId.slice(0, 8)} &middot; chunk {t.chunkId}
+						&middot; {t.batchKey.length > 32 ? `${t.batchKey.slice(0, 32)}…` : t.batchKey}
+					</div>
 				{/if}
 				<div>
 					{#if stats.shadowsEnabled}
@@ -1443,7 +1470,10 @@
 			<MiniBuildChoiceDialog
 				testId="mini-build-edit-choice"
 				title={`Edit "${choice.name}"`}
-				lines={[`${choice.copies} placed copies use this design.`, 'Editing the shared design updates all of them.']}
+				lines={[
+					`${choice.copies} placed copies use this design.`,
+					'Editing the shared design updates all of them.'
+				]}
 				options={[
 					{
 						label: 'Edit Shared Design',
@@ -1778,7 +1808,9 @@
 		letter-spacing: 0.02em;
 		pointer-events: none;
 		opacity: 0.55;
-		transition: opacity 0.2s ease, bottom 0.2s ease;
+		transition:
+			opacity 0.2s ease,
+			bottom 0.2s ease;
 		z-index: 40;
 	}
 
@@ -1938,7 +1970,9 @@
 		font-size: 1.1rem;
 		font-weight: 700;
 		cursor: pointer;
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(87, 226, 111, 0.45);
+		box-shadow:
+			0 6px 20px rgba(0, 0, 0, 0.5),
+			0 0 20px rgba(87, 226, 111, 0.45);
 		transition: transform 0.15s ease;
 	}
 
@@ -2223,7 +2257,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: background 0.15s ease, transform 0.1s ease;
+		transition:
+			background 0.15s ease,
+			transform 0.1s ease;
 	}
 
 	.touch-mode .floor-selector .floor-arrow:active:not(:disabled) {

@@ -1866,6 +1866,201 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						200,
 						1,
 						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.trees.spacing',
+						'Minimum spacing (m)',
+						vegetation.trees,
+						'minTreeSpacing',
+						0,
+						6,
+						0.25,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.trees.maxPerChunk',
+						'Max trees per chunk',
+						vegetation.trees,
+						'maxTreesPerChunk',
+						0,
+						1000,
+						10,
+						actions.vegetationSettings
+					),
+					boolField(
+						'vegetation.trees.clearance',
+						'Keep crowns clear of buildings',
+						vegetation.trees,
+						'buildingClearance',
+						actions.vegetationSettings
+					)
+				]),
+				group('vegetation-species', 'Species mix', [
+					numberField(
+						'vegetation.species.oak',
+						'Broadleaf (oak) weight',
+						vegetation.species,
+						'oakWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.pine',
+						'Pine weight',
+						vegetation.species,
+						'pineWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.cypress',
+						'Cypress weight',
+						vegetation.species,
+						'cypressWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.ornamental',
+						'Ornamental weight',
+						vegetation.species,
+						'ornamentalWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.regionScale',
+						'Conifer region scale',
+						vegetation.species,
+						'coniferRegionScale',
+						100,
+						3000,
+						10,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.coniferStart',
+						'Conifers from height',
+						vegetation.species,
+						'coniferStartHeight',
+						-20,
+						150,
+						1,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.coniferFull',
+						'All conifers above height',
+						vegetation.species,
+						'coniferFullHeight',
+						-20,
+						200,
+						1,
+						actions.vegetationSettings
+					)
+				]),
+				group('vegetation-rendering', 'Tree rendering & LOD', [
+					numberField(
+						'vegetation.render.lod1',
+						'LOD1 distance (m)',
+						vegetation.rendering,
+						'lod1Distance',
+						5,
+						300,
+						1,
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.lod2',
+						'LOD2 distance (m)',
+						vegetation.rendering,
+						'lod2Distance',
+						10,
+						500,
+						1,
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.lod3',
+						'Silhouette (LOD3) distance (m)',
+						vegetation.rendering,
+						'lod3Distance',
+						20,
+						800,
+						1,
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.hysteresis',
+						'LOD hysteresis',
+						vegetation.rendering,
+						'lodHysteresis',
+						0,
+						0.3,
+						0.01,
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.lodStep',
+						'LOD update distance (m)',
+						vegetation.rendering,
+						'lodUpdateDistance',
+						0.5,
+						30,
+						0.5,
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.lodBudget',
+						'LOD rebuilds per frame',
+						vegetation.rendering,
+						'lodRebuildsPerFrame',
+						1,
+						16,
+						1,
+						actions.vegetationRendering
+					),
+					boolField(
+						'vegetation.render.wind',
+						'Wind',
+						vegetation.rendering,
+						'windEnabled',
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.windStrength',
+						'Wind strength',
+						vegetation.rendering,
+						'windStrength',
+						0,
+						3,
+						0.05,
+						actions.vegetationRendering
+					),
+					boolField(
+						'vegetation.render.shadows',
+						'Tree shadows',
+						vegetation.rendering,
+						'castShadows',
+						actions.vegetationRendering
+					),
+					numberField(
+						'vegetation.render.prototypes',
+						'Prototypes per species (0 = default)',
+						vegetation.rendering,
+						'prototypesPerSpecies',
+						0,
+						16,
+						1,
+						actions.vegetationSettings
 					)
 				]),
 				group('vegetation-debug', 'Debug', [

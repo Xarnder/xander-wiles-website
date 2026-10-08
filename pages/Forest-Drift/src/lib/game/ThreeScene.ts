@@ -116,7 +116,11 @@ import { terrainMaterial } from './terrain/TerrainChunk';
 import { terrainColorOptions } from './terrain/terrainColor';
 import { TerrainManager } from './terrain/TerrainManager';
 import { createDefaultTerrainSettings, type TerrainSettings } from './terrain/TerrainSettings';
-import { TreeManager } from './vegetation/TreeManager';
+import {
+	TreeManager,
+	type TreeQualityProfile,
+	type TreeRenderStats
+} from './vegetation/TreeManager';
 import {
 	createDefaultVegetationSettings,
 	type VegetationSettings
@@ -182,6 +186,8 @@ export interface SceneStats {
 	queuedVegetationChunks: number;
 	treeInstances: number;
 	vegetationRevision: number;
+	/** Detailed tree-system stats (LODs, batches, memory) — only populated while render stats are shown. */
+	trees?: TreeRenderStats;
 	graphicsQuality: GraphicsQuality;
 	renderScale: number;
 	pixelRatio: number;
@@ -206,6 +212,17 @@ export interface SceneStats {
 	 * chunk under the ghost including what it would add. Absent when the counter is turned off.
 	 */
 	miniBuildChunk?: MiniBuildChunkReadout & { placing: boolean };
+}
+
+/** The graphics preset's tree knobs (LOD distance scale, density, shadow LODs, wind). */
+function treeQualityFor(quality: GraphicsQuality): TreeQualityProfile {
+	const preset = GRAPHICS_PRESETS[quality];
+	return {
+		lodDistanceScale: preset.treeLodDistanceScale,
+		densityScale: preset.treeDensityScale,
+		maxShadowLod: preset.treeShadowMaxLod,
+		wind: preset.treeWind
+	};
 }
 
 export interface MiniBuildBenchmarkReport extends MiniBuildBenchmarkPlacement {
@@ -460,6 +477,7 @@ export class ThreeScene implements WorldRuntime {
 				this.graphicsSettingsStore.setQuality(quality);
 				this.materialLibrary.setQuality(materialQualityForGraphics(quality));
 				this.materialLibrary.setAnisotropy(this.materialAnisotropy());
+				this.treeManager.setQualityProfile(treeQualityFor(quality));
 				this.graphicsSettings.surfaceRelief = GRAPHICS_PRESETS[quality].materialRelief;
 				this.graphicsSettings.surfaceSubdivision = GRAPHICS_PRESETS[quality].materialSubdivision;
 				this.applySurfaceDetail();
@@ -666,6 +684,7 @@ export class ThreeScene implements WorldRuntime {
 			seed: this.settings.seed
 		});
 		this.scene.add(this.treeManager.group);
+		this.treeManager.setQualityProfile(treeQualityFor(this.graphicsSettings.quality));
 		this.terrainManager.setVegetationRegionSampler(this.treeManager.getVegetationRegionSampler());
 		for (const material of this.treeManager.getSharedMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
@@ -1141,6 +1160,7 @@ export class ThreeScene implements WorldRuntime {
 					this.environmentRevision++;
 					this.dirty.vegetationSettings = true;
 				},
+				vegetationRendering: () => this.treeManager.notifyRenderingChanged(),
 				vegetationViewDistance: () => {
 					this.baseTreeViewDistanceChunks = this.vegetationSettings.loading.treeViewDistanceChunks;
 					this.dirty.vegetationViewDistance = true;
@@ -1720,6 +1740,18 @@ export class ThreeScene implements WorldRuntime {
 		window.dispatchEvent(new KeyboardEvent('keyup', { code }));
 	}
 
+	/** Tree-system stats against the current camera frustum (for the overlay and benchmarks). */
+	treeRenderStats(): TreeRenderStats {
+		this.camera.updateMatrixWorld();
+		const frustum = new THREE.Frustum().setFromProjectionMatrix(
+			new THREE.Matrix4().multiplyMatrices(
+				this.camera.projectionMatrix,
+				this.camera.matrixWorldInverse
+			)
+		);
+		return this.treeManager.getRenderStats(frustum);
+	}
+
 	/** Turns procedural materials on/off (same as the Graphics settings toggle). */
 	setProceduralMaterialsEnabled(enabled: boolean): void {
 		this.graphicsSettings.proceduralMaterials = enabled;
@@ -2179,6 +2211,7 @@ export class ThreeScene implements WorldRuntime {
 		);
 		this.terrainManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
+		this.treeManager.updateView(this.camera.position, deltaSeconds);
 		this.miniBuilds.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
 		this.miniBuildChunkBoundaries.update(
@@ -2266,6 +2299,7 @@ export class ThreeScene implements WorldRuntime {
 			loadedVegetationChunks: vegetationStats.loadedChunks,
 			queuedVegetationChunks: vegetationStats.queuedChunks,
 			treeInstances: vegetationStats.treeInstances,
+			trees: this.graphicsSettings.showRenderStats ? this.treeRenderStats() : undefined,
 			vegetationRevision: vegetationStats.revision,
 			graphicsQuality: graphicsStats.quality,
 			renderScale: graphicsStats.renderScale,

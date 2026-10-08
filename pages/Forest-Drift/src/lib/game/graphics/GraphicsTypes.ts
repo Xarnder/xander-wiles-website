@@ -49,6 +49,15 @@ export interface GraphicsPreset {
 	readonly materialRelief: boolean;
 	/** Subdivide large building faces for finer colour variation by default — see GraphicsSettings.surfaceSubdivision. */
 	readonly materialSubdivision: boolean;
+
+	/** Multiplies tree LOD switch distances (shorter = cheaper). */
+	readonly treeLodDistanceScale: number;
+	/** Multiplies tree planting density; LOW keeps a stable subset of the trees. */
+	readonly treeDensityScale: number;
+	/** Tree LODs at or below this cast shadows (−1 = no tree shadows). */
+	readonly treeShadowMaxLod: number;
+	/** Shader wind on trees. */
+	readonly treeWind: boolean;
 }
 
 export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>> = {
@@ -76,7 +85,11 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		// Never dynamic-resolution-downscale below full res at LOW either — see pixelRatioCap's comment.
 		minDynamicResolutionScale: 1,
 		materialRelief: false,
-		materialSubdivision: false
+		materialSubdivision: false,
+		treeLodDistanceScale: 0.65,
+		treeDensityScale: 0.75,
+		treeShadowMaxLod: -1,
+		treeWind: false
 	},
 	medium: {
 		label: 'Medium',
@@ -97,7 +110,11 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeRenderDistanceMultiplier: 0.8,
 		minDynamicResolutionScale: 0.65,
 		materialRelief: false,
-		materialSubdivision: false
+		materialSubdivision: false,
+		treeLodDistanceScale: 0.85,
+		treeDensityScale: 0.9,
+		treeShadowMaxLod: 0,
+		treeWind: true
 	},
 	high: {
 		label: 'High',
@@ -118,7 +135,11 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeRenderDistanceMultiplier: 1,
 		minDynamicResolutionScale: 0.7,
 		materialRelief: false,
-		materialSubdivision: false
+		materialSubdivision: false,
+		treeLodDistanceScale: 1,
+		treeDensityScale: 1,
+		treeShadowMaxLod: 0,
+		treeWind: true
 	},
 	ultra: {
 		label: 'Ultra',
@@ -142,7 +163,11 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeRenderDistanceMultiplier: 1,
 		minDynamicResolutionScale: 0.75,
 		materialRelief: true,
-		materialSubdivision: true
+		materialSubdivision: true,
+		treeLodDistanceScale: 1.3,
+		treeDensityScale: 1,
+		treeShadowMaxLod: 1,
+		treeWind: true
 	}
 };
 

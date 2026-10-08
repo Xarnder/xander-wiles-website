@@ -45,6 +45,7 @@ export interface GameSettingsActions {
 	stairwellFraming: () => void;
 	vegetationSettings: () => void;
 	vegetationViewDistance: () => void;
+	vegetationRendering: () => void;
 	vegetationBorders: () => void;
 	sky: () => void;
 	graphicsQuality: (quality: string) => void;

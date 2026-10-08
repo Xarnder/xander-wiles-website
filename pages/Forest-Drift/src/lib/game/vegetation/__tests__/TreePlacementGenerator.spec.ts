@@ -133,3 +133,80 @@ describe('slope rejection', () => {
 		expect(evaluation.accepted).toBe(true);
 	});
 });
+
+describe('stylised tree placement', () => {
+	it('keeps neighbouring trees at least minTreeSpacing apart', () => {
+		const spacing = 3;
+		const generator = makeGenerator(1, 0, { minTreeSpacing: spacing, treeCellSize: 6 });
+		const trees = [];
+		for (let x = -6; x < 6; x++)
+			for (let z = -6; z < 6; z++) trees.push(generator.generateCell(x, z)!);
+		for (let i = 0; i < trees.length; i++) {
+			for (let j = i + 1; j < trees.length; j++) {
+				const d = Math.hypot(trees[i].worldX - trees[j].worldX, trees[i].worldZ - trees[j].worldZ);
+				expect(d).toBeGreaterThanOrEqual(spacing - 1e-9);
+			}
+		}
+	});
+
+	it('assigns a valid species, prototype variant and bounded variation deterministically', () => {
+		const a = makeGenerator(1, 0);
+		const b = makeGenerator(1, 0);
+		const species = new Set<string>();
+		for (let i = 0; i < 200; i++) {
+			const tree = a.generateCell(i, -i)!;
+			expect(tree).toEqual(b.generateCell(i, -i));
+			species.add(tree.speciesId);
+			expect(tree.variant).toBeGreaterThanOrEqual(0);
+			expect(tree.widthScale).toBeGreaterThan(0.8);
+			expect(tree.widthScale).toBeLessThan(1.2);
+			expect(tree.tint).toBeGreaterThanOrEqual(0);
+			expect(tree.tint).toBeLessThan(1);
+		}
+		expect(species.size).toBeGreaterThan(1);
+	});
+
+	it('a lower density scale plants a stable subset of the same trees', () => {
+		const settings = { ...createDefaultVegetationSettings().trees };
+		const make = (scale: number) => {
+			const g = new TreePlacementGenerator(
+				makeTerrainSampler(0, 0),
+				makeConstantDensitySampler(0.6),
+				settings,
+				{
+					getDensityScale: () => scale
+				}
+			);
+			g.setSeed('subset-world');
+			return g;
+		};
+		const full = make(1);
+		const reduced = make(0.6);
+		let fullCount = 0;
+		let reducedCount = 0;
+		for (let i = 0; i < 300; i++) {
+			const r = reduced.generateCell(i, 7);
+			const f = full.generateCell(i, 7);
+			if (f) fullCount++;
+			if (r) {
+				reducedCount++;
+				expect(r).toEqual(f);
+			}
+		}
+		expect(reducedCount).toBeLessThan(fullCount);
+	});
+
+	it('uses the configured prototype count per species', () => {
+		const settings = { ...createDefaultVegetationSettings().trees };
+		const g = new TreePlacementGenerator(
+			makeTerrainSampler(0, 0),
+			makeConstantDensitySampler(1),
+			settings,
+			{
+				getPrototypesPerSpecies: () => 1
+			}
+		);
+		g.setSeed('one-prototype');
+		for (let i = 0; i < 100; i++) expect(g.generateCell(i, 0)!.variant).toBe(0);
+	});
+});

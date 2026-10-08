@@ -50,6 +50,52 @@ export interface TreePlacementSettings {
 	treeLineStartHeight: number;
 	/** Elevation above which density reaches zero. */
 	treeLineEndHeight: number;
+	/**
+	 * Minimum distance between neighbouring trees, metres. Enforced deterministically by keeping
+	 * each cell's candidate away from its cell edges (capped below the cell size).
+	 */
+	minTreeSpacing: number;
+	/** Hard cap on trees materialized per vegetation chunk (a performance safety valve). */
+	maxTreesPerChunk: number;
+	/** Keep canopies clear of building foundations, not just trunks. */
+	buildingClearance: boolean;
+}
+
+/**
+ * Which tree species grow where. Weights are relative; the selector also biases them by a
+ * low-frequency conifer/broadleaf region map, elevation and local forest density, so forests form
+ * broadleaf woods, pine forests and mixed woodland instead of uniform confetti.
+ */
+export interface TreeSpeciesMixSettings {
+	oakWeight: number;
+	pineWeight: number;
+	cypressWeight: number;
+	ornamentalWeight: number;
+	/** World-unit scale of the conifer-vs-broadleaf region map. */
+	coniferRegionScale: number;
+	/** Elevation band over which forests shift toward conifers. */
+	coniferStartHeight: number;
+	coniferFullHeight: number;
+}
+
+/** Runtime rendering knobs (developer-tunable; the graphics preset scales distances and toggles). */
+export interface TreeRenderingSettings {
+	/** Distances (metres) at which trees switch to LOD1 / LOD2 / LOD3 (silhouette). */
+	lod1Distance: number;
+	lod2Distance: number;
+	lod3Distance: number;
+	/** Fractional hysteresis band around each LOD distance, so trees don't flicker between LODs. */
+	lodHysteresis: number;
+	/** Camera movement (metres) before a chunk's LOD assignment is re-evaluated. */
+	lodUpdateDistance: number;
+	/** Max chunks re-batched for LOD per frame (spreads the CPU cost). */
+	lodRebuildsPerFrame: number;
+	windEnabled: boolean;
+	windStrength: number;
+	/** Trees cast shadows at all (the graphics preset also limits which LODs cast). */
+	castShadows: boolean;
+	/** Prototype designs per species; 0 = each species' own default. Draw calls scale with this. */
+	prototypesPerSpecies: number;
 }
 
 /** How vegetation chunks are loaded around the player — independent of terrain's own view distance. */
@@ -68,6 +114,8 @@ export interface VegetationDebugSettings {
 export interface VegetationSettings {
 	forest: ForestRegionSettings;
 	trees: TreePlacementSettings;
+	species: TreeSpeciesMixSettings;
+	rendering: TreeRenderingSettings;
 	loading: TreeLoadingSettings;
 	debug: VegetationDebugSettings;
 }
@@ -102,7 +150,33 @@ export function createDefaultVegetationSettings(): VegetationSettings {
 			maxTreeSlopeDegrees: 40,
 			enableTreeLine: true,
 			treeLineStartHeight: 55,
-			treeLineEndHeight: 85
+			treeLineEndHeight: 85,
+			minTreeSpacing: 2.5,
+			maxTreesPerChunk: 400,
+			buildingClearance: true
+		},
+
+		species: {
+			oakWeight: 1,
+			pineWeight: 0.9,
+			cypressWeight: 0.35,
+			ornamentalWeight: 0.3,
+			coniferRegionScale: 700,
+			coniferStartHeight: 18,
+			coniferFullHeight: 55
+		},
+
+		rendering: {
+			lod1Distance: 45,
+			lod2Distance: 95,
+			lod3Distance: 170,
+			lodHysteresis: 0.08,
+			lodUpdateDistance: 4,
+			lodRebuildsPerFrame: 3,
+			windEnabled: true,
+			windStrength: 1,
+			castShadows: true,
+			prototypesPerSpecies: 0
 		},
 
 		loading: {
@@ -122,17 +196,6 @@ export function createDefaultVegetationSettings(): VegetationSettings {
  * A deterministic logical tree — identity derives entirely from its vegetation cell, never a
  * random UUID, so it reproduces across sessions/clients from (worldSeed, cellX, cellZ) alone. No
  * per-tree database row is needed; a future multiplayer server only needs to record exceptions
- * (removed/replaced trees) keyed by this same id.
+ * (removed/replaced trees) keyed by this same id. See `trees/TreeSpeciesTypes.ts`.
  */
-export interface ProceduralTreeDefinition {
-	id: string;
-	cellX: number;
-	cellZ: number;
-	worldX: number;
-	worldZ: number;
-	scale: number;
-	rotationY: number;
-	variant: number;
-}
-
-export const TREE_VARIANT_COUNT = 3;
+export type { TreeInstanceDefinition as ProceduralTreeDefinition } from './trees/TreeSpeciesTypes';

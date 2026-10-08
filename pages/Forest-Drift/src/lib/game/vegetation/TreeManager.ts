@@ -1,22 +1,24 @@
 import * as THREE from 'three';
-import { InstancedTreeLayer } from './InstancedTreeLayer';
-import { createTreeVariantAssets, type TreeVariantAssets } from './treeGeometry';
 import { TreePlacementGenerator, type CellEvaluation } from './TreePlacementGenerator';
 import { VegetationRegionSampler } from './VegetationRegionSampler';
 import type { VegetationSettings } from './VegetationTypes';
+import { TreeChunk, type PlantedTree, type TreeShadowPolicy } from './trees/TreeChunk';
+import type { TreeLodDistances } from './trees/treeLod';
+import { createTreeMaterial, type TreeWindUniforms } from './trees/treeMaterial';
+import { TreePrototypeCache } from './trees/TreePrototypeCache';
+import { TreeSpeciesSelector } from './trees/TreeSpeciesSelector';
+import { getTreeSpecies } from './trees/treeSpecies';
+import type { TreeSpeciesDefinition } from './trees/TreeSpeciesTypes';
 import type { FoundationManager } from '../building/FoundationManager';
 import { chunkKey, worldToChunkCoord, type ChunkKey } from '../terrain/chunkKey';
 import { TerrainGenerationQueue, type ChunkJob } from '../terrain/TerrainGenerationQueue';
-import type { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
+import { createHeightSample, type TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
-
-/** Generous per-variant, per-component instance capacity — see the README for the sizing rationale. */
-const CAPACITY_PER_VARIANT = 6000;
 
 /**
  * The stable identity of a procedural tree: its vegetation cell, and nothing else.
  *
- * This works precisely because tree existence/position/scale/rotation/variant are all derived from
+ * This works precisely because tree existence/position/species/variant/scale are all derived from
  * `(worldSeed, cellX, cellZ)` alone (see TreePlacementGenerator) — so a cell reference is enough to
  * name a specific tree forever, in a save file or, later, in a multiplayer message, without either
  * side having sent the tree's data.
@@ -25,8 +27,6 @@ export function proceduralTreeId(cellX: number, cellZ: number): string {
 	return `${cellX}:${cellZ}`;
 }
 
-const UP_AXIS = new THREE.Vector3(0, 1, 0);
-
 const treeChunkBorderMaterial = new THREE.LineBasicMaterial({ color: 0x33ccff });
 const debugPointsMaterial = new THREE.PointsMaterial({
 	size: 0.5,
@@ -34,22 +34,26 @@ const debugPointsMaterial = new THREE.PointsMaterial({
 	sizeAttenuation: true
 });
 
-/** Mutable box a tree instance owns so InstancedTreeLayer can update it in place when a swap-remove moves it. */
-interface IndexBox {
-	index: number;
+/** Graphics-preset knobs for trees (see `GraphicsPreset.tree*`). */
+export interface TreeQualityProfile {
+	lodDistanceScale: number;
+	densityScale: number;
+	maxShadowLod: number;
+	wind: boolean;
 }
 
-interface ActiveTreeInstance {
-	variant: number;
-	trunkBox: IndexBox;
-	foliageBox: IndexBox;
-}
+const DEFAULT_QUALITY: TreeQualityProfile = {
+	lodDistanceScale: 1,
+	densityScale: 1,
+	maxShadowLod: 0,
+	wind: true
+};
 
 interface VegetationChunkRecord {
 	chunkX: number;
 	chunkZ: number;
 	revision: number;
-	instances: ActiveTreeInstance[];
+	trees: TreeChunk | null;
 	borderLines: THREE.LineSegments | null;
 	debugPoints: THREE.Points | null;
 }
@@ -61,6 +65,25 @@ export interface VegetationStats {
 	revision: number;
 }
 
+/** Tuning/debug view of the tree system (see the Vegetation settings and the stats overlay). */
+export interface TreeRenderStats {
+	/** Trees in chunks whose batches intersect the camera frustum, per LOD. */
+	visibleTreesByLod: [number, number, number, number];
+	visibleTrees: number;
+	/** Batches in the camera frustum = tree draw calls in the main pass. */
+	visibleBatches: number;
+	activeBatches: number;
+	activeChunks: number;
+	prototypeGeometries: number;
+	prototypeTriangles: number;
+	/** Prototype geometry + per-chunk instance data, bytes. */
+	memoryBytes: number;
+	/** Trees per LOD across all loaded chunks. */
+	loadedTreesByLod: [number, number, number, number];
+	/** Wall-clock milliseconds of the most recent chunk materialization. */
+	lastChunkBuildMs: number;
+}
+
 export interface TreeManagerOptions {
 	settings: VegetationSettings;
 	terrainSettings: TerrainSettings;
@@ -69,15 +92,26 @@ export interface TreeManagerOptions {
 	seed: string;
 }
 
+/** Horizontal canopy radius at scale 1 (metres) — for keeping crowns clear of buildings. */
+function canopyRadius(species: TreeSpeciesDefinition): number {
+	const canopy = species.canopy;
+	if (canopy.kind === 'blobs') return canopy.width[1] / 2;
+	if (canopy.kind === 'tiers') return canopy.baseRadius[1];
+	return canopy.radius[1];
+}
+
 /**
- * Loads/unloads vegetation chunks around the player and renders every accepted tree via
- * instanced rendering (one InstancedMesh per tree-variant per component — trunk/foliage — so the
- * whole visible forest costs a small, fixed number of draw calls regardless of tree count).
+ * Streams the stylised tree system around the player — see the README's "Stylised trees" section.
  *
- * Vegetation chunks are aligned to the same world chunkSize as terrain purely for *loading
- * convenience* — every cell's world position, and therefore every tree's existence, still comes
- * entirely from TreePlacementGenerator's (worldSeed, cellX, cellZ) math. A chunk boundary changes
- * which chunk *loads* a cell's tree, never whether that tree exists or where it sits.
+ * Layers, kept separate:
+ *   - placement: TreePlacementGenerator + TreeSpeciesSelector (where trees go, which species)
+ *   - prototypes: TreePrototypeCache (shared compiled geometry per species × variant × LOD)
+ *   - rendering: TreeChunk (per-chunk instanced batches per prototype × LOD, one shared material)
+ *   - runtime: this class (chunk load/unload queue, budgeted LOD updates, wind, stats)
+ *
+ * Per-frame CPU work is: one chunk-distance check per loaded chunk, at most
+ * `lodRebuildsPerFrame` chunk re-batches when the camera has moved enough, and one wind uniform.
+ * No per-tree objects, updates, raycasts or animation.
  */
 export class TreeManager {
 	readonly group = new THREE.Group();
@@ -88,33 +122,30 @@ export class TreeManager {
 	private readonly foundationManager: FoundationManager;
 
 	private readonly vegetationRegionSampler: VegetationRegionSampler;
+	private readonly speciesSelector: TreeSpeciesSelector;
 	private readonly treePlacementGenerator: TreePlacementGenerator;
 
-	private readonly variantAssets: TreeVariantAssets[];
-	private readonly trunkLayers: InstancedTreeLayer<IndexBox>[];
-	private readonly foliageLayers: InstancedTreeLayer<IndexBox>[];
+	private readonly prototypes: TreePrototypeCache;
+	private readonly material: THREE.MeshStandardMaterial;
+	private readonly wind: TreeWindUniforms;
+	private quality: TreeQualityProfile = { ...DEFAULT_QUALITY };
 
 	private readonly active = new Map<ChunkKey, VegetationChunkRecord>();
 	private readonly queue = new TerrainGenerationQueue();
 
 	/**
 	 * Deterministic ids of procedural trees the player has removed — the vegetation half of
-	 * `ProceduralWorldOverrides`. Held as a Set because it's consulted once per candidate cell during
-	 * chunk materialization, and it is the ONLY vegetation state that is ever persisted: every tree
-	 * that still exists is regenerated from `(seed, cell)` instead.
+	 * `ProceduralWorldOverrides`. It is the ONLY vegetation state ever persisted: every tree that
+	 * still exists is regenerated from `(seed, cell)` instead.
 	 */
 	private removedTreeIds = new Set<string>();
-	/** Bumped whenever the override set changes, so world persistence can detect it — see WorldRevisionCounters. */
 	private overrideRevision = 0;
 
 	private revision = 0;
 	private lastPlayerChunkX = Number.NaN;
 	private lastPlayerChunkZ = Number.NaN;
-
-	private readonly scratchMatrix = new THREE.Matrix4();
-	private readonly scratchPosition = new THREE.Vector3();
-	private readonly scratchQuaternion = new THREE.Quaternion();
-	private readonly scratchScale = new THREE.Vector3();
+	private readonly camera = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
+	private lastChunkBuildMs = 0;
 
 	constructor(options: TreeManagerOptions) {
 		this.settings = options.settings;
@@ -124,34 +155,24 @@ export class TreeManager {
 
 		this.vegetationRegionSampler = new VegetationRegionSampler(this.settings);
 		this.vegetationRegionSampler.setSeed(options.seed);
+		this.speciesSelector = new TreeSpeciesSelector(this.settings.species);
 		this.treePlacementGenerator = new TreePlacementGenerator(
 			this.terrainHeightSampler,
 			this.vegetationRegionSampler,
-			this.settings.trees
+			this.settings.trees,
+			{
+				speciesSelector: this.speciesSelector,
+				getPrototypesPerSpecies: () => this.settings.rendering.prototypesPerSpecies,
+				getDensityScale: () => this.quality.densityScale
+			}
 		);
 		this.treePlacementGenerator.setSeed(options.seed);
 
-		this.variantAssets = createTreeVariantAssets();
-		this.trunkLayers = this.variantAssets.map(
-			(assets) =>
-				new InstancedTreeLayer(assets.trunkGeometry, assets.trunkMaterial, CAPACITY_PER_VARIANT)
-		);
-		this.foliageLayers = this.variantAssets.map(
-			(assets) =>
-				new InstancedTreeLayer(assets.foliageGeometry, assets.foliageMaterial, CAPACITY_PER_VARIANT)
-		);
-		for (const layer of [...this.trunkLayers, ...this.foliageLayers]) {
-			// NOT castShadow: InstancedTreeLayer deliberately sets `frustumCulled = false` on this mesh
-			// (a populated instance buffer's default bounding sphere doesn't reflect where instances
-			// actually are, and recomputing a correct one per chunk load/unload isn't implemented) —
-			// which means a shadow camera can't cull it either, so every cascade would submit every
-			// loaded tree instance (thousands) to the shadow depth shader every frame. Measured cost of
-			// that was severe enough (multi-second frame times) to rule it out for this pass; trees
-			// still receive shadows/AO from buildings and terrain for grounding. See the README's
-			// "Graphics quality" section for the full writeup and what a real fix would need.
-			layer.mesh.receiveShadow = true;
-			this.group.add(layer.mesh);
-		}
+		this.prototypes = new TreePrototypeCache(options.seed);
+		const { material, wind } = createTreeMaterial();
+		this.material = material;
+		this.wind = wind;
+		this.group.name = 'trees';
 	}
 
 	getVegetationRegionSampler(): VegetationRegionSampler {
@@ -184,13 +205,24 @@ export class TreeManager {
 		return this.overrideRevision;
 	}
 
-	/**
-	 * The small, finite set of shared trunk/foliage materials (one pair per tree variant) — every
-	 * tree in the world reuses one of these, so the graphics pipeline only needs to register this
-	 * handful with the cascaded-shadow system once, regardless of how many trees are ever placed.
-	 */
+	/** Every tree in the world uses this ONE material — register it with the shadow pipeline once. */
 	getSharedMaterials(): THREE.Material[] {
-		return this.variantAssets.flatMap((assets) => [assets.trunkMaterial, assets.foliageMaterial]);
+		return [this.material];
+	}
+
+	/** Applies a graphics preset's tree profile. Density changes regenerate; everything else is live. */
+	setQualityProfile(profile: TreeQualityProfile): void {
+		const densityChanged = profile.densityScale !== this.quality.densityScale;
+		this.quality = { ...profile };
+		this.invalidateLods();
+		this.applyShadowPolicy();
+		if (densityChanged) this.notifySettingsChanged();
+	}
+
+	/** Rendering settings changed (LOD distances, shadows, wind, prototype count). */
+	notifyRenderingChanged(): void {
+		this.invalidateLods();
+		this.applyShadowPolicy();
 	}
 
 	update(playerWorldX: number, playerWorldZ: number): void {
@@ -207,7 +239,47 @@ export class TreeManager {
 		this.processQueue(playerChunkX, playerChunkZ);
 	}
 
-	/** Vegetation settings changed (forest shape, tree density/scale/slope, debug overlays): regenerate visible chunks, terrain untouched. */
+	/**
+	 * Per-frame view update: advances the wind clock and re-assigns LODs for chunks the camera has
+	 * moved enough relative to (nearest first, budgeted). Chunks entirely inside one LOD band skip
+	 * per-tree work entirely.
+	 */
+	updateView(cameraPosition: THREE.Vector3, deltaSeconds: number): void {
+		const rendering = this.settings.rendering;
+		this.wind.uTreeTime.value = (this.wind.uTreeTime.value + deltaSeconds) % 3600;
+		this.wind.uTreeWindStrength.value =
+			rendering.windEnabled && this.quality.wind ? rendering.windStrength : 0;
+
+		this.camera.copy(cameraPosition);
+		const distances = this.lodDistances();
+		const threshold = Math.max(0.5, rendering.lodUpdateDistance);
+		const candidates: { chunk: TreeChunk; distance: number }[] = [];
+		for (const record of this.active.values()) {
+			const chunk = record.trees;
+			if (!chunk || chunk.count === 0) continue;
+			if (chunk.needsBuild) {
+				candidates.push({ chunk, distance: -1 });
+				continue;
+			}
+			const moved = chunk.lastEvaluation.distanceTo(cameraPosition);
+			if (!(moved >= threshold)) continue;
+			const [near] = chunk.distanceRange(cameraPosition);
+			candidates.push({ chunk, distance: near });
+		}
+		candidates.sort((a, b) => a.distance - b.distance);
+		const budget = Math.max(1, rendering.lodRebuildsPerFrame);
+		let rebuilt = 0;
+		for (const { chunk } of candidates) {
+			if (rebuilt >= budget && !chunk.needsBuild) break;
+			const changed = chunk.assignLods(cameraPosition, distances);
+			if (changed || chunk.needsBuild) {
+				chunk.rebuildBatches(this.prototypes, this.material, this.shadowPolicy());
+				rebuilt++;
+			}
+		}
+	}
+
+	/** Vegetation settings changed (forest shape, tree density/scale/slope, species mix, debug overlays): regenerate visible chunks, terrain untouched. */
 	notifySettingsChanged(): void {
 		this.revision++;
 		for (const chunk of this.active.values())
@@ -217,20 +289,16 @@ export class TreeManager {
 	notifySeedChanged(seed: string): void {
 		this.vegetationRegionSampler.setSeed(seed);
 		this.treePlacementGenerator.setSeed(seed);
+		this.prototypes.setWorldSeed(seed);
 		this.notifySettingsChanged();
 	}
 
 	/**
-	 * Terrain changed (shape, seed, or chunkSize/topology). Vegetation generation is otherwise
-	 * independent of terrain settings, but tree Y/slope placement reads the same TerrainHeightSampler,
-	 * so visible vegetation is refreshed to stay consistent with the new ground — see the README's
-	 * "Terrain settings changes" note for why this is a development-time convenience, not a hard
-	 * coupling of the two systems.
+	 * Terrain changed (shape, seed, or chunkSize/topology). Tree Y/slope placement reads the same
+	 * TerrainHeightSampler, so visible vegetation is refreshed to stay on the new ground.
 	 */
 	notifyTerrainChanged(): void {
-		this.revision++;
-		for (const chunk of this.active.values())
-			this.queue.enqueue(chunk.chunkX, chunk.chunkZ, this.revision);
+		this.notifySettingsChanged();
 		this.lastPlayerChunkX = Number.NaN;
 		this.lastPlayerChunkZ = Number.NaN;
 	}
@@ -256,7 +324,7 @@ export class TreeManager {
 
 	getStats(): VegetationStats {
 		let treeInstances = 0;
-		for (const record of this.active.values()) treeInstances += record.instances.length;
+		for (const record of this.active.values()) treeInstances += record.trees?.count ?? 0;
 		return {
 			loadedChunks: this.active.size,
 			queuedChunks: this.queue.size,
@@ -265,16 +333,80 @@ export class TreeManager {
 		};
 	}
 
+	/** Detailed tuning stats. `frustum` (the camera's) limits "visible" counts to batches on screen. */
+	getRenderStats(frustum: THREE.Frustum | null): TreeRenderStats {
+		const visibleTreesByLod: [number, number, number, number] = [0, 0, 0, 0];
+		const loadedTreesByLod: [number, number, number, number] = [0, 0, 0, 0];
+		let visibleBatches = 0;
+		let activeBatches = 0;
+		let activeChunks = 0;
+		let memoryBytes = 0;
+		const sphere = new THREE.Sphere();
+		for (const record of this.active.values()) {
+			const chunk = record.trees;
+			if (!chunk) continue;
+			activeChunks++;
+			chunk.lodCounts(loadedTreesByLod);
+			memoryBytes += chunk.memoryBytes();
+			for (const mesh of chunk.getBatches()) {
+				activeBatches++;
+				if (!mesh.boundingSphere) continue;
+				sphere.copy(mesh.boundingSphere).applyMatrix4(mesh.matrixWorld);
+				if (frustum && !frustum.intersectsSphere(sphere)) continue;
+				visibleBatches++;
+				visibleTreesByLod[mesh.userData.treeLod as number] += mesh.count;
+			}
+		}
+		const prototypeStats = this.prototypes.getStats();
+		return {
+			visibleTreesByLod,
+			visibleTrees: visibleTreesByLod.reduce((a, b) => a + b, 0),
+			visibleBatches,
+			activeBatches,
+			activeChunks,
+			prototypeGeometries: prototypeStats.geometries,
+			prototypeTriangles: prototypeStats.triangles,
+			memoryBytes: memoryBytes + prototypeStats.bytes,
+			loadedTreesByLod,
+			lastChunkBuildMs: this.lastChunkBuildMs
+		};
+	}
+
 	dispose(): void {
 		for (const record of this.active.values()) this.disposeChunkRecord(record);
 		this.active.clear();
 		this.queue.clear();
-		for (const layer of [...this.trunkLayers, ...this.foliageLayers]) layer.dispose();
-		for (const assets of this.variantAssets) {
-			assets.trunkMaterial.dispose();
-			assets.foliageMaterial.dispose();
-		}
+		this.prototypes.dispose();
+		this.material.dispose();
 		this.group.clear();
+	}
+
+	private lodDistances(): TreeLodDistances {
+		const rendering = this.settings.rendering;
+		const scale = this.quality.lodDistanceScale;
+		return {
+			lod1: rendering.lod1Distance * scale,
+			lod2: Math.max(rendering.lod1Distance, rendering.lod2Distance) * scale,
+			lod3: Math.max(rendering.lod2Distance, rendering.lod3Distance) * scale,
+			hysteresis: rendering.lodHysteresis
+		};
+	}
+
+	private shadowPolicy(): TreeShadowPolicy {
+		return {
+			castShadows: this.settings.rendering.castShadows,
+			maxShadowLod: this.quality.maxShadowLod
+		};
+	}
+
+	private invalidateLods(): void {
+		for (const record of this.active.values())
+			record.trees?.lastEvaluation.set(Number.NaN, Number.NaN, Number.NaN);
+	}
+
+	private applyShadowPolicy(): void {
+		const policy = this.shadowPolicy();
+		for (const record of this.active.values()) record.trees?.applyShadowPolicy(policy);
 	}
 
 	private refreshActiveArea(playerChunkX: number, playerChunkZ: number): void {
@@ -314,19 +446,35 @@ export class TreeManager {
 		for (const job of jobs) this.materializeJob(job);
 	}
 
+	/** True when a tree's trunk or (with buildingClearance) crown would intersect a foundation. */
+	private blockedByBuilding(worldX: number, worldZ: number, radius: number): boolean {
+		const fm = this.foundationManager;
+		if (fm.getTopYAt(worldX, worldZ) !== null) return true;
+		if (!this.settings.trees.buildingClearance || radius <= 0) return false;
+		for (let i = 0; i < 8; i++) {
+			const angle = (i / 8) * Math.PI * 2;
+			if (
+				fm.getTopYAt(worldX + Math.cos(angle) * radius, worldZ + Math.sin(angle) * radius) !== null
+			)
+				return true;
+		}
+		return false;
+	}
+
 	private materializeJob(job: ChunkJob): void {
 		if (job.revision !== this.revision) return;
+		const started = typeof performance !== 'undefined' ? performance.now() : 0;
 
 		const key = chunkKey(job.chunkX, job.chunkZ);
 		let record = this.active.get(key);
 		if (record) {
-			this.clearChunkInstances(record);
+			this.clearChunk(record);
 		} else {
 			record = {
 				chunkX: job.chunkX,
 				chunkZ: job.chunkZ,
 				revision: job.revision,
-				instances: [],
+				trees: null,
 				borderLines: null,
 				debugPoints: null
 			};
@@ -340,8 +488,7 @@ export class TreeManager {
 		const originZ = job.chunkZ * chunkSize;
 
 		// The cell whose *origin* falls in [originX, originX + chunkSize) belongs to this chunk —
-		// works for any chunkSize/cellSize ratio and negative coordinates (Math.ceil, not floor,
-		// so it's the smallest cell index whose origin is >= originX).
+		// works for any chunkSize/cellSize ratio and negative coordinates.
 		const cellMinX = Math.ceil(originX / cellSize);
 		const cellMaxX = Math.ceil((originX + chunkSize) / cellSize) - 1;
 		const cellMinZ = Math.ceil(originZ / cellSize);
@@ -350,81 +497,47 @@ export class TreeManager {
 		const collectDebug =
 			this.settings.debug.showTreeCells || this.settings.debug.showRejectedTreeCandidates;
 		const debugEvaluations: CellEvaluation[] = [];
+		const planted: PlantedTree[] = [];
+		const maxTrees = Math.max(0, this.settings.trees.maxTreesPerChunk);
+		const sample = createHeightSample();
 
 		for (let cx = cellMinX; cx <= cellMaxX; cx++) {
 			for (let cz = cellMinZ; cz <= cellMaxZ; cz++) {
 				const evaluation = this.treePlacementGenerator.evaluateCell(cx, cz);
 				if (collectDebug) debugEvaluations.push(evaluation);
-				if (!evaluation.accepted || !evaluation.tree) continue;
-				// The world save stores *exceptions* to the deterministic forest, never the forest
-				// itself — see ProceduralWorldOverrides. A removed tree costs one short id in the save;
-				// the millions still standing cost nothing because they are re-derived from the seed.
+				const tree = evaluation.tree;
+				if (!evaluation.accepted || !tree) continue;
+				if (planted.length >= maxTrees) continue;
+				// The world save stores *exceptions* to the deterministic forest, never the forest itself.
 				if (this.removedTreeIds.has(proceduralTreeId(cx, cz))) continue;
-				if (
-					this.foundationManager.getTopYAt(evaluation.tree.worldX, evaluation.tree.worldZ) !== null
-				)
-					continue;
-				this.addTreeInstance(
-					record,
-					evaluation.tree.worldX,
-					evaluation.tree.worldZ,
-					evaluation.tree.rotationY,
-					evaluation.tree.scale,
-					evaluation.tree.variant
-				);
+				const crown =
+					canopyRadius(getTreeSpecies(tree.speciesId)) * tree.scale * tree.widthScale * 0.7;
+				if (this.blockedByBuilding(tree.worldX, tree.worldZ, crown)) continue;
+				this.terrainHeightSampler.sampleWithNormal(tree.worldX, tree.worldZ, sample);
+				planted.push({ tree, groundY: sample.height, normalY: sample.normalY });
 			}
 		}
 
-		this.updateChunkDebugVisuals(record, debugEvaluations);
+		const chunk = new TreeChunk(job.chunkX, job.chunkZ, planted);
+		record.trees = chunk;
+		this.group.add(chunk.group);
+		// Build immediately when we know where the camera is, so a chunk never appears late.
+		if (Number.isFinite(this.camera.x) && chunk.count > 0) {
+			chunk.assignLods(this.camera, this.lodDistances());
+			chunk.rebuildBatches(this.prototypes, this.material, this.shadowPolicy());
+		}
 
+		this.updateChunkDebugVisuals(record, debugEvaluations);
 		if (this.settings.debug.showTreeChunkBorders && !record.borderLines) {
 			record.borderLines = this.buildBorderLines(job.chunkX, job.chunkZ);
 			this.group.add(record.borderLines);
 		}
+		if (started) this.lastChunkBuildMs = performance.now() - started;
 	}
 
-	private addTreeInstance(
-		record: VegetationChunkRecord,
-		worldX: number,
-		worldZ: number,
-		rotationY: number,
-		scale: number,
-		variant: number
-	): void {
-		const height = this.terrainHeightSampler.sample(worldX, worldZ);
-		this.scratchPosition.set(worldX, height, worldZ);
-		this.scratchQuaternion.setFromAxisAngle(UP_AXIS, rotationY);
-		this.scratchScale.setScalar(scale);
-		this.scratchMatrix.compose(this.scratchPosition, this.scratchQuaternion, this.scratchScale);
-
-		const trunkBox: IndexBox = { index: -1 };
-		const foliageBox: IndexBox = { index: -1 };
-		const trunkIndex = this.trunkLayers[variant].add(this.scratchMatrix, trunkBox);
-		const foliageIndex = this.foliageLayers[variant].add(this.scratchMatrix, foliageBox);
-
-		if (trunkIndex === -1 || foliageIndex === -1) {
-			// At instancing capacity — drop this candidate rather than exceed the fixed buffer.
-			if (trunkIndex !== -1) this.trunkLayers[variant].remove(trunkIndex, () => {});
-			if (foliageIndex !== -1) this.foliageLayers[variant].remove(foliageIndex, () => {});
-			return;
-		}
-
-		trunkBox.index = trunkIndex;
-		foliageBox.index = foliageIndex;
-		record.instances.push({ variant, trunkBox, foliageBox });
-	}
-
-	private clearChunkInstances(record: VegetationChunkRecord): void {
-		for (const instance of record.instances) {
-			this.trunkLayers[instance.variant].remove(instance.trunkBox.index, (owner, newIndex) => {
-				owner.index = newIndex;
-			});
-			this.foliageLayers[instance.variant].remove(instance.foliageBox.index, (owner, newIndex) => {
-				owner.index = newIndex;
-			});
-		}
-		record.instances.length = 0;
-
+	private clearChunk(record: VegetationChunkRecord): void {
+		record.trees?.dispose();
+		record.trees = null;
 		if (record.debugPoints) {
 			this.group.remove(record.debugPoints);
 			record.debugPoints.geometry.dispose();
@@ -433,7 +546,7 @@ export class TreeManager {
 	}
 
 	private disposeChunkRecord(record: VegetationChunkRecord): void {
-		this.clearChunkInstances(record);
+		this.clearChunk(record);
 		if (record.borderLines) {
 			this.group.remove(record.borderLines);
 			record.borderLines.geometry.dispose();
@@ -453,21 +566,14 @@ export class TreeManager {
 		const colors: number[] = [];
 
 		for (const evaluation of evaluations) {
-			if (evaluation.accepted) {
-				if (!showCells) continue;
-				positions.push(
-					evaluation.worldX,
-					this.terrainHeightSampler.sample(evaluation.worldX, evaluation.worldZ) + 0.3,
-					evaluation.worldZ
-				);
-				colors.push(0.3, 1, 0.3);
-			} else {
-				if (!showRejected) continue;
-				positions.push(
-					evaluation.worldX,
-					this.terrainHeightSampler.sample(evaluation.worldX, evaluation.worldZ) + 0.3,
-					evaluation.worldZ
-				);
+			if (evaluation.accepted ? !showCells : !showRejected) continue;
+			positions.push(
+				evaluation.worldX,
+				this.terrainHeightSampler.sample(evaluation.worldX, evaluation.worldZ) + 0.3,
+				evaluation.worldZ
+			);
+			if (evaluation.accepted) colors.push(0.3, 1, 0.3);
+			else {
 				const isSlope = evaluation.rejectionReason === 'slope';
 				colors.push(isSlope ? 1 : 0.55, 0.3, isSlope ? 0.3 : 0.85);
 			}

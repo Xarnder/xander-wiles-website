@@ -32,5 +32,8 @@ export const CellHashChannel = {
 	Existence: 2,
 	Scale: 3,
 	Rotation: 4,
-	Variant: 5
+	Variant: 5,
+	Species: 6,
+	Width: 7,
+	Tint: 8
 } as const;
