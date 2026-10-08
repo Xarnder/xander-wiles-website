@@ -599,7 +599,8 @@ export class ThreeScene implements WorldRuntime {
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			materialManager: this.materialManager,
-			buildingSettings
+			buildingSettings,
+			sampleTerrainHeight: (x, z) => this.terrainManager.getHeightSampler().sample(x, z)
 		});
 		this.scene.add(this.stairManager.group);
 		this.stairLevelTrigger = new StairLevelTrigger(this.stairManager, this.levelManager);

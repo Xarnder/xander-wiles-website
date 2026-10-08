@@ -30,6 +30,7 @@ import {
 } from './stairMath';
 import {
 	approachStairBaseY,
+	stairFootingDepth,
 	foundationGridCellCounts,
 	MAX_STAIR_EXTERIOR_CELLS,
 	snapStairFootprintToFoundation,
@@ -911,7 +912,10 @@ export class StairTool implements BuildTool {
 		});
 
 		this.previewGeometry?.dispose();
-		this.previewGeometry = buildStairGeometry(bounds, this.direction, baseY, metrics);
+		const footing = stairFootingDepth(bounds, baseY, frame, (x, z) =>
+			this.terrainHeightSampler.sample(x, z)
+		);
+		this.previewGeometry = buildStairGeometry(bounds, this.direction, baseY, metrics, footing);
 		this.previewMesh.geometry = this.previewGeometry;
 		this.previewMesh.position.set(frame.originWorldX, frame.originWorldY, frame.originWorldZ);
 		this.previewMaterial.color.setHex(colorForPreviewFit(fit));
@@ -987,8 +991,7 @@ export class StairTool implements BuildTool {
 		const fullCellsX = Math.floor(width / buildingGridSize);
 		const fullCellsZ = Math.floor(depth / buildingGridSize);
 		const exteriorPad = Math.min(MAX_STAIR_EXTERIOR_CELLS, FALLBACK_RADIUS_CELLS);
-		const paddedCount =
-			(fullCellsX + 1 + exteriorPad * 2) * (fullCellsZ + 1 + exteriorPad * 2);
+		const paddedCount = (fullCellsX + 1 + exteriorPad * 2) * (fullCellsZ + 1 + exteriorPad * 2);
 
 		let minGridX: number;
 		let maxGridX: number;
@@ -1120,12 +1123,8 @@ export class StairTool implements BuildTool {
 			Math.min(xCells, zCells) < this.buildingSettings.minimumStairWidthCells ||
 			Math.max(xCells, zCells) < this.buildingSettings.minimumStairRunCells;
 		if (approach && ceilingLocalY !== null) {
-			const riseNeeded = ceilingLocalY - this.placementBaseY(
-				this.foundationId!,
-				footprint,
-				approach,
-				approach
-			);
+			const riseNeeded =
+				ceilingLocalY - this.placementBaseY(this.foundationId!, footprint, approach, approach);
 			lines.push(`Rise to foundation: ${Math.max(0, riseNeeded).toFixed(2)}m`);
 			if (fit === 'match') lines.push('Matches foundation height!');
 			else if (fit === 'too-tall') lines.push('Too long — stairs would overshoot the pad');
@@ -1201,7 +1200,13 @@ export class StairTool implements BuildTool {
 			} else {
 				lines.push(`Top elevation: ${metrics.topLocalY.toFixed(2)}m`, 'No matching floor level');
 			}
-			lines.push('', '← / → Change direction', 'Enter / Click: Build', 'E customise', 'Right click: Cancel');
+			lines.push(
+				'',
+				'← / → Change direction',
+				'Enter / Click: Build',
+				'E customise',
+				'Right click: Cancel'
+			);
 		} else {
 			lines.push('', 'Enter / Click: Build', 'E customise', 'Right click: Cancel');
 		}

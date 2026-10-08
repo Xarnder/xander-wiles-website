@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	STAIR_FOOTING_EXTRA_DEPTH,
+	stairFootingDepth,
 	approachDirectionForFootprint,
 	approachStairBaseY,
 	foundationGridCellCounts,
@@ -22,7 +24,11 @@ describe('foundationGridCellCounts', () => {
 describe('isStairFootprintInterior', () => {
 	it('accepts a rectangle on the pad, including the far-edge grid line', () => {
 		expect(
-			isStairFootprintInterior({ minGridX: 0, maxGridX: 12, minGridZ: 0, maxGridZ: 4 }, CELLS_X, CELLS_Z)
+			isStairFootprintInterior(
+				{ minGridX: 0, maxGridX: 12, minGridZ: 0, maxGridZ: 4 },
+				CELLS_X,
+				CELLS_Z
+			)
 		).toBe(true);
 		expect(
 			isStairFootprintInterior(
@@ -224,5 +230,28 @@ describe('isStairGridPointNearFoundation', () => {
 		expect(isStairGridPointNearFoundation(20, 12, CELLS_X, CELLS_Z)).toBe(true);
 		expect(isStairGridPointNearFoundation(-8, 12, CELLS_X, CELLS_Z)).toBe(true);
 		expect(isStairGridPointNearFoundation(-80, 12, CELLS_X, CELLS_Z)).toBe(false);
+	});
+});
+
+describe('stairFootingDepth', () => {
+	const bounds = { minLocalX: 2, maxLocalX: 5, minLocalZ: -2, maxLocalZ: -1 };
+	const origin = { originWorldX: 10, originWorldY: 4, originWorldZ: 20 };
+
+	it('reaches half a metre below the lowest ground under the whole run, not just the bottom step', () => {
+		// Bottom step at local x = 2 sits on ground at world y 1 (local −3); a dip mid-run goes to 0.2.
+		const sample = (x: number) => (Math.abs(x - 13.5) < 0.6 ? 0.2 : 1);
+		const footing = stairFootingDepth(bounds, -3, origin, sample);
+		// Lowest local = 0.2 − 4 = −3.8; base must reach −4.3 → 1.3 below the first tread.
+		expect(footing).toBeCloseTo(1.3);
+		expect(STAIR_FOOTING_EXTRA_DEPTH).toBe(0.5);
+	});
+
+	it('still sinks a flat-ground outside stair half a metre into the ground', () => {
+		expect(stairFootingDepth(bounds, -3, origin, () => 1)).toBeCloseTo(0.5);
+	});
+
+	it('gives stairs starting on or above the foundation top no footing', () => {
+		expect(stairFootingDepth(bounds, 0, origin, () => -50)).toBe(0);
+		expect(stairFootingDepth(bounds, 2.8, origin, () => -50)).toBe(0);
 	});
 });

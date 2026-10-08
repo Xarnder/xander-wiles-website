@@ -166,3 +166,26 @@ describe('buildStairGeometry — winding correctness (geometric face normals, no
 		}
 	});
 });
+
+describe('stair footing (outside stairs on uneven ground)', () => {
+	const bounds: StairLocalBounds = { minLocalX: 0, maxLocalX: 3, minLocalZ: 0, maxLocalZ: 1 };
+	const metrics = computeStairMetrics({
+		minGridX: 0,
+		maxGridX: 12,
+		minGridZ: 0,
+		maxGridZ: 4,
+		direction: '+x',
+		gridSizeAtCreation: 0.25,
+		baseY: -2
+	});
+
+	it('extends the bottom of the solid steps down by the footing depth, leaving the treads alone', () => {
+		const plain = buildStairGeometry(bounds, '+x', -2, metrics);
+		const footed = buildStairGeometry(bounds, '+x', -2, metrics, 1.3);
+		plain.computeBoundingBox();
+		footed.computeBoundingBox();
+		expect(plain.boundingBox!.min.y).toBeCloseTo(-2);
+		expect(footed.boundingBox!.min.y).toBeCloseTo(-3.3);
+		expect(footed.boundingBox!.max.y).toBeCloseTo(plain.boundingBox!.max.y);
+	});
+});

@@ -28,7 +28,13 @@ export function buildStairGeometry(
 	bounds: StairLocalBounds,
 	direction: StairDirection,
 	baseY: number,
-	metrics: StairMetrics
+	metrics: StairMetrics,
+	/**
+	 * Extra solid base below the first tread, metres (outside stairs on uneven ground — see
+	 * `stairFootingDepth`). The bottom box already spans the whole footprint, so it is simply
+	 * extended downward.
+	 */
+	footingDepth = 0
 ): THREE.BufferGeometry {
 	const { stepCount, stepRise, stepRun, widthMeters, runMeters } = metrics;
 	if (stepCount <= 0 || widthMeters <= 0) return new THREE.BufferGeometry();
@@ -41,7 +47,7 @@ export function buildStairGeometry(
 	for (let i = 0; i < stepCount; i++) {
 		const xMin = i * stepRun;
 		const xMax = runMeters;
-		const yMin = i * stepRise;
+		const yMin = i === 0 ? -Math.max(0, footingDepth) : i * stepRise;
 		const yMax = (i + 1) * stepRise;
 		const zMin = 0;
 		const zMax = widthMeters;

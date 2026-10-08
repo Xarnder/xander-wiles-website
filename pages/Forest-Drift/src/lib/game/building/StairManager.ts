@@ -7,6 +7,7 @@ import { createDefaultBuildingSettings } from './FoundationTypes';
 import { buildStairFrame, disposeStairFrame } from './StairFrameBuilder';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import { computeStairMetrics, stairSideRectsLocal, stairTreadRectsLocal } from './stairMath';
+import { stairFootingDepth } from './stairPlacementMath';
 import type { StairLocalBounds, StairTreadRect } from './stairMath';
 import {
 	computeStairLevelTriggerVolume,
@@ -42,6 +43,11 @@ export interface StairManagerOptions {
 	materialManager?: BuildingMaterialManager;
 	/** Live framing toggles/sizes, read at every rebuild. Optional so existing tests keep compiling. */
 	buildingSettings?: BuildingSettings;
+	/**
+	 * Terrain height at a world point. When given, outside stairs get a solid footing reaching below
+	 * the lowest ground under them, recomputed on every build (so also on world load).
+	 */
+	sampleTerrainHeight?: (worldX: number, worldZ: number) => number;
 }
 
 /**
@@ -86,6 +92,7 @@ export class StairManager {
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly roots: FoundationRootRegistry;
+	private readonly sampleTerrainHeight?: (worldX: number, worldZ: number) => number;
 
 	private readonly stairs = new Map<string, StairEntry>();
 	private showBounds = false;
@@ -97,6 +104,7 @@ export class StairManager {
 		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
+		this.sampleTerrainHeight = options.sampleTerrainHeight;
 	}
 
 	private buildEntry(definition: StairDefinition, existing?: StairEntry): StairEntry | null {
@@ -108,7 +116,16 @@ export class StairManager {
 		const bounds = localBoundsOf(definition);
 		const metrics = computeStairMetrics(definition);
 
-		const geometry = buildStairGeometry(bounds, definition.direction, definition.baseY, metrics);
+		const footing = this.sampleTerrainHeight
+			? stairFootingDepth(bounds, definition.baseY, frame, this.sampleTerrainHeight)
+			: 0;
+		const geometry = buildStairGeometry(
+			bounds,
+			definition.direction,
+			definition.baseY,
+			metrics,
+			footing
+		);
 
 		const material = this.materialManager.getMaterial('stair', definition.material);
 		let mesh = existing?.mesh;

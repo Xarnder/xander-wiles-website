@@ -317,3 +317,42 @@ export function stairBottomCenterLocal(
 export function approachStairBaseY(bottomWorldY: number, foundationTopY: number): number {
 	return bottomWorldY - foundationTopY;
 }
+
+/** How far below the lowest terrain under an outside stair its solid base reaches (metres). */
+export const STAIR_FOOTING_EXTRA_DEPTH = 0.5;
+/** Terrain sample spacing across a stair footprint (metres) — finer than any terrain grid. */
+const STAIR_FOOTING_SAMPLE_STEP = 0.25;
+
+/**
+ * How far an outside (approach) stair's solid base must extend below its first tread so it meets
+ * the ground everywhere. An approach stair's `baseY` comes from the terrain at its bottom step
+ * only, but the ground under the rest of its run can dip lower, which left a gap under the
+ * steps. The whole footprint is sampled and the base extended to `extraDepth` below the lowest
+ * point. Stairs that start on or above the foundation top (inside a building) get no footing.
+ *
+ * `bounds` are foundation-local; `origin` is the foundation's local frame origin (its top surface).
+ */
+export function stairFootingDepth(
+	bounds: { minLocalX: number; maxLocalX: number; minLocalZ: number; maxLocalZ: number },
+	baseY: number,
+	origin: { originWorldX: number; originWorldY: number; originWorldZ: number },
+	sample: (worldX: number, worldZ: number) => number,
+	extraDepth = STAIR_FOOTING_EXTRA_DEPTH
+): number {
+	if (baseY >= -1e-3) return 0;
+	const spanX = bounds.maxLocalX - bounds.minLocalX;
+	const spanZ = bounds.maxLocalZ - bounds.minLocalZ;
+	const stepsX = Math.max(1, Math.ceil(spanX / STAIR_FOOTING_SAMPLE_STEP));
+	const stepsZ = Math.max(1, Math.ceil(spanZ / STAIR_FOOTING_SAMPLE_STEP));
+	let lowest = Infinity;
+	for (let i = 0; i <= stepsX; i++) {
+		for (let j = 0; j <= stepsZ; j++) {
+			const worldX = origin.originWorldX + bounds.minLocalX + (spanX * i) / stepsX;
+			const worldZ = origin.originWorldZ + bounds.minLocalZ + (spanZ * j) / stepsZ;
+			lowest = Math.min(lowest, sample(worldX, worldZ));
+		}
+	}
+	if (!Number.isFinite(lowest)) return 0;
+	const lowestLocal = lowest - origin.originWorldY;
+	return Math.max(0, baseY - (lowestLocal - extraDepth));
+}
