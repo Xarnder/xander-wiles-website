@@ -1,4 +1,4 @@
-import { isFolder, isMarkdownCandidate, sortDriveEntries } from './drive.js';
+import { isFolder, isMarkdownCandidate, isPdfCandidate, sortDriveEntries } from './drive.js';
 import {
     ROOT_FOLDER_ID,
     ROOT_FOLDER_NAME,
@@ -173,8 +173,11 @@ export function bindUi() {
     els.listsRoot = document.getElementById('lists-root');
     els.listsStatus = document.getElementById('lists-status');
     els.markdownPreview = document.getElementById('markdown-preview');
+    els.pdfViewer = document.getElementById('pdf-viewer');
+    els.pdfFileName = document.getElementById('pdf-file-name');
     els.draftDialog = document.getElementById('draft-dialog');
     els.unsavedDialog = document.getElementById('unsaved-dialog');
+    els.largeFileDialog = document.getElementById('large-file-dialog');
     els.savingDialog = document.getElementById('saving-dialog');
     els.savingDialogTitle = document.getElementById('saving-dialog-title');
     els.savingDialogMessage = document.getElementById('saving-dialog-message');
@@ -736,7 +739,8 @@ export function renderFileList(
     }
 
     const folders = sorted.filter((f) => isFolder(f));
-    const notes = sorted.filter((f) => !isFolder(f));
+    const notes = sorted.filter((f) => isMarkdownCandidate(f));
+    const pdfs = sorted.filter((f) => isPdfCandidate(f));
 
     if (folders.length) {
         els.fileList.appendChild(
@@ -764,6 +768,19 @@ export function renderFileList(
         );
     }
 
+    if (pdfs.length) {
+        els.fileList.appendChild(
+            buildFileGroup({
+                kind: 'pdf',
+                title: 'PDF',
+                files: pdfs,
+                onOpen,
+                onMenu,
+                openedAtById: openedMap,
+            })
+        );
+    }
+
     applyFinderLayoutPrefs();
     if (scrollToMarkdown && notes.length) {
         scrollFinderToMarkdownSection();
@@ -784,7 +801,8 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
     if (!list.length) return;
 
     const folders = list.filter((f) => isFolder(f));
-    const notes = list.filter((f) => !isFolder(f));
+    const notes = list.filter((f) => isMarkdownCandidate(f));
+    const pdfs = list.filter((f) => isPdfCandidate(f));
 
     if (folders.length) {
         els.pinnedList.appendChild(
@@ -803,6 +821,17 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
                 kind: 'pinned-markdown',
                 title: 'Markdown',
                 files: notes,
+                onOpen,
+                onMenu,
+            })
+        );
+    }
+    if (pdfs.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-pdf',
+                title: 'PDF',
+                files: pdfs,
                 onOpen,
                 onMenu,
             })
@@ -1169,12 +1198,17 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
 
     for (const file of files) {
         const folder = isFolder(file);
+        const pdf = !folder && isPdfCandidate(file);
         const fullName = file.name || '(unnamed)';
         const displayName = displayFileListName(file.name, { isFolder: folder, showExtension });
         const fileId = file?.id ? String(file.id) : '';
         const isBold = Boolean(fileId && textBold.has(fileId));
         const row = document.createElement('div');
-        row.className = folder ? 'file-row file-row--folder' : 'file-row file-row--markdown';
+        row.className = folder
+            ? 'file-row file-row--folder'
+            : pdf
+              ? 'file-row file-row--pdf'
+              : 'file-row file-row--markdown';
         if (isBold) row.classList.add('file-row--important');
         row.setAttribute('role', 'listitem');
 
@@ -1185,7 +1219,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
             'aria-label',
             folder
                 ? `Open ${isBold ? 'important ' : ''}folder ${displayName}`
-                : `Open ${isBold ? 'important ' : ''}${displayName}`
+                : `Open ${isBold ? 'important ' : ''}${pdf ? 'PDF ' : ''}${displayName}`
         );
 
         const icon = document.createElement('span');
@@ -1195,7 +1229,9 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         const img = document.createElement('img');
         img.src = folder
             ? 'Assets/SVGs/open-folder-outline-icon.svg'
-            : 'Assets/SVGs/markdown-icon.svg';
+            : pdf
+              ? 'Assets/SVGs/pdf-icon.svg'
+              : 'Assets/SVGs/markdown-icon.svg';
         img.alt = '';
         img.width = 28;
         img.height = 28;
@@ -1294,7 +1330,7 @@ export function setUpEnabled(enabled) {
 export function displayNoteTitle(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return 'Untitled';
-    return raw.replace(/\.(md|markdown)$/i, '') || 'Untitled';
+    return raw.replace(/\.(md|markdown|pdf)$/i, '') || 'Untitled';
 }
 
 /**
@@ -1307,7 +1343,7 @@ export function displayFileListName(name, options = {}) {
     const raw = String(name ?? '').trim();
     if (!raw) return '(unnamed)';
     if (options.isFolder || options.showExtension) return raw;
-    return raw.replace(/\.(md|markdown)$/i, '') || raw;
+    return raw.replace(/\.(md|markdown|pdf)$/i, '') || raw;
 }
 
 const FILE_COLOR_PRESETS = Object.freeze([
@@ -1613,6 +1649,14 @@ export function syncEditorChrome(state, options = {}) {
 
     setEditorLoading(false);
 
+    const pdfOpen = state.kind === 'pdf' && Boolean(state.fileId);
+    if (els.editorActive) els.editorActive.classList.toggle('is-pdf', pdfOpen);
+    if (els.pdfViewer) els.pdfViewer.hidden = !pdfOpen;
+    if (els.pdfFileName) {
+        els.pdfFileName.textContent = pdfOpen ? title : '';
+        els.pdfFileName.hidden = !pdfOpen;
+    }
+
     if (state.fileId) {
         if (!els.viewEditor.hidden) {
             // Top strip stays compact; file name lives under the mode selector.
@@ -1628,12 +1672,12 @@ export function syncEditorChrome(state, options = {}) {
         els.editorEmpty.hidden = true;
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
-        if (els.btnUndo) els.btnUndo.hidden = false;
-        if (els.btnRedo) els.btnRedo.hidden = false;
-        if (els.btnInsertList) els.btnInsertList.hidden = false;
-        if (els.btnClickEdit) els.btnClickEdit.hidden = false;
-        if (els.btnEditorMore) els.btnEditorMore.hidden = false;
-        if (els.btnEditorSearch) els.btnEditorSearch.hidden = false;
+        if (els.btnUndo) els.btnUndo.hidden = pdfOpen;
+        if (els.btnRedo) els.btnRedo.hidden = pdfOpen;
+        if (els.btnInsertList) els.btnInsertList.hidden = pdfOpen;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = pdfOpen;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = pdfOpen;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = pdfOpen;
     } else {
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
@@ -1654,7 +1698,7 @@ export function syncEditorChrome(state, options = {}) {
         if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
-    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId;
+    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId || pdfOpen;
     if (els.viewAi && !els.viewAi.hidden) {
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
@@ -2014,6 +2058,33 @@ export function promptUnsavedChanges(dialogEl) {
 }
 
 /**
+ * Styled stand-in for the large-file confirm. Resolves true when the user continues.
+ * @param {HTMLDialogElement | null | undefined} dialogEl
+ * @param {{ title: string, message: string }} copy
+ * @returns {Promise<boolean>}
+ */
+export function promptLargeFile(dialogEl, copy) {
+    const title = copy?.title || 'Large file';
+    const message = copy?.message || 'Opening large files may be slow on a phone.';
+    if (!dialogEl) return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+
+    const titleEl = dialogEl.querySelector('#large-file-title');
+    const messageEl = dialogEl.querySelector('#large-file-message');
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message;
+
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialogEl.removeEventListener('close', onClose);
+            resolve(dialogEl.returnValue === 'continue');
+        };
+        dialogEl.addEventListener('close', onClose);
+        dialogEl.returnValue = 'cancel';
+        dialogEl.showModal();
+    });
+}
+
+/**
  * Update the Finder Sort button label to match the active mode.
  * @param {string} sortMode
  */
@@ -2364,14 +2435,16 @@ export function promptItemActions(file, options = {}) {
     if (!dialog) return Promise.resolve(null);
 
     const folder = isFolder(file);
+    const pdf = !folder && isPdfCandidate(file);
     const pinned = Boolean(options.isPinned);
-    const canDownload = !folder && isMarkdownCandidate(file);
-    const canCopy = !folder && isMarkdownCandidate(file);
+    const canDownload = !folder && (isMarkdownCandidate(file) || pdf);
+    const canCopy = canDownload;
+    const canAi = !folder && isMarkdownCandidate(file);
     const fileId = file?.id ? String(file.id) : '';
     const existingColor = fileId ? readFileTextColorsMap().get(fileId) : '';
     const existingBold = fileId ? readFileTextBoldMap().has(fileId) : false;
     if (els.itemActionsTitle) {
-        els.itemActionsTitle.textContent = folder ? 'Folder actions' : 'Markdown actions';
+        els.itemActionsTitle.textContent = folder ? 'Folder actions' : pdf ? 'PDF actions' : 'Markdown actions';
     }
     if (els.itemActionsName) {
         els.itemActionsName.textContent = file.name || '(unnamed)';
@@ -2389,7 +2462,7 @@ export function promptItemActions(file, options = {}) {
     }
     if (els.itemActionCopy) els.itemActionCopy.hidden = !canCopy;
     if (els.itemActionDownload) els.itemActionDownload.hidden = !canDownload;
-    if (els.itemActionAi) els.itemActionAi.hidden = !canDownload;
+    if (els.itemActionAi) els.itemActionAi.hidden = !canAi;
 
     return new Promise((resolve) => {
         const onClose = () => {

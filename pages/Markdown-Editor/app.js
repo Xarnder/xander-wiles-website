@@ -72,10 +72,12 @@ import {
     createFolder,
     createMarkdownFile,
     findItemsByNameInFolder,
+    getFileBytes,
     getFileContent,
     getFileMetadata,
     isFolder,
     isMarkdownCandidate,
+    isPdfCandidate,
     listChildFolders,
     listComputerRootFolders,
     listFolder,
@@ -86,10 +88,13 @@ import {
     searchMarkdownFiles,
     sortDriveEntries,
     suggestCopyFileName,
+    updateFileBytes,
     updateFileContent,
 } from './drive.js';
+import { mountPdfViewer } from './pdf-view.js';
 import {
     applyLoadedContent,
+    applyLoadedPdf,
     clearDraft,
     createEditorState,
     markError,
@@ -198,6 +203,7 @@ import {
     promptPinnedShortcutIssue,
     promptRestoreRevision,
     promptUnsavedChanges,
+    promptLargeFile,
     renderFileList,
     renderPinnedList,
     renderFolderPath,
@@ -289,6 +295,9 @@ const state = {
 
 /** @type {ReturnType<typeof createEditorSearch> | null} */
 let editorSearch = null;
+
+/** @type {ReturnType<typeof mountPdfViewer> | null} */
+let pdfSession = null;
 
 /** @type {ReturnType<typeof setTimeout> | null} */
 let autosaveTimer = null;
@@ -627,6 +636,7 @@ function syncAutosaveFromEditorState() {
     const editorVisible = isDocumentSurfaceVisible();
 
     if (
+        ed?.kind === 'pdf' ||
         !autosaveEnabled ||
         !ed?.fileId ||
         !ed.dirty ||
@@ -660,6 +670,10 @@ function syncAutosaveFromEditorState() {
 
 async function runAutosave() {
     const ed = state.editor;
+    if (ed?.kind === 'pdf') {
+        stopAutosaveCountdown();
+        return;
+    }
     if (!autosaveEnabled || autosaveInFlight || restoreInFlight || pendingConflict) return;
     const els = getEls();
     const editorVisible = isDocumentSurfaceVisible();
@@ -1901,6 +1915,7 @@ function showParseWarnings() {
 function flushCurrentEditorContent() {
     const els = getEls();
     if (!state.editor.fileId) return;
+    if (state.editor.kind === 'pdf') return;
     if (state.viewMode === 'raw') {
         adoptEditorBuffer(els.editor.value, { userEdit: true });
     } else if (
@@ -2760,6 +2775,10 @@ async function handleOpenEntry(file) {
         await enterFolder(file);
         return;
     }
+    if (isPdfCandidate(file)) {
+        await openPdfFile(file);
+        return;
+    }
     await openMarkdownFile(file);
 }
 
@@ -3058,6 +3077,20 @@ async function handleDownloadEntry(file) {
     if (isFolder(file)) return;
     setStatus('Downloading…');
     try {
+        if (isPdfCandidate(file)) {
+            const bytes = await getFileBytes(file.id);
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = file.name || 'file.pdf';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            setStatus(`Downloaded ${file.name || 'PDF'}`, 'ok');
+            return;
+        }
         const text = await getFileContent(file.id);
         const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -3180,7 +3213,8 @@ function makeUniqueNameValidator(parentId, options = {}) {
 }
 
 async function handleCopyEntry(file) {
-    if (isFolder(file) || !isMarkdownCandidate(file)) return;
+    const pdf = isPdfCandidate(file);
+    if (isFolder(file) || (!isMarkdownCandidate(file) && !pdf)) return;
 
     setStatus('Preparing copy…');
     let parentId = normalizeParentId(file.parents);
@@ -3201,23 +3235,27 @@ async function handleCopyEntry(file) {
         }
 
         const localNames = await collectSiblingNames(parentId);
-        const suggested = suggestCopyFileName(source.name || 'Untitled.md', localNames);
+        const suggested = suggestCopyFileName(source.name || (pdf ? 'Untitled.pdf' : 'Untitled.md'), localNames, {
+            keepExtension: pdf,
+        });
 
         // Ensure suggested name isn’t already taken on Drive either
         let copyName = suggested;
         {
             let guard = 0;
             while (guard < 50) {
-                const check = await nameConflictsInFolder(parentId, copyName, { isMarkdown: true });
+                const check = await nameConflictsInFolder(parentId, copyName, { isMarkdown: !pdf });
                 if (!check.conflict) break;
                 localNames.push(copyName);
-                copyName = suggestCopyFileName(source.name || 'Untitled.md', localNames);
+                copyName = suggestCopyFileName(source.name || (pdf ? 'Untitled.pdf' : 'Untitled.md'), localNames, {
+                    keepExtension: pdf,
+                });
                 guard += 1;
             }
         }
 
         setStatus('Copying…');
-        const copied = await copyDriveFile(source.id, { name: copyName, parentId });
+        const copied = await copyDriveFile(source.id, { name: copyName, parentId, keepName: pdf });
 
         const viewingSameFolder = currentFolder()?.id === parentId;
         if (viewingSameFolder) {
@@ -3235,7 +3273,7 @@ async function handleCopyEntry(file) {
             selectStem: true,
             validate: makeUniqueNameValidator(parentId, {
                 ignoreId: copied.id,
-                isMarkdown: true,
+                isMarkdown: !pdf,
             }),
         });
 
@@ -3246,8 +3284,10 @@ async function handleCopyEntry(file) {
             return;
         }
 
-        const normalizedTarget = normalizeMarkdownFileName(name);
-        const normalizedCurrent = normalizeMarkdownFileName(copied.name || '');
+        const normalizedTarget = pdf ? name.trim().toLowerCase() : normalizeMarkdownFileName(name);
+        const normalizedCurrent = pdf
+            ? String(copied.name || '').trim().toLowerCase()
+            : normalizeMarkdownFileName(copied.name || '');
         if (normalizedTarget === normalizedCurrent) {
             setStatus(`Copied as ${copied.name}`, 'ok');
             showAppToast(`Copied “${copied.name}”`, 'ok', { key: `copy:${copied.id}` });
@@ -3256,7 +3296,7 @@ async function handleCopyEntry(file) {
         }
 
         setStatus('Renaming copy…');
-        const updated = await renameDriveItem(copied.id, name, { isMarkdown: true });
+        const updated = await renameDriveItem(copied.id, name, { isMarkdown: !pdf });
         const idx = state.files.findIndex((f) => f.id === copied.id);
         if (idx >= 0) {
             state.files[idx] = { ...state.files[idx], name: updated.name };
@@ -3274,6 +3314,8 @@ async function handleCopyEntry(file) {
 
 async function handleRenameEntry(file) {
     const folder = isFolder(file);
+    const pdf = !folder && isPdfCandidate(file);
+    const markdown = !folder && !pdf;
     let parentId = normalizeParentId(file.parents) || currentFolder()?.id || '';
     if (!parentId) {
         try {
@@ -3285,17 +3327,19 @@ async function handleRenameEntry(file) {
     }
 
     const name = await promptForName({
-        title: folder ? 'Rename folder' : 'Rename note',
+        title: folder ? 'Rename folder' : pdf ? 'Rename PDF' : 'Rename note',
         hint: folder
             ? 'Folder names in this location must be unique.'
-            : 'We’ll keep the .md ending for notes. Names must be unique in this folder.',
+            : pdf
+              ? 'Names must be unique in this folder.'
+              : 'We’ll keep the .md ending for notes. Names must be unique in this folder.',
         confirmLabel: 'Rename',
         initialValue: file.name || '',
         selectStem: !folder,
         validate: parentId
             ? makeUniqueNameValidator(parentId, {
                   ignoreId: file.id,
-                  isMarkdown: !folder,
+                  isMarkdown: markdown,
               })
             : async (raw) => {
                   const trimmed = String(raw || '').trim();
@@ -3309,7 +3353,7 @@ async function handleRenameEntry(file) {
     if (parentId) {
         const conflict = await nameConflictsInFolder(parentId, name, {
             ignoreId: file.id,
-            isMarkdown: !folder,
+            isMarkdown: markdown,
         });
         if (conflict.conflict) {
             setStatus(
@@ -3322,7 +3366,7 @@ async function handleRenameEntry(file) {
 
     setStatus('Renaming…');
     try {
-        const updated = await renameDriveItem(file.id, name, { isMarkdown: !folder });
+        const updated = await renameDriveItem(file.id, name, { isMarkdown: markdown });
         const idx = state.files.findIndex((f) => f.id === file.id);
         if (idx >= 0) {
             state.files[idx] = { ...state.files[idx], name: updated.name };
@@ -4241,6 +4285,179 @@ function showAppView(name, extra = {}) {
     }
 }
 
+function ensurePdfSession() {
+    if (pdfSession) return pdfSession;
+    const els = getEls();
+    if (!els.pdfViewer) return null;
+    pdfSession = mountPdfViewer(els.pdfViewer, {
+        onDirty() {
+            notePdfDirty();
+        },
+    });
+    return pdfSession;
+}
+
+function notePdfDirty() {
+    const ed = state.editor;
+    if (ed.kind !== 'pdf' || !ed.fileId) return;
+    const dirty = Boolean(pdfSession?.hasEdits());
+    ed.dirty = dirty;
+    if (ed.status === 'saving') return;
+    ed.status = dirty ? 'dirty' : 'idle';
+    syncEditorChrome(ed);
+}
+
+/** Bumped so a slow PDF download cannot paint over a newer open. */
+let pdfOpenToken = 0;
+
+async function savePdfFileExclusive(options = {}) {
+    const autosave = Boolean(options.autosave);
+    const ed = state.editor;
+    const session = pdfSession;
+    if (!ed.fileId || ed.kind !== 'pdf' || !session) return;
+
+    if (!session.hasEdits() && !options.force) {
+        ed.dirty = false;
+        if (ed.status !== 'saving') ed.status = 'idle';
+        stopAutosaveCountdown();
+        if (!autosave) {
+            showEditorToast('Already saved', 'ok', {
+                key: 'already-saved',
+                durationMs: 1600,
+            });
+        }
+        syncEditorChrome(ed, { quiet: true, syncAutosave: true });
+        return;
+    }
+
+    const fileId = ed.fileId;
+    const baked = session.snapshot();
+    stopAutosaveCountdown();
+    if (!autosave) {
+        markSaving(ed);
+        syncEditorChrome(ed);
+    }
+
+    try {
+        const bytes = await session.exportBytes(baked);
+        if (state.editor.fileId !== fileId) return;
+        const savedMeta = await updateFileBytes(fileId, bytes, 'application/pdf');
+        if (state.editor.fileId !== fileId) return;
+        let nextVersion = savedMeta?.version;
+        let nextHead = savedMeta?.headRevisionId ? String(savedMeta.headRevisionId) : null;
+        if (nextVersion == null || nextVersion === '' || !nextHead) {
+            try {
+                const refreshed = await getFileMetadata(fileId);
+                if (state.editor.fileId === fileId) {
+                    if (nextVersion == null || nextVersion === '') nextVersion = refreshed?.version;
+                    if (!nextHead && refreshed?.headRevisionId) nextHead = String(refreshed.headRevisionId);
+                }
+            } catch {
+                // The upload already succeeded.
+            }
+        }
+        if (state.editor.fileId !== fileId) return;
+        await session.commitSaved(bytes, baked);
+        if (state.editor.fileId !== fileId) return;
+        const stillDirty = session.hasEdits();
+        ed.dirty = stillDirty;
+        ed.status = stillDirty ? 'dirty' : 'saved';
+        ed.mimeType = 'application/pdf';
+        applyDriveVersionMeta(ed, {
+            version: nextVersion,
+            headRevisionId: nextHead,
+        });
+        clearDraft(fileId);
+        syncEditorChrome(ed, autosave ? { quiet: true, syncAutosave: true } : undefined);
+        if (!autosave && !stillDirty) setStatus('Saved', 'ok');
+    } catch (err) {
+        if (state.editor.fileId !== fileId) return;
+        markError(ed, err.message || 'Could not save PDF');
+        ed.dirty = true;
+        syncEditorChrome(ed);
+        setStatus(ed.errorMessage, 'error');
+    }
+}
+
+async function openPdfFile(file) {
+    const els = getEls();
+    if (state.editor.fileId && state.editor.fileId !== file.id) {
+        await waitForDriveWritesIdle();
+        if (state.editor.kind !== 'pdf') flushCurrentEditorContent();
+        if (state.editor.dirty) {
+            const choice = await promptUnsavedChanges(els.unsavedDialog);
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
+                await saveCurrentFile();
+                if (state.editor.dirty) return;
+            }
+        }
+    }
+
+    const token = ++pdfOpenToken;
+    if (state.editor.kind === 'pdf') await pdfSession?.close();
+
+    state.editor.status = 'loading';
+    state.editor.kind = 'pdf';
+    showAppView('editor', { loading: true });
+    setEditorLoading(true, file.name || 'PDF');
+    setStatus('Opening PDF…');
+
+    try {
+        const meta = await getFileMetadata(file.id);
+        if (token !== pdfOpenToken) return;
+        const size = Number(meta.size || 0);
+        if (size > LARGE_FILE_BYTES) {
+            const ok = await promptLargeFile(getEls().largeFileDialog, {
+                title: 'Large PDF',
+                message: `This PDF is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on a phone.`,
+            });
+            if (!ok) {
+                if (token !== pdfOpenToken) return;
+                setEditorLoading(false);
+                state.editor.status = 'idle';
+                state.editor.kind = 'markdown';
+                state.editor.fileId = null;
+                showAppView('finder');
+                setStatus('');
+                return;
+            }
+        }
+
+        const bytes = await getFileBytes(file.id);
+        if (token !== pdfOpenToken) return;
+        applyLoadedPdf(state.editor, {
+            fileId: meta.id,
+            fileName: meta.name,
+            mimeType: meta.mimeType || 'application/pdf',
+            driveVersion: meta.version ?? null,
+            headRevisionId: meta.headRevisionId ? String(meta.headRevisionId) : null,
+        });
+        clearDraft(meta.id);
+        rememberRecentFile({
+            id: meta.id,
+            name: meta.name,
+            mimeType: meta.mimeType || 'application/pdf',
+        });
+        editorSearch?.close({ restoreFocus: false });
+        const session = ensurePdfSession();
+        setEditorLoading(false);
+        showAppView('editor');
+        syncEditorChrome(state.editor);
+        if (!session) throw new Error('PDF viewer is unavailable');
+        await session.open(bytes);
+        if (token !== pdfOpenToken || state.editor.fileId !== meta.id) return;
+        setStatus('');
+    } catch (err) {
+        if (token !== pdfOpenToken) return;
+        setEditorLoading(false);
+        markError(state.editor, err.message || 'Failed to open PDF');
+        showAppView('editor');
+        syncEditorChrome(state.editor);
+        setStatus(state.editor.errorMessage, 'error');
+    }
+}
+
 async function openMarkdownFile(file, options = {}) {
     const els = getEls();
     // Finish any in-flight Drive write before switching file identity.
@@ -4273,9 +4490,10 @@ async function openMarkdownFile(file, options = {}) {
         const meta = await getFileMetadata(file.id);
         const size = Number(meta.size || 0);
         if (size > LARGE_FILE_BYTES) {
-            const ok = window.confirm(
-                `This file is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on iPhone. Continue?`
-            );
+            const ok = await promptLargeFile(getEls().largeFileDialog, {
+                title: 'Large file',
+                message: `This file is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on a phone.`,
+            });
             if (!ok) {
                 setEditorLoading(false);
                 state.editor.status = state.editor.dirty ? 'dirty' : 'idle';
@@ -4284,6 +4502,9 @@ async function openMarkdownFile(file, options = {}) {
                 return;
             }
         }
+
+        pdfOpenToken += 1;
+        if (state.editor.kind === 'pdf') await pdfSession?.close();
 
         const content = await getFileContent(file.id);
         applyLoadedContent(state.editor, {
@@ -4427,6 +4648,7 @@ async function pinRetiredHeadAfterSave(fileId, previousHeadId, newHeadId) {
  */
 function persistOpenEditorInBackground() {
     if (!hasOpenFile()) return;
+    if (state.editor.kind === 'pdf') return;
     flushCurrentEditorContent();
     const ed = state.editor;
     if (!ed.fileId || !ed.dirty) return;
@@ -4480,6 +4702,10 @@ async function saveCurrentFileExclusive(options = {}) {
     const skipConflictCheck = Boolean(options.skipConflictCheck);
     const ed = state.editor;
     if (!ed.fileId) return;
+    if (ed.kind === 'pdf') {
+        await savePdfFileExclusive(options);
+        return;
+    }
     if (restoreInFlight) return;
 
     // Snapshot identity + bytes so a later file switch cannot redirect this write.
@@ -5442,6 +5668,12 @@ function wireEvents() {
             const target = event.target;
             const inAppEditor = hasOpenFile() && els.viewEditor && !els.viewEditor.hidden;
             if (!inAppEditor) return;
+            if (state.editor.kind === 'pdf') {
+                if (target instanceof HTMLElement && target.classList.contains('pdf-text-box')) return;
+                event.preventDefault();
+                if (!event.shiftKey) pdfSession?.undo();
+                return;
+            }
             // Let native undo work inside list mini-inputs; document undo for Raw / chrome.
             if (
                 target instanceof HTMLElement &&

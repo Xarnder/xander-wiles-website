@@ -88,6 +88,7 @@ declare module '$env/static/private' {
 	export const VITE_FIREBASE_STORAGE_BUCKET: string;
 	export const __CFBundleIdentifier: string;
 	export const USER: string;
+	export const GEMINI_PROJECT_NUMBER: string;
 	export const npm_package_name: string;
 	export const SHELL: string;
 	export const ZDOTDIR: string;
@@ -150,11 +151,11 @@ declare module '$env/static/public' {
 	export const PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
 	export const PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_STORY_FIREBASE_APP_ID: string;
 	export const PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
-	export const PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_STORY_FIREBASE_API_KEY: string;
 	export const PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_API_KEY: string;
@@ -293,6 +294,7 @@ declare module '$env/dynamic/private' {
 		VITE_FIREBASE_STORAGE_BUCKET: string;
 		__CFBundleIdentifier: string;
 		USER: string;
+		GEMINI_PROJECT_NUMBER: string;
 		npm_package_name: string;
 		SHELL: string;
 		ZDOTDIR: string;
@@ -374,11 +376,11 @@ declare module '$env/dynamic/public' {
 		PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_TIME_PASS_FIREBASE_STORAGE_BUCKET: string;
 		PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_STORY_FIREBASE_APP_ID: string;
 		PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
-		PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_STORY_FIREBASE_API_KEY: string;
 		PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_API_KEY: string;

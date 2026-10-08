@@ -1,5 +1,6 @@
 import { PAGE_SIZE, ROOT_FOLDER_ID } from './config.js';
 import { getAccessToken, refreshAccessToken } from './auth.js';
+import { isPdfFile, pdfUploadKind } from './pdf-edit.js';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const GOOGLE_NATIVE_PREFIX = 'application/vnd.google-apps.';
@@ -57,18 +58,25 @@ export function isFolder(file) {
 export function isMarkdownCandidate(file) {
     if (isFolder(file)) return false;
     if (file.mimeType?.startsWith(GOOGLE_NATIVE_PREFIX)) return false;
+    if (isPdfFile(file)) return false;
     if (file.mimeType === 'text/markdown') return true;
     const name = (file.name || '').toLowerCase();
     return name.endsWith('.md') || name.endsWith('.markdown');
 }
 
-/** Folders first, then markdown, then other — sorted within each group by `sortMode`. */
+/** PDF files (application/pdf or a .pdf name), never folders or Google Docs. */
+export function isPdfCandidate(file) {
+    return isPdfFile(file);
+}
+
+/** Folders first, then markdown, then PDFs — sorted within each group by `sortMode`. */
 export function sortDriveEntries(files, sortMode = 'name-asc') {
     const mode = typeof sortMode === 'string' ? sortMode : 'name-asc';
     const rank = (file) => {
         if (isFolder(file)) return 0;
         if (isMarkdownCandidate(file)) return 1;
-        return 2;
+        if (isPdfCandidate(file)) return 2;
+        return 3;
     };
     const nameCmp = (a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), undefined, {
@@ -133,8 +141,8 @@ export function driveOrderByForSort(sortMode = 'name-asc') {
 }
 
 /**
- * List folders and markdown files in a folder.
- * Query is scoped to folders + markdown candidates so pagination matches what the UI shows.
+ * List folders, markdown files, and PDFs in a folder.
+ * Query is scoped to those types so pagination matches what the UI shows.
  * @param {string} [folderId]
  * @param {string|null} [pageToken]
  * @param {{ sortMode?: string }} [options]
@@ -147,7 +155,7 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
     const q = [
         `'${safeParent}' in parents`,
         'trashed = false',
-        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or name contains '.md' or name contains '.markdown')`,
+        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or mimeType = 'application/pdf' or name contains '.md' or name contains '.markdown' or name contains '.pdf')`,
     ].join(' and ');
     const params = new URLSearchParams({
         q,
@@ -162,7 +170,7 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
     const files = sortDriveEntries(
-        (data.files || []).filter((f) => isFolder(f) || isMarkdownCandidate(f)),
+        (data.files || []).filter((f) => isFolder(f) || isMarkdownCandidate(f) || isPdfCandidate(f)),
         sortMode
     );
     return {
@@ -234,7 +242,7 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null, opti
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
     const files = sortDriveEntries(
-        (data.files || []).filter((f) => isMarkdownCandidate(f)),
+        (data.files || []).filter((f) => isMarkdownCandidate(f) || isPdfCandidate(f)),
         sortMode
     );
     return {
@@ -303,6 +311,59 @@ export async function getFileContent(fileId) {
     return response.text();
 }
 
+/** Download a file as bytes (PDFs and other binary files). */
+export async function getFileBytes(fileId) {
+    const response = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
+    );
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * Replace a binary file.
+ * Files up to 5 MB use the same media upload as markdown notes.
+ * Larger files use a resumable session. Content-Length is left to fetch —
+ * setting it from script throws in the browser and the save never leaves.
+ * @param {string} fileId
+ * @param {Uint8Array | ArrayBuffer} bytes
+ * @param {string} [mimeType]
+ */
+export async function updateFileBytes(fileId, bytes, mimeType = 'application/pdf') {
+    const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const blob = new Blob([body], { type: mimeType || 'application/pdf' });
+    const fileUrl = `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}`;
+    const fields = 'id,version,headRevisionId,modifiedTime';
+
+    if (pdfUploadKind(blob.size) === 'media') {
+        const params = new URLSearchParams({ uploadType: 'media', fields });
+        const response = await driveFetch(`${fileUrl}?${params}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': mimeType || 'application/pdf' },
+            body: blob,
+        });
+        return response.json();
+    }
+
+    const params = new URLSearchParams({ uploadType: 'resumable', fields });
+    const start = await driveFetch(`${fileUrl}?${params}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Upload-Content-Type': mimeType || 'application/pdf',
+            'X-Upload-Content-Length': String(blob.size),
+        },
+        body: '{}',
+    });
+    const location = start.headers.get('Location');
+    if (!location) throw new Error('Drive did not accept the PDF upload');
+    const uploaded = await driveFetch(location, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType || 'application/pdf' },
+        body: blob,
+    });
+    return uploaded.json();
+}
+
 /**
  * Last-write-wins content update for an existing file.
  * @returns {Promise<{ id?: string, version?: string | number, headRevisionId?: string, modifiedTime?: string }>}
@@ -349,7 +410,21 @@ export function normalizeMarkdownFileName(name) {
  * @param {Iterable<string>} existingNames
  * @returns {string}
  */
-export function suggestCopyFileName(originalName, existingNames = []) {
+export function suggestCopyFileName(originalName, existingNames = [], options = {}) {
+    if (options.keepExtension) {
+        const raw = String(originalName || 'Untitled').trim() || 'Untitled';
+        const taken = new Set([...existingNames].map((n) => String(n || '').trim().toLowerCase()));
+        const dot = raw.lastIndexOf('.');
+        const stem = dot > 0 ? raw.slice(0, dot) : raw;
+        const ext = dot > 0 ? raw.slice(dot) : '';
+        let candidate = `Copy of ${stem}${ext}`;
+        let n = 2;
+        while (taken.has(candidate.toLowerCase())) {
+            candidate = `Copy of ${stem} (${n})${ext}`;
+            n += 1;
+        }
+        return candidate;
+    }
     const ensured = ensureMdExtension(originalName || 'Untitled.md');
     const lower = ensured.toLowerCase();
     const ext = lower.endsWith('.markdown') ? '.markdown' : '.md';
@@ -408,8 +483,10 @@ export async function findItemsByNameInFolder(parentId, name) {
  * @param {string} fileId
  * @param {{ name: string, parentId?: string }} options
  */
-export async function copyDriveFile(fileId, { name, parentId } = {}) {
-    const fileName = ensureMdExtension(name || 'Copy.md');
+export async function copyDriveFile(fileId, { name, parentId, keepName = false } = {}) {
+    const fileName = keepName
+        ? String(name || '').trim() || 'Copy'
+        : ensureMdExtension(name || 'Copy.md');
     /** @type {{ name: string, parents?: string[] }} */
     const body = { name: fileName };
     if (parentId) body.parents = [parentId];

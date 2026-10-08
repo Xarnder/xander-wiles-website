@@ -26,6 +26,12 @@ test('leaves names without a markdown suffix unchanged', () => {
     assert.equal(displayFileListName('notes.md.bak'), 'notes.md.bak');
 });
 
+test('hides a trailing .pdf unless extensions are shown', () => {
+    assert.equal(displayFileListName('brief.pdf'), 'brief');
+    assert.equal(displayFileListName('brief.pdf', { showExtension: true }), 'brief.pdf');
+    assert.equal(displayFileListName('notes.pdf.md'), 'notes.pdf');
+});
+
 test('uses a fallback for empty names', () => {
     assert.equal(displayFileListName(''), '(unnamed)');
     assert.equal(displayFileListName('   '), '(unnamed)');

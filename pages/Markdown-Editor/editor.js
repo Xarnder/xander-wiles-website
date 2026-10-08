@@ -78,6 +78,8 @@ export function clearDraft(fileId) {
 
 export function createEditorState() {
     return {
+        /** @type {'markdown' | 'pdf'} */
+        kind: 'markdown',
         fileId: null,
         fileName: '',
         mimeType: 'text/markdown',
@@ -94,12 +96,30 @@ export function createEditorState() {
 }
 
 export function applyLoadedContent(state, { fileId, fileName, mimeType, content, driveVersion = null, headRevisionId = null }) {
+    state.kind = 'markdown';
     state.fileId = fileId;
     state.fileName = fileName;
     state.mimeType = mimeType || 'text/markdown';
     const text = normalizeEditorText(content);
     state.originalContent = text;
     state.editorContent = text;
+    state.dirty = false;
+    state.status = 'idle';
+    state.errorMessage = '';
+    state.driveVersion = driveVersion != null && driveVersion !== '' ? driveVersion : null;
+    state.headRevisionId = headRevisionId ? String(headRevisionId) : null;
+}
+
+/**
+ * Open a PDF in the editor without treating its bytes as markdown text.
+ */
+export function applyLoadedPdf(state, { fileId, fileName, mimeType, driveVersion = null, headRevisionId = null }) {
+    state.kind = 'pdf';
+    state.fileId = fileId;
+    state.fileName = fileName || 'Untitled.pdf';
+    state.mimeType = mimeType || 'application/pdf';
+    state.originalContent = '';
+    state.editorContent = '';
     state.dirty = false;
     state.status = 'idle';
     state.errorMessage = '';

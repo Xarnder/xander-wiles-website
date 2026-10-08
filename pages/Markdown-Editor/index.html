@@ -232,7 +232,7 @@
                     </div>
                 </form>
                 <form id="search-form" class="search-form" hidden>
-                    <label class="sr-only" for="search-input">Search markdown file names</label>
+                    <label class="sr-only" for="search-input">Search markdown and PDF file names</label>
                     <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
                     <button type="submit" class="btn btn-primary">Search</button>
                 </form>
@@ -244,13 +244,13 @@
                 </div>
                 <div id="file-list" class="file-list" data-md-mobile="bottom" data-md-desktop="top" role="list"></div>
                 <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
-                <p id="browse-empty" class="empty-state" hidden>No folders or markdown files here.</p>
+                <p id="browse-empty" class="empty-state" hidden>No folders, markdown files, or PDFs here.</p>
             </section>
 
             <section id="view-editor" class="view view-editor" hidden>
                 <div id="editor-empty" class="empty-panel" hidden>
                     <p class="empty-panel-title">No file open</p>
-                    <p class="empty-panel-copy">Open a markdown file from Pinned or Finder to start editing.</p>
+                    <p class="empty-panel-copy">Open a markdown file or PDF from Pinned or Finder.</p>
                     <button type="button" id="btn-go-finder" class="btn btn-primary">Go to Finder</button>
                 </div>
                 <div id="editor-loading" class="editor-loading" hidden aria-live="polite" aria-busy="true">
@@ -297,6 +297,33 @@
                         <article id="markdown-preview" class="md-preview" hidden aria-label="Markdown preview"></article>
                         <label class="sr-only" for="editor">Markdown content</label>
                         <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
+                    </div>
+                    <div id="pdf-viewer" class="pdf-viewer" hidden>
+                        <p id="pdf-file-name" class="pdf-file-name" hidden></p>
+                        <div id="pdf-stage" class="pdf-stage" tabindex="0" aria-label="PDF pages"></div>
+                        <p id="pdf-status" class="pdf-status" hidden></p>
+                        <div id="pdf-line-edit" class="pdf-line-edit" hidden>
+                            <label class="sr-only" for="pdf-line-input">Edit PDF text</label>
+                            <input id="pdf-line-input" class="pdf-text-box pdf-line-input" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="sentences" spellcheck="true">
+                            <button type="button" class="pdf-tool" id="pdf-line-done">Done</button>
+                        </div>
+                        <div class="pdf-toolbar" role="toolbar" aria-label="PDF tools">
+                            <button type="button" class="pdf-tool is-active" data-pdf-tool="view" aria-pressed="true">View</button>
+                            <button type="button" class="pdf-tool" data-pdf-tool="pen" aria-pressed="false">Pen</button>
+                            <button type="button" class="pdf-tool" data-pdf-tool="highlight" aria-pressed="false">Highlight</button>
+                            <button type="button" class="pdf-tool" data-pdf-tool="text" aria-pressed="false">Text</button>
+                            <button type="button" class="pdf-tool" data-pdf-tool="eraser" aria-pressed="false">Eraser</button>
+                            <span id="pdf-colors" class="pdf-colors" hidden>
+                                <button type="button" class="pdf-color is-active" data-pdf-color="#111111" aria-label="Black"></button>
+                                <button type="button" class="pdf-color" data-pdf-color="#e03131" aria-label="Red"></button>
+                                <button type="button" class="pdf-color" data-pdf-color="#1971c2" aria-label="Blue"></button>
+                            </span>
+                            <button type="button" class="pdf-tool" id="pdf-undo" disabled>Undo</button>
+                            <button type="button" class="pdf-tool pdf-tool--icon" id="pdf-zoom-out" aria-label="Zoom out">−</button>
+                            <span class="pdf-zoom-label" id="pdf-zoom-label">Fit</span>
+                            <button type="button" class="pdf-tool pdf-tool--icon" id="pdf-zoom-in" aria-label="Zoom in">+</button>
+                            <span class="pdf-page-label" id="pdf-page-label"></span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -451,7 +478,7 @@
                             <span class="settings-pref-label">Show file extensions</span>
                             <input id="pref-show-file-extensions" class="settings-toggle" type="checkbox">
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Show .md on markdown names in Finder and Pinned. Off by default.</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Show .md and .pdf on file names in Finder and Pinned. Off by default.</p>
                     </div>
                     <p class="browse-hint settings-hint">
                         Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
@@ -462,7 +489,7 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text. Turn on <strong>Pure reader</strong> in the Edit ⋮ menu to lock Preview (no list buttons, long-press, or mini editor) when handing the device to someone.</li>
-                        <li>Unsaved edits autosave to Drive after 10 seconds of inactivity. The slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. Tapping <strong>Save</strong> can show a <strong>Saving in progress</strong> lock (turn this off in Settings if you really need to). Autosave never blocks the screen. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
+                        <li>Unsaved markdown edits autosave to Drive after 10 seconds of inactivity. PDFs save only when you tap Save. The slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. Tapping <strong>Save</strong> can show a <strong>Saving in progress</strong> lock (turn this off in Settings if you really need to). Autosave never blocks the screen. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here. Tap Preview content and choose Above / Below to place it.</li>
                         <li>The toolbar <strong>Add list</strong> inserts a normal markdown list. In <strong>Preview</strong> it stays there and opens the first point. In <strong>List</strong>, <strong>Convert to custom list</strong> turns that list into a ranked <code>mdlist</code>.</li>
@@ -614,6 +641,17 @@
         </form>
     </dialog>
 
+    <dialog id="large-file-dialog" class="dialog dialog--warn" aria-labelledby="large-file-title" aria-describedby="large-file-message">
+        <form method="dialog" class="dialog-body">
+            <h2 id="large-file-title">Large PDF</h2>
+            <p id="large-file-message">This PDF is about 6 MB. Opening large files may be slow on a phone.</p>
+            <div class="dialog-actions dialog-actions--pair">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" value="continue" class="btn btn-primary">Continue</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="draft-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
             <h2>Restore local draft?</h2>
@@ -628,7 +666,7 @@
     <dialog id="finder-sort-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
             <h2>Sort by</h2>
-            <p class="dialog-hint">Folders stay grouped above markdown notes.</p>
+            <p class="dialog-hint">Folders, markdown notes, and PDFs stay in their own groups.</p>
             <div id="finder-sort-options" class="item-actions-list" role="group" aria-label="Sort order">
                 <!-- filled by ui.js -->
             </div>
