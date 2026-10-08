@@ -1755,12 +1755,32 @@ export class ThreeScene implements WorldRuntime {
 		};
 	}
 
-	/** Texture anisotropy for procedural maps: the preset's value, capped by the GPU. */
+	/**
+	 * Texture anisotropy for procedural maps: the preset's value, capped at 4× (8× at Ultra) and by
+	 * the GPU. Stochastic sampling can fetch twice per map, and beyond 4× the sharpening on oblique
+	 * surfaces is small next to the extra filtering cost.
+	 */
 	private materialAnisotropy(): number {
+		// Software rasterisers (no GPU acceleration) pay heavily for anisotropic filtering.
+		if (this.isSoftwareRenderer()) return 1;
+		const quality = this.graphicsSettings.quality;
 		return Math.min(
-			GRAPHICS_PRESETS[this.graphicsSettings.quality].anisotropy,
+			GRAPHICS_PRESETS[quality].anisotropy,
+			quality === 'ultra' ? 8 : 4,
 			this.renderer.capabilities.getMaxAnisotropy()
 		);
+	}
+
+	private softwareRenderer: boolean | null = null;
+
+	/** True when WebGL is running on a CPU rasteriser (SwiftShader, llvmpipe, Microsoft Basic Render). */
+	private isSoftwareRenderer(): boolean {
+		if (this.softwareRenderer !== null) return this.softwareRenderer;
+		const gl = this.renderer.getContext();
+		const info = gl.getExtension('WEBGL_debug_renderer_info');
+		const name = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+		this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(name);
+		return this.softwareRenderer;
 	}
 
 	getGraphicsQuality(): GraphicsQuality {

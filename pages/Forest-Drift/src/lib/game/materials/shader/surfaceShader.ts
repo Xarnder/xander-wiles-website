@@ -120,16 +120,25 @@ float fsNoise(vec2 p) {
 	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Fractal value noise in 0..1 — not periodic: features never repeat on a grid.
-float fsFbm(vec2 p) {
+// Fractal value noise in 0..1 — not periodic: features never repeat on a grid. octaves is
+// capped by the quality tier; low-frequency masks (warps, macro patches) ask for only 2, since
+// extra octaves there cost a lot (full-screen on terrain) and add nothing visible.
+float fsFbmN(vec2 p, int octaves) {
 	float sum = 0.0;
 	float amplitude = 0.5;
+	float norm = 0.0;
 	for (int i = 0; i < FS_OCTAVES; i++) {
+		if (i >= octaves) break;
 		sum += amplitude * fsNoise(p);
+		norm += amplitude;
 		p = mat2(1.6, 1.2, -1.2, 1.6) * p + vec2(17.13, 9.71);
 		amplitude *= 0.5;
 	}
-	return sum / (1.0 - pow(0.5, float(FS_OCTAVES)));
+	return sum / norm;
+}
+
+float fsFbm(vec2 p) {
+	return fsFbmN(p, FS_OCTAVES);
 }
 
 // Stochastic, non-tiling texture lookup (after Inigo Quilez's "texture repetition" #3): a smooth,
@@ -145,14 +154,18 @@ vec4 fsNoTile(sampler2D tex, vec2 uv) {
 	float l = k * 8.0;
 	float ia = floor(l);
 	float f = fract(l);
-	vec2 offa = fsHash22(vec2(ia, 1.7) + uFsSeed);
-	vec2 offb = fsHash22(vec2(ia + 1.0, 1.7) + uFsSeed);
 	vec2 dx = dFdx(uv);
 	vec2 dy = dFdy(uv);
+	vec2 offa = fsHash22(vec2(ia, 1.7) + uFsSeed);
+	// Most of each region needs only one fetch; the second is taken only inside the cross-fade band
+	// (safe to branch: explicit gradients, no implicit derivatives inside the branch).
+	if (f < 0.32) return textureGrad(tex, uv + offa, dx, dy);
+	vec2 offb = fsHash22(vec2(ia + 1.0, 1.7) + uFsSeed);
+	if (f > 0.68) return textureGrad(tex, uv + offb, dx, dy);
 	vec4 cola = textureGrad(tex, uv + offa, dx, dy);
 	vec4 colb = textureGrad(tex, uv + offb, dx, dy);
 	vec4 diff = cola - colb;
-	return mix(cola, colb, smoothstep(0.2, 0.8, f - 0.1 * (diff.x + diff.y + diff.z)));
+	return mix(cola, colb, smoothstep(0.32, 0.68, f - 0.05 * (diff.x + diff.y + diff.z)));
 }
 
 // Bump perturbation from a height derivative (Mikkelsen's surface gradient, unnormalised so the
@@ -248,7 +261,7 @@ FsCell fsLayout(vec2 p) {
 // that drifts across the surface — so some regions are many small stones, others large ones.
 FsCell fsLayout(vec2 p) {
 	float size = uFsLayout.x;
-	vec2 warp = (vec2(fsFbm(p * 0.45), fsFbm(p * 0.45 + 5.2)) - 0.5) * 1.1
+	vec2 warp = (vec2(fsFbmN(p * 0.45, 2), fsFbmN(p * 0.45 + 5.2, 2)) - 0.5) * 1.1
 		+ (vec2(fsNoise(p * 2.6 + 1.3), fsNoise(p * 2.6 + 8.4)) - 0.5) * 0.22;
 	vec2 q = p / size + warp * uFsWarp;
 	q.y /= uFsLayout.w;
@@ -274,8 +287,10 @@ FsCell fsLayout(vec2 p) {
 	// Gradient of the border distance: away from the nearest separating edge (toward our feature).
 	vec2 borderDir = normalize(mr + vec2(1e-6));
 	#if FS_QUALITY > 0
-	for (int j = -2; j <= 2; j++)
-		for (int i = -2; i <= 2; i++) {
+	// 3×3 around the winning cell (9 hashes, not IQ's exhaustive 5×5 = 25): the borders that matter
+	// are almost always between immediate neighbours, and this pass runs per pixel on large areas.
+	for (int j = -1; j <= 1; j++)
+		for (int i = -1; i <= 1; i++) {
 			vec2 g = mg + vec2(float(i), float(j));
 			vec2 o = 0.5 + (fsHash22(n + g + uFsSeed) - 0.5) * uFsLayout.z;
 			vec2 r = g + o - f;
@@ -307,7 +322,7 @@ FsCell fsLayout(vec2 p) {
 
 	// Hierarchical size variation: split some stones in two along a random line through the centre.
 	float splitChance =
-		mix(0.04, 0.55, smoothstep(0.3, 0.7, fsFbm(p * 0.09 + 3.1))) * (1.0 - 0.75 * uFsRoundness);
+		mix(0.04, 0.55, smoothstep(0.3, 0.7, fsFbmN(p * 0.09 + 3.1, 2))) * (1.0 - 0.75 * uFsRoundness);
 	vec2 splitHash = fsHash22(cell.id * 1.91 + 4.7 + uFsSeed);
 	if (splitHash.x < splitChance) {
 		float angle = splitHash.y * 6.2831853;
@@ -354,8 +369,8 @@ FsSurface fsEvaluate(vec2 uvMetres) {
 	float bevel = smoothstep(jointHalf, jointHalf + bevelWidth, edge);
 
 	// Macro regions (several metres) shift tone, so no stretch of wall or paving matches another.
-	float macro = fsFbm(p * 0.16);
-	float macroFine = fsFbm(p * 0.6 + 4.7);
+	float macro = fsFbmN(p * 0.16, 3);
+	float macroFine = fsFbmN(p * 0.6 + 4.7, 2);
 	float variation = uFsAmount.x;
 	float tone = (r1 - 0.5) * 1.6 * variation + (macro - 0.5) * 1.2 + (macroFine - 0.5) * 0.35;
 	vec3 stone = tone > 0.0 ? mix(uFsStone, uFsStoneLight, min(1.0, tone * 0.8)) : mix(uFsStone, uFsStoneDark, min(1.0, -tone * 0.9));
@@ -367,10 +382,10 @@ FsSurface fsEvaluate(vec2 uvMetres) {
 	stone = mix(stone, uFsStoneLight, uFsWorn * bevel * 0.07 * (1.0 - r3));
 
 	// World-aligned dirt and damp: broad patches, heavier toward joints.
-	float dirtField = fsFbm(p * 0.23 + 8.3);
+	float dirtField = fsFbmN(p * 0.23 + 8.3, 3);
 	float dirtMask = smoothstep(0.42, 0.78, dirtField) * uFsAmount.z;
 	stone = mix(stone, uFsDirt, dirtMask * (0.22 + (1.0 - bevel) * 0.25));
-	float mossMask = smoothstep(0.5, 0.78, fsFbm(p * 0.31 + 2.4)) * uFsAmount.w;
+	float mossMask = smoothstep(0.5, 0.78, fsFbmN(p * 0.31 + 2.4, 2)) * uFsAmount.w;
 	stone = mix(stone, uFsMoss, mossMask * (1.0 - bevel) * stoneMask * 0.45);
 
 	vec3 joint = mix(uFsJoint, uFsDirt, 0.12 + dirtMask * 0.4);
@@ -438,13 +453,13 @@ struct FsSurface {
 FsSurface fsEvaluate(vec2 uvMetres) {
 	vec2 p = uvMetres;
 	#if FS_QUALITY > 0
-	vec2 warp = vec2(fsFbm(p * 0.015), fsFbm(p * 0.015 + 7.7)) - 0.5;
+	vec2 warp = vec2(fsFbmN(p * 0.015, 2), fsFbmN(p * 0.015 + 7.7, 2)) - 0.5;
 	vec2 q = p + warp * 24.0;
 	#else
 	vec2 q = p + (vec2(fsNoise(p * 0.02), fsNoise(p * 0.02 + 7.7)) - 0.5) * 18.0;
 	#endif
-	float broad = fsFbm(q * 0.028);
-	float mid = fsFbm(q * 0.21 + 3.3);
+	float broad = fsFbmN(q * 0.028, 3);
+	float mid = fsFbmN(q * 0.21 + 3.3, 2);
 	float fine = fsNoise(p * 1.9);
 	float dry = smoothstep(0.52, 0.78, broad) * (0.55 + uFsAmount.y);
 	float lush = smoothstep(0.48, 0.24, broad);
