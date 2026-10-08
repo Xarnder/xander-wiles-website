@@ -2120,8 +2120,9 @@ exiting Paint Mode, and that picking a swatch updates the HUD's colour indicator
 
 ### Not implemented yet
 
-Image/tileable textures (the union has room to grow — see "The core design requirement" above — but
-the texture branch itself is deliberately not built yet); per-face painting (inside/outside wall
+Choosing a different texture per object (every surface is now dressed automatically by the
+procedural material system — see "Procedural materials" below — and a painted colour tints that
+texture, but the `BuildingMaterialDefinition` union still only has the `color` member); per-face painting (inside/outside wall
 face, wall top/edges, slab top/bottom face); painting stairs, windows, or doors; painting an entire
 wall path in one click rather than segment-by-segment; a confirmation step for painting (not needed
 for the current per-element painting — hover-preview-plus-click is the whole confirmation, same
@@ -2129,6 +2130,213 @@ reasoning Remove Mode's own "Not implemented yet" section gives); and any undo-s
 (painting doesn't currently push onto `BuildUndoManager`'s stack — reversing a paint would need to
 remember the PREVIOUS material, not just the object's id, which that stack's `{type, id}` shape
 doesn't carry today; a natural, but separate, future extension, same gap Remove Mode already has).
+
+## Procedural materials: textures, world-scale surfaces, and the material gallery (`materials/`)
+
+Every building surface, the terrain and window glass are dressed with procedurally generated PBR
+materials — no image files, no external tools. The same seed always produces the same pixels, and
+a world's seed picks which of a bounded set of variations it uses, so worlds differ while texture
+memory stays bounded. Toggle **Graphics → Procedural materials** (or open the game with
+`?materials=flat`) to compare with the original flat-colour look.
+
+### Architecture decision: CPU texture maps + world-scale shader layout (not TSL)
+
+The renderer is a `WebGLRenderer` with cascaded shadow maps (CSM), GTAO and SMAA. Node materials /
+TSL need `WebGPURenderer`, and migrating the renderer was out of scope, so the system is:
+
+- **CPU-generated, seamlessly tiling texture maps** (albedo, tangent-space normal, ORM) for the
+  micro surface — plaster grit, wood grain, slate cleavage, stone grain, grass blades. Generated in a
+  worker pool, cached, reference-counted.
+- **A small world-scale shader layer** on top of `MeshStandardMaterial` for the materials whose
+  _structure_ must never repeat — masonry, paving and ground cover — plus stochastic (no-tile)
+  sampling for the stochastic textures. Everything else in the lighting model is three.js's own
+  standard shader, so shadows, GTAO, fog and tone mapping behave exactly as before.
+
+`onBeforeCompile` has one slot per material and CSM overwrites and deletes it, so procedural
+shading and CSM are composed in one place: `materials/shader/shaderHooks.ts`. `GraphicsPipeline`
+records CSM's hook right after `csm.setupMaterial` and clears it after `csm.dispose`; materials set
+their own extension; the material gets one composed hook and an explicit `customProgramCacheKey`.
+Injection only replaces named chunks and exact `texture2D(...)` calls inside them, so a three.js
+upgrade that renames a chunk degrades to plain sampling rather than breaking a shader.
+
+### Module map
+
+| File                                                                                 | Responsibility                                                                                                                                                              |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ProceduralMaterialTypes.ts`                                                         | Typed material ids, per-type variants, options, resolved recipes, quality tiers. Pure data.                                                                                 |
+| `materialPresets.ts`                                                                 | Per-type defaults (real-world tile sizes in metres), recipe resolution, stable cache keys.                                                                                  |
+| `materialPalettes.ts`                                                                | Art direction: named colours per material. `alpine` is tuned; four more palettes are overrides of it.                                                                       |
+| `noise/tileableNoise.ts`                                                             | Seeded, periodic gradient/value noise, fBm, ridged noise, Worley with exact border distance.                                                                                |
+| `generators/*.ts`                                                                    | One generator per material family, painting into a `SurfaceCanvas`.                                                                                                         |
+| `SurfaceCanvas.ts`                                                                   | Working buffers + finalisation into GPU maps (height→normal with physical texel spacing, cavity AO, half-res ORM).                                                          |
+| `generateMaterialMaps.ts`                                                            | The single type → generator table. Pure; runs identically on the main thread, in a worker, and in Node.                                                                     |
+| `MaterialMapSource.ts`, `proceduralTexture.worker.ts`                                | Worker pool (≤3) with inline fallback.                                                                                                                                      |
+| `ProceduralMaterialLibrary.ts`                                                       | Three.js side: texture-set cache (ref-counted, bounded idle LRU), binding looks onto existing materials, enable/quality/palette/seed/anti-tiling/relief switches, disposal. |
+| `surfaceMapping.ts`, `SurfaceMappingBinder.ts`                                       | Real-world UVs + weathering vertex colours for any building mesh (see below).                                                                                               |
+| `shader/surfaceShader.ts`, `shader/surfaceShaderPresets.ts`, `shader/shaderHooks.ts` | World-scale layouts, no-tile sampling, CSM hook composition.                                                                                                                |
+| `buildingSurfaceStyles.ts`                                                           | The ONE table mapping semantic surfaces (`MaterialKind`) to materials.                                                                                                      |
+| `gallery/*`, `routes/materials/*`                                                    | Development gallery and anti-tiling test scene.                                                                                                                             |
+
+### Materials
+
+| Material | Variants                                                                    | Notes                                                                                                                                                             |
+| -------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plaster  | `lime`, `rough`                                                             | Broad mottling, trowel undulation, sand grain, patchy hairline cracks, pits, faint vertical rain streaks.                                                         |
+| Timber   | `dark-oak`, `aged-brown`, `weathered`, `fresh`, `dark-stained` (+ `planks`) | Grain always runs along U; growth rings wander and swirl round knots; fibre streaks, checks, sun-bleached patches. `planks` adds seams and staggered butt joints. |
+| Slate    | `natural`, `irregular`                                                      | Courses of exposed gauge 0.2 m starting at the eave, half-slate broken bond, per-slate tone/tilt/chipped edges, sawtooth overlap profile, lichen.                 |
+| Masonry  | `dressed`, `cut-block`, `rough`, `fieldstone`                               | Coursed blocks or flattened Voronoi rubble, recessed mortar, worn arrises, dirt and moss in joints.                                                               |
+| Paving   | `cobble`, `setts`, `flagstone`                                              | Rounded domed cobbles, rectangular setts, or large flat flags; sandy joints, polished worn tops.                                                                  |
+| Ground   | `soil`, `path`, `gravel`                                                    | Clumped soil with discrete pebbles per Voronoi cell. Available for future paths.                                                                                  |
+| Grass    | `meadow`, `dry`, `detail`                                                   | Thousands of drawn blades over soil. `detail` is a near-neutral variant multiplied over terrain vertex colours.                                                   |
+| Glass    | `clear`, `old`                                                              | Dark tint, low roughness, faint smudges and waviness; `MeshPhysicalMaterial` with environment reflections.                                                        |
+
+Open `/materials/` under `npm run dev` to inspect any of them on real-sized sample geometry, with
+live seed/scale/roughness/weathering/dirt/moss/variation/quality/palette controls and the raw
+albedo, normal, roughness and AO maps.
+
+### Integration with world generation
+
+Builders are untouched: they still ask `BuildingMaterialManager.getMaterial(kind, definition)`.
+When it creates a material it looks the kind up in `BUILDING_SURFACE_STYLES` and asks the library to
+bind that look onto the material — so a material keeps its identity (CSM registration, paint
+previews and every mesh reference keep working) and its flat template look is captured for the
+toggle. Walls → plaster, wall frames / beams / window and door frames → dark oak, roofs → slate,
+foundation sides → cut-block masonry, foundation tops → cobbles (`getFoundationMaterials` returns a
+per-face array; the new `'foundation-top'` kind), stairs → dressed stone, floors and ceilings →
+aged-brown planks, door leaves → planks. Furniture, Mini Build slots and door handles keep their
+player-authored flat colours. Terrain gets the `detail` grass map over its vertex colours plus
+seeded ground-cover variation in `terrainColor.ts`; the shared glass material gets the glass look.
+
+**Paint is a tint, not a replacement.** A painted colour sets `material.color` to
+`paint / textureMean` (per channel, linear), so the textured surface averages exactly the painted
+colour. Main World's roofs (Umber) and walls (Tan) are painted, so they show slate and plaster in
+those colours; clearing the paint shows the Alpine palette.
+
+**Mapping in metres (`SurfaceMappingBinder`).** Procedural meshes are mapped lazily: a material's
+`onBeforeRender` queues any geometry not yet mapped for it, and `ThreeScene.animate` flushes the
+queue once per frame before rendering (geometry is only ever changed between frames). Positions are
+transformed into the owning foundation's local frame, so a pattern is continuous across every mesh
+of one building, stays attached to the building, and is identical however the building is placed.
+Each face gets an exact planar projection — floors on X/Z, walls along-wall/Y, slopes along-contour/
+up-slope (true slope distance) — so nothing stretches and scale never depends on mesh size.
+`grain` mode puts U along each timber piece's long axis (the longer leg of each right triangle), and
+`roof` mode measures V from each roof plane's lowest edge so slate courses start at the eave.
+Per-plane UV offsets and per-building seeds vary the pattern between pieces and buildings; masonry
+courses never get a V offset, so they stay level around corners. The binder also writes weathering
+vertex colours: per-piece/per-building tint, macro variation, and grime toward the foundation.
+
+### Non-repeating surfaces (anti-tiling)
+
+A texture tile repeats exactly, so anything recognisable inside it recurs on a grid. For masonry,
+paving and grass that grid was obvious, so their structure now lives in the fragment shader,
+evaluated in surface metres — nothing in it is periodic:
+
+- **Masonry** (`coursed`): course heights jitter per course; each course has its own block length,
+  offset and per-joint jitter; joints are slightly warped; each block gets hashed tone, chips, tilt
+  and roughness; multi-metre macro tone, world-aligned dirt and moss masks sit on top.
+- **Cobbles / flags / fieldstone** (`cellular`): Voronoi stones with an exact border distance on a
+  fixed lattice, bent by two warp scales; stones are split by an extra joint with a probability that
+  drifts across the surface (regions of many small stones vs. large ones); cobble corners are
+  rounded slightly so joints read as sand-filled gaps.
+- **Grass** (`cover`): domain-warped lush/dry swathes (tens of metres), clumps (metres) and small
+  bare-soil patches over the blade texture.
+- **Plaster, ground** (`noTile`) and the textures under all of the above: stochastic sampling — a
+  smooth non-periodic index picks a random offset per region and regions cross-fade (after Inigo
+  Quilez's "texture repetition" technique), using `textureGrad` so mips stay continuous.
+
+Stone relief is an **analytic slope** — the layout knows the nearest joint's distance and
+direction, so chamfer, bevel, per-stone tilt and two scales of rough face are differentiated
+exactly and projected to screen space. (Differentiating a per-pixel height with `dFdx` only resolves
+2×2 pixel blocks and looked soft.) For masonry and paving the CPU map is generated with
+`structure: false` — stone grain only — since the shader draws the stones. **Graphics → Non-repeating
+surfaces** (or `?tiling=legacy`) switches back to the old tiled maps; `/materials/anti-tiling/`
+compares the two on a 60 m wall, a 40 × 40 m courtyard and a 300 m field from fixed camera views
+(`?view=wall-wide|wall-close|courtyard-wide|courtyard-close|field-wide|field-close&tiling=legacy`).
+
+### Quality, relief and subdivision
+
+`MaterialQuality` follows the graphics preset (Low → low, Medium → medium, High/Ultra → high):
+albedo/normal maps are 256/512/1024 px (timber half, glass quarter), ORM half of that. The low tier
+uses cheaper shader paths (F2−F1 joints instead of exact borders, two fBm octaves, plain sampling).
+
+**Surface relief** (normal maps + stone bump) and **surface subdivision** (large faces split to
+≤ 3 m for finer vertex colour variation) are **off by default** and on at **Ultra**
+(`GraphicsPreset.materialRelief` / `materialSubdivision`); both have their own Graphics toggles, and
+switching subdivision off restores the original triangles. With both off the game renders exactly
+the original triangle count.
+
+### Caching, memory, and disposal
+
+Texture sets are keyed by every field that affects their pixels (`recipeCacheKey`) plus the UV
+unit, shared by every material resolving to the same recipe, and reference-counted; unreferenced
+sets stay in a 4-entry idle LRU (fast quality/palette toggling) and are then disposed. Generation
+requests are de-duplicated while in flight. `MATERIAL_SEED_SLOTS = 4` bounds variations per type.
+`ThreeScene.dispose` disposes the library (restoring the module-level terrain and glass materials
+to their flat look) and the binder.
+
+### Lighting changes (separate from materials)
+
+- **Bug fix — inverted sun under cascaded shadows.** `GraphicsPipeline` passed the direction
+  _toward_ the sun to `CSM.lightDirection`, which is the direction light _travels_. With shadows on
+  (Medium and above) the sun lit the world from below: terrain, roofs and paving received no direct
+  light and the scene was lit by blue skylight alone — a large part of the old flat, cyan look.
+- **Enhanced lighting** (`ENHANCED_LIGHTING`, Graphics → Enhanced lighting, `?lighting=classic` to
+  disable): a modestly stronger warm sun against a slightly lower, more neutral hemisphere light and
+  environment. Multipliers on the world's own sky settings, so saved worlds and day/night still
+  drive the result; nothing is written into world data.
+
+### Determinism and seeds
+
+No `Math.random()` anywhere in generation. Per-texel randomness is coordinate hashing; layout
+decisions (course heights, knots) use a seeded mulberry32. Material seeds come from the world seed
+(`hash(worldSeed, type) % 4`), per-building variation from `hash(worldSeed, foundationId)`, and
+shader layouts from a seed uniform — never from traversal or creation order.
+
+### Performance
+
+Measured at 1920×1080 on the development Mac (Metal), Main World spawn view, dynamic resolution
+off, vsync off — see `docs/procedural-materials-performance.json` for the full report.
+
+| Configuration                     | Idle machine¹ High | Idle¹ Low | Loaded² High            | Loaded² Low | Triangles (High, all passes) | Procedural texture memory (High / Low) |
+| --------------------------------- | ------------------ | --------- | ----------------------- | ----------- | ---------------------------- | -------------------------------------- |
+| Original flat materials           | 7.06 ms (142 fps)  | 2.93 ms   | 11.8 ms                 | 5.4 ms      | 1,224,032                    | —                                      |
+| Procedural, tiled textures        | 7.57 ms (132 fps)  | 3.05 ms   | 12.7 ms                 | 6.0 ms      | 1,224,032                    | 54 MB / 3.4 MB                         |
+| Procedural, world-scale (default) | 8.93 ms (112 fps)  | 3.38 ms   | 16.8 ms                 | 6.9 ms      | 1,224,032                    | 54 MB / 3.4 MB                         |
+| Ultra (relief + subdivision on)   | —                  | —         | 26.1 ms (flat: 23.5 ms) | —           | 1,845,793 (flat: 1,449,909)  | 98 MB                                  |
+
+¹ Idle machine, before the final shader optimisations (single-fetch stochastic sampling, fewer
+octaves, 3×3 border search, anisotropy cap), which only reduce cost. ² Final code, measured while
+macOS background services kept load averages at 6–12: medians of three interleaved runs; absolute
+times are inflated for every configuration, so compare within a column. Default settings render the
+original triangle count. Texture generation runs in workers; all materials for Main World are ready
+≈1.5–3 s after the world opens (flat look until then). In SwiftShader (CPU rendering, as used by the
+e2e suite) a frame costs 336 ms vs 306 ms flat (+10%).
+
+### Tests
+
+Unit (`materials/__tests__/`): noise periodicity; recipe defaults, validation, scale and cache keys;
+every generator's determinism, seed sensitivity, map validity and seamless wrap; real-world mapping
+(wall sizes, angled walls, grain direction on posts/beams/braces, eave-aligned roofs, continuity,
+determinism); binder de-indexing, subdivision and its reversal, foundation-local mapping;
+library caching, sharing, toggles, paint tint, quality regeneration, idle bound, disposal; shader
+hook composition and injection; `BuildingMaterialManager` integration. E2E
+(`tests/proceduralMaterials.e2e.ts`): Main World loads procedural materials with no shader errors and
+measurably more surface detail than the flat look from the same camera; the anti-tiling scene and
+gallery work. Screenshots are attached to the Playwright report.
+
+### Limitations and next steps
+
+- The binder maps a mesh the frame after it first renders, so a newly built mesh shows one
+  untextured frame.
+- Grass is a surface texture; the reference image's meadow needs real instanced grass blades and
+  flowers with distance-based density.
+- Roofs are a texture pattern only: no ridge caps, and no instanced slate geometry for near-camera
+  silhouettes.
+- The low tier keeps plain texture sampling, so grass detail can show its tile grid there (the
+  macro cover layer still varies it).
+- Window glass has no interior glow; trees are unchanged.
+- Remaining palettes (medieval village, English countryside, mountain lodge, old European town) are
+  starting points, not tuned.
 
 ## Vegetation: independent forest regions
 
