@@ -181,7 +181,8 @@ export class StairManager {
 				stairFrameEnabled: stairFrameEnabledOf(definition),
 				stairRailingsEnabled: stairRailingsEnabledOf(definition),
 				stairFrameWidth: this.buildingSettings.stairFrameWidth,
-				stairFrameDepthExtra: this.buildingSettings.stairFrameDepthExtra
+				stairFrameDepthExtra: this.buildingSettings.stairFrameDepthExtra,
+				footingDepth: footing
 			},
 			this.materialManager
 		);

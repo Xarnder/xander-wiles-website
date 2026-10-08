@@ -222,3 +222,18 @@ describe('computeStairFrameBoxes', () => {
 		);
 	});
 });
+
+describe('stair framing on a footing', () => {
+	it('extends every base-level timber piece down to the bottom of the footing', () => {
+		const plain = computeStairFrameBoxes(metrics(), SETTINGS);
+		const footed = computeStairFrameBoxes(metrics(), { ...SETTINGS, footingDepth: 1.2 });
+		expect(footed).toHaveLength(plain.length);
+		const grounded = footed.filter((b) => b.minRise === -1.2);
+		// Bottom riser board ×2, back posts ×2, back bottom rail, bottom newels ×2, rail posts ×2.
+		expect(grounded).toHaveLength(9);
+		// Everything else is unchanged.
+		const unchanged = footed.filter((b, i) => b.minRise === plain[i].minRise);
+		expect(unchanged.length + grounded.length).toBe(footed.length);
+		expect(Math.min(...plain.map((b) => b.minRise))).toBeGreaterThanOrEqual(0);
+	});
+});

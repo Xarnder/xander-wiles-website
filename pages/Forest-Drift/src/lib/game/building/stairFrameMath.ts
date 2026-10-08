@@ -15,6 +15,13 @@ export interface StairFrameSettings {
 	stairRailingsEnabled: boolean;
 	stairFrameWidth: number;
 	stairFrameDepthExtra: number;
+	/**
+	 * Solid footing below the first tread (outside stairs on uneven ground, see
+	 * `stairFootingDepth`). Every timber piece that starts at the stair's base — the bottom riser
+	 * boards, back posts and bottom rail, bottom newels and railing posts — extends down by this so
+	 * the framing reaches the ground with the stone. Default 0.
+	 */
+	footingDepth?: number;
 }
 
 /** Axis-aligned box in canonical stair space. `pitch` rotates in the run-rise plane (around +width). */
@@ -145,6 +152,9 @@ export function computeStairFrameBoxes(
 
 	const face = STAIR_FRAME_FACE_INSET;
 	const lastTreadCap = totalRise - face;
+	// Where base-level timber starts: the stair's base, or the bottom of its footing.
+	const footing = Math.max(0, settings.footingDepth ?? 0);
+	const ground = -footing;
 	const nosingThick = Math.min(Math.max(width * 0.2, 0.018), 0.03);
 
 	if (settings.stairFrameEnabled) {
@@ -160,7 +170,8 @@ export function computeStairFrameBoxes(
 
 			for (const [minW, maxW] of sides) {
 				push(boxes, box(runFront, runCap, rise1 - width, treadCap, minW, maxW));
-				push(boxes, box(runFront, run0 + width, riseFloor, rise1 - width - face, minW, maxW));
+				const riserBottom = i === 0 && footing > 0 ? ground : riseFloor;
+				push(boxes, box(runFront, run0 + width, riserBottom, rise1 - width - face, minW, maxW));
 			}
 
 			const lipBottom = rise1 + STAIR_NOSING_LIFT;
@@ -173,9 +184,9 @@ export function computeStairFrameBoxes(
 		}
 
 		for (const [minW, maxW] of sides) {
-			push(boxes, box(backInner, backOuter, 0, lastTreadCap, minW, maxW));
+			push(boxes, box(backInner, backOuter, ground, lastTreadCap, minW, maxW));
 		}
-		push(boxes, box(backInner, backOuter, 0, width, leftInner, rightInner));
+		push(boxes, box(backInner, backOuter, ground, ground + width, leftInner, rightInner));
 		push(boxes, box(backInner, backOuter, totalRise - width, lastTreadCap, leftInner, rightInner));
 	}
 
@@ -183,7 +194,7 @@ export function computeStairFrameBoxes(
 		const newelHeight = Math.min(0.9, Math.max(0.45, totalRise * 0.35 + 0.35));
 		for (const w0 of [leftOuter, rightOuter - width]) {
 			const w1 = w0 + width;
-			push(boxes, box(-extra, -extra + width, 0, newelHeight, w0, w1));
+			push(boxes, box(-extra, -extra + width, ground, newelHeight, w0, w1));
 			push(
 				boxes,
 				box(
@@ -197,7 +208,7 @@ export function computeStairFrameBoxes(
 			);
 		}
 
-		pushRailings(boxes, metrics, width);
+		pushRailings(boxes, metrics, width, ground);
 	}
 
 	return boxes;
@@ -209,7 +220,8 @@ function pushRailings(
 		StairMetrics,
 		'stepCount' | 'stepRise' | 'stepRun' | 'widthMeters' | 'runMeters' | 'totalRise'
 	>,
-	frameWidth: number
+	frameWidth: number,
+	ground: number
 ): void {
 	const { stepCount, stepRise, stepRun, widthMeters, runMeters, totalRise } = metrics;
 	const bands = railBands(widthMeters, frameWidth);
@@ -225,7 +237,7 @@ function pushRailings(
 	for (const band of bands) {
 		push(
 			boxes,
-			box(0, post, 0, railH + railThickness, band.minWidth, band.maxWidth, { role: 'rail' })
+			box(0, post, ground, railH + railThickness, band.minWidth, band.maxWidth, { role: 'rail' })
 		);
 		push(
 			boxes,
