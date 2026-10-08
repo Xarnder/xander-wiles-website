@@ -225,7 +225,8 @@ function treeQualityFor(quality: GraphicsQuality): TreeQualityProfile {
 		lodDistanceScale: preset.treeLodDistanceScale,
 		densityScale: preset.treeDensityScale,
 		maxShadowLod: preset.treeShadowMaxLod,
-		wind: preset.treeWind
+		wind: preset.treeWind,
+		surfaceDetail: preset.treeSurfaceDetail
 	};
 }
 
@@ -697,6 +698,7 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.scene.add(this.treeManager.group);
 		this.treeManager.setQualityProfile(treeQualityFor(this.graphicsSettings.quality));
+		this.treeManager.setProceduralSurfaces(this.graphicsSettings.proceduralMaterials);
 		this.terrainManager.setVegetationRegionSampler(this.treeManager.getVegetationRegionSampler());
 		for (const material of this.treeManager.getSharedMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
@@ -1768,6 +1770,7 @@ export class ThreeScene implements WorldRuntime {
 	setProceduralMaterialsEnabled(enabled: boolean): void {
 		this.graphicsSettings.proceduralMaterials = enabled;
 		this.materialLibrary.setEnabled(enabled);
+		this.treeManager.setProceduralSurfaces(enabled);
 		if (terrainColorOptions.groundVariation !== enabled) {
 			terrainColorOptions.groundVariation = enabled;
 			this.dirty.settings = true;

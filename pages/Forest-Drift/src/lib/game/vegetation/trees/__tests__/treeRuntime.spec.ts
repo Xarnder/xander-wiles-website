@@ -13,6 +13,8 @@ import { TreeSpeciesSelector } from '../TreeSpeciesSelector';
 import { TREE_SPECIES } from '../treeSpecies';
 import { TREE_SPECIES_IDS, type TreeSpeciesId } from '../TreeSpeciesTypes';
 import { createDefaultVegetationSettings } from '../../VegetationTypes';
+import { createTreeMaterial, setTreeSurfaceDetail, TREE_DETAIL_RANGES } from '../treeMaterial';
+import { GRAPHICS_PRESETS } from '../../../graphics/GraphicsTypes';
 
 const DISTANCES: TreeLodDistances = { lod1: 40, lod2: 90, lod3: 160, hysteresis: 0.1 };
 
@@ -243,5 +245,51 @@ describe('TreeSpeciesSelector', () => {
 		});
 		pinesOnly.setSeed('x');
 		for (let r = 0; r < 1; r += 0.1) expect(pinesOnly.pick(site(), r)).toBe('pine');
+	});
+});
+
+describe('tree material (procedural bark and leaves)', () => {
+	type Shader = Parameters<THREE.Material['onBeforeCompile']>[0];
+	const compile = (material: THREE.Material) => {
+		const lib = THREE.ShaderLib.lambert;
+		const shader = {
+			uniforms: THREE.UniformsUtils.clone(lib.uniforms),
+			vertexShader: lib.vertexShader,
+			fragmentShader: lib.fragmentShader
+		} as unknown as Shader;
+		material.onBeforeCompile(shader, null as never);
+		return shader;
+	};
+
+	it('injects wind, the surface attribute and the bark/leaf functions', () => {
+		const { material, wind } = createTreeMaterial(2);
+		const shader = compile(material);
+		expect(shader.vertexShader).toContain('attribute vec4 treeSurface');
+		expect(shader.vertexShader).toContain('vTreeLocal = position');
+		expect(shader.fragmentShader).toContain('#define TREE_DETAIL 2');
+		expect(shader.fragmentShader).toContain('treeBark(treeKind');
+		expect(shader.fragmentShader).toContain('treeLeaves(treeKind');
+		expect(shader.fragmentShader).toContain(
+			'normal = normalize(normal + mat3(viewMatrix) * treeTilt)'
+		);
+		expect(shader.uniforms.uTreeDetailRange).toBe(wind.uTreeDetailRange);
+		expect(wind.uTreeDetailRange.value.y).toBe(TREE_DETAIL_RANGES[2][1]);
+	});
+
+	it('switches detail levels by recompiling (0 = the plain vertex-coloured trees)', () => {
+		const { material, wind } = createTreeMaterial(2);
+		const key = material.customProgramCacheKey();
+		setTreeSurfaceDetail(material, wind, 0);
+		expect(material.customProgramCacheKey()).not.toBe(key);
+		expect(compile(material).fragmentShader).toContain('#define TREE_DETAIL 0');
+		setTreeSurfaceDetail(material, wind, 3);
+		expect(wind.uTreeDetailRange.value.y).toBe(TREE_DETAIL_RANGES[3][1]);
+	});
+
+	it('draws detail further out at higher graphics presets', () => {
+		const far = (q: keyof typeof GRAPHICS_PRESETS) =>
+			TREE_DETAIL_RANGES[GRAPHICS_PRESETS[q].treeSurfaceDetail][1];
+		expect(far('low')).toBeLessThan(far('high'));
+		expect(far('high')).toBeLessThan(far('ultra'));
 	});
 });

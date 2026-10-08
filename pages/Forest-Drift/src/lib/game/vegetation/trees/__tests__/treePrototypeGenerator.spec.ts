@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildTreeMesh, designTree } from '../treePrototypeGenerator';
 import { TREE_SPECIES } from '../treeSpecies';
-import { TREE_LODS, TREE_SPECIES_IDS, triangleCount, type TreeMeshData } from '../TreeSpeciesTypes';
+import {
+	TREE_LODS,
+	TREE_SPECIES_IDS,
+	TREE_SURFACE_CODES,
+	triangleCount,
+	type TreeMeshData
+} from '../TreeSpeciesTypes';
 
 function allMeshes(worldSeed = 'test-world') {
 	const meshes: { speciesId: string; variant: number; lod: number; mesh: TreeMeshData }[] = [];
@@ -62,6 +68,34 @@ describe('tree prototype generation', () => {
 			expect(mesh.max[1]).toBeGreaterThan(3);
 			expect(mesh.max[1]).toBeLessThan(20);
 			expect(mesh.max[0] - mesh.min[0]).toBeLessThan(8);
+		}
+	});
+
+	it('tags every vertex with its species bark or foliage surface, with unit bark axes', () => {
+		for (const { speciesId, lod, mesh } of meshes) {
+			const species = TREE_SPECIES[speciesId as keyof typeof TREE_SPECIES];
+			const bark = TREE_SURFACE_CODES[species.surface.bark];
+			const foliage = TREE_SURFACE_CODES[species.surface.foliage];
+			const vertexCount = mesh.positions.length / 3;
+			expect(mesh.surface.length).toBe(vertexCount * 4);
+			const codes = new Set<number>();
+			for (let v = 0; v < vertexCount; v++) {
+				const code = mesh.surface[v * 4];
+				codes.add(code);
+				if (code === bark) {
+					const axis = Math.hypot(
+						mesh.surface[v * 4 + 1],
+						mesh.surface[v * 4 + 2],
+						mesh.surface[v * 4 + 3]
+					);
+					expect(axis).toBeCloseTo(1, 4);
+				}
+			}
+			expect(codes.has(foliage), `${speciesId} LOD${lod} foliage`).toBe(true);
+			for (const code of codes) expect([bark, foliage]).toContain(code);
+			// Bark codes are < 4 and foliage ≥ 4: the shader branches on that.
+			expect(bark).toBeLessThan(4);
+			expect(foliage).toBeGreaterThanOrEqual(4);
 		}
 	});
 

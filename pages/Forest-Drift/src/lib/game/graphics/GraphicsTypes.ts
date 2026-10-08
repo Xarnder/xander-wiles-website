@@ -58,6 +58,8 @@ export interface GraphicsPreset {
 	readonly treeShadowMaxLod: number;
 	/** Shader wind on trees. */
 	readonly treeWind: boolean;
+	/** Procedural bark/leaf detail on near trees (see `TreeSurfaceDetail`: 1 cheap, 2 full, 3 full + further). */
+	readonly treeSurfaceDetail: 1 | 2 | 3;
 }
 
 export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>> = {
@@ -89,7 +91,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeLodDistanceScale: 0.65,
 		treeDensityScale: 0.75,
 		treeShadowMaxLod: -1,
-		treeWind: false
+		treeWind: false,
+		treeSurfaceDetail: 1
 	},
 	medium: {
 		label: 'Medium',
@@ -114,7 +117,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeLodDistanceScale: 0.85,
 		treeDensityScale: 0.9,
 		treeShadowMaxLod: 0,
-		treeWind: true
+		treeWind: true,
+		treeSurfaceDetail: 2
 	},
 	high: {
 		label: 'High',
@@ -139,7 +143,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeLodDistanceScale: 1,
 		treeDensityScale: 1,
 		treeShadowMaxLod: 0,
-		treeWind: true
+		treeWind: true,
+		treeSurfaceDetail: 2
 	},
 	ultra: {
 		label: 'Ultra',
@@ -167,7 +172,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeLodDistanceScale: 1.3,
 		treeDensityScale: 1,
 		treeShadowMaxLod: 1,
-		treeWind: true
+		treeWind: true,
+		treeSurfaceDetail: 3
 	}
 };
 

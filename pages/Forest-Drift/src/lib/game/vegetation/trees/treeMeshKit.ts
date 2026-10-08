@@ -70,6 +70,8 @@ function normalize(v: Vec3): Vec3 {
 export interface VertexShade {
 	color: Rgb;
 	wind: number;
+	/** Surface kind code (`TREE_SURFACE_CODES`). */
+	surface: number;
 }
 
 export class TreeMeshBuilder {
@@ -77,14 +79,17 @@ export class TreeMeshBuilder {
 	private readonly normals: number[] = [];
 	private readonly colors: number[] = [];
 	private readonly wind: number[] = [];
+	private readonly surface: number[] = [];
 	private readonly indices: number[] = [];
 
 	get vertexCount(): number {
 		return this.positions.length / 3;
 	}
 
-	addVertex(position: Vec3, normal: Vec3, shade: VertexShade): number {
+	/** `grain` is the surface direction the shader stretches its pattern along (bark axis, needle direction). */
+	addVertex(position: Vec3, normal: Vec3, shade: VertexShade, grain: Vec3 = [0, 0, 0]): number {
 		const index = this.vertexCount;
+		this.surface.push(shade.surface, grain[0], grain[1], grain[2]);
 		this.positions.push(position[0], position[1], position[2]);
 		const n = normalize(normal);
 		this.normals.push(n[0], n[1], n[2]);
@@ -112,6 +117,7 @@ export class TreeMeshBuilder {
 			normals: new Float32Array(this.normals),
 			colors: new Float32Array(this.colors),
 			wind: new Float32Array(this.wind),
+			surface: new Float32Array(this.surface),
 			indices: new Uint32Array(this.indices),
 			min,
 			max
@@ -175,7 +181,7 @@ export function addTube(
 				point.position[1] + normal[1] * point.radius,
 				point.position[2] + normal[2] * point.radius
 			];
-			ring.push(builder.addVertex(position, normal, shade(t, angle, position)));
+			ring.push(builder.addVertex(position, normal, shade(t, angle, position), axis));
 		}
 		rings.push(ring);
 	}
@@ -348,7 +354,7 @@ export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 	const rimCount = points * 2;
 	const height = apexY - baseY;
 	const apex: Vec3 = [offset[0], apexY, offset[1]];
-	const apexIndex = builder.addVertex(apex, [0, 1, 0], options.shade(apex, 0, false));
+	const apexIndex = builder.addVertex(apex, [0, 1, 0], options.shade(apex, 0, false), [0, -1, 0]);
 
 	const ringAt = (fraction: number, yOf: (notch: boolean) => number, underside: boolean) => {
 		const ring: number[] = [];
@@ -365,7 +371,14 @@ export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 			const normal: Vec3 = underside
 				? [Math.cos(angle) * 0.75, -0.55, Math.sin(angle) * 0.75]
 				: [Math.cos(angle), slope * 0.9, Math.sin(angle)];
-			ring.push(builder.addVertex(position, normal, options.shade(position, fraction, underside)));
+			const grain = normalize([
+				position[0] - apex[0],
+				position[1] - apex[1],
+				position[2] - apex[2]
+			]);
+			ring.push(
+				builder.addVertex(position, normal, options.shade(position, fraction, underside), grain)
+			);
 		}
 		return ring;
 	};
@@ -395,7 +408,12 @@ export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 	// Shallow underside back to the trunk, so the tier reads as a solid skirt from below.
 	const under: Vec3 = [offset[0], baseY + height * 0.18, offset[1]];
 	const underRim = ringAt(1, rimY, true);
-	const underIndex = builder.addVertex(under, [0, -1, 0], options.shade(under, 0, true));
+	const underIndex = builder.addVertex(
+		under,
+		[0, -1, 0],
+		options.shade(under, 0, true),
+		[0, -1, 0]
+	);
 	for (let i = 0; i < rimCount; i++)
 		builder.addTriangle(underIndex, underRim[i], underRim[(i + 1) % rimCount]);
 }
@@ -437,7 +455,8 @@ export function addLathe(builder: TreeMeshBuilder, options: LatheOptions): void 
 				builder.addVertex(
 					position,
 					normal,
-					options.shade(position, (point.y - minY) / span, normal)
+					options.shade(position, (point.y - minY) / span, normal),
+					normalize([cos * 0.4, 1, sin * 0.4])
 				)
 			);
 		}
@@ -454,11 +473,16 @@ export function addLathe(builder: TreeMeshBuilder, options: LatheOptions): void 
 		}
 	}
 	const top: Vec3 = [offset[0], apexY, offset[1]];
-	const topIndex = builder.addVertex(top, [0, 1, 0], options.shade(top, 1, [0, 1, 0]));
+	const topIndex = builder.addVertex(top, [0, 1, 0], options.shade(top, 1, [0, 1, 0]), [0, 1, 0]);
 	const last = rings[rings.length - 1];
 	for (let s = 0; s < sides; s++) builder.addTriangle(last[s], topIndex, last[(s + 1) % sides]);
 	const bottom: Vec3 = [offset[0], minY, offset[1]];
-	const bottomIndex = builder.addVertex(bottom, [0, -1, 0], options.shade(bottom, 0, [0, -1, 0]));
+	const bottomIndex = builder.addVertex(
+		bottom,
+		[0, -1, 0],
+		options.shade(bottom, 0, [0, -1, 0]),
+		[0, 1, 0]
+	);
 	const first = rings[0];
 	for (let s = 0; s < sides; s++)
 		builder.addTriangle(first[(s + 1) % sides], bottomIndex, first[s]);

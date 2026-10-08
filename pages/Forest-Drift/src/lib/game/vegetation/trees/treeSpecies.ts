@@ -41,6 +41,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 			trunk: '#5E4430',
 			tintVariation: 0.5
 		},
+		surface: { bark: 'furrowed', foliage: 'broadleaf' },
 		prototypeCount: 4,
 		instanceWidthScale: [0.88, 1.15],
 		instanceScale: [0.9, 1.08],
@@ -76,6 +77,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 			trunk: '#5A4030',
 			tintVariation: 0.35
 		},
+		surface: { bark: 'plated', foliage: 'needles' },
 		prototypeCount: 4,
 		instanceWidthScale: [0.9, 1.1],
 		instanceScale: [0.88, 1.12],
@@ -110,6 +112,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 			trunk: '#4E3A2A',
 			tintVariation: 0.3
 		},
+		surface: { bark: 'fibrous', foliage: 'scales' },
 		prototypeCount: 3,
 		instanceWidthScale: [0.85, 1.12],
 		instanceScale: [0.88, 1.1],
@@ -150,6 +153,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 				{ dark: '#6E4A1C', base: '#A8742C', light: '#D3A452' }
 			]
 		},
+		surface: { bark: 'smooth', foliage: 'small-leaf' },
 		prototypeCount: 3,
 		instanceWidthScale: [0.9, 1.15],
 		instanceScale: [0.85, 1.1],

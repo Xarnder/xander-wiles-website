@@ -4,7 +4,12 @@ import { VegetationRegionSampler } from './VegetationRegionSampler';
 import type { VegetationSettings } from './VegetationTypes';
 import { TreeChunk, type PlantedTree, type TreeShadowPolicy } from './trees/TreeChunk';
 import type { TreeLodDistances } from './trees/treeLod';
-import { createTreeMaterial, type TreeWindUniforms } from './trees/treeMaterial';
+import {
+	createTreeMaterial,
+	setTreeSurfaceDetail,
+	type TreeSurfaceDetail,
+	type TreeWindUniforms
+} from './trees/treeMaterial';
 import { TreePrototypeCache } from './trees/TreePrototypeCache';
 import { TreeSpeciesSelector } from './trees/TreeSpeciesSelector';
 import { getTreeSpecies } from './trees/treeSpecies';
@@ -40,13 +45,16 @@ export interface TreeQualityProfile {
 	densityScale: number;
 	maxShadowLod: number;
 	wind: boolean;
+	/** Procedural bark/leaf detail level on near trees. */
+	surfaceDetail: TreeSurfaceDetail;
 }
 
 const DEFAULT_QUALITY: TreeQualityProfile = {
 	lodDistanceScale: 1,
 	densityScale: 1,
 	maxShadowLod: 0,
-	wind: true
+	wind: true,
+	surfaceDetail: 2
 };
 
 interface VegetationChunkRecord {
@@ -129,6 +137,8 @@ export class TreeManager {
 	private readonly material: THREE.MeshLambertMaterial;
 	private readonly wind: TreeWindUniforms;
 	private quality: TreeQualityProfile = { ...DEFAULT_QUALITY };
+	private proceduralSurfaces = true;
+	private appliedSurfaceDetail: TreeSurfaceDetail = DEFAULT_QUALITY.surfaceDetail;
 
 	private readonly active = new Map<ChunkKey, VegetationChunkRecord>();
 	private readonly queue = new TerrainGenerationQueue();
@@ -169,7 +179,7 @@ export class TreeManager {
 		this.treePlacementGenerator.setSeed(options.seed);
 
 		this.prototypes = new TreePrototypeCache(options.seed);
-		const { material, wind } = createTreeMaterial();
+		const { material, wind } = createTreeMaterial(this.quality.surfaceDetail);
 		this.material = material;
 		this.wind = wind;
 		this.group.name = 'trees';
@@ -214,9 +224,32 @@ export class TreeManager {
 	setQualityProfile(profile: TreeQualityProfile): void {
 		const densityChanged = profile.densityScale !== this.quality.densityScale;
 		this.quality = { ...profile };
+		this.applySurfaceDetail();
 		this.invalidateLods();
 		this.applyShadowPolicy();
 		if (densityChanged) this.notifySettingsChanged();
+	}
+
+	/**
+	 * Procedural bark and leaves on/off — follows Graphics → Procedural materials, so switching it
+	 * off restores the plain vertex-coloured trees.
+	 */
+	setProceduralSurfaces(enabled: boolean): void {
+		if (this.proceduralSurfaces === enabled) return;
+		this.proceduralSurfaces = enabled;
+		this.applySurfaceDetail();
+	}
+
+	/** The procedural surface level actually in use (0 = off). */
+	getSurfaceDetail(): TreeSurfaceDetail {
+		return this.proceduralSurfaces ? this.quality.surfaceDetail : 0;
+	}
+
+	private applySurfaceDetail(): void {
+		const detail = this.getSurfaceDetail();
+		if (detail === this.appliedSurfaceDetail) return;
+		this.appliedSurfaceDetail = detail;
+		setTreeSurfaceDetail(this.material, this.wind, detail);
 	}
 
 	/** Rendering settings changed (LOD distances, shadows, wind, prototype count). */

@@ -22,6 +22,7 @@ import type {
 	TreeMeshData,
 	TreeSpeciesDefinition
 } from './TreeSpeciesTypes';
+import { TREE_SURFACE_CODES } from './TreeSpeciesTypes';
 
 /** How far trunks extend below y = 0, so a tree on a slope never shows a floating base. */
 export const TRUNK_SINK = 0.35;
@@ -337,6 +338,7 @@ export function buildTreeMesh(
 	const palette = design.palette;
 	const total = design.totalHeight;
 	const windResponse = species.windResponse;
+	const barkCode = TREE_SURFACE_CODES[species.surface.bark];
 
 	if (tess.trunk) {
 		const path: TubePoint[] = [];
@@ -360,7 +362,7 @@ export function buildTreeMesh(
 			path.push({ position, radius });
 		}
 		addTube(builder, path, tess.trunkSides, (t, _angle, position) =>
-			trunkShade(palette, t, position, total, windResponse)
+			trunkShade(palette, t, position, total, windResponse, barkCode)
 		);
 
 		if (tess.branches) {
@@ -385,17 +387,20 @@ export function buildTreeMesh(
 						{ position: branch.to, radius: radius * 0.45 }
 					],
 					5,
-					(t, _angle, position) => trunkShade(palette, 0.5 + t * 0.5, position, total, windResponse)
+					(t, _angle, position) =>
+						trunkShade(palette, 0.5 + t * 0.5, position, total, windResponse, barkCode)
 				);
 			}
 		}
 	}
 
 	const canopy = species.canopy;
-	if (canopy.kind === 'blobs') buildBlobCanopy(builder, canopy, design, tess, total, windResponse);
+	const leafCode = TREE_SURFACE_CODES[species.surface.foliage];
+	if (canopy.kind === 'blobs')
+		buildBlobCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
 	else if (canopy.kind === 'tiers')
-		buildTierCanopy(builder, canopy, design, tess, total, windResponse);
-	else buildSpindleCanopy(builder, canopy, design, tess, total, windResponse);
+		buildTierCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
+	else buildSpindleCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
 
 	return builder.build();
 }
@@ -405,12 +410,13 @@ function trunkShade(
 	t: number,
 	position: Vec3,
 	total: number,
-	windResponse: number
+	windResponse: number,
+	surface: number
 ): VertexShade {
 	// Darker, damp base; lighter bark higher up. Below ground stays dark.
 	const color = mixRgb(palette.trunkDark, palette.trunk, smooth01(-0.05, 0.6, t));
 	const h = Math.max(0, position[1]) / total;
-	return { color, wind: h * h * 0.35 * windResponse };
+	return { color, wind: h * h * 0.35 * windResponse, surface };
 }
 
 /** Stylised foliage shading: vertical gradient, sunlit top, occluded interior and underside. */
@@ -421,6 +427,7 @@ function foliageShade(
 	design: TreeDesign,
 	total: number,
 	windResponse: number,
+	surface: number,
 	underside = false
 ): VertexShade {
 	const relativeHeight =
@@ -437,7 +444,7 @@ function foliageShade(
 		color[2] * occlusion * under
 	];
 	const h = Math.max(0, position[1]) / total;
-	return { color, wind: (0.35 + 0.65 * h * outward) * windResponse };
+	return { color, wind: (0.35 + 0.65 * h * outward) * windResponse, surface };
 }
 
 function buildBlobCanopy(
@@ -446,10 +453,11 @@ function buildBlobCanopy(
 	design: TreeDesign,
 	tess: LodTessellation,
 	total: number,
-	windResponse: number
+	windResponse: number,
+	leafCode: number
 ): void {
 	const shade = (position: Vec3, outward: number) =>
-		foliageShade(design.palette, position, outward, design, total, windResponse);
+		foliageShade(design.palette, position, outward, design, total, windResponse, leafCode);
 	if (tess.hullBlobs === 0) {
 		for (const cluster of design.clusters) {
 			addBlob(builder, {
@@ -514,7 +522,8 @@ function buildTierCanopy(
 	design: TreeDesign,
 	tess: LodTessellation,
 	total: number,
-	windResponse: number
+	windResponse: number,
+	leafCode: number
 ): void {
 	const tiers = design.tiers;
 	const offset: [number, number] = [design.trunkTop[0] * 0.5, design.trunkTop[2] * 0.5];
@@ -526,6 +535,7 @@ function buildTierCanopy(
 			design,
 			total,
 			windResponse,
+			leafCode,
 			underside
 		);
 	if (tess.maxTiers === 1) {
@@ -574,7 +584,8 @@ function buildSpindleCanopy(
 	design: TreeDesign,
 	tess: LodTessellation,
 	total: number,
-	windResponse: number
+	windResponse: number,
+	leafCode: number
 ): void {
 	if (!design.spindle) return;
 	const source = design.spindle.profile;
@@ -600,6 +611,7 @@ function buildSpindleCanopy(
 				design,
 				total,
 				windResponse,
+				leafCode,
 				normal[1] < -0.5
 			);
 		}

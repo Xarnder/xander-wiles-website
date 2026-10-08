@@ -7,7 +7,7 @@ export interface TreePrototypeCacheStats {
 	designs: number;
 	geometries: number;
 	triangles: number;
-	/** GPU bytes of all compiled prototype geometry (positions, normals, colours, wind, indices). */
+	/** GPU bytes of all compiled prototype geometry (positions, normals, colours, wind, surface, indices). */
 	bytes: number;
 }
 
@@ -65,6 +65,7 @@ export class TreePrototypeCache {
 		geometry.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
 		geometry.setAttribute('color', new THREE.BufferAttribute(mesh.colors, 3));
 		geometry.setAttribute('treeWind', new THREE.BufferAttribute(mesh.wind, 1));
+		geometry.setAttribute('treeSurface', new THREE.BufferAttribute(mesh.surface, 4));
 		const vertexCount = mesh.positions.length / 3;
 		geometry.setIndex(
 			new THREE.BufferAttribute(

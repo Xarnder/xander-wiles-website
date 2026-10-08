@@ -2601,6 +2601,33 @@ uniform; it is installed through `materials/shader/shaderHooks.ts` so it compose
 LODs ≤ the preset's `treeShadowMaxLod` cast (Medium/High: LOD0; Ultra: LOD0–1; Low: none); LOD0–2
 receive; silhouettes neither.
 
+### Procedural bark and leaves
+
+Near trees get procedural surfaces in the same shader — still no textures, no UVs, no extra draw
+calls. Each vertex carries a `treeSurface` attribute (`TREE_SURFACE_CODES`: the species' bark or
+foliage kind, plus a grain direction — the trunk/branch axis for bark, the spray direction for
+conifer foliage); the fragment shader evaluates the pattern on the tree's undisplaced local
+position (so nothing swims in the wind), offset per instance so trees sharing a prototype differ.
+
+| Species    | Bark                                                                 | Foliage                                                                                |
+| ---------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Oak        | `furrowed`: long vertical furrows along noise contours, corky ridges | `broadleaf`: two overlapping layers of oval leaves (11 cm cells), darker inner foliage |
+| Pine       | `plated`: elongated plates split by irregular dark cracks            | `needles`: tufts stretched down each tier, fine needle streaks                         |
+| Cypress    | `fibrous`: long stringy strands                                      | `scales`: small sprays stretched upward                                                |
+| Ornamental | `smooth`: soft mottling with horizontal lenticels                    | `small-leaf`: as broadleaf, 7.5 cm cells                                               |
+
+Bark adds lichen patches (more near the ground). Every leaf has its own tone, hue and a normal tilt,
+so it catches the sun slightly differently from its neighbours. All patterns average ~1, so the
+tuned vertex colours — and far trees, which skip the work — keep their overall colour.
+
+Cost control: the pattern fades out with distance and is not computed at all beyond it
+(`TREE_DETAIL_RANGES`; Low 8–22 m with a single-noise cheap variant and no leaf tilt, Medium/High
+16–38 m, Ultra 26–60 m), so only LOD0/LOD1 trees ever pay for it. Graphics → Procedural materials
+off (or `?materials=flat`) restores the plain vertex-coloured trees. Measured at 1920 × 1080 in one
+session, procedural vs plain: High forest views +0.2–0.4 ms (within run-to-run noise), an oak
+canopy filling the screen +1.3 ms; Low ≈ +0.1 ms; Ultra ≈ +1 ms. Geometry grows by 16 bytes per
+prototype vertex (shared by every instance).
+
 ### Quality presets and developer controls
 
 | Preset | LOD distance scale | Density scale | Tree shadows | Wind |

@@ -105,6 +105,31 @@ export interface TreeStyle {
 	alternateFoliage?: readonly { dark: string; base: string; light: string }[];
 }
 
+/** Procedural bark, drawn per pixel by the tree shader along each trunk/branch axis. */
+export type TreeBarkKind = 'furrowed' | 'plated' | 'fibrous' | 'smooth';
+/** Procedural foliage surface: leaf clusters, needle tufts or scale-like sprays. */
+export type TreeFoliageKind = 'broadleaf' | 'small-leaf' | 'needles' | 'scales';
+
+export interface TreeSurfaceStyle {
+	bark: TreeBarkKind;
+	foliage: TreeFoliageKind;
+}
+
+/**
+ * Surface kind codes stored in the `treeSurface` vertex attribute (x) — the shader branches on
+ * them. Bark kinds are < 4, foliage kinds ≥ 4.
+ */
+export const TREE_SURFACE_CODES: Readonly<Record<TreeBarkKind | TreeFoliageKind, number>> = {
+	furrowed: 0,
+	plated: 1,
+	fibrous: 2,
+	smooth: 3,
+	broadleaf: 4,
+	'small-leaf': 5,
+	needles: 6,
+	scales: 7
+};
+
 /** Approximate triangle budget per LOD — enforced by tests, used to pick tessellation. */
 export type TriangleBudget = readonly [lod0: number, lod1: number, lod2: number, lod3: number];
 
@@ -115,6 +140,8 @@ export interface TreeSpeciesDefinition {
 	trunk: TrunkRules;
 	canopy: CanopyRules;
 	style: TreeStyle;
+	/** Procedural bark and foliage surfaces. */
+	surface: TreeSurfaceStyle;
 	/** Number of procedural prototype designs compiled for this species (draw calls scale with it). */
 	prototypeCount: number;
 	/** Per-instance non-uniform scale: canopy width multiplier range (height comes from the placement scale). */
@@ -162,6 +189,11 @@ export interface TreeMeshData {
 	colors: Float32Array;
 	/** 0 at the trunk base → 1 at the canopy's outer edge: drives shader wind sway. */
 	wind: Float32Array;
+	/**
+	 * Per vertex: surface kind code (`TREE_SURFACE_CODES`) and a grain direction — the branch axis
+	 * for bark, the needle/spray direction for conifer foliage, zero for broadleaf.
+	 */
+	surface: Float32Array;
 	indices: Uint32Array;
 	/** Axis-aligned bounds in prototype space (y = 0 at the ground). */
 	min: [number, number, number];
