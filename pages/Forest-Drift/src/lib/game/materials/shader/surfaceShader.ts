@@ -183,9 +183,17 @@ uniform float uFsWorn;
 
 struct FsCell {
 	float edge;   // metres to the stone outline
+	vec2 dir;     // unit gradient of edge in surface metres (points away from the nearest joint)
 	vec2 id;      // stable per-stone id
 	vec2 local;   // position inside the stone, about -0.5..0.5
+	vec2 extent;  // stone size in metres (for per-stone tilt)
 };
+
+// Value-noise gradient by forward differences (in the noise's own units).
+vec2 fsNoiseGrad(vec2 q) {
+	float n0 = fsNoise(q);
+	return vec2(fsNoise(q + vec2(0.02, 0.0)) - n0, fsNoise(q + vec2(0.0, 0.02)) - n0) / 0.02;
+}
 
 #ifdef FS_COURSED
 // Course k's lower bed joint: nominal spacing with a large per-course jitter, so course heights
@@ -218,9 +226,15 @@ FsCell fsLayout(vec2 p) {
 	float a1 = (j + 1.0 + (fsHash12(vec2(j + 1.0, k) + uFsSeed) - 0.5) * jitter) * lengthK;
 
 	FsCell cell;
-	cell.edge = min(min(x - a0, a1 - x), min(p.y - b0, b1 - p.y));
+	// Nearest side decides both the distance and its gradient direction.
+	cell.edge = x - a0;
+	cell.dir = vec2(1.0, 0.0);
+	if (a1 - x < cell.edge) { cell.edge = a1 - x; cell.dir = vec2(-1.0, 0.0); }
+	if (p.y - b0 < cell.edge) { cell.edge = p.y - b0; cell.dir = vec2(0.0, 1.0); }
+	if (b1 - p.y < cell.edge) { cell.edge = b1 - p.y; cell.dir = vec2(0.0, -1.0); }
 	cell.id = vec2(j, k);
 	cell.local = vec2((x - a0) / (a1 - a0), (p.y - b0) / (b1 - b0)) - 0.5;
+	cell.extent = vec2(a1 - a0, b1 - b0);
 	return cell;
 }
 #else
@@ -252,6 +266,8 @@ FsCell fsLayout(vec2 p) {
 		}
 
 	float border = 8.0;
+	// Gradient of the border distance: away from the nearest separating edge (toward our feature).
+	vec2 borderDir = normalize(mr + vec2(1e-6));
 	#if FS_QUALITY > 0
 	for (int j = -2; j <= 2; j++)
 		for (int i = -2; i <= 2; i++) {
@@ -260,8 +276,10 @@ FsCell fsLayout(vec2 p) {
 			vec2 r = g + o - f;
 			r.y *= uFsLayout.w;
 			vec2 delta = r - mr;
-			if (dot(delta, delta) > 0.00001)
-				border = min(border, dot(0.5 * (mr + r), normalize(delta)));
+			if (dot(delta, delta) > 0.00001) {
+				float distance = dot(0.5 * (mr + r), normalize(delta));
+				if (distance < border) { border = distance; borderDir = -normalize(delta); }
+			}
 		}
 	#else
 	border = 0.5 * (sqrt(md2) - sqrt(md)); // F2 - F1 approximation for the low tier
@@ -270,11 +288,17 @@ FsCell fsLayout(vec2 p) {
 	FsCell cell;
 	// Rounded stones: the outline is the Voronoi border, pulled in toward a per-stone radius so
 	// corners round off and leave sand-filled gaps, as real cobbles do.
-	float radius = mix(0.56, 0.7, fsHash12(n + mg + 2.3 + uFsSeed));
+	// Only the corners are rounded (radius well beyond the mid-edge distance), so neighbours still
+	// sit snugly along their sides and the three-way gaps stay small.
+	float radius = mix(0.68, 0.84, fsHash12(n + mg + 2.3 + uFsSeed));
 	float rounded = radius - length(mr);
-	cell.edge = mix(border, min(border, rounded), uFsRoundness) * size;
+	float minEdge = min(border, rounded);
+	vec2 minDir = rounded < border ? normalize(mr + vec2(1e-6)) : borderDir;
+	cell.edge = mix(border, minEdge, uFsRoundness) * size;
+	cell.dir = normalize(mix(borderDir, minDir, uFsRoundness) + vec2(1e-6));
 	cell.id = n + mg;
 	cell.local = -mr;
+	cell.extent = vec2(size);
 
 	// Hierarchical size variation: split some stones in two along a random line through the centre.
 	float splitChance =
@@ -284,7 +308,10 @@ FsCell fsLayout(vec2 p) {
 		float angle = splitHash.y * 6.2831853;
 		vec2 dir = vec2(cos(angle), sin(angle));
 		float side = dot(cell.local, dir);
-		cell.edge = min(cell.edge, abs(side) * size);
+		if (abs(side) * size < cell.edge) {
+			cell.edge = abs(side) * size;
+			cell.dir = side > 0.0 ? dir : -dir;
+		}
 		cell.id += side > 0.0 ? vec2(0.37, 0.61) : vec2(0.0);
 	}
 	return cell;
@@ -352,18 +379,33 @@ FsSurface fsEvaluate(vec2 uvMetres) {
 	float far = smoothstep(jointHalf * 1.5, jointHalf * 6.0, px);
 	color = mix(color, mix(stone, joint, 0.2), far * 0.4);
 
-	float tilt = dot(cell.local, vec2(r1 - 0.5, r2 - 0.5)) * uFsProfile.w * 0.6;
-	float stoneHeight = uFsProfile.w + bevel * uFsProfile.z * mix(0.6, 1.3, r2) + tilt;
-	float height = mix(0.0, stoneHeight, stoneMask);
+	// Relief as an ANALYTIC slope (metres of height per metre of surface), projected to screen
+	// space below. Differentiating a per-pixel height with dFdx would only resolve 2×2-pixel blocks;
+	// the layout knows exactly how far and in which direction the nearest joint is, so the chamfer,
+	// the rounded bevel, each stone's tilt and its rough face stay crisp at any distance.
+	float proud = uFsProfile.w;
+	float chamfer = max(0.002, soft);
+	float t1 = clamp((edge - jointHalf) / chamfer, 0.0, 1.0);
+	float s1 = t1 * t1 * (3.0 - 2.0 * t1);
+	float chamferSlope = proud * 6.0 * t1 * (1.0 - t1) / chamfer * min(1.0, chamfer * 1.5 / px);
+	float t2 = clamp((edge - jointHalf) / bevelWidth, 0.0, 1.0);
+	float dome = uFsProfile.z * mix(0.6, 1.3, r2);
+	float bevelSlope = dome * 2.0 * (1.0 - t2) / bevelWidth * min(1.0, bevelWidth / (px * 2.0));
+	vec2 slope = (chamferSlope + bevelSlope) * cell.dir;
+	slope += vec2(r1 - 0.5, r2 - 0.5) * proud * 1.2 / max(cell.extent, vec2(0.05)) * s1;
+	// Rough face: two scales of relief per stone, each faded once it falls below a couple of pixels.
+	float faceAmp = proud * 0.3 * (0.5 + uFsIrregularity);
+	float coarse = 1.0 - smoothstep(0.25, 0.6, px * 9.0);
+	float fine = 1.0 - smoothstep(0.25, 0.6, px * 32.0);
+	slope += fsNoiseGrad(p * 9.0 + cell.id * 3.1) * 9.0 * faceAmp * coarse * s1;
+	slope += fsNoiseGrad(p * 32.0 + cell.id * 1.7) * 32.0 * faceAmp * 0.3 * fine * s1;
 
 	FsSurface surface;
 	surface.color = color * uFsTint;
 	float stoneRoughness = uFsRoughness + (r1 - 0.5) * 0.1 - uFsWorn * bevel * 0.05 + dirtMask * 0.04;
 	surface.roughness = mix(uFsJointRoughness, stoneRoughness, stoneMask) / uFsRoughness;
 	surface.ao = mix(0.55, 1.0, stoneMask * 0.7 + bevel * 0.3);
-	// Relief survives until the bevel itself is sub-pixel (joints fade much earlier).
-	float farRelief = smoothstep(bevelWidth * 0.35, bevelWidth * 1.5, px);
-	surface.dHdxy = vec2(dFdx(height), dFdy(height)) * (1.0 - farRelief);
+	surface.dHdxy = vec2(dot(slope, dFdx(p)), dot(slope, dFdy(p)));
 	return surface;
 }
 `;

@@ -99,12 +99,12 @@ const STONE_SHAPES: Record<string, StoneShape> = {
 		jitter: 0.9,
 		aspect: 0.85,
 		jointHalf: 0.008,
-		bevel: 0.05,
-		dome: 0.012,
+		bevel: 0.065,
+		dome: 0.02,
 		proud: 0.004,
 		warp: 1,
 		irregularity: 0.6,
-		roundness: 0.85,
+		roundness: 0.55,
 		worn: true
 	},
 	'paving:setts': {

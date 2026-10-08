@@ -40,6 +40,11 @@ export interface SurfaceMappingBinderOptions {
 	getWorldSeed: () => string;
 }
 
+/** Stops the binder mapping meshes of this material (it now keeps its own UVs). */
+export function clearSurfaceMappingSpec(material: THREE.Material): void {
+	delete material.userData[SPEC_KEY];
+}
+
 export function getSurfaceMappingSpec(material: THREE.Material): SurfaceMappingSpec | undefined {
 	return material.userData[SPEC_KEY] as SurfaceMappingSpec | undefined;
 }
