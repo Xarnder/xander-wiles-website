@@ -133,4 +133,17 @@ export interface FloorDetailBox {
 	 * piece is not forced onto the axis-aligned grid.
 	 */
 	yaw?: number;
+	/**
+	 * Solid wood (planks, path rails): rendered with the procedural wood shader, tinted by `color`.
+	 * `grain` is the box-local axis the wood runs along; boxes sharing a `seed` are cut from the same
+	 * log, and `along` (metres) is where this box starts along it — so a rail made of many short
+	 * segments reads as one continuous length of timber.
+	 */
+	wood?: FloorDetailWood;
+}
+
+export interface FloorDetailWood {
+	grain: 'x' | 'z';
+	seed: number;
+	along?: number;
 }

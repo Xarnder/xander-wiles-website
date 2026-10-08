@@ -1,16 +1,21 @@
 import type { MaterialKind } from '../building/MaterialTypes';
 import type { SurfaceStyle } from './ProceduralMaterialTypes';
 
+/**
+ * Framing is SOLID wood (`mapping: 'wood'` → `shader/woodShader.ts`): one continuous piece of timber
+ * per post or beam with growth rings on its end grain — never boards. Planked surfaces (floors, door
+ * leaves) keep the board texture below.
+ */
 const STRUCTURAL_TIMBER: SurfaceStyle = {
 	type: 'timber',
 	options: { variant: 'dark-oak' },
-	mapping: 'grain'
+	mapping: 'wood'
 };
 
 const JOINERY_TIMBER: SurfaceStyle = {
 	type: 'timber',
 	options: { variant: 'aged-brown', weathering: 0.25 },
-	mapping: 'grain'
+	mapping: 'wood'
 };
 
 /**
@@ -45,6 +50,16 @@ export const BUILDING_SURFACE_STYLES: Readonly<Partial<Record<MaterialKind, Surf
 		options: { variant: 'aged-brown', planks: true, weathering: 0.3 },
 		mapping: 'grain'
 	}
+};
+
+/**
+ * Floor-detail wood (hotbar slot 6: plank floors and path frame rails). Solid wood whose average
+ * colour is the player's chosen plank/rail colour (the geometry supplies its own per-board logs).
+ */
+export const FLOOR_DETAIL_WOOD_STYLE: SurfaceStyle = {
+	type: 'timber',
+	options: { variant: 'aged-brown' },
+	mapping: 'wood'
 };
 
 /** Window glass — bound onto the shared glass material (see `OpeningVisualBuilder.getGlassMaterial`). */

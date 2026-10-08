@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { hashStringToUint32 } from '../terrain/seededRandom';
 import type { SurfaceMappingMode } from './ProceduralMaterialTypes';
 import { computeSurfaceMapping } from './surfaceMapping';
+import { computeWoodCoordinates } from './woodCoords';
 
 /** Per-material mapping request, stored on `material.userData` so any mesh using it can be mapped. */
 export interface SurfaceMappingSpec {
@@ -199,7 +200,11 @@ export class SurfaceMappingBinder {
 		if (signature === '') return;
 		if (geometry.index) deindexInPlace(geometry);
 		restoreBaseGeometry(geometry);
-		if (this.subdivide) {
+		const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+		const solidWood = materials.some((m) => m && getSurfaceMappingSpec(m)?.mode === 'wood');
+		// Solid wood is shaded per pixel and finds its pieces by shared edges, which subdivision would
+		// break apart — wood meshes are never subdivided.
+		if (this.subdivide && !solidWood) {
 			geometry.userData[BASE_GEOMETRY_KEY] = {
 				attributes: { ...geometry.attributes },
 				groups: geometry.groups.map((group) => ({ ...group }))
@@ -223,7 +228,6 @@ export class SurfaceMappingBinder {
 			anchored[i * 3 + 2] = this.tempVector.z;
 		}
 
-		const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 		const specForMaterialIndex = (index: number) =>
 			(materials[index] && getSurfaceMappingSpec(materials[index])) || undefined;
 		const triangleSpec: (SurfaceMappingSpec | undefined)[] = new Array(Math.floor(vertexCount / 3));
@@ -246,6 +250,14 @@ export class SurfaceMappingBinder {
 		});
 		geometry.setAttribute('uv', new THREE.BufferAttribute(result.uv, 2));
 		geometry.setAttribute('color', new THREE.BufferAttribute(result.color, 3));
+		if (solidWood) {
+			geometry.setAttribute(
+				'woodCoord',
+				new THREE.BufferAttribute(computeWoodCoordinates(anchored, hashStringToUint32(seedText)), 3)
+			);
+		} else if (geometry.getAttribute('woodCoord')) {
+			geometry.deleteAttribute('woodCoord');
+		}
 		geometry.userData[GEOMETRY_KEY] = {
 			signature,
 			materialRef: mesh.material,

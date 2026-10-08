@@ -3,6 +3,7 @@
  * FloorDetailGeometryBuilder merges. No Three.js.
  */
 
+import { hashStringToUint32 } from '../terrain/seededRandom';
 import { buildingGridToLocal, type BuildingGridPoint } from './FoundationLocalMath';
 import {
 	FLOOR_DETAIL_2D_THICKNESS,
@@ -423,6 +424,7 @@ function buildPlankBoxes(def: FloorDetailDefinition, gridSize: number): FloorDet
 	const target = plankTargetLength(plankWidth, runSpan, rowCount);
 	const boxes: FloorDetailBox[] = [];
 
+	const idHash = hashStringToUint32(def.id);
 	const emit = (run0: number, run1: number, across0: number, across1: number, color: string) => {
 		const shrinkRun = run1 < runMax - 1e-6 ? groove : 0;
 		const shrinkAcross = across1 < acrossMax - 1e-6 ? groove : 0;
@@ -430,7 +432,10 @@ function buildPlankBoxes(def: FloorDetailDefinition, gridSize: number): FloorDet
 			? { minX: run0, maxX: run1 - shrinkRun, minZ: across0, maxZ: across1 - shrinkAcross }
 			: { minX: across0, maxX: across1 - shrinkAcross, minZ: run0, maxZ: run1 - shrinkRun };
 		if (part.maxX - part.minX <= 1e-4 || part.maxZ - part.minZ <= 1e-4) return;
-		boxes.push(axisBox(part, minY, maxY, color));
+		boxes.push({
+			...axisBox(part, minY, maxY, color),
+			wood: { grain: alongX ? 'x' : 'z', seed: hashStringToUint32(`${boxes.length}`, idHash) }
+		});
 	};
 
 	for (let row = 0; row < rowCount; row++) {
@@ -620,16 +625,21 @@ function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDeta
 	const offset = halfW - frameHalf;
 	const frame = yRange(def.hostY, def.kind, def.renderMode, FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA);
 	const railColor = colorAt(def.colors, 1);
+	const idHash = hashStringToUint32(def.id);
 	for (const sign of [-1, 1] as const) {
-		boxes.push(
-			...boxesAlongPolyline(
-				offsetPathPolyline(samples, sign * offset),
-				frameHalf,
-				frame.minY,
-				frame.maxY,
-				railColor
-			)
-		);
+		// Each rail is one length of timber: its segments share a log, laid end to end along it.
+		const seed = hashStringToUint32(`rail${sign}`, idHash);
+		let along = 0;
+		for (const rail of boxesAlongPolyline(
+			offsetPathPolyline(samples, sign * offset),
+			frameHalf,
+			frame.minY,
+			frame.maxY,
+			railColor
+		)) {
+			boxes.push({ ...rail, wood: { grain: 'z', seed, along } });
+			along += rail.maxZ - rail.minZ;
+		}
 	}
 	return boxes;
 }

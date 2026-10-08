@@ -183,8 +183,10 @@ export interface MaterialMapData {
  *   beams, posts and braces whatever their orientation.
  * - `roof`: like `planar`, with V measured up the slope from each roof plane's lowest edge, so slate
  *   courses start at the eave and stay parallel to it.
+ * - `wood`: solid procedural wood (`shader/woodShader.ts`) — UVs and colours as `grain`, plus a
+ *   per-piece 3D `woodCoord` attribute (see `woodCoords.ts`). No texture is generated.
  */
-export type SurfaceMappingMode = 'planar' | 'grain' | 'roof';
+export type SurfaceMappingMode = 'planar' | 'grain' | 'roof' | 'wood';
 
 /** Everything the scene needs to put a procedural look on a surface. */
 export interface SurfaceStyle {

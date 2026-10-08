@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { FLOOR_DETAIL_WOOD_GROUP } from '../FloorDetailGeometryBuilder';
 import { FloorDetailManager } from '../FloorDetailManager';
 import type { FoundationDefinition } from '../FoundationTypes';
 import type { FloorDetailDefinition } from '../FloorDetailTypes';
@@ -58,7 +59,13 @@ describe('FloorDetailManager integration', () => {
 		expect(meshes[0].userData.foundationId).toBe('f1');
 		const mesh = meshes[0] as THREE.Mesh;
 		expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
-		expect((mesh.material as THREE.MeshStandardMaterial).polygonOffset).toBe(true);
+		const [flat, wood] = mesh.material as THREE.MeshStandardMaterial[];
+		expect(flat.polygonOffset).toBe(true);
+		expect(wood.polygonOffset).toBe(true);
+		// Planks are solid wood: every triangle is in the wood draw group, with log-space coordinates.
+		const woodGroup = mesh.geometry.groups[FLOOR_DETAIL_WOOD_GROUP];
+		expect(woodGroup.count).toBe(mesh.geometry.index!.count);
+		expect(mesh.geometry.getAttribute('woodCoord')).toBeDefined();
 		expect('getAllCollisionRects' in manager).toBe(false);
 	});
 

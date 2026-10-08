@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { InlineMaterialMapSource } from '../../materials/MaterialMapSource';
 import { ProceduralMaterialLibrary } from '../../materials/ProceduralMaterialLibrary';
+import { hasOwnShaderHook } from '../../materials/shader/shaderHooks';
 import { BuildingMaterialManager } from '../BuildingMaterialManager';
 
 /** getMaterial() returns the base THREE.Material type (all callers just assign it to `mesh.material`) — narrow it here since only this test cares about reading `.color` back. */
@@ -127,8 +128,9 @@ describe('BuildingMaterialManager with procedural materials', () => {
 		const handle = asStandard(manager.getMaterial('door-handle', undefined));
 		await library.whenIdle();
 		expect(wall.map).not.toBeNull();
-		expect(beam.map).not.toBeNull();
-		expect(wall.map).not.toBe(beam.map);
+		// Framing is solid procedural wood: shader-only, no texture, and a woodCoord-driven hook.
+		expect(beam.map).toBeNull();
+		expect(hasOwnShaderHook(beam)).toBe(true);
 		// Player-authored or metal surfaces keep their flat look.
 		expect(handle.map).toBeNull();
 	});

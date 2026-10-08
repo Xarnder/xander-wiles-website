@@ -2174,6 +2174,7 @@ upgrade that renames a chunk degrades to plain sampling rather than breaking a s
 | `ProceduralMaterialLibrary.ts`                                                       | Three.js side: texture-set cache (ref-counted, bounded idle LRU), binding looks onto existing materials, enable/quality/palette/seed/anti-tiling/relief switches, disposal. |
 | `surfaceMapping.ts`, `SurfaceMappingBinder.ts`                                       | Real-world UVs + weathering vertex colours for any building mesh (see below).                                                                                               |
 | `shader/surfaceShader.ts`, `shader/surfaceShaderPresets.ts`, `shader/shaderHooks.ts` | World-scale layouts, no-tile sampling, CSM hook composition.                                                                                                                |
+| `shader/woodShader.ts`, `woodCoords.ts`                                              | Solid procedural wood (GLSL port of three.js's `WoodNodeMaterial`) and per-piece log-space coordinates.                                                                     |
 | `buildingSurfaceStyles.ts`                                                           | The ONE table mapping semantic surfaces (`MaterialKind`) to materials.                                                                                                      |
 | `gallery/*`, `routes/materials/*`                                                    | Development gallery and anti-tiling test scene.                                                                                                                             |
 
@@ -2200,7 +2201,7 @@ Builders are untouched: they still ask `BuildingMaterialManager.getMaterial(kind
 When it creates a material it looks the kind up in `BUILDING_SURFACE_STYLES` and asks the library to
 bind that look onto the material — so a material keeps its identity (CSM registration, paint
 previews and every mesh reference keep working) and its flat template look is captured for the
-toggle. Walls → plaster, wall frames / beams / window and door frames → dark oak, roofs → slate,
+toggle. Walls → plaster, wall frames / beams / window and door frames → solid dark oak, roofs → slate,
 foundation sides → cut-block masonry, foundation tops → cobbles (`getFoundationMaterials` returns a
 per-face array; the new `'foundation-top'` kind), stairs → dressed stone, floors and ceilings →
 aged-brown planks, door leaves → planks. Furniture, Mini Build slots and door handles keep their
@@ -2252,6 +2253,49 @@ exactly and projected to screen space. (Differentiating a per-pixel height with 
 surfaces** (or `?tiling=legacy`) switches back to the old tiled maps; `/materials/anti-tiling/`
 compares the two on a 60 m wall, a 40 × 40 m courtyard and a 300 m field from fixed camera views
 (`?view=wall-wide|wall-close|courtyard-wide|courtyard-close|field-wide|field-close&tiling=legacy`).
+
+### Solid wood: framing and floor-detail timber (`shader/woodShader.ts`, `woodCoords.ts`)
+
+Structural timber — wall frames, beams, window/door/stair/slab-opening frames, skirting — and the
+wood in floor details (hotbar slot 6: plank floors and path frame rails) is **solid procedural
+wood**, the approach of three.js's
+[TSL wood example](https://threejs.org/examples/webgpu_tsl_wood.html). Floors (`slab-floor`) and
+door leaves keep the planked texture.
+
+- **The shader** is a GLSL port of `WoodNodeMaterial` (itself ported from Blender): growth rings
+  from the distance to a log's axis, warped at three scales, with per-ring size variance and a
+  ring bias; radial "splotch" detail; Voronoi pores; soft-light colour mixing. All ten genus presets
+  (teak, walnut, white oak, pine, poplar, maple, red oak, cherry, cedar, mahogany) are carried over
+  verbatim; the game's timber variants are built on them (`dark-oak` on walnut, darkened to the
+  Alpine reference). TSL needs `WebGPURenderer`, so it is injected into `MeshStandardMaterial`
+  through `shaderHooks.ts` like every other extension; clearcoat finishes become darkening plus
+  roughness. No texture is generated or sampled.
+- **Log space (`woodCoords.ts`).** The wood is volumetric, so every piece is given its own log: the
+  binder splits a mesh into pieces by shared manifold edges (a beam resting flush on a post stays a
+  separate piece — contact edges have four triangles, not two), frames each by its principal axes
+  (grain along the long axis), and places the pith just outside the piece across its thin side, in a
+  hashed direction ±30° — how real boards are sawn, so faces show flat-sawn arches and end grain
+  shows rings. Pieces also slide along their log by a hashed amount, so no two match. Floor details
+  build the same coordinates per box in `FloorDetailGeometryBuilder`; path rails share one log per
+  rail with segments laid end to end, so a curved rail reads as one length of timber.
+- **Colour.** Unpainted framing uses the preset's own colours (× the binder's per-piece weathering
+  tint). A painted frame, and floor-detail wood (whose colours are player-chosen), use the wood's
+  _brightness_ pattern normalised around 1 and tinted by the chosen colour, so the hue is exactly the
+  chosen one.
+- **Cost.** Scale is the example's (1 unit = 1 m; a ring every ~3 cm). Low skips pores and fine warp;
+  Medium/High add them only within ~8 m, where they are visible. Measured A/B in one session at
+  1920 × 1080 High (development Mac, Metal): the wide village view is unchanged against the old textured
+  timber (8.65 vs 8.59 ms); a close-up with frames filling a quarter of the screen costs about +1.3 ms.
+  Solid-wood meshes are never subdivided.
+- **Uniforms survive program reuse.** three calls `onBeforeCompile` only for a program it has not
+  compiled for the material before, and otherwise keeps the uniforms object of whichever program
+  compiled last — so toggling procedural materials off and on left wood (and the stone shader)
+  without its uniforms, rendering black. Extensions now register their uniforms with
+  `setOwnShaderHook`, which writes them into every uniforms object three built for the material.
+
+`/materials/wood/` recreates the three.js example (`?view=boards`: every genus × finish on its
+0.125 × 0.9 × 0.9 boards, neutral tone mapping) next to the game's own timber at game scale
+(`?view=frame`: framed bay, brace, window frame, plank floor and path rails, ACES).
 
 ### Quality, relief and subdivision
 

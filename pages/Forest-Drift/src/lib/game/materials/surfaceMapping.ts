@@ -155,7 +155,9 @@ export function computeSurfaceMapping(input: SurfaceMappingInput): SurfaceMappin
 		const normal = normalize(
 			cross([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]])
 		);
-		const mode = input.modeForTriangle(tri);
+		const requested = input.modeForTriangle(tri);
+		// Solid wood is laid out per piece in the shader; its UVs/colours are the timber ones.
+		const mode = requested === 'wood' ? 'grain' : requested;
 		modes[tri] = mode;
 		const frame = mode === 'grain' ? grainFrame(a, b, c, normal) : planarFrame(normal);
 		frames[tri] = frame;

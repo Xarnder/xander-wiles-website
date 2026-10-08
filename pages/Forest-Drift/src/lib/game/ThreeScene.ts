@@ -78,7 +78,11 @@ import { WindowTool } from './building/WindowTool';
 import { WorldSurfaceSampler } from './building/WorldSurfaceSampler';
 import { GraphicsPipeline } from './graphics/GraphicsPipeline';
 import { foundationLocalFrame } from './building/FoundationLocalMath';
-import { GLASS_SURFACE_STYLE, TERRAIN_SURFACE_STYLE } from './materials/buildingSurfaceStyles';
+import {
+	FLOOR_DETAIL_WOOD_STYLE,
+	GLASS_SURFACE_STYLE,
+	TERRAIN_SURFACE_STYLE
+} from './materials/buildingSurfaceStyles';
 import {
 	ProceduralMaterialLibrary,
 	type ProceduralMaterialStats
@@ -615,6 +619,14 @@ export class ThreeScene implements WorldRuntime {
 			getBuildingGridSize: () => buildingSettings.buildingGridSize
 		});
 		this.scene.add(this.floorDetailManager.group);
+		for (const material of this.floorDetailManager.getMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+		this.materialLibrary.bindMaterial(
+			this.floorDetailManager.getWoodMaterial(),
+			FLOOR_DETAIL_WOOD_STYLE,
+			{ ownWoodCoords: true }
+		);
 
 		this.furnitureManager = new FurnitureManager(this.materialManager);
 		this.scene.add(this.furnitureManager.group);

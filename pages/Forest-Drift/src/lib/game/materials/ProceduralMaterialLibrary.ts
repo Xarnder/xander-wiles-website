@@ -25,6 +25,15 @@ import {
 	surfaceShaderKindFor
 } from './shader/surfaceShaderPresets';
 import { clearSurfaceMappingSpec, type SurfaceMappingBinder } from './SurfaceMappingBinder';
+import {
+	applySolidWoodShader,
+	createWoodUniforms,
+	GAME_WOOD_PRESETS,
+	resolveWoodParameters,
+	setWoodUniforms,
+	WOOD_FINISHES,
+	type WoodUniforms
+} from './shader/woodShader';
 
 /**
  * Number of distinct texture variations per material type a world can draw from. The world seed
@@ -47,6 +56,11 @@ export interface ProceduralBindingOptions {
 	detail?: boolean;
 	/** Metres per unit of the mesh's existing UVs (only for `mapping: 'native'`). Default 1. */
 	uvUnitMeters?: number;
+	/**
+	 * `mapping: 'wood'` only: the geometry already carries its own `woodCoord` and colour (floor
+	 * details build them per box), so the binder leaves it alone and the vertex colour tints the wood.
+	 */
+	ownWoodCoords?: boolean;
 }
 
 interface TextureSet {
@@ -87,6 +101,8 @@ interface Binding {
 	shaderKind: SurfaceShaderKind | null;
 	shaderRecipe: ResolvedMaterialRecipe | null;
 	uniforms: SurfaceShaderUniforms;
+	/** Solid-wood uniforms (`mapping: 'wood'` styles), created on first use. */
+	woodUniforms: WoodUniforms | null;
 }
 
 export interface ProceduralMaterialLibraryOptions {
@@ -345,7 +361,8 @@ export class ProceduralMaterialLibrary {
 				wantedKey: null,
 				shaderKind: null,
 				shaderRecipe: null,
-				uniforms: createSurfaceShaderUniforms()
+				uniforms: createSurfaceShaderUniforms(),
+				woodUniforms: null
 			};
 			this.bindings.set(material, binding);
 			material.addEventListener('dispose', () => this.unbind(material, false));
@@ -403,12 +420,17 @@ export class ProceduralMaterialLibrary {
 		}
 		// Only procedural surfaces need binder mapping; flat (and native-UV) materials are left alone.
 		const style = binding.style;
-		if (style.mapping === 'native') clearSurfaceMappingSpec(binding.material);
-		else {
+		if (style.mapping === 'native' || (style.mapping === 'wood' && binding.options.ownWoodCoords)) {
+			clearSurfaceMappingSpec(binding.material);
+		} else {
 			this.binder?.watch(binding.material, {
 				mode: style.mapping,
 				weathering: style.type !== 'glass'
 			});
+		}
+		if (style.mapping === 'wood') {
+			this.applySolidWood(binding);
+			return;
 		}
 		let recipe = this.resolveRecipe(binding.style);
 		const shaderKind = this.antiTiling ? surfaceShaderKindFor(recipe) : null;
@@ -448,6 +470,40 @@ export class ProceduralMaterialLibrary {
 				this.pendingCount = Math.max(0, this.pendingCount - 1);
 				if (this.pendingCount === 0) this.flushIdleWaiters();
 			});
+	}
+
+	/**
+	 * Solid procedural wood: no texture at all — the shader computes the wood per pixel in each
+	 * piece's log space (see `shader/woodShader.ts`), so there is nothing to generate or wait for.
+	 */
+	private applySolidWood(binding: Binding): void {
+		binding.wantedKey = null;
+		binding.shaderKind = null;
+		binding.shaderRecipe = null;
+		this.releaseSet(binding.applied);
+		binding.applied = null;
+		const material = binding.material;
+		const variant = String(binding.style.options?.variant ?? 'dark-oak');
+		const preset = GAME_WOOD_PRESETS[variant] ?? GAME_WOOD_PRESETS['dark-oak'];
+		const uniforms = (binding.woodUniforms ??= createWoodUniforms());
+		const tint = binding.options.tint;
+		setWoodUniforms(uniforms, resolveWoodParameters(preset.base, preset.overrides), {
+			tintMode: tint || binding.options.ownWoodCoords ? 'relative' : 'absolute',
+			finish: preset.finish
+		});
+		const programChanged =
+			material.map !== null || material.normalMap !== null || !material.vertexColors;
+		material.map = null;
+		material.normalMap = null;
+		material.roughnessMap = null;
+		material.aoMap = null;
+		// A painted colour becomes the wood's average colour; otherwise the preset's own colours show.
+		material.color.set(tint ?? 0xffffff);
+		material.roughness = WOOD_FINISHES[preset.finish].roughness;
+		material.metalness = 0;
+		material.vertexColors = true;
+		applySolidWoodShader(material, uniforms, shaderQualityFor(this.quality));
+		if (programChanged) material.needsUpdate = true;
 	}
 
 	private async loadSet(

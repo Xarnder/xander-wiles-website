@@ -32,6 +32,9 @@ export class FloorDetailManager {
 	private readonly roots: FoundationRootRegistry;
 	private readonly details = new Map<string, FloorDetailEntry>();
 	private readonly material: THREE.MeshStandardMaterial;
+	/** Wood boxes (planks, path rails) — the scene dresses it with solid procedural wood. */
+	private readonly woodMaterial: THREE.MeshStandardMaterial;
+	private readonly materials: THREE.Material[];
 	private showBounds = false;
 
 	constructor(options: FloorDetailManagerOptions) {
@@ -48,6 +51,18 @@ export class FloorDetailManager {
 			polygonOffsetFactor: -2,
 			polygonOffsetUnits: -2
 		});
+		this.woodMaterial = this.material.clone();
+		this.woodMaterial.name = 'floor-detail-wood';
+		this.materials = [this.material, this.woodMaterial];
+	}
+
+	/** Both materials (flat, wood), in draw-group order — for shadow registration. */
+	getMaterials(): readonly THREE.MeshStandardMaterial[] {
+		return [this.material, this.woodMaterial];
+	}
+
+	getWoodMaterial(): THREE.MeshStandardMaterial {
+		return this.woodMaterial;
 	}
 
 	private buildEntry(
@@ -65,7 +80,7 @@ export class FloorDetailManager {
 			mesh.geometry.dispose();
 			mesh.geometry = geometry;
 		} else {
-			mesh = new THREE.Mesh(geometry, this.material);
+			mesh = new THREE.Mesh(geometry, this.materials);
 			mesh.userData.foundationId = definition.foundationId;
 			mesh.userData.floorDetailId = definition.id;
 			mesh.castShadow = true;
@@ -157,6 +172,7 @@ export class FloorDetailManager {
 	dispose(): void {
 		for (const id of Array.from(this.details.keys())) this.removeFloorDetail(id);
 		this.material.dispose();
+		this.woodMaterial.dispose();
 		this.roots.dispose();
 	}
 }
