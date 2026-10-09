@@ -9,9 +9,9 @@ the brief, the measured performance and the known limitations.
 | Limit                           | Value                                |
 | ------------------------------- | ------------------------------------ |
 | Cuboids per design              | 16                                   |
-| Grid increment                  | 0.0625 m                             |
+| Grid increment                  | 0.03125 m                            |
 | Block size                      | 0 – 4 m per axis; at most one axis 0 |
-| Design bounds                   | 4 × 4 × 4 m (64 grid units)          |
+| Design bounds                   | 4 × 4 × 4 m (128 grid units)         |
 | Material slots                  | 4                                    |
 | Block rotation                  | 90° steps                            |
 | Primitive budget per chunk      | 512 source cuboids (a plane costs 1) |
@@ -64,6 +64,9 @@ the brief, the measured performance and the known limitations.
 8. **Schema v2 halved the grid.** v1 designs (0.125 m grid) are upgraded on load by doubling every
    grid coordinate, so they keep their exact size. The compiler version (now 3) is part of every
    asset key and content hash, so cached assets and thumbnails regenerate.
+9. **Schema v3 halved the grid again** to 0.03125 m for finer furniture detail. Older designs are
+   scaled on load (v1 ×4, v2 ×2) and keep their exact size in metres; planes forced solid still get
+   0.0625 m of collision thickness.
 
 ## Runtime pipeline
 
@@ -113,20 +116,20 @@ stats, benchmark), `RemoveTool.ts`, `MoveTool.ts`, `BuildUndoManager.ts`, world 
 
 ## Controls
 
-| Where        | Control                                      | Action                                                       |
-| ------------ | -------------------------------------------- | ------------------------------------------------------------ |
-| World        | `8`                                          | Place Object                                                 |
-| Place Object | `E`                                          | Object Library (My Builds, Default Designs, Lights, Create)  |
-| Place Object | `R` / `↑` `↓`                                | Rotate 90° / cycle recently used objects                     |
-| Place Object | `C` / `F`                                    | Copy / Edit the looked-at Mini Build                         |
-| Place Object | Click / Right click / `-`                    | Place / cancel preview / undo placement                      |
-| World        | `X` / `M`                                    | Remove one copy / move a copy (budget-checked)               |
-| Settings     | Mini Builds → Chunks & detail budget         | Toggle chunk boundary grid + labels, and the chunk counter   |
-| Editor       | `N`, `Delete`, `Ctrl/Cmd+D`, `M`             | Add, delete, duplicate, duplicate + mirror X                 |
-| Editor       | Arrows, `E`/`Q` (+`Shift` resizes)           | Move/resize in 0.0625m steps; shrink a size to 0 for a plane |
-| Editor       | `R` (`Shift` X, `Alt` Z), `1`–`4`, `Tab`     | Rotate 90°, assign material, next block                      |
-| Editor       | `Ctrl/Cmd+Z`, `Shift+Z`, `Ctrl/Cmd+S`, `F`   | Undo, redo, save and keep editing, frame design              |
-| Editor       | Drag arrows / cubes, drag, right-drag, wheel | Move, resize, orbit, pan, zoom                               |
+| Where        | Control                                      | Action                                                        |
+| ------------ | -------------------------------------------- | ------------------------------------------------------------- |
+| World        | `8`                                          | Place Object                                                  |
+| Place Object | `E`                                          | Object Library (My Builds, Default Designs, Lights, Create)   |
+| Place Object | `R` / `↑` `↓`                                | Rotate 90° / cycle recently used objects                      |
+| Place Object | `C` / `F`                                    | Copy / Edit the looked-at Mini Build                          |
+| Place Object | Click / Right click / `-`                    | Place / cancel preview / undo placement                       |
+| World        | `X` / `M`                                    | Remove one copy / move a copy (budget-checked)                |
+| Settings     | Mini Builds → Chunks & detail budget         | Toggle chunk boundary grid + labels, and the chunk counter    |
+| Editor       | `N`, `Delete`, `Ctrl/Cmd+D`, `M`             | Add, delete, duplicate, duplicate + mirror X                  |
+| Editor       | Arrows, `E`/`Q` (+`Shift` resizes)           | Move/resize in 0.03125m steps; shrink a size to 0 for a plane |
+| Editor       | `R` (`Shift` X, `Alt` Z), `1`–`4`, `Tab`     | Rotate 90°, assign material, next block                       |
+| Editor       | `Ctrl/Cmd+Z`, `Shift+Z`, `Ctrl/Cmd+S`, `F`   | Undo, redo, save and keep editing, frame design               |
+| Editor       | Drag arrows / cubes, drag, right-drag, wheel | Move, resize, orbit, pan, zoom                                |
 
 ## Performance results
 

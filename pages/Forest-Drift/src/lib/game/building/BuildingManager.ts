@@ -9,9 +9,12 @@ import type { FoundationManager } from './FoundationManager';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import { isFootprintCompatibleWithRoofType } from './RoofGeometryBuilder';
 import type { RoofManager } from './RoofManager';
+import { checkRoofOpeningFit, type RoofOpeningFit } from './roofOpeningMath';
 import type {
 	RoofDefinition,
 	RoofDirection,
+	RoofFaceSide,
+	RoofOpeningDefinition,
 	RoofProfileSettings,
 	RoofType,
 	ShedDirection
@@ -143,6 +146,18 @@ export interface AddOpeningParams extends OpeningCandidate {
 	edgeMargin: number;
 	spacing: number;
 	/** Copied onto the opening at place time so later slider edits do not recolour this one. */
+	material?: BuildingMaterialDefinition;
+}
+
+export interface RoofOpeningCandidate extends OpeningCandidate {
+	roofId: string;
+	face: RoofFaceSide;
+	edgeMargin: number;
+	spacing: number;
+}
+
+export interface AddRoofOpeningParams extends RoofOpeningCandidate {
+	/** Copied onto the opening at place time, same as a wall opening's. */
 	material?: BuildingMaterialDefinition;
 }
 
@@ -600,9 +615,78 @@ export class BuildingManager {
 		return { valid: true, value: roof };
 	}
 
+	/** Removes the roof and, with it, every window/door in its vertical faces — they live on the roof's own definition. */
 	removeRoof(id: string): boolean {
 		this.revision++;
 		return this.roofManager.removeRoof(id);
+	}
+
+	/**
+	 * Whether a window/door fits `candidate.face` of `candidate.roofId` — the single rule both the
+	 * Window/Door tools' live preview and `addRoofOpening` apply (see roofOpeningMath's
+	 * `checkRoofOpeningFit`), so the preview can never promise a placement this then refuses.
+	 */
+	checkRoofOpening(candidate: RoofOpeningCandidate): RoofOpeningFit {
+		const roof = this.roofManager.getRoof(candidate.roofId);
+		if (!roof) return { valid: false, issue: 'face', reason: 'Roof not found' };
+		const face = this.roofManager
+			.getVerticalFaces(candidate.roofId)
+			.find((f) => f.side === candidate.face);
+		if (!face) {
+			return { valid: false, issue: 'face', reason: 'That side of the roof has no gable' };
+		}
+		return checkRoofOpeningFit(face, candidate, {
+			edgeMargin: candidate.edgeMargin,
+			spacing: candidate.spacing,
+			existing: (roof.openings ?? []).filter((opening) => opening.face === candidate.face)
+		});
+	}
+
+	/**
+	 * Cuts a window/door into one of a roof's vertical faces (a gable end, a shed's tall wall). The
+	 * opening is stored on the roof itself — `RoofDefinition.openings`, in that face's (U, Y) frame —
+	 * so saving, loading, painting and removing the roof all carry it along with no extra wiring.
+	 */
+	addRoofOpening(params: AddRoofOpeningParams): BuildingMutationResult<RoofOpeningDefinition> {
+		this.revision++;
+		const roof = this.roofManager.getRoof(params.roofId);
+		if (!roof) return { valid: false, reason: 'Roof not found' };
+
+		const fit = this.checkRoofOpening(params);
+		if (!fit.valid) return { valid: false, reason: fit.reason };
+
+		const opening: RoofOpeningDefinition = {
+			id: crypto.randomUUID(),
+			type: params.type,
+			face: params.face,
+			minU: params.minU,
+			maxU: params.maxU,
+			minY: params.minY,
+			maxY: params.maxY,
+			...(params.material ? { material: params.material } : {})
+		};
+		roof.openings = [...(roof.openings ?? []), opening];
+		this.roofManager.rebuildRoof(roof.id);
+		return { valid: true, value: opening };
+	}
+
+	removeRoofOpening(roofId: string, openingId: string): boolean {
+		this.revision++;
+		const roof = this.roofManager.getRoof(roofId);
+		if (!roof?.openings?.some((opening) => opening.id === openingId)) return false;
+		roof.openings = roof.openings.filter((opening) => opening.id !== openingId);
+		this.roofManager.rebuildRoof(roofId);
+		return true;
+	}
+
+	/** A vertical roof face with its world-space (U, Y) frame — Window/Door tools and RemoveTool's picking proxies work in it exactly as they do in a wall's. */
+	getRoofFaceTarget(roofId: string, side: RoofFaceSide) {
+		return this.roofManager.getFaceTarget(roofId, side);
+	}
+
+	/** Which vertical face of a roof a world-space raycast hit landed on, if any — `null` for a slope, eave or fascia. */
+	locateRoofFace(roofId: string, worldX: number, worldY: number, worldZ: number) {
+		return this.roofManager.locateFaceAt(roofId, worldX, worldY, worldZ);
 	}
 
 	getRoof(id: string): RoofDefinition | undefined {
@@ -1125,9 +1209,13 @@ export class BuildingManager {
 		return this.foundationManager.getMeshes();
 	}
 
-	/** Every door hinge pivot (standalone walls and path segments) — `DoorInteractionController` swings these. */
+	/** Every door hinge pivot (standalone walls, path segments and roof faces) — `DoorInteractionController` swings these. */
 	getDoorHingePivots() {
-		return [...this.wallManager.getDoorHingePivots(), ...this.wallPathManager.getDoorHingePivots()];
+		return [
+			...this.wallManager.getDoorHingePivots(),
+			...this.wallPathManager.getDoorHingePivots(),
+			...this.roofManager.getDoorHingePivots()
+		];
 	}
 
 	getWallPath(pathId: string): WallPathDefinition | undefined {
@@ -1247,11 +1335,10 @@ export class BuildingManager {
 
 	/**
 	 * Cascade-delete rule for foundation removal (chosen per the README over "reject deletion while
-	 * occupied" — there is no foundation-deletion UI yet, but whenever one is added it must call this
-	 * before/alongside FoundationManager.removeFoundation so no wall, wall path, or slab ever
-	 * outlives its foundation). Building levels are removed by the caller via
-	 * BuildingLevelManager.removeLevelsForFoundation — this class doesn't know levels exist (see the
-	 * class doc comment), so it can't cascade them itself.
+	 * occupied"). `deleteFoundationAndBuilding` calls this before FoundationManager.removeFoundation
+	 * so no wall, wall path, slab, stair, roof, or floor detail outlives its foundation. Building
+	 * levels are removed by that same caller via BuildingLevelManager.removeLevelsForFoundation —
+	 * this class doesn't know levels exist (see the class doc comment), so it can't cascade them.
 	 */
 	removeBuildingForFoundation(foundationId: string): void {
 		this.revision++;

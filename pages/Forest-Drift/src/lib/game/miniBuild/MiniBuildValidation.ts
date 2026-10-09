@@ -22,6 +22,7 @@ import {
 	MINI_BUILD_LIMITS,
 	MINI_BUILD_SCHEMA_VERSION,
 	MINI_BUILD_V1_GRID_SCALE,
+	miniBuildGridScaleFor,
 	MINI_BUILD_SEMANTIC_TYPES,
 	MINI_BUILD_WORLD_LIMITS,
 	type MiniBuildBlock,
@@ -228,7 +229,8 @@ export function validateMiniBuildDefinition(
 		return fail(`${label} revision must be a positive integer`);
 	}
 	if (typeof value.name !== 'string') return fail(`${label} name missing`);
-	const blocksRaw = schemaVersion < 2 ? upgradeV1Blocks(value.blocks) : value.blocks;
+	const scale = miniBuildGridScaleFor(schemaVersion);
+	const blocksRaw = scale === 1 ? value.blocks : scaleLegacyBlocks(value.blocks, scale);
 	const content = validateMiniBuildContent(blocksRaw, value.materials);
 	if (!content.ok) return fail(`${label}: ${content.error}`);
 	if (
@@ -381,18 +383,18 @@ export function validateMiniBuildWorldState(
 }
 
 /**
- * v1 designs used a 0.125m grid; v2 uses 0.0625m. Doubling every grid coordinate keeps each block at
- * exactly the same size and place in metres. Non-numeric fields are left alone so malformed data
- * still fails validation afterwards rather than being "repaired".
+ * Older designs used a coarser grid (v1 0.125m, v2 0.0625m; now 0.03125m). Multiplying every grid
+ * coordinate by the ratio keeps each block at exactly the same size and place in metres. Non-numeric
+ * fields are left alone so malformed data still fails validation afterwards rather than being
+ * "repaired".
  */
-export function upgradeV1Blocks(blocks: unknown): unknown {
+export function scaleLegacyBlocks(blocks: unknown, factor: number): unknown {
 	if (!Array.isArray(blocks)) return blocks;
 	const scale = (vector: unknown) => {
 		if (!isRecord(vector)) return vector;
 		const out: Record<string, unknown> = { ...vector };
 		for (const axis of ['x', 'y', 'z'] as const) {
-			if (typeof vector[axis] === 'number')
-				out[axis] = (vector[axis] as number) * MINI_BUILD_V1_GRID_SCALE;
+			if (typeof vector[axis] === 'number') out[axis] = (vector[axis] as number) * factor;
 		}
 		return out;
 	};
@@ -401,6 +403,11 @@ export function upgradeV1Blocks(blocks: unknown): unknown {
 			? { ...block, positionGrid: scale(block.positionGrid), sizeGrid: scale(block.sizeGrid) }
 			: block
 	);
+}
+
+/** v1 → current: see `scaleLegacyBlocks`. */
+export function upgradeV1Blocks(blocks: unknown): unknown {
+	return scaleLegacyBlocks(blocks, MINI_BUILD_V1_GRID_SCALE);
 }
 
 /** True when every block's effective box has integer coordinates — asserted by tests and the compiler. */

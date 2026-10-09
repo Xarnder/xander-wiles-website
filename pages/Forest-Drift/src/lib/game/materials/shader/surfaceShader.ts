@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { injectWeatherSurface, WEATHER_SURFACE_UNIFORMS } from './weatherSurface';
 import { setOwnShaderHook } from './shaderHooks';
 
 /**
@@ -511,6 +512,115 @@ function withNoTile(source: string): string {
  * Installs (or, with `kind = null`, removes) the world-scale surface shading on `material`.
  * Uniform objects are shared with the caller so values update live without recompiling.
  */
+/**
+ * River and lake shores and beds, layered into the terrain's ground-cover shader where the terrain
+ * mesh's `aShore` attribute says so (x = beach cover, y = material: 0 sand/mud … 0.5 pebbles … 1
+ * stones, z = wetness — 1 under water and along the waterline). Everything is per pixel in
+ * world metres, so nothing repeats:
+ *
+ *   sand    — two grain scales, wind/current ripple marks bent by noise, dark mineral specks;
+ *   mud     — darker silt where a muddy (low-stone) stretch is wet;
+ *   pebbles — 7 cm Voronoi pebbles, each with its own rock colour, a domed highlight and a dark
+ *             gap of sand between;
+ *   stones  — 26 cm cobbles over the pebbles, with moss on some and dark crevices;
+ *   wet     — the whole lot darker, more saturated and shinier toward and under the water.
+ *
+ * The cell detail fades to its average with distance (it would only shimmer sub-pixel).
+ */
+const SHORE = /* glsl */ `
+vec3 fsShoreCells(vec2 x, out vec2 cellId) {
+	vec2 n = floor(x);
+	vec2 f = fract(x);
+	float f1 = 8.0;
+	float f2 = 8.0;
+	cellId = n;
+	for (int j = -1; j <= 1; j++)
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 o = fsHash22(n + g) * 0.86 + 0.07;
+			vec2 r = g + o - f;
+			float d = dot(r, r);
+			if (d < f1) {
+				f2 = f1;
+				f1 = d;
+				cellId = n + g;
+			} else if (d < f2) {
+				f2 = d;
+			}
+		}
+	return vec3(sqrt(f1), sqrt(f2), 0.0);
+}
+
+vec3 fsRockColor(float h, float k) {
+	vec3 grey = vec3(0.50, 0.49, 0.46);
+	vec3 tan = vec3(0.60, 0.52, 0.40);
+	vec3 slate = vec3(0.30, 0.31, 0.33);
+	vec3 rust = vec3(0.55, 0.40, 0.29);
+	vec3 quartz = vec3(0.78, 0.76, 0.70);
+	vec3 c = h < 0.32 ? grey : h < 0.55 ? tan : h < 0.75 ? slate : h < 0.9 ? rust : quartz;
+	return c * (0.86 + 0.28 * k);
+}
+
+vec3 fsShore(vec2 p, float stone, float wet, float viewDist, out float roughness) {
+	float detail = 1.0 - smoothstep(22.0, 60.0, viewDist);
+	// Sand: grain, ripple marks bent by noise, mineral specks.
+	float grain = fsNoise(p * 7.0) * 0.6 + fsNoise(p * 23.0) * 0.4;
+	float bend = fsNoise(p * 0.32) * 7.0 + fsNoise(p * 1.1) * 1.5;
+	float ripple = sin(dot(p, vec2(0.83, 0.55)) * 8.5 + bend);
+	ripple = smoothstep(-0.3, 1.0, ripple) * detail;
+	vec3 sand = mix(vec3(0.42, 0.32, 0.19), vec3(0.62, 0.50, 0.31), grain);
+	sand *= 0.9 + 0.13 * ripple;
+	sand *= 1.0 - 0.3 * step(0.83, fsNoise(p * 47.0)) * detail;
+	// Mud: muddy stretches (low stone) turn to silt where wet.
+	vec3 mud = mix(vec3(0.17, 0.12, 0.075), vec3(0.27, 0.2, 0.12), grain);
+	float muddy = smoothstep(0.32, 0.0, stone) * smoothstep(0.2, 0.8, wet);
+	vec3 ground = mix(sand, mud, muddy * 0.8);
+	roughness = 0.95;
+
+	#if FS_QUALITY > 0
+	// Pebbles over the sand.
+	// Stony stretches are pebble-covered; sandy ones still get scattered gravel, more on the wet bed.
+	float pebbleAmount = max(smoothstep(0.22, 0.6, stone), 0.22 + 0.4 * wet) * detail;
+	if (pebbleAmount > 0.001) {
+		vec2 id;
+		vec3 c = fsShoreCells(p / 0.075, id);
+		float h = fsHash12(id + 3.1);
+		float k = fsHash12(id + 9.7);
+		float radius = 0.34 + 0.16 * k;
+		float inside = smoothstep(radius, radius - 0.1, c.x) * smoothstep(0.0, 0.05, c.y - c.x);
+		// Density varies in patches: gravel bars and bare sand between.
+		float density = smoothstep(0.25, 0.6, fsNoise(p * 0.6) * 0.6 + stone * 0.6);
+		vec3 pebble = fsRockColor(h, k) * (1.12 - 0.55 * c.x / radius);
+		ground = mix(ground, pebble, inside * pebbleAmount * density);
+		roughness = mix(roughness, 0.7, inside * pebbleAmount * density);
+	}
+	// Larger stones and cobbles on stony stretches.
+	float stoneAmount = smoothstep(0.62, 0.92, stone) * detail;
+	if (stoneAmount > 0.001) {
+		vec2 id;
+		vec3 c = fsShoreCells(p / 0.26 + 17.3, id);
+		float h = fsHash12(id + 5.3);
+		float k = fsHash12(id + 1.9);
+		float radius = 0.4 + 0.14 * k;
+		float inside = smoothstep(radius, radius - 0.07, c.x) * smoothstep(0.0, 0.06, c.y - c.x);
+		vec3 rock = fsRockColor(h * 0.75, k) * (1.15 - 0.6 * c.x / radius);
+		// Moss on the drier tops of some stones.
+		float moss = step(0.62, fsHash12(id + 7.7)) * (1.0 - wet) * smoothstep(0.35, 0.0, c.x);
+		rock = mix(rock, vec3(0.30, 0.38, 0.17), moss * 0.7);
+		// Dark crevices around each stone.
+		ground *= mix(1.0, 0.62, smoothstep(radius + 0.08, radius, c.x) * stoneAmount);
+		ground = mix(ground, rock, inside * stoneAmount);
+		roughness = mix(roughness, 0.66, inside * stoneAmount);
+	}
+	#endif
+	// Wet: darker, a little more saturated, much smoother.
+	vec3 wetColor = ground * mix(vec3(0.62), ground * 1.5, 0.3);
+	ground = mix(ground, wetColor, wet);
+	roughness = mix(roughness, 0.35, wet * 0.8);
+	return ground;
+}
+`;
+
 export function applySurfaceShader(
 	material: THREE.Material,
 	kind: SurfaceShaderKind | null,
@@ -524,6 +634,7 @@ export function applySurfaceShader(
 		return;
 	}
 	const structured = kind === 'coursed' || kind === 'cellular';
+	const shore = kind === 'cover' && material.userData.fsShore === true;
 	const hook: THREE.Material['onBeforeCompile'] = (shader) => {
 		Object.assign(shader.uniforms, uniforms);
 		const defines = [
@@ -536,24 +647,44 @@ export function applySurfaceShader(
 		shader.vertexShader = shader.vertexShader
 			.replace(
 				'#include <common>',
-				`#include <common>\nvarying vec2 vFsUv;\nuniform float uFsUvToMetres;`
+				`#include <common>\nvarying vec2 vFsUv;\nuniform float uFsUvToMetres;\n${
+					shore ? 'attribute vec3 aShore;\nvarying vec3 vFsShore;\n' : ''
+				}`
 			)
-			.replace('#include <uv_vertex>', `#include <uv_vertex>\nvFsUv = uv * uFsUvToMetres;`);
+			.replace(
+				'#include <uv_vertex>',
+				`#include <uv_vertex>\nvFsUv = uv * uFsUvToMetres;${shore ? '\nvFsShore = aShore;' : ''}`
+			);
 
 		let fragment = shader.fragmentShader.replace(
 			'#include <common>',
-			`#include <common>\n${defines}\n${COMMON}\n${structured ? STONE : kind === 'cover' ? COVER : ''}`
+			`#include <common>\n${shore ? 'varying vec3 vFsShore;\n' : ''}${defines}\n${COMMON}\n${structured ? STONE : kind === 'cover' ? COVER : ''}${shore ? SHORE : ''}`
 		);
 		fragment = withNoTile(fragment);
 		if (kind !== 'noTile') {
 			fragment = fragment
 				.replace(
 					'#include <color_fragment>',
-					'#include <color_fragment>\nFsSurface fsSurface = fsEvaluate(vFsUv);\ndiffuseColor.rgb *= fsSurface.color;'
+					`#include <color_fragment>\nFsSurface fsSurface = fsEvaluate(vFsUv);\ndiffuseColor.rgb *= fsSurface.color;${
+						shore
+							? `\nfloat fsShoreMask = 0.0;\nfloat fsShoreRough = 1.0;\n{
+	float shoreWet = clamp(vFsShore.z, 0.0, 1.0);
+	float shoreCover = max(clamp(vFsShore.x, 0.0, 1.0), shoreWet);
+	// Ragged edge where beach meets grass, rather than a smooth band.
+	fsShoreMask = smoothstep(0.25, 0.75, shoreCover + (fsNoise(vFsUv * 1.3) - 0.5) * 0.45);
+	if (fsShoreMask > 0.001) {
+		vec3 shoreColor = fsShore(vFsUv, clamp(vFsShore.y, 0.0, 1.0), shoreWet, length(vViewPosition), fsShoreRough);
+		diffuseColor.rgb = mix(diffuseColor.rgb, shoreColor, fsShoreMask);
+	}
+}`
+							: ''
+					}`
 				)
 				.replace(
 					'#include <roughnessmap_fragment>',
-					'#include <roughnessmap_fragment>\nroughnessFactor *= fsSurface.roughness;'
+					`#include <roughnessmap_fragment>\nroughnessFactor *= fsSurface.roughness;${
+						shore ? '\nroughnessFactor = mix(roughnessFactor, fsShoreRough, fsShoreMask);' : ''
+					}`
 				)
 				.replace(
 					'#include <normal_fragment_maps>',
@@ -567,6 +698,13 @@ export function applySurfaceShader(
 				);
 		}
 		shader.fragmentShader = fragment;
+		// Rain and snow on whatever is open to the sky (see weatherSurface.ts).
+		injectWeatherSurface(shader);
 	};
-	setOwnShaderHook(material, hook, `fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}`, uniforms);
+	setOwnShaderHook(
+		material,
+		hook,
+		`fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}${shore ? ':shore' : ''}:wx`,
+		{ ...uniforms, ...WEATHER_SURFACE_UNIFORMS }
+	);
 }

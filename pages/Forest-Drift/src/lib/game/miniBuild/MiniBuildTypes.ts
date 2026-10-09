@@ -3,7 +3,7 @@
  * this is the persisted, player-authored contract. Nothing here is a mesh, a geometry or a material
  * instance — compiled render assets are always regenerated from these recipes.
  *
- * A Mini Build is deliberately constrained (16 cuboids on a 0.0625m grid, 4m bounds, 4 material
+ * A Mini Build is deliberately constrained (16 cuboids on a 0.03125m grid, 4m bounds, 4 material
  * slots, quarter-turn rotations). A cuboid may be flat (size 0) on one axis, which makes it a plane.
  * Those limits are the creative rule of the system, so they live in exactly one place and every layer
  * (editor, validation, loader, compiler) reads them from here.
@@ -14,12 +14,23 @@ import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
  * Bump when `MiniBuildDefinition`'s persisted shape changes.
  *
  * v1 — grid unit 0.125m, every size ≥ 1.
- * v2 — grid unit 0.0625m (v1 coordinates are doubled on load), one axis may be 0 (a plane).
+ * v2 — grid unit 0.0625m, one axis may be 0 (a plane).
+ * v3 — grid unit 0.03125m (finer snap). Older coordinates are scaled up on load (v1 ×4, v2 ×2), so
+ *      every saved design keeps exactly its size and shape in metres.
  */
-export const MINI_BUILD_SCHEMA_VERSION = 2;
+export const MINI_BUILD_SCHEMA_VERSION = 3;
 
-/** v1 grid units per v2 grid unit: v1 designs are scaled by this when loaded. */
-export const MINI_BUILD_V1_GRID_SCALE = 2;
+/** Current grid units per v1 grid unit (0.125m / 0.03125m): v1 designs are scaled by this when loaded. */
+export const MINI_BUILD_V1_GRID_SCALE = 4;
+/** Current grid units per v2 grid unit (0.0625m / 0.03125m). */
+export const MINI_BUILD_V2_GRID_SCALE = 2;
+
+/** How much a design saved at `schemaVersion` must be scaled to current grid units. */
+export function miniBuildGridScaleFor(schemaVersion: number): number {
+	if (schemaVersion <= 1) return MINI_BUILD_V1_GRID_SCALE;
+	if (schemaVersion === 2) return MINI_BUILD_V2_GRID_SCALE;
+	return 1;
+}
 
 /**
  * Bump when the compiler's output for the same definition changes (face emission, UVs, collision).
@@ -30,11 +41,11 @@ export const MINI_BUILD_COMPILER_VERSION = 3;
 
 export const MINI_BUILD_LIMITS = {
 	maxBlocks: 16,
-	/** Snap increment in metres for positions and sizes. */
-	gridSize: 0.0625,
+	/** Snap increment in metres for positions and sizes (3.125 cm). */
+	gridSize: 0.03125,
 	maxBounds: { x: 4, y: 4, z: 4 },
 	/** `maxBounds / gridSize` — the same limit in integer grid units. */
-	maxBoundsGrid: { x: 64, y: 64, z: 64 },
+	maxBoundsGrid: { x: 128, y: 128, z: 128 },
 	maxMaterialSlots: 4,
 	/**
 	 * Sizes may reach 0 — a plane — but only on one axis per block (a line or a point would be
@@ -45,9 +56,9 @@ export const MINI_BUILD_LIMITS = {
 	/** Upper bound for `MiniBuildBlock.layer` (the editor keeps layers dense, 0–15). */
 	maxPlaneLayer: 999,
 	/** New cuboids start at 0.5m on every axis. */
-	defaultBlockSizeGrid: 8,
-	/** Editor workspace: X/Z in [-workspaceHalfGrid, workspaceHalfGrid], Y in [0, maxBoundsGrid.y]. */
-	workspaceHalfGrid: 64,
+	defaultBlockSizeGrid: 16,
+	/** Editor workspace: X/Z in [-workspaceHalfGrid, workspaceHalfGrid] (±4m), Y in [0, maxBoundsGrid.y]. */
+	workspaceHalfGrid: 128,
 	/** Editor floor grid line spacing (metres) — coarser than the snap so the grid stays readable. */
 	editorGridLineSpacing: 0.125,
 	maxNameLength: 48

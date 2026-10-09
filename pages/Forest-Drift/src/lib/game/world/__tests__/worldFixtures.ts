@@ -1,4 +1,5 @@
 import { createDefaultCreatureState } from '../../creatures/CreaturePersistence';
+import { createDefaultHydrologySettings } from '../../hydrology/HydrologyTypes';
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { createDefaultVegetationSettings } from '../../vegetation/VegetationTypes';
@@ -20,7 +21,8 @@ export function defaultEnvironment(): WorldEnvironmentDefinition {
 	return {
 		terrain: createDefaultTerrainSettings(),
 		vegetation: createDefaultVegetationSettings(),
-		sky: createDefaultSkySettings()
+		sky: createDefaultSkySettings(),
+		hydrology: createDefaultHydrologySettings()
 	};
 }
 

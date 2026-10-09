@@ -3,6 +3,13 @@ import type { GraphicsSettings } from '../graphics/GraphicsTypes';
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import type { SustainSettings } from '../music/SustainTrailBuilder';
 import type { SkySettings } from '../sky/SkyTypes';
+import type {
+	HydrologyDebugSettings,
+	HydrologySettings,
+	HydrologyVisualSettings
+} from '../hydrology/HydrologyTypes';
+import type { ParticleDebugSettings } from '../particles/ParticleTypes';
+import type { WeatherDebugSettings, WeatherType } from '../weather/WeatherTypes';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { VegetationSettings } from '../vegetation/VegetationTypes';
 
@@ -32,6 +39,17 @@ export interface GameSettingsActions {
 	terrainTopology: () => void;
 	terrainViewDistance: () => void;
 	terrainRendering: () => void;
+	hydrologyStructure?: () => void;
+	hydrologyVisual?: () => void;
+	hydrologyDebug?: () => void;
+	particles?: () => void;
+	/** Weather panel values changed: re-apply the selection (forced weather or schedule). */
+	weather?: () => void;
+	/** Weather selection changed: load the preset's wind/cloud values, then apply. */
+	weatherSelect?: () => void;
+	weatherLightning?: () => void;
+	/** Developer shortcut: force one weather type now. */
+	weatherForce?: (type: WeatherType) => void;
 	foundationBounds: () => void;
 	wallBounds: () => void;
 	collisionGeometry?: () => void;
@@ -50,6 +68,8 @@ export interface GameSettingsActions {
 	sky: () => void;
 	graphicsQuality: (quality: string) => void;
 	graphicsAdvanced: () => void;
+	/** Field of view slider moved (applies live; saved per browser). */
+	graphicsFieldOfView?: () => void;
 	graphicsExposure: () => void;
 	graphicsAo: () => void;
 	graphicsExport: () => void;
@@ -91,6 +111,15 @@ export interface CreatureSettingsPort {
 export interface GameSettingsHost {
 	creatures?: CreatureSettingsPort;
 	terrain: TerrainSettings;
+	hydrology?: {
+		settings: HydrologySettings;
+		debug: HydrologyDebugSettings;
+		visual: HydrologyVisualSettings;
+	};
+	/** Particle system developer controls (Settings → Graphics → Particles). */
+	particles?: ParticleDebugSettings;
+	/** Weather developer controls (Settings → Weather). */
+	weather?: WeatherDebugSettings;
 	vegetation: VegetationSettings;
 	sky: SkySettings;
 	graphics: GraphicsSettings;

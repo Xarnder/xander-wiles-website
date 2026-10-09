@@ -68,6 +68,18 @@ describe('migrateWorld', () => {
 		expect(validateWorldDefinition(result.value).ok).toBe(true);
 	});
 
+	it('disables hydrology when migrating a world that predates rivers', () => {
+		const world = richWorld();
+		const old = { ...world, schemaVersion: 7 };
+		delete (old.environment as { hydrology?: unknown }).hydrology;
+		const result = migrateWorld(old);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const environment = result.value.environment as { hydrology?: { enabled?: boolean } };
+		expect(environment.hydrology?.enabled).toBe(false);
+		expect(validateWorldDefinition(result.value).ok).toBe(true);
+	});
+
 	it('produces a world that still passes validation after migrating', () => {
 		const result = migrateWorld(richWorld());
 		expect(result.ok).toBe(true);

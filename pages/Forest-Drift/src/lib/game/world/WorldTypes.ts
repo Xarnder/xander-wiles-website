@@ -1,3 +1,4 @@
+import type { WeatherSaveState } from '../weather/WeatherTypes';
 import type { CreatureWorldState } from '../creatures/CreatureTypes';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { FurnitureDefinition } from '../building/FurnitureTypes';
@@ -7,6 +8,7 @@ import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
 import type { SkySettings } from '../sky/SkyTypes';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
+import type { HydrologySettings } from '../hydrology/HydrologyTypes';
 import type { VegetationSettings } from '../vegetation/VegetationTypes';
 
 /**
@@ -15,7 +17,7 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 7;
+export const CURRENT_WORLD_SCHEMA_VERSION = 8;
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';
@@ -35,6 +37,17 @@ export interface WorldEnvironmentDefinition {
 	terrain: TerrainSettings;
 	vegetation: VegetationSettings;
 	sky: SkySettings;
+	/**
+	 * Rivers and lakes are regenerated from these settings and the world seed. Meshes are never
+	 * saved. Worlds created before hydrology exist with `enabled: false` so a lake cannot appear
+	 * under a building that was placed on the old terrain.
+	 */
+	hydrology: HydrologySettings;
+	/**
+	 * The world's logical weather (schedule seed and clock, or a forced weather). Never particles or
+	 * sounds. Absent in worlds saved before weather existed — they start the schedule from the seed.
+	 */
+	weather?: WeatherSaveState;
 }
 
 /**

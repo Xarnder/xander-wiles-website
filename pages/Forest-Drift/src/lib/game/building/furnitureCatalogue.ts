@@ -115,9 +115,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.4,
 			defaultDepth: 2,
 			defaultHeight: 0.55,
-			widthStep: 0.1,
-			depthStep: 0.1,
-			heightStep: 0.05,
+			widthStep: 0.05,
+			depthStep: 0.05,
+			heightStep: 0.025,
 			depthLabel: 'Length'
 		}),
 		params: [{ key: 'headboard', label: 'Headboard', type: 'boolean', defaultValue: true }],
@@ -145,9 +145,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.45,
 			defaultDepth: 0.4,
 			defaultHeight: 0.55,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -170,9 +170,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.2,
 			defaultDepth: 0.55,
 			defaultHeight: 2,
-			widthStep: 0.1,
-			depthStep: 0.05,
-			heightStep: 0.1
+			widthStep: 0.05,
+			depthStep: 0.025,
+			heightStep: 0.05
 		}),
 		params: [],
 		presets: [],
@@ -195,9 +195,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.5,
 			defaultDepth: 0.5,
 			defaultHeight: 0.9,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [{ key: 'backrest', label: 'Backrest', type: 'boolean', defaultValue: true }],
 		presets: [],
@@ -220,9 +220,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.38,
 			defaultDepth: 0.38,
 			defaultHeight: 0.45,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -245,9 +245,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.6,
 			defaultDepth: 0.42,
 			defaultHeight: 0.85,
-			widthStep: 0.25,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.125,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [{ key: 'backrest', label: 'Backrest', type: 'boolean', defaultValue: false }],
 		presets: [
@@ -275,9 +275,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.4,
 			defaultDepth: 0.8,
 			defaultHeight: 0.75,
-			widthStep: 0.25,
-			depthStep: 0.1,
-			heightStep: 0.05
+			widthStep: 0.125,
+			depthStep: 0.05,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [
@@ -304,9 +304,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.6,
 			defaultDepth: 0.7,
 			defaultHeight: 0.85,
-			widthStep: 0.25,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.125,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -329,9 +329,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.5,
 			defaultDepth: 0.6,
 			defaultHeight: 0.9,
-			widthStep: 0.25,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.125,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [
@@ -358,9 +358,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.5,
 			defaultDepth: 0.6,
 			defaultHeight: 0.9,
-			widthStep: 0.25,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.125,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [
@@ -387,9 +387,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.7,
 			defaultDepth: 0.6,
 			defaultHeight: 0.95,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -412,9 +412,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.9,
 			defaultDepth: 0.4,
 			defaultHeight: 1,
-			widthStep: 0.1,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.05,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -437,9 +437,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.8,
 			defaultDepth: 0.45,
 			defaultHeight: 0.5,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -462,9 +462,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.55,
 			defaultDepth: 0.55,
 			defaultHeight: 0.75,
-			widthStep: 0.05,
-			depthStep: 0.05,
-			heightStep: 0.05,
+			widthStep: 0.025,
+			depthStep: 0.025,
+			heightStep: 0.025,
 			widthLabel: 'Diameter'
 		}),
 		params: [],
@@ -493,9 +493,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.2,
 			defaultDepth: 0.3,
 			defaultHeight: 1.6,
-			widthStep: 0.1,
-			depthStep: 0.05,
-			heightStep: 0.1
+			widthStep: 0.05,
+			depthStep: 0.025,
+			heightStep: 0.05
 		}),
 		params: [{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 4, min: 2, max: 8 }],
 		presets: [],
@@ -518,9 +518,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1,
 			defaultDepth: 0.32,
 			defaultHeight: 1.8,
-			widthStep: 0.1,
-			depthStep: 0.05,
-			heightStep: 0.1
+			widthStep: 0.05,
+			depthStep: 0.025,
+			heightStep: 0.05
 		}),
 		params: [{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 5, min: 2, max: 8 }],
 		presets: [],
@@ -543,9 +543,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 1.2,
 			defaultDepth: 0.55,
 			defaultHeight: 1.15,
-			widthStep: 0.1,
-			depthStep: 0.05,
-			heightStep: 0.05
+			widthStep: 0.05,
+			depthStep: 0.025,
+			heightStep: 0.025
 		}),
 		params: [],
 		presets: [],
@@ -568,9 +568,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.18,
 			defaultDepth: 0.18,
 			defaultHeight: 0.38,
-			widthStep: 0.02,
-			depthStep: 0.02,
-			heightStep: 0.02
+			widthStep: 0.01,
+			depthStep: 0.01,
+			heightStep: 0.01
 		}),
 		params: [],
 		presets: [],
@@ -593,9 +593,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			defaultWidth: 0.12,
 			defaultDepth: 0.12,
 			defaultHeight: 0.5,
-			widthStep: 0.02,
-			depthStep: 0.02,
-			heightStep: 0.02
+			widthStep: 0.01,
+			depthStep: 0.01,
+			heightStep: 0.01
 		}),
 		params: [],
 		presets: [],

@@ -6,7 +6,9 @@ import {
 	sixteenBlockDefinition,
 	testBlocks,
 	testDefinition,
-	type TestBox
+	TEST_UNIT,
+	type TestBox,
+	testGridBoxes
 } from './miniBuildFixtures';
 
 function totalQuads(data: CompiledMiniBuildData): number {
@@ -359,7 +361,9 @@ describe('MiniBuildCollisionCompiler', () => {
 			]),
 			MINI_BUILD_COLLISION
 		);
-		expect(boxes).toEqual([{ min: { x: 0, y: 0, z: 0 }, max: { x: 8, y: 16, z: 8 } }]);
+		expect(boxes).toEqual(
+			testGridBoxes([{ min: { x: 0, y: 0, z: 0 }, max: { x: 8, y: 16, z: 8 } }])
+		);
 	});
 
 	it('treats tiny auto blocks (legs, handles) as visual-only', () => {
@@ -373,7 +377,9 @@ describe('MiniBuildCollisionCompiler', () => {
 			]),
 			MINI_BUILD_COLLISION
 		);
-		expect(boxes).toEqual([{ min: { x: 0, y: 6, z: 0 }, max: { x: 8, y: 8, z: 8 } }]);
+		expect(boxes).toEqual(
+			testGridBoxes([{ min: { x: 0, y: 6, z: 0 }, max: { x: 8, y: 8, z: 8 } }])
+		);
 	});
 
 	it('falls back to one bounds box when every block is decorative', () => {
@@ -384,7 +390,9 @@ describe('MiniBuildCollisionCompiler', () => {
 			]),
 			MINI_BUILD_COLLISION
 		);
-		expect(boxes).toEqual([{ min: { x: 0, y: 0, z: 0 }, max: { x: 4, y: 1, z: 1 } }]);
+		expect(boxes).toEqual(
+			testGridBoxes([{ min: { x: 0, y: 0, z: 0 }, max: { x: 4, y: 1, z: 1 } }])
+		);
 	});
 
 	it('never exceeds the per-design collision box ceiling', () => {
@@ -409,9 +417,9 @@ describe('MiniBuildCollisionCompiler', () => {
 			const covered = boxes.some(
 				(box) =>
 					box.min.x <= block.positionGrid.x &&
-					box.max.x >= block.positionGrid.x + 6 &&
+					box.max.x >= block.positionGrid.x + 6 * TEST_UNIT &&
 					box.min.z <= block.positionGrid.z &&
-					box.max.z >= block.positionGrid.z + 6
+					box.max.z >= block.positionGrid.z + 6 * TEST_UNIT
 			);
 			expect(covered).toBe(true);
 		}
@@ -427,11 +435,13 @@ describe('MiniBuildCollisionCompiler', () => {
 		]);
 		wall[0].collision = 'solid';
 		wall[1].collision = 'solid';
-		expect(compileCollisionGridBoxes(wall, MINI_BUILD_COLLISION)).toEqual([
-			{ min: { x: 0, y: 0, z: 3.5 }, max: { x: 16, y: 16, z: 4.5 } },
-			// A floor plane at the bottom is pushed up rather than sinking below the anchor.
-			{ min: { x: 0, y: 0, z: 0 }, max: { x: 16, y: 1, z: 16 } }
-		]);
+		expect(compileCollisionGridBoxes(wall, MINI_BUILD_COLLISION)).toEqual(
+			testGridBoxes([
+				{ min: { x: 0, y: 0, z: 3.5 }, max: { x: 16, y: 16, z: 4.5 } },
+				// A floor plane at the bottom is pushed up rather than sinking below the anchor.
+				{ min: { x: 0, y: 0, z: 0 }, max: { x: 16, y: 1, z: 16 } }
+			])
+		);
 	});
 
 	it('respects explicit collision modes', () => {
@@ -441,8 +451,8 @@ describe('MiniBuildCollisionCompiler', () => {
 		]);
 		blocks[0].collision = 'solid';
 		blocks[1].collision = 'none';
-		expect(compileCollisionGridBoxes(blocks, MINI_BUILD_COLLISION)).toEqual([
-			{ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }
-		]);
+		expect(compileCollisionGridBoxes(blocks, MINI_BUILD_COLLISION)).toEqual(
+			testGridBoxes([{ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }])
+		);
 	});
 });

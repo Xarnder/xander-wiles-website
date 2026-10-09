@@ -1,6 +1,7 @@
 import type { GraphicsQuality } from './GraphicsTypes';
 
 const STORAGE_KEY = 'forest-drift.graphics.v1';
+const FOV_STORAGE_KEY = 'forest-drift.fov.v1';
 
 const VALID_QUALITIES: readonly GraphicsQuality[] = ['low', 'medium', 'high', 'ultra'];
 
@@ -29,6 +30,29 @@ export class GraphicsSettingsStore {
 			return isValidQuality(raw) ? raw : null;
 		} catch {
 			return null;
+		}
+	}
+
+	/** The player's saved field of view (degrees), or null when never set / unreadable. */
+	getFieldOfView(): number | null {
+		const storage = getStorage();
+		if (!storage) return null;
+		try {
+			const raw = storage.getItem(FOV_STORAGE_KEY);
+			const value = raw === null ? Number.NaN : Number(raw);
+			return Number.isFinite(value) ? value : null;
+		} catch {
+			return null;
+		}
+	}
+
+	setFieldOfView(degrees: number): void {
+		const storage = getStorage();
+		if (!storage) return;
+		try {
+			storage.setItem(FOV_STORAGE_KEY, String(degrees));
+		} catch {
+			// Same as setQuality: only cross-session persistence is lost.
 		}
 	}
 

@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
-import type { FoundationDefinition } from './FoundationTypes';
+import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
+import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import { buildOpeningVisual, disposeOpeningVisual, getGlassMaterial } from './OpeningVisualBuilder';
 import {
 	axisAlignedRectangleOf,
 	buildRoofFaces,
@@ -12,8 +14,17 @@ import {
 	type RoofVertex
 } from './roofMath';
 import { buildRoofGeometry, RoofFootprintError } from './RoofGeometryBuilder';
-import type { RoofDefinition } from './RoofTypes';
+import {
+	locateOnRoofFace,
+	roofFaceHeading,
+	roofVerticalFaces,
+	type FacePoint,
+	type RoofVerticalFace
+} from './roofOpeningMath';
+import type { RoofDefinition, RoofFaceSide } from './RoofTypes';
 import { pointInPolygon2D } from './slabMath';
+import { applyWallTransform } from './WallGeometryBuilder';
+import type { WallTransform } from './wallGeometryMath';
 import type { Point2D } from './wallPathMath';
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xff9d4d });
@@ -29,6 +40,21 @@ interface RoofEntry {
 	bottomWorldY: number | null;
 	/** World-space footprint polygon (including overhang) — a cheap first-pass rejection before the more expensive per-face test. */
 	worldFootprint: Point2D[];
+	/** Foundation-local gable ends / shed wall that can take windows and doors — see roofOpeningMath.ts. `[]` for flat, hip and mansard roofs. */
+	verticalFaces: RoofVerticalFace[];
+	/** How deep a window/door in a vertical face is built — the thickness of the walls the gables match. */
+	openingDepth: number;
+	/** Child of `mesh` — one face-aligned group per vertical face with openings, holding their frames, glass and doors. `null` when the roof has no openings. */
+	openingVisuals: THREE.Group | null;
+}
+
+/** A vertical face plus everything needed to work in its (U, Y) frame in world space. */
+export interface RoofFaceTarget {
+	face: RoofVerticalFace;
+	/** World-space, wall-shaped: U along the face, Y = foundation-local height (origin at the foundation top), +thickness outward. */
+	transform: WallTransform;
+	/** The depth window/door visuals in this face are built with. */
+	openingDepth: number;
 }
 
 export interface RoofManagerOptions {
@@ -44,6 +70,10 @@ export interface RoofManagerOptions {
 		material?: BuildingMaterialDefinition;
 		wallThickness: number;
 	};
+	/** Live settings read at every rebuild for window/door visual sizing — defaults to `createDefaultBuildingSettings()`, same as WallManager. */
+	buildingSettings?: BuildingSettings;
+	/** The one shared window-glass material — defaults to `getGlassMaterial()`'s singleton. */
+	glassMaterial?: THREE.Material;
 }
 
 export type RoofBuildResult = { ok: true; roof: RoofDefinition } | { ok: false; reason: string };
@@ -66,9 +96,13 @@ export class RoofManager {
 	private readonly getBuildingGridSize: () => number;
 	private readonly getEndWallStyle?: RoofManagerOptions['getEndWallStyle'];
 	private readonly materialManager: BuildingMaterialManager;
+	private readonly buildingSettings: BuildingSettings;
+	private readonly glassMaterial: THREE.Material;
 	private readonly roots: FoundationRootRegistry;
 
 	private readonly roofs = new Map<string, RoofEntry>();
+	/** openingId -> its door's hingePivot, for doors in vertical roof faces — merged with the walls' own by BuildingManager.getDoorHingePivots. */
+	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: RoofManagerOptions) {
@@ -77,6 +111,8 @@ export class RoofManager {
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.materialManager = options.materialManager ?? new BuildingMaterialManager();
 		this.getEndWallStyle = options.getEndWallStyle;
+		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
+		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
 		this.roots = new FoundationRootRegistry(this.getFoundation, this.getVertexSpacing);
 		this.group = this.roots.group;
 	}
@@ -90,9 +126,8 @@ export class RoofManager {
 		const buildingGridSize = this.getBuildingGridSize();
 
 		const endWalls = this.getEndWallStyle?.(definition.foundationId);
-		const geometry = buildRoofGeometry(definition, buildingGridSize, {
-			endWallOffset: (endWalls?.wallThickness ?? 0) / 2
-		});
+		const endWallOffset = (endWalls?.wallThickness ?? 0) / 2;
+		const geometry = buildRoofGeometry(definition, buildingGridSize, { endWallOffset });
 
 		const roofMaterial = this.materialManager.getMaterial('slab-roof', definition.material);
 		// Pitched roofs: group 0 is the roof, group 1 the vertical end walls (gables) — plaster,
@@ -159,6 +194,19 @@ export class RoofManager {
 			];
 		}
 
+		const verticalFaces =
+			definition.type === 'flat'
+				? []
+				: roofVerticalFaces(definition, buildingGridSize, endWallOffset);
+		const openingDepth = endWalls?.wallThickness ?? this.buildingSettings.wallThickness;
+		const openingVisuals = this.rebuildOpeningVisuals(
+			definition,
+			mesh,
+			verticalFaces,
+			openingDepth,
+			existing?.openingVisuals
+		);
+
 		const entry: RoofEntry = {
 			definition,
 			mesh,
@@ -166,10 +214,60 @@ export class RoofManager {
 			worldFaces,
 			topWorldY,
 			bottomWorldY,
-			worldFootprint
+			worldFootprint,
+			verticalFaces,
+			openingDepth,
+			openingVisuals
 		};
 		this.refreshBoundsHelper(entry);
 		return entry;
+	}
+
+	/**
+	 * Rebuilds every window/door visual in this roof's vertical faces from scratch, the same way
+	 * WallManager does for a wall: one group per face, placed with `applyWallTransform` on the face's
+	 * own frame, so `buildOpeningVisual` positions each opening at its stored (U, Y) exactly as it
+	 * would in a wall, and the door's hinge pivot swings it inward. Openings whose face no longer
+	 * exists (hand-edited data) are skipped rather than placed somewhere arbitrary.
+	 */
+	private rebuildOpeningVisuals(
+		definition: RoofDefinition,
+		mesh: THREE.Mesh,
+		faces: readonly RoofVerticalFace[],
+		openingDepth: number,
+		existing: THREE.Group | null | undefined
+	): THREE.Group | null {
+		if (existing) {
+			clearDoorHingePivotsFrom(existing, this.doorHingePivots);
+			disposeOpeningVisual(existing);
+		}
+		const openings = definition.openings ?? [];
+		if (openings.length === 0) return null;
+
+		const group = new THREE.Group();
+		group.name = 'roof-opening-visuals';
+		for (const face of faces) {
+			const faceOpenings = openings.filter((opening) => opening.face === face.side);
+			if (faceOpenings.length === 0) continue;
+			const faceGroup = new THREE.Group();
+			faceGroup.name = `roof-face-${face.side}`;
+			applyWallTransform(faceGroup, face.originX, 0, face.originZ, roofFaceHeading(face));
+			for (const opening of faceOpenings) {
+				const result = buildOpeningVisual(
+					opening,
+					openingDepth,
+					this.buildingSettings,
+					this.materialManager,
+					this.glassMaterial
+				);
+				if (!result) continue;
+				faceGroup.add(result.object);
+				if (result.hingePivot) this.doorHingePivots.set(opening.id, result.hingePivot);
+			}
+			group.add(faceGroup);
+		}
+		mesh.add(group);
+		return group;
 	}
 
 	/** Validates the footprint against `definition.type` and, if compatible, builds and stores the roof. Mirrors `BuildingManager.addSlab`'s "validate, then delegate" shape — the actual grid/overlap/within-foundation checks live in `BuildingManager.addRoof`, this only owns "can THIS geometry algorithm actually build this shape". */
@@ -199,6 +297,77 @@ export class RoofManager {
 		return this.roofs.get(roofId)?.mesh;
 	}
 
+	/** Call after mutating a RoofDefinition this manager owns (BuildingManager adding/removing a roof opening) to rebuild its mesh and opening visuals. */
+	rebuildRoof(roofId: string): void {
+		const entry = this.roofs.get(roofId);
+		if (!entry) return;
+		const rebuilt = this.buildEntry(entry.definition, entry);
+		if (rebuilt) this.roofs.set(roofId, rebuilt);
+	}
+
+	/** Rebuilds every roof — used when a global window/door visual setting changes, like WallManager.rebuildAllWalls. */
+	rebuildAllRoofs(): void {
+		for (const roofId of Array.from(this.roofs.keys())) this.rebuildRoof(roofId);
+	}
+
+	/** The vertical faces of `roofId` that can take a window or door (foundation-local) — `[]` for none or an unknown roof. */
+	getVerticalFaces(roofId: string): readonly RoofVerticalFace[] {
+		return this.roofs.get(roofId)?.verticalFaces ?? [];
+	}
+
+	/** `side`'s face on `roofId` with its world-space frame — undefined if that roof has no such face. */
+	getFaceTarget(roofId: string, side: RoofFaceSide): RoofFaceTarget | undefined {
+		const entry = this.roofs.get(roofId);
+		const face = entry?.verticalFaces.find((candidate) => candidate.side === side);
+		if (!entry || !face) return undefined;
+		const foundation = this.getFoundation(entry.definition.foundationId);
+		if (!foundation) return undefined;
+		const frame = foundationLocalFrame(foundation, this.getVertexSpacing());
+		return {
+			face,
+			openingDepth: entry.openingDepth,
+			transform: {
+				originWorldX: frame.originWorldX + face.originX,
+				originWorldY: frame.originWorldY,
+				originWorldZ: frame.originWorldZ + face.originZ,
+				headingRadians: roofFaceHeading(face),
+				dirX: face.dirX,
+				dirZ: face.dirZ,
+				length: face.length
+			}
+		};
+	}
+
+	/**
+	 * Which vertical face of `roofId` a world-space point (a raycast hit on the roof mesh) lies on,
+	 * and where on it — `null` when the point is on a slope, eave or fascia instead.
+	 */
+	locateFaceAt(
+		roofId: string,
+		worldX: number,
+		worldY: number,
+		worldZ: number
+	): (RoofFaceTarget & { point: FacePoint }) | null {
+		const entry = this.roofs.get(roofId);
+		if (!entry) return null;
+		const foundation = this.getFoundation(entry.definition.foundationId);
+		if (!foundation) return null;
+		const frame = foundationLocalFrame(foundation, this.getVertexSpacing());
+		const located = locateOnRoofFace(entry.verticalFaces, {
+			x: worldX - frame.originWorldX,
+			y: worldY - frame.originWorldY,
+			z: worldZ - frame.originWorldZ
+		});
+		if (!located) return null;
+		const target = this.getFaceTarget(roofId, located.face.side);
+		return target ? { ...target, point: located.point } : null;
+	}
+
+	/** Every door hinge pivot in a roof face — `DoorInteractionController` swings these alongside the walls' own. */
+	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.doorHingePivots;
+	}
+
 	/** Every roof's real mesh, for Remove/Paint Mode raycasting — already carries `userData.roofId`/`userData.foundationId` (see `buildEntry`). */
 	getMeshesForRaycast(): THREE.Object3D[] {
 		return Array.from(this.roofs.values(), (entry) => entry.mesh);
@@ -207,6 +376,10 @@ export class RoofManager {
 	removeRoof(id: string): boolean {
 		const entry = this.roofs.get(id);
 		if (!entry) return false;
+		if (entry.openingVisuals) {
+			clearDoorHingePivotsFrom(entry.openingVisuals, this.doorHingePivots);
+			disposeOpeningVisual(entry.openingVisuals);
+		}
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
@@ -308,6 +481,14 @@ export class RoofManager {
 		for (const id of Array.from(this.roofs.keys())) this.removeRoof(id);
 		this.roots.dispose();
 	}
+}
+
+function clearDoorHingePivotsFrom(root: THREE.Object3D, pivots: Map<string, THREE.Object3D>): void {
+	root.traverse((child) => {
+		if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
+			pivots.delete(child.userData.openingId);
+		}
+	});
 }
 
 function toWorld(

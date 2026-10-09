@@ -9,13 +9,14 @@ import {
 import type { VegetationRegionSampler } from './VegetationRegionSampler';
 import { clamp01, smoothstep } from '../terrain/mathUtils';
 import { createHeightSample, type TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
+import { TREE_WATER_CLEARANCE } from '../hydrology/HydrologyTypes';
 import { hashStringToUint32 } from '../terrain/seededRandom';
 
 const RADIANS_PER_DEGREE = Math.PI / 180;
 /** Distinguishes tree-cell hashing from every other named seed channel in the game. */
 const SEED_SALT = 0x7ee5;
 
-export type RejectionReason = 'density' | 'slope' | null;
+export type RejectionReason = 'density' | 'slope' | 'water' | null;
 
 export interface TreePlacementOptions {
 	/** Species-per-site rules (defaults to the default species mix). */
@@ -24,6 +25,8 @@ export interface TreePlacementOptions {
 	getPrototypesPerSpecies?: () => number;
 	/** Graphics-preset density scale (LOW plants fewer trees). Read live; trees kept are a stable subset. */
 	getDensityScale?: () => number;
+	/** Water-column depth at a world point. Trees deeper than `TREE_WATER_CLEARANCE` are rejected. */
+	waterDepthAt?: (worldX: number, worldZ: number) => number;
 }
 
 export interface CellEvaluation {
@@ -69,7 +72,8 @@ export class TreePlacementGenerator {
 			options.speciesSelector ?? new TreeSpeciesSelector(createDefaultVegetationSettings().species);
 		this.options = {
 			getPrototypesPerSpecies: options.getPrototypesPerSpecies ?? (() => 0),
-			getDensityScale: options.getDensityScale ?? (() => 1)
+			getDensityScale: options.getDensityScale ?? (() => 1),
+			waterDepthAt: options.waterDepthAt ?? (() => 0)
 		};
 	}
 
@@ -118,6 +122,10 @@ export class TreePlacementGenerator {
 		const existenceRoll = hashCellToFloat01(this.seedHash, cellX, cellZ, CellHashChannel.Existence);
 		if (existenceRoll >= acceptProbability) {
 			return { ...base, accepted: false, rejectionReason: 'density', tree: null };
+		}
+
+		if (this.options.waterDepthAt(worldX, worldZ) > TREE_WATER_CLEARANCE) {
+			return { ...base, accepted: false, rejectionReason: 'water', tree: null };
 		}
 
 		const sample = createHeightSample();

@@ -1,6 +1,12 @@
 import type { Point2D } from './wallPathMath';
 import { ensureCCW, signedArea2D } from './slabMath';
-import type { RoofDirection, RoofProfileSettings, RoofType, ShedDirection } from './RoofTypes';
+import type {
+	RoofDefinition,
+	RoofDirection,
+	RoofProfileSettings,
+	RoofType,
+	ShedDirection
+} from './RoofTypes';
 
 const EPSILON = 1e-6;
 
@@ -820,6 +826,53 @@ export function buildRoofFaces(
 		case 'dutch-gable':
 			return buildDutchGableFaces(rect, direction, baseY, rise, profile);
 	}
+}
+
+export type PitchedRoofShape = Pick<
+	RoofDefinition,
+	| 'points'
+	| 'type'
+	| 'direction'
+	| 'shedDirection'
+	| 'baseY'
+	| 'rise'
+	| 'overhang'
+	| 'profileSettings'
+>;
+
+/**
+ * Every face of a pitched roof exactly as RoofGeometryBuilder meshes it — slopes on the overhung
+ * rectangle, vertical end walls pulled back to the wall line — plus the footprint rectangle itself
+ * (in metres). The single place both the mesh and the roof-face opening maths
+ * (roofOpeningMath.ts) get their faces from, so a hole is always cut where it was validated.
+ * `null` for `'flat'` or a footprint that isn't an axis-aligned rectangle.
+ */
+export function pitchedRoofFaces(
+	roof: PitchedRoofShape,
+	buildingGridSize: number,
+	endWallOffset: number
+): { rect: AxisAlignedRect; faces: RoofFace[] } | null {
+	if (roof.type === 'flat') return null;
+	const rect = axisAlignedRectangleOf(
+		roof.points.map((p) => ({ x: p.gridX * buildingGridSize, z: p.gridZ * buildingGridSize }))
+	);
+	if (!rect) return null;
+	const overhungRect = roof.overhang > 0 ? expandRect(rect, roof.overhang) : rect;
+	const faces = insetVerticalRoofFaces(
+		buildRoofFaces(
+			roof.type,
+			overhungRect,
+			roof.direction,
+			roof.shedDirection,
+			roof.baseY,
+			roof.rise,
+			roof.profileSettings
+		),
+		rect,
+		roof.overhang,
+		endWallOffset
+	);
+	return { rect, faces };
 }
 
 /** Re-exported for callers that only have a plain point list and want the signed area / winding check without reaching into `slabMath.ts` directly. */

@@ -18,8 +18,13 @@
 
 	let categoryId = $state('world');
 	let query = $state('');
+	/** Bumped when a button writes settings the menu cannot see on its own. */
+	let formRevision = $state(0);
 
-	const catalog = $derived(buildSettingsCatalog(host));
+	const catalog = $derived.by(() => {
+		// Reading formRevision rebuilds the menu after a button writes a plain settings object.
+		return formRevision >= 0 ? buildSettingsCatalog(host) : [];
+	});
 	const normalizedQuery = $derived(query.trim().toLowerCase());
 	const active = $derived(catalog.find((category) => category.id === categoryId) ?? catalog[0]);
 
@@ -50,7 +55,7 @@
 {#snippet fieldList(group: SettingsGroup)}
 	<div class="fields">
 		{#each visibleFields(group) as field (field.id)}
-			<SettingsField {field} />
+			<SettingsField {field} onMutate={() => formRevision++} />
 		{/each}
 	</div>
 {/snippet}

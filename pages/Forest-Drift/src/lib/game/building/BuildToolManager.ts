@@ -34,6 +34,11 @@ export interface BuildTool {
 	prepareForCustomize?(): void;
 	onCustomizeClosed?(): void;
 	isHoldingObject?(): boolean;
+	/**
+	 * Remove Mode: start the typed "Confirm Delete" prompt for the foundation under the crosshair.
+	 * Does not delete anything itself.
+	 */
+	requestFoundationDeletion?(): void;
 }
 
 const DIGIT_TO_SLOT: Record<string, number> = {
@@ -201,6 +206,14 @@ export class BuildToolManager {
 			return;
 		}
 		if (this.globalMode !== 'none') {
+			if (
+				this.globalMode === 'remove' &&
+				(event.code === 'Delete' || event.code === 'Backspace')
+			) {
+				event.preventDefault();
+				this.removeTool.requestFoundationDeletion?.();
+				return;
+			}
 			if (event.code === 'Escape') {
 				if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
 					this.getGlobalTool()?.onSecondaryAction();

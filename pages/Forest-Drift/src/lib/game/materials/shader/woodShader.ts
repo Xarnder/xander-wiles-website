@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { setOwnShaderHook } from './shaderHooks';
+import { injectWeatherSurface, WEATHER_SURFACE_UNIFORMS } from './weatherSurface';
 
 /**
  * Solid (volumetric) procedural wood — a GLSL port of three.js's `WoodNodeMaterial`
@@ -567,6 +568,8 @@ export function applySolidWoodShader(
 		diffuseColor.rgb *= mix(wood, vec3(woodRelative), uWoodTintMode) * woodLift;
 	}`
 			);
+		// Rain and snow on exposed decks, paths and framing tops (see weatherSurface.ts).
+		injectWeatherSurface(shader);
 	};
-	setOwnShaderHook(material, hook, `wood:${quality}`, uniforms);
+	setOwnShaderHook(material, hook, `wood:${quality}:wx`, { ...uniforms, ...WEATHER_SURFACE_UNIFORMS });
 }

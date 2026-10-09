@@ -60,6 +60,12 @@ export interface GraphicsPreset {
 	readonly treeWind: boolean;
 	/** Procedural bark/leaf detail on near trees (see `TreeSurfaceDetail`: 1 cheap, 2 full, 3 full + further). */
 	readonly treeSurfaceDetail: 1 | 2 | 3;
+
+	/**
+	 * Water shader tier. 0 is a flat colour, 1 adds Fresnel and one ripple, 2 adds a second ripple
+	 * and a tighter sun highlight, 3 adds a third ripple. Geometry density follows the same tier.
+	 */
+	readonly waterQuality: 0 | 1 | 2 | 3;
 }
 
 export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>> = {
@@ -92,7 +98,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeDensityScale: 0.75,
 		treeShadowMaxLod: -1,
 		treeWind: false,
-		treeSurfaceDetail: 1
+		treeSurfaceDetail: 1,
+		waterQuality: 0
 	},
 	medium: {
 		label: 'Medium',
@@ -118,7 +125,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeDensityScale: 0.9,
 		treeShadowMaxLod: 0,
 		treeWind: true,
-		treeSurfaceDetail: 2
+		treeSurfaceDetail: 2,
+		waterQuality: 1
 	},
 	high: {
 		label: 'High',
@@ -144,7 +152,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeDensityScale: 1,
 		treeShadowMaxLod: 0,
 		treeWind: true,
-		treeSurfaceDetail: 2
+		treeSurfaceDetail: 2,
+		waterQuality: 2
 	},
 	ultra: {
 		label: 'Ultra',
@@ -173,7 +182,8 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeDensityScale: 1,
 		treeShadowMaxLod: 1,
 		treeWind: true,
-		treeSurfaceDetail: 3
+		treeSurfaceDetail: 3,
+		waterQuality: 3
 	}
 };
 
@@ -267,6 +277,28 @@ export interface GraphicsSettings {
 	surfaceRelief: boolean;
 	/** Extra triangles on large faces for finer colour variation. Reset to the preset's `materialSubdivision` on every quality change. */
 	surfaceSubdivision: boolean;
+	/** Vertical field of view, degrees (Settings → Graphics → Display; saved per browser). */
+	fieldOfView: number;
+}
+
+export const DEFAULT_FIELD_OF_VIEW = 70;
+export const FIELD_OF_VIEW_MIN = 50;
+export const FIELD_OF_VIEW_MAX = 110;
+/** Holding U zooms in by this magnification (4× → a 70° view becomes ~19°). */
+export const ZOOM_MAGNIFICATION = 4;
+
+export function clampFieldOfView(degrees: number): number {
+	if (!Number.isFinite(degrees)) return DEFAULT_FIELD_OF_VIEW;
+	return Math.min(FIELD_OF_VIEW_MAX, Math.max(FIELD_OF_VIEW_MIN, degrees));
+}
+
+/**
+ * The vertical FOV (degrees) for a base FOV at a magnification — divides the half-angle's tangent,
+ * so the image really is `magnification` times larger (a plain angle divide would not be).
+ */
+export function zoomedFieldOfView(baseDegrees: number, magnification: number): number {
+	const half = (baseDegrees * Math.PI) / 360;
+	return (Math.atan(Math.tan(half) / Math.max(1, magnification)) * 360) / Math.PI;
 }
 
 /** The adjustments `enhancedLighting` applies — multipliers and tints, so day/night and every saved sky setting still drive the result. */
@@ -302,7 +334,8 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		antiTiling: true,
 		enhancedLighting: true,
 		surfaceRelief: GRAPHICS_PRESETS.high.materialRelief,
-		surfaceSubdivision: GRAPHICS_PRESETS.high.materialSubdivision
+		surfaceSubdivision: GRAPHICS_PRESETS.high.materialSubdivision,
+		fieldOfView: DEFAULT_FIELD_OF_VIEW
 	};
 }
 

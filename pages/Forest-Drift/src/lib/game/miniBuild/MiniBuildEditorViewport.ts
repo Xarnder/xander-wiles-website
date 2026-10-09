@@ -140,7 +140,7 @@ export class MiniBuildEditorViewport {
 		this.scene.add(fill);
 
 		const size = MINI_BUILD_LIMITS.workspaceHalfGrid * 2 * MINI_BUILD_LIMITS.gridSize;
-		// Minor lines every editorGridLineSpacing (coarser than the 0.0625m snap), major every 0.5m.
+		// Minor lines every editorGridLineSpacing (coarser than the 0.03125m snap), major every 0.5m.
 		const minor = new THREE.GridHelper(
 			size,
 			Math.round(size / MINI_BUILD_LIMITS.editorGridLineSpacing),

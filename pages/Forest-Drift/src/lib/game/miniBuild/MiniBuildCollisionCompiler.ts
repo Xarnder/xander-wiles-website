@@ -3,7 +3,7 @@
  *
  *   1. classify: `solid` / `none` explicitly, `auto` blocks at or below a small volume are visual-only
  *      (legs, handles, trim, and every plane) so they never snag the player. A plane forced `solid`
- *      is thickened to one grid unit so nothing can tunnel through a zero-width box
+ *      is thickened to 0.0625m so nothing can tunnel through a zero-width box
  *   2. drop boxes contained in another box
  *   3. exact merges: two boxes sharing extents on two axes and touching/overlapping on the third
  *      become one box (4 cabinet blocks → 1 cabinet box)
@@ -77,13 +77,17 @@ function mergesExactly(a: GridBox, b: GridBox): boolean {
 	return differing <= 1;
 }
 
-/** Gives a zero-thickness box one grid unit of thickness, centred on its plane but never below the floor. */
+/** Collision thickness given to a plane forced solid, in metres. */
+const PLANE_COLLISION_THICKNESS = 0.0625;
+
+/** Gives a zero-thickness box a 0.0625m thickness, centred on its plane but never below the floor. */
 function thickenFlat(box: GridBox, floorY: number): GridBox {
 	const out: GridBox = { min: { ...box.min }, max: { ...box.max } };
+	const half = PLANE_COLLISION_THICKNESS / MINI_BUILD_LIMITS.gridSize / 2;
 	for (const axis of ['x', 'y', 'z'] as const) {
 		if (out.max[axis] !== out.min[axis]) continue;
-		out.min[axis] -= 0.5;
-		out.max[axis] += 0.5;
+		out.min[axis] -= half;
+		out.max[axis] += half;
 	}
 	if (out.min.y < floorY) {
 		out.max.y += floorY - out.min.y;

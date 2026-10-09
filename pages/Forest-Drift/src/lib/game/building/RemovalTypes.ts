@@ -18,11 +18,19 @@ export type RemovalTarget =
 			openingType: WallOpeningType;
 			foundationId: string;
 	  }
+	| {
+			type: 'roof-opening';
+			roofId: string;
+			openingId: string;
+			openingType: WallOpeningType;
+			foundationId: string;
+	  }
 	| { type: 'beam'; wallId: string; beamId: string; foundationId: string }
 	| { type: 'stair'; stairId: string; foundationId: string }
 	| { type: 'slab'; slabId: string; foundationId: string }
 	| { type: 'roof'; roofId: string; foundationId: string }
-	| { type: 'floor-detail'; detailId: string; foundationId: string };
+	| { type: 'floor-detail'; detailId: string; foundationId: string }
+	| { type: 'foundation'; foundationId: string };
 
 /** A stable string key for a target — used to detect "the hovered thing changed" without deep-equality checks. */
 export function removalTargetKey(target: RemovalTarget): string {
@@ -33,6 +41,8 @@ export function removalTargetKey(target: RemovalTarget): string {
 			return `wall-segment:${target.segmentId}`;
 		case 'opening':
 			return `opening:${target.wallId}:${target.openingId}`;
+		case 'roof-opening':
+			return `roof-opening:${target.roofId}:${target.openingId}`;
 		case 'beam':
 			return `beam:${target.wallId}:${target.beamId}`;
 		case 'stair':
@@ -43,6 +53,8 @@ export function removalTargetKey(target: RemovalTarget): string {
 			return `roof:${target.roofId}`;
 		case 'floor-detail':
 			return `floor-detail:${target.detailId}`;
+		case 'foundation':
+			return `foundation:${target.foundationId}`;
 	}
 }
 
@@ -74,6 +86,9 @@ export interface BuildingPickUserData {
  * A wall-path segment's picking mesh carries BOTH `wallPathId` and `wallId` (the segment's own id,
  * reusing the "wallId" field name — see WallPathManager.getSegmentAsWallView) — `wallPathId`'s
  * presence is what distinguishes it from a standalone wall, which only ever carries `wallId`.
+ * A hit that carries only `foundationId` is the foundation cuboid itself (FoundationMesh sets no
+ * other pick id). That is a whole-foundation target — deleting it also removes the build on it,
+ * and only after the player types "Confirm Delete" (see foundationDeletion.ts).
  * Returns null for anything without recognizable building-pick metadata (terrain, trees, sky, ...).
  */
 export function resolveRemovalTarget(userData: BuildingPickUserData): RemovalTarget | null {
@@ -84,6 +99,17 @@ export function resolveRemovalTarget(userData: BuildingPickUserData): RemovalTar
 		return {
 			type: 'opening',
 			wallId: userData.wallId,
+			openingId: userData.openingId,
+			openingType: userData.openingType,
+			foundationId
+		};
+	}
+	// A window/door in a gable carries `roofId` instead of `wallId` — checked before the roof itself,
+	// whose mesh carries `roofId` too.
+	if (userData.openingId && userData.roofId && userData.openingType) {
+		return {
+			type: 'roof-opening',
+			roofId: userData.roofId,
 			openingId: userData.openingId,
 			openingType: userData.openingType,
 			foundationId
@@ -120,5 +146,5 @@ export function resolveRemovalTarget(userData: BuildingPickUserData): RemovalTar
 	if (userData.wallId) {
 		return { type: 'wall', wallId: userData.wallId, foundationId };
 	}
-	return null;
+	return { type: 'foundation', foundationId };
 }

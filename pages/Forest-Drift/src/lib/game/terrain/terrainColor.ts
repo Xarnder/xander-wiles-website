@@ -51,7 +51,9 @@ export function writeTerrainColor(
 	out: Float32Array,
 	offset: number,
 	worldX = 0,
-	worldZ = 0
+	worldZ = 0,
+	shoreCover = 0,
+	shoreStone = 0
 ): void {
 	const lowToMid = smoothstep(-4, 4, height);
 	const midToHigh = smoothstep(6, 26, height);
@@ -94,6 +96,25 @@ export function writeTerrainColor(
 	r += (ROCK[0] - r) * steepness;
 	g += (ROCK[1] - g) * steepness;
 	b += (ROCK[2] - b) * steepness;
+
+	const cover = shoreCover < 0 ? 0 : shoreCover > 1 ? 1 : shoreCover;
+	if (cover > 0.001) {
+		const stone = shoreStone < 0 ? 0 : shoreStone > 1 ? 1 : shoreStone;
+		const grain = groundNoise(worldX * 1.6, worldZ * 1.6, 0x51a1e3);
+		const pebble = groundNoise(worldX * 4.2, worldZ * 4.2, 0x9e3779b1);
+		const mudR = 0.28 + (0.43 - 0.28) * grain;
+		const mudG = 0.19 + (0.32 - 0.19) * grain;
+		const mudB = 0.11 + (0.18 - 0.11) * grain;
+		const rockR = 0.4 + (0.74 - 0.4) * pebble;
+		const rockG = 0.38 + (0.71 - 0.38) * pebble;
+		const rockB = 0.34 + (0.64 - 0.34) * pebble;
+		const beachR = mudR + (rockR - mudR) * stone;
+		const beachG = mudG + (rockG - mudG) * stone;
+		const beachB = mudB + (rockB - mudB) * stone;
+		r += (beachR - r) * cover;
+		g += (beachG - g) * cover;
+		b += (beachB - b) * cover;
+	}
 
 	out[offset] = r;
 	out[offset + 1] = g;

@@ -4,6 +4,7 @@ import { TerrainChunk, terrainMaterial } from './TerrainChunk';
 import { TerrainGenerationQueue, type ChunkJob } from './TerrainGenerationQueue';
 import { TerrainHeightSampler } from './TerrainHeightSampler';
 import type { TerrainSettings } from './TerrainSettings';
+import type { HydrologySample } from '../hydrology/HydrologyTypes';
 import type { VegetationRegionSampler } from '../vegetation/VegetationRegionSampler';
 
 export interface TerrainStats {
@@ -40,6 +41,11 @@ export class TerrainManager {
 
 	/** Only used for the 'forestDensity'/'terrainPlusForest' debug views — terrain generation itself never reads this. */
 	private vegetationRegionSampler: VegetationRegionSampler | null = null;
+	private hydrologyReady: ((worldX: number, worldZ: number) => boolean) | null = null;
+	private hydrologyTick: (() => void) | null = null;
+	private hydrologySync: ((worldX: number, worldZ: number) => void) | null = null;
+	private sampleWater: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null =
+		null;
 
 	constructor(settings: TerrainSettings) {
 		this.settings = settings;
@@ -51,6 +57,22 @@ export class TerrainManager {
 	/** Wired in by ThreeScene once the vegetation system exists — purely for debug-view colouring. */
 	setVegetationRegionSampler(sampler: VegetationRegionSampler): void {
 		this.vegetationRegionSampler = sampler;
+	}
+
+	/**
+	 * Hydrology is generated ahead of terrain meshes. Chunks stay queued until their region halo
+	 * exists, so a mesh is never baked from uncarved heights that would later pop into a valley.
+	 */
+	setHydrologyGate(gate: {
+		ready: (worldX: number, worldZ: number) => boolean;
+		tick: () => void;
+		ensure: (worldX: number, worldZ: number) => void;
+		sampleWater: (worldX: number, worldZ: number, out: HydrologySample) => void;
+	}): void {
+		this.hydrologyReady = gate.ready;
+		this.hydrologyTick = gate.tick;
+		this.hydrologySync = gate.ensure;
+		this.sampleWater = gate.sampleWater;
 	}
 
 	/** Height at a world position — used by the player controller for grounding. */
@@ -79,6 +101,7 @@ export class TerrainManager {
 			this.refreshActiveArea(playerChunkX, playerChunkZ);
 		}
 
+		this.hydrologyTick?.();
 		this.processQueue(playerChunkX, playerChunkZ);
 	}
 
@@ -94,9 +117,10 @@ export class TerrainManager {
 		this.refreshActiveArea(chunkX, chunkZ);
 		this.lastPlayerChunkX = chunkX;
 		this.lastPlayerChunkZ = chunkZ;
+		this.hydrologySync?.(worldX, worldZ);
 
 		const jobs = this.queue.takeWithinDistance(chunkX, chunkZ, immediateRadius * immediateRadius);
-		for (const job of jobs) this.materializeJob(job);
+		for (const job of jobs) this.materializeJob(job, true);
 	}
 
 	/** Non-topology settings changed (noise, shape, seed, warp): regenerate visible chunks in place, progressively. */
@@ -204,8 +228,18 @@ export class TerrainManager {
 		for (const job of jobs) this.materializeJob(job);
 	}
 
-	private materializeJob(job: ChunkJob): void {
+	private materializeJob(job: ChunkJob, syncHydrology = false): void {
 		if (job.revision !== this.revision) return;
+
+		const worldX = (job.chunkX + 0.5) * this.settings.chunkSize;
+		const worldZ = (job.chunkZ + 0.5) * this.settings.chunkSize;
+		if (this.hydrologyReady && !this.hydrologyReady(worldX, worldZ)) {
+			if (syncHydrology) this.hydrologySync?.(worldX, worldZ);
+			if (!this.hydrologyReady(worldX, worldZ)) {
+				this.queue.enqueue(job.chunkX, job.chunkZ, job.revision);
+				return;
+			}
+		}
 
 		const key = chunkKey(job.chunkX, job.chunkZ);
 		let chunk = this.active.get(key);
@@ -224,7 +258,8 @@ export class TerrainManager {
 			this.sampler,
 			this.revision,
 			this.settings.rendering.debugView,
-			this.vegetationRegionSampler
+			this.vegetationRegionSampler,
+			this.sampleWater
 		);
 		chunk.setActive(true);
 		chunk.setBorderVisible(this.settings.rendering.showChunkBorders);

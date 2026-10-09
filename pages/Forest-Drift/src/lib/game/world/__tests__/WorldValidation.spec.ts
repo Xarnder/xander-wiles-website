@@ -107,6 +107,27 @@ describe('enum and material safety', () => {
 		expectRejected(world, /finite/i);
 	});
 
+	it('accepts roofs with and without gable openings', () => {
+		const world = richWorld();
+		expect(world.buildings[0].roofs[0].openings).toBeUndefined();
+		world.buildings[0].roofs[0].openings = [
+			{ id: 'gable-door', type: 'door', face: '+x', minU: 1, maxU: 2, minY: 3, maxY: 5.1 }
+		];
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+
+	it('rejects a roof opening on an unknown face or with bad geometry', () => {
+		const world = richWorld();
+		world.buildings[0].roofs[0].openings = [
+			{ id: 'o', type: 'window', face: 'up' as '+x', minU: 1, maxU: 2, minY: 3, maxY: 4 }
+		];
+		expectRejected(world, /roof opening face/i);
+		world.buildings[0].roofs[0].openings = [
+			{ id: 'o', type: 'window', face: '-z', minU: 1, maxU: Number.NaN, minY: 3, maxY: 4 }
+		];
+		expectRejected(world, /finite/i);
+	});
+
 	it('rejects a colour that is not a colour, rather than handing it to THREE.Color', () => {
 		const world = richWorld();
 		world.buildings[0].walls[0].material = {

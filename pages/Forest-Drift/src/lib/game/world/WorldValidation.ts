@@ -6,8 +6,10 @@ import { validateMiniBuildWorldState } from '../miniBuild/MiniBuildValidation';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
 import {
+	ROOF_FACE_SIDES,
 	ROOF_TYPE_ORDER,
 	type RoofDefinition,
+	type RoofFaceSide,
 	type RoofProfileSettings,
 	type RoofType,
 	type ShedDirection
@@ -43,6 +45,7 @@ export const IMPORT_LIMITS = {
 	wallPathsPerFoundation: 5_000,
 	pointsPerWallPath: 2_000,
 	openingsPerWall: 200,
+	openingsPerRoof: 200,
 	beamsPerWall: 200,
 	slabsPerFoundation: 5_000,
 	pointsPerSlab: 2_000,
@@ -360,6 +363,20 @@ function validateRoof(value: unknown, where: string): ValidationResult<RoofDefin
 			return fail(`${where}: roof point must have finite gridX/gridZ`);
 		}
 	}
+	// Optional: roofs saved before gable openings existed simply have none.
+	if (value.openings !== undefined) {
+		if (!Array.isArray(value.openings)) return fail(`${where}: roof openings must be an array`);
+		if (value.openings.length > IMPORT_LIMITS.openingsPerRoof) {
+			return fail(`${where}: too many openings on one roof`);
+		}
+		for (const opening of value.openings) {
+			const result = validateOpening(opening, where);
+			if (!result.ok) return result;
+			if (!ROOF_FACE_SIDES.includes((opening as { face?: unknown }).face as RoofFaceSide)) {
+				return fail(`${where}: roof opening face must be one of ${ROOF_FACE_SIDES.join(', ')}`);
+			}
+		}
+	}
 	return { ok: true, value: value as unknown as RoofDefinition };
 }
 
@@ -522,8 +539,29 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	}
 
 	if (!isRecord(value.environment)) return fail('World environment missing');
-	for (const key of ['terrain', 'vegetation', 'sky'] as const) {
+	for (const key of ['terrain', 'vegetation', 'sky', 'hydrology'] as const) {
 		if (!isRecord(value.environment[key])) return fail(`World environment.${key} missing`);
+	}
+	// Weather is optional (older worlds) and sanitised on load; only its shape is checked here.
+	if (value.environment.weather !== undefined && !isRecord(value.environment.weather)) {
+		return fail('World environment.weather must be an object');
+	}
+	const hydrology = value.environment.hydrology as Record<string, unknown>;
+	if (typeof hydrology.enabled !== 'boolean') return fail('Hydrology enabled must be a boolean');
+	if (!isFiniteNumber(hydrology.generatorVersion))
+		return fail('Hydrology generatorVersion missing');
+	for (const key of [
+		'regionSize',
+		'gridSpacing',
+		'riverDensity',
+		'lakeDensity',
+		'minRiverSourceElevation',
+		'minRiverWidth',
+		'maxRiverWidth',
+		'minLakeRadius',
+		'maxLakeRadius'
+	] as const) {
+		if (!isFiniteNumber(hydrology[key])) return fail(`Hydrology ${key} must be a finite number`);
 	}
 	const terrain = value.environment.terrain as Record<string, unknown>;
 	if (!isNonEmptyString(terrain.seed)) return fail('Terrain seed missing');

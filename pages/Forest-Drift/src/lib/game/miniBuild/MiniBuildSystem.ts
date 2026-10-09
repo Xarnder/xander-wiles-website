@@ -364,6 +364,13 @@ export class MiniBuildSystem {
 		return removed;
 	}
 
+	/** Removes every placed copy recorded against `foundationId`. Designs in the library stay. */
+	removeInstancesForFoundation(foundationId: string): number {
+		const removed = this.instances.removeForFoundation(foundationId);
+		if (removed > 0) this.notify();
+		return removed;
+	}
+
 	moveInstance(
 		instanceId: string,
 		position: { x: number; y: number; z: number },

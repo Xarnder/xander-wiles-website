@@ -6,6 +6,7 @@ import { createDefaultSustainSettings } from '../../music/SustainTrailBuilder';
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { createDefaultVegetationSettings } from '../../vegetation/VegetationTypes';
+import { createDefaultWeatherDebugSettings } from '../../weather/WeatherTypes';
 import {
 	createDefaultMusicVisualSettings,
 	type GameSettingsActions,
@@ -284,5 +285,31 @@ describe('creature settings', () => {
 		expect(categoryMatchesQuery(building, 'collision')).toBe(true);
 		expect(categoryMatchesQuery(rendering, 'collision')).toBe(true);
 		expect(firstMatchingCategoryId(catalog, 'collision')).toBe('building');
+	});
+
+	it('puts a Weather tab after Player so a weather can be held for testing', () => {
+		const host = testHost();
+		host.weather = createDefaultWeatherDebugSettings();
+		host.actions.weatherSelect = vi.fn();
+		host.actions.weatherForce = vi.fn();
+		const catalog = buildSettingsCatalog(host);
+		const ids = catalog.map((category) => category.id);
+		expect(ids.indexOf('weather')).toBe(ids.indexOf('player') + 1);
+		const weather = catalog.find((category) => category.id === 'weather');
+		expect(weather?.description).toContain('18–40 minutes');
+		const fields = weather!.groups.flatMap((group) => group.fields);
+		const selection = fields.find((field) => field.id === 'weather.selection');
+		expect(selection?.kind).toBe('select');
+		if (selection?.kind === 'select') {
+			selection.set('rain');
+			selection.onChange?.();
+		}
+		expect(host.weather.selection).toBe('rain');
+		expect(host.actions.weatherSelect).toHaveBeenCalledOnce();
+		const rain = fields.find((field) => field.id === 'weather.force.rain');
+		expect(rain?.kind).toBe('button');
+		if (rain?.kind === 'button') rain.onClick();
+		expect(host.actions.weatherForce).toHaveBeenCalledWith('rain');
+		expect(firstMatchingCategoryId(catalog, 'thunderstorm')).toBe('weather');
 	});
 });

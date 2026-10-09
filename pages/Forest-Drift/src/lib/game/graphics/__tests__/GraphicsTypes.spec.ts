@@ -38,6 +38,9 @@ describe('GRAPHICS_PRESETS', () => {
 		}
 		expect(GRAPHICS_PRESETS.ultra.materialRelief).toBe(true);
 		expect(GRAPHICS_PRESETS.ultra.materialSubdivision).toBe(true);
+		expect(GRAPHICS_PRESETS.low.waterQuality).toBeLessThan(GRAPHICS_PRESETS.medium.waterQuality);
+		expect(GRAPHICS_PRESETS.medium.waterQuality).toBeLessThan(GRAPHICS_PRESETS.high.waterQuality);
+		expect(GRAPHICS_PRESETS.high.waterQuality).toBeLessThan(GRAPHICS_PRESETS.ultra.waterQuality);
 		const defaults = createDefaultGraphicsSettings();
 		expect(defaults.surfaceRelief).toBe(false);
 		expect(defaults.surfaceSubdivision).toBe(false);

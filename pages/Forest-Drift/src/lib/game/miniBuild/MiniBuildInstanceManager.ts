@@ -237,6 +237,18 @@ export class MiniBuildInstanceManager {
 		return true;
 	}
 
+	/** Drops every placed copy tied to a foundation, including copies that failed to load. */
+	removeForFoundation(foundationId: string): number {
+		const ids = [...this.records.values()]
+			.filter((record) => record.instance.foundationId === foundationId)
+			.map((record) => record.instance.id);
+		for (const id of ids) this.remove(id);
+		const inactiveBefore = this.inactive.length;
+		this.inactive = this.inactive.filter((instance) => instance.foundationId !== foundationId);
+		if (this.inactive.length !== inactiveBefore) this.bump();
+		return ids.length + (inactiveBefore - this.inactive.length);
+	}
+
 	/** Budget-validated move; ownership transfers to the destination chunk only if it has room. */
 	move(
 		id: string,

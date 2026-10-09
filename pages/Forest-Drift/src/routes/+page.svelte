@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ConfirmDeleteFoundationDialog from '$lib/components/ConfirmDeleteFoundationDialog.svelte';
 	import CreatureLabModal from '$lib/components/CreatureLabModal.svelte';
 	let creatureLabOpen = $state(false);
 	function openCreatureLab() {
@@ -56,10 +57,12 @@
 		isSlabHeightTool
 	} from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
-	import { graphicsQualityLabel } from '$lib/game/graphics/GraphicsTypes';
+	import { graphicsQualityLabel, type GraphicsQuality } from '$lib/game/graphics/GraphicsTypes';
+	import { fade } from 'svelte/transition';
 	import type { SceneStats } from '$lib/game/ThreeScene';
 	import { formatDayClock } from '$lib/game/sky/dayNightMath';
 	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
+	import { createDefaultHydrologySettings } from '$lib/game/hydrology/HydrologyTypes';
 	import { createDefaultTerrainSettings } from '$lib/game/terrain/TerrainSettings';
 	import { createDefaultVegetationSettings } from '$lib/game/vegetation/VegetationTypes';
 	import {
@@ -78,9 +81,18 @@
 	import { WorldSession } from '$lib/game/world/WorldSession';
 	import type { SaveStatus, WorldMetadata } from '$lib/game/world/WorldTypes';
 
+	type ForestTestWindow = Window & {
+		__forestSession?: WorldSession | null;
+		__setTestLookedAtDoor?: (id: string | null) => void;
+	};
+
 	let container = $state<HTMLDivElement | undefined>(undefined);
 	let pointerLocked = $state(false);
 	let stats = $state<SceneStats | null>(null);
+	/** Free flight (B): shown as a badge while on; speed follows the scroll wheel. */
+	let flight = $state<{ flying: boolean; speed: number }>({ flying: false, speed: 0 });
+	/** Best-quality screenshot (\\) in progress: movement is locked and the badge says what is happening. */
+	let captureStage = $state<'loading' | 'capturing' | null>(null);
 	let hotbar = $state<HotbarUiState | null>(null);
 	let buildHud = $state<BuildUiState | null>(null);
 	let showHelp = $state(false);
@@ -89,7 +101,11 @@
 	let placementCustomizeOpen = $state(false);
 	let placementHeightOpen = $state(false);
 	let paintState = $state<PaintUiState | null>(null);
-	let graphicsNotice = $state<string | null>(null);
+	/** Shown after a render-mode change (L, the settings menu) — which mode is now active. */
+	let graphicsNotice = $state<GraphicsQuality | null>(null);
+	const GRAPHICS_LEVELS: readonly GraphicsQuality[] = ['low', 'medium', 'high', 'ultra'];
+	/** How long the render-mode notice stays up (then fades), ms. */
+	const GRAPHICS_NOTICE_MS = 4500;
 	let isTouchDevice = $state(false);
 	let touchControlsEnabled = $state<boolean | null>(null);
 	const showTouchControls = $derived(touchControlsEnabled ?? isTouchDevice);
@@ -116,6 +132,8 @@
 	let miniBuildEditChoice = $state<{ instanceId: string; name: string; copies: number } | null>(
 		null
 	);
+	/** Foundation waiting on the typed "Confirm Delete" phrase. Null while the prompt is closed. */
+	let foundationDeleteId = $state<string | null>(null);
 
 	let session = $state.raw<WorldSession>();
 
@@ -129,8 +147,28 @@
 			placementCustomizeOpen ||
 			placementHeightOpen ||
 			miniBuildEditor !== null ||
-			miniBuildEditChoice !== null
+			miniBuildEditChoice !== null ||
+			foundationDeleteId !== null
 		);
+	}
+
+	function openFoundationDelete(foundationId: string) {
+		showHelp = false;
+		foundationDeleteId = foundationId;
+		if (session) session.scene.foundationDeletePromptOpen = true;
+		document.exitPointerLock?.();
+	}
+
+	function closeFoundationDelete() {
+		foundationDeleteId = null;
+		if (session) session.scene.foundationDeletePromptOpen = false;
+	}
+
+	function confirmFoundationDelete(typed: string): boolean {
+		if (!session || !foundationDeleteId) return false;
+		const removed = session.scene.deleteFoundationAndBuilding(foundationDeleteId, typed);
+		if (removed) closeFoundationDelete();
+		return removed;
 	}
 
 	function openMiniBuildEditor(launch: MiniBuildEditorLaunch) {
@@ -190,12 +228,51 @@
 		return target.isContentEditable;
 	}
 
-	function showGraphicsNotice(quality: Parameters<typeof graphicsQualityLabel>[0]) {
-		graphicsNotice = `Graphics: ${graphicsQualityLabel(quality).toUpperCase()}`;
+	function showGraphicsNotice(quality: GraphicsQuality) {
+		// The best-quality screenshot (\\) switches to Ultra and back by itself — not a mode change.
+		if (captureStage) return;
+		graphicsNotice = quality;
 		clearTimeout(graphicsNoticeTimeout);
 		graphicsNoticeTimeout = setTimeout(() => {
 			graphicsNotice = null;
-		}, 2000);
+		}, GRAPHICS_NOTICE_MS);
+	}
+
+	/**
+	 * \\: Ultra quality, wait for everything to load, save the canvas as a PNG, then back to the
+	 * previous render mode. The scene locks all movement for the duration.
+	 */
+	async function captureBestScreenshot() {
+		if (!session || captureStage) return;
+		const scene = session.scene;
+		captureStage = 'loading';
+		try {
+			const result = await scene.captureBestScreenshot({
+				onStage: (stage) => (captureStage = stage)
+			});
+			if (!result?.blob) {
+				showSaveToast('Screenshot failed');
+				return;
+			}
+			const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+			const url = URL.createObjectURL(result.blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `forest-drift-${stamp}.png`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			setTimeout(() => URL.revokeObjectURL(url), 5000);
+			showSaveToast(
+				`Screenshot saved · ${result.width}×${result.height}${result.timedOut ? ' (some areas still loading)' : ''}`
+			);
+		} finally {
+			captureStage = null;
+		}
+	}
+
+	function formatFlySpeed(speed: number): string {
+		return `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} m/s`;
 	}
 
 	function showSaveToast(message: string) {
@@ -316,6 +393,21 @@
 		}
 		if (paused) return;
 
+		if (event.code === 'Backslash') {
+			event.preventDefault();
+			void captureBestScreenshot();
+			return;
+		}
+		if (event.code === 'KeyB') {
+			if (!session) return;
+			const next = session.scene.toggleFlying();
+			showSaveToast(
+				next.flying
+					? `Flying · ${formatFlySpeed(next.speed)} · scroll to change speed`
+					: 'Flying off'
+			);
+			return;
+		}
 		if (event.code === 'KeyL') session?.scene.cycleGraphicsQuality();
 	}
 
@@ -388,7 +480,8 @@
 				environment: {
 					terrain: createDefaultTerrainSettings(),
 					vegetation: createDefaultVegetationSettings(),
-					sky: createDefaultSkySettings()
+					sky: createDefaultSkySettings(),
+					hydrology: createDefaultHydrologySettings()
 				}
 			});
 			if (!result.ok) {
@@ -441,6 +534,11 @@
 				saveError = error;
 			},
 			onStatsUpdate: (next) => (stats = next),
+			onFlightChange: (next) => {
+				const speedChanged = next.flying && flight.flying && next.speed !== flight.speed;
+				flight = next;
+				if (speedChanged) showSaveToast(`Fly speed ${formatFlySpeed(next.speed)}`);
+			},
 			onPointerLockChange: (locked) => {
 				const wasLocked = pointerLocked;
 				pointerLocked = locked;
@@ -470,12 +568,14 @@
 				placementHeightOpen = open;
 				if (open) showHelp = false;
 			},
+			onRequestFoundationDelete: (foundationId) => openFoundationDelete(foundationId),
 			onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
 			onMiniBuildNotice: (message) => showSaveToast(message)
 		});
 		if (typeof window !== 'undefined') {
-			(window as any).__forestSession = session;
-			(window as any).__setTestLookedAtDoor = (id: string | null) => {
+			const testWindow = window as ForestTestWindow;
+			testWindow.__forestSession = session;
+			testWindow.__setTestLookedAtDoor = (id: string | null) => {
 				lookedAtDoorId = id;
 			};
 		}
@@ -495,8 +595,9 @@
 			const result = await session!.dispose();
 			session = undefined;
 			if (typeof window !== 'undefined') {
-				(window as any).__forestSession = null;
-				delete (window as any).__setTestLookedAtDoor;
+				const testWindow = window as ForestTestWindow;
+				testWindow.__forestSession = null;
+				delete testWindow.__setTestLookedAtDoor;
 			}
 			lookedAtDoorId = null;
 			if (!result.ok) worldsError = result.error ?? 'Unable to save world before quitting.';
@@ -513,7 +614,9 @@
 			placementHeightOpen = false;
 			miniBuildEditor = null;
 			miniBuildEditChoice = null;
+			foundationDeleteId = null;
 			stats = null;
+			flight = { flying: false, speed: 0 };
 			hotbar = null;
 			buildHud = null;
 			paintState = null;
@@ -716,7 +819,24 @@
 		{/if}
 
 		{#if graphicsNotice}
-			<div class="graphics-notice" data-testid="graphics-notice">{graphicsNotice}</div>
+			<div
+				class="graphics-notice"
+				data-testid="graphics-notice"
+				role="status"
+				aria-live="polite"
+				out:fade={{ duration: 400 }}
+			>
+				<div class="graphics-notice-title">Render mode</div>
+				<div class="graphics-notice-level" data-testid="graphics-notice-level">
+					{graphicsQualityLabel(graphicsNotice).toUpperCase()}
+				</div>
+				<div class="graphics-notice-scale">
+					{#each GRAPHICS_LEVELS as level (level)}
+						<span class:active={level === graphicsNotice}>{graphicsQualityLabel(level)}</span>
+					{/each}
+				</div>
+				<div class="graphics-notice-hint">Press L to change</div>
+			</div>
 		{/if}
 
 		{#if buildHud?.snapBadge}
@@ -850,6 +970,18 @@
 						<dd>Run</dd>
 						<dt>Space</dt>
 						<dd>Jump</dd>
+						<dt>\</dt>
+						<dd>
+							Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
+							load, saves a PNG, then returns to your graphics setting
+						</dd>
+						<dt>U (hold)</dt>
+						<dd>Zoom in (field of view: Settings &rarr; Graphics &rarr; Display)</dd>
+						<dt>B</dt>
+						<dd>
+							Toggle flying. W/S fly where you look, A/D strafe, Space up, Shift down; the scroll
+							wheel sets the fly speed (default twice running speed, up to 600 m/s).
+						</dd>
 						<dt>Mouse</dt>
 						<dd>Look around</dd>
 						<dt>Esc</dt>
@@ -1051,7 +1183,13 @@
 						<dt>Left click</dt>
 						<dd>
 							Remove the highlighted wall, wall segment, window, door, beam, ceiling, floor, roof,
-							staircase, floor detailing, or music plant
+							staircase, floor detailing, or music plant. Clicking the foundation itself starts a
+							whole-foundation delete
+						</dd>
+						<dt>Delete / Backspace</dt>
+						<dd>
+							Delete the foundation under the crosshair and everything built on it. You must type
+							Confirm Delete before anything is removed. The cleared ground can be built on again
 						</dd>
 						<dt>X / Right click / Esc</dt>
 						<dd>Exit Remove Mode</dd>
@@ -1212,6 +1350,19 @@
 						{/if}
 					</div>
 				{/if}
+				{#if buildHud.foundationDeleteId}
+					<button
+						type="button"
+						class="build-hud-action"
+						data-testid="delete-foundation-button"
+						onclick={() => {
+							const id = buildHud?.foundationDeleteId;
+							if (id) openFoundationDelete(id);
+						}}
+					>
+						Delete whole foundation
+					</button>
+				{/if}
 				{#each buildHud.hintLines as line, index (index)}
 					{#if line === ''}
 						<div class="build-hud-spacer"></div>
@@ -1228,6 +1379,18 @@
 			</div>
 		{/if}
 
+		{#if captureStage && screen === 'game'}
+			<div class="flight-badge capture-badge" data-testid="capture-badge">
+				{captureStage === 'loading'
+					? 'Movement locked · loading best quality…'
+					: 'Taking screenshot…'}
+			</div>
+		{/if}
+		{#if flight.flying && screen === 'game' && !captureStage}
+			<div class="flight-badge" data-testid="flight-badge">
+				Flying · {formatFlySpeed(flight.speed)}
+			</div>
+		{/if}
 		{#if stats?.dayCycleEnabled}
 			<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
 		{/if}
@@ -1278,6 +1441,45 @@
 				</div>
 				<div>Terrain rev {stats.revision}</div>
 				<div>Triangles {stats.triangles.toLocaleString()}</div>
+				{#if stats.water}
+					<div data-testid="water-stats">
+						Water {stats.water.triangles.toLocaleString()} tris · {stats.water.drawCalls} draws ·
+						{stats.water.riverSections} river sections · {stats.water.lakes} lakes ·
+						{stats.water.rivers} rivers · region {stats.water.regionMs.toFixed(1)} ms
+					</div>
+				{/if}
+				{#if stats.particles}
+					{@const p = stats.particles}
+					<div data-testid="particle-stats">
+						Particles {p.activeParticles.toLocaleString()}/{p.capacity.toLocaleString()} · {p.drawCalls}
+						draws · {(p.bufferBytes / 1024).toFixed(0)} KB · {p.updateMs.toFixed(2)} ms · dropped {p.dropped}
+					</div>
+					<div>
+						Splash zones {p.splash.activeZones}/{p.splash.zones} active · {p.splash.visibleZones} visible
+						·
+						{p.splash.lakes} lakes
+					</div>
+				{/if}
+				{#if stats.weather}
+					{@const w = stats.weather}
+					<div data-testid="weather-stats">
+						Weather {w.type}
+						{(w.intensity * 100).toFixed(0)}% · {w.mode}{w.transition < 1
+							? ` · changing ${(w.transition * 100).toFixed(0)}%`
+							: ''} · wind {w.windSpeed.toFixed(1)} m/s · wet {(w.wetness * 100).toFixed(0)}%
+					</div>
+					<div>
+						Rain {w.rain}/{w.rainCapacity} · snow {w.snow}/{w.snowCapacity} · impacts {w.impactsPerSecond.toFixed(
+							0
+						)}/s · density {(w.densityScale * 100).toFixed(0)}%{w.sheltered ? ' · sheltered' : ''} · {w.updateMs.toFixed(
+							2
+						)} ms
+					</div>
+					<div>
+						Lightning {w.lightningStrikes} strikes · flash {w.flash.toFixed(2)} · thunder {w.thunderPlaying}
+						playing, {w.thunderPending} pending
+					</div>
+				{/if}
 				<div>
 					Trees {stats.loadedVegetationChunks}/{stats.queuedVegetationChunks} chunks &middot; {stats.treeInstances.toLocaleString()}
 					trees
@@ -1407,7 +1609,7 @@
 			{/if}
 		{/if}
 
-		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen}
+		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
 			{#if !showTouchControls}
 				<div
 					class="door-toast"
@@ -1422,6 +1624,13 @@
 					Press K to open the door
 				</div>
 			{/if}
+		{/if}
+
+		{#if foundationDeleteId}
+			<ConfirmDeleteFoundationDialog
+				onCancel={closeFoundationDelete}
+				onConfirm={confirmFoundationDelete}
+			/>
 		{/if}
 
 		{#if placementCustomizeOpen && session && customizeToolId}
@@ -2076,6 +2285,21 @@
 		height: 0.35rem;
 	}
 
+	.build-hud-action {
+		pointer-events: auto;
+		display: block;
+		width: 100%;
+		margin-bottom: 0.45rem;
+		font: inherit;
+		font-weight: 700;
+		color: #fff;
+		background: #6b2420;
+		border: 1px solid #e07a72;
+		border-radius: 6px;
+		padding: 0.35rem 0.5rem;
+		cursor: pointer;
+	}
+
 	.paint-color-row {
 		display: flex;
 		align-items: center;
@@ -2133,25 +2357,69 @@
 
 	.graphics-notice {
 		position: absolute;
-		top: 1rem;
+		top: 1.25rem;
 		left: 50%;
 		transform: translateX(-50%);
-		padding: 0.35rem 0.85rem;
-		background: rgba(10, 20, 15, 0.72);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.7rem 1.1rem 0.6rem;
+		background: rgba(10, 20, 15, 0.82);
 		border: 1px solid rgba(159, 232, 255, 0.55);
 		color: #eaf6ff;
 		font-family:
 			system-ui,
 			-apple-system,
 			sans-serif;
-		font-size: 0.78rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		border-radius: 999px;
+		border-radius: 14px;
 		white-space: nowrap;
 		pointer-events: none;
-		backdrop-filter: blur(2px);
+		backdrop-filter: blur(4px);
+		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 		animation: snap-badge-in 0.15s ease;
+		z-index: 30;
+	}
+
+	.graphics-notice-title {
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		opacity: 0.75;
+	}
+
+	.graphics-notice-level {
+		font-size: 1.45rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		color: #9fe8ff;
+	}
+
+	.graphics-notice-scale {
+		display: flex;
+		gap: 0.3rem;
+	}
+
+	.graphics-notice-scale span {
+		padding: 0.15rem 0.55rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 600;
+		border: 1px solid rgba(234, 246, 255, 0.25);
+		opacity: 0.55;
+	}
+
+	.graphics-notice-scale span.active {
+		opacity: 1;
+		color: #0b1a14;
+		background: #9fe8ff;
+		border-color: #9fe8ff;
+	}
+
+	.graphics-notice-hint {
+		font-size: 0.66rem;
+		opacity: 0.6;
 	}
 
 	.floor-selector {
@@ -2639,5 +2907,20 @@
 
 	.help-close:hover {
 		background: rgba(57, 211, 83, 1);
+	}
+	.flight-badge {
+		position: fixed;
+		top: 12px;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 4px 12px;
+		border-radius: 999px;
+		background: rgba(18, 28, 24, 0.72);
+		color: #e8f5ec;
+		font:
+			600 13px/1.4 system-ui,
+			sans-serif;
+		pointer-events: none;
+		z-index: 20;
 	}
 </style>

@@ -529,6 +529,20 @@
 			{/if}
 		</div>
 
+		{#if hotbar?.globalMode === 'remove' && buildHud?.foundationDeleteId}
+			<div class="touch-path-actions">
+				<button
+					type="button"
+					class="touch-pill-btn"
+					onclick={() => scene?.simulateKey('Delete')}
+					data-testid="touch-delete-foundation"
+					aria-label="Delete whole foundation"
+				>
+					Delete foundation
+				</button>
+			</div>
+		{/if}
+
 		<!-- Primary Place & Cancel Buttons -->
 		<div class="touch-primary-row">
 			<button

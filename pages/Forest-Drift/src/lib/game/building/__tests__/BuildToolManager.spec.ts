@@ -16,6 +16,7 @@ function makeFakeTool(toolId: ToolId = 'remove'): BuildTool & {
 	updateCount: number;
 	primaryCount: number;
 	secondaryCount: number;
+	foundationDeleteCount: number;
 } {
 	return {
 		toolId,
@@ -24,6 +25,7 @@ function makeFakeTool(toolId: ToolId = 'remove'): BuildTool & {
 		updateCount: 0,
 		primaryCount: 0,
 		secondaryCount: 0,
+		foundationDeleteCount: 0,
 		activate() {
 			this.activateCount++;
 		},
@@ -38,6 +40,9 @@ function makeFakeTool(toolId: ToolId = 'remove'): BuildTool & {
 		},
 		onSecondaryAction() {
 			this.secondaryCount++;
+		},
+		requestFoundationDeletion() {
+			this.foundationDeleteCount++;
 		}
 	};
 }
@@ -402,6 +407,20 @@ describe('BuildToolManager Remove Mode routing', () => {
 
 		key('Digit2'); // Wall
 		expect(removeTool.deactivateCount).toBe(1);
+	});
+
+	it('Delete and Backspace ask the remove tool to start whole-foundation deletion, without leaving Remove Mode', () => {
+		const { removeTool, key } = buildHarness(pointerLocked);
+
+		key('Delete');
+		expect(removeTool.foundationDeleteCount).toBe(0);
+
+		key('KeyX');
+		key('Delete');
+		key('Backspace');
+
+		expect(removeTool.foundationDeleteCount).toBe(2);
+		expect(removeTool.deactivateCount).toBe(0);
 	});
 
 	it('never occupies a numbered hotbar slot — pressing a digit never activates the remove tool', () => {

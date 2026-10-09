@@ -24,7 +24,13 @@ export interface ChunkLoadingSettings {
 }
 
 export type TerrainDebugView =
-	'normal' | 'biomeColors' | 'biomeMask' | 'elevation' | 'forestDensity' | 'terrainPlusForest';
+	| 'normal'
+	| 'biomeColors'
+	| 'biomeMask'
+	| 'elevation'
+	| 'forestDensity'
+	| 'terrainPlusForest'
+	| 'water';
 
 /** Fog now lives in SkySettings' "Sun & Atmosphere" group — see sky/SkyTypes.ts — so it can match the sky's horizon colour without this module needing to know about the sky system. */
 export interface RenderingSettings {

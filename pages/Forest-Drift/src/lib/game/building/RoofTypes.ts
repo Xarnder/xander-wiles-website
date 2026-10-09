@@ -1,5 +1,6 @@
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import type { WallOpeningDefinition } from './WallTypes';
 
 export type RoofType =
 	| 'flat'
@@ -73,6 +74,25 @@ export function createDefaultRoofProfileSettings(): RoofProfileSettings {
 }
 
 /**
+ * A roof's vertical faces (gable ends, a shed's tall wall), named by the direction they face
+ * outward in foundation-local space. Every pitched type roofMath.ts builds has at most one vertical
+ * face per direction, so this alone identifies a face — see roofOpeningMath.ts.
+ */
+export type RoofFaceSide = '+x' | '-x' | '+z' | '-z';
+
+export const ROOF_FACE_SIDES: readonly RoofFaceSide[] = ['+x', '-x', '+z', '-z'];
+
+/**
+ * A window or door cut into one of a roof's vertical faces. Same rectangle as a wall opening, in
+ * that face's own (U, Y) coordinates (see `roofFaceFrame` in roofOpeningMath.ts): U runs along the
+ * face from the footprint corner, Y is foundation-local height — NOT relative to the roof — so a
+ * tall gable can carry openings on several floors, whichever level the roof itself was built on.
+ */
+export interface RoofOpeningDefinition extends WallOpeningDefinition {
+	face: RoofFaceSide;
+}
+
+/**
  * A procedural roof — foundation-local, serializable, and independent of Three.js (see
  * RoofGeometryBuilder.ts for the one place logical roof data becomes a mesh). Nothing here is a
  * generated vertex: `RoofGeometryBuilder.buildRoofGeometry(this)` must reproduce the exact same
@@ -110,4 +130,7 @@ export interface RoofDefinition {
 	profileSettings: RoofProfileSettings;
 
 	material?: BuildingMaterialDefinition;
+
+	/** Windows/doors in the vertical faces. Absent on roofs that never had one, including every roof saved before this field existed — treated as `[]`. */
+	openings?: RoofOpeningDefinition[];
 }

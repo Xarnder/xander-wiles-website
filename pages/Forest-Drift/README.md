@@ -416,8 +416,9 @@ every attached wall would move with it for free via the scene graph, without tou
 
 ### Window Tool / Door Tool (`OpeningToolBase.ts`, `WindowTool.ts`, `DoorTool.ts`)
 
-Both tools raycast against wall meshes only (`WallManager.getWallMeshesForRaycast()`) — never
-terrain or foundations — and share one implementation (`OpeningToolBase`) parameterized by opening
+Both tools raycast against wall meshes (`WallManager.getWallMeshesForRaycast()`) and roof meshes —
+never terrain or foundations; roofs because openings also go into gable ends, see "Windows and doors
+in gable ends" under Roofs — and share one implementation (`OpeningToolBase`) parameterized by opening
 type, width, and vertical extent; `WindowTool`/`DoorTool` are thin wrappers so the hotbar/tool
 identity stays distinct. A hit is converted into that wall's local `(U, Y)` via
 `worldToWallLocal(transform, ...)`, the horizontal centre snaps to `openingGridSize` (default 0.1m,
@@ -1182,7 +1183,7 @@ visibility/opacity accordingly, re-applied whenever the active foundation or lev
 
 ## Mini Builds: player-created furniture and objects (`src/lib/game/miniBuild/`)
 
-Furniture and small objects are built by players from **at most 16 cuboids** on a **0.0625m grid**,
+Furniture and small objects are built by players from **at most 16 cuboids** on a **0.03125m grid**,
 within **4 × 4 × 4m**, using **up to 4 material slots** and **90° rotations**. Any one size of a cuboid
 can be dragged or typed down to 0 to make a **plane**, which compiles to a single two-sided quad pair
 (4 triangles) rather than a six-sided box. The limits are the
@@ -1687,6 +1688,45 @@ own plane equation for the real Y there. `WorldSurfaceSampler.getSupportingSurfa
 `getCeilingBlockY` fold these in with one extra loop each, identical in shape to the existing slab
 loop — a player can stand on (and bump their head against the underside of) a pitched roof exactly
 like a flat one, at the correct sloped height rather than the roof's highest point everywhere.
+
+### Windows and doors in gable ends (`roofOpeningMath.ts`)
+
+The Window and Door tools also cut into a roof's **vertical faces**: gable ends (gable, gambrel,
+butterfly, M-shaped, a dutch gable's small cap) and a shed's sloped sides and tall end wall. Hip,
+mansard and flat roofs have none. Every type has at most one vertical face per outward direction,
+so an opening is stored on the roof itself — `RoofDefinition.openings`, each tagged `face: '+x' |
+'-x' | '+z' | '-z'` — in that face's own (U, Y) frame. U runs along the face from the footprint
+corner (so `C`-snap "half" lands on the same centre line as the wall below); **Y is foundation-local
+height**, not relative to the roof, because a gable belongs to no single storey.
+
+- **Height comes from the selected floor.** A door starts at the level picked with `[`/`]`; a window
+  at that level plus the sill. One tall gable can take openings on several floors, whichever level
+  the roof was built on, and the preview re-checks the moment the floor changes. Hovering a gable
+  makes its foundation the active one, so `[`/`]` work from there.
+- **Nearest surface wins.** Walls and roofs are raycast together: a wall in front of a gable takes
+  the opening as before, a roof slope in front of a wall blocks it ("Roof slopes cannot take
+  openings"), and a gable can be targeted from outside or from inside the roof space. Beams stay
+  wall-only.
+- **Fit is checked against the real outline** (`checkRoofOpeningFit`, shared by the preview and
+  `BuildingManager.addRoofOpening`): the opening plus `openingEdgeMargin` must lie inside the face —
+  crossing a rake, ridge, valley or side is refused — and must stay clear of the roof slab, which
+  hangs `thickness` below the top surface the gable's sloping edges follow. The bottom may sit flush
+  on the face's lowest edge (a door on the attic floor); `openingSpacing` applies between openings.
+  Each refusal says why, with a `[`/`]` hint when changing floor would fix it.
+- **Faces stay convex pieces.** M-shaped's concave end is three coplanar triangles; containment is
+  "the pieces' clipped areas add up to the whole rectangle", and cutting clips each piece against the
+  rectangles left around the holes (`computeSolidWallSegments`, as for walls). Both stay exact when an
+  opening straddles two pieces or sits on the bottom edge. Faces come from `pitchedRoofFaces` — the
+  same list the mesh is built from — so the hole is always where the preview was.
+- **Visuals and doors reuse the wall code.** Each face gets a group placed with `applyWallTransform`
+  on its frame (outward normal = wall-local +thickness), so `buildOpeningVisual` builds the usual
+  frame, glass, leaf and handles at depth = the gable's wall thickness, doors swing inward, and
+  `DoorInteractionController` picks them up through `BuildingManager.getDoorHingePivots`. The gable
+  plane itself still has no horizontal collision (it never did); a door's leaf collides as usual.
+
+Removing the roof removes its openings with it. Remove Mode targets them through picking proxies like
+wall openings (`'roof-opening'` `RemovalTarget`), `-` undoes a placement (`'roofOpening'` action),
+and older saves without `openings` load unchanged.
 
 ### Remove/Paint Mode and world-save integration
 
@@ -2782,6 +2822,98 @@ A bright, calm daytime look: a mid-blue upper sky fading through pale blue to a 
 a soft mid-elevation sun (45°) with warm-white light, gentle far-off fog that matches the horizon
 color, and two cloud layers at moderate coverage (`0.45`) and fairly high softness — few hard edges,
 slow independent drift per layer, no storm-like density or fast movement.
+
+## Particles: a procedural particle system, and lake-shore splashes (`particles/`)
+
+A small, generic particle framework — effects are plain data, every effect shares one pool, one
+renderer (one draw call per blend mode) and one procedural texture atlas. Lake-shore splashes are
+the first effect; river spray, waterfall mist, rain, snow, smoke, embers, dust, leaves, pollen and
+creature effects are meant to be further definitions plus a small emitter each, not new systems.
+
+```
+ParticleEffectDefinition (data)      effects/lakeShoreSplash.ts — WHERE (splash zones) + the look
+        ↓                            effects/LakeShoreSplashSource.ts — WHEN (scheduling, streaming)
+ParticleEffectManager                registry · shared budget · priorities · bursts · stats
+        ↓
+ParticlePool (per blend mode)        fixed-capacity typed arrays, dense, swap-remove
+        ↓
+ParticleRenderer (per blend mode)    one instanced quad mesh, billboarded in the vertex shader
+ParticleTextureGenerator             procedural sprites → one cached 256² atlas
+```
+
+**Storage and pooling (`ParticlePool`).** Every live particle lives in `[0, count)` of one
+interleaved `Float32Array` (24 floats: position, velocity, age, life, size/opacity ranges,
+rotation, spin, gravity, drag, kill height, atlas cell, lighting, tint). An expired particle is
+overwritten by the last live one, so spawning is O(1), nothing is allocated after construction and
+the pool never grows — when it is full, `spawn` refuses. Each update integrates gravity and drag,
+retires particles that age out or fall back below their kill height (into the water), and writes
+three render streams (`positionSize`, `params`, `color`) that the renderer uploads directly.
+
+**Renderer (`ParticleRenderer`).** One `InstancedBufferGeometry` quad whose instance attributes ARE
+the pool's render streams; only the live range is uploaded (`addUpdateRange`) and drawn
+(`instanceCount = count`). Billboarding, per-particle rotation and the atlas lookup happen in the
+vertex shader — there is no `Object3D` per particle and no CPU orientation. One renderer per blend
+mode (normal, additive), created lazily; unshadowed, depth-tested, no depth write, fogged, lit by a
+single scene-light uniform.
+
+**Procedural textures (`ParticleTextureGenerator`).** No sprite files. Generators write RGBA into
+64 px cells of one 256² atlas, built once on first use and cached (`particleAtlasBuildCount()` is
+1 in a running game). `water-droplet` (4 variants): a soft blob with an irregular, noise-wobbled
+outline, tilted and elongated into a teardrop, a bright off-centre highlight, a cooler rim, a faded
+edge and one to three satellite droplets — water, not a glow. `water-mist` (2 variants): a faint,
+cloudy, speckled puff. Further effects register generators with `registerParticleTexture` before
+the atlas is built. No mipmaps: cells are packed edge to edge and the sprites are tiny.
+
+**Budget and priorities.** One global budget per graphics preset (`PARTICLE_QUALITY`: Low 500,
+Medium 1,500, High 3,000, Ultra 5,000), overridable in developer settings. Ambient effects may fill
+only 80 % of it, so important effects always find room; each effect also has its own cap. When
+either is full, new particles are dropped (counted in the stats) — never allocated. Presets also
+scale burst size, ambient frequency, secondary particles (mist: High/Ultra) and distance bands.
+
+**Lake-shore splashes.** Hydrology knows nothing about particles; the splash source reads lake
+definitions (`HydrologySystem.lakesNear`) and the authoritative, carved terrain sampler — never
+rendered meshes — and stops cleanly when hydrology or particles are off.
+
+- _Zones_ (`generateLakeSplashZones`): candidates every `splashCandidateSpacing` m along the lake's
+  outline (jittered from world seed × lake id × index), each with the outline's true outward normal.
+  Walking that normal finds the real waterline (where the carved terrain meets the water level);
+  candidates with no bank nearby (river mouths, submerged shelves) are rejected. The bank's slope
+  is measured over the first 2.5 m above the water; banks gentler than `splashSlopeThreshold`
+  (24°) never splash. A hashed `splashDensity` subset is kept, weighted toward steeper banks, whose
+  `strength` (0.25–1) also scales burst size, speed and frequency. Zones sit just above the logical
+  lake surface, facing the water. Same lake, seed and terrain → the same zones.
+- _Streaming_: lakes within the cull distance are queued, and at most one lake's zones are generated
+  per frame (well under 1 ms); far lakes are evicted and regenerate identically on return. Zones are
+  plain data plus two typed arrays of timers — no emitter objects.
+- _Scheduling_: each zone fires irregular bursts every 1.5–5 s (hashed from its seed and burst
+  number, with a hashed starting phase so a shore never splashes in unison). Distance bands: full
+  rate within `fullDistance`, ×2.2 slower and smaller to `reducedDistance`, ×4 to `cullDistance`
+  (High: 50 / 90 / 110 m), nothing beyond — out-of-range zones only keep their timer from piling up.
+- _Bursts_: 4–9 droplets (scaled by quality, strength and band) from the waterline, flung up and
+  out over the water with spread, slowed by gravity and drag, shrinking and fading over 0.35–0.85 s,
+  and vanishing when they fall back below the surface; on High/Ultra a few slower, larger, fainter
+  mist puffs mix in from the same burst.
+- Nothing is saved: zones, timers and particles are derived from the seed and regenerated.
+
+**Developer controls.** Settings → Graphics → Particles: enabled, pause, show emitters (active zones,
+yellow) / splash zones (cyan posts, taller = stronger, with a tick toward the water), max particles,
+splash density, slope threshold, candidate spacing and cull distance. With render stats on (`F3`),
+the overlay shows active particles / capacity, particle draw calls, buffer KB, update ms, dropped
+particles, and active / visible / total splash zones.
+
+**Performance** (1920 × 1080, High, development Mac; particles held at a target count in view):
+
+| Live particles | Frame (ms) | Particle CPU update (ms) | Particle draw calls |
+| -------------- | ---------- | ------------------------ | ------------------- |
+| 0              | 8.14       | 0.00                     | 1                   |
+| 100            | 8.09       | 0.003                    | 1                   |
+| 500            | 8.13       | 0.008                    | 1                   |
+| 1,000          | 8.13       | 0.02                     | 1                   |
+| 3,000          | 8.17       | 0.06                     | 1                   |
+| 5,000          | 8.24       | 0.09                     | 1                   |
+
+Buffers: 1.1 MB at a 6,000 capacity (≈ 0.6 MB at High's 3,000); atlas 256 KB. A real lake shore
+peaks at a few dozen live particles.
 
 ## Graphics quality: presets, cascaded shadows, GTAO, and postprocessing (`graphics/GraphicsTypes.ts`, `graphics/GraphicsPipeline.ts`, `graphics/GraphicsSettingsStore.ts`)
 

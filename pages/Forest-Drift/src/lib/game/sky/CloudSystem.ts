@@ -123,17 +123,37 @@ const FRAGMENT_SHADER = /* glsl */ `
 		return sum / 0.875;
 	}
 
+	uniform vec2 uSunXZ;
+	uniform float uSunUp;
+
+	// Cloud density at a point: macro shapes, domain-warped so they billow instead of smearing,
+	// with ridged "cauliflower" detail eating into the edges. The raw fbm mix clusters tightly
+	// around 0.5 (value noise), which left every pixel a faint, even haze — it is stretched here so
+	// coverage/threshold produce real clouds with real clear sky between them.
+	float cloudDensity(vec2 coord, out vec2 warped, out float macroOut) {
+		vec2 warp = vec2(
+			valueNoise(coord * uBreakupScale * 0.5 + uOffsetBreakup + 3.7),
+			valueNoise(coord * uBreakupScale * 0.5 + uOffsetBreakup - 5.1)
+		) - 0.5;
+		vec2 q = coord + warp * (0.28 / max(uMacroScale, 0.1));
+		warped = q;
+		float macro = fbm3(q * uMacroScale + uOffsetMacro);
+		macroOut = macro;
+		float breakup = fbm3(q * uBreakupScale + uOffsetBreakup);
+		float billow = 1.0 - abs(valueNoise(q * uWispyScale + uOffsetWispy) * 2.0 - 1.0);
+		float puff = 1.0 - abs(valueNoise(q * uWispyScale * 2.3 + uOffsetWispy * 1.7 + 9.0) * 2.0 - 1.0);
+		float raw = macro * 0.58 + breakup * 0.24 + billow * 0.12 + puff * 0.06;
+		return (raw - 0.5) * 2.6 + 0.5 + (uCoverage - 0.5) * 1.5;
+	}
+
 	void main() {
 		vec2 worldCoord = vWorldXZ / CLOUD_NOISE_REFERENCE_UNIT;
+		vec2 warped;
+		float macroHere;
+		float density = cloudDensity(worldCoord, warped, macroHere);
 
-		float macro = fbm3(worldCoord * uMacroScale + uOffsetMacro);
-		float breakup = fbm3(worldCoord * uBreakupScale + uOffsetBreakup);
-		float wispy = fbm3(worldCoord * uWispyScale + uOffsetWispy);
-
-		float density = macro * 0.6 + breakup * 0.3 + wispy * 0.1;
-		density += (uCoverage - 0.5);
-
-		float alpha = smoothstep(uEdgeThreshold - uEdgeSoftness, uEdgeThreshold + uEdgeSoftness, density);
+		float soft = max(0.035, uEdgeSoftness * 0.6);
+		float alpha = smoothstep(uEdgeThreshold - soft, uEdgeThreshold + soft, density);
 
 		// Fade the plane's own boundary to nothing well before its edge, so there is never a
 		// visible rectangular border no matter how far the player can theoretically see.
@@ -142,12 +162,22 @@ const FRAGMENT_SHADER = /* glsl */ `
 
 		if (alpha <= 0.002) discard;
 
-		float shade = mix(1.0, clamp(density + 0.3, 0.0, 1.0), uLightResponse);
+		// Seen from below: thick cores are grey underneath, thin edges let light through and glow.
+		float thickness = smoothstep(uEdgeThreshold, uEdgeThreshold + 0.7, density);
+		// One step toward the sun on the large shapes only (cheap): where the cloud thins toward the
+		// sun, that side is lit.
+		float macroSun = fbm3((warped + uSunXZ * 0.045) * uMacroScale + uOffsetMacro);
+		float sunlit = clamp((macroHere - macroSun) * 6.0 + 0.5, 0.0, 1.0) * uSunUp;
+		float shade = mix(1.0, 1.0 - thickness * 0.95, uLightResponse);
+		shade = clamp(shade + sunlit * 0.35 * uLightResponse, 0.0, 1.15);
 		vec3 color = mix(uShadowColor, uBaseColor, shade);
-		color = mix(color, uWarmColor, uWarmth * 0.35);
-		color = mix(color, uCoolColor, uCoolTint * 0.25);
+		// Silver lining on the thin, sunward edges.
+		color += uBaseColor * (1.0 - thickness) * sunlit * 0.18;
+		color = mix(color, uWarmColor * (uBaseColor.r), uWarmth * 0.3);
+		color = mix(color, uCoolColor * (uBaseColor.r), uCoolTint * 0.2);
 
-		gl_FragColor = vec4(color, alpha * uOpacity);
+		// Dense cores are nearly opaque; thin edges stay soft.
+		gl_FragColor = vec4(color, alpha * mix(0.75, 1.0, thickness) * uOpacity);
 	}
 `;
 
@@ -209,7 +239,9 @@ export class CloudSystem {
 					uCoolColor: { value: new THREE.Color(0xbcd4ff) },
 					uLightResponse: { value: 0.6 },
 					uWarmth: { value: 0.4 },
-					uCoolTint: { value: 0.25 }
+					uCoolTint: { value: 0.25 },
+					uSunXZ: { value: new THREE.Vector2(0, 1) },
+					uSunUp: { value: 1 }
 				}
 			});
 
@@ -231,7 +263,10 @@ export class CloudSystem {
 		this.group.visible = settings.enabled;
 
 		const baseColor = new THREE.Color(0xffffff).multiplyScalar(settings.brightness);
-		const shadowColor = baseColor.clone().multiplyScalar(1 - settings.shadowTint);
+		// Undersides: a cool grey (stronger than the old flat tint) so clouds read against a pale sky.
+		const shadowColor = new THREE.Color(0x8e9aaa)
+			.multiplyScalar(settings.brightness)
+			.lerp(baseColor, 1 - Math.min(1, settings.shadowTint * 1.6));
 
 		this.layers.forEach((layer, index) => {
 			layer.mesh.visible = settings.enabled && index < settings.layerCount;
@@ -256,6 +291,16 @@ export class CloudSystem {
 		for (const layer of this.layers) {
 			layer.bounds.visible = debug.showCloudBounds;
 			layer.material.wireframe = debug.showCloudLayerWireframe;
+		}
+	}
+
+	/** Sun direction (toward the sun) — lights the sunward side of each cloud. */
+	setSunDirection(direction: THREE.Vector3): void {
+		const horizontal = Math.hypot(direction.x, direction.z) || 1;
+		for (const layer of this.layers) {
+			const u = layer.material.uniforms;
+			(u.uSunXZ.value as THREE.Vector2).set(direction.x / horizontal, direction.z / horizontal);
+			u.uSunUp.value = THREE.MathUtils.clamp(direction.y * 3 + 0.3, 0, 1);
 		}
 	}
 

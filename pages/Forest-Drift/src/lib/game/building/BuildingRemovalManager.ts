@@ -34,6 +34,10 @@ export class BuildingRemovalManager {
 		return this.buildingManager.removeOpening(wallId, openingId);
 	}
 
+	removeRoofOpening(roofId: string, openingId: string): boolean {
+		return this.buildingManager.removeRoofOpening(roofId, openingId);
+	}
+
 	removeBeam(wallId: string, beamId: string): boolean {
 		return this.buildingManager.removeBeam(wallId, beamId);
 	}
@@ -63,6 +67,8 @@ export class BuildingRemovalManager {
 				return this.removeWallSegment(target.wallPathId, target.segmentId);
 			case 'opening':
 				return this.removeOpening(target.wallId, target.openingId);
+			case 'roof-opening':
+				return this.removeRoofOpening(target.roofId, target.openingId);
 			case 'beam':
 				return this.removeBeam(target.wallId, target.beamId);
 			case 'stair':
@@ -73,6 +79,10 @@ export class BuildingRemovalManager {
 				return this.removeRoof(target.roofId);
 			case 'floor-detail':
 				return this.removeFloorDetail(target.detailId);
+			case 'foundation':
+				// A whole foundation also deletes the build on it, and only after the player types
+				// "Confirm Delete". That cascade lives in foundationDeletion.ts, not this per-piece path.
+				return false;
 		}
 	}
 }

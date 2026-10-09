@@ -46,6 +46,8 @@ export interface FoundationToolOptions {
 	terrainSettings: TerrainSettings;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
+	/** Returns true when a footprint overlaps a river or lake deeply enough to reject it. */
+	waterBlocksFoundation?: (minX: number, maxX: number, minZ: number, maxZ: number) => boolean;
 }
 
 /**
@@ -65,6 +67,12 @@ export class FoundationTool implements BuildTool {
 	private readonly terrainSettings: TerrainSettings;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
+	private readonly waterBlocksFoundation?: (
+		minX: number,
+		maxX: number,
+		minZ: number,
+		maxZ: number
+	) => boolean;
 
 	private readonly raycaster = new THREE.Raycaster();
 	private readonly screenCenter = new THREE.Vector2(0, 0);
@@ -109,6 +117,7 @@ export class FoundationTool implements BuildTool {
 		this.terrainSettings = options.terrainSettings;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
+		this.waterBlocksFoundation = options.waterBlocksFoundation;
 
 		this.gridGeometry.setAttribute('position', new THREE.BufferAttribute(this.gridPositions, 3));
 		this.gridGeometry.setAttribute('color', new THREE.BufferAttribute(this.gridColors, 3));
@@ -223,6 +232,22 @@ export class FoundationTool implements BuildTool {
 		this.refreshVisuals();
 	}
 
+	private footprintInWater(result: {
+		minGridX: number;
+		maxGridX: number;
+		minGridZ: number;
+		maxGridZ: number;
+	}): boolean {
+		if (!this.waterBlocksFoundation) return false;
+		const spacing = this.vertexSpacing();
+		return this.waterBlocksFoundation(
+			result.minGridX * spacing,
+			result.maxGridX * spacing,
+			result.minGridZ * spacing,
+			result.maxGridZ * spacing
+		);
+	}
+
 	private raycastTerrain(): THREE.Intersection | null {
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
 		const meshes = this.getTerrainMeshes();
@@ -243,7 +268,7 @@ export class FoundationTool implements BuildTool {
 			this.buildingSettings.maxFoundationCells,
 			this.buildingSettings.foundationUndergroundDepth
 		);
-		if (!result.valid) return;
+		if (!result.valid || this.footprintInWater(result)) return;
 
 		this.foundationManager.addFoundation({
 			id: crypto.randomUUID(),
@@ -297,12 +322,20 @@ export class FoundationTool implements BuildTool {
 			this.buildingSettings.foundationUndergroundDepth
 		);
 
-		this.updateTargetMarker(this.currentHoverPoint, result.valid ? VALID_COLOR : INVALID_COLOR);
+		const inWater = result.valid && this.footprintInWater(result);
+		this.updateTargetMarker(
+			this.currentHoverPoint,
+			result.valid && !inWater ? VALID_COLOR : INVALID_COLOR
+		);
 
-		if (!result.valid) {
+		if (!result.valid || inWater) {
 			this.hidePreview();
 			this.highestPointMarker.visible = false;
-			this.onHudChange?.(this.buildInvalidHud(result.reason ?? 'Invalid selection'));
+			this.onHudChange?.(
+				this.buildInvalidHud(
+					inWater ? 'Overlaps deep water' : (result.reason ?? 'Invalid selection')
+				)
+			);
 			return;
 		}
 

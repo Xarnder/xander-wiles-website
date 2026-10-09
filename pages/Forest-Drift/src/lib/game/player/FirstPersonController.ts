@@ -22,6 +22,25 @@ export function ceilingCameraClearance(near: number): number {
 const STEP_SWEEP_SAMPLE_SPACING = 0.08;
 const MAX_STEP_SWEEP_SAMPLES = 24;
 
+/** Flying speed range (m/s). The default is twice the run speed; the scroll wheel scales it. */
+export const FLY_SPEED_MIN = 1;
+export const FLY_SPEED_MAX = 600;
+/** Speed multiplier per mouse-wheel notch (≈100 px of `deltaY`); trackpads scale smoothly. */
+export const FLY_WHEEL_STEP = 1.2;
+
+export interface FlightState {
+	flying: boolean;
+	/** Current flying speed, m/s. */
+	speed: number;
+}
+
+/** New fly speed after a wheel movement: scroll up (negative `deltaY`) is faster. Clamped. */
+export function flySpeedAfterWheel(speed: number, deltaY: number): number {
+	const notches = -deltaY / 100;
+	const next = speed * Math.pow(FLY_WHEEL_STEP, notches);
+	return Math.min(FLY_SPEED_MAX, Math.max(FLY_SPEED_MIN, next));
+}
+
 export interface FirstPersonControllerOptions {
 	domElement: HTMLElement;
 	camera: THREE.PerspectiveCamera;
@@ -55,6 +74,13 @@ export interface FirstPersonControllerOptions {
 		feetY: number,
 		headY: number
 	) => { x: number; z: number };
+	/**
+	 * When this returns true the step is refused, unless the player is already standing there.
+	 * Deep lakes use this. Rivers stay open so the player can walk into the channel.
+	 */
+	isMoveBlocked?: (worldX: number, worldZ: number) => boolean;
+	/** Flying toggled, or its speed changed (scroll wheel). */
+	onFlightChange?: (state: FlightState) => void;
 }
 
 /**
@@ -90,6 +116,17 @@ export class FirstPersonController {
 		feetY: number,
 		headY: number
 	) => { x: number; z: number };
+	private readonly isMoveBlocked?: (worldX: number, worldZ: number) => boolean;
+	private readonly onFlightChange?: (state: FlightState) => void;
+
+	private flying = false;
+	/** Chosen fly speed; `null` until the wheel is used — then the default (2 × run) applies. */
+	private flySpeed: number | null = null;
+
+	/** All movement and look frozen (best-quality screenshot capture). */
+	private movementLocked = false;
+	/** Mouse/touch look scale — below 1 while zoomed in (U), so aiming stays steady. */
+	private lookScale = 1;
 
 	private yaw = 0;
 	private pitch = 0;
@@ -114,9 +151,9 @@ export class FirstPersonController {
 	};
 
 	private readonly handleMouseMove = (event: MouseEvent) => {
-		if (!this.pointerLocked) return;
-		this.yaw -= event.movementX * MOUSE_SENSITIVITY;
-		this.pitch -= event.movementY * MOUSE_SENSITIVITY;
+		if (!this.pointerLocked || this.movementLocked) return;
+		this.yaw -= event.movementX * MOUSE_SENSITIVITY * this.lookScale;
+		this.pitch -= event.movementY * MOUSE_SENSITIVITY * this.lookScale;
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
 	};
 
@@ -129,6 +166,13 @@ export class FirstPersonController {
 
 	private readonly handleKeyUp = (event: KeyboardEvent) => {
 		this.keys.delete(event.code);
+	};
+
+	/** While flying (and in control of the mouse), the wheel sets fly speed — nothing else uses it in play. */
+	private readonly handleWheel = (event: WheelEvent) => {
+		if (!this.flying || !this.pointerLocked || this.movementLocked) return;
+		event.preventDefault();
+		this.setFlySpeed(flySpeedAfterWheel(this.getFlySpeed(), event.deltaY));
 	};
 
 	private readonly handleClick = () => {
@@ -147,8 +191,11 @@ export class FirstPersonController {
 		this.settings = options.settings;
 		this.onPointerLockChange = options.onPointerLockChange;
 		this.resolveHorizontalCollision = options.resolveHorizontalCollision;
+		this.isMoveBlocked = options.isMoveBlocked;
+		this.onFlightChange = options.onFlightChange;
 
 		document.addEventListener('pointerlockchange', this.handlePointerLockChange);
+		window.addEventListener('wheel', this.handleWheel, { passive: false });
 		document.addEventListener('mousemove', this.handleMouseMove);
 		window.addEventListener('keydown', this.handleKeyDown);
 		window.addEventListener('keyup', this.handleKeyUp);
@@ -188,6 +235,63 @@ export class FirstPersonController {
 		this.spawn(worldX, worldZ);
 	}
 
+	/**
+	 * Freezes (or releases) all player movement and look: position, view, gravity and flight all hold
+	 * exactly still until released.
+	 */
+	setMovementLocked(locked: boolean): void {
+		this.movementLocked = locked;
+		if (locked) this.keys.clear();
+	}
+
+	isMovementLocked(): boolean {
+		return this.movementLocked;
+	}
+
+	/** Look-speed multiplier (1 = normal). The scene lowers it while zoomed in. */
+	setLookScale(scale: number): void {
+		this.lookScale = Math.max(0.05, Math.min(1, scale));
+	}
+
+	/** True while U is held with the game in control (pointer locked) — hold-to-zoom. */
+	isZoomHeld(): boolean {
+		return this.pointerLocked && this.keys.has('KeyU');
+	}
+
+	isFlying(): boolean {
+		return this.flying;
+	}
+
+	/** Current flying speed (m/s): the wheel-chosen one, or twice the run speed by default. */
+	getFlySpeed(): number {
+		return this.flySpeed ?? Math.min(FLY_SPEED_MAX, this.settings.runSpeed * 2);
+	}
+
+	setFlySpeed(speed: number): void {
+		const next = Math.min(FLY_SPEED_MAX, Math.max(FLY_SPEED_MIN, speed));
+		if (next === this.flySpeed) return;
+		this.flySpeed = next;
+		this.onFlightChange?.({ flying: this.flying, speed: next });
+	}
+
+	/**
+	 * Starts or stops flying. Leaving flight mid-air simply lets gravity take over (no fall damage).
+	 * The chosen fly speed is kept for the session.
+	 */
+	setFlying(flying: boolean): void {
+		if (this.flying === flying) return;
+		this.flying = flying;
+		this.verticalVelocity = 0;
+		this.grounded = false;
+		this.walkBob = createWalkBobState();
+		this.onFlightChange?.({ flying, speed: this.getFlySpeed() });
+	}
+
+	toggleFlying(): boolean {
+		this.setFlying(!this.flying);
+		return this.flying;
+	}
+
 	getYaw(): number {
 		return this.yaw;
 	}
@@ -218,6 +322,14 @@ export class FirstPersonController {
 	}
 
 	update(deltaSeconds: number): void {
+		if (this.movementLocked) {
+			this.syncCamera();
+			return;
+		}
+		if (this.flying) {
+			this.updateFlying(deltaSeconds);
+			return;
+		}
 		const forward = this.keys.has('KeyW') ? 1 : 0;
 		const backward = this.keys.has('KeyS') ? 1 : 0;
 		const left = this.keys.has('KeyA') ? 1 : 0;
@@ -226,8 +338,8 @@ export class FirstPersonController {
 		const jumpPressed = this.keys.has('Space') || this.touchJump;
 		this.touchJump = false;
 
-		let moveX = right - left + this.touchMoveX;
-		let moveZ = forward - backward + this.touchMoveZ;
+		const moveX = right - left + this.touchMoveX;
+		const moveZ = forward - backward + this.touchMoveZ;
 
 		let worldX = this.worldPosition.x;
 		let worldZ = this.worldPosition.z;
@@ -256,6 +368,14 @@ export class FirstPersonController {
 			const resolved = this.resolveHorizontalCollision(worldX, worldZ, feetY, headY);
 			worldX = resolved.x;
 			worldZ = resolved.z;
+		}
+
+		if (
+			this.isMoveBlocked?.(worldX, worldZ) &&
+			!this.isMoveBlocked(this.worldPosition.x, this.worldPosition.z)
+		) {
+			worldX = this.worldPosition.x;
+			worldZ = this.worldPosition.z;
 		}
 
 		// The player's own pre-step feet Y — passed as getSupportingSurfaceY's referenceY so a
@@ -317,6 +437,50 @@ export class FirstPersonController {
 			running
 		);
 		this.syncCamera(running);
+	}
+
+	/**
+	 * Free flight: W/S along the view direction (pitch included), A/D strafe, Space up, Shift down —
+	 * all at the fly speed. No gravity, walls or deep water stop you (flying is for getting around
+	 * and looking at things), but you can never go below the ground or a floor beneath you.
+	 */
+	private updateFlying(deltaSeconds: number): void {
+		const forward =
+			(this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0) + this.touchMoveZ;
+		const strafe =
+			(this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0) + this.touchMoveX;
+		const rise =
+			(this.keys.has('Space') || this.touchJump ? 1 : 0) -
+			(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 1 : 0);
+		this.touchJump = false;
+
+		const sinYaw = Math.sin(this.yaw);
+		const cosYaw = Math.cos(this.yaw);
+		const cosPitch = Math.cos(this.pitch);
+		// Look direction (Three.js forward is -Z, rotated by yaw then pitch) and the strafe axis.
+		let vx = -sinYaw * cosPitch * forward + cosYaw * strafe;
+		let vy = Math.sin(this.pitch) * forward + rise;
+		let vz = -cosYaw * cosPitch * forward - sinYaw * strafe;
+		const length = Math.hypot(vx, vy, vz);
+		if (length > 1) {
+			vx /= length;
+			vy /= length;
+			vz /= length;
+		}
+		const step = this.getFlySpeed() * deltaSeconds;
+		const x = this.worldPosition.x + vx * step;
+		const z = this.worldPosition.z + vz * step;
+		let y = this.worldPosition.y + vy * step;
+
+		// Never below the ground (or a floor/roof under you).
+		const feetY = Math.max(this.worldPosition.y, y) - this.settings.eyeHeight;
+		const floor = this.getSupportingSurfaceY(x, z, feetY) + this.settings.eyeHeight;
+		if (y < floor) y = floor;
+
+		this.worldPosition.set(x, y, z);
+		this.grounded = false;
+		this.verticalVelocity = 0;
+		this.syncCamera();
 	}
 
 	/**
@@ -389,9 +553,10 @@ export class FirstPersonController {
 	}
 
 	addTouchLook(deltaX: number, deltaY: number): void {
+		if (this.movementLocked) return;
 		const TOUCH_LOOK_SENSITIVITY = 0.0035;
-		this.yaw -= deltaX * TOUCH_LOOK_SENSITIVITY;
-		this.pitch -= deltaY * TOUCH_LOOK_SENSITIVITY;
+		this.yaw -= deltaX * TOUCH_LOOK_SENSITIVITY * this.lookScale;
+		this.pitch -= deltaY * TOUCH_LOOK_SENSITIVITY * this.lookScale;
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
 		this.syncCamera(this.touchRunning);
 	}
@@ -415,6 +580,7 @@ export class FirstPersonController {
 		document.removeEventListener('mousemove', this.handleMouseMove);
 		window.removeEventListener('keydown', this.handleKeyDown);
 		window.removeEventListener('keyup', this.handleKeyUp);
+		window.removeEventListener('wheel', this.handleWheel);
 		this.domElement.removeEventListener('click', this.handleClick);
 		if (this.pointerLocked) document.exitPointerLock();
 	}

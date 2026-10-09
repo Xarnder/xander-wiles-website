@@ -1,11 +1,11 @@
 /**
  * The starter library. Every design here is an ordinary MiniBuildDefinition built under the exact
- * player rules — ≤16 cuboids, 0.0625m grid, ≤4 materials, ≤4m bounds — and is validated by the same
+ * player rules — ≤16 cuboids, 0.03125m grid, ≤4 materials, ≤4m bounds — and is validated by the same
  * code as a player's build (see MiniBuildValidation.spec.ts). There is no private geometry: if a stock
  * object can't be made from cuboids, the answer is a better cuboid design, not a special mesh.
  *
  * Boxes are authored in 0.125m units (the original, coarser grid — furniture rarely needs finer)
- * and scaled to 0.0625m grid units when built, min corner first. +Z is the front of the object.
+ * and scaled to 0.03125m grid units when built, min corner first. +Z is the front of the object.
  */
 import { colorMaterialFromHex } from '../building/MaterialTypes';
 import { computeBounds, groundBlocks } from './miniBuildGrid';

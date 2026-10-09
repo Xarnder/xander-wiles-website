@@ -4,9 +4,11 @@
 
 	interface Props {
 		field: SettingsField;
+		/** Settings values live on plain objects, so a button has to ask the menu to rebuild. */
+		onMutate?: () => void;
 	}
 
-	let { field }: Props = $props();
+	let { field, onMutate }: Props = $props();
 
 	let numberValue = $derived(field.kind === 'number' ? field.get() : 0);
 	let numberDraft = $state<string | null>(null);
@@ -172,7 +174,10 @@
 		class="action"
 		type="button"
 		data-testid="settings-field-{field.id}"
-		onclick={field.onClick}
+		onclick={() => {
+			field.onClick();
+			onMutate?.();
+		}}
 	>
 		{field.label}
 	</button>

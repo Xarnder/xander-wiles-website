@@ -33,6 +33,7 @@ import { BuildingLevelManager } from './building/BuildingLevelManager';
 import { BuildingMaterialManager } from './building/BuildingMaterialManager';
 import { getGlassMaterial } from './building/OpeningVisualBuilder';
 import { BuildingRemovalManager } from './building/BuildingRemovalManager';
+import { deleteFoundationAndBuilding as removeConfirmedFoundation } from './building/foundationDeletion';
 import { BuildUndoManager } from './building/BuildUndoManager';
 import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
@@ -102,9 +103,12 @@ import {
 	type AntiAliasMode,
 	type AoQuality,
 	type GraphicsQuality,
-	type GraphicsSettings
+	type GraphicsSettings,
+	clampFieldOfView,
+	ZOOM_MAGNIFICATION,
+	zoomedFieldOfView
 } from './graphics/GraphicsTypes';
-import { FirstPersonController } from './player/FirstPersonController';
+import { FirstPersonController, type FlightState } from './player/FirstPersonController';
 import { resolveFogColor } from './sky/atmosphereMath';
 import {
 	advanceTimeOfDay,
@@ -116,6 +120,38 @@ import { CloudSystem } from './sky/CloudSystem';
 import { HdriEnvironmentSystem } from './sky/HdriEnvironmentSystem';
 import { SkySystem } from './sky/SkySystem';
 import { createDefaultSkySettings, type SkySettings } from './sky/SkyTypes';
+import { BaseTerrainSampler } from './hydrology/BaseTerrainSampler';
+import { HydrologyDebugView } from './hydrology/HydrologyDebugView';
+import { HydrologySystem } from './hydrology/HydrologySystem';
+import {
+	createDefaultHydrologyDebug,
+	createDefaultHydrologySettings,
+	createDefaultHydrologyVisual,
+	createHydrologySample,
+	DEEP_WATER_DEPTH,
+	SHALLOW_WATER_DEPTH,
+	type HydrologyDebugSettings,
+	type HydrologySettings,
+	type HydrologyVisualSettings
+} from './hydrology/HydrologyTypes';
+import { foundationOverlapsWater } from './hydrology/foundationWater';
+import { UnderwaterTint } from './hydrology/underwater';
+import { WaterRenderer, type WaterRenderStats } from './hydrology/WaterRenderer';
+import { ParticleEffectManager } from './particles/ParticleEffectManager';
+import { WEATHER_SURFACE_UNIFORMS } from './materials/shader/weatherSurface';
+import { WeatherExposureMap } from './weather/WeatherExposureMap';
+import { WeatherSystem, type WeatherFrame, type WeatherStats } from './weather/WeatherSystem';
+import {
+	createDefaultParticleDebugSettings,
+	PARTICLE_QUALITY,
+	type ParticleDebugSettings,
+	type ParticleStats
+} from './particles/ParticleTypes';
+import {
+	LakeShoreSplashSource,
+	type LakeShoreSplashStats
+} from './particles/effects/LakeShoreSplashSource';
+import { hashStringToUint32 } from './terrain/seededRandom';
 import { worldToChunkCoord } from './terrain/chunkKey';
 import { terrainMaterial } from './terrain/TerrainChunk';
 import { terrainColorOptions } from './terrain/terrainColor';
@@ -199,6 +235,16 @@ export interface SceneStats {
 	drawCalls: number;
 	geometries: number;
 	textures: number;
+	/** Particle system and lake-shore splash stats — only populated while render stats are shown. */
+	particles?: ParticleStats & { splash: LakeShoreSplashStats };
+	/** Weather state, precipitation and lightning — only populated while render stats are shown. */
+	weather?: WeatherStats;
+	water?: WaterRenderStats & {
+		regions: number;
+		rivers: number;
+		logicalLakes: number;
+		regionMs: number;
+	};
 	shadowsEnabled: boolean;
 	shadowCascades: number;
 	shadowDistance: number;
@@ -284,6 +330,8 @@ export interface ThreeSceneOptions {
 	skySettings: SkySettings;
 	onStatsUpdate?: (stats: SceneStats) => void;
 	onPointerLockChange?: (locked: boolean) => void;
+	/** Flying toggled (B) or its speed changed (scroll wheel while flying). */
+	onFlightChange?: (state: FlightState) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -292,6 +340,11 @@ export interface ThreeSceneOptions {
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 	onPlacementCustomizeChange?: (open: boolean) => void;
 	onPlacementHeightChange?: (open: boolean) => void;
+	/**
+	 * Remove Mode asked to delete one foundation and the build on it. The page shows a prompt that
+	 * accepts only the typed phrase "Confirm Delete" before calling `deleteFoundationAndBuilding`.
+	 */
+	onRequestFoundationDelete?: (foundationId: string) => void;
 	/** `F` on a placed Mini Build in Place Object mode. */
 	onMiniBuildEditRequest?: (instanceId: string) => void;
 	/** Short player-facing Mini Build messages (copied, detail limit, load warnings). */
@@ -320,6 +373,8 @@ export interface ThreeSceneOptions {
  */
 export class ThreeScene implements WorldRuntime {
 	devPanelOpen = false;
+	/** Typed foundation-deletion prompt is open — blocks building keys the same way other modals do. */
+	foundationDeletePromptOpen = false;
 	/** Pause menu: the render loop keeps running, but the day/night clock does not. */
 	simulationPaused = false;
 	readonly buildingSettings: BuildingSettings;
@@ -334,6 +389,25 @@ export class ThreeScene implements WorldRuntime {
 	private readonly camera: THREE.PerspectiveCamera;
 	private readonly renderer: THREE.WebGLRenderer;
 	private readonly terrainManager: TerrainManager;
+	private readonly hydrologySettings: HydrologySettings;
+	private readonly hydrologyDebug: HydrologyDebugSettings;
+	private readonly hydrologyVisual: HydrologyVisualSettings;
+	private readonly hydrology: HydrologySystem;
+	private readonly water: WaterRenderer;
+	private readonly underwaterTint: UnderwaterTint;
+	/** The shared procedural particle system (one pool, one draw call per blend mode). */
+	readonly particles: ParticleEffectManager;
+	private readonly lakeSplashes: LakeShoreSplashSource;
+	private readonly particleSettings: ParticleDebugSettings;
+	private readonly particleFrustum = new THREE.Frustum();
+	private readonly weather: WeatherSystem;
+	private readonly weatherFrame: WeatherFrame;
+	private readonly weatherExposure: WeatherExposureMap;
+	private lastWeatherPersistRevision = -1;
+	private readonly particleMatrix = new THREE.Matrix4();
+	private readonly particleLight = new THREE.Color();
+	private readonly hydrologyDebugView: HydrologyDebugView;
+	private hydrologyRebuildTimer = 0;
 	private readonly treeManager: TreeManager;
 	private readonly materialManager: BuildingMaterialManager;
 	/** Procedural textures for buildings and terrain — see the README's "Procedural materials" section. */
@@ -409,6 +483,7 @@ export class ThreeScene implements WorldRuntime {
 
 	private readonly skySystem: SkySystem;
 	private readonly cloudSystem: CloudSystem;
+	private readonly cloudSunScratch = new THREE.Vector3();
 	private readonly hdriSystem: HdriEnvironmentSystem;
 	private readonly hemisphereLight: THREE.HemisphereLight;
 	private readonly sunLight: THREE.DirectionalLight;
@@ -455,6 +530,7 @@ export class ThreeScene implements WorldRuntime {
 		// see GraphicsPipeline's class doc for the full postprocessing pipeline.
 		this.renderer = new THREE.WebGLRenderer({ antialias: false });
 		this.container.appendChild(this.renderer.domElement);
+		this.underwaterTint = new UnderwaterTint(this.container);
 
 		// Visible sky: a procedural gradient dome + a couple of large soft cloud sheets, both
 		// re-centred on the camera every frame (see animate()) so an infinite world never has an
@@ -473,6 +549,11 @@ export class ThreeScene implements WorldRuntime {
 		const savedGraphicsQuality = this.graphicsSettingsStore.getQuality();
 		this.graphicsSettings = createDefaultGraphicsSettings();
 		if (savedGraphicsQuality) this.graphicsSettings.quality = savedGraphicsQuality;
+		this.graphicsSettings.fieldOfView = clampFieldOfView(
+			this.graphicsSettingsStore.getFieldOfView() ?? this.graphicsSettings.fieldOfView
+		);
+		this.camera.fov = this.graphicsSettings.fieldOfView;
+		this.camera.updateProjectionMatrix();
 		this.graphicsPipeline = new GraphicsPipeline({
 			renderer: this.renderer,
 			scene: this.scene,
@@ -484,6 +565,13 @@ export class ThreeScene implements WorldRuntime {
 				this.materialLibrary.setQuality(materialQualityForGraphics(quality));
 				this.materialLibrary.setAnisotropy(this.materialAnisotropy());
 				this.treeManager.setQualityProfile(treeQualityFor(quality));
+				this.water.setQuality(quality);
+				this.water.applyLook(this.hydrologyVisual);
+				this.particles.setQuality(
+					PARTICLE_QUALITY[quality],
+					this.particleSettings.maxParticlesOverride
+				);
+				this.weather?.setQuality(quality);
 				this.graphicsSettings.surfaceRelief = GRAPHICS_PRESETS[quality].materialRelief;
 				this.graphicsSettings.surfaceSubdivision = GRAPHICS_PRESETS[quality].materialSubdivision;
 				this.applySurfaceDetail();
@@ -496,6 +584,42 @@ export class ThreeScene implements WorldRuntime {
 
 		this.terrainManager = new TerrainManager(this.settings);
 		this.scene.add(this.terrainManager.group);
+		this.hydrologySettings = createDefaultHydrologySettings();
+		this.hydrologyDebug = createDefaultHydrologyDebug();
+		this.hydrologyVisual = createDefaultHydrologyVisual();
+		const heightSampler = this.terrainManager.getHeightSampler();
+		this.hydrology = new HydrologySystem(
+			new BaseTerrainSampler(heightSampler),
+			this.hydrologySettings,
+			this.settings.seed
+		);
+		heightSampler.attachHydrology(this.hydrology);
+		this.terrainManager.setHydrologyGate({
+			ready: (x, z) => this.hydrology.isReady(x, z),
+			tick: () => this.hydrology.tick(),
+			ensure: (x, z) => this.hydrology.ensureSync(x, z),
+			sampleWater: (x, z, out) => this.hydrology.sampleWaterInto(x, z, out)
+		});
+		this.water = new WaterRenderer();
+		this.water.setQuality(this.graphicsSettings.quality);
+		this.water.applyLook(this.hydrologyVisual);
+		this.scene.add(this.water.group);
+		this.hydrologyDebugView = new HydrologyDebugView();
+		this.scene.add(this.hydrologyDebugView.group);
+		// Particles consume hydrology (never the reverse): splashes find steep lake shores from the
+		// lake definitions and the authoritative carved terrain sampler.
+		this.particleSettings = createDefaultParticleDebugSettings();
+		this.particles = new ParticleEffectManager();
+		this.particles.setQuality(PARTICLE_QUALITY[this.graphicsSettings.quality]);
+		this.scene.add(this.particles.group);
+		this.lakeSplashes = new LakeShoreSplashSource(
+			this.particles,
+			this.hydrology,
+			(x, z) => this.terrainManager.getHeightSampler().sample(x, z),
+			() => hashStringToUint32(this.settings.seed),
+			this.particleSettings
+		);
+		this.scene.add(this.lakeSplashes.debugGroup);
 		this.graphicsPipeline.registerMaterial(terrainMaterial);
 		const glassMaterial = getGlassMaterial();
 		this.graphicsPipeline.registerMaterial(glassMaterial);
@@ -612,7 +736,9 @@ export class ThreeScene implements WorldRuntime {
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
 			materialManager: this.materialManager,
-			getEndWallStyle: (foundationId) => this.endWallStyleFor(foundationId)
+			getEndWallStyle: (foundationId) => this.endWallStyleFor(foundationId),
+			buildingSettings,
+			glassMaterial
 		});
 		this.scene.add(this.roofManager.group);
 
@@ -682,6 +808,48 @@ export class ThreeScene implements WorldRuntime {
 			() => buildingSettings.maxStepHeight
 		);
 
+		// Weather drives the shared particle system (rain/snow fields, impacts), the sky look, tree
+		// wind and surface wetness. It only reads the world through these few point queries.
+		const weatherWater = createHydrologySample();
+		this.weather = new WeatherSystem(
+			this.particles,
+			{
+				groundY: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity),
+				coverAbove: (x, z, fromY) =>
+					this.worldSurfaceSampler.getCeilingBlockY(x, z, fromY, fromY + 80),
+				waterY: (x, z) => {
+					this.hydrology.sampleWaterInto(x, z, weatherWater);
+					return weatherWater.waterType === 'none' ? Number.NaN : weatherWater.waterSurfaceY;
+				}
+			},
+			(x, z) => this.terrainManager.getHeightSampler().sample(x, z),
+			this.settings.seed
+		);
+		this.weather.setQuality(this.graphicsSettings.quality);
+		this.scene.add(this.weather.group);
+		// Transparent effects must not cast ambient occlusion (dark halos round drops and bolts).
+		this.graphicsPipeline.excludeFromAo(this.weather.group);
+		this.graphicsPipeline.excludeFromAo(this.particles.group);
+		// Which surfaces are open to the sky (wet patches and snow only settle there).
+		this.weatherExposure = new WeatherExposureMap(this.renderer, this.scene, () => [
+			this.foundationManager.group,
+			this.wallManager.group,
+			this.wallPathManager.group,
+			this.slabManager.group,
+			this.stairManager.group,
+			this.roofManager.group,
+			this.floorDetailManager.group,
+			this.furnitureManager.group,
+			this.miniBuilds.group
+		]);
+		this.weatherFrame = {
+			camera: this.camera,
+			feetY: 0,
+			viewportHeight: 1,
+			frustum: this.particleFrustum,
+			cloudAltitude: 220
+		};
+
 		this.miniBuildChunkBoundaries = new MiniBuildChunkBoundaries({
 			camera: this.camera,
 			getLabelContainer: () => this.container,
@@ -697,7 +865,8 @@ export class ThreeScene implements WorldRuntime {
 			terrainSettings: this.settings,
 			terrainHeightSampler: this.terrainManager.getHeightSampler(),
 			foundationManager: this.foundationManager,
-			seed: this.settings.seed
+			seed: this.settings.seed,
+			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z)
 		});
 		this.scene.add(this.treeManager.group);
 		this.treeManager.setQualityProfile(treeQualityFor(this.graphicsSettings.quality));
@@ -716,6 +885,8 @@ export class ThreeScene implements WorldRuntime {
 				this.worldSurfaceSampler.getCeilingBlockY(x, z, fromY, toY),
 			settings: this.settings.player,
 			onPointerLockChange: options.onPointerLockChange,
+			onFlightChange: options.onFlightChange,
+			isMoveBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
 			resolveHorizontalCollision: (x, z, feetY, headY) => {
 				const creaturePosition = this.creatures?.resolvePlayer(x, z, feetY, headY) ?? { x, z };
 				return resolvePlayerPositionAgainstWalls(
@@ -736,8 +907,9 @@ export class ThreeScene implements WorldRuntime {
 			}
 		});
 
-		this.controller.spawn(0, 0);
-		this.terrainManager.primeAround(0, 0, 1);
+		const origin = this.dryGroundNear(0, 0);
+		this.controller.spawn(origin.x, origin.z);
+		this.terrainManager.primeAround(origin.x, origin.z, 1);
 
 		this.foundationTool = new FoundationTool({
 			scene: this.scene,
@@ -747,7 +919,15 @@ export class ThreeScene implements WorldRuntime {
 			foundationManager: this.foundationManager,
 			terrainSettings: this.settings,
 			buildingSettings,
-			onHudChange: options.onBuildHudChange
+			onHudChange: options.onBuildHudChange,
+			waterBlocksFoundation: (minX, maxX, minZ, maxZ) =>
+				foundationOverlapsWater(
+					(x, z) => this.hydrology.waterColumnDepth(x, z),
+					minX,
+					maxX,
+					minZ,
+					maxZ
+				)
 		});
 
 		this.wallTool = new WallTool({
@@ -939,6 +1119,7 @@ export class ThreeScene implements WorldRuntime {
 		let musicObstacleRevision = '';
 		let musicObstacles: THREE.Box3[] = [];
 		const naturalGroundBlocked = (x: number, z: number, radius = 0.2, height = 2) => {
+			if (this.hydrology.waterColumnDepth(x, z) > DEEP_WATER_DEPTH) return true;
 			if (this.foundationManager.getTopYAt(x, z) !== null) return true;
 			const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity);
 			if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y, y + 2) !== null) return true;
@@ -989,7 +1170,8 @@ export class ThreeScene implements WorldRuntime {
 			buildingManager: this.buildingManager,
 			removalManager: this.removalManager,
 			buildingSettings,
-			onHudChange: options.onBuildHudChange
+			onHudChange: options.onBuildHudChange,
+			onRequestFoundationDelete: options.onRequestFoundationDelete
 		});
 
 		this.paintTool = new PaintTool({
@@ -1055,6 +1237,7 @@ export class ThreeScene implements WorldRuntime {
 			musicTool: this.music,
 			isInputBlocked: () =>
 				this.devPanelOpen ||
+				this.foundationDeletePromptOpen ||
 				this.miniBuildUiOpen ||
 				this.miniBuildEditorOpen ||
 				this.music.importPanelOpen ||
@@ -1095,6 +1278,13 @@ export class ThreeScene implements WorldRuntime {
 		this.settingsHost = {
 			creatures: this.creatures,
 			terrain: this.settings,
+			hydrology: {
+				settings: this.hydrologySettings,
+				debug: this.hydrologyDebug,
+				visual: this.hydrologyVisual
+			},
+			particles: this.particleSettings,
+			weather: this.weather.debug,
 			vegetation: this.vegetationSettings,
 			sky: this.skySettings,
 			graphics: this.graphicsSettings,
@@ -1135,6 +1325,37 @@ export class ThreeScene implements WorldRuntime {
 				terrainRendering: () => {
 					this.dirty.rendering = true;
 				},
+				hydrologyStructure: () => {
+					this.environmentRevision++;
+					window.clearTimeout(this.hydrologyRebuildTimer);
+					this.hydrologyRebuildTimer = window.setTimeout(() => this.rebuildHydrology(), 220);
+				},
+				hydrologyVisual: () => {
+					this.water.applyLook(this.hydrologyVisual);
+				},
+				weather: () => this.weather.applyDebugSelection(),
+				weatherSelect: () => {
+					this.weather.presetDebugValues();
+					this.weather.applyDebugSelection();
+				},
+				weatherLightning: () => this.weather.forceLightning(this.weatherFrame),
+				weatherForce: (type) => {
+					this.weather.debug.selection = type;
+					this.weather.presetDebugValues();
+					this.weather.applyDebugSelection();
+				},
+				particles: () => {
+					this.particles.setEnabled(this.particleSettings.enabled);
+					this.particles.setPaused(this.particleSettings.paused);
+					this.particles.setQuality(
+						PARTICLE_QUALITY[this.graphicsSettings.quality],
+						this.particleSettings.maxParticlesOverride
+					);
+				},
+				hydrologyDebug: () => {
+					if (this.hydrologyDebug.showWaterDepth) this.settings.rendering.debugView = 'water';
+					this.dirty.rendering = true;
+				},
 				foundationBounds: () => {
 					this.foundationManager.setShowBounds(buildingSettings.showFoundationBounds);
 				},
@@ -1148,6 +1369,7 @@ export class ThreeScene implements WorldRuntime {
 				openingVisuals: () => {
 					this.wallManager.rebuildAllWalls();
 					this.wallPathManager.rebuildAllPaths();
+					this.roofManager.rebuildAllRoofs();
 				},
 				wallFraming: () => {
 					this.wallManager.rebuildAllWalls();
@@ -1195,6 +1417,11 @@ export class ThreeScene implements WorldRuntime {
 				graphicsAdvanced: () => {
 					this.graphicsPipeline.refreshAdvancedSettings();
 					this.emitStats();
+				},
+				graphicsFieldOfView: () => {
+					this.graphicsSettings.fieldOfView = clampFieldOfView(this.graphicsSettings.fieldOfView);
+					this.graphicsSettingsStore.setFieldOfView(this.graphicsSettings.fieldOfView);
+					// Applied (with any zoom) by updateFieldOfView on the next frame.
 				},
 				graphicsExposure: () =>
 					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
@@ -1304,7 +1531,9 @@ export class ThreeScene implements WorldRuntime {
 		} else {
 			// A never-played world has no meaningful saved position; spawn onto the terrain surface
 			// rather than restoring the placeholder (0,0,0), which would drop the player underground.
-			this.controller.spawn(player.position.x, player.position.z);
+			// Step off a lake or river if the origin landed in deep water.
+			const spot = this.dryGroundNear(player.position.x, player.position.z);
+			this.controller.spawn(spot.x, spot.z);
 		}
 		if (player.currentLevelIndexByFoundation) {
 			this.levelManager.restoreCurrentLevelIndexes(player.currentLevelIndexByFoundation);
@@ -1312,7 +1541,11 @@ export class ThreeScene implements WorldRuntime {
 		if (player.activeFoundationId)
 			this.levelManager.lockActiveFoundation(player.activeFoundationId);
 
-		this.terrainManager.primeAround(player.position.x, player.position.z, 1);
+		this.terrainManager.primeAround(
+			this.controller.worldPosition.x,
+			this.controller.worldPosition.z,
+			1
+		);
 	}
 
 	/**
@@ -1320,12 +1553,29 @@ export class ThreeScene implements WorldRuntime {
 	 * them: every manager, tool and GUI controller holds a reference to these exact objects, so
 	 * swapping the references would leave half the game reading a stale settings instance.
 	 */
+	private rebuildHydrology(): void {
+		this.hydrology.invalidate();
+		this.water.clear();
+		this.terrainManager.notifySettingsChanged();
+		this.treeManager.notifyTerrainChanged();
+	}
+
 	private applyEnvironment(environment: WorldEnvironmentDefinition, seed: string): void {
 		this.environmentRevision++;
 
 		deepAssign(this.settings, environment.terrain);
 		this.settings.seed = seed;
+		if (environment.hydrology) deepAssign(this.hydrologySettings, environment.hydrology);
+		else
+			Object.assign(this.hydrologySettings, {
+				...createDefaultHydrologySettings(),
+				enabled: false
+			});
+		this.hydrology.setSeed(seed);
 		this.materialLibrary.setWorldSeed(seed);
+		this.weather.load(environment.weather, seed);
+		this.weatherExposure?.invalidate();
+		this.lastWeatherPersistRevision = this.weather.persistRevision;
 		deepAssign(this.vegetationSettings, environment.vegetation);
 		deepAssign(this.skySettings, environment.sky);
 		ensureDayCycleSettings(this.skySettings);
@@ -1342,6 +1592,12 @@ export class ThreeScene implements WorldRuntime {
 		this.terrainManager.notifySeedChanged();
 		this.treeManager.notifySeedChanged(seed);
 		this.applySkySettings();
+	}
+
+	/** B: toggles free flight. Returns the new state (flying, speed). */
+	toggleFlying(): FlightState {
+		const flying = this.controller.toggleFlying();
+		return { flying, speed: this.controller.getFlySpeed() };
 	}
 
 	/** Lets the Svelte hotbar UI's trash icon toggle Remove Mode by click, in addition to the `X` key shortcut. */
@@ -1661,9 +1917,26 @@ export class ThreeScene implements WorldRuntime {
 	 * supporting surface at eye height, and primes the terrain around the spawn.
 	 */
 	respawn(): void {
-		this.controller.respawn(0, 0);
-		this.terrainManager.primeAround(0, 0, 1);
-		this.treeManager.update(0, 0);
+		const spot = this.dryGroundNear(0, 0);
+		this.controller.respawn(spot.x, spot.z);
+		this.terrainManager.primeAround(spot.x, spot.z, 1);
+		this.treeManager.update(spot.x, spot.z);
+	}
+
+	/** First spawn only: walk a few rings outward until the feet are out of deep water. */
+	private dryGroundNear(x: number, z: number): { x: number; z: number } {
+		if (!this.hydrology.settings.enabled) return { x, z };
+		if (this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH) return { x, z };
+		for (let ring = 1; ring <= 14; ring++) {
+			const radius = ring * 14;
+			for (let i = 0; i < 12; i++) {
+				const angle = (i / 12) * Math.PI * 2 + ring * 0.4;
+				const sx = x + Math.cos(angle) * radius;
+				const sz = z + Math.sin(angle) * radius;
+				if (this.hydrology.waterColumnDepth(sx, sz) <= SHALLOW_WATER_DEPTH) return { x: sx, z: sz };
+			}
+		}
+		return { x, z };
 	}
 
 	/**
@@ -1739,6 +2012,30 @@ export class ThreeScene implements WorldRuntime {
 
 	toggleBuildMode(): void {
 		this.buildToolManager.toggleBuildMode();
+	}
+
+	/**
+	 * Removes one foundation and everything built on it. `confirmation` must be exactly
+	 * "Confirm Delete" — any other string leaves the foundation and its building in place.
+	 * Returns true only when that foundation was actually removed, so the caller can close the
+	 * prompt and a new foundation can be placed on the cleared ground.
+	 */
+	deleteFoundationAndBuilding(foundationId: string, confirmation: string): boolean {
+		const removed = removeConfirmedFoundation(
+			{
+				buildingManager: this.buildingManager,
+				foundationManager: this.foundationManager,
+				levelManager: this.levelManager,
+				furnitureManager: this.furnitureManager,
+				removePlacedObjects: (id) => {
+					this.miniBuilds.removeInstancesForFoundation(id);
+				}
+			},
+			foundationId,
+			confirmation
+		);
+		if (removed) this.removeTool.syncAfterExternalRemoval();
+		return removed;
 	}
 
 	togglePlacementCustomize(): void {
@@ -1911,7 +2208,13 @@ export class ThreeScene implements WorldRuntime {
 		vegetation.debug = createDefaultVegetationSettings().debug;
 		const sky: SkySettings = structuredClone(this.skySettings);
 		sky.debug = createDefaultSkySettings().debug;
-		return { terrain, vegetation, sky };
+		return {
+			terrain,
+			vegetation,
+			sky,
+			hydrology: structuredClone(this.hydrologySettings),
+			weather: this.weather.save()
+		};
 	}
 
 	getFoundations(): FoundationDefinition[] {
@@ -2051,9 +2354,10 @@ export class ThreeScene implements WorldRuntime {
 		this.environmentRevision++;
 	}
 
-	private updateDayCycle(deltaSeconds: number): void {
+	/** Advances the clock and re-applies the sky when it moved. Returns whether it was applied. */
+	private updateDayCycle(deltaSeconds: number): boolean {
 		const cycle = ensureDayCycleSettings(this.skySettings);
-		if (!cycle.enabled || this.simulationPaused || deltaSeconds <= 0) return;
+		if (!cycle.enabled || this.simulationPaused || deltaSeconds <= 0) return false;
 		cycle.timeOfDay = advanceTimeOfDay(cycle.timeOfDay, deltaSeconds, cycle.durationSeconds);
 		this.applySkySettings();
 		this.dayCyclePersistAccum += deltaSeconds;
@@ -2061,6 +2365,46 @@ export class ThreeScene implements WorldRuntime {
 			this.dayCyclePersistAccum = 0;
 			this.markClockDirtyIfNeeded();
 		}
+		return true;
+	}
+
+	/**
+	 * Advances the weather (with last frame's camera — the rain volume is world-anchored, so a frame
+	 * of lag is invisible) and pushes its wind and wetness to trees and terrain. Returns whether the
+	 * sky look needs re-applying.
+	 */
+	private updateWeather(deltaSeconds: number): boolean {
+		const frame = this.weatherFrame;
+		frame.feetY = this.controller.worldPosition.y - this.settings.player.eyeHeight;
+		frame.viewportHeight = this.renderer.domElement.height || this.container.clientHeight || 1;
+		frame.cloudAltitude = this.skySettings.clouds.altitude;
+		this.weather.update(this.simulationPaused ? 0 : deltaSeconds, frame);
+		const { smoothedFps, targetFps } = this.graphicsPipeline.getFrameRate();
+		this.weather.setPerformance(deltaSeconds, smoothedFps, targetFps);
+		this.treeManager.setWeatherWind(this.weather.treeWind());
+		const wet = this.weather.wetness;
+		const snow = this.weather.snowCover;
+		WEATHER_SURFACE_UNIFORMS.uWxWet.value = wet;
+		WEATHER_SURFACE_UNIFORMS.uWxSnow.value = snow;
+		if (this.scene.fog) WEATHER_SURFACE_UNIFORMS.uWxSky.value.copy(this.scene.fog.color);
+		const position = this.controller.worldPosition;
+		this.weatherExposure.update(
+			position.x,
+			position.y,
+			position.z,
+			this.buildingManager.getRevision() +
+				this.foundationManager.getRevision() +
+				this.levelManager.getRevision() +
+				this.furnitureManager.getRevision() +
+				this.miniBuilds.revision,
+			wet > 0.005 || snow > 0.005
+		);
+		const persist = this.weather.persistRevision;
+		if (persist !== this.lastWeatherPersistRevision) {
+			if (this.lastWeatherPersistRevision >= 0) this.environmentRevision++;
+			this.lastWeatherPersistRevision = persist;
+		}
+		return this.weather.consumeLookChange();
 	}
 
 	/**
@@ -2070,7 +2414,8 @@ export class ThreeScene implements WorldRuntime {
 	 */
 	private applySkySettings(): void {
 		ensureDayCycleSettings(this.skySettings);
-		const look = resolveEffectiveSky(this.skySettings);
+		// The day/night look first, then the weather on top (clouds, light, fog, lightning flash).
+		const look = this.weather.applyToLook(resolveEffectiveSky(this.skySettings));
 		this.dayNightLook = look;
 		this.skySystem.applySettings(look.sky, look.atmosphere);
 		this.cloudSystem.applySettings(look.clouds);
@@ -2136,9 +2481,21 @@ export class ThreeScene implements WorldRuntime {
 			atmosphere.fogMatchHorizon
 		);
 
+		// Updated in place when the fog type is unchanged: weather and the day cycle re-apply this
+		// every frame while they move, and a new Fog object each frame is needless garbage.
+		const fog = this.scene.fog;
 		if (atmosphere.fogDensityMode === 'exponential') {
 			const density = 2.5 / Math.max(1, atmosphere.fogFar);
-			this.scene.fog = new THREE.FogExp2(fogColor.getHex(), density);
+			if (fog instanceof THREE.FogExp2) {
+				fog.color.copy(fogColor);
+				fog.density = density;
+			} else {
+				this.scene.fog = new THREE.FogExp2(fogColor.getHex(), density);
+			}
+		} else if (fog instanceof THREE.Fog) {
+			fog.color.copy(fogColor);
+			fog.near = atmosphere.fogNear;
+			fog.far = atmosphere.fogFar;
 		} else {
 			this.scene.fog = new THREE.Fog(fogColor.getHex(), atmosphere.fogNear, atmosphere.fogFar);
 		}
@@ -2186,6 +2543,132 @@ export class ThreeScene implements WorldRuntime {
 		}
 	}
 
+	// ---------------------------------------------------------------------------------------------
+	// Best-quality screenshot (`\`)
+	// ---------------------------------------------------------------------------------------------
+
+	private captureInProgress = false;
+	private captureRequest: ((blob: Blob | null) => void) | null = null;
+
+	isCapturingScreenshot(): boolean {
+		return this.captureInProgress;
+	}
+
+	/**
+	 * `\`: freezes the player, switches to the best render mode (Ultra, full resolution — no dynamic
+	 * downscaling), waits until the view has fully loaded at that quality (terrain and tree streaming,
+	 * hydrology, procedural textures all idle for a moment), captures the canvas right after a render,
+	 * then restores the exact previous render mode and releases the player — even if anything fails.
+	 * Returns the PNG (or null if the browser could not encode it).
+	 */
+	async captureBestScreenshot(
+		options: { timeoutMs?: number; onStage?: (stage: 'loading' | 'capturing') => void } = {}
+	): Promise<{
+		blob: Blob | null;
+		width: number;
+		height: number;
+		waitedMs: number;
+		timedOut: boolean;
+	} | null> {
+		if (this.captureInProgress) return null;
+		this.captureInProgress = true;
+		const saved = {
+			quality: this.graphicsSettings.quality,
+			dynamicResolutionEnabled: this.graphicsSettings.dynamicResolutionEnabled,
+			surfaceRelief: this.graphicsSettings.surfaceRelief,
+			surfaceSubdivision: this.graphicsSettings.surfaceSubdivision
+		};
+		const start = performance.now();
+		this.controller.setMovementLocked(true);
+		try {
+			options.onStage?.('loading');
+			this.graphicsSettings.dynamicResolutionEnabled = false;
+			if (saved.quality !== 'ultra') this.graphicsPipeline.setQuality('ultra');
+			else this.graphicsPipeline.refreshAdvancedSettings();
+			this.graphicsSettings.surfaceRelief = true;
+			this.graphicsSettings.surfaceSubdivision = true;
+			this.applySurfaceDetail();
+			const timedOut = !(await this.whenRenderSettled(options.timeoutMs ?? 30000));
+			await this.whenMaterialsReady();
+			options.onStage?.('capturing');
+			const blob = await new Promise<Blob | null>((resolve) => (this.captureRequest = resolve));
+			const canvas = this.renderer.domElement;
+			return {
+				blob,
+				width: canvas.width,
+				height: canvas.height,
+				waitedMs: performance.now() - start,
+				timedOut
+			};
+		} finally {
+			this.captureRequest = null;
+			if (this.graphicsSettings.quality !== saved.quality) {
+				this.graphicsPipeline.setQuality(saved.quality);
+			}
+			this.graphicsSettings.dynamicResolutionEnabled = saved.dynamicResolutionEnabled;
+			this.graphicsPipeline.refreshAdvancedSettings();
+			this.graphicsSettings.surfaceRelief = saved.surfaceRelief;
+			this.graphicsSettings.surfaceSubdivision = saved.surfaceSubdivision;
+			this.applySurfaceDetail();
+			this.controller.setMovementLocked(false);
+			this.captureInProgress = false;
+		}
+	}
+
+	/**
+	 * Resolves true once everything that streams in after a quality change has finished: terrain
+	 * and tree chunk queues empty, hydrology regions built, procedural textures generated, and full
+	 * render resolution — and has stayed that way for ~0.8 s (tree LODs and the last uploads
+	 * settle), with at least 1.5 s overall for shader compiles. False on timeout.
+	 */
+	private async whenRenderSettled(timeoutMs: number): Promise<boolean> {
+		const start = performance.now();
+		let stable = 0;
+		while (performance.now() - start < timeoutMs) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const idle =
+				this.terrainManager.getStats().queuedChunks === 0 &&
+				this.treeManager.getStats().queuedChunks === 0 &&
+				this.hydrology.getStats().pendingRegions === 0 &&
+				this.materialLibrary.getStats().pending === 0 &&
+				this.graphicsPipeline.getRenderStats().renderScale === 1;
+			stable = idle ? stable + 1 : 0;
+			if (stable >= 8 && performance.now() - start >= 1500) return true;
+		}
+		return false;
+	}
+
+	/** Runs right after a render, while the drawing buffer still holds that frame. */
+	private fulfilCaptureRequest(): void {
+		const resolve = this.captureRequest;
+		if (!resolve) return;
+		this.captureRequest = null;
+		this.renderer.domElement.toBlob((blob) => resolve(blob), 'image/png');
+	}
+
+	/** 0 = normal view … 1 = fully zoomed (U held); eased so zooming in and out is smooth. */
+	private zoomAmount = 0;
+
+	/**
+	 * Applies the field-of-view setting and hold-U zoom. Zoom magnifies by `ZOOM_MAGNIFICATION`
+	 * (dividing the half-angle tangent, so the image really is that much larger) and slows mouse
+	 * look by the same factor. Only touches the projection (and the shadow cascades, which depend
+	 * on it) when the FOV actually changes.
+	 */
+	private updateFieldOfView(deltaSeconds: number): void {
+		const target = this.controller.isZoomHeld() ? 1 : 0;
+		const ease = 1 - Math.exp(-Math.min(0.1, deltaSeconds) * 14);
+		this.zoomAmount += (target - this.zoomAmount) * ease;
+		if (Math.abs(target - this.zoomAmount) < 1e-3) this.zoomAmount = target;
+		const magnification = 1 + (ZOOM_MAGNIFICATION - 1) * this.zoomAmount;
+		const fov = zoomedFieldOfView(this.graphicsSettings.fieldOfView, magnification);
+		this.controller.setLookScale(1 / magnification);
+		if (Math.abs(fov - this.camera.fov) < 1e-3) return;
+		this.camera.fov = fov;
+		this.camera.updateProjectionMatrix();
+		this.graphicsPipeline.refreshShadowFrustums();
+	}
+
 	private handleResize(): void {
 		const width = this.container.clientWidth;
 		const height = this.container.clientHeight;
@@ -2214,11 +2697,15 @@ export class ThreeScene implements WorldRuntime {
 			this.dirty.viewDistance = false;
 		} else {
 			if (this.dirty.seed) {
+				this.hydrology.setSeed(this.settings.seed);
+				this.water.clear();
 				this.terrainManager.notifySeedChanged();
 				this.treeManager.notifySeedChanged(this.settings.seed);
 				this.dirty.seed = false;
 				this.dirty.settings = false;
 			} else if (this.dirty.settings) {
+				this.hydrology.invalidate();
+				this.water.clear();
 				this.terrainManager.notifySettingsChanged();
 				this.treeManager.notifyTerrainChanged();
 				this.dirty.settings = false;
@@ -2255,18 +2742,49 @@ export class ThreeScene implements WorldRuntime {
 
 		if (this.devPanelOpen || this.miniBuildEditorOpen) return;
 		const frameCpuStart = this.frameCpuSamples ? performance.now() : 0;
-		this.updateDayCycle(deltaSeconds);
+		const weatherLookChanged = this.updateWeather(deltaSeconds);
+		const skyApplied = this.updateDayCycle(deltaSeconds);
+		if (weatherLookChanged && !skyApplied) this.applySkySettings();
 		this.flushDirtyFlags();
 
 		this.doorInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
+		this.underwaterTint.setActive(
+			this.hydrology.cameraUnderwater(
+				this.camera.position.x,
+				this.camera.position.y,
+				this.camera.position.z
+			)
+		);
 		this.suggestBuildingLevelFoundation();
 		this.stairLevelTrigger.update(
 			this.controller.worldPosition.x,
 			this.controller.worldPosition.y - this.settings.player.eyeHeight,
 			this.controller.worldPosition.z
 		);
+		this.hydrology.prepareAround(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.terrainManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
+		const sunDirection = this.sunLight.position.clone().sub(this.sunLight.target.position);
+		if (sunDirection.lengthSq() > 0) sunDirection.normalize();
+		this.water.update(
+			this.hydrology,
+			this.controller.worldPosition.x,
+			this.controller.worldPosition.z,
+			deltaSeconds,
+			this.camera.position,
+			sunDirection,
+			this.sunLight.color,
+			this.hemisphereLight.color,
+			Math.max(160, this.settings.viewDistance * this.settings.chunkSize)
+		);
+		this.hydrologyDebugView.update(
+			this.hydrology,
+			this.hydrologyDebug,
+			this.controller.worldPosition.x,
+			this.controller.worldPosition.z,
+			(x, z) => this.terrainManager.getHeightSampler().sampleBase(x, z)
+		);
+		this.updateParticles(deltaSeconds, sunDirection);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.updateView(this.camera.position, deltaSeconds);
 		this.miniBuilds.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
@@ -2288,6 +2806,12 @@ export class ThreeScene implements WorldRuntime {
 		}
 
 		this.skySystem.update(this.camera.position);
+		this.cloudSystem.setSunDirection(
+			this.cloudSunScratch
+				.copy(this.sunLight.position)
+				.sub(this.sunLight.target.position)
+				.normalize()
+		);
 		this.cloudSystem.update(
 			deltaSeconds,
 			this.skySettings.clouds,
@@ -2296,11 +2820,13 @@ export class ThreeScene implements WorldRuntime {
 		);
 		this.updateSunLightPosition();
 
+		this.updateFieldOfView(deltaSeconds);
 		this.graphicsPipeline.update(deltaSeconds);
 		// Gives meshes built since last frame their real-world UVs before they are drawn again.
 		this.surfaceBinder.flush();
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
+		this.fulfilCaptureRequest();
 		if (this.frameCpuSamples) {
 			const end = performance.now();
 			this.frameCpuSamples.push({ frame: end - frameCpuStart, render: end - renderCpuStart });
@@ -2323,6 +2849,40 @@ export class ThreeScene implements WorldRuntime {
 		this.emitStats();
 		return this.graphicsSettings.showRenderStats;
 	}
+
+	/**
+	 * Lake-shore splashes schedule bursts near the player; the shared particle system simulates and
+	 * uploads every live particle (one draw call). Lit roughly like a droplet in the open: sky light
+	 * plus sun when it is up.
+	 */
+	private updateParticles(deltaSeconds: number, sunDirection: THREE.Vector3): void {
+		this.particleMatrix.multiplyMatrices(
+			this.camera.projectionMatrix,
+			this.camera.matrixWorldInverse
+		);
+		this.particleFrustum.setFromProjectionMatrix(this.particleMatrix);
+		const sunUp = Math.max(0, sunDirection.y);
+		this.particleLight
+			.copy(this.hemisphereLight.color)
+			.multiplyScalar(this.hemisphereLight.intensity * 0.75)
+			.add(
+				this.lakeSplashScratch
+					.copy(this.sunLight.color)
+					.multiplyScalar(this.sunLight.intensity * 0.3 * sunUp)
+			);
+		const max = Math.max(this.particleLight.r, this.particleLight.g, this.particleLight.b);
+		if (max > 1.15) this.particleLight.multiplyScalar(1.15 / max);
+		this.particles.setLight(this.particleLight);
+		this.lakeSplashes.update(
+			deltaSeconds,
+			this.controller.worldPosition.x,
+			this.controller.worldPosition.z,
+			this.particleFrustum
+		);
+		this.particles.update(deltaSeconds);
+	}
+
+	private readonly lakeSplashScratch = new THREE.Color();
 
 	private emitStats(): void {
 		if (!this.onStatsUpdate) return;
@@ -2357,6 +2917,19 @@ export class ThreeScene implements WorldRuntime {
 			queuedVegetationChunks: vegetationStats.queuedChunks,
 			treeInstances: vegetationStats.treeInstances,
 			trees: this.graphicsSettings.showRenderStats ? this.treeRenderStats() : undefined,
+			particles: this.graphicsSettings.showRenderStats
+				? { ...this.particles.getStats(), splash: { ...this.lakeSplashes.getStats() } }
+				: undefined,
+			weather: this.graphicsSettings.showRenderStats ? this.weather.getStats() : undefined,
+			water: this.graphicsSettings.showRenderStats
+				? {
+						...this.water.getStats(),
+						regions: this.hydrology.getStats().regions,
+						rivers: this.hydrology.getStats().rivers,
+						logicalLakes: this.hydrology.getStats().lakes,
+						regionMs: this.hydrology.getStats().lastRegionMs
+					}
+				: undefined,
 			vegetationRevision: vegetationStats.revision,
 			graphicsQuality: graphicsStats.quality,
 			renderScale: graphicsStats.renderScale,
@@ -2387,6 +2960,12 @@ export class ThreeScene implements WorldRuntime {
 
 	dispose(): void {
 		this.disposed = true;
+		window.clearTimeout(this.hydrologyRebuildTimer);
+		this.water.dispose();
+		this.lakeSplashes.dispose();
+		this.weather.dispose();
+		this.weatherExposure.dispose();
+		this.particles.dispose();
 		const debugWindow = window as unknown as { forestScene?: ThreeScene };
 		if (debugWindow.forestScene === this) delete debugWindow.forestScene;
 		cancelAnimationFrame(this.animationFrameId);
@@ -2432,6 +3011,7 @@ export class ThreeScene implements WorldRuntime {
 		this.undoManager.dispose();
 		this.foundationManager.dispose();
 		this.controller.dispose();
+		this.underwaterTint.dispose();
 		this.terrainManager.dispose();
 		this.skySystem.dispose();
 		this.cloudSystem.dispose();

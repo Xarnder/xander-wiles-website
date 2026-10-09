@@ -9,6 +9,7 @@ import { DEFAULT_MINI_BUILDS } from './defaultMiniBuilds';
 import { cloneBlock, cloneMaterials } from './miniBuildGrid';
 import type { MiniBuildSystem } from './MiniBuildSystem';
 import {
+	MINI_BUILD_V1_GRID_SCALE,
 	MINI_BUILD_WORLD_LIMITS,
 	type MiniBuildBlock,
 	type MiniBuildDraft,
@@ -37,7 +38,7 @@ export interface MiniBuildBenchmarkPlacement {
 	primitiveUnits: number;
 }
 
-/** Coordinates in 0.125m units (scaled ×2 to 0.0625m grid units) so benchmark designs keep their size. */
+/** Coordinates in 0.125m units (scaled to grid units) so benchmark designs keep their size. */
 function block(
 	id: string,
 	x: number,
@@ -50,8 +51,16 @@ function block(
 ): MiniBuildBlock {
 	return {
 		id,
-		positionGrid: { x: x * 2, y: y * 2, z: z * 2 },
-		sizeGrid: { x: sx * 2, y: sy * 2, z: sz * 2 },
+		positionGrid: {
+			x: x * MINI_BUILD_V1_GRID_SCALE,
+			y: y * MINI_BUILD_V1_GRID_SCALE,
+			z: z * MINI_BUILD_V1_GRID_SCALE
+		},
+		sizeGrid: {
+			x: sx * MINI_BUILD_V1_GRID_SCALE,
+			y: sy * MINI_BUILD_V1_GRID_SCALE,
+			z: sz * MINI_BUILD_V1_GRID_SCALE
+		},
 		rotation: { x: 0, y: 0, z: 0 },
 		materialSlot: slot
 	};

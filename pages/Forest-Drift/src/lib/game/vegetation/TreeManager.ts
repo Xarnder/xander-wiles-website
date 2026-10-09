@@ -98,6 +98,8 @@ export interface TreeManagerOptions {
 	terrainHeightSampler: TerrainHeightSampler;
 	foundationManager: FoundationManager;
 	seed: string;
+	/** Rejects trees standing in river channels and lakes. Omitted, placement ignores water. */
+	waterDepthAt?: (worldX: number, worldZ: number) => number;
 }
 
 /** Horizontal canopy radius at scale 1 (metres) — for keeping crowns clear of buildings. */
@@ -136,6 +138,8 @@ export class TreeManager {
 	private readonly prototypes: TreePrototypeCache;
 	private readonly material: THREE.MeshLambertMaterial;
 	private readonly wind: TreeWindUniforms;
+	/** Weather wind (strength multiplier, direction, lean) — see `setWeatherWind`. */
+	private readonly weatherWind = { strengthScale: 1, dirX: 0, dirZ: 1, lean: 0 };
 	private quality: TreeQualityProfile = { ...DEFAULT_QUALITY };
 	private proceduralSurfaces = true;
 	private appliedSurfaceDetail: TreeSurfaceDetail = DEFAULT_QUALITY.surfaceDetail;
@@ -173,7 +177,8 @@ export class TreeManager {
 			{
 				speciesSelector: this.speciesSelector,
 				getPrototypesPerSpecies: () => this.settings.rendering.prototypesPerSpecies,
-				getDensityScale: () => this.quality.densityScale
+				getDensityScale: () => this.quality.densityScale,
+				waterDepthAt: options.waterDepthAt
 			}
 		);
 		this.treePlacementGenerator.setSeed(options.seed);
@@ -273,6 +278,17 @@ export class TreeManager {
 	}
 
 	/**
+	 * Weather wind for the tree shader: a sway multiplier (bounded), the direction it blows toward
+	 * and a steady downwind lean. Uniforms only — no per-tree work.
+	 */
+	setWeatherWind(wind: { strengthScale: number; dirX: number; dirZ: number; lean: number }): void {
+		this.weatherWind.strengthScale = wind.strengthScale;
+		this.weatherWind.dirX = wind.dirX;
+		this.weatherWind.dirZ = wind.dirZ;
+		this.weatherWind.lean = wind.lean;
+	}
+
+	/**
 	 * Per-frame view update: advances the wind clock and re-assigns LODs for chunks the camera has
 	 * moved enough relative to (nearest first, budgeted). Chunks entirely inside one LOD band skip
 	 * per-tree work entirely.
@@ -280,8 +296,12 @@ export class TreeManager {
 	updateView(cameraPosition: THREE.Vector3, deltaSeconds: number): void {
 		const rendering = this.settings.rendering;
 		this.wind.uTreeTime.value = (this.wind.uTreeTime.value + deltaSeconds) % 3600;
-		this.wind.uTreeWindStrength.value =
-			rendering.windEnabled && this.quality.wind ? rendering.windStrength : 0;
+		const windOn = rendering.windEnabled && this.quality.wind;
+		this.wind.uTreeWindStrength.value = windOn
+			? rendering.windStrength * this.weatherWind.strengthScale
+			: 0;
+		this.wind.uTreeWindDir.value.set(this.weatherWind.dirX, this.weatherWind.dirZ);
+		this.wind.uTreeWindLean.value = windOn ? this.weatherWind.lean : 0;
 
 		this.camera.copy(cameraPosition);
 		const distances = this.lodDistances();

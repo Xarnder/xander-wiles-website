@@ -1,11 +1,16 @@
 import { colorMaterialFromHex } from '../../building/MaterialTypes';
-import { computeBounds } from '../miniBuildGrid';
+import { computeBounds, type GridBox } from '../miniBuildGrid';
 import {
 	MINI_BUILD_SCHEMA_VERSION,
+	MINI_BUILD_V2_GRID_SCALE,
+	type GridVec3,
 	type MiniBuildBlock,
 	type MiniBuildDefinition,
 	type MiniBuildMaterialSlot
 } from '../MiniBuildTypes';
+
+/** Test boxes are written in 0.0625m units (the v2 grid) and scaled to current grid units. */
+export const TEST_UNIT = MINI_BUILD_V2_GRID_SCALE;
 
 export type TestBox = [
 	x: number,
@@ -26,11 +31,12 @@ export function testSlots(count = 1): MiniBuildMaterialSlot[] {
 	}));
 }
 
-export function testBlocks(boxes: TestBox[]): MiniBuildBlock[] {
+/** `unit` is grid units per box unit: pass 1 to write raw grid coordinates. */
+export function testBlocks(boxes: TestBox[], unit = TEST_UNIT): MiniBuildBlock[] {
 	return boxes.map(([x, y, z, sx, sy, sz, slot = 0], i) => ({
 		id: `b${i}`,
-		positionGrid: { x, y, z },
-		sizeGrid: { x: sx, y: sy, z: sz },
+		positionGrid: { x: x * unit, y: y * unit, z: z * unit },
+		sizeGrid: { x: sx * unit, y: sy * unit, z: sz * unit },
 		rotation: { x: 0, y: 0, z: 0 },
 		materialSlot: slot
 	}));
@@ -38,9 +44,9 @@ export function testBlocks(boxes: TestBox[]): MiniBuildBlock[] {
 
 export function testDefinition(
 	boxes: TestBox[],
-	options: { id?: string; revision?: number; slots?: number; name?: string } = {}
+	options: { id?: string; revision?: number; slots?: number; name?: string; unit?: number } = {}
 ): MiniBuildDefinition {
-	const blocks = testBlocks(boxes);
+	const blocks = testBlocks(boxes, options.unit);
 	return {
 		schemaVersion: MINI_BUILD_SCHEMA_VERSION,
 		id: options.id ?? 'design-a',
@@ -70,4 +76,14 @@ export function sixteenBlockDefinition(id = 'design-16'): MiniBuildDefinition {
 		]);
 	}
 	return testDefinition(boxes, { id, slots: 2 });
+}
+
+/** Scales grid boxes written in 0.0625m test units to current grid units. */
+export function testGridBoxes(boxes: GridBox[]): GridBox[] {
+	const scale = (v: GridVec3): GridVec3 => ({
+		x: v.x * TEST_UNIT,
+		y: v.y * TEST_UNIT,
+		z: v.z * TEST_UNIT
+	});
+	return boxes.map((box) => ({ min: scale(box.min), max: scale(box.max) }));
 }

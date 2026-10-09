@@ -209,4 +209,26 @@ describe('stylised tree placement', () => {
 		g.setSeed('one-prototype');
 		for (let i = 0; i < 100; i++) expect(g.generateCell(i, 0)!.variant).toBe(0);
 	});
+
+	it('rejects a tree standing in deep water and leaves dry land unchanged', () => {
+		const settings = { ...createDefaultVegetationSettings().trees };
+		const terrain = makeTerrainSampler(0, 0);
+		const regions = makeConstantDensitySampler(1);
+		const dry = new TreePlacementGenerator(terrain, regions, settings, {
+			waterDepthAt: () => 0
+		});
+		const plain = new TreePlacementGenerator(terrain, regions, settings);
+		dry.setSeed('dry-bank');
+		plain.setSeed('dry-bank');
+		expect(dry.evaluateCell(4, -3)).toEqual(plain.evaluateCell(4, -3));
+
+		const wet = new TreePlacementGenerator(terrain, regions, settings, {
+			waterDepthAt: () => 2
+		});
+		wet.setSeed('dry-bank');
+		const rejected = wet.evaluateCell(4, -3);
+		expect(rejected.accepted).toBe(false);
+		expect(rejected.rejectionReason).toBe('water');
+		expect(rejected.tree).toBeNull();
+	});
 });

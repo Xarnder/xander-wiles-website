@@ -251,7 +251,7 @@ export class MiniBuildEditorState {
 			candidates.push({ x: cx, y: bounds.max.y, z: cz }, { x: cx, y: 0, z: cz }, { ...bounds.min });
 		}
 		candidates.push({ x: -size / 2, y: 0, z: -size / 2 });
-		for (const sizeGrid of [size, 4, 2, 1]) {
+		for (const sizeGrid of [size, 8, 4, 2, 1]) {
 			for (const position of candidates) {
 				const block: MiniBuildBlock = {
 					id: newId(),
@@ -271,8 +271,8 @@ export class MiniBuildEditorState {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
 		if (!this.canAddBlock) return { ok: false, error: EDITOR_ERRORS.maxBlocks };
-		// Two grid units (0.125m) so the copy is visibly offset; one unit as a fallback near the edges.
-		const offsets: GridVec3[] = [2, 1].flatMap((d) => [
+		// Four grid units (0.125m) so the copy is visibly offset; smaller steps as fallbacks near the edges.
+		const offsets: GridVec3[] = [4, 2, 1].flatMap((d) => [
 			{ x: d, y: 0, z: 0 },
 			{ x: -d, y: 0, z: 0 },
 			{ x: 0, y: 0, z: d },
@@ -330,7 +330,7 @@ export class MiniBuildEditorState {
 		});
 	}
 
-	/** Numeric panel input in metres — snapped to the 0.0625m grid before it is ever stored. */
+	/** Numeric panel input in metres — snapped to the 0.03125m grid before it is ever stored. */
 	setPositionMeters(axis: Axis, meters: number): EditorResult {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };

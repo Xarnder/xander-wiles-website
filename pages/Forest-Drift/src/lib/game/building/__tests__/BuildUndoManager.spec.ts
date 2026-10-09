@@ -44,6 +44,7 @@ function makeBuildingManagerStub() {
 		removeWall: vi.fn().mockReturnValue(true),
 		removeWallPath: vi.fn().mockReturnValue(true),
 		removeOpening: vi.fn().mockReturnValue(true),
+		removeRoofOpening: vi.fn().mockReturnValue(true),
 		removeBeam: vi.fn().mockReturnValue(true),
 		removeSlab: vi.fn().mockReturnValue(true),
 		removeRoof: vi.fn().mockReturnValue(true),
@@ -91,6 +92,15 @@ describe('BuildUndoManager', () => {
 		manager.record({ kind: 'opening', wallId: 'wall-1', openingId: 'opening-1' });
 		expect(manager.undo()).toBe(true);
 		expect(stub.removeOpening).toHaveBeenCalledWith('wall-1', 'opening-1');
+	});
+
+	it('undoes a recorded gable window/door by calling removeRoofOpening with (roofId, openingId)', () => {
+		const stub = makeBuildingManagerStub();
+		manager = new BuildUndoManager(stub as unknown as BuildingManager);
+
+		manager.record({ kind: 'roofOpening', roofId: 'roof-1', openingId: 'opening-1' });
+		expect(manager.undo()).toBe(true);
+		expect(stub.removeRoofOpening).toHaveBeenCalledWith('roof-1', 'opening-1');
 	});
 
 	it('undoes a recorded beam by calling removeBeam with (wallId, beamId)', () => {

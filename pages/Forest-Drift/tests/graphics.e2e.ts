@@ -19,6 +19,9 @@ test('defaults to HIGH graphics quality on a fresh visit', async ({ page }) => {
 });
 
 test('L cycles graphics quality HIGH → ULTRA → LOW → MEDIUM → HIGH', async ({ page }) => {
+	// World entry plus four pipeline rebuilds no longer fits the default minute once hydrology
+	// is generating on the first visit. The longer cycle below already allows three minutes.
+	test.setTimeout(120_000);
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -63,12 +66,13 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 				const start = performance.now();
 				const poll = () => {
 					const el = document.querySelector('[data-testid="graphics-notice"]');
-					if (el && appearedWith === null) appearedWith = el.textContent;
+					const level = document.querySelector('[data-testid="graphics-notice-level"]');
+					if (el && level && appearedWith === null) appearedWith = level.textContent?.trim() ?? '';
 					if (appearedWith !== null && !el) {
 						resolve({ appearedWith, disappearedAfter: true });
 						return;
 					}
-					if (performance.now() - start > 8000) {
+					if (performance.now() - start > 9000) {
 						resolve({ appearedWith, disappearedAfter: !el });
 						return;
 					}
@@ -78,13 +82,14 @@ test('L shows a HUD notification naming the new quality, which fades back out on
 			})
 	);
 
-	expect(result.appearedWith).toBe('Graphics: ULTRA');
+	expect(result.appearedWith).toBe('ULTRA');
 	// Transient — it must fade back out on its own rather than staying on screen permanently (the
 	// brief explicitly rules out "a large permanent notification").
 	expect(result.disappearedAfter).toBe(true);
 });
 
 test('graphics quality persists across a reload', async ({ page }) => {
+	test.setTimeout(120_000);
 	await page.goto('/');
 	await createAndEnterWorld(page);
 	await enableRenderStats(page);
@@ -99,9 +104,11 @@ test('graphics quality persists across a reload', async ({ page }) => {
 	expect(stored).toBe('ultra');
 
 	// Graphics quality is a *local preference*, not world state, so it survives a reload
-	// independently of any world — reopening any world shows it again.
+	// independently of any world — reopening any world shows it again. The stats overlay itself is
+	// a session toggle (only the quality string is stored), so it has to be turned back on to read it.
 	await page.reload();
 	await openWorldNamed(page, 'Test World');
+	await enableRenderStats(page);
 	await expect(page.getByTestId('graphics-stats')).toContainText('Graphics ULTRA', {
 		timeout: 10_000
 	});

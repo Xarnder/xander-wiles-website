@@ -18,22 +18,27 @@ import {
 	validateMiniBuildInstance,
 	validateMiniBuildWorldState
 } from '../MiniBuildValidation';
-import { MINI_BUILD_LIMITS, MINI_BUILD_WORLD_LIMITS } from '../MiniBuildTypes';
+import {
+	MINI_BUILD_LIMITS,
+	MINI_BUILD_SCHEMA_VERSION,
+	MINI_BUILD_WORLD_LIMITS
+} from '../MiniBuildTypes';
 import { compileMiniBuildData } from '../MiniBuildCompiler';
-import { sixteenBlockDefinition, testDefinition } from './miniBuildFixtures';
+import { sixteenBlockDefinition, testDefinition, testGridBoxes } from './miniBuildFixtures';
 
 describe('miniBuildGrid', () => {
-	it('snaps metres to 0.0625m without floating-point drift', () => {
-		expect(MINI_BUILD_LIMITS.gridSize).toBe(0.0625);
-		expect(metersToGrid(0.3)).toBe(5);
-		expect(metersToGrid(0.44)).toBe(7);
-		expect(snapMeters(1.03)).toBe(1);
+	it('snaps metres to 0.03125m without floating-point drift', () => {
+		expect(MINI_BUILD_LIMITS.gridSize).toBe(0.03125);
+		expect(metersToGrid(0.3)).toBe(10);
+		expect(metersToGrid(0.44)).toBe(14);
+		expect(snapMeters(1.01)).toBe(1);
+		expect(snapMeters(1.03)).toBe(1.03125);
 		expect(snapMeters(1.07)).toBe(1.0625);
-		expect(snapMeters(1.1)).toBe(1.125);
+		expect(snapMeters(1.1)).toBe(1.09375);
 		let grid = 0;
-		for (let i = 0; i < 1000; i++) grid += metersToGrid(0.0625);
+		for (let i = 0; i < 1000; i++) grid += metersToGrid(0.03125);
 		expect(grid).toBe(1000);
-		expect(grid * MINI_BUILD_LIMITS.gridSize).toBe(62.5);
+		expect(grid * MINI_BUILD_LIMITS.gridSize).toBe(31.25);
 	});
 
 	it('permutes sizes for quarter-turn rotations and inverts cleanly', () => {
@@ -166,29 +171,58 @@ describe('validateMiniBuildDefinition', () => {
 		).toBe(false);
 	});
 
-	it('upgrades v1 (0.125m grid) designs by doubling their grid coordinates', () => {
-		const v1 = testDefinition([
-			[0, 0, 0, 4, 2, 6],
-			[-2, 2, 1, 8, 1, 2]
-		]);
+	it('upgrades v1 (0.125m grid) designs by scaling their grid coordinates ×4', () => {
+		const v1 = testDefinition(
+			[
+				[0, 0, 0, 4, 2, 6],
+				[-2, 2, 1, 8, 1, 2]
+			],
+			{ unit: 1 }
+		);
 		v1.schemaVersion = 1;
 		const result = validateMiniBuildDefinition(v1);
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value.schemaVersion).toBe(2);
-		expect(result.value.blocks[0].sizeGrid).toEqual({ x: 8, y: 4, z: 12 });
-		expect(result.value.blocks[1].positionGrid).toEqual({ x: -4, y: 4, z: 2 });
-		expect(result.value.blocks[1].sizeGrid).toEqual({ x: 16, y: 2, z: 4 });
+		expect(result.value.schemaVersion).toBe(MINI_BUILD_SCHEMA_VERSION);
+		expect(result.value.blocks[0].sizeGrid).toEqual({ x: 16, y: 8, z: 24 });
+		expect(result.value.blocks[1].positionGrid).toEqual({ x: -8, y: 8, z: 4 });
+		expect(result.value.blocks[1].sizeGrid).toEqual({ x: 32, y: 4, z: 8 });
 		// Same size in metres: the first block is still 0.5m × 0.25m × 0.75m.
 		expect(compileMiniBuildData(result.value).bounds.max.y).toBeCloseTo(0.375, 6);
 		// A v1 design at the old 4m limit (32 units) still fits after upgrading.
-		const big = testDefinition([[0, 0, 0, 32, 32, 32]]);
+		const big = testDefinition([[0, 0, 0, 32, 32, 32]], { unit: 1 });
 		big.schemaVersion = 1;
 		expect(validateMiniBuildDefinition(big).ok).toBe(true);
-		// Zero stays zero under the doubling, so a zero-size v1 block simply loads as a plane.
-		const flat = testDefinition([[0, 0, 0, 4, 0, 4]]);
+		// Zero stays zero under the scaling, so a zero-size v1 block simply loads as a plane.
+		const flat = testDefinition([[0, 0, 0, 4, 0, 4]], { unit: 1 });
 		flat.schemaVersion = 1;
 		expect(validateMiniBuildDefinition(flat).ok).toBe(true);
+	});
+
+	it('upgrades v2 (0.0625m grid) designs by doubling their grid coordinates', () => {
+		const v2 = testDefinition(
+			[
+				[0, 0, 0, 8, 4, 12],
+				[-4, 4, 2, 16, 0, 4]
+			],
+			{ unit: 1 }
+		);
+		v2.schemaVersion = 2;
+		const result = validateMiniBuildDefinition(v2);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.schemaVersion).toBe(MINI_BUILD_SCHEMA_VERSION);
+		expect(result.value.blocks[0].sizeGrid).toEqual({ x: 16, y: 8, z: 24 });
+		expect(result.value.blocks[1].positionGrid).toEqual({ x: -8, y: 8, z: 4 });
+		expect(result.value.blocks[1].sizeGrid).toEqual({ x: 32, y: 0, z: 8 });
+		expect(compileMiniBuildData(result.value).bounds.max.y).toBeCloseTo(0.25, 6);
+		// A v2 design at the 4m limit (64 units) still fits; one beyond it still fails.
+		const big = testDefinition([[0, 0, 0, 64, 64, 64]], { unit: 1 });
+		big.schemaVersion = 2;
+		expect(validateMiniBuildDefinition(big).ok).toBe(true);
+		const tooBig = testDefinition([[0, 0, 0, 65, 1, 1]], { unit: 1 });
+		tooBig.schemaVersion = 2;
+		expect(validateMiniBuildDefinition(tooBig).ok).toBe(false);
 	});
 
 	it('validates material slots and rotations', () => {
@@ -210,7 +244,9 @@ describe('validateMiniBuildDefinition', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.value.blocks[0].positionGrid.y).toBe(0);
-		expect(result.value.bounds).toEqual({ min: { x: 0, y: 0, z: 0 }, max: { x: 2, y: 2, z: 2 } });
+		expect(result.value.bounds).toEqual(
+			testGridBoxes([{ min: { x: 0, y: 0, z: 0 }, max: { x: 2, y: 2, z: 2 } }])[0]
+		);
 	});
 });
 

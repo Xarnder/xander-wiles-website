@@ -246,7 +246,7 @@ test('builds a Mini Build, places copies, saves, reloads and makes one copy uniq
 	expect(pageErrors).toEqual([]);
 });
 
-test('the editor enforces the 16-block limit, the 4m bounds, the 0.0625m grid and planes', async ({
+test('the editor enforces the 16-block limit, the 4m bounds, the 0.03125m grid and planes', async ({
 	page
 }) => {
 	test.setTimeout(120_000);
@@ -266,6 +266,9 @@ test('the editor enforces the 16-block limit, the 4m bounds, the 0.0625m grid an
 	// Non-grid values snap.
 	await setNumber(page, 'mini-build-pos-y', '0.44');
 	await expect(page.getByTestId('mini-build-pos-y')).toHaveValue('0.4375');
+	// The snap step is 0.03125m: 0.1 lands on 0.09375, not the old 0.0625m grid's 0.125.
+	await setNumber(page, 'mini-build-pos-y', '0.1');
+	await expect(page.getByTestId('mini-build-pos-y')).toHaveValue('0.09375');
 	await setNumber(page, 'mini-build-pos-y', '0');
 
 	// Size 0 on one axis makes a two-sided plane; a second flat axis is refused.

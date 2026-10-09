@@ -1,4 +1,5 @@
 import { createNoise2D } from 'simplex-noise';
+import type { HydrologyCarver, RiverEdgeTint } from '../hydrology/HydrologyTypes';
 import type { Noise2D } from './noiseLayer';
 import { fbm2D } from './noiseLayer';
 import { smoothstep } from './mathUtils';
@@ -66,11 +67,15 @@ export function createBiomeWeights(): BiomeWeights {
  *
  * IMPORTANT: sample() and its helpers below never allocate. Only setSeed() (called rarely, when
  * the seed text actually changes) allocates the noise generators themselves.
+ *
+ * Hydrology, when attached, shapes this height after the noise. `sampleBase` is the pre-water
+ * surface hydrology itself reads. `sample` is the final height every other system uses.
  */
 export class TerrainHeightSampler {
 	private readonly settings: TerrainSettings;
 	private seed = '';
 	private initialized = false;
+	private hydrology: HydrologyCarver | null = null;
 
 	private biomeNoise!: Noise2D;
 	private biomeWarpXNoise!: Noise2D;
@@ -122,6 +127,7 @@ export class TerrainHeightSampler {
 		this.sharedDetailNoise = createNoise2D(createNamedRandom(seed, 'sharedDetail'));
 		this.detailWarpXNoise = createNoise2D(createNamedRandom(seed, 'detailWarpX'));
 		this.detailWarpZNoise = createNoise2D(createNamedRandom(seed, 'detailWarpZ'));
+		this.hydrology?.invalidate();
 	}
 
 	/**
@@ -351,7 +357,16 @@ export class TerrainHeightSampler {
 	/** Reused across sample() calls — a private scratch object, never allocated per vertex. */
 	private readonly weightScratch: BiomeWeights = createBiomeWeights();
 
-	sample(worldX: number, worldZ: number): number {
+	/** River and lake carving. Null leaves `sample` identical to the pre-water surface. */
+	attachHydrology(hydrology: HydrologyCarver | null): void {
+		this.hydrology = hydrology;
+	}
+
+	/**
+	 * Terrain before hydrology. River routing and lake placement must use this — calling `sample`
+	 * from hydrology would carve a surface that depends on the carve itself.
+	 */
+	sampleBase(worldX: number, worldZ: number): number {
 		const weights = this.weightScratch;
 		this.sampleBiomeWeights(worldX, worldZ, weights);
 
@@ -373,6 +388,24 @@ export class TerrainHeightSampler {
 
 		const combined = this.applyTerracing(macro + regional);
 		return this.settings.baseHeight + combined * this.settings.heightMultiplier;
+	}
+
+	/** Beach of the last `sample` / `shapeHeight`. Valid after `sampleWithNormal`, which samples the centre last. */
+	copyRiverEdge(out: RiverEdgeTint): void {
+		if (!this.hydrology?.settings.enabled) {
+			out.cover = 0;
+			out.stone = 0;
+			out.wet = 0;
+			return;
+		}
+		this.hydrology.copyRiverEdge(out);
+	}
+
+	/** Final terrain: pre-water height, then river channels and lake basins when hydrology is on. */
+	sample(worldX: number, worldZ: number): number {
+		const base = this.sampleBase(worldX, worldZ);
+		if (!this.hydrology?.settings.enabled) return base;
+		return this.hydrology.shapeHeight(worldX, worldZ, base);
 	}
 
 	/**

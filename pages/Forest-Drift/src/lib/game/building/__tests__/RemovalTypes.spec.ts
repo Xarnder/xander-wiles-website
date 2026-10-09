@@ -93,8 +93,37 @@ describe('resolveRemovalTarget', () => {
 		expect(resolveRemovalTarget({ wallId: 'wall-1' })).toBeNull();
 	});
 
+	it('resolves a foundation mesh hit (foundationId only) to a whole-foundation target', () => {
+		expect(resolveRemovalTarget({ foundationId: 'f1' })).toEqual({
+			type: 'foundation',
+			foundationId: 'f1'
+		});
+	});
+
 	it('returns null for userData carrying no recognizable building-pick fields (terrain, trees, sky)', () => {
-		expect(resolveRemovalTarget({ foundationId: 'f1' })).toBeNull();
+		expect(resolveRemovalTarget({})).toBeNull();
+	});
+
+	it('resolves a gable opening proxy (openingId + roofId) to a roof-opening target, not the roof', () => {
+		expect(
+			resolveRemovalTarget({
+				foundationId: 'f1',
+				roofId: 'roof-1',
+				openingId: 'opening-1',
+				openingType: 'door'
+			})
+		).toEqual({
+			type: 'roof-opening',
+			roofId: 'roof-1',
+			openingId: 'opening-1',
+			openingType: 'door',
+			foundationId: 'f1'
+		});
+		expect(resolveRemovalTarget({ foundationId: 'f1', roofId: 'roof-1' })).toEqual({
+			type: 'roof',
+			roofId: 'roof-1',
+			foundationId: 'f1'
+		});
 	});
 
 	it('prioritizes an opening even on userData that also carries a plain wallId, since a proxy hit always means "the opening was in front"', () => {
@@ -134,6 +163,11 @@ describe('removalTargetKey', () => {
 			foundationId: 'f1'
 		};
 		expect(removalTargetKey(a)).toBe(removalTargetKey(b));
+	});
+
+	it('keys a whole foundation by its id', () => {
+		const target: RemovalTarget = { type: 'foundation', foundationId: 'f1' };
+		expect(removalTargetKey(target)).toBe('foundation:f1');
 	});
 
 	it('distinguishes a wall from a wall-segment that happens to reuse the same id', () => {

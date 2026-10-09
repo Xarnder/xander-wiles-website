@@ -747,6 +747,12 @@ export interface BuildUiState {
 	level?: BuildingLevelUiState;
 	/** Paint Tool's currently selected colour (`#RRGGBB`), for the HUD's colour swatch row — see `+page.svelte`'s `.paint-color-row`. Only ever set by PaintTool's own HUD builders. */
 	paintColor?: string;
+	/**
+	 * Remove Mode: the foundation under the crosshair can be deleted together with everything built
+	 * on it, once the player types "Confirm Delete". Absent when nothing aimed at belongs to a
+	 * foundation.
+	 */
+	foundationDeleteId?: string;
 }
 
 export interface HotbarUiState {

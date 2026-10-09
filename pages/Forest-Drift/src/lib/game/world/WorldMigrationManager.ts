@@ -1,4 +1,5 @@
 import { migrateCreaturesV4 } from '../creatures/CreaturePersistence';
+import { createDefaultHydrologySettings } from '../hydrology/HydrologyTypes';
 import { migrateMusicV3 } from '../music/MusicMigration';
 import { CURRENT_WORLD_SCHEMA_VERSION } from './WorldTypes';
 
@@ -29,8 +30,20 @@ type MigrationStep = (world: Record<string, unknown>) => Record<string, unknown>
  * Version 6 adds world-space furniture (torches first) to version 5 saves.
  * Version 7 adds `miniBuilds` (player-created designs + placed copies). Existing furniture is left
  * exactly as it was — legacy furniture keeps rendering through FurnitureManager.
+ * Version 8 adds hydrology settings. Worlds that predate rivers keep `enabled: false` so carving
+ * cannot drop a lake under a building that was placed on the old terrain. New worlds opt in.
  */
 const MIGRATIONS: Record<number, MigrationStep> = {
+	7: (world) => {
+		const environment =
+			world.environment && typeof world.environment === 'object'
+				? { ...(world.environment as Record<string, unknown>) }
+				: {};
+		const hydrology = createDefaultHydrologySettings();
+		hydrology.enabled = false;
+		environment.hydrology = hydrology;
+		return { ...world, schemaVersion: 8, environment };
+	},
 	6: (world) => ({
 		...world,
 		schemaVersion: 7,

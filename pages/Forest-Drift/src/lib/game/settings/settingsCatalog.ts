@@ -235,6 +235,419 @@ function creatureCategories(host: GameSettingsHost): SettingsCategory[] {
 	];
 }
 
+function hydrologyGroups(host: GameSettingsHost): SettingsGroup[] {
+	const hydro = host.hydrology;
+	if (!hydro) return [];
+	const structure = host.actions.hydrologyStructure;
+	const visual = host.actions.hydrologyVisual;
+	const debug = host.actions.hydrologyDebug;
+	const { settings, debug: flags, visual: look } = hydro;
+	return [
+		group('hydrology', 'Hydrology', [
+			boolField('hydro.enabled', 'Enabled', settings, 'enabled', structure),
+			numberField(
+				'hydro.riverDensity',
+				'River density',
+				settings,
+				'riverDensity',
+				0,
+				1,
+				0.01,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.lakeDensity',
+				'Lake density',
+				settings,
+				'lakeDensity',
+				0,
+				1,
+				0.01,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.minSource',
+				'Min source elevation',
+				settings,
+				'minRiverSourceElevation',
+				-10,
+				40,
+				0.5,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.widthMin',
+				'Min river width',
+				settings,
+				'minRiverWidth',
+				0.6,
+				8,
+				0.1,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.widthMax',
+				'Max river width',
+				settings,
+				'maxRiverWidth',
+				2,
+				30,
+				0.1,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.depth',
+				'River depth scale',
+				settings,
+				'riverDepthScale',
+				0.2,
+				3,
+				0.05,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.bank',
+				'Bank width scale',
+				settings,
+				'riverBankScale',
+				0.2,
+				3,
+				0.05,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.meander',
+				'Meander strength',
+				settings,
+				'meanderStrength',
+				0,
+				1.5,
+				0.05,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.lakeMin',
+				'Min lake radius',
+				settings,
+				'minLakeRadius',
+				8,
+				80,
+				1,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.lakeMax',
+				'Max lake radius',
+				settings,
+				'maxLakeRadius',
+				12,
+				200,
+				1,
+				undefined,
+				structure
+			),
+			numberField(
+				'hydro.lakeDepth',
+				'Lake depth scale',
+				settings,
+				'lakeDepthScale',
+				0.2,
+				3,
+				0.05,
+				undefined,
+				structure
+			)
+		]),
+		group('hydrology-look', 'Water look', [
+			colorField('hydro.deep', 'Deep colour', look, 'deepColor', visual),
+			colorField('hydro.shallow', 'Shallow colour', look, 'shallowColor', visual),
+			numberField(
+				'hydro.alpha',
+				'Transparency',
+				look,
+				'transparency',
+				0.2,
+				1,
+				0.01,
+				undefined,
+				visual
+			),
+			numberField(
+				'hydro.waves',
+				'Wave strength',
+				look,
+				'waveStrength',
+				0,
+				2,
+				0.01,
+				undefined,
+				visual
+			),
+			numberField('hydro.flow', 'Flow speed', look, 'flowSpeed', 0, 2, 0.01, undefined, visual)
+		]),
+		group('hydrology-debug', 'Hydrology debug', [
+			boolField('hydro.debug.grid', 'Show hydrology grid', flags, 'showHydrologyGrid', debug),
+			boolField(
+				'hydro.debug.regions',
+				'Show hydrology regions',
+				flags,
+				'showHydrologyRegions',
+				debug
+			),
+			boolField('hydro.debug.sources', 'Show river sources', flags, 'showRiverSources', debug),
+			boolField('hydro.debug.raw', 'Show raw river paths', flags, 'showRawRiverPaths', debug),
+			boolField('hydro.debug.splines', 'Show river splines', flags, 'showRiverSplines', debug),
+			boolField('hydro.debug.flow', 'Show flow direction', flags, 'showFlowDirection', debug),
+			boolField('hydro.debug.width', 'Show river width', flags, 'showRiverWidth', debug),
+			boolField(
+				'hydro.debug.influence',
+				'Show river influence',
+				flags,
+				'showRiverInfluence',
+				debug
+			),
+			boolField(
+				'hydro.debug.candidates',
+				'Show lake candidates',
+				flags,
+				'showLakeCandidates',
+				debug
+			),
+			boolField('hydro.debug.boundary', 'Show lake boundary', flags, 'showLakeBoundary', debug),
+			boolField('hydro.debug.level', 'Show lake water level', flags, 'showLakeWaterLevel', debug),
+			boolField('hydro.debug.basin', 'Show lake basin', flags, 'showLakeBasin', debug),
+			boolField('hydro.debug.depth', 'Show water depth', flags, 'showWaterDepth', debug),
+			boolField('hydro.debug.cells', 'Show spatial cells', flags, 'showSpatialCells', debug)
+		])
+	];
+}
+
+/**
+ * Particle system developer controls. Live counters (active particles, capacity, splash zones,
+ * draw calls, buffer size) are in the render-stats overlay (`F3`/Graphics → Show render stats).
+ */
+function particleGroups(host: GameSettingsHost): SettingsGroup[] {
+	const p = host.particles;
+	if (!p) return [];
+	const apply = host.actions.particles;
+	return [
+		group('particles', 'Particles', [
+			boolField('particles.enabled', 'Enabled', p, 'enabled', apply),
+			boolField('particles.paused', 'Pause particles', p, 'paused', apply),
+			boolField('particles.showEmitters', 'Show emitters (active zones)', p, 'showEmitters'),
+			boolField('particles.showSplashZones', 'Show splash zones', p, 'showSplashZones'),
+			numberField(
+				'particles.maxParticles',
+				'Max particles (0 = preset)',
+				p,
+				'maxParticlesOverride',
+				0,
+				10000,
+				100,
+				undefined,
+				apply
+			),
+			numberField('particles.splashDensity', 'Splash density', p, 'splashDensity', 0, 1, 0.01),
+			numberField(
+				'particles.splashSlope',
+				'Splash slope threshold (°)',
+				p,
+				'splashSlopeThreshold',
+				5,
+				80,
+				1
+			),
+			numberField(
+				'particles.splashSpacing',
+				'Splash candidate spacing (m)',
+				p,
+				'splashCandidateSpacing',
+				1,
+				30,
+				0.5
+			),
+			numberField(
+				'particles.splashCull',
+				'Splash cull distance (m, 0 = preset)',
+				p,
+				'splashCullDistance',
+				0,
+				400,
+				5
+			)
+		])
+	];
+}
+
+/**
+ * Weather controls. The procedural schedule is the world's own weather; the menu can hold one
+ * type so it can be looked at without waiting out a stretch of clear sky.
+ */
+function weatherCategories(host: GameSettingsHost): SettingsCategory[] {
+	const w = host.weather;
+	if (!w) return [];
+	const apply = host.actions.weather;
+	const select = host.actions.weatherSelect;
+	const force = host.actions.weatherForce;
+	const buttons: SettingsField[] = [];
+	if (force) {
+		for (const [type, label] of [
+			['clear', 'Clear'],
+			['rain', 'Rain'],
+			['thunderstorm', 'Thunderstorm'],
+			['snow', 'Snow']
+		] as const) {
+			buttons.push({
+				kind: 'button',
+				id: `weather.force.${type}`,
+				label,
+				onClick: () => force(type)
+			});
+		}
+	}
+	if (host.actions.weatherLightning) {
+		buttons.push({
+			kind: 'button',
+			id: 'weather.lightning',
+			label: 'Trigger lightning',
+			onClick: host.actions.weatherLightning
+		});
+	}
+	return [
+		{
+			id: 'weather',
+			title: 'Weather',
+			description:
+				'On its own, clear lasts 18–40 minutes, rain 7–16 minutes, and a thunderstorm 4–10 minutes. Snow stays out of that rotation until you allow it, then it lasts 10–24 minutes. Each change takes 35–60 seconds. Pick a weather here to hold it for testing.',
+			groups: [
+				group('weather-manual', 'Change weather', [
+					selectField(
+						'weather.selection',
+						'Weather',
+						w,
+						'selection',
+						[
+							{ value: 'schedule', label: 'Procedural schedule' },
+							{ value: 'clear', label: 'Clear' },
+							{ value: 'rain', label: 'Rain' },
+							{ value: 'thunderstorm', label: 'Thunderstorm' },
+							{ value: 'snow', label: 'Snow' }
+						],
+						select
+					),
+					...buttons
+				]),
+				group('weather-current', 'Look', [
+					boolField('weather.enabled', 'Weather enabled', w, 'enabled', apply),
+					numberField(
+						'weather.intensity',
+						'Intensity',
+						w,
+						'intensity',
+						0,
+						1,
+						0.01,
+						undefined,
+						select
+					),
+					numberField(
+						'weather.transition',
+						'Transition (s, 0 = about 6)',
+						w,
+						'transitionDuration',
+						0,
+						120,
+						1
+					),
+					numberField(
+						'weather.windDirection',
+						'Wind direction (°)',
+						w,
+						'windDirection',
+						0,
+						360,
+						1,
+						undefined,
+						apply
+					),
+					numberField(
+						'weather.windStrength',
+						'Wind strength (m/s)',
+						w,
+						'windStrength',
+						0,
+						25,
+						0.1,
+						undefined,
+						apply
+					),
+					numberField(
+						'weather.cloudiness',
+						'Cloudiness',
+						w,
+						'cloudiness',
+						0,
+						1,
+						0.01,
+						undefined,
+						apply
+					)
+				]),
+				group('weather-tuning', 'Precipitation & lightning', [
+					numberField('weather.rainDensity', 'Rain density', w, 'rainDensity', 0, 2, 0.05),
+					numberField('weather.snowDensity', 'Snow density', w, 'snowDensity', 0, 2, 0.05),
+					numberField(
+						'weather.lightningFrequency',
+						'Lightning frequency',
+						w,
+						'lightningFrequency',
+						0,
+						5,
+						0.1
+					),
+					numberField(
+						'weather.wetness',
+						'Wetness (-1 = follow weather)',
+						w,
+						'wetnessOverride',
+						-1,
+						1,
+						0.05
+					),
+					numberField(
+						'weather.snowCover',
+						'Snow cover (-1 = follow weather)',
+						w,
+						'snowCoverOverride',
+						-1,
+						1,
+						0.05
+					),
+					boolField('weather.allowSnow', 'Schedule may choose snow', w, 'allowSnow'),
+					numberField('weather.volume', 'Weather sound volume', w, 'audioVolume', 0, 1, 0.05)
+				]),
+				group('weather-clock', 'Weather clock', [
+					boolField('weather.paused', 'Pause weather', w, 'paused'),
+					numberField('weather.timeScale', 'Accelerate weather (×)', w, 'timeScale', 0, 600, 1)
+				]),
+				group('weather-debug', 'Debug', [
+					boolField('weather.showVolume', 'Show precipitation volume', w, 'showVolume'),
+					boolField('weather.showImpacts', 'Show rain impact points', w, 'showImpacts')
+				])
+			]
+		}
+	];
+}
+
 export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[] {
 	const { terrain, vegetation, sky, graphics, building, music, sustain, musicVisual, actions } =
 		host;
@@ -622,7 +1035,8 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						1,
 						shape
 					)
-				])
+				]),
+				...hydrologyGroups(host)
 			]
 		},
 		{
@@ -638,6 +1052,7 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 				])
 			]
 		},
+		...weatherCategories(host),
 		...creatureCategories(host),
 		{
 			id: 'music',
@@ -2530,6 +2945,17 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						get: () => graphics.quality,
 						set: (value) => actions.graphicsQuality(value)
 					},
+					numberField(
+						'graphics.fov',
+						'Field of view (°)',
+						graphics,
+						'fieldOfView',
+						50,
+						110,
+						1,
+						actions.graphicsFieldOfView,
+						actions.graphicsFieldOfView
+					),
 					boolField(
 						'graphics.dynamic',
 						'Dynamic resolution',
@@ -2717,7 +3143,8 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						0.1,
 						actions.graphicsAo
 					)
-				])
+				]),
+				...particleGroups(host)
 			]
 		},
 		{
@@ -2758,7 +3185,8 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 							{ value: 'biomeMask', label: 'Biome mask' },
 							{ value: 'elevation', label: 'Elevation' },
 							{ value: 'forestDensity', label: 'Forest density' },
-							{ value: 'terrainPlusForest', label: 'Terrain + forest' }
+							{ value: 'terrainPlusForest', label: 'Terrain + forest' },
+							{ value: 'water', label: 'Water' }
 						],
 						actions.terrainSettings
 					)

@@ -13,6 +13,7 @@ import {
 	writeScalarDebugColor,
 	writeTerrainColor
 } from './terrainColor';
+import { createHydrologySample, type HydrologySample } from '../hydrology/HydrologyTypes';
 import type { VegetationRegionSampler } from '../vegetation/VegetationRegionSampler';
 
 /** "Elevation" debug view maps this world-height range onto the 0..1 grayscale ramp. */
@@ -47,6 +48,27 @@ function getSharedIndices(resolution: number): Uint32Array {
 	return indices;
 }
 
+function writeWaterDebugColor(sample: HydrologySample, colors: Float32Array, offset: number): void {
+	if (sample.waterType === 'lake') {
+		const deep = Math.min(1, sample.waterDepth / 4);
+		colors[offset] = 0.15;
+		colors[offset + 1] = 0.45 + (1 - deep) * 0.35;
+		colors[offset + 2] = 0.55 + deep * 0.3;
+		return;
+	}
+	if (sample.waterType === 'river') {
+		const deep = Math.min(1, sample.waterDepth / 2);
+		colors[offset] = 0.1;
+		colors[offset + 1] = 0.35 + (1 - deep) * 0.25;
+		colors[offset + 2] = 0.85;
+		return;
+	}
+	const influence = Math.min(1, sample.terrainInfluence);
+	colors[offset] = 0.45 + influence * 0.4;
+	colors[offset + 1] = 0.42;
+	colors[offset + 2] = 0.22;
+}
+
 /** Single material shared by every chunk — toggling wireframe here affects all terrain at once. */
 export const terrainMaterial = new THREE.MeshStandardMaterial({
 	vertexColors: true,
@@ -54,6 +76,8 @@ export const terrainMaterial = new THREE.MeshStandardMaterial({
 	metalness: 0,
 	side: THREE.FrontSide
 });
+/** The grass shader reads `aShore` and replaces the green tint on the river shelf. */
+terrainMaterial.userData.fsShore = true;
 
 const borderMaterial = new THREE.LineBasicMaterial({ color: 0xff5533 });
 
@@ -77,6 +101,8 @@ export class TerrainChunk {
 	private readonly normals: Float32Array;
 	private readonly colors: Float32Array;
 	private readonly uvs: Float32Array;
+	private readonly shores: Float32Array;
+	private readonly shoreTint = { cover: 0, stone: 0, wet: 0 };
 
 	private coordSprite: THREE.Sprite | null = null;
 	private coordCanvas: HTMLCanvasElement | null = null;
@@ -91,12 +117,14 @@ export class TerrainChunk {
 		this.normals = new Float32Array(vertexCount * 3);
 		this.colors = new Float32Array(vertexCount * 3);
 		this.uvs = new Float32Array(vertexCount * 2);
+		this.shores = new Float32Array(vertexCount * 3);
 
 		this.geometry = new THREE.BufferGeometry();
 		this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
 		this.geometry.setAttribute('normal', new THREE.BufferAttribute(this.normals, 3));
 		this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
 		this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2));
+		this.geometry.setAttribute('aShore', new THREE.BufferAttribute(this.shores, 3));
 		this.geometry.setIndex(new THREE.BufferAttribute(getSharedIndices(resolution), 1));
 
 		this.mesh = new THREE.Mesh(this.geometry, terrainMaterial);
@@ -118,7 +146,8 @@ export class TerrainChunk {
 		sampler: TerrainHeightSampler,
 		revision: number,
 		debugView: TerrainDebugView = 'normal',
-		vegetationRegionSampler: VegetationRegionSampler | null = null
+		vegetationRegionSampler: VegetationRegionSampler | null = null,
+		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null
 	): void {
 		this.chunkX = chunkX;
 		this.chunkZ = chunkZ;
@@ -132,6 +161,7 @@ export class TerrainChunk {
 		const sample = createHeightSample();
 		const needsBiomeWeights = debugView === 'biomeColors' || debugView === 'terrainPlusForest';
 		const biomeWeights: BiomeWeights | null = needsBiomeWeights ? createBiomeWeights() : null;
+		const waterSample = debugView === 'water' ? createHydrologySample() : null;
 
 		for (let zi = 0; zi < verticesPerSide; zi++) {
 			const worldZ = originZ + zi * step;
@@ -149,6 +179,11 @@ export class TerrainChunk {
 				this.normals[p] = sample.normalX;
 				this.normals[p + 1] = sample.normalY;
 				this.normals[p + 2] = sample.normalZ;
+
+				const shoreIndex = vertexIndex * 3;
+				this.shores[shoreIndex] = 0;
+				this.shores[shoreIndex + 1] = 0;
+				this.shores[shoreIndex + 2] = 0;
 
 				switch (debugView) {
 					case 'biomeColors':
@@ -175,8 +210,32 @@ export class TerrainChunk {
 						writeCombinedDebugColor(biomeWeights as BiomeWeights, density, this.colors, p);
 						break;
 					}
-					default:
-						writeTerrainColor(sample.height, sample.normalY, this.colors, p, worldX, worldZ);
+					case 'water': {
+						if (waterAt && waterSample) {
+							waterAt(worldX, worldZ, waterSample);
+							writeWaterDebugColor(waterSample, this.colors, p);
+						} else {
+							writeTerrainColor(sample.height, sample.normalY, this.colors, p, worldX, worldZ);
+						}
+						break;
+					}
+					default: {
+						sampler.copyRiverEdge(this.shoreTint);
+						this.shores[shoreIndex] = this.shoreTint.cover;
+						this.shores[shoreIndex + 1] = this.shoreTint.stone;
+						this.shores[shoreIndex + 2] = this.shoreTint.wet;
+						// Vertex colours (procedural materials off): beach and wet bed in one flat tint.
+						writeTerrainColor(
+							sample.height,
+							sample.normalY,
+							this.colors,
+							p,
+							worldX,
+							worldZ,
+							Math.max(this.shoreTint.cover, this.shoreTint.wet),
+							this.shoreTint.stone
+						);
+					}
 				}
 
 				const uvIndex = vertexIndex * 2;
@@ -189,6 +248,7 @@ export class TerrainChunk {
 		this.geometry.attributes.normal.needsUpdate = true;
 		this.geometry.attributes.color.needsUpdate = true;
 		this.geometry.attributes.uv.needsUpdate = true;
+		this.geometry.attributes.aShore.needsUpdate = true;
 		this.geometry.computeBoundingBox();
 		this.geometry.computeBoundingSphere();
 

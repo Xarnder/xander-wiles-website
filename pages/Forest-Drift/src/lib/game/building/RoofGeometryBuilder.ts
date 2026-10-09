@@ -2,12 +2,17 @@ import * as THREE from 'three';
 import { buildSlabGeometry } from './SlabGeometryBuilder';
 import {
 	axisAlignedRectangleOf,
-	buildRoofFaces,
-	expandRect,
-	insetVerticalRoofFaces,
+	pitchedRoofFaces,
 	type RoofFace,
 	type RoofVertex
 } from './roofMath';
+import {
+	cutOpeningsFromPolygon,
+	fromFacePoint,
+	roofFaceFrame,
+	toFacePoint,
+	verticalFaceSide
+} from './roofOpeningMath';
 import { ensureCCW } from './slabMath';
 import type { Point2D } from './wallPathMath';
 import type { RoofDefinition } from './RoofTypes';
@@ -52,6 +57,7 @@ export function buildRoofGeometry(
 		| 'thickness'
 		| 'overhang'
 		| 'profileSettings'
+		| 'openings'
 	>,
 	buildingGridSize: number,
 	options: RoofGeometryOptions = {}
@@ -65,31 +71,30 @@ export function buildRoofGeometry(
 		return buildSlabGeometry(footprint, roof.baseY, roof.baseY - roof.thickness);
 	}
 
-	const rect = axisAlignedRectangleOf(footprint);
-	if (!rect) {
+	// The slopes overhang on every side; vertical end walls are pulled back to the wall line so the
+	// roof overhangs them too.
+	const built = pitchedRoofFaces(roof, buildingGridSize, options.endWallOffset ?? 0);
+	if (!built) {
 		throw new RoofFootprintError(
 			`${roof.type} roof requires a rectangular footprint (axis-aligned, 4 corners)`
 		);
 	}
-	const overhungRect = roof.overhang > 0 ? expandRect(rect, roof.overhang) : rect;
-
-	// The slopes overhang on every side; vertical end walls are pulled back to the wall line so the
-	// roof overhangs them too.
-	const faces = insetVerticalRoofFaces(
-		buildRoofFaces(
-			roof.type,
-			overhungRect,
-			roof.direction,
-			roof.shedDirection,
-			roof.baseY,
-			roof.rise,
-			roof.profileSettings
-		),
-		rect,
-		roof.overhang,
-		options.endWallOffset ?? 0
-	);
-	return buildRoofSolidGeometry(faces, roof.thickness);
+	const openings = roof.openings ?? [];
+	const cutVerticalFace =
+		openings.length === 0
+			? undefined
+			: (face: RoofFace): RoofVertex[][] | null => {
+					const side = verticalFaceSide(face, built.rect);
+					const faceOpenings = openings.filter((opening) => opening.face === side);
+					if (faceOpenings.length === 0) return null;
+					const axis = side === '+x' || side === '-x' ? 'x' : 'z';
+					const frame = roofFaceFrame(side, face.points[0][axis], built.rect);
+					return cutOpeningsFromPolygon(
+						face.points.map((p) => toFacePoint(frame, p)),
+						faceOpenings
+					).map((piece) => piece.map((q) => fromFacePoint(frame, q)));
+				};
+	return buildRoofSolidGeometry(built.faces, roof.thickness, cutVerticalFace);
 }
 
 /** Whether `footprint` is compatible with `type` — used by the live preview to show "invalid" without needing to catch an exception on every mouse-move. */
@@ -118,14 +123,20 @@ export function isFootprintCompatibleWithRoofType(
  *  - a VERTICAL gable-end wall is not extruded downward (that offset would lie in the same plane).
  *    It is emitted twice in place: once wound outward, then again reversed so the attic side has a
  *    real inward normal (FrontSide materials otherwise show the inside as a back-face). Flagged
- *    edges still get a fascia strip (the band under a gable's eave-to-eave line).
+ *    edges still get a fascia strip (the band under a gable's eave-to-eave line). When
+ *    `cutVerticalFace` returns pieces for it (a window or door in that face — see
+ *    roofOpeningMath.ts), those convex pieces are emitted the same two-sided way instead.
  *
  * Vertices are NOT deduplicated across faces even where two faces share an edge (a ridge, hip, or
  * valley) — positions coincide exactly (so there's no visible gap), but each face gets its own,
  * independently-computed normal, which is what keeps ridges looking like sharp architectural edges
  * instead of being smoothed across by `computeVertexNormals` (see the README's "Normals" section).
  */
-function buildRoofSolidGeometry(faces: RoofFace[], thickness: number): THREE.BufferGeometry {
+function buildRoofSolidGeometry(
+	faces: RoofFace[],
+	thickness: number,
+	cutVerticalFace?: (face: RoofFace) => RoofVertex[][] | null
+): THREE.BufferGeometry {
 	const skin = { positions: [] as number[], normals: [] as number[], uvs: [] as number[] };
 	const walls = { positions: [] as number[], normals: [] as number[], uvs: [] as number[] };
 	let target = skin;
@@ -158,12 +169,17 @@ function buildRoofSolidGeometry(faces: RoofFace[], thickness: number): THREE.Buf
 			? ensureOutwardWinding(face.points, interior)
 			: ensureUpwardWinding(face.points);
 		target = vertical ? walls : skin;
-		pushFan(top);
 
 		if (vertical) {
-			pushFan(top.slice().reverse());
+			const pieces = cutVerticalFace?.(face) ?? null;
+			for (const piece of pieces ?? [top]) {
+				const outward = pieces ? ensureOutwardWinding(piece, interior) : piece;
+				pushFan(outward);
+				pushFan(outward.slice().reverse());
+			}
 			target = skin;
 		} else {
+			pushFan(top);
 			const bottom = top
 				.slice()
 				.reverse()

@@ -9,7 +9,7 @@ describe('MiniBuildEditorState', () => {
 		const state = MiniBuildEditorState.createNew();
 		expect(state.addBlock()).toEqual({ ok: true });
 		expect(state.blockCount).toBe(1);
-		expect(state.selectedBlock?.sizeGrid).toEqual({ x: 8, y: 8, z: 8 });
+		expect(state.selectedBlock?.sizeGrid).toEqual({ x: 16, y: 16, z: 16 });
 		expect(state.getSizeMeters()).toEqual({ x: 0.5, y: 0.5, z: 0.5 });
 	});
 
@@ -27,15 +27,20 @@ describe('MiniBuildEditorState', () => {
 		expect(state.blockCount).toBe(16);
 	});
 
-	it('snaps non-grid numeric input to 0.0625m and stores integers', () => {
+	it('snaps non-grid numeric input to 0.03125m and stores integers', () => {
 		const state = MiniBuildEditorState.createNew();
 		state.addBlock();
 		expect(state.setPositionMeters('x', 0.3).ok).toBe(true);
-		expect(state.selectedBlock?.positionGrid.x).toBe(5);
+		expect(state.selectedBlock?.positionGrid.x).toBe(10);
 		expect(state.setSizeMeters('z', 0.93).ok).toBe(true);
-		expect(state.selectedBlock?.sizeGrid.z).toBe(15);
-		expect(state.resizeSelected('z', 1).ok).toBe(true);
+		expect(state.selectedBlock?.sizeGrid.z).toBe(30);
+		expect(state.resizeSelected('z', 2).ok).toBe(true);
 		expect(state.getSizeMeters().z).toBe(1);
+		// The smallest step is 0.03125m (half the old 0.0625m).
+		expect(state.resizeSelected('z', 1).ok).toBe(true);
+		expect(state.getSizeMeters().z).toBe(1.03125);
+		expect(state.setSizeMeters('z', 0.03125).ok).toBe(true);
+		expect(state.getSizeMeters().z).toBe(0.03125);
 		for (const value of Object.values(state.selectedBlock!.positionGrid))
 			expect(Number.isInteger(value)).toBe(true);
 	});
@@ -50,14 +55,14 @@ describe('MiniBuildEditorState', () => {
 
 		// A second flat axis would make a line: typed input is refused, dragging stops at one unit.
 		expect(state.setSizeMeters('x', 0)).toEqual({ ok: false, error: EDITOR_ERRORS.flat });
-		expect(state.selectedBlock?.sizeGrid.x).toBe(8);
+		expect(state.selectedBlock?.sizeGrid.x).toBe(16);
 		expect(state.resizeSelected('x', -100).ok).toBe(true);
-		expect(state.selectedBlock?.sizeGrid).toEqual({ x: 1, y: 0, z: 8 });
+		expect(state.selectedBlock?.sizeGrid).toEqual({ x: 1, y: 0, z: 16 });
 		expect(
-			state.setBlockGrid(state.selectedBlockId!, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 8 })
+			state.setBlockGrid(state.selectedBlockId!, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 16 })
 		).toEqual({ ok: false, error: EDITOR_ERRORS.flat });
 		expect(
-			state.previewBlockGrid(state.selectedBlockId!, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }).ok
+			state.previewBlockGrid(state.selectedBlockId!, { x: 0, y: 0, z: 0 }, { x: 16, y: 0, z: 0 }).ok
 		).toBe(false);
 
 		// Resizing the flat axis back up restores a cuboid; resizing down again never goes negative.
@@ -73,9 +78,9 @@ describe('MiniBuildEditorState', () => {
 		const state = MiniBuildEditorState.createNew();
 		state.addBlock();
 		state.setPositionMeters('y', 1);
-		state.resizeSelected('y', -8, 'min');
-		expect(effectiveSize(state.selectedBlock!)).toEqual({ x: 8, y: 0, z: 8 });
-		expect(blockBox(state.selectedBlock!).min.y).toBe(24);
+		state.resizeSelected('y', -16, 'min');
+		expect(effectiveSize(state.selectedBlock!)).toEqual({ x: 16, y: 0, z: 16 });
+		expect(blockBox(state.selectedBlock!).min.y).toBe(48);
 		expect(state.rotateSelected('x').ok).toBe(true);
 		expect(flatAxis(effectiveSize(state.selectedBlock!))).toBe('z');
 	});
@@ -128,7 +133,7 @@ describe('MiniBuildEditorState', () => {
 		state.setPositionMeters('x', 0);
 		state.duplicateSelected();
 		const before = blockBox(state.selectedBlock!);
-		const result = state.moveSelected({ x: 80 });
+		const result = state.moveSelected({ x: 160 });
 		expect(result.ok).toBe(false);
 		expect(blockBox(state.selectedBlock!)).toEqual(before);
 		expect(state.setSizeMeters('y', 4.125).ok).toBe(false);
@@ -144,7 +149,7 @@ describe('MiniBuildEditorState', () => {
 		expect(state.rotateSelected('y').ok).toBe(true);
 		const block = state.selectedBlock!;
 		expect(block.rotation.y).toBe(90);
-		expect(effectiveSize(block)).toEqual({ x: 4, y: 8, z: 16 });
+		expect(effectiveSize(block)).toEqual({ x: 8, y: 16, z: 32 });
 		for (const value of Object.values(blockBox(block).min))
 			expect(Number.isInteger(value)).toBe(true);
 	});
@@ -190,8 +195,8 @@ describe('MiniBuildEditorState', () => {
 		state.selectBlock(state.getBlocks()[0].id);
 		expect(state.mirrorDuplicateX().ok).toBe(true);
 		const mirrored = state.selectedBlock!;
-		// The duplicate sits 2 units (0.125m) right, so the design spans 0–18 and the leg 0–2.
-		expect(blockBox(mirrored).max.x).toBe(18);
+		// The duplicate sits 4 units (0.125m) right, so the design spans 0–36 and the leg 0–4.
+		expect(blockBox(mirrored).max.x).toBe(36);
 	});
 
 	it('is transactional: the source definition is never mutated', () => {

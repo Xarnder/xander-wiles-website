@@ -89,11 +89,21 @@ export class GraphicsPipeline {
 	private readonly onQualityChange?: (quality: GraphicsQuality) => void;
 
 	private csm: CSM | null = null;
+	/**
+	 * Bumped every time CSM is torn down. `CSM.dispose` deletes `CSM_cascades`, `cameraNear`, and
+	 * `shadowFar` from the live shader uniform object while Three keeps that object and its uniform
+	 * upload list. Rebuilding the same program cache key then throws
+	 * `Cannot read properties of undefined (reading 'needsUpdate')` on the next frame. A new define
+	 * forces a fresh program so `onBeforeCompile` installs the uniforms again.
+	 */
+	private csmEpoch = 0;
 	private composer: EffectComposer | null = null;
 	private passes: PipelinePasses | null = null;
 	private currentPreset: GraphicsPreset;
 
 	private readonly registeredMaterials = new Set<THREE.Material>();
+	/** Hidden from GTAO's depth/normal pre-pass (see `excludeFromAo`). */
+	private readonly aoExcluded = new Set<THREE.Object3D>();
 
 	private readonly sunDirection = new THREE.Vector3(0, 1, 0);
 	private sunColor = new THREE.Color(0xffffff);
@@ -142,6 +152,20 @@ export class GraphicsPipeline {
 		return this.settings.quality;
 	}
 
+	/**
+	 * Keeps `object` (and its children) out of the ambient-occlusion pre-pass. For transparent
+	 * effects — particles, rain, lightning — which GTAO would otherwise render as solid surfaces and
+	 * darken the world around (a dark halo round every raindrop and bolt).
+	 */
+	excludeFromAo(object: THREE.Object3D): void {
+		this.aoExcluded.add(object);
+	}
+
+	/** Smoothed frame rate and the target — other systems (weather) scale themselves down first. */
+	getFrameRate(): { smoothedFps: number; targetFps: number } {
+		return { smoothedFps: this.smoothedFps, targetFps: this.settings.targetFps };
+	}
+
 	setQuality(quality: GraphicsQuality): void {
 		if (this.settings.quality === quality) return;
 		this.settings.quality = quality;
@@ -172,6 +196,30 @@ export class GraphicsPipeline {
 	/** Re-applies `settings.aoTuning` to the live GTAO pass — cheap uniform updates, no rebuild. Call after mutating fields on the object `getAoTuning()` returned (the debug GUI's sliders do this directly). A no-op when AO is disabled for the current preset (nothing to apply to). */
 	refreshAoTuning(): void {
 		if (this.passes?.gtaoPass) this.applyAoTuning(this.passes.gtaoPass);
+	}
+
+	/**
+	 * GTAO already hides points and lines while it draws its depth/normal pass (and restores them
+	 * after); this extends that same mechanism to the objects registered with `excludeFromAo`.
+	 */
+	private hideExcludedFromAo(gtaoPass: GTAOPass): void {
+		const pass = gtaoPass as unknown as {
+			_overrideVisibility: () => void;
+			_visibilityCache: THREE.Object3D[];
+		};
+		if (typeof pass._overrideVisibility !== 'function' || !Array.isArray(pass._visibilityCache)) {
+			return; // a future three.js changed the internals: AO still works, only without exclusions
+		}
+		const original = pass._overrideVisibility.bind(gtaoPass);
+		const excluded = this.aoExcluded;
+		pass._overrideVisibility = () => {
+			original();
+			for (const object of excluded) {
+				if (!object.visible) continue;
+				object.visible = false;
+				pass._visibilityCache.push(object);
+			}
+		};
 	}
 
 	private applyAoTuning(gtaoPass: GTAOPass): void {
@@ -395,6 +443,7 @@ export class GraphicsPipeline {
 				// multiplies the denoised AO term over it via `blendIntensity`), which is what an actual
 				// rendered frame needs.
 				gtaoPass.output = GTAOPass.OUTPUT.Default;
+				this.hideExcludedFromAo(gtaoPass);
 				this.applyAoTuning(gtaoPass);
 				composer.addPass(gtaoPass);
 			}
@@ -490,8 +539,15 @@ export class GraphicsPipeline {
 		this.csm.remove();
 		this.csm.dispose();
 		this.csm = null;
-		// CSM.dispose deletes every material's onBeforeCompile; re-compose any procedural extension.
-		for (const material of this.registeredMaterials) setBaseShaderHook(material, null);
+		this.csmEpoch++;
+		// CSM.dispose deletes every material's onBeforeCompile and the cascade uniforms on the
+		// compiled shader. Re-compose any procedural extension, and change the program key so Three
+		// does not upload the uniform list from the program that just lost those uniforms.
+		for (const material of this.registeredMaterials) {
+			material.defines = material.defines ?? {};
+			material.defines.CSM_EPOCH = this.csmEpoch;
+			setBaseShaderHook(material, null);
+		}
 	}
 
 	private disposeComposer(): void {

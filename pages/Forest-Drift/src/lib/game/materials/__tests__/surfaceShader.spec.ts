@@ -42,6 +42,23 @@ describe('shader hook composition', () => {
 		expect(hasOwnShaderHook(material)).toBe(false);
 	});
 
+	it('paints a river-edge beach only on the terrain cover shader', () => {
+		const plain = new THREE.MeshStandardMaterial();
+		const shore = new THREE.MeshStandardMaterial();
+		shore.userData.fsShore = true;
+		const uniforms = createSurfaceShaderUniforms();
+		applySurfaceShader(plain, 'cover', uniforms, 1);
+		applySurfaceShader(shore, 'cover', createSurfaceShaderUniforms(), 1);
+		expect(plain.customProgramCacheKey()).not.toBe(shore.customProgramCacheKey());
+		const shader = fakeShader();
+		shore.onBeforeCompile(shader, null as never);
+		expect(shader.vertexShader).toContain('vFsShore = aShore');
+		expect(shader.fragmentShader).toContain('vFsShore');
+		const plainShader = fakeShader();
+		plain.onBeforeCompile(plainShader, null as never);
+		expect(plainShader.vertexShader).not.toContain('aShore');
+	});
+
 	it('gives different extensions different program keys', () => {
 		const a = new THREE.MeshStandardMaterial();
 		const b = new THREE.MeshStandardMaterial();

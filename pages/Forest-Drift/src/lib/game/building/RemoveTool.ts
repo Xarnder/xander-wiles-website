@@ -8,7 +8,7 @@ import type { BuildingRemovalManager } from './BuildingRemovalManager';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
 import { applyWallTransform } from './WallGeometryBuilder';
-import { ROOF_TYPE_LABELS } from './RoofTypes';
+import { ROOF_TYPE_LABELS, type RoofDefinition, type RoofOpeningDefinition } from './RoofTypes';
 import { computeStairMetrics } from './stairMath';
 import { computeWallLength, wallLocalToWorld } from './wallGeometryMath';
 import type { SlabType } from './SlabTypes';
@@ -18,6 +18,7 @@ import type {
 	WallOpeningDefinition,
 	WallOpeningType
 } from './WallTypes';
+import { FOUNDATION_DELETE_CONFIRMATION } from './foundationDeletion';
 import type { BuildingPickUserData, RemovalTarget } from './RemovalTypes';
 import { removalTargetKey, resolveRemovalTarget } from './RemovalTypes';
 import type { BuildTool } from './BuildToolManager';
@@ -48,6 +49,17 @@ interface OpeningPickingProxy {
 	heightMeters: number;
 }
 
+/** OpeningPickingProxy's counterpart for a window/door in a roof's vertical face — same box, placed in the face's frame, carrying `roofId` instead of `wallId`. */
+interface RoofOpeningPickingProxy {
+	mesh: THREE.Mesh;
+	roofId: string;
+	openingId: string;
+	/** "gable" / "end wall" — which kind of roof face it's in, for the HUD. */
+	faceLabel: string;
+	widthMeters: number;
+	heightMeters: number;
+}
+
 interface BeamPickingProxy {
 	mesh: THREE.Mesh;
 	wallId: string;
@@ -67,6 +79,8 @@ export interface RemoveToolOptions {
 	removalManager: BuildingRemovalManager;
 	buildingSettings: BuildingSettings;
 	onHudChange?: (hud: BuildUiState | null) => void;
+	/** Opens the typed "Confirm Delete" prompt for one foundation and the build on it. */
+	onRequestFoundationDelete?: (foundationId: string) => void;
 }
 
 /**
@@ -77,12 +91,16 @@ export interface RemoveToolOptions {
  * while remove mode is active, leaving the hotbar's own selection completely untouched underneath.
  *
  * Targeting is a single combined raycast against every standalone wall mesh, wall-path segment
- * picking mesh, stair mesh, slab (ceiling/floor) mesh, roof mesh, floor-detail mesh, and this
- * tool's own OpeningPickingProxy meshes — nearest hit wins, with an opening's proxy built
- * deliberately thicker than its wall so it always resolves ahead of the (opening-unaware) solid
- * wall/segment box it physically overlaps. The nearest hit's `userData` is resolved to a logical
- * RemovalTarget (RemovalTypes.ts) — highlighting, HUD text, and the actual removal call all operate
- * on that logical target, never on the raw mesh.
+ * picking mesh, stair mesh, slab (ceiling/floor) mesh, roof mesh, floor-detail mesh, foundation
+ * mesh, and this tool's own OpeningPickingProxy meshes — nearest hit wins, with an opening's proxy
+ * built deliberately thicker than its wall so it always resolves ahead of the (opening-unaware)
+ * solid wall/segment box it physically overlaps. The nearest hit's `userData` is resolved to a
+ * logical RemovalTarget (RemovalTypes.ts) — highlighting, HUD text, and the actual removal call all
+ * operate on that logical target, never on the raw mesh.
+ *
+ * A whole foundation (and everything built on it) is not removed by that click. Aiming at the
+ * foundation, or pressing Delete / Backspace while aiming at anything on it, opens a prompt that
+ * accepts only the typed phrase "Confirm Delete".
  */
 export class RemoveTool implements BuildTool {
 	readonly toolId: ToolId = 'remove';
@@ -104,6 +122,7 @@ export class RemoveTool implements BuildTool {
 	private readonly removalManager: BuildingRemovalManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly onHudChange?: (hud: BuildUiState | null) => void;
+	private readonly onRequestFoundationDelete?: (foundationId: string) => void;
 
 	private readonly raycaster = new THREE.Raycaster();
 	private readonly screenCenter = new THREE.Vector2(0, 0);
@@ -129,11 +148,14 @@ export class RemoveTool implements BuildTool {
 	});
 
 	private openingProxies: OpeningPickingProxy[] = [];
+	private roofOpeningProxies: RoofOpeningPickingProxy[] = [];
 	private beamProxies: BeamPickingProxy[] = [];
 
 	private active = false;
 	private hoveredKey: string | null = null;
 	private hoveredTarget: RemovalTarget | null = null;
+	/** Foundation the crosshair is on, including when the hit is a wall, object, or the pad itself. */
+	private hoveredFoundationId: string | null = null;
 
 	constructor(options: RemoveToolOptions) {
 		this.music = options.music;
@@ -161,6 +183,7 @@ export class RemoveTool implements BuildTool {
 		this.removalManager = options.removalManager;
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
+		this.onRequestFoundationDelete = options.onRequestFoundationDelete;
 
 		this.highlightMesh = new THREE.Mesh(this.emptyGeometry, this.highlightMaterial);
 		this.highlightMesh.renderOrder = 20;
@@ -185,6 +208,7 @@ export class RemoveTool implements BuildTool {
 		this.active = false;
 		this.hoveredKey = null;
 		this.hoveredTarget = null;
+		this.hoveredFoundationId = null;
 		this.clearHighlight();
 		this.disposeRemovalProxies();
 		this.scene.remove(this.overlayGroup);
@@ -203,7 +227,9 @@ export class RemoveTool implements BuildTool {
 			...this.buildingManager.getRaycastableSlabMeshes(),
 			...this.buildingManager.getRaycastableRoofMeshes(),
 			...this.buildingManager.getRaycastableFloorDetailMeshes(),
+			...this.buildingManager.getRaycastableFoundationMeshes(),
 			...this.openingProxies.map((proxy) => proxy.mesh),
+			...this.roofOpeningProxies.map((proxy) => proxy.mesh),
 			...this.beamProxies.map((proxy) => proxy.mesh)
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
@@ -226,6 +252,7 @@ export class RemoveTool implements BuildTool {
 			(!miniBuildHit || plantHit.distance <= miniBuildHit.distance)
 		) {
 			this.musicId = plantHit.object.userData.musicPlantId;
+			this.hoveredFoundationId = null;
 			this.setHoveredTarget(null, null);
 			this.musicHighlight.setFromObject(this.music!.plants.visuals.get(this.musicId!)!);
 			this.musicHighlight.visible = true;
@@ -243,6 +270,9 @@ export class RemoveTool implements BuildTool {
 			(!furnitureHit || miniBuildHit.distance < furnitureHit.distance)
 		) {
 			this.miniBuildId = miniBuildHit.id;
+			const miniFoundationId =
+				this.miniBuilds?.instances.get(miniBuildHit.id)?.foundationId ?? null;
+			this.hoveredFoundationId = miniFoundationId;
 			this.setHoveredTarget(null, null);
 			const box = this.miniBuilds.instances.worldAabb(miniBuildHit.id);
 			if (box) {
@@ -265,20 +295,27 @@ export class RemoveTool implements BuildTool {
 			const name = instance
 				? (this.miniBuilds.getDesign(instance.designId)?.name ?? 'Object')
 				: 'Object';
-			this.onHudChange?.({
-				toolId: 'remove',
-				crosshair: 'valid',
-				notice: name,
-				hintLines: [
-					`REMOVE ${name.toUpperCase()}`,
-					'Removes this copy only — the design stays in your library',
-					'Click Remove · X Exit'
-				]
-			});
+			this.onHudChange?.(
+				this.withWholeFoundationHint(
+					{
+						toolId: 'remove',
+						crosshair: 'valid',
+						notice: name,
+						hintLines: [
+							`REMOVE ${name.toUpperCase()}`,
+							'Removes this copy only — the design stays in your library',
+							'Click Remove · X Exit'
+						]
+					},
+					miniFoundationId
+				)
+			);
 			return;
 		}
 		if (furnitureCloser && furnitureHit && this.furniture) {
 			this.furnitureId = furnitureHit.id;
+			const furnitureFoundationId = this.furniture.get(furnitureHit.id)?.foundationId ?? null;
+			this.hoveredFoundationId = furnitureFoundationId;
 			this.setHoveredTarget(null, null);
 			if (this.furniture.getWorldAabb(furnitureHit.id, this.furnitureAabb)) {
 				this.furnitureAabb.getCenter(this.furnitureHighlightCenter);
@@ -293,23 +330,54 @@ export class RemoveTool implements BuildTool {
 			}
 			const kind = this.furniture.get(furnitureHit.id)?.kind;
 			const label = kind ? getFurnitureCatalogueEntry(kind).name.toUpperCase() : 'OBJECT';
-			this.onHudChange?.({
-				toolId: 'remove',
-				crosshair: 'valid',
-				hintLines: [`REMOVE ${label}`, 'Click Remove · X Exit']
-			});
+			this.onHudChange?.(
+				this.withWholeFoundationHint(
+					{
+						toolId: 'remove',
+						crosshair: 'valid',
+						hintLines: [`REMOVE ${label}`, 'Click Remove · X Exit']
+					},
+					furnitureFoundationId
+				)
+			);
 			return;
 		}
 		const target = hit ? resolveRemovalTarget(hit.object.userData as BuildingPickUserData) : null;
 
 		if (!target || !hit) {
+			this.hoveredFoundationId = null;
 			this.setHoveredTarget(null, null);
 			this.onHudChange?.(this.buildNoTargetHud());
 			return;
 		}
 
+		this.hoveredFoundationId = target.foundationId;
 		this.setHoveredTarget(target, hit.object);
 		this.onHudChange?.(this.buildTargetHud(target));
+	}
+
+	/**
+	 * Delete / Backspace while Remove Mode is aimed at a foundation, a piece of its building, or an
+	 * object sitting on it. Opens the typed confirmation — it does not delete anything by itself.
+	 */
+	requestFoundationDeletion(): void {
+		if (!this.active || !this.hoveredFoundationId) return;
+		this.onRequestFoundationDelete?.(this.hoveredFoundationId);
+	}
+
+	/** Called after a confirmed foundation deletion so leftover opening proxies and highlights go away. */
+	syncAfterExternalRemoval(): void {
+		if (!this.active) return;
+		this.hoveredKey = null;
+		this.hoveredTarget = null;
+		this.hoveredFoundationId = null;
+		this.musicId = undefined;
+		this.furnitureId = undefined;
+		this.miniBuildId = undefined;
+		this.musicHighlight.visible = false;
+		this.furnitureHighlight.visible = false;
+		this.clearHighlight();
+		this.rebuildRemovalProxies();
 	}
 
 	onPrimaryAction(): void {
@@ -332,6 +400,10 @@ export class RemoveTool implements BuildTool {
 			return;
 		}
 		if (!this.active || !this.hoveredTarget) return;
+		if (this.hoveredTarget.type === 'foundation') {
+			this.requestFoundationDeletion();
+			return;
+		}
 		const removed = this.removalManager.remove(this.hoveredTarget);
 		if (!removed) return;
 
@@ -362,6 +434,7 @@ export class RemoveTool implements BuildTool {
 	/** Called by BuildToolManager when the `showRemovalPickingProxies` GUI toggle changes — see its class doc comment. */
 	setShowPickingProxies(visible: boolean): void {
 		for (const proxy of this.openingProxies) proxy.mesh.visible = visible;
+		for (const proxy of this.roofOpeningProxies) proxy.mesh.visible = visible;
 		for (const proxy of this.beamProxies) proxy.mesh.visible = visible;
 	}
 
@@ -422,6 +495,52 @@ export class RemoveTool implements BuildTool {
 				for (const beam of segment.beams ?? []) this.addBeamProxy(segmentWall, beam);
 			}
 		}
+		for (const roof of this.buildingManager.getAllRoofs()) {
+			for (const opening of roof.openings ?? []) this.addRoofOpeningProxy(roof, opening);
+		}
+	}
+
+	private addRoofOpeningProxy(roof: RoofDefinition, opening: RoofOpeningDefinition): void {
+		const target = this.buildingManager.getRoofFaceTarget(roof.id, opening.face);
+		if (!target) return;
+
+		const width = opening.maxU - opening.minU;
+		const height = opening.maxY - opening.minY;
+		const geometry = new THREE.BoxGeometry(
+			width,
+			height,
+			target.openingDepth + OPENING_PROXY_DEPTH_BUFFER
+		);
+		const mesh = new THREE.Mesh(geometry, this.proxyMaterial);
+		mesh.visible = this.buildingSettings.showRemovalPickingProxies;
+		mesh.userData.foundationId = roof.foundationId;
+		mesh.userData.roofId = roof.id;
+		mesh.userData.openingId = opening.id;
+		mesh.userData.openingType = opening.type;
+
+		const center = wallLocalToWorld(
+			target.transform,
+			(opening.minU + opening.maxU) / 2,
+			(opening.minY + opening.maxY) / 2,
+			0
+		);
+		applyWallTransform(
+			mesh,
+			center.worldX,
+			center.worldY,
+			center.worldZ,
+			target.transform.headingRadians
+		);
+
+		this.overlayGroup.add(mesh);
+		this.roofOpeningProxies.push({
+			mesh,
+			roofId: roof.id,
+			openingId: opening.id,
+			faceLabel: target.face.label,
+			widthMeters: width,
+			heightMeters: height
+		});
 	}
 
 	private addOpeningProxy(wall: WallDefinition, opening: WallOpeningDefinition): void {
@@ -494,6 +613,11 @@ export class RemoveTool implements BuildTool {
 			proxy.mesh.removeFromParent();
 		}
 		this.openingProxies = [];
+		for (const proxy of this.roofOpeningProxies) {
+			proxy.mesh.geometry.dispose();
+			proxy.mesh.removeFromParent();
+		}
+		this.roofOpeningProxies = [];
 		for (const proxy of this.beamProxies) {
 			proxy.mesh.geometry.dispose();
 			proxy.mesh.removeFromParent();
@@ -509,6 +633,18 @@ export class RemoveTool implements BuildTool {
 		return this.beamProxies.find((p) => p.wallId === wallId && p.beamId === beamId);
 	}
 
+	private withWholeFoundationHint(hud: BuildUiState, foundationId: string | null): BuildUiState {
+		if (!foundationId) return hud;
+		return {
+			...hud,
+			foundationDeleteId: foundationId,
+			hintLines: [
+				...hud.hintLines,
+				`Delete: whole foundation — type ${FOUNDATION_DELETE_CONFIRMATION}`
+			]
+		};
+	}
+
 	private buildNoTargetHud(): BuildUiState {
 		return {
 			toolId: 'remove',
@@ -518,19 +654,31 @@ export class RemoveTool implements BuildTool {
 				'REMOVE',
 				'',
 				'Look at a building element',
-				'Left Click: Remove',
+				'Left Click: Remove one piece',
+				'Delete: whole foundation under the crosshair',
 				'X / Right Click: Exit'
 			]
 		};
 	}
 
 	private buildTargetHud(target: RemovalTarget): BuildUiState {
-		const lines = ['REMOVE', '', ...this.describeTarget(target), '', 'Click to remove'];
+		const wholeFoundation = target.type === 'foundation';
+		const lines = [
+			'REMOVE',
+			'',
+			...this.describeTarget(target),
+			'',
+			wholeFoundation ? 'Click or Delete to start' : 'Click to remove this piece',
+			wholeFoundation
+				? `Type ${FOUNDATION_DELETE_CONFIRMATION} to remove the foundation and building`
+				: `Delete: whole foundation — type ${FOUNDATION_DELETE_CONFIRMATION}`
+		];
 		return {
 			toolId: 'remove',
 			crosshair: 'invalid',
 			notice: this.shortLabel(target),
-			hintLines: lines
+			hintLines: lines,
+			foundationDeleteId: target.foundationId
 		};
 	}
 
@@ -551,6 +699,16 @@ export class RemoveTool implements BuildTool {
 				const label = target.openingType === 'window' ? 'Window' : 'Door';
 				if (!proxy) return [label];
 				return [label, `${proxy.widthMeters.toFixed(2)} × ${proxy.heightMeters.toFixed(2)}m`];
+			}
+			case 'roof-opening': {
+				const proxy = this.roofOpeningProxies.find(
+					(p) => p.roofId === target.roofId && p.openingId === target.openingId
+				);
+				const label = target.openingType === 'window' ? 'Window' : 'Door';
+				const size = proxy
+					? `${proxy.widthMeters.toFixed(2)} × ${proxy.heightMeters.toFixed(2)}m`
+					: '';
+				return [label, size, `In the roof ${proxy?.faceLabel ?? 'gable'}`];
 			}
 			case 'beam': {
 				const proxy = this.findBeamProxy(target.wallId, target.beamId);
@@ -589,6 +747,8 @@ export class RemoveTool implements BuildTool {
 				} as const;
 				return ['Floor detailing', labels[detail.kind]];
 			}
+			case 'foundation':
+				return ['Whole foundation', 'Everything built on it is removed with it'];
 		}
 	}
 
@@ -599,6 +759,7 @@ export class RemoveTool implements BuildTool {
 			case 'wall-segment':
 				return 'Wall Segment';
 			case 'opening':
+			case 'roof-opening':
 				return target.openingType === 'window' ? 'Window' : 'Door';
 			case 'beam':
 				return 'Beam';
@@ -618,6 +779,8 @@ export class RemoveTool implements BuildTool {
 				if (detail.kind === 'planks') return 'Planks';
 				return 'Tiles';
 			}
+			case 'foundation':
+				return 'Whole foundation';
 		}
 	}
 

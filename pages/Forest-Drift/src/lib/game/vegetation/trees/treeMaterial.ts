@@ -5,6 +5,10 @@ import { setOwnShaderHook } from '../../materials/shader/shaderHooks';
 export interface TreeWindUniforms {
 	uTreeTime: { value: number };
 	uTreeWindStrength: { value: number };
+	/** World X/Z unit direction the weather's wind blows toward. */
+	uTreeWindDir: { value: THREE.Vector2 };
+	/** Steady lean of the crown along the wind (m at full `treeWind` weight) — weather-driven. */
+	uTreeWindLean: { value: number };
 	/** Procedural surface detail fades out between these view distances (metres). */
 	uTreeDetailRange: { value: THREE.Vector2 };
 }
@@ -52,6 +56,16 @@ const WIND_VERTEX = /* glsl */ `
 	float treeSway = sin(uTreeTime * 1.15 + treePhase) * 0.65 + sin(uTreeTime * 2.3 + treePhase * 1.7) * 0.25;
 	transformed.x += treeSway * treeWeight * 0.16;
 	transformed.z += cos(uTreeTime * 0.9 + treePhase * 1.3) * treeWeight * 0.09;
+	// Weather wind: the crown leans downwind (in tree-local axes) and gusts push it further.
+#ifdef USE_INSTANCING
+	vec3 treeWindLocal = transpose(mat3(instanceMatrix)) * vec3(uTreeWindDir.x, 0.0, uTreeWindDir.y);
+#else
+	vec3 treeWindLocal = vec3(uTreeWindDir.x, 0.0, uTreeWindDir.y);
+#endif
+	float treeWindLen = length(treeWindLocal.xz);
+	vec2 treeWindXZ = treeWindLen > 1e-4 ? treeWindLocal.xz / treeWindLen : vec2(0.0);
+	float treeGust = 0.75 + 0.25 * sin(uTreeTime * 0.7 + treePhase * 0.6);
+	transformed.xz += treeWindXZ * treeWind * treeWind * uTreeWindLean * treeGust;
 	transformed += objectNormal * sin(uTreeTime * 3.8 + position.y * 1.9 + treePhase) * treeWeight * 0.025;
 `;
 
@@ -277,7 +291,7 @@ function installTreeShader(
 			shader.vertexShader = shader.vertexShader
 				.replace(
 					'#include <common>',
-					`#include <common>\n${define}attribute float treeWind;\nattribute vec4 treeSurface;\nuniform float uTreeTime;\nuniform float uTreeWindStrength;\nvarying vec4 vTreeSurface;\nvarying vec3 vTreeLocal;`
+					`#include <common>\n${define}attribute float treeWind;\nattribute vec4 treeSurface;\nuniform float uTreeTime;\nuniform float uTreeWindStrength;\nuniform vec2 uTreeWindDir;\nuniform float uTreeWindLean;\nvarying vec4 vTreeSurface;\nvarying vec3 vTreeLocal;`
 				)
 				.replace('#include <begin_vertex>', `#include <begin_vertex>\n${WIND_VERTEX}`);
 			shader.fragmentShader = shader.fragmentShader
@@ -316,6 +330,8 @@ export function createTreeMaterial(detail: TreeSurfaceDetail = 2): {
 	const wind: TreeWindUniforms = {
 		uTreeTime: { value: 0 },
 		uTreeWindStrength: { value: 1 },
+		uTreeWindDir: { value: new THREE.Vector2(0, 1) },
+		uTreeWindLean: { value: 0 },
 		uTreeDetailRange: { value: new THREE.Vector2() }
 	};
 	setTreeSurfaceDetail(material, wind, detail);

@@ -7,6 +7,7 @@ export type BuildAction =
 	| { kind: 'wall'; wallId: string }
 	| { kind: 'wallPath'; pathId: string }
 	| { kind: 'opening'; wallId: string; openingId: string }
+	| { kind: 'roofOpening'; roofId: string; openingId: string }
 	| { kind: 'beam'; wallId: string; beamId: string }
 	| { kind: 'slab'; slabId: string }
 	| { kind: 'roof'; roofId: string }
@@ -74,6 +75,8 @@ export class BuildUndoManager {
 				return this.buildingManager.removeWallPath(action.pathId);
 			case 'opening':
 				return this.buildingManager.removeOpening(action.wallId, action.openingId);
+			case 'roofOpening':
+				return this.buildingManager.removeRoofOpening(action.roofId, action.openingId);
 			case 'beam':
 				return this.buildingManager.removeBeam(action.wallId, action.beamId);
 			case 'slab':

@@ -146,7 +146,8 @@
 	};
 
 	function meters(value: number): string {
-		return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+		// Five places: every 0.03125m grid step is exact (e.g. 0.09375).
+		return value.toFixed(5).replace(/0+$/, '').replace(/\.$/, '');
 	}
 
 	/**

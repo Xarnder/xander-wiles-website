@@ -1,6 +1,7 @@
 import { createDefaultBuildingSettings } from '../building/FoundationTypes';
 import type { BuildUiState, HotbarUiState } from '../building/FoundationTypes';
 import type { PaintUiState } from '../building/PaintTool';
+import type { FlightState } from '../player/FirstPersonController';
 import type { GraphicsQuality } from '../graphics/GraphicsTypes';
 import { createDefaultSkySettings } from '../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../terrain/TerrainSettings';
@@ -20,6 +21,7 @@ export interface WorldSessionOptions {
 	onSaveStatusChange?: (status: SaveStatus, error: string | null) => void;
 	onStatsUpdate?: (stats: SceneStats) => void;
 	onPointerLockChange?: (locked: boolean) => void;
+	onFlightChange?: (state: FlightState) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -28,6 +30,7 @@ export interface WorldSessionOptions {
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
 	onPlacementCustomizeChange?: (open: boolean) => void;
 	onPlacementHeightChange?: (open: boolean) => void;
+	onRequestFoundationDelete?: (foundationId: string) => void;
 	onMiniBuildEditRequest?: (instanceId: string) => void;
 	onMiniBuildNotice?: (message: string) => void;
 }
@@ -64,6 +67,7 @@ export class WorldSession {
 			world: options.world,
 			onStatsUpdate: options.onStatsUpdate,
 			onPointerLockChange: options.onPointerLockChange,
+			onFlightChange: options.onFlightChange,
 			onHotbarChange: options.onHotbarChange,
 			onBuildHudChange: options.onBuildHudChange,
 			onLookedAtDoorChange: options.onLookedAtDoorChange,
@@ -72,6 +76,7 @@ export class WorldSession {
 			onGraphicsQualityChange: options.onGraphicsQualityChange,
 			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
 			onPlacementHeightChange: options.onPlacementHeightChange,
+			onRequestFoundationDelete: options.onRequestFoundationDelete,
 			onMiniBuildEditRequest: options.onMiniBuildEditRequest,
 			onMiniBuildNotice: options.onMiniBuildNotice
 		});
