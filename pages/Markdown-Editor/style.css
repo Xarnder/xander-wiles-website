@@ -7159,3 +7159,92 @@ html[data-list-layout="continuous"][data-list-stripe="spectrum"] :is(
     max-height: min(28dvh, 220px);
     min-height: 6rem;
 }
+
+/* Bullets whose text contains !!! */
+html {
+    --bullet-important-bg: hsl(40 68% 24%);
+    --bullet-important-star: #ffd000;
+}
+
+html[data-theme="light"] {
+    --bullet-important-bg: #ffe39a;
+    --bullet-important-star: #c48a00;
+}
+
+html[data-theme="oled"] {
+    --bullet-important-bg: #3a2c08;
+    --bullet-important-star: #ffd000;
+}
+
+.mdplain-view-item.md-bullet-important > .mdplain-view-item-main,
+.mdplain-view-item.md-bullet-important > .mdplain-mini-editor,
+.mdlist-view-item.md-bullet-important,
+.md-preview li.md-bullet-important > .md-bullet-important-row {
+    position: relative;
+    font-weight: 700;
+    color: var(--text);
+    padding-bottom: 22px;
+}
+
+.mdlist-item.md-bullet-important {
+    position: relative;
+    font-weight: 700;
+    color: var(--text);
+    padding-bottom: 28px;
+}
+
+.mdplain-view-item.md-bullet-important > .mdplain-view-item-main .mdplain-view-text,
+.mdplain-view-item.md-bullet-important > .mdplain-view-item-main .mdplain-task-label,
+.mdlist-view-item.md-bullet-important .mdlist-view-text,
+.mdlist-item.md-bullet-important .mdlist-text,
+.mdplain-view-item.md-bullet-important .mdplain-mini-text,
+.md-preview li.md-bullet-important > .md-bullet-important-row {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.md-preview li.md-bullet-important > .md-bullet-important-row {
+    display: block;
+    border-radius: 8px;
+    background: var(--bullet-important-bg);
+    padding: 6px 8px 22px;
+}
+
+.mdplain-view-item.md-bullet-important > .mdplain-view-item-main::after,
+.mdplain-view-item.md-bullet-important > .mdplain-mini-editor::after,
+.mdlist-view-item.md-bullet-important::after,
+.mdlist-item.md-bullet-important::after,
+.md-preview li.md-bullet-important > .md-bullet-important-row::after {
+    content: "";
+    position: absolute;
+    right: 6px;
+    bottom: 3px;
+    width: 16px;
+    height: 16px;
+    background-color: var(--bullet-important-star);
+    -webkit-mask: url('/assets/SVGs/StarIcons.svg') center / contain no-repeat;
+    mask: url('/assets/SVGs/StarIcons.svg') center / contain no-repeat;
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+    pointer-events: none;
+}
+
+.mdlist-item.md-bullet-important .mdlist-text {
+    font-weight: 700;
+}
+
+/* Beat list stripes and nested shells. */
+html[data-list-layout="segmented"][data-list-stripe] li.mdplain-view-item.md-bullet-important[data-depth],
+html[data-list-layout="segmented"][data-list-stripe] li.mdplain-item.md-bullet-important[data-depth],
+html[data-list-layout="segmented"][data-list-stripe] li.mdlist-view-item.md-bullet-important:not(.mdlist-empty-item),
+html[data-list-layout="segmented"][data-list-stripe] li.mdlist-item.md-bullet-important:not(.mdplain-item),
+html[data-list-layout="continuous"] li.mdplain-view-item.md-bullet-important,
+html[data-list-layout="continuous"] li.mdplain-item.md-bullet-important,
+html[data-list-layout="continuous"] li.mdlist-view-item.md-bullet-important,
+html[data-list-layout="continuous"] li.mdlist-item.md-bullet-important {
+    background: var(--bullet-important-bg) !important;
+    color: var(--text);
+}
+
+html[data-list-layout="segmented"][data-list-stripe] .md-preview li.md-bullet-important[data-depth] {
+    background: transparent !important;
+}

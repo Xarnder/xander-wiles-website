@@ -37,6 +37,7 @@ import {
     plainListDepthFromIndent,
     plainListIndentForDepth,
     plainListInsertIndexAfterSubtree,
+    isImportantBullet,
     plainListOrderedDisplayNumber,
     plainListSiblingMoveTarget,
     renderInline,
@@ -2077,6 +2078,7 @@ function openPlainItemMiniEditor({
         const depth = plainListDepthFromIndent(item.indent);
         li.dataset.depth = String(depth);
         li.classList.toggle('mdplain-view-item--nested', depth > 0);
+        syncImportantBullet(li, text);
         // Keep nested sublists; only replace the main label row.
         const nest = li.querySelector(':scope > .mdplain-view-nest');
         li.replaceChildren();
@@ -2287,6 +2289,7 @@ function openPlainItemMiniEditor({
         mutateItem((target) => {
             target.text = commitEditorText();
         }, { skipRender: true });
+        syncImportantBullet(li, textInput.value);
         syncDateMeta();
         syncHeight();
     });
@@ -2696,6 +2699,11 @@ function plainViewOrderedNumberForItem(block, itemId) {
  * @param {{ onItemLongPress?: Function, onStatus?: Function }} options
  * @param {{ nestChildren?: boolean, orderedNumber?: number | null }} [flags]
  */
+function syncImportantBullet(el, text) {
+    if (!el) return;
+    el.classList.toggle('md-bullet-important', isImportantBullet(text));
+}
+
 function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
     const { onItemLongPress, onStatus } = options;
     const nestChildren = Boolean(flags.nestChildren);
@@ -2709,6 +2717,7 @@ function renderPlainViewItemNode(node, block, options = {}, flags = {}) {
     li.dataset.plainItemId = item.id;
     li.dataset.depth = String(node.depth);
     if (node.depth > 0) li.classList.add('mdplain-view-item--nested');
+    syncImportantBullet(li, item.text);
     li.setAttribute('role', 'listitem');
 
     if (typeof onItemLongPress === 'function') {
@@ -2790,6 +2799,7 @@ function renderPlainListViewItems(block, options = {}) {
         const depth = plainListDepthFromIndent(item.indent);
         li.dataset.depth = String(depth);
         if (depth > 0) li.classList.add('mdplain-view-item--nested');
+        syncImportantBullet(li, item.text);
         li.setAttribute('role', 'listitem');
         if (typeof onItemLongPress === 'function') {
             li.title = 'Long-press to edit this item · Double-tap to copy (includes nested points)';
@@ -2817,6 +2827,7 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
     const li = document.createElement('li');
     li.className = 'mdlist-item mdplain-item';
     li.dataset.plainItemId = item.id;
+    syncImportantBullet(li, item.text);
     const depth = plainListDepthFromIndent(item.indent);
     li.dataset.depth = String(depth);
     if (depth > 0) li.classList.add('mdplain-item--nested');
@@ -2897,6 +2908,7 @@ function renderPlainItemRow({ item, index, block, total, onMutate }) {
             const target = (listBlock.items || []).find((it) => it.id === item.id);
             if (target) target.text = commitMiniEditListItemText(originalText, textInput.value);
         }, { skipRender: true });
+        syncImportantBullet(li, textInput.value);
         syncTextHeight();
     });
     textInput.addEventListener('blur', syncTextHeight);
@@ -3425,6 +3437,7 @@ function renderListViewItems(list, onStatus) {
     items.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'mdlist-view-item';
+        syncImportantBullet(li, item.text);
         li.setAttribute('role', 'listitem');
         li.title = 'Double-tap to copy';
 
@@ -3589,6 +3602,7 @@ export function applyReorderingPlainLists(doc, reorderingPlainLists = {}) {
 function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate, onStatus }) {
     const li = document.createElement('li');
     li.className = 'mdlist-item';
+    syncImportantBullet(li, item.text);
     li.dataset.itemId = item.id;
     li.setAttribute('role', 'listitem');
 
@@ -3646,6 +3660,7 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
         onMutate(() => setItemText(list, item.id, commitMiniEditListItemText(originalText, textInput.value)), {
             skipRender: true,
         });
+        syncImportantBullet(li, textInput.value);
         syncTextHeight();
     });
     textInput.addEventListener('blur', syncTextHeight);

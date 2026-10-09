@@ -825,6 +825,11 @@ export function movePlainListItemToSiblingEdge(items, fromIndex, edge) {
     return next;
 }
 
+/** A bullet is important when its text contains three exclamation marks in a row. */
+export function isImportantBullet(text) {
+    return String(text ?? '').includes('!!!');
+}
+
 /**
  * @param {{ task?: boolean, checked?: boolean, text?: string, depth?: number, children?: object[] }} node
  * @param {{ showDates?: boolean }} inlineOpts
@@ -846,7 +851,10 @@ function renderPreviewListItemHtml(node, inlineOpts) {
     const classes = [`md-li-depth-${depth}`];
     if (node.task) classes.push('md-task');
     if (depth > 0) classes.push('md-li-nested');
-    return `<li class="${classes.join(' ')}" data-depth="${depth}">${body}${kids}</li>`;
+    const important = isImportantBullet(node.text);
+    if (important) classes.push('md-bullet-important');
+    const row = important ? `<span class="md-bullet-important-row">${body}</span>` : body;
+    return `<li class="${classes.join(' ')}" data-depth="${depth}">${row}${kids}</li>`;
 }
 
 /**

@@ -183,6 +183,18 @@ test('copying a task item keeps the checkbox prefix', () => {
     );
 });
 
+test('bullets containing !!! are marked important', async () => {
+    const { isImportantBullet, renderMarkdown } = await import('./markdown.js');
+    assert.equal(isImportantBullet('Buy milk'), false);
+    assert.equal(isImportantBullet('Almost !!'), false);
+    assert.equal(isImportantBullet('Ship it !!!'), true);
+    assert.equal(isImportantBullet('Really !!!! urgent'), true);
+    const html = renderMarkdown(['- Normal item', '- Ship it !!!'].join('\n'));
+    assert.match(html, /<li class="md-li-depth-0" data-depth="0">Normal item<\/li>/);
+    assert.match(html, /class="md-li-depth-0 md-bullet-important"/);
+    assert.match(html, /class="md-bullet-important-row">Ship it !!!/);
+});
+
 test('markdown tables wrap cells and keep column alignment', async () => {
     const { renderMarkdown } = await import('./markdown.js');
     const html = renderMarkdown(
