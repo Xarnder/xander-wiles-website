@@ -17,7 +17,7 @@ import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, 
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
-import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask, isListFreezeImportantEnabled } from './kanban.js';
+import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask, isListFreezeImportantEnabled, GROUP_BY_TAG_ICON } from './kanban.js';
 import {
     MISC_TAG_ID,
     ensureDefaultTags,
@@ -1143,21 +1143,48 @@ export function renderGroupedListSelect(select, includeNewListOption = false) {
  * This is called once after rendering to avoid flickering caused by continuous observation.
  */
 function applyStaticLayouts() {
-    document.querySelectorAll('.task-card').forEach(card => {
+    const cards = document.querySelectorAll('.task-card');
+    const marks = [];
+    cards.forEach(card => {
         const textEl = card.querySelector('.task-text');
-        if (!textEl) return;
+        if (!textEl) {
+            marks.push({ card, vertical: false, single: false });
+            return;
+        }
 
         // Reset to horizontal to measure natural height in that layout
-        card.classList.remove('vertical-actions');
-        
-        // Measure scrollHeight. 
+        card.classList.remove('vertical-actions', 'is-single-line');
+
+        // Measure scrollHeight.
         // 1.35 line-height * 0.9rem ~= 19.4px per line.
         // 3 lines ~= 58px. We use 60px as a safe threshold for "too long for horizontal".
-        if (textEl.scrollHeight > 60) {
-            card.classList.add('vertical-actions');
-        }
+        const lineHeight = parseFloat(getComputedStyle(textEl).lineHeight);
+        const wrapper = textEl.parentElement;
+        const textHeight = textEl.scrollHeight;
+        const oneLine = Number.isFinite(lineHeight)
+            && lineHeight > 0
+            && textHeight <= lineHeight * 1.6
+            && (!wrapper || wrapper.scrollHeight <= textHeight + 4);
+        marks.push({
+            card,
+            vertical: textHeight > 60,
+            single: oneLine
+        });
+    });
+    marks.forEach(({ card, vertical, single }) => {
+        card.classList.toggle('vertical-actions', vertical);
+        card.classList.toggle('is-single-line', single);
     });
 }
+
+let staticLayoutFrame = 0;
+window.addEventListener('resize', () => {
+    if (staticLayoutFrame) cancelAnimationFrame(staticLayoutFrame);
+    staticLayoutFrame = requestAnimationFrame(() => {
+        staticLayoutFrame = 0;
+        applyStaticLayouts();
+    });
+});
 
 export const LIST_BOTTOM_GAP_MIN = -64;
 export const LIST_BOTTOM_GAP_MAX = 64;
@@ -1447,6 +1474,12 @@ export function renderTagModeBar() {
     renderComposerTagBar();
 }
 
+let composerEditTaskId = null;
+
+export function setComposerEditTask(taskId) {
+    composerEditTaskId = taskId || null;
+}
+
 export function renderComposerTagBar() {
     const container = document.getElementById('add-task-composer-tags');
     const root = document.getElementById('add-task-composer');
@@ -1454,7 +1487,10 @@ export function renderComposerTagBar() {
 
     const ensured = ensureDefaultTags(state.appData.settings);
     const tags = sortTags(ensured.tags);
-    const activeId = ensured.activeTagId || MISC_TAG_ID;
+    const editingTask = composerEditTaskId ? state.appData.tasks[composerEditTaskId] : null;
+    const activeId = editingTask
+        ? resolveTaskTagId(editingTask)
+        : (ensured.activeTagId || MISC_TAG_ID);
 
     container.innerHTML = '';
     tags.forEach((tag) => {
@@ -1857,6 +1893,7 @@ export function stepMasonryFont(direction) {
     if (next === current) next = current + direction;
     const size = applyMasonryFontSize(next);
     try { localStorage.setItem(MASONRY_FONT_KEY, String(size)); } catch (_) {}
+    applyStaticLayouts();
     return size;
 }
 
@@ -1982,8 +2019,9 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         ? `<button type="button" class="icon-btn freeze-list-btn ${isFrozen ? 'active' : ''}" onclick="window.toggleListFreezeImportant('${list.id}')" title="${isFrozen ? 'Important tasks frozen at top (click to unfreeze)' : 'Important tasks unfrozen (click to freeze at top)'}" aria-label="Toggle freeze important tasks" aria-pressed="${isFrozen}"><i class="${isFrozen ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i></button>`
         : '';
     const masonryOn = state.focusedMasonryListId === list.id;
+    const masonryIcon = `<svg class="masonry-layout-icon" viewBox="0 0 511.86 496" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M511.86,27.89v264.65c0,15.4-12.49,27.89-27.89,27.89h-91.15c-15.4,0-27.89-12.49-27.89-27.89V27.89c0-15.4,12.49-27.89,27.89-27.89h91.15c15.4,0,27.89,12.49,27.89,27.89ZM146.94,384.88v83.22c0,15.4-12.49,27.89-27.89,27.89H27.89c-15.4,0-27.89-12.49-27.89-27.89v-83.22c0-15.4,12.49-27.89,27.89-27.89h91.15c15.4,0,27.89,12.49,27.89,27.89ZM146.94,27.89v264.65c0,15.4-12.49,27.89-27.89,27.89H27.89c-15.4,0-27.89-12.49-27.89-27.89V27.89C0,12.49,12.49,0,27.89,0h91.15c15.4,0,27.89,12.49,27.89,27.89ZM329.4,111.12V27.89c0-15.4-12.49-27.89-27.89-27.89h-91.14c-15.4,0-27.89,12.49-27.89,27.89v83.22c0,15.4,12.49,27.89,27.89,27.89h91.14c15.4,0,27.89-12.49,27.89-27.89ZM329.4,468.11V203.45c0-15.4-12.49-27.89-27.89-27.89h-91.14c-15.4,0-27.89,12.49-27.89,27.89v264.65c0,15.4,12.49,27.89,27.89,27.89h91.14c15.4,0,27.89-12.49,27.89-27.89ZM511.86,384.88v83.22c0,15.4-12.49,27.89-27.89,27.89h-91.15c-15.4,0-27.89-12.49-27.89-27.89v-83.22c0-15.4,12.49-27.89,27.89-27.89h91.15c15.4,0,27.89,12.49,27.89,27.89Z"/></svg>`;
     const masonryBtn = !isOrphan
-        ? `<button type="button" class="icon-btn masonry-layout-btn ${masonryOn ? 'active' : ''}" onclick="window.toggleMasonryFocus('${list.id}')" title="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}" aria-pressed="${masonryOn}" aria-label="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}"><i class="ph ph-grid-four"></i></button>`
+        ? `<button type="button" class="icon-btn masonry-layout-btn ${masonryOn ? 'active' : ''}" onclick="window.toggleMasonryFocus('${list.id}')" title="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}" aria-pressed="${masonryOn}" aria-label="${masonryOn ? 'Exit masonry layout' : 'Masonry layout'}">${masonryIcon}</button>`
         : '';
     const masonryFontBtns = masonryOn
         ? `<button type="button" id="masonry-font-down" class="icon-btn masonry-font-btn" onclick="window.stepMasonryFont(-1)" title="Smaller task text" aria-label="Smaller task text">A−</button><button type="button" id="masonry-font-up" class="icon-btn masonry-font-btn" onclick="window.stepMasonryFont(1)" title="Larger task text" aria-label="Larger task text">A+</button>`
@@ -1995,7 +2033,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
              ${masonryFontBtns}
              ${kanbanBtn}
              ${freezeBtn}
-             <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag"><i class="ph ph-stack"></i></button>
+             <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">${GROUP_BY_TAG_ICON}</button>
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
               <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
               <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
@@ -2826,7 +2864,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
             : '';
         actionsHtml = `
             <button class="icon-btn copy-task-btn" title="Copy Text" onclick="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')" ontouchstart="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')"><i class="ph ph-copy"></i></button>
-            <button class="icon-btn edit-task-btn" title="Edit" onclick="event.stopPropagation(); window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
+            <button class="icon-btn edit-task-btn" title="Edit" onclick="event.stopPropagation(); window.openTaskInComposer('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
             <button class="icon-btn move-task-btn" title="Move task" onclick="event.stopPropagation(); window.openQuickMoveForTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.openQuickMoveForTask('${task.id}')"><i class="ph ph-arrow-bend-up-right"></i></button>
             <button class="icon-btn reassign-tag-btn" title="Reassign tag" onclick="event.stopPropagation(); window.openReassignTagModal('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.openReassignTagModal('${task.id}')"><i class="ph ph-tag"></i></button>
             ${aiBtnHtml}
@@ -4081,6 +4119,7 @@ export function performSearch(query) {
         matches.forEach(match => {
             renderSearchResultItem(match.task, match.context, match.searchHit);
         });
+        applyStaticLayouts();
     }
 }
 

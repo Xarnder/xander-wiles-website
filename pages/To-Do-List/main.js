@@ -20,7 +20,8 @@ import {
     migrateNestedTree,
     nestedTreeNeedsMigration,
     getParentKanbanStatus,
-    allSubtasksComplete
+    allSubtasksComplete,
+    sanitizeNestedForSave
 } from './nested.js';
 import { MISC_TAG_ID, ensureDefaultTags, getTagsById, getTagNameForTask } from './tags.js';
 import { initCategoryDropup, isSlimCategoryDropup, closeCategoryDropup } from './category-dropup.js';
@@ -331,6 +332,7 @@ window.deleteList = (id) => {
 window.emptyOrphans = API.emptyOrphans;
 
 window.openEditModal = UI.openEditModal;
+window.openTaskInComposer = openTaskInComposer;
 window.summariseTask = UI.summariseTask;
 window.openQuickMoveForTask = UI.openQuickMoveForTask;
 window.openReassignTagModal = UI.openReassignTagModal;
@@ -1469,6 +1471,9 @@ document.addEventListener('DOMContentLoaded', () => {
             lastAutoMovedAt: null
         }).catch(e => API.handleSyncError(e));
         modalOverlay.classList.add('hidden');
+        if (composerSession && composerSession.taskId === taskId) {
+            closeAddTaskComposer({ restore: false });
+        }
     };
 
     document.getElementById('add-nested-idea-btn').onclick = () => {
@@ -3122,10 +3127,13 @@ async function performBulkDeleteForever() {
 // --- GLOBAL KEYBOARD SHORTCUTS ---
 window.addEventListener('keydown', (e) => {
     if (isAddTaskComposerOpen()) {
+        const advanced = document.getElementById('modal-overlay');
+        const advancedOpen = advanced && !advanced.classList.contains('hidden');
         if (e.key === 'Escape') {
             e.preventDefault();
-            closeAddTaskComposer({ restore: true });
-        } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+            if (advancedOpen) advanced.classList.add('hidden');
+            else closeAddTaskComposer({ restore: true });
+        } else if (!advancedOpen && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
             e.preventDefault();
             submitAddTaskComposer();
         } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
@@ -3380,6 +3388,7 @@ function parentComposerHasText() {
 }
 
 function saveComposerOutline(listId) {
+    if (composerSession && composerSession.taskId) return;
     const parent = composerParentField();
     if (!listId || !parent) return;
     rememberDraft(listId, parent.value);
@@ -3430,7 +3439,7 @@ function revealComposerItem(field, pinTop) {
     }
 }
 
-function appendComposerSubtask(text) {
+function appendComposerSubtask(text, nodeId) {
     const outline = composerOutline();
     const parent = composerParentField();
     if (!outline) return null;
@@ -3452,6 +3461,7 @@ function appendComposerSubtask(text) {
     field.enterKeyHint = 'enter';
     field.inputMode = 'text';
     field.value = text || '';
+    if (nodeId) field.dataset.nodeId = nodeId;
     if (parent) {
         field.style.fontSize = parent.style.fontSize;
         field.style.lineHeight = parent.style.lineHeight || '1.2';
@@ -3489,6 +3499,32 @@ function rebuildComposerSubtasks(texts) {
     clearComposerSubtasks();
     (Array.isArray(texts) ? texts : []).forEach((text) => appendComposerSubtask(text));
     syncComposerOutlineSpacer();
+}
+
+function rebuildComposerSubtasksFromNodes(nodes) {
+    clearComposerSubtasks();
+    const byId = new Map();
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+        if (!node || typeof node !== 'object') return;
+        let copy = node;
+        try { copy = JSON.parse(JSON.stringify(node)); } catch (_) {}
+        const id = copy.id || '';
+        if (id) byId.set(id, copy);
+        appendComposerSubtask(typeof copy.text === 'string' ? copy.text : '', id);
+    });
+    if (composerSession) composerSession.nestedById = byId;
+    syncComposerOutlineSpacer();
+}
+
+function collectEditedNestedIdeas() {
+    const byId = (composerSession && composerSession.nestedById) || new Map();
+    return composerSubtaskFields().map((field) => {
+        const text = field.value.trim();
+        if (!text) return null;
+        const existing = field.dataset.nodeId ? byId.get(field.dataset.nodeId) : null;
+        if (existing) return { ...existing, text };
+        return { text, completed: false, nestedIdeas: [] };
+    }).filter(Boolean);
 }
 
 function collectComposerNestedIdeas() {
@@ -3618,7 +3654,7 @@ function beginComposerAutoAdd() {
 
 function scheduleComposerAutoAdd() {
     resetComposerAutoAdd();
-    if (!composerSession || !isAddTaskComposerOpen() || composerSubmitting) return;
+    if (!composerSession || composerSession.taskId || !isAddTaskComposerOpen() || composerSubmitting) return;
     const totalMs = getAutoAddIdleTimeMs();
     renderCountdownMarks(document.getElementById('add-task-composer-countdown'), totalMs);
     const field = document.getElementById('add-task-composer-input');
@@ -3789,8 +3825,10 @@ function bindComposerOnce() {
     bindComposerAction(addBtn, () => submitAddTaskComposer());
     const fontDown = document.getElementById('add-task-composer-font-down');
     const fontUp = document.getElementById('add-task-composer-font-up');
+    const advanceBtn = document.getElementById('add-task-composer-advance');
     if (fontDown) bindComposerAction(fontDown, () => stepComposerFont(-1));
     if (fontUp) bindComposerAction(fontUp, () => stepComposerFont(1));
+    if (advanceBtn) bindComposerAction(advanceBtn, () => openAdvancedTaskEditor());
     applyComposerFontSize(readComposerFontSize());
 
     const stage = document.getElementById('add-task-composer-stage');
@@ -3799,7 +3837,7 @@ function bindComposerOnce() {
             const target = event.target;
             if (!target.classList || !target.classList.contains('add-task-composer-input')) return;
             if (!composerSession) return;
-            if (target.id === 'add-task-composer-input') {
+            if (target.id === 'add-task-composer-input' && !composerSession.taskId) {
                 const source = findAddTaskInput(composerSession.listId);
                 if (source) source.value = target.value;
             }
@@ -3826,7 +3864,9 @@ function bindComposerOnce() {
 
     root.addEventListener('keydown', (e) => {
         if (e.key !== 'Tab') return;
-        const items = [fontDown, fontUp, field, exitBtn, subtaskBtn, addBtn].filter(Boolean);
+        const advanceBtn = document.getElementById('add-task-composer-advance');
+        const items = [fontDown, fontUp, advanceBtn, field, exitBtn, subtaskBtn, addBtn]
+            .filter((el) => el && !el.hidden);
         const first = items[0];
         const last = items[items.length - 1];
         if (e.shiftKey && document.activeElement === first) {
@@ -3848,7 +3888,7 @@ function bindComposerOnce() {
     const tagRow = document.getElementById('add-task-composer-tags');
     const tagFooter = root.querySelector('.add-task-composer-footer');
     if (tagRow) {
-        initCategoryDropup(tagRow, (tagId) => UI.selectComposerTag(tagId));
+        initCategoryDropup(tagRow, (tagId) => chooseComposerTag(tagId));
         let tagFromPointer = false;
         let tagPointer = null;
         tagRow.addEventListener('pointerdown', (e) => {
@@ -3875,7 +3915,7 @@ function bindComposerOnce() {
                 && e.clientY >= rect.top && e.clientY <= rect.bottom;
             if (!inside) return;
             tagFromPointer = true;
-            UI.selectComposerTag(btn.dataset.tagId);
+            chooseComposerTag(btn.dataset.tagId);
             setTimeout(() => { tagFromPointer = false; }, 400);
         });
         tagRow.addEventListener('click', (e) => {
@@ -3888,9 +3928,129 @@ function bindComposerOnce() {
                 tagFromPointer = false;
                 return;
             }
-            UI.selectComposerTag(btn.dataset.tagId);
+            chooseComposerTag(btn.dataset.tagId);
         });
     }
+}
+
+function chooseComposerTag(tagId) {
+    if (composerSession && composerSession.taskId) {
+        const task = state.appData.tasks[composerSession.taskId];
+        if (task) task.tagId = tagId;
+        UI.renderComposerTagBar();
+        API.setTaskTag(composerSession.taskId, tagId);
+        return;
+    }
+    UI.selectComposerTag(tagId);
+}
+
+function syncComposerEditChrome() {
+    const editing = !!(composerSession && composerSession.taskId);
+    const advance = document.getElementById('add-task-composer-advance');
+    const addBtn = document.getElementById('add-task-composer-add');
+    const root = document.getElementById('add-task-composer');
+    const title = document.getElementById('add-task-composer-title');
+    if (advance) advance.hidden = !editing;
+    if (addBtn) {
+        addBtn.textContent = editing ? 'Save' : 'Add';
+        addBtn.title = editing ? 'Save task' : 'Add task';
+    }
+    if (root) root.classList.toggle('is-editing-task', editing);
+    if (title) title.textContent = editing ? 'Edit task' : 'Add task';
+}
+
+function openAdvancedTaskEditor() {
+    if (!composerSession || !composerSession.taskId) return;
+    const taskId = composerSession.taskId;
+    const listId = composerSession.listId;
+    UI.openEditModal(taskId, listId);
+    const input = document.getElementById('modal-task-input');
+    const parent = composerParentField();
+    if (input && parent) input.value = parent.value;
+    const nestedContainer = document.getElementById('nested-ideas-editor-container');
+    if (nestedContainer) {
+        nestedContainer.innerHTML = '';
+        UI.renderNestedEditorList(nestedContainer, collectEditedNestedIdeas());
+    }
+}
+
+function saveEditedTaskFromComposer() {
+    if (!composerSession || !composerSession.taskId || composerSubmitting) return;
+    const taskId = composerSession.taskId;
+    const field = composerParentField();
+    const text = field ? field.value : '';
+    if (!text.trim()) {
+        if (field) {
+            UI.flashInputBox(field);
+            try { field.focus({ preventScroll: true }); } catch (_) { field.focus(); }
+        }
+        return;
+    }
+    const task = state.appData.tasks[taskId];
+    if (!task || !state.currentUser) return;
+    const nestedIdeas = sanitizeNestedForSave(collectEditedNestedIdeas(), getParentKanbanStatus(task));
+    const updateData = {
+        text,
+        nestedIdeas,
+        updatedAt: Date.now(),
+        lastAutoMovedAt: null
+    };
+    composerSubmitting = true;
+    syncComposerAddState();
+    Object.assign(task, updateData);
+    updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData).then(() => {
+        composerSubmitting = false;
+        closeAddTaskComposer({ restore: false });
+        UI.renderBoard();
+    }, (e) => {
+        composerSubmitting = false;
+        syncComposerAddState();
+        API.handleSyncError(e);
+    });
+}
+
+function openTaskInComposer(taskId, listId) {
+    if (composerSubmitting) return;
+    const task = state.appData.tasks[taskId];
+    if (!task) return;
+    bindComposerOnce();
+    const root = document.getElementById('add-task-composer');
+    const field = composerParentField();
+    if (!root || !field) return;
+
+    if (composerSession && composerSession.taskId === taskId && isAddTaskComposerOpen()) {
+        focusComposerField(field, null, false);
+        return;
+    }
+
+    if (composerSession && !composerSession.taskId && isAddTaskComposerOpen()) {
+        saveComposerOutline(composerSession.listId);
+        const source = findAddTaskInput(composerSession.listId);
+        if (source) source.value = field.value;
+    }
+
+    composerSession = { listId, taskId, nestedById: new Map() };
+    UI.setComposerEditTask(taskId);
+    field.value = task.text || '';
+    field.placeholder = 'Edit task';
+    field.setAttribute('aria-label', 'Task');
+    const preparedNested = migrateNestedTree(task.nestedIdeas || [], getParentKanbanStatus(task));
+    rebuildComposerSubtasksFromNodes(preparedNested);
+    const titleEl = document.getElementById('add-task-composer-list');
+    const list = (state.appData.rawLists || []).find((item) => item.id === listId);
+    if (titleEl) titleEl.textContent = list ? list.title : '';
+    composerToggleAt = Date.now();
+    root.classList.remove('hidden');
+    root.setAttribute('aria-hidden', 'false');
+    document.documentElement.classList.add('add-task-composer-open');
+    resetComposerAutoAdd();
+    startComposerViewportWatch();
+    positionAddTaskComposer();
+    syncComposerEditChrome();
+    syncComposerAddState();
+    UI.renderComposerTagBar();
+    applyComposerFontSize(readComposerFontSize());
+    focusComposerField(field, null, true);
 }
 
 function openAddTaskComposer(sourceInput) {
@@ -3904,7 +4064,7 @@ function openAddTaskComposer(sourceInput) {
     const field = document.getElementById('add-task-composer-input');
     if (!ctx || !root || !field) return;
 
-    if (composerSession && composerSession.listId !== ctx.listId) {
+    if (composerSession && !composerSession.taskId && composerSession.listId !== ctx.listId) {
         rememberDraft(composerSession.listId, field.value);
         const prev = findAddTaskInput(composerSession.listId);
         if (prev) prev.value = field.value;
@@ -3912,11 +4072,15 @@ function openAddTaskComposer(sourceInput) {
     }
 
     const already = composerSession
+        && !composerSession.taskId
         && composerSession.listId === ctx.listId
         && !root.classList.contains('hidden');
 
     if (!already) {
         composerSession = { listId: ctx.listId };
+        UI.setComposerEditTask(null);
+        field.placeholder = 'Type an idea to add';
+        field.setAttribute('aria-label', 'New task');
         field.value = sourceInput.value || addTaskDrafts.get(ctx.listId) || '';
         rebuildComposerSubtasks(addTaskSubtaskDrafts.get(ctx.listId) || []);
         rememberDraft(ctx.listId, field.value);
@@ -3931,6 +4095,7 @@ function openAddTaskComposer(sourceInput) {
         resetTimerForList(ctx.listId);
         startComposerViewportWatch();
         positionAddTaskComposer();
+        syncComposerEditChrome();
         syncComposerAddState();
         scheduleComposerAutoAdd();
         UI.renderComposerTagBar();
@@ -3983,7 +4148,9 @@ function closeAddTaskComposer({ restore = false } = {}) {
     resetComposerAutoAdd();
     const session = composerSession;
     const text = field ? field.value : '';
-    if (session && restore) {
+    if (session && session.taskId) {
+        // An edited task stays as it was until Save.
+    } else if (session && restore) {
         saveComposerOutline(session.listId);
         const source = findAddTaskInput(session.listId);
         if (source) {
@@ -3997,6 +4164,12 @@ function closeAddTaskComposer({ restore = false } = {}) {
     clearComposerSubtasks();
     syncComposerSubtaskButton();
     composerSession = null;
+    UI.setComposerEditTask(null);
+    if (field) {
+        field.placeholder = 'Type an idea to add';
+        field.setAttribute('aria-label', 'New task');
+    }
+    syncComposerEditChrome();
     if (field && document.activeElement === field) field.blur();
     composerToggleAt = Date.now();
     closeCategoryDropup(document.getElementById('add-task-composer-tags'));
@@ -4015,6 +4188,10 @@ function closeAddTaskComposer({ restore = false } = {}) {
 
 function submitAddTaskComposer({ auto = false } = {}) {
     if (!composerSession || composerSubmitting) return;
+    if (composerSession.taskId) {
+        saveEditedTaskFromComposer();
+        return;
+    }
     resetComposerAutoAdd();
     const field = document.getElementById('add-task-composer-input');
     if (!field) return;
@@ -4059,7 +4236,7 @@ function syncRenderedAddInputs() {
         if (input.id === 'add-task-composer-input') return;
         const ctx = getAddTaskContext(input);
         if (!ctx) return;
-        if (composerSession && composerSession.listId === ctx.listId) {
+        if (composerSession && !composerSession.taskId && composerSession.listId === ctx.listId) {
             const field = document.getElementById('add-task-composer-input');
             if (field) input.value = field.value;
             return;

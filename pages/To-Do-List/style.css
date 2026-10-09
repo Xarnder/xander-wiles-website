@@ -1929,10 +1929,27 @@ body {
 body:not(.disable-important-animation) .task-card.important {
     position: relative;
     --task-category-fallback: var(--task-category-color, var(--tag-color, oklch(0.850 0.160 85)));
+    --important-pulse-peak: oklch(1 0 0);
+    --important-pulse-peak-strong: oklch(1 0 0 / 0.95);
+    --important-pulse-peak-soft: oklch(1 0 0 / 0.5);
     background-color: color-mix(in oklch, var(--task-category-fallback) 78%, white 22%);
     border: 2px solid var(--task-category-fallback);
     outline: 2px solid transparent;
     outline-offset: 1px;
+}
+
+body:not(.disable-important-animation) .nested-idea-display-item.important {
+    --important-pulse-peak: oklch(1 0 0);
+    --important-pulse-peak-strong: oklch(1 0 0 / 0.95);
+    --important-pulse-peak-soft: oklch(1 0 0 / 0.5);
+}
+
+/* White categories are already the pulse colour, so they flash amber instead. */
+body:not(.disable-important-animation) .task-card.important[data-tag-tone="white"],
+body:not(.disable-important-animation) .task-card[data-tag-tone="white"] .nested-idea-display-item.important {
+    --important-pulse-peak: oklch(0.78 0.16 75);
+    --important-pulse-peak-strong: oklch(0.78 0.16 75 / 0.95);
+    --important-pulse-peak-soft: oklch(0.78 0.16 75 / 0.5);
 }
 
 /* In dark modes: crisp black text for clear legibility on category colour and white */
@@ -1994,10 +2011,10 @@ body:not(.disable-important-animation) .task-card.important:not(.task-completed)
 body:not(.disable-important-animation) .task-card.important:not(.task-completed):not(.archived-task):hover {
     animation-play-state: paused;
     box-shadow:
-        0 0 18px oklch(1 0 0 / 0.95),
+        0 0 18px var(--important-pulse-peak-strong),
         0 0 35px var(--task-category-fallback),
         0 2px 8px oklch(0 0 0 / 0.3);
-    border-color: oklch(1 0 0);
+    border-color: var(--important-pulse-peak);
     outline-color: color-mix(in oklch, var(--task-category-fallback) 80%, transparent);
 }
 
@@ -2059,10 +2076,10 @@ body.disable-important-animation .nested-idea-display-item.important {
             0 2px 6px oklch(0 0 0 / 0.25);
     }
     60% {
-        background-color: oklch(1 0 0);
+        background-color: var(--important-pulse-peak);
         box-shadow:
-            0 0 20px oklch(1 0 0 / 0.95),
-            0 0 38px oklch(1 0 0 / 0.5),
+            0 0 20px var(--important-pulse-peak-strong),
+            0 0 38px var(--important-pulse-peak-soft),
             0 2px 8px oklch(0 0 0 / 0.3);
     }
     100% {
@@ -2082,8 +2099,8 @@ body.disable-important-animation .nested-idea-display-item.important {
         outline-offset: 1px;
     }
     45% {
-        border-color: oklch(1 0 0);
-        outline-color: oklch(1 0 0 / 0.9);
+        border-color: var(--important-pulse-peak);
+        outline-color: var(--important-pulse-peak-strong);
         outline-offset: 1px;
     }
     80% {
@@ -2125,9 +2142,9 @@ body:not(.disable-important-animation) .nested-idea-display-item.important:not(.
             0 1px 4px oklch(0 0 0 / 0.1);
     }
     60% {
-        background-color: oklch(1 0 0);
+        background-color: var(--important-pulse-peak);
         box-shadow:
-            0 0 0 1px oklch(1 0 0 / 0.9),
+            0 0 0 1px var(--important-pulse-peak-strong),
             0 0 14px color-mix(in oklch, var(--task-category-fallback) 50%, transparent),
             0 3px 10px oklch(0 0 0 / 0.12);
     }
@@ -2183,12 +2200,20 @@ body:not(.disable-important-animation) .nested-idea-display-item.important:not(.
     min-width: 18px;
 }
 
+.task-card.is-single-line .task-number {
+    margin-top: 0;
+}
+
 .task-main-row {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
     gap: 8px;
     width: 100%;
+}
+
+.task-card.is-single-line .task-main-row {
+    align-items: center;
 }
 
 .task-checkbox {
@@ -2803,11 +2828,23 @@ html.add-task-composer-open body {
 }
 
 .add-task-composer-top {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     flex-shrink: 0;
     padding: calc(12px + env(safe-area-inset-top, 0px)) 8px 4px;
+}
+
+.add-task-composer-fonts {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    justify-self: start;
+}
+
+.add-task-composer.is-editing-task .add-task-composer-footer {
+    display: none;
 }
 
 .add-task-composer-dock {
@@ -2881,15 +2918,38 @@ html.add-task-composer-open body {
 }
 
 .add-task-composer-heading {
-    flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
+    justify-self: center;
     gap: 6px;
     min-width: 0;
+    max-width: 100%;
     height: 1.15em;
     font-size: 0.85rem;
     overflow: hidden;
+}
+
+.add-task-composer-advance {
+    justify-self: end;
+    margin: 0;
+    padding: 0 10px;
+    height: 28px;
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    background: oklch(0.623 0.188 259.8 / 0.2);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.add-task-composer-advance[hidden] {
+    display: none;
 }
 
 .add-task-composer-list {
@@ -3890,12 +3950,23 @@ input:checked+.slider-small:before {
     backdrop-filter: blur(5px);
 }
 
+html.add-task-composer-open .modal-overlay {
+    z-index: 10060;
+}
+
 #confirm-modal-overlay,
 #automation-confirm-modal-overlay,
 #reset-modal-overlay,
 #backup-reminder-modal-overlay {
     z-index: 4000;
     /* Higher than regular modal overlays */
+}
+
+html.add-task-composer-open #confirm-modal-overlay,
+html.add-task-composer-open #automation-confirm-modal-overlay,
+html.add-task-composer-open #reset-modal-overlay,
+html.add-task-composer-open #backup-reminder-modal-overlay {
+    z-index: 10070;
 }
 
 /* No Blur for Search List Modal so we can see reordered lists */
@@ -9305,6 +9376,14 @@ body.kanban-dragging .kanban-column-pane {
 .dedup-task-preview-item.is-shared {
     color: #fbbf24;
     font-weight: 500;
+}
+
+.masonry-layout-icon,
+.group-by-tag-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    display: block;
+    flex-shrink: 0;
 }
 
 .masonry-layout-btn.active,

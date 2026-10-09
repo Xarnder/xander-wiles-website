@@ -631,7 +631,7 @@
             <div class="modal-scroll">
             <div class="modal-header-sticky">
                 <div class="modal-header-row">
-                    <h2>Edit Task</h2>
+                    <h2>Advanced</h2>
                     <div class="modal-actions-group">
                         <button id="modal-save-btn" class="btn primary">Save Changes</button>
                         <button id="modal-close-btn" class="btn secondary">Close</button>
@@ -1628,12 +1628,15 @@
 
     <div id="add-task-composer" class="add-task-composer hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="add-task-composer-title">
         <div class="add-task-composer-top">
-            <button type="button" id="add-task-composer-font-down" class="add-task-composer-font" aria-label="Decrease text size" title="Smaller text">A−</button>
+            <div class="add-task-composer-fonts">
+                <button type="button" id="add-task-composer-font-down" class="add-task-composer-font" aria-label="Decrease text size" title="Smaller text">A−</button>
+                <button type="button" id="add-task-composer-font-up" class="add-task-composer-font" aria-label="Increase text size" title="Larger text">A+</button>
+            </div>
             <span class="add-task-composer-heading">
                 <span id="add-task-composer-list" class="add-task-composer-list"></span>
                 <span id="add-task-composer-category" class="add-task-composer-category" hidden></span>
             </span>
-            <button type="button" id="add-task-composer-font-up" class="add-task-composer-font" aria-label="Increase text size" title="Larger text">A+</button>
+            <button type="button" id="add-task-composer-advance" class="add-task-composer-advance" hidden>Advance</button>
         </div>
         <h2 id="add-task-composer-title" class="visually-hidden">Add task</h2>
         <div class="add-task-composer-stage" id="add-task-composer-stage">

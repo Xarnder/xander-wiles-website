@@ -1,6 +1,8 @@
 import { state } from './store.js';
 import { escapeHtml, showToast, getTerm } from './utils.js';
 
+export const GROUP_BY_TAG_ICON = `<svg class="group-by-tag-icon" viewBox="0 0 478 512.29" aria-hidden="true" focusable="false"><path fill="currentColor" d="M161.37 115.54H129.6V505.7c0 3.34-3.25 6.59-6.58 6.59H52.94c-3.41 0-6.63-2.94-6.63-6.59V115.54H14.58c-3.37 0-6.82-1.15-9.56-3.57-6.1-5.27-6.7-14.51-1.46-20.58L78.84 4.96c5.99-6.62 16.46-6.7 22.25.28l71.07 85.87c2.38 2.62 3.81 6.11 3.81 9.84 0 8.13-6.51 14.59-14.6 14.59zm50.02 396.75c-3.33 0-6.59-3.25-6.59-6.59v-56.59c0-3.38 2.94-6.63 6.59-6.63h260.03c3.65 0 6.58 3.25 6.58 6.63v56.59c0 3.34-3.25 6.59-6.58 6.59H211.39zm0-142.11c-3.17 0-6.59-3.38-6.59-6.59v-56.6c0-3.25 2.98-6.62 6.59-6.62h192.84c3.61 0 6.58 3.25 6.58 6.62v56.6c0 3.33-3.33 6.59-6.58 6.59H211.39zm0-142.11c-3.17 0-6.59-3.34-6.59-6.59v-56.6c0-3.29 2.94-6.62 6.59-6.62h125.65c3.65 0 6.58 3.25 6.58 6.62v56.6c0 3.33-3.33 6.59-6.58 6.59H211.39z"/></svg>`;
+
 export const KANBAN_STAGES = ['new', 'under_review', 'almost_done', 'finished'];
 
 export const DEFAULT_KANBAN_LABELS = {
@@ -230,7 +232,7 @@ export function renderKanbanFocus(boardContainer, list) {
                     <i class="${isListFreezeImportantEnabled(list) ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i>
                 </button>
                 <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">
-                    <i class="ph ph-stack"></i>
+                    ${GROUP_BY_TAG_ICON}
                 </button>
                 <button type="button" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List">
                     <i class="ph ph-check-square-offset"></i>
