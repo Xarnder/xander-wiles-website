@@ -1,4 +1,4 @@
-import { PAGE_SIZE, ROOT_FOLDER_ID } from './config.js';
+import { FINDER_SORT_DEFAULT, PAGE_SIZE, ROOT_FOLDER_ID } from './config.js';
 import { getAccessToken, refreshAccessToken } from './auth.js';
 import { isPdfFile, pdfUploadKind } from './pdf-edit.js';
 
@@ -70,8 +70,8 @@ export function isPdfCandidate(file) {
 }
 
 /** Folders first, then markdown, then PDFs — sorted within each group by `sortMode`. */
-export function sortDriveEntries(files, sortMode = 'name-asc') {
-    const mode = typeof sortMode === 'string' ? sortMode : 'name-asc';
+export function sortDriveEntries(files, sortMode = FINDER_SORT_DEFAULT) {
+    const mode = typeof sortMode === 'string' ? sortMode : FINDER_SORT_DEFAULT;
     const rank = (file) => {
         if (isFolder(file)) return 0;
         if (isMarkdownCandidate(file)) return 1;
@@ -118,7 +118,7 @@ export function sortDriveEntries(files, sortMode = 'name-asc') {
 }
 
 /** Map UI sort mode → Drive `orderBy` (folders still first). */
-export function driveOrderByForSort(sortMode = 'name-asc') {
+export function driveOrderByForSort(sortMode = FINDER_SORT_DEFAULT) {
     switch (sortMode) {
         case 'name-desc':
             return 'folder,name_natural desc';
@@ -149,7 +149,7 @@ export function driveOrderByForSort(sortMode = 'name-asc') {
  * @returns {Promise<{ files: object[], nextPageToken: string|null }>}
  */
 export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, options = {}) {
-    const sortMode = options.sortMode || 'name-asc';
+    const sortMode = options.sortMode || FINDER_SORT_DEFAULT;
     const parent = folderId || ROOT_FOLDER_ID;
     const safeParent = parent.replace(/'/g, "\\'");
     const q = [
@@ -214,7 +214,7 @@ export async function fetchVisiblePage(fetchPage, startToken, options = {}) {
  * @returns {Promise<{ files: object[], nextPageToken: string|null }>}
  */
 export async function searchMarkdownFiles(nameQuery = '', pageToken = null, options = {}) {
-    const sortMode = options.sortMode || 'modified-desc';
+    const sortMode = options.sortMode || FINDER_SORT_DEFAULT;
     // Broad server query; tighten client-side with isMarkdownCandidate.
     const parts = ['trashed = false', "mimeType != 'application/vnd.google-apps.folder'"];
     const trimmed = (nameQuery || '').trim();

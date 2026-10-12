@@ -138,6 +138,7 @@ export function bindUi() {
     els.editorSearchPrev = document.getElementById('editor-search-prev');
     els.editorSearchNext = document.getElementById('editor-search-next');
     els.editorSearchClose = document.getElementById('editor-search-close');
+    els.prefFinderSort = document.getElementById('pref-finder-sort');
     els.prefMdOrderMobile = document.getElementById('pref-md-order-mobile');
     els.prefMdOrderDesktop = document.getElementById('pref-md-order-desktop');
     els.prefTheme = document.getElementById('pref-theme');
@@ -2093,6 +2094,7 @@ export function syncFinderSortControl(sortMode) {
     const option = FINDER_SORT_OPTIONS.find((o) => o.value === mode);
     const label = option?.label || 'Sort';
     if (els.btnFinderSortLabel) els.btnFinderSortLabel.textContent = label;
+    if (els.prefFinderSort) els.prefFinderSort.value = mode;
     if (els.btnFinderSort) {
         els.btnFinderSort.title = `Sort: ${label}`;
         els.btnFinderSort.setAttribute('aria-label', `Sort files: ${label}`);

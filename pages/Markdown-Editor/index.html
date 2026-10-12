@@ -461,6 +461,20 @@
                         <h3 class="settings-subheading">Finder layout</h3>
                         <p class="settings-prefs-lede">Choose where the Markdown section appears relative to Folders.</p>
                         <label class="settings-pref">
+                            <span class="settings-pref-label">Default order</span>
+                            <select id="pref-finder-sort" class="settings-select">
+                                <option value="modified-desc" selected>Last updated</option>
+                                <option value="modified-asc">Oldest updated</option>
+                                <option value="created-desc">Newest created</option>
+                                <option value="created-asc">Oldest created</option>
+                                <option value="name-asc">Name A–Z</option>
+                                <option value="name-desc">Name Z–A</option>
+                                <option value="size-desc">Largest first</option>
+                                <option value="size-asc">Smallest first</option>
+                            </select>
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Finder and Pinned list the most recently updated items first. Change this if you prefer another order.</p>
+                        <label class="settings-pref">
                             <span class="settings-pref-label">Mobile</span>
                             <select id="pref-md-order-mobile" class="settings-select">
                                 <option value="bottom">Markdown at bottom</option>
@@ -552,7 +566,7 @@
                     </div>
                     <div class="finder-actions">
                         <button type="button" id="btn-finder-sort" class="btn btn-ghost btn-finder-sort" aria-haspopup="dialog" aria-controls="finder-sort-dialog" title="Sort files" aria-label="Sort files">
-                            <span class="btn-finder-sort-label">Sort</span>
+                            <span class="btn-finder-sort-label">Last updated</span>
                         </button>
                         <div id="create-actions" class="create-actions" hidden>
                             <button type="button" id="btn-new-note" class="btn btn-primary">+ Note</button>

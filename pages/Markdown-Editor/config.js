@@ -31,7 +31,8 @@ export const FINDER_MD_ORDER_DESKTOP_DEFAULT = 'top';
  * Folders stay grouped above markdown; this sorts within each group.
  */
 export const FINDER_SORT_KEY = 'md-editor:finderSort';
-export const FINDER_SORT_DEFAULT = 'name-asc';
+/** Used by Finder and Pinned until the user picks another order in Settings. */
+export const FINDER_SORT_DEFAULT = 'modified-desc';
 /** @type {readonly { value: string, label: string }[]} */
 export const FINDER_SORT_OPTIONS = Object.freeze([
     { value: 'modified-desc', label: 'Last updated' },

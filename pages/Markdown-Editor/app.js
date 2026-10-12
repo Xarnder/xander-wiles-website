@@ -808,6 +808,19 @@ function applySavedFinderSort() {
     syncFinderSortControl(readFinderSort());
 }
 
+async function applyFinderSortChoice(mode) {
+    const next = writeFinderSort(mode);
+    syncFinderSortControl(next);
+    const label = FINDER_SORT_OPTIONS.find((o) => o.value === next)?.label || next;
+    setStatus(`Sorted by ${label}`, 'ok');
+    const elsNow = getEls();
+    if (elsNow.viewPinned && !elsNow.viewPinned.hidden) {
+        await renderPinnedView();
+    } else if (elsNow.viewFinder && !elsNow.viewFinder.hidden) {
+        await refreshBrowse(true);
+    }
+}
+
 function readTheme() {
     try {
         const raw = localStorage.getItem(THEME_KEY);
@@ -5267,17 +5280,12 @@ function wireEvents() {
             const current = readFinderSort();
             const next = await promptFinderSort(current);
             if (!next || next === current) return;
-            const mode = writeFinderSort(next);
-            syncFinderSortControl(mode);
-            const label =
-                FINDER_SORT_OPTIONS.find((o) => o.value === mode)?.label || mode;
-            setStatus(`Sorted by ${label}`, 'ok');
-            const elsNow = getEls();
-            if (elsNow.viewPinned && !elsNow.viewPinned.hidden) {
-                await renderPinnedView();
-            } else {
-                await refreshBrowse(true);
-            }
+            await applyFinderSortChoice(next);
+        });
+    }
+    if (els.prefFinderSort) {
+        els.prefFinderSort.addEventListener('change', () => {
+            applyFinderSortChoice(els.prefFinderSort.value);
         });
     }
     if (els.btnEditorMore) {
