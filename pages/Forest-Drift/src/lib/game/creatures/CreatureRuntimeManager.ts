@@ -3,6 +3,7 @@ import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
 import { animateCreature } from './CreatureAnimationSystem';
+import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
 import { createDefaultCreatureState, validateCreatureWorldState } from './CreaturePersistence';
 import {
 	generatePopulationCell,
@@ -12,6 +13,7 @@ import {
 import { createCreatureState, decideCreature, advanceCreature } from './CreatureBehaviourSystem';
 import type {
 	CreatureDefinition,
+	CreatureLod,
 	CreatureRuntimeDefinition,
 	CreatureSpawnDefinition,
 	CreatureWorldAccess,
@@ -22,7 +24,7 @@ import { CREATURE_GRAPHICS_BUDGETS, type GraphicsQuality } from '../graphics/Gra
 
 interface LiveCreature {
 	compiled: CompiledCreature;
-	lod: 0 | 1;
+	lod: CreatureLod;
 	lastAnimation: number;
 	born: number;
 	debug?: THREE.SkeletonHelper;
@@ -36,6 +38,8 @@ export class CreatureRuntimeManager {
 	private spatial = new CreatureSpatialIndex<CreatureRuntimeDefinition>();
 	readonly logical = new Map<string, CreatureRuntimeDefinition>();
 	readonly live = new Map<string, LiveCreature>();
+	/** Terrain conformation state per live creature; survives LOD recompiles (same skeleton). */
+	readonly grounding = new Map<string, CreatureGroundingController>();
 	state: CreatureWorldState;
 	revision = 0;
 	private cells = new Map<string, CreatureSpawnDefinition[]>();
@@ -70,7 +74,10 @@ export class CreatureRuntimeManager {
 		behaviourMs: 0,
 		lod0: 0,
 		lod1: 0,
+		lod2: 0,
 		culled: 0,
+		groundingUpdates: 0,
+		surfaceSamples: 0,
 		failures: 0
 	};
 	constructor(
@@ -112,6 +119,7 @@ export class CreatureRuntimeManager {
 	}
 	private reset() {
 		for (const id of [...this.live.keys()]) this.unload(id);
+		this.grounding.clear();
 		this.logical.clear();
 		this.cells.clear();
 		this.scanAt = -1;
@@ -183,7 +191,14 @@ export class CreatureRuntimeManager {
 			this.scan(player, quality);
 			this.scanAt = this.time + 0.8;
 		}
-		const visible: { id: string; distance: number; lod: 0 | 1 }[] = [];
+		const visible: { id: string; distance: number; lod: CreatureLod }[] = [];
+		// Same anatomy at every level; only tessellation and sub-silhouette detail drop with distance.
+		const lodFor = (distance: number): CreatureLod =>
+			distance < budget.nearDistance && quality !== 'low'
+				? 0
+				: distance < budget.nearDistance * (quality === 'low' ? 1.6 : 2.4)
+					? 1
+					: 2;
 		for (const [id, r] of this.logical) {
 			const p = r.spawn.species.proportions,
 				size =
@@ -193,12 +208,7 @@ export class CreatureRuntimeManager {
 				budget.populationRadius,
 				Math.max(budget.smallRenderDistance, size * 24)
 			);
-			if (distance <= far)
-				visible.push({
-					id,
-					distance,
-					lod: distance < budget.nearDistance && quality !== 'low' ? 0 : 1
-				});
+			if (distance <= far) visible.push({ id, distance, lod: lodFor(distance) });
 		}
 		visible.sort((a, b) => a.distance - b.distance);
 		const selected = visible.slice(
@@ -206,7 +216,13 @@ export class CreatureRuntimeManager {
 			Math.min(this.state.settings.maxActiveCreatures, budget.maxActive)
 		);
 		const ids = new Set(selected.map((p) => p.id));
-		for (const id of this.live.keys()) if (!ids.has(id)) this.unload(id);
+		for (const id of this.live.keys())
+			if (!ids.has(id)) {
+				this.unload(id);
+				this.grounding.delete(id);
+			}
+		const samplesBefore = groundingStats.surfaceCalls,
+			updatesBefore = groundingStats.updates;
 		let compiledThisFrame = false;
 		this.stats.skeletonUpdates = 0;
 		this.stats.behaviourUpdates = 0;
@@ -275,12 +291,24 @@ export class CreatureRuntimeManager {
 			const interval = item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 0.1 : 0.4;
 			if (this.time - live.lastAnimation >= interval) {
 				const start = performance.now();
+				let grounding = this.grounding.get(item.id);
+				if (!grounding) {
+					grounding = new CreatureGroundingController(c.compilation);
+					this.grounding.set(item.id, grounding);
+				}
+				// Grounding detail follows the animation cadence: full planting/IK near, simplified
+				// stepping at medium range, body-only slope alignment far away.
 				animateCreature(
 					c,
 					{ ...r.intent, heading: r.heading },
 					this.time,
 					Math.min(0.4, this.time - live.lastAnimation),
-					item.distance < budget.nearDistance ? this.access.surface : undefined
+					this.access.surface,
+					{
+						grounding,
+						lod: item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 1 : 2,
+						standable: this.access.standable
+					}
 				);
 				live.lastAnimation = this.time;
 				this.stats.animationMs += performance.now() - start;
@@ -309,11 +337,14 @@ export class CreatureRuntimeManager {
 		this.stats.triangles = 0;
 		this.stats.lod0 = 0;
 		this.stats.lod1 = 0;
+		this.stats.lod2 = 0;
 		for (const r of this.live.values()) {
 			this.stats.triangles += r.compiled.compilation.geometry.indices.length / 3;
-			this.stats[r.lod === 0 ? 'lod0' : 'lod1']++;
+			this.stats[`lod${r.lod}`]++;
 		}
 		this.stats.drawCalls = this.live.size;
+		this.stats.groundingUpdates = groundingStats.updates - updatesBefore;
+		this.stats.surfaceSamples = groundingStats.surfaceCalls - samplesBefore;
 		if (this.time - this.persistenceAt > 5) {
 			this.persistenceAt = this.time;
 			if (this.state.individuals.length) this.revision++;
@@ -465,6 +496,7 @@ export class CreatureRuntimeManager {
 	}
 	dispose() {
 		for (const id of [...this.live.keys()]) this.unload(id);
+		this.grounding.clear();
 		this.logical.clear();
 		this.cells.clear();
 		this.group.removeFromParent();

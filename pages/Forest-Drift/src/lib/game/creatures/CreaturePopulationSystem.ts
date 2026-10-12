@@ -28,7 +28,9 @@ export function creatureSurface(
 	x: number,
 	z: number,
 	radius: number,
-	height: number
+	height: number,
+	/** tan(max walkable slope); species pass their own (agile animals climb steeper ground). */
+	maxSlope = 0.65
 ): number | undefined {
 	const y = access.surface(x, z);
 	if (!Number.isFinite(y) || access.blocked(x, z, radius, height)) return;
@@ -40,7 +42,7 @@ export function creatureSurface(
 		[0, -probe]
 	]) {
 		const other = access.surface(x + dx, z + dz);
-		if (!Number.isFinite(other) || Math.abs(other - y) > probe * 0.65) return;
+		if (!Number.isFinite(other) || Math.abs(other - y) > probe * maxSlope) return;
 	}
 	return y;
 }

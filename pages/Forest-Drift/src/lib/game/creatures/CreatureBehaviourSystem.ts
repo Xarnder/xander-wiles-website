@@ -6,6 +6,10 @@ import type {
 	Vec3
 } from './CreatureTypes';
 import { creatureDimensions, creatureSurface } from './CreaturePopulationSystem';
+import { resolveTerrainLocomotion } from './CreatureTerrainProfile';
+/** Movement rejects ground steeper than the species can stand on (its body tilt is limited too). */
+const slopeLimit = (state: CreatureRuntimeDefinition) =>
+	Math.tan(resolveTerrainLocomotion(state.spawn.species).maxWalkSlope);
 const distance = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.z - b.z);
 export function createCreatureState(spawn: CreatureSpawnDefinition): CreatureRuntimeDefinition {
 	return {
@@ -162,7 +166,8 @@ export function decideCreature(
 				state.position.x + vx * 0.5,
 				state.position.z + vz * 0.5,
 				dims.radius,
-				dims.height
+				dims.height,
+				slopeLimit(state)
 			) !== undefined
 		) {
 			velocity = { x: vx, y: 0, z: vz };
@@ -191,7 +196,7 @@ export function advanceCreature(
 	for (let i = 0; i < steps; i++) {
 		const x = state.position.x + (v.x * elapsed) / steps,
 			z = state.position.z + (v.z * elapsed) / steps;
-		const y = creatureSurface(access, x, z, dims.radius, dims.height);
+		const y = creatureSurface(access, x, z, dims.radius, dims.height, slopeLimit(state));
 		const radius = Math.max(state.spawn.species.behaviour.wanderRadius, dims.radius * 3);
 		if (
 			y === undefined ||

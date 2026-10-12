@@ -5,8 +5,14 @@ import type {
 	CreaturePattern,
 	SpeciesGenome
 } from './CreatureTypes';
+import { deriveSpeciesForm, traitFeatures } from './CreatureForm';
+import { deriveTerrainLocomotion } from './CreatureTerrainProfile';
 
-/** V1 dimensions are reference metres; scaleRange bounds individual.sizeFactor, not height. */
+/**
+ * V1 dimensions are reference metres; scaleRange bounds individual.sizeFactor, not height.
+ * The draw order of `rng` is part of species identity (proportions, primary colour, name): new
+ * choices use their own named streams instead of adding draws here.
+ */
 export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'): SpeciesGenome {
 	if (!Number.isSafeInteger(seed)) throw new Error('Creature seed must be a safe integer');
 	const rng = createNamedRandom(String(seed), `creature-species-v1:${bodyPlan}`);
@@ -29,14 +35,18 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 		longbody: 'fins',
 		crownhead: 'horns'
 	};
-	const features: CreatureFeatureKind[] = [
-		'eyes',
+	const legacyFeatures: CreatureFeatureKind[] = [
 		dominant[strategy],
 		pick(['ears', 'frills', 'spikes', 'tail-tip'] as const)
 	];
-	if (bodyPlan !== 'serpentine') features.push('feet');
 	const hue = between(0, 360);
 	const light = between(0.38, 0.62);
+	// Colour blocking: saturated body, warm pale underside, contrasting accent for extremities.
+	const paletteRng = createNamedRandom(String(seed), `creature-palette-v2:${bodyPlan}`);
+	const pb = (a: number, b: number) => a + paletteRng() * (b - a);
+	const scheme = [150, 180, 210, 120, -120, 40][Math.floor(paletteRng() * 6)];
+	const accentHue = hue + scheme + pb(-15, 15);
+	const creamHue = hue + (((45 - hue + 540) % 360) - 180) * pb(0.55, 0.8);
 	const color = (h: number, saturation: number, lightness: number) => {
 		const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
 		const hh = (((h % 360) + 360) % 360) / 60;
@@ -75,7 +85,7 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 				: bodyPlan === 'serpentine'
 					? []
 					: [0, 0.5, 0.5, 0];
-	return {
+	const species: SpeciesGenome = {
 		id: `sp_1_${(hashStringToUint32(`${seed}:${bodyPlan}`) >>> 0).toString(16)}`,
 		name: `${pick(['Moss', 'Dusk', 'Amber', 'Mist', 'River', 'Moon'])} ${strategy === 'longleg' ? 'Stilt' : strategy === 'round' ? 'Pebbleback' : strategy === 'longbody' ? 'Ribbon' : 'Crownling'}`,
 		seed,
@@ -101,16 +111,16 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 		},
 		anatomy: {
 			symmetryStrength: between(0.95, 1),
-			features,
-			signatureTraits: [strategy, dominant[strategy], bodyPlan],
+			features: [],
+			signatureTraits: [strategy],
 			featureScale: between(0.8, 1.15)
 		},
 		appearance: {
 			palette: {
-				primary: color(hue, 0.42, light),
-				secondary: color(hue + 20, 0.3, Math.min(0.85, light + 0.18)),
-				accent: color(hue + 155, 0.48, 0.58),
-				eye: '#18252b',
+				primary: color(hue, 0.48, light),
+				secondary: color(creamHue, pb(0.32, 0.5), pb(0.78, 0.87)),
+				accent: color(accentHue, pb(0.42, 0.6), scheme === 40 ? light * 0.72 : pb(0.5, 0.62)),
+				eye: color(hue, 0.25, 0.08),
 				roughness: between(0.65, 0.9),
 				metalness: 0,
 				pattern: pick<CreaturePattern>([
@@ -158,4 +168,29 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 			behaviour: 0.12
 		}
 	};
+	// The art-direction genome comes from its own named stream too.
+	const form = deriveSpeciesForm(species);
+	const adornments = traitFeatures(form);
+	for (const kind of legacyFeatures)
+		if (
+			adornments.length < 2 &&
+			!adornments.includes(kind) &&
+			(bodyPlan !== 'serpentine' || kind !== 'tail-tip')
+		)
+			adornments.push(kind);
+	species.anatomy.features = [
+		'eyes',
+		...adornments,
+		...(bodyPlan !== 'serpentine' ? (['feet'] as const) : [])
+	];
+	species.anatomy.signatureTraits = [
+		strategy,
+		form.traits.dominant,
+		form.traits.secondary,
+		...(form.traits.minor ? [form.traits.minor] : []),
+		bodyPlan
+	];
+	species.form = form;
+	species.locomotion.terrain = deriveTerrainLocomotion(species);
+	return species;
 }

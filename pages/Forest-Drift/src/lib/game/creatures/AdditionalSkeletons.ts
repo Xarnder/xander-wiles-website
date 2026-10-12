@@ -1,269 +1,303 @@
-import type {
-	CreatureDefinition,
-	ProceduralSkeletonDefinition,
-	Vec3,
-	JointSemantic,
-	CrossSection
-} from './CreatureTypes';
+import { Vector3 } from 'three';
+import {
+	TORSO_PROFILES,
+	buildLimbPair,
+	buildNeckAndHead,
+	buildTail,
+	hostJointAt,
+	lerp,
+	section,
+	type RigBuilder
+} from './CreatureAnatomy';
+import { sectionAt } from './SweptBodyVolume';
+import type { CrossSection } from './CreatureTypes';
+
 /** Separate upright, three-pair and limbless grammars; the quadruped is not mutated into these plans. */
-export function generateAdditionalSkeleton(def: CreatureDefinition): ProceduralSkeletonDefinition {
-	const { species: s, individual: i } = def,
-		p = s.proportions,
-		k = i.sizeFactor,
-		v = i.proportionVariation;
-	const length = p.bodyLength * v.length * k,
-		width = p.bodyWidth * v.width * k,
-		depth = p.bodyDepth * k,
-		legs = p.legLength * v.legs * k,
-		thick = p.legThickness * k,
-		head = p.headSize * v.head * k;
-	const rig: ProceduralSkeletonDefinition = {
-			joints: [],
-			volumes: [],
-			features: [],
-			limbs: [],
-			groundOffset: 0
-		},
-		world = new Map<string, Vec3>();
-	const add = (
-		id: string,
-		parentId: string | undefined,
-		semantic: JointSemantic,
-		pos: Vec3,
-		mirrorGroup?: string
-	) => {
-		const parent = parentId ? world.get(parentId)! : { x: 0, y: 0, z: 0 };
-		rig.joints.push({
-			id,
-			parentId,
-			semantic,
-			localPosition: { x: pos.x - parent.x, y: pos.y - parent.y, z: pos.z - parent.z },
-			mirrorGroup
-		});
-		world.set(id, pos);
-		return id;
-	};
-	const section = (t: number, radiusX: number, radiusY: number): CrossSection => ({
-		t,
-		radiusX,
-		radiusY
+export function generateAdditionalSkeleton(b: RigBuilder) {
+	const plan = b.definition.species.bodyPlan.id;
+	b.add('root', undefined, 'root', { x: 0, y: 0, z: 0 });
+	if (plan === 'biped') buildBiped(b);
+	else if (plan === 'hexapod') buildHexapod(b);
+	else if (plan === 'serpentine') buildSerpentine(b);
+	else throw new Error('Unsupported creature body plan');
+}
+
+/** Rounded pelvis bowl, upright chest, legs rooted under the pelvis, relaxed arms from the shoulders. */
+function buildBiped(b: RigBuilder) {
+	const { form, dims, definition } = b,
+		gait = definition.species.locomotion.gait;
+	const { length, width: W, depth: D, legs, head: h } = dims;
+	const profile = TORSO_PROFILES[form.torsoProfile];
+	const r = dims.limbRadius,
+		footY = r * 0.85 * form.footScale;
+	const pelvisY = footY + legs + D * 0.12,
+		// Upright torso height comes from body length but stays within a readable range of its depth.
+		torso = Math.min(Math.max(length * 0.6, D * 1.1), D * 1.9);
+	b.add('pelvis', 'root', 'pelvis', { x: 0, y: pelvisY, z: 0 });
+	b.add('spine', 'pelvis', 'spine', { x: 0, y: pelvisY + torso * 0.48, z: -D * 0.05 });
+	b.add('chest', 'spine', 'chest', { x: 0, y: pelvisY + torso * 0.9, z: D * 0.02 });
+	const hw = W * 0.55,
+		hd = D * 0.5;
+	const hip = Math.sqrt(form.hipMass),
+		shoulder = Math.sqrt(form.shoulderMass);
+	const ids = ['pelvis', 'pelvis', 'spine', 'chest', 'chest'];
+	const chest = b.at('chest');
+	// Vertical sweep: radiusX is width, radiusY the back (upper) / belly (lower) depth.
+	b.volume({
+		id: 'torso',
+		jointIds: ids,
+		// Straight vertical sweep axis; posture lives in the joints, silhouette in the sections.
+		pointOffsets: b.offsets(
+			ids,
+			[
+				pelvisY - torso * 0.16,
+				pelvisY,
+				pelvisY + torso * 0.48,
+				chest.y,
+				chest.y + torso * 0.12
+			].map((y) => ({ x: 0, y, z: 0 }))
+		),
+		sections: [
+			section(0, hw * 0.72 * profile.hipW * hip, hd * 0.72),
+			section(0.25, hw * profile.hipW * hip, hd * 0.92 * profile.hipD, {
+				radiusYLower: hd * profile.hipD * (1 + profile.sag)
+			}),
+			section(0.5, hw * profile.waist * 0.9, hd * 0.82, {
+				radiusYLower: hd * (0.9 * profile.belly + form.bellySag + profile.sag)
+			}),
+			section(
+				0.75,
+				hw * 0.88 * profile.chestW * shoulder,
+				hd * profile.chestD * 0.92 * form.chestDepth,
+				{
+					radiusYLower: hd * profile.chestD * form.chestDepth
+				}
+			),
+			section(1, hw * 0.6 * profile.chestW, hd * 0.6)
+		],
+		caps: { start: 'dome', end: 'dome' },
+		part: 'torso',
+		detail: 'major',
+		segmentRings: [2, 3, 3, 2],
+		skinBlend: 0.5
 	});
-	const volume = (id: string, jointIds: string[], sections: CrossSection[]) =>
-		rig.volumes.push({ id, jointIds, sections });
-	add('root', undefined, 'root', { x: 0, y: 0, z: 0 });
-	const limb = (
-		host: string,
-		pair: number,
-		side: -1 | 1,
-		hip: Vec3,
-		knee: Vec3,
-		foot: Vec3,
-		arm = false
-	) => {
-		const id = `limb-${pair}-${side}`,
-			hipId = add(`${id}-hip`, host, 'limb-root', hip, `hip-${pair}`),
-			kneeId = add(`${id}-knee`, hipId, 'lower-limb', knee, `knee-${pair}`),
-			footId = add(`${id}-foot`, kneeId, 'foot', foot, `foot-${pair}`);
-		const dist = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-		rig.limbs.push({
-			id,
-			side,
+	buildLimbPair(b, {
+		pair: 0,
+		hostVolumeId: 'torso',
+		hostJointId: 'pelvis',
+		// Low on the pelvis bowl: the root leaves down-and-out, so the hip mass reads as a thigh.
+		t: lerp(0.13, 0.07, form.hipSpread),
+		angle: 0,
+		radius: r * 1.05,
+		massKind: 'hip',
+		// Upright hips read as a pelvis, not balls: smaller, thigh-shaped masses.
+		massScale: form.hipMass * 0.7,
+		phases: [gait.footPhaseOffsets[0] ?? 0, gait.footPhaseOffsets[1] ?? 0.5],
+		place(pivot) {
+			const foot = new Vector3(pivot.x + dims.stanceWidth * 0.06, footY, pivot.z + legs * 0.04);
+			const knee = pivot.clone().lerp(foot, 0.52);
+			knee.z += legs * 0.07;
+			return { knee, foot };
+		}
+	});
+	buildLimbPair(b, {
+		pair: 1,
+		hostVolumeId: 'torso',
+		hostJointId: 'chest',
+		t: 0.84,
+		angle: 0.1,
+		radius: r * 0.95,
+		massKind: 'shoulder',
+		massScale: form.shoulderMass * 0.85,
+		phases: [0, 0.5],
+		arm: true,
+		place(pivot) {
+			const arm = Math.min(Math.max(legs * 0.6, torso * 0.85), (pivot.y - footY) * 0.8);
+			// Relaxed arms hang slightly away from the body so they read in silhouette.
+			const knee = pivot.clone().add(new Vector3(arm * 0.2, -arm * 0.46, -arm * 0.04));
+			const foot = knee.clone().add(new Vector3(arm * 0.1, -arm * 0.42, arm * 0.14));
+			return { knee, foot };
+		}
+	});
+	const nl = dims.neckLength;
+	const neck = { x: 0, y: chest.y + torso * 0.12 + nl * 0.6, z: chest.z + D * 0.08 };
+	buildNeckAndHead(b, {
+		hostJointId: 'chest',
+		hostVolumeId: 'torso',
+		neckBase: { x: 0, y: chest.y + torso * 0.04, z: chest.z + D * 0.04 },
+		neck,
+		head: { x: 0, y: neck.y + nl * 0.4 + h * 0.32, z: neck.z + h * 0.12 },
+		pitch: 0.05
+	});
+	const pelvis = b.at('pelvis');
+	buildTail(b, {
+		hostJointId: 'pelvis',
+		hostVolumeId: 'torso',
+		root: { x: 0, y: pelvis.y - torso * 0.04, z: pelvis.z - hd * 0.4 },
+		first: { x: 0, y: pelvis.y - torso * 0.06, z: pelvis.z - hd * profile.hipD * 1.02 },
+		direction: new Vector3(0, -0.35, -1).normalize()
+	});
+}
+
+/** Rounded abdomen, pinched waist and thorax; six splayed limbs rooted along the thorax sides. */
+function buildHexapod(b: RigBuilder) {
+	const { form, dims } = b;
+	const { length: L, width: W, depth: D, legs, head: h } = dims;
+	const profile = TORSO_PROFILES[form.torsoProfile];
+	// Six limbs crowd the silhouette: thinner than a quadruped's four.
+	const r = dims.limbRadius * 0.78,
+		footY = r * 0.85 * form.footScale;
+	// Short legs under a big abdomen: raise the body so its underside clears the ground; the bind
+	// pose then splays the legs further instead of burying the belly.
+	const abdomenBelow = D * 0.5 * 1.05 * profile.hipD * (1 + form.bellySag) - D * 0.05;
+	const y = Math.max(footY + legs * 0.85 + D * 0.1, abdomenBelow + legs * 0.25 + footY);
+	b.add('pelvis', 'root', 'pelvis', { x: 0, y: y + D * 0.05, z: -L * 0.2 });
+	b.add('spine', 'pelvis', 'spine', { x: 0, y: y + D * 0.02, z: L * 0.08 });
+	b.add('chest', 'spine', 'chest', { x: 0, y, z: L * 0.3 });
+	const hw = W * 0.5,
+		hd = D * 0.5,
+		hip = Math.sqrt(form.hipMass);
+	const pinch = lerp(0.55, 0.9, Math.max(0, Math.min(1, (profile.waist - 0.8) / 0.3)));
+	const ids = ['pelvis', 'pelvis', 'spine', 'chest', 'chest'];
+	const pelvis = b.at('pelvis'),
+		chest = b.at('chest');
+	const rear = { x: 0, y: pelvis.y + D * 0.06, z: pelvis.z - L * 0.3 };
+	b.volume({
+		id: 'torso',
+		jointIds: ids,
+		pointOffsets: b.offsets(
+			ids,
+			[rear.z, pelvis.z, b.at('spine').z, chest.z, chest.z + L * 0.13].map((z) => ({
+				x: 0,
+				y: lerp(pelvis.y, chest.y, (z - pelvis.z) / (chest.z - pelvis.z)),
+				z
+			}))
+		),
+		sections: [
+			section(0, hw * 0.48, hd * 0.48),
+			section(0.2, hw * 1.05 * profile.hipW * hip, hd * 1.05 * profile.hipD, {
+				radiusYLower: hd * 1.05 * profile.hipD * (1 + form.bellySag)
+			}),
+			section(0.4, hw * pinch, hd * pinch),
+			section(0.6, hw * 0.86 * profile.chestW, hd * 0.8),
+			section(0.78, hw * 0.82 * profile.chestW, hd * 0.78),
+			section(1, hw * 0.55, hd * 0.55)
+		],
+		caps: { start: 'dome', end: 'dome' },
+		part: 'torso',
+		detail: 'major',
+		segmentRings: [2, 3, 3, 2],
+		skinBlend: 0.5
+	});
+	const volume = b.rig.volumes.find((v) => v.id === 'torso')!;
+	const offsets = b.definition.species.locomotion.gait.footPhaseOffsets;
+	// Six roots stay small: mass scales with limb count so the thorax does not read as a row of balls.
+	for (const [pair, t] of [
+		[0, 0.8],
+		[1, 0.66],
+		[2, 0.52]
+	] as const)
+		buildLimbPair(b, {
 			pair,
-			hipId,
-			kneeId,
-			footId,
-			restFoot: { ...foot },
-			upperLength: dist(hip, knee),
-			lowerLength: dist(knee, foot),
-			phase:
-				s.locomotion.gait.footPhaseOffsets[pair * 2 + (side === 1 ? 1 : 0)] ??
-				(side === 1 ? 0.5 : 0),
-			arm
-		});
-		volume(
-			id,
-			[hipId, kneeId, footId],
-			[
-				section(0, thick * 0.85, thick * 0.85),
-				section(0.25, thick * 0.62, thick * 0.62),
-				section(0.5, thick * 0.43, thick * 0.43),
-				section(0.64, thick * 0.4, thick * 0.4),
-				section(1, thick * 0.28, thick * 0.28)
-			]
-		);
-		rig.features.push({
-			id: `${id}-pad`,
-			kind: 'feet',
-			hostJointId: footId,
-			offset: { x: 0, y: 0, z: thick * 0.25 },
-			scale: { x: thick * 0.48, y: thick * 0.32, z: thick * 0.75 }
-		});
-	};
-	const face = (host: string, neck: Vec3, headPos: Vec3) => {
-		add('neck', host, 'neck', neck);
-		add('head', 'neck', 'head', headPos);
-		add('muzzle', 'head', 'feature', {
-			x: headPos.x,
-			y: headPos.y - head * 0.08,
-			z: headPos.z + head * 0.68
-		});
-		volume(
-			'neck',
-			[host, 'neck', 'head'],
-			[
-				section(0, head * 0.3, head * 0.32),
-				section(0.5, head * 0.25, head * 0.27),
-				section(1, head * 0.3, head * 0.32)
-			]
-		);
-		volume(
-			'head',
-			['neck', 'head', 'muzzle'],
-			[
-				section(0, head * 0.2, head * 0.22),
-				section(0.5, head * 0.49, head * 0.47),
-				section(0.8, head * 0.38, head * 0.32),
-				section(1, head * 0.12, head * 0.14)
-			]
-		);
-	};
-	const tail = (host: string) => {
-		const origin = world.get(host)!,
-			ids = [host],
-			n = 5;
-		for (let a = 1; a <= n; a++)
-			ids.push(
-				add(`tail-${a}`, a === 1 ? host : `tail-${a - 1}`, 'tail', {
-					x: 0,
-					y: origin.y + Math.sin((a / n) * Math.PI) * p.tailLength * k * 0.12,
-					z: origin.z - (p.tailLength * k * a) / n
-				})
-			);
-		volume('tail', ids, [
-			section(0, p.tailThickness * k, p.tailThickness * k),
-			section(0.5, p.tailThickness * k * 0.5, p.tailThickness * k * 0.5),
-			section(1, p.tailThickness * k * 0.02, p.tailThickness * k * 0.02)
-		]);
-	};
-	if (s.bodyPlan.id === 'biped') {
-		const pelvisY = legs + thick * 0.32,
-			torso = length * 0.85;
-		add('pelvis', 'root', 'pelvis', { x: 0, y: pelvisY, z: 0 });
-		add('spine', 'pelvis', 'spine', { x: 0, y: pelvisY + torso * 0.48, z: -depth * 0.07 });
-		add('chest', 'spine', 'chest', { x: 0, y: pelvisY + torso, z: 0 });
-		volume(
-			'torso',
-			['pelvis', 'spine', 'chest'],
-			[
-				section(0, width * 0.44, depth * 0.4),
-				section(0.2, width * 0.5, depth * 0.48),
-				section(0.5, width * 0.43 * p.waistScale, depth * 0.38),
-				section(0.84, width * 0.5 * p.chestScale, depth * 0.46),
-				section(1, width * 0.33, depth * 0.29)
-			]
-		);
-		face(
-			'chest',
-			{ x: 0, y: pelvisY + torso + p.neckLength * k * 0.65, z: depth * 0.12 },
-			{ x: 0, y: pelvisY + torso + p.neckLength * k + head * 0.18, z: depth * 0.25 }
-		);
-		for (const side of [-1, 1] as const) {
-			limb(
-				'pelvis',
-				0,
-				side,
-				{ x: side * width * 0.28, y: pelvisY, z: 0 },
-				{ x: side * width * 0.31, y: pelvisY * 0.52, z: legs * 0.13 },
-				{ x: side * (width * 0.3 + p.stanceWidth * k * 0.25), y: thick * 0.32, z: 0 }
-			);
-			const shoulder = pelvisY + torso * 0.94,
-				armLength = legs * 0.65;
-			limb(
-				'chest',
-				1,
-				side,
-				{ x: side * width * 0.48, y: shoulder, z: 0 },
-				{
-					x: side * (width * 0.52 + armLength * 0.15),
-					y: shoulder - armLength * 0.5,
-					z: armLength * 0.08
-				},
-				{
-					x: side * (width * 0.55 + armLength * 0.12),
-					y: shoulder - armLength,
-					z: armLength * 0.2
-				},
-				true
-			);
-		}
-		tail('pelvis');
-	} else if (s.bodyPlan.id === 'hexapod') {
-		const y = legs + thick * 0.32;
-		add('pelvis', 'root', 'pelvis', { x: 0, y, z: -length * 0.4 });
-		add('spine', 'pelvis', 'spine', { x: 0, y: y + depth * 0.05, z: 0 });
-		add('chest', 'spine', 'chest', { x: 0, y, z: length * 0.37 });
-		volume(
-			'abdomen',
-			['pelvis', 'spine', 'chest'],
-			[
-				section(0, width * 0.3, depth * 0.3),
-				section(0.2, width * 0.6, depth * 0.6),
-				section(0.48, width * 0.45 * p.waistScale, depth * 0.43),
-				section(0.8, width * 0.48 * p.chestScale, depth * 0.48),
-				section(1, width * 0.3, depth * 0.3)
-			]
-		);
-		face(
-			'chest',
-			{ x: 0, y: y + depth * 0.18, z: length * 0.5 + p.neckLength * k * 0.35 },
-			{ x: 0, y: y + depth * 0.28, z: length * 0.5 + p.neckLength * k + head * 0.25 }
-		);
-		for (let pair = 0; pair < 3; pair++)
-			for (const side of [-1, 1] as const) {
-				const host = ['chest', 'spine', 'pelvis'][pair],
-					z = world.get(host)!.z;
-				limb(
-					host,
-					pair,
-					side,
-					{ x: side * width * 0.4, y, z },
-					{ x: side * (width * 0.55 + legs * 0.4), y: y * 0.63, z: z + (pair - 1) * legs * 0.13 },
-					{
-						x: side * (width * 0.6 + legs * 0.6 + p.stanceWidth * k * 0.2),
-						y: thick * 0.32,
-						z: z + (pair - 1) * legs * 0.27
-					}
+			hostVolumeId: 'torso',
+			hostJointId: hostJointAt(volume, t),
+			t,
+			angle: -(Math.PI / 2) * (1 - (pair === 2 ? form.hipSpread : form.shoulderSpread)),
+			radius: r,
+			massKind: 'limb-root',
+			detail: 'minor',
+			massScale: 0.4 * (pair === 2 ? form.hipMass : form.shoulderMass),
+			phases: [offsets[pair * 2] ?? 0, offsets[pair * 2 + 1] ?? 0.5],
+			place(pivot) {
+				const spread = 1 - pair;
+				const knee = pivot.clone().add(new Vector3(legs * 0.42, legs * 0.1, spread * legs * 0.12));
+				const foot = new Vector3(
+					pivot.x + legs * 0.72 + dims.stanceWidth * 0.08,
+					footY,
+					pivot.z + spread * legs * 0.3
 				);
+				return { knee, foot };
 			}
-		tail('pelvis');
-	} else if (s.bodyPlan.id === 'serpentine') {
-		const segments = Math.max(8, Math.min(24, s.bodyPlan.spineSegments)),
-			ids: string[] = [],
-			height = depth * 0.6;
-		// A distinct long axial chain. Every segment is an independently deformable semantic spine.
-		for (let n = 0; n < segments; n++) {
-			const t = n / (segments - 1);
-			ids.push(
-				add(`spine-${n}`, n === 0 ? 'root' : `spine-${n - 1}`, 'spine', {
-					x: 0,
-					y: height + Math.sin(t * Math.PI) * depth * 0.12,
-					z: (t - 0.5) * length
-				})
-			);
-		}
-		volume('serpentine-body', ids, [
-			section(0, width * 0.035, depth * 0.035),
-			section(0.15, width * 0.3, depth * 0.35),
-			section(0.5, width * 0.5, depth * 0.5),
-			section(0.78, width * 0.47 * p.chestScale, depth * 0.45),
-			section(1, width * 0.24, depth * 0.25)
-		]);
-		const front = world.get(ids.at(-1)!)!;
-		face(
-			ids.at(-1)!,
-			{ x: 0, y: front.y + head * 0.15, z: front.z + p.neckLength * k * 0.3 },
-			{ x: 0, y: front.y + head * 0.3, z: front.z + p.neckLength * k + head * 0.35 }
+		});
+	const nl = dims.neckLength;
+	const neck = { x: 0, y: y + D * 0.12, z: chest.z + L * 0.16 + nl * 0.35 };
+	buildNeckAndHead(b, {
+		hostJointId: 'chest',
+		hostVolumeId: 'torso',
+		neckBase: { x: 0, y: chest.y + D * 0.05, z: chest.z + L * 0.08 },
+		neck,
+		head: { x: 0, y: neck.y + D * 0.06 + nl * 0.2, z: neck.z + nl * 0.45 + h * 0.28 },
+		pitch: 0.18
+	});
+	const rearDome = (hw * 0.48 + hd * 0.48) * 0.5;
+	buildTail(b, {
+		hostJointId: 'pelvis',
+		hostVolumeId: 'torso',
+		root: { x: 0, y: rear.y + hd * 0.1, z: rear.z + L * 0.03 },
+		first: { x: 0, y: rear.y + hd * 0.12, z: rear.z - rearDome * 0.85 },
+		direction: new Vector3(0, 0, -1)
+	});
+}
+
+/** One continuous tapered chain in a gentle S, flattened belly, enlarged head on a short neck. */
+function buildSerpentine(b: RigBuilder) {
+	const { dims, definition } = b;
+	const { length: L, width: W, depth: D } = dims;
+	const segments = Math.max(8, Math.min(24, definition.species.bodyPlan.spineSegments));
+	// A serpent's body is its whole silhouette: thicker than a legged torso, never thinner than L/28.
+	const hw = Math.max(W * 0.5 * 1.6, L / 22),
+		hd = Math.max(D * 0.5 * 1.4, L / 24),
+		chest = definition.species.proportions.chestScale;
+	const sections: CrossSection[] = [
+		section(0, hw * 0.08, hd * 0.08),
+		section(0.14, hw * 0.3, hd * 0.3, { radiusYLower: hd * 0.26 }),
+		section(0.46, hw * 0.5, hd * 0.5, { radiusYLower: hd * 0.4 }),
+		section(0.8, hw * 0.52 * chest, hd * 0.5, { radiusYLower: hd * 0.42 }),
+		section(0.94, hw * 0.42, hd * 0.42, { radiusYLower: hd * 0.38 }),
+		section(1, hw * 0.4, hd * 0.4, { radiusYLower: hd * 0.36 })
+	];
+	const ids: string[] = [];
+	for (let n = 0; n < segments; n++) {
+		const t = n / (segments - 1);
+		const profile = sectionAt(sections, t);
+		ids.push(
+			b.add(`spine-${n}`, n === 0 ? 'root' : `spine-${n - 1}`, 'spine', {
+				x: Math.sin(t * Math.PI * 1.6 + 0.4) * L * 0.06 * (1 - t * 0.5),
+				y: profile.ryl * 1.02 + Math.sin(t * Math.PI) * D * 0.04,
+				z: (t - 0.5) * L
+			})
 		);
-	} else throw new Error('Unsupported creature body plan');
-	return rig;
+	}
+	b.volume({
+		id: 'serpentine-body',
+		jointIds: ids,
+		sections,
+		caps: { start: 'dome', end: 'dome' },
+		part: 'torso',
+		detail: 'major',
+		segmentRings: Array(segments - 1).fill(2),
+		skinBlend: 0.5
+	});
+	const frontId = ids[ids.length - 1],
+		front = b.at(frontId);
+	const frontRadius = Math.min(hw, hd) * 0.4;
+	// Enlarged head; the short neck continues the body instead of pinching between body and head.
+	dims.head = Math.max(dims.head, Math.min(hw, hd) * 1.7);
+	const h = dims.head,
+		nl = Math.min(dims.neckLength, h * 0.6);
+	// The enlarged head is carried raised, clear of the ground.
+	const neck = {
+		x: front.x,
+		y: Math.max(front.y + h * 0.16, h * 0.42),
+		z: front.z + nl * 0.35 + hd * 0.3
+	};
+	buildNeckAndHead(b, {
+		hostJointId: frontId,
+		hostVolumeId: 'serpentine-body',
+		neckBase: { x: front.x, y: front.y, z: front.z - hw * 0.1 },
+		neck,
+		head: { x: neck.x, y: Math.max(neck.y + h * 0.12, h * 0.6), z: neck.z + nl * 0.55 + h * 0.3 },
+		pitch: 0.12,
+		neckRadius: frontRadius * 0.95
+	});
 }

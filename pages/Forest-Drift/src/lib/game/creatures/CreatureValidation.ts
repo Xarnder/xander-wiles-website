@@ -1,4 +1,6 @@
 import type { SpeciesGenome } from './CreatureTypes';
+import { validateSpeciesForm } from './CreatureForm';
+import { validateTerrainLocomotion } from './CreatureTerrainProfile';
 
 type RecordValue = Record<string, unknown>;
 const object = (v: unknown): v is RecordValue => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -93,6 +95,10 @@ export function validateSpecies(value: unknown): string | null {
 	)
 		return 'Invalid gait';
 	const gait = s.locomotion.gait as RecordValue;
+	if (s.locomotion.terrain !== undefined) {
+		const terrainError = validateTerrainLocomotion(s.locomotion.terrain);
+		if (terrainError) return terrainError;
+	}
 	const count =
 		s.bodyPlan.id === 'quadruped'
 			? 4
@@ -131,6 +137,11 @@ export function validateSpecies(value: unknown): string | null {
 	)
 		return 'Invalid mutation limits';
 	if (s.voiceProfileId !== undefined && !text(s.voiceProfileId)) return 'Invalid voice profile';
+	// Recipes saved before the art-direction genome existed omit it and derive it at compile time.
+	if (s.form !== undefined) {
+		const formError = validateSpeciesForm(s.form);
+		if (formError) return formError;
+	}
 	return null;
 }
 

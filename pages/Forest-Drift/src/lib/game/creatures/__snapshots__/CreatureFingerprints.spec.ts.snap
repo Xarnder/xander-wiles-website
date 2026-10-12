@@ -1,0 +1,702 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`creature golden fingerprints > biped 3 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.004,
+      "root": [
+        0.019,
+        0.042,
+        0,
+      ],
+      "surface": [
+        0.022,
+        0.04,
+        0,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.003,
+      "root": [
+        0.011,
+        0.128,
+        -0.002,
+      ],
+      "surface": [
+        0.014,
+        0.129,
+        -0.002,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.036,
+    0,
+    -0.115,
+    0.036,
+    0.189,
+    0.038,
+  ],
+  "features": {
+    "eyes": 2,
+    "feet": 2,
+    "fins": 1,
+    "frills": 5,
+    "hands": 2,
+    "nose": 1,
+  },
+  "fingerprint": "v1-24-1975-3680-3140da28",
+  "joints": 24,
+  "keyJoints": {
+    "chest": [
+      0,
+      0.125,
+      0.001,
+    ],
+    "head": [
+      0,
+      0.173,
+      0.008,
+    ],
+    "neck": [
+      0,
+      0.151,
+      0.004,
+    ],
+    "pelvis": [
+      0,
+      0.049,
+      0,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.013,
+      -0.114,
+    ],
+  },
+  "name": "Amber Ribbon",
+  "style": "slender",
+  "traits": [
+    "longbody",
+    "snout",
+    "heavy-haunches",
+    "biped",
+  ],
+  "triangles": 3680,
+  "vertices": 1975,
+}
+`;
+
+exports[`creature golden fingerprints > biped 42 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.039,
+      "root": [
+        0.099,
+        0.569,
+        0,
+      ],
+      "surface": [
+        0.13,
+        0.545,
+        0,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.036,
+      "root": [
+        0.096,
+        1.018,
+        -0.016,
+      ],
+      "surface": [
+        0.124,
+        1.041,
+        -0.018,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.332,
+    0,
+    -0.551,
+    0.325,
+    2.081,
+    0.643,
+  ],
+  "features": {
+    "antennae": 2,
+    "eyes": 2,
+    "feet": 2,
+    "hands": 2,
+    "horns": 2,
+  },
+  "fingerprint": "v1-24-1652-3092-7b166dce",
+  "joints": 24,
+  "keyJoints": {
+    "chest": [
+      0,
+      1.018,
+      0.009,
+    ],
+    "head": [
+      0,
+      1.47,
+      0.12,
+    ],
+    "neck": [
+      0,
+      1.189,
+      0.043,
+    ],
+    "pelvis": [
+      0,
+      0.593,
+      0,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.473,
+      -0.537,
+    ],
+  },
+  "name": "Dusk Crownling",
+  "style": "elegant",
+  "traits": [
+    "crownhead",
+    "horned",
+    "antennae",
+    "biped",
+  ],
+  "triangles": 3092,
+  "vertices": 1652,
+}
+`;
+
+exports[`creature golden fingerprints > hexapod 11 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.022,
+      "root": [
+        0.041,
+        0.161,
+        0.098,
+      ],
+      "surface": [
+        0.062,
+        0.157,
+        0.103,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.022,
+      "root": [
+        0.043,
+        0.162,
+        0.069,
+      ],
+      "surface": [
+        0.065,
+        0.158,
+        0.07,
+      ],
+    },
+    {
+      "limb": "limb-2-1",
+      "penetration": 0.022,
+      "root": [
+        0.044,
+        0.161,
+        0.029,
+      ],
+      "surface": [
+        0.065,
+        0.155,
+        0.029,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.168,
+    0,
+    -0.311,
+    0.168,
+    0.375,
+    0.243,
+  ],
+  "features": {
+    "eyes": 2,
+    "feet": 6,
+    "frills": 5,
+    "nose": 1,
+    "plates": 3,
+  },
+  "fingerprint": "v1-30-2368-4446-641f16f9",
+  "joints": 30,
+  "keyJoints": {
+    "chest": [
+      0,
+      0.177,
+      0.095,
+    ],
+    "head": [
+      0,
+      0.222,
+      0.194,
+    ],
+    "neck": [
+      0,
+      0.202,
+      0.158,
+    ],
+    "pelvis": [
+      0,
+      0.187,
+      -0.063,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.208,
+      -0.304,
+    ],
+  },
+  "name": "Moss Pebbleback",
+  "style": "heavy",
+  "traits": [
+    "round",
+    "round-belly",
+    "frilled",
+    "hexapod",
+  ],
+  "triangles": 4446,
+  "vertices": 2368,
+}
+`;
+
+exports[`creature golden fingerprints > hexapod 42 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.054,
+      "root": [
+        0.051,
+        0.379,
+        0.203,
+      ],
+      "surface": [
+        0.104,
+        0.374,
+        0.213,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.056,
+      "root": [
+        0.053,
+        0.383,
+        0.144,
+      ],
+      "surface": [
+        0.109,
+        0.378,
+        0.146,
+      ],
+    },
+    {
+      "limb": "limb-2-1",
+      "penetration": 0.061,
+      "root": [
+        0.049,
+        0.37,
+        0.06,
+      ],
+      "surface": [
+        0.108,
+        0.359,
+        0.061,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.352,
+    0,
+    -0.662,
+    0.352,
+    0.806,
+    0.599,
+  ],
+  "features": {
+    "antennae": 2,
+    "eyes": 2,
+    "feet": 6,
+    "nose": 1,
+    "plates": 3,
+  },
+  "fingerprint": "v1-30-1966-3654-436edb62",
+  "joints": 30,
+  "keyJoints": {
+    "chest": [
+      0,
+      0.404,
+      0.196,
+    ],
+    "head": [
+      0,
+      0.504,
+      0.419,
+    ],
+    "neck": [
+      0,
+      0.46,
+      0.331,
+    ],
+    "pelvis": [
+      0,
+      0.427,
+      -0.131,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.601,
+      -0.648,
+    ],
+  },
+  "name": "River Pebbleback",
+  "style": "heavy",
+  "traits": [
+    "round",
+    "round-belly",
+    "antennae",
+    "hexapod",
+  ],
+  "triangles": 3654,
+  "vertices": 1966,
+}
+`;
+
+exports[`creature golden fingerprints > quadruped 7 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.029,
+      "root": [
+        0.05,
+        0.241,
+        0.188,
+      ],
+      "surface": [
+        0.072,
+        0.223,
+        0.195,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.031,
+      "root": [
+        0.039,
+        0.288,
+        -0.211,
+      ],
+      "surface": [
+        0.063,
+        0.269,
+        -0.214,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.227,
+    0,
+    -0.632,
+    0.227,
+    0.882,
+    0.767,
+  ],
+  "features": {
+    "eyes": 2,
+    "feet": 4,
+    "horns": 2,
+    "nose": 1,
+    "spikes": 6,
+  },
+  "fingerprint": "v1-24-1902-3578-ab5b73aa",
+  "joints": 24,
+  "keyJoints": {
+    "chest": [
+      0,
+      0.358,
+      0.198,
+    ],
+    "head": [
+      0,
+      0.54,
+      0.471,
+    ],
+    "neck": [
+      0,
+      0.472,
+      0.31,
+    ],
+    "pelvis": [
+      0,
+      0.365,
+      -0.212,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.356,
+      -0.624,
+    ],
+  },
+  "name": "River Crownling",
+  "style": "cute",
+  "traits": [
+    "crownhead",
+    "horned",
+    "short-neck",
+    "big-eyes",
+    "quadruped",
+  ],
+  "triangles": 3578,
+  "vertices": 1902,
+}
+`;
+
+exports[`creature golden fingerprints > quadruped 42 1`] = `
+{
+  "attachments": [
+    {
+      "limb": "limb-0-1",
+      "penetration": 0.033,
+      "root": [
+        0.043,
+        0.595,
+        0.119,
+      ],
+      "surface": [
+        0.069,
+        0.577,
+        0.126,
+      ],
+    },
+    {
+      "limb": "limb-1-1",
+      "penetration": 0.035,
+      "root": [
+        0.039,
+        0.655,
+        -0.149,
+      ],
+      "surface": [
+        0.068,
+        0.635,
+        -0.153,
+      ],
+    },
+  ],
+  "bounds": [
+    -0.163,
+    0,
+    -0.578,
+    0.168,
+    1.215,
+    0.576,
+  ],
+  "features": {
+    "antennae": 2,
+    "ears": 2,
+    "eyes": 2,
+    "feet": 4,
+    "nose": 1,
+  },
+  "fingerprint": "v1-24-1712-3190-69b54a48",
+  "joints": 24,
+  "keyJoints": {
+    "chest": [
+      0,
+      0.688,
+      0.137,
+    ],
+    "head": [
+      0,
+      1.076,
+      0.428,
+    ],
+    "neck": [
+      0,
+      0.952,
+      0.342,
+    ],
+    "pelvis": [
+      0,
+      0.714,
+      -0.146,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "tail-5": [
+      0,
+      0.858,
+      -0.57,
+    ],
+  },
+  "name": "Mist Stilt",
+  "style": "elegant",
+  "traits": [
+    "longleg",
+    "huge-ears",
+    "long-tail",
+    "antennae",
+    "quadruped",
+  ],
+  "triangles": 3190,
+  "vertices": 1712,
+}
+`;
+
+exports[`creature golden fingerprints > serpentine 5 1`] = `
+{
+  "attachments": [],
+  "bounds": [
+    -2.416,
+    0,
+    -14.553,
+    2.655,
+    3.43,
+    17.691,
+  ],
+  "features": {
+    "eyes": 2,
+    "fins": 6,
+    "plates": 8,
+  },
+  "fingerprint": "v1-18-1523-2876-78f80d66",
+  "joints": 18,
+  "keyJoints": {
+    "head": [
+      -0.655,
+      1.339,
+      16.36,
+    ],
+    "neck": [
+      -0.655,
+      0.937,
+      15.206,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "spine-0": [
+      0.675,
+      0.124,
+      -14.441,
+    ],
+  },
+  "name": "Amber Ribbon",
+  "style": "chunky",
+  "traits": [
+    "longbody",
+    "dorsal-fin",
+    "tall-plates",
+    "serpentine",
+  ],
+  "triangles": 2876,
+  "vertices": 1523,
+}
+`;
+
+exports[`creature golden fingerprints > serpentine 42 1`] = `
+{
+  "attachments": [],
+  "bounds": [
+    -2.363,
+    0,
+    -15.658,
+    2.556,
+    2.784,
+    19.443,
+  ],
+  "features": {
+    "eyes": 2,
+    "fins": 6,
+    "frills": 5,
+  },
+  "fingerprint": "v1-16-1334-2522-290fb62d",
+  "joints": 16,
+  "keyJoints": {
+    "head": [
+      -0.705,
+      1.441,
+      18.011,
+    ],
+    "neck": [
+      -0.705,
+      1.009,
+      16.498,
+    ],
+    "root": [
+      0,
+      0,
+      0,
+    ],
+    "spine-0": [
+      0.726,
+      0.122,
+      -15.544,
+    ],
+  },
+  "name": "Dusk Ribbon",
+  "style": "elegant",
+  "traits": [
+    "longbody",
+    "frilled",
+    "curled-tail",
+    "serpentine",
+  ],
+  "triangles": 2522,
+  "vertices": 1334,
+}
+`;

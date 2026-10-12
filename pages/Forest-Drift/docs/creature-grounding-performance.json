@@ -1,0 +1,118 @@
+{
+	"renderer": "ANGLE Metal, Apple M4 (headless Chromium, vsync off)",
+	"measured": "2026-10-12",
+	"terrain": "Lab uneven ramp, 15 deg",
+	"method": "median of 3 runs x 60 frames after 10 warm-up; tests/creatureQuality.e2e.ts",
+	"results": [
+		{
+			"count": 1,
+			"grounding": false,
+			"frameMs": 0.1000000000003638,
+			"cpu": 0,
+			"anim": 0,
+			"support": 0,
+			"skin": 0,
+			"calls": 0,
+			"tris": 3628
+		},
+		{
+			"count": 1,
+			"grounding": true,
+			"frameMs": 0.1000000000003638,
+			"cpu": 0,
+			"anim": 0,
+			"support": 0,
+			"skin": 0,
+			"calls": 3,
+			"tris": 3628
+		},
+		{
+			"count": 10,
+			"grounding": false,
+			"frameMs": 0.3999999999996362,
+			"cpu": 0.29999999701976776,
+			"anim": 0.10000000894069672,
+			"support": 0,
+			"skin": 0,
+			"calls": 0,
+			"tris": 33422
+		},
+		{
+			"count": 10,
+			"grounding": true,
+			"frameMs": 0.3999999999996362,
+			"cpu": 0.29999999701976776,
+			"anim": 0.20000000298023224,
+			"support": 0,
+			"skin": 0,
+			"calls": 47,
+			"tris": 33422
+		},
+		{
+			"count": 25,
+			"grounding": false,
+			"frameMs": 2.5,
+			"cpu": 2.3999999910593033,
+			"anim": 0.3999999910593033,
+			"support": 0,
+			"skin": 0,
+			"calls": 0,
+			"tris": 82698
+		},
+		{
+			"count": 25,
+			"grounding": true,
+			"frameMs": 1.9000000000005457,
+			"cpu": 1.7999999970197678,
+			"anim": 0.4000000059604645,
+			"support": 0.09999999403953552,
+			"skin": 0,
+			"calls": 117,
+			"tris": 82698
+		},
+		{
+			"count": 50,
+			"grounding": false,
+			"frameMs": 1.4000000000005457,
+			"cpu": 1.2999999970197678,
+			"anim": 0.7000000029802322,
+			"support": 0,
+			"skin": 0.09999999403953552,
+			"calls": 0,
+			"tris": 166852
+		},
+		{
+			"count": 50,
+			"grounding": true,
+			"frameMs": 1.800000000000182,
+			"cpu": 1.5999999940395355,
+			"anim": 1,
+			"support": 0.19999998807907104,
+			"skin": 0.09999999403953552,
+			"calls": 270,
+			"tris": 166852
+		},
+		{
+			"count": 100,
+			"grounding": false,
+			"frameMs": 3.100000000000364,
+			"cpu": 2.8999999910593033,
+			"anim": 1.6000000089406967,
+			"support": 0,
+			"skin": 0.20000000298023224,
+			"calls": 0,
+			"tris": 329964
+		},
+		{
+			"count": 100,
+			"grounding": true,
+			"frameMs": 2.800000000000182,
+			"cpu": 2.6000000089406967,
+			"anim": 1.5,
+			"support": 0.20000000298023224,
+			"skin": 0.19999998807907104,
+			"calls": 533,
+			"tris": 329964
+		}
+	]
+}

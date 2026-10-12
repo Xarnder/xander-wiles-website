@@ -10,7 +10,7 @@ describe('versioned creature recipes', () => {
 		const a = generateSpecies(42);
 		expect(a).toEqual(generateSpecies(42));
 		expect(generateIndividual(a, 7)).toEqual(generateIndividual(JSON.parse(JSON.stringify(a)), 7));
-		expect(hashStringToUint32(JSON.stringify(a)) >>> 0).toMatchInlineSnapshot(`3220558847`);
+		expect(hashStringToUint32(JSON.stringify(a)) >>> 0).toMatchInlineSnapshot(`3840942121`);
 	});
 	it.each<BodyPlanId>(['quadruped', 'biped', 'hexapod', 'serpentine'])(
 		'validates 100 %s species and bounded related individuals',

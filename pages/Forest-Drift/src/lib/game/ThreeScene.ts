@@ -1155,7 +1155,9 @@ export class ThreeScene implements WorldRuntime {
 			this.settings.seed,
 			{
 				surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
-				blocked: naturalGroundBlocked
+				blocked: naturalGroundBlocked,
+				// Terrestrial feet never plant on a lake floor under deep water.
+				standable: (x, z) => this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH
 			},
 			options.world?.creatures,
 			(m) => this.graphicsPipeline.registerMaterial(m)

@@ -1,26 +1,73 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { CreatureLab } from '../game/creatures/CreatureLab';
-	import type { BodyPlanId, CreatureDefinition } from '../game/creatures/CreatureTypes';
+	import { dev } from '$app/environment';
+	import {
+		CreatureLab,
+		DEFAULT_LAB_TUNING,
+		type CreatureLabMode,
+		type CreatureLabTuning
+	} from '../game/creatures/CreatureLab';
+	import type {
+		BodyPlanId,
+		CreatureDefinition,
+		CreatureLod
+	} from '../game/creatures/CreatureTypes';
+	import {
+		DEFAULT_GROUNDING_DEBUG,
+		DEFAULT_LAB_TERRAIN,
+		type GroundingDebugFlags,
+		type LabTerrainSettings
+	} from '../game/creatures/CreatureLabTerrain';
 	let {
 		onClose,
-		onPlace
-	}: { onClose: () => void; onPlace: (definition: CreatureDefinition) => void } = $props();
+		onPlace,
+		expose = false
+	}: {
+		onClose: () => void;
+		onPlace?: (definition: CreatureDefinition) => void;
+		/** Publish the lab as `window.creatureLab` for tests and dev tooling. */
+		expose?: boolean;
+	} = $props();
+	// Generator tuning, CURRENT/IMPROVED comparison and attachment debugging are developer tools.
+	const developer = $derived(dev || expose || new URLSearchParams(location.search).has('dev'));
 	let viewport: HTMLDivElement;
 	let lab: CreatureLab;
 	let speciesSeed = $state(42),
 		individualSeed = $state(7),
 		plan = $state<BodyPlanId>('quadruped'),
 		scale = $state(1),
-		lod = $state<0 | 1>(0),
-		gait = $state<'idle' | 'walk' | 'run'>('walk');
-	let wireframe = $state(false),
-		skeleton = $state(false),
-		collision = $state(false),
-		chains = $state(false),
-		crossSections = $state(false),
-		anchors = $state(false),
-		weights = $state(false);
+		lod = $state<CreatureLod>(0),
+		gait = $state<'idle' | 'walk' | 'run'>('walk'),
+		mode = $state<CreatureLabMode>('improved');
+	const toggleKeys = [
+		'wireframe',
+		'skeleton',
+		'collision',
+		'chains',
+		'crossSections',
+		'anchors',
+		'weights'
+	] as const;
+	const debugKeys = ['limbRoots', 'attachmentVolumes', 'jointFrames'] as const;
+	const toggles = $state<Record<string, boolean>>({});
+	const terrain = $state<LabTerrainSettings>({ ...DEFAULT_LAB_TERRAIN });
+	const groundDebug = $state<GroundingDebugFlags>({ ...DEFAULT_GROUNDING_DEBUG });
+	let groundingEnabled = $state(true);
+	function applyTerrain() {
+		lab.groundingEnabled = groundingEnabled;
+		lab.setTerrain({ ...terrain });
+	}
+	const tuning = $state<CreatureLabTuning>({ ...DEFAULT_LAB_TUNING });
+	const tuningLabels: Record<keyof CreatureLabTuning, string> = {
+		limbRootPenetration: 'Limb root penetration',
+		shoulderMass: 'Shoulder mass',
+		hipMass: 'Hip mass',
+		limbTaper: 'Limb taper',
+		jointScale: 'Joint scale',
+		headScale: 'Head scale',
+		eyeScale: 'Eye scale',
+		muzzleScale: 'Muzzle scale'
+	};
 	let error = $state(''),
 		report = $state(''),
 		busy = $state(false),
@@ -28,15 +75,25 @@
 		stats = $state('');
 	function generate() {
 		try {
+			lab.tuning = { ...tuning };
 			const d = lab.generate(speciesSeed, individualSeed, plan, scale, lod);
-			name = d.species.name;
+			name = `${d.species.name} · ${d.species.anatomy.signatureTraits.slice(1, -1).join(' · ')}`;
 			error = '';
 		} catch (e) {
 			error = String(e);
 		}
 	}
+	async function changeMode() {
+		busy = true;
+		try {
+			await lab.setMode(mode);
+			generate();
+		} finally {
+			busy = false;
+		}
+	}
 	function overlays() {
-		Object.assign(lab, { wireframe, skeleton, collision, chains, crossSections, anchors, weights });
+		Object.assign(lab, toggles);
 		lab.updateHelpers();
 	}
 	async function sample() {
@@ -50,11 +107,12 @@
 	onMount(() => {
 		lab = new CreatureLab(viewport);
 		const testWindow = window as unknown as { creatureLab?: CreatureLab };
-		if (new URLSearchParams(location.search).has('musicTest')) testWindow.creatureLab = lab;
+		if (expose || new URLSearchParams(location.search).has('musicTest'))
+			testWindow.creatureLab = lab;
 		generate();
 		const timer = setInterval(() => {
 			const t = lab.telemetry;
-			stats = `${t.vertices.toLocaleString()} vertices · ${t.triangles.toLocaleString()} triangles · ${t.bones} bones · ${t.compileMs.toFixed(1)} ms compile · ${t.animationMs.toFixed(2)} ms animation · ${t.fps.toFixed(0)} FPS`;
+			stats = `${t.vertices.toLocaleString()} vertices · ${t.triangles.toLocaleString()} triangles · ${t.bones} bones · ${t.compileMs.toFixed(1)} ms compile · ${t.animationMs.toFixed(2)} ms animation · ${t.fps.toFixed(0)} FPS${developer && lab.mode === 'improved' ? ` · ${t.issues} anatomy issues` : ''}${developer && lab.groundingEnabled ? ` · slope ${t.slope.toFixed(1)}° pitch ${t.pitch.toFixed(1)}° roll ${t.roll.toFixed(1)}° · ${t.supportLegs} support (${t.support})${t.canStand ? '' : ' · TOO STEEP'} · ${t.surfaceSamples} samples` : ''}`;
 		}, 500);
 		return () => {
 			clearInterval(timer);
@@ -128,8 +186,10 @@
 					/></label
 				>
 				<label
-					>Geometry<select bind:value={lod} onchange={generate}
-						><option value={0}>LOD0 / full</option><option value={1}>LOD1 / reduced</option></select
+					>Geometry<select data-testid="creature-lod" bind:value={lod} onchange={generate}
+						><option value={0}>LOD0 / near</option><option value={1}>LOD1 / medium</option><option
+							value={2}>LOD2 / far</option
+						></select
 					></label
 				>
 				<label
@@ -140,38 +200,128 @@
 					></label
 				>
 				<div class="toggles">
-					{#each ['wireframe', 'skeleton', 'collision', 'chains', 'crossSections', 'anchors', 'weights'] as key (key)}<label
-							><input
-								type="checkbox"
-								onchange={(e) => {
-									const v = e.currentTarget.checked;
-									if (key === 'wireframe') wireframe = v;
-									else if (key === 'skeleton') skeleton = v;
-									else if (key === 'collision') collision = v;
-									else if (key === 'chains') chains = v;
-									else if (key === 'crossSections') crossSections = v;
-									else if (key === 'anchors') anchors = v;
-									else weights = v;
-									overlays();
-								}}
-							/>{key}</label
+					{#each toggleKeys as key (key)}<label
+							><input type="checkbox" bind:checked={toggles[key]} onchange={overlays} />{key}</label
 						>{/each}
 				</div>
-				<button disabled={busy} onclick={sample}>GENERATE 100</button><button
-					class="primary"
-					onclick={() => {
-						try {
-							if (lab.definition) onPlace(lab.definition);
-						} catch (e) {
-							error = String(e);
-						}
-					}}>Place in world</button
-				>
+				{#if developer}
+					<fieldset data-testid="creature-developer">
+						<legend>Generator (developer)</legend>
+						<label
+							>Generator<select
+								data-testid="creature-mode"
+								bind:value={mode}
+								onchange={changeMode}
+								disabled={busy}
+								><option value="improved">IMPROVED</option><option value="current"
+									>CURRENT (pre-rewrite)</option
+								></select
+							></label
+						>
+						<div class="toggles">
+							{#each debugKeys as key (key)}<label
+									><input
+										type="checkbox"
+										data-testid={`creature-debug-${key}`}
+										bind:checked={toggles[key]}
+										onchange={overlays}
+									/>{key}</label
+								>{/each}
+						</div>
+						{#each Object.keys(tuningLabels) as key (key)}
+							{@const k = key as keyof CreatureLabTuning}
+							<label
+								>{tuningLabels[k]} ×{tuning[k].toFixed(2)}<input
+									type="range"
+									min={k === 'limbRootPenetration' ? 0 : 0.4}
+									max="2"
+									step="0.05"
+									bind:value={tuning[k]}
+									onchange={generate}
+								/></label
+							>
+						{/each}
+						<label
+							>Test ground<select
+								data-testid="creature-terrain"
+								bind:value={terrain.kind}
+								onchange={applyTerrain}
+								><option value="flat">Flat</option><option value="ramp">Ramp</option><option
+									value="uneven">Uneven</option
+								><option value="platform">Ramp + foundation slab</option></select
+							></label
+						>
+						<label
+							>Slope {terrain.angle}°<input
+								data-testid="creature-slope"
+								type="range"
+								min="0"
+								max="40"
+								step="5"
+								bind:value={terrain.angle}
+								onchange={applyTerrain}
+							/></label
+						>
+						<label
+							>Walk direction<select
+								data-testid="creature-direction"
+								bind:value={terrain.direction}
+								onchange={applyTerrain}
+								><option value="uphill">Uphill</option><option value="downhill">Downhill</option
+								><option value="across">Across slope</option></select
+							></label
+						>
+						<label class="inline"
+							><input
+								type="checkbox"
+								data-testid="creature-grounding"
+								bind:checked={groundingEnabled}
+								onchange={applyTerrain}
+							/>Terrain conformation</label
+						>
+						<div class="toggles">
+							{#each Object.keys(DEFAULT_GROUNDING_DEBUG) as key (key)}<label
+									><input
+										type="checkbox"
+										data-testid={`creature-ground-${key}`}
+										bind:checked={groundDebug[key as keyof GroundingDebugFlags]}
+										onchange={() => Object.assign(lab.groundDebug, groundDebug)}
+									/>{key}</label
+								>{/each}
+						</div>
+						<button
+							onclick={() => {
+								Object.assign(tuning, DEFAULT_LAB_TUNING);
+								generate();
+							}}>Reset tuning</button
+						>
+						<button
+							onclick={() => {
+								lab.gait = gait;
+								lab.showGallery(plan, speciesSeed, 12, 4, lod);
+							}}>Gallery: 12 species</button
+						>
+					</fieldset>
+				{/if}
+				<button disabled={busy} onclick={sample}>GENERATE 100</button>
+				{#if onPlace}<button
+						class="primary"
+						onclick={() => {
+							try {
+								if (lab.definition) onPlace(lab.definition);
+							} catch (e) {
+								error = String(e);
+							}
+						}}>Place in world</button
+					>{/if}
 			</aside>
 			<main>
 				<div class="views">
 					{#each ['front', 'side', 'top'] as view (view)}<button
-							onclick={() => lab.view(view as 'front' | 'side' | 'top')}>{view}</button
+							onclick={() => {
+								lab.clearGallery();
+								lab.view(view as 'front' | 'side' | 'top');
+							}}>{view}</button
 						>{/each}<span>Drag to orbit · Scroll to zoom</span>
 				</div>
 				<div class="viewport" bind:this={viewport} data-testid="creature-viewport"></div>
@@ -279,6 +429,31 @@
 	.toggles label {
 		flex-direction: row;
 		align-items: center;
+	}
+	fieldset {
+		min-width: 0;
+		border: 1px solid #c3d0bc;
+		border-radius: 8px;
+		padding: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	fieldset .toggles {
+		grid-template-columns: 1fr;
+	}
+	label.inline {
+		flex-direction: row;
+		align-items: center;
+	}
+	fieldset input[type='range'] {
+		width: 100%;
+		padding: 0;
+	}
+	legend {
+		font-size: 11px;
+		letter-spacing: 1px;
+		text-transform: uppercase;
 	}
 	main {
 		position: relative;
