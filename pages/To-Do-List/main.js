@@ -30,6 +30,14 @@ import { buildXanderListV1, xanderListToMarkdown } from './list-interchange.js';
 const nestedRollupPromptedTaskIds = new Set();
 
 let nestedMigrationPersistInFlight = false;
+let recentArchiveHeld = false;
+
+function releaseRecentCompletedHold() {
+    if (!recentArchiveHeld) return;
+    recentArchiveHeld = false;
+    API.releaseArchivedTasks();
+}
+window.releaseRecentCompletedHold = releaseRecentCompletedHold;
 let tagMigrationPersistInFlight = false;
 
 async function persistTagMigrations(updates) {
@@ -499,6 +507,7 @@ onAuthStateChanged(auth, (user) => {
         archivePurgeStarted = false;
         serverSettingsReady = false;
         serverListsReady = false;
+        recentArchiveHeld = false;
         API.forceReleaseArchivedTasks();
         cleanupListeners();
         dateReset();
@@ -590,7 +599,7 @@ function manageFancyOrbs(theme) {
 // --- FIRESTORE LISTENERS ---
 function setupFirestoreListeners(uid) {
     API.setArchivedTasksListener(() => {
-        if (state.showArchived) UI.renderBoard();
+        if (state.showArchived || state.showRecentCompleted) UI.renderBoard();
         const searchModal = document.getElementById('search-modal-overlay');
         const searchInput = document.getElementById('search-input');
         if (searchModal && searchInput && !searchModal.classList.contains('hidden') && state.searchShowArchived) {
@@ -952,7 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Toggle Recent Completed Filter
     const recentCompletedBtn = document.getElementById('recent-completed-btn');
     if (recentCompletedBtn) {
-        recentCompletedBtn.onclick = function () {
+        recentCompletedBtn.onclick = async function () {
             if (isKanbanFocused()) {
                 exitKanbanFocus({ render: false, silent: true });
             }
@@ -962,9 +971,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.showRecentCompleted) {
                 btn.classList.add('active');
                 Utils.showToast("Viewing Recent Completed Tasks");
+                if (!recentArchiveHeld) {
+                    recentArchiveHeld = true;
+                    await API.holdArchivedTasks();
+                }
+                if (!state.showRecentCompleted) return;
             } else {
                 btn.classList.remove('active');
                 Utils.showToast("Viewing All Tasks");
+                releaseRecentCompletedHold();
             }
             UI.renderBoard();
         };

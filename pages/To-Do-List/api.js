@@ -116,6 +116,8 @@ export function archivedTaskPatch() {
 }
 
 export function archiveTask(taskId) {
+    const task = state.appData.tasks[taskId];
+    if (task) Object.assign(task, archivedTaskPatch());
     return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), archivedTaskPatch())
         .catch(e => handleSyncError(e));
 }
@@ -1056,7 +1058,9 @@ export function clearCompletedInList(listId) {
     list.taskIds.forEach(taskId => {
         const task = state.appData.tasks[taskId];
         if (task && task.completed && !task.archived) {
-            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), archivedTaskPatch());
+            const patch = archivedTaskPatch();
+            Object.assign(task, patch);
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), patch);
             count++;
         }
     });
@@ -1071,6 +1075,7 @@ export function clearCompletedInList(listId) {
 let archivedHolds = 0;
 let archivedUnsub = null;
 let archivedReady = Promise.resolve();
+let archivedReadyResolve = null;
 let archivedTasksListener = null;
 let purgeInFlight = false;
 
@@ -1102,8 +1107,10 @@ export function holdArchivedTasks() {
         const finish = () => {
             if (settled) return;
             settled = true;
+            archivedReadyResolve = null;
             resolve();
         };
+        archivedReadyResolve = finish;
         archivedUnsub = onSnapshot(query(tasksCol, where("archived", "==", true)), (snapshot) => {
             mergeArchivedSnapshot(snapshot);
             finish();
@@ -1128,6 +1135,7 @@ export function forceReleaseArchivedTasks() {
         archivedUnsub();
         archivedUnsub = null;
     }
+    if (archivedReadyResolve) archivedReadyResolve();
     archivedReady = Promise.resolve();
     const next = {};
     Object.entries(state.appData.tasks || {}).forEach(([id, task]) => {

@@ -139,6 +139,9 @@ export function clearExclusiveViewModes() {
         state.showRecentCompleted = false;
         const recentBtn = document.getElementById('recent-completed-btn');
         if (recentBtn) recentBtn.classList.remove('active');
+        if (typeof window.releaseRecentCompletedHold === 'function') {
+            window.releaseRecentCompletedHold();
+        }
     }
 }
 

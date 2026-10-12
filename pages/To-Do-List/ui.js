@@ -65,6 +65,22 @@ function taskMatchesTagFilter(task) {
     return resolveTaskTagId(task) === state.tagFilterId;
 }
 
+/** Epoch millis for a completion time stored as a number or a Firestore Timestamp. */
+function completedAtMillis(value) {
+    let ms = null;
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        ms = value;
+    } else if (value && typeof value.toMillis === 'function') {
+        const converted = value.toMillis();
+        if (typeof converted === 'number' && Number.isFinite(converted) && converted > 0) ms = converted;
+    } else if (value && typeof value.seconds === 'number' && Number.isFinite(value.seconds)) {
+        ms = value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+    }
+    if (ms == null) return null;
+    if (ms < 1e12) ms *= 1000;
+    return ms;
+}
+
 function syncTagFilterChrome() {
     const filtering = !!state.tagFilterId;
     document.body.classList.toggle('is-tag-filter-view', filtering);
@@ -2127,7 +2143,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             // Exclusive Mode Logic
             let show = false;
             if (state.showRecentCompleted) {
-                show = task.completed && task.completedAt && (Date.now() - task.completedAt <= 24 * 60 * 60 * 1000);
+                const completedMs = completedAtMillis(task.completedAt);
+                show = !!task.completed && completedMs != null && (Date.now() - completedMs <= 24 * 60 * 60 * 1000);
             } else {
                 show = state.showArchived ? task.archived === true : !task.archived;
             }
@@ -2180,6 +2197,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             const tagsById = getTagsById(state.appData.settings.tags);
             const filterName = tagsById[state.tagFilterId]?.name || 'tag';
             emptyMsg.innerHTML = `<i class="ph ph-funnel-simple"></i> No ${getTerm(false)} with tag “${escapeHtml(filterName)}”`;
+        } else if (state.showRecentCompleted) {
+            emptyMsg.innerHTML = `<i class="ph ph-clock-counter-clockwise"></i> No ${getTerm(false)} completed in the last 24 hours`;
         } else {
             emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
         }
@@ -2909,8 +2928,9 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
         : '';
 
     let recentCompletedHtml = '';
-    if (state.showRecentCompleted && task.completed && task.completedAt) {
-        const diffMs = Date.now() - task.completedAt;
+    const completedMs = completedAtMillis(task.completedAt);
+    if (state.showRecentCompleted && task.completed && completedMs) {
+        const diffMs = Date.now() - completedMs;
         const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
         const diffMins = Math.floor(diffSecs / 60);
         const diffHrs = Math.floor(diffMins / 60);
@@ -2924,7 +2944,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
             relativeStr = `${diffSecs} second${diffSecs !== 1 ? 's' : ''} ago`;
         }
 
-        const timeStr = new Date(task.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const timeStr = new Date(completedMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         recentCompletedHtml = `<div style="font-size: 0.75rem; color: var(--accent-green); margin-top: 4px;"><i class="ph ph-check-circle"></i> Completed at ${timeStr} (${relativeStr})</div>`;
     }
 
@@ -3254,7 +3274,8 @@ export function updateTotalTaskCount() {
             if (!task.archived) totalAll++;
         }
 
-        if (task.completed && task.completedAt >= resetTimestamp) {
+        const completedMs = completedAtMillis(task.completedAt);
+        if (task.completed && completedMs != null && completedMs >= resetTimestamp) {
             dailyCompleted++;
         }
     });
