@@ -261,6 +261,11 @@ export interface GraphicsSettings {
 	toneMappingExposure: number;
 	/** Debug-GUI-only: shows the extended render-stats overlay (draw calls, triangles, shadow cost, etc). */
 	showRenderStats: boolean;
+	/**
+	 * Player-facing FPS pill (frames per second, dropped frames, and the quality preset).
+	 * On by default; Graphics → Show FPS counter turns it off. Remembered per browser.
+	 */
+	showFpsCounter: boolean;
 	/** Live-tunable GTAO look parameters — see `AoTuning`'s own doc comment. */
 	aoTuning: AoTuning;
 	/** Procedural PBR materials on buildings and terrain (see `materials/`). Off = the original flat-colour look, kept for comparison and for very weak devices. */
@@ -329,6 +334,7 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		targetFps: 60,
 		toneMappingExposure: 1.0,
 		showRenderStats: false,
+		showFpsCounter: true,
 		aoTuning: createDefaultAoTuning(),
 		proceduralMaterials: true,
 		antiTiling: true,

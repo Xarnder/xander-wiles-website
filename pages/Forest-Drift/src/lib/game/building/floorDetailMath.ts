@@ -18,6 +18,7 @@ import {
 	FLOOR_DETAIL_PATH_FRAME_WIDTH,
 	type FloorDetailBox,
 	type FloorDetailDefinition,
+	type FloorDetailStrip,
 	type FloorDetailKind,
 	type FloorDetailRenderMode,
 	type FloorDetailTilePattern
@@ -557,98 +558,82 @@ function buildDiamondTileBoxes(def: FloorDetailDefinition, rect: LocalRect): Flo
 	return boxes;
 }
 
-/** Box whose local Z runs from A→B and whose local X is the half-width. */
-function yawedBoxAlongSegment(
-	ax: number,
-	az: number,
-	bx: number,
-	bz: number,
-	halfWidth: number,
-	minY: number,
-	maxY: number,
-	color: string
-): FloorDetailBox | null {
-	const dx = bx - ax;
-	const dz = bz - az;
-	const length = Math.hypot(dx, dz);
-	if (length < 1e-8 || halfWidth <= 0) return null;
-	const cx = (ax + bx) / 2;
-	const cz = (az + bz) / 2;
-	const halfL = length / 2;
-	return {
-		minX: cx - halfWidth,
-		maxX: cx + halfWidth,
-		minY,
-		maxY,
-		minZ: cz - halfL,
-		maxZ: cz + halfL,
-		color,
-		yaw: Math.atan2(dx, dz)
-	};
+function stationAlong(samples: readonly PathLocalPoint[]): number[] {
+	const along = [0];
+	for (let i = 1; i < samples.length; i++) {
+		along.push(
+			along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].z - samples[i - 1].z)
+		);
+	}
+	return along;
 }
 
-function boxesAlongPolyline(
-	samples: readonly PathLocalPoint[],
-	halfWidth: number,
-	minY: number,
-	maxY: number,
-	color: string
-): FloorDetailBox[] {
-	const boxes: FloorDetailBox[] = [];
-	for (let i = 1; i < samples.length; i++) {
-		const box = yawedBoxAlongSegment(
-			samples[i - 1].x,
-			samples[i - 1].z,
-			samples[i].x,
-			samples[i].z,
-			halfWidth,
+/**
+ * Path centre and, when framed, both rails. Each strip has the same number of points on both
+ * edges, taken from the same centreline stations, so the faces that join them share every edge.
+ */
+export function buildFloorDetailStrips(
+	definition: FloorDetailDefinition,
+	gridSize: number
+): FloorDetailStrip[] {
+	if (definition.kind !== 'path' || !(gridSize > 0)) return [];
+	const samples = pathCenterlineLocalSamples(definition.points, gridSize);
+	if (samples.length < 2 || !(definition.pathWidth > 0)) return [];
+	const half = definition.pathWidth / 2;
+	const along = stationAlong(samples);
+	const { minY, maxY } = yRange(definition.hostY, definition.kind, definition.renderMode);
+	const frameHalf = FLOOR_DETAIL_PATH_FRAME_WIDTH / 2;
+	const framed = definition.pathFraming && half > FLOOR_DETAIL_PATH_FRAME_WIDTH + 1e-4;
+	const inner = framed ? half - frameHalf * 2 : half;
+	const fillColor = colorAt(definition.colors, 0);
+	const strips: FloorDetailStrip[] = [
+		{
+			role: 'stone',
+			color: fillColor,
 			minY,
 			maxY,
-			color
-		);
-		if (box) boxes.push(box);
-	}
-	return boxes;
-}
-
-function buildPathBoxes(def: FloorDetailDefinition, gridSize: number): FloorDetailBox[] {
-	const samples = pathCenterlineLocalSamples(def.points, gridSize);
-	if (samples.length < 2) return [];
-	const { minY, maxY } = yRange(def.hostY, def.kind, def.renderMode);
-	const halfW = def.pathWidth / 2;
-	// The fill is solid wood too (a boardwalk run along the path), one log laid end to end.
-	const idHash = hashStringToUint32(def.id);
-	const fillSeed = hashStringToUint32('fill', idHash);
-	let fillAlong = 0;
-	const boxes: FloorDetailBox[] = [];
-	for (const fill of boxesAlongPolyline(samples, halfW, minY, maxY, colorAt(def.colors, 0))) {
-		boxes.push({ ...fill, wood: { grain: 'z', seed: fillSeed, along: fillAlong } });
-		fillAlong += fill.maxZ - fill.minZ;
-	}
-	if (!def.pathFraming) return boxes;
-
-	const frameHalf = FLOOR_DETAIL_PATH_FRAME_WIDTH / 2;
-	if (halfW < frameHalf + 1e-4) return boxes;
-
-	const offset = halfW - frameHalf;
-	const frame = yRange(def.hostY, def.kind, def.renderMode, FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA);
-	const railColor = colorAt(def.colors, 1);
-	for (const sign of [-1, 1] as const) {
-		// Each rail is one length of timber: its segments share a log, laid end to end along it.
-		const seed = hashStringToUint32(`rail${sign}`, idHash);
-		let along = 0;
-		for (const rail of boxesAlongPolyline(
-			offsetPathPolyline(samples, sign * offset),
-			frameHalf,
-			frame.minY,
-			frame.maxY,
-			railColor
-		)) {
-			boxes.push({ ...rail, wood: { grain: 'z', seed, along } });
-			along += rail.maxZ - rail.minZ;
+			left: offsetPathPolyline(samples, inner),
+			right: offsetPathPolyline(samples, -inner),
+			along
 		}
-	}
-	return boxes;
+	];
+	if (!framed) return strips;
+
+	const frame = yRange(
+		definition.hostY,
+		definition.kind,
+		definition.renderMode,
+		FLOOR_DETAIL_PATH_FRAME_HEIGHT_EXTRA
+	);
+	const railColor = colorAt(definition.colors, 1);
+	const idHash = hashStringToUint32(definition.id);
+	const outerLeft = offsetPathPolyline(samples, half);
+	const innerLeft = offsetPathPolyline(samples, inner);
+	const innerRight = offsetPathPolyline(samples, -inner);
+	const outerRight = offsetPathPolyline(samples, -half);
+	strips.push(
+		{
+			role: 'wood',
+			color: railColor,
+			minY: frame.minY,
+			maxY: frame.maxY,
+			left: outerLeft,
+			right: innerLeft,
+			along,
+			woodSeed: hashStringToUint32('rail-1', idHash)
+		},
+		{
+			role: 'wood',
+			color: railColor,
+			minY: frame.minY,
+			maxY: frame.maxY,
+			left: innerRight,
+			right: outerRight,
+			along,
+			woodSeed: hashStringToUint32('rail1', idHash)
+		}
+	);
+	return strips;
 }
 
 /** Coloured boxes for one detailing piece — empty when the footprint is degenerate. */
@@ -665,6 +650,6 @@ export function buildFloorDetailBoxes(
 		case 'tiles':
 			return buildTileBoxes(definition, gridSize);
 		case 'path':
-			return buildPathBoxes(definition, gridSize);
+			return [];
 	}
 }

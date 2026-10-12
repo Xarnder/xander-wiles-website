@@ -59,7 +59,7 @@ export const FLOOR_DETAIL_CARPET_PILE = 0.006;
 
 export const DEFAULT_FLOOR_DETAIL_COLORS: Record<FloorDetailKind, readonly [string, string]> = {
 	carpet: ['#6B2E1F', '#4A1F14'],
-	path: ['#8A8680', '#5C4632'],
+	path: ['#524E4A', '#5C4632'],
 	planks: ['#7A5639', '#8A6443'],
 	tiles: ['#C1443C', '#F4F0E6']
 };
@@ -134,6 +134,11 @@ export interface FloorDetailBox {
 	 */
 	yaw?: number;
 	/**
+	 * Path centre stone. UVs are foundation-local XZ so the texture continues along the path.
+	 * Curved paths use `FloorDetailStrip` instead of a run of boxes.
+	 */
+	stone?: boolean;
+	/**
 	 * Solid wood (planks, path rails): rendered with the procedural wood shader, tinted by `color`.
 	 * `grain` is the box-local axis the wood runs along; boxes sharing a `seed` are cut from the same
 	 * log, and `along` (metres) is where this box starts along it — so a rail made of many short
@@ -146,4 +151,28 @@ export interface FloorDetailWood {
 	grain: 'x' | 'z';
 	seed: number;
 	along?: number;
+}
+
+/** One station on a path ribbon, in foundation-local metres. */
+export interface FloorDetailStripPoint {
+	x: number;
+	z: number;
+}
+
+/**
+ * A path centre or rail as one strip. `left` and `right` have the same length — station `i` on
+ * each side is joined to station `i + 1`, so neighbouring faces share an edge and neither overlap
+ * nor leave a gap.
+ */
+export interface FloorDetailStrip {
+	role: 'stone' | 'wood';
+	color: string;
+	minY: number;
+	maxY: number;
+	left: FloorDetailStripPoint[];
+	right: FloorDetailStripPoint[];
+	/** Arc length in metres at each station. Same length as `left` and `right`. */
+	along: number[];
+	/** Set on rails so the whole rail is one log. */
+	woodSeed?: number;
 }

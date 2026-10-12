@@ -2,6 +2,7 @@ import type { GraphicsQuality } from './GraphicsTypes';
 
 const STORAGE_KEY = 'forest-drift.graphics.v1';
 const FOV_STORAGE_KEY = 'forest-drift.fov.v1';
+const FPS_COUNTER_STORAGE_KEY = 'forest-drift.fps-counter.v1';
 
 const VALID_QUALITIES: readonly GraphicsQuality[] = ['low', 'medium', 'high', 'ultra'];
 
@@ -51,6 +52,30 @@ export class GraphicsSettingsStore {
 		if (!storage) return;
 		try {
 			storage.setItem(FOV_STORAGE_KEY, String(degrees));
+		} catch {
+			// Same as setQuality: only cross-session persistence is lost.
+		}
+	}
+
+	/**
+	 * Whether the FPS counter is shown. Missing or unreadable storage means on — the counter is the
+	 * default, and only an explicit "off" should hide it.
+	 */
+	getShowFpsCounter(): boolean {
+		const storage = getStorage();
+		if (!storage) return true;
+		try {
+			return storage.getItem(FPS_COUNTER_STORAGE_KEY) !== '0';
+		} catch {
+			return true;
+		}
+	}
+
+	setShowFpsCounter(show: boolean): void {
+		const storage = getStorage();
+		if (!storage) return;
+		try {
+			storage.setItem(FPS_COUNTER_STORAGE_KEY, show ? '1' : '0');
 		} catch {
 			// Same as setQuality: only cross-session persistence is lost.
 		}

@@ -125,6 +125,10 @@ describe('createDefaultGraphicsSettings', () => {
 		expect(createDefaultGraphicsSettings().quality).toBe('high');
 	});
 
+	it('shows the FPS counter unless the player turns it off', () => {
+		expect(createDefaultGraphicsSettings().showFpsCounter).toBe(true);
+	});
+
 	it('returns a fresh object each call (no shared mutable default)', () => {
 		const a = createDefaultGraphicsSettings();
 		const b = createDefaultGraphicsSettings();

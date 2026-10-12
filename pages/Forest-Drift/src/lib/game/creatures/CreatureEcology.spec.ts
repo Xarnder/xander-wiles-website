@@ -4,13 +4,32 @@ import {
 	creatureDimensions,
 	generateCreatureDemo,
 	generatePopulationCell,
-	regionSpecies
+	regionSpecies,
+	selectVisibleCreatures
 } from './CreaturePopulationSystem';
 import { advanceCreature, createCreatureState, decideCreature } from './CreatureBehaviourSystem';
 import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import type { CreatureWorldAccess } from './CreatureTypes';
 const flat: CreatureWorldAccess = { surface: () => 0, blocked: () => false };
+
+function hexHue(hex: string): number {
+	const n = Number.parseInt(hex.slice(1), 16);
+	const r = ((n >> 16) & 255) / 255;
+	const g = ((n >> 8) & 255) / 255;
+	const b = (n & 255) / 255;
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const d = max - min;
+	if (d === 0) return 0;
+	const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+	return (h * 60 + 360) % 360;
+}
+
+function hueDistance(a: number, b: number): number {
+	const d = Math.abs(a - b) % 360;
+	return Math.min(d, 360 - d);
+}
 describe('deterministic world-space ecology', () => {
 	it('floors negative coordinates independently of terrain chunks', () => {
 		expect(creatureCellAt(-0.01, -64.01)).toEqual({ x: -1, z: -2 });
@@ -27,24 +46,80 @@ describe('deterministic world-space ecology', () => {
 			for (const spawn of generatePopulationCell('forest', x, 2, 6.25, flat))
 				expect(pool.has(spawn.species.id)).toBe(true);
 	});
-	it('has sparse normal density and bounded rare size tiers', () => {
+	it('spawns frequent groups with big differences between them and small ones inside', () => {
 		let count = 0,
 			giants = 0,
-			common = 0;
+			smaller = 0;
 		for (let x = -100; x < 100; x++) {
 			const spawns = generatePopulationCell('forest', x, 0, 1, flat);
 			count += spawns.length;
 			for (const s of spawns) {
 				const h = creatureDimensions(s.species).height;
-				if (h >= 10) giants++;
-				if (h <= 1.51) common++;
+				if (h >= 14) giants++;
+				else smaller++;
 			}
 		}
-		expect(count).toBeLessThan(800);
-		expect(common).toBeGreaterThan(giants * 10);
-		const heights = regionSpecies('forest', 0, 0).map((s) => creatureDimensions(s).height);
-		expect(heights[5]).toBeGreaterThanOrEqual(10);
-		expect(heights[5]).toBeLessThanOrEqual(30);
+		expect(count).toBeGreaterThan(800);
+		expect(count).toBeLessThan(4000);
+		expect(smaller).toBeGreaterThan(giants);
+		expect(giants).toBeGreaterThan(0);
+
+		const species = regionSpecies('forest', 0, 0);
+		const heights = species.map((s) => creatureDimensions(s).height);
+		for (let i = 1; i < heights.length; i++)
+			expect(heights[i]).toBeGreaterThan(heights[i - 1] * 1.25);
+		expect(heights[0]).toBeLessThan(1);
+		expect(heights[5]).toBeGreaterThanOrEqual(16);
+		expect(heights[5]).toBeLessThanOrEqual(26);
+		const hues = species.map((s) => hexHue(s.appearance.palette.primary));
+		for (let i = 0; i < hues.length; i++)
+			for (let j = i + 1; j < hues.length; j++)
+				expect(hueDistance(hues[i], hues[j])).toBeGreaterThan(30);
+
+		const crowded = generatePopulationCell('forest', 0, 0, 4, flat);
+		const groups = new Map<string, typeof crowded>();
+		for (const spawn of crowded) {
+			const members = groups.get(spawn.groupId);
+			if (members) members.push(spawn);
+			else groups.set(spawn.groupId, [spawn]);
+		}
+		const herds = [...groups.values()].filter((members) => members.length >= 2);
+		expect(herds.length).toBeGreaterThan(0);
+		for (const members of herds) {
+			expect(new Set(members.map((member) => member.species.id)).size).toBe(1);
+			const sizes = members.map((member) => member.individual.sizeFactor);
+			expect(Math.max(...sizes) / Math.min(...sizes)).toBeLessThan(1.12);
+			const shifts = members.map((member) => member.individual.paletteVariation.hue);
+			expect(Math.max(...shifts) - Math.min(...shifts)).toBeLessThan(0.03);
+		}
+		const groupHeights = [...groups.values()].map(
+			(members) => creatureDimensions(members[0].species).height
+		);
+		if (groupHeights.length >= 2) {
+			const shortest = Math.min(...groupHeights);
+			const tallest = Math.max(...groupHeights);
+			expect(tallest).toBeGreaterThan(shortest * 1.25);
+		}
+	});
+	it('shows large creatures even when small herds are closer', () => {
+		const herds = Array.from({ length: 30 }, (_, index) => ({
+			id: index,
+			distance: 4 + index,
+			height: 0.7
+		}));
+		const picked = selectVisibleCreatures(
+			[
+				...herds,
+				{ id: 100, distance: 90, height: 18 },
+				{ id: 101, distance: 70, height: 10 },
+				{ id: 102, distance: 50, height: 4.5 }
+			],
+			10
+		);
+		expect(picked.some((creature) => creature.height >= 8)).toBe(true);
+		expect(picked.some((creature) => creature.height >= 2.2 && creature.height < 8)).toBe(true);
+		expect(picked.some((creature) => creature.height < 2.2)).toBe(true);
+		expect(picked).toHaveLength(10);
 	});
 	it('rejects invalid terrain and building footprints without partial invalid groups', () => {
 		for (const access of [

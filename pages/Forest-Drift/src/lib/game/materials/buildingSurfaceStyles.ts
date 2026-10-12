@@ -62,6 +62,16 @@ export const FLOOR_DETAIL_WOOD_STYLE: SurfaceStyle = {
 	mapping: 'wood'
 };
 
+/**
+ * Path centres. One continuous dark-grey stone face: patchy tone and fine grit. UVs are authored
+ * on the path geometry in metres.
+ */
+export const FLOOR_DETAIL_STONE_STYLE: SurfaceStyle = {
+	type: 'paving',
+	options: { variant: 'plain', moss: 0, dirt: 0, variation: 0.65 },
+	mapping: 'native'
+};
+
 /** Window glass — bound onto the shared glass material (see `OpeningVisualBuilder.getGlassMaterial`). */
 export const GLASS_SURFACE_STYLE: SurfaceStyle = { type: 'glass', mapping: 'planar' };
 

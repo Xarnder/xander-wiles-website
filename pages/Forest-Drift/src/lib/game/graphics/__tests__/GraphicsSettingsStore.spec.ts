@@ -56,5 +56,16 @@ describe('GraphicsSettingsStore', () => {
 		const store = new GraphicsSettingsStore();
 		expect(() => store.setQuality('medium')).not.toThrow();
 		expect(store.getQuality()).toBeNull();
+		expect(() => store.setShowFpsCounter(false)).not.toThrow();
+		expect(store.getShowFpsCounter()).toBe(true);
+	});
+
+	it('shows the FPS counter until the player turns it off', () => {
+		const store = new GraphicsSettingsStore();
+		expect(store.getShowFpsCounter()).toBe(true);
+		store.setShowFpsCounter(false);
+		expect(new GraphicsSettingsStore().getShowFpsCounter()).toBe(false);
+		store.setShowFpsCounter(true);
+		expect(store.getShowFpsCounter()).toBe(true);
 	});
 });

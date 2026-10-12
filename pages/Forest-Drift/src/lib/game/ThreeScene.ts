@@ -81,6 +81,7 @@ import { GraphicsPipeline } from './graphics/GraphicsPipeline';
 import { foundationLocalFrame } from './building/FoundationLocalMath';
 import type { BuildingMaterialDefinition } from './building/MaterialTypes';
 import {
+	FLOOR_DETAIL_STONE_STYLE,
 	FLOOR_DETAIL_WOOD_STYLE,
 	GLASS_SURFACE_STYLE,
 	TERRAIN_SURFACE_STYLE
@@ -95,6 +96,7 @@ import {
 	createDefaultMusicVisualSettings,
 	type GameSettingsHost
 } from './settings/GameSettingsHost';
+import { FrameDropMeter } from './graphics/frameStats';
 import { GraphicsSettingsStore } from './graphics/GraphicsSettingsStore';
 import {
 	createDefaultGraphicsSettings,
@@ -252,6 +254,10 @@ export interface SceneStats {
 	aoQuality: AoQuality;
 	antialiasing: AntiAliasMode;
 	showRenderStats: boolean;
+	/** Player-facing FPS pill. Independent of the F3 render-stats overlay. */
+	showFpsCounter: boolean;
+	/** Missed refreshes in the last second, relative to the graphics target FPS. */
+	frameDrops: number;
 	dayCycleEnabled: boolean;
 	timeOfDay: number;
 	/** Only populated while render stats are shown — see emitStats. */
@@ -500,6 +506,9 @@ export class ThreeScene implements WorldRuntime {
 
 	private statsAccumSeconds = 0;
 	private statsFrameCount = 0;
+	/** Monotonic clock for the one-second frame-drop window. Accumulated frame deltas, not wall time. */
+	private statsClock = 0;
+	private readonly frameDropMeter = new FrameDropMeter();
 
 	private readonly dirty = {
 		topology: false,
@@ -549,6 +558,7 @@ export class ThreeScene implements WorldRuntime {
 		const savedGraphicsQuality = this.graphicsSettingsStore.getQuality();
 		this.graphicsSettings = createDefaultGraphicsSettings();
 		if (savedGraphicsQuality) this.graphicsSettings.quality = savedGraphicsQuality;
+		this.graphicsSettings.showFpsCounter = this.graphicsSettingsStore.getShowFpsCounter();
 		this.graphicsSettings.fieldOfView = clampFieldOfView(
 			this.graphicsSettingsStore.getFieldOfView() ?? this.graphicsSettings.fieldOfView
 		);
@@ -756,6 +766,12 @@ export class ThreeScene implements WorldRuntime {
 			this.floorDetailManager.getWoodMaterial(),
 			FLOOR_DETAIL_WOOD_STYLE,
 			{ ownWoodCoords: true }
+		);
+		// Native UVs are written on the path geometry. A planar bind would let the surface mapper
+		// rewrite the whole mesh and drop the rails' wood coordinates.
+		this.materialLibrary.bindMaterial(
+			this.floorDetailManager.getStoneMaterial(),
+			FLOOR_DETAIL_STONE_STYLE
 		);
 
 		this.furnitureManager = new FurnitureManager(this.materialManager);
@@ -1424,6 +1440,10 @@ export class ThreeScene implements WorldRuntime {
 					this.graphicsSettings.fieldOfView = clampFieldOfView(this.graphicsSettings.fieldOfView);
 					this.graphicsSettingsStore.setFieldOfView(this.graphicsSettings.fieldOfView);
 					// Applied (with any zoom) by updateFieldOfView on the next frame.
+				},
+				graphicsFpsCounter: () => {
+					this.graphicsSettingsStore.setShowFpsCounter(this.graphicsSettings.showFpsCounter);
+					this.emitStats();
 				},
 				graphicsExposure: () =>
 					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
@@ -2840,6 +2860,8 @@ export class ThreeScene implements WorldRuntime {
 	private updateStats(deltaSeconds: number): void {
 		if (!this.onStatsUpdate) return;
 
+		this.statsClock += deltaSeconds;
+		this.frameDropMeter.push(this.statsClock, deltaSeconds, this.graphicsSettings.targetFps);
 		this.statsFrameCount++;
 		this.statsAccumSeconds += deltaSeconds;
 		if (this.statsAccumSeconds < 0.25) return;
@@ -2905,6 +2927,7 @@ export class ThreeScene implements WorldRuntime {
 		this.onStatsUpdate({
 			creatures: { ...this.creatures.stats },
 			fps: Math.round(fps),
+			frameDrops: this.frameDropMeter.count,
 			frameTimeMs: Math.round(frameTimeMs * 10) / 10,
 			playerX: position.x,
 			playerY: position.y,
@@ -2946,6 +2969,7 @@ export class ThreeScene implements WorldRuntime {
 			aoQuality: graphicsStats.aoQuality,
 			antialiasing: graphicsStats.antialiasing,
 			showRenderStats: this.graphicsSettings.showRenderStats,
+			showFpsCounter: this.graphicsSettings.showFpsCounter,
 			dayCycleEnabled: cycle.enabled,
 			timeOfDay: cycle.timeOfDay,
 			...(this.miniBuildPreferences.display.showChunkUsage

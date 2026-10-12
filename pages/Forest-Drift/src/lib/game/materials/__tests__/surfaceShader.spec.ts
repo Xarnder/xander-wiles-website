@@ -96,6 +96,9 @@ describe('world-scale surface shader', () => {
 		expect(surfaceShaderKindFor(resolveMaterialRecipe('paving', { variant: 'setts' }))).toBe(
 			'coursed'
 		);
+		expect(surfaceShaderKindFor(resolveMaterialRecipe('paving', { variant: 'plain' }))).toBe(
+			'noTile'
+		);
 		expect(surfaceShaderKindFor(resolveMaterialRecipe('grass'))).toBe('cover');
 		expect(surfaceShaderKindFor(resolveMaterialRecipe('plaster'))).toBe('noTile');
 		expect(surfaceShaderKindFor(resolveMaterialRecipe('slate'))).toBeNull();
@@ -118,6 +121,34 @@ describe('world-scale surface shader', () => {
 			return max - min;
 		};
 		expect(spread(detail.albedo)).toBeLessThan(spread(structured.albedo));
+	});
+
+	it('paints plain paving as patchy stone without joint-dark seams', () => {
+		const laid = generateMaterialMaps(resolveMaterialRecipe('paving', { quality: 'low' }));
+		const plain = generateMaterialMaps(
+			resolveMaterialRecipe('paving', { variant: 'plain', quality: 'low', variation: 0.65 })
+		);
+		const range = (pixels: Uint8Array) => {
+			let min = 255;
+			let max = 0;
+			for (let i = 0; i < pixels.length; i += 4) {
+				min = Math.min(min, pixels[i]);
+				max = Math.max(max, pixels[i]);
+			}
+			return { min, max, spread: max - min };
+		};
+		const plainRange = range(plain.albedo);
+		const laidRange = range(laid.albedo);
+		let sum = 0;
+		let count = 0;
+		for (let i = 0; i < plain.albedo.length; i += 4) {
+			sum += plain.albedo[i];
+			count++;
+		}
+		const plainMean = sum / count;
+		expect(plainRange.spread).toBeGreaterThan(30);
+		expect(plainMean).toBeLessThan(laidRange.min);
+		expect(plainMean).toBeGreaterThan(40);
 	});
 
 	it('the library switches between world-scale and legacy tiled looks, deterministically', async () => {

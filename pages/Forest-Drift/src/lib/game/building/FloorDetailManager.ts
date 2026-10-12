@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FoundationRootRegistry } from './FoundationRootRegistry';
 import type { FoundationDefinition } from './FoundationTypes';
 import { buildFloorDetailGeometry } from './FloorDetailGeometryBuilder';
-import { buildFloorDetailBoxes } from './floorDetailMath';
+import { buildFloorDetailBoxes, buildFloorDetailStrips } from './floorDetailMath';
 import type { FloorDetailDefinition } from './FloorDetailTypes';
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0x7ad0a0 });
@@ -34,6 +34,8 @@ export class FloorDetailManager {
 	private readonly material: THREE.MeshStandardMaterial;
 	/** Wood boxes (planks, path rails) — the scene dresses it with solid procedural wood. */
 	private readonly woodMaterial: THREE.MeshStandardMaterial;
+	/** Path centres — the scene dresses it with plain procedural stone. */
+	private readonly stoneMaterial: THREE.MeshStandardMaterial;
 	private readonly materials: THREE.Material[];
 	private showBounds = false;
 
@@ -53,16 +55,22 @@ export class FloorDetailManager {
 		});
 		this.woodMaterial = this.material.clone();
 		this.woodMaterial.name = 'floor-detail-wood';
-		this.materials = [this.material, this.woodMaterial];
+		this.stoneMaterial = this.material.clone();
+		this.stoneMaterial.name = 'floor-detail-stone';
+		this.materials = [this.material, this.woodMaterial, this.stoneMaterial];
 	}
 
-	/** Both materials (flat, wood), in draw-group order — for shadow registration. */
+	/** Materials in draw-group order (flat, wood, stone) — for shadow registration. */
 	getMaterials(): readonly THREE.MeshStandardMaterial[] {
-		return [this.material, this.woodMaterial];
+		return [this.material, this.woodMaterial, this.stoneMaterial];
 	}
 
 	getWoodMaterial(): THREE.MeshStandardMaterial {
 		return this.woodMaterial;
+	}
+
+	getStoneMaterial(): THREE.MeshStandardMaterial {
+		return this.stoneMaterial;
 	}
 
 	private buildEntry(
@@ -72,8 +80,9 @@ export class FloorDetailManager {
 		const root = this.roots.getOrCreate(definition.foundationId);
 		if (!root) return null;
 
-		const boxes = buildFloorDetailBoxes(definition, this.getBuildingGridSize());
-		const geometry = buildFloorDetailGeometry(boxes);
+		const gridSize = this.getBuildingGridSize();
+		const boxes = buildFloorDetailBoxes(definition, gridSize);
+		const geometry = buildFloorDetailGeometry(boxes, buildFloorDetailStrips(definition, gridSize));
 
 		let mesh = existing?.mesh;
 		if (mesh) {

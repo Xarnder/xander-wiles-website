@@ -49,4 +49,33 @@ describe('bounded creature runtime', () => {
 		expect(c.serialize().individuals).toHaveLength(0);
 		c.dispose();
 	});
+
+	it('keeps a grounded facing on throttled animation frames instead of snapping yaw', () => {
+		const c = new CreatureRuntimeManager(
+			'facing-hold',
+			{ surface: (x) => x * 0.2, blocked: () => false },
+			undefined
+		);
+		const dt = 1 / 60;
+		for (let i = 0; i < 30; i++) c.update({ x: 0, y: 0, z: 0 }, dt, 'low');
+		let checked = 0;
+		let worst = 0;
+		for (let i = 0; i < 90; i++) {
+			c.update({ x: 80, y: 0, z: 0 }, dt, 'low');
+			for (const [id, live] of c.live) {
+				const r = c.logical.get(id)!;
+				const distance = Math.hypot(80 - r.position.x, 0 - r.position.z);
+				if (distance < 40 || !c.grounding.has(id)) continue;
+				live.compiled.object.updateMatrix();
+				const e = live.compiled.object.matrix.elements;
+				const face = Math.atan2(e[8], e[10]);
+				const err = Math.abs(Math.atan2(Math.sin(face - r.heading), Math.cos(face - r.heading)));
+				worst = Math.max(worst, err);
+				checked++;
+			}
+		}
+		expect(checked).toBeGreaterThan(0);
+		expect(worst).toBeLessThan(0.08);
+		c.dispose();
+	});
 });

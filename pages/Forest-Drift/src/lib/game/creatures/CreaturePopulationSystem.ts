@@ -46,6 +46,85 @@ export function creatureSurface(
 	}
 	return y;
 }
+/**
+ * One height band per regional species, smallest to giant. Adjacent bands stay far enough apart
+ * that two groups read as different sizes even at a glance.
+ */
+const REGION_HEIGHT_BANDS: readonly (readonly [number, number])[] = [
+	[0.55, 0.8],
+	[1.2, 1.65],
+	[2.3, 3.1],
+	[4.4, 6],
+	[8.5, 12],
+	[16, 26]
+];
+/** Candidate groups per 64m cell. Each one draws a different regional species. */
+const POPULATION_SLOTS = 4;
+/**
+ * Chance a slot is occupied at density 1. Density still scales it, up to a cap so the max setting
+ * does not fill every metre.
+ */
+const POPULATION_PRESENCE = 0.5;
+
+function hslHex(h: number, saturation: number, lightness: number): string {
+	const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+	const hh = (((h % 360) + 360) % 360) / 60;
+	const x = chroma * (1 - Math.abs((hh % 2) - 1));
+	const rgb =
+		hh < 1
+			? [chroma, x, 0]
+			: hh < 2
+				? [x, chroma, 0]
+				: hh < 3
+					? [0, chroma, x]
+					: hh < 4
+						? [0, x, chroma]
+						: hh < 5
+							? [x, 0, chroma]
+							: [chroma, 0, x];
+	return (
+		'#' +
+		rgb
+			.map((v) =>
+				Math.round((v + lightness - chroma / 2) * 255)
+					.toString(16)
+					.padStart(2, '0')
+			)
+			.join('')
+	);
+}
+
+/**
+ * Gives the region's species clearly different colours, then tightens individual mutation so
+ * members of one group stay close to their species in size and hue.
+ */
+function showcaseRegion(
+	speciesList: SpeciesGenome[],
+	worldSeed: string | number,
+	regionX: number,
+	regionZ: number
+): void {
+	const rng = createNamedRandom(String(worldSeed), `fauna-showcase-v1:${regionX}:${regionZ}`);
+	const baseHue = rng() * 360;
+	speciesList.forEach((species, index) => {
+		const hue = (baseHue + (index * 360) / speciesList.length + (rng() * 16 - 8) + 360) % 360;
+		const palette = species.appearance.palette;
+		palette.primary = hslHex(hue, 0.58 + rng() * 0.18, 0.46 + rng() * 0.12);
+		palette.secondary = hslHex(hue, 0.28 + rng() * 0.12, 0.78 + rng() * 0.08);
+		palette.accent = hslHex(
+			(hue + 150 + rng() * 40) % 360,
+			0.55 + rng() * 0.2,
+			0.42 + rng() * 0.12
+		);
+		palette.eye = hslHex(hue, 0.2, 0.08);
+		species.individualVariation.size = 0.045;
+		species.individualVariation.hue = 0.012;
+		species.individualVariation.proportions = 0.035;
+		species.scaleRange.min = 0.95;
+		species.scaleRange.max = 1.05;
+	});
+}
+
 /** Resize a complete genome coherently, retaining scale-dependent gait and behaviour. */
 function stature(species: SpeciesGenome, height: number): SpeciesGenome {
 	const previous = creatureDimensions(species).height;
@@ -84,20 +163,58 @@ export function regionSpecies(
 ): SpeciesGenome[] {
 	const rng = createNamedRandom(String(worldSeed), `fauna-region-v1:${regionX}:${regionZ}`);
 	const plans: BodyPlanId[] = ['quadruped', 'quadruped', 'hexapod', 'biped', 'serpentine'];
-	return Array.from({ length: 6 }, (_, index) => {
+	const speciesList = Array.from({ length: REGION_HEIGHT_BANDS.length }, (_, index) => {
 		const seed = hashStringToUint32(`${worldSeed}:fauna-v1:${regionX}:${regionZ}:${index}`);
 		const species = generateSpecies(seed, plans[Math.floor(rng() * plans.length)]);
-		const height =
-			index < 3
-				? 0.5 + rng()
-				: index === 3
-					? 2 + rng() * 2
-					: index === 4
-						? 5 + rng() * 5
-						: 10 + rng() * 20;
-		return stature(species, height);
+		const [minHeight, maxHeight] = REGION_HEIGHT_BANDS[index];
+		const sized = stature(species, minHeight + rng() * (maxHeight - minHeight));
+		// Small species travel in herds; the largest are landmarks and spawn alone.
+		if (index <= 2)
+			sized.behaviour.preferredGroupSize = Math.max(3, sized.behaviour.preferredGroupSize);
+		else if (index === 3)
+			sized.behaviour.preferredGroupSize = Math.min(
+				3,
+				Math.max(2, sized.behaviour.preferredGroupSize)
+			);
+		else sized.behaviour.preferredGroupSize = 1;
+		return sized;
 	});
+	showcaseRegion(speciesList, worldSeed, regionX, regionZ);
+	return speciesList;
 }
+/**
+ * Picks who is drawn when more creatures are in range than the active cap.
+ * Nearest-only would fill the cap with the closest herd and hide the tall, differently coloured
+ * groups. Slots are split across small, mid and landmark heights, then leftover slots take the
+ * nearest creatures that were not already chosen.
+ */
+export function selectVisibleCreatures<T extends { distance: number; height: number }>(
+	visible: readonly T[],
+	limit: number
+): T[] {
+	if (limit <= 0) return [];
+	const sorted = [...visible].sort((a, b) => a.distance - b.distance);
+	if (sorted.length <= limit) return sorted;
+	const tiers: T[][] = [[], [], []];
+	for (const creature of sorted)
+		tiers[creature.height >= 8 ? 2 : creature.height >= 2.2 ? 1 : 0].push(creature);
+	const quotas = [Math.round(limit * 0.45), Math.round(limit * 0.3), Math.round(limit * 0.25)];
+	quotas[0] += limit - quotas.reduce((sum, count) => sum + count, 0);
+	const picked: T[] = [];
+	const chosen = new Set<T>();
+	tiers.forEach((tier, index) => {
+		for (const creature of tier.slice(0, Math.max(0, quotas[index]))) {
+			picked.push(creature);
+			chosen.add(creature);
+		}
+	});
+	for (const creature of sorted) {
+		if (picked.length >= limit) break;
+		if (!chosen.has(creature)) picked.push(creature);
+	}
+	return picked;
+}
+
 export function generatePopulationCell(
 	worldSeed: string | number,
 	cellX: number,
@@ -115,15 +232,20 @@ export function generatePopulationCell(
 	const rng = createNamedRandom(String(worldSeed), `fauna-cell-v1:${cellX}:${cellZ}`);
 	const speciesList = regionSpecies(worldSeed, Math.floor(cellX / 8), Math.floor(cellZ / 8));
 	const result: CreatureSpawnDefinition[] = [];
-	// At default density most cells are empty. Independent slots keep existing IDs stable as density rises.
-	for (let slot = 0; slot < 3; slot++) {
+	// Shuffle so the groups in one cell are different species: big size and colour gaps between
+	// them, while each group itself stays one species.
+	const tiers = speciesList.map((_, index) => index);
+	for (let i = tiers.length - 1; i > 0; i--) {
+		const j = Math.floor(rng() * (i + 1));
+		[tiers[i], tiers[j]] = [tiers[j], tiers[i]];
+	}
+	const presenceLimit = Math.min(0.92, density * POPULATION_PRESENCE);
+	for (let slot = 0; slot < POPULATION_SLOTS; slot++) {
 		const presence = rng(),
-			choice = rng(),
-			cx = (cellX + 0.15 + rng() * 0.7) * 64,
-			cz = (cellZ + 0.15 + rng() * 0.7) * 64;
-		if (presence >= Math.min(1, density * 0.16)) continue;
-		const index =
-			choice < 0.84 ? Math.floor(choice / 0.28) : choice < 0.97 ? 3 : choice < 0.995 ? 4 : 5;
+			cx = (cellX + 0.12 + rng() * 0.76) * 64,
+			cz = (cellZ + 0.12 + rng() * 0.76) * 64;
+		if (presence >= presenceLimit) continue;
+		const index = tiers[slot];
 		const species = speciesList[index];
 		const dimensions = creatureDimensions(species, 1.1);
 		const y = creatureSurface(access, cx, cz, dimensions.radius, dimensions.height);

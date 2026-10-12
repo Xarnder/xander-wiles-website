@@ -4,6 +4,7 @@ import {
 	buildFloorDetailBoxes,
 	floorDetailMeshMinY,
 	floorDetailThickness,
+	buildFloorDetailStrips,
 	pathBendIsStraight,
 	pathCenterlineLocalSamples,
 	pathStripLocalCorners,
@@ -11,7 +12,8 @@ import {
 	rectanglePointsFromCorners,
 	validateFloorDetailFootprint
 } from '../floorDetailMath';
-import type { FloorDetailDefinition } from '../FloorDetailTypes';
+import type { FloorDetailDefinition, FloorDetailStrip } from '../FloorDetailTypes';
+import type { PathLocalPoint } from '../floorDetailMath';
 import {
 	FLOOR_DETAIL_2D_THICKNESS,
 	FLOOR_DETAIL_HOST_LIFT,
@@ -19,6 +21,48 @@ import {
 } from '../FloorDetailTypes';
 
 const GRID = 0.25;
+
+function cross(ax: number, az: number, bx: number, bz: number): number {
+	return ax * bz - az * bx;
+}
+
+function pointInTri(
+	px: number,
+	pz: number,
+	a: PathLocalPoint,
+	b: PathLocalPoint,
+	c: PathLocalPoint
+): boolean {
+	const c1 = cross(b.x - a.x, b.z - a.z, px - a.x, pz - a.z);
+	const c2 = cross(c.x - b.x, c.z - b.z, px - b.x, pz - b.z);
+	const c3 = cross(a.x - c.x, a.z - c.z, px - c.x, pz - c.z);
+	const hasNeg = c1 < -1e-8 || c2 < -1e-8 || c3 < -1e-8;
+	const hasPos = c1 > 1e-8 || c2 > 1e-8 || c3 > 1e-8;
+	return !(hasNeg && hasPos);
+}
+
+function pointInStrip(strip: FloorDetailStrip, x: number, z: number): boolean {
+	for (let i = 0; i < strip.left.length - 1; i++) {
+		const l0 = strip.left[i];
+		const l1 = strip.left[i + 1];
+		const r0 = strip.right[i];
+		const r1 = strip.right[i + 1];
+		if (pointInTri(x, z, l0, l1, r1) || pointInTri(x, z, l0, r1, r0)) return true;
+	}
+	return false;
+}
+
+/** Y component of the top triangle's normal. Positive means the quad is not folded over. */
+function topFacingY(strip: FloorDetailStrip, index: number): number {
+	const l0 = strip.left[index];
+	const l1 = strip.left[index + 1];
+	const r1 = strip.right[index + 1];
+	const ax = l1.x - l0.x;
+	const az = l1.z - l0.z;
+	const bx = r1.x - l0.x;
+	const bz = r1.z - l0.z;
+	return az * bx - ax * bz;
+}
 
 function detail(overrides: Partial<FloorDetailDefinition> = {}): FloorDetailDefinition {
 	return {
@@ -266,9 +310,9 @@ describe('buildFloorDetailBoxes', () => {
 		const yawed = diamond.filter((box) => box.yaw);
 		expect(yawed.length).toBeGreaterThan(1);
 		expect(yawed.every((box) => Math.abs((box.yaw ?? 0) - Math.PI / 4) < 1e-6)).toBe(true);
-		expect(
-			yawed.every((box) => Math.abs(box.maxX - box.minX - (box.maxZ - box.minZ)) < 1e-6)
-		).toBe(true);
+		expect(yawed.every((box) => Math.abs(box.maxX - box.minX - (box.maxZ - box.minZ)) < 1e-6)).toBe(
+			true
+		);
 		expect(new Set(yawed.map((box) => box.color)).size).toBe(2);
 		expect(diamond.every((box) => box.yaw)).toBe(true);
 		expect(checker.every((box) => !box.yaw)).toBe(true);
@@ -299,76 +343,73 @@ describe('buildFloorDetailBoxes', () => {
 		expect(edgePairs).toBeGreaterThan(0);
 	});
 
-	it('adds framed path edges as extra yawed boxes', () => {
-		const framed = buildFloorDetailBoxes(
-			detail({
-				kind: 'path',
-				pathFraming: true,
-				points: [
-					{ gridX: 0, gridZ: 0 },
-					{ gridX: 8, gridZ: 0 }
-				]
-			}),
+	it('joins an equal number of points on both sides of a path', () => {
+		const points = [
+			{ gridX: 0, gridZ: 0 },
+			{ gridX: 0, gridZ: 4 },
+			{ gridX: 4, gridZ: 4 }
+		];
+		const framed = buildFloorDetailStrips(
+			detail({ kind: 'path', pathFraming: true, pathWidth: 1.2, points }),
 			GRID
 		);
-		const bare = buildFloorDetailBoxes(
-			detail({
-				kind: 'path',
-				pathFraming: false,
-				points: [
-					{ gridX: 0, gridZ: 0 },
-					{ gridX: 8, gridZ: 0 }
-				]
-			}),
+		const bare = buildFloorDetailStrips(
+			detail({ kind: 'path', pathFraming: false, pathWidth: 1.2, points }),
 			GRID
 		);
-		expect(framed.length).toBe(bare.length + 2);
-		expect(framed[0].yaw).toBeDefined();
+		expect(bare.map((strip) => strip.role)).toEqual(['stone']);
+		expect(framed.map((strip) => strip.role)).toEqual(['stone', 'wood', 'wood']);
+		const samples = pathCenterlineLocalSamples(points, GRID);
+		for (const strip of framed) {
+			expect(strip.left).toHaveLength(strip.right.length);
+			expect(strip.left.length).toBe(samples.length);
+			expect(strip.along).toHaveLength(strip.left.length);
+			for (let i = 0; i < strip.left.length - 1; i++)
+				expect(topFacingY(strip, i)).toBeGreaterThan(0);
+		}
+		const [stone, leftRail, rightRail] = framed;
+		for (let i = 0; i < stone.left.length; i++) {
+			expect(stone.left[i]).toEqual(leftRail.right[i]);
+			expect(stone.right[i]).toEqual(rightRail.left[i]);
+		}
+		const mid = Math.floor(samples.length / 2);
+		expect(pointInStrip(stone, samples[mid].x, samples[mid].z)).toBe(true);
+		expect(pointInStrip(leftRail, samples[mid].x, samples[mid].z)).toBe(false);
 	});
 
-	it('keeps diagonal path rails on the long edges from start to end', () => {
+	it('keeps diagonal path rails on opposite long edges', () => {
 		const pathWidth = 1;
-		const boxes = buildFloorDetailBoxes(
-			detail({
-				kind: 'path',
-				pathFraming: true,
-				pathWidth,
-				points: [
-					{ gridX: 0, gridZ: 0 },
-					{ gridX: 8, gridZ: 8 }
-				]
-			}),
+		const points = [
+			{ gridX: 0, gridZ: 0 },
+			{ gridX: 8, gridZ: 8 }
+		];
+		const strips = buildFloorDetailStrips(
+			detail({ kind: 'path', pathFraming: true, pathWidth, points }),
 			GRID
 		);
-		expect(boxes).toHaveLength(3);
-		const [bed, ...rails] = boxes;
-		const bedCx = (bed.minX + bed.maxX) / 2;
-		const bedCz = (bed.minZ + bed.maxZ) / 2;
-		const dirX = Math.sin(bed.yaw ?? 0);
-		const dirZ = Math.cos(bed.yaw ?? 0);
+		const stone = strips.find((strip) => strip.role === 'stone');
+		const rails = strips.filter((strip) => strip.role === 'wood');
+		expect(stone).toBeDefined();
+		expect(rails).toHaveLength(2);
+		const bedX = (stone!.left[0].x + stone!.right[0].x + stone!.left[1].x + stone!.right[1].x) / 4;
+		const bedZ = (stone!.left[0].z + stone!.right[0].z + stone!.left[1].z + stone!.right[1].z) / 4;
+		const dirX = 1 / Math.SQRT2;
+		const dirZ = 1 / Math.SQRT2;
 		const expectedOffset = pathWidth / 2 - FLOOR_DETAIL_PATH_FRAME_WIDTH / 2;
-		const bedLength = bed.maxZ - bed.minZ;
-
-		for (const rail of rails) {
-			expect(rail.yaw).toBeCloseTo(bed.yaw ?? 0, 5);
-			expect(rail.maxZ - rail.minZ).toBeCloseTo(bedLength, 5);
-			const rcx = (rail.minX + rail.maxX) / 2;
-			const rcz = (rail.minZ + rail.maxZ) / 2;
-			const along = (rcx - bedCx) * dirX + (rcz - bedCz) * dirZ;
-			const side = (rcx - bedCx) * -dirZ + (rcz - bedCz) * dirX;
+		const sides = rails.map((rail) => {
+			const x = (rail.left[0].x + rail.right[0].x + rail.left[1].x + rail.right[1].x) / 4;
+			const z = (rail.left[0].z + rail.right[0].z + rail.left[1].z + rail.right[1].z) / 4;
+			const along = (x - bedX) * dirX + (z - bedZ) * dirZ;
+			const side = (x - bedX) * -dirZ + (z - bedZ) * dirX;
 			expect(along).toBeCloseTo(0, 5);
 			expect(Math.abs(side)).toBeCloseTo(expectedOffset, 5);
-		}
-		const sides = rails.map((rail) => {
-			const rcx = (rail.minX + rail.maxX) / 2;
-			const rcz = (rail.minZ + rail.maxZ) / 2;
-			return (rcx - bedCx) * -dirZ + (rcz - bedCz) * dirX;
+			return side;
 		});
 		expect(Math.sign(sides[0])).not.toBe(Math.sign(sides[1]));
 	});
 
 	it('builds a curved path from a start, handle, and end', () => {
-		const straight = buildFloorDetailBoxes(
+		const straight = buildFloorDetailStrips(
 			detail({
 				kind: 'path',
 				pathFraming: false,
@@ -379,7 +420,7 @@ describe('buildFloorDetailBoxes', () => {
 			}),
 			GRID
 		);
-		const bent = buildFloorDetailBoxes(
+		const bent = buildFloorDetailStrips(
 			detail({
 				kind: 'path',
 				pathFraming: true,
@@ -391,8 +432,9 @@ describe('buildFloorDetailBoxes', () => {
 			}),
 			GRID
 		);
-		expect(straight).toHaveLength(1);
-		expect(bent.length).toBeGreaterThan(straight.length + 2);
+		expect(straight[0].left).toHaveLength(2);
+		expect(bent[0].left.length).toBeGreaterThan(straight[0].left.length);
+		expect(bent.filter((strip) => strip.role === 'wood')).toHaveLength(2);
 	});
 
 	it('builds a carpet rim that does not sit under the field', () => {

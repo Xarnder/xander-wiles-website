@@ -2,9 +2,14 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
 	buildFloorDetailGeometry,
+	FLOOR_DETAIL_STONE_GROUP,
 	FLOOR_DETAIL_WOOD_GROUP
 } from '../../building/FloorDetailGeometryBuilder';
-import { buildFloorDetailBoxes, rectanglePointsFromCorners } from '../../building/floorDetailMath';
+import {
+	buildFloorDetailBoxes,
+	buildFloorDetailStrips,
+	rectanglePointsFromCorners
+} from '../../building/floorDetailMath';
 import type { FloorDetailDefinition } from '../../building/FloorDetailTypes';
 import { BUILDING_SURFACE_STYLES } from '../buildingSurfaceStyles';
 import { InlineMaterialMapSource } from '../MaterialMapSource';
@@ -235,8 +240,8 @@ describe('floor-detail wood', () => {
 		expect(new Set(boxes.map((b) => b.wood?.seed)).size).toBe(boxes.length);
 	});
 
-	it('makes the path fill and rails continuous solid wood, and leaves carpet and tiles flat', () => {
-		const path = buildFloorDetailBoxes(
+	it('gives the path centre stone and each rail one continuous length of wood', () => {
+		const path = buildFloorDetailStrips(
 			base({
 				kind: 'path',
 				points: [
@@ -247,38 +252,69 @@ describe('floor-detail wood', () => {
 			}),
 			0.25
 		);
-		const rails = path.filter((b) => b.wood);
-		expect(rails.length).toBe(path.length);
-		// One log each for the fill and the two rails; segments laid end to end along it.
-		const bySeed = new Map<number, number[]>();
-		for (const rail of rails)
-			bySeed.set(rail.wood!.seed, [...(bySeed.get(rail.wood!.seed) ?? []), rail.wood!.along ?? 0]);
-		expect(bySeed.size).toBe(3);
-		for (const alongs of bySeed.values()) expect(alongs).toEqual([...alongs].sort((a, b) => a - b));
+		const stone = path.filter((strip) => strip.role === 'stone');
+		const rails = path.filter((strip) => strip.role === 'wood');
+		expect(stone).toHaveLength(1);
+		expect(rails).toHaveLength(2);
+		expect(new Set(rails.map((rail) => rail.woodSeed)).size).toBe(2);
+		for (const rail of rails) {
+			expect(rail.along).toEqual([...rail.along].sort((a, b) => a - b));
+			expect(rail.along[rail.along.length - 1]).toBeGreaterThan(rail.along[0]);
+		}
 		for (const kind of ['carpet', 'tiles'] as const) {
-			expect(buildFloorDetailBoxes(base({ kind }), 0.25).some((b) => b.wood)).toBe(false);
+			const boxes = buildFloorDetailBoxes(base({ kind }), 0.25);
+			expect(boxes.some((b) => b.wood || b.stone)).toBe(false);
+			expect(buildFloorDetailStrips(base({ kind }), 0.25)).toHaveLength(0);
 		}
 	});
 
-	it('puts wood boxes in their own draw group with log coordinates', () => {
-		const boxes = buildFloorDetailBoxes(
-			base({
-				kind: 'path',
-				points: [
-					{ gridX: 0, gridZ: 0 },
-					{ gridX: 8, gridZ: 0 }
-				]
-			}),
-			0.25
-		);
-		const geometry = buildFloorDetailGeometry(boxes);
-		const flat = boxes.filter((b) => !b.wood).length;
-		const wood = boxes.length - flat;
-		expect(geometry.groups[0]).toMatchObject({ start: 0, count: flat * 36 });
+	it('puts wood rails and the stone centre in their own draw groups', () => {
+		const definition = base({
+			kind: 'path',
+			points: [
+				{ gridX: 0, gridZ: 0 },
+				{ gridX: 8, gridZ: 0 }
+			]
+		});
+		const strips = buildFloorDetailStrips(definition, 0.25);
+		const geometry = buildFloorDetailGeometry([], strips);
+		const stone = strips.filter((strip) => strip.role === 'stone').length;
+		const wood = strips.filter((strip) => strip.role === 'wood').length;
+		expect(geometry.groups[0]).toMatchObject({ start: 0, count: 0 });
 		expect(geometry.groups[FLOOR_DETAIL_WOOD_GROUP]).toMatchObject({
-			start: flat * 36,
+			start: 0,
 			count: wood * 36
 		});
-		expect(geometry.getAttribute('woodCoord').count).toBe(geometry.getAttribute('position').count);
+		expect(geometry.groups[FLOOR_DETAIL_STONE_GROUP]).toMatchObject({
+			start: wood * 36,
+			count: stone * 36
+		});
+		const position = geometry.getAttribute('position');
+		const uv = geometry.getAttribute('uv');
+		const index = geometry.getIndex();
+		expect(geometry.getAttribute('woodCoord').count).toBe(position.count);
+		const stoneGroup = geometry.groups[FLOOR_DETAIL_STONE_GROUP];
+		expect(index).toBeTruthy();
+		for (let i = stoneGroup.start; i < stoneGroup.start + stoneGroup.count; i++) {
+			const vertex = index!.getX(i);
+			expect(uv.getX(vertex)).toBeCloseTo(position.getX(vertex), 5);
+			expect(uv.getY(vertex)).toBeCloseTo(position.getZ(vertex), 5);
+			expect(position.getY(vertex)).toBeGreaterThan(0);
+		}
+		let upward = 0;
+		for (let i = stoneGroup.start; i < stoneGroup.start + stoneGroup.count; i += 3) {
+			const a = index!.getX(i);
+			const b = index!.getX(i + 1);
+			const c = index!.getX(i + 2);
+			const abx = position.getX(b) - position.getX(a);
+			const abz = position.getZ(b) - position.getZ(a);
+			const acx = position.getX(c) - position.getX(a);
+			const acz = position.getZ(c) - position.getZ(a);
+			const ny = abz * acx - abx * acz;
+			if (Math.abs(position.getY(a) - position.getY(b)) < 1e-6 && position.getY(a) > 0.02) {
+				upward += ny;
+			}
+		}
+		expect(upward).toBeGreaterThan(0);
 	});
 });

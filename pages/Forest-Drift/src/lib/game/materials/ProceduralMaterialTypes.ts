@@ -25,8 +25,8 @@ export type PlasterVariant = 'lime' | 'rough';
 export type TimberVariant = 'dark-oak' | 'aged-brown' | 'weathered' | 'fresh' | 'dark-stained';
 export type SlateVariant = 'natural' | 'irregular';
 export type MasonryVariant = 'dressed' | 'cut-block' | 'fieldstone' | 'rough';
-/** `setts` is the rectangular laid paving; `flagstone` large irregular slabs. */
-export type PavingVariant = 'cobble' | 'setts' | 'flagstone';
+/** `setts` is the rectangular laid paving; `flagstone` large irregular slabs; `plain` is one stone face. */
+export type PavingVariant = 'cobble' | 'setts' | 'flagstone' | 'plain';
 /** Bare ground for paths and exposed earth: `soil` → `path` (soil + gravel) → `gravel`. */
 export type GroundVariant = 'soil' | 'path' | 'gravel';
 /** `detail` is a near-neutral variant for multiplying over terrain vertex colours (the colour comes from the terrain, the texture adds structure). */
@@ -51,7 +51,7 @@ export const PROCEDURAL_VARIANTS: {
 	timber: ['dark-oak', 'aged-brown', 'weathered', 'fresh', 'dark-stained'],
 	slate: ['natural', 'irregular'],
 	masonry: ['dressed', 'cut-block', 'fieldstone', 'rough'],
-	paving: ['cobble', 'setts', 'flagstone'],
+	paving: ['cobble', 'setts', 'flagstone', 'plain'],
 	ground: ['soil', 'path', 'gravel'],
 	grass: ['meadow', 'dry', 'detail'],
 	glass: ['clear', 'old']

@@ -3,14 +3,24 @@ import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
 import { animateCreature } from './CreatureAnimationSystem';
-import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
+import {
+	CreatureGroundingController,
+	groundingStats,
+	orientationFromUp
+} from './CreatureGrounding';
 import { createDefaultCreatureState, validateCreatureWorldState } from './CreaturePersistence';
 import {
 	generatePopulationCell,
 	CREATURE_CELL_SIZE,
-	generateCreatureDemo
+	generateCreatureDemo,
+	selectVisibleCreatures
 } from './CreaturePopulationSystem';
-import { createCreatureState, decideCreature, advanceCreature } from './CreatureBehaviourSystem';
+import {
+	createCreatureState,
+	decideCreature,
+	advanceCreature,
+	turnCreature
+} from './CreatureBehaviourSystem';
 import type {
 	CreatureDefinition,
 	CreatureLod,
@@ -179,7 +189,8 @@ export class CreatureRuntimeManager {
 			}
 	}
 	update(player: Vec3, delta: number, quality: GraphicsQuality) {
-		this.time += Math.min(delta, 0.1);
+		const frameDt = Math.min(delta, 0.1);
+		this.time += frameDt;
 		if (!this.state.settings.enabled) {
 			for (const id of [...this.live.keys()]) this.unload(id);
 			return;
@@ -191,7 +202,7 @@ export class CreatureRuntimeManager {
 			this.scan(player, quality);
 			this.scanAt = this.time + 0.8;
 		}
-		const visible: { id: string; distance: number; lod: CreatureLod }[] = [];
+		const visible: { id: string; distance: number; lod: CreatureLod; height: number }[] = [];
 		// Same anatomy at every level; only tessellation and sub-silhouette detail drop with distance.
 		const lodFor = (distance: number): CreatureLod =>
 			distance < budget.nearDistance && quality !== 'low'
@@ -208,11 +219,10 @@ export class CreatureRuntimeManager {
 				budget.populationRadius,
 				Math.max(budget.smallRenderDistance, size * 24)
 			);
-			if (distance <= far) visible.push({ id, distance, lod: lodFor(distance) });
+			if (distance <= far) visible.push({ id, distance, lod: lodFor(distance), height: size });
 		}
-		visible.sort((a, b) => a.distance - b.distance);
-		const selected = visible.slice(
-			0,
+		const selected = selectVisibleCreatures(
+			visible,
 			Math.min(this.state.settings.maxActiveCreatures, budget.maxActive)
 		);
 		const ids = new Set(selected.map((p) => p.id));
@@ -283,13 +293,26 @@ export class CreatureRuntimeManager {
 				r.nextDecision = Math.max(r.nextDecision, this.time + (item.distance > 160 ? 1.5 : 0.3));
 				this.stats.behaviourUpdates++;
 			}
-			if (moving) advanceCreature(r, step, this.access);
+			// Position stays on the physics tick. Facing is integrated every rendered frame so a
+			// correction is not a single 50 ms snap.
+			if (moving) advanceCreature(r, step, this.access, false);
+			turnCreature(r, frameDt);
 			this.stats.behaviourMs += performance.now() - behaviourStart;
 			const c = live.compiled;
 			c.object.position.copy(r.position);
-			c.object.rotation.y = r.heading;
 			const interval = item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 0.1 : 0.4;
-			if (this.time - live.lastAnimation >= interval) {
+			const animateNow = this.time - live.lastAnimation >= interval;
+			const held = this.grounding.get(item.id);
+			if (!animateNow && held) {
+				// Full poses are throttled with distance. Setting euler yaw here used to replace the
+				// grounded orientation on the skipped frames, so the body turned and then snapped back.
+				orientationFromUp(held.up, r.heading, held.quaternion);
+				c.object.quaternion.copy(held.quaternion);
+				c.object.position.y = held.position.y;
+			} else if (!animateNow) {
+				c.object.rotation.set(0, r.heading, 0);
+			}
+			if (animateNow) {
 				const start = performance.now();
 				let grounding = this.grounding.get(item.id);
 				if (!grounding) {

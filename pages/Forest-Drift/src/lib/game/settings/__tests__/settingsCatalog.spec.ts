@@ -125,6 +125,20 @@ describe('buildSettingsCatalog', () => {
 		}
 	});
 
+	it('offers a default-on FPS counter toggle under Graphics', () => {
+		const catalog = buildSettingsCatalog(testHost());
+		const graphics = catalog.find((category) => category.id === 'graphics');
+		const display = graphics?.groups.find((group) => group.id === 'graphics-main');
+		const field = display?.fields.find((item) => item.id === 'graphics.fpsCounter');
+		expect(field?.kind).toBe('boolean');
+		expect(field?.label).toBe('Show FPS counter');
+		if (field?.kind === 'boolean') {
+			expect(field.get()).toBe(true);
+			field.set(false);
+			expect(field.get()).toBe(false);
+		}
+	});
+
 	it('filters categories by search query', () => {
 		const catalog = buildSettingsCatalog(testHost());
 		const sky = catalog.find((category) => category.id === 'sky');

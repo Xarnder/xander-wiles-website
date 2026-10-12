@@ -70,6 +70,8 @@ export interface GameSettingsActions {
 	graphicsAdvanced: () => void;
 	/** Field of view slider moved (applies live; saved per browser). */
 	graphicsFieldOfView?: () => void;
+	/** FPS counter checkbox (applies live; saved per browser). */
+	graphicsFpsCounter?: () => void;
 	graphicsExposure: () => void;
 	graphicsAo: () => void;
 	graphicsExport: () => void;

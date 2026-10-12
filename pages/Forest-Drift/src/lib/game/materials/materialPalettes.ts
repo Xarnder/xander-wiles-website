@@ -133,7 +133,8 @@ const ALPINE: MaterialPaletteDefinition = {
 			rough: { stone: '#9C978B', dark: '#7C776C', light: '#B5B0A4' }
 		},
 		paving: {
-			flagstone: { stone: '#958E81', dark: '#77705F', light: '#B0A99B' }
+			flagstone: { stone: '#958E81', dark: '#77705F', light: '#B0A99B' },
+			plain: { stone: '#524E4A', dark: '#322F2C', light: '#746F6A' }
 		},
 		ground: {
 			gravel: { soil: '#7C7366', dark: '#5D554B' }

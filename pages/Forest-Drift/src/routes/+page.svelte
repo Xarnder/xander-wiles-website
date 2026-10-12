@@ -758,7 +758,11 @@
 {#if screen === 'game'}
 	<!-- The renderer only exists while a world is open: quitting to the Worlds screen unmounts
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
-	<div class="game-shell" class:touch-mode={showTouchControls}>
+	<div
+		class="game-shell"
+		class:touch-mode={showTouchControls}
+		class:fps-on={!!stats?.showFpsCounter}
+	>
 		<div
 			class="canvas-container"
 			data-testid="canvas-container"
@@ -1300,6 +1304,12 @@
 						<dd>Pause &rarr; Creature Lab — design a creature, then place it in the world</dd>
 						<dt>F3</dt>
 						<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
+						<dt>FPS</dt>
+						<dd>
+							A counter in the top-left shows frames per second, dropped frames in the last second,
+							and the render mode (Low, Medium, High, or Ultra). Graphics &rarr; Show FPS counter
+							turns it off.
+						</dd>
 						<dt>L</dt>
 						<dd>
 							Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies
@@ -1429,9 +1439,26 @@
 			</div>
 		{/if}
 
+		{#if stats?.showFpsCounter}
+			<div class="fps-counter" data-testid="fps-counter">
+				<span data-testid="fps-value">{stats.fps} FPS</span>
+				<span class="fps-dot" aria-hidden="true">&middot;</span>
+				<span class="fps-drops" class:dropping={stats.frameDrops > 0} data-testid="fps-drops">
+					{stats.frameDrops}
+					{stats.frameDrops === 1 ? 'drop' : 'drops'}
+				</span>
+				<span class="fps-dot" aria-hidden="true">&middot;</span>
+				<span data-testid="fps-quality">{graphicsQualityLabel(stats.graphicsQuality)}</span>
+			</div>
+		{/if}
+
 		{#if stats?.showRenderStats}
-			<div class="stats-overlay" data-testid="stats-overlay">
-				<div>{stats.fps} FPS &middot; {stats.frameTimeMs.toFixed(1)} ms</div>
+			<div class="stats-overlay" class:below-fps={stats.showFpsCounter} data-testid="stats-overlay">
+				<div>
+					{stats.fps} FPS &middot; {stats.frameDrops} drops &middot; {graphicsQualityLabel(
+						stats.graphicsQuality
+					)} &middot; {stats.frameTimeMs.toFixed(1)} ms
+				</div>
 				<div>
 					Pos {stats.playerX.toFixed(1)}, {stats.playerY.toFixed(1)}, {stats.playerZ.toFixed(1)}
 				</div>
@@ -2111,23 +2138,30 @@
 		position: absolute;
 		top: 50%;
 		left: 50%;
-		width: 8px;
-		height: 8px;
+		width: 30px;
+		height: 30px;
 		transform: translate(-50%, -50%);
-		border: 1.5px solid rgba(255, 255, 255, 0.85);
-		border-radius: 50%;
 		pointer-events: none;
-		box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+		--crosshair-color: rgba(255, 255, 255, 0.92);
+		background:
+			linear-gradient(var(--crosshair-color), var(--crosshair-color)) center top / 2px 9px no-repeat,
+			linear-gradient(var(--crosshair-color), var(--crosshair-color)) center bottom / 2px 9px
+				no-repeat,
+			linear-gradient(var(--crosshair-color), var(--crosshair-color)) left center / 9px 2px
+				no-repeat,
+			linear-gradient(var(--crosshair-color), var(--crosshair-color)) right center / 9px 2px
+				no-repeat,
+			radial-gradient(circle, var(--crosshair-color) 1.25px, transparent 1.5px) center / 100% 100%
+				no-repeat;
+		filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85));
 	}
 
 	.crosshair.valid {
-		border-color: #39d353;
-		background: rgba(57, 211, 83, 0.25);
+		--crosshair-color: #39d353;
 	}
 
 	.crosshair.invalid {
-		border-color: #ff4d4d;
-		background: rgba(255, 77, 77, 0.25);
+		--crosshair-color: #ff4d4d;
 	}
 
 	.instructions {
@@ -2233,6 +2267,36 @@
 		}
 	}
 
+	.fps-counter {
+		position: absolute;
+		top: 0.75rem;
+		left: 0.75rem;
+		z-index: 12;
+		display: flex;
+		align-items: baseline;
+		gap: 0.35rem;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		background: rgba(10, 20, 15, 0.55);
+		border: 1px solid rgba(234, 246, 255, 0.2);
+		color: #eaf6ff;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.75rem;
+		font-weight: 650;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
+		backdrop-filter: blur(2px);
+		pointer-events: none;
+	}
+
+	.fps-drops {
+		color: #9fe0b8;
+	}
+
+	.fps-drops.dropping {
+		color: #ffb020;
+	}
+
 	.stats-overlay {
 		position: absolute;
 		top: 0.75rem;
@@ -2246,6 +2310,10 @@
 		border-radius: 8px;
 		pointer-events: none;
 		backdrop-filter: blur(2px);
+	}
+
+	.stats-overlay.below-fps {
+		top: 2.85rem;
 	}
 
 	/* Bottom-left, above the pause button; stats stay top-left and the hotbar is centred. */
@@ -2559,6 +2627,10 @@
 		bottom: auto;
 	}
 
+	.touch-mode.fps-on .save-indicator {
+		top: max(4.6rem, calc(env(safe-area-inset-top) + 3.6rem));
+	}
+
 	.touch-mode .save-error-chip {
 		top: max(88px, calc(env(safe-area-inset-top) + 80px));
 		left: max(14px, env(safe-area-inset-left));
@@ -2705,6 +2777,10 @@
 			padding: 0.2rem 0.5rem;
 		}
 
+		.touch-mode.fps-on .save-indicator {
+			top: max(4.4rem, calc(env(safe-area-inset-top) + 3.4rem));
+		}
+
 		.touch-mode .save-error-chip {
 			top: max(70px, calc(env(safe-area-inset-top) + 64px));
 			bottom: auto;
@@ -2776,6 +2852,10 @@
 			right: auto;
 			font-size: 0.68rem;
 			padding: 0.2rem 0.5rem;
+		}
+
+		.touch-mode.fps-on .save-indicator {
+			top: max(4.5rem, calc(env(safe-area-inset-top) + 3.5rem));
 		}
 
 		.touch-mode .save-error-chip {

@@ -2929,7 +2929,8 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 		{
 			id: 'graphics',
 			title: 'Graphics',
-			description: 'Quality preset, exposure, dynamic resolution, and ambient occlusion.',
+			description:
+				'Quality preset, field of view, FPS counter, exposure, dynamic resolution, and ambient occlusion.',
 			groups: [
 				group('graphics-main', 'Display', [
 					{
@@ -2945,6 +2946,13 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						get: () => graphics.quality,
 						set: (value) => actions.graphicsQuality(value)
 					},
+					boolField(
+						'graphics.fpsCounter',
+						'Show FPS counter',
+						graphics,
+						'showFpsCounter',
+						actions.graphicsFpsCounter
+					),
 					numberField(
 						'graphics.fov',
 						'Field of view (°)',

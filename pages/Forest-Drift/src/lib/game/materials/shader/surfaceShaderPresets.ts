@@ -149,6 +149,9 @@ const STONE_SHAPES: Record<string, StoneShape> = {
  */
 export function surfaceShaderKindFor(recipe: ResolvedMaterialRecipe): SurfaceShaderKind | null {
 	if (recipe.type === 'masonry' || recipe.type === 'paving') {
+		// Plain paving is one stone face. Stochastic sampling hides the texture repeat; there is
+		// no stone layout, so no joints and no moss.
+		if (recipe.type === 'paving' && recipe.variant === 'plain') return 'noTile';
 		return STONE_SHAPES[`${recipe.type}:${recipe.variant}`]?.kind ?? null;
 	}
 	if (recipe.type === 'grass') return 'cover';

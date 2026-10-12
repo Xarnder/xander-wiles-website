@@ -9,7 +9,12 @@ import {
 	type FloorDetailToolId
 } from './FoundationTypes';
 import { buildFloorDetailGeometry } from './FloorDetailGeometryBuilder';
-import { buildFloorDetailBoxes, rectanglePointsFromCorners } from './floorDetailMath';
+import type { FloorDetailDefinition } from './FloorDetailTypes';
+import {
+	buildFloorDetailBoxes,
+	buildFloorDetailStrips,
+	rectanglePointsFromCorners
+} from './floorDetailMath';
 import type { FloorDetailKind } from './FloorDetailTypes';
 import { colorMaterialFromHex } from './MaterialTypes';
 import {
@@ -236,28 +241,27 @@ function buildFloorPreview(
 					{ gridX: 8, gridZ: 2 }
 				]
 			: rectanglePointsFromCorners({ gridX: 0, gridZ: 0 }, { gridX: 6, gridZ: 6 });
-	const boxes = buildFloorDetailBoxes(
-		{
-			id: 'preview-floor-detail',
-			foundationId: 'preview',
-			levelIndex: 0,
-			kind,
-			hostY: 0,
-			renderMode: settings.floorDetailRenderMode === '2d' ? '2d' : '3d',
-			points,
-			colors: [settings.floorDetailColorA, settings.floorDetailColorB],
-			plankWidth: settings.floorDetailPlankWidth,
-			plankDirection: settings.floorDetailPlankDirection === 'z' ? 'z' : 'x',
-			tileSize: settings.floorDetailTileSize,
-			tilePattern: settings.floorDetailTilePattern,
-			pathWidth: settings.floorDetailPathWidth,
-			pathFraming: settings.floorDetailPathFraming
-		},
-		grid
-	);
+	const draft: FloorDetailDefinition = {
+		id: 'preview-floor-detail',
+		foundationId: 'preview',
+		levelIndex: 0,
+		kind,
+		hostY: 0,
+		renderMode: settings.floorDetailRenderMode === '2d' ? '2d' : '3d',
+		points,
+		colors: [settings.floorDetailColorA, settings.floorDetailColorB],
+		plankWidth: settings.floorDetailPlankWidth,
+		plankDirection: settings.floorDetailPlankDirection === 'z' ? 'z' : 'x',
+		tileSize: settings.floorDetailTileSize,
+		tilePattern: settings.floorDetailTilePattern,
+		pathWidth: settings.floorDetailPathWidth,
+		pathFraming: settings.floorDetailPathFraming
+	};
+	const boxes = buildFloorDetailBoxes(draft, grid);
+	const strips = buildFloorDetailStrips(draft, grid);
 	const group = new THREE.Group();
 	group.name = 'preview-floor-detail';
-	const mesh = new THREE.Mesh(buildFloorDetailGeometry(boxes), materials.floorDetail);
+	const mesh = new THREE.Mesh(buildFloorDetailGeometry(boxes, strips), materials.floorDetail);
 	mesh.name = 'preview-floor-detail-mesh';
 	group.add(mesh);
 
@@ -270,6 +274,14 @@ function buildFloorPreview(
 		maxX = Math.max(maxX, box.maxX);
 		minZ = Math.min(minZ, box.minZ);
 		maxZ = Math.max(maxZ, box.maxZ);
+	}
+	for (const strip of strips) {
+		for (const point of [...strip.left, ...strip.right]) {
+			minX = Math.min(minX, point.x);
+			maxX = Math.max(maxX, point.x);
+			minZ = Math.min(minZ, point.z);
+			maxZ = Math.max(maxZ, point.z);
+		}
 	}
 	const pad = 0.28;
 	const sizeX = Number.isFinite(minX)

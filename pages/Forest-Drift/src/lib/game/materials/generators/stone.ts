@@ -332,12 +332,53 @@ export function paintMasonry(canvas: SurfaceCanvas, recipe: ResolvedMaterialReci
 	}
 }
 
+const PLAIN_LAYER = { patch: 1, mid: 2, fine: 3 };
+
+/**
+ * One stone face: broad patches of lighter and darker stone, plus fine grit. No joints, no moss,
+ * no separate stones — the colour variation is noise only.
+ */
+function paintPlainStone(canvas: SurfaceCanvas, recipe: ResolvedMaterialRecipe): void {
+	const { size, tileWidth } = canvas;
+	const seeds = layerSeeds(recipe.seed, PLAIN_LAYER);
+	const stone = paletteColor(recipe, 'stone');
+	const dark = paletteColor(recipe, 'dark');
+	const light = paletteColor(recipe, 'light');
+	const broadP = periodFor(tileWidth, 1.4);
+	const patchP = periodFor(tileWidth, 0.38);
+	const gritP = periodFor(tileWidth, 0.09);
+	const fineP = Math.max(8, Math.round(size / 2));
+	const amount = 0.62 + recipe.variation * 0.32;
+
+	for (let y = 0; y < size; y++) {
+		const t = (y + 0.5) / size;
+		for (let x = 0; x < size; x++) {
+			const s = (x + 0.5) / size;
+			const i = y * size + x;
+			const broad = fbm01(s, t, broadP, broadP, 2, seeds.patch);
+			const patch = fbm01(s, t, patchP, patchP, 3, seeds.mid);
+			const grit = fbm01(s, t, gritP, gritP, 2, seeds.fine);
+			const fine = gradientNoise(s * fineP, t * fineP, fineP, fineP, seeds.fine + 17);
+			const tone = broad * 0.22 + patch * 0.5 + grit * 0.28;
+			canvas.setColor(i, mixRgb(stone, mixRgb(dark, light, tone), amount));
+			canvas.scaleColor(i, 0.88 + fine * 0.2);
+			canvas.height[i] = (patch - 0.5) * 0.0016 + (grit - 0.5) * 0.0008 + fine * 0.00025;
+			canvas.roughness[i] = Math.min(1, Math.max(0, recipe.roughness + (grit - 0.5) * 0.1));
+		}
+	}
+}
+
 /**
  * Courtyard and path paving. `cobble` is small domed Voronoi stones with sandy, gritty joints;
  * `setts` is rectangular stones laid in courses; `flagstone` is large, flat, slightly tilted
- * irregular slabs with thin joints. Worn tops are a touch lighter and smoother than the edges.
+ * irregular slabs with thin joints. `plain` is one continuous stone face. Worn tops are a touch
+ * lighter and smoother than the edges.
  */
 export function paintPaving(canvas: SurfaceCanvas, recipe: ResolvedMaterialRecipe): void {
+	if (recipe.variant === 'plain') {
+		paintPlainStone(canvas, recipe);
+		return;
+	}
 	const { tileWidth, tileHeight } = canvas;
 	const seed = recipe.seed;
 	const colors = {

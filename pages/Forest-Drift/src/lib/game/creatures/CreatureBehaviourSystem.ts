@@ -181,11 +181,28 @@ export function decideCreature(
 		state.intent.heading = Math.atan2(velocity.x, velocity.z);
 	state.intent.gait = safe ? (state.state === 'FLEE' ? 'run' : 'walk') : 'idle';
 }
+/** Shortest-angle turn toward `intent.heading`, spread across render frames. */
+export function turnCreature(state: CreatureRuntimeDefinition, dt: number): void {
+	if (!Number.isFinite(dt) || dt <= 0) return;
+	if (!Number.isFinite(state.heading) || !Number.isFinite(state.intent.heading)) return;
+	const delta = Math.atan2(
+		Math.sin(state.intent.heading - state.heading),
+		Math.cos(state.intent.heading - state.heading)
+	);
+	// Same ~6 rad/s response as before, but applied per frame so a correction does not land in one tick.
+	const turn = delta * (1 - Math.exp(-6 * dt));
+	const next = state.heading + turn;
+	state.heading = Math.atan2(Math.sin(next), Math.cos(next));
+	state.intent.angularVelocity = turn / dt;
+}
+
 /** Bounded substeps prevent tunnelling through obstacles when frame time spikes. */
 export function advanceCreature(
 	state: CreatureRuntimeDefinition,
 	dt: number,
-	access: CreatureWorldAccess
+	access: CreatureWorldAccess,
+	/** Position-only when the caller turns every rendered frame itself. */
+	turn = true
 ): void {
 	if (!Number.isFinite(dt) || dt <= 0) return;
 	const dims = creatureDimensions(state.spawn.species, state.spawn.individual.sizeFactor);
@@ -210,12 +227,5 @@ export function advanceCreature(
 		}
 		state.position = { x, y, z };
 	}
-	const delta = Math.atan2(
-		Math.sin(state.intent.heading - state.heading),
-		Math.cos(state.intent.heading - state.heading)
-	);
-	const turn = delta * Math.min(1, elapsed * 6);
-	state.heading += turn;
-	// Derived from this physics step, not the render cadence, so lean stays stable regardless of frame rate.
-	state.intent.angularVelocity = elapsed > 0 ? turn / elapsed : 0;
+	if (turn) turnCreature(state, elapsed);
 }
