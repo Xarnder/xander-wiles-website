@@ -5,14 +5,15 @@ import type { BuildUiState, ToolId } from '../building/FoundationTypes';
 import { getFurnitureCatalogueEntry } from '../building/furnitureCatalogue';
 import type { FurnitureTool } from '../building/FurnitureTool';
 import { FURNITURE_PLACE_MAX_DISTANCE } from '../building/furniturePlacementMath';
-import { gridToMeters, nextQuarterTurn } from './miniBuildGrid';
-import { MiniBuildGhost } from './MiniBuildGhost';
+import { gridToMeters, stepAngle } from './miniBuildGrid';
+import { fitBoundsHighlight, MiniBuildGhost } from './MiniBuildGhost';
 import {
 	solveMiniBuildPlacement,
 	type MiniBuildPlacementContext,
 	type MiniBuildPlacementPreview
 } from './MiniBuildPlacement';
 import { selectionKey, type MiniBuildPreferences } from './MiniBuildPreferences';
+import { cycleRotationSnapStep, formatAngle, getRotationSnapStep } from './MiniBuildRotationSnap';
 import {
 	formatAreaDetail,
 	type MiniBuildChunkReadout,
@@ -22,7 +23,7 @@ import type {
 	MiniBuildDefinition,
 	MiniBuildMaterialOverride,
 	PlaceObjectSelection,
-	QuarterTurn
+	SnapAngle
 } from './MiniBuildTypes';
 
 const TARGET_COLOR = 0x7ec8e3;
@@ -46,8 +47,10 @@ export interface PlaceObjectToolOptions {
  * the default starter designs) and, for special functional objects (lights), delegates to the legacy
  * FurnitureTool, which keeps their dynamic-light behaviour.
  *
- * Controls: `E` Object Library (handled by BuildToolManager) · `R` rotate 90° · `↑/↓` recent objects ·
- * `C` copy the looked-at object · `F` edit the looked-at object · click place · right click / Esc cancel.
+ * Controls: `E` Object Library (handled by BuildToolManager) · `R` / `Shift+R` rotate one snap step
+ * either way · `T` / `Shift+T` finer / coarser snap step (shared with the Mini Build editor) ·
+ * `↑/↓` recent objects · `C` copy the looked-at object · `F` edit the looked-at object · click place ·
+ * right click / Esc cancel.
  */
 export class PlaceObjectTool implements BuildTool {
 	readonly toolId: ToolId = 'place-object';
@@ -69,7 +72,7 @@ export class PlaceObjectTool implements BuildTool {
 	private readonly screenCenter = new THREE.Vector2(0, 0);
 
 	private selection: PlaceObjectSelection;
-	private rotationY: QuarterTurn = 0;
+	private rotationY: SnapAngle = 0;
 	private materialOverrides: MiniBuildMaterialOverride[] | undefined;
 	private preview: MiniBuildPlacementPreview | null = null;
 	private targetInstanceId: string | null = null;
@@ -81,7 +84,13 @@ export class PlaceObjectTool implements BuildTool {
 		if (isTypingTarget(event.target)) return;
 		switch (event.code) {
 			case 'KeyR':
-				if (!this.delegatingToLight) this.rotate();
+				if (!this.delegatingToLight) this.rotate(event.shiftKey ? -1 : 1);
+				break;
+			case 'KeyT':
+				if (!this.delegatingToLight) {
+					const step = cycleRotationSnapStep(event.shiftKey ? -1 : 1);
+					this.onNotice?.(`Rotation snap ${formatAngle(step)}`);
+				}
 				break;
 			case 'KeyC':
 				this.copyTarget();
@@ -131,7 +140,7 @@ export class PlaceObjectTool implements BuildTool {
 		return this.selection;
 	}
 
-	getRotation(): QuarterTurn {
+	getRotation(): SnapAngle {
 		return this.rotationY;
 	}
 
@@ -161,7 +170,7 @@ export class PlaceObjectTool implements BuildTool {
 
 	setSelection(
 		selection: PlaceObjectSelection,
-		options: { rotationY?: QuarterTurn; materialOverrides?: MiniBuildMaterialOverride[] } = {}
+		options: { rotationY?: SnapAngle; materialOverrides?: MiniBuildMaterialOverride[] } = {}
 	): void {
 		this.selection = selection;
 		this.materialOverrides = options.materialOverrides;
@@ -266,8 +275,9 @@ export class PlaceObjectTool implements BuildTool {
 		return placed.value.id;
 	}
 
-	rotate(): void {
-		this.rotationY = nextQuarterTurn(this.rotationY);
+	/** One snap step about +Y (`direction` −1 turns back), at the shared rotation step. */
+	rotate(direction: 1 | -1 = 1): void {
+		this.rotationY = stepAngle(this.rotationY, getRotationSnapStep(), direction);
 	}
 
 	/** Copy / Duplicate: pick up the looked-at object's design, rotation and material overrides. */
@@ -322,22 +332,12 @@ export class PlaceObjectTool implements BuildTool {
 		this.raycaster.far = FURNITURE_PLACE_MAX_DISTANCE;
 		const hit = this.system.instances.raycast(this.raycaster);
 		this.targetInstanceId = hit?.id ?? null;
-		const box = hit ? this.system.instances.worldAabb(hit.id) : null;
+		const box = hit ? this.system.instances.worldBounds(hit.id) : null;
 		if (!box) {
 			this.targetHighlight.visible = false;
 			return;
 		}
-		this.targetHighlight.position.set(
-			(box.minX + box.maxX) / 2,
-			(box.minY + box.maxY) / 2,
-			(box.minZ + box.maxZ) / 2
-		);
-		this.targetHighlight.scale.set(
-			box.maxX - box.minX + 0.04,
-			box.maxY - box.minY + 0.04,
-			box.maxZ - box.minZ + 0.04
-		);
-		this.targetHighlight.updateMatrixWorld(true);
+		fitBoundsHighlight(this.targetHighlight, box, 0.04);
 		this.targetHighlight.visible = true;
 	}
 
@@ -369,10 +369,11 @@ export class PlaceObjectTool implements BuildTool {
 			'PLACE OBJECT',
 			`${definition.name} · ${definition.blocks.length} block${definition.blocks.length === 1 ? '' : 's'}`,
 			`${size.x.toFixed(2)} × ${size.z.toFixed(2)} × ${size.y.toFixed(2)}m`,
-			`Rotation: ${this.rotationY}°`,
+			`Rotation: ${formatAngle(this.rotationY)} · snap ${formatAngle(getRotationSnapStep())}`,
 			'',
 			'E    Object Library',
-			'R    Rotate',
+			'R    Rotate (Shift: back)',
+			'T    Snap angle (Shift: coarser)',
 			'↑/↓  Recent objects'
 		];
 		if (targetName) lines.push(`C    Copy ${targetName}`, `F    Edit ${targetName}`);

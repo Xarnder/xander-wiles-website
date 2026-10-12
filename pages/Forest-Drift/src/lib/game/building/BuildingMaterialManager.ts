@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { BUILDING_SURFACE_STYLES } from '../materials/buildingSurfaceStyles';
-import type { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
+import type {
+	ProceduralBindingOptions,
+	ProceduralMaterialLibrary
+} from '../materials/ProceduralMaterialLibrary';
+import type { SurfaceStyle } from '../materials/ProceduralMaterialTypes';
 import type { BuildingMaterialDefinition, MaterialKind } from './MaterialTypes';
 import { normalizeColorHex } from './MaterialTypes';
 
@@ -131,14 +135,45 @@ export class BuildingMaterialManager {
 		this.procedural = procedural;
 	}
 
+	/** The procedural library materials are dressed with (absent in tests and previews). */
+	get proceduralLibrary(): ProceduralMaterialLibrary | undefined {
+		return this.procedural;
+	}
+
 	getMaterial(
 		kind: MaterialKind,
 		definition: BuildingMaterialDefinition | undefined
 	): THREE.Material {
 		const key = `${kind}:${definitionKey(definition)}`;
-		const cached = this.cache.get(key);
-		if (cached) return cached;
+		return (
+			this.cache.get(key) ??
+			this.createMaterial(key, kind, definition, BUILDING_SURFACE_STYLES[kind])
+		);
+	}
 
+	/**
+	 * `getMaterial` with the procedural look chosen by the caller instead of the kind's default —
+	 * Mini Build material slots, where the player picks the texture. `null` is a flat colour. Cached
+	 * by (kind, colour, style), so every slot using the same look shares one material.
+	 */
+	getStyledMaterial(
+		kind: MaterialKind,
+		definition: BuildingMaterialDefinition | undefined,
+		style: SurfaceStyle | null,
+		binding: Omit<ProceduralBindingOptions, 'tint'> = {}
+	): THREE.Material {
+		const look = style ? `${JSON.stringify(style)}${JSON.stringify(binding)}` : 'flat';
+		const key = `${kind}:${definitionKey(definition)}|${look}`;
+		return this.cache.get(key) ?? this.createMaterial(key, kind, definition, style, binding);
+	}
+
+	private createMaterial(
+		key: string,
+		kind: MaterialKind,
+		definition: BuildingMaterialDefinition | undefined,
+		style: SurfaceStyle | null | undefined,
+		binding: Omit<ProceduralBindingOptions, 'tint'> = {}
+	): THREE.MeshStandardMaterial {
 		const template = TEMPLATES[kind];
 		const material = new THREE.MeshStandardMaterial({
 			color: definition?.type === 'color' ? normalizeColorHex(definition.color) : template.color,
@@ -156,9 +191,9 @@ export class BuildingMaterialManager {
 		});
 		this.cache.set(key, material);
 		this.onMaterialCreated?.(material);
-		const style = BUILDING_SURFACE_STYLES[kind];
 		if (style && this.procedural) {
 			this.procedural.bindMaterial(material, style, {
+				...binding,
 				tint: definition?.type === 'color' ? normalizeColorHex(definition.color) : undefined
 			});
 		}

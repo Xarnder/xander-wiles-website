@@ -4,7 +4,6 @@ import type { FoundationManager } from '../building/FoundationManager';
 import { resolveFurnitureBuildInput } from '../building/furnitureCatalogue';
 import type { FurnitureManager } from '../building/FurnitureManager';
 import {
-	aabbOverlapsWallRect,
 	FURNITURE_PLACE_MAX_DISTANCE,
 	FURNITURE_SUPPORT_SLOPE,
 	FURNITURE_WALL_CLEARANCE,
@@ -14,9 +13,18 @@ import {
 import { facingNormal } from '../building/furnitureMath';
 import type { WallCollisionRect } from '../building/wallCollision';
 import type { WorldSurfaceSampler } from '../building/WorldSurfaceSampler';
-import { aabbsOverlap, transformLocalBox, type WorldAabb } from './miniBuildGrid';
+import {
+	aabbToObb,
+	obbAabb,
+	obbCorners,
+	obbsOverlap,
+	transformLocalBox,
+	transformLocalObb,
+	type WorldAabb,
+	type WorldObb
+} from './miniBuildGrid';
 import { budgetMessage, type MiniBuildSystem } from './MiniBuildSystem';
-import type { MiniBuildDefinition, QuarterTurn } from './MiniBuildTypes';
+import type { MiniBuildDefinition, SnapAngle } from './MiniBuildTypes';
 
 /** Objects may sit flush against each other and walls; only real interpenetration is rejected. */
 const OBJECT_GAP = 0.01;
@@ -36,7 +44,7 @@ export interface MiniBuildPlacementContext {
 
 export interface MiniBuildPlacementPreview {
 	position: { x: number; y: number; z: number };
-	rotationY: QuarterTurn;
+	rotationY: SnapAngle;
 	foundationId: string | null;
 	valid: boolean;
 	/** Why placement is refused (shown in the HUD). */
@@ -56,12 +64,13 @@ const worldNormal = new THREE.Vector3();
  * Uses the same surfaces as furniture (terrain, foundations, floor slabs, upper floors, flat roofs)
  * and WorldSurfaceSampler for the supporting Y, so upper floors work without special cases.
  * Overlap tests use each design's compiled collision boxes — never render triangles — so a chair
- * can tuck under a table whose legs are decorative.
+ * can tuck under a table whose legs are decorative. Boxes are tested as oriented boxes, so an object
+ * at any snap angle is judged by its real footprint, not the larger square around it.
  */
 export function solveMiniBuildPlacement(
 	context: MiniBuildPlacementContext,
 	definition: MiniBuildDefinition,
-	rotationY: QuarterTurn,
+	rotationY: SnapAngle,
 	ignoreInstanceId?: string
 ): MiniBuildPlacementPreview | null {
 	raycaster.setFromCamera(screenCenter, context.camera);
@@ -97,7 +106,7 @@ export function solveMiniBuildPlacement(
 export function evaluateMiniBuildPlacement(
 	context: Omit<MiniBuildPlacementContext, 'camera'>,
 	definition: MiniBuildDefinition,
-	rotationY: QuarterTurn,
+	rotationY: SnapAngle,
 	point: { x: number; y: number; z: number },
 	normalY: number,
 	foundationId: string | null,
@@ -120,7 +129,7 @@ export function evaluateMiniBuildPlacement(
 	const walls = context.getWallRects();
 	const boxesAt = (px: number, pz: number) =>
 		data.collision.map((box) =>
-			transformLocalBox(box.min, box.max, { x: px, y: point.y, z: pz }, rotationY)
+			obbAabb(transformLocalObb(box.min, box.max, { x: px, y: point.y, z: pz }, rotationY, box.yaw))
 		);
 
 	// Wall faces rarely sit on the placement grid, so a snapped footprint is often a few centimetres
@@ -145,25 +154,24 @@ export function evaluateMiniBuildPlacement(
 
 	if (normalY < 0.65) return refuse('Needs a floor');
 
-	const cornerYs = [
-		[bounds.minX + CORNER_INSET, bounds.minZ + CORNER_INSET],
-		[bounds.minX + CORNER_INSET, bounds.maxZ - CORNER_INSET],
-		[bounds.maxX - CORNER_INSET, bounds.minZ + CORNER_INSET],
-		[bounds.maxX - CORNER_INSET, bounds.maxZ - CORNER_INSET]
-	].map(([cx, cz]) => context.worldSurfaceSampler.getSupportingSurfaceY(cx, cz, point.y + 0.2));
+	// Support is sampled under the turned footprint's corners, not the corners of its bounding square.
+	const footprint = transformLocalObb(data.bounds.min, data.bounds.max, position, rotationY);
+	const cornerYs = obbCorners(footprint, CORNER_INSET).map(([cx, cz]) =>
+		context.worldSurfaceSampler.getSupportingSurfaceY(cx, cz, point.y + 0.2)
+	);
 	if (!supportSpreadOk([...cornerYs, y], FURNITURE_SUPPORT_SLOPE)) return refuse('Uneven ground');
 
 	const boxes = data.collision.map((box) =>
-		transformLocalBox(box.min, box.max, position, rotationY)
+		transformLocalObb(box.min, box.max, position, rotationY, box.yaw)
 	);
 
 	for (const rect of walls) {
-		if (boxes.some((box) => aabbOverlapsWallRect(box, rect, FURNITURE_WALL_CLEARANCE)))
+		if (boxes.some((box) => obbOverlapsWallRect(box, rect, FURNITURE_WALL_CLEARANCE)))
 			return refuse('Blocked by a wall');
 	}
 
 	for (const other of context.system.instances.queryCollisionBoxes(bounds, ignoreInstanceId)) {
-		if (boxes.some((box) => aabbsOverlap(box, other.box, OBJECT_GAP)))
+		if (boxes.some((box) => obbsOverlap(box, other.box, OBJECT_GAP)))
 			return refuse('Overlaps another object');
 	}
 
@@ -185,7 +193,8 @@ export function evaluateMiniBuildPlacement(
 				input.height,
 				item.rotationY ?? 0
 			);
-			if (boxes.some((box) => aabbsOverlap(box, aabb, OBJECT_GAP)))
+			const furniture = aabbToObb(aabb);
+			if (boxes.some((box) => obbsOverlap(box, furniture, OBJECT_GAP)))
 				return refuse('Overlaps furniture');
 		}
 	}
@@ -194,6 +203,32 @@ export function evaluateMiniBuildPlacement(
 	const message = budgetMessage(budget);
 	if (!budget.ok) return refuse(message ?? 'This area has reached its detail limit.');
 	return { ...base, valid: true, reason: null, notice: message };
+}
+
+/**
+ * `aabbOverlapsWallRect` for an oriented box: the same 2cm vertical tolerance and the same clearance
+ * (each side of the object pulled in by `clearance` before testing), against the wall's oriented rect.
+ */
+export function obbOverlapsWallRect(
+	box: WorldObb,
+	rect: WallCollisionRect,
+	clearance: number
+): boolean {
+	if (box.maxY <= rect.minWorldY + 0.02 || box.minY >= rect.maxWorldY - 0.02) return false;
+	const halfX = box.halfX - clearance;
+	const halfZ = box.halfZ - clearance;
+	if (halfX <= 0 || halfZ <= 0) return false;
+	const wall: WorldObb = {
+		centerX: rect.centerX,
+		centerZ: rect.centerZ,
+		halfX: rect.halfLength,
+		halfZ: rect.halfThickness,
+		cos: rect.dirX,
+		sin: -rect.dirZ,
+		minY: -Infinity,
+		maxY: Infinity
+	};
+	return obbsOverlap({ ...box, halfX, halfZ, minY: -Infinity, maxY: Infinity }, wall);
 }
 
 /**

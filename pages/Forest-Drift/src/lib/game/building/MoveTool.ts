@@ -32,15 +32,20 @@ import type { BuildTool } from './BuildToolManager';
 import type { WorldSurfaceSampler } from './WorldSurfaceSampler';
 import type { WallCollisionRect } from './wallCollision';
 import { colorMaterialFromHex } from './MaterialTypes';
-import { nextQuarterTurn } from '../miniBuild/miniBuildGrid';
-import { MiniBuildGhost } from '../miniBuild/MiniBuildGhost';
+import { stepAngle } from '../miniBuild/miniBuildGrid';
+import { fitBoundsHighlight, MiniBuildGhost } from '../miniBuild/MiniBuildGhost';
 import {
 	solveMiniBuildPlacement,
 	type MiniBuildPlacementContext,
 	type MiniBuildPlacementPreview
 } from '../miniBuild/MiniBuildPlacement';
 import { formatAreaDetail, type MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
-import type { QuarterTurn } from '../miniBuild/MiniBuildTypes';
+import {
+	cycleRotationSnapStep,
+	formatAngle,
+	getRotationSnapStep
+} from '../miniBuild/MiniBuildRotationSnap';
+import type { SnapAngle } from '../miniBuild/MiniBuildTypes';
 
 const VALID_COLOR = 0x39d353;
 const INVALID_COLOR = 0xf85149;
@@ -101,7 +106,7 @@ export class MoveTool implements BuildTool {
 	private readonly miniBuildGhost?: MiniBuildGhost;
 	private hoveredMiniBuildId: string | null = null;
 	/** A placed Mini Build being moved: hidden in place (budget and index untouched) until dropped. */
-	private heldMiniBuild: { id: string; rotationY: QuarterTurn } | null = null;
+	private heldMiniBuild: { id: string; rotationY: SnapAngle } | null = null;
 	private miniBuildPreview: MiniBuildPlacementPreview | null = null;
 
 	private readonly raycaster = new THREE.Raycaster();
@@ -141,7 +146,11 @@ export class MoveTool implements BuildTool {
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (isTypingTarget(event.target)) return;
 		if (event.code === 'KeyR') {
-			this.rotate();
+			this.rotate(event.shiftKey ? -1 : 1);
+		} else if (event.code === 'KeyT' && (this.heldMiniBuild || this.hoveredMiniBuildId)) {
+			// Mini Builds turn in the shared snap step (furniture keeps its own fixed steps).
+			cycleRotationSnapStep(event.shiftKey ? -1 : 1);
+			this.emitMiniBuildHud();
 		}
 	};
 
@@ -471,14 +480,15 @@ export class MoveTool implements BuildTool {
 				hintLines: [
 					'MOVE OBJECT',
 					name,
-					`Rotation: ${this.heldMiniBuild.rotationY}°`,
+					`Rotation: ${formatAngle(this.heldMiniBuild.rotationY)} · snap ${formatAngle(getRotationSnapStep())}`,
 					'',
 					preview
 						? preview.valid
 							? 'Click: Place object'
 							: (preview.reason ?? 'Cannot place here').split('\n')[0]
 						: 'Aim at a floor or the ground',
-					'R    Rotate',
+					'R    Rotate (Shift: back)',
+					'T    Snap angle (Shift: coarser)',
 					'Right-Click / Esc: Cancel move',
 					...(readout ? ['', formatAreaDetail(readout)] : [])
 				],
@@ -494,18 +504,24 @@ export class MoveTool implements BuildTool {
 			hintLines: [
 				'MOVE OBJECT',
 				name,
-				`Rotation: ${instance?.rotationY ?? 0}°`,
+				`Rotation: ${formatAngle(instance?.rotationY ?? 0)} · snap ${formatAngle(getRotationSnapStep())}`,
 				'',
 				'Click: Pick up / drag',
-				'R    Rotate in-place',
+				'R    Rotate in-place (Shift: back)',
+				'T    Snap angle (Shift: coarser)',
 				'M: Exit Move Mode'
 			]
 		});
 	}
 
-	rotate(): void {
+	/** `direction` −1 (Shift+R) turns a Mini Build back one step; furniture always cycles forward. */
+	rotate(direction: 1 | -1 = 1): void {
 		if (this.heldMiniBuild) {
-			this.heldMiniBuild.rotationY = nextQuarterTurn(this.heldMiniBuild.rotationY);
+			this.heldMiniBuild.rotationY = stepAngle(
+				this.heldMiniBuild.rotationY,
+				getRotationSnapStep(),
+				direction
+			);
 			return;
 		}
 		if (!this.heldItem && this.hoveredMiniBuildId && this.miniBuilds) {
@@ -514,7 +530,7 @@ export class MoveTool implements BuildTool {
 				this.miniBuilds.moveInstance(
 					instance.id,
 					instance.position,
-					nextQuarterTurn(instance.rotationY)
+					stepAngle(instance.rotationY, getRotationSnapStep(), direction)
 				);
 			return;
 		}
@@ -691,19 +707,9 @@ export class MoveTool implements BuildTool {
 		if (miniBuildHit && (!hit || miniBuildHit.distance < hit.distance)) {
 			this.hoveredId = null;
 			this.hoveredMiniBuildId = miniBuildHit.id;
-			const box = this.miniBuilds!.instances.worldAabb(miniBuildHit.id);
+			const box = this.miniBuilds!.instances.worldBounds(miniBuildHit.id);
 			if (box) {
-				this.hoverHighlight.position.set(
-					(box.minX + box.maxX) / 2,
-					(box.minY + box.maxY) / 2,
-					(box.minZ + box.maxZ) / 2
-				);
-				this.hoverHighlight.scale.set(
-					Math.max(0.1, box.maxX - box.minX),
-					Math.max(0.1, box.maxY - box.minY),
-					Math.max(0.1, box.maxZ - box.minZ)
-				);
-				this.hoverHighlight.updateMatrixWorld(true);
+				fitBoundsHighlight(this.hoverHighlight, box);
 				this.hoverHighlight.visible = true;
 			}
 			return;
@@ -720,6 +726,7 @@ export class MoveTool implements BuildTool {
 			this.furnitureAabb.getCenter(this.highlightCenter);
 			this.furnitureAabb.getSize(this.highlightSize);
 			this.hoverHighlight.position.copy(this.highlightCenter);
+			this.hoverHighlight.rotation.set(0, 0, 0);
 			this.hoverHighlight.scale.copy(this.highlightSize);
 			this.hoverHighlight.scale.x = Math.max(0.1, this.hoverHighlight.scale.x);
 			this.hoverHighlight.scale.y = Math.max(0.1, this.hoverHighlight.scale.y);

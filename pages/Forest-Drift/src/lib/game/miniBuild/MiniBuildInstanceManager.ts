@@ -13,7 +13,9 @@ import {
 	materialKey,
 	parseChunkId,
 	transformLocalBox,
-	type WorldAabb
+	transformLocalObb,
+	type WorldAabb,
+	type WorldObb
 } from './miniBuildGrid';
 import type { MiniBuildLibrary } from './MiniBuildLibrary';
 import { MiniBuildRenderBatch } from './MiniBuildRenderBatch';
@@ -22,7 +24,7 @@ import {
 	type MiniBuildDefinition,
 	type MiniBuildInstance,
 	type MiniBuildMaterialSlot,
-	type QuarterTurn,
+	type SnapAngle,
 	type WorldChunkId
 } from './MiniBuildTypes';
 
@@ -253,7 +255,7 @@ export class MiniBuildInstanceManager {
 	move(
 		id: string,
 		position: { x: number; y: number; z: number },
-		rotationY: QuarterTurn
+		rotationY: SnapAngle
 	): InstanceResult<MiniBuildInstance> {
 		const record = this.records.get(id);
 		if (!record) return { ok: false, error: 'That object no longer exists.' };
@@ -442,12 +444,26 @@ export class MiniBuildInstanceManager {
 		);
 	}
 
+	/** The design bounds as placed — turned with the object, unlike `worldAabb` (highlights, picking UI). */
+	worldBounds(id: string): WorldObb | null {
+		const record = this.records.get(id);
+		const definition = record ? this.library.get(record.instance.designId) : undefined;
+		if (!record || !definition) return null;
+		const data = this.cache.getData(definition);
+		return transformLocalObb(
+			data.bounds.min,
+			data.bounds.max,
+			record.instance.position,
+			record.instance.rotationY
+		);
+	}
+
 	/** World collision boxes of instances whose anchors are near a region (placement overlap tests). */
 	queryCollisionBoxes(
 		region: WorldAabb,
 		ignoreInstanceId?: string
-	): { id: string; box: WorldAabb }[] {
-		const out: { id: string; box: WorldAabb }[] = [];
+	): { id: string; box: WorldObb }[] {
+		const out: { id: string; box: WorldObb }[] = [];
 		const min = chunkCoordsForPosition(
 			region.minX - MAX_DESIGN_REACH,
 			region.minZ - MAX_DESIGN_REACH
@@ -484,14 +500,15 @@ export class MiniBuildInstanceManager {
 				) ?? []) {
 					const record = this.records.get(id)!;
 					if (record.hidden) continue;
+					// Oriented rects: an object turned to 45° collides as itself, not as the square around it.
 					for (const box of this.collisionBoxesFor(record)) {
 						rects.push({
-							centerX: (box.minX + box.maxX) / 2,
-							centerZ: (box.minZ + box.maxZ) / 2,
-							halfLength: (box.maxX - box.minX) / 2,
-							halfThickness: (box.maxZ - box.minZ) / 2,
-							dirX: 1,
-							dirZ: 0,
+							centerX: box.centerX,
+							centerZ: box.centerZ,
+							halfLength: box.halfX,
+							halfThickness: box.halfZ,
+							dirX: box.cos,
+							dirZ: -box.sin,
 							minWorldY: box.minY,
 							maxWorldY: box.maxY
 						});
@@ -583,12 +600,18 @@ export class MiniBuildInstanceManager {
 		set.add(id);
 	}
 
-	private collisionBoxesFor(record: InstanceRecord): WorldAabb[] {
+	private collisionBoxesFor(record: InstanceRecord): WorldObb[] {
 		const definition = this.library.get(record.instance.designId);
 		if (!definition) return [];
 		const data = this.cache.getData(definition);
 		return data.collision.map((box) =>
-			transformLocalBox(box.min, box.max, record.instance.position, record.instance.rotationY)
+			transformLocalObb(
+				box.min,
+				box.max,
+				record.instance.position,
+				record.instance.rotationY,
+				box.yaw
+			)
 		);
 	}
 

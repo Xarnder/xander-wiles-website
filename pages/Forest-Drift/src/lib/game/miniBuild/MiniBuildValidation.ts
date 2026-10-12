@@ -14,9 +14,10 @@ import {
 	cloneBlock,
 	computeBounds,
 	groundBlocks,
-	isQuarterTurn,
+	isSnapAngle,
 	sanitizeName
 } from './miniBuildGrid';
+import { isMiniBuildTextureId } from './miniBuildTextures';
 import {
 	MINI_BUILD_FINISHES,
 	MINI_BUILD_LIMITS,
@@ -80,12 +81,16 @@ function validateMaterialSlot(
 	const material = validateMaterialDefinition(value.material);
 	if (!material) return fail(`Material slot ${index + 1} has an invalid material`);
 	const name = typeof value.name === 'string' ? value.name.trim().slice(0, 32) : '';
+	// An unknown texture (a newer build's, or a hand edit) falls back to auto rather than failing.
+	const texture =
+		isMiniBuildTextureId(value.texture) && value.texture !== 'auto' ? value.texture : undefined;
 	return {
 		ok: true,
 		value: {
 			name: name || `Material ${index + 1}`,
 			finish: value.finish as MiniBuildFinish,
-			material
+			material,
+			...(texture ? { texture } : {})
 		}
 	};
 }
@@ -113,7 +118,8 @@ function validateBlock(
 			return fail(`${label} size must be whole grid units, zero or more`);
 		}
 		if (s > MINI_BUILD_LIMITS.maxBoundsGrid[axis]) return fail(`${label} is larger than 4m`);
-		if (!isQuarterTurn(rotation[axis])) return fail(`${label} rotation must be 0, 90, 180 or 270`);
+		if (!isSnapAngle(rotation[axis]))
+			return fail(`${label} rotation must be a multiple of 7.5° from 0 to 352.5`);
 	}
 	const flat = [size.x, size.y, size.z].filter((s) => s === 0).length;
 	if (flat > MINI_BUILD_LIMITS.maxFlatAxesPerBlock) {
@@ -148,11 +154,7 @@ function validateBlock(
 			id: value.id,
 			positionGrid: { x: position.x as number, y: position.y as number, z: position.z as number },
 			sizeGrid: { x: size.x as number, y: size.y as number, z: size.z as number },
-			rotation: {
-				x: rotation.x as MiniBuildBlock['rotation']['x'],
-				y: rotation.y as MiniBuildBlock['rotation']['y'],
-				z: rotation.z as MiniBuildBlock['rotation']['z']
-			},
+			rotation: { x: rotation.x as number, y: rotation.y as number, z: rotation.z as number },
 			materialSlot: value.materialSlot,
 			collision: collision as MiniBuildBlockCollision | undefined,
 			layer: layer as number | undefined
@@ -317,7 +319,8 @@ export function validateMiniBuildInstance(
 			return fail(`${label} must have a finite position`);
 		}
 	}
-	if (!isQuarterTurn(value.rotationY)) return fail(`${label} rotationY must be 0, 90, 180 or 270`);
+	if (!isSnapAngle(value.rotationY))
+		return fail(`${label} rotationY must be a multiple of 7.5° from 0 to 352.5`);
 	const overrides = validateOverrides(value.materialOverrides, label);
 	if (!overrides.ok) return overrides;
 	const instance: MiniBuildInstance = {

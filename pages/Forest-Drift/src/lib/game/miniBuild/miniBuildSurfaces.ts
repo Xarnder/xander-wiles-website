@@ -12,9 +12,12 @@
  *   3. between planes, the higher `layer` wins — the plane selected last in the editor
  *   4. otherwise the earlier block wins
  *
+ * Angled blocks (not a whole number of quarter turns) never lie in a grid plane, so they take no part
+ * in any of this.
+ *
  * Pure and Three.js-free.
  */
-import { blockBox, cloneBlock, isPlaneBlock, type GridBox } from './miniBuildGrid';
+import { blockBox, cloneBlock, isAngledBlock, isPlaneBlock, type GridBox } from './miniBuildGrid';
 import type { MiniBuildBlock, MiniBuildMaterialSlot } from './MiniBuildTypes';
 
 export interface SurfaceRank {
@@ -84,15 +87,16 @@ export function surfaceOffsetLevels(
 	materials: readonly Pick<MiniBuildMaterialSlot, 'finish'>[]
 ): number[] {
 	const ranks = surfaceRanks(blocks, materials);
-	const boxes = blocks.map(blockBox);
+	const boxes = blocks.map((block) => (isAngledBlock(block) ? null : blockBox(block)));
 	const losersFirst = [...ranks].sort((a, b) => (surfaceWins(a, b) ? 1 : -1));
 	const levels = new Array<number>(blocks.length).fill(0);
 	const placed: number[] = [];
 	for (const rank of losersFirst) {
 		let level = 0;
+		const own = boxes[rank.index];
 		for (const j of placed) {
-			if (sharesCoplanarSurface(boxes[rank.index], boxes[j]))
-				level = Math.max(level, levels[j] + 1);
+			const other = boxes[j];
+			if (own && other && sharesCoplanarSurface(own, other)) level = Math.max(level, levels[j] + 1);
 		}
 		levels[rank.index] = level;
 		placed.push(rank.index);
@@ -110,13 +114,14 @@ export function raisePlaneLayer(
 	id: string | null
 ): MiniBuildBlock[] | null {
 	const index = blocks.findIndex((block) => block.id === id);
-	if (index < 0 || !isPlaneBlock(blocks[index])) return null;
+	if (index < 0 || !isPlaneBlock(blocks[index]) || isAngledBlock(blocks[index])) return null;
 	const box = blockBox(blocks[index]);
 	const own = planeLayer(blocks[index]);
 	let top = own;
 	let beaten = false;
 	blocks.forEach((other, j) => {
-		if (j === index || !isPlaneBlock(other) || !sharesCoplanarSurface(box, blockBox(other))) return;
+		if (j === index || !isPlaneBlock(other) || isAngledBlock(other)) return;
+		if (!sharesCoplanarSurface(box, blockBox(other))) return;
 		const layer = planeLayer(other);
 		top = Math.max(top, layer);
 		if (layer > own || (layer === own && j < index)) beaten = true;

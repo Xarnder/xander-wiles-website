@@ -20,19 +20,35 @@
 		effectiveSize,
 		flatAxis,
 		gridToMeters,
+		isAngledBlock,
 		isPlaneBlock,
+		isRotationSnapStep,
 		type Axis
 	} from '$lib/game/miniBuild/miniBuildGrid';
+	import {
+		cycleRotationSnapStep,
+		formatAngle,
+		getRotationSnapStep,
+		onRotationSnapStepChange,
+		setRotationSnapStep
+	} from '$lib/game/miniBuild/MiniBuildRotationSnap';
 	import {
 		MINI_BUILD_FINISHES,
 		MINI_BUILD_FINISH_LABELS,
 		MINI_BUILD_LIMITS,
+		MINI_BUILD_ROTATION,
 		MINI_BUILD_SEMANTIC_TYPES,
 		type MiniBuildBlockCollision,
 		type MiniBuildDefinition,
 		type MiniBuildFinish,
-		type MiniBuildSemanticType
+		type MiniBuildSemanticType,
+		type MiniBuildTextureId
 	} from '$lib/game/miniBuild/MiniBuildTypes';
+	import {
+		MINI_BUILD_AUTO_TEXTURE,
+		miniBuildTextureGroups,
+		miniBuildTextureLabel
+	} from '$lib/game/miniBuild/miniBuildTextures';
 	import type { ThreeScene } from '$lib/game/ThreeScene';
 
 	let {
@@ -69,6 +85,9 @@
 	let showHelp = $state(false);
 	let viewport: MiniBuildEditorViewport | null = null;
 	let messageTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Shared with Place Object / Move in the world (MiniBuildRotationSnap). */
+	let rotationStep = $state<number>(getRotationSnapStep());
+	const stopStepSync = onRotationSnapStepChange((step) => (rotationStep = step));
 
 	const blocks = $derived.by(() => {
 		void version;
@@ -107,7 +126,11 @@
 		return editor.canRedo;
 	});
 	const selectedBox = $derived(selected ? blockBox(selected) : null);
-	const selectedSize = $derived(selected ? effectiveSize(selected) : null);
+	const selectedAngled = $derived(selected ? isAngledBlock(selected) : false);
+	/** World-axis size for a grid block; an angled block's sizes are along its own axes. */
+	const selectedSize = $derived(
+		selected ? (isAngledBlock(selected) ? selected.sizeGrid : effectiveSize(selected)) : null
+	);
 
 	function refresh() {
 		version = editor.version;
@@ -137,6 +160,15 @@
 				run(result);
 				return result;
 			},
+			onCommitRotation: (id, axis, angle) => {
+				const result = editor.setBlockAngle(id, axis, angle);
+				run(result);
+				return result;
+			},
+			getRotationStep: () => rotationStep,
+			getProcedural: () => system.proceduralLibrary,
+			onRotatePreview: (axis, angle) =>
+				flash(`${axis.toUpperCase()} ${formatAngle(angle)}`, 'info'),
 			onInvalidPreview: (text) => flash(text)
 		});
 		return () => {
@@ -166,7 +198,26 @@
 		const value = Number(input.value);
 		if (Number.isFinite(value)) run(editor.setSizeMeters(axis, value));
 		const block = editor.selectedBlock;
-		if (block) input.value = meters(gridToMeters(effectiveSize(block)[axis]));
+		if (block)
+			input.value = meters(
+				gridToMeters((isAngledBlock(block) ? block.sizeGrid : effectiveSize(block))[axis])
+			);
+	}
+
+	/** Typed (or spinner-stepped) angle, snapped to the current rotation step. */
+	function onAngleInput(axis: Axis, input: HTMLInputElement) {
+		const value = Number(input.value);
+		if (Number.isFinite(value)) run(editor.setRotationDegrees(axis, value, rotationStep));
+		const block = editor.selectedBlock;
+		if (block) input.value = String(block.rotation[axis]);
+	}
+
+	function rotate(axis: Axis, direction: 1 | -1 = 1) {
+		run(editor.rotateSelected(axis, direction, rotationStep));
+	}
+
+	function cycleStep(direction: 1 | -1) {
+		flash(`Rotation snap ${formatAngle(cycleRotationSnapStep(direction))}`, 'info');
 	}
 
 	function isUntitled(name: string): boolean {
@@ -333,7 +384,10 @@
 				run(step ? editor.resizeSelected('y', -1) : editor.moveSelected({ y: -1 }));
 				break;
 			case 'KeyR':
-				run(editor.rotateSelected(event.altKey ? 'z' : event.shiftKey ? 'x' : 'y'));
+				rotate(event.altKey ? 'z' : event.shiftKey ? 'x' : 'y');
+				break;
+			case 'KeyT':
+				cycleStep(event.shiftKey ? -1 : 1);
 				break;
 			case 'KeyM':
 				run(editor.mirrorDuplicateX());
@@ -364,12 +418,14 @@
 	});
 
 	onDestroy(() => {
+		stopStepSync();
 		window.removeEventListener('keydown', onKeyDown, true);
 		clearTimeout(messageTimer);
 		scene.setMiniBuildOverlay({ editorOpen: false });
 	});
 
 	const AXIS_LIST: Axis[] = ['x', 'y', 'z'];
+	const TEXTURE_GROUPS = miniBuildTextureGroups();
 </script>
 
 <div
@@ -478,27 +534,42 @@
 				disabled={!selected}
 				onclick={() => run(editor.mirrorDuplicateX())}>Duplicate + Mirror X</button
 			>
+			<label class="row snap-row" title="Rotation snap (T finer, Shift+T coarser)">
+				<span>Snap</span>
+				<select
+					data-testid="mini-build-rotation-step"
+					value={String(rotationStep)}
+					onchange={(event) => {
+						const step = Number(event.currentTarget.value);
+						if (isRotationSnapStep(step)) setRotationSnapStep(step);
+					}}
+				>
+					{#each MINI_BUILD_ROTATION.snapSteps as step (step)}
+						<option value={String(step)}>{formatAngle(step)}</option>
+					{/each}
+				</select>
+			</label>
 			<div class="rotate-row">
 				<button
 					type="button"
 					data-testid="mini-build-rotate-y"
 					disabled={!selected}
-					onclick={() => run(editor.rotateSelected('y'))}
-					title="Rotate 90° around Y (R)">↻ Y</button
+					onclick={() => rotate('y')}
+					title="Rotate {formatAngle(rotationStep)} around Y (R)">↻ Y</button
 				>
 				<button
 					type="button"
 					data-testid="mini-build-rotate-x"
 					disabled={!selected}
-					onclick={() => run(editor.rotateSelected('x'))}
-					title="Rotate 90° around X (Shift+R)">↻ X</button
+					onclick={() => rotate('x')}
+					title="Rotate {formatAngle(rotationStep)} around X (Shift+R)">↻ X</button
 				>
 				<button
 					type="button"
 					data-testid="mini-build-rotate-z"
 					disabled={!selected}
-					onclick={() => run(editor.rotateSelected('z'))}
-					title="Rotate 90° around Z (Alt+R)">↻ Z</button
+					onclick={() => rotate('z')}
+					title="Rotate {formatAngle(rotationStep)} around Z (Alt+R)">↻ Z</button
 				>
 			</div>
 			<button
@@ -540,7 +611,7 @@
 			<div class="legend" aria-hidden="true">
 				<span class="axis x">X</span><span class="axis y">Y</span><span class="axis z">Z</span>
 				<span class="anchor">● origin</span>
-				<span>snap {MINI_BUILD_LIMITS.gridSize}m</span>
+				<span>snap {MINI_BUILD_LIMITS.gridSize}m · {formatAngle(rotationStep)}</span>
 			</div>
 			{#if message}
 				<p
@@ -573,7 +644,11 @@
 							/>
 						</label>
 					{/each}
-					<span class="field-title">Size</span>
+					<span
+						class="field-title"
+						title={selectedAngled ? "Along the block's own axes" : undefined}
+						>{selectedAngled ? 'Size (own)' : 'Size'}</span
+					>
 					{#each AXIS_LIST as axis (axis)}
 						<label>
 							<span class="axis {axis}">{axis.toUpperCase()}</span>
@@ -585,6 +660,21 @@
 								data-testid="mini-build-size-{axis}"
 								value={meters(gridToMeters(selectedSize[axis]))}
 								onchange={(event) => onSizeInput(axis, event.currentTarget)}
+							/>
+						</label>
+					{/each}
+					<span class="field-title" title="Degrees, applied Y then X then Z">Rotate°</span>
+					{#each AXIS_LIST as axis (axis)}
+						<label>
+							<span class="axis {axis}">{axis.toUpperCase()}</span>
+							<input
+								type="number"
+								step={rotationStep}
+								min={-rotationStep}
+								max={360}
+								data-testid="mini-build-angle-{axis}"
+								value={selected.rotation[axis]}
+								onchange={(event) => onAngleInput(axis, event.currentTarget)}
 							/>
 						</label>
 					{/each}
@@ -622,10 +712,11 @@
 						Set any one size to 0 to make a two-sided plane.
 					{/if}
 				</p>
-				<p class="hint">
-					Rotation {selected.rotation.x}° / {selected.rotation.y}° / {selected.rotation.z}° (X / Y /
-					Z)
-				</p>
+				{#if selectedAngled}
+					<p class="hint" data-testid="mini-build-angled-hint">
+						Angled — turns about the centre of its grid box; sizes follow the block's own axes.
+					</p>
+				{/if}
 			{:else}
 				<p class="hint">Click a block to select it.</p>
 			{/if}
@@ -672,6 +763,32 @@
 							disabled={materials.length <= 1}
 							onclick={() => run(editor.removeMaterialSlot(index))}>×</button
 						>
+						<label class="texture-row">
+							<span>Texture</span>
+							<select
+								data-testid="mini-build-material-texture-{index}"
+								value={slot.texture ?? 'auto'}
+								aria-label="Material {index + 1} texture"
+								onchange={(event) =>
+									run(
+										editor.updateMaterialSlot(index, {
+											texture: event.currentTarget.value as MiniBuildTextureId
+										})
+									)}
+							>
+								<option value="auto"
+									>Auto ({miniBuildTextureLabel(MINI_BUILD_AUTO_TEXTURE[slot.finish])})</option
+								>
+								<option value="flat">Flat colour</option>
+								{#each TEXTURE_GROUPS as group (group.group)}
+									<optgroup label={group.group}>
+										{#each group.ids as id (id)}
+											<option value={id}>{miniBuildTextureLabel(id)}</option>
+										{/each}
+									</optgroup>
+								{/each}
+							</select>
+						</label>
 					</li>
 				{/each}
 			</ul>
@@ -718,7 +835,11 @@
 					<dt>Shift + arrows, E, Q</dt>
 					<dd>Resize (shrink to 0 for a plane)</dd>
 					<dt>R</dt>
-					<dd>Rotate 90° (Shift X, Alt Z)</dd>
+					<dd>Rotate {formatAngle(rotationStep)} around Y (Shift X, Alt Z)</dd>
+					<dt>Drag rings</dt>
+					<dd>Rotate in {formatAngle(rotationStep)} snaps</dd>
+					<dt>T / Shift+T</dt>
+					<dd>Finer / coarser rotation snap</dd>
 					<dt>Ctrl/Cmd+D</dt>
 					<dd>Duplicate block</dd>
 					<dt>M</dt>
@@ -913,6 +1034,9 @@
 	.properties {
 		border-left: 1px solid #30363d;
 	}
+	.snap-row {
+		grid-template-columns: 2.6rem 1fr;
+	}
 	.rotate-row {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
@@ -1042,6 +1166,19 @@
 		grid-template-columns: 1rem 2rem 1fr 4.6rem 1.8rem;
 		align-items: center;
 		gap: 0.25rem;
+	}
+	.texture-row {
+		grid-column: 2 / -1;
+		display: grid;
+		grid-template-columns: 3.4rem 1fr;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 12px;
+		color: #8b949e;
+	}
+	.materials li + li {
+		border-top: 1px solid #30363d;
+		padding-top: 0.3rem;
 	}
 	.materials input[type='color'] {
 		padding: 0.1rem;

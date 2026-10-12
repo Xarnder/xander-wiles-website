@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BuildingMaterialManager } from '../building/BuildingMaterialManager';
 import type { MaterialKind } from '../building/MaterialTypes';
+import type { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
 import { getDefaultMiniBuild } from './defaultMiniBuilds';
 import { MiniBuildAssetCache, type MiniBuildAssetCacheStats } from './MiniBuildAssetCache';
 import {
@@ -10,6 +11,7 @@ import {
 import { chunkIdForPosition, cloneBlock, cloneMaterials, newId } from './miniBuildGrid';
 import { MiniBuildInstanceManager, type MiniBuildInstanceStats } from './MiniBuildInstanceManager';
 import { MiniBuildLibrary } from './MiniBuildLibrary';
+import { miniBuildSurfaceStyle } from './miniBuildTextures';
 import { validateMiniBuildDefinition, validateMiniBuildDraft } from './MiniBuildValidation';
 import {
 	MINI_BUILD_WORLD_LIMITS,
@@ -20,7 +22,7 @@ import {
 	type MiniBuildMaterialSlot,
 	type MiniBuildWorldState,
 	type PlaceObjectSelection,
-	type QuarterTurn
+	type SnapAngle
 } from './MiniBuildTypes';
 
 export type SystemResult<T> = { ok: true; value: T } | { ok: false; error: string; code?: string };
@@ -127,11 +129,25 @@ export class MiniBuildSystem {
 		return () => this.listeners.delete(listener);
 	}
 
-	resolveMaterial(slot: Pick<MiniBuildMaterialSlot, 'finish' | 'material'>): THREE.Material {
-		return this.materialManager.getMaterial(
+	/**
+	 * The world material for a slot: its procedural texture (`miniBuildTextures.ts` — `auto` follows
+	 * the finish) tinted by its colour, or a flat colour. Solid wood reads the compiled `woodCoord`.
+	 */
+	resolveMaterial(
+		slot: Pick<MiniBuildMaterialSlot, 'finish' | 'material' | 'texture'>
+	): THREE.Material {
+		const style = miniBuildSurfaceStyle(slot);
+		return this.materialManager.getStyledMaterial(
 			`mini-build-${slot.finish}` as MaterialKind,
-			slot.material
+			slot.material,
+			style,
+			style?.mapping === 'wood' ? { ownWoodCoords: true } : { uvUnitMeters: 1 }
 		);
+	}
+
+	/** The procedural library world materials use (null without one, e.g. in tests). */
+	get proceduralLibrary(): ProceduralMaterialLibrary | null {
+		return this.materialManager.proceduralLibrary ?? null;
 	}
 
 	load(state: MiniBuildWorldState): string[] {
@@ -329,7 +345,7 @@ export class MiniBuildSystem {
 	placeInstance(
 		designId: string,
 		position: { x: number; y: number; z: number },
-		rotationY: QuarterTurn,
+		rotationY: SnapAngle,
 		extras: {
 			foundationId?: string | null;
 			levelId?: string;
@@ -374,7 +390,7 @@ export class MiniBuildSystem {
 	moveInstance(
 		instanceId: string,
 		position: { x: number; y: number; z: number },
-		rotationY: QuarterTurn
+		rotationY: SnapAngle
 	): SystemResult<MiniBuildInstance> {
 		const result = this.instances.move(instanceId, position, rotationY);
 		if (!result.ok) {
@@ -391,7 +407,7 @@ export class MiniBuildSystem {
 	/** What Copy picks up from a placed object: same design, same rotation and material overrides. */
 	copyInstance(instanceId: string): {
 		designId: string;
-		rotationY: QuarterTurn;
+		rotationY: SnapAngle;
 		materialOverrides?: MiniBuildMaterialOverride[];
 	} | null {
 		const instance = this.instances.get(instanceId);

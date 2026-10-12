@@ -25,10 +25,20 @@
  *
  * A face is at most 64 × 64 cells and there are at most 16 blocks, so the worst case is a few
  * hundred thousand cell tests — well under a millisecond in practice (see the compiler tests).
+ *
+ * An angled block (rotation not a whole number of quarter turns) is not grid aligned, so it sits
+ * outside all of this: it is emitted as its own turned cuboid (6 quads, or 2 for a plane), never hides
+ * another block's face and is never hidden by one. Where it overlaps another block the buried part is
+ * simply overdraw — at most 16 blocks, so that costs nothing worth the complexity of clipping.
+ *
+ * Every vertex also gets a `woodCoord` (see `materials/woodCoords.ts`): each block is one piece of
+ * timber with its grain along its longest side, so a slot drawn in solid procedural wood shows long
+ * grain on the faces and growth rings on the end grain, and no two blocks look alike.
  */
 import {
 	MINI_BUILD_COLLISION,
 	MINI_BUILD_LIMITS,
+	type MiniBuildBlock,
 	type MiniBuildDefinition
 } from './MiniBuildTypes';
 import {
@@ -38,20 +48,33 @@ import {
 import {
 	anchorGrid,
 	blockBox,
+	blockCenterGrid,
 	computeBounds,
 	contentHash,
 	gridToMeters,
 	grainAxis,
+	isAngledBlock,
 	localBoundsMeters,
+	orientationMatrix,
 	type GridBox
 } from './miniBuildGrid';
 import { surfaceRanks, surfaceWins } from './miniBuildSurfaces';
+import { hashStringToUint32 } from '../terrain/seededRandom';
+import {
+	woodHash,
+	woodLogFor,
+	writeWoodCoord,
+	type Vec3,
+	type WoodPieceFrame
+} from '../materials/woodCoords';
 
 export interface CompiledMiniBuildGroupData {
 	materialSlot: number;
 	positions: Float32Array;
 	normals: Float32Array;
 	uvs: Float32Array;
+	/** Solid-wood log-space coordinates (metres), one vec3 per vertex. */
+	woodCoords: Float32Array;
 	indices: Uint16Array | Uint32Array;
 }
 
@@ -81,6 +104,7 @@ interface GroupBuilder {
 	positions: number[];
 	normals: number[];
 	uvs: number[];
+	woodCoords: number[];
 	indices: number[];
 }
 
@@ -120,7 +144,8 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 			`Mini Build ${definition.id} must have 1–${MINI_BUILD_LIMITS.maxBlocks} blocks`
 		);
 	}
-	const boxes = blocks.map(blockBox);
+	// Angled blocks have no grid box that means anything for covering faces.
+	const boxes = blocks.map((block) => (isAngledBlock(block) ? null : blockBox(block)));
 	const ranks = surfaceRanks(blocks, definition.materials);
 	const bounds = computeBounds(blocks);
 	const anchor = anchorGrid(bounds);
@@ -133,8 +158,14 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 		const slot = blocks[i].materialSlot;
 		let builder = builders.get(slot);
 		if (!builder) {
-			builder = { positions: [], normals: [], uvs: [], indices: [] };
+			builder = { positions: [], normals: [], uvs: [], woodCoords: [], indices: [] };
 			builders.set(slot, builder);
+		}
+		const firstVertex = builder.positions.length / 3;
+		if (!box) {
+			quads += emitAngledBlock(builder, blocks[i], anchor);
+			appendWoodCoords(builder, firstVertex, blocks[i], anchor);
+			continue;
 		}
 		const grain = grainAxis(blocks[i].rotation);
 
@@ -149,8 +180,8 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 				const cells = new Uint8Array(width * height);
 
 				for (let j = 0; j < boxes.length; j++) {
-					if (j === i) continue;
 					const other = boxes[j];
+					if (j === i || !other) continue;
 					const oMin = coord(other, 'min', n);
 					const oMax = coord(other, 'max', n);
 					// A block covers this face when it occupies the space just outside it. Planes have no
@@ -223,6 +254,7 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 				}
 			}
 		}
+		appendWoodCoords(builder, firstVertex, blocks[i], anchor);
 	}
 
 	const groups: CompiledMiniBuildGroupData[] = [];
@@ -239,6 +271,7 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 			positions: new Float32Array(builder.positions),
 			normals: new Float32Array(builder.normals),
 			uvs: new Float32Array(builder.uvs),
+			woodCoords: new Float32Array(builder.woodCoords),
 			indices:
 				vertexCount > 0xffff ? new Uint32Array(builder.indices) : new Uint16Array(builder.indices)
 		});
@@ -254,6 +287,110 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 		primitiveCost: blocks.length,
 		stats: { vertices, triangles, quads, hiddenCells }
 	};
+}
+
+/**
+ * Log-space coordinates for the vertices a block just emitted: the block is one piece of timber
+ * whose grain runs along its longest side and whose pith sits just beyond its thinnest side,
+ * jittered by a hash of the block id (stable however blocks are reordered or moved).
+ */
+function appendWoodCoords(
+	builder: GroupBuilder,
+	firstVertex: number,
+	block: MiniBuildBlock,
+	anchor: { x: number; y: number; z: number }
+): void {
+	const m = orientationMatrix(block.rotation);
+	const size = [block.sizeGrid.x, block.sizeGrid.y, block.sizeGrid.z];
+	const [thin, wide, grain] = [0, 1, 2].sort((p, q) => size[p] - size[q] || q - p);
+	const axis = (k: number): Vec3 => [m[k], m[3 + k], m[6 + k]];
+	const c = blockCenterGrid(block);
+	const frame: WoodPieceFrame = {
+		center: [
+			gridToMeters(c.x - anchor.x),
+			gridToMeters(c.y - anchor.y),
+			gridToMeters(c.z - anchor.z)
+		],
+		grain: axis(grain),
+		wide: axis(wide),
+		thin: axis(thin),
+		halfThin: gridToMeters(size[thin]) / 2
+	};
+	const seed = hashStringToUint32(block.id);
+	const log = woodLogFor(
+		frame.halfThin,
+		woodHash(1, 2, 3, seed),
+		woodHash(4, 5, 6, seed),
+		woodHash(7, 8, 9, seed)
+	);
+	const vertexCount = builder.positions.length / 3;
+	const out = new Float32Array(3);
+	for (let v = firstVertex; v < vertexCount; v++) {
+		const p = builder.positions;
+		writeWoodCoord(out, 0, [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]], frame, log);
+		builder.woodCoords.push(out[0], out[1], out[2]);
+	}
+}
+
+/**
+ * A turned cuboid: each face a single quad in the block's own frame, rotated about the grid-box
+ * centre. Faces with no area (a plane's edges) are skipped, so a plane is two quads, back to back.
+ * UVs are world metres projected onto the face, with the grain along local X as for grid faces.
+ */
+function emitAngledBlock(
+	builder: GroupBuilder,
+	block: MiniBuildBlock,
+	anchor: { x: number; y: number; z: number }
+): number {
+	const m = orientationMatrix(block.rotation);
+	const c = blockCenterGrid(block);
+	const size = [block.sizeGrid.x, block.sizeGrid.y, block.sizeGrid.z];
+	const centre = [c.x, c.y, c.z];
+	const anchorArr = [anchor.x, anchor.y, anchor.z];
+	const world = (local: number[]) =>
+		[0, 1, 2].map(
+			(r) => centre[r] + m[r * 3] * local[0] + m[r * 3 + 1] * local[1] + m[r * 3 + 2] * local[2]
+		);
+	const axisDir = (k: number) => [m[k], m[3 + k], m[6 + k]];
+	let quads = 0;
+	for (const n of [0, 1, 2] as const) {
+		const [a, b] = TANGENTS[n];
+		if (size[a] === 0 || size[b] === 0) continue;
+		const ta = axisDir(a);
+		const tb = axisDir(b);
+		const swapUv = b === 0;
+		for (const dir of [-1, 1] as const) {
+			const base = builder.positions.length / 3;
+			const normal = axisDir(n).map((v) => v * dir);
+			for (const [sa, sb] of [
+				[-1, -1],
+				[1, -1],
+				[1, 1],
+				[-1, 1]
+			]) {
+				const local = [0, 0, 0];
+				local[n] = (dir * size[n]) / 2;
+				local[a] = (sa * size[a]) / 2;
+				local[b] = (sb * size[b]) / 2;
+				const p = world(local);
+				builder.positions.push(
+					gridToMeters(p[0] - anchorArr[0]),
+					gridToMeters(p[1] - anchorArr[1]),
+					gridToMeters(p[2] - anchorArr[2])
+				);
+				builder.normals.push(normal[0], normal[1], normal[2]);
+				const u = gridToMeters(p[0] * ta[0] + p[1] * ta[1] + p[2] * ta[2]) * MINI_BUILD_UV_SCALE;
+				const v = gridToMeters(p[0] * tb[0] + p[1] * tb[1] + p[2] * tb[2]) * MINI_BUILD_UV_SCALE;
+				if (swapUv) builder.uvs.push(v, u);
+				else builder.uvs.push(u, v);
+			}
+			// Same winding rule as emitQuad: a × b = +n in the block's frame, and rotation keeps handedness.
+			if (dir > 0) builder.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+			else builder.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+			quads++;
+		}
+	}
+	return quads;
 }
 
 function emitQuad(

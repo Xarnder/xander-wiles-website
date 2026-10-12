@@ -10,8 +10,11 @@
  */
 import { colorMaterialFromHex } from '../building/MaterialTypes';
 import {
+	angleDeltaUnits,
 	AXES,
 	blockBox,
+	blockCenterGrid,
+	blockExtentBox,
 	blockInWorkspace,
 	boundsFit,
 	boundsSizeGrid,
@@ -22,17 +25,25 @@ import {
 	effectiveSize,
 	flatAxisCount,
 	gridToMeters,
+	isAngledBlock,
 	localSizeForEffective,
 	metersToGrid,
 	newId,
-	nextQuarterTurn,
+	orientationMatrix,
+	quarterOf,
+	quarterRotation,
 	sanitizeName,
+	snapAngle,
+	stepAngle,
+	stepAngleUnit,
 	type Axis
 } from './miniBuildGrid';
 import { raisePlaneLayer } from './miniBuildSurfaces';
+import { MINI_BUILD_TEXTURES, type MiniBuildTextureEntry } from './miniBuildTextures';
 import { validateMiniBuildDraft } from './MiniBuildValidation';
 import {
 	MINI_BUILD_LIMITS,
+	MINI_BUILD_ROTATION,
 	type GridVec3,
 	type MiniBuildBlock,
 	type MiniBuildBlockCollision,
@@ -40,7 +51,9 @@ import {
 	type MiniBuildDraft,
 	type MiniBuildFinish,
 	type MiniBuildMaterialSlot,
-	type MiniBuildSemanticType
+	type MiniBuildSemanticType,
+	type MiniBuildTextureId,
+	type SnapAngle
 } from './MiniBuildTypes';
 
 export type EditorResult = { ok: true } | { ok: false; error: string };
@@ -301,12 +314,30 @@ export class MiniBuildEditorState {
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
 		if (!this.canAddBlock) return { ok: false, error: EDITOR_ERRORS.maxBlocks };
 		const bounds = computeBounds(this.blocks);
-		const box = blockBox(source);
-		const mirrorMinX = bounds.min.x + bounds.max.x - box.max.x;
 		const copy = cloneBlock(source);
 		copy.id = newId();
-		copy.positionGrid = { ...source.positionGrid, x: mirrorMinX };
-		if (mirrorMinX === source.positionGrid.x)
+		if (isAngledBlock(source)) {
+			// Mirroring across X turns Rz·Rx·Ry into Rz(−z)·Rx(x)·Ry(−y); the cuboid itself is symmetric.
+			copy.rotation = {
+				x: source.rotation.x,
+				y: snapAngle(-source.rotation.y),
+				z: snapAngle(-source.rotation.z)
+			};
+			const centre = blockCenterGrid(source);
+			const size = effectiveSize(copy);
+			copy.positionGrid = {
+				x: Math.round(bounds.min.x + bounds.max.x - centre.x - size.x / 2),
+				y: Math.round(centre.y - size.y / 2),
+				z: Math.round(centre.z - size.z / 2)
+			};
+		} else {
+			const box = blockBox(source);
+			copy.positionGrid = { ...source.positionGrid, x: bounds.min.x + bounds.max.x - box.max.x };
+		}
+		if (
+			copy.positionGrid.x === source.positionGrid.x &&
+			JSON.stringify(copy.rotation) === JSON.stringify(source.rotation)
+		)
 			copy.positionGrid.x += Math.max(1, effectiveSize(source).x);
 		return this.commit([...this.blocks, copy], this.materials, copy.id);
 	}
@@ -344,6 +375,17 @@ export class MiniBuildEditorState {
 	resizeSelected(axis: Axis, deltaGrid: number, side: 'min' | 'max' = 'max'): EditorResult {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
+		if (isAngledBlock(source)) {
+			// An angled block grows along whichever of its own axes is closest to the world axis.
+			const { localAxis, sign } = nearestLocalAxis(source, axis);
+			const next = resizeBlockLocal(
+				source,
+				localAxis,
+				deltaGrid,
+				(side === 'max' ? sign : -sign) as 1 | -1
+			);
+			return this.setBlockGrid(source.id, next.positionGrid, next.effective);
+		}
 		const size = effectiveSize(source);
 		const nextSize = clampBlockSize(size, axis, size[axis] + deltaGrid);
 		const applied = nextSize - size[axis];
@@ -352,28 +394,73 @@ export class MiniBuildEditorState {
 		return this.setBlockGrid(source.id, position, { ...size, [axis]: nextSize });
 	}
 
+	/**
+	 * Size along a world axis. An angled block has no world-axis size, so for it `axis` names one of
+	 * the block's own axes (the panel labels them so) and the block grows about its centre.
+	 */
 	setSizeMeters(axis: Axis, meters: number): EditorResult {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
+		if (isAngledBlock(source)) {
+			const grid = Math.max(MINI_BUILD_LIMITS.minBlockSizeGrid, metersToGrid(meters));
+			if (clampBlockSize(source.sizeGrid, axis, grid) !== grid)
+				return { ok: false, error: EDITOR_ERRORS.flat };
+			const next = resizeBlockLocal(
+				source,
+				AXES.indexOf(axis) as 0 | 1 | 2,
+				grid - source.sizeGrid[axis],
+				0
+			);
+			return this.setBlockGrid(source.id, next.positionGrid, next.effective);
+		}
 		const size = effectiveSize(source);
 		const grid = Math.max(MINI_BUILD_LIMITS.minBlockSizeGrid, metersToGrid(meters));
 		if (clampBlockSize(size, axis, grid) !== grid) return { ok: false, error: EDITOR_ERRORS.flat };
 		return this.setBlockGrid(source.id, source.positionGrid, { ...size, [axis]: grid });
 	}
 
-	/** Rotates the selected block 90° about an axis, keeping its centre as close as the grid allows. */
-	rotateSelected(axis: Axis): EditorResult {
+	/**
+	 * Rotates the selected block one snap step (`step` degrees, 90° by default) about an axis, keeping
+	 * its centre where it is (see `rotateBlockTo`). An angle set with a finer step first snaps to the
+	 * next angle on this step's grid.
+	 */
+	rotateSelected(
+		axis: Axis,
+		direction: 1 | -1 = 1,
+		step: number = MINI_BUILD_ROTATION.defaultStep
+	): EditorResult {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
-		const before = effectiveSize(source);
-		const rotation = { ...source.rotation, [axis]: nextQuarterTurn(source.rotation[axis]) };
-		const after = effectiveSize({ sizeGrid: source.sizeGrid, rotation });
-		const position = { ...source.positionGrid };
-		for (const a of AXES) position[a] += Math.floor((before[a] - after[a]) / 2);
-		const next = this.blocks.map((block) =>
-			block.id === source.id ? { ...cloneBlock(block), rotation, positionGrid: position } : block
-		);
-		return this.commit(next, this.materials, source.id);
+		return this.setBlockAngle(source.id, axis, stepAngle(source.rotation[axis], step, direction));
+	}
+
+	/** Typed angle for the selected block, snapped to `step` (default: the 7.5° unit). */
+	setRotationDegrees(
+		axis: Axis,
+		degrees: number,
+		step: number = MINI_BUILD_ROTATION.unitDegrees
+	): EditorResult {
+		const source = this.selectedBlock;
+		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
+		return this.setBlockAngle(source.id, axis, snapAngle(degrees, step));
+	}
+
+	/** Turns one block to `angle` about one axis — one undo step, however far it turns. */
+	setBlockAngle(id: string, axis: Axis, angle: SnapAngle): EditorResult {
+		const source = this.blocks.find((block) => block.id === id);
+		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
+		const turned = turnBlock(source, axis, angle);
+		if (turned.rotation[axis] === source.rotation[axis]) return { ok: true };
+		const next = this.blocks.map((block) => (block.id === id ? turned : block));
+		return this.commit(next, this.materials, id);
+	}
+
+	/** Checks a rotation without applying it — the viewport's rotation-ring preview. */
+	previewBlockAngle(id: string, axis: Axis, angle: SnapAngle): EditorResult {
+		const source = this.blocks.find((block) => block.id === id);
+		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
+		const turned = turnBlock(source, axis, angle);
+		return this.check(this.blocks.map((block) => (block.id === id ? turned : block)));
 	}
 
 	/**
@@ -408,11 +495,7 @@ export class MiniBuildEditorState {
 	previewBlockGrid(id: string, positionGrid: GridVec3, effective: GridVec3): EditorResult {
 		const source = this.blocks.find((block) => block.id === id);
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
-		const candidate: MiniBuildBlock = {
-			...cloneBlock(source),
-			positionGrid: { ...positionGrid },
-			sizeGrid: localSizeForEffective(effective, source.rotation)
-		};
+		const candidate = withGridTransform(source, positionGrid, effective);
 		return this.check(this.blocks.map((block) => (block.id === id ? candidate : block)));
 	}
 
@@ -465,13 +548,28 @@ export class MiniBuildEditorState {
 		return this.commit(blocks, materials, this.selectedBlockId);
 	}
 
+	/**
+	 * Picking a texture (not Auto / Flat) also sets the colour to the texture's natural swatch — the
+	 * colour tints the texture, so this starts it looking like itself; recolour it afterwards — and
+	 * moves the finish into line where the texture implies one (glass is transparent, wood is wood).
+	 */
 	updateMaterialSlot(
 		index: number,
-		patch: { name?: string; finish?: MiniBuildFinish; color?: string }
+		patch: { name?: string; finish?: MiniBuildFinish; color?: string; texture?: MiniBuildTextureId }
 	): EditorResult {
 		const existing = this.materials[index];
 		if (!existing) return { ok: false, error: 'That material slot does not exist.' };
 		let material = existing.material;
+		let finish = patch.finish ?? existing.finish;
+		let texture = existing.texture;
+		if (patch.texture !== undefined && patch.texture !== (existing.texture ?? 'auto')) {
+			texture = patch.texture === 'auto' ? undefined : patch.texture;
+			if (patch.texture !== 'auto' && patch.texture !== 'flat') {
+				const entry = MINI_BUILD_TEXTURES[patch.texture];
+				material = colorMaterialFromHex(entry.swatch);
+				if (patch.finish === undefined) finish = finishForTexture(entry.group, finish);
+			}
+		}
 		if (patch.color !== undefined) {
 			try {
 				material = colorMaterialFromHex(patch.color);
@@ -481,8 +579,9 @@ export class MiniBuildEditorState {
 		}
 		const next: MiniBuildMaterialSlot = {
 			name: patch.name !== undefined ? patch.name.slice(0, 32) : existing.name,
-			finish: patch.finish ?? existing.finish,
-			material
+			finish,
+			material,
+			...(texture ? { texture } : {})
 		};
 		const materials = cloneMaterials(this.materials);
 		materials[index] = next;
@@ -574,6 +673,120 @@ export class MiniBuildEditorState {
 			}
 		}));
 	}
+}
+
+/** A copy of `block` with a new grid-box min corner and effective size (mapped back to local size). */
+export function withGridTransform(
+	block: MiniBuildBlock,
+	positionGrid: GridVec3,
+	effective: GridVec3
+): MiniBuildBlock {
+	return {
+		...cloneBlock(block),
+		positionGrid: { ...positionGrid },
+		sizeGrid: localSizeForEffective(effective, block.rotation)
+	};
+}
+
+/**
+ * Turns a block about one axis to `angle`, one 7.5° unit at a time along the shorter way round.
+ *
+ * Inside a quarter turn only the visible cuboid turns — the grid box, and so the position, stays put
+ * and the block turns exactly about its centre. Each time the angle crosses a quarter turn the grid
+ * box's extents swap, and its min corner moves to keep the centre fixed. When that would put the
+ * corner on a half unit it rounds down on one crossing and up on the next (by the parity of the
+ * quarter turns), so the half units cancel: spinning a block all the way round on any axis, in any
+ * step, brings it back to exactly where it started.
+ */
+export function rotateBlockTo(block: MiniBuildBlock, axis: Axis, angle: SnapAngle): MiniBuildBlock {
+	let current = cloneBlock(block);
+	let remaining = angleDeltaUnits(current.rotation[axis], angle);
+	while (remaining !== 0) {
+		const direction = remaining > 0 ? 1 : -1;
+		remaining -= direction;
+		const rotation = {
+			...current.rotation,
+			[axis]: stepAngleUnit(current.rotation[axis], direction)
+		};
+		const position = { ...current.positionGrid };
+		if (quarterOf(rotation[axis]) !== quarterOf(current.rotation[axis])) {
+			const before = effectiveSize(current);
+			const after = effectiveSize({ sizeGrid: current.sizeGrid, rotation });
+			const q = quarterRotation(rotation);
+			const odd = ((q.x + q.y + q.z) / 90) % 2 === 1;
+			for (const a of AXES) {
+				const half = (before[a] - after[a]) / 2;
+				position[a] += odd ? Math.floor(half) : Math.ceil(half);
+			}
+		}
+		current = { ...current, rotation, positionGrid: position };
+	}
+	return cloneBlock(current);
+}
+
+/**
+ * `rotateBlockTo` as the editor applies it: a turn that would sink part of the block below the floor
+ * (standing a plank up, tilting a block that rests on the floor) lifts it just onto the floor
+ * instead of being refused.
+ */
+export function turnBlock(block: MiniBuildBlock, axis: Axis, angle: SnapAngle): MiniBuildBlock {
+	const turned = rotateBlockTo(block, axis, angle);
+	const below = -blockExtentBox(turned).min.y;
+	if (below > 0) turned.positionGrid.y += below;
+	return turned;
+}
+
+/** The block's own axis most nearly along a world axis, and which way it points. */
+export function nearestLocalAxis(
+	block: Pick<MiniBuildBlock, 'rotation'>,
+	axis: Axis
+): { localAxis: 0 | 1 | 2; sign: 1 | -1 } {
+	const m = orientationMatrix(block.rotation);
+	const row = AXES.indexOf(axis) * 3;
+	let best: 0 | 1 | 2 = 0;
+	for (const k of [1, 2] as const) if (Math.abs(m[row + k]) > Math.abs(m[row + best])) best = k;
+	return { localAxis: best, sign: m[row + best] < 0 ? -1 : 1 };
+}
+
+/**
+ * Resizes a block along one of its own axes. `side` +1 moves the face on the positive end of that
+ * axis (the other face stays put), −1 the negative end, 0 grows about the centre. Returns the grid
+ * transform for `setBlockGrid` / `previewBlockGrid`; an angled block's moved centre is rounded to
+ * the nearest grid position.
+ */
+export function resizeBlockLocal(
+	block: MiniBuildBlock,
+	localAxis: 0 | 1 | 2,
+	deltaGrid: number,
+	side: 1 | -1 | 0
+): { positionGrid: GridVec3; effective: GridVec3 } {
+	const axis = AXES[localAxis];
+	const sizeGrid = {
+		...block.sizeGrid,
+		[axis]: clampBlockSize(block.sizeGrid, axis, block.sizeGrid[axis] + deltaGrid)
+	};
+	const applied = sizeGrid[axis] - block.sizeGrid[axis];
+	const m = orientationMatrix(block.rotation);
+	const centre = blockCenterGrid(block);
+	const shift = (side * applied) / 2;
+	const effective = effectiveSize({ sizeGrid, rotation: block.rotation });
+	const positionGrid = {
+		x: Math.round(centre.x + m[localAxis] * shift - effective.x / 2),
+		y: Math.round(centre.y + m[3 + localAxis] * shift - effective.y / 2),
+		z: Math.round(centre.z + m[6 + localAxis] * shift - effective.z / 2)
+	};
+	return { positionGrid, effective };
+}
+
+/** The finish a picked texture implies; plaster and ground keep any finish but glass or metal. */
+function finishForTexture(
+	group: MiniBuildTextureEntry['group'],
+	current: MiniBuildFinish
+): MiniBuildFinish {
+	if (group === 'Wood') return 'wood';
+	if (group === 'Stone') return 'stone';
+	if (group === 'Glass') return 'glass';
+	return current === 'glass' || current === 'metal' ? 'plain' : current;
 }
 
 /**

@@ -1,22 +1,39 @@
 import * as THREE from 'three';
 import {
 	clampBlockSize,
+	resizeBlockLocal,
+	turnBlock,
+	withGridTransform,
 	type EditorResult,
 	type MiniBuildEditorState
 } from './MiniBuildEditorState';
 import {
 	anchorGrid,
+	AXES,
 	blockBox,
-	cloneBlock,
+	blockCenterGrid,
+	blockExtentBox,
 	computeBounds,
 	effectiveSize,
-	flatAxis,
 	gridToMeters,
-	localSizeForEffective,
+	isAngledBlock,
+	orientationMatrix,
+	snapAngle,
+	snapCosSin,
 	type Axis
 } from './miniBuildGrid';
+import { compileMiniBuildData } from './MiniBuildCompiler';
 import { surfaceOffsetLevels } from './miniBuildSurfaces';
-import { MINI_BUILD_LIMITS, type GridVec3, type MiniBuildFinish } from './MiniBuildTypes';
+import { miniBuildSurfaceStyle } from './miniBuildTextures';
+import type { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
+import {
+	MINI_BUILD_LIMITS,
+	MINI_BUILD_SCHEMA_VERSION,
+	type GridVec3,
+	type MiniBuildBlock,
+	type MiniBuildFinish,
+	type SnapAngle
+} from './MiniBuildTypes';
 
 const BACKGROUND = 0x262b2e;
 const SELECT_COLOR = 0xffd166;
@@ -36,12 +53,14 @@ const FINISH_LOOK: Record<
 	plain: { roughness: 0.7, metalness: 0 }
 };
 
-type HandleKind = 'move' | 'resize-max' | 'resize-min';
+type HandleKind = 'move' | 'resize-max' | 'resize-min' | 'rotate';
 
 interface DragState {
 	kind: HandleKind;
+	/** World axis for move handles and grid blocks; the block's own axis for an angled block's resize. */
 	axis: Axis;
 	blockId: string;
+	block: MiniBuildBlock;
 	startPosition: GridVec3;
 	startSize: GridVec3;
 	origin: THREE.Vector3;
@@ -49,6 +68,13 @@ interface DragState {
 	startT: number;
 	lastPosition: GridVec3;
 	lastSize: GridVec3;
+	/** Rotation ring drags: the plane's in-plane basis, and the unwrapped pointer angle. */
+	ringU?: THREE.Vector3;
+	ringV?: THREE.Vector3;
+	lastPhi?: number;
+	turned?: number;
+	startAngle?: SnapAngle;
+	lastAngle?: SnapAngle;
 	valid: boolean;
 }
 
@@ -56,22 +82,40 @@ export interface MiniBuildEditorViewportCallbacks {
 	getState: () => MiniBuildEditorState;
 	onSelect: (blockId: string | null) => void;
 	onCommitTransform: (blockId: string, position: GridVec3, size: GridVec3) => EditorResult;
+	/** Rotation ring released on a new angle. */
+	onCommitRotation: (blockId: string, axis: Axis, angle: SnapAngle) => EditorResult;
+	/** Current rotation snap step in degrees. */
+	getRotationStep: () => number;
+	/** Live angle while a rotation ring is dragged (for a readout). */
+	onRotatePreview?: (axis: Axis, angle: SnapAngle) => void;
 	onInvalidPreview?: (message: string) => void;
+	/** The game's procedural material library — slots are drawn with their textures when present. */
+	getProcedural?: () => ProceduralMaterialLibrary | null;
 }
+
+const RING_RADIUS_PAD = 0.32;
+const DEG = Math.PI / 180;
 
 /**
  * The isolated Mini Build editor viewport: neutral background, floor grid, X/Y/Z axes, the 4m build
  * limit, the design bounds and the anchor marker, an orbit camera, and simple snapped handles.
  *
  * Editor rendering is deliberately naive — one Mesh per block (≤16) — because that makes selection
- * and manipulation trivial. A block that is flat on one axis is drawn with a shared, two-sided unit
- * plane instead of a squashed box (which would have a singular normal matrix and z-fighting faces).
- * None of these meshes ever reach the world: saving hands a logical draft to the compiler.
+ * and manipulation trivial. Each block's mesh is that block compiled on its own by the world
+ * compiler (a plane is two back-to-back quads), so its UVs and solid-wood coordinates are exactly
+ * the world's, and with the game's procedural library each slot is drawn with the same procedural
+ * texture it will have once placed. None of these meshes ever reach the world: saving hands a
+ * logical draft to the compiler.
  *
  * Separate meshes cannot have hidden faces removed, so wherever two blocks put a surface in the same
  * place the one that wins (miniBuildSurfaces.ts — the same rule the compiler uses) is drawn with a
  * polygon offset that pulls it towards the camera. A plane on a table top is therefore always on
  * top, and of two planes in one place the last selected is on top, from whichever side you look.
+ *
+ * Rotation: three rings around the selection turn it about the axes its X / Y / Z angles actually
+ * turn it about (Z is the world Z axis, X is turned by Z, Y is the block's own Y — the Y→X→Z Euler
+ * order), snapping to the editor's rotation step. An angled block's outline and resize handles
+ * follow the block's own axes.
  */
 export class MiniBuildEditorViewport {
 	private readonly renderer: THREE.WebGLRenderer;
@@ -82,17 +126,14 @@ export class MiniBuildEditorViewport {
 	private readonly blockMeshes = new Map<string, THREE.Mesh>();
 	private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
 	private readonly boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-	/** Unit planes whose normal lies along each axis, for blocks that are flat on that axis. */
-	private readonly planeGeometries: Record<Axis, THREE.PlaneGeometry> = {
-		x: new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2),
-		y: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-		z: new THREE.PlaneGeometry(1, 1)
-	};
+	/** Stand-in for a block mesh until its compiled geometry is built. */
+	private readonly emptyGeometry = new THREE.BufferGeometry();
 	private readonly selectionOutline: THREE.LineSegments;
 	private readonly boundsOutline: THREE.LineSegments;
 	private readonly limitOutline: THREE.LineSegments;
 	private readonly anchorMarker: THREE.Group;
 	private readonly handleMeshes: THREE.Mesh[] = [];
+	private readonly ringMeshes: THREE.Mesh[] = [];
 	private readonly raycaster = new THREE.Raycaster();
 	private readonly pointer = new THREE.Vector2();
 	private readonly observer: ResizeObserver;
@@ -238,10 +279,7 @@ export class MiniBuildEditorViewport {
 		window.removeEventListener('pointerup', this.onPointerUp);
 		this.canvas.removeEventListener('wheel', this.onWheel);
 		this.canvas.removeEventListener('contextmenu', this.onContextMenu);
-		const shared = new Set<THREE.BufferGeometry>([
-			this.boxGeometry,
-			...Object.values(this.planeGeometries)
-		]);
+		const shared = new Set<THREE.BufferGeometry>([this.boxGeometry, this.emptyGeometry]);
 		this.scene.traverse((object) => {
 			if (
 				object instanceof THREE.Mesh ||
@@ -330,6 +368,22 @@ export class MiniBuildEditorViewport {
 				this.handleMeshes.push(mesh);
 				this.handlesGroup.add(mesh);
 			}
+			// Unit-radius ring in its local XY plane (axis +Z), scaled to the selection; a fatter
+			// invisible copy makes it easy to grab.
+			const ring = new THREE.Mesh(
+				new THREE.TorusGeometry(1, 0.008, 6, 72),
+				new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.8 })
+			);
+			ring.renderOrder = 7;
+			const grip = new THREE.Mesh(
+				new THREE.TorusGeometry(1, 0.045, 6, 48),
+				new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+			);
+			grip.userData = { kind: 'rotate', axis };
+			ring.add(grip);
+			this.ringMeshes.push(ring);
+			this.handleMeshes.push(grip);
+			this.handlesGroup.add(ring);
 		}
 	}
 
@@ -337,15 +391,13 @@ export class MiniBuildEditorViewport {
 	 * `offsetLevel` > 0 pulls the surface towards the camera in depth — enough to win against a
 	 * coplanar face, far too little to show through anything that is actually in front of it.
 	 */
-	private materialFor(
-		slotIndex: number,
-		twoSided = false,
-		offsetLevel = 0
-	): THREE.MeshStandardMaterial {
+	private materialFor(slotIndex: number, offsetLevel = 0): THREE.MeshStandardMaterial {
 		const slot = this.callbacks.getState().getMaterials()[slotIndex];
 		const color = slot?.material.type === 'color' ? slot.material.color : '#cccccc';
 		const finish = slot?.finish ?? 'plain';
-		const key = `${finish}:${color}:${twoSided ? 2 : 1}:${offsetLevel}`;
+		const procedural = this.callbacks.getProcedural?.() ?? null;
+		const style = procedural && slot ? miniBuildSurfaceStyle(slot) : null;
+		const key = `${finish}:${color}:${style ? JSON.stringify(style) : 'flat'}:${offsetLevel}`;
 		let material = this.materials.get(key);
 		if (!material) {
 			const look = FINISH_LOOK[finish];
@@ -353,7 +405,6 @@ export class MiniBuildEditorViewport {
 				color,
 				roughness: look.roughness,
 				metalness: look.metalness,
-				side: twoSided ? THREE.DoubleSide : THREE.FrontSide,
 				...(offsetLevel > 0
 					? {
 							polygonOffset: true,
@@ -364,6 +415,15 @@ export class MiniBuildEditorViewport {
 				...(look.opacity ? { transparent: true, opacity: look.opacity } : {})
 			});
 			this.materials.set(key, material);
+			// The same look the world binds (MiniBuildSystem.resolveMaterial). Maps arrive
+			// asynchronously; the library flips the material over once they are ready.
+			if (procedural && style) {
+				procedural.bindMaterial(material, style, {
+					tint: color,
+					...(style.mapping === 'wood' ? { ownWoodCoords: true } : { uvUnitMeters: 1 })
+				});
+				void procedural.whenIdle().then(() => (this.needsRender = true));
+			}
 		}
 		return material;
 	}
@@ -377,18 +437,19 @@ export class MiniBuildEditorViewport {
 			seen.add(block.id);
 			let mesh = this.blockMeshes.get(block.id);
 			if (!mesh) {
-				mesh = new THREE.Mesh(this.boxGeometry, this.materialFor(block.materialSlot));
+				mesh = new THREE.Mesh(this.emptyGeometry, this.materialFor(block.materialSlot));
 				mesh.userData.blockId = block.id;
 				this.blockMeshes.set(block.id, mesh);
 				this.blocksGroup.add(mesh);
 			}
 			mesh.userData.materialSlot = block.materialSlot;
 			mesh.userData.offsetLevel = levels[index];
-			this.applyBlockMesh(mesh, blockBox(block).min, effectiveSize(block));
+			this.applyBlockMesh(mesh, block);
 		}
 		for (const [id, mesh] of [...this.blockMeshes]) {
 			if (seen.has(id)) continue;
 			mesh.removeFromParent();
+			if (mesh.geometry !== this.emptyGeometry) mesh.geometry.dispose();
 			this.blockMeshes.delete(id);
 		}
 		if (blocks.length > 0) {
@@ -429,29 +490,52 @@ export class MiniBuildEditorViewport {
 		this.updateSelection();
 	}
 
-	/** Positions a block mesh, swapping between the box and a plane as its thickness reaches 0. */
-	private applyBlockMesh(mesh: THREE.Mesh, min: GridVec3, size: GridVec3): void {
-		const flat = flatAxis(size);
-		mesh.geometry = flat ? this.planeGeometries[flat] : this.boxGeometry;
-		mesh.userData.twoSided = flat !== null;
-		this.refreshMaterial(mesh);
-		this.applyBox(mesh, min, size);
-		// The plane has no extent on its flat axis; a unit scale keeps the normal matrix invertible.
-		if (flat) {
-			mesh.scale[flat] = 1;
-			mesh.updateMatrixWorld(true);
+	/**
+	 * Gives a block mesh the block compiled on its own (rebuilt only when its shape changes) and
+	 * places it at that compile's anchor.
+	 */
+	private applyBlockMesh(mesh: THREE.Mesh, block: MiniBuildBlock): void {
+		const shapeKey = JSON.stringify([block.id, block.positionGrid, block.sizeGrid, block.rotation]);
+		if (mesh.userData.shapeKey !== shapeKey) {
+			if (mesh.geometry !== this.emptyGeometry) mesh.geometry.dispose();
+			mesh.geometry = compileBlockGeometry(block);
+			mesh.userData.shapeKey = shapeKey;
 		}
+		this.refreshMaterial(mesh);
+		const anchor = anchorGrid(computeBounds([block]));
+		mesh.position.set(gridToMeters(anchor.x), gridToMeters(anchor.y), gridToMeters(anchor.z));
+		mesh.rotation.set(0, 0, 0);
+		mesh.scale.set(1, 1, 1);
+		mesh.updateMatrixWorld(true);
+	}
+
+	/** Centre, rotation and local size of a block (metres); `pad` grows every side (outlines). */
+	private applyOrientedBox(object: THREE.Object3D, block: MiniBuildBlock, pad = 0): void {
+		const c = blockCenterGrid(block);
+		object.position.set(gridToMeters(c.x), gridToMeters(c.y), gridToMeters(c.z));
+		object.rotation.set(
+			block.rotation.x * DEG,
+			block.rotation.y * DEG,
+			block.rotation.z * DEG,
+			'ZXY'
+		);
+		object.scale.set(
+			gridToMeters(block.sizeGrid.x) + pad,
+			gridToMeters(block.sizeGrid.y) + pad,
+			gridToMeters(block.sizeGrid.z) + pad
+		);
+		object.updateMatrixWorld(true);
 	}
 
 	private refreshMaterial(mesh: THREE.Mesh): void {
 		mesh.material = this.materialFor(
 			mesh.userData.materialSlot as number,
-			mesh.userData.twoSided as boolean,
 			(mesh.userData.offsetLevel as number | undefined) ?? 0
 		);
 	}
 
 	private applyBox(object: THREE.Object3D, min: GridVec3, size: GridVec3, pad = 0): void {
+		object.rotation.set(0, 0, 0);
 		object.position.set(
 			gridToMeters(min.x + size.x / 2),
 			gridToMeters(min.y + size.y / 2),
@@ -465,33 +549,25 @@ export class MiniBuildEditorViewport {
 		object.updateMatrixWorld(true);
 	}
 
-	private updateSelection(previewPosition?: GridVec3, previewSize?: GridVec3, valid = true): void {
+	/** Outline, handles and (during a drag) the previewed block. `preview` replaces the selected block. */
+	private updateSelection(preview?: MiniBuildBlock, valid = true): void {
 		const state = this.callbacks.getState();
-		const block = state.selectedBlock;
-		if (!block) {
+		const selected = state.selectedBlock;
+		if (!selected) {
 			this.selectionOutline.visible = false;
 			this.handlesGroup.visible = false;
 			return;
 		}
-		const min = previewPosition ?? blockBox(block).min;
-		const size = previewSize ?? effectiveSize(block);
-		this.applyBox(this.selectionOutline, min, size, 0.01);
+		const block = preview ?? selected;
+		this.applyOrientedBox(this.selectionOutline, block, 0.01);
 		(this.selectionOutline.material as THREE.LineBasicMaterial).color.setHex(
 			valid ? SELECT_COLOR : INVALID_COLOR
 		);
 		this.selectionOutline.visible = true;
 		const mesh = this.blockMeshes.get(block.id);
-		if (mesh && previewPosition && previewSize) {
+		if (mesh && preview) {
 			// A drag can create or break coplanar contacts, so re-rank every surface for the preview.
-			const blocks = state.getBlocks().map((other) =>
-				other.id === block.id
-					? {
-							...cloneBlock(other),
-							positionGrid: { ...previewPosition },
-							sizeGrid: localSizeForEffective(previewSize, other.rotation)
-						}
-					: other
-			);
+			const blocks = state.getBlocks().map((other) => (other.id === block.id ? preview : other));
 			const levels = surfaceOffsetLevels(blocks, state.getMaterials());
 			for (const [index, other] of blocks.entries()) {
 				const otherMesh = this.blockMeshes.get(other.id);
@@ -499,34 +575,50 @@ export class MiniBuildEditorViewport {
 				otherMesh.userData.offsetLevel = levels[index];
 				this.refreshMaterial(otherMesh);
 			}
-			this.applyBlockMesh(mesh, previewPosition, previewSize);
+			this.applyBlockMesh(mesh, preview);
 		}
 
-		const center = new THREE.Vector3(
-			gridToMeters(min.x + size.x / 2),
-			gridToMeters(min.y + size.y / 2),
-			gridToMeters(min.z + size.z / 2)
-		);
+		const c = blockCenterGrid(block);
+		const center = new THREE.Vector3(gridToMeters(c.x), gridToMeters(c.y), gridToMeters(c.z));
+		const extent = blockExtentBox(block);
 		const half = {
-			x: gridToMeters(size.x) / 2,
-			y: gridToMeters(size.y) / 2,
-			z: gridToMeters(size.z) / 2
+			x: gridToMeters(extent.max.x - extent.min.x) / 2,
+			y: gridToMeters(extent.max.y - extent.min.y) / 2,
+			z: gridToMeters(extent.max.z - extent.min.z) / 2
 		};
+		const angled = isAngledBlock(block);
+		const m = orientationMatrix(block.rotation);
 		for (const handle of this.handleMeshes) {
 			const { kind, axis } = handle.userData as { kind: HandleKind; axis: Axis };
-			const dir = new THREE.Vector3(
-				axis === 'x' ? 1 : 0,
-				axis === 'y' ? 1 : 0,
-				axis === 'z' ? 1 : 0
-			);
+			if (kind === 'rotate') continue;
+			const k = AXES.indexOf(axis);
+			let dir = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+			let reach = half[axis];
+			if (kind !== 'move' && angled) {
+				// Resize along the block's own axis.
+				dir = new THREE.Vector3(m[k], m[3 + k], m[6 + k]);
+				reach = gridToMeters(block.sizeGrid[axis]) / 2;
+			}
+			handle.userData.direction = dir.clone();
 			if (kind === 'move') {
 				handle.position.copy(center).addScaledVector(dir, half[axis] + 0.22);
 				handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
 			} else {
 				const sign = kind === 'resize-max' ? 1 : -1;
-				handle.position.copy(center).addScaledVector(dir, sign * (half[axis] + 0.06));
+				handle.position.copy(center).addScaledVector(dir, sign * (reach + 0.06));
+				handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
 			}
 			handle.updateMatrixWorld(true);
+		}
+		const radius = Math.max(half.x, half.y, half.z) + RING_RADIUS_PAD;
+		for (const ring of this.ringMeshes) {
+			const axis = (ring.children[0].userData as { axis: Axis }).axis;
+			const normal = ringAxis(block, axis);
+			ring.position.copy(center);
+			ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+			ring.scale.setScalar(radius);
+			ring.updateMatrixWorld(true);
+			ring.children[0].userData.normal = normal;
 		}
 		this.handlesGroup.visible = true;
 	}
@@ -583,26 +675,49 @@ export class MiniBuildEditorViewport {
 			const hit = this.raycaster.intersectObjects(this.handleMeshes, false)[0];
 			if (hit) {
 				const { kind, axis } = hit.object.userData as { kind: HandleKind; axis: Axis };
-				const direction = new THREE.Vector3(
-					axis === 'x' ? 1 : 0,
-					axis === 'y' ? 1 : 0,
-					axis === 'z' ? 1 : 0
-				);
-				const origin = hit.object.getWorldPosition(new THREE.Vector3());
 				const box = blockBox(selected);
-				this.drag = {
+				const base = {
 					kind,
 					axis,
 					blockId: selected.id,
+					block: selected,
 					startPosition: { ...box.min },
 					startSize: effectiveSize(selected),
-					origin,
-					direction,
-					startT: this.axisParameter(origin, direction),
 					lastPosition: { ...box.min },
 					lastSize: effectiveSize(selected),
 					valid: true
 				};
+				if (kind === 'rotate') {
+					const normal = (hit.object.userData.normal as THREE.Vector3).clone();
+					const c = blockCenterGrid(selected);
+					const origin = new THREE.Vector3(gridToMeters(c.x), gridToMeters(c.y), gridToMeters(c.z));
+					const ringU = new THREE.Vector3(1, 0, 0);
+					if (Math.abs(ringU.dot(normal)) > 0.9) ringU.set(0, 1, 0);
+					ringU.addScaledVector(normal, -ringU.dot(normal)).normalize();
+					const ringV = normal.clone().cross(ringU);
+					const phi = this.ringAngle(origin, normal, ringU, ringV) ?? 0;
+					this.drag = {
+						...base,
+						origin,
+						direction: normal,
+						startT: 0,
+						ringU,
+						ringV,
+						lastPhi: phi,
+						turned: 0,
+						startAngle: selected.rotation[axis],
+						lastAngle: selected.rotation[axis]
+					};
+				} else {
+					const direction = (hit.object.userData.direction as THREE.Vector3).clone();
+					const origin = hit.object.getWorldPosition(new THREE.Vector3());
+					this.drag = {
+						...base,
+						origin,
+						direction,
+						startT: this.axisParameter(origin, direction)
+					};
+				}
 				this.canvas.setPointerCapture?.(event.pointerId);
 				event.preventDefault();
 				return;
@@ -623,13 +738,28 @@ export class MiniBuildEditorViewport {
 		if (this.drag) {
 			this.setPointer(event);
 			const drag = this.drag;
+			if (drag.kind === 'rotate') {
+				this.dragRing(drag);
+				return;
+			}
 			const deltaGrid = Math.round(
 				(this.axisParameter(drag.origin, drag.direction) - drag.startT) / MINI_BUILD_LIMITS.gridSize
 			);
-			const position = { ...drag.startPosition };
-			const size = { ...drag.startSize };
+			let position = { ...drag.startPosition };
+			let size = { ...drag.startSize };
 			if (drag.kind === 'move') {
 				position[drag.axis] += deltaGrid;
+			} else if (isAngledBlock(drag.block)) {
+				const local = AXES.indexOf(drag.axis) as 0 | 1 | 2;
+				const max = drag.kind === 'resize-max';
+				const next = resizeBlockLocal(
+					drag.block,
+					local,
+					max ? deltaGrid : -deltaGrid,
+					max ? 1 : -1
+				);
+				position = next.positionGrid;
+				size = next.effective;
 			} else if (drag.kind === 'resize-max') {
 				size[drag.axis] = clampBlockSize(size, drag.axis, drag.startSize[drag.axis] + deltaGrid);
 			} else {
@@ -642,7 +772,7 @@ export class MiniBuildEditorViewport {
 			drag.lastSize = size;
 			drag.valid = result.ok;
 			if (!result.ok) this.callbacks.onInvalidPreview?.(result.error);
-			this.updateSelection(position, size, result.ok);
+			this.updateSelection(withGridTransform(drag.block, position, size), result.ok);
 			this.needsRender = true;
 			return;
 		}
@@ -674,6 +804,13 @@ export class MiniBuildEditorViewport {
 		if (this.drag) {
 			const drag = this.drag;
 			this.drag = null;
+			if (drag.kind === 'rotate') {
+				if (drag.valid && drag.lastAngle !== drag.startAngle && drag.lastAngle !== undefined)
+					this.callbacks.onCommitRotation(drag.blockId, drag.axis, drag.lastAngle);
+				this.lastVersion = -1;
+				this.needsRender = true;
+				return;
+			}
 			const changed =
 				JSON.stringify(drag.lastPosition) !== JSON.stringify(drag.startPosition) ||
 				JSON.stringify(drag.lastSize) !== JSON.stringify(drag.startSize);
@@ -694,6 +831,49 @@ export class MiniBuildEditorViewport {
 		this.needsRender = true;
 	};
 
+	/** Pointer angle around a ring (radians, in the ring's u/v basis), or null when edge-on. */
+	private ringAngle(
+		origin: THREE.Vector3,
+		normal: THREE.Vector3,
+		u: THREE.Vector3,
+		v: THREE.Vector3
+	): number | null {
+		const ray = this.raycaster.ray;
+		const denom = ray.direction.dot(normal);
+		if (Math.abs(denom) < 1e-4) return null;
+		const t = origin.clone().sub(ray.origin).dot(normal) / denom;
+		if (t <= 0) return null;
+		const offset = ray.at(t, new THREE.Vector3()).sub(origin);
+		return Math.atan2(offset.dot(v), offset.dot(u));
+	}
+
+	/**
+	 * Turning a ring: the pointer's swept angle (unwrapped, so several turns are fine) snapped to the
+	 * rotation step. Small wiggles below half a step leave the angle alone; past that it lands on the
+	 * step's grid, so a block set at an odd angle with a finer step snaps onto round angles again.
+	 */
+	private dragRing(drag: DragState): void {
+		const phi = this.ringAngle(drag.origin, drag.direction, drag.ringU!, drag.ringV!);
+		if (phi === null) return;
+		let delta = phi - drag.lastPhi!;
+		if (delta > Math.PI) delta -= 2 * Math.PI;
+		if (delta < -Math.PI) delta += 2 * Math.PI;
+		drag.lastPhi = phi;
+		drag.turned = drag.turned! + delta;
+		const step = this.callbacks.getRotationStep();
+		const degrees = drag.turned / DEG;
+		const angle =
+			Math.abs(degrees) < step / 2 ? drag.startAngle! : snapAngle(drag.startAngle! + degrees, step);
+		if (angle === drag.lastAngle) return;
+		drag.lastAngle = angle;
+		const result = this.callbacks.getState().previewBlockAngle(drag.blockId, drag.axis, angle);
+		drag.valid = result.ok;
+		if (!result.ok) this.callbacks.onInvalidPreview?.(result.error);
+		else this.callbacks.onRotatePreview?.(drag.axis, angle);
+		this.updateSelection(turnBlock(drag.block, drag.axis, angle), result.ok);
+		this.needsRender = true;
+	}
+
 	private readonly onWheel = (event: WheelEvent): void => {
 		event.preventDefault();
 		this.radius = THREE.MathUtils.clamp(this.radius * Math.exp(event.deltaY * 0.0012), 0.6, 20);
@@ -703,4 +883,48 @@ export class MiniBuildEditorViewport {
 	private readonly onContextMenu = (event: MouseEvent): void => {
 		event.preventDefault();
 	};
+}
+
+/**
+ * The world axis a block's X, Y or Z angle turns it about. With `v' = Rz · Rx · Ry · v`: changing Z
+ * turns about world Z, changing X about Rz·X, changing Y about the block's own Y (Rz·Rx·Y).
+ */
+function ringAxis(block: MiniBuildBlock, axis: Axis): THREE.Vector3 {
+	if (axis === 'z') return new THREE.Vector3(0, 0, 1);
+	const [cz, sz] = snapCosSin(block.rotation.z);
+	if (axis === 'x') return new THREE.Vector3(cz, sz, 0);
+	const m = orientationMatrix(block.rotation);
+	return new THREE.Vector3(m[1], m[4], m[7]);
+}
+
+/**
+ * One block through the world compiler, as a BufferGeometry relative to that block's own anchor —
+ * the same faces, metre UVs and `woodCoord`s it gets inside a placed design. The material slot is
+ * irrelevant here (one group), so a single placeholder slot keeps the compile self-contained.
+ */
+function compileBlockGeometry(block: MiniBuildBlock): THREE.BufferGeometry {
+	const solo: MiniBuildBlock = { ...block, materialSlot: 0 };
+	const bounds = computeBounds([solo]);
+	const data = compileMiniBuildData({
+		schemaVersion: MINI_BUILD_SCHEMA_VERSION,
+		id: 'editor-block',
+		name: '',
+		revision: 1,
+		blocks: [solo],
+		materials: [{ name: '', finish: 'plain', material: { type: 'color', color: '#FFFFFF' } }],
+		bounds,
+		anchor: { type: 'bottom-center' },
+		createdAt: '',
+		updatedAt: ''
+	});
+	const group = data.groups[0];
+	const geometry = new THREE.BufferGeometry();
+	if (!group) return geometry;
+	geometry.setAttribute('position', new THREE.BufferAttribute(group.positions, 3));
+	geometry.setAttribute('normal', new THREE.BufferAttribute(group.normals, 3));
+	geometry.setAttribute('uv', new THREE.BufferAttribute(group.uvs, 2));
+	geometry.setAttribute('woodCoord', new THREE.BufferAttribute(group.woodCoords, 3));
+	geometry.setIndex(new THREE.BufferAttribute(group.indices, 1));
+	geometry.computeBoundingSphere();
+	return geometry;
 }

@@ -38,6 +38,7 @@ interface TestScene {
 		cache: { compileCount: number; refCount(definition: DefinitionView): number };
 	};
 	placeObjectTool: {
+		getRotation(): number;
 		getPreview(): { valid: boolean; reason: string | null } | null;
 		getTargetInstanceId(): string | null;
 		getSelection(): { type: string; designId?: string };
@@ -242,6 +243,63 @@ test('builds a Mini Build, places copies, saves, reloads and makes one copy uniq
 	expect(after.otherDesign).toBe(first.designId);
 	expect(after.otherBlocks).toBe(2);
 	expect(after.originalRevision).toBe(1);
+
+	expect(pageErrors).toEqual([]);
+});
+
+test('blocks and whole objects rotate in snap steps, exactly', async ({ page }) => {
+	test.setTimeout(120_000);
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+
+	await page.goto('/');
+	await createAndEnterWorld(page, { name: 'Rotation World', seed: 'rotation-seed' });
+	await page.keyboard.press('8');
+	await page.keyboard.press('e');
+	await page.getByTestId('mini-build-create-new').click();
+	await expect(page.getByTestId('mini-build-editor')).toBeVisible();
+	await page.getByTestId('mini-build-add').click();
+	await setNumber(page, 'mini-build-size-x', '1');
+	await setNumber(page, 'mini-build-size-z', '0.25');
+
+	// 22.5° steps on the buttons and the keyboard; typed angles snap to the step.
+	await page.getByTestId('mini-build-rotation-step').selectOption('22.5');
+	await page.getByTestId('mini-build-rotate-y').click();
+	await page.getByTestId('mini-build-rotate-y').click();
+	await expect(page.getByTestId('mini-build-angle-y')).toHaveValue('45');
+	await expect(page.getByTestId('mini-build-angled-hint')).toBeVisible();
+	await setNumber(page, 'mini-build-angle-x', '30');
+	await expect(page.getByTestId('mini-build-angle-x')).toHaveValue('22.5');
+	await page.getByTestId('mini-build-editor-canvas').click({ position: { x: 5, y: 5 } });
+	await page.keyboard.press('t'); // 22.5 → 15
+	await expect(page.getByTestId('mini-build-rotation-step')).toHaveValue('15');
+	await page.getByTestId('mini-build-block-0').click();
+	await page.keyboard.press('Alt+r');
+	await expect(page.getByTestId('mini-build-angle-z')).toHaveValue('15');
+	await page.screenshot({ path: test.info().outputPath('angled-block-editor.png') });
+
+	await page.getByTestId('mini-build-save').click();
+	await page.getByTestId('mini-build-name-input').fill('Angled Bench');
+	await page.getByTestId('mini-build-name-confirm').click();
+	await expect(page.getByTestId('mini-build-editor')).toBeHidden();
+
+	// The world tools share the 15° step: R ×3 = 45°, Shift+R back to 30°.
+	const rotation = () =>
+		page.evaluate(() =>
+			(window as unknown as TestWindow).__forestSession.scene.placeObjectTool.getRotation()
+		);
+	for (let i = 0; i < 3; i++) await page.keyboard.press('r');
+	await expect.poll(rotation).toBe(45);
+	await page.keyboard.press('Shift+r');
+	await expect.poll(rotation).toBe(30);
+	await expect(page.getByTestId('build-hud')).toContainText('Rotation: 30° · snap 15°');
+	await aimAtGround(page, 0);
+	await page.evaluate(() =>
+		(window as unknown as TestWindow).__forestSession.scene.triggerPrimaryAction()
+	);
+	await expect.poll(async () => (await instances(page)).length).toBe(1);
+	expect((await instances(page))[0].rotationY).toBe(30);
+	await page.screenshot({ path: test.info().outputPath('angled-object-world.png') });
 
 	expect(pageErrors).toEqual([]);
 });

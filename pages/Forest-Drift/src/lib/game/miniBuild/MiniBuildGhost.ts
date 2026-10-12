@@ -1,7 +1,24 @@
 import * as THREE from 'three';
 import type { CompiledMiniBuildAsset } from './MiniBuildAsset';
 import { miniBuildAssetKey, type MiniBuildAssetCache } from './MiniBuildAssetCache';
-import type { MiniBuildDefinition, QuarterTurn } from './MiniBuildTypes';
+import type { WorldObb } from './miniBuildGrid';
+import type { MiniBuildDefinition, SnapAngle } from './MiniBuildTypes';
+
+/**
+ * Fits a unit-box overlay (edges or fill) to a placed object's turned bounds, `pad` metres larger on
+ * every axis — so the highlight around an object at 30° is the object's own box, not the square
+ * around it.
+ */
+export function fitBoundsHighlight(object: THREE.Object3D, box: WorldObb, pad = 0): void {
+	object.position.set(box.centerX, (box.minY + box.maxY) / 2, box.centerZ);
+	object.rotation.set(0, Math.atan2(box.sin, box.cos), 0);
+	object.scale.set(
+		Math.max(0.1, box.halfX * 2 + pad),
+		Math.max(0.1, box.maxY - box.minY + pad),
+		Math.max(0.1, box.halfZ * 2 + pad)
+	);
+	object.updateMatrixWorld(true);
+}
 
 export const GHOST_VALID_COLOR = 0x39d353;
 export const GHOST_INVALID_COLOR = 0xf85149;
@@ -101,7 +118,7 @@ export class MiniBuildGhost {
 		);
 	}
 
-	setTransform(position: { x: number; y: number; z: number }, rotationY: QuarterTurn): void {
+	setTransform(position: { x: number; y: number; z: number }, rotationY: SnapAngle): void {
 		this.group.matrix.makeRotationY((rotationY * Math.PI) / 180);
 		this.group.matrix.setPosition(position.x, position.y, position.z);
 		this.group.matrixWorldNeedsUpdate = true;

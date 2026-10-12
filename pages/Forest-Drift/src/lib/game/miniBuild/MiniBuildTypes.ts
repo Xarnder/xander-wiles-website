@@ -4,7 +4,7 @@
  * instance — compiled render assets are always regenerated from these recipes.
  *
  * A Mini Build is deliberately constrained (16 cuboids on a 0.03125m grid, 4m bounds, 4 material
- * slots, quarter-turn rotations). A cuboid may be flat (size 0) on one axis, which makes it a plane.
+ * slots, rotations snapped to 7.5° units). A cuboid may be flat (size 0) on one axis, which makes it a plane.
  * Those limits are the creative rule of the system, so they live in exactly one place and every layer
  * (editor, validation, loader, compiler) reads them from here.
  */
@@ -17,8 +17,10 @@ import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
  * v2 — grid unit 0.0625m, one axis may be 0 (a plane).
  * v3 — grid unit 0.03125m (finer snap). Older coordinates are scaled up on load (v1 ×4, v2 ×2), so
  *      every saved design keeps exactly its size and shape in metres.
+ * v4 — block rotations may be any multiple of 7.5° (not just quarter turns). Coordinates unchanged;
+ *      every v3 design is a valid v4 design as-is.
  */
-export const MINI_BUILD_SCHEMA_VERSION = 3;
+export const MINI_BUILD_SCHEMA_VERSION = 4;
 
 /** Current grid units per v1 grid unit (0.125m / 0.03125m): v1 designs are scaled by this when loaded. */
 export const MINI_BUILD_V1_GRID_SCALE = 4;
@@ -37,7 +39,7 @@ export function miniBuildGridScaleFor(schemaVersion: number): number {
  * Part of the asset cache key and the content hash, so an improved compiler regenerates assets
  * rather than reusing stale ones — saved designs themselves never need migrating for it.
  */
-export const MINI_BUILD_COMPILER_VERSION = 3;
+export const MINI_BUILD_COMPILER_VERSION = 4;
 
 export const MINI_BUILD_LIMITS = {
 	maxBlocks: 16,
@@ -101,6 +103,27 @@ export const MINI_BUILD_COLLISION = {
 export type QuarterTurn = 0 | 90 | 180 | 270;
 export const QUARTER_TURNS: readonly QuarterTurn[] = [0, 90, 180, 270];
 
+/**
+ * Rotation snapping, shared by block rotation in the editor and whole-object yaw in the world.
+ *
+ * Every stored angle is a whole number of `unitDegrees` in [0, 360). 7.5° is the finest unit that
+ * every offered step divides, so switching the step never strands an angle between snap points and
+ * any mix of steps still lands exactly on the grid of angles. Multiples of 7.5 are exact binary
+ * floats, and angle arithmetic goes through integer units anyway, so 48 × 7.5° (or 24 × 15°, or
+ * 16 × 22.5°…) returns to exactly 0 — rotations never drift.
+ */
+export const MINI_BUILD_ROTATION = {
+	unitDegrees: 7.5,
+	/** Steps the player can pick, coarsest first. */
+	snapSteps: [90, 45, 30, 22.5, 15, 7.5],
+	defaultStep: 90
+} as const;
+
+export type RotationSnapStep = (typeof MINI_BUILD_ROTATION.snapSteps)[number];
+
+/** Degrees in [0, 360), a whole multiple of `MINI_BUILD_ROTATION.unitDegrees`. */
+export type SnapAngle = number;
+
 /** Integer grid coordinates. Metres = value × `MINI_BUILD_LIMITS.gridSize`. */
 export interface GridVec3 {
 	x: number;
@@ -109,20 +132,28 @@ export interface GridVec3 {
 }
 
 /**
- * Applied Y, then X, then Z (see `rotationMatrix` in miniBuildGrid.ts). For a cuboid a quarter-turn
- * rotation only permutes axes, so the effective box stays grid aligned.
+ * Euler angles in degrees, applied Y, then X, then Z (`v' = Rz · Rx · Ry · v`, see
+ * `orientationMatrix` in miniBuildGrid.ts), about the centre of the block's grid box.
+ *
+ * Each angle is a `SnapAngle`. When all three are quarter turns the rotation only permutes axes and
+ * the block is an ordinary grid-aligned box. Otherwise the block is *angled*: its grid box (see
+ * `MiniBuildBlock.positionGrid`) is the box it would have with every angle rounded down to a quarter
+ * turn, and the visible cuboid is the same block turned the rest of the way about that box's centre.
  */
 export interface MiniBuildBlockRotation {
-	x: QuarterTurn;
-	y: QuarterTurn;
-	z: QuarterTurn;
+	x: SnapAngle;
+	y: SnapAngle;
+	z: SnapAngle;
 }
 
 export type MiniBuildBlockCollision = 'auto' | 'solid' | 'none';
 
 export interface MiniBuildBlock {
 	id: string;
-	/** Min corner of the block's effective (rotated) box, in grid units. */
+	/**
+	 * Min corner of the block's grid box (its effective, quarter-turn-rotated box), in grid units. An
+	 * angled block turns about this box's centre — see `MiniBuildBlockRotation`.
+	 */
 	positionGrid: GridVec3;
 	/** Local (unrotated) extents in grid units, each ≥ 0 — at most one axis 0, which makes a plane. */
 	sizeGrid: GridVec3;
@@ -149,11 +180,48 @@ export const MINI_BUILD_FINISH_LABELS: Record<MiniBuildFinish, string> = {
 	plain: 'Plain'
 };
 
+/**
+ * Procedural surface a material slot can use — the game's existing procedural looks (solid wood,
+ * stone, plaster, paving…), catalogued with labels and styles in `miniBuildTextures.ts`. `auto`
+ * picks one from the slot's finish; `flat` is plain colour.
+ */
+export const MINI_BUILD_TEXTURE_IDS = [
+	'auto',
+	'flat',
+	'dark-oak',
+	'aged-oak',
+	'weathered-wood',
+	'pine',
+	'mahogany',
+	'oak-planks',
+	'lime-plaster',
+	'rough-plaster',
+	'dressed-stone',
+	'cut-stone',
+	'fieldstone',
+	'rough-stone',
+	'cobbles',
+	'setts',
+	'flagstones',
+	'slate',
+	'soil',
+	'gravel',
+	'earth-path',
+	'meadow-grass',
+	'dry-grass',
+	'clear-glass',
+	'old-glass'
+] as const;
+export type MiniBuildTextureId = (typeof MINI_BUILD_TEXTURE_IDS)[number];
+
 /** A logical material slot — never a THREE.Material. */
 export interface MiniBuildMaterialSlot {
 	name: string;
 	finish: MiniBuildFinish;
+	/** The colour; on a textured slot it tints the texture (its average becomes this colour). */
 	material: BuildingMaterialDefinition;
+	/** Procedural surface; omitted means `auto` (chosen from the finish). */
+	texture?: MiniBuildTextureId;
 }
 
 export interface MiniBuildAnchor {
@@ -208,7 +276,8 @@ export interface MiniBuildInstance {
 	designId: string;
 	/** World position of the design anchor (bottom-centre). */
 	position: { x: number; y: number; z: number };
-	rotationY: QuarterTurn;
+	/** Yaw about the anchor in degrees, a `SnapAngle` (matches `THREE.Matrix4.makeRotationY`). */
+	rotationY: SnapAngle;
 	foundationId?: string;
 	levelId?: string;
 	materialOverrides?: MiniBuildMaterialOverride[];

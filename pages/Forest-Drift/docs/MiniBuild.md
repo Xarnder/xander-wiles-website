@@ -13,7 +13,7 @@ the brief, the measured performance and the known limitations.
 | Block size                      | 0 – 4 m per axis; at most one axis 0 |
 | Design bounds                   | 4 × 4 × 4 m (128 grid units)         |
 | Material slots                  | 4                                    |
-| Block rotation                  | 90° steps                            |
+| Block / object rotation         | Snap steps of 90°–7.5° (7.5° units)  |
 | Primitive budget per chunk      | 512 source cuboids (a plane costs 1) |
 | Instance safety ceiling / chunk | 256                                  |
 | Collision boxes per design      | 8 (after merging)                    |
@@ -67,6 +67,52 @@ the brief, the measured performance and the known limitations.
 9. **Schema v3 halved the grid again** to 0.03125 m for finer furniture detail. Older designs are
    scaled on load (v1 ×4, v2 ×2) and keep their exact size in metres; planes forced solid still get
    0.0625 m of collision thickness.
+10. **Snap-angle rotation (schema v4).** Block angles (X/Y/Z) and placed-object yaw may be any whole
+    number of 7.5° units in [0, 360). The player picks a snap step — 90, 45, 30, 22.5, 15 or 7.5° —
+    shared by the editor and the world tools (`MiniBuildRotationSnap.ts`, a local preference). 7.5°
+    is the finest unit every step divides, so changing step never strands an angle off the grid,
+    and all angle arithmetic runs in integer units: a full turn in any step returns to exactly 0.
+    - **Angled blocks** (any angle not a quarter turn) keep integer storage: `positionGrid` and the
+      grid box are those of the rotation rounded down to quarter turns, and the visible cuboid is
+      the same block turned the rest of the way about that box's centre. So inside a quarter turn
+      a block turns exactly about its centre; crossing a quarter turn the grid box swaps extents
+      and its corner moves to keep the centre, rounding a half unit down on one crossing and up on
+      the next (by quarter-turn parity), so spinning a block all the way round on any axis brings
+      it back to exactly where it started (`rotateBlockTo`). A turn that would sink the block
+      below the floor lifts it onto the floor instead of being refused.
+    - **Compiling:** angled blocks bypass the grid hidden-face pass — each is its own turned cuboid
+      (6 quads, a plane 2), never hides a neighbour's face and is never hidden. Bounds (and so the
+      anchor, workspace and 4 m limits) use the turned corners rounded outwards to the grid.
+    - **Collision:** an angled block that stays upright (one own axis vertical — in practice, turned
+      about Y) keeps its exact footprint as a collision box with a `yaw`; a tilted block collides
+      as the grid box around it. Yawed boxes never merge exactly, and take part in over-budget
+      merging as their surrounding grid box.
+    - **Placed objects** at any yaw collide with the player as oriented rects, and placement tests
+      walls, other objects and furniture with oriented boxes (separating axis), so a bench at 45°
+      can sit beside another bench at 45° instead of being judged by the square around it.
+      Highlights in Place / Move / Remove turn with the object.
+11. **Procedural textures on material slots.** Every slot has a `texture` (`miniBuildTextures.ts`):
+    a curated set of the game's existing procedural materials — solid wood (dark oak, aged oak,
+    weathered, pine, mahogany), oak planks, lime/rough plaster, dressed/cut/field/rough stone,
+    cobbles, setts, flagstones, slate, soil, gravel, earth path, meadow/dry grass, clear/old glass
+    — or `flat`. Omitted means `auto`, chosen from the finish: wood → aged oak, stone → dressed
+    stone, fabric → lime plaster, glass → clear glass; metal and plain stay flat (no procedural
+    metal, and a texture would drop metalness). So every design, including the defaults, is
+    procedurally textured unless its slot says otherwise.
+    - The slot colour **tints** the texture (its average becomes the colour), exactly like painting
+      a wall, so material overrides and recolouring still work. Picking a texture in the editor
+      sets the colour to the texture's natural swatch and moves the finish into line (wood, stone,
+      glass); recolour it afterwards for a painted look.
+    - Textures use the compiled geometry's metre UVs (`native` mapping, grain along U); wood uses
+      the solid-wood shader with a per-vertex `woodCoord` the compiler now emits — each block is one
+      piece of timber, grain along its longest side, log offset hashed from the block id (compiler
+      version 4). `BuildingMaterialManager.getStyledMaterial` caches one material per
+      (finish, colour, texture), shared by every copy.
+    - The editor draws each block as that block compiled on its own, with materials bound by the
+      same procedural library, so the editor shows the world's exact look (including wood grain).
+      Turning procedural materials off in Graphics turns them off in both.
+    - An unknown texture id in a save falls back to `auto`; the texture only enters the content
+      hash when set, so designs saved before textures keep their hash.
 
 ## Runtime pipeline
 
@@ -102,8 +148,10 @@ MiniBuildDefinition (≤16 logical cuboids)
 | `MiniBuildGhost.ts`              | Ghost preview from cached compiled geometry                               |
 | `PlaceObjectTool.ts`             | Hotbar 8: place / rotate / copy / edit; lights delegate to FurnitureTool  |
 | `MiniBuildPreferences.ts`        | Local prefs: last selection, recently used, library sort                  |
+| `MiniBuildRotationSnap.ts`       | Local pref: the rotation snap step, shared by editor and world tools      |
+| `miniBuildTextures.ts`           | Slot texture catalogue (existing procedural looks), auto-by-finish        |
 | `MiniBuildEditorState.ts`        | Pure transactional editor state with snapshot undo/redo                   |
-| `MiniBuildEditorViewport.ts`     | Editor viewport: orbit camera, grid, axes, bounds, anchor, handles        |
+| `MiniBuildEditorViewport.ts`     | Editor viewport: orbit camera, grid, axes, bounds, anchor, handles, rings |
 | `MiniBuildPersonalLibrary.ts`    | Cross-world IndexedDB "My Builds" + thumbnails                            |
 | `MiniBuildThumbnails.ts`         | Thumbnails rendered offscreen through the game renderer                   |
 | `defaultMiniBuilds.ts`           | 16 starter designs under the same rules                                   |
@@ -120,14 +168,18 @@ stats, benchmark), `RemoveTool.ts`, `MoveTool.ts`, `BuildUndoManager.ts`, world 
 | ------------ | -------------------------------------------- | ------------------------------------------------------------- |
 | World        | `8`                                          | Place Object                                                  |
 | Place Object | `E`                                          | Object Library (My Builds, Default Designs, Lights, Create)   |
-| Place Object | `R` / `↑` `↓`                                | Rotate 90° / cycle recently used objects                      |
+| Place Object | `R` / `Shift+R`, `T` / `Shift+T`             | Rotate one snap step either way; finer / coarser snap step    |
+| Place Object | `↑` `↓`                                      | Cycle recently used objects                                   |
+| Move         | `R` / `Shift+R`, `T` / `Shift+T`             | Same, for a held or looked-at Mini Build                      |
 | Place Object | `C` / `F`                                    | Copy / Edit the looked-at Mini Build                          |
 | Place Object | Click / Right click / `-`                    | Place / cancel preview / undo placement                       |
 | World        | `X` / `M`                                    | Remove one copy / move a copy (budget-checked)                |
 | Settings     | Mini Builds → Chunks & detail budget         | Toggle chunk boundary grid + labels, and the chunk counter    |
 | Editor       | `N`, `Delete`, `Ctrl/Cmd+D`, `M`             | Add, delete, duplicate, duplicate + mirror X                  |
 | Editor       | Arrows, `E`/`Q` (+`Shift` resizes)           | Move/resize in 0.03125m steps; shrink a size to 0 for a plane |
-| Editor       | `R` (`Shift` X, `Alt` Z), `1`–`4`, `Tab`     | Rotate 90°, assign material, next block                       |
+| Editor       | `R` (`Shift` X, `Alt` Z), `T` / `Shift+T`    | Rotate one snap step on Y (X, Z); finer / coarser snap step   |
+| Editor       | Drag a ring, Snap menu, Rotate° fields       | Rotate in snap steps; pick the step; type an angle (snapped)  |
+| Editor       | `1`–`4`, `Tab`                               | Assign material, next block                                   |
 | Editor       | `Ctrl/Cmd+Z`, `Shift+Z`, `Ctrl/Cmd+S`, `F`   | Undo, redo, save and keep editing, frame design               |
 | Editor       | Drag arrows / cubes, drag, right-drag, wheel | Move, resize, orbit, pan, zoom                                |
 
@@ -178,11 +230,15 @@ why the chunk budget counts source cuboids rather than rendered meshes.
   disposal, bounded growth), library semantics, system (10 copies → 1 batch, delete safety, shared
   edits, Make Unique, Save As, instanced picking at index 17 through swap-removal, streaming,
   collision, save/load, over-budget load, resource-leak cycles), placement (upper floors, grid snap,
-  wall snug, tuck-under collision, budget messages), benchmark scenes. World schema v7 migration,
+  wall snug, tuck-under collision, budget messages), snap rotation (`MiniBuildRotation.spec.ts`:
+  exact full turns in every step on every axis, typed-angle snapping, floor lift, angled-block
+  bounds / compile / yawed collision, oriented placement overlap and player collision), benchmark
+  scenes. World schema v7 migration,
   serializer, validation and export/import round trip.
 - Playwright: `tests/miniBuilds.e2e.ts` (8 → E → Create New → build → Save "Test Chair" → place →
   Copy → place → save/reload → F → Make Unique → edit → original unchanged; 17th block / 4m bounds /
-  non-grid values; Remove Mode reclaims budget and keeps the design), `tests/miniBuildPerformance.e2e.ts`,
+  non-grid values; snap rotation of blocks and placed objects; Remove Mode reclaims budget and keeps
+  the design), `tests/miniBuildPerformance.e2e.ts`,
   and updated slot-8 / persistence tests in `tests/game.e2e.ts` and `tests/worldPersistence.e2e.ts`.
 
 ## Known limitations and next steps

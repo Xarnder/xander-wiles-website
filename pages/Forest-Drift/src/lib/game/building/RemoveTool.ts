@@ -1,4 +1,5 @@
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
+import { fitBoundsHighlight } from '../miniBuild/MiniBuildGhost';
 import type { MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
 import * as THREE from 'three';
 import type { BuildingManager } from './BuildingManager';
@@ -274,21 +275,11 @@ export class RemoveTool implements BuildTool {
 				this.miniBuilds?.instances.get(miniBuildHit.id)?.foundationId ?? null;
 			this.hoveredFoundationId = miniFoundationId;
 			this.setHoveredTarget(null, null);
-			const box = this.miniBuilds.instances.worldAabb(miniBuildHit.id);
+			const box = this.miniBuilds.instances.worldBounds(miniBuildHit.id);
 			if (box) {
 				// A bounds overlay — instanced objects have no per-object mesh to recolour, and duplicating
-				// runtime geometry just for hover would defeat the batching.
-				this.furnitureHighlight.position.set(
-					(box.minX + box.maxX) / 2,
-					(box.minY + box.maxY) / 2,
-					(box.minZ + box.maxZ) / 2
-				);
-				this.furnitureHighlight.scale.set(
-					box.maxX - box.minX + 0.03,
-					box.maxY - box.minY + 0.03,
-					box.maxZ - box.minZ + 0.03
-				);
-				this.furnitureHighlight.updateMatrixWorld(true);
+				// runtime geometry just for hover would defeat the batching. It turns with the object.
+				fitBoundsHighlight(this.furnitureHighlight, box, 0.03);
 				this.furnitureHighlight.visible = true;
 			}
 			const instance = this.miniBuilds.instances.get(miniBuildHit.id);
@@ -321,6 +312,7 @@ export class RemoveTool implements BuildTool {
 				this.furnitureAabb.getCenter(this.furnitureHighlightCenter);
 				this.furnitureAabb.getSize(this.furnitureHighlightSize);
 				this.furnitureHighlight.position.copy(this.furnitureHighlightCenter);
+				this.furnitureHighlight.rotation.set(0, 0, 0);
 				this.furnitureHighlight.scale.copy(this.furnitureHighlightSize);
 				this.furnitureHighlight.scale.x = Math.max(0.08, this.furnitureHighlight.scale.x);
 				this.furnitureHighlight.scale.y = Math.max(0.08, this.furnitureHighlight.scale.y);

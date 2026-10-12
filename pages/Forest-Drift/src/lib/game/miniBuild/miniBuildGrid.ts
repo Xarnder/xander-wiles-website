@@ -5,6 +5,7 @@
 import {
 	MINI_BUILD_COMPILER_VERSION,
 	MINI_BUILD_LIMITS,
+	MINI_BUILD_ROTATION,
 	MINI_BUILD_WORLD_LIMITS,
 	type GridVec3,
 	type MiniBuildBlock,
@@ -13,6 +14,7 @@ import {
 	type MiniBuildDefinition,
 	type MiniBuildMaterialSlot,
 	type QuarterTurn,
+	type SnapAngle,
 	type WorldChunkId
 } from './MiniBuildTypes';
 
@@ -47,6 +49,96 @@ export function normalizeQuarterTurn(degrees: number): QuarterTurn {
 	return ((((snapped % 360) + 360) % 360) + 0) as QuarterTurn;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Snap angles. All arithmetic runs in whole 7.5° units (48 per turn), so no sequence of steps can
+// accumulate floating-point error — see MINI_BUILD_ROTATION.
+
+const UNITS_PER_TURN = Math.round(360 / MINI_BUILD_ROTATION.unitDegrees);
+
+function angleUnits(degrees: number): number {
+	const units = Math.round(degrees / MINI_BUILD_ROTATION.unitDegrees) % UNITS_PER_TURN;
+	return units < 0 ? units + UNITS_PER_TURN : units;
+}
+
+function unitsToAngle(units: number): SnapAngle {
+	return (
+		(((units % UNITS_PER_TURN) + UNITS_PER_TURN) % UNITS_PER_TURN) * MINI_BUILD_ROTATION.unitDegrees
+	);
+}
+
+/** A stored angle: a whole number of 7.5° units in [0, 360). */
+export function isSnapAngle(value: unknown): value is SnapAngle {
+	if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value >= 360)
+		return false;
+	return Number.isInteger(value / MINI_BUILD_ROTATION.unitDegrees);
+}
+
+export function isRotationSnapStep(
+	value: unknown
+): value is (typeof MINI_BUILD_ROTATION.snapSteps)[number] {
+	return (MINI_BUILD_ROTATION.snapSteps as readonly unknown[]).includes(value);
+}
+
+/** Any angle → the nearest whole multiple of `step` (default: the 7.5° unit), wrapped to [0, 360). */
+export function snapAngle(
+	degrees: number,
+	step: number = MINI_BUILD_ROTATION.unitDegrees
+): SnapAngle {
+	if (!Number.isFinite(degrees)) return 0;
+	const stepUnits = Math.max(1, Math.round(step / MINI_BUILD_ROTATION.unitDegrees));
+	const units = Math.round(degrees / MINI_BUILD_ROTATION.unitDegrees);
+	return unitsToAngle(Math.round(units / stepUnits) * stepUnits);
+}
+
+/**
+ * Turns by `direction` steps of `step` degrees. An angle that is not on the step's grid (it was set
+ * with a finer step) first snaps to the neighbouring step-grid angle in the direction of travel, so
+ * pressing rotate always lands on a "round" angle for the current step and never skips past one.
+ */
+export function stepAngle(angle: SnapAngle, step: number, direction: 1 | -1 = 1): SnapAngle {
+	const stepUnits = Math.max(1, Math.round(step / MINI_BUILD_ROTATION.unitDegrees));
+	const units = angleUnits(angle);
+	const offGrid = units % stepUnits;
+	if (offGrid !== 0)
+		return unitsToAngle(direction > 0 ? units - offGrid + stepUnits : units - offGrid);
+	return unitsToAngle(units + direction * stepUnits);
+}
+
+/** Signed shortest turn from `from` to `to`, in 7.5° units (−24…24). */
+export function angleDeltaUnits(from: SnapAngle, to: SnapAngle): number {
+	let delta = angleUnits(to) - angleUnits(from);
+	if (delta > UNITS_PER_TURN / 2) delta -= UNITS_PER_TURN;
+	if (delta < -UNITS_PER_TURN / 2) delta += UNITS_PER_TURN;
+	return delta;
+}
+
+/** One 7.5° unit forward or back. */
+export function stepAngleUnit(angle: SnapAngle, direction: 1 | -1): SnapAngle {
+	return unitsToAngle(angleUnits(angle) + direction);
+}
+
+/** The quarter turn at or below an angle — the part of a block's rotation its grid box follows. */
+export function quarterOf(angle: SnapAngle): QuarterTurn {
+	return (Math.floor(angleUnits(angle) / (UNITS_PER_TURN / 4)) * 90) as QuarterTurn;
+}
+
+export function quarterRotation(rotation: MiniBuildBlockRotation): {
+	x: QuarterTurn;
+	y: QuarterTurn;
+	z: QuarterTurn;
+} {
+	return { x: quarterOf(rotation.x), y: quarterOf(rotation.y), z: quarterOf(rotation.z) };
+}
+
+/** True when any angle is not a quarter turn — the block is not a grid-aligned box. */
+export function isAngledRotation(rotation: MiniBuildBlockRotation): boolean {
+	return !isQuarterTurn(rotation.x) || !isQuarterTurn(rotation.y) || !isQuarterTurn(rotation.z);
+}
+
+export function isAngledBlock(block: Pick<MiniBuildBlock, 'rotation'>): boolean {
+	return isAngledRotation(block.rotation);
+}
+
 type Matrix3 = [number, number, number, number, number, number, number, number, number];
 
 function cosSin(turn: QuarterTurn): [number, number] {
@@ -62,6 +154,13 @@ function cosSin(turn: QuarterTurn): [number, number] {
 	}
 }
 
+/** cos/sin of a snap angle — exact at quarter turns, so axis-aligned results stay integers. */
+export function snapCosSin(angle: SnapAngle): [number, number] {
+	if (isQuarterTurn(angle)) return cosSin(angle);
+	const radians = (angle * Math.PI) / 180;
+	return [Math.cos(radians), Math.sin(radians)];
+}
+
 function multiply(a: Matrix3, b: Matrix3): Matrix3 {
 	const out = new Array(9).fill(0) as Matrix3;
 	for (let r = 0; r < 3; r++) {
@@ -74,18 +173,32 @@ function multiply(a: Matrix3, b: Matrix3): Matrix3 {
 	return out;
 }
 
-/** Integer rotation matrix (row-major), applied Y then X then Z: `v' = Rz · Rx · Ry · v`. */
-export function rotationMatrix(rotation: MiniBuildBlockRotation): Matrix3 {
-	const [cy, sy] = cosSin(rotation.y);
-	const [cx, sx] = cosSin(rotation.x);
-	const [cz, sz] = cosSin(rotation.z);
+function eulerMatrix(x: SnapAngle, y: SnapAngle, z: SnapAngle): Matrix3 {
+	const [cy, sy] = snapCosSin(y);
+	const [cx, sx] = snapCosSin(x);
+	const [cz, sz] = snapCosSin(z);
 	const ry: Matrix3 = [cy, 0, sy, 0, 1, 0, -sy, 0, cy];
 	const rx: Matrix3 = [1, 0, 0, 0, cx, -sx, 0, sx, cx];
 	const rz: Matrix3 = [cz, -sz, 0, sz, cz, 0, 0, 0, 1];
 	return multiply(rz, multiply(rx, ry));
 }
 
-/** The block's extents along world X/Y/Z after rotation — always a permutation of `sizeGrid`. */
+/**
+ * Integer rotation matrix (row-major) of the block's *grid box*: the rotation with every angle
+ * rounded down to a quarter turn, applied Y then X then Z (`v' = Rz · Rx · Ry · v`). For a block
+ * that is not angled this is its whole rotation.
+ */
+export function rotationMatrix(rotation: MiniBuildBlockRotation): Matrix3 {
+	const q = quarterRotation(rotation);
+	return eulerMatrix(q.x, q.y, q.z);
+}
+
+/** The block's full rotation (row-major, `Rz · Rx · Ry`) — what the visible cuboid uses. */
+export function orientationMatrix(rotation: MiniBuildBlockRotation): Matrix3 {
+	return eulerMatrix(rotation.x, rotation.y, rotation.z);
+}
+
+/** The block's grid-box extents along world X/Y/Z — always a permutation of `sizeGrid`. */
 export function effectiveSize(block: Pick<MiniBuildBlock, 'sizeGrid' | 'rotation'>): GridVec3 {
 	const m = rotationMatrix(block.rotation);
 	const { x, y, z } = block.sizeGrid;
@@ -143,13 +256,78 @@ export interface GridBox {
 	max: GridVec3;
 }
 
-export function blockBox(block: MiniBuildBlock): GridBox {
+/**
+ * The block's grid box: its effective box under the quarter-turn part of its rotation. For an
+ * ordinary block this is exactly the cuboid; an angled block turns about this box's centre.
+ */
+export function blockBox(
+	block: Pick<MiniBuildBlock, 'positionGrid' | 'sizeGrid' | 'rotation'>
+): GridBox {
 	const size = effectiveSize(block);
 	const p = block.positionGrid;
 	return {
 		min: { x: p.x, y: p.y, z: p.z },
 		max: { x: p.x + size.x, y: p.y + size.y, z: p.z + size.z }
 	};
+}
+
+/** Centre of the block's grid box (and pivot of an angled block), in grid units — may be a half unit. */
+export function blockCenterGrid(
+	block: Pick<MiniBuildBlock, 'positionGrid' | 'sizeGrid' | 'rotation'>
+): GridVec3 {
+	const size = effectiveSize(block);
+	const p = block.positionGrid;
+	return { x: p.x + size.x / 2, y: p.y + size.y / 2, z: p.z + size.z / 2 };
+}
+
+/** The eight corners of the visible cuboid in grid units (a plane's corners coincide in pairs). */
+export function blockCornersGrid(
+	block: Pick<MiniBuildBlock, 'positionGrid' | 'sizeGrid' | 'rotation'>
+): GridVec3[] {
+	const m = orientationMatrix(block.rotation);
+	const c = blockCenterGrid(block);
+	const h = { x: block.sizeGrid.x / 2, y: block.sizeGrid.y / 2, z: block.sizeGrid.z / 2 };
+	const corners: GridVec3[] = [];
+	for (const sx of [-1, 1])
+		for (const sy of [-1, 1])
+			for (const sz of [-1, 1]) {
+				const lx = sx * h.x;
+				const ly = sy * h.y;
+				const lz = sz * h.z;
+				corners.push({
+					x: c.x + m[0] * lx + m[1] * ly + m[2] * lz,
+					y: c.y + m[3] * lx + m[4] * ly + m[5] * lz,
+					z: c.z + m[6] * lx + m[7] * ly + m[8] * lz
+				});
+			}
+	return corners;
+}
+
+/** Tolerance when rounding an angled block's corners out to the grid (rotations are never exact). */
+const EXTENT_EPSILON = 1e-6;
+
+/**
+ * Smallest grid box containing everything the block draws. Identical to `blockBox` for an ordinary
+ * block; an angled block's turned corners are rounded outwards to whole grid units, so bounds,
+ * workspace limits and grounding stay integer.
+ */
+export function blockExtentBox(
+	block: Pick<MiniBuildBlock, 'positionGrid' | 'sizeGrid' | 'rotation'>
+): GridBox {
+	if (!isAngledBlock(block)) return blockBox(block);
+	const min = { x: Infinity, y: Infinity, z: Infinity };
+	const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+	for (const corner of blockCornersGrid(block)) {
+		for (const axis of AXES) {
+			min[axis] = Math.min(min[axis], corner[axis]);
+			max[axis] = Math.max(max[axis], corner[axis]);
+		}
+	}
+	for (const axis of AXES) {
+		min[axis] = Math.floor(min[axis] + EXTENT_EPSILON);
+		max[axis] = Math.ceil(max[axis] - EXTENT_EPSILON);
+	}
+	return { min, max };
 }
 
 export function computeBounds(blocks: readonly MiniBuildBlock[]): MiniBuildBounds {
@@ -159,7 +337,7 @@ export function computeBounds(blocks: readonly MiniBuildBlock[]): MiniBuildBound
 	const min = { x: Infinity, y: Infinity, z: Infinity };
 	const max = { x: -Infinity, y: -Infinity, z: -Infinity };
 	for (const block of blocks) {
-		const box = blockBox(block);
+		const box = blockExtentBox(block);
 		for (const axis of AXES) {
 			min[axis] = Math.min(min[axis], box.min[axis]);
 			max[axis] = Math.max(max[axis], box.max[axis]);
@@ -184,7 +362,7 @@ export function boundsFit(bounds: MiniBuildBounds): boolean {
 
 /** Every block inside the editor workspace (X/Z ±4m around the origin, Y from the floor to 4m). */
 export function blockInWorkspace(block: MiniBuildBlock): boolean {
-	const box = blockBox(block);
+	const box = blockExtentBox(block);
 	const half = MINI_BUILD_LIMITS.workspaceHalfGrid;
 	return (
 		box.min.x >= -half &&
@@ -257,6 +435,13 @@ export function rotateQuarterY(x: number, z: number, turn: QuarterTurn): { x: nu
 	}
 }
 
+/** `rotateQuarterY` for any snap angle (exact at quarter turns). */
+export function rotateY(x: number, z: number, angle: SnapAngle): { x: number; z: number } {
+	if (isQuarterTurn(angle)) return rotateQuarterY(x, z, angle);
+	const [c, s] = snapCosSin(angle);
+	return { x: x * c + z * s, z: -x * s + z * c };
+}
+
 export interface WorldAabb {
 	minX: number;
 	minY: number;
@@ -266,23 +451,144 @@ export interface WorldAabb {
 	maxZ: number;
 }
 
-/** A local metre box (relative to the anchor) placed at `position` with a quarter-turn yaw. */
+/**
+ * A local metre box (relative to the anchor) placed at `position` with a yaw — the world AABB that
+ * contains it. Exact for quarter turns; for other angles it bounds the turned footprint (use
+ * `transformLocalObb` where the real, oriented shape matters).
+ */
 export function transformLocalBox(
 	min: GridVec3,
 	max: GridVec3,
 	position: { x: number; y: number; z: number },
-	turn: QuarterTurn
+	angle: SnapAngle
 ): WorldAabb {
-	const a = rotateQuarterY(min.x, min.z, turn);
-	const b = rotateQuarterY(max.x, max.z, turn);
+	if (isQuarterTurn(angle)) {
+		const a = rotateQuarterY(min.x, min.z, angle);
+		const b = rotateQuarterY(max.x, max.z, angle);
+		return {
+			minX: position.x + Math.min(a.x, b.x),
+			maxX: position.x + Math.max(a.x, b.x),
+			minY: position.y + min.y,
+			maxY: position.y + max.y,
+			minZ: position.z + Math.min(a.z, b.z),
+			maxZ: position.z + Math.max(a.z, b.z)
+		};
+	}
+	return obbAabb(transformLocalObb(min, max, position, angle));
+}
+
+/**
+ * A box in the world's horizontal plane, extruded over a Y range: centre, half extents along its own
+ * axes, and its yaw as cos/sin. The box's own X axis points along (cos, −sin) in world X/Z — the
+ * `THREE.Matrix4.makeRotationY` convention — and its own Z axis along (sin, cos).
+ */
+export interface WorldObb {
+	centerX: number;
+	centerZ: number;
+	halfX: number;
+	halfZ: number;
+	cos: number;
+	sin: number;
+	minY: number;
+	maxY: number;
+}
+
+/**
+ * A local metre box (relative to the anchor), optionally turned by `boxYaw` about its own centre
+ * first, placed at `position` with yaw `angle` — as an oriented box, so a 45° object collides as
+ * itself rather than as the larger square around it.
+ */
+export function transformLocalObb(
+	min: GridVec3,
+	max: GridVec3,
+	position: { x: number; y: number; z: number },
+	angle: SnapAngle,
+	boxYaw: SnapAngle = 0
+): WorldObb {
+	const centre = rotateY((min.x + max.x) / 2, (min.z + max.z) / 2, angle);
+	const [cos, sin] = snapCosSin(snapAngle(angle + boxYaw));
 	return {
-		minX: position.x + Math.min(a.x, b.x),
-		maxX: position.x + Math.max(a.x, b.x),
+		centerX: position.x + centre.x,
+		centerZ: position.z + centre.z,
+		halfX: (max.x - min.x) / 2,
+		halfZ: (max.z - min.z) / 2,
+		cos,
+		sin,
 		minY: position.y + min.y,
-		maxY: position.y + max.y,
-		minZ: position.z + Math.min(a.z, b.z),
-		maxZ: position.z + Math.max(a.z, b.z)
+		maxY: position.y + max.y
 	};
+}
+
+/** Footprint corners (x, z) of an oriented box. */
+export function obbCorners(box: WorldObb, inset = 0): [number, number][] {
+	const hx = Math.max(0, box.halfX - inset);
+	const hz = Math.max(0, box.halfZ - inset);
+	const out: [number, number][] = [];
+	for (const [sx, sz] of [
+		[-1, -1],
+		[1, -1],
+		[1, 1],
+		[-1, 1]
+	]) {
+		const lx = sx * hx;
+		const lz = sz * hz;
+		out.push([
+			box.centerX + lx * box.cos + lz * box.sin,
+			box.centerZ - lx * box.sin + lz * box.cos
+		]);
+	}
+	return out;
+}
+
+export function obbAabb(box: WorldObb): WorldAabb {
+	const ex = Math.abs(box.cos) * box.halfX + Math.abs(box.sin) * box.halfZ;
+	const ez = Math.abs(box.sin) * box.halfX + Math.abs(box.cos) * box.halfZ;
+	return {
+		minX: box.centerX - ex,
+		maxX: box.centerX + ex,
+		minY: box.minY,
+		maxY: box.maxY,
+		minZ: box.centerZ - ez,
+		maxZ: box.centerZ + ez
+	};
+}
+
+export function aabbToObb(box: WorldAabb): WorldObb {
+	return {
+		centerX: (box.minX + box.maxX) / 2,
+		centerZ: (box.minZ + box.maxZ) / 2,
+		halfX: (box.maxX - box.minX) / 2,
+		halfZ: (box.maxZ - box.minZ) / 2,
+		cos: 1,
+		sin: 0,
+		minY: box.minY,
+		maxY: box.maxY
+	};
+}
+
+/**
+ * Separating-axis test for two oriented boxes. Like `aabbsOverlap`, boxes may touch or interpenetrate
+ * by up to `gap` on any axis without counting as overlapping.
+ */
+export function obbsOverlap(a: WorldObb, b: WorldObb, gap = 0): boolean {
+	if (!(a.minY < b.maxY - gap && a.maxY > b.minY + gap)) return false;
+	const dx = b.centerX - a.centerX;
+	const dz = b.centerZ - a.centerZ;
+	// Each box's own X and Z axes in world X/Z.
+	const axes: [number, number][] = [
+		[a.cos, -a.sin],
+		[a.sin, a.cos],
+		[b.cos, -b.sin],
+		[b.sin, b.cos]
+	];
+	for (const [ax, az] of axes) {
+		const ra =
+			a.halfX * Math.abs(a.cos * ax - a.sin * az) + a.halfZ * Math.abs(a.sin * ax + a.cos * az);
+		const rb =
+			b.halfX * Math.abs(b.cos * ax - b.sin * az) + b.halfZ * Math.abs(b.sin * ax + b.cos * az);
+		if (Math.abs(dx * ax + dz * az) >= ra + rb - gap) return false;
+	}
+	return true;
 }
 
 export function aabbsOverlap(a: WorldAabb, b: WorldAabb, gap = 0): boolean {
@@ -341,7 +647,10 @@ export function contentHash(definition: Pick<MiniBuildDefinition, 'blocks' | 'ma
 		);
 	}
 	for (const slot of definition.materials) {
-		parts.push(`m${slot.finish}|${materialKey(slot)}`);
+		// The texture joins the key only when set, so designs saved before textures keep their hash.
+		parts.push(
+			`m${slot.finish}|${materialKey(slot)}${slot.texture && slot.texture !== 'auto' ? `|${slot.texture}` : ''}`
+		);
 	}
 	const text = parts.join(';');
 	return (
@@ -393,7 +702,8 @@ export function cloneMaterials(
 	return materials.map((slot) => ({
 		name: slot.name,
 		finish: slot.finish,
-		material: { ...slot.material }
+		material: { ...slot.material },
+		...(slot.texture && slot.texture !== 'auto' ? { texture: slot.texture } : {})
 	}));
 }
 

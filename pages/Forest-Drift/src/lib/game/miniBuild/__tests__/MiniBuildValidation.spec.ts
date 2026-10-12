@@ -233,7 +233,9 @@ describe('validateMiniBuildDefinition', () => {
 		fiveSlots.materials.push({ ...fiveSlots.materials[0] });
 		expect(validateMiniBuildDefinition(fiveSlots).ok).toBe(false);
 		const rotated = testDefinition([[0, 0, 0, 1, 1, 1]]);
-		(rotated.blocks[0].rotation as { y: number }).y = 45;
+		rotated.blocks[0].rotation.y = 45;
+		expect(validateMiniBuildDefinition(rotated).ok).toBe(true);
+		rotated.blocks[0].rotation.y = 50;
 		expect(validateMiniBuildDefinition(rotated).ok).toBe(false);
 	});
 
@@ -251,12 +253,13 @@ describe('validateMiniBuildDefinition', () => {
 });
 
 describe('validateMiniBuildInstance / world state', () => {
-	it('rejects instances referencing unknown designs and non-quarter rotations', () => {
+	it('rejects instances referencing unknown designs and off-snap rotations', () => {
 		const ids = new Set(['d1']);
 		const base = { id: 'i1', designId: 'd1', position: { x: 1, y: 2, z: 3 }, rotationY: 90 };
 		expect(validateMiniBuildInstance(base, ids).ok).toBe(true);
 		expect(validateMiniBuildInstance({ ...base, designId: 'missing' }, ids).ok).toBe(false);
-		expect(validateMiniBuildInstance({ ...base, rotationY: 45 }, ids).ok).toBe(false);
+		expect(validateMiniBuildInstance({ ...base, rotationY: 45 }, ids).ok).toBe(true);
+		expect(validateMiniBuildInstance({ ...base, rotationY: 50 }, ids).ok).toBe(false);
 		expect(
 			validateMiniBuildInstance({ ...base, position: { x: Infinity, y: 0, z: 0 } }, ids).ok
 		).toBe(false);

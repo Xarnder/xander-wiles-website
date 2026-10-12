@@ -38,6 +38,7 @@ export function createMiniBuildAsset(
 		geometry.setAttribute('position', new THREE.BufferAttribute(group.positions, 3));
 		geometry.setAttribute('normal', new THREE.BufferAttribute(group.normals, 3));
 		geometry.setAttribute('uv', new THREE.BufferAttribute(group.uvs, 2));
+		geometry.setAttribute('woodCoord', new THREE.BufferAttribute(group.woodCoords, 3));
 		geometry.setIndex(new THREE.BufferAttribute(group.indices, 1));
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
@@ -74,6 +75,7 @@ export function estimateMiniBuildDataBytes(data: CompiledMiniBuildData): number 
 			group.positions.byteLength +
 			group.normals.byteLength +
 			group.uvs.byteLength +
+			group.woodCoords.byteLength +
 			group.indices.byteLength;
 	}
 	return bytes;
