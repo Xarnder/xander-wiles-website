@@ -97,8 +97,8 @@ export function compileLegacyCreatureGeometry(
 		colors.push(c.r, c.g, c.b);
 	}
 	const geometry = finishGeometry(out, colors);
-	geometry.surface.fill(palette.roughness);
-	for (let n = 1; n < geometry.surface.length; n += 2) geometry.surface[n] = 0;
+	for (let n = 0; n < geometry.surface.length; n += 4)
+		geometry.surface[n] = Math.round(palette.roughness * 1000);
 	let hash = 2166136261;
 	for (const array of [
 		geometry.positions,

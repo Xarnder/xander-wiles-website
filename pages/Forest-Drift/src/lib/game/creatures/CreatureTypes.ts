@@ -1,3 +1,4 @@
+import type { CreatureSurfaceDefinition } from './surface/CreaturePatternGenerator';
 /** Generator v1 uses +Y up, +Z forward and +X creature-right. Logical roots lie on the ground. */
 export const CREATURE_GENERATOR_VERSION = 1;
 export type Vec3 = { x: number; y: number; z: number };
@@ -49,8 +50,75 @@ export interface CreaturePalette {
 	metalness: number;
 	pattern: CreaturePattern;
 }
+/** Procedural surface pattern vocabulary (see surface/CreaturePatternGenerator). */
+export type CreaturePatternType =
+	| 'solid'
+	| 'spots'
+	| 'mottled'
+	| 'stripes'
+	| 'bands'
+	| 'back-stripe'
+	| 'limb-bands'
+	| 'dorsal-spots'
+	| 'gradient'
+	| 'underbelly';
+/** How a pattern colour relates to the body colour. */
+export type CreaturePatternTone = 'light' | 'dark' | 'underbelly' | 'accent';
+export interface CreaturePatternDefinition {
+	type: CreaturePatternType;
+	/** Noise features (spots/mottle) per body length. */
+	scale: number;
+	/** Fraction of the target area covered, 0–1. */
+	density: number;
+	/** Blend strength toward the pattern colour, 0–1. */
+	contrast: number;
+	/** Elongation of spots along the body (1 = round). */
+	stretch: number;
+	/** Bands/stripes per body length (limbs and tails: per part). */
+	frequency: number;
+	tone: CreaturePatternTone;
+}
+export interface UnderbellyPatternDefinition {
+	/** Share of the cross-section counted as underside, 0–1. */
+	width: number;
+	softness: number;
+	strength: number;
+	/** Extra lightness of the underside colour. */
+	brightness: number;
+	/** Belly plates: faint bands across the underside (serpents). */
+	segmented: boolean;
+}
+export type CreatureAccentRegion =
+	| 'feet'
+	| 'hands'
+	| 'ears'
+	| 'horns'
+	| 'fins'
+	| 'spines'
+	| 'plates'
+	| 'frills'
+	| 'antennae'
+	| 'tail-tip';
+/**
+ * Persisted surface recipe. Colours come from the palette; this holds pattern rules only, so a
+ * recipe is a few numbers — never pixels. `version` pins the surface algorithm for saved species.
+ */
+export interface CreatureSurfaceGenome {
+	version: 1;
+	seed: number;
+	primaryPattern: CreaturePatternDefinition;
+	/** `type: 'solid'` means none. */
+	secondaryPattern: CreaturePatternDefinition;
+	underbelly: UnderbellyPatternDefinition;
+	accents: CreatureAccentRegion[];
+	roughness: number;
+	roughnessVariation: number;
+	/** 0 matte → 1 wet-looking. */
+	gloss: number;
+}
 export interface SpeciesAppearance {
 	palette: CreaturePalette;
+	surface?: CreatureSurfaceGenome;
 }
 export interface GaitDefinition {
 	walkFrequency: number;
@@ -379,8 +447,13 @@ export interface CreatureCompiledGeometry {
 	skinWeights: Float32Array;
 	colors: Float32Array;
 	uvs: Float32Array;
-	/** Per-vertex roughness and emissive amount, shared-material shading without extra draws. */
-	surface: Float32Array;
+	/**
+	 * Per vertex: roughness·1000, emissive·1000, surface-table slot (written at instantiation),
+	 * region id. Shared-material shading without extra draws.
+	 */
+	surface: Uint16Array;
+	/** Per vertex: longitudinal coordinate·1024, radial (dorsal +1 … ventral −1), mask A, mask B. */
+	surfacePattern: Uint16Array;
 }
 export type CreatureLod = 0 | 1 | 2;
 export interface CreatureBounds {
@@ -400,6 +473,12 @@ export interface CreatureCompilation {
 	bounds: CreatureBounds;
 	collision: CreatureCollisionDefinition;
 	lod: CreatureLod;
+	/** Resolved surface (palette + individual patterns); absent for the legacy comparison compiler. */
+	surface?: CreatureSurfaceDefinition;
+	/** Body scale patterns are sized against (torso path length). */
+	surfaceScale?: number;
+	/** Per-vertex underbelly/accent masks, only when compiled for Lab debug views. */
+	surfaceDebug?: { underbelly: Float32Array; accent: Float32Array };
 	fingerprint: string;
 }
 export type CreatureBehaviourState =

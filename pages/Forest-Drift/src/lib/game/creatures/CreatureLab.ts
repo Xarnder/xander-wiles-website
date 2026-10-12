@@ -14,6 +14,14 @@ import { generateIndividual } from './IndividualGenerator';
 import { resolveSpeciesForm } from './CreatureForm';
 import { validateCreatureAnatomy } from './CreatureAnatomyValidation';
 import { volumePath } from './SweptBodyVolume';
+import {
+	deriveSurfaceGenome,
+	patternFor,
+	resolveSurfaceGenome
+} from './surface/CreaturePatternGenerator';
+import { generateCreaturePalette } from './surface/CreaturePaletteGenerator';
+import { creatureSurfaceTable, type SurfaceDebugMode } from './surface/CreatureSurfaceTable';
+import { createMulberry32 } from '../terrain/seededRandom';
 import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
 import {
 	DEFAULT_GROUNDING_DEBUG,
@@ -27,6 +35,8 @@ import {
 } from './CreatureLabTerrain';
 import type {
 	BodyPlanId,
+	CreatureAccentRegion,
+	CreaturePatternType,
 	CreatureCompilation,
 	CreatureDefinition,
 	CreatureIntent,
@@ -58,6 +68,32 @@ export const DEFAULT_LAB_TUNING: CreatureLabTuning = {
 	eyeScale: 1,
 	muzzleScale: 1
 };
+/** Developer surface overrides (SURFACE panel). Unset fields keep the generated recipe. */
+export interface CreatureLabSurface {
+	primary?: CreaturePatternType;
+	secondary?: CreaturePatternType;
+	spotDensity?: number;
+	spotScale?: number;
+	stripeFrequency?: number;
+	mottleScale?: number;
+	underbellyWidth?: number;
+	underbellyBrightness?: number;
+	accents?: CreatureAccentRegion[];
+	roughness?: number;
+	/** Re-derives the whole surface recipe from another stream (Randomise Surface). */
+	surfaceSalt?: number;
+	/** Replaces the palette with a controlled random one (Randomise Palette). */
+	paletteSeed?: number;
+}
+export type CreatureSurfaceDebugView =
+	| 'none'
+	| 'regionIds'
+	| 'longitudinal'
+	| 'radial'
+	| 'underbelly'
+	| 'primaryMask'
+	| 'secondaryMask'
+	| 'accent';
 type LegacyCompile = (definition: CreatureDefinition, lod?: 0 | 1) => CreatureCompilation;
 const PLANS = ['quadruped', 'biped', 'hexapod', 'serpentine'] as const;
 
@@ -73,6 +109,8 @@ export class CreatureLab {
 	definition?: CreatureDefinition;
 	mode: CreatureLabMode = 'improved';
 	tuning: CreatureLabTuning = { ...DEFAULT_LAB_TUNING };
+	surfaceOverride: CreatureLabSurface = {};
+	surfaceDebug: CreatureSurfaceDebugView = 'none';
 	private legacy?: LegacyCompile;
 	private helpers = new THREE.Group();
 	private boneHelpers: THREE.Object3D[] = [];
@@ -152,6 +190,53 @@ export class CreatureLab {
 	}
 	/** Applies Lab tuning to a copy of the generated form, so placed creatures keep what you saw. */
 	private tuned(species: SpeciesGenome): SpeciesGenome {
+		return this.surfaced(this.formTuned(species));
+	}
+	/** Applies SURFACE panel overrides to a copy of the species' surface recipe and palette. */
+	private surfaced(species: SpeciesGenome): SpeciesGenome {
+		const o = this.surfaceOverride;
+		if (!Object.values(o).some((v) => v !== undefined)) return species;
+		const plan = species.bodyPlan.id;
+		const mid = (a: number, b: number) => (a + b) / 2;
+		const surface = structuredClone(
+			o.surfaceSalt ? deriveSurfaceGenome(species, o.surfaceSalt) : resolveSurfaceGenome(species)
+		);
+		if (o.primary && o.primary !== surface.primaryPattern.type)
+			surface.primaryPattern = patternFor(
+				o.primary,
+				plan,
+				mid,
+				o.primary === 'gradient'
+					? 'dark'
+					: surface.primaryPattern.tone === 'underbelly'
+						? 'light'
+						: surface.primaryPattern.tone
+			);
+		if (o.secondary && o.secondary !== surface.secondaryPattern.type)
+			surface.secondaryPattern = patternFor(o.secondary, plan, mid, 'dark');
+		for (const pattern of [surface.primaryPattern, surface.secondaryPattern]) {
+			const spotty = pattern.type === 'spots' || pattern.type === 'dorsal-spots';
+			if (spotty && o.spotDensity !== undefined) pattern.density = o.spotDensity;
+			if (spotty && o.spotScale !== undefined) pattern.scale = o.spotScale;
+			if (pattern.type === 'mottled' && o.mottleScale !== undefined) pattern.scale = o.mottleScale;
+			if (['stripes', 'bands'].includes(pattern.type) && o.stripeFrequency !== undefined)
+				pattern.frequency = o.stripeFrequency;
+		}
+		if (o.underbellyWidth !== undefined) surface.underbelly.width = o.underbellyWidth;
+		if (o.underbellyBrightness !== undefined)
+			surface.underbelly.brightness = o.underbellyBrightness;
+		if (o.accents) surface.accents = [...o.accents];
+		if (o.roughness !== undefined) surface.roughness = o.roughness;
+		const palette = { ...species.appearance.palette };
+		if (o.paletteSeed)
+			Object.assign(palette, generateCreaturePalette(createMulberry32(o.paletteSeed)));
+		return {
+			...species,
+			id: `${species.id}_lab_surface`,
+			appearance: { ...species.appearance, palette, surface }
+		};
+	}
+	private formTuned(species: SpeciesGenome): SpeciesGenome {
 		const t = this.tuning;
 		if (Object.entries(t).every(([k, v]) => v === DEFAULT_LAB_TUNING[k as keyof CreatureLabTuning]))
 			return species;
@@ -172,7 +257,7 @@ export class CreatureLab {
 		const compilation =
 			this.mode === 'current' && this.legacy
 				? this.legacy(definition, Math.min(1, lod) as 0 | 1)
-				: compileCreatureGeometry(definition, lod);
+				: compileCreatureGeometry(definition, lod, { surfaceDebug: true });
 		return instantiateCreature(compilation, this.material);
 	}
 	generate(
@@ -296,7 +381,7 @@ export class CreatureLab {
 		mode: CreatureLabMode = 'improved',
 		lod: CreatureLod = 0,
 		/** Terrain conformation on/off (off = the previous flat-ground posing) and the test ground. */
-		options: { grounding?: boolean; terrain?: LabTerrainSettings } = {}
+		options: { grounding?: boolean; terrain?: LabTerrainSettings; surface?: boolean } = {}
 	) {
 		if (![1, 10, 25, 50, 100].includes(count)) throw Error('Choose 1, 10, 25, 50 or 100 creatures');
 		const previous = this.mode;
@@ -323,6 +408,8 @@ export class CreatureLab {
 				this.scene.add(c.object);
 				creatures.push(c);
 				if (options.grounding) groundings.push(new CreatureGroundingController(c.compilation));
+				// surface: false = the plain material path (vertex colours only, no shader patterns).
+				if (options.surface === false) creatureSurfaceTable().setDebug(c.surfaceSlot, 1);
 				states.push(
 					createCreatureState({
 						id: individual.id,
@@ -434,6 +521,10 @@ export class CreatureLab {
 				animationMs: median(animation),
 				skinUpdateMs: median(skin),
 				grounding: !!options.grounding,
+				surface: options.surface !== false,
+				programs: this.renderer.info.programs?.length ?? 0,
+				textures: this.renderer.info.memory.textures,
+				surfaceTableRows: creatureSurfaceTable().used,
 				terrain: options.terrain?.kind ?? 'flat',
 				supportSolveMs: median(support),
 				surfaceCallsPerFrame: median(sampleCounts),
@@ -450,6 +541,7 @@ export class CreatureLab {
 							g.colors,
 							g.uvs,
 							g.surface,
+							g.surfacePattern,
 							g.skinIndices,
 							g.skinWeights,
 							g.indices
@@ -618,8 +710,23 @@ export class CreatureLab {
 					}
 				}
 				mesh.geometry.setAttribute('color', new THREE.BufferAttribute(a, 3));
+			} else if (this.surfaceDebugColors(c)) {
+				mesh.geometry.setAttribute(
+					'color',
+					new THREE.BufferAttribute(this.surfaceDebugColors(c)!, 3)
+				);
 			} else mesh.geometry.setAttribute('color', new THREE.BufferAttribute(g.colors, 3));
 		}
+		// Mask views are evaluated by the shader itself; CPU views show vertex colours only.
+		const mode: SurfaceDebugMode =
+			this.surfaceDebug === 'primaryMask'
+				? 2
+				: this.surfaceDebug === 'secondaryMask'
+					? 3
+					: this.surfaceDebug === 'none' || this.weights
+						? 0
+						: 1;
+		creatureSurfaceTable().setDebug(c.surfaceSlot, this.weights ? 1 : mode);
 		const rig = c.compilation.skeleton,
 			b = c.compilation.bounds;
 		const marker = Math.max(0.004, b.height * 0.012);
@@ -773,6 +880,29 @@ export class CreatureLab {
 				}
 			}
 		}
+	}
+	/** Per-vertex debug colours for the CPU surface views (region ids, coordinates, masks). */
+	private surfaceDebugColors(c: CompiledCreature): Float32Array | undefined {
+		const view = this.surfaceDebug,
+			g = c.compilation.geometry;
+		if (view === 'none' || view === 'primaryMask' || view === 'secondaryMask') return;
+		const count = g.positions.length / 3,
+			out = new Float32Array(count * 3),
+			tint = new THREE.Color();
+		for (let v = 0; v < count; v++) {
+			const u = (g.surfacePattern[v * 4] / 1024) % 1,
+				radial = g.surfacePattern[v * 4 + 1] / 65535;
+			if (view === 'regionIds') tint.setHSL((g.surface[v * 4 + 3] * 0.161) % 1, 0.7, 0.55);
+			else if (view === 'longitudinal') tint.setRGB(u, u * 0.6, 1 - u);
+			else if (view === 'radial') tint.setRGB(radial, 0.15, 1 - radial);
+			else {
+				const mask =
+					c.compilation.surfaceDebug?.[view === 'underbelly' ? 'underbelly' : 'accent'][v] ?? 0;
+				tint.setRGB(mask, mask, mask);
+			}
+			tint.toArray(out, v * 3);
+		}
+		return out;
 	}
 	/** GENERATE N: compiles, validates (incl. FLOATING_LIMB etc.) and disposes N species of a plan. */
 	async sample(count = 100, plan: BodyPlanId = 'quadruped') {

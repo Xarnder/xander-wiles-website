@@ -10,7 +10,7 @@ describe('versioned creature recipes', () => {
 		const a = generateSpecies(42);
 		expect(a).toEqual(generateSpecies(42));
 		expect(generateIndividual(a, 7)).toEqual(generateIndividual(JSON.parse(JSON.stringify(a)), 7));
-		expect(hashStringToUint32(JSON.stringify(a)) >>> 0).toMatchInlineSnapshot(`3840942121`);
+		expect(hashStringToUint32(JSON.stringify(a)) >>> 0).toMatchInlineSnapshot(`3118987960`);
 	});
 	it.each<BodyPlanId>(['quadruped', 'biped', 'hexapod', 'serpentine'])(
 		'validates 100 %s species and bounded related individuals',
@@ -29,7 +29,8 @@ describe('versioned creature recipes', () => {
 	it('varies silhouettes, palettes and size without mutating species', () => {
 		const species = Array.from({ length: 100 }, (_, i) => generateSpecies(i));
 		expect(new Set(species.map((s) => s.anatomy.signatureTraits[0])).size).toBe(4);
-		expect(new Set(species.map((s) => s.appearance.palette.pattern)).size).toBe(7);
+		// Quadruped surface signatures: one primary pattern each, drawn from a plan-biased set.
+		expect(new Set(species.map((s) => s.appearance.surface!.primaryPattern.type)).size).toBe(7);
 		const heights = species.map(
 			(s) =>
 				s.proportions.legLength +

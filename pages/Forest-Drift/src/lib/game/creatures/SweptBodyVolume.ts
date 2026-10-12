@@ -14,6 +14,8 @@ export interface RegionInfo {
 	part: CreaturePart;
 	/** Feature kind, foot type, limb id… used for colour blocking. */
 	kind: string;
+	/** Arc length of the swept path (bind pose), for longitudinal pattern coordinates. */
+	length?: number;
 }
 export interface GeometryAccumulator {
 	positions: number[];
@@ -25,6 +27,11 @@ export interface GeometryAccumulator {
 	region: number[];
 	/** Per-vertex position along its part, 0 = root/base, 1 = tip. */
 	params: number[];
+	/**
+	 * Per-vertex position around the part's cross-section: +1 dorsal (back), −1 ventral (belly),
+	 * from the swept ring angle rather than world height, so bends and upright torsos stay right.
+	 */
+	radial: number[];
 	regions: RegionInfo[];
 }
 export const geometryAccumulator = (): GeometryAccumulator => ({
@@ -35,6 +42,7 @@ export const geometryAccumulator = (): GeometryAccumulator => ({
 	uvs: [],
 	region: [],
 	params: [],
+	radial: [],
 	regions: []
 });
 export function regionIndex(out: GeometryAccumulator, part: CreaturePart, kind = ''): number {
@@ -290,9 +298,11 @@ function pushVertex(
 	u: number,
 	v: number,
 	region: number,
-	param: number
+	param: number,
+	radial = 0
 ) {
 	out.positions.push(p.x, p.y, p.z);
+	out.radial.push(radial);
 	const merged = new Map<number, number>();
 	for (const [bone, weight] of influences)
 		if (weight > 0) merged.set(bone, (merged.get(bone) ?? 0) + weight);
@@ -363,8 +373,26 @@ export function appendSweep(
 		options.skin ?? ((t: number) => jointBlendInfluence(boneIndices, t, volume.skinBlend ?? 0.5));
 	const start = out.positions.length / 3,
 		p = new Vector3();
+	// Dorsal reference in each ring's plane: world up projected onto it, blending to "back" (−Z)
+	// where the part is upright (a biped torso's back is dorsal, its belly faces forward).
+	const dorsal = (ring: SweepRing) => {
+		const un = ring.normal.y,
+			ub = ring.binormal.y;
+		const w = Math.min(1, (un * un + ub * ub) * 3);
+		const n = un * w - ring.normal.z * (1 - w),
+			b = ub * w - ring.binormal.z * (1 - w);
+		const length = Math.hypot(n, b) || 1;
+		return [n / length, b / length];
+	};
+	let length = 0;
+	for (let r = 1; r < rings.length; r++)
+		if (!rings[r].dome && !rings[r - 1].dome)
+			length += rings[r].center.distanceTo(rings[r - 1].center);
+	const info = out.regions[options.region];
+	if (info) info.length = Math.max(info.length ?? 0, length);
 	rings.forEach((ring, r) => {
 		const influences = skin(ring.t);
+		const [dn, db] = dorsal(ring);
 		for (let c = 0; c < sides; c++) {
 			const angle = (c / sides) * Math.PI * 2 + ring.rot;
 			pushVertex(
@@ -374,7 +402,8 @@ export function appendSweep(
 				c / sides,
 				ring.t,
 				options.region,
-				ring.t
+				ring.t,
+				Math.cos(angle) * dn + Math.sin(angle) * db
 			);
 			if (r < rings.length - 1) {
 				const here = start + r * sides + c,
@@ -389,16 +418,20 @@ export function appendSweep(
 		if (hard) {
 			base = out.positions.length / 3;
 			const influences = skin(ring.t);
-			for (let c = 0; c < sides; c++)
+			const [dn, db] = dorsal(ring);
+			for (let c = 0; c < sides; c++) {
+				const angle = (c / sides) * Math.PI * 2 + ring.rot;
 				pushVertex(
 					out,
-					ringPoint(ring, (c / sides) * Math.PI * 2 + ring.rot, p),
+					ringPoint(ring, angle, p),
 					influences,
 					c / sides,
 					ring.t,
 					options.region,
-					ring.t
+					ring.t,
+					Math.cos(angle) * dn + Math.sin(angle) * db
 				);
+			}
 		}
 		const centre = out.positions.length / 3;
 		pushVertex(
@@ -453,23 +486,22 @@ export function appendEllipsoid(out: GeometryAccumulator, o: EllipsoidOptions) {
 			.addScaledVector(a1, c * ring * r1 * (c < 0 ? (o.lowerScale ?? 1) : 1))
 			.addScaledVector(a2, sn * ring * r2);
 	};
-	pushVertex(out, at(-1, 0, 0), o.skin(-1), 0.5, 0, o.region, 0);
+	// Ellipsoids are small and roughly upright: radial is simply the outward direction's height.
+	const radial = (q: Vector3) => {
+		const d = q.distanceTo(o.centre);
+		return d > 1e-12 ? (q.y - o.centre.y) / d : 0;
+	};
+	pushVertex(out, at(-1, 0, 0), o.skin(-1), 0.5, 0, o.region, 0, radial(p));
 	for (let i = 1; i < o.rings; i++) {
 		const phi = (i / o.rings) * Math.PI,
 			s = -Math.cos(phi),
 			ring = Math.sin(phi);
-		for (let c = 0; c < o.sides; c++)
-			pushVertex(
-				out,
-				at(s, ring, (c / o.sides) * Math.PI * 2),
-				o.skin(s),
-				c / o.sides,
-				i / o.rings,
-				o.region,
-				(s + 1) / 2
-			);
+		for (let c = 0; c < o.sides; c++) {
+			const q = at(s, ring, (c / o.sides) * Math.PI * 2);
+			pushVertex(out, q, o.skin(s), c / o.sides, i / o.rings, o.region, (s + 1) / 2, radial(q));
+		}
 	}
-	pushVertex(out, at(1, 0, 0), o.skin(1), 0.5, 1, o.region, 1);
+	pushVertex(out, at(1, 0, 0), o.skin(1), 0.5, 1, o.region, 1, radial(p));
 	const first = start + 1,
 		apex = start + 1 + (o.rings - 1) * o.sides;
 	for (let c = 0; c < o.sides; c++) {

@@ -135,6 +135,7 @@ export function finishGeometry(
 		skinWeights: new Float32Array(out.skinWeights),
 		uvs: new Float32Array(out.uvs),
 		colors: new Float32Array(colors),
-		surface: new Float32Array((out.positions.length / 3) * 2)
+		surface: new Uint16Array((out.positions.length / 3) * 4),
+		surfacePattern: new Uint16Array((out.positions.length / 3) * 4)
 	};
 }

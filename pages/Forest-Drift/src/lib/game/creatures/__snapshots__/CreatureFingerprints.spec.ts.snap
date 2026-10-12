@@ -48,7 +48,7 @@ exports[`creature golden fingerprints > biped 3 1`] = `
     "hands": 2,
     "nose": 1,
   },
-  "fingerprint": "v1-24-1975-3680-3140da28",
+  "fingerprint": "v1-24-1975-3680-7df060f8",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -142,7 +142,7 @@ exports[`creature golden fingerprints > biped 42 1`] = `
     "hands": 2,
     "horns": 2,
   },
-  "fingerprint": "v1-24-1652-3092-7b166dce",
+  "fingerprint": "v1-24-1652-3092-898a812b",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -250,7 +250,7 @@ exports[`creature golden fingerprints > hexapod 11 1`] = `
     "nose": 1,
     "plates": 3,
   },
-  "fingerprint": "v1-30-2368-4446-641f16f9",
+  "fingerprint": "v1-30-2368-4446-3893ad26",
   "joints": 30,
   "keyJoints": {
     "chest": [
@@ -358,7 +358,7 @@ exports[`creature golden fingerprints > hexapod 42 1`] = `
     "nose": 1,
     "plates": 3,
   },
-  "fingerprint": "v1-30-1966-3654-436edb62",
+  "fingerprint": "v1-30-1966-3654-1434d8f5",
   "joints": 30,
   "keyJoints": {
     "chest": [
@@ -452,7 +452,7 @@ exports[`creature golden fingerprints > quadruped 7 1`] = `
     "nose": 1,
     "spikes": 6,
   },
-  "fingerprint": "v1-24-1902-3578-ab5b73aa",
+  "fingerprint": "v1-24-1902-3578-c01fc322",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -547,7 +547,7 @@ exports[`creature golden fingerprints > quadruped 42 1`] = `
     "feet": 4,
     "nose": 1,
   },
-  "fingerprint": "v1-24-1712-3190-69b54a48",
+  "fingerprint": "v1-24-1712-3190-c3c5b775",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -611,7 +611,7 @@ exports[`creature golden fingerprints > serpentine 5 1`] = `
     "fins": 6,
     "plates": 8,
   },
-  "fingerprint": "v1-18-1523-2876-78f80d66",
+  "fingerprint": "v1-18-1523-2876-371aa999",
   "joints": 18,
   "keyJoints": {
     "head": [
@@ -664,7 +664,7 @@ exports[`creature golden fingerprints > serpentine 42 1`] = `
     "fins": 6,
     "frills": 5,
   },
-  "fingerprint": "v1-16-1334-2522-290fb62d",
+  "fingerprint": "v1-16-1334-2522-24816ad8",
   "joints": 16,
   "keyJoints": {
     "head": [

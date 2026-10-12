@@ -1,0 +1,174 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`surface golden fingerprints > biped 3 1`] = `
+{
+  "accents": [
+    "feet",
+    "hands",
+    "ears",
+    "horns",
+    "fins",
+    "spines",
+    "plates",
+    "frills",
+    "antennae",
+    "tail-tip",
+  ],
+  "palette": {
+    "accent": "#6dc95a",
+    "eye": "#170f1a",
+    "primary": "#a759c5",
+    "secondary": "#743097",
+    "underbelly": "#ecd6d5",
+  },
+  "primary": "gradient",
+  "samples": {
+    "primary": [
+      0.983,
+      0.33,
+      0,
+      0.774,
+    ],
+    "secondary": null,
+  },
+  "secondary": "solid",
+  "seed": 3917184594,
+  "underbelly": {
+    "brightness": 0.06315893771126867,
+    "segmented": false,
+    "softness": 0.12039929198101162,
+    "strength": 0.7759384546428919,
+    "width": 0.3175131234666333,
+  },
+}
+`;
+
+exports[`surface golden fingerprints > hexapod 11 1`] = `
+{
+  "accents": [
+    "feet",
+    "hands",
+    "horns",
+    "spines",
+    "plates",
+    "frills",
+    "tail-tip",
+  ],
+  "palette": {
+    "accent": "#4d64c2",
+    "eye": "#1a160f",
+    "primary": "#a37c39",
+    "secondary": "#664720",
+    "underbelly": "#eee5d1",
+  },
+  "primary": "bands",
+  "samples": {
+    "primary": [
+      0,
+      0,
+      0,
+      1,
+    ],
+    "secondary": null,
+  },
+  "secondary": "solid",
+  "seed": 1780349422,
+  "underbelly": {
+    "brightness": 0.06790389807894825,
+    "segmented": false,
+    "softness": 0.17993074267171322,
+    "strength": 0.8965856014401652,
+    "width": 0.31833297525066884,
+  },
+}
+`;
+
+exports[`surface golden fingerprints > quadruped 42 1`] = `
+{
+  "accents": [
+    "feet",
+    "hands",
+    "ears",
+    "fins",
+    "spines",
+    "plates",
+    "frills",
+    "antennae",
+    "tail-tip",
+  ],
+  "palette": {
+    "accent": "#cd6a6c",
+    "eye": "#121a0f",
+    "primary": "#51b43f",
+    "secondary": "#377726",
+    "underbelly": "#edeedb",
+  },
+  "primary": "mottled",
+  "samples": {
+    "primary": [
+      0.346,
+      1,
+      0,
+      0.614,
+    ],
+    "secondary": [
+      0,
+      1,
+      1,
+      1,
+    ],
+  },
+  "secondary": "limb-bands",
+  "seed": 4124768270,
+  "underbelly": {
+    "brightness": 0.07833228792995214,
+    "segmented": false,
+    "softness": 0.16152591121383011,
+    "strength": 0.5554673400474712,
+    "width": 0.33874905207660055,
+  },
+}
+`;
+
+exports[`surface golden fingerprints > serpentine 5 1`] = `
+{
+  "accents": [
+    "feet",
+    "hands",
+    "ears",
+    "horns",
+    "fins",
+    "spines",
+    "plates",
+    "frills",
+    "antennae",
+    "tail-tip",
+  ],
+  "palette": {
+    "accent": "#54d4b4",
+    "eye": "#1a180f",
+    "primary": "#b9b540",
+    "secondary": "#7c7427",
+    "underbelly": "#efebd7",
+  },
+  "primary": "back-stripe",
+  "samples": {
+    "primary": [
+      1,
+      0.623,
+      0,
+      1,
+    ],
+    "secondary": null,
+  },
+  "secondary": "solid",
+  "seed": 1771545347,
+  "underbelly": {
+    "brightness": 0.026868614107370375,
+    "segmented": true,
+    "softness": 0.2062797400681302,
+    "strength": 0.8557895071571693,
+    "width": 0.2931227683462203,
+  },
+}
+`;

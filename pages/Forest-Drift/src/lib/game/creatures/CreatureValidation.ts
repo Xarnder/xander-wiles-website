@@ -1,6 +1,7 @@
 import type { SpeciesGenome } from './CreatureTypes';
 import { validateSpeciesForm } from './CreatureForm';
 import { validateTerrainLocomotion } from './CreatureTerrainProfile';
+import { validateSurfaceGenome } from './surface/CreaturePatternGenerator';
 
 type RecordValue = Record<string, unknown>;
 const object = (v: unknown): v is RecordValue => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -83,6 +84,10 @@ export function validateSpecies(value: unknown): string | null {
 		)
 	)
 		return 'Invalid palette';
+	if (s.appearance.surface !== undefined) {
+		const surfaceError = validateSurfaceGenome(s.appearance.surface);
+		if (surfaceError) return surfaceError;
+	}
 	if (
 		!object(s.locomotion) ||
 		!fields(s.locomotion.gait, ['walkFrequency', 'runFrequency'], 0.01, 20) ||

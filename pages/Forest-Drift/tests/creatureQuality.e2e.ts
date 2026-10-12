@@ -73,6 +73,22 @@ test('improved creatures: 100 species per plan validate, overlays render, poses 
 		for (const toggle of ['limbRoots', 'attachmentVolumes'])
 			await page.getByTestId(`creature-debug-${toggle}`).uncheck();
 	}
+	// SURFACE panel: pattern override, shader mask debug view, controlled random palette.
+	await expect(page.getByTestId('creature-surface')).toBeVisible();
+	await page.getByTestId('creature-surface-pattern').selectOption('spots');
+	await page.getByTestId('creature-surface-debug').selectOption('primaryMask');
+	await page.getByRole('button', { name: 'Randomise Palette', exact: true }).click();
+	const surface = await page.evaluate(() => {
+		const c = (window as unknown as LabWindow).creatureLab.creature!;
+		return { type: c.compilation.surface?.primaryPattern.type, slot: c.surfaceSlot };
+	});
+	expect(surface.type).toBe('spots');
+	expect(surface.slot).toBeGreaterThan(0);
+	await page
+		.getByTestId('creature-viewport')
+		.locator('canvas')
+		.screenshot({ path: 'test-results/creature-quality-surface-mask.png' });
+	await page.getByRole('button', { name: 'Reset surface', exact: true }).click();
 	// CURRENT (frozen pre-rewrite generator) remains available for side-by-side comparison.
 	await page.getByTestId('creature-mode').selectOption('current');
 	await expect
@@ -137,6 +153,24 @@ test('creature rendering cost: CURRENT vs IMPROVED, 1/10/25/50/100 creatures', a
 			expect(result.fps).toBeGreaterThan(0);
 			grounding.push(result);
 		}
+	// Procedural surface: plain vertex colours vs patterns in the shared shader.
+	const surfaces = [];
+	for (const count of [1, 10, 25, 50, 100])
+		for (const surface of [false, true]) {
+			const result = await page.evaluate(
+				({ count, surface }) =>
+					(window as unknown as LabWindow).creatureLab.benchmark(count, 'improved', 0, { surface }),
+				{ count, surface }
+			);
+			// One draw per creature, and patterns never multiply shader programs.
+			expect(result.drawCalls).toBeLessThanOrEqual(count + 2);
+			expect(result.programs).toBeLessThanOrEqual(4);
+			surfaces.push(result);
+		}
+	await writeFile(
+		info.outputPath('creature-surface-performance.json'),
+		JSON.stringify({ renderer, results: surfaces }, null, 2)
+	);
 	await writeFile(
 		info.outputPath('creature-grounding-performance.json'),
 		JSON.stringify({ renderer, results: grounding }, null, 2)

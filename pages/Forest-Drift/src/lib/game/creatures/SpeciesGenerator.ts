@@ -7,7 +7,23 @@ import type {
 } from './CreatureTypes';
 import { deriveSpeciesForm, traitFeatures } from './CreatureForm';
 import { deriveTerrainLocomotion } from './CreatureTerrainProfile';
+import { deriveSurfaceGenome } from './surface/CreaturePatternGenerator';
 
+const LEGACY_PATTERN: Record<
+	NonNullable<SpeciesGenome['appearance']['surface']>['primaryPattern']['type'],
+	CreaturePattern
+> = {
+	solid: 'solid',
+	spots: 'spots',
+	'dorsal-spots': 'spots',
+	mottled: 'spots',
+	stripes: 'stripe',
+	'back-stripe': 'stripe',
+	bands: 'bands',
+	'limb-bands': 'limb-tips',
+	gradient: 'gradient',
+	underbelly: 'belly'
+};
 /**
  * V1 dimensions are reference metres; scaleRange bounds individual.sizeFactor, not height.
  * The draw order of `rng` is part of species identity (proportions, primary colour, name): new
@@ -192,5 +208,9 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 	];
 	species.form = form;
 	species.locomotion.terrain = deriveTerrainLocomotion(species);
+	// Surface pattern recipe (own named stream). palette.pattern mirrors it for older readers.
+	const surface = deriveSurfaceGenome(species);
+	species.appearance.surface = surface;
+	species.appearance.palette.pattern = LEGACY_PATTERN[surface.primaryPattern.type];
 	return species;
 }

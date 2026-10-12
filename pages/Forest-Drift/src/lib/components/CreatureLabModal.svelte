@@ -5,8 +5,14 @@
 		CreatureLab,
 		DEFAULT_LAB_TUNING,
 		type CreatureLabMode,
-		type CreatureLabTuning
+		type CreatureLabSurface,
+		type CreatureLabTuning,
+		type CreatureSurfaceDebugView
 	} from '../game/creatures/CreatureLab';
+	import {
+		ACCENT_REGIONS,
+		PATTERN_TYPES
+	} from '../game/creatures/surface/CreaturePatternGenerator';
 	import type {
 		BodyPlanId,
 		CreatureDefinition,
@@ -73,9 +79,66 @@
 		busy = $state(false),
 		name = $state(''),
 		stats = $state('');
+	// SURFACE panel: unset values keep the generated recipe; a slider only overrides once moved.
+	const surface = $state<CreatureLabSurface>({});
+	let surfaceDebug = $state<CreatureSurfaceDebugView>('none');
+	const surfaceSliders: {
+		key:
+			| 'spotDensity'
+			| 'spotScale'
+			| 'stripeFrequency'
+			| 'mottleScale'
+			| 'underbellyWidth'
+			| 'underbellyBrightness'
+			| 'roughness';
+		label: string;
+		min: number;
+		max: number;
+		step: number;
+		fallback: number;
+	}[] = [
+		{ key: 'spotDensity', label: 'Spot density', min: 0.05, max: 0.6, step: 0.01, fallback: 0.3 },
+		{ key: 'spotScale', label: 'Spot scale', min: 1, max: 6, step: 0.1, fallback: 3 },
+		{ key: 'stripeFrequency', label: 'Stripe frequency', min: 1, max: 16, step: 0.5, fallback: 6 },
+		{ key: 'mottleScale', label: 'Mottle scale', min: 0.5, max: 3, step: 0.1, fallback: 1.6 },
+		{
+			key: 'underbellyWidth',
+			label: 'Underbelly width',
+			min: 0,
+			max: 0.6,
+			step: 0.01,
+			fallback: 0.28
+		},
+		{
+			key: 'underbellyBrightness',
+			label: 'Underbelly brightness',
+			min: 0,
+			max: 0.2,
+			step: 0.01,
+			fallback: 0.04
+		},
+		{ key: 'roughness', label: 'Roughness', min: 0.3, max: 1, step: 0.01, fallback: 0.8 }
+	];
+	const surfaceDebugViews: CreatureSurfaceDebugView[] = [
+		'none',
+		'regionIds',
+		'longitudinal',
+		'radial',
+		'underbelly',
+		'primaryMask',
+		'secondaryMask',
+		'accent'
+	];
+	function applySurface() {
+		lab.surfaceOverride = $state.snapshot(surface) as CreatureLabSurface;
+		lab.surfaceDebug = surfaceDebug;
+		generate();
+	}
 	function generate() {
 		try {
 			lab.tuning = { ...tuning };
+			lab.surfaceOverride = $state.snapshot(surface) as CreatureLabSurface;
+			lab.surfaceDebug = surfaceDebug;
 			const d = lab.generate(speciesSeed, individualSeed, plan, scale, lod);
 			name = `${d.species.name} · ${d.species.anatomy.signatureTraits.slice(1, -1).join(' · ')}`;
 			error = '';
@@ -300,6 +363,89 @@
 								lab.gait = gait;
 								lab.showGallery(plan, speciesSeed, 12, 4, lod);
 							}}>Gallery: 12 species</button
+						>
+					</fieldset>
+					<fieldset data-testid="creature-surface">
+						<legend>Surface (developer)</legend>
+						<label
+							>Pattern<select
+								data-testid="creature-surface-pattern"
+								bind:value={surface.primary}
+								onchange={applySurface}
+								><option value={undefined}>Generated</option
+								>{#each PATTERN_TYPES as type (type)}<option value={type}>{type}</option
+									>{/each}</select
+							></label
+						>
+						<label
+							>Secondary pattern<select bind:value={surface.secondary} onchange={applySurface}
+								><option value={undefined}>Generated</option
+								>{#each PATTERN_TYPES as type (type)}<option value={type}>{type}</option
+									>{/each}</select
+							></label
+						>
+						{#each surfaceSliders as slider (slider.key)}
+							<label
+								>{slider.label}
+								{surface[slider.key] === undefined
+									? '(generated)'
+									: surface[slider.key]?.toFixed(2)}<input
+									type="range"
+									min={slider.min}
+									max={slider.max}
+									step={slider.step}
+									value={surface[slider.key] ?? slider.fallback}
+									onchange={(e) => {
+										surface[slider.key] = Number(e.currentTarget.value);
+										applySurface();
+									}}
+								/></label
+							>
+						{/each}
+						<div class="toggles">
+							{#each ACCENT_REGIONS as region (region)}<label
+									><input
+										type="checkbox"
+										checked={surface.accents ? surface.accents.includes(region) : true}
+										onchange={(e) => {
+											const current = surface.accents ?? [...ACCENT_REGIONS];
+											surface.accents = e.currentTarget.checked
+												? [...current, region]
+												: current.filter((r) => r !== region);
+											applySurface();
+										}}
+									/>{region}</label
+								>{/each}
+						</div>
+						<label
+							>Surface debug<select
+								data-testid="creature-surface-debug"
+								bind:value={surfaceDebug}
+								onchange={applySurface}
+								>{#each surfaceDebugViews as view (view)}<option value={view}>{view}</option
+									>{/each}</select
+							></label
+						>
+						<div class="pair">
+							<button
+								onclick={() => {
+									surface.surfaceSalt = (surface.surfaceSalt ?? 0) + 1;
+									applySurface();
+								}}>Randomise Surface</button
+							><button
+								onclick={() => {
+									surface.paletteSeed = ((surface.paletteSeed ?? 0) + 2654435761) >>> 0 || 1;
+									applySurface();
+								}}>Randomise Palette</button
+							>
+						</div>
+						<button
+							onclick={() => {
+								for (const key of Object.keys(surface))
+									delete surface[key as keyof CreatureLabSurface];
+								surfaceDebug = 'none';
+								applySurface();
+							}}>Reset surface</button
 						>
 					</fieldset>
 				{/if}
