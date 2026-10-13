@@ -1,13 +1,13 @@
 import type { BuildingGridPoint } from './FoundationLocalMath';
 
 /**
- * Shared "press C to snap" behavior for every tool that draws a sequence of foundation-local grid
+ * Shared "press B to snap" behavior for every tool that draws a sequence of foundation-local grid
  * points — Wall Tool, Polygon/Continuous Wall Tool, and the Ceiling/Floor/Flat Roof tools (all
  * three via `SlabToolBase`). Framework- and Three.js-free, same rule as every other math module in
  * this project, so the snapping decision is directly unit-testable independent of any one tool's
  * raycasting/rendering.
  *
- * Four modes, cycled by repeatedly pressing `C`:
+ * Four modes, cycled by repeatedly pressing `B`:
  * - `'off'` — the raw grid-snapped hover point is used as-is (today's behavior).
  * - `'axis'` — the segment from the last confirmed point is forced to be perfectly horizontal or
  *   vertical (whichever the raw drag direction is closer to), instead of an arbitrary diagonal.
@@ -52,7 +52,7 @@ export function cycleSnapMode(
 /**
  * Polygon Wall Tool starts on `'axis'` each time it is selected. `'axis-inline'` only differs once
  * 3 points exist, so if the player left the default on, step them up automatically at that count.
- * Any other mode (they pressed `C`) is left alone.
+ * Any other mode (they pressed `B`) is left alone.
  */
 export function autoPromotePolygonWallSnap(mode: SnapMode, confirmedPointCount: number): SnapMode {
 	if (mode === 'axis' && confirmedPointCount >= 3) return 'axis-inline';

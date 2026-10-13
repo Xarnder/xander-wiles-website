@@ -66,6 +66,7 @@ describe('bounded creature runtime', () => {
 				const r = c.logical.get(id)!;
 				const distance = Math.hypot(80 - r.position.x, 0 - r.position.z);
 				if (distance < 40 || !c.grounding.has(id)) continue;
+				if (r.spawn.species.bodyPlan.id === 'serpentine') continue;
 				live.compiled.object.updateMatrix();
 				const e = live.compiled.object.matrix.elements;
 				const face = Math.atan2(e[8], e[10]);

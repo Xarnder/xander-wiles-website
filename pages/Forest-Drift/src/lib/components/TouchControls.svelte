@@ -173,7 +173,7 @@
 	}
 
 	function onToggleSnap() {
-		scene?.simulateKey('KeyC');
+		scene?.simulateKey('KeyB');
 	}
 
 	function onRotate() {

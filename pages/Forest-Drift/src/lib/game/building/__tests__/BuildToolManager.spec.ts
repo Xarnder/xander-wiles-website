@@ -115,7 +115,12 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	const removeTool = makeFakeTool();
 	const paintTool = makeFakeTool('paint');
 	const moveTool = makeFakeTool('move');
-	const musicTool = makeFakeTool('music');
+	const musicTool = Object.assign(makeFakeTool('music'), {
+		speciesIndex: 0,
+		selectSpecies(index: number) {
+			this.speciesIndex = index;
+		}
+	});
 	const polyWallTool = makeFakeTool('polygon-wall');
 	const wallTool = makeFakeTool('wall');
 	const doorTool = makeFakeTool('door');
@@ -133,6 +138,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		variantIndex?: number;
 		variantCount?: number;
 		furnitureKind?: string;
+		musicActiveSlot?: number;
 	}[] = [];
 	const buildToolManager = new BuildToolManager({
 		domElement: domElement as unknown as HTMLElement,
@@ -163,7 +169,8 @@ function buildHarness(pointerLocked: { value: boolean }) {
 				label: active?.label,
 				variantIndex: active?.variantIndex,
 				variantCount: active?.variantCount,
-				furnitureKind: active?.furnitureKind
+				furnitureKind: active?.furnitureKind,
+				musicActiveSlot: state.musicActiveSlot
 			});
 		}
 	});
@@ -543,7 +550,25 @@ describe('Music global mode', () => {
 		h.key('KeyN');
 		expect(h.removeTool.deactivateCount).toBe(1);
 		h.key('Digit1');
+		expect(h.musicTool.deactivateCount).toBe(1);
+		expect(h.musicTool.speciesIndex).toBe(0);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('music');
+		h.key('Escape');
 		expect(h.musicTool.deactivateCount).toBe(2);
+		h.buildToolManager.dispose();
+	});
+
+	it('number keys 1–5 pick an instrument and stay in Compose Mode', () => {
+		const h = buildHarness({ value: true });
+		h.key('KeyN');
+		h.key('Digit3');
+		expect(h.musicTool.speciesIndex).toBe(2);
+		expect(h.musicTool.deactivateCount).toBe(0);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('music');
+		expect(h.hotbarStates.at(-1)?.musicActiveSlot).toBe(3);
+		h.key('Digit8');
+		expect(h.musicTool.deactivateCount).toBe(0);
+		expect(h.hotbarStates.at(-1)?.globalMode).toBe('music');
 		h.buildToolManager.dispose();
 	});
 });

@@ -8,6 +8,7 @@
 		paintModeActive?: boolean;
 		moveModeActive?: boolean;
 		musicModeActive?: boolean;
+		showGlobalModes?: boolean;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
 		onTogglePaintMode?: () => void;
@@ -21,6 +22,7 @@
 		paintModeActive = false,
 		moveModeActive = false,
 		musicModeActive = false,
+		showGlobalModes = true,
 		onSelectSlot,
 		onToggleRemoveMode,
 		onTogglePaintMode,
@@ -99,7 +101,13 @@
 				!paintModeActive &&
 				!moveModeActive &&
 				!musicModeActive}
-			data-testid={slot.toolId !== 'none' ? `hotbar-slot-${slot.toolId}` : undefined}
+			data-testid={
+				slot.hotbarId
+					? `hotbar-slot-${slot.hotbarId}`
+					: slot.toolId !== 'none'
+						? `hotbar-slot-${slot.toolId}`
+						: undefined
+			}
 			onclick={() => onSelectSlot?.(slot.slot)}
 			aria-label={slot.variantCount > 1
 				? `${slot.label} (slot ${slot.slot}, ${slot.variantIndex + 1} of ${slot.variantCount} — up/down to switch)`
@@ -128,7 +136,9 @@
 
 	<!-- Deliberately outside the numbered-slot loop above — Remove Mode and Paint Mode are global
 	     overlays, not hotbar selections, so neither ever takes a slot number (see
-	     BuildToolManager's class doc comment). -->
+	     BuildToolManager's class doc comment). The music hotbar hides these; its slots are the
+	     instruments. -->
+	{#if showGlobalModes}
 	<button
 		type="button"
 		class="slot remove-slot"
@@ -167,6 +177,7 @@
 		<span class="slot-number">M</span>
 		<span class="slot-label" use:autoScale={'Move'}>Move</span>
 	</button>
+	{/if}
 </div>
 
 <style>

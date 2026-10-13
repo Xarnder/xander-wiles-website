@@ -181,16 +181,40 @@ export function decideCreature(
 		state.intent.heading = Math.atan2(velocity.x, velocity.z);
 	state.intent.gait = safe ? (state.state === 'FLEE' ? 'run' : 'walk') : 'idle';
 }
-/** Shortest-angle turn toward `intent.heading`, spread across render frames. */
+/**
+ * Fastest yaw (rad/s) that still reads as a step, not a spin.
+ * Longer bodies take a wider arc. Serpents steer the head; the body has to be able to follow
+ * that curve, so their radius stays about half a body length.
+ */
+export function maxYawRate(state: CreatureRuntimeDefinition): number {
+	const dims = creatureDimensions(state.spawn.species, state.spawn.individual.sizeFactor);
+	const length = Math.max(0.45, dims.radius * 2);
+	const speed = Math.hypot(state.intent.velocity.x, state.intent.velocity.z);
+	const serpent = state.spawn.species.bodyPlan.id === 'serpentine';
+	const pace = state.intent.gait === 'run' ? 1.7 : state.intent.gait === 'walk' ? 1.05 : 0.65;
+	const minRadius = serpent ? Math.max(0.35, length * 0.48) : Math.max(0.22, length * 0.2);
+	const moving = speed > 0.04 ? speed / minRadius : pace * 0.55;
+	const limit = Math.min(pace, Math.max(serpent ? 0.28 : 0.4, moving));
+	return serpent ? Math.min(limit, 0.85) : limit;
+}
+
+/** Shortest-angle turn toward `intent.heading`, capped so a new direction is an arc. */
 export function turnCreature(state: CreatureRuntimeDefinition, dt: number): void {
 	if (!Number.isFinite(dt) || dt <= 0) return;
 	if (!Number.isFinite(state.heading) || !Number.isFinite(state.intent.heading)) return;
+	const speed = Math.hypot(state.intent.velocity.x, state.intent.velocity.z);
+	// Standing still does not swivel the whole body. The head still looks via `lookTarget`.
+	if (speed < 0.02) {
+		state.intent.angularVelocity = 0;
+		return;
+	}
 	const delta = Math.atan2(
 		Math.sin(state.intent.heading - state.heading),
 		Math.cos(state.intent.heading - state.heading)
 	);
-	// Same ~6 rad/s response as before, but applied per frame so a correction does not land in one tick.
-	const turn = delta * (1 - Math.exp(-6 * dt));
+	const maxStep = maxYawRate(state) * dt;
+	const eased = delta * (1 - Math.exp(-3 * dt));
+	const turn = Math.max(-maxStep, Math.min(maxStep, eased));
 	const next = state.heading + turn;
 	state.heading = Math.atan2(Math.sin(next), Math.cos(next));
 	state.intent.angularVelocity = turn / dt;
@@ -209,10 +233,14 @@ export function advanceCreature(
 	const v = state.intent.velocity;
 	const elapsed = Math.min(dt, 0.25),
 		speed = Math.hypot(v.x, v.z);
+	// Travel where the body is facing. `intent.velocity` is only the direction being steered toward,
+	// so a new target becomes a curve instead of a sideways slide while the mesh yaws.
+	const moveX = Math.sin(state.heading) * speed,
+		moveZ = Math.cos(state.heading) * speed;
 	const steps = Math.max(1, Math.ceil((speed * elapsed) / Math.max(0.1, dims.radius * 0.35)));
 	for (let i = 0; i < steps; i++) {
-		const x = state.position.x + (v.x * elapsed) / steps,
-			z = state.position.z + (v.z * elapsed) / steps;
+		const x = state.position.x + (moveX * elapsed) / steps,
+			z = state.position.z + (moveZ * elapsed) / steps;
 		const y = creatureSurface(access, x, z, dims.radius, dims.height, slopeLimit(state));
 		const radius = Math.max(state.spawn.species.behaviour.wanderRadius, dims.radius * 3);
 		if (

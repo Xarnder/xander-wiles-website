@@ -1,4 +1,4 @@
-import { Bone, Quaternion, Vector3 } from 'three';
+import { Bone, Matrix4, Quaternion, Vector3 } from 'three';
 import type { CompiledCreature } from './CreatureCompiler';
 import type { CreatureIntent, CreatureLod, LimbRigDefinition } from './CreatureTypes';
 import { groundingStats, type CreatureGroundingController } from './CreatureGrounding';
@@ -198,6 +198,7 @@ export function animateCreature(
 			}
 	}
 	if (grounding) applyTerrainCompensation(creature, grounding);
+	if (grounding?.serpentine) poseSerpent(creature, grounding, s);
 	creature.object.updateMatrixWorld(true);
 	if (grounding && (lod < 2 || serpentine)) {
 		for (const leg of grounding.legs) {
@@ -244,36 +245,59 @@ export function animateCreature(
 	creature.skeleton.update();
 }
 
+const serpentBasis = new Matrix4();
+
+/** Places each spine joint on the head's trail so the body follows the path instead of yawing as one piece. */
+function poseSerpent(
+	creature: CompiledCreature,
+	grounding: CreatureGroundingController,
+	s: PoseScratch
+) {
+	const ids = grounding.serpentJointIds;
+	if (!ids.length) return;
+	creature.object.updateMatrixWorld(true);
+	const ahead = s.e.set(0, 0, 1).applyQuaternion(creature.object.quaternion);
+	let parent = creature.bonesById.get('root') ?? creature.object;
+	for (let j = 0; j < ids.length; j++) {
+		const bone = creature.bonesById.get(ids[j]);
+		if (!bone) continue;
+		parent.updateMatrixWorld(true);
+		s.c.set(grounding.serpentPathX[j], grounding.serpentPathY[j], grounding.serpentPathZ[j]);
+		if (j + 1 < ids.length)
+			s.d.set(
+				grounding.serpentPathX[j + 1],
+				grounding.serpentPathY[j + 1],
+				grounding.serpentPathZ[j + 1]
+			);
+		else s.d.copy(s.c).add(ahead);
+		s.b.copy(s.d).sub(s.c);
+		if (s.b.lengthSq() < 1e-8) s.b.copy(ahead);
+		s.b.normalize();
+		s.a.set(0, 1, 0).cross(s.b);
+		if (s.a.lengthSq() < 1e-8) s.a.set(1, 0, 0);
+		else s.a.normalize();
+		s.up.crossVectors(s.b, s.a).normalize();
+		serpentBasis.makeBasis(s.a, s.up, s.b);
+		s.q.setFromRotationMatrix(serpentBasis);
+		parent.getWorldQuaternion(s.r);
+		bone.quaternion.copy(s.r.invert()).multiply(s.q);
+		parent.worldToLocal(s.c);
+		bone.position.copy(s.c);
+		bone.updateMatrixWorld(true);
+		parent = bone;
+	}
+}
+
 /**
- * Terrain-driven bone offsets: serpent spines follow their smoothed support curve; neck, head and
- * (for upright plans) the upper torso partly counter the body's slope pitch/roll so heads stay level.
+ * Terrain-driven bone offsets: neck and head partly counter the body's slope so heads stay level.
+ * A serpent's spine is posed along its trail separately.
  */
 function applyTerrainCompensation(
 	creature: CompiledCreature,
 	grounding: CreatureGroundingController
 ) {
 	const terrain = grounding.terrain;
-	if (grounding.serpentine) {
-		const ids = grounding.serpentJointIds,
-			z = grounding.serpentJointZ,
-			offsets = grounding.serpentOffsets;
-		const limit = terrain.maxWalkSlope;
-		let previous = 0;
-		for (let j = 0; j < ids.length; j++) {
-			const bone = creature.bonesById.get(ids[j]);
-			if (!bone) continue;
-			if (j === 0) bone.position.y += offsets[0];
-			if (j === ids.length - 1) break;
-			const slope = clamp(
-				Math.atan2(offsets[j + 1] - offsets[j], Math.max(1e-5, z[j + 1] - z[j])),
-				-limit,
-				limit
-			);
-			// Absolute segment pitch accumulates down the chain: local = this pitch minus the parent's.
-			bone.rotation.x += -(slope - previous);
-			previous = slope;
-		}
-	}
+	// Serpent spines are placed on the head's trail in `poseSerpent`. Pitch lives in that curve.
 	const pitch = grounding.bodyPitch,
 		roll = grounding.bodyRoll;
 	if (!pitch && !roll) return;

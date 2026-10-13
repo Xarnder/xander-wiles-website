@@ -113,17 +113,17 @@ export class WallTool implements BuildTool {
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	/**
-	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'axis-inline'` every time the
+	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Defaults to `'axis-inline'` every time the
 	 * tool is activated (see `activate()`) rather than persisting the player's last choice, per the
 	 * README's "Draw-snap" section; a straight wall never accumulates the 3+ points `'axis-inline'`
 	 * needs to differ from plain `'axis'`, so in practice this just starts the player on axis-locked
-	 * placement, one `C` press away from `'off'` (`cycleSnapMode('axis-inline', ...)` goes straight
+	 * placement, one `B` press away from `'off'` (`cycleSnapMode('axis-inline', ...)` goes straight
 	 * to `'off'` since `wallCornersAvailable` is never passed here).
 	 */
 	private snapMode: SnapMode = 'axis-inline';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || event.code !== 'KeyC') return;
+		if (!this.active || event.code !== 'KeyB') return;
 		this.snapMode = cycleSnapMode(this.snapMode, this.firstPoint ? 1 : 0);
 		this.refreshVisuals();
 	};
@@ -557,7 +557,7 @@ export class WallTool implements BuildTool {
 				`Grid: ${this.buildingSettings.buildingGridSize.toFixed(2)}m`,
 				'Left click: Select start point',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E customise'
 			]
 		};
@@ -576,7 +576,7 @@ export class WallTool implements BuildTool {
 				'',
 				'Select end point',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -596,7 +596,7 @@ export class WallTool implements BuildTool {
 				reason,
 				'',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'Right click: Cancel'
 			]
 		};
@@ -618,7 +618,7 @@ export class WallTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Left click: Build',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E customise',
 				'Right click: Cancel'
 			]

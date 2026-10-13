@@ -343,7 +343,12 @@ export class CreatureGroundingController {
 	readonly serpentHeights: Float64Array;
 	readonly serpentJointIds: string[] = [];
 	readonly serpentJointZ: number[] = [];
+	readonly serpentJointY: number[] = [];
 	readonly serpentOffsets: Float64Array;
+	/** World pose of each spine joint, tail → head. The head is the tracked point; the body trails it. */
+	readonly serpentPathX: Float64Array;
+	readonly serpentPathY: Float64Array;
+	readonly serpentPathZ: Float64Array;
 	private fallbackAt = new Vector3(Infinity, 0, Infinity);
 	private fallbackAge = Infinity;
 	private readonly footprint = { front: 0, back: 0, half: 0 };
@@ -452,12 +457,19 @@ export class CreatureGroundingController {
 		const spine = skeleton.joints.filter((j) => j.semantic === 'spine');
 		if (this.serpentine)
 			for (const j of spine) {
+				const p = world.get(j.id)!;
 				this.serpentJointIds.push(j.id);
-				this.serpentJointZ.push(world.get(j.id)!.z - root.z);
+				this.serpentJointZ.push(p.z - root.z);
+				this.serpentJointY.push(p.y - root.y);
 			}
+		const joints = Math.max(1, this.serpentJointIds.length);
 		this.serpentStations = new Float64Array(12);
 		this.serpentHeights = new Float64Array(12);
-		this.serpentOffsets = new Float64Array(Math.max(1, this.serpentJointIds.length));
+		this.serpentOffsets = new Float64Array(joints);
+		this.serpentPathX = new Float64Array(joints);
+		this.serpentPathY = new Float64Array(joints);
+		this.serpentPathZ = new Float64Array(joints);
+		this.serpentHalfWidth = Math.max(0.02, b.max.x);
 	}
 
 	/** Swing-leg arc height for a step between two contacts. */
@@ -901,25 +913,26 @@ export class CreatureGroundingController {
 		return out;
 	}
 
-	/** Serpents: ground heights at 3–12 body stations, spatially and temporally smoothed. */
+	/** Serpents: the head is the tracked point. Spine joints sit on the path the head has already walked. */
 	private updateSerpent(input: GroundingInput, dt: number, first: boolean) {
 		const ids = this.serpentJointZ;
-		const z0 = Math.min(...ids),
-			z1 = Math.max(...ids);
-		const span = Math.max(1e-4, z1 - z0);
+		const zTail = ids[0] ?? 0,
+			zHead = ids[ids.length - 1] ?? 0;
+		const span = Math.max(1e-4, zHead - zTail);
 		const radius = Math.max(1e-3, this.compilation.bounds.max.x);
+		if (first) this.resetTrail(input.x, input.z, input.heading, span);
+		else this.recordHead(input.x, input.z);
 		const count =
 			input.lod === 0
 				? Math.max(5, Math.min(12, Math.round(span / (radius * 2))))
 				: input.lod === 1
 					? 5
 					: 3;
-		const s = Math.sin(input.heading),
-			c = Math.cos(input.heading);
 		const raw = this.serpentStations;
 		for (let k = 0; k < count; k++) {
-			const lz = z0 + (span * k) / (count - 1);
-			const y = this.probe.height(input.x + lz * s, input.z + lz * c);
+			const behind = span * (1 - k / (count - 1));
+			const sample = this.sampleTrail(behind);
+			const y = this.probe.height(sample.x, sample.z);
 			raw[k] = Number.isFinite(y) ? y : k > 0 ? raw[k - 1] : this.position.y;
 		}
 		// [1,2,1] low-pass so the body bridges small bumps instead of tracing them.
@@ -934,26 +947,37 @@ export class CreatureGroundingController {
 			first || this.serpentCount !== count ? 1 : responseAlpha(this.terrain.bodyGroundResponse, dt);
 		this.serpentCount = count;
 		for (let k = 0; k < count; k++) this.serpentHeights[k] += (raw[k] - this.serpentHeights[k]) * a;
-		const heightAt = (lz: number) => {
-			const f = Math.max(0, Math.min(count - 1, ((lz - z0) / span) * (count - 1)));
+		const heightAt = (behind: number) => {
+			const f = Math.max(0, Math.min(count - 1, (1 - behind / span) * (count - 1)));
 			const i = Math.min(count - 2, Math.floor(f));
 			return (
 				this.serpentHeights[i] + (this.serpentHeights[i + 1] - this.serpentHeights[i]) * (f - i)
 			);
 		};
-		const centre = heightAt(0);
-		this.position.set(input.x, centre, input.z);
-		for (let j = 0; j < ids.length; j++) this.serpentOffsets[j] = heightAt(ids[j]) - centre;
+		const moving = input.gait !== 'idle' && Math.hypot(input.velocityX, input.velocityZ) > 1e-4;
+		const amp = this.serpentHalfWidth * (moving ? 0.65 : 0.12);
+		for (let j = 0; j < ids.length; j++) {
+			const behind = zHead - ids[j];
+			const sample = this.sampleTrail(behind);
+			const fade = Math.min(1, behind / Math.max(1e-3, span * 0.2));
+			const wave = Math.sin(sample.s * this.waveK) * amp * fade;
+			const tlen = Math.hypot(sample.tx, sample.tz) || 1;
+			const ground = heightAt(behind);
+			this.serpentPathX[j] = sample.x + (-sample.tz / tlen) * wave;
+			this.serpentPathZ[j] = sample.z + (sample.tx / tlen) * wave;
+			this.serpentPathY[j] = ground + (this.serpentJointY[j] ?? 0);
+			this.serpentOffsets[j] = ground - heightAt(0);
+		}
+		const head = Math.max(0, ids.length - 1);
+		this.position.set(this.serpentPathX[head], this.serpentPathY[head], this.serpentPathZ[head]);
 		orientationFromUp(UP, input.heading, this.quaternion);
 		this.up.copy(UP);
-		// Pitch of the front of the body, for head stabilisation.
-		const front = ids.length - 1;
-		const dz = Math.max(1e-4, ids[front] - ids[Math.max(0, front - 2)]);
-		this.bodyPitch = Math.atan2(
-			this.serpentOffsets[front] - this.serpentOffsets[Math.max(0, front - 2)],
-			dz
-		);
+		const front = Math.max(0, head - 2);
+		const dz = Math.max(1e-4, ids[head] - ids[front]);
+		this.bodyPitch = Math.atan2(heightAt(zHead - ids[head]) - heightAt(zHead - ids[front]), dz);
 		this.bodyRoll = 0;
+		const s = Math.sin(input.heading),
+			c = Math.cos(input.heading);
 		const plane = this.plane;
 		plane.point.copy(this.position);
 		plane.normal.copy(UP);
@@ -967,7 +991,115 @@ export class CreatureGroundingController {
 		);
 		this.canStand = plane.slope <= this.terrain.maxWalkSlope;
 	}
+
+	private resetTrail(x: number, z: number, heading: number, span: number) {
+		this.serpentSpan = Math.max(0.2, span);
+		this.trailSpacing = Math.max(0.05, this.serpentSpan / 48);
+		this.waveK = (Math.PI * 2 * 1.35) / this.serpentSpan;
+		this.trailCount = 0;
+		this.tipX = x;
+		this.tipZ = z;
+		this.tipS = 0;
+		const steps = Math.ceil(this.serpentSpan / this.trailSpacing);
+		const bx = -Math.sin(heading),
+			bz = -Math.cos(heading);
+		for (let i = steps; i >= 1; i--) {
+			const d = this.trailSpacing * i;
+			this.pushCommit(x + bx * d, z + bz * d, -d);
+		}
+	}
+
+	private pushCommit(x: number, z: number, s: number) {
+		this.trailHead = this.trailCount === 0 ? 0 : (this.trailHead + 1) % this.trailCap;
+		this.trailX[this.trailHead] = x;
+		this.trailZ[this.trailHead] = z;
+		this.trailS[this.trailHead] = s;
+		if (this.trailCount < this.trailCap) this.trailCount++;
+	}
+
+	/** Advance the head and leave a trail of where it has been. Samples accumulate across short frames. */
+	private recordHead(x: number, z: number) {
+		const step = Math.hypot(x - this.tipX, z - this.tipZ);
+		if (step < 1e-6) return;
+		this.tipS += step;
+		this.tipX = x;
+		this.tipZ = z;
+		if (!this.trailCount) {
+			this.pushCommit(x, z, this.tipS);
+			return;
+		}
+		let cx = this.trailX[this.trailHead],
+			cz = this.trailZ[this.trailHead],
+			cs = this.trailS[this.trailHead];
+		let gx = this.tipX - cx,
+			gz = this.tipZ - cz;
+		let gap = Math.hypot(gx, gz);
+		while (gap >= this.trailSpacing) {
+			const t = this.trailSpacing / gap;
+			cx += gx * t;
+			cz += gz * t;
+			cs += this.trailSpacing;
+			this.pushCommit(cx, cz, cs);
+			gx = this.tipX - cx;
+			gz = this.tipZ - cz;
+			gap = Math.hypot(gx, gz);
+		}
+	}
+
+	/** Point `dist` metres behind the head, plus the path tangent pointing back toward the head. */
+	private sampleTrail(dist: number): { x: number; z: number; s: number; tx: number; tz: number } {
+		let x = this.tipX,
+			z = this.tipZ,
+			s = this.tipS;
+		const remainStart = Math.max(0, dist);
+		let remain = remainStart;
+		const newestX = this.trailCount ? this.trailX[this.trailHead] : x;
+		const newestZ = this.trailCount ? this.trailZ[this.trailHead] : z - 1;
+		if (this.trailCount === 0 || remain <= 1e-6)
+			return { x, z, s, tx: x - newestX, tz: z - newestZ };
+		let px = x,
+			pz = z,
+			ps = s;
+		for (let n = 0; n < this.trailCount; n++) {
+			const j = (this.trailHead - n + this.trailCap) % this.trailCap;
+			px = this.trailX[j];
+			pz = this.trailZ[j];
+			ps = this.trailS[j];
+			const step = Math.hypot(x - px, z - pz);
+			if (step >= remain && step > 1e-8) {
+				const t = remain / step;
+				return {
+					x: x + (px - x) * t,
+					z: z + (pz - z) * t,
+					s: s + (ps - s) * t,
+					tx: x - px,
+					tz: z - pz
+				};
+			}
+			remain -= step;
+			x = px;
+			z = pz;
+			s = ps;
+		}
+		const tx = x - px,
+			tz = z - pz;
+		const len = Math.hypot(tx, tz) || 1;
+		return { x: x - (tx / len) * remain, z: z - (tz / len) * remain, s: s - remain, tx, tz };
+	}
 	private serpentCount = 0;
+	private serpentHalfWidth = 0.1;
+	private serpentSpan = 1;
+	private waveK = 1;
+	private trailSpacing = 0.08;
+	private readonly trailCap = 80;
+	private readonly trailX = new Float64Array(80);
+	private readonly trailZ = new Float64Array(80);
+	private readonly trailS = new Float64Array(80);
+	private trailCount = 0;
+	private trailHead = 0;
+	private tipX = 0;
+	private tipZ = 0;
+	private tipS = 0;
 
 	/**
 	 * Navigation hook: could this creature stand at (x, z, heading)? Fits its rest footprint to the

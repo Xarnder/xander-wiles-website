@@ -127,16 +127,16 @@ export class PolygonWallTool implements BuildTool {
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	/**
-	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Reset to `'axis'` every time the tool is
+	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Reset to `'axis'` every time the tool is
 	 * selected (`activate()`). After three confirmed points, `'axis'` is auto-promoted to
-	 * `'axis-inline'` so later corners can flush with earlier ones; a `C` press to any other mode
+	 * `'axis-inline'` so later corners can flush with earlier ones; a `B` press to any other mode
 	 * is left alone.
 	 */
 	private snapMode: SnapMode = 'axis';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyB') {
 			this.snapMode = cycleSnapMode(this.snapMode, this.points.length);
 			this.refreshVisuals();
 			return;
@@ -683,7 +683,7 @@ export class PolygonWallTool implements BuildTool {
 				'',
 				'Click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E customise'
 			]
 		};
@@ -736,7 +736,7 @@ export class PolygonWallTool implements BuildTool {
 				'Click: Add point',
 				'Enter: Finish',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E customise',
 				'Right click: Cancel'
 			]
@@ -760,7 +760,7 @@ export class PolygonWallTool implements BuildTool {
 				...this.snapHudLines(),
 				'Enter: Finish',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'Right click: Cancel'
 			]
 		};

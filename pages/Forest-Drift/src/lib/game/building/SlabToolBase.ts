@@ -127,7 +127,7 @@ export class SlabToolBase implements BuildTool {
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
 	/**
-	 * Cycled by pressing `C` — see polygonDrawSnap.ts. Defaults to `'wall-corners'` every time the
+	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Defaults to `'wall-corners'` every time the
 	 * tool is activated (see `activate()`) rather than persisting the player's last choice — tracing
 	 * a ceiling/floor/roof polygon exactly over the room's own walls below is the common case for
 	 * these three tools, per the README's "Draw-snap" section. Harmless even before any wall exists
@@ -138,7 +138,7 @@ export class SlabToolBase implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyB') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -725,7 +725,7 @@ export class SlabToolBase implements BuildTool {
 				'',
 				'Look at the slab: click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height'
 			]
 		};
@@ -754,7 +754,7 @@ export class SlabToolBase implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'C: Cycle snap',
+					'B: Cycle snap',
 					'E set height',
 					'Click to close slab'
 				]
@@ -775,7 +775,7 @@ export class SlabToolBase implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height',
 				'Right click: Cancel'
 			]
@@ -797,7 +797,7 @@ export class SlabToolBase implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height',
 				'Right click: Cancel'
 			]

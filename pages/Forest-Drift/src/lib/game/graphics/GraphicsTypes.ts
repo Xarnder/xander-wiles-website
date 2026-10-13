@@ -362,7 +362,7 @@ export interface GraphicsSettings {
 export const DEFAULT_FIELD_OF_VIEW = 70;
 export const FIELD_OF_VIEW_MIN = 50;
 export const FIELD_OF_VIEW_MAX = 110;
-/** Holding U zooms in by this magnification (4× → a 70° view becomes ~19°). */
+/** Holding C zooms in by this magnification (4× → a 70° view becomes ~19°). */
 export const ZOOM_MAGNIFICATION = 4;
 
 export function clampFieldOfView(degrees: number): number {

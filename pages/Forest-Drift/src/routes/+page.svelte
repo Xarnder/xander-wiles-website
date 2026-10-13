@@ -51,7 +51,17 @@
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import TouchControls from '$lib/components/TouchControls.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
-	import type { BuildUiState, HotbarUiState } from '$lib/game/building/FoundationTypes';
+	import type { BuildUiState, HotbarSlot, HotbarUiState } from '$lib/game/building/FoundationTypes';
+	import { species } from '$lib/game/music/MusicModel';
+
+	const musicHotbarSlots: HotbarSlot[] = species.map((sp, index) => ({
+		slot: index + 1,
+		toolId: 'music',
+		label: (sp.name.split(' — ')[0] ?? sp.name).replace(/ Flower$/, ''),
+		variantCount: 1,
+		variantIndex: 0,
+		hotbarId: sp.id
+	}));
 	import {
 		isCustomizablePlacementTool,
 		isSlabHeightTool
@@ -398,8 +408,15 @@
 			void captureBestScreenshot();
 			return;
 		}
-		if (event.code === 'KeyB') {
-			if (!session) return;
+		if (event.code === 'KeyF') {
+			if (!session || event.repeat) return;
+			const placingObject =
+				hotbar?.buildModeActive &&
+				hotbar.globalMode === 'none' &&
+				hotbar.slots.some(
+					(slot) => slot.slot === hotbar.activeSlot && slot.toolId === 'place-object'
+				);
+			if (placingObject) return;
 			const next = session.scene.toggleFlying();
 			showSaveToast(
 				next.flying
@@ -940,7 +957,8 @@
 						<dd>Toggle build mode and show the hotbar along the bottom.</dd>
 						<dt>Music Button</dt>
 						<dd>
-							Toggle Music Garden mode to compose and plant musical notes around the Music Tree.
+							Toggle Music Garden mode. The hotbar switches to the instruments: Flower, Mushroom,
+							Fern, Reed, and Crystal.
 						</dd>
 						<dt>Hotbar Slots</dt>
 						<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
@@ -979,12 +997,13 @@
 							Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
 							load, saves a PNG, then returns to your graphics setting
 						</dd>
-						<dt>U (hold)</dt>
+						<dt>C (hold)</dt>
 						<dd>Zoom in (field of view: Settings &rarr; Graphics &rarr; Display)</dd>
-						<dt>B</dt>
+						<dt>F</dt>
 						<dd>
 							Toggle flying. W/S fly where you look, A/D strafe, Space up, Shift down; the scroll
-							wheel sets the fly speed (default twice running speed, up to 600 m/s).
+							wheel sets the fly speed (default twice running speed, up to 600 m/s). While Place
+							Object is selected, F edits the object you are looking at instead.
 						</dd>
 						<dt>Mouse</dt>
 						<dd>Look around</dd>
@@ -1039,12 +1058,11 @@
 							click the ▲ / ▼ floor selector on the left edge of the screen whenever a level-aware
 							tool is active
 						</dd>
-						<dt>C</dt>
+						<dt>B</dt>
 						<dd>
 							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
 							Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
-							snaps to the room's wall corners below. On Path, C cycles Axis snap &rarr; Free &rarr;
-							Bezier.
+							snaps to the room's wall corners below.
 						</dd>
 						<dt>E</dt>
 						<dd>
@@ -1087,7 +1105,7 @@
 							Adjust rise (hold Shift for a finer step). These keys do not change hotbar variant
 							while you are adjusting a roof
 						</dd>
-						<dt>C</dt>
+						<dt>B</dt>
 						<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
 						<dt>E</dt>
 						<dd>
@@ -1255,8 +1273,7 @@
 						</dd>
 						<dt>Q / E</dt>
 						<dd>
-							Choose the species before placing &mdash; flower, mushroom, fern, reed, or crystal
-							&mdash; each one is a different instrument
+							Cycle the instrument, the same five choices as hotbar slots 1&ndash;5
 						</dd>
 						<dt>&uarr; / &darr;</dt>
 						<dd>
@@ -1270,10 +1287,10 @@
 						</dd>
 						<dt>, / .</dt>
 						<dd>Shorten or lengthen the note (duration in steps)</dd>
-						<dt>F</dt>
+						<dt>1&ndash;5</dt>
 						<dd>
-							Select the plant under the crosshair to move it or edit its pitch / volume / duration.
-							Click again to place it on the same timing ring
+							Choose the instrument on the music hotbar &mdash; 1 Flower, 2 Mushroom, 3 Fern, 4
+							Reed, 5 Crystal. Click a slot to do the same
 						</dd>
 						<dt>J</dt>
 						<dd>Play / pause the tree's music loop</dd>
@@ -1617,14 +1634,20 @@
 			</div>
 		{/if}
 
-		{#if hotbar?.buildModeActive}
+		{#if hotbar?.globalMode === 'music'}
+			<Hotbar
+				slots={musicHotbarSlots}
+				activeSlot={hotbar.musicActiveSlot}
+				showGlobalModes={false}
+				onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
+			/>
+		{:else if hotbar?.buildModeActive}
 			<Hotbar
 				slots={hotbar.slots}
 				activeSlot={hotbar.activeSlot}
 				removeModeActive={hotbar.globalMode === 'remove'}
 				paintModeActive={hotbar.globalMode === 'paint'}
 				moveModeActive={hotbar.globalMode === 'move'}
-				musicModeActive={hotbar.globalMode === 'music'}
 				onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
 				onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
 				onTogglePaintMode={() => session?.scene.togglePaintMode()}

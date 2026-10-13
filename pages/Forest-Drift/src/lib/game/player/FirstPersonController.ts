@@ -125,7 +125,7 @@ export class FirstPersonController {
 
 	/** All movement and look frozen (best-quality screenshot capture). */
 	private movementLocked = false;
-	/** Mouse/touch look scale — below 1 while zoomed in (U), so aiming stays steady. */
+	/** Mouse/touch look scale — below 1 while zoomed in (C held), so aiming stays steady. */
 	private lookScale = 1;
 
 	private yaw = 0;
@@ -253,9 +253,9 @@ export class FirstPersonController {
 		this.lookScale = Math.max(0.05, Math.min(1, scale));
 	}
 
-	/** True while U is held with the game in control (pointer locked) — hold-to-zoom. */
+	/** True while C is held with the game in control (pointer locked) — hold-to-zoom. */
 	isZoomHeld(): boolean {
-		return this.pointerLocked && this.keys.has('KeyU');
+		return this.pointerLocked && this.keys.has('KeyC');
 	}
 
 	isFlying(): boolean {

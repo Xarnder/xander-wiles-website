@@ -7,7 +7,7 @@ import {
 	regionSpecies,
 	selectVisibleCreatures
 } from './CreaturePopulationSystem';
-import { advanceCreature, createCreatureState, decideCreature } from './CreatureBehaviourSystem';
+import { advanceCreature, createCreatureState, decideCreature, maxYawRate, turnCreature } from './CreatureBehaviourSystem';
 import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import type { CreatureWorldAccess } from './CreatureTypes';
@@ -199,6 +199,26 @@ describe('autonomous intent and safe movement', () => {
 		a.target = { ...a.position, z: a.position.z + 3 };
 		decideCreature(a, { x: 1000, y: 0, z: 1000 }, [other], 0, flat);
 		expect(a.intent.velocity.x).toBeLessThan(0);
+	});
+	it('arcs into a new direction instead of snapping its yaw or sliding sideways', () => {
+		const s = state();
+		s.heading = 0;
+		s.intent.heading = Math.PI / 2;
+		s.intent.velocity = { x: 1.2, y: 0, z: 0 };
+		s.intent.gait = 'walk';
+		const rate = maxYawRate(s);
+		turnCreature(s, 1 / 60);
+		const step = Math.atan2(Math.sin(s.heading), Math.cos(s.heading));
+		expect(step).toBeGreaterThan(0);
+		expect(step).toBeLessThanOrEqual(rate / 60 + 1e-6);
+		for (let i = 0; i < 60; i++) turnCreature(s, 1 / 60);
+		expect(Math.atan2(Math.sin(s.heading), Math.cos(s.heading))).toBeLessThan(Math.PI / 2 - 0.2);
+		s.heading = 0;
+		s.position = { x: 0, y: 0, z: 0 };
+		s.intent.velocity = { x: 1, y: 0, z: 0 };
+		advanceCreature(s, 0.5, flat, false);
+		expect(s.position.z).toBeGreaterThan(0.2);
+		expect(s.position.x).toBeCloseTo(0, 5);
 	});
 });
 it('updates and removes spatial entries across negative cell boundaries', () => {

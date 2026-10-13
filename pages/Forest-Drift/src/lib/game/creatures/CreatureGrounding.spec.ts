@@ -479,6 +479,51 @@ describe('body plans on slopes', () => {
 		for (const bone of creature.skeleton.bones)
 			expect(bone.quaternion.toArray().every(Number.isFinite)).toBe(true);
 	});
+	it('serpent body stays on the travelled path when the head changes direction', () => {
+		const setup = make(5, 'serpentine');
+		const { creature, grounding } = setup;
+		const surface = () => 0;
+		const poseAt = (heading: number, x: number, z: number, gait: 'idle' | 'walk') => {
+			creature.object.position.set(x, 0, z);
+			animateCreature(
+				creature,
+				{
+					velocity:
+						gait === 'idle'
+							? { x: 0, y: 0, z: 0 }
+							: { x: Math.sin(heading), y: 0, z: Math.cos(heading) },
+					heading,
+					angularVelocity: 0,
+					gait
+				},
+				0,
+				1 / 60,
+				surface,
+				{ grounding }
+			);
+		};
+		poseAt(0, 0, 0, 'idle');
+		const ids = grounding.serpentJointIds;
+		const tailBone = creature.bonesById.get(ids[0])!;
+		const headBone = creature.bonesById.get(ids[ids.length - 1])!;
+		const tail = tailBone.getWorldPosition(new Vector3());
+		const before = tail.clone();
+		poseAt(Math.PI / 2, 0, 0, 'idle');
+		tailBone.getWorldPosition(tail);
+		expect(tail.distanceTo(before)).toBeLessThan(0.05);
+		let x = 0;
+		for (let f = 0; f < 45; f++) {
+			x += 1 / 60;
+			poseAt(Math.PI / 2, x, 0, 'walk');
+		}
+		tailBone.getWorldPosition(tail);
+		const head = headBone.getWorldPosition(new Vector3());
+		const span = grounding.serpentJointZ[ids.length - 1] - grounding.serpentJointZ[0];
+		expect(head.x).toBeGreaterThan(0.5);
+		expect(head.distanceTo(tail)).toBeGreaterThan(span * 0.85);
+		expect(tail.z).toBeLessThan(-span * 0.7);
+		creature.dispose();
+	});
 	it('stays finite and slope-aligned for 25 species of every plan on uneven ramps', () => {
 		for (const plan of ['quadruped', 'biped', 'hexapod', 'serpentine'] as const)
 			for (let seed = 0; seed < 25; seed++) {

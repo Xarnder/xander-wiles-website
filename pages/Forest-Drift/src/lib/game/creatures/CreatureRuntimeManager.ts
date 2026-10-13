@@ -303,13 +303,17 @@ export class CreatureRuntimeManager {
 			const interval = item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 0.1 : 0.4;
 			const animateNow = this.time - live.lastAnimation >= interval;
 			const held = this.grounding.get(item.id);
+			const serpent = r.spawn.species.bodyPlan.id === 'serpentine';
 			if (!animateNow && held) {
 				// Full poses are throttled with distance. Setting euler yaw here used to replace the
 				// grounded orientation on the skipped frames, so the body turned and then snapped back.
-				orientationFromUp(held.up, r.heading, held.quaternion);
-				c.object.quaternion.copy(held.quaternion);
+				// A serpent's spine is posed in that orientation; yawing the root alone would spin the trail.
+				if (!serpent) {
+					orientationFromUp(held.up, r.heading, held.quaternion);
+					c.object.quaternion.copy(held.quaternion);
+				}
 				c.object.position.y = held.position.y;
-			} else if (!animateNow) {
+			} else if (!animateNow && !serpent) {
 				c.object.rotation.set(0, r.heading, 0);
 			}
 			if (animateNow) {

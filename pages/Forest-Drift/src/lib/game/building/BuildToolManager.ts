@@ -51,6 +51,15 @@ const DIGIT_TO_SLOT: Record<string, number> = {
 	Digit8: 8
 };
 
+/** Compose Mode instruments, in hotbar order. Index 0 is key 1. */
+const MUSIC_DIGIT_TO_INDEX: Record<string, number> = {
+	Digit1: 0,
+	Digit2: 1,
+	Digit3: 2,
+	Digit4: 3,
+	Digit5: 4
+};
+
 /** Which temporary global editing overlay (if any) is active — see the class doc comment. */
 type GlobalMode = 'none' | 'remove' | 'paint' | 'music' | 'move';
 
@@ -181,6 +190,15 @@ export class BuildToolManager {
 		if (event.code === 'KeyM' && this.moveTool) {
 			this.toggleMoveMode();
 			return;
+		}
+		if (this.globalMode === 'music') {
+			const musicIndex = MUSIC_DIGIT_TO_INDEX[event.code];
+			if (musicIndex !== undefined) {
+				this.selectMusicSpecies(musicIndex);
+				return;
+			}
+			// Other number keys stay in Compose Mode instead of jumping back to a build tool.
+			if (DIGIT_TO_SLOT[event.code] !== undefined) return;
 		}
 		if (!this.buildModeActive) {
 			if (this.globalMode === 'music') {
@@ -406,6 +424,19 @@ export class BuildToolManager {
 		return this.globalMode === 'music';
 	}
 
+	/** Compose Mode hotbar: pick an instrument without leaving Compose Mode. */
+	selectMusicSpecies(index: number): void {
+		if (this.globalMode !== 'music') return;
+		const tool = this.musicTool as (BuildTool & { selectSpecies?(index: number): void }) | undefined;
+		tool?.selectSpecies?.(index);
+		this.emitHotbarChange();
+	}
+
+	/** Q / E inside the music tool changed the instrument; republish the hotbar highlight. */
+	refreshHotbar(): void {
+		this.emitHotbarChange();
+	}
+
 	isPlacementCustomizeOpen(): boolean {
 		return this.placementCustomizeOpen;
 	}
@@ -625,7 +656,9 @@ export class BuildToolManager {
 			),
 			activeSlot: this.activeSlotNumber,
 			buildModeActive: this.buildModeActive,
-			globalMode: this.globalMode
+			globalMode: this.globalMode,
+			musicActiveSlot:
+				((this.musicTool as { speciesIndex?: number } | undefined)?.speciesIndex ?? 0) + 1
 		});
 	}
 

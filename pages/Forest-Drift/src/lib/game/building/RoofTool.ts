@@ -189,7 +189,7 @@ export class RoofTool implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/** Cycled by `C` while idle/drawing — same convention (and same "defaults to wall-corners on activate" reasoning) as every other polygon-drawing build tool; see SlabToolBase's doc comment. */
+	/** Cycled by `B` while idle/drawing — same convention (and same "defaults to wall-corners on activate" reasoning) as every other polygon-drawing build tool; see SlabToolBase's doc comment. */
 	private snapMode: SnapMode = 'wall-corners';
 
 	// --- Live roof parameters, only meaningful once `state === 'adjusting'` (set in `enterAdjusting`) ---
@@ -214,7 +214,7 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyB') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersOnCurrentLevel(foundationId).length > 0
@@ -914,7 +914,7 @@ export class RoofTool implements BuildTool {
 				'',
 				'Look at the roof: click to start',
 				...this.snapHudLines(),
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height'
 			]
 		};
@@ -937,7 +937,7 @@ export class RoofTool implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'C: Cycle snap',
+					'B: Cycle snap',
 					'E set height',
 					'Click to close footprint'
 				]
@@ -958,7 +958,7 @@ export class RoofTool implements BuildTool {
 				'Click: Add point',
 				'Click first point: Close',
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height',
 				'Right click: Cancel'
 			]
@@ -980,7 +980,7 @@ export class RoofTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'C: Cycle snap',
+				'B: Cycle snap',
 				'E set height',
 				'Right click: Cancel'
 			]

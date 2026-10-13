@@ -12,7 +12,6 @@ import {
 	noteName,
 	species,
 	scaleNotes,
-	scales,
 	secondsAtStep,
 	fractionalLoopStep,
 	timelineDefinition,
@@ -63,7 +62,8 @@ export class MusicPlantPlacementTool implements BuildTool {
 	importPanelOpen = false;
 	committing = false;
 	pendingImport?: MidiImportPlan;
-	selectedId?: string;
+	/** Fired when Q / E changes the instrument, so the music hotbar can follow. */
+	onSpeciesChange?: () => void;
 	private treePreview?: THREE.Group;
 	readonly runtimes = new Map<
 		string,
@@ -71,6 +71,11 @@ export class MusicPlantPlacementTool implements BuildTool {
 	>();
 	activeTree?: MusicTreeDefinition;
 	speciesIndex = 0;
+	/** Chooses the instrument for the next plant. Slot 1 is index 0. Wraps. */
+	selectSpecies(index: number): void {
+		if (species.length === 0) return;
+		this.speciesIndex = ((index % species.length) + species.length) % species.length;
+	}
 	growth = 0.5;
 	vibrancy = 0.7;
 	/** The PREFERRED duration (in timing subdivisions) for the next plant — raw and un-clamped; `previewAt` clamps it to `[1, maxDurationSteps]` for the CURRENT candidate ring via `clampDurationSteps`, exactly like `growth` is adjusted raw here and quantized downstream by `MusicPlantManager.quantize`. */
@@ -186,7 +191,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 	}
 	onSecondaryAction() {
 		this.pendingImport = undefined;
-		this.selectedId = undefined;
 		if (this.treePreview) disposeGroup(this.treePreview);
 		this.treePreview = undefined;
 		this.candidate = null;
@@ -195,16 +199,7 @@ export class MusicPlantPlacementTool implements BuildTool {
 	previewAt(x: number, z: number) {
 		const t = this.activeTree;
 		if (!t) return null;
-		let snap = radialSnap(t, x, z);
-		const selected = this.selectedId ? this.plants.byId.get(this.selectedId) : undefined;
-		if (selected) {
-			const angle = Math.atan2(z - t.position.z, x - t.position.x);
-			snap = {
-				angle,
-				ringIndex: selected.ringIndex,
-				...positionOf(t, { angle, ringIndex: selected.ringIndex })
-			};
-		}
+		const snap = radialSnap(t, x, z);
 		this.candidate = null;
 		if (!snap) {
 			this.clearGhost();
@@ -221,9 +216,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 			vibrancy: this.vibrancy
 		};
 		this.plants.quantize(t, p);
-		if (selected) {
-			Object.assign(p, selected, { angle: snap.angle });
-		}
 		const y = this.options.surface(snap.x, snap.z);
 		if (
 			this.options.blocked(
@@ -234,12 +226,7 @@ export class MusicPlantPlacementTool implements BuildTool {
 			) ||
 			Math.abs(y - this.options.surface(snap.x + 0.3, snap.z)) > 0.6 ||
 			Math.abs(y - this.options.surface(snap.x, snap.z + 0.3)) > 0.6 ||
-			this.plants.overlaps(
-				snap.x,
-				snap.z,
-				plantMetrics(p).placementClearanceRadius,
-				this.selectedId
-			)
+			this.plants.overlaps(snap.x, snap.z, plantMetrics(p).placementClearanceRadius)
 		) {
 			this.clearGhost();
 			return null;
@@ -313,10 +300,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 		}
 		if (!this.candidate || !this.activeTree) return;
 		const p = { ...this.candidate };
-		if (this.selectedId) {
-			this.plants.remove(this.selectedId);
-			this.selectedId = undefined;
-		}
 		this.plants.add(this.activeTree, p);
 		this.candidate = null;
 		this.clearGhost();
@@ -384,23 +367,20 @@ export class MusicPlantPlacementTool implements BuildTool {
 			const t = this.activeTree;
 			if (!t) return;
 			const c = this.candidate;
-			const selected = this.selectedId ? this.plants.byId.get(this.selectedId) : undefined;
+			const planted = { speciesId: species[this.speciesIndex].id, growth: this.growth };
 			this.options.hud?.({
 				toolId: 'music',
 				crosshair: c ? 'valid' : 'invalid',
 				hintLines: [
 					'MUSIC GARDEN',
-					selected
-						? `${species.find((s) => s.id === selected.speciesId)!.name} · Selected`
-						: species[this.speciesIndex].name,
-					`Pitch: ${noteName(pitch(t, selected ?? { speciesId: species[this.speciesIndex].id, growth: this.growth }))} · Volume: ${Math.round((selected?.vibrancy ?? this.vibrancy) * 100)}%`,
+					species[this.speciesIndex].name,
+					`Pitch: ${noteName(pitch(t, planted))} · Volume: ${Math.round(this.vibrancy * 100)}%`,
 					c === null
 						? 'Aim at an open patch of earth'
 						: `Duration: ${c.durationSteps} step${c.durationSteps === 1 ? '' : 's'}`,
 					c === null ? '' : `${barBeat(t, c.ringIndex)} → ${barBeat(t, endRingIndex(c))}`,
-					'↑ ↓ Pitch · ← → Vibrancy',
-					', . Duration · Q / E Species',
-					'Click: Plant · F Select / move · J Play/Pause · M Exit',
+					'↑ ↓ Pitch · ← → Vibrancy · , . Duration',
+					'1–5 Instrument · Click: Plant · J Play/Pause · N Exit',
 					...(this.debug.showRingIndices || this.debug.showDurationSteps
 						? [
 								`Ring ${c?.ringIndex ?? '—'} → ${c ? endRingIndex(c) : '—'} (max ${c ? maxDurationSteps(t.loop, c.ringIndex) : '—'})`
@@ -552,47 +532,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 		)
 			return;
 		const t = this.activeTree!;
-		if (e.code === 'KeyF') {
-			if (this.selectedId) this.selectedId = undefined;
-			else {
-				this.ray.setFromCamera(this.center, this.options.camera);
-				const hit = this.ray.intersectObjects([...this.plants.visuals.values()], true)[0];
-				if (hit) {
-					this.selectedId = hit.object.userData.musicPlantId;
-					const p = this.plants.byId.get(this.selectedId!)!;
-					this.activeTree = this.trees.find((t) => t.id === p.musicTreeId);
-				}
-			}
-			e.preventDefault();
-			return;
-		}
-		if (
-			this.selectedId &&
-			['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Comma', 'Period'].includes(e.code)
-		) {
-			const old = this.plants.byId.get(this.selectedId)!;
-			const p = { ...old };
-			if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-				const notes = Array.from({ length: 128 }, (_, i) => i).filter((n) =>
-					scales[t.scale.scale].includes((((n - t.scale.rootMidi) % 12) + 12) % 12)
-				);
-				p.pitchMidi =
-					e.code === 'ArrowUp'
-						? (notes.find((n) => n > (p.pitchMidi ?? 60)) ?? 127)
-						: ([...notes].reverse().find((n) => n < (p.pitchMidi ?? 60)) ?? 0);
-			} else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight')
-				p.vibrancy = Math.max(0, Math.min(1, p.vibrancy + (e.code === 'ArrowRight' ? 0.1 : -0.1)));
-			else
-				p.durationSteps = clampDurationSteps(
-					t.loop,
-					p.ringIndex,
-					p.durationSteps + (e.code === 'Period' ? 1 : -1)
-				);
-			this.editPlant(p);
-			e.preventDefault();
-			e.stopImmediatePropagation();
-			return;
-		}
 		const n = scaleNotes(t.scale, species[this.speciesIndex]).length;
 		if (e.code === 'ArrowUp' || e.code === 'ArrowDown')
 			this.growth = Math.max(
@@ -604,10 +543,10 @@ export class MusicPlantPlacementTool implements BuildTool {
 				0,
 				Math.min(1, this.vibrancy + (e.code === 'ArrowRight' ? 0.1 : -0.1))
 			);
-		else if (e.code === 'KeyQ' || e.code === 'KeyE')
-			this.speciesIndex =
-				(this.speciesIndex + (e.code === 'KeyE' ? 1 : species.length - 1)) % species.length;
-		else if (e.code === 'Comma' || e.code === 'Period') {
+		else if (e.code === 'KeyQ' || e.code === 'KeyE') {
+			this.selectSpecies(this.speciesIndex + (e.code === 'KeyE' ? 1 : -1));
+			this.onSpeciesChange?.();
+		} else if (e.code === 'Comma' || e.code === 'Period') {
 			// Clamped loosely here (a generous, ring-agnostic upper bound); `previewAt` re-clamps to the
 			// CURRENT candidate ring's own `maxDurationSteps` every time it runs, which is the precise
 			// bound that actually matters (see its own comment on why `duration` is deliberately raw).
@@ -624,26 +563,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 		e.preventDefault();
 		e.stopImmediatePropagation();
 	};
-	editPlant(p: MusicPlantDefinition) {
-		const t = this.trees.find((t) => t.id === p.musicTreeId);
-		if (!t) return;
-		const pos = positionOf(t, p);
-		if (
-			this.plants.overlaps(pos.x, pos.z, plantMetrics(p).placementClearanceRadius, p.id) ||
-			this.options.blocked(
-				pos.x,
-				pos.z,
-				plantMetrics(p).placementClearanceRadius,
-				plantMetrics(p).height
-			)
-		)
-			return;
-		this.runtimes.get(t.id)!.sequencer.cancel(p.id);
-		this.plants.remove(p.id);
-		this.plants.add(t, p);
-		this.reindex();
-		this.revision++;
-	}
 	beginImport(plan: MidiImportPlan) {
 		this.importPanelOpen = false;
 		this.clearGhost();
@@ -772,7 +691,6 @@ export class MusicPlantPlacementTool implements BuildTool {
 		this.options.scene.add(staged.group);
 		this.trees = trees;
 		this.activeTree = t;
-		this.selectedId = undefined;
 		this.reindex();
 		this.revision++;
 		this.pendingImport = undefined;

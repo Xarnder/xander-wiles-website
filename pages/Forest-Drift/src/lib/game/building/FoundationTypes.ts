@@ -93,6 +93,8 @@ export interface HotbarSlot {
 	variantCount: number;
 	variantIndex: number;
 	furnitureKind?: FurnitureKind;
+	/** Stable id for the button when several slots share a `toolId`, such as music instruments. */
+	hotbarId?: string;
 }
 
 /**
@@ -777,4 +779,9 @@ export interface HotbarUiState {
 	 * moment it exits. See BuildToolManager's class doc comment.
 	 */
 	globalMode: 'none' | 'remove' | 'music' | 'paint' | 'move';
+	/**
+	 * 1-based instrument on the Compose Mode hotbar (1 Flower … 5 Crystal). Number keys 1–5 change
+	 * it without leaving Compose Mode.
+	 */
+	musicActiveSlot: number;
 }

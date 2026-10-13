@@ -370,7 +370,7 @@ export interface ThreeSceneOptions {
 	skySettings: SkySettings;
 	onStatsUpdate?: (stats: SceneStats) => void;
 	onPointerLockChange?: (locked: boolean) => void;
-	/** Flying toggled (B) or its speed changed (scroll wheel while flying). */
+	/** Flying toggled (F) or its speed changed (scroll wheel while flying). */
 	onFlightChange?: (state: FlightState) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
@@ -1369,6 +1369,7 @@ export class ThreeScene implements WorldRuntime {
 			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
 			onPlacementHeightChange: options.onPlacementHeightChange
 		});
+		this.music.onSpeciesChange = () => this.buildToolManager.refreshHotbar();
 
 		this.collisionVisualizer = new CollisionVisualizer(this.scene, {
 			getWallRects: () => this.wallManager.getAllCollisionRects(),
@@ -1741,7 +1742,7 @@ export class ThreeScene implements WorldRuntime {
 		this.applySkySettings();
 	}
 
-	/** B: toggles free flight. Returns the new state (flying, speed). */
+	/** F: toggles free flight. Returns the new state (flying, speed). */
 	toggleFlying(): FlightState {
 		const flying = this.controller.toggleFlying();
 		return { flying, speed: this.controller.getFlySpeed() };
@@ -2052,6 +2053,11 @@ export class ThreeScene implements WorldRuntime {
 	/** Lets the Svelte hotbar UI select a slot by click, in addition to the number-key shortcuts. */
 	selectHotbarSlot(slot: number): void {
 		this.buildToolManager.selectSlot(slot);
+	}
+
+	/** Compose Mode hotbar: choose Flower, Mushroom, Fern, Reed, or Crystal. */
+	selectMusicSpecies(index: number): void {
+		this.buildToolManager.selectMusicSpecies(index);
 	}
 
 	/** Lets the on-screen floor selector's ▲ button move up a level by click, identically to Page Up. */
@@ -2855,11 +2861,11 @@ export class ThreeScene implements WorldRuntime {
 		this.renderer.domElement.toBlob((blob) => resolve(blob), 'image/png');
 	}
 
-	/** 0 = normal view … 1 = fully zoomed (U held); eased so zooming in and out is smooth. */
+	/** 0 = normal view … 1 = fully zoomed (C held); eased so zooming in and out is smooth. */
 	private zoomAmount = 0;
 
 	/**
-	 * Applies the field-of-view setting and hold-U zoom. Zoom magnifies by `ZOOM_MAGNIFICATION`
+	 * Applies the field-of-view setting and hold-C zoom. Zoom magnifies by `ZOOM_MAGNIFICATION`
 	 * (dividing the half-angle tangent, so the image really is that much larger) and slows mouse
 	 * look by the same factor. Only touches the projection (and the shadow cascades, which depend
 	 * on it) when the FOV actually changes.
