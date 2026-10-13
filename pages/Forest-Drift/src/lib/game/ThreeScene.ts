@@ -164,6 +164,10 @@ import {
 	type TreeQualityProfile,
 	type TreeRenderStats
 } from './vegetation/TreeManager';
+import { GrassManager, type GrassRenderStats } from './vegetation/grass/GrassManager';
+import { PlantManager, type PlantRenderStats } from './vegetation/plants/PlantManager';
+import type { PlantQualityProfile } from './vegetation/plants/PlantTypes';
+import type { GrassQualityProfile } from './vegetation/grass/GrassTypes';
 import {
 	createDefaultVegetationSettings,
 	type VegetationSettings
@@ -231,6 +235,10 @@ export interface SceneStats {
 	vegetationRevision: number;
 	/** Detailed tree-system stats (LODs, batches, memory) — only populated while render stats are shown. */
 	trees?: TreeRenderStats;
+	/** Grass stats (visible tufts per LOD, draw calls, memory, generation) — with render stats only. */
+	grass?: GrassRenderStats;
+	/** Flower / ground-plant stats — with render stats only. */
+	plants?: PlantRenderStats;
 	graphicsQuality: GraphicsQuality;
 	renderScale: number;
 	pixelRatio: number;
@@ -272,6 +280,32 @@ export interface SceneStats {
 }
 
 /** The graphics preset's tree knobs (LOD distance scale, density, shadow LODs, wind). */
+function plantQualityFor(quality: GraphicsQuality): PlantQualityProfile {
+	const preset = GRAPHICS_PRESETS[quality];
+	return {
+		densityScale: preset.plantDensityScale,
+		distanceScale: preset.plantDistanceScale,
+		nearScale: preset.plantNearScale,
+		speciesScale: preset.plantSpeciesScale,
+		maxPrototypes: preset.plantMaxPrototypes,
+		receiveShadows: preset.plantReceiveShadows,
+		wind: preset.plantWind,
+		maxVisibleInstances: preset.plantMaxVisibleInstances
+	};
+}
+
+function grassQualityFor(quality: GraphicsQuality): GrassQualityProfile {
+	const preset = GRAPHICS_PRESETS[quality];
+	return {
+		densityScale: preset.grassDensityScale,
+		distanceScale: preset.grassDistanceScale,
+		crossedCards: preset.grassCrossedCards,
+		receiveShadows: preset.grassReceiveShadows,
+		wind: preset.grassWind,
+		maxVisibleInstances: preset.grassMaxVisibleInstances
+	};
+}
+
 function treeQualityFor(quality: GraphicsQuality): TreeQualityProfile {
 	const preset = GRAPHICS_PRESETS[quality];
 	return {
@@ -415,6 +449,8 @@ export class ThreeScene implements WorldRuntime {
 	private readonly hydrologyDebugView: HydrologyDebugView;
 	private hydrologyRebuildTimer = 0;
 	private readonly treeManager: TreeManager;
+	private readonly grassManager: GrassManager;
+	private readonly plantManager: PlantManager;
 	private readonly materialManager: BuildingMaterialManager;
 	/** Procedural textures for buildings and terrain — see the README's "Procedural materials" section. */
 	private readonly materialLibrary: ProceduralMaterialLibrary;
@@ -575,6 +611,8 @@ export class ThreeScene implements WorldRuntime {
 				this.materialLibrary.setQuality(materialQualityForGraphics(quality));
 				this.materialLibrary.setAnisotropy(this.materialAnisotropy());
 				this.treeManager.setQualityProfile(treeQualityFor(quality));
+				this.grassManager.setQualityProfile(grassQualityFor(quality));
+				this.plantManager.setQualityProfile(plantQualityFor(quality));
 				this.water.setQuality(quality);
 				this.water.applyLook(this.hydrologyVisual);
 				this.particles.setQuality(
@@ -889,6 +927,71 @@ export class ThreeScene implements WorldRuntime {
 		this.treeManager.setProceduralSurfaces(this.graphicsSettings.proceduralMaterials);
 		this.terrainManager.setVegetationRegionSampler(this.treeManager.getVegetationRegionSampler());
 		for (const material of this.treeManager.getSharedMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+
+		this.grassManager = new GrassManager({
+			settings: options.vegetationSettings.grass,
+			debug: options.vegetationSettings.debug,
+			seed: this.settings.seed,
+			terrain: {
+				chunkSize: () => this.settings.chunkSize,
+				getRevision: () => this.terrainManager.getRevision(),
+				getSurfaceLattice: (x, z) => this.terrainManager.getSurfaceLattice(x, z)
+			},
+			heightSampler: this.terrainManager.getHeightSampler(),
+			vegetationRegionSampler: this.treeManager.getVegetationRegionSampler(),
+			groundCover: (x, z) => this.plantManager?.flowerCover(x, z) ?? 0,
+			getExclusions: () => this.foundationManager.getFootprints(),
+			getExclusionRevision: () => this.foundationManager.getRevision(),
+			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z),
+			hasWaterNear: (minX, minZ, maxX, maxZ) => {
+				const x = (minX + maxX) / 2;
+				const z = (minZ + maxZ) / 2;
+				const radius = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+				return (
+					this.hydrology.riversNear(x, z, radius).length > 0 ||
+					this.hydrology.lakesNear(x, z, radius).length > 0
+				);
+			}
+		});
+		this.scene.add(this.grassManager.group);
+		// Instanced cards built in the vertex shader: GTAO's override material would draw them untransformed.
+		this.graphicsPipeline.excludeFromAo(this.grassManager.group);
+		this.grassManager.setQualityProfile(grassQualityFor(this.graphicsSettings.quality));
+		for (const material of this.grassManager.getSharedMaterials()) {
+			this.graphicsPipeline.registerMaterial(material);
+		}
+
+		this.plantManager = new PlantManager({
+			settings: options.vegetationSettings.plants,
+			debug: options.vegetationSettings.debug,
+			seed: this.settings.seed,
+			terrain: {
+				chunkSize: () => this.settings.chunkSize,
+				getRevision: () => this.terrainManager.getRevision(),
+				getSurfaceLattice: (x, z) => this.terrainManager.getSurfaceLattice(x, z)
+			},
+			heightSampler: this.terrainManager.getHeightSampler(),
+			vegetationRegionSampler: this.treeManager.getVegetationRegionSampler(),
+			getExclusions: () => this.foundationManager.getFootprints(),
+			getExclusionRevision: () => this.foundationManager.getRevision(),
+			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z),
+			hasWaterNear: (minX, minZ, maxX, maxZ) => {
+				const x = (minX + maxX) / 2;
+				const z = (minZ + maxZ) / 2;
+				const radius = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+				return (
+					this.hydrology.riversNear(x, z, radius).length > 0 ||
+					this.hydrology.lakesNear(x, z, radius).length > 0
+				);
+			}
+		});
+		this.scene.add(this.plantManager.group);
+		this.graphicsPipeline.excludeFromAo(this.plantManager.group);
+		this.plantManager.setQualityProfile(plantQualityFor(this.graphicsSettings.quality));
+		this.terrainManager.setGroundTint(this.plantManager.terrainTint());
+		for (const material of this.plantManager.getSharedMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
 		}
 
@@ -1425,6 +1528,26 @@ export class ThreeScene implements WorldRuntime {
 				vegetationBorders: () => {
 					this.treeManager.setBorderVisibility(this.vegetationSettings.debug.showTreeChunkBorders);
 				},
+				grassSettings: () => {
+					this.environmentRevision++;
+					this.grassManager.notifySettingsChanged();
+				},
+				grassRendering: () => {
+					this.environmentRevision++;
+				},
+				grassDebug: () => this.grassManager.notifyDebugChanged(),
+				plantSettings: () => {
+					this.environmentRevision++;
+					this.plantManager.notifySettingsChanged();
+				},
+				plantRendering: () => {
+					this.environmentRevision++;
+				},
+				plantDebug: () => this.plantManager.notifyDebugChanged(),
+				terrainTint: () => {
+					this.environmentRevision++;
+					this.terrainManager.notifySettingsChanged();
+				},
 				sky: () => {
 					this.environmentRevision++;
 					this.applySkySettings();
@@ -1613,6 +1736,8 @@ export class ThreeScene implements WorldRuntime {
 		this.terrainManager.notifyTopologyChanged();
 		this.terrainManager.notifySeedChanged();
 		this.treeManager.notifySeedChanged(seed);
+		this.grassManager.setSeed(seed);
+		this.plantManager.setSeed(seed);
 		this.applySkySettings();
 	}
 
@@ -2086,6 +2211,62 @@ export class ThreeScene implements WorldRuntime {
 		window.dispatchEvent(new KeyboardEvent('keyup', { code }));
 	}
 
+	/** Grass stats against the current camera frustum (for the overlay and benchmarks). */
+	grassRenderStats(): GrassRenderStats {
+		this.camera.updateMatrixWorld();
+		const frustum = new THREE.Frustum().setFromProjectionMatrix(
+			new THREE.Matrix4().multiplyMatrices(
+				this.camera.projectionMatrix,
+				this.camera.matrixWorldInverse
+			)
+		);
+		return this.grassManager.getRenderStats(frustum);
+	}
+
+	/**
+	 * Grass benchmark sample for the current view: frame timing (FPS, p95, main-thread CPU per frame
+	 * and inside render) from the shared frame sampler, plus the grass stats for the same frame.
+	 */
+	async measureGrassFrames(
+		sampleMs = 3000
+	): Promise<Awaited<ReturnType<ThreeScene['measureFrames']>> & { grass: GrassRenderStats }> {
+		const frames = await this.measureFrames(sampleMs);
+		return { ...frames, grass: this.grassRenderStats() };
+	}
+
+	/** Flower / ground-plant stats against the current camera frustum. */
+	plantRenderStats(): PlantRenderStats {
+		this.camera.updateMatrixWorld();
+		const frustum = new THREE.Frustum().setFromProjectionMatrix(
+			new THREE.Matrix4().multiplyMatrices(
+				this.camera.projectionMatrix,
+				this.camera.matrixWorldInverse
+			)
+		);
+		return this.plantManager.getRenderStats(frustum);
+	}
+
+	/** Plant benchmark sample: frame timing plus grass and plant stats for the same frames. */
+	async measureVegetationFrames(sampleMs = 3000): Promise<
+		Awaited<ReturnType<ThreeScene['measureFrames']>> & {
+			grass: GrassRenderStats;
+			plants: PlantRenderStats;
+		}
+	> {
+		const frames = await this.measureFrames(sampleMs);
+		return { ...frames, grass: this.grassRenderStats(), plants: this.plantRenderStats() };
+	}
+
+	/** Benchmarks: hold plants at full quality instead of letting them adapt. */
+	setPlantAdaptive(enabled: boolean): void {
+		this.plantManager.setAdaptiveEnabled(enabled);
+	}
+
+	/** Benchmarks: hold grass at full quality instead of letting it adapt to the frame rate. */
+	setGrassAdaptive(enabled: boolean): void {
+		this.grassManager.setAdaptiveEnabled(enabled);
+	}
+
 	/** Tree-system stats against the current camera frustum (for the overlay and benchmarks). */
 	treeRenderStats(): TreeRenderStats {
 		this.camera.updateMatrixWorld();
@@ -2404,6 +2585,10 @@ export class ThreeScene implements WorldRuntime {
 		const { smoothedFps, targetFps } = this.graphicsPipeline.getFrameRate();
 		this.weather.setPerformance(deltaSeconds, smoothedFps, targetFps);
 		this.treeManager.setWeatherWind(this.weather.treeWind());
+		this.grassManager.setWeather(this.weather.treeWind(), this.weather.wetness);
+		this.grassManager.setPerformance(deltaSeconds, smoothedFps, targetFps);
+		this.plantManager.setWeather(this.weather.treeWind(), this.weather.wetness);
+		this.plantManager.setPerformance(deltaSeconds, smoothedFps, targetFps);
 		const wet = this.weather.wetness;
 		const snow = this.weather.snowCover;
 		WEATHER_SURFACE_UNIFORMS.uWxWet.value = wet;
@@ -2472,6 +2657,8 @@ export class ThreeScene implements WorldRuntime {
 		const showSkyOnly = this.skySettings.debug.showSkyOnly;
 		this.terrainManager.group.visible = !showSkyOnly;
 		this.treeManager.group.visible = !showSkyOnly;
+		this.grassManager.group.visible = !showSkyOnly && this.vegetationSettings.grass.enabled;
+		this.plantManager.group.visible = !showSkyOnly && this.vegetationSettings.plants.enabled;
 		this.foundationManager.group.visible = !showSkyOnly;
 		this.wallManager.group.visible = !showSkyOnly;
 		this.wallPathManager.group.visible = !showSkyOnly;
@@ -2723,6 +2910,8 @@ export class ThreeScene implements WorldRuntime {
 				this.water.clear();
 				this.terrainManager.notifySeedChanged();
 				this.treeManager.notifySeedChanged(this.settings.seed);
+				this.grassManager.setSeed(this.settings.seed);
+				this.plantManager.setSeed(this.settings.seed);
 				this.dirty.seed = false;
 				this.dirty.settings = false;
 			} else if (this.dirty.settings) {
@@ -2746,6 +2935,8 @@ export class ThreeScene implements WorldRuntime {
 
 		if (this.dirty.vegetationSettings) {
 			this.treeManager.notifySettingsChanged();
+			this.grassManager.notifySettingsChanged();
+			this.plantManager.notifySettingsChanged();
 			this.dirty.vegetationSettings = false;
 		}
 		if (this.dirty.vegetationViewDistance) {
@@ -2809,6 +3000,18 @@ export class ThreeScene implements WorldRuntime {
 		this.updateParticles(deltaSeconds, sunDirection);
 		this.treeManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.treeManager.updateView(this.camera.position, deltaSeconds);
+		this.grassManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
+		this.grassManager.updateView(this.camera, deltaSeconds, {
+			x: this.controller.worldPosition.x,
+			feetY: this.controller.worldPosition.y - this.settings.player.eyeHeight,
+			z: this.controller.worldPosition.z
+		});
+		this.plantManager.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
+		this.plantManager.updateView(this.camera, deltaSeconds, {
+			x: this.controller.worldPosition.x,
+			feetY: this.controller.worldPosition.y - this.settings.player.eyeHeight,
+			z: this.controller.worldPosition.z
+		});
 		this.miniBuilds.update(this.controller.worldPosition.x, this.controller.worldPosition.z);
 		this.buildToolManager.update();
 		this.miniBuildChunkBoundaries.update(
@@ -2942,6 +3145,8 @@ export class ThreeScene implements WorldRuntime {
 			queuedVegetationChunks: vegetationStats.queuedChunks,
 			treeInstances: vegetationStats.treeInstances,
 			trees: this.graphicsSettings.showRenderStats ? this.treeRenderStats() : undefined,
+			grass: this.graphicsSettings.showRenderStats ? this.grassRenderStats() : undefined,
+			plants: this.graphicsSettings.showRenderStats ? this.plantRenderStats() : undefined,
 			particles: this.graphicsSettings.showRenderStats
 				? { ...this.particles.getStats(), splash: { ...this.lakeSplashes.getStats() } }
 				: undefined,
@@ -3028,6 +3233,8 @@ export class ThreeScene implements WorldRuntime {
 		this.surfaceBinder.dispose();
 		this.collisionVisualizer.dispose();
 		this.treeManager.dispose();
+		this.grassManager.dispose();
+		this.plantManager.dispose();
 		this.wallManager.dispose();
 		this.wallPathManager.dispose();
 		this.slabManager.dispose();

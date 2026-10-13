@@ -3,6 +3,10 @@ import { createAndEnterWorld, enableRenderStats, openWorldNamed } from './worldH
 
 const STORAGE_KEY = 'forest-drift.graphics.v1';
 
+// Each test creates a world and drives menus while headless Chromium renders in software
+// (SwiftShader): with terrain, trees, grass and flowers that sits close to the 60 s default.
+test.describe.configure({ timeout: 120_000 });
+
 test('defaults to HIGH graphics quality on a fresh visit', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -32,9 +36,10 @@ test('L cycles graphics quality HIGH → ULTRA → LOW → MEDIUM → HIGH', asy
 	await expect(stats).toContainText('Graphics HIGH', { timeout: 10_000 });
 
 	const sequence = ['ULTRA', 'LOW', 'MEDIUM', 'HIGH'];
+	// Software rendering takes several seconds per ULTRA frame, and the key waits for the frame.
 	for (const expected of sequence) {
 		await page.keyboard.press('l');
-		await expect(stats).toContainText(`Graphics ${expected}`, { timeout: 10_000 });
+		await expect(stats).toContainText(`Graphics ${expected}`, { timeout: 20_000 });
 	}
 
 	expect(pageErrors).toEqual([]);

@@ -155,6 +155,21 @@ export class FoundationManager {
 	}
 
 	/** Highest foundation top surface covering (worldX, worldZ), or null if no foundation covers it. */
+	/**
+	 * Every foundation's world-space footprint (the same rectangle `getTopYAt` tests). Ground cover
+	 * (grass) uses these as exclusion rects, so nothing grows through a floor.
+	 */
+	getFootprints(): { id: string; minX: number; minZ: number; maxX: number; maxZ: number }[] {
+		const spacing = this.getVertexSpacing();
+		return [...this.foundations.values()].map(({ definition }) => ({
+			id: definition.id,
+			minX: definition.minGridX * spacing - EDGE_TOLERANCE,
+			minZ: definition.minGridZ * spacing - EDGE_TOLERANCE,
+			maxX: definition.maxGridX * spacing + EDGE_TOLERANCE,
+			maxZ: definition.maxGridZ * spacing + EDGE_TOLERANCE
+		}));
+	}
+
 	getTopYAt(worldX: number, worldZ: number): number | null {
 		const spacing = this.getVertexSpacing();
 		let best: number | null = null;

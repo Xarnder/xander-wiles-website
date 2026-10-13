@@ -1525,6 +1525,39 @@
 						)} ms
 					</div>
 				{/if}
+				{#if stats.plants?.enabled}
+					{@const p = stats.plants}
+					<div data-testid="plant-stats">
+						Plants {p.nearInstances.toLocaleString()} near · {p.cardInstances.toLocaleString()} cards
+						(LOD1/2
+						{p.cardLodInstances.join('/')}) · {p.nearDrawCalls}+{p.cardDrawCalls} draws · {p.triangles.toLocaleString()}
+						tris
+					</div>
+					<div>
+						Plants {p.activeSpecies} species · {p.prototypes} prototypes ({p.prototypeTriangles.toLocaleString()}
+						tris) · {(p.bufferBytes / 1048576).toFixed(2)} MB · gen {p.lastGenerationMs.toFixed(1)} ms
+						· adaptive
+						{p.adaptiveLevel.toFixed(2)}
+					</div>
+				{/if}
+				{#if stats.grass?.enabled}
+					{@const g = stats.grass}
+					<div data-testid="grass-stats">
+						Grass {g.visibleInstances.toLocaleString()} visible (LOD {g.lodInstances
+							.map((n) => n.toLocaleString())
+							.join('/')}) &middot; {g.drawCalls}/{g.activeChunks} chunks &middot; {g.triangles.toLocaleString()}
+						tris
+					</div>
+					<div>
+						Grass {(g.bufferBytes / 1048576).toFixed(2)} MB &middot; gen {g.lastGenerationMs.toFixed(
+							1
+						)} ms (avg {g.averageGenerationMs.toFixed(1)}) &middot; {g.queuedChunks} queued &middot; {g.renderDistance.toFixed(
+							0
+						)} m &middot; adaptive {g.adaptiveLevel.toFixed(2)}{g.budgetScale < 1
+							? ` · budget ${g.budgetScale.toFixed(2)}`
+							: ''}
+					</div>
+				{/if}
 				<div>
 					Creatures {stats.creatures.rendered}/{stats.creatures.active} active · {stats.creatures
 						.sleeping} sleeping · LOD {stats.creatures.lod0}/{stats.creatures.lod1}

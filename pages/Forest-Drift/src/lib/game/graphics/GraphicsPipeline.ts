@@ -36,6 +36,14 @@ const DYNAMIC_RES_CHECK_INTERVAL = 1;
 const DYNAMIC_RES_STEP = 0.08;
 /** Exponential-moving-average time constant (seconds) for the smoothed FPS the dynamic-resolution logic reacts to. */
 const FPS_SMOOTHING_TIME_CONSTANT = 0.5;
+/**
+ * GTAO's three full-screen passes (normal/depth, AO, denoise) scale with pixel count, and at a
+ * Retina canvas (≈ 3 MP at the 1.5 pixel-ratio cap) they cost more than the whole rest of the frame.
+ * AO is low-frequency and denoised, so it is computed at no more than ~1 MP and upsampled in the
+ * blend: full resolution at 1280 × 720, about half on a laptop's Retina screen.
+ */
+const AO_PIXEL_BUDGET = 1_000_000;
+const AO_MIN_SCALE = 0.5;
 
 interface PipelinePasses {
 	renderPass: RenderPass;
@@ -219,6 +227,18 @@ export class GraphicsPipeline {
 				object.visible = false;
 				pass._visibilityCache.push(object);
 			}
+		};
+	}
+
+	/** Computes AO within `AO_PIXEL_BUDGET` whatever size the composer asks for (see that constant). */
+	private limitAoResolution(gtaoPass: GTAOPass): void {
+		const setSize = gtaoPass.setSize.bind(gtaoPass);
+		gtaoPass.setSize = (width: number, height: number) => {
+			const scale = Math.max(
+				AO_MIN_SCALE,
+				Math.min(1, Math.sqrt(AO_PIXEL_BUDGET / Math.max(1, width * height)))
+			);
+			setSize(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
 		};
 	}
 
@@ -443,6 +463,7 @@ export class GraphicsPipeline {
 				// multiplies the denoised AO term over it via `blendIntensity`), which is what an actual
 				// rendered frame needs.
 				gtaoPass.output = GTAOPass.OUTPUT.Default;
+				this.limitAoResolution(gtaoPass);
 				this.hideExcludedFromAo(gtaoPass);
 				this.applyAoTuning(gtaoPass);
 				composer.addPass(gtaoPass);

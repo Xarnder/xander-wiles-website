@@ -2737,6 +2737,457 @@ duplication across chunks, per-chunk cap, crown clearance).
   cut far draw calls further if needed.
 - Optional species (dead, bent, flowering, willow) are not implemented.
 
+## Grass: procedural billboard tufts, density LOD and terrain hand-off (`vegetation/grass/`)
+
+Grass is built for 60 FPS from the start: one shared card, one shared atlas, one shared material
+and compact per-tuft data, in spatial chunk batches — never a Mesh, Object3D or JS object per
+tuft, and no per-tuft CPU work after a chunk is built.
+
+```
+world-space candidate cells (seed, cell)              grass/grassPlacement.ts
+  → region density: biome, forest, elevation          grass/GrassRegionSampler.ts
+  → clumping, slope, shore, water, foundations        grass/grassPlacement.ts
+  → 20 bytes per tuft, sorted by LOD rank             grass/grassPlacement.ts
+    → one InstancedBufferGeometry per 16 m chunk      grass/GrassChunk.ts   (1 draw call)
+      → shared atlas / card / material                grass/grassAtlas.ts, grass/grassMaterial.ts
+        → streaming, budget, adaptive quality, stats  grass/GrassManager.ts, grass/grassLod.ts
+```
+
+### What one tuft is
+
+A **tuft**, not a blade: each card shows one of eight procedural tufts (6–16 blades each) from a
+4 × 2 atlas — short, medium, tall, wide, thin, bent, seed heads, fine. `generateGrassAtlas` draws
+deterministic quadratic blade strokes with analytic antialiasing (no canvas, runs in Node) and
+builds its own mip chain: colour is alpha-weighted (transparent texels never darken edges, and
+carry dilated blade colour so filtering never pulls in a halo), and each level's alpha is
+rescaled so the fraction of texels passing the alpha test matches level 0. Distant tufts
+therefore keep their coverage instead of thinning out or vanishing. 128 px tiles, five levels,
+682 KB including mips. The atlas RGB is a light/dark **multiplier** around 1, never the green
+itself, so one atlas serves every biome.
+
+Instance data is three attributes — no Matrix4:
+
+| Attribute     | Format            | Contents                                            |
+| ------------- | ----------------- | --------------------------------------------------- |
+| `aGrassPos`   | 3 × float32       | root x/z (chunk-local) and y (on the built terrain) |
+| `aGrassShape` | 4 × uint8 (norm.) | height, width, LOD rank, wind phase                 |
+| `aGrassTint`  | 4 × uint8         | √-encoded linear colour (terrain-matched), variant  |
+
+20 bytes per tuft against 64 for a matrix. CPU copies are dropped once uploaded.
+
+### Billboarding and the near crossed pair
+
+The card is **axial**: rooted at its bottom centre, always upright, turned about world Y to face
+the camera horizontally — it never tips over into a floor sprite when you look down. On HIGH and
+ULTRA, tufts within ~9 m are **two crossed cards** at the tuft's own fixed yaw (so walking through
+a meadow doesn't show cards swivelling to follow you); the pair morphs continuously into the
+single camera-facing card by 9 m, and chunks beyond that draw only the first card (4 triangles
+instead of 8 — the draw range changes, no other data). Normals are biased toward world up (with
+a little toward the camera) and never flip on back faces, so a card seen edge-on never goes dark;
+Lambert lighting, a darker base and lighter tip, no extra texture.
+
+### Placement: deterministic, world-space, seam-free
+
+Candidates sit on a world grid of `candidateSpacing` (0.4 m) cells. A cell's tuft — jitter,
+existence, height, width, variant, colour, rank, wind phase — is a hash of (seed, cell x, cell z)
+and the land under it, salted with `generatorVersion`. A chunk owns the cells whose origin lies
+inside it, so tufts are identical whichever chunk generates them, in any order, at negative
+coordinates too (tests compare four 16 m chunks against one 32 m chunk). Grass chunks are
+independent of terrain/vegetation chunk sizes; those are only load buckets.
+
+Per cell, cheapest test first:
+
+1. **Region density** (`GrassRegionSampler`, on a 4 m grid per chunk): plains 1.0, rolling hills
+   0.85, highlands 0.5, mountains 0.16 by terrain region weight; forest floors keep 45 %; it thins
+   above 48–92 m. The same region data biases height (short alpine turf ↔ tall meadow), warmth
+   (dark forest grass ↔ dry upland grass) and the variant mix.
+2. **Clumping**: two octaves of broad value noise (~6 m and ~2 m patches) scale acceptance from
+   34 % to 120 % — dense patches and sparse gaps, never per-cell white noise. Dense patches grow
+   a little taller.
+3. **Quality**: the preset's density scale multiplies acceptance against the same roll, so LOW is
+   a stable subset of HIGH (switching quality never reshuffles the meadow).
+4. **Buildings**: foundation footprints (`FoundationManager.getFootprints`, padded 0.3 m) — a
+   handful of rects per chunk, never a test against building geometry.
+5. **The built terrain**: the tuft's height, normal and shore values are interpolated from the
+   terrain chunk's own vertex lattice on the mesh's own triangles
+   (`terrain/terrainSurfaceLattice.ts`), so it sits exactly on the rendered ground and costs no
+   noise evaluation. Slopes thin out from ~28° to none at ~45° (matching where the terrain colour
+   turns to rock); beaches and wet river shelves have none.
+6. **Water**: only for chunks with a river or lake nearby, water depth on a 2 m grid; any wet node
+   (plus a margin) excludes, so grass stops short of the waterline and never grows underwater.
+7. **Colour**: `writeTerrainColor` at the tuft — the very colour the terrain shows there — with
+   ±7 % shade and the region's warmth. This is what lets the billboards hand over to the terrain.
+
+Generation runs in a time-sliced queue (3 ms per frame, nearest chunks first) and waits for the
+terrain chunk underneath. Placing, moving or removing a foundation regenerates only the grass
+chunks its old and new footprints touch.
+
+### LOD: density, not just geometry
+
+Each tuft has a fixed **rank** hash (bigger tufts rank earlier). Density is a continuous curve of
+distance — full to `lod0Distance` (14 m), down to `lod1Density` 0.5 at 32 m, to `lod2Density`
+0.22 at 50 m, to zero at `renderDistance` 64 m (all × the preset's distance scale) — and a tuft
+exists while its rank is below the density at its distance. Tufts within a small rank band of the
+threshold **scale down** smoothly instead of popping, and survivors of thinned LODs widen a little
+so coverage falls slower than the count. No rings, no flicker: the same tuft always survives or
+fades at the same place.
+
+Because instances are stored sorted by rank, the CPU's whole per-frame LOD job is one distance per
+chunk: `instanceCount = how many ranks could be visible at the chunk's nearest point` (a 257-entry
+table per chunk). Tufts past the cut are never even submitted. Beyond `renderDistance` there is
+no grass geometry at all — LOD3 is the terrain, whose colour and procedural grass detail texture
+are what the billboards' colours were taken from.
+
+Debug: Settings → Vegetation → Debug → Show grass LOD tints tufts red / green / blue by band.
+
+### Wind and weather
+
+All in the vertex shader: the tip offset grows with (local height)², swaying along the weather
+wind (the same direction, strength multiplier and lean the trees use) with a per-tuft phase and
+broad travelling gusts from world position. The bend is clamped to 60 % of the tuft height, so a
+thunderstorm bends grass hard without flattening it. Rain darkens it slightly (wetness uniform).
+Tips near the player lean away (one uniform; off in Settings). LOW turns wind off.
+
+### Quality presets, budget and adaptive quality
+
+| Preset | Density | Distance (m) | Crossed near cards | Receives shadows | Wind | Tuft cap |
+| ------ | ------- | ------------ | ------------------ | ---------------- | ---- | -------- |
+| LOW    | 0.55    | 38           | no                 | no               | no   | 15 000   |
+| MEDIUM | 0.8     | 51           | no                 | no               | yes  | 30 000   |
+| HIGH   | 1.0     | 64           | yes                | yes              | yes  | 60 000   |
+| ULTRA  | 1.1     | 80           | yes                | yes              | yes  | 90 000   |
+
+Grass never casts shadows (thousands of tiny cards in the shadow map are not worth it).
+
+- **Budget**: if the loaded view would draw more than the preset's tuft cap, densities scale down
+  proportionally and recover slowly — sliders can't create unbounded work.
+- **Adaptive quality** (`GrassAdaptiveQuality`): fed the smoothed frame rate once a second, three
+  consecutive seconds under 90 % of target step the level down; eight seconds above 97 % step it
+  half as far back up. What gives way follows the brief's order — far density first, then LOD
+  distances, then mid-distance density, then (modestly, never below 75 %) near density. All of it
+  is uniforms and instance counts: nothing regenerates.
+
+### Persistence
+
+Grass settings (including `generatorVersion`) are part of `VegetationSettings`, saved with the
+world; debug views are stripped like the tree ones. Tufts, buffers and geometry are never saved —
+they regenerate. `GRASS_GENERATOR_VERSION` salts every hash, so a future placement change can keep
+old worlds' meadows as they were.
+
+### Settings and stats
+
+Settings → Vegetation → Grass: enabled, density, candidate spacing, render distance, LOD0/1/2
+distances and densities, heights, width ratio, wind strength, alpha test, bend around player.
+Debug: grass chunk outlines, LOD tints, candidate points. The render-stats overlay shows visible
+tufts per LOD, grass draw calls / chunks, triangles, buffer + atlas memory, generation time,
+queue, effective distance and the adaptive level.
+
+### Performance
+
+`tests/grassPerformance.e2e.ts` → `docs/grass-performance.json` (Apple M4, ANGLE Metal, 1280 × 720,
+production build, vsync and the frame cap off, dynamic resolution and adaptive grass off so
+configurations compare directly). "OFF" is grass disabled at HIGH, so OFF → HIGH is grass's own
+cost; LOW/MEDIUM/ULTRA columns also change everything else their preset changes.
+
+| Scene                              | OFF     | LOW     | MEDIUM  | HIGH    | ULTRA   |
+| ---------------------------------- | ------- | ------- | ------- | ------- | ------- |
+| A flat plains, dense grass         | 208 fps | 520 fps | 281 fps | 196 fps | 145 fps |
+| B rolling hills                    | 230 fps | 528 fps | 293 fps | 215 fps | 162 fps |
+| C dense forest + grass             | 189 fps | 547 fps | 263 fps | 183 fps | 134 fps |
+| D 60 furnished Mini Builds + grass | 199 fps | 522 fps | 267 fps | 179 fps | 139 fps |
+| E rain + trees + river + grass     | 175 fps | 438 fps | 220 fps | 160 fps | 121 fps |
+| F creatures + thunderstorm + grass | 187 fps | 472 fps | 218 fps | 149 fps | 121 fps |
+
+Grass at HIGH costs **0.2–0.6 ms per frame** (F's larger gap is lightning noise). Frame time tracks
+main-thread CPU time in every row, so on this machine the game is CPU-bound, not fill-bound.
+
+Grass itself in scene A:
+
+| Preset | Visible tufts | LOD0 / 1 / 2          | Grass draws | Grass triangles | Buffers + atlas |
+| ------ | ------------- | --------------------- | ----------- | --------------- | --------------- |
+| LOW    | 4 328         | 2 748 / 730 / 850     | 12          | 17 312          | 1.1 MB          |
+| MEDIUM | 8 719         | 4 082 / 2 458 / 2 179 | 19          | 34 876          | 1.6 MB          |
+| HIGH   | 13 886        | 4 900 / 6 463 / 2 523 | 26          | 75 144          | 2.4 MB          |
+| ULTRA  | 19 551        | 7 146 / 8 124 / 4 281 | 38          | 98 748          | 3.3 MB          |
+
+(LOD bands are by chunk; ~89 000 tufts are resident at HIGH, of which the rank cut submits ~14 000.)
+
+Stress, scene A at HIGH looking horizontally through the meadow (worst overdraw):
+
+| Drawn tufts | Triangles | FPS | Frame  | Grass memory |
+| ----------- | --------- | --- | ------ | ------------ |
+| 13 886      | 75 144    | 183 | 5.5 ms | 2.4 MB       |
+| 25 238      | 120 552   | 176 | 5.7 ms | 2.4 MB       |
+| 51 135      | 244 380   | 171 | 5.9 ms | 4.1 MB       |
+| 137 314     | 627 296   | 131 | 7.6 ms | 12.3 MB      |
+
+Nothing became limiting below ~50 000 drawn tufts; at 137 000 the extra cost was ~2 ms, split
+between vertex work and the 10× resident data. Overdraw never dominated at this resolution with
+alpha test (no blending) — expect it to matter first on weak integrated GPUs at high resolutions,
+which is what the adaptive level and the tuft cap are for.
+
+Streaming: a chunk generates in **0.3–0.5 ms** (time-sliced, 3 ms a frame); after a 150 m teleport
+the whole ring is rebuilt in 0.15–0.7 s. Over a 3.1 km walk the resident set stayed at 85–88
+chunks and 1.7–2.5 MB of instance buffers (it varies with how grassy the land is, never grows).
+
+**Recommended HIGH defaults** (the shipped values): candidate spacing 0.4 m, render distance 64 m,
+LOD 14 / 32 / 50 m at density 1 / 0.5 / 0.22, crossed cards to 9 m, receive shadows on, tuft cap
+60 000. That is ~14 000 drawn tufts in dense plains for ~0.3 ms — leaving the cap and adaptive
+quality as headroom for weaker GPUs rather than spending it by default.
+
+### Tests
+
+`vegetation/grass/__tests__/grass.spec.ts`: atlas determinism and coverage-preserving mips at
+every level, tufts rooted at the tile bottom, no unfilled (halo) texels; placement determinism
+regardless of generation order; no seams (four 16 m chunks = one 32 m chunk, negative
+coordinates); tufts inside their chunk and on the surface; rank sorting and counts; lower quality
+is a strict subset; foundation / water / cliff exclusions with plains kept; clumping spread;
+region rules (plains > hills > highlands > mountains, forests and altitude thinner); continuous
+density curve and smooth per-tuft fades; the drawn rank prefix always contains every visible
+tuft; adaptive order and hysteresis; terrain-lattice interpolation; streaming — one mesh per
+chunk, one shared material, bounded chunks and memory over a 2 km walk, clean dispose, and a new
+foundation rebuilding only the chunks under it. `tests/grassPerformance.e2e.ts` is the benchmark.
+
+### Limitations
+
+- No grass under Mini Builds or floor-detail paths yet (only foundations exclude); a rug on open
+  ground has grass poking through.
+- Reeds/wet-shore grass and player grass removal are not implemented; the exclusion list is where
+  either would plug in.
+- Grass doesn't react to creatures, only to the player.
+- Looking straight down, upright cards are seen edge-on and the meadow reads thinner (the terrain's
+  own grass texture fills in).
+
+## Flowers and ground plants: species recipes, prototype banks and colonies (`vegetation/plants/`)
+
+Meadows get hundreds of distinct flower and ground-plant species without hundreds of meshes or
+textures. Variety lives in small **species recipes**; each recipe compiles lazily into a tiny bank
+of 2–4 low-poly **prototypes**; every plant in the world is a few bytes of instance data that
+points at one of them. Everything shares one procedural atlas, one card and two materials.
+
+```
+seed → regional species set (3–6 flowers, 2–4 ground plants)   plants/plantEcology.ts
+  → species recipe (family, shape, palette, habitat, growth)   plants/plantSpecies.ts, plantPalette.ts
+    → 2–4 prototypes, compiled only when first seen up close   plants/plantPrototype.ts, PlantPrototypeCache.ts
+  → world-space candidates per spacing class, colonies,        plants/plantPlacement.ts
+    habitat, slope / water / foundation exclusions
+    → near ring (LOD0): one instanced batch per prototype      plants/PlantManager.ts
+    → far cards (LOD1/2): one draw per 32 m chunk, all species plants/PlantCardChunk.ts
+    → beyond: flower colour mixed into the terrain             PlantManager.terrainTint()
+  shared: one 512 px mask atlas, one card, two materials        plants/plantAtlas.ts, plantMaterial.ts
+```
+
+### Species, not plants, carry the variety
+
+A species (`PlantSpeciesDefinition`, `generatePlantSpecies(seed)`) fixes everything that makes it
+recognisable: family, petal shape and count, layers, head size, stem height range, leaf shape and
+arrangement, palette, habitat, spacing class, colony size, rarity and wind stiffness. Instances
+only vary what real plants of one species vary: scale (±15 %), yaw, a small hue / shade shift,
+wind phase and which of the species' prototypes they use. So a colony reads as one species, and
+the next colony over as a different one.
+
+Generation is **correlated**, not independent dice: bigger heads get thicker stems, tall plants
+lean on stiffer stems, succulents are stemless, stiff and dry-loving, ferns like shade, bells
+droop, spikes stack 6–10 small blossoms, fantasy colours are always rare.
+
+**Flower families** — radial (daisy), star, cup, bell, spike, orb (allium / clover-head), cluster
+(umbels of florets). **Ground families** — rosette, fern, broadleaf, clover (patches of
+trefoils), succulent, ground tuft.
+
+**Petal archetypes** (8) — round, pointed, teardrop, wide, narrow, heart, diamond, curved. **Leaf
+archetypes** (8) — lance, oval, heart, frond, trefoil, succulent, spatulate, strap.
+
+**Palettes** (`plantPalette.ts`) are generated in HSL by colour family — white, yellow, orange,
+pink, red, purple, blue and (rare) fantasy — with weights that favour natural meadow colours.
+The petal tip is always related to the base (lighter, whitening or a neighbouring hue for
+bicolours); centres contrast with petals (yellow/brown discs, dark eyes on pale flowers); leaves
+come from a family-dependent green range (blue-green succulents, yellow-green clovers, deep ferns)
+and stems follow the leaves. `paletteIssues` rejects muddy or invisible combinations (petals that
+don't stand out from their own leaves, near-black leaves, out-of-gamut values); tests run it over
+hundreds of seeds.
+
+### Geometry: a few triangles per plant
+
+`buildPlantPrototype(species, variant)` emits one merged, indexed mesh per prototype from three
+primitives — **cards** (bent / folded / arched quads with a few segments; petals and leaves),
+**prisms** (3-sided stems) and **domes** (centres, only when big enough to see). Petals and leaves
+are textured cards, so a daisy is one card per petal, not a modelled petal. Averages per family
+are 12–90 triangles, the maximum ~160 (a big cluster). Every vertex carries its wind weight (0 at
+the root → 1 at the tip), a head flag (heads sway independently of the stem), the species'
+stiffness and a hash; normals are biased toward world up so petals and leaves never go black
+edge-on. Compiling one prototype takes ~0.06 ms.
+
+### The procedural atlas: shapes, not colours
+
+`generatePlantAtlas` draws 32 tiles of 64 px in one 512 × 256 RGBA atlas (no canvas, runs in Node,
+~130 ms once at startup): the 8 petal shapes, a disc and a floret centre, the 8 leaf shapes,
+13 distant-card impostors (one per flower/ground family silhouette) and a clover patch. Tiles are
+**masks**: alpha is the shape, R is a vein / gradient shade, G marks petal vs centre vs leaf for
+the impostors. The shaders colour them from the instance's palette, so one atlas serves every
+species. Mips are built like grass's (coverage-preserving alpha, dilated colour —
+`vegetation/atlas/alphaAtlas.ts`), so a far card keeps the same visible area. ~680 KB with mips.
+
+### Prototype cache
+
+`PlantPrototypeCache` compiles a prototype only when a plant of that species and variant first
+enters the near ring, keyed `speciesId:variant`; species seen only as distant cards never cost
+any geometry. 1 000 plants of one species share its 2–4 prototypes (tested). Entries unused for
+20 s are pruned every 5 s, with a hard cap of 160, so walking the world never accumulates
+geometry. The preset's `maxPrototypes` (1 on LOW … 4 on ULTRA) limits how many of a species'
+variants are used.
+
+### Instance data
+
+Near (LOD0) batches: `aPlantRoot` (3 × float32) + `aPlantInst` (4 × uint8: scale, yaw, hue /
+shade shift, wind phase) = **16 bytes**. Far cards: root (12 bytes) + four normalised `uint8 × 4`
+attributes = **28 bytes**:
+
+| Attribute     | Contents                                                            |
+| ------------- | ------------------------------------------------------------------- |
+| `aCardShape`  | height, width, LOD rank, wind phase                                 |
+| `aCardPetal`  | √-encoded petal colour, impostor tile                               |
+| `aCardCentre` | √-encoded centre colour, species hash                               |
+| `aCardLeaf`   | √-encoded leaf colour, stiffness (4 bits) + distance class (4 bits) |
+
+No Matrix4, no per-plant objects; CPU copies are dropped after upload except the positions the
+near ring rebuild needs.
+
+### Placement: deterministic, colonies and micro-habitats
+
+Each species is placed on a world grid for its **spacing class** — tiny 0.9 m, medium 1.6 m,
+large 3.2 m cells — so small plants can be dense and large ones never crowd. A cell's candidate
+(jitter, existence, scale, yaw, prototype, rank) is a hash of (seed, class, cell), salted with
+`PLANT_GENERATOR_VERSION`; a chunk owns the cells whose origin is inside it. Tests compare four
+32 m chunks against one 64 m chunk at negative coordinates: no duplicates, no gaps.
+
+Per candidate:
+
+1. **Region species** (`PlantEcology`): the world is split into ~192 m domain-warped regions.
+   Each 4 × 4 block of regions shares a pool of 10 flower and 7 ground species, and each region
+   picks 3–6 flowers and 2–4 ground plants from it (× the species-count setting × the preset).
+   Neighbouring regions overlap, so species drift across the map instead of switching at a line;
+   rare species are skipped more often.
+2. **Colonies**: per species, two octaves of value noise at its own colony scale, thresholded with
+   a soft edge (`plantColony`) — patches of one species with gaps, not uniform confetti.
+3. **Habitat** (`plantSuitability`): forest shade vs open meadow, wetness (distance to rivers and
+   lakes), elevation band and maximum slope, against the species' preferences. Forest floors get
+   ferns and shade plants; wet banks get moisture lovers; dry slopes get succulents.
+4. **Competition**: the best-suited species in the cell wins (`best × 1.7 + others × 0.35`,
+   capped at 97 %), so two colonies overlapping don't double the density.
+5. **Exclusions**: the built terrain (`terrainSurfaceLattice`, exactly on the rendered mesh),
+   slope beyond the species' limit, shore cover, any wet node of the water grid (never
+   underwater), and foundation footprints. Placing or removing a foundation regenerates only the
+   plant chunks its footprints touch.
+6. **Shared vegetation budget**: where flower colonies are strong, grass grows ~45 % sparser and
+   ~35 % shorter (`flowerCover` → `GrassManager.groundCover`), so flowers stand out of the meadow.
+
+Generation is time-sliced (3 ms per frame, nearest first) and waits for the terrain chunk under it.
+`removedPlantIds` (picking flowers) is designed for but not stored yet: a plant's id is its
+(species class, cell), so a future set of removed ids can be applied at generation time.
+
+### LOD
+
+| Band | Distance (HIGH)  | What draws                                                          |
+| ---- | ---------------- | ------------------------------------------------------------------- |
+| LOD0 | 0–11 m           | real prototype geometry, one draw per prototype in view             |
+| LOD1 | 11–26 m          | one alpha-tested card per plant (family impostor, palette-coloured) |
+| LOD2 | 26–40 m          | the same cards, density falling to 20 %                             |
+| LOD3 | 40–52 m → beyond | cards thin to none; flower colonies tint the terrain colour         |
+
+Density is a rank prefix exactly like grass: instances are stored sorted by rank, a chunk's
+`instanceCount` comes from a 257-entry table, and plants near the threshold shrink instead of
+popping. **Importance** decides who goes first: small plants carry a short distance class (a
+clover vanishes at a third of the distance a tall foxglove survives to), so far cards are the
+plants you'd actually see. The LOD0 ↔ card hand-off is a 1.5 m crossfade with complementary 4 × 4
+Bayer dither masks — every pixel shows exactly one of the two, so there is no pop and no
+double-draw blending. The near ring is rebuilt only after the camera moves 1.5 m.
+
+**Terrain hand-off**: `PlantManager.terrainTint()` is installed into `TerrainManager.setGroundTint`
+and mixes the local flower colonies' petal colour into the terrain vertex colour (≤ 18 %, weighted
+by colony strength and density), so a meadow of red poppies is still faintly red at 300 m when no
+plant is drawn there.
+
+### Wind
+
+Vertex shader only, sharing the trees' and grass's weather wind (direction, strength, storm lean):
+bend grows with the vertex's wind weight², scaled by the species' stiffness (succulents barely
+move, tall thin flowers sway most), and heads add their own faster nod. Cards use the same
+formula with the stiffness from their instance byte. The player pushes nearby plants aside. LOW
+turns wind off.
+
+### Quality presets, budget and adaptive quality
+
+| Preset | Density | Distance | Near (LOD0) | Species | Prototypes / species | Shadows | Wind | Plant cap |
+| ------ | ------- | -------- | ----------- | ------- | -------------------- | ------- | ---- | --------- |
+| LOW    | 0.5     | 0.6 ×    | 0.7 ×       | 0.6 ×   | 1                    | no      | no   | 4 000     |
+| MEDIUM | 0.75    | 0.8 ×    | 0.85 ×      | 0.85 ×  | 2                    | no      | yes  | 8 000     |
+| HIGH   | 1.0     | 1.0 ×    | 1.0 ×       | 1.0 ×   | 3                    | receive | yes  | 14 000    |
+| ULTRA  | 1.1     | 1.2 ×    | 1.25 ×      | 1.0 ×   | 4                    | receive | yes  | 20 000    |
+
+Plants never cast shadows. The budget and adaptive quality work exactly like grass's (same
+`GrassAdaptiveQuality` class and degradation order), driven separately so either can give way.
+
+### Settings, debug and the Plant Lab
+
+Settings → Vegetation → Flowers & ground plants: enabled, flower density, ground-plant density,
+species per region, render distance, LOD0/1/2 distances and densities, wind multiplier, alpha
+test, terrain tint. Debug: plant chunk outlines, per-species colours, LOD tints, candidate points
+(accepted / rejected) and colony fields. The stats overlay shows near / card instances, draws,
+triangles, active species, prototypes (and compiles), buffer and atlas memory, generation time,
+queue and adaptive level.
+
+**Plant Lab** (`/plants`, developer tool): rows of generated species — each prototype as real
+geometry next to the far card it becomes — with the game's own atlas and materials. Random
+flowers, random ground plants, a mixed set, a real region's set, `?seed=`, and `?inspect` for
+the recipe JSON.
+
+### Performance
+
+`tests/plantPerformance.e2e.ts` → `docs/plant-performance.json` (Apple M4, ANGLE Metal, 1280 × 720,
+production build, vsync and the frame cap off, dynamic resolution and adaptive vegetation off).
+Every scene runs with grass, trees, water and weather on; "OFF" is plants disabled at HIGH, measured
+both before and after the plant configurations (averaged — the machine drifts ~1 ms between them).
+Frame times in ms:
+
+| Scene                               | OFF   | LOW  | MEDIUM | HIGH | ULTRA |
+| ----------------------------------- | ----- | ---- | ------ | ---- | ----- |
+| A flower meadow (plains) + grass    | 5.89  | 1.88 | 3.92   | 5.74 | 8.00  |
+| B rolling hills                     | 6.54  | 2.12 | 4.71   | 6.91 | 8.37  |
+| C forest floor + trees + grass      | 8.97  | 1.99 | 5.61   | 8.61 | 11.48 |
+| D 60 furnished Mini Builds + plants | 9.49  | 2.86 | 6.99   | 8.83 | 11.76 |
+| E rain + river + plants + grass     | 10.55 | 2.80 | 6.42   | 9.43 | 12.39 |
+| F creatures + thunderstorm + plants | 10.32 | 2.25 | 6.93   | 9.96 | 13.85 |
+
+Plants at HIGH cost less than the measurement noise (±0.4 ms) in every scene; LOW/MEDIUM/ULTRA
+also change everything else their preset changes. Plants themselves in scene A:
+
+| Preset | Near (LOD0) | Cards (LOD1 / LOD2) | Plant draws | Triangles | Species / prototypes | Buffers |
+| ------ | ----------- | ------------------- | ----------- | --------- | -------------------- | ------- |
+| LOW    | 40          | 339 / 62            | 4 + 5       | 3 388     | 12 / 4               | 0.8 MB  |
+| MEDIUM | 94          | 546 / 380           | 11 + 7      | 8 154     | 18 / 11              | 0.9 MB  |
+| HIGH   | 269         | 1 550 / 542         | 18 + 7      | 17 046    | 20 / 18              | 1.1 MB  |
+| ULTRA  | 439         | 2 444 / 450         | 20 + 12     | 25 730    | 32 / 20              | 1.3 MB  |
+
+Plus the 680 KB atlas. Stress (scene A at HIGH, looking horizontally through the meadow):
+
+| Setting                       | Loaded plants | Drawn (near + cards) | Frame   | Plant memory |
+| ----------------------------- | ------------- | -------------------- | ------- | ------------ |
+| density 0.25                  | 2 855         | 53 + 512             | 9.56 ms | 0.8 MB       |
+| default HIGH                  | 11 179        | 269 + 2 092          | 9.83 ms | 1.1 MB       |
+| flat LOD density              | 11 179        | 269 + 3 656          | 9.55 ms | 1.1 MB       |
+| density × 3, 80 m             | 36 926        | 613 + 14 484         | 9.78 ms | 2.0 MB       |
+| density × 3, 120 m, near 24 m | 74 823        | 2 518 + 20 867       | 10.6 ms | 3.4 MB       |
+
+An eye 0.4 m above the densest level (worst overdraw) ran at 10.5 ms. Streaming: a 32 m chunk
+generates in ~1–2 ms (time-sliced); over a 3.1 km teleport-walk the resident set stayed at 20–23
+chunks and 1.1–2.1 MB, and the prototype cache rose to its 160-entry cap and stayed there (teleports
+outrun the 20 s idle prune; walking doesn't).
+
+### Persistence
+
+Plant settings, including `generatorVersion`, are saved with the world's `VegetationSettings`;
+no plant, species or buffer is ever saved — they regenerate from the seed.
+
 ## Sky: HDRI lighting, a procedural sky dome, and layered cloud sheets
 
 `src/lib/game/sky/` adds three independent, framework-free systems, all driven from one
@@ -2999,6 +3450,12 @@ and the Poisson denoiser's ring/sample counts. The AO buffer itself also renders
 resolution on cheaper tiers (0.5/0.75/0.85 of the composer's pixel-ratio-scaled size) — reapplied via
 `gtaoPass.setSize()` immediately after `EffectComposer.setSize()` would otherwise reset it to full
 res, since the composer propagates its own size to every pass uniformly.
+On top of that tier scale, the AO buffer is capped at ~1 megapixel (`AO_PIXEL_BUDGET`, never below
+half the tier-scaled size): GTAO's three full-screen passes scale with pixel count, and on a
+laptop's Retina canvas (≈ 3 MP at the 1.5 pixel-ratio cap) they were the largest single cost in the
+frame. At 1280 × 720 the cap changes nothing. Grass and plant groups are excluded from the AO
+pre-pass (`excludeFromAo`): their instances are positioned in the vertex shader, which GTAO's
+override material doesn't run.
 
 ### Anti-aliasing: FXAA on LOW, SMAA everywhere else — deliberately never TAA
 

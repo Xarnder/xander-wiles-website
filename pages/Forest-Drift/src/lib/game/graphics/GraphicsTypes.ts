@@ -61,6 +61,23 @@ export interface GraphicsPreset {
 	/** Procedural bark/leaf detail on near trees (see `TreeSurfaceDetail`: 1 cheap, 2 full, 3 full + further). */
 	readonly treeSurfaceDetail: 1 | 2 | 3;
 
+	/** Procedural grass: density, render-distance scale, near crossed cards, shadow receiving, wind, tuft cap (see `GrassQualityProfile`). */
+	readonly grassDensityScale: number;
+	readonly grassDistanceScale: number;
+	readonly grassCrossedCards: boolean;
+	readonly grassReceiveShadows: boolean;
+	readonly grassWind: boolean;
+	readonly grassMaxVisibleInstances: number;
+	/** Flowers & ground plants (see `PlantQualityProfile`). With the grass cap this is the preset's vegetation budget. */
+	readonly plantDensityScale: number;
+	readonly plantDistanceScale: number;
+	readonly plantNearScale: number;
+	readonly plantSpeciesScale: number;
+	readonly plantMaxPrototypes: number;
+	readonly plantReceiveShadows: boolean;
+	readonly plantWind: boolean;
+	readonly plantMaxVisibleInstances: number;
+
 	/**
 	 * Water shader tier. 0 is a flat colour, 1 adds Fresnel and one ripple, 2 adds a second ripple
 	 * and a tighter sun highlight, 3 adds a third ripple. Geometry density follows the same tier.
@@ -99,6 +116,20 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: -1,
 		treeWind: false,
 		treeSurfaceDetail: 1,
+		grassDensityScale: 0.55,
+		grassDistanceScale: 0.6,
+		grassCrossedCards: false,
+		grassReceiveShadows: false,
+		grassWind: false,
+		grassMaxVisibleInstances: 15000,
+		plantDensityScale: 0.5,
+		plantDistanceScale: 0.6,
+		plantNearScale: 0.7,
+		plantSpeciesScale: 0.6,
+		plantMaxPrototypes: 1,
+		plantReceiveShadows: false,
+		plantWind: false,
+		plantMaxVisibleInstances: 4000,
 		waterQuality: 0
 	},
 	medium: {
@@ -126,6 +157,20 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 0,
 		treeWind: true,
 		treeSurfaceDetail: 2,
+		grassDensityScale: 0.8,
+		grassDistanceScale: 0.8,
+		grassCrossedCards: false,
+		grassReceiveShadows: false,
+		grassWind: true,
+		grassMaxVisibleInstances: 30000,
+		plantDensityScale: 0.75,
+		plantDistanceScale: 0.8,
+		plantNearScale: 0.85,
+		plantSpeciesScale: 0.85,
+		plantMaxPrototypes: 2,
+		plantReceiveShadows: false,
+		plantWind: true,
+		plantMaxVisibleInstances: 8000,
 		waterQuality: 1
 	},
 	high: {
@@ -153,6 +198,20 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 0,
 		treeWind: true,
 		treeSurfaceDetail: 2,
+		grassDensityScale: 1,
+		grassDistanceScale: 1,
+		grassCrossedCards: true,
+		grassReceiveShadows: true,
+		grassWind: true,
+		grassMaxVisibleInstances: 60000,
+		plantDensityScale: 1,
+		plantDistanceScale: 1,
+		plantNearScale: 1,
+		plantSpeciesScale: 1,
+		plantMaxPrototypes: 3,
+		plantReceiveShadows: true,
+		plantWind: true,
+		plantMaxVisibleInstances: 14000,
 		waterQuality: 2
 	},
 	ultra: {
@@ -183,6 +242,20 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 1,
 		treeWind: true,
 		treeSurfaceDetail: 3,
+		grassDensityScale: 1.1,
+		grassDistanceScale: 1.25,
+		grassCrossedCards: true,
+		grassReceiveShadows: true,
+		grassWind: true,
+		grassMaxVisibleInstances: 90000,
+		plantDensityScale: 1.1,
+		plantDistanceScale: 1.2,
+		plantNearScale: 1.25,
+		plantSpeciesScale: 1,
+		plantMaxPrototypes: 4,
+		plantReceiveShadows: true,
+		plantWind: true,
+		plantMaxVisibleInstances: 20000,
 		waterQuality: 3
 	}
 };

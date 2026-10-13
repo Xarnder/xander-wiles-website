@@ -2478,6 +2478,305 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						actions.vegetationSettings
 					)
 				]),
+				group('grass', 'Grass', [
+					boolField(
+						'vegetation.grass.enabled',
+						'Grass',
+						vegetation.grass,
+						'enabled',
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.density',
+						'Density',
+						vegetation.grass,
+						'density',
+						0,
+						1.5,
+						0.05,
+						undefined,
+						actions.grassSettings
+					),
+					numberField(
+						'vegetation.grass.spacing',
+						'Candidate spacing (m)',
+						vegetation.grass,
+						'candidateSpacing',
+						0.3,
+						1.5,
+						0.05,
+						undefined,
+						actions.grassSettings
+					),
+					numberField(
+						'vegetation.grass.distance',
+						'Render distance (m)',
+						vegetation.grass,
+						'renderDistance',
+						10,
+						160,
+						1,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod0',
+						'LOD0 distance (m)',
+						vegetation.grass,
+						'lod0Distance',
+						2,
+						80,
+						1,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod1',
+						'LOD1 distance (m)',
+						vegetation.grass,
+						'lod1Distance',
+						4,
+						120,
+						1,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod2',
+						'LOD2 distance (m)',
+						vegetation.grass,
+						'lod2Distance',
+						6,
+						150,
+						1,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod0Density',
+						'LOD0 density',
+						vegetation.grass,
+						'lod0Density',
+						0,
+						1,
+						0.01,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod1Density',
+						'LOD1 density',
+						vegetation.grass,
+						'lod1Density',
+						0,
+						1,
+						0.01,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.lod2Density',
+						'LOD2 density',
+						vegetation.grass,
+						'lod2Density',
+						0,
+						1,
+						0.01,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.minHeight',
+						'Min height (m)',
+						vegetation.grass,
+						'minHeight',
+						0.05,
+						1.5,
+						0.01,
+						undefined,
+						actions.grassSettings
+					),
+					numberField(
+						'vegetation.grass.maxHeight',
+						'Max height (m)',
+						vegetation.grass,
+						'maxHeight',
+						0.1,
+						2,
+						0.01,
+						undefined,
+						actions.grassSettings
+					),
+					numberField(
+						'vegetation.grass.width',
+						'Width ratio',
+						vegetation.grass,
+						'widthRatio',
+						0.4,
+						2.5,
+						0.05,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.wind',
+						'Wind strength',
+						vegetation.grass,
+						'windStrength',
+						0,
+						3,
+						0.05,
+						actions.grassRendering
+					),
+					numberField(
+						'vegetation.grass.alphaTest',
+						'Alpha test',
+						vegetation.grass,
+						'alphaTest',
+						0.05,
+						0.95,
+						0.01,
+						actions.grassRendering
+					),
+					boolField(
+						'vegetation.grass.player',
+						'Bend around player',
+						vegetation.grass,
+						'playerInteraction',
+						actions.grassRendering
+					)
+				]),
+				group('plants', 'Flowers & ground plants', [
+					boolField(
+						'vegetation.plants.enabled',
+						'Flowers & ground plants',
+						vegetation.plants,
+						'enabled',
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.flowers',
+						'Flower density',
+						vegetation.plants,
+						'flowerDensity',
+						0,
+						2,
+						0.05,
+						undefined,
+						actions.plantSettings
+					),
+					numberField(
+						'vegetation.plants.ground',
+						'Ground-plant density',
+						vegetation.plants,
+						'groundPlantDensity',
+						0,
+						2,
+						0.05,
+						undefined,
+						actions.plantSettings
+					),
+					numberField(
+						'vegetation.plants.species',
+						'Species per region (×)',
+						vegetation.plants,
+						'speciesCount',
+						0.3,
+						2,
+						0.05,
+						undefined,
+						actions.plantSettings
+					),
+					numberField(
+						'vegetation.plants.distance',
+						'Render distance (m)',
+						vegetation.plants,
+						'renderDistance',
+						10,
+						140,
+						1,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod0',
+						'LOD0 (geometry) distance (m)',
+						vegetation.plants,
+						'lod0Distance',
+						2,
+						40,
+						0.5,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod1',
+						'LOD1 distance (m)',
+						vegetation.plants,
+						'lod1Distance',
+						4,
+						100,
+						1,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod2',
+						'LOD2 distance (m)',
+						vegetation.plants,
+						'lod2Distance',
+						6,
+						130,
+						1,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod0Density',
+						'LOD0 density',
+						vegetation.plants,
+						'lod0Density',
+						0,
+						1,
+						0.01,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod1Density',
+						'LOD1 density',
+						vegetation.plants,
+						'lod1Density',
+						0,
+						1,
+						0.01,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.lod2Density',
+						'LOD2 density',
+						vegetation.plants,
+						'lod2Density',
+						0,
+						1,
+						0.01,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.wind',
+						'Wind multiplier',
+						vegetation.plants,
+						'windStrength',
+						0,
+						3,
+						0.05,
+						actions.plantRendering
+					),
+					numberField(
+						'vegetation.plants.alphaTest',
+						'Alpha test',
+						vegetation.plants,
+						'alphaTest',
+						0.05,
+						0.95,
+						0.01,
+						actions.plantRendering
+					),
+					boolField(
+						'vegetation.plants.tint',
+						'Flower colour in distant terrain',
+						vegetation.plants,
+						'terrainTint',
+						actions.terrainTint
+					)
+				]),
 				group('vegetation-debug', 'Debug', [
 					boolField(
 						'vegetation.debug.cells',
@@ -2499,6 +2798,62 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 						vegetation.debug,
 						'showRejectedTreeCandidates',
 						actions.vegetationSettings
+					),
+					boolField(
+						'vegetation.debug.grassChunks',
+						'Show grass chunks',
+						vegetation.debug,
+						'showGrassChunks',
+						actions.grassDebug
+					),
+					boolField(
+						'vegetation.debug.grassLod',
+						'Show grass LOD (red/green/blue)',
+						vegetation.debug,
+						'showGrassLod',
+						actions.grassDebug
+					),
+					boolField(
+						'vegetation.debug.grassCandidates',
+						'Show grass candidate points',
+						vegetation.debug,
+						'showGrassCandidates',
+						actions.grassDebug
+					),
+					boolField(
+						'vegetation.debug.plantChunks',
+						'Show plant chunks',
+						vegetation.debug,
+						'showPlantChunks',
+						actions.plantDebug
+					),
+					boolField(
+						'vegetation.debug.plantSpecies',
+						'Show plant species colours',
+						vegetation.debug,
+						'showPlantSpecies',
+						actions.plantDebug
+					),
+					boolField(
+						'vegetation.debug.plantLod',
+						'Show plant LOD (red/green/blue)',
+						vegetation.debug,
+						'showPlantLod',
+						actions.plantDebug
+					),
+					boolField(
+						'vegetation.debug.plantCandidates',
+						'Show plant candidate cells',
+						vegetation.debug,
+						'showPlantCandidates',
+						actions.plantDebug
+					),
+					boolField(
+						'vegetation.debug.colonyFields',
+						'Show colony fields',
+						vegetation.debug,
+						'showColonyFields',
+						actions.plantDebug
 					)
 				])
 			]

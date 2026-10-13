@@ -14,7 +14,20 @@ import {
 	writeTerrainColor
 } from './terrainColor';
 import { createHydrologySample, type HydrologySample } from '../hydrology/HydrologyTypes';
+import type { TerrainSurfaceLattice } from './terrainSurfaceLattice';
 import type { VegetationRegionSampler } from '../vegetation/VegetationRegionSampler';
+
+/**
+ * Optional extra colouring of the normal terrain view, applied in place to the vertex colour at
+ * `offset` (e.g. distant flower meadows — see PlantManager.terrainTint).
+ */
+export type TerrainGroundTint = (
+	worldX: number,
+	worldZ: number,
+	height: number,
+	colors: Float32Array,
+	offset: number
+) => void;
 
 /** "Elevation" debug view maps this world-height range onto the 0..1 grayscale ramp. */
 const ELEVATION_DEBUG_MIN = -30;
@@ -147,7 +160,8 @@ export class TerrainChunk {
 		revision: number,
 		debugView: TerrainDebugView = 'normal',
 		vegetationRegionSampler: VegetationRegionSampler | null = null,
-		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null
+		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null,
+		groundTint: TerrainGroundTint | null = null
 	): void {
 		this.chunkX = chunkX;
 		this.chunkZ = chunkZ;
@@ -235,6 +249,9 @@ export class TerrainChunk {
 							Math.max(this.shoreTint.cover, this.shoreTint.wet),
 							this.shoreTint.stone
 						);
+						// Distant meadow colour (flower colonies), never on beaches or steep rock.
+						if (groundTint && this.shoreTint.cover < 0.3 && sample.normalY > 0.8)
+							groundTint(worldX, worldZ, sample.height, this.colors, p);
 					}
 				}
 
@@ -303,6 +320,22 @@ export class TerrainChunk {
 		const clampedX = Math.max(0, Math.min(verticesPerSide - 1, xi));
 		const clampedZ = Math.max(0, Math.min(verticesPerSide - 1, zi));
 		return this.positions[(clampedZ * verticesPerSide + clampedX) * 3 + 1];
+	}
+
+	/**
+	 * The built vertex lattice (live views of this chunk's own buffers — copy anything kept; a
+	 * recycled chunk overwrites them). See `terrainSurfaceLattice.ts`.
+	 */
+	getSurfaceLattice(chunkSize: number): TerrainSurfaceLattice {
+		return {
+			originX: this.chunkX * chunkSize,
+			originZ: this.chunkZ * chunkSize,
+			step: chunkSize / this.resolution,
+			verticesPerSide: this.resolution + 1,
+			positions: this.positions,
+			normals: this.normals,
+			shores: this.shores
+		};
 	}
 
 	setBorderVisible(visible: boolean): void {

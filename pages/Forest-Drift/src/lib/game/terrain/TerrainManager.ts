@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { chunkKey, worldToChunkCoord, type ChunkKey } from './chunkKey';
-import { TerrainChunk, terrainMaterial } from './TerrainChunk';
+import { TerrainChunk, terrainMaterial, type TerrainGroundTint } from './TerrainChunk';
 import { TerrainGenerationQueue, type ChunkJob } from './TerrainGenerationQueue';
 import { TerrainHeightSampler } from './TerrainHeightSampler';
 import type { TerrainSettings } from './TerrainSettings';
+import type { TerrainSurfaceLattice } from './terrainSurfaceLattice';
 import type { HydrologySample } from '../hydrology/HydrologyTypes';
 import type { VegetationRegionSampler } from '../vegetation/VegetationRegionSampler';
 
@@ -54,6 +55,13 @@ export class TerrainManager {
 		terrainMaterial.wireframe = settings.rendering.wireframe;
 	}
 
+	private groundTint: TerrainGroundTint | null = null;
+
+	/** Extra ground colouring (distant flower meadows). Takes effect as chunks (re)generate. */
+	setGroundTint(tint: TerrainGroundTint | null): void {
+		this.groundTint = tint;
+	}
+
 	/** Wired in by ThreeScene once the vegetation system exists — purely for debug-view colouring. */
 	setVegetationRegionSampler(sampler: VegetationRegionSampler): void {
 		this.vegetationRegionSampler = sampler;
@@ -88,6 +96,22 @@ export class TerrainManager {
 	/** Meshes of every currently active chunk, for raycasting. Same array reference every call — mutated in place, never reallocated. */
 	getActiveMeshes(): readonly THREE.Mesh[] {
 		return this.activeMeshes;
+	}
+
+	/** Bumps whenever loaded chunks are regenerated from new terrain settings (or seed/topology). */
+	getRevision(): number {
+		return this.revision;
+	}
+
+	/**
+	 * The built surface of a loaded chunk, or null while it is missing or still showing an older
+	 * revision (queued for regeneration). Used by ground-rooted systems (grass) so they sit on the
+	 * exact triangles drawn — see `terrainSurfaceLattice.ts`.
+	 */
+	getSurfaceLattice(chunkX: number, chunkZ: number): TerrainSurfaceLattice | null {
+		const chunk = this.active.get(chunkKey(chunkX, chunkZ));
+		if (!chunk || chunk.revision !== this.revision) return null;
+		return chunk.getSurfaceLattice(this.settings.chunkSize);
 	}
 
 	/** Call once per frame with the player's current world position. */
@@ -259,7 +283,8 @@ export class TerrainManager {
 			this.revision,
 			this.settings.rendering.debugView,
 			this.vegetationRegionSampler,
-			this.sampleWater
+			this.sampleWater,
+			this.groundTint
 		);
 		chunk.setActive(true);
 		chunk.setBorderVisible(this.settings.rendering.showChunkBorders);

@@ -65,6 +65,18 @@ export interface GameSettingsActions {
 	vegetationViewDistance: () => void;
 	vegetationRendering: () => void;
 	vegetationBorders: () => void;
+	/** Grass placement settings changed (density, spacing, heights): regenerate grass chunks. */
+	grassSettings: () => void;
+	/** Grass look/LOD settings changed (read live by the shader each frame). */
+	grassRendering: () => void;
+	grassDebug: () => void;
+	/** Plant placement settings changed (densities, species count): regenerate plant chunks. */
+	plantSettings: () => void;
+	/** Plant look/LOD settings changed (read live each frame). */
+	plantRendering: () => void;
+	plantDebug: () => void;
+	/** Flower colonies tinting distant terrain on/off (terrain chunks regenerate). */
+	terrainTint: () => void;
 	sky: () => void;
 	graphicsQuality: (quality: string) => void;
 	graphicsAdvanced: () => void;

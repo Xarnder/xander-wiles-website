@@ -1,3 +1,6 @@
+import { createDefaultGrassSettings, type GrassSettings } from './grass/GrassTypes';
+import { createDefaultPlantSettings, type PlantSettings } from './plants/PlantTypes';
+
 /**
  * Vegetation configuration and world-state types. Framework-free, same rule as TerrainSettings —
  * read directly by VegetationRegionSampler/TreePlacementGenerator/TreeManager, mutated live by
@@ -109,6 +112,22 @@ export interface VegetationDebugSettings {
 	showTreeCells: boolean;
 	showTreeChunkBorders: boolean;
 	showRejectedTreeCandidates: boolean;
+	/** Grass chunk outlines (one per batch / draw call). */
+	showGrassChunks: boolean;
+	/** Tint grass by LOD band: red LOD0, green LOD1, blue LOD2. */
+	showGrassLod: boolean;
+	/** A dot on every accepted grass candidate. */
+	showGrassCandidates: boolean;
+	/** Plant chunk outlines (one card draw call each). */
+	showPlantChunks: boolean;
+	/** Colour every plant by species. */
+	showPlantSpecies: boolean;
+	/** Near geometry red, LOD1 cards green, LOD2 cards blue. */
+	showPlantLod: boolean;
+	/** A dot on every plant candidate cell (grey rejected, species colour accepted). */
+	showPlantCandidates: boolean;
+	/** Candidate cells as a colony-strength heat map. */
+	showColonyFields: boolean;
 }
 
 export interface VegetationSettings {
@@ -117,6 +136,10 @@ export interface VegetationSettings {
 	species: TreeSpeciesMixSettings;
 	rendering: TreeRenderingSettings;
 	loading: TreeLoadingSettings;
+	/** Procedural billboard grass (see `grass/`). Saved with the world; tufts never are. */
+	grass: GrassSettings;
+	/** Procedural flowers and ground plants (see `plants/`). Settings saved; plants never are. */
+	plants: PlantSettings;
 	debug: VegetationDebugSettings;
 }
 
@@ -184,10 +207,21 @@ export function createDefaultVegetationSettings(): VegetationSettings {
 			treeChunksGeneratedPerFrame: 1
 		},
 
+		grass: createDefaultGrassSettings(),
+		plants: createDefaultPlantSettings(),
+
 		debug: {
 			showTreeCells: false,
 			showTreeChunkBorders: false,
-			showRejectedTreeCandidates: false
+			showRejectedTreeCandidates: false,
+			showGrassChunks: false,
+			showGrassLod: false,
+			showGrassCandidates: false,
+			showPlantChunks: false,
+			showPlantSpecies: false,
+			showPlantLod: false,
+			showPlantCandidates: false,
+			showColonyFields: false
 		}
 	};
 }
