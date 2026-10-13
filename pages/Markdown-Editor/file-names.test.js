@@ -32,6 +32,18 @@ test('hides a trailing .pdf unless extensions are shown', () => {
     assert.equal(displayFileListName('notes.pdf.md'), 'notes.pdf');
 });
 
+test('hides a trailing .csv unless extensions are shown', () => {
+    assert.equal(displayFileListName('budget.csv'), 'budget');
+    assert.equal(displayFileListName('budget.csv', { showExtension: true }), 'budget.csv');
+    assert.equal(displayFileListName('notes.csv.md'), 'notes.csv');
+});
+
+test('hides common image extensions unless extensions are shown', () => {
+    assert.equal(displayFileListName('Holiday.JPG'), 'Holiday');
+    assert.equal(displayFileListName('scan.heic'), 'scan');
+    assert.equal(displayFileListName('scan.heic', { showExtension: true }), 'scan.heic');
+});
+
 test('uses a fallback for empty names', () => {
     assert.equal(displayFileListName(''), '(unnamed)');
     assert.equal(displayFileListName('   '), '(unnamed)');

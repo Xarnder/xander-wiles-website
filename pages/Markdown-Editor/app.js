@@ -75,7 +75,9 @@ import {
     getFileBytes,
     getFileContent,
     getFileMetadata,
+    isCsvCandidate,
     isFolder,
+    isImageCandidate,
     isMarkdownCandidate,
     isPdfCandidate,
     listChildFolders,
@@ -92,8 +94,11 @@ import {
     updateFileContent,
 } from './drive.js';
 import { mountPdfViewer } from './pdf-view.js';
+import { readCsvGridText, renderCsvGrid } from './csv-view.js';
+import { clearImageCaches, downloadImageOriginal, toggleImagePreview } from './image-preview.js';
 import {
     applyLoadedContent,
+    applyLoadedCsv,
     applyLoadedPdf,
     clearDraft,
     createEditorState,
@@ -1929,6 +1934,11 @@ function flushCurrentEditorContent() {
     const els = getEls();
     if (!state.editor.fileId) return;
     if (state.editor.kind === 'pdf') return;
+    if (state.editor.kind === 'csv') {
+        const text = readCsvGridText(els.csvGrid);
+        if (text != null) setEditorText(state.editor, text);
+        return;
+    }
     if (state.viewMode === 'raw') {
         adoptEditorBuffer(els.editor.value, { userEdit: true });
     } else if (
@@ -2249,6 +2259,7 @@ function applyViewMode(mode, {
     focusTocId = null,
 } = {}) {
     if (!VIEW_MODES.has(mode)) mode = 'raw';
+    if (state.editor.kind === 'csv' || state.editor.kind === 'pdf') return;
     const els = getEls();
     const previousMode = state.viewMode;
 
@@ -2531,9 +2542,9 @@ async function loadBrowse(reset = true) {
     renderFolderPath(state.folderStack, 'folder', '', jumpToFolderCrumb);
     rememberFolder(folder.id);
     updateCreateActions();
-    setBrowseEmptyMessage(
-        'No folders or markdown files here yet. Tap + Note or + Folder to create one.'
-    );
+        setBrowseEmptyMessage(
+            'No folders, markdown files, CSVs, or images here yet. Tap + Note or + Folder to create one.'
+        );
     if (reset) setLoadMoreVisible(false);
     else setLoadMoreBusy(true);
 
@@ -2677,7 +2688,7 @@ async function loadComputers(reset = true) {
         state.nextPageToken = result.nextPageToken;
         renderCurrentFileList({ scrollToMarkdown: reset });
         setLoadMoreVisible(Boolean(state.nextPageToken));
-        setStatus(state.files.length ? '' : 'No folders or markdown files here.');
+        setStatus(state.files.length ? '' : 'No folders, markdown files, CSVs, or images here.');
     } catch (err) {
         setFinderLoading(false);
         setStatus(err.message || 'Failed to load Computers', 'error');
@@ -2783,13 +2794,21 @@ async function acceptAiFile({ fileId, fileName, markdown }) {
     return true;
 }
 
-async function handleOpenEntry(file) {
+async function handleOpenEntry(file, context = {}) {
     if (isFolder(file)) {
         await enterFolder(file);
         return;
     }
+    if (isImageCandidate(file)) {
+        await toggleImagePreview(file, context.row);
+        return;
+    }
     if (isPdfCandidate(file)) {
         await openPdfFile(file);
+        return;
+    }
+    if (isCsvCandidate(file)) {
+        await openCsvFile(file);
         return;
     }
     await openMarkdownFile(file);
@@ -2983,7 +3002,17 @@ async function resolvePinnedEntry(pinned) {
     }
 }
 
-async function handleOpenPinnedEntry(pinned) {
+async function handleOpenPinnedEntry(pinned, context = {}) {
+    // Images skip the pinned metadata check — the thumbnail tap does its own single call.
+    if (isImageCandidate(pinned)) {
+        // Pinned rows carry pin-time dates; only trust Drive’s own modifiedTime for cache checks.
+        const live = pinnedMetaCache.get(pinned.id);
+        await toggleImagePreview(
+            { ...pinned, modifiedTime: live?.modifiedTime || '', size: live?.size ?? pinned.size },
+            context.row
+        );
+        return;
+    }
     const meta = await resolvePinnedEntry(pinned);
     if (!meta) return;
 
@@ -3090,22 +3119,32 @@ async function handleDownloadEntry(file) {
     if (isFolder(file)) return;
     setStatus('Downloading…');
     try {
-        if (isPdfCandidate(file)) {
-            const bytes = await getFileBytes(file.id);
-            const blob = new Blob([bytes], { type: 'application/pdf' });
+        const image = isImageCandidate(file);
+        if (isPdfCandidate(file) || image) {
+            // Images go through the same size / budget guards as the viewer.
+            const blob = image
+                ? await downloadImageOriginal(file)
+                : new Blob([await getFileBytes(file.id)], { type: 'application/pdf' });
+            if (!blob) {
+                setStatus('');
+                return;
+            }
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = file.name || 'file.pdf';
+            link.download = file.name || (image ? 'image' : 'file.pdf');
             document.body.appendChild(link);
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
-            setStatus(`Downloaded ${file.name || 'PDF'}`, 'ok');
+            setStatus(`Downloaded ${file.name || (image ? 'image' : 'PDF')}`, 'ok');
             return;
         }
+        const csv = isCsvCandidate(file);
         const text = await getFileContent(file.id);
-        const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+        const blob = new Blob([text], {
+            type: csv ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8',
+        });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -3227,7 +3266,9 @@ function makeUniqueNameValidator(parentId, options = {}) {
 
 async function handleCopyEntry(file) {
     const pdf = isPdfCandidate(file);
-    if (isFolder(file) || (!isMarkdownCandidate(file) && !pdf)) return;
+    const csv = !pdf && isCsvCandidate(file);
+    const image = !pdf && !csv && isImageCandidate(file);
+    if (isFolder(file) || (!isMarkdownCandidate(file) && !pdf && !csv && !image)) return;
 
     setStatus('Preparing copy…');
     let parentId = normalizeParentId(file.parents);
@@ -3248,27 +3289,32 @@ async function handleCopyEntry(file) {
         }
 
         const localNames = await collectSiblingNames(parentId);
-        const suggested = suggestCopyFileName(source.name || (pdf ? 'Untitled.pdf' : 'Untitled.md'), localNames, {
-            keepExtension: pdf,
-        });
+        const keepExtension = pdf || csv || image;
+        const suggested = suggestCopyFileName(
+            source.name || (pdf ? 'Untitled.pdf' : csv ? 'Untitled.csv' : image ? 'Untitled image' : 'Untitled.md'),
+            localNames,
+            { keepExtension }
+        );
 
         // Ensure suggested name isn’t already taken on Drive either
         let copyName = suggested;
         {
             let guard = 0;
             while (guard < 50) {
-                const check = await nameConflictsInFolder(parentId, copyName, { isMarkdown: !pdf });
+                const check = await nameConflictsInFolder(parentId, copyName, { isMarkdown: !keepExtension });
                 if (!check.conflict) break;
                 localNames.push(copyName);
-                copyName = suggestCopyFileName(source.name || (pdf ? 'Untitled.pdf' : 'Untitled.md'), localNames, {
-                    keepExtension: pdf,
-                });
+                copyName = suggestCopyFileName(
+                    source.name || (pdf ? 'Untitled.pdf' : csv ? 'Untitled.csv' : image ? 'Untitled image' : 'Untitled.md'),
+                    localNames,
+                    { keepExtension }
+                );
                 guard += 1;
             }
         }
 
         setStatus('Copying…');
-        const copied = await copyDriveFile(source.id, { name: copyName, parentId, keepName: pdf });
+        const copied = await copyDriveFile(source.id, { name: copyName, parentId, keepName: keepExtension });
 
         const viewingSameFolder = currentFolder()?.id === parentId;
         if (viewingSameFolder) {
@@ -3286,7 +3332,7 @@ async function handleCopyEntry(file) {
             selectStem: true,
             validate: makeUniqueNameValidator(parentId, {
                 ignoreId: copied.id,
-                isMarkdown: !pdf,
+                isMarkdown: !keepExtension,
             }),
         });
 
@@ -3297,8 +3343,8 @@ async function handleCopyEntry(file) {
             return;
         }
 
-        const normalizedTarget = pdf ? name.trim().toLowerCase() : normalizeMarkdownFileName(name);
-        const normalizedCurrent = pdf
+        const normalizedTarget = keepExtension ? name.trim().toLowerCase() : normalizeMarkdownFileName(name);
+        const normalizedCurrent = keepExtension
             ? String(copied.name || '').trim().toLowerCase()
             : normalizeMarkdownFileName(copied.name || '');
         if (normalizedTarget === normalizedCurrent) {
@@ -3309,7 +3355,7 @@ async function handleCopyEntry(file) {
         }
 
         setStatus('Renaming copy…');
-        const updated = await renameDriveItem(copied.id, name, { isMarkdown: !pdf });
+        const updated = await renameDriveItem(copied.id, name, { isMarkdown: !keepExtension });
         const idx = state.files.findIndex((f) => f.id === copied.id);
         if (idx >= 0) {
             state.files[idx] = { ...state.files[idx], name: updated.name };
@@ -3328,7 +3374,9 @@ async function handleCopyEntry(file) {
 async function handleRenameEntry(file) {
     const folder = isFolder(file);
     const pdf = !folder && isPdfCandidate(file);
-    const markdown = !folder && !pdf;
+    const csv = !folder && !pdf && isCsvCandidate(file);
+    const image = !folder && !pdf && !csv && isImageCandidate(file);
+    const markdown = !folder && !pdf && !csv && !image;
     let parentId = normalizeParentId(file.parents) || currentFolder()?.id || '';
     if (!parentId) {
         try {
@@ -3340,10 +3388,10 @@ async function handleRenameEntry(file) {
     }
 
     const name = await promptForName({
-        title: folder ? 'Rename folder' : pdf ? 'Rename PDF' : 'Rename note',
+        title: folder ? 'Rename folder' : pdf ? 'Rename PDF' : csv ? 'Rename CSV' : image ? 'Rename image' : 'Rename note',
         hint: folder
             ? 'Folder names in this location must be unique.'
-            : pdf
+            : pdf || csv || image
               ? 'Names must be unique in this folder.'
               : 'We’ll keep the .md ending for notes. Names must be unique in this folder.',
         confirmLabel: 'Rename',
@@ -4471,6 +4519,107 @@ async function openPdfFile(file) {
     }
 }
 
+async function openCsvFile(file) {
+    const els = getEls();
+    if (state.editor.fileId && state.editor.fileId !== file.id) {
+        await waitForDriveWritesIdle();
+    }
+    if (state.editor.fileId && state.editor.fileId !== file.id) {
+        flushCurrentEditorContent();
+        if (state.editor.dirty) {
+            const choice = await promptUnsavedChanges(els.unsavedDialog);
+            if (choice === 'cancel') return;
+            if (choice === 'save') {
+                await saveCurrentFile();
+                if (state.editor.dirty) return;
+            }
+        }
+    }
+
+    state.editor.status = 'loading';
+    showAppView('editor', { loading: true });
+    setEditorLoading(true, file.name || 'CSV file');
+    setStatus('Opening file…');
+
+    try {
+        const meta = await getFileMetadata(file.id);
+        const size = Number(meta.size || 0);
+        if (size > LARGE_FILE_BYTES) {
+            const ok = await promptLargeFile(getEls().largeFileDialog, {
+                title: 'Large CSV',
+                message: `This CSV is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on a phone.`,
+            });
+            if (!ok) {
+                setEditorLoading(false);
+                state.editor.status = state.editor.dirty ? 'dirty' : 'idle';
+                showAppView('finder');
+                setStatus('');
+                return;
+            }
+        }
+
+        pdfOpenToken += 1;
+        if (state.editor.kind === 'pdf') await pdfSession?.close();
+
+        const content = await getFileContent(file.id);
+        applyLoadedCsv(state.editor, {
+            fileId: meta.id,
+            fileName: meta.name,
+            mimeType: meta.mimeType,
+            content,
+            driveVersion: meta.version ?? null,
+            headRevisionId: meta.headRevisionId ? String(meta.headRevisionId) : null,
+        });
+        pendingConflict = null;
+        destructiveAutosaveDeferUntil = 0;
+        destructiveWarnedFingerprint = null;
+        rememberRecentFile({
+            id: meta.id,
+            name: meta.name,
+            mimeType: meta.mimeType,
+        });
+
+        const draft = readDraft(meta.id);
+        if (draft && !textsEqual(draft.text, content)) {
+            const choice = await promptRestoreDraft(els.draftDialog);
+            if (choice === 'restore') {
+                setEditorText(state.editor, draft.text);
+            } else {
+                clearDraft(meta.id);
+            }
+        }
+
+        setEditorLoading(false);
+        showAppView('editor');
+        showCsvEditor(state.editor.editorContent);
+    } catch (err) {
+        setEditorLoading(false);
+        markError(state.editor, err.message || 'Failed to open CSV');
+        showAppView('editor');
+        syncEditorChrome(state.editor);
+        setStatus(state.editor.errorMessage, 'error');
+    }
+}
+
+function showCsvEditor(text) {
+    const els = getEls();
+    autosaveEnabled = true;
+    editorSearch?.close({ restoreFocus: false });
+    state.placingList = false;
+    state.pendingImportList = null;
+    state.clickEdit = false;
+    if (els.editor) els.editor.value = text;
+    renderCsvGrid(els.csvGrid, text, (next) => {
+        if (state.editor.kind !== 'csv') return;
+        setEditorText(state.editor, next);
+        if (els.editor) els.editor.value = state.editor.editorContent;
+        syncEditorChrome(state.editor);
+        syncAutosaveFromEditorState();
+    });
+    syncEditorChrome(state.editor);
+    syncAutosaveFromEditorState();
+}
+
 async function openMarkdownFile(file, options = {}) {
     const els = getEls();
     // Finish any in-flight Drive write before switching file identity.
@@ -4843,22 +4992,24 @@ async function saveCurrentFileExclusive(options = {}) {
                 version: nextVersion,
                 headRevisionId: nextHead,
             });
-            // Align baseline to canonical serialize so Preview/List flush stays clean.
-            try {
-                refreshDocumentModelFromText(ed.editorContent);
-                if (state.documentModel) {
-                    const canonical = serializeDocument(state.documentModel);
-                    if (
-                        !ed.dirty &&
-                        !textsEqual(canonical, ed.originalContent)
-                    ) {
-                        rebaseEditorBaseline(ed, canonical);
-                        const elsCanon = getEls();
-                        if (elsCanon.editor) elsCanon.editor.value = canonical;
+            // Markdown Preview/List can rewrite whitespace. CSV must stay the grid text.
+            if (ed.kind !== 'csv') {
+                try {
+                    refreshDocumentModelFromText(ed.editorContent);
+                    if (state.documentModel) {
+                        const canonical = serializeDocument(state.documentModel);
+                        if (
+                            !ed.dirty &&
+                            !textsEqual(canonical, ed.originalContent)
+                        ) {
+                            rebaseEditorBaseline(ed, canonical);
+                            const elsCanon = getEls();
+                            if (elsCanon.editor) elsCanon.editor.value = canonical;
+                        }
                     }
+                } catch {
+                    // ignore canonicalize failures
                 }
-            } catch {
-                // ignore canonicalize failures
             }
         }
         autosaveContentFingerprint = ed.editorContent;
@@ -4872,11 +5023,13 @@ async function saveCurrentFileExclusive(options = {}) {
         }
 
         syncEditorChrome(ed);
-        refreshDocumentModelFromText(ed.editorContent);
-        applyTagFilters(state.documentModel, state.tagFilters);
-        applyEditingLists(state.documentModel, state.editingListIds);
-        if (state.viewMode !== 'raw' && !isEditorTextFieldFocused()) {
-            renderStructuredEditor();
+        if (ed.kind !== 'csv') {
+            refreshDocumentModelFromText(ed.editorContent);
+            applyTagFilters(state.documentModel, state.tagFilters);
+            applyEditingLists(state.documentModel, state.editingListIds);
+            if (state.viewMode !== 'raw' && !isEditorTextFieldFocused()) {
+                renderStructuredEditor();
+            }
         }
     } catch (err) {
         if (!stillSameFile()) return;
@@ -4924,22 +5077,35 @@ async function resolvePendingConflict() {
 
         if (choice === 'use-drive') {
             const els = getEls();
-            applyLoadedContent(ed, {
-                fileId: ed.fileId,
-                fileName: ed.fileName,
-                mimeType: ed.mimeType || 'text/markdown',
-                content: conflict.driveContent,
-                driveVersion: conflict.driveVersion,
-                headRevisionId: conflict.headRevisionId,
-            });
-            if (els.editor) els.editor.value = ed.editorContent;
+            if (ed.kind === 'csv') {
+                applyLoadedCsv(ed, {
+                    fileId: ed.fileId,
+                    fileName: ed.fileName,
+                    mimeType: ed.mimeType || 'text/csv',
+                    content: conflict.driveContent,
+                    driveVersion: conflict.driveVersion,
+                    headRevisionId: conflict.headRevisionId,
+                });
+                showCsvEditor(ed.editorContent);
+            } else {
+                applyLoadedContent(ed, {
+                    fileId: ed.fileId,
+                    fileName: ed.fileName,
+                    mimeType: ed.mimeType || 'text/markdown',
+                    content: conflict.driveContent,
+                    driveVersion: conflict.driveVersion,
+                    headRevisionId: conflict.headRevisionId,
+                });
+                if (els.editor) els.editor.value = ed.editorContent;
+                refreshDocumentModelFromText(ed.editorContent);
+                syncEditorChrome(ed);
+                if (state.viewMode !== 'raw') renderStructuredEditor();
+            }
             editHistory.reset(ed.editorContent);
             clearDraft(ed.fileId);
             pendingConflict = null;
             autosaveContentFingerprint = ed.editorContent;
-            refreshDocumentModelFromText(ed.editorContent);
             syncEditorChrome(ed);
-            if (state.viewMode !== 'raw') renderStructuredEditor();
             setStatus('Loaded Drive version', 'ok');
             showEditorToast('Using Drive version', 'ok', {
                 key: 'conflict-drive',
@@ -5088,6 +5254,7 @@ async function signOut() {
     userEditedSettings = false;
     spacingEdited = false;
     pinnedMetaCache.clear();
+    clearImageCaches();
     clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
     state.files = [];
@@ -5682,6 +5849,11 @@ function wireEvents() {
                 if (!event.shiftKey) pdfSession?.undo();
                 return;
             }
+            if (state.editor.kind === 'csv') {
+                if (target instanceof HTMLElement && target.classList.contains('csv-input')) return;
+                event.preventDefault();
+                return;
+            }
             // Let native undo work inside list mini-inputs; document undo for Raw / chrome.
             if (
                 target instanceof HTMLElement &&
@@ -5708,6 +5880,11 @@ function wireEvents() {
                     target.tagName === 'INPUT' ||
                     target.isContentEditable)
             ) {
+                return;
+            }
+            if (state.editor.kind === 'csv') {
+                if (target instanceof HTMLElement && target.classList.contains('csv-input')) return;
+                event.preventDefault();
                 return;
             }
             event.preventDefault();

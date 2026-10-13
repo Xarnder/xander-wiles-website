@@ -1,5 +1,7 @@
 import { FINDER_SORT_DEFAULT, PAGE_SIZE, ROOT_FOLDER_ID } from './config.js';
 import { getAccessToken, refreshAccessToken } from './auth.js';
+import { isCsvFile } from './csv.js';
+import { isImageFile } from './image-files.js';
 import { isPdfFile, pdfUploadKind } from './pdf-edit.js';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -69,14 +71,26 @@ export function isPdfCandidate(file) {
     return isPdfFile(file);
 }
 
+/** CSV files (text/csv or a .csv name), never folders, notes, or PDFs. */
+export function isCsvCandidate(file) {
+    return isCsvFile(file);
+}
+
+/** Images (image/* or a common image name), never folders or Google Drawings. */
+export function isImageCandidate(file) {
+    return isImageFile(file);
+}
+
 /** Folders first, then markdown, then PDFs — sorted within each group by `sortMode`. */
 export function sortDriveEntries(files, sortMode = FINDER_SORT_DEFAULT) {
     const mode = typeof sortMode === 'string' ? sortMode : FINDER_SORT_DEFAULT;
     const rank = (file) => {
         if (isFolder(file)) return 0;
         if (isMarkdownCandidate(file)) return 1;
-        if (isPdfCandidate(file)) return 2;
-        return 3;
+        if (isCsvCandidate(file)) return 2;
+        if (isPdfCandidate(file)) return 3;
+        if (isImageCandidate(file)) return 4;
+        return 5;
     };
     const nameCmp = (a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), undefined, {
@@ -141,8 +155,9 @@ export function driveOrderByForSort(sortMode = FINDER_SORT_DEFAULT) {
 }
 
 /**
- * List folders, markdown files, and PDFs in a folder.
+ * List folders, markdown files, CSVs, PDFs, and images in a folder.
  * Query is scoped to those types so pagination matches what the UI shows.
+ * Never asks for thumbnailLink — images cost nothing extra until tapped.
  * @param {string} [folderId]
  * @param {string|null} [pageToken]
  * @param {{ sortMode?: string }} [options]
@@ -155,7 +170,7 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
     const q = [
         `'${safeParent}' in parents`,
         'trashed = false',
-        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or mimeType = 'application/pdf' or name contains '.md' or name contains '.markdown' or name contains '.pdf')`,
+        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or mimeType = 'application/pdf' or mimeType contains 'image/' or name contains '.md' or name contains '.markdown' or name contains '.csv' or name contains '.pdf')`,
     ].join(' and ');
     const params = new URLSearchParams({
         q,
@@ -170,7 +185,14 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
     const files = sortDriveEntries(
-        (data.files || []).filter((f) => isFolder(f) || isMarkdownCandidate(f) || isPdfCandidate(f)),
+        (data.files || []).filter(
+            (f) =>
+                isFolder(f) ||
+                isMarkdownCandidate(f) ||
+                isCsvCandidate(f) ||
+                isPdfCandidate(f) ||
+                isImageCandidate(f)
+        ),
         sortMode
     );
     return {
@@ -223,7 +245,9 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null, opti
         parts.push(`name contains '${safe}'`);
     } else {
         // Prefer files that look like markdown without requiring a folder path.
-        parts.push("(mimeType = 'text/markdown' or name contains '.md')");
+        parts.push(
+            "(mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or name contains '.md' or name contains '.csv')"
+        );
     }
 
     // Search has no folders in results — drop the folder key from orderBy.
@@ -242,7 +266,9 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null, opti
     const response = await driveFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
     const data = await response.json();
     const files = sortDriveEntries(
-        (data.files || []).filter((f) => isMarkdownCandidate(f) || isPdfCandidate(f)),
+        (data.files || []).filter(
+            (f) => isMarkdownCandidate(f) || isCsvCandidate(f) || isPdfCandidate(f) || isImageCandidate(f)
+        ),
         sortMode
     );
     return {
@@ -309,6 +335,31 @@ export async function getFileContent(fileId) {
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
     );
     return response.text();
+}
+
+/**
+ * One small metadata call for a tapped image: thumbnail link + dimensions.
+ * The link points at Google’s image CDN, so fetching it is not a Drive download.
+ */
+export async function getImageMetadata(fileId, { signal } = {}) {
+    const params = new URLSearchParams({
+        fields: 'id,name,mimeType,modifiedTime,size,hasThumbnail,thumbnailLink,imageMediaMetadata(width,height)',
+    });
+    const response = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`,
+        { signal }
+    );
+    return response.json();
+}
+
+/**
+ * Start a file download and hand back the unread response, so the caller can
+ * stream it with a byte cap (image-files.js readBodyCapped) and stop early.
+ */
+export async function openFileDownload(fileId, { signal } = {}) {
+    return driveFetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+        signal,
+    });
 }
 
 /** Download a file as bytes (PDFs and other binary files). */

@@ -78,7 +78,7 @@ export function clearDraft(fileId) {
 
 export function createEditorState() {
     return {
-        /** @type {'markdown' | 'pdf'} */
+        /** @type {'markdown' | 'csv' | 'pdf'} */
         kind: 'markdown',
         fileId: null,
         fileName: '',
@@ -100,6 +100,24 @@ export function applyLoadedContent(state, { fileId, fileName, mimeType, content,
     state.fileId = fileId;
     state.fileName = fileName;
     state.mimeType = mimeType || 'text/markdown';
+    const text = normalizeEditorText(content);
+    state.originalContent = text;
+    state.editorContent = text;
+    state.dirty = false;
+    state.status = 'idle';
+    state.errorMessage = '';
+    state.driveVersion = driveVersion != null && driveVersion !== '' ? driveVersion : null;
+    state.headRevisionId = headRevisionId ? String(headRevisionId) : null;
+}
+
+/**
+ * Open a CSV as text without running it through the markdown editor.
+ */
+export function applyLoadedCsv(state, { fileId, fileName, mimeType, content, driveVersion = null, headRevisionId = null }) {
+    state.kind = 'csv';
+    state.fileId = fileId;
+    state.fileName = fileName || 'Untitled.csv';
+    state.mimeType = mimeType || 'text/csv';
     const text = normalizeEditorText(content);
     state.originalContent = text;
     state.editorContent = text;

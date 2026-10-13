@@ -1,4 +1,11 @@
-import { isFolder, isMarkdownCandidate, isPdfCandidate, sortDriveEntries } from './drive.js';
+import {
+    isCsvCandidate,
+    isFolder,
+    isImageCandidate,
+    isMarkdownCandidate,
+    isPdfCandidate,
+    sortDriveEntries,
+} from './drive.js';
 import {
     ROOT_FOLDER_ID,
     ROOT_FOLDER_NAME,
@@ -175,6 +182,16 @@ export function bindUi() {
     els.listsStatus = document.getElementById('lists-status');
     els.markdownPreview = document.getElementById('markdown-preview');
     els.pdfViewer = document.getElementById('pdf-viewer');
+    els.csvViewer = document.getElementById('csv-viewer');
+    els.csvGrid = document.getElementById('csv-grid');
+    els.csvFileName = document.getElementById('csv-file-name');
+    els.imageViewer = document.getElementById('image-viewer');
+    els.imageViewerTitle = document.getElementById('image-viewer-title');
+    els.imageViewerClose = document.getElementById('image-viewer-close');
+    els.imageViewerStage = document.getElementById('image-viewer-stage');
+    els.imageViewerImg = document.getElementById('image-viewer-img');
+    els.imageViewerStatus = document.getElementById('image-viewer-status');
+    els.imageViewerOriginal = document.getElementById('image-viewer-original');
     els.pdfFileName = document.getElementById('pdf-file-name');
     els.draftDialog = document.getElementById('draft-dialog');
     els.unsavedDialog = document.getElementById('unsaved-dialog');
@@ -741,7 +758,9 @@ export function renderFileList(
 
     const folders = sorted.filter((f) => isFolder(f));
     const notes = sorted.filter((f) => isMarkdownCandidate(f));
+    const csvs = sorted.filter((f) => isCsvCandidate(f));
     const pdfs = sorted.filter((f) => isPdfCandidate(f));
+    const images = sorted.filter((f) => isImageCandidate(f));
 
     if (folders.length) {
         els.fileList.appendChild(
@@ -769,6 +788,19 @@ export function renderFileList(
         );
     }
 
+    if (csvs.length) {
+        els.fileList.appendChild(
+            buildFileGroup({
+                kind: 'csv',
+                title: 'CSV',
+                files: csvs,
+                onOpen,
+                onMenu,
+                openedAtById: openedMap,
+            })
+        );
+    }
+
     if (pdfs.length) {
         els.fileList.appendChild(
             buildFileGroup({
@@ -778,6 +810,18 @@ export function renderFileList(
                 onOpen,
                 onMenu,
                 openedAtById: openedMap,
+            })
+        );
+    }
+
+    if (images.length) {
+        els.fileList.appendChild(
+            buildFileGroup({
+                kind: 'images',
+                title: 'Images',
+                files: images,
+                onOpen,
+                onMenu,
             })
         );
     }
@@ -803,7 +847,9 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
 
     const folders = list.filter((f) => isFolder(f));
     const notes = list.filter((f) => isMarkdownCandidate(f));
+    const csvs = list.filter((f) => isCsvCandidate(f));
     const pdfs = list.filter((f) => isPdfCandidate(f));
+    const images = list.filter((f) => isImageCandidate(f));
 
     if (folders.length) {
         els.pinnedList.appendChild(
@@ -827,12 +873,34 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
             })
         );
     }
+    if (csvs.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-csv',
+                title: 'CSV',
+                files: csvs,
+                onOpen,
+                onMenu,
+            })
+        );
+    }
     if (pdfs.length) {
         els.pinnedList.appendChild(
             buildFileGroup({
                 kind: 'pinned-pdf',
                 title: 'PDF',
                 files: pdfs,
+                onOpen,
+                onMenu,
+            })
+        );
+    }
+    if (images.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-images',
+                title: 'Images',
+                files: images,
                 onOpen,
                 onMenu,
             })
@@ -1200,6 +1268,8 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
     for (const file of files) {
         const folder = isFolder(file);
         const pdf = !folder && isPdfCandidate(file);
+        const csv = !folder && !pdf && isCsvCandidate(file);
+        const image = !folder && !pdf && !csv && isImageCandidate(file);
         const fullName = file.name || '(unnamed)';
         const displayName = displayFileListName(file.name, { isFolder: folder, showExtension });
         const fileId = file?.id ? String(file.id) : '';
@@ -1209,7 +1279,11 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
             ? 'file-row file-row--folder'
             : pdf
               ? 'file-row file-row--pdf'
-              : 'file-row file-row--markdown';
+              : csv
+                ? 'file-row file-row--csv'
+                : image
+                  ? 'file-row file-row--image'
+                  : 'file-row file-row--markdown';
         if (isBold) row.classList.add('file-row--important');
         row.setAttribute('role', 'listitem');
 
@@ -1220,8 +1294,11 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
             'aria-label',
             folder
                 ? `Open ${isBold ? 'important ' : ''}folder ${displayName}`
-                : `Open ${isBold ? 'important ' : ''}${pdf ? 'PDF ' : ''}${displayName}`
+                : image
+                  ? `Show thumbnail for ${isBold ? 'important ' : ''}image ${displayName}`
+                  : `Open ${isBold ? 'important ' : ''}${pdf ? 'PDF ' : csv ? 'CSV ' : ''}${displayName}`
         );
+        if (image) openBtn.setAttribute('aria-expanded', 'false');
 
         const icon = document.createElement('span');
         icon.className = 'file-row-icon';
@@ -1232,7 +1309,11 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
             ? 'Assets/SVGs/open-folder-outline-icon.svg'
             : pdf
               ? 'Assets/SVGs/pdf-icon.svg'
-              : 'Assets/SVGs/markdown-icon.svg';
+              : csv
+                ? 'Assets/SVGs/csv-icon.svg'
+                : image
+                  ? 'Assets/SVGs/image-icon.svg'
+                  : 'Assets/SVGs/markdown-icon.svg';
         img.alt = '';
         img.width = 28;
         img.height = 28;
@@ -1280,7 +1361,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         }
 
         openBtn.append(icon, label);
-        openBtn.addEventListener('click', () => onOpen(file));
+        openBtn.addEventListener('click', () => onOpen(file, { row }));
 
         const menuBtn = document.createElement('button');
         menuBtn.type = 'button';
@@ -1331,7 +1412,7 @@ export function setUpEnabled(enabled) {
 export function displayNoteTitle(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return 'Untitled';
-    return raw.replace(/\.(md|markdown|pdf)$/i, '') || 'Untitled';
+    return raw.replace(/\.(md|markdown|pdf|csv)$/i, '') || 'Untitled';
 }
 
 /**
@@ -1344,7 +1425,7 @@ export function displayFileListName(name, options = {}) {
     const raw = String(name ?? '').trim();
     if (!raw) return '(unnamed)';
     if (options.isFolder || options.showExtension) return raw;
-    return raw.replace(/\.(md|markdown|pdf)$/i, '') || raw;
+    return raw.replace(/\.(md|markdown|pdf|csv|jpe?g|png|gif|webp|avif|bmp|svg|heic|heif|tiff?)$/i, '') || raw;
 }
 
 const FILE_COLOR_PRESETS = Object.freeze([
@@ -1651,11 +1732,21 @@ export function syncEditorChrome(state, options = {}) {
     setEditorLoading(false);
 
     const pdfOpen = state.kind === 'pdf' && Boolean(state.fileId);
-    if (els.editorActive) els.editorActive.classList.toggle('is-pdf', pdfOpen);
+    const csvOpen = state.kind === 'csv' && Boolean(state.fileId);
+    const plainSheet = pdfOpen || csvOpen;
+    if (els.editorActive) {
+        els.editorActive.classList.toggle('is-pdf', pdfOpen);
+        els.editorActive.classList.toggle('is-csv', csvOpen);
+    }
     if (els.pdfViewer) els.pdfViewer.hidden = !pdfOpen;
+    if (els.csvViewer) els.csvViewer.hidden = !csvOpen;
     if (els.pdfFileName) {
         els.pdfFileName.textContent = pdfOpen ? title : '';
         els.pdfFileName.hidden = !pdfOpen;
+    }
+    if (els.csvFileName) {
+        els.csvFileName.textContent = csvOpen ? title : '';
+        els.csvFileName.hidden = !csvOpen;
     }
 
     if (state.fileId) {
@@ -1673,12 +1764,12 @@ export function syncEditorChrome(state, options = {}) {
         els.editorEmpty.hidden = true;
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
-        if (els.btnUndo) els.btnUndo.hidden = pdfOpen;
-        if (els.btnRedo) els.btnRedo.hidden = pdfOpen;
-        if (els.btnInsertList) els.btnInsertList.hidden = pdfOpen;
-        if (els.btnClickEdit) els.btnClickEdit.hidden = pdfOpen;
-        if (els.btnEditorMore) els.btnEditorMore.hidden = pdfOpen;
-        if (els.btnEditorSearch) els.btnEditorSearch.hidden = pdfOpen;
+        if (els.btnUndo) els.btnUndo.hidden = plainSheet;
+        if (els.btnRedo) els.btnRedo.hidden = plainSheet;
+        if (els.btnInsertList) els.btnInsertList.hidden = plainSheet;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = plainSheet;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = plainSheet;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = plainSheet;
     } else {
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
@@ -1699,7 +1790,7 @@ export function syncEditorChrome(state, options = {}) {
         if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
-    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId || pdfOpen;
+    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId || plainSheet;
     if (els.viewAi && !els.viewAi.hidden) {
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
@@ -2438,15 +2529,25 @@ export function promptItemActions(file, options = {}) {
 
     const folder = isFolder(file);
     const pdf = !folder && isPdfCandidate(file);
+    const csv = !folder && !pdf && isCsvCandidate(file);
+    const image = !folder && !pdf && !csv && isImageCandidate(file);
     const pinned = Boolean(options.isPinned);
-    const canDownload = !folder && (isMarkdownCandidate(file) || pdf);
+    const canDownload = !folder && (isMarkdownCandidate(file) || pdf || csv || image);
     const canCopy = canDownload;
     const canAi = !folder && isMarkdownCandidate(file);
     const fileId = file?.id ? String(file.id) : '';
     const existingColor = fileId ? readFileTextColorsMap().get(fileId) : '';
     const existingBold = fileId ? readFileTextBoldMap().has(fileId) : false;
     if (els.itemActionsTitle) {
-        els.itemActionsTitle.textContent = folder ? 'Folder actions' : pdf ? 'PDF actions' : 'Markdown actions';
+        els.itemActionsTitle.textContent = folder
+            ? 'Folder actions'
+            : pdf
+              ? 'PDF actions'
+              : csv
+                ? 'CSV actions'
+                : image
+                  ? 'Image actions'
+                  : 'Markdown actions';
     }
     if (els.itemActionsName) {
         els.itemActionsName.textContent = file.name || '(unnamed)';

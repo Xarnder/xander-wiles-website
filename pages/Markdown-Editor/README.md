@@ -79,6 +79,23 @@ Rules locked for v1:
 - Mode choice is remembered per file in `localStorage`
 - Invalid blocks: best-effort repair when safe; otherwise warn and edit in Standard
 
+## Images (tap to load, data-first)
+
+Images show in Finder and Pinned as plain icons. Nothing image-related is requested until you tap. (The Drive API itself has no usage fee — these limits protect mobile data and quota.)
+
+| Step | What it fetches | Hard cap |
+|------|-----------------|----------|
+| Finder list | Nothing extra — the folder listing never asks for `thumbnailLink` | — |
+| Tap an image row | One metadata call + a ~320px thumbnail from Google’s image CDN, cached on this device | 512 KB |
+| Tap the thumbnail | Full screen with a **screen-sized copy** (≤ 2048px) from the CDN — not the original | 4 MB |
+| Zoom in past the copy’s detail (or tap **Full resolution**) | The original from Drive, once per viewing, after the pinch ends. Asks first over 10 MB or when the size is unknown; declining stops further zoom prompts | Reported size + 5%, never > 30 MB |
+| ⋮ → Download | Same checks as Load original (no 30 MB view limit when Drive reports the size) | Reported size + 5% |
+| Tap again later | Device cache (thumbnails always; full-screen copies/originals within a 60 MB LRU budget) | free |
+
+**Viewer gestures:** pinch to zoom (up to 8×), drag to pan when zoomed, double-tap to zoom in / back to fit, tap to hide or show the controls, swipe down to close. Desktop: wheel or trackpad pinch to zoom toward the cursor, double-click, `+` / `-` / `0`, Esc.
+
+Every download is streamed and cut off the moment it passes its cap, has a timeout, and is never retried automatically. Only one image loads at a time. Per device: at most 60 thumbnails, 30 screen copies, and 10 originals per hour, and 50 MB of image data per day (asks before allowing 25 MB more). Image caches are cleared on sign-out; the usage limits are not.
+
 ## Auth approach & Drive scope
 
 | Item | Choice |
