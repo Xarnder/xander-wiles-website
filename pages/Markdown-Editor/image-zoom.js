@@ -18,6 +18,10 @@ const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP_PX = 32;
 const DISMISS_DISTANCE_PX = 110;
 const DISMISS_VELOCITY = 0.6; // px per ms
+const SWIPE_DISTANCE_PX = 70;
+const SWIPE_VELOCITY = 0.45; // px per ms
+/** Drag resistance at the first / last image. */
+const SWIPE_EDGE_RESISTANCE = 0.25;
 
 /**
  * Fit an image inside the stage (contain), but never stretch it past one image
@@ -77,6 +81,8 @@ export function wantsMoreDetail(displayDevicePx, shownPx, fullPx) {
  *   onDismiss?: () => void,
  *   onSettle?: (info: { scale: number, displayDevicePx: number }) => void,
  *   onDrag?: (progress: number) => void,
+ *   onSwipe?: (direction: 'prev'|'next') => void,
+ *   canSwipe?: (direction: 'prev'|'next') => boolean,
  * }} handlers
  */
 export function createImageZoom(stage, img, handlers = {}) {
@@ -89,6 +95,8 @@ export function createImageZoom(stage, img, handlers = {}) {
      */
     let fullLong = 0;
     let dismissY = 0;
+    /** Horizontal drag offset while swiping between images (not zoomed). */
+    let swipeX = 0;
 
     /** @type {Map<number, { x: number, y: number }>} */
     const pointers = new Map();
@@ -114,7 +122,7 @@ export function createImageZoom(stage, img, handlers = {}) {
         img.classList.toggle('is-animating', animate);
         img.style.width = `${fit.w}px`;
         img.style.height = `${fit.h}px`;
-        img.style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y + dismissY}px) scale(${view.scale})`;
+        img.style.transform = `translate(-50%, -50%) translate(${view.x + swipeX}px, ${view.y + dismissY}px) scale(${view.scale})`;
         stage.classList.toggle('is-zoomed', view.scale > 1.01);
     }
 
@@ -165,7 +173,9 @@ export function createImageZoom(stage, img, handlers = {}) {
                 startView: { ...view },
                 startTime: performance.now(),
                 lastTime: performance.now(),
+                velocityX: 0,
                 velocityY: 0,
+                axis: '',
                 moved: false,
             };
         } else {
@@ -213,6 +223,7 @@ export function createImageZoom(stage, img, handlers = {}) {
             if (!gesture.moved) return;
             const now = performance.now();
             const dt = Math.max(1, now - gesture.lastTime);
+            gesture.velocityX = (p.x - gesture.last.x) / dt;
             gesture.velocityY = (p.y - gesture.last.y) / dt;
             gesture.last = { ...p };
             gesture.lastTime = now;
@@ -223,10 +234,18 @@ export function createImageZoom(stage, img, handlers = {}) {
                     stage.clientWidth,
                     stage.clientHeight
                 );
-            } else if (handlers.onDismiss && event.pointerType !== 'mouse') {
-                // Not zoomed: vertical drag pulls the photo away to close.
-                dismissY = dy;
-                handlers.onDrag?.(Math.min(1, Math.abs(dy) / (stage.clientHeight * 0.5)));
+            } else {
+                // Not zoomed: lock to the first clear direction.
+                if (!gesture.axis) gesture.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+                if (gesture.axis === 'x' && handlers.onSwipe) {
+                    // Horizontal drag steps between images (resists at the ends).
+                    const can = handlers.canSwipe?.(dx < 0 ? 'next' : 'prev') ?? true;
+                    swipeX = can ? dx : dx * SWIPE_EDGE_RESISTANCE;
+                } else if (gesture.axis === 'y' && handlers.onDismiss && event.pointerType !== 'mouse') {
+                    // Vertical drag pulls the photo away to close.
+                    dismissY = dy;
+                    handlers.onDrag?.(Math.min(1, Math.abs(dy) / (stage.clientHeight * 0.5)));
+                }
             }
             render();
         }
@@ -273,6 +292,21 @@ export function createImageZoom(stage, img, handlers = {}) {
 
         if (ended?.type === 'pan' && !ended.moved && performance.now() - ended.startTime < TAP_MS) {
             if (event.type !== 'pointercancel') handleTap(point);
+            return;
+        }
+
+        if (swipeX) {
+            const direction = swipeX < 0 ? 'next' : 'prev';
+            const far = Math.abs(swipeX) > SWIPE_DISTANCE_PX;
+            const fling = Math.abs(ended?.velocityX || 0) > SWIPE_VELOCITY && Math.sign(ended.velocityX) === Math.sign(swipeX);
+            const can = handlers.canSwipe?.(direction) ?? true;
+            swipeX = 0;
+            if ((far || fling) && can) {
+                render();
+                handlers.onSwipe?.(direction);
+                return;
+            }
+            settle();
             return;
         }
 
@@ -329,6 +363,7 @@ export function createImageZoom(stage, img, handlers = {}) {
             gesture = null;
             lastTap = null;
             dismissY = 0;
+            swipeX = 0;
             view = { scale: 1, x: 0, y: 0 };
             fit = { w: 0, h: 0 };
             fullLong = 0;

@@ -39,9 +39,10 @@ import {
     recordImageUsage,
     screenCopyPx,
     sizedThumbnailUrl,
+    summarizeImageUsage,
 } from './image-files.js';
 import { createImageZoom, wantsMoreDetail } from './image-zoom.js';
-import { getEls, promptLargeFile, showAppToast } from './ui.js';
+import { fileForRow, getEls, promptLargeFile, showAppToast } from './ui.js';
 
 const THUMB_CACHE = 'md-editor-image-thumbs-v1';
 const FULL_CACHE = 'md-editor-image-full-v1';
@@ -68,12 +69,17 @@ const metaById = new Map();
 let busyId = '';
 /** @type {{ row: HTMLElement, panel: HTMLElement, fileId: string } | null} */
 let openPreview = null;
-/** @type {AbortController | null} */
-let viewerAbort = null;
 let viewerObjectUrl = '';
 let viewerWired = false;
-/** @type {{ file: object, meta: object, originalShown: boolean, detailDeclined: boolean } | null} */
-let viewerFile = null;
+/**
+ * One full-screen viewing: the images it can step through and the one on screen.
+ * @type {{ files: object[], index: number, item: ViewerItem | null } | null}
+ */
+let session = null;
+/**
+ * @typedef {{ file: object, meta: object|null, abort: AbortController,
+ *   originalShown: boolean, detailDeclined: boolean, loadingOriginal: boolean }} ViewerItem
+ */
 /** @type {ReturnType<typeof createImageZoom> | null} */
 let zoom = null;
 
@@ -88,13 +94,31 @@ function readUsage() {
     }
 }
 
+/** Fired on window whenever today’s image usage changes (Settings listens). */
+export const IMAGE_USAGE_EVENT = 'md-editor:image-usage';
+
 function writeUsage(usage) {
     try {
         localStorage.setItem(USAGE_KEY, JSON.stringify(usage));
     } catch {
         // ignore — limits still apply in memory for this load
     }
+    window.dispatchEvent(new CustomEvent(IMAGE_USAGE_EVENT));
 }
+
+/** Snapshot for the Settings usage card. */
+export function readImageUsageSummary(now = Date.now()) {
+    let raw = null;
+    try {
+        raw = JSON.parse(localStorage.getItem(USAGE_KEY) || 'null');
+    } catch {
+        raw = null;
+    }
+    return summarizeImageUsage(raw, now);
+}
+
+/** localStorage key, so other tabs’ `storage` events can be matched. */
+export const IMAGE_USAGE_STORAGE_KEY = USAGE_KEY;
 
 function usageLine() {
     const usage = readUsage();
@@ -184,6 +208,14 @@ function friendlyError(err, fallback) {
 // ---------------------------------------------------------------------------
 // Device caches
 
+/**
+ * Drive’s modifiedTime for cache checks. Pinned rows carry pin time for sorting,
+ * so they pass `driveModifiedTime` ('' when unknown → trust the cache).
+ */
+function listedModified(file) {
+    return file && 'driveModifiedTime' in file ? file.driveModifiedTime : file?.modifiedTime;
+}
+
 function cacheRequestUrl(variant, fileId) {
     return new URL(`__image-cache/${variant}/${encodeURIComponent(fileId)}`, location.href).href;
 }
@@ -224,7 +256,7 @@ async function readCachedThumb(file) {
         const hit = await cache.match(cacheRequestUrl('thumb', file.id));
         if (!hit) return null;
         const meta = metaFromHeaders(file.id, hit.headers);
-        if (!isCachedImageFresh(meta.modifiedTime, file.modifiedTime)) return null;
+        if (!isCachedImageFresh(meta.modifiedTime, listedModified(file))) return null;
         return { blob: await hit.blob(), meta };
     } catch {
         return null;
@@ -271,7 +303,7 @@ async function readCachedFull(variant, file) {
     try {
         const hit = await cache.match(cacheRequestUrl(variant, file.id));
         if (!hit) return null;
-        if (!isCachedImageFresh(hit.headers.get('X-Modified-Time'), file.modifiedTime)) return null;
+        if (!isCachedImageFresh(hit.headers.get('X-Modified-Time'), listedModified(file))) return null;
         const blob = await hit.blob();
         const key = `${variant}:${file.id}`;
         const index = readFullIndex();
@@ -379,9 +411,9 @@ function describeMeta(file, meta) {
  * Load (or reuse) one thumbnail.
  * @returns {Promise<{ url: string, meta: object }>} url is '' when Drive has no thumbnail
  */
-async function loadThumbnail(file) {
+async function loadThumbnail(file, { signal } = {}) {
     const mem = thumbsInMemory.get(file.id);
-    if (mem && isCachedImageFresh(mem.modifiedTime, file.modifiedTime)) return mem;
+    if (mem && isCachedImageFresh(mem.modifiedTime, listedModified(file))) return mem;
 
     const remember = (entry) => {
         if (mem?.url?.startsWith('blob:') && mem.url !== entry.url) URL.revokeObjectURL(mem.url);
@@ -400,7 +432,7 @@ async function loadThumbnail(file) {
 
     const meter = startMeter('thumb');
     try {
-        const meta = await fetchImageMetadata(file.id);
+        const meta = await fetchImageMetadata(file.id, signal);
         const link = meta.thumbnailLink ? sizedThumbnailUrl(meta.thumbnailLink, THUMBNAIL_PX) : '';
         if (!link) {
             await writeCachedThumb(file.id, null, meta);
@@ -410,6 +442,7 @@ async function loadThumbnail(file) {
             maxBytes: THUMBNAIL_MAX_BYTES,
             timeoutMs: THUMB_TIMEOUT_MS,
             meter,
+            signal,
         });
         if (blob) {
             await writeCachedThumb(file.id, blob, meta);
@@ -523,7 +556,7 @@ export async function toggleImagePreview(file, row) {
         }
         thumbBtn.addEventListener('click', (event) => {
             event.stopPropagation();
-            openImageFull(file, { thumbUrl: thumb.url, meta });
+            openImageFull(file, { thumbUrl: thumb.url, meta, row });
         });
     } catch (err) {
         if (openPreview?.panel !== panel) return;
@@ -549,41 +582,52 @@ function wireViewer() {
         onDismiss: () => dialog.close(),
         onDrag: (progress) => dialog.style.setProperty('--viewer-dim', String(1 - progress * 0.75)),
         onSettle: () => maybeLoadDetail(),
+        onSwipe: (direction) => stepViewer(direction === 'next' ? 1 : -1),
+        canSwipe: (direction) => canStep(direction === 'next' ? 1 : -1),
     });
     // Every bitmap swap (thumbnail → screen copy → original) re-measures the fit.
     els.imageViewerImg.addEventListener('load', () => zoom?.layout());
-    dialog.addEventListener('close', resetViewer);
+    dialog.addEventListener('close', closeSession);
     dialog.addEventListener('keydown', (event) => {
         if (event.target instanceof HTMLButtonElement && (event.key === 'Enter' || event.key === ' ')) return;
-        if (event.key === '+' || event.key === '=') zoom?.zoomBy(1.5);
+        if (event.key === 'ArrowRight') stepViewer(1);
+        else if (event.key === 'ArrowLeft') stepViewer(-1);
+        else if (event.key === '+' || event.key === '=') zoom?.zoomBy(1.5);
         else if (event.key === '-' || event.key === '_') zoom?.zoomBy(1 / 1.5);
         else if (event.key === '0') zoom?.resetZoom();
         else return;
         event.preventDefault();
     });
     els.imageViewerClose?.addEventListener('click', () => dialog.close());
+    els.imageViewerPrev?.addEventListener('click', () => stepViewer(-1));
+    els.imageViewerNext?.addEventListener('click', () => stepViewer(1));
     els.imageViewerOriginal?.addEventListener('click', () => {
-        if (viewerFile) loadOriginalIntoViewer(viewerFile.file, viewerFile.meta);
+        if (session?.item) loadOriginalIntoViewer(session.item);
     });
 }
 
-function resetViewer() {
-    viewerAbort?.abort();
-    viewerAbort = null;
-    viewerFile = null;
+/** Clear the picture and per-image UI (zoom, status, button). */
+function clearViewerPicture() {
     const els = getEls();
     zoom?.reset();
     if (els.imageViewerImg) {
         els.imageViewerImg.removeAttribute('src');
         delete els.imageViewerImg.dataset.ready;
     }
-    els.imageViewer?.classList.remove('is-chrome-hidden');
-    els.imageViewer?.style.removeProperty('--viewer-dim');
     els.imageViewerStage?.classList.remove('is-loading');
     setOriginalButton(null);
     setViewerStatus('');
     if (viewerObjectUrl) URL.revokeObjectURL(viewerObjectUrl);
     viewerObjectUrl = '';
+}
+
+function closeSession() {
+    session?.item?.abort.abort();
+    session = null;
+    clearViewerPicture();
+    const els = getEls();
+    els.imageViewer?.classList.remove('is-chrome-hidden');
+    els.imageViewer?.style.removeProperty('--viewer-dim');
 }
 
 function setViewerStatus(text, kind = '') {
@@ -610,12 +654,56 @@ function originalButtonLabel(file, meta) {
     return size ? `Full resolution · ${size}` : 'Full resolution';
 }
 
+function canStep(delta) {
+    if (!session) return false;
+    const next = session.index + delta;
+    return next >= 0 && next < session.files.length;
+}
+
+/** Title, “3 / 12”, and which arrows show. */
+function syncViewerNav() {
+    const els = getEls();
+    const file = session?.item?.file;
+    const total = session?.files.length || 0;
+    if (els.imageViewerTitle) els.imageViewerTitle.textContent = file?.name || 'Image';
+    if (els.imageViewerImg) els.imageViewerImg.alt = file?.name || 'Image';
+    if (els.imageViewerCount) {
+        els.imageViewerCount.hidden = total < 2;
+        els.imageViewerCount.textContent = total > 1 ? `${session.index + 1} / ${total}` : '';
+    }
+    // Arrows stay in place (dimmed) at the ends so the bar never jumps; hidden for a single image.
+    for (const [btn, delta] of [
+        [els.imageViewerPrev, -1],
+        [els.imageViewerNext, 1],
+    ]) {
+        if (!btn) continue;
+        btn.hidden = total < 2;
+        btn.disabled = !canStep(delta);
+    }
+    els.imageViewerControls?.classList.toggle('is-single', total < 2);
+}
+
+/** Abortable pause. Resolves early (without error) when aborted. */
+function pause(ms, signal) {
+    return new Promise((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            'abort',
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            { once: true }
+        );
+    });
+}
+
 /**
  * Decode a blob off-screen, then swap it in — the current picture stays up
  * until the new one is ready, and a failed decode leaves it untouched.
  * @returns {Promise<boolean>}
  */
-async function showInViewer(blob) {
+async function showInViewer(blob, signal) {
     const els = getEls();
     const img = els.imageViewerImg;
     const url = URL.createObjectURL(blob);
@@ -627,7 +715,7 @@ async function showInViewer(blob) {
         URL.revokeObjectURL(url);
         return false;
     }
-    if (!img.isConnected || !getEls().imageViewer?.open) {
+    if (signal?.aborted || !img.isConnected || !getEls().imageViewer?.open) {
         URL.revokeObjectURL(url);
         return false;
     }
@@ -640,62 +728,125 @@ async function showInViewer(blob) {
     return true;
 }
 
+/** The images in the same Finder / Pinned group as `row`, in on-screen order. */
+function siblingImages(row, file) {
+    const list = row?.closest?.('.file-group-list');
+    const files = list
+        ? [...list.querySelectorAll(':scope > .file-row--image')].map((r) => fileForRow(r)).filter(Boolean)
+        : [];
+    const index = files.findIndex((f) => f.id === file.id);
+    if (index < 0) return { files: [file], index: 0 };
+    files[index] = file; // the tapped copy may carry fresher metadata
+    return { files, index };
+}
+
 /**
- * Second tap (on the thumbnail): full screen with a screen-sized copy.
- * The original loads only when the user zooms past the copy’s detail, or asks.
+ * Second tap (on the thumbnail): full screen. Steps through the other images in
+ * the same group with the arrows, swipes, or ←/→.
  */
-async function openImageFull(file, { thumbUrl, meta }) {
-    // Claim the lock before any await so a double tap can never start two loads.
+async function openImageFull(file, { thumbUrl, meta, row }) {
     if (busyId) {
         warnBusy();
         return;
     }
     const els = getEls();
     const dialog = els.imageViewer;
+    // dialog.open is set synchronously below, so a double tap cannot open twice.
     if (!dialog || !els.imageViewerImg || dialog.open) return;
-    const lock = `screen:${file.id}`;
-    busyId = lock;
-    try {
-        wireViewer();
-        resetViewer();
-        viewerFile = { file, meta, originalShown: false, detailDeclined: needsConvertedImage(file) };
-        const w = meta?.imageMediaMetadata?.width;
-        const h = meta?.imageMediaMetadata?.height;
-        zoom?.setFullDims(w, h);
-        if (els.imageViewerTitle) els.imageViewerTitle.textContent = file.name || 'Image';
-        const img = els.imageViewerImg;
-        img.alt = file.name || 'Image';
-        if (thumbUrl) img.src = thumbUrl;
-        els.imageViewerStage?.classList.add('is-loading');
-        dialog.showModal();
-        els.imageViewerClose?.focus({ preventScroll: true });
-        const abort = new AbortController();
-        viewerAbort = abort;
-        await showBestCopy(file, meta, abort.signal);
-    } finally {
-        if (busyId === lock) busyId = '';
-    }
-    // Zoomed in while the copy was still loading? Check detail now.
-    maybeLoadDetail();
+    wireViewer();
+    closeSession();
+    const { files, index } = siblingImages(row, file);
+    session = { files, index, item: null };
+    dialog.showModal();
+    els.imageViewerClose?.focus({ preventScroll: true });
+    await showViewerItem(index, { thumbUrl, meta, settled: true });
 }
 
-async function showBestCopy(file, meta, signal) {
+function stepViewer(delta) {
+    if (!session || !canStep(delta)) return;
+    showViewerItem(session.index + delta, {});
+}
+
+/** How long to stay on an image before its screen copy loads (flicking past costs only thumbnails). */
+const STEP_SETTLE_MS = 450;
+
+/**
+ * Show one image: thumbnail first (from cache, or one small download), then the
+ * screen-sized copy. Stepping away cancels whatever this image was still loading.
+ */
+async function showViewerItem(index, { thumbUrl = '', meta = null, settled = false }) {
+    if (!session || index < 0 || index >= session.files.length) return;
+    session.item?.abort.abort();
+    const file = session.files[index];
+    /** @type {ViewerItem} */
+    const item = {
+        file,
+        meta,
+        abort: new AbortController(),
+        originalShown: false,
+        detailDeclined: needsConvertedImage(file),
+        loadingOriginal: false,
+    };
+    session.index = index;
+    session.item = item;
+    const signal = item.abort.signal;
+    const els = getEls();
+
+    clearViewerPicture();
+    syncViewerNav();
+    els.imageViewerStage?.classList.add('is-loading');
+
+    // 1. Thumbnail.
+    let thumb = thumbUrl ? { url: thumbUrl, meta } : null;
+    if (!thumb) {
+        const memo = thumbsInMemory.get(file.id);
+        if (!memo) setViewerStatus('Loading thumbnail…', 'progress');
+        try {
+            thumb = await loadThumbnail(file, { signal });
+        } catch (err) {
+            if (signal.aborted) return;
+            els.imageViewerStage?.classList.remove('is-loading');
+            setViewerStatus(friendlyError(err, 'Could not load this image'), 'error');
+            return;
+        }
+        if (signal.aborted) return;
+    }
+    item.meta = { ...(thumb.meta || {}), ...(item.meta || {}) };
+    item.meta.size = item.meta.size || file.size;
+    zoom?.setFullDims(item.meta.imageMediaMetadata?.width, item.meta.imageMediaMetadata?.height);
+    if (thumb.url) els.imageViewerImg.src = thumb.url;
+    setViewerStatus('');
+
+    // 2. Screen copy — after a short pause when stepping, so fast flicking stays cheap.
+    if (!settled) {
+        await pause(STEP_SETTLE_MS, signal);
+        if (signal.aborted) return;
+    }
+    await showBestCopy(item, signal);
+    if (!signal.aborted) maybeLoadDetail();
+}
+
+async function showBestCopy(item, signal) {
+    const { file } = item;
+    const meta = item.meta;
     const els = getEls();
     const canShowOriginal = !needsConvertedImage(file);
-    const offerOriginal = () => setOriginalButton(canShowOriginal ? originalButtonLabel(file, meta) : null);
+    const offerOriginal = () => {
+        if (!signal.aborted) setOriginalButton(canShowOriginal ? originalButtonLabel(file, meta) : null);
+    };
     const zoomHint = 'Pinch or double-tap to zoom';
 
     // Cache first: an original beats a screen copy, and both are free.
     const cachedOriginal = canShowOriginal ? await readCachedFull('original', file) : null;
     if (signal.aborted) return;
-    if (cachedOriginal && (await showInViewer(cachedOriginal))) {
-        if (viewerFile) viewerFile.originalShown = true;
+    if (cachedOriginal && (await showInViewer(cachedOriginal, signal))) {
+        item.originalShown = true;
         setViewerStatus(`Full resolution (saved on this device) · ${zoomHint}`);
         return;
     }
     const cachedScreen = await readCachedFull('screen', file);
     if (signal.aborted) return;
-    if (cachedScreen && (await showInViewer(cachedScreen))) {
+    if (cachedScreen && (await showInViewer(cachedScreen, signal))) {
         setViewerStatus(`Screen copy (saved on this device) · ${zoomHint}`);
         offerOriginal();
         return;
@@ -715,6 +866,7 @@ async function showBestCopy(file, meta, signal) {
     try {
         const fresh = await currentMetadata(file.id, signal);
         if (!meta?.imageMediaMetadata && fresh?.imageMediaMetadata) {
+            item.meta = { ...meta, imageMediaMetadata: fresh.imageMediaMetadata };
             zoom?.setFullDims(fresh.imageMediaMetadata.width, fresh.imageMediaMetadata.height);
         }
         const link = fresh.thumbnailLink;
@@ -740,9 +892,9 @@ async function showBestCopy(file, meta, signal) {
             offerOriginal();
             return;
         }
-        if (await showInViewer(blob)) {
+        if (await showInViewer(blob, signal)) {
             setViewerStatus(`Screen copy · ${formatBytes(blob.size)} · ${usageLine()} · ${zoomHint}`);
-            writeCachedFull('screen', file.id, blob, meta);
+            writeCachedFull('screen', file.id, blob, item.meta);
         } else if (!signal.aborted) {
             els.imageViewerStage?.classList.remove('is-loading');
             setViewerStatus('This image could not be displayed.', 'error');
@@ -761,18 +913,18 @@ async function showBestCopy(file, meta, signal) {
 /**
  * Zoom settled: if the screen copy is now too coarse, fetch the original once.
  * Same guards as the button (confirm when big, limits, caps). Declining or a
- * refusal stops further zoom-triggered attempts for this viewing.
+ * refusal stops further zoom-triggered attempts for this image.
  */
 function maybeLoadDetail() {
-    const state = viewerFile;
+    const item = session?.item;
     const img = getEls().imageViewerImg;
-    if (!state || !zoom || !img || state.originalShown || state.detailDeclined || busyId) return;
+    if (!item || !zoom || !img || item.originalShown || item.detailDeclined || item.loadingOriginal) return;
     if (img.dataset.ready !== '1' || zoom.scale <= 1.01) return;
     const shown = Math.max(img.naturalWidth, img.naturalHeight);
-    const w = state.meta?.imageMediaMetadata?.width || 0;
-    const h = state.meta?.imageMediaMetadata?.height || 0;
+    const w = item.meta?.imageMediaMetadata?.width || 0;
+    const h = item.meta?.imageMediaMetadata?.height || 0;
     if (!wantsMoreDetail(zoom.displayDevicePx, shown, Math.max(w, h))) return;
-    loadOriginalIntoViewer(state.file, state.meta, { fromZoom: true });
+    loadOriginalIntoViewer(item, { fromZoom: true });
 }
 
 /**
@@ -829,23 +981,19 @@ async function downloadOriginal(file, size, maxBytes, signal, onProgress) {
     }
 }
 
-async function loadOriginalIntoViewer(file, meta, { fromZoom = false } = {}) {
-    if (busyId) {
-        if (!fromZoom) warnBusy();
-        return;
-    }
-    const state = viewerFile;
-    const lock = `original:${file.id}`;
-    busyId = lock;
-    const els = getEls();
-    const signal = viewerAbort?.signal;
+/** @param {ViewerItem} item */
+async function loadOriginalIntoViewer(item, { fromZoom = false } = {}) {
+    if (item.loadingOriginal || item.originalShown) return;
+    item.loadingOriginal = true;
+    const { file, meta } = item;
+    const signal = item.abort.signal;
     try {
         setOriginalButton(originalButtonLabel(file, meta), true);
         const approved = await approveOriginal(file, meta, { maxBytes: ORIGINAL_VIEW_MAX_BYTES });
-        if (signal?.aborted) return;
+        if (signal.aborted) return;
         if (!approved.ok) {
             // Don’t keep asking on every pinch after a no / a limit.
-            if (state) state.detailDeclined = true;
+            item.detailDeclined = true;
             if (approved.message) setViewerStatus(approved.message, 'error');
             setOriginalButton(originalButtonLabel(file, meta));
             return;
@@ -855,30 +1003,30 @@ async function loadOriginalIntoViewer(file, meta, { fromZoom = false } = {}) {
         setViewerStatus(total ? `${label} · ${formatBytes(total)}` : `${label}…`, 'progress');
         let lastPct = -1;
         const blob = await downloadOriginal(file, total, ORIGINAL_VIEW_MAX_BYTES, signal, (received) => {
-            if (!total) return;
+            if (!total || signal.aborted) return;
             const pct = Math.min(99, Math.floor((received / total) * 100));
             if (pct === lastPct) return;
             lastPct = pct;
             setViewerStatus(`${label} · ${pct}% of ${formatBytes(total)}`, 'progress');
         });
-        if (signal?.aborted) return;
-        if (await showInViewer(blob)) {
-            if (state) state.originalShown = true;
+        if (signal.aborted) return;
+        if (await showInViewer(blob, signal)) {
+            item.originalShown = true;
             setViewerStatus(`Full resolution · ${formatBytes(blob.size)} · ${usageLine()}`);
             setOriginalButton(null);
             writeCachedFull('original', file.id, blob, meta);
-        } else if (!signal?.aborted) {
-            if (state) state.detailDeclined = true;
+        } else if (!signal.aborted) {
+            item.detailDeclined = true;
             setViewerStatus('This browser cannot display the full-resolution format.', 'error');
             setOriginalButton(null);
         }
     } catch (err) {
-        if (signal?.aborted) return;
-        if (state) state.detailDeclined = true;
+        if (signal.aborted) return;
+        item.detailDeclined = true;
         setViewerStatus(friendlyError(err, 'Could not load full resolution'), 'error');
         setOriginalButton(originalButtonLabel(file, meta));
     } finally {
-        if (busyId === lock) busyId = '';
+        item.loadingOriginal = false;
     }
 }
 

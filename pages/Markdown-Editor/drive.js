@@ -76,6 +76,19 @@ export function isCsvCandidate(file) {
     return isCsvFile(file);
 }
 
+/**
+ * Plain text files (.txt, or text/plain without a markdown / CSV name).
+ * Notes saved as text/plain but named .md stay markdown.
+ */
+export function isTextCandidate(file) {
+    if (!file || isFolder(file)) return false;
+    const mime = String(file.mimeType || '');
+    if (mime.startsWith(GOOGLE_NATIVE_PREFIX)) return false;
+    if (isMarkdownCandidate(file) || isCsvCandidate(file) || isPdfCandidate(file)) return false;
+    if (String(file.name || '').toLowerCase().endsWith('.txt')) return !mime || mime.startsWith('text/') || mime === 'application/octet-stream';
+    return mime === 'text/plain';
+}
+
 /** Images (image/* or a common image name), never folders or Google Drawings. */
 export function isImageCandidate(file) {
     return isImageFile(file);
@@ -87,10 +100,11 @@ export function sortDriveEntries(files, sortMode = FINDER_SORT_DEFAULT) {
     const rank = (file) => {
         if (isFolder(file)) return 0;
         if (isMarkdownCandidate(file)) return 1;
-        if (isCsvCandidate(file)) return 2;
-        if (isPdfCandidate(file)) return 3;
-        if (isImageCandidate(file)) return 4;
-        return 5;
+        if (isTextCandidate(file)) return 2;
+        if (isCsvCandidate(file)) return 3;
+        if (isPdfCandidate(file)) return 4;
+        if (isImageCandidate(file)) return 5;
+        return 6;
     };
     const nameCmp = (a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), undefined, {
@@ -155,7 +169,7 @@ export function driveOrderByForSort(sortMode = FINDER_SORT_DEFAULT) {
 }
 
 /**
- * List folders, markdown files, CSVs, PDFs, and images in a folder.
+ * List folders, markdown, text, CSV, PDF, and image files in a folder.
  * Query is scoped to those types so pagination matches what the UI shows.
  * Never asks for thumbnailLink — images cost nothing extra until tapped.
  * @param {string} [folderId]
@@ -170,7 +184,7 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
     const q = [
         `'${safeParent}' in parents`,
         'trashed = false',
-        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or mimeType = 'application/pdf' or mimeType contains 'image/' or name contains '.md' or name contains '.markdown' or name contains '.csv' or name contains '.pdf')`,
+        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or mimeType = 'text/plain' or mimeType = 'application/pdf' or mimeType contains 'image/' or name contains '.md' or name contains '.txt' or name contains '.markdown' or name contains '.csv' or name contains '.pdf')`,
     ].join(' and ');
     const params = new URLSearchParams({
         q,
@@ -189,6 +203,7 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null, op
             (f) =>
                 isFolder(f) ||
                 isMarkdownCandidate(f) ||
+                isTextCandidate(f) ||
                 isCsvCandidate(f) ||
                 isPdfCandidate(f) ||
                 isImageCandidate(f)
@@ -246,7 +261,7 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null, opti
     } else {
         // Prefer files that look like markdown without requiring a folder path.
         parts.push(
-            "(mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or name contains '.md' or name contains '.csv')"
+            "(mimeType = 'text/markdown' or mimeType = 'text/csv' or mimeType = 'application/csv' or name contains '.md' or name contains '.txt' or name contains '.csv')"
         );
     }
 
@@ -267,7 +282,12 @@ export async function searchMarkdownFiles(nameQuery = '', pageToken = null, opti
     const data = await response.json();
     const files = sortDriveEntries(
         (data.files || []).filter(
-            (f) => isMarkdownCandidate(f) || isCsvCandidate(f) || isPdfCandidate(f) || isImageCandidate(f)
+            (f) =>
+                isMarkdownCandidate(f) ||
+                isTextCandidate(f) ||
+                isCsvCandidate(f) ||
+                isPdfCandidate(f) ||
+                isImageCandidate(f)
         ),
         sortMode
     );
@@ -560,10 +580,30 @@ export async function copyDriveFile(fileId, { name, parentId, keepName = false }
 
 /** Create an empty markdown file in a folder. */
 export async function createMarkdownFile(parentId, name, content = '') {
-    const fileName = ensureMdExtension(name);
+    return createTextBasedFile(parentId, ensureMdExtension(name), content, 'text/markdown');
+}
+
+/**
+ * Add `ext` (e.g. '.txt') unless the name already ends with it.
+ * @param {string} name
+ * @param {string} ext
+ */
+export function ensureFileExtension(name, ext) {
+    const trimmed = String(name || '').trim() || 'Untitled';
+    return trimmed.toLowerCase().endsWith(ext.toLowerCase()) ? trimmed : `${trimmed}${ext}`;
+}
+
+/**
+ * Create a text-based file (markdown, plain text, CSV) with initial content.
+ * @param {string} parentId
+ * @param {string} fileName full name including extension
+ * @param {string} content
+ * @param {string} mimeType
+ */
+export async function createTextBasedFile(parentId, fileName, content, mimeType) {
     const metadata = {
         name: fileName,
-        mimeType: 'text/markdown',
+        mimeType,
         parents: [parentId || ROOT_FOLDER_ID],
     };
     const boundary = 'mdeditor_boundary';
@@ -572,7 +612,7 @@ export async function createMarkdownFile(parentId, name, content = '') {
         'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
         `${JSON.stringify(metadata)}\r\n` +
         `--${boundary}\r\n` +
-        'Content-Type: text/markdown; charset=UTF-8\r\n\r\n' +
+        `Content-Type: ${mimeType}; charset=UTF-8\r\n\r\n` +
         `${content}\r\n` +
         `--${boundary}--`;
 

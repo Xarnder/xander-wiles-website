@@ -4,6 +4,7 @@ import {
     isImageCandidate,
     isMarkdownCandidate,
     isPdfCandidate,
+    isTextCandidate,
     sortDriveEntries,
 } from './drive.js';
 import {
@@ -192,6 +193,11 @@ export function bindUi() {
     els.imageViewerImg = document.getElementById('image-viewer-img');
     els.imageViewerStatus = document.getElementById('image-viewer-status');
     els.imageViewerOriginal = document.getElementById('image-viewer-original');
+    els.imageViewerPrev = document.getElementById('image-viewer-prev');
+    els.imageViewerNext = document.getElementById('image-viewer-next');
+    els.imageViewerCount = document.getElementById('image-viewer-count');
+    els.imageViewerControls = document.getElementById('image-viewer-controls');
+    els.newFileDialog = document.getElementById('new-file-dialog');
     els.pdfFileName = document.getElementById('pdf-file-name');
     els.draftDialog = document.getElementById('draft-dialog');
     els.unsavedDialog = document.getElementById('unsaved-dialog');
@@ -758,6 +764,7 @@ export function renderFileList(
 
     const folders = sorted.filter((f) => isFolder(f));
     const notes = sorted.filter((f) => isMarkdownCandidate(f));
+    const texts = sorted.filter((f) => isTextCandidate(f));
     const csvs = sorted.filter((f) => isCsvCandidate(f));
     const pdfs = sorted.filter((f) => isPdfCandidate(f));
     const images = sorted.filter((f) => isImageCandidate(f));
@@ -781,6 +788,19 @@ export function renderFileList(
                 kind: 'markdown',
                 title: 'Markdown',
                 files: notes,
+                onOpen,
+                onMenu,
+                openedAtById: openedMap,
+            })
+        );
+    }
+
+    if (texts.length) {
+        els.fileList.appendChild(
+            buildFileGroup({
+                kind: 'text',
+                title: 'Text',
+                files: texts,
                 onOpen,
                 onMenu,
                 openedAtById: openedMap,
@@ -847,6 +867,7 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
 
     const folders = list.filter((f) => isFolder(f));
     const notes = list.filter((f) => isMarkdownCandidate(f));
+    const texts = list.filter((f) => isTextCandidate(f));
     const csvs = list.filter((f) => isCsvCandidate(f));
     const pdfs = list.filter((f) => isPdfCandidate(f));
     const images = list.filter((f) => isImageCandidate(f));
@@ -868,6 +889,17 @@ export function renderPinnedList(items, { onOpen, onMenu }) {
                 kind: 'pinned-markdown',
                 title: 'Markdown',
                 files: notes,
+                onOpen,
+                onMenu,
+            })
+        );
+    }
+    if (texts.length) {
+        els.pinnedList.appendChild(
+            buildFileGroup({
+                kind: 'pinned-text',
+                title: 'Text',
+                files: texts,
                 onOpen,
                 onMenu,
             })
@@ -1245,6 +1277,17 @@ function openedRecencyTier(openedAt) {
     return null;
 }
 
+/** Drive file behind each rendered Finder / Pinned row (the image viewer steps through these). */
+const rowFiles = new WeakMap();
+
+/**
+ * @param {Element|null} row a `.file-row`
+ * @returns {object|null}
+ */
+export function fileForRow(row) {
+    return (row && rowFiles.get(row)) || null;
+}
+
 function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = null }) {
     const section = document.createElement('section');
     section.className = `file-group file-group--${kind}`;
@@ -1270,6 +1313,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
         const pdf = !folder && isPdfCandidate(file);
         const csv = !folder && !pdf && isCsvCandidate(file);
         const image = !folder && !pdf && !csv && isImageCandidate(file);
+        const text = !folder && !pdf && !csv && !image && isTextCandidate(file);
         const fullName = file.name || '(unnamed)';
         const displayName = displayFileListName(file.name, { isFolder: folder, showExtension });
         const fileId = file?.id ? String(file.id) : '';
@@ -1283,9 +1327,12 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
                 ? 'file-row file-row--csv'
                 : image
                   ? 'file-row file-row--image'
-                  : 'file-row file-row--markdown';
+                  : text
+                    ? 'file-row file-row--text'
+                    : 'file-row file-row--markdown';
         if (isBold) row.classList.add('file-row--important');
         row.setAttribute('role', 'listitem');
+        rowFiles.set(row, file);
 
         const openBtn = document.createElement('button');
         openBtn.type = 'button';
@@ -1296,7 +1343,7 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
                 ? `Open ${isBold ? 'important ' : ''}folder ${displayName}`
                 : image
                   ? `Show thumbnail for ${isBold ? 'important ' : ''}image ${displayName}`
-                  : `Open ${isBold ? 'important ' : ''}${pdf ? 'PDF ' : csv ? 'CSV ' : ''}${displayName}`
+                  : `Open ${isBold ? 'important ' : ''}${pdf ? 'PDF ' : csv ? 'CSV ' : text ? 'text file ' : ''}${displayName}`
         );
         if (image) openBtn.setAttribute('aria-expanded', 'false');
 
@@ -1313,7 +1360,9 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu, openedAtById = nul
                 ? 'Assets/SVGs/csv-icon.svg'
                 : image
                   ? 'Assets/SVGs/image-icon.svg'
-                  : 'Assets/SVGs/markdown-icon.svg';
+                  : text
+                    ? 'Assets/SVGs/txt-icon.svg'
+                    : 'Assets/SVGs/markdown-icon.svg';
         img.alt = '';
         img.width = 28;
         img.height = 28;
@@ -1412,7 +1461,7 @@ export function setUpEnabled(enabled) {
 export function displayNoteTitle(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return 'Untitled';
-    return raw.replace(/\.(md|markdown|pdf|csv)$/i, '') || 'Untitled';
+    return raw.replace(/\.(md|markdown|txt|pdf|csv)$/i, '') || 'Untitled';
 }
 
 /**
@@ -1425,7 +1474,7 @@ export function displayFileListName(name, options = {}) {
     const raw = String(name ?? '').trim();
     if (!raw) return '(unnamed)';
     if (options.isFolder || options.showExtension) return raw;
-    return raw.replace(/\.(md|markdown|pdf|csv|jpe?g|png|gif|webp|avif|bmp|svg|heic|heif|tiff?)$/i, '') || raw;
+    return raw.replace(/\.(md|markdown|txt|pdf|csv|jpe?g|png|gif|webp|avif|bmp|svg|heic|heif|tiff?)$/i, '') || raw;
 }
 
 const FILE_COLOR_PRESETS = Object.freeze([
@@ -1733,10 +1782,12 @@ export function syncEditorChrome(state, options = {}) {
 
     const pdfOpen = state.kind === 'pdf' && Boolean(state.fileId);
     const csvOpen = state.kind === 'csv' && Boolean(state.fileId);
+    const textOpen = state.kind === 'text' && Boolean(state.fileId);
     const plainSheet = pdfOpen || csvOpen;
     if (els.editorActive) {
         els.editorActive.classList.toggle('is-pdf', pdfOpen);
         els.editorActive.classList.toggle('is-csv', csvOpen);
+        els.editorActive.classList.toggle('is-text', textOpen);
     }
     if (els.pdfViewer) els.pdfViewer.hidden = !pdfOpen;
     if (els.csvViewer) els.csvViewer.hidden = !csvOpen;
@@ -1766,9 +1817,10 @@ export function syncEditorChrome(state, options = {}) {
         els.btnSave.hidden = false;
         if (els.btnUndo) els.btnUndo.hidden = plainSheet;
         if (els.btnRedo) els.btnRedo.hidden = plainSheet;
-        if (els.btnInsertList) els.btnInsertList.hidden = plainSheet;
-        if (els.btnClickEdit) els.btnClickEdit.hidden = plainSheet;
-        if (els.btnEditorMore) els.btnEditorMore.hidden = plainSheet;
+        // Plain text keeps undo / search but none of the markdown tools.
+        if (els.btnInsertList) els.btnInsertList.hidden = plainSheet || textOpen;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = plainSheet || textOpen;
+        if (els.btnEditorMore) els.btnEditorMore.hidden = plainSheet || textOpen;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = plainSheet;
     } else {
         els.viewTitle.classList.remove('view-title--doc');
@@ -1790,7 +1842,7 @@ export function syncEditorChrome(state, options = {}) {
         if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
     els.btnSave.classList.toggle('is-flashing', Boolean(state.dirty && state.fileId && state.status !== 'saving'));
-    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId || plainSheet;
+    if (els.btnEditorMore) els.btnEditorMore.hidden = !state.fileId || plainSheet || textOpen;
     if (els.viewAi && !els.viewAi.hidden) {
         if (els.btnInsertList) els.btnInsertList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
@@ -2518,6 +2570,26 @@ export function promptFillListDates(options) {
 }
 
 /**
+ * Long-press chooser for + Note.
+ * @returns {Promise<'md'|'txt'|'csv'|null>}
+ */
+export function promptNewFileType() {
+    const dialog = els.newFileDialog;
+    if (!dialog) return Promise.resolve('md');
+    return new Promise((resolve) => {
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            const value = dialog.returnValue;
+            resolve(value === 'md' || value === 'txt' || value === 'csv' ? value : null);
+        };
+        dialog.addEventListener('close', onClose);
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+        dialog.querySelector('.new-file-option')?.focus({ preventScroll: true });
+    });
+}
+
+/**
  * Action sheet for a Finder / Pinned row.
  * @param {object} file
  * @param {{ isPinned?: boolean }} [options]
@@ -2531,8 +2603,9 @@ export function promptItemActions(file, options = {}) {
     const pdf = !folder && isPdfCandidate(file);
     const csv = !folder && !pdf && isCsvCandidate(file);
     const image = !folder && !pdf && !csv && isImageCandidate(file);
+    const text = !folder && !pdf && !csv && !image && isTextCandidate(file);
     const pinned = Boolean(options.isPinned);
-    const canDownload = !folder && (isMarkdownCandidate(file) || pdf || csv || image);
+    const canDownload = !folder && (isMarkdownCandidate(file) || pdf || csv || image || text);
     const canCopy = canDownload;
     const canAi = !folder && isMarkdownCandidate(file);
     const fileId = file?.id ? String(file.id) : '';
@@ -2547,7 +2620,9 @@ export function promptItemActions(file, options = {}) {
                 ? 'CSV actions'
                 : image
                   ? 'Image actions'
-                  : 'Markdown actions';
+                  : text
+                    ? 'Text actions'
+                    : 'Markdown actions';
     }
     if (els.itemActionsName) {
         els.itemActionsName.textContent = file.name || '(unnamed)';

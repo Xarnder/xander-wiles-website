@@ -78,7 +78,7 @@ export function clearDraft(fileId) {
 
 export function createEditorState() {
     return {
-        /** @type {'markdown' | 'csv' | 'pdf'} */
+        /** @type {'markdown' | 'text' | 'csv' | 'pdf'} */
         kind: 'markdown',
         fileId: null,
         fileName: '',
@@ -126,6 +126,16 @@ export function applyLoadedCsv(state, { fileId, fileName, mimeType, content, dri
     state.errorMessage = '';
     state.driveVersion = driveVersion != null && driveVersion !== '' ? driveVersion : null;
     state.headRevisionId = headRevisionId ? String(headRevisionId) : null;
+}
+
+/**
+ * Open a plain text file: same text buffer as markdown, but never parsed or
+ * reformatted as markdown (Raw view only).
+ */
+export function applyLoadedText(state, options) {
+    applyLoadedCsv(state, { ...options, mimeType: options.mimeType || 'text/plain' });
+    state.kind = 'text';
+    state.fileName = options.fileName || 'Untitled.txt';
 }
 
 /**

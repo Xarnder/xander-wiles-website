@@ -244,7 +244,7 @@
                 </div>
                 <div id="file-list" class="file-list" data-md-mobile="bottom" data-md-desktop="top" role="list"></div>
                 <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
-                <p id="browse-empty" class="empty-state" hidden>No folders, markdown files, CSVs, PDFs, or images here.</p>
+                <p id="browse-empty" class="empty-state" hidden>No folders, notes, text files, CSVs, PDFs, or images here.</p>
             </section>
 
             <section id="view-editor" class="view view-editor" hidden>
@@ -375,6 +375,20 @@
 
             <section id="view-settings" class="view view-settings" hidden>
                 <div class="settings-card">
+                    <section id="image-usage" class="usage-meter" data-level="ok" aria-labelledby="image-usage-title">
+                        <div class="usage-meter-head">
+                            <h3 id="image-usage-title" class="usage-meter-title">Drive image data today</h3>
+                            <span id="image-usage-value" class="usage-meter-value">0 KB of 50 MB</span>
+                        </div>
+                        <div id="image-usage-bar" class="usage-meter-track" role="progressbar" aria-labelledby="image-usage-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <div id="image-usage-fill" class="usage-meter-fill"></div>
+                        </div>
+                        <div class="usage-meter-foot">
+                            <span id="image-usage-percent">0% used</span>
+                            <span id="image-usage-reset">Resets at midnight</span>
+                        </div>
+                        <p id="image-usage-hourly" class="usage-meter-hourly"></p>
+                    </section>
                     <h2 class="settings-heading">Settings</h2>
                     <p class="settings-lede">Search Drive for markdown files, or sign out of this device.</p>
                     <div class="settings-actions">
@@ -496,7 +510,7 @@
                             <span class="settings-pref-label">Show file extensions</span>
                             <input id="pref-show-file-extensions" class="settings-toggle" type="checkbox">
                         </label>
-                        <p class="settings-prefs-lede settings-prefs-lede--tight">Show .md, .csv, .pdf, and image extensions on file names in Finder and Pinned. Off by default.</p>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">Show .md, .txt, .csv, .pdf, and image extensions on file names in Finder and Pinned. Off by default.</p>
                     </div>
                     <p class="browse-hint settings-hint">
                         Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
@@ -506,6 +520,7 @@
                     <ul class="settings-tips">
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
+                        <li>Tap <strong>+ Note</strong> for a markdown note. Long-press it (or right-click / <kbd>Shift</kbd>+<kbd>Enter</kbd>) to create a <strong>text (.txt)</strong> or <strong>CSV</strong> file instead.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text. Turn on <strong>Pure reader</strong> in the Edit ⋮ menu to lock Preview (no list buttons, long-press, or mini editor) when handing the device to someone.</li>
                         <li>Unsaved markdown and CSV edits autosave to Drive after 10 seconds of inactivity. PDFs save only when you tap Save. The slim bar under the mode switcher counts down remaining idle time. You can still tap Save anytime. Tapping <strong>Save</strong> can show a <strong>Saving in progress</strong> lock (turn this off in Settings if you really need to). Autosave never blocks the screen. <strong>Undo</strong> / <strong>Redo</strong> in the Edit toolbar (and ⌘/Ctrl+Z) still work after autosave. For older cloud versions after reload, open <strong>Version history</strong> from the Edit ⋮ menu. Use <strong>Name this version…</strong> for a permanent checkpoint.</li>
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
@@ -573,7 +588,8 @@
                             <span class="btn-finder-sort-label">Last updated</span>
                         </button>
                         <div id="create-actions" class="create-actions" hidden>
-                            <button type="button" id="btn-new-note" class="btn btn-primary">+ Note</button>
+                            <button type="button" id="btn-new-note" class="btn btn-primary btn-new-note" title="New markdown note · long-press for text or CSV" aria-haspopup="dialog" aria-describedby="btn-new-note-hint">+ Note</button>
+                            <span id="btn-new-note-hint" class="sr-only">Long-press, right-click, or Shift+Enter to choose markdown, text, or CSV.</span>
                             <button type="button" id="btn-new-folder" class="btn btn-ghost">+ Folder</button>
                         </div>
                     </div>
@@ -659,19 +675,63 @@
         </form>
     </dialog>
 
+    <dialog id="new-file-dialog" class="dialog new-file-dialog" aria-labelledby="new-file-title">
+        <form method="dialog" class="dialog-body">
+            <h2 id="new-file-title">New file</h2>
+            <p>Choose what to create in this folder.</p>
+            <div class="new-file-options">
+                <button type="submit" value="md" class="new-file-option new-file-option--markdown">
+                    <img src="Assets/SVGs/markdown-icon.svg" alt="" width="30" height="30">
+                    <span class="new-file-option-text">
+                        <span class="new-file-option-title">Markdown note</span>
+                        <span class="new-file-option-sub">.md · headings, lists, Preview</span>
+                    </span>
+                </button>
+                <button type="submit" value="txt" class="new-file-option new-file-option--text">
+                    <img src="Assets/SVGs/txt-icon.svg" alt="" width="30" height="30">
+                    <span class="new-file-option-text">
+                        <span class="new-file-option-title">Text file</span>
+                        <span class="new-file-option-sub">.txt · plain text, no formatting</span>
+                    </span>
+                </button>
+                <button type="submit" value="csv" class="new-file-option new-file-option--csv">
+                    <img src="Assets/SVGs/csv-icon.svg" alt="" width="30" height="30">
+                    <span class="new-file-option-text">
+                        <span class="new-file-option-title">CSV table</span>
+                        <span class="new-file-option-sub">.csv · rows and columns</span>
+                    </span>
+                </button>
+            </div>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="image-viewer" class="image-viewer" aria-labelledby="image-viewer-title">
         <div id="image-viewer-stage" class="image-viewer-stage">
             <img id="image-viewer-img" class="image-viewer-img" alt="" decoding="async" draggable="false" referrerpolicy="no-referrer">
         </div>
         <div class="image-viewer-bar">
-            <h2 id="image-viewer-title" class="image-viewer-title">Image</h2>
+            <div class="image-viewer-heading">
+                <h2 id="image-viewer-title" class="image-viewer-title">Image</h2>
+                <span id="image-viewer-count" class="image-viewer-count" hidden></span>
+            </div>
             <button type="button" id="image-viewer-close" class="image-viewer-close" aria-label="Close image">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
         </div>
         <div class="image-viewer-foot">
             <p id="image-viewer-status" class="image-viewer-status" role="status" hidden></p>
-            <button type="button" id="image-viewer-original" class="image-viewer-original" hidden>Full resolution</button>
+            <div id="image-viewer-controls" class="image-viewer-controls">
+                <button type="button" id="image-viewer-prev" class="image-viewer-nav" aria-label="Previous image" hidden>
+                    <img src="Assets/SVGs/Left-ArrowIcons.svg" alt="" width="22" height="20" draggable="false">
+                </button>
+                <button type="button" id="image-viewer-original" class="image-viewer-original" hidden>Full resolution</button>
+                <button type="button" id="image-viewer-next" class="image-viewer-nav" aria-label="Next image" hidden>
+                    <img src="Assets/SVGs/Right-ArrowIcons.svg" alt="" width="22" height="20" draggable="false">
+                </button>
+            </div>
         </div>
     </dialog>
 

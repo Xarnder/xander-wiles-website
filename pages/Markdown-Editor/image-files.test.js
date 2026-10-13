@@ -10,7 +10,11 @@ import {
     ImageTooLargeError,
     checkImageUsage,
     formatBytes,
+    formatDuration,
     isCachedImageFresh,
+    msUntilLocalMidnight,
+    summarizeImageUsage,
+    usageLevel,
     localDayKey,
     normalizeImageUsage,
     readBodyCapped,
@@ -161,4 +165,48 @@ test('capped reads stop oversized bodies and report every byte', async () => {
         readBodyCapped(new Response(body(1), { headers: { 'Content-Length': '5000' } }), 1000),
         ImageTooLargeError
     );
+});
+
+test('reset countdown runs to local midnight and reads naturally', () => {
+    const now = new Date(2026, 9, 13, 18, 48, 0).getTime();
+    assert.equal(msUntilLocalMidnight(now), (5 * 60 + 12) * 60 * 1000);
+    assert.equal(formatDuration((5 * 60 + 12) * 60 * 1000), '5 h 12 min');
+    assert.equal(formatDuration(2 * 60 * 60 * 1000), '2 h');
+    assert.equal(formatDuration(47.2 * 60 * 1000), '48 min');
+    assert.equal(formatDuration(10 * 1000), '1 min');
+    assert.equal(formatDuration(0), 'under 1 min');
+});
+
+test('usage colour bands', () => {
+    assert.equal(usageLevel(0), 'ok');
+    assert.equal(usageLevel(0.69), 'ok');
+    assert.equal(usageLevel(0.7), 'warn');
+    assert.equal(usageLevel(0.9), 'critical');
+    assert.equal(usageLevel(1), 'over');
+    assert.equal(usageLevel(1.4), 'over');
+});
+
+test('summary combines today’s bytes, reset time, and hourly counts', () => {
+    const now = new Date(2026, 9, 13, 23, 30, 0).getTime();
+    const raw = {
+        day: localDayKey(now),
+        bytes: 40 * 1024 * 1024,
+        allowance: DAILY_IMAGE_BYTES,
+        events: [
+            ...Array.from({ length: HOURLY_LIMITS.original }, (_, i) => ({ t: now - (i + 1) * 60_000, k: 'original' })),
+            { t: now - 1000, k: 'thumb' },
+        ],
+    };
+    const s = summarizeImageUsage(raw, now);
+    assert.equal(s.level, 'warn');
+    assert.equal(Math.round(s.fraction * 100), 80);
+    assert.equal(s.resetInMs, 30 * 60 * 1000);
+    assert.equal(s.raised, false);
+    const byKind = Object.fromEntries(s.hourly.map((h) => [h.kind, h]));
+    assert.equal(byKind.thumb.used, 1);
+    assert.equal(byKind.thumb.retryInMs, 0);
+    assert.equal(byKind.original.used, HOURLY_LIMITS.original);
+    assert.ok(byKind.original.retryInMs > 0);
+    // Yesterday’s ledger reads as a fresh day.
+    assert.equal(summarizeImageUsage(raw, now + 60 * 60 * 1000).bytes, 0);
 });

@@ -247,3 +247,55 @@ export async function readBodyCapped(response, maxBytes, onBytes = () => {}) {
     }
     return new Blob(chunks, { type: type.split(';')[0].trim() });
 }
+
+/** Milliseconds until the next local midnight, when the daily budget resets. */
+export function msUntilLocalMidnight(now = Date.now()) {
+    const d = new Date(now);
+    const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    return Math.max(0, next.getTime() - now);
+}
+
+/** “5 h 12 min”, “48 min”, “under 1 min”. */
+export function formatDuration(ms) {
+    const mins = Math.ceil(Math.max(0, Number(ms) || 0) / 60_000);
+    if (mins < 1) return 'under 1 min';
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/**
+ * Colour band for a used fraction of the daily budget.
+ * @returns {'ok'|'warn'|'critical'|'over'}
+ */
+export function usageLevel(fraction) {
+    if (fraction >= 1) return 'over';
+    if (fraction >= 0.9) return 'critical';
+    if (fraction >= 0.7) return 'warn';
+    return 'ok';
+}
+
+/**
+ * Everything the Settings usage card shows, from the stored ledger.
+ * @param {any} raw stored ledger (or null)
+ * @param {number} [now]
+ */
+export function summarizeImageUsage(raw, now = Date.now()) {
+    const usage = normalizeImageUsage(raw, now);
+    const fraction = usage.allowance > 0 ? usage.bytes / usage.allowance : 0;
+    const hourly = Object.entries(HOURLY_LIMITS).map(([kind, limit]) => {
+        const used = usage.events.filter((e) => e.k === kind).length;
+        const check = checkImageUsage({ ...usage, bytes: 0 }, { kind }, now);
+        return { kind, used: Math.min(used, limit), limit, retryInMs: check.ok ? 0 : check.retryInMs || 0 };
+    });
+    return {
+        bytes: usage.bytes,
+        allowance: usage.allowance,
+        raised: usage.allowance > DAILY_IMAGE_BYTES,
+        fraction: Math.min(1, Math.max(0, fraction)),
+        level: usageLevel(fraction),
+        resetInMs: msUntilLocalMidnight(now),
+        hourly,
+    };
+}

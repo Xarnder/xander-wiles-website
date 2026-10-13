@@ -7,7 +7,7 @@ Live path: `/pages/Markdown-Editor/`
 
 1. Sign in with Google (OAuth access token via Google Identity Services)
 2. Browse Drive folders in-app (open folder, list markdown, navigate Up)
-3. **Create** new markdown notes and folders in the current location
+3. **Create** new notes and folders in the current location — tap **+ Note** for markdown; long-press (or right-click / Shift+Enter) to choose **Markdown**, **Text (.txt)**, or **CSV**. Text files open in a plain Raw editor (undo, search, autosave) and are saved exactly as typed — never parsed or reformatted as markdown
 4. **Rename** notes and folders from the list (or Rename while editing)
 5. Open a `.md` / `text/markdown` file
 6. Edit in a plain textarea (**Standard** mode), or use **Custom** / **Mixed** modes for structured `mdlist` blocks
@@ -93,6 +93,10 @@ Images show in Finder and Pinned as plain icons. Nothing image-related is reques
 | Tap again later | Device cache (thumbnails always; full-screen copies/originals within a 60 MB LRU budget) | free |
 
 **Viewer gestures:** pinch to zoom (up to 8×), drag to pan when zoomed, double-tap to zoom in / back to fit, tap to hide or show the controls, swipe down to close. Desktop: wheel or trackpad pinch to zoom toward the cursor, double-click, `+` / `-` / `0`, Esc.
+
+**Next / previous:** the arrow buttons in the bottom bar (either side of **Full resolution**), a sideways swipe (when not zoomed), or ← / → step through the other images in the same Finder / Pinned group (“3 / 12” under the name). Each image shows its thumbnail first (often already cached), then its screen copy — but only after you stay on it for about half a second, so flicking past images costs at most their thumbnails. Stepping away cancels anything the previous image was still loading. Nothing is prefetched.
+
+**Settings → Drive image data today** (top of Settings) shows the real numbers (“12 MB of 50 MB”), a bar, % used, time until the midnight reset, and this hour’s counts per kind. It turns amber at 70%, red at 90% and at the limit, and updates live while open — including from image loads in other tabs.
 
 Every download is streamed and cut off the moment it passes its cap, has a timeout, and is never retried automatically. Only one image loads at a time. Per device: at most 60 thumbnails, 30 screen copies, and 10 originals per hour, and 50 MB of image data per day (asks before allowing 25 MB more). Image caches are cleared on sign-out; the usage limits are not.
 
