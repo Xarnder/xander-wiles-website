@@ -222,6 +222,7 @@ describe('captureWorldContent', () => {
 				'musicPlants',
 				'furniture',
 				'miniBuilds',
+				'barriers',
 				'buildingLevels',
 				'buildings',
 				'environment',

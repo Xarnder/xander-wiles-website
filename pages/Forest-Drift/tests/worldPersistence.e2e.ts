@@ -164,6 +164,7 @@ test('a saved world contains its definition and none of the regenerable world', 
 
 	expect(stored.seed).toBe('measured-seed-1');
 	expect(stored.keys).toEqual([
+		'barriers',
 		'buildingLevels',
 		'buildings',
 		'createdAt',

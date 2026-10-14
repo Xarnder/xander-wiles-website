@@ -62,6 +62,15 @@ import { regroundedFoundationBottom, vertexSpacingFor } from './building/foundat
 import type { PaintUiState } from './building/PaintTool';
 import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
+import { BarrierManager, type BarrierRenderStats } from './building/BarrierManager';
+import { BarrierTool } from './building/BarrierTool';
+import {
+	cloneBarrierStyle,
+	getBarrierPreset,
+	type BarrierDefinition,
+	type BarrierPresetId,
+	type BarrierStyleDefinition
+} from './building/BarrierTypes';
 import { RemoveTool } from './building/RemoveTool';
 import { MoveTool } from './building/MoveTool';
 import { RoofManager } from './building/RoofManager';
@@ -280,6 +289,14 @@ export interface SceneStats {
 }
 
 /** The graphics preset's tree knobs (LOD distance scale, density, shadow LODs, wind). */
+/** Fence / railing LOD distance multipliers per graphics preset (see BarrierManager). */
+const BARRIER_LOD_SCALE: Record<GraphicsQuality, number> = {
+	low: 0.55,
+	medium: 0.8,
+	high: 1,
+	ultra: 1.4
+};
+
 function plantQualityFor(quality: GraphicsQuality): PlantQualityProfile {
 	const preset = GRAPHICS_PRESETS[quality];
 	return {
@@ -464,6 +481,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly roofManager: RoofManager;
 	private readonly floorDetailManager: FloorDetailManager;
 	private readonly furnitureManager: FurnitureManager;
+	/** Fences and railings (hotbar 2 → Fence / Railing) — see BarrierManager.ts. */
+	private readonly barrierManager: BarrierManager;
+	private readonly barrierTool: BarrierTool;
 	private readonly levelManager: BuildingLevelManager;
 	private readonly undoManager: BuildUndoManager;
 	private readonly buildingManager: BuildingManager;
@@ -613,6 +633,8 @@ export class ThreeScene implements WorldRuntime {
 				this.treeManager.setQualityProfile(treeQualityFor(quality));
 				this.grassManager.setQualityProfile(grassQualityFor(quality));
 				this.plantManager.setQualityProfile(plantQualityFor(quality));
+				this.barrierManager?.setLodScale(BARRIER_LOD_SCALE[quality]);
+				this.barrierManager?.setShadowsEnabled(GRAPHICS_PRESETS[quality].shadowsEnabled);
 				this.water.setQuality(quality);
 				this.water.applyLook(this.hydrologyVisual);
 				this.particles.setQuality(
@@ -848,6 +870,7 @@ export class ThreeScene implements WorldRuntime {
 		});
 
 		this.undoManager = new BuildUndoManager(this.buildingManager, {
+			removeBarrier: (id) => this.barrierManager.remove(id),
 			removeFurniture: (id) => this.furnitureManager.remove(id),
 			removeMiniBuild: (id) => this.miniBuilds.removeInstance(id)
 		});
@@ -861,6 +884,23 @@ export class ThreeScene implements WorldRuntime {
 			this.roofManager,
 			() => buildingSettings.maxStepHeight
 		);
+
+		const terrainSampler = this.terrainManager.getHeightSampler();
+		this.barrierManager = new BarrierManager({
+			materialManager: this.materialManager,
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			sampleSurface: (x, z, referenceY) =>
+				this.worldSurfaceSampler.getSupportingSurfaceY(x, z, referenceY),
+			sampleTerrain: (x, z) => terrainSampler.sample(x, z),
+			getStoreyHeight: () => buildingSettings.defaultStoreyHeight
+		});
+		this.barrierManager.setLodScale(BARRIER_LOD_SCALE[this.graphicsSettings.quality]);
+		this.barrierManager.setShadowsEnabled(
+			GRAPHICS_PRESETS[this.graphicsSettings.quality].shadowsEnabled
+		);
+		this.scene.add(this.barrierManager.group);
 
 		// Weather drives the shared particle system (rain/snow fields, impacts), the sky look, tree
 		// wind and surface wetness. It only reads the world through these few point queries.
@@ -1020,6 +1060,7 @@ export class ThreeScene implements WorldRuntime {
 						...this.stairManager.getAllCollisionRects(),
 						...(this.doorInteraction?.getCollisionRects() ?? []),
 						...this.furnitureManager.getCollisionRects(),
+						...this.barrierManager.getCollisionRects(),
 						...this.miniBuilds.instances.getNearbyCollisionRects()
 					]
 				);
@@ -1088,6 +1129,27 @@ export class ThreeScene implements WorldRuntime {
 			levelManager: this.levelManager,
 			undoManager: this.undoManager,
 			buildingSettings,
+			onHudChange: options.onBuildHudChange
+		});
+
+		this.barrierTool = new BarrierTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			levelManager: this.levelManager,
+			barrierManager: this.barrierManager,
+			undoManager: this.undoManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			getTerrainMeshes: () => this.terrainManager.getActiveMeshes(),
+			sampleSurface: (x, z, referenceY) =>
+				this.worldSurfaceSampler.getSupportingSurfaceY(x, z, referenceY),
+			sampleTerrain: (x, z) => terrainSampler.sample(x, z),
+			stairs: {
+				getMeshes: () => this.buildingManager.getRaycastableStairMeshes(),
+				getRailingStyle: (id) => this.buildingManager.getStair(id)?.railingStyle,
+				restyle: (id, style) => this.buildingManager.restyleStairRailings(id, style)
+			},
 			onHudChange: options.onBuildHudChange
 		});
 
@@ -1286,6 +1348,7 @@ export class ThreeScene implements WorldRuntime {
 			music: this.music,
 			furniture: this.furnitureManager,
 			miniBuilds: this.miniBuilds,
+			barriers: this.barrierManager,
 			scene: this.scene,
 			camera: this.camera,
 			buildingManager: this.buildingManager,
@@ -1301,6 +1364,7 @@ export class ThreeScene implements WorldRuntime {
 			buildingManager: this.buildingManager,
 			materialManager: this.materialManager,
 			buildingSettings,
+			barriers: this.barrierManager,
 			onHudChange: options.onBuildHudChange,
 			onPaintPaletteChange: options.onPaintPaletteChange,
 			onPaintStateChange: options.onPaintStateChange
@@ -1341,6 +1405,7 @@ export class ThreeScene implements WorldRuntime {
 				door: this.doorTool,
 				beam: this.beamTool,
 				'polygon-wall': this.polygonWallTool,
+				barrier: this.barrierTool,
 				ceiling: this.ceilingTool,
 				floor: this.floorTool,
 				'flat-roof': this.roofTool,
@@ -1378,6 +1443,7 @@ export class ThreeScene implements WorldRuntime {
 			getDoorRects: () => this.doorInteraction?.getCollisionRects() ?? [],
 			getFurnitureRects: () => [
 				...this.furnitureManager.getCollisionRects(),
+				...this.barrierManager.getCollisionRects(),
 				...this.miniBuilds.instances.getNearbyCollisionRects()
 			],
 			getCreatureColliders: () => {
@@ -1659,6 +1725,7 @@ export class ThreeScene implements WorldRuntime {
 		this.levelManager.load(structuredClone(world.buildingLevels));
 		this.music.load(world.musicTrees ?? [], world.musicPlants ?? []);
 		this.furnitureManager.load(world.furniture ?? []);
+		this.barrierManager.load(world.barriers ?? []);
 		const miniBuildWarnings = this.miniBuilds.load(
 			world.miniBuilds ?? createEmptyMiniBuildWorldState()
 		);
@@ -2180,6 +2247,7 @@ export class ThreeScene implements WorldRuntime {
 				foundationManager: this.foundationManager,
 				levelManager: this.levelManager,
 				furnitureManager: this.furnitureManager,
+				barrierManager: this.barrierManager,
 				removePlacedObjects: (id) => {
 					this.miniBuilds.removeInstancesForFoundation(id);
 				}
@@ -2454,6 +2522,17 @@ export class ThreeScene implements WorldRuntime {
 	getFurniture(): FurnitureDefinition[] {
 		return this.furnitureManager.serialize();
 	}
+	getBarriers(): BarrierDefinition[] {
+		return this.barrierManager.serialize();
+	}
+	/** A copy of a fence / railing preset's style (tests and benchmarks build barriers from these). */
+	barrierPresetStyle(presetId: BarrierPresetId): BarrierStyleDefinition {
+		return cloneBarrierStyle(getBarrierPreset(presetId).style);
+	}
+	/** Fence / railing counts, meshes, triangles and memory (stats overlay, benchmarks). */
+	barrierRenderStats(): BarrierRenderStats {
+		return this.barrierManager.getStats();
+	}
 	getMiniBuilds(): MiniBuildWorldState {
 		return this.miniBuilds.serialize();
 	}
@@ -2492,6 +2571,7 @@ export class ThreeScene implements WorldRuntime {
 				this.foundationManager.getRevision() +
 				this.levelManager.getRevision() +
 				this.furnitureManager.getRevision() +
+				this.barrierManager.getRevision() +
 				this.miniBuilds.revision,
 			environment: this.environmentRevision,
 			procedural: this.treeManager.getOverrideRevision()
@@ -2925,6 +3005,7 @@ export class ThreeScene implements WorldRuntime {
 				this.water.clear();
 				this.terrainManager.notifySettingsChanged();
 				this.treeManager.notifyTerrainChanged();
+				this.barrierManager.rebuildTerrainBarriers();
 				this.dirty.settings = false;
 			}
 			if (this.dirty.viewDistance) {
@@ -3215,6 +3296,7 @@ export class ThreeScene implements WorldRuntime {
 		this.doorTool.dispose();
 		this.beamTool.dispose();
 		this.polygonWallTool.dispose();
+		this.barrierTool.dispose();
 		this.ceilingTool.dispose();
 		this.floorTool.dispose();
 		this.roofTool.dispose();
@@ -3226,6 +3308,7 @@ export class ThreeScene implements WorldRuntime {
 		this.placeObjectTool.dispose();
 		this.furnitureTool.dispose();
 		this.furnitureManager.dispose();
+		this.barrierManager.dispose();
 		this.miniBuildThumbnails.dispose();
 		this.miniBuildChunkBoundaries.dispose();
 		this.miniBuilds.dispose();

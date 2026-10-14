@@ -103,7 +103,7 @@
 		isFloorDetail
 			? 'E or Esc to close — applies to the next piece you place.'
 			: isStairs
-				? 'E or Esc to close — colour, framing, railings, hole, and hole framing apply to the next stair you place.'
+				? 'E or Esc to close — colour, framing, railings, hole, and hole framing apply to the next stair you place. Railings use the Fence / Railing style (slot 2 → Fence / Rail, E); aim that tool at a stair and press R to restyle one already built.'
 				: isWall
 					? 'E or Esc to close — height and width apply to the next wall you place. Length still comes from your clicks.'
 					: toolId === 'beam' && orientation === 'vertical'

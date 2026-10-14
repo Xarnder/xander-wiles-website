@@ -571,6 +571,7 @@ export class StairTool implements BuildTool {
 			material: colorMaterialFromHex(this.buildingSettings.stairColor),
 			frameEnabled: this.buildingSettings.stairFrameEnabled,
 			railingsEnabled: this.buildingSettings.stairRailingsEnabled,
+			railingStyle: this.buildingSettings.barrier.style,
 			openingEnabled: this.buildingSettings.stairOpeningEnabled,
 			openingFrameEnabled: this.buildingSettings.slabOpeningFrameEnabled
 		});

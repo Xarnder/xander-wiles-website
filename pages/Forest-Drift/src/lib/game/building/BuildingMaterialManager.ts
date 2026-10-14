@@ -84,7 +84,8 @@ const TEMPLATES: Record<MaterialKind, MaterialTemplate> = {
 		transparent: true,
 		opacity: 0.45
 	},
-	'mini-build-plain': { color: 0xcccccc, roughness: 0.7, metalness: 0 }
+	'mini-build-plain': { color: 0xcccccc, roughness: 0.7, metalness: 0 },
+	barrier: { color: 0xa27a4e, roughness: 0.8, metalness: 0.02 }
 };
 
 /** `undefined` (no override — use the kind's own default look) collapses to a stable `'default'` key; a colour definition's key is its normalized hex, so two differently-cased/shorthand inputs that mean the same colour still share one cached material. */

@@ -47,6 +47,7 @@
 	} from '$lib/components/MiniBuildEditor.svelte';
 	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
+	import BarrierCustomizeModal from '$lib/components/BarrierCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import TouchControls from '$lib/components/TouchControls.svelte';
@@ -410,11 +411,12 @@
 		}
 		if (event.code === 'KeyF') {
 			if (!session || event.repeat) return;
+			const current = hotbar;
 			const placingObject =
-				hotbar?.buildModeActive &&
-				hotbar.globalMode === 'none' &&
-				hotbar.slots.some(
-					(slot) => slot.slot === hotbar.activeSlot && slot.toolId === 'place-object'
+				current?.buildModeActive &&
+				current.globalMode === 'none' &&
+				current.slots.some(
+					(slot) => slot.slot === current.activeSlot && slot.toolId === 'place-object'
 				);
 			if (placingObject) return;
 			const next = session.scene.toggleFlying();
@@ -1038,10 +1040,10 @@
 						</dd>
 						<dt>↑ / ↓</dt>
 						<dd>
-							Cycle tools inside the selected slot — Poly Wall / Wall, Door / Window / Beam, Ceiling
-							/ Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently
-							used objects. The last choice is remembered. While a roof is being adjusted, ↑/↓ still
-							change rise instead.
+							Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing, Door /
+							Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓
+							cycle your recently used objects. The last choice is remembered. While a roof is being
+							adjusted, ↑/↓ still change rise instead.
 						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
@@ -1087,6 +1089,22 @@
 						<dd>Finish an open wall path (Continuous Wall only)</dd>
 						<dt>Click first point again</dt>
 						<dd>Close the loop / shape</dd>
+					</dl>
+
+					<h3>Fence / Railing (2, then ↑/↓)</h3>
+					<dl>
+						<dt>Left click</dt>
+						<dd>
+							Add points like a Continuous Wall — on a floor (railings, balconies, stairs) or on
+							open ground (fences that follow the land). Click the first point again to close a
+							loop.
+						</dd>
+						<dt>Enter / Backspace</dt>
+						<dd>Finish the path · Undo the last point</dd>
+						<dt>E</dt>
+						<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
+						<dt>R / Q</dt>
+						<dd>Apply the current settings to the fence you're aiming at · Copy its style</dd>
 					</dl>
 
 					<h3>Roof</h3>
@@ -1272,9 +1290,7 @@
 							cancels the current preview
 						</dd>
 						<dt>Q / E</dt>
-						<dd>
-							Cycle the instrument, the same five choices as hotbar slots 1&ndash;5
-						</dd>
+						<dd>Cycle the instrument, the same five choices as hotbar slots 1&ndash;5</dd>
 						<dt>&uarr; / &darr;</dt>
 						<dd>
 							Grow the plant taller or shorter before placing &mdash; this sets its pitch (short =
@@ -1722,6 +1738,11 @@
 					scene={session.scene}
 					onClose={() => session?.scene.closePlacementCustomize()}
 					onOpenEditor={openMiniBuildEditor}
+				/>
+			{:else if customizeToolId === 'barrier'}
+				<BarrierCustomizeModal
+					settings={session.scene.buildingSettings}
+					onClose={() => session?.scene.closePlacementCustomize()}
 				/>
 			{:else if customizeToolId === 'torch'}
 				<FurnitureCatalogueModal

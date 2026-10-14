@@ -4,6 +4,7 @@
  * building tools.
  */
 
+import { createDefaultBarrierDraftSettings, type BarrierDraftSettings } from './BarrierTypes';
 import type { BeamOrientation } from './beamMath';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type {
@@ -54,6 +55,7 @@ export type ToolId =
 	| 'door'
 	| 'beam'
 	| 'polygon-wall'
+	| 'barrier'
 	| 'ceiling'
 	| 'floor'
 	| 'flat-roof'
@@ -98,7 +100,7 @@ export interface HotbarSlot {
 }
 
 /**
- * 1 Foundation · 2 Poly Wall/Wall · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
+ * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
  * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Place Object (Mini Builds + lights, chosen in
  * the Object Library with `E`). Slot 7 is unused.
  */
@@ -108,7 +110,8 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 		slot: 2,
 		variants: [
 			{ toolId: 'polygon-wall', label: 'Poly Wall' },
-			{ toolId: 'wall', label: 'Wall' }
+			{ toolId: 'wall', label: 'Wall' },
+			{ toolId: 'barrier', label: 'Fence / Rail' }
 		]
 	},
 	{
@@ -187,6 +190,7 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'beam',
 	'wall',
 	'polygon-wall',
+	'barrier',
 	'stairs',
 	'floor-carpet',
 	'floor-path',
@@ -204,6 +208,7 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'beam' ||
 		id === 'wall' ||
 		id === 'polygon-wall' ||
+		id === 'barrier' ||
 		id === 'stairs' ||
 		id === 'torch' ||
 		id === 'place-object' ||
@@ -389,6 +394,9 @@ export interface BuildingSettings {
 	showOpeningFrameBounds: boolean;
 	/** Dev-only: renders a small marker at a door's `hingePivot` — the axis a future interactive door will rotate around. */
 	showDoorHinge: boolean;
+
+	/** Fence / Railing tool: the style, type and base mode the NEXT barrier is drawn with (`E` panel). */
+	barrier: BarrierDraftSettings;
 
 	/** Corner-join style for the Polygon/Continuous Wall Tool — standalone walls are unaffected (they have no interior joints). */
 	wallJoinStyle: 'miter' | 'bevel';
@@ -617,6 +625,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showOpeningFrameBounds: false,
 		showDoorHinge: false,
 
+		barrier: createDefaultBarrierDraftSettings(),
 		wallJoinStyle: 'miter',
 		miterLimit: 4,
 		cornerOpeningMargin: 0.15,

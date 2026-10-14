@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { BarrierManager } from './BarrierManager';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingMaterialManager } from './BuildingMaterialManager';
 import type { BuildTool } from './BuildToolManager';
@@ -23,6 +24,8 @@ export interface PaintToolOptions {
 	buildingManager: BuildingManager;
 	materialManager: BuildingMaterialManager;
 	buildingSettings: BuildingSettings;
+	/** Fences and railings: painting recolours the whole barrier's wood (the grain stays). */
+	barriers?: BarrierManager;
 	onHudChange?: (hud: BuildUiState | null) => void;
 	/** Fired whenever the colour palette opens/closes (`C`) — see the class doc comment on pointer lock. */
 	onPaintPaletteChange?: (open: boolean) => void;
@@ -87,6 +90,9 @@ export class PaintTool implements BuildTool {
 	private hoveredKey: string | null = null;
 	private hoveredTarget: PaintTarget | null = null;
 	private selectedMaterial: BuildingMaterialDefinition | undefined;
+	private readonly barriers?: BarrierManager;
+	private barrierHoverId: string | null = null;
+	private restoreBarrierPreview: (() => void) | null = null;
 
 	constructor(options: PaintToolOptions) {
 		this.scene = options.scene;
@@ -97,6 +103,7 @@ export class PaintTool implements BuildTool {
 		this.onHudChange = options.onHudChange;
 		this.onPaintPaletteChange = options.onPaintPaletteChange;
 		this.onPaintStateChange = options.onPaintStateChange;
+		this.barriers = options.barriers;
 
 		this.selectedMaterial = this.presetStore.getLastSelected() ?? undefined;
 	}
@@ -118,6 +125,7 @@ export class PaintTool implements BuildTool {
 		this.active = false;
 		this.closePalette();
 		this.clearHighlight();
+		this.setBarrierHover(null);
 		window.removeEventListener('keydown', this.handleKeyDown);
 		this.onHudChange?.(null);
 	}
@@ -136,6 +144,22 @@ export class PaintTool implements BuildTool {
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
 		const hit = hits[0];
+		const barrierHit = this.barriers?.pick(this.raycaster) ?? null;
+		if (barrierHit && (!hit || barrierHit.distance < hit.distance)) {
+			this.setHoveredTarget(null);
+			this.setBarrierHover(barrierHit.barrierId);
+			const label =
+				this.barriers?.get(barrierHit.barrierId)?.type === 'railing' ? 'Railing' : 'Fence';
+			this.onHudChange?.({
+				toolId: 'paint',
+				crosshair: 'valid',
+				notice: label,
+				paintColor: this.currentColorHex(),
+				hintLines: ['PAINT', '', label, 'The whole path is painted', '', 'Click to paint']
+			});
+			return;
+		}
+		this.setBarrierHover(null);
 		const target = hit ? resolvePaintTarget(hit.object.userData as PaintPickUserData) : null;
 
 		this.setHoveredTarget(target);
@@ -143,7 +167,16 @@ export class PaintTool implements BuildTool {
 	}
 
 	onPrimaryAction(): void {
-		if (!this.active || this.paletteOpen || !this.hoveredTarget) return;
+		if (!this.active || this.paletteOpen) return;
+		if (this.barrierHoverId && this.barriers) {
+			// The rebuild replaces the meshes, so the preview is dropped rather than restored.
+			const id = this.barrierHoverId;
+			this.restoreBarrierPreview = null;
+			this.barrierHoverId = null;
+			this.barriers.setMaterial(id, this.selectedMaterial);
+			return;
+		}
+		if (!this.hoveredTarget) return;
 
 		const target = this.hoveredTarget;
 		const material = this.selectedMaterial;
@@ -209,6 +242,11 @@ export class PaintTool implements BuildTool {
 	selectMaterial(material: BuildingMaterialDefinition | undefined): void {
 		this.selectedMaterial = material;
 		this.presetStore.setLastSelected(material ?? null);
+		if (this.barrierHoverId) {
+			const id = this.barrierHoverId;
+			this.setBarrierHover(null);
+			this.setBarrierHover(id);
+		}
 		if (this.hoveredTarget) {
 			// Same target, new colour — the live preview must reflect the new selection immediately,
 			// not just on the next hover change.
@@ -240,6 +278,17 @@ export class PaintTool implements BuildTool {
 			selected: this.selectedMaterial,
 			savedPresets: this.presetStore.getSavedPresets()
 		});
+	}
+
+	/** Live preview on a hovered barrier: its main wood shows the selected colour until the hover moves. */
+	private setBarrierHover(id: string | null): void {
+		if (id === this.barrierHoverId) return;
+		this.restoreBarrierPreview?.();
+		this.restoreBarrierPreview = null;
+		this.barrierHoverId = id;
+		if (id && this.barriers) {
+			this.restoreBarrierPreview = this.barriers.previewMaterial(id, this.selectedMaterial);
+		}
 	}
 
 	private setHoveredTarget(target: PaintTarget | null): void {

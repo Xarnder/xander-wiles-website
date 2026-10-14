@@ -4,6 +4,7 @@ import { createMusicTree, timelineDefinition } from '../music/MusicModel';
 import { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
+import type { BarrierDefinition } from '../building/BarrierTypes';
 import type { FurnitureDefinition } from '../building/FurnitureTypes';
 import {
 	createEmptyMiniBuildWorldState,
@@ -48,6 +49,7 @@ export interface WorldRuntime {
 	getMusicPlants?(): MusicPlantDefinition[];
 	getFurniture?(): FurnitureDefinition[];
 	getMiniBuilds?(): MiniBuildWorldState;
+	getBarriers?(): BarrierDefinition[];
 	getEnvironment(): WorldEnvironmentDefinition;
 	getFoundations(): FoundationDefinition[];
 	getBuildings(): FoundationBuildingDefinition[];
@@ -64,6 +66,7 @@ export interface WorldContentSnapshot {
 	musicPlants: MusicPlantDefinition[];
 	furniture: FurnitureDefinition[];
 	miniBuilds: MiniBuildWorldState;
+	barriers: BarrierDefinition[];
 	environment: WorldEnvironmentDefinition;
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
@@ -92,6 +95,7 @@ export function captureWorldContent(runtime: WorldRuntime): WorldContentSnapshot
 		musicPlants: runtime.getMusicPlants?.() ?? [],
 		furniture: runtime.getFurniture?.() ?? [],
 		miniBuilds: runtime.getMiniBuilds?.() ?? createEmptyMiniBuildWorldState(),
+		barriers: runtime.getBarriers?.() ?? [],
 		environment: runtime.getEnvironment(),
 		foundations: runtime.getFoundations(),
 		buildings: runtime.getBuildings(),
@@ -114,6 +118,7 @@ export function applyContentToWorld(
 		musicPlants: content.musicPlants,
 		furniture: content.furniture,
 		miniBuilds: content.miniBuilds,
+		barriers: content.barriers,
 		environment: content.environment,
 		foundations: content.foundations,
 		buildings: content.buildings,
@@ -172,6 +177,7 @@ export function createWorldDefinition({
 		musicPlants: [],
 		furniture: [],
 		miniBuilds: createEmptyMiniBuildWorldState(),
+		barriers: [],
 		foundations: [],
 		buildings: [],
 		buildingLevels: [],

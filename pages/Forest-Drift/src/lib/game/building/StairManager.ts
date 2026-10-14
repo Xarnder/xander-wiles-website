@@ -4,7 +4,10 @@ import { buildingGridToLocal, foundationLocalFrame } from './FoundationLocalMath
 import { FoundationRootRegistry } from './FoundationRootRegistry';
 import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
 import { createDefaultBuildingSettings } from './FoundationTypes';
+import { cloneBarrierStyle, type BarrierStyleDefinition } from './BarrierTypes';
 import { buildStairFrame, disposeStairFrame } from './StairFrameBuilder';
+import { buildStairRailing, disposeStairRailing, type StairRailing } from './StairRailingBuilder';
+import { defaultStairRailingStyle } from './stairRailingMath';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import { computeStairMetrics, stairSideRectsLocal, stairTreadRectsLocal } from './stairMath';
 import { stairFootingDepth } from './stairPlacementMath';
@@ -28,6 +31,8 @@ interface StairEntry {
 	boundsHelper: THREE.LineSegments | null;
 	/** Sibling of `mesh` on the foundation root — decorative timber, never in collision or Remove raycasts. */
 	framing: THREE.Group | null;
+	/** Fence-style railings and newels — sibling of `mesh`, decorative like `framing`. */
+	railing: StairRailing | null;
 	/** World-space tread rects (top surface only) — the authoritative "where can the player stand/climb" data. */
 	worldTreads: StairTreadRect[];
 	/** World-space side-edge collision rects, in the same shape wall collision already uses. */
@@ -179,7 +184,6 @@ export class StairManager {
 			metrics,
 			{
 				stairFrameEnabled: stairFrameEnabledOf(definition),
-				stairRailingsEnabled: stairRailingsEnabledOf(definition),
 				stairFrameWidth: this.buildingSettings.stairFrameWidth,
 				stairFrameDepthExtra: this.buildingSettings.stairFrameDepthExtra,
 				footingDepth: footing
@@ -188,11 +192,26 @@ export class StairManager {
 		);
 		if (framing) root.add(framing);
 
+		if (existing?.railing) disposeStairRailing(existing.railing);
+		const railing = stairRailingsEnabledOf(definition)
+			? buildStairRailing(
+					bounds,
+					definition.direction,
+					definition.baseY,
+					metrics,
+					definition.railingStyle ?? defaultStairRailingStyle(),
+					this.materialManager,
+					hashString(definition.id)
+				)
+			: null;
+		if (railing) root.add(railing.group);
+
 		const entry: StairEntry = {
 			definition,
 			mesh,
 			boundsHelper: existing?.boundsHelper ?? null,
 			framing,
+			railing,
 			worldTreads,
 			collisionRects,
 			levelTrigger: computeStairLevelTriggerVolume(definition, bounds, metrics, frame)
@@ -221,6 +240,7 @@ export class StairManager {
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
 		if (entry.framing) disposeStairFrame(entry.framing);
+		if (entry.railing) disposeStairRailing(entry.railing);
 		this.stairs.delete(id);
 		return true;
 	}
@@ -230,6 +250,16 @@ export class StairManager {
 			if (entry.definition.foundationId === foundationId) this.removeStair(id);
 		}
 		this.roots.remove(foundationId);
+	}
+
+	/** Rebuilds one stair's railings in a new Fence / Railing style (the Fence tool's `R`). */
+	setRailingStyle(id: string, style: BarrierStyleDefinition): boolean {
+		const entry = this.stairs.get(id);
+		if (!entry) return false;
+		entry.definition.railingStyle = cloneBarrierStyle(style);
+		const rebuilt = this.buildEntry(entry.definition, entry);
+		if (rebuilt) this.stairs.set(id, rebuilt);
+		return true;
 	}
 
 	getStair(id: string): StairDefinition | undefined {
@@ -315,4 +345,10 @@ export class StairManager {
 		for (const id of Array.from(this.stairs.keys())) this.removeStair(id);
 		this.roots.dispose();
 	}
+}
+
+function hashString(value: string): number {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < value.length; i++) h = Math.imul(h ^ value.charCodeAt(i), 0x01000193);
+	return h >>> 0;
 }

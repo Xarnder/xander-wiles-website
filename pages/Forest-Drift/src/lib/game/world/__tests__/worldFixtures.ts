@@ -1,3 +1,4 @@
+import { cloneBarrierStyle, getBarrierPreset } from '../../building/BarrierTypes';
 import { createDefaultCreatureState } from '../../creatures/CreaturePersistence';
 import { createDefaultHydrologySettings } from '../../hydrology/HydrologyTypes';
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
@@ -213,6 +214,36 @@ export function richWorld(overrides: Partial<WorldDefinition> = {}): WorldDefini
 			{ id: 'level-1', foundationId: 'foundation-1', index: 0, baseY: 0, wallHeight: 2.6 },
 			{ id: 'level-2', foundationId: 'foundation-1', index: 1, baseY: 2.6, wallHeight: 2.6 }
 		],
+		barriers: [
+			{
+				id: 'fence-1',
+				type: 'fence',
+				foundationId: null,
+				points: [
+					{ x: 20, y: 12.4, z: 0 },
+					{ x: 26, y: 12.9, z: 0 },
+					{ x: 26, y: 13.1, z: 5 }
+				],
+				closed: false,
+				baseMode: 'follow-surface',
+				style: cloneBarrierStyle(getBarrierPreset('simple-wood-fence').style)
+			},
+			{
+				id: 'railing-1',
+				type: 'railing',
+				foundationId: 'foundation-1',
+				levelIndex: 1,
+				points: [
+					{ x: 0.5, y: 2.6, z: 0.5 },
+					{ x: 2.5, y: 2.6, z: 0.5 },
+					{ x: 2.5, y: 2.6, z: 2 }
+				],
+				closed: false,
+				baseMode: 'flat',
+				style: cloneBarrierStyle(getBarrierPreset('fancy-newel').style),
+				material: { type: 'color', color: '#6B2E1F' }
+			}
+		],
 		furniture: [
 			{
 				id: 'torch-1',
@@ -286,6 +317,7 @@ export class FakeWorldRuntime implements WorldRuntime {
 	buildings: WorldDefinition['buildings'] = [];
 	buildingLevels: WorldDefinition['buildingLevels'] = [];
 	furniture: WorldDefinition['furniture'] = [];
+	barriers: WorldDefinition['barriers'] = [];
 	miniBuilds: WorldDefinition['miniBuilds'] = createEmptyMiniBuildWorldState();
 	player: SavedPlayerState = createDefaultPlayerState();
 	overrides: ProceduralWorldOverrides = createEmptyProceduralOverrides();
@@ -305,6 +337,9 @@ export class FakeWorldRuntime implements WorldRuntime {
 	}
 	getFurniture() {
 		return this.furniture;
+	}
+	getBarriers() {
+		return this.barriers;
 	}
 	getMiniBuilds() {
 		return this.miniBuilds;
@@ -337,6 +372,7 @@ export function runtimeFromWorld(world: WorldDefinition): FakeWorldRuntime {
 	runtime.buildings = world.buildings;
 	runtime.buildingLevels = world.buildingLevels;
 	runtime.furniture = world.furniture;
+	runtime.barriers = world.barriers;
 	runtime.miniBuilds = world.miniBuilds;
 	runtime.player = world.player;
 	runtime.overrides = world.proceduralOverrides;

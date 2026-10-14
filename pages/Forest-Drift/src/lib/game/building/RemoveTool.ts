@@ -2,6 +2,7 @@ import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import { fitBoundsHighlight } from '../miniBuild/MiniBuildGhost';
 import type { MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
 import * as THREE from 'three';
+import type { BarrierManager } from './BarrierManager';
 import type { BuildingManager } from './BuildingManager';
 import type { FurnitureManager } from './FurnitureManager';
 import { getFurnitureCatalogueEntry } from './furnitureCatalogue';
@@ -74,6 +75,8 @@ export interface RemoveToolOptions {
 	music?: MusicPlantPlacementTool;
 	furniture?: FurnitureManager;
 	miniBuilds?: MiniBuildSystem;
+	/** Fences and railings — a click removes one path segment, Shift + click the whole barrier. */
+	barriers?: BarrierManager;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	buildingManager: BuildingManager;
@@ -111,6 +114,13 @@ export class RemoveTool implements BuildTool {
 	private furnitureId?: string;
 	private miniBuilds?: MiniBuildSystem;
 	private miniBuildId?: string;
+	private barriers?: BarrierManager;
+	private barrierTarget: { id: string; segmentIndex: number } | null = null;
+	private shiftHeld = false;
+	private readonly handleShift = (event: KeyboardEvent) => {
+		if (event.key !== 'Shift' || this.shiftHeld === (event.type === 'keydown')) return;
+		this.shiftHeld = event.type === 'keydown';
+	};
 	private musicHighlight = new THREE.BoxHelper(new THREE.Group(), 0xff6655);
 	private readonly furnitureAabb = new THREE.Box3();
 	private readonly furnitureHighlightCenter = new THREE.Vector3();
@@ -161,6 +171,7 @@ export class RemoveTool implements BuildTool {
 	constructor(options: RemoveToolOptions) {
 		this.music = options.music;
 		this.furniture = options.furniture;
+		this.barriers = options.barriers;
 		this.miniBuilds = options.miniBuilds;
 		options.scene.add(this.musicHighlight);
 		this.musicHighlight.visible = false;
@@ -194,6 +205,9 @@ export class RemoveTool implements BuildTool {
 
 	activate(): void {
 		this.active = true;
+		this.shiftHeld = false;
+		window.addEventListener('keydown', this.handleShift);
+		window.addEventListener('keyup', this.handleShift);
 		this.hoveredKey = null;
 		this.hoveredTarget = null;
 		this.scene.add(this.overlayGroup);
@@ -201,6 +215,9 @@ export class RemoveTool implements BuildTool {
 	}
 
 	deactivate(): void {
+		window.removeEventListener('keydown', this.handleShift);
+		window.removeEventListener('keyup', this.handleShift);
+		this.barrierTarget = null;
 		this.musicId = undefined;
 		this.furnitureId = undefined;
 		this.miniBuildId = undefined;
@@ -246,6 +263,18 @@ export class RemoveTool implements BuildTool {
 			: undefined;
 		const furnitureHit = this.pickFurniture();
 		const furnitureCloser = furnitureHit && (!hit || furnitureHit.distance < hit.distance);
+		this.barrierTarget = null;
+		const barrierHit = this.barriers?.pick(this.raycaster) ?? null;
+		if (
+			barrierHit &&
+			this.barriers &&
+			[hit, plantHit, furnitureHit, miniBuildHit].every(
+				(other) => !other || barrierHit.distance <= other.distance
+			)
+		) {
+			this.showBarrierTarget(barrierHit.barrierId, barrierHit.segmentIndex);
+			return;
+		}
 		if (
 			plantHit &&
 			(!hit || plantHit.distance < hit.distance) &&
@@ -373,6 +402,14 @@ export class RemoveTool implements BuildTool {
 	}
 
 	onPrimaryAction(): void {
+		if (this.active && this.barrierTarget && this.barriers) {
+			const { id, segmentIndex } = this.barrierTarget;
+			if (this.shiftHeld) this.barriers.remove(id);
+			else this.barriers.removeSegment(id, segmentIndex);
+			this.barrierTarget = null;
+			this.furnitureHighlight.visible = false;
+			return;
+		}
 		if (this.active && this.musicId) {
 			this.music?.remove(this.musicId);
 			this.musicId = undefined;
@@ -407,6 +444,49 @@ export class RemoveTool implements BuildTool {
 		// Exiting remove mode on right-click is orchestrated by BuildToolManager (it also owns the
 		// hotbar-restore step) — this tool has no pending, cancelable selection of its own since a
 		// removal is a single click, never a multi-step placement.
+	}
+
+	/** Barrier hover: outline the segment (or the whole barrier with Shift) and describe the click. */
+	private showBarrierTarget(id: string, segmentIndex: number): void {
+		const barriers = this.barriers!;
+		const definition = barriers.get(id);
+		this.barrierTarget = { id, segmentIndex };
+		this.hoveredFoundationId = definition?.foundationId ?? null;
+		this.setHoveredTarget(null, null);
+		const whole = this.shiftHeld;
+		const box = whole ? barriers.getWorldObb(id) : barriers.getSegmentObb(id, segmentIndex);
+		if (box) {
+			fitBoundsHighlight(this.furnitureHighlight, box, 0.03);
+			this.furnitureHighlight.visible = true;
+		}
+		const label = definition?.type === 'railing' ? 'Railing' : 'Fence';
+		const segments = definition
+			? definition.closed
+				? definition.points.length
+				: definition.points.length - 1
+			: 1;
+		this.onHudChange?.(
+			this.withWholeFoundationHint(
+				{
+					toolId: 'remove',
+					crosshair: 'invalid',
+					notice: whole || segments <= 1 ? label : `${label} segment`,
+					hintLines: [
+						'REMOVE',
+						'',
+						label,
+						segments > 1 ? `Segment ${segmentIndex + 1} of ${segments}` : '',
+						'',
+						whole || segments <= 1
+							? `Click: remove the whole ${label.toLowerCase()}`
+							: 'Click: remove this segment',
+						'Shift + Click: remove the whole thing',
+						'X Exit'
+					]
+				},
+				this.hoveredFoundationId
+			)
+		);
 	}
 
 	private pickFurniture(): { id: string; distance: number } | undefined {

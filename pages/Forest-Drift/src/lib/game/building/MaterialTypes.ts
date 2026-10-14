@@ -228,4 +228,6 @@ export type MaterialKind =
 	| 'mini-build-metal'
 	| 'mini-build-stone'
 	| 'mini-build-glass'
-	| 'mini-build-plain';
+	| 'mini-build-plain'
+	/** Fences and railings — solid wood whose grain the barrier geometry supplies; see BarrierManager.ts. */
+	| 'barrier';

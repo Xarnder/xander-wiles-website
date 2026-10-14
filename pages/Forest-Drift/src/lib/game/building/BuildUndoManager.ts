@@ -13,11 +13,13 @@ export type BuildAction =
 	| { kind: 'roof'; roofId: string }
 	| { kind: 'floorDetail'; detailId: string }
 	| { kind: 'furniture'; furnitureId: string }
-	| { kind: 'miniBuild'; instanceId: string };
+	| { kind: 'miniBuild'; instanceId: string }
+	| { kind: 'barrier'; barrierId: string };
 
 export interface BuildUndoManagerOptions {
 	removeFurniture?: (id: string) => boolean;
 	removeMiniBuild?: (instanceId: string) => boolean;
+	removeBarrier?: (id: string) => boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export class BuildUndoManager {
 	private readonly buildingManager: BuildingManager;
 	private readonly removeFurniture?: (id: string) => boolean;
 	private readonly removeMiniBuild?: (instanceId: string) => boolean;
+	private readonly removeBarrier?: (id: string) => boolean;
 	private readonly history: BuildAction[] = [];
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
@@ -55,6 +58,7 @@ export class BuildUndoManager {
 		this.buildingManager = buildingManager;
 		this.removeFurniture = options.removeFurniture;
 		this.removeMiniBuild = options.removeMiniBuild;
+		this.removeBarrier = options.removeBarrier;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
@@ -89,6 +93,8 @@ export class BuildUndoManager {
 				return this.removeFurniture?.(action.furnitureId) ?? false;
 			case 'miniBuild':
 				return this.removeMiniBuild?.(action.instanceId) ?? false;
+			case 'barrier':
+				return this.removeBarrier?.(action.barrierId) ?? false;
 		}
 	}
 

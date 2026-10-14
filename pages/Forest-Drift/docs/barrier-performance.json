@@ -1,0 +1,228 @@
+{
+	"date": "2026-10-14T10:23:00.177Z",
+	"single": [
+		{
+			"preset": "simple-wood-fence",
+			"length": 10,
+			"members": 86,
+			"posts": 6,
+			"balusters": 70,
+			"rails": 10,
+			"objects": 7,
+			"meshes": 3,
+			"nearDrawCalls": 1,
+			"vertices": 2832,
+			"triangles": 1152,
+			"trianglesByLod": [
+				1152,
+				1152,
+				264
+			],
+			"gpuBytes": 93456,
+			"buildMs": 3.9
+		},
+		{
+			"preset": "simple-wood-fence",
+			"length": 50,
+			"members": 426,
+			"posts": 26,
+			"balusters": 350,
+			"rails": 50,
+			"objects": 7,
+			"meshes": 3,
+			"nearDrawCalls": 1,
+			"vertices": 13712,
+			"triangles": 5632,
+			"trianglesByLod": [
+				5632,
+				5632,
+				1224
+			],
+			"gpuBytes": 452496,
+			"buildMs": 3.5
+		},
+		{
+			"preset": "simple-wood-fence",
+			"length": 100,
+			"members": 851,
+			"posts": 51,
+			"balusters": 700,
+			"rails": 100,
+			"objects": 7,
+			"meshes": 3,
+			"nearDrawCalls": 1,
+			"vertices": 27312,
+			"triangles": 11232,
+			"trianglesByLod": [
+				11232,
+				11232,
+				2424
+			],
+			"gpuBytes": 901296,
+			"buildMs": 5.1
+		},
+		{
+			"preset": "fancy-newel",
+			"length": 10,
+			"members": 89,
+			"posts": 5,
+			"balusters": 76,
+			"rails": 8,
+			"objects": 10,
+			"meshes": 6,
+			"nearDrawCalls": 2,
+			"vertices": 13064,
+			"triangles": 12564,
+			"trianglesByLod": [
+				12564,
+				1468,
+				180
+			],
+			"gpuBytes": 477192,
+			"buildMs": 3.5
+		},
+		{
+			"preset": "fancy-newel",
+			"length": 50,
+			"members": 441,
+			"posts": 21,
+			"balusters": 380,
+			"rails": 40,
+			"objects": 10,
+			"meshes": 6,
+			"nearDrawCalls": 2,
+			"vertices": 61736,
+			"triangles": 59924,
+			"trianglesByLod": [
+				59924,
+				6076,
+				756
+			],
+			"gpuBytes": 2252616,
+			"buildMs": 7.9
+		},
+		{
+			"preset": "fancy-newel",
+			"length": 100,
+			"members": 881,
+			"posts": 41,
+			"balusters": 760,
+			"rails": 80,
+			"objects": 10,
+			"meshes": 6,
+			"nearDrawCalls": 2,
+			"vertices": 122576,
+			"triangles": 119124,
+			"trianglesByLod": [
+				119124,
+				11836,
+				1476
+			],
+			"gpuBytes": 5184240,
+			"buildMs": 14.6
+		}
+	],
+	"stress": [
+		{
+			"paths": 0,
+			"fps": 180.6,
+			"frameMs": 5.54,
+			"cpuMs": 5.13,
+			"drawCalls": 655,
+			"barriers": 0,
+			"objects": 0,
+			"meshes": 0,
+			"nearDrawCalls": 0,
+			"members": 0,
+			"posts": 0,
+			"balusters": 0,
+			"rails": 0,
+			"vertices": 0,
+			"triangles": 0,
+			"trianglesByLod": [
+				0,
+				0,
+				0
+			],
+			"bytes": 0,
+			"lastBuildMs": 14.5,
+			"totalBuildMs": 38
+		},
+		{
+			"paths": 20,
+			"fps": 170.5,
+			"frameMs": 5.87,
+			"cpuMs": 5.64,
+			"drawCalls": 841,
+			"barriers": 20,
+			"objects": 152,
+			"meshes": 72,
+			"nearDrawCalls": 24,
+			"members": 1476,
+			"posts": 116,
+			"balusters": 1168,
+			"rails": 192,
+			"vertices": 136736,
+			"triangles": 99856,
+			"trianglesByLod": [
+				99856,
+				26336,
+				4560
+			],
+			"bytes": 4841088,
+			"lastBuildMs": 1.399999976158142,
+			"totalBuildMs": 58.80000001192093
+		},
+		{
+			"paths": 50,
+			"fps": 156.6,
+			"frameMs": 6.39,
+			"cpuMs": 6.21,
+			"drawCalls": 1073,
+			"barriers": 50,
+			"objects": 380,
+			"meshes": 180,
+			"nearDrawCalls": 60,
+			"members": 3690,
+			"posts": 290,
+			"balusters": 2920,
+			"rails": 480,
+			"vertices": 341840,
+			"triangles": 249640,
+			"trianglesByLod": [
+				249640,
+				65840,
+				11400
+			],
+			"bytes": 12102720,
+			"lastBuildMs": 1.4000000059604645,
+			"totalBuildMs": 108.30000007152557
+		},
+		{
+			"paths": 100,
+			"fps": 148.7,
+			"frameMs": 6.73,
+			"cpuMs": 6.53,
+			"drawCalls": 1227,
+			"barriers": 100,
+			"objects": 760,
+			"meshes": 360,
+			"nearDrawCalls": 120,
+			"members": 7380,
+			"posts": 580,
+			"balusters": 5840,
+			"rails": 960,
+			"vertices": 683680,
+			"triangles": 499280,
+			"trianglesByLod": [
+				499280,
+				131680,
+				22800
+			],
+			"bytes": 24205440,
+			"lastBuildMs": 1,
+			"totalBuildMs": 196.70000007748604
+		}
+	],
+	"heapBytes": 116000000
+}

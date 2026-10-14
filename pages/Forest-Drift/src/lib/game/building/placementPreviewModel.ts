@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { compileBarrierLevel } from './BarrierGeometryCompiler';
+import { layoutBarrier } from './barrierLayout';
+import { barrierWoodStyle } from './BarrierManager';
+import { BARRIER_WOODS, barrierMainColor, sanitizeBarrierStyle } from './BarrierTypes';
 import { beamAlongWallSize, beamExtentForOrientation } from './beamMath';
 import type { BuildingMaterialManager } from './BuildingMaterialManager';
 import {
@@ -25,6 +29,7 @@ import {
 import { buildSlabGeometry } from './SlabGeometryBuilder';
 import { buildSlabOpeningFrame } from './SlabOpeningFrameBuilder';
 import { buildStairFrame } from './StairFrameBuilder';
+import { buildStairRailing } from './StairRailingBuilder';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import { computeStairMetrics } from './stairMath';
 import { buildBeamVisual } from './WallBeamBuilder';
@@ -220,6 +225,48 @@ function buildPolygonWallPreview(
 	return group;
 }
 
+/** An L of the next fence/railing — a run, a corner post and a return — from the real generator. */
+function buildBarrierPreview(
+	settings: BuildingSettings,
+	materials: BuildingMaterialManager
+): THREE.Group {
+	const style = sanitizeBarrierStyle(settings.barrier.style);
+	const run = Math.max(2.4, style.structuralPostSpacing * 1.2);
+	const points = [
+		{ x: 0, y: 0, z: 0 },
+		{ x: run, y: 0, z: 0 },
+		{ x: run, y: 0, z: -1.6 }
+	];
+	const layout = layoutBarrier({ points, closed: false, baseMode: 'flat', style });
+	const compiled = compileBarrierLevel(layout, style, { lod: 0, origin: points[0], seed: 7 });
+	const group = new THREE.Group();
+	group.name = 'preview-barrier';
+	const main = materials.getStyledMaterial(
+		'barrier',
+		colorMaterialFromHex(barrierMainColor({ style, material: undefined })),
+		barrierWoodStyle(style.wood),
+		{ ownWoodCoords: true }
+	);
+	if (compiled.main) group.add(new THREE.Mesh(compiled.main, main));
+	if (compiled.accent) {
+		const wood = style.accentWood ?? style.wood;
+		const accent = materials.getStyledMaterial(
+			'barrier',
+			colorMaterialFromHex(BARRIER_WOODS[wood].color),
+			barrierWoodStyle(wood),
+			{ ownWoodCoords: true }
+		);
+		group.add(new THREE.Mesh(compiled.accent, accent));
+	}
+	const floor = new THREE.Mesh(
+		new THREE.PlaneGeometry(run + 0.4, 2.1).rotateX(-Math.PI / 2),
+		materials.getMaterial('slab-floor', undefined)
+	);
+	floor.position.set(run / 2, -0.005, -0.7);
+	group.add(floor);
+	return group;
+}
+
 function floorKind(toolId: FloorDetailToolId): FloorDetailKind {
 	if (toolId === 'floor-path') return 'path';
 	if (toolId === 'floor-planks') return 'planks';
@@ -342,13 +389,17 @@ function buildStairPreview(
 		metrics,
 		{
 			stairFrameEnabled: settings.stairFrameEnabled,
-			stairRailingsEnabled: settings.stairRailingsEnabled,
 			stairFrameWidth: settings.stairFrameWidth,
 			stairFrameDepthExtra: settings.stairFrameDepthExtra
 		},
 		materials
 	);
 	if (frame) group.add(frame);
+	// Railings are fences in the current Fence / Railing style — the same thing the stair will get.
+	if (settings.stairRailingsEnabled) {
+		const railing = buildStairRailing(bounds, '+x', 0, metrics, settings.barrier.style, materials);
+		if (railing) group.add(railing.group);
+	}
 
 	const pad = 0.35;
 	const topY = metrics.totalRise;
@@ -449,6 +500,8 @@ export function buildPlacementPreviewModel(
 		group = buildWallPreview(settings, materials.building, [], true);
 	} else if (toolId === 'polygon-wall') {
 		group = buildPolygonWallPreview(settings, materials.building);
+	} else if (toolId === 'barrier') {
+		group = buildBarrierPreview(settings, materials.building);
 	} else if (isFloorDetailTool(toolId)) {
 		group = buildFloorPreview(toolId, settings, materials);
 	} else if (toolId === 'stairs') {

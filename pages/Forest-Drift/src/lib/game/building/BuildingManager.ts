@@ -1,3 +1,4 @@
+import { cloneBarrierStyle, type BarrierStyleDefinition } from './BarrierTypes';
 import {
 	buildingGridToLocal,
 	foundationLocalSize,
@@ -27,10 +28,7 @@ import type { FloorDetailManager } from './FloorDetailManager';
 import { pathCenterlineLocalSamples, validateFloorDetailFootprint } from './floorDetailMath';
 import type { FloorDetailDefinition } from './FloorDetailTypes';
 import { computeStairMetrics } from './stairMath';
-import {
-	foundationGridCellCounts,
-	validateStairFoundationPlacement
-} from './stairPlacementMath';
+import { foundationGridCellCounts, validateStairFoundationPlacement } from './stairPlacementMath';
 import type { StairManager } from './StairManager';
 import type { StairDefinition, StairDirection } from './StairTypes';
 import { stairOpeningEnabledOf, stairOpeningFrameEnabledOf } from './StairTypes';
@@ -113,6 +111,8 @@ export interface AddStairParams {
 	material?: BuildingMaterialDefinition;
 	frameEnabled?: boolean;
 	railingsEnabled?: boolean;
+	/** Fence / Railing style for the railings (the Fence tool's current settings). */
+	railingStyle?: BarrierStyleDefinition;
 	openingEnabled?: boolean;
 	openingFrameEnabled?: boolean;
 }
@@ -741,6 +741,7 @@ export class BuildingManager {
 			material: params.material,
 			frameEnabled: params.frameEnabled ?? true,
 			railingsEnabled: params.railingsEnabled ?? true,
+			...(params.railingStyle ? { railingStyle: cloneBarrierStyle(params.railingStyle) } : {}),
 			openingEnabled: params.openingEnabled ?? true,
 			openingFrameEnabled: params.openingFrameEnabled ?? true
 		};
@@ -896,6 +897,13 @@ export class BuildingManager {
 			}
 		}
 		return true;
+	}
+
+	/** Rebuilds a stair's railings in a Fence / Railing style (the Fence tool's `R`). */
+	restyleStairRailings(id: string, style: BarrierStyleDefinition): boolean {
+		const changed = this.stairManager.setRailingStyle(id, style);
+		if (changed) this.revision++;
+		return changed;
 	}
 
 	getStair(id: string): StairDefinition | undefined {

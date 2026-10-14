@@ -1,6 +1,7 @@
 import { validateCreatureWorldState } from '../creatures/CreaturePersistence';
 import { validateMusic } from '../music/MusicValidation';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
+import { validateBarriers, validateBarrierStyle } from '../building/BarrierTypes';
 import { validateFurniture } from '../building/FurnitureTypes';
 import { validateMiniBuildWorldState } from '../miniBuild/MiniBuildValidation';
 import type { FoundationDefinition } from '../building/FoundationTypes';
@@ -313,6 +314,10 @@ function validateStair(value: unknown, where: string): ValidationResult<StairDef
 			return fail(`${where}: stair ${key} must be a boolean when present`);
 		}
 	}
+	if (value.railingStyle !== undefined) {
+		const styleError = validateBarrierStyle(value.railingStyle);
+		if (styleError) return fail(`${where}: stair railingStyle ${styleError}`);
+	}
 	return { ok: true, value: value as unknown as StairDefinition };
 }
 
@@ -594,6 +599,10 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	}
 	const furnitureError = validateFurniture(value.furniture, foundationIds);
 	if (furnitureError) return fail(furnitureError);
+
+	if (value.barriers === undefined) value.barriers = [];
+	const barrierError = validateBarriers(value.barriers, foundationIds);
+	if (barrierError) return fail(barrierError);
 
 	// Mini Builds are untrusted like everything else: block limits, grid integers, bounds, materials
 	// and references are all re-checked here, independently of the editor. The sanitised copy

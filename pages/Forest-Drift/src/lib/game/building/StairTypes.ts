@@ -1,3 +1,4 @@
+import type { BarrierStyleDefinition } from './BarrierTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 
 /** Which axis the stairs travel along, ascending — see stairMath's "canonical stair space" doc comment. */
@@ -42,6 +43,12 @@ export interface StairDefinition {
 	 * keep timber without a handrail, or a rail without stringers. Missing means on.
 	 */
 	railingsEnabled?: boolean;
+	/**
+	 * The Fence / Railing style the railings are built in (copied from the Fence / Railing tool's
+	 * settings when the stair is placed, or applied later with that tool's `R`). Missing on stairs
+	 * saved before stair railings were fences — they use the default Classic Interior style.
+	 */
+	railingStyle?: BarrierStyleDefinition;
 	/**
 	 * Whether this stair cuts a hole in the slab it reaches. Copied from the live E-customise
 	 * default at place time. Missing means on, matching the original always-cut look.

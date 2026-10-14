@@ -1,6 +1,7 @@
 import type { WeatherSaveState } from '../weather/WeatherTypes';
 import type { CreatureWorldState } from '../creatures/CreatureTypes';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
+import type { BarrierDefinition } from '../building/BarrierTypes';
 import type { FurnitureDefinition } from '../building/FurnitureTypes';
 import type { MiniBuildWorldState } from '../miniBuild/MiniBuildTypes';
 import type { FoundationDefinition } from '../building/FoundationTypes';
@@ -17,7 +18,7 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 8;
+export const CURRENT_WORLD_SCHEMA_VERSION = 9;
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';
@@ -123,6 +124,11 @@ export interface WorldDefinition {
 	 * geometry is never saved — it is regenerated from these recipes.
 	 */
 	miniBuilds: MiniBuildWorldState;
+	/**
+	 * Fences and railings: one PATH + STYLE record per barrier (`BarrierTypes.ts`), never their
+	 * posts or balusters. Building railings reference their foundation; terrain fences don't.
+	 */
+	barriers: BarrierDefinition[];
 	foundations: FoundationDefinition[];
 	buildings: FoundationBuildingDefinition[];
 	buildingLevels: BuildingLevelDefinition[];

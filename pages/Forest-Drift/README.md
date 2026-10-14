@@ -48,6 +48,9 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `8` — Place Object (Mini Builds and lights). `E` opens the Object Library (My Builds, Default
   Designs, Lights, `+ Create New`); `R` rotates 90°; `↑`/`↓` cycle recent objects; `C` copies the
   looked-at Mini Build; `F` edits it (shared design or Make Unique) — see "Mini Builds"
+- `2` then `↑`/`↓` — Fence / Railing (Poly Wall → Wall → Fence / Rail): draw like a Continuous Wall,
+  on a building or on open ground; `E` customises it, `R` applies the current settings to the
+  fence under the crosshair and `Q` copies its style — see "Fences and railings"
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -773,6 +776,151 @@ tolerance-boundary match still snapping.
 `tests/game.e2e.ts` confirms the hotbar's slot 5 (Polygon/Continuous Wall) is selectable with the 5
 key, and that pressing `C` on the Wall/Polygon Wall/Ceiling tools cycles snap mode with no console
 errors.
+
+## Fences and railings: one path, one style, derived posts and balusters (`BarrierTypes.ts`, `barrierLayout.ts`, `barrierProfiles.ts`, `BarrierGeometryCompiler.ts`, `BarrierManager.ts`, `BarrierTool.ts`)
+
+Hotbar slot 2 holds Poly Wall, Wall and **Fence / Rail** (cycle with `↑`/`↓`). A fence and a
+railing are the same thing to the code — posts, balusters (pickets), a top rail and an optional
+bottom rail — so there is one generator; the style decides whether it reads as a garden fence, a
+deck railing or a turned interior balustrade.
+
+```
+BarrierDefinition (path + style)                 BarrierTypes.ts      saved
+  → layoutBarrier: posts, balusters, rails       barrierLayout.ts     derived, pure, unit-tested
+    → compileBarrierLevel × 3 LODs               BarrierGeometryCompiler.ts
+      (cached prototypes, merged per material)   barrierProfiles.ts
+        → one THREE.LOD per barrier, 1–2 meshes  BarrierManager.ts    + collision, picking, stats
+```
+
+### Drawing
+
+The tool is the Continuous Wall tool's workflow: click points, click the first point again to close
+a loop, `Enter` to finish an open path, `Backspace` to undo a point, right click to cancel, `B` to
+cycle axis snapping, `E` to customise. It reuses the wall tools' targeting
+(`raycastFoundationTop` + the storey's construction plane), snapping (`polygonDrawSnap.ts`) and path
+checks (`wallPathMath.ts`: self-intersection, length). Unlike a wall, a barrier doesn't need a
+foundation: a path started on a building is stored foundation-local on the storey it was drawn on;
+a path started on open ground is a terrain fence in world metres. The preview is the real generator
+at LOD 1 (LOD 2 beyond 30 m), rebuilt only when the snapped point changes. Segments are 0.25–40 m
+(`BARRIER_MAX_SEGMENT_LENGTH`) and at least 1.5 end-post widths; up to 128 points.
+
+`R` restyles the fence under the crosshair with the current settings and `Q` copies its style into
+them, so editing an existing fence is: aim, `Q`, `E`, change, `R`.
+
+### What is saved
+
+```ts
+interface BarrierDefinition {
+	id: string;
+	type: 'fence' | 'railing';
+	foundationId: string | null; // null = terrain fence (world metres)
+	levelIndex?: number;
+	points: { x: number; y: number; z: number }[]; // y = each point's base elevation
+	closed: boolean;
+	baseMode: 'flat' | 'linear-slope' | 'follow-surface';
+	style: BarrierStyleDefinition; // preset id, height, rails, posts, balusters, spacing, woods
+	material?: BuildingMaterialDefinition; // paint
+}
+```
+
+A world's `barriers` list (schema 9; older worlds migrate to `[]`) holds these records only — a
+40 m fence with 300 pickets is one small record, never 300 baluster entries, meshes or geometry.
+Import validation checks every field and that a referenced foundation exists; deleting a
+foundation deletes its railings. Numbers are clamped by `sanitizeBarrierStyle` at build time, so no
+save can ask for 500 balusters on a 2 m railing.
+
+### Layout rules (`barrierLayout.ts`)
+
+- **One path vertex = one post.** Open ends get an end post; every shared vertex gets one corner
+  post — the end-post style (newel) where the path turns, the structural style where it runs
+  straight through. A closed loop has exactly one post per corner.
+- **Structural posts** split each segment into equal bays: `ceil(L / spacing) − 1` posts.
+- **Balusters are balanced per bay**: between the two post faces, `count = round(available /
+spacing) − 1`, spacing `available / (count + 1)`, so both ends have the same margin. Spacing is
+  clamped to [max(6 cm, baluster + 2.5 cm), 60 cm] and a bay never holds more than 400.
+- **Rails** die into any post that rises above them (`extendAbove > 0`: newels, fence posts). Where
+  the top rail runs over a post (deck railings) it is mitred at corners with the wall-path join
+  maths (`computeJoinAt`), falling back to a bevel wedge past a miter limit of 4. Bottom and middle
+  rails always die into the posts. Rails extend past open-end posts that sit under them by the
+  style's overhang.
+- **Posts are always vertical.** Base modes: `flat` (level — balconies, landings), `linear-slope`
+  (a straight line between each segment's end points — stairs, ramps), `follow-surface` (every post
+  and baluster stands on the surface under it, sampled once at build time through
+  `WorldSurfaceSampler`; posts are sunk 12 cm so no side floats on a slope). The top rail always
+  runs in straight lines between post tops, and each baluster spans from its own base (or the
+  bottom rail) to that line, so balusters on uneven ground all have different lengths. `Auto` (the
+  default) follows the ground outdoors, stays level on a floor, and slopes when the clicked points
+  sit at different heights — clicking along a staircase records each tread, which gives a manual
+  stair railing.
+
+### Geometry (`barrierProfiles.ts`, `BarrierGeometryCompiler.ts`)
+
+Members are low-poly lofts of a few sections: square, chamfered (octagonal) and tapered boxes, and
+lathed turnings with 8–10 sides (6 at LOD 1). Turned balusters and newels are square blocks at the
+ends with a turned vase between; caps are flat, bevelled, pyramid, ball or a turned finial. Each
+prototype stores its vertex heights as `y = yA · h + yB` — end blocks keep their size, the turned
+shaft stretches — so one cached prototype serves every member length, including every different
+baluster on a slope. Prototypes are cached by style, dimensions and LOD and compiled once.
+
+A barrier compiles to one indexed geometry per material slot (main wood, plus caps in an accent wood
+if chosen). Each member gets its own solid-wood "log" (`woodCoord`, see `materials/woodCoords.ts`):
+grain runs up posts and balusters and along rails, never sideways, and density stays in metres, so
+a 5 m rail never stretches one texture. Woods (oak, dark oak, walnut, pine, painted, weathered) are
+`timber` shader presets tinted to a colour, fetched through `BuildingMaterialManager` (the
+`barrier` material kind) and shared by every barrier using the same wood and paint. Normals and
+tones are packed into bytes (30 bytes a vertex), and CPU copies are released after upload except
+what picking needs (the LOD 0 positions/normals/indices).
+
+LOD: 0 is the full design (to 22 m at HIGH), 1 drops lathe detail and turns turned balusters into
+boxes (to 60 m), 2 is the silhouette — box posts, plain rails, no balusters, no shadow casting.
+Distances scale with the graphics preset (0.55× LOW … 1.4× ULTRA); plain styles reuse LOD 0 for 1.
+
+### Stair railings are fences
+
+Staircases don't have their own railing code: each side of a flight is a barrier path from a newel
+on the floor at its foot to a newel on the top tread (`stairRailingMath.ts`, placed by
+`StairRailingBuilder.ts` with the stair's own canonical→local mapping). A stair stores the Fence /
+Railing style that was current when it was placed (`StairDefinition.railingStyle`; older stairs use
+Classic Interior), so a staircase and the balustrade round its landing match. The rail runs parallel
+to the nosings at the style's height (`railLift` = one step), balusters stand on the treads
+(`balusterBase`), a bottom rail becomes a sloped shoe rail, and there are no run posts mid-flight.
+Aim the Fence / Railing tool at a stair and press `R` to rebuild its railings in the current style
+(`Q` copies their style). Stringers, nosings and the back frame are still `stairFrameMath.ts`.
+
+### Collision, Remove, Paint
+
+Collision is one thin oriented box per path segment (`WallCollisionRect`, the same resolver walls
+use), covering the barrier's full height range — never per baluster. Remove Mode picks the visible
+mesh and resolves the hit to the path segment under it: click removes that segment (an open path
+splits, a loop opens there, and the cut ends rebuild with end posts), Shift + click removes the whole
+barrier. Paint recolours the whole barrier (the grain stays) with a live preview. Undo (`-`) removes
+the last fence placed.
+
+### Performance
+
+`tests/barrierPerformance.e2e.ts` → `docs/barrier-performance.json` (Apple M4, ANGLE Metal, 1280 ×
+720, production build, vsync off). One barrier, terrain-following, straight with a post every 10 m:
+
+| Style                | Length | Members | Meshes (all LODs) | Draws near | LOD 0 triangles | GPU memory | Build   |
+| -------------------- | ------ | ------- | ----------------- | ---------- | --------------- | ---------- | ------- |
+| Simple wood fence    | 10 m   | 86      | 3                 | 1          | 1 152           | 91 KB      | 3.9 ms  |
+| Simple wood fence    | 50 m   | 426     | 3                 | 1          | 5 632           | 442 KB     | 3.5 ms  |
+| Simple wood fence    | 100 m  | 851     | 3                 | 1          | 11 232          | 880 KB     | 5.1 ms  |
+| Fancy newel (turned) | 10 m   | 89      | 6                 | 2          | 12 564          | 466 KB     | 3.5 ms  |
+| Fancy newel (turned) | 50 m   | 441     | 6                 | 2          | 59 924          | 2.2 MB     | 7.9 ms  |
+| Fancy newel (turned) | 100 m  | 881     | 6                 | 2          | 119 124         | 4.9 MB     | 14.6 ms |
+
+Many barriers in view (mixed styles, three-point paths ≈ 8 m each), against the same scene with none:
+
+| Paths | Members | Scene objects | Meshes | Frame   | Draw calls (incl. shadows) | GPU memory |
+| ----- | ------- | ------------- | ------ | ------- | -------------------------- | ---------- |
+| 0     | 0       | 0             | 0      | 5.54 ms | 655                        | 0          |
+| 20    | 1 476   | 152           | 72     | 5.87 ms | 841                        | 4.6 MB     |
+| 50    | 3 690   | 380           | 180    | 6.39 ms | 1 073                      | 11.5 MB    |
+| 100   | 7 380   | 760           | 360    | 6.73 ms | 1 227                      | 23.1 MB    |
+
+Placed barriers have no per-frame code at all; the cost is draw calls (one or two per barrier, plus
+their shadow cascades) and memory, which is dominated by the turned LOD 0 of decorative styles.
 
 ## Building levels, horizontal slabs, and multi-level collision
 

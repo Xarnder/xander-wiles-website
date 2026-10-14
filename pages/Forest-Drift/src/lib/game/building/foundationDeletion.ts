@@ -12,7 +12,7 @@ export function isFoundationDeleteConfirmed(typed: string): boolean {
 /**
  * Collaborators a confirmed foundation deletion has to touch. BuildingManager already cascades
  * walls, paths, slabs, stairs, roofs, and floor detailing, but it does not own the foundation
- * mesh, storeys, furniture, or placed Mini Builds — the caller passes those in so this stays the
+ * mesh, storeys, furniture, fences/railings, or placed Mini Builds — the caller passes those in so this stays the
  * one place that orders the cascade (building content first, the foundation itself last).
  */
 export interface FoundationDeletionDeps {
@@ -27,6 +27,9 @@ export interface FoundationDeletionDeps {
 		removeLevelsForFoundation(foundationId: string): void;
 	};
 	furnitureManager?: {
+		removeForFoundation(foundationId: string): void;
+	};
+	barrierManager?: {
 		removeForFoundation(foundationId: string): void;
 	};
 	removePlacedObjects?(foundationId: string): void;
@@ -49,6 +52,7 @@ export function deleteFoundationAndBuilding(
 	deps.buildingManager.removeBuildingForFoundation(foundationId);
 	deps.levelManager.removeLevelsForFoundation(foundationId);
 	deps.furnitureManager?.removeForFoundation(foundationId);
+	deps.barrierManager?.removeForFoundation(foundationId);
 	deps.removePlacedObjects?.(foundationId);
 	return deps.foundationManager.removeFoundation(foundationId);
 }
