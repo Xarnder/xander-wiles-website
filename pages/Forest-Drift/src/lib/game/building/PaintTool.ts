@@ -140,6 +140,7 @@ export class PaintTool implements BuildTool {
 			...this.buildingManager.getRaycastableWallMeshes(),
 			...this.buildingManager.getRaycastableSlabMeshes(),
 			...this.buildingManager.getRaycastableRoofMeshes(),
+			...this.buildingManager.getRaycastableSkirtingMeshes(),
 			...this.buildingManager.getRaycastableFoundationMeshes()
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
@@ -197,6 +198,9 @@ export class PaintTool implements BuildTool {
 				break;
 			case 'roof':
 				painted = this.buildingManager.paintRoof(target.roofId, material);
+				break;
+			case 'skirting-run':
+				painted = this.buildingManager.paintSkirtingRun(target.skirtingRunId, material);
 				break;
 			case 'foundation':
 				painted = this.buildingManager.paintFoundation(target.foundationId, material);
@@ -310,6 +314,7 @@ export class PaintTool implements BuildTool {
 			return slab?.type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
 		}
 		if (target.type === 'roof') return 'slab-roof';
+		if (target.type === 'skirting-run') return 'skirting';
 		return 'wall';
 	}
 
@@ -365,6 +370,8 @@ export class PaintTool implements BuildTool {
 				return this.buildingManager.getSlabMesh(target.slabId);
 			case 'roof':
 				return this.buildingManager.getRoofMesh(target.roofId);
+			case 'skirting-run':
+				return this.buildingManager.getSkirtingRunMesh(target.skirtingRunId);
 			case 'wall-segment':
 				return undefined;
 		}
@@ -416,6 +423,8 @@ export class PaintTool implements BuildTool {
 				const roof = this.buildingManager.getRoof(target.roofId);
 				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';
 			}
+			case 'skirting-run':
+				return 'Skirting';
 		}
 	}
 

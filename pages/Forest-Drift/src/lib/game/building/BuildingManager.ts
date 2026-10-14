@@ -1,3 +1,5 @@
+import type { SkirtingRunManager } from './SkirtingRunManager';
+import type { SkirtingRunDefinition, WallLine } from './skirtingRunMath';
 import { cloneBarrierStyle, type BarrierStyleDefinition } from './BarrierTypes';
 import {
 	buildingGridToLocal,
@@ -187,6 +189,8 @@ export interface BuildingManagerOptions {
 	stairManager: StairManager;
 	roofManager: RoofManager;
 	floorDetailManager: FloorDetailManager;
+	/** Hand-drawn skirting — optional so tests that don't need it keep compiling. */
+	skirtingRunManager?: SkirtingRunManager;
 	getVertexSpacing: () => number;
 	getBuildingGridSize: () => number;
 	getCornerOpeningMargin: () => number;
@@ -220,6 +224,7 @@ export class BuildingManager {
 	private readonly stairManager: StairManager;
 	private readonly roofManager: RoofManager;
 	private readonly floorDetailManager: FloorDetailManager;
+	private readonly skirtingRunManager?: SkirtingRunManager;
 	private readonly getVertexSpacing: () => number;
 	private readonly getBuildingGridSize: () => number;
 	private readonly getCornerOpeningMargin: () => number;
@@ -244,6 +249,7 @@ export class BuildingManager {
 		this.stairManager = options.stairManager;
 		this.roofManager = options.roofManager;
 		this.floorDetailManager = options.floorDetailManager;
+		this.skirtingRunManager = options.skirtingRunManager;
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
@@ -1299,6 +1305,74 @@ export class BuildingManager {
 	}
 
 	/** Paints (or resets) a roof — preserves type/pitch/geometry/collision exactly, only the material changes (RoofManager.setMaterial rebuilds the mesh from the SAME RoofDefinition with just `material` swapped). Returns `false` for an unknown roof id. */
+	/** Adds a hand-drawn skirting run (the Skirting tool). */
+	addSkirtingRun(
+		params: Omit<SkirtingRunDefinition, 'id'>
+	): BuildingMutationResult<SkirtingRunDefinition> {
+		this.revision++;
+		if (!this.skirtingRunManager) return { valid: false, reason: 'Skirting is unavailable' };
+		if (!this.foundationManager.getFoundation(params.foundationId))
+			return { valid: false, reason: 'Foundation not found' };
+		const segmentCount = params.closed ? params.points.length : params.points.length - 1;
+		if (params.points.length < 2 || params.segments.length !== segmentCount)
+			return { valid: false, reason: 'A skirting run needs at least one segment' };
+		const run: SkirtingRunDefinition = { id: crypto.randomUUID(), ...structuredClone(params) };
+		if (!this.skirtingRunManager.add(run)) return { valid: false, reason: 'Foundation not found' };
+		return { valid: true, value: run };
+	}
+
+	removeSkirtingRun(id: string): boolean {
+		this.revision++;
+		return this.skirtingRunManager?.remove(id) ?? false;
+	}
+
+	getSkirtingRun(id: string): SkirtingRunDefinition | undefined {
+		return this.skirtingRunManager?.get(id);
+	}
+
+	getSkirtingRunMesh(id: string) {
+		return this.skirtingRunManager?.getMesh(id);
+	}
+
+	paintSkirtingRun(id: string, material: BuildingMaterialDefinition | undefined): boolean {
+		this.revision++;
+		return this.skirtingRunManager?.setMaterial(id, material) ?? false;
+	}
+
+	getRaycastableSkirtingMeshes() {
+		return this.skirtingRunManager?.getMeshesForRaycast() ?? [];
+	}
+
+	/** Every wall centre line on a foundation (standalone walls and path segments), local metres — the Skirting tool's auto offset. */
+	getWallLinesForFoundation(foundationId: string): WallLine[] {
+		const grid = this.getBuildingGridSize();
+		const local = (gridX: number, gridZ: number) => {
+			const p = buildingGridToLocal({ gridX, gridZ }, grid);
+			return { x: p.localX, z: p.localZ };
+		};
+		const lines: WallLine[] = this.wallManager.getWallsForFoundation(foundationId).map((wall) => ({
+			start: local(wall.startGridX, wall.startGridZ),
+			end: local(wall.endGridX, wall.endGridZ),
+			baseY: wall.baseY ?? 0,
+			thickness: wall.thickness
+		}));
+		for (const path of this.wallPathManager.getPathsForFoundation(foundationId)) {
+			const n = path.points.length;
+			const count = path.closed ? n : n - 1;
+			for (let i = 0; i < count; i++) {
+				const a = path.points[i];
+				const b = path.points[(i + 1) % n];
+				lines.push({
+					start: local(a.gridX, a.gridZ),
+					end: local(b.gridX, b.gridZ),
+					baseY: path.baseY ?? 0,
+					thickness: path.wallThickness
+				});
+			}
+		}
+		return lines;
+	}
+
 	paintRoof(roofId: string, material: BuildingMaterialDefinition | undefined): boolean {
 		this.revision++;
 		return this.roofManager.setMaterial(roofId, material);
@@ -1337,7 +1411,8 @@ export class BuildingManager {
 			slabs: this.slabManager.getSlabsForFoundation(foundationId),
 			stairs: this.stairManager.getStairsForFoundation(foundationId),
 			roofs: this.roofManager.getRoofsForFoundation(foundationId),
-			floorDetails: this.floorDetailManager.getDetailsForFoundation(foundationId)
+			floorDetails: this.floorDetailManager.getDetailsForFoundation(foundationId),
+			skirtingRuns: this.skirtingRunManager?.getForFoundation(foundationId) ?? []
 		};
 	}
 
@@ -1356,6 +1431,7 @@ export class BuildingManager {
 		this.stairManager.removeStairsForFoundation(foundationId);
 		this.roofManager.removeRoofsForFoundation(foundationId);
 		this.floorDetailManager.removeDetailsForFoundation(foundationId);
+		this.skirtingRunManager?.removeForFoundation(foundationId);
 	}
 
 	/** Plain, serializable world-state grouped by foundation — never Three.js objects. Building *levels* aren't included here since BuildingManager doesn't own BuildingLevelManager; ThreeScene combines both when serializing the full scene. */
@@ -1369,12 +1445,21 @@ export class BuildingManager {
 				stairs: StairDefinition[];
 				roofs: RoofDefinition[];
 				floorDetails: FloorDetailDefinition[];
+				skirtingRuns: SkirtingRunDefinition[];
 			}
 		>();
 		const ensure = (foundationId: string) => {
 			let entry = byFoundation.get(foundationId);
 			if (!entry) {
-				entry = { walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [], floorDetails: [] };
+				entry = {
+					walls: [],
+					wallPaths: [],
+					slabs: [],
+					stairs: [],
+					roofs: [],
+					floorDetails: [],
+					skirtingRuns: []
+				};
 				byFoundation.set(foundationId, entry);
 			}
 			return entry;
@@ -1390,6 +1475,9 @@ export class BuildingManager {
 		for (const roof of this.roofManager.getAllRoofs()) ensure(roof.foundationId).roofs.push(roof);
 		for (const detail of this.floorDetailManager.getAllDetails()) {
 			ensure(detail.foundationId).floorDetails.push(detail);
+		}
+		for (const run of this.skirtingRunManager?.getAll() ?? []) {
+			ensure(run.foundationId).skirtingRuns.push(run);
 		}
 		return Array.from(byFoundation.entries(), ([foundationId, data]) => ({
 			foundationId,
@@ -1413,6 +1501,8 @@ export class BuildingManager {
 		for (const detail of this.floorDetailManager.getAllDetails()) {
 			this.floorDetailManager.removeFloorDetail(detail.id);
 		}
+		for (const run of this.skirtingRunManager?.getAll() ?? [])
+			this.skirtingRunManager?.remove(run.id);
 		for (const building of definitions) {
 			// Runtime data loaded from an actual save file may predate `baseY` even though the type
 			// says it's required — `?? 0` keeps that old data loading as ground-floor walls/paths.
@@ -1427,6 +1517,7 @@ export class BuildingManager {
 			for (const roof of building.roofs ?? []) this.roofManager.addRoof(roof);
 			for (const detail of building.floorDetails ?? [])
 				this.floorDetailManager.addFloorDetail(detail);
+			for (const run of building.skirtingRuns ?? []) this.skirtingRunManager?.add(run);
 		}
 		// Walls load before slabs, so skirting (which reads live lids) must rebuild once both exist.
 		this.wallManager.rebuildAllWalls();

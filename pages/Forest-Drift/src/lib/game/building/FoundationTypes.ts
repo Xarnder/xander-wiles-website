@@ -6,6 +6,7 @@
 
 import { createDefaultBarrierDraftSettings, type BarrierDraftSettings } from './BarrierTypes';
 import type { BeamOrientation } from './beamMath';
+import { createDefaultSkirtingDraftSettings, type SkirtingDraftSettings } from './skirtingRunMath';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import type {
 	FloorDetailPlankDirection,
@@ -56,6 +57,7 @@ export type ToolId =
 	| 'beam'
 	| 'polygon-wall'
 	| 'barrier'
+	| 'skirting'
 	| 'ceiling'
 	| 'floor'
 	| 'flat-roof'
@@ -100,7 +102,7 @@ export interface HotbarSlot {
 }
 
 /**
- * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
+ * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing/Skirting · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
  * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Place Object (Mini Builds + lights, chosen in
  * the Object Library with `E`). Slot 7 is unused.
  */
@@ -111,7 +113,8 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 		variants: [
 			{ toolId: 'polygon-wall', label: 'Poly Wall' },
 			{ toolId: 'wall', label: 'Wall' },
-			{ toolId: 'barrier', label: 'Fence / Rail' }
+			{ toolId: 'barrier', label: 'Fence / Rail' },
+			{ toolId: 'skirting', label: 'Skirting' }
 		]
 	},
 	{
@@ -191,6 +194,7 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'wall',
 	'polygon-wall',
 	'barrier',
+	'skirting',
 	'stairs',
 	'floor-carpet',
 	'floor-path',
@@ -209,6 +213,7 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'wall' ||
 		id === 'polygon-wall' ||
 		id === 'barrier' ||
+		id === 'skirting' ||
 		id === 'stairs' ||
 		id === 'torch' ||
 		id === 'place-object' ||
@@ -397,6 +402,8 @@ export interface BuildingSettings {
 
 	/** Fence / Railing tool: the style, type and base mode the NEXT barrier is drawn with (`E` panel). */
 	barrier: BarrierDraftSettings;
+	/** Skirting tool: offset mode, manual offset, board size and colour for the NEXT run (`E` panel). */
+	skirtingRun: SkirtingDraftSettings;
 
 	/** Corner-join style for the Polygon/Continuous Wall Tool — standalone walls are unaffected (they have no interior joints). */
 	wallJoinStyle: 'miter' | 'bevel';
@@ -626,6 +633,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showDoorHinge: false,
 
 		barrier: createDefaultBarrierDraftSettings(),
+		skirtingRun: createDefaultSkirtingDraftSettings(),
 		wallJoinStyle: 'miter',
 		miterLimit: 4,
 		cornerOpeningMargin: 0.15,

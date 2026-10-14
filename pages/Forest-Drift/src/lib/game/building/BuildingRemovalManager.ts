@@ -79,6 +79,8 @@ export class BuildingRemovalManager {
 				return this.removeRoof(target.roofId);
 			case 'floor-detail':
 				return this.removeFloorDetail(target.detailId);
+			case 'skirting-run':
+				return this.buildingManager.removeSkirtingRun(target.skirtingRunId);
 			case 'foundation':
 				// A whole foundation also deletes the build on it, and only after the player types
 				// "Confirm Delete". That cascade lives in foundationDeletion.ts, not this per-piece path.

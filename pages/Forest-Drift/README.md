@@ -51,6 +51,9 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `2` then `↑`/`↓` — Fence / Railing (Poly Wall → Wall → Fence / Rail): draw like a Continuous Wall,
   on a building or on open ground; `E` customises it, `R` applies the current settings to the
   fence under the crosshair and `Q` copies its style — see "Fences and railings"
+- `2` then `↑`/`↓` to Skirting — draw skirting boards along a wall's centre line; each board goes on
+  the wall face toward you, offset by half the wall found on that line (`O` switches to a manual
+  offset, `E` sets offset, height, depth and colour) — see "Skirting"
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -921,6 +924,32 @@ Many barriers in view (mixed styles, three-point paths ≈ 8 m each), against th
 
 Placed barriers have no per-frame code at all; the cost is draw calls (one or two per barrier, plus
 their shadow cascades) and memory, which is dominated by the turned LOD 0 of decorative styles.
+
+## Skirting: automatic under ceilings, hand-drawn anywhere (`skirtingMath.ts`, `skirtingRunMath.ts`, `SkirtingRunManager.ts`, `SkirtingTool.ts`)
+
+Walls get skirting automatically on the inside of a room that has a ceiling, floor or flat roof over
+it (`skirtingMath.ts` — interior face only, broken at doorways). Where that doesn't apply — an open
+room, a wall without a lid, a run that should stop short — hotbar 2's fourth tool, **Skirting**
+(Poly Wall → Wall → Fence / Rail → Skirting), draws boards by hand.
+
+Draw along a wall's **centre line**, exactly like drawing the wall: click points on the storey's
+construction plane, click the first point again to close a room, `Enter` to finish, `Backspace` to
+undo a point, `B` for axis snap. Each segment's board is moved off that line onto the wall face on
+the side you are standing (decided when you click its end point, previewed live as you move), so
+drawing a room from inside puts every board on the inside.
+
+- **Auto offset** (default): `findWallHalfThickness` looks for a standalone wall or wall-path segment
+  on this foundation and storey whose centre line the drawn segment lies along (parallel, within
+  6 cm, overlapping) and uses half its thickness — the board lands exactly on that wall's face. The
+  HUD says whether a wall was found under the line being drawn.
+- **Manual offset**: `O` toggles it, or set it in the `E` panel (with board height, depth and
+  colour). Auto mode also falls back to this value on a line with no wall.
+
+A run is saved as the drawn grid points plus one `{ side, offset }` per segment and the board size
+(`FoundationBuildingDefinition.skirtingRuns`, optional so older worlds load unchanged). Boards on the
+same side meet in a mitre; a side flip or a very sharp corner ends them square. Each run is one mesh
+in the shared `skirting` timber, removable with Remove Mode, paintable with Paint Mode, undoable
+with `-`, and deleted with its foundation. No collision — the wall behind it already blocks.
 
 ## Building levels, horizontal slabs, and multi-level collision
 

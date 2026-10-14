@@ -245,6 +245,7 @@ export class RemoveTool implements BuildTool {
 			...this.buildingManager.getRaycastableSlabMeshes(),
 			...this.buildingManager.getRaycastableRoofMeshes(),
 			...this.buildingManager.getRaycastableFloorDetailMeshes(),
+			...this.buildingManager.getRaycastableSkirtingMeshes(),
 			...this.buildingManager.getRaycastableFoundationMeshes(),
 			...this.openingProxies.map((proxy) => proxy.mesh),
 			...this.roofOpeningProxies.map((proxy) => proxy.mesh),
@@ -819,6 +820,11 @@ export class RemoveTool implements BuildTool {
 				} as const;
 				return ['Floor detailing', labels[detail.kind]];
 			}
+			case 'skirting-run': {
+				const run = this.buildingManager.getSkirtingRun(target.skirtingRunId);
+				const pieces = run ? (run.closed ? run.points.length : run.points.length - 1) : 0;
+				return ['Skirting', pieces > 1 ? `${pieces} boards` : ''];
+			}
 			case 'foundation':
 				return ['Whole foundation', 'Everything built on it is removed with it'];
 		}
@@ -851,6 +857,8 @@ export class RemoveTool implements BuildTool {
 				if (detail.kind === 'planks') return 'Planks';
 				return 'Tiles';
 			}
+			case 'skirting-run':
+				return 'Skirting';
 			case 'foundation':
 				return 'Whole foundation';
 		}

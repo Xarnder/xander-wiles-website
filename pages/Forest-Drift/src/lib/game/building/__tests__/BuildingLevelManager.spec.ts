@@ -69,6 +69,17 @@ describe('BuildingLevelManager.getOrCreateLevel', () => {
 		expect(level0.wallHeight).toBe(3);
 	});
 
+	it('only counts as a change when it actually creates a level (reads are free)', () => {
+		manager = new BuildingLevelManager(makeSettings({ defaultStoreyHeight: 3 }));
+		manager.getOrCreateLevel('f1', 1);
+		const revision = manager.getRevision();
+		for (let i = 0; i < 10; i++) manager.getOrCreateLevel('f1', 1);
+		manager.getLevelUiState('f1');
+		expect(manager.getRevision()).toBe(revision);
+		manager.getOrCreateLevel('f1', 2);
+		expect(manager.getRevision()).toBeGreaterThan(revision);
+	});
+
 	it('a new level starts at the previous level baseY + wallHeight', () => {
 		const settings = makeSettings({ defaultStoreyHeight: 3 });
 		manager = new BuildingLevelManager(settings);

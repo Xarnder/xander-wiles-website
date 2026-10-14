@@ -29,6 +29,7 @@ import {
 import { buildSlabGeometry } from './SlabGeometryBuilder';
 import { buildSlabOpeningFrame } from './SlabOpeningFrameBuilder';
 import { buildStairFrame } from './StairFrameBuilder';
+import { buildSkirtingRunGeometry } from './SkirtingRunManager';
 import { buildStairRailing } from './StairRailingBuilder';
 import { buildStairGeometry } from './StairGeometryBuilder';
 import { computeStairMetrics } from './stairMath';
@@ -222,6 +223,59 @@ function buildPolygonWallPreview(
 	stubGroup.rotation.y = -Math.PI / 2;
 	group.add(stubGroup);
 
+	return group;
+}
+
+/**
+ * A wall corner with the next skirting run drawn along its centre line: the boards land on the
+ * inside faces at the offset the tool would use (half the wall here in Auto; the manual value
+ * otherwise), so the panel shows whether the offset is right.
+ */
+function buildSkirtingPreview(
+	settings: BuildingSettings,
+	materials: BuildingMaterialManager
+): THREE.Group {
+	const draft = settings.skirtingRun;
+	const grid = Math.max(0.05, settings.buildingGridSize);
+	const height = 0.9;
+	const thickness = Math.max(0.05, settings.wallThickness);
+	const runCells = Math.max(2, Math.round(2.2 / grid));
+	const stubCells = Math.max(2, Math.round(1.6 / grid));
+	const run = runCells * grid;
+	const stub = stubCells * grid;
+	const group = new THREE.Group();
+	group.name = 'preview-skirting';
+	group.add(wallMesh(run, height, thickness, [], materials));
+	const stubWall = wallMesh(stub, height, thickness, [], materials);
+	stubWall.position.set(run, 0, 0);
+	stubWall.rotation.y = -Math.PI / 2;
+	group.add(stubWall);
+	const offset = draft.offsetMode === 'auto' ? thickness / 2 : draft.manualOffset;
+	const boards = new THREE.Mesh(
+		buildSkirtingRunGeometry(
+			{
+				id: 'preview',
+				foundationId: 'preview',
+				levelIndex: 0,
+				baseY: 0,
+				points: [
+					{ gridX: 0, gridZ: 0 },
+					{ gridX: runCells, gridZ: 0 },
+					{ gridX: runCells, gridZ: stubCells }
+				],
+				closed: false,
+				segments: [
+					{ side: 1, offset },
+					{ side: 1, offset }
+				],
+				height: draft.height,
+				depth: draft.depth
+			},
+			grid
+		),
+		materials.getMaterial('skirting', draft.color ? colorMaterialFromHex(draft.color) : undefined)
+	);
+	group.add(boards);
 	return group;
 }
 
@@ -502,6 +556,8 @@ export function buildPlacementPreviewModel(
 		group = buildPolygonWallPreview(settings, materials.building);
 	} else if (toolId === 'barrier') {
 		group = buildBarrierPreview(settings, materials.building);
+	} else if (toolId === 'skirting') {
+		group = buildSkirtingPreview(settings, materials.building);
 	} else if (isFloorDetailTool(toolId)) {
 		group = buildFloorPreview(toolId, settings, materials);
 	} else if (toolId === 'stairs') {

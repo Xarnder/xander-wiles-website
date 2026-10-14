@@ -216,11 +216,13 @@ export class BuildingLevelManager {
 	 * its `wallHeight` is the *current* `defaultStoreyHeight` setting, captured once.
 	 */
 	getOrCreateLevel(foundationId: string, index: number): BuildingLevelDefinition {
-		this.revision++;
 		if (index < 0) throw new Error('Building levels cannot be negative');
 
+		// Only creating a level changes the world — this is read every frame by targeting and HUDs,
+		// and counting reads as changes kept the autosave permanently "unsaved" while aiming.
 		const existing = this.getLevel(foundationId, index);
 		if (existing) return existing;
+		this.revision++;
 
 		const list = this.levels.get(foundationId) ?? [];
 		this.levels.set(foundationId, list);

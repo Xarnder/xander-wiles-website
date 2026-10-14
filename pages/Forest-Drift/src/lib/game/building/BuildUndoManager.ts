@@ -14,7 +14,8 @@ export type BuildAction =
 	| { kind: 'floorDetail'; detailId: string }
 	| { kind: 'furniture'; furnitureId: string }
 	| { kind: 'miniBuild'; instanceId: string }
-	| { kind: 'barrier'; barrierId: string };
+	| { kind: 'barrier'; barrierId: string }
+	| { kind: 'skirtingRun'; skirtingRunId: string };
 
 export interface BuildUndoManagerOptions {
 	removeFurniture?: (id: string) => boolean;
@@ -95,6 +96,8 @@ export class BuildUndoManager {
 				return this.removeMiniBuild?.(action.instanceId) ?? false;
 			case 'barrier':
 				return this.removeBarrier?.(action.barrierId) ?? false;
+			case 'skirtingRun':
+				return this.buildingManager.removeSkirtingRun(action.skirtingRunId);
 		}
 	}
 

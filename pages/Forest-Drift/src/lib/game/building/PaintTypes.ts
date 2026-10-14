@@ -12,7 +12,8 @@ export type PaintTarget =
 	| { type: 'wall'; foundationId: string; wallId: string }
 	| { type: 'wall-segment'; foundationId: string; wallPathId: string; segmentId: string }
 	| { type: 'slab'; foundationId: string; slabId: string }
-	| { type: 'roof'; foundationId: string; roofId: string };
+	| { type: 'roof'; foundationId: string; roofId: string }
+	| { type: 'skirting-run'; foundationId: string; skirtingRunId: string };
 
 /** A stable string key for a target — used to detect "the hovered thing changed" without deep-equality checks. */
 export function paintTargetKey(target: PaintTarget): string {
@@ -27,6 +28,8 @@ export function paintTargetKey(target: PaintTarget): string {
 			return `slab:${target.slabId}`;
 		case 'roof':
 			return `roof:${target.roofId}`;
+		case 'skirting-run':
+			return `skirting-run:${target.skirtingRunId}`;
 	}
 }
 
@@ -45,6 +48,7 @@ export interface PaintPickUserData {
 	wallPathId?: string;
 	slabId?: string;
 	roofId?: string;
+	skirtingRunId?: string;
 }
 
 /**
@@ -63,6 +67,9 @@ export function resolvePaintTarget(userData: PaintPickUserData): PaintTarget | n
 
 	if (userData.slabId) {
 		return { type: 'slab', foundationId, slabId: userData.slabId };
+	}
+	if (userData.skirtingRunId) {
+		return { type: 'skirting-run', foundationId, skirtingRunId: userData.skirtingRunId };
 	}
 	if (userData.roofId) {
 		return { type: 'roof', foundationId, roofId: userData.roofId };

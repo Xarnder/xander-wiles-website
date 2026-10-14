@@ -48,6 +48,7 @@
 	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
 	import BarrierCustomizeModal from '$lib/components/BarrierCustomizeModal.svelte';
+	import SkirtingCustomizeModal from '$lib/components/SkirtingCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import TouchControls from '$lib/components/TouchControls.svelte';
@@ -1040,10 +1041,10 @@
 						</dd>
 						<dt>↑ / ↓</dt>
 						<dd>
-							Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing, Door /
-							Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks / Tiles. On slot 8, ↑/↓
-							cycle your recently used objects. The last choice is remembered. While a roof is being
-							adjusted, ↑/↓ still change rise instead.
+							Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing /
+							Skirting, Door / Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks /
+							Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last choice is remembered.
+							While a roof is being adjusted, ↑/↓ still change rise instead.
 						</dd>
 						<dt>Left click</dt>
 						<dd>Place / confirm</dd>
@@ -1105,6 +1106,19 @@
 						<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
 						<dt>R / Q</dt>
 						<dd>Apply the current settings to the fence you're aiming at · Copy its style</dd>
+					</dl>
+
+					<h3>Skirting (2, then ↑/↓)</h3>
+					<dl>
+						<dt>Left click</dt>
+						<dd>
+							Click along a wall's centre line like drawing the wall; boards go on the face toward
+							you. Click the first point again to close a room.
+						</dd>
+						<dt>O</dt>
+						<dd>Offset: Auto (half the wall found on that line) / Manual</dd>
+						<dt>E</dt>
+						<dd>Offset, height, depth and colour</dd>
 					</dl>
 
 					<h3>Roof</h3>
@@ -1738,6 +1752,11 @@
 					scene={session.scene}
 					onClose={() => session?.scene.closePlacementCustomize()}
 					onOpenEditor={openMiniBuildEditor}
+				/>
+			{:else if customizeToolId === 'skirting'}
+				<SkirtingCustomizeModal
+					settings={session.scene.buildingSettings}
+					onClose={() => session?.scene.closePlacementCustomize()}
 				/>
 			{:else if customizeToolId === 'barrier'}
 				<BarrierCustomizeModal

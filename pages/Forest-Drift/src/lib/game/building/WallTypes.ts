@@ -1,3 +1,4 @@
+import type { SkirtingRunDefinition } from './skirtingRunMath';
 /**
  * Building-element types. Framework- and Three.js-free, same rule as FoundationTypes.ts — this is
  * plain, serializable state. A wall never stores world-space coordinates: its endpoints are
@@ -129,4 +130,6 @@ export interface FoundationBuildingDefinition {
 	roofs: RoofDefinition[];
 	/** Defaults to `[]` when absent so buildings serialized before floor detailing existed still load. */
 	floorDetails?: FloorDetailDefinition[];
+	/** Hand-drawn skirting runs (hotbar 2 → Skirting). Defaults to `[]` when absent. */
+	skirtingRuns?: SkirtingRunDefinition[];
 }

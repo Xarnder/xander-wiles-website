@@ -64,6 +64,8 @@ import { PaintTool } from './building/PaintTool';
 import { PolygonWallTool } from './building/PolygonWallTool';
 import { BarrierManager, type BarrierRenderStats } from './building/BarrierManager';
 import { BarrierTool } from './building/BarrierTool';
+import { SkirtingRunManager } from './building/SkirtingRunManager';
+import { SkirtingTool } from './building/SkirtingTool';
 import {
 	cloneBarrierStyle,
 	getBarrierPreset,
@@ -480,6 +482,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly stairLevelTrigger: StairLevelTrigger;
 	private readonly roofManager: RoofManager;
 	private readonly floorDetailManager: FloorDetailManager;
+	/** Hand-drawn skirting boards (hotbar 2 → Skirting). */
+	private readonly skirtingRunManager: SkirtingRunManager;
+	private readonly skirtingTool: SkirtingTool;
 	private readonly furnitureManager: FurnitureManager;
 	/** Fences and railings (hotbar 2 → Fence / Railing) — see BarrierManager.ts. */
 	private readonly barrierManager: BarrierManager;
@@ -819,6 +824,14 @@ export class ThreeScene implements WorldRuntime {
 			getBuildingGridSize: () => buildingSettings.buildingGridSize
 		});
 		this.scene.add(this.floorDetailManager.group);
+		this.skirtingRunManager = new SkirtingRunManager({
+			getFoundation: (id) => this.foundationManager.getFoundation(id),
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			getBuildingGridSize: () => buildingSettings.buildingGridSize,
+			materialManager: this.materialManager
+		});
+		this.scene.add(this.skirtingRunManager.group);
 		for (const material of this.floorDetailManager.getMaterials()) {
 			this.graphicsPipeline.registerMaterial(material);
 		}
@@ -863,6 +876,7 @@ export class ThreeScene implements WorldRuntime {
 			stairManager: this.stairManager,
 			roofManager: this.roofManager,
 			floorDetailManager: this.floorDetailManager,
+			skirtingRunManager: this.skirtingRunManager,
 			getVertexSpacing: () =>
 				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
 			getBuildingGridSize: () => buildingSettings.buildingGridSize,
@@ -1153,6 +1167,19 @@ export class ThreeScene implements WorldRuntime {
 			onHudChange: options.onBuildHudChange
 		});
 
+		this.skirtingTool = new SkirtingTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			levelManager: this.levelManager,
+			buildingManager: this.buildingManager,
+			undoManager: this.undoManager,
+			terrainSettings: this.settings,
+			buildingSettings,
+			getPlayerPosition: () => this.controller.worldPosition,
+			onHudChange: options.onBuildHudChange
+		});
+
 		this.polygonWallTool = new PolygonWallTool({
 			scene: this.scene,
 			camera: this.camera,
@@ -1406,6 +1433,7 @@ export class ThreeScene implements WorldRuntime {
 				beam: this.beamTool,
 				'polygon-wall': this.polygonWallTool,
 				barrier: this.barrierTool,
+				skirting: this.skirtingTool,
 				ceiling: this.ceilingTool,
 				floor: this.floorTool,
 				'flat-roof': this.roofTool,
@@ -3329,6 +3357,8 @@ export class ThreeScene implements WorldRuntime {
 		this.slabManager.dispose();
 		this.stairManager.dispose();
 		this.floorDetailManager.dispose();
+		this.skirtingTool.dispose();
+		this.skirtingRunManager.dispose();
 		this.levelManager.dispose();
 		this.undoManager.dispose();
 		this.foundationManager.dispose();

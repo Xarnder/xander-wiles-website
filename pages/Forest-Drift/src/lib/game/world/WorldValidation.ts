@@ -3,6 +3,7 @@ import { validateMusic } from '../music/MusicValidation';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import { validateBarriers, validateBarrierStyle } from '../building/BarrierTypes';
 import { validateFurniture } from '../building/FurnitureTypes';
+import { validateSkirtingRun } from '../building/skirtingRunMath';
 import { validateMiniBuildWorldState } from '../miniBuild/MiniBuildValidation';
 import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
@@ -504,6 +505,16 @@ function validateBuilding(
 		const result = validateFloorDetail(detail, where);
 		if (!result.ok) return result;
 	}
+	const skirtingRuns = value.skirtingRuns ?? [];
+	if (!Array.isArray(skirtingRuns)) return fail(`${where}: skirtingRuns must be an array`);
+	if (skirtingRuns.length > IMPORT_LIMITS.floorDetailsPerFoundation)
+		return fail(`${where}: too many skirting runs`);
+	for (const run of skirtingRuns) {
+		const problem = validateSkirtingRun(run);
+		if (problem) return fail(`${where}: ${problem}`);
+		if ((run as { foundationId: string }).foundationId !== value.foundationId)
+			return fail(`${where}: skirting run belongs to another foundation`);
+	}
 	return {
 		ok: true,
 		value: {
@@ -513,7 +524,8 @@ function validateBuilding(
 			slabs,
 			stairs,
 			roofs,
-			floorDetails
+			floorDetails,
+			skirtingRuns
 		} as FoundationBuildingDefinition
 	};
 }
