@@ -1,7 +1,50 @@
 import * as THREE from 'three';
-import { buildTreeMesh, designTree, type TreeDesign } from './treePrototypeGenerator';
+import {
+	buildTreeMesh,
+	buildTreeShadowProxy,
+	designTree,
+	type TreeDesign
+} from './treePrototypeGenerator';
 import { getTreeSpecies } from './treeSpecies';
-import { triangleCount, type TreeLod, type TreeSpeciesId } from './TreeSpeciesTypes';
+import {
+	triangleCount,
+	type TreeLod,
+	type TreeMeshData,
+	type TreeSpeciesId
+} from './TreeSpeciesTypes';
+
+/**
+ * `geometry.userData.treeShadowRange`: [first index, index count] of the shadow proxy appended
+ * after the visible triangles. The draw range covers only the visible part; tree batches switch it
+ * to the proxy for the shadow pass (`onBeforeShadow`) and back (`onAfterShadow`), so shadows cost
+ * a fraction of the triangles with no extra objects or draw calls.
+ */
+export type TreeShadowRange = [start: number, count: number];
+
+/** Visible mesh followed by its shadow proxy, in one set of buffers (indices offset). */
+function appendMesh(main: TreeMeshData, proxy: TreeMeshData): TreeMeshData {
+	const join = (a: Float32Array, b: Float32Array) => {
+		const out = new Float32Array(a.length + b.length);
+		out.set(a);
+		out.set(b, a.length);
+		return out;
+	};
+	const offset = main.positions.length / 3;
+	const indices = new Uint32Array(main.indices.length + proxy.indices.length);
+	indices.set(main.indices);
+	for (let i = 0; i < proxy.indices.length; i++)
+		indices[main.indices.length + i] = proxy.indices[i] + offset;
+	return {
+		positions: join(main.positions, proxy.positions),
+		normals: join(main.normals, proxy.normals),
+		colors: join(main.colors, proxy.colors),
+		wind: join(main.wind, proxy.wind),
+		surface: join(main.surface, proxy.surface),
+		indices,
+		min: main.min,
+		max: main.max
+	};
+}
 
 export interface TreePrototypeCacheStats {
 	designs: number;
@@ -59,7 +102,9 @@ export class TreePrototypeCache {
 			design = designTree(species, designVariant, this.worldSeed);
 			this.designs.set(designKey, design);
 		}
-		const mesh = buildTreeMesh(species, design, lod);
+		const visible = buildTreeMesh(species, design, lod);
+		const proxy = buildTreeShadowProxy(species, design, lod);
+		const mesh = proxy ? appendMesh(visible, proxy) : visible;
 		const geometry = new THREE.BufferGeometry();
 		geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
 		geometry.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
@@ -73,16 +118,22 @@ export class TreePrototypeCache {
 				1
 			)
 		);
+		if (proxy) {
+			const range: TreeShadowRange = [visible.indices.length, proxy.indices.length];
+			geometry.userData.treeShadowRange = range;
+			geometry.setDrawRange(0, visible.indices.length);
+		}
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
 		geometry.name = `tree:${key}`;
 		this.geometries.set(key, geometry);
-		this.triangles += triangleCount(mesh);
+		this.triangles += triangleCount(visible);
 		this.bytes +=
 			mesh.positions.byteLength +
 			mesh.normals.byteLength +
 			mesh.colors.byteLength +
 			mesh.wind.byteLength +
+			mesh.surface.byteLength +
 			mesh.indices.length * (vertexCount < 65536 ? 2 : 4);
 		return geometry;
 	}

@@ -314,8 +314,10 @@ export class TreeManager {
 				candidates.push({ chunk, distance: -1 });
 				continue;
 			}
+			// `lastEvaluation` is NaN after `invalidateLods` (quality or settings change): NaN < threshold
+			// is false, so an invalidated chunk is re-evaluated, not skipped forever.
 			const moved = chunk.lastEvaluation.distanceTo(cameraPosition);
-			if (!(moved >= threshold)) continue;
+			if (moved < threshold) continue;
 			const [near] = chunk.distanceRange(cameraPosition);
 			candidates.push({ chunk, distance: near });
 		}

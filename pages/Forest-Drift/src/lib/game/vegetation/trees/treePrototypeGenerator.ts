@@ -231,7 +231,7 @@ function designSpindle(
 	const bulges = pickInt(random, rules.bulges);
 	const bulgePhase = random() * Math.PI * 2;
 	const base = design.trunkHeight * 0.6;
-	const samples = 24;
+	const samples = 32;
 	const profile: { y: number; radius: number }[] = [];
 	for (let i = 0; i <= samples; i++) {
 		const t = i / samples;
@@ -256,70 +256,121 @@ function designSpindle(
 interface LodTessellation {
 	trunkSides: number;
 	trunkSegments: number;
-	branches: boolean;
+	/** Root buttresses flaring out of the trunk base (near LOD only). */
+	roots: boolean;
+	/** Limbs from the trunk into the crown: sides per limb (0 = none). */
+	branchSides: number;
+	/** Cluster core subdivision (icosphere detail). */
 	blobDetail: number;
-	/** LOD2/3 replace the clusters with this many hull blobs (0 = keep clusters). */
-	hullBlobs: number;
+	/** Smaller clumps bulging from each cluster (0 = plain clusters) and their subdivision. */
+	clumps: number;
+	clumpDetail: number;
+	/** Second, finer octave of lumps on clusters and spindles (fraction of the lumpiness). */
+	fineLumps: number;
+	/** The silhouette LOD replaces the clusters with one lumpy hull blob of this subdivision. */
+	hull: boolean;
+	hullDetail: number;
 	tierPoints: number;
-	tierMidRing: boolean;
+	/** Profile rings of each conifer tier between apex and rim. */
+	tierRings: readonly { fraction: number; height: number }[];
+	tierUnderRing: boolean;
+	tierJitter: number;
 	maxTiers: number;
 	latheSides: number;
 	latheRings: number;
-	trunk: boolean;
+	/** Scales crown clusters and clumps about their centres (shadow proxies sit just inside). */
+	crownScale: number;
 }
 
+/**
+ * Near trees carry real detail — smooth clustered crowns, ragged conifer tiers, buttressed trunks
+ * and limbs — and each farther LOD drops roughly 3–4× of it while keeping the same silhouette, so
+ * the forest reads as the same trees at every distance (a far pine is still a stack of tiers, a far
+ * oak a lumpy crown) instead of collapsing to cones and balls.
+ */
 const TESSELLATION: Readonly<Record<TreeLod, LodTessellation>> = {
 	0: {
-		trunkSides: 7,
-		trunkSegments: 4,
-		branches: true,
-		blobDetail: 1,
-		hullBlobs: 0,
-		tierPoints: 9,
-		tierMidRing: true,
+		trunkSides: 10,
+		trunkSegments: 8,
+		roots: true,
+		branchSides: 6,
+		blobDetail: 2,
+		clumps: 4,
+		clumpDetail: 2,
+		fineLumps: 0.7,
+		hull: false,
+		hullDetail: 0,
+		tierPoints: 13,
+		tierRings: [
+			{ fraction: 0.3, height: 0.72 },
+			{ fraction: 0.64, height: 0.38 }
+		],
+		tierUnderRing: true,
+		tierJitter: 0.14,
 		maxTiers: 99,
-		latheSides: 12,
-		latheRings: 14,
-		trunk: true
+		latheSides: 16,
+		latheRings: 24,
+		crownScale: 1
 	},
 	1: {
-		trunkSides: 5,
-		trunkSegments: 2,
-		branches: false,
-		blobDetail: 0,
-		hullBlobs: 0,
-		tierPoints: 6,
-		tierMidRing: false,
-		maxTiers: 5,
-		latheSides: 8,
-		latheRings: 8,
-		trunk: true
+		trunkSides: 7,
+		trunkSegments: 4,
+		roots: false,
+		branchSides: 4,
+		blobDetail: 1,
+		clumps: 4,
+		clumpDetail: 1,
+		fineLumps: 0,
+		hull: false,
+		hullDetail: 0,
+		tierPoints: 9,
+		tierRings: [{ fraction: 0.55, height: 0.42 }],
+		tierUnderRing: false,
+		tierJitter: 0.12,
+		maxTiers: 6,
+		latheSides: 11,
+		latheRings: 12,
+		crownScale: 1
 	},
 	2: {
-		trunkSides: 4,
-		trunkSegments: 1,
-		branches: false,
-		blobDetail: 0,
-		hullBlobs: 2,
-		tierPoints: 5,
-		tierMidRing: false,
-		maxTiers: 3,
-		latheSides: 6,
-		latheRings: 4,
-		trunk: true
+		trunkSides: 5,
+		trunkSegments: 2,
+		roots: false,
+		branchSides: 0,
+		blobDetail: 1,
+		clumps: 0,
+		clumpDetail: 0,
+		fineLumps: 0,
+		hull: false,
+		hullDetail: 0,
+		tierPoints: 7,
+		tierRings: [],
+		tierUnderRing: false,
+		tierJitter: 0.1,
+		maxTiers: 5,
+		latheSides: 8,
+		latheRings: 6,
+		crownScale: 1
 	},
 	3: {
-		trunkSides: 3,
+		trunkSides: 4,
 		trunkSegments: 1,
-		branches: false,
+		roots: false,
+		branchSides: 0,
 		blobDetail: 0,
-		hullBlobs: 1,
-		tierPoints: 3,
-		tierMidRing: false,
-		maxTiers: 1,
-		latheSides: 4,
-		latheRings: 3,
-		trunk: true
+		clumps: 0,
+		clumpDetail: 0,
+		fineLumps: 0,
+		hull: true,
+		hullDetail: 1,
+		tierPoints: 6,
+		tierRings: [],
+		tierUnderRing: false,
+		tierJitter: 0,
+		maxTiers: 4,
+		latheSides: 6,
+		latheRings: 4,
+		crownScale: 1
 	}
 };
 
@@ -333,66 +384,49 @@ export function buildTreeMesh(
 	design: TreeDesign,
 	lod: TreeLod
 ): TreeMeshData {
+	return buildWith(species, design, TESSELLATION[lod]);
+}
+
+/**
+ * The shadow caster for a LOD: the same crown one subdivision coarser, with a plain trunk and no
+ * limbs, at about a quarter of the triangles. A coarser icosphere's vertices are a subset of the
+ * finer one's (same lumps), and its facets lie inside, so — shrunk a little more — the proxy stays
+ * just inside the visible crown: it never shadows the crown's own lit side, and its ground shadow
+ * is indistinguishable. Only clustered (broadleaf) crowns get one: conifer tiers merge differently
+ * per LOD, so a coarser stack would poke out of the visible one, and conifers are cheap already.
+ * Returns null when the LOD casts with its own geometry (or never casts).
+ */
+export function buildTreeShadowProxy(
+	species: TreeSpeciesDefinition,
+	design: TreeDesign,
+	lod: TreeLod
+): TreeMeshData | null {
+	// LOD2+ never cast (`lodCastsShadow`), so they need no proxy.
 	const tess = TESSELLATION[lod];
+	if (species.canopy.kind !== 'blobs' || lod >= 2 || tess.blobDetail === 0) return null;
+	return buildWith(species, design, {
+		...tess,
+		trunkSides: 5,
+		trunkSegments: 2,
+		roots: false,
+		branchSides: 0,
+		blobDetail: tess.blobDetail - 1,
+		clumpDetail: Math.max(0, tess.clumpDetail - 1),
+		crownScale: 0.95
+	});
+}
+
+function buildWith(
+	species: TreeSpeciesDefinition,
+	design: TreeDesign,
+	tess: LodTessellation
+): TreeMeshData {
 	const builder = new TreeMeshBuilder();
-	const palette = design.palette;
 	const total = design.totalHeight;
 	const windResponse = species.windResponse;
 	const barkCode = TREE_SURFACE_CODES[species.surface.bark];
 
-	if (tess.trunk) {
-		const path: TubePoint[] = [];
-		const segments = tess.trunkSegments;
-		const top = design.trunkTop;
-		const bend = design.trunkBend;
-		for (let i = 0; i <= segments; i++) {
-			const t = i / segments;
-			// Quadratic Bézier from the sunk base through the bend point to the top.
-			const a = (1 - t) * (1 - t);
-			const b = 2 * (1 - t) * t;
-			const c = t * t;
-			const position: Vec3 = [
-				b * bend[0] + c * top[0],
-				a * -TRUNK_SINK + b * bend[1] + c * top[1],
-				b * bend[2] + c * top[2]
-			];
-			// Root flare near the ground, then the species taper.
-			const flare = 1 + 0.35 * (1 - smooth01(0, 0.18, t));
-			const radius = design.trunkRadius * (1 - (1 - species.trunk.taper) * t) * flare;
-			path.push({ position, radius });
-		}
-		addTube(builder, path, tess.trunkSides, (t, _angle, position) =>
-			trunkShade(palette, t, position, total, windResponse, barkCode)
-		);
-
-		if (tess.branches) {
-			for (const branch of design.branches) {
-				const startY = design.trunkHeight * branch.from;
-				const start: Vec3 = [
-					design.trunkTop[0] * branch.from,
-					startY,
-					design.trunkTop[2] * branch.from
-				];
-				const mid: Vec3 = [
-					(start[0] + branch.to[0]) / 2,
-					(start[1] + branch.to[1]) / 2 + 0.25,
-					(start[2] + branch.to[2]) / 2
-				];
-				const radius = design.trunkRadius * species.trunk.taper * 0.75;
-				addTube(
-					builder,
-					[
-						{ position: start, radius },
-						{ position: mid, radius: radius * 0.75 },
-						{ position: branch.to, radius: radius * 0.45 }
-					],
-					5,
-					(t, _angle, position) =>
-						trunkShade(palette, 0.5 + t * 0.5, position, total, windResponse, barkCode)
-				);
-			}
-		}
-	}
+	buildTrunk(builder, species, design, tess, total, barkCode);
 
 	const canopy = species.canopy;
 	const leafCode = TREE_SURFACE_CODES[species.surface.foliage];
@@ -403,6 +437,85 @@ export function buildTreeMesh(
 	else buildSpindleCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
 
 	return builder.build();
+}
+
+/** Trunk (with root buttresses near) and the limbs reaching into the crown. */
+function buildTrunk(
+	builder: TreeMeshBuilder,
+	species: TreeSpeciesDefinition,
+	design: TreeDesign,
+	tess: LodTessellation,
+	total: number,
+	barkCode: number
+): void {
+	const palette = design.palette;
+	const windResponse = species.windResponse;
+	const path: TubePoint[] = [];
+	const segments = tess.trunkSegments;
+	const top = design.trunkTop;
+	const bend = design.trunkBend;
+	for (let i = 0; i <= segments; i++) {
+		const t = i / segments;
+		// Quadratic Bézier from the sunk base through the bend point to the top.
+		const a = (1 - t) * (1 - t);
+		const b = 2 * (1 - t) * t;
+		const c = t * t;
+		const position: Vec3 = [
+			b * bend[0] + c * top[0],
+			a * -TRUNK_SINK + b * bend[1] + c * top[1],
+			b * bend[2] + c * top[2]
+		];
+		// Root flare near the ground, then the species taper.
+		const flare = 1 + 0.35 * (1 - smooth01(0, 0.18, t));
+		const radius = design.trunkRadius * (1 - (1 - species.trunk.taper) * t) * flare;
+		path.push({ position, radius });
+	}
+	// Five-ish buttresses spreading into the ground, fading out by a sixth of the way up.
+	const rootCount = 4 + (design.seed % 3);
+	const rootPhase = ((design.seed >>> 8) % 628) / 100;
+	const roots = tess.roots
+		? (t: number, angle: number) =>
+				1 +
+				0.32 *
+					Math.pow(Math.max(0, Math.cos(angle * rootCount + rootPhase)), 3) *
+					(1 - smooth01(0.02, 0.2, t))
+		: undefined;
+	addTube(
+		builder,
+		path,
+		tess.trunkSides,
+		(t, _angle, position) => trunkShade(palette, t, position, total, windResponse, barkCode),
+		0,
+		roots
+	);
+
+	if (tess.branchSides > 0) {
+		for (const branch of design.branches) {
+			const startY = design.trunkHeight * branch.from;
+			const start: Vec3 = [
+				design.trunkTop[0] * branch.from,
+				startY,
+				design.trunkTop[2] * branch.from
+			];
+			const mid: Vec3 = [
+				(start[0] + branch.to[0]) / 2,
+				(start[1] + branch.to[1]) / 2 + 0.25,
+				(start[2] + branch.to[2]) / 2
+			];
+			const radius = design.trunkRadius * species.trunk.taper * 0.75;
+			addTube(
+				builder,
+				[
+					{ position: start, radius },
+					{ position: mid, radius: radius * 0.75 },
+					{ position: branch.to, radius: radius * 0.45 }
+				],
+				tess.branchSides,
+				(t, _angle, position) =>
+					trunkShade(palette, 0.5 + t * 0.5, position, total, windResponse, barkCode)
+			);
+		}
+	}
 }
 
 function trunkShade(
@@ -437,7 +550,7 @@ function foliageShade(
 	// Interior (near the canopy centre) and undersides are occluded.
 	const occlusion = 0.55 + 0.45 * smooth01(0.35, 0.95, outward);
 	// Undersides face the (blue) sky's opposite; keep them dark and green rather than pale.
-	const under = underside ? 0.5 : 1;
+	const under = underside ? 0.6 : 1;
 	color = [
 		color[0] * occlusion * under,
 		color[1] * occlusion * under,
@@ -445,6 +558,53 @@ function foliageShade(
 	];
 	const h = Math.max(0, position[1]) / total;
 	return { color, wind: (0.35 + 0.65 * h * outward) * windResponse, surface };
+}
+
+/**
+ * Smaller clumps bulging out of a cluster's outer, upper surface: they break a round cluster into
+ * a cauliflower-like crown. Derived from the cluster's own seed (no design draws), so every LOD
+ * that shows them places them identically. Clumps stay inside the cluster's envelope (core shrunk
+ * to make room), so the crown's extent — and the far-LOD hull — is unchanged.
+ */
+function clumpsFor(
+	design: TreeDesign,
+	cluster: TreeDesign['clusters'][number],
+	count: number
+): { center: Vec3; radii: Vec3; seed: number }[] {
+	const random = createMulberry32((cluster.seed ^ 0x9e3779b9) >>> 0);
+	const c = design.canopyCenter;
+	const away: Vec3 = [
+		cluster.center[0] - c[0],
+		(cluster.center[1] - c[1]) * 0.6 + design.canopyRadii[1] * 0.35,
+		cluster.center[2] - c[2]
+	];
+	const awayLength = Math.hypot(away[0], away[1], away[2]) || 1;
+	const clumps: { center: Vec3; radii: Vec3; seed: number }[] = [];
+	const start = random() * Math.PI * 2;
+	for (let k = 0; k < count; k++) {
+		// Spread around the outward direction, tilted up: clumps crown the top and the outside.
+		const angle = start + (k / count) * Math.PI * 2 + (random() - 0.5) * 0.8;
+		const spread = 0.75 + random() * 0.35;
+		const dir: Vec3 = [
+			away[0] / awayLength + Math.cos(angle) * spread,
+			away[1] / awayLength + 0.25 + (random() - 0.3) * 0.5,
+			away[2] / awayLength + Math.sin(angle) * spread
+		];
+		const length = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+		const size = 0.4 + random() * 0.12;
+		const reach = 0.98 - size;
+		const r = cluster.radii;
+		clumps.push({
+			center: [
+				cluster.center[0] + (dir[0] / length) * r[0] * reach,
+				cluster.center[1] + (dir[1] / length) * r[1] * reach,
+				cluster.center[2] + (dir[2] / length) * r[2] * reach
+			],
+			radii: [r[0] * size, r[1] * size, r[2] * size],
+			seed: (cluster.seed + 104729 * (k + 1)) >>> 0
+		});
+	}
+	return clumps;
 }
 
 function buildBlobCanopy(
@@ -458,31 +618,15 @@ function buildBlobCanopy(
 ): void {
 	const shade = (position: Vec3, outward: number) =>
 		foliageShade(design.palette, position, outward, design, total, windResponse, leafCode);
-	if (tess.hullBlobs === 0) {
-		for (const cluster of design.clusters) {
-			addBlob(builder, {
-				center: cluster.center,
-				radii: cluster.radii,
-				detail: tess.blobDetail,
-				lumpiness: rules.lumpiness,
-				seed: cluster.seed,
-				canopyCenter: design.canopyCenter,
-				canopyRadii: design.canopyRadii,
-				normalBlend: 0.6,
-				shade
-			});
-		}
-		return;
-	}
-	// Far LODs: the canopy hull as one or two lumpy blobs with the same overall extent.
-	const r = design.canopyRadii;
-	const c = design.canopyCenter;
-	if (tess.hullBlobs === 1) {
+	if (tess.hull) {
+		// Silhouette LOD: the canopy hull as one lumpy blob with the same overall extent.
+		const r = design.canopyRadii;
+		const c = design.canopyCenter;
 		addBlob(builder, {
 			center: [c[0], c[1] + r[1] * 0.05, c[2]],
-			radii: [r[0] * 1.02, r[1] * 0.98, r[2] * 1.02],
-			detail: 0,
-			lumpiness: rules.lumpiness,
+			radii: [r[0] * 0.98, r[1] * 0.95, r[2] * 0.98],
+			detail: tess.hullDetail,
+			lumpiness: rules.lumpiness * 1.6,
 			seed: design.seed,
 			canopyCenter: c,
 			canopyRadii: r,
@@ -491,29 +635,38 @@ function buildBlobCanopy(
 		});
 		return;
 	}
-	const off = r[0] * 0.28;
-	addBlob(builder, {
-		center: [c[0] - off * 0.6, c[1], c[2] - off * 0.3],
-		radii: [r[0] * 0.82, r[1] * 0.9, r[2] * 0.82],
-		detail: 0,
-		lumpiness: rules.lumpiness,
-		seed: design.seed,
-		canopyCenter: c,
-		canopyRadii: r,
-		normalBlend: 0.85,
-		shade
-	});
-	addBlob(builder, {
-		center: [c[0] + off * 0.6, c[1] + r[1] * 0.12, c[2] + off * 0.3],
-		radii: [r[0] * 0.78, r[1] * 0.86, r[2] * 0.78],
-		detail: 0,
-		lumpiness: rules.lumpiness,
-		seed: design.seed + 1,
-		canopyCenter: c,
-		canopyRadii: r,
-		normalBlend: 0.85,
-		shade
-	});
+	for (const cluster of design.clusters) {
+		const core = (tess.clumps > 0 ? 0.86 : 1) * tess.crownScale;
+		addBlob(builder, {
+			center: cluster.center,
+			radii: [cluster.radii[0] * core, cluster.radii[1] * core, cluster.radii[2] * core],
+			detail: tess.blobDetail,
+			lumpiness: rules.lumpiness,
+			fineLumps: tess.fineLumps,
+			seed: cluster.seed,
+			canopyCenter: design.canopyCenter,
+			canopyRadii: design.canopyRadii,
+			normalBlend: 0.6,
+			shade
+		});
+		for (const clump of clumpsFor(design, cluster, tess.clumps)) {
+			addBlob(builder, {
+				center: clump.center,
+				radii: [
+					clump.radii[0] * tess.crownScale,
+					clump.radii[1] * tess.crownScale,
+					clump.radii[2] * tess.crownScale
+				],
+				detail: tess.clumpDetail,
+				lumpiness: rules.lumpiness * 1.4,
+				seed: clump.seed,
+				canopyCenter: design.canopyCenter,
+				canopyRadii: design.canopyRadii,
+				normalBlend: 0.45,
+				shade
+			});
+		}
+	}
 }
 
 function buildTierCanopy(
@@ -538,24 +691,6 @@ function buildTierCanopy(
 			leafCode,
 			underside
 		);
-	if (tess.maxTiers === 1) {
-		// Silhouette: one cone over the whole foliage extent.
-		const first = tiers[0];
-		const last = tiers[tiers.length - 1];
-		addTier(builder, {
-			baseY: first.baseY,
-			apexY: last.apexY,
-			radius: first.radius * 1.05,
-			points: tess.tierPoints,
-			rimNotch: 1,
-			droop: first.droop,
-			midRing: false,
-			rotation: first.rotation,
-			offset,
-			shade
-		});
-		return;
-	}
 	// Fewer tiers at lower LODs: merge evenly across the same height span.
 	const count = Math.min(tess.maxTiers, tiers.length);
 	for (let i = 0; i < count; i++) {
@@ -570,7 +705,11 @@ function buildTierCanopy(
 			points: tess.tierPoints,
 			rimNotch: rules.rimNotch,
 			droop: start.droop,
-			midRing: tess.tierMidRing,
+			rings: tess.tierRings,
+			underRing: tess.tierUnderRing,
+			tipJitter: tess.tierJitter,
+			valleyShade: tess.tierRings.length > 0 ? 0.7 : 0.82,
+			seed: (design.seed + startIndex * 7907) >>> 0,
 			rotation: start.rotation,
 			offset,
 			shade
@@ -599,6 +738,7 @@ function buildSpindleCanopy(
 		profile,
 		sides: tess.latheSides,
 		lumpiness: rules.lumpiness,
+		fineLumps: tess.fineLumps,
 		seed: design.seed,
 		offset: [design.trunkTop[0] * 0.5, design.trunkTop[2] * 0.5],
 		apexY: design.spindle.apexY,

@@ -7,7 +7,7 @@ import {
 	uniformLodForRange,
 	type TreeLodDistances
 } from './treeLod';
-import { TreePrototypeCache } from './TreePrototypeCache';
+import { TreePrototypeCache, type TreeShadowRange } from './TreePrototypeCache';
 import { getTreeSpecies } from './treeSpecies';
 import { TREE_SPECIES_IDS, type TreeInstanceDefinition, type TreeLod } from './TreeSpeciesTypes';
 
@@ -212,6 +212,8 @@ export class TreeChunk {
 				);
 				mesh.name = `trees:${this.chunkX},${this.chunkZ}:${key}`;
 				mesh.userData.treeLod = lod;
+				mesh.onBeforeShadow = drawShadowProxy;
+				mesh.onAfterShadow = drawVisibleMesh;
 				this.batches.set(key, mesh);
 				this.group.add(mesh);
 			}
@@ -273,4 +275,18 @@ export class TreeChunk {
 		this.group.removeFromParent();
 		this.group.clear();
 	}
+}
+
+/**
+ * Shadow pass: draw the prototype's coarser shadow proxy instead of its visible triangles (see
+ * `TreeShadowRange`). Plain functions, called with the batch as `this` — no closure per batch.
+ */
+function drawShadowProxy(this: THREE.Mesh): void {
+	const range = this.geometry.userData.treeShadowRange as TreeShadowRange | undefined;
+	if (range) this.geometry.setDrawRange(range[0], range[1]);
+}
+
+function drawVisibleMesh(this: THREE.Mesh): void {
+	const range = this.geometry.userData.treeShadowRange as TreeShadowRange | undefined;
+	if (range) this.geometry.setDrawRange(0, range[0]);
 }

@@ -2755,12 +2755,12 @@ species definition (rules + ranges)            trees/treeSpecies.ts
 
 ### Species
 
-| Species      | Family          | Silhouette                                               | Prototypes | Triangles LOD0 / 1 / 2 / 3  |
-| ------------ | --------------- | -------------------------------------------------------- | ---------- | --------------------------- |
-| `oak`        | broadleaf       | single trunk, 4–6 rounded cluster masses, branch stubs   | 4          | 416–536 / 100–120 / 48 / 26 |
-| `pine`       | conifer         | straight trunk, 5–7 jagged drooping tiers                | 4          | 416–560 / 140 / 68 / 18     |
-| `cypress`    | slim conifer    | narrow lathed spindle, trunk mostly hidden               | 3          | 392 / 148 / 56 / 30         |
-| `ornamental` | small broadleaf | short trunk, 2–4 clusters; one autumn-coloured prototype | 3          | 256–396 / 60–100 / 48 / 26  |
+| Species      | Family          | Silhouette                                                       | Prototypes | Triangles LOD0 / 1 / 2 / 3           | Shadow proxy LOD0 / 1 |
+| ------------ | --------------- | ---------------------------------------------------------------- | ---------- | ------------------------------------ | --------------------- |
+| `oak`        | broadleaf       | buttressed trunk, limbs, 4–6 clumped cluster masses              | 4          | 6608–9856 / 1688–2520 / 340–500 / 88 | 1620–2420 / 420–620   |
+| `pine`       | conifer         | straight trunk, 5–7 ragged drooping tiers                        | 4          | 1200–1616 / 416–488 / 160 / 104      | — (casts itself)      |
+| `cypress`    | slim conifer    | narrow lathed spindle with vertical sprays, trunk mostly hidden  | 3          | 928 / 320 / 116 / 56                 | — (casts itself)      |
+| `ornamental` | small broadleaf | short trunk, 2–4 clumped clusters; one autumn-coloured prototype | 3          | 4984–6608 / 1272–1688 / 260–340 / 88 | 1220–1620 / 320–420   |
 
 A species is a `TreeSpeciesDefinition`: trunk rules (height, radius, taper, bend, branches), a
 canopy rule (`blobs`, `tiers` or `spindle` with their ranges), a colour style, prototype count,
@@ -2775,10 +2775,24 @@ enforce. A new species is a new entry — no meshes are authored.
 silhouette and switching barely pops. Each LOD is ONE merged mesh — trunk, branches and foliage —
 with per-vertex: position, normal, linear colour and a `treeWind` weight.
 
-The stylised look comes from shading, not polygons: foliage cluster normals are blended toward the
-whole canopy's centre so many clusters shade as one soft volume; vertex colours carry a dark-to-light
-vertical gradient, a sunlit top, interior/underside occlusion and a bark gradient with a darker,
-flared, sunk base.
+The stylised look comes from shading as much as polygons: foliage cluster normals are blended toward
+the whole canopy's centre so many clusters shade as one soft volume; vertex colours carry a
+dark-to-light vertical gradient, a sunlit top, interior/underside occlusion, darker valleys between
+conifer branch sprays and a bark gradient with a darker, flared, sunk base.
+
+**Detail per LOD** (`TESSELLATION` in `treePrototypeGenerator.ts`). Near trees carry real geometry
+and each farther LOD drops roughly 4× of it while keeping the silhouette, so a far pine is still a
+stack of tiers and a far oak a lumpy crown — never a cone or a ball:
+
+| LOD | Broadleaf crown                                                                      | Conifer tier / spindle                                                                                         | Trunk                                |
+| --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 0   | each cluster a smooth core + 4 bulging clumps (icosphere detail 2), two lump octaves | 13 branch tips with ragged length/droop, 2 profile rings, bowl underside; 16 × 24 spindle with vertical sprays | 10 sides × 8, root buttresses, limbs |
+| 1   | same clumps one subdivision coarser                                                  | 9 tips, 1 profile ring, up to 6 tiers; 11 × 12 spindle                                                         | 7 × 4, limbs                         |
+| 2   | the clusters alone (detail 1)                                                        | 7 tips, up to 5 tiers; 8 × 6 spindle                                                                           | 5 × 2                                |
+| 3   | one lumpy hull (detail 1), shared per species                                        | 6 tips, 4 tiers; 6 × 4 spindle, shared per species                                                             | 4 × 1                                |
+
+Clumps are placed from each cluster's own seed (no design draws) and stay inside the cluster's
+envelope, so every LOD that shows them agrees and the crown's extent never changes between LODs.
 
 ### Instances, chunks and batching
 
@@ -2801,12 +2815,18 @@ uniform and skip per-tree work, and chunks are only re-evaluated after the camer
 `lodUpdateDistance` (4 m), at most `lodRebuildsPerFrame` (3) per frame, nearest first. Default
 distances: LOD1 45 m, LOD2 95 m, LOD3 170 m, scaled by the graphics preset.
 
-**LOD3 is a 18–30 triangle silhouette mesh, not a billboard.** Billboards/cross-planes need an
+**LOD3 is a 56–104 triangle silhouette mesh, not a billboard.** Billboards/cross-planes need an
 alpha-tested texture atlas: alpha-test disables early-Z (overdraw cost on dense far forests),
 mip-mapped alpha thins trees out with distance, cross-planes look flat from above, and lighting
-would differ from the geometric LODs. A tiny silhouette mesh has none of those problems, no texture
-memory, the same shading as LOD0–2, and at 18–30 triangles × a few thousand far trees it costs far
-less than the old full-detail placeholders (scene D: 1.70M → 0.99M triangles).
+would differ from the geometric LODs. A small silhouette mesh has none of those problems, no texture
+memory and the same shading as LOD0–2. (It was 18–30 triangles at first — far pines read as plain
+cones; four tiers cost ~100k triangles across a far forest, which this GPU does not notice.)
+
+A quality or tree-settings change invalidates every chunk's last LOD evaluation (sets it to NaN) so
+the next frame re-evaluates them. Until 2026-10-14 the distance check read `!(moved >= threshold)`,
+which is true for NaN — so invalidated chunks were skipped forever and kept whatever LODs they had
+when the setting changed: walk toward trees that were far at the time and they stayed silhouettes.
+At Ultra in particular no tree near the camera ever reached LOD0. `TreeManager.spec.ts` covers it.
 
 ### Material, wind and shadows
 
@@ -2817,6 +2837,16 @@ weighted by `treeWind` and phase-shifted by the instance's position, driven by o
 uniform; it is installed through `materials/shader/shaderHooks.ts` so it composes with CSM. Shadows:
 LODs ≤ the preset's `treeShadowMaxLod` cast (Medium/High: LOD0; Ultra: LOD0–1; Low: none); LOD0–2
 receive; silhouettes neither.
+
+**Shadow proxies.** Broadleaf LOD0/LOD1 crowns are dense and cascaded shadows draw them up to four
+times, so they cast with a proxy: the same crown one subdivision coarser, 5 % smaller, with a plain
+trunk (`buildTreeShadowProxy`, about a quarter of the triangles). The proxy is appended to the
+prototype's own buffers; the geometry's draw range covers only the visible part, and each batch's
+`onBeforeShadow` / `onAfterShadow` switch the range to the proxy and back — no extra objects, draw
+calls or materials. A coarser icosphere shares the finer one's vertices (and lumps) and its facets
+lie inside, so the proxy never shadows the crown's own lit side (a ray-cast test checks this).
+Conifers cast with their own triangles: their tiers merge differently per LOD, so a coarser stack
+would poke out of the visible one, and they are cheap already.
 
 ### Procedural bark and leaves
 
@@ -2888,6 +2918,25 @@ calls; at **Ultra** at 18–21 ms (49–55 fps — dominated by Ultra's 2× pixe
 material relief). Chunk streaming builds a chunk in ~0.5 ms; a full 49–149 chunk area streams in
 0.3–0.9 s. Every scene is well above the 30 fps minimum target on this machine.
 
+**LOD detail upgrade (2026-10-14)** — `tests/treePerformance.e2e.ts`, `docs/tree-lod-performance.json`:
+1512 × 945 at device pixel ratio 2 (the Retina canvas the game is played on), vsync and frame cap
+off, Chromium + ANGLE Metal, on a loaded machine (load average ~4; ± ~5 % run to run). Frame time in a dense forest,
+standing among the trees:
+
+| View (dense forest)  | High before | High after | Ultra before¹ | Ultra after | Ultra, no trees at all |
+| -------------------- | ----------- | ---------- | ------------- | ----------- | ---------------------- |
+| oak close-up         | 10.8 ms     | 12.5 ms    | 19.7 ms       | 21.8 ms     | —                      |
+| forest, ground level | 10.8 ms     | 11.9 ms    | 19.7 ms       | 23.3 ms     | 20.3 ms                |
+
+¹ Ultra "before" was cheap because of the frozen-LOD bug: near trees were showing LOD2/3.
+
+In the same run, everything tree-related (geometry, shadows) costs **≈2.0 ms at High** (84 fps in
+the forest; 0.4 ms of it tree shadows) and **≈3.0 ms at Ultra** (1.4 ms shadows). Shadow proxies
+cut Ultra's shadow triangles from ~8.6M to ~3.9M per frame and High's from ~1.8M to ~1.0M. Ultra
+is under 60 fps on this canvas with or without trees (20.3 ms with none) — that is GTAO, four
+cascades and relief, not trees. Tree memory (prototype geometry + per-chunk data) grows from ~1.1 MB
+to ~3.9 MB (the old figure also left out the `treeSurface` attribute, now counted).
+
 **Tuning recommendations:** draw calls scale with prototypes per species — keep 3–4. On weak GPUs,
 lower LOD distances (or the preset) before density. Shadow cost is the largest tree cost at
 High/Ultra; `treeShadowMaxLod = 0` is the right default. If far forests ever dominate, raise
@@ -2896,14 +2945,17 @@ High/Ultra; `treeShadowMaxLod = 0` is the right default. If far forests ever dom
 ### Tests
 
 `trees/__tests__/treePrototypeGenerator.spec.ts` (budgets per LOD, LODs strictly cheaper, valid
-finite geometry, outward winding, determinism, silhouette consistency across LODs);
+finite geometry, outward winding, determinism, silhouette consistency across LODs, shadow proxies
+cheaper and inside the crown);
 `trees/__tests__/treeRuntime.spec.ts` (LOD thresholds and hysteresis, uniform-range skipping,
-shadow policy, prototype cache reuse and per-species LOD3 sharing, batch grouping covering every
+shadow policy, prototype cache reuse and per-species LOD3 sharing, the appended shadow proxy and the
+batches' shadow-pass range switch, batch grouping covering every
 tree once, bounding spheres containing instances, far chunks collapsing to one batch per species,
 batch reuse, disposal, species selection determinism and rules); `TreePlacementGenerator.spec.ts`
 (minimum spacing, deterministic species/variant/variation, density-scale subsets, prototype count);
-`TreeManager.spec.ts` (foundation exclusion, chunk load/unload releasing batches, no prototype
-duplication across chunks, per-chunk cap, crown clearance).
+`TreeManager.spec.ts` (foundation exclusion, chunk load/unload releasing batches, LODs still
+re-evaluated after a quality/settings change, no prototype duplication across chunks, per-chunk cap,
+crown clearance). `tests/treePerformance.e2e.ts` is the LOD benchmark and review-shot harness.
 
 ### Limitations and next steps
 

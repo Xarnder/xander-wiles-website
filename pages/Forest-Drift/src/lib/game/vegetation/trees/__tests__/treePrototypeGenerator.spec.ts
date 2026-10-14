@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildTreeMesh, designTree } from '../treePrototypeGenerator';
+import { addBlob, TreeMeshBuilder } from '../treeMeshKit';
+import { buildTreeMesh, buildTreeShadowProxy, designTree } from '../treePrototypeGenerator';
 import { TREE_SPECIES } from '../treeSpecies';
 import {
 	TREE_LODS,
@@ -137,6 +138,111 @@ describe('tree prototype generation', () => {
 		const v0 = meshes.find((m) => m.speciesId === 'oak' && m.variant === 0 && m.lod === 0)!.mesh;
 		const v1 = meshes.find((m) => m.speciesId === 'oak' && m.variant === 1 && m.lod === 0)!.mesh;
 		expect(Array.from(v1.positions)).not.toEqual(Array.from(v0.positions));
+	});
+
+	it('gives near broadleaf LODs a shadow proxy: far fewer triangles, within the visible bounds', () => {
+		for (const speciesId of TREE_SPECIES_IDS) {
+			const species = TREE_SPECIES[speciesId];
+			const design = designTree(species, 0, 'proxy-world');
+			for (const lod of TREE_LODS) {
+				const proxy = buildTreeShadowProxy(species, design, lod);
+				if (species.canopy.kind !== 'blobs' || lod >= 2) {
+					expect(proxy, `${speciesId} LOD${lod}`).toBeNull();
+					continue;
+				}
+				const visible = buildTreeMesh(species, design, lod);
+				expect(proxy, `${speciesId} LOD${lod}`).not.toBeNull();
+				expect(triangleCount(proxy!)).toBeLessThan(triangleCount(visible) * 0.4);
+				for (let k = 0; k < 3; k++) {
+					// Within a centimetre (a five-sided trunk ring on a bent trunk dips a millimetre lower).
+					expect(proxy!.max[k]).toBeLessThanOrEqual(visible.max[k] + 0.01);
+					expect(proxy!.min[k]).toBeGreaterThanOrEqual(visible.min[k] - 0.01);
+				}
+			}
+		}
+	});
+
+	it('a coarser, slightly shrunk blob with the same lumps lies inside the finer one', () => {
+		// The shadow proxy's guarantee, per cluster: every vertex and facet centre of the coarse
+		// blob is inside the fine blob along its ray from the centre — so a proxy never shadows the
+		// lit side of the crown it stands in for.
+		const blob = (detail: number, scale: number) => {
+			const builder = new TreeMeshBuilder();
+			addBlob(builder, {
+				center: [0.3, 4, -0.2],
+				radii: [1.4 * scale, 1.1 * scale, 1.3 * scale],
+				detail,
+				lumpiness: 0.14,
+				fineLumps: 0.7,
+				seed: 1234,
+				canopyCenter: [0, 4, 0],
+				canopyRadii: [2.5, 2, 2.5],
+				normalBlend: 0.6,
+				shade: () => ({ color: [1, 1, 1], wind: 0, surface: 4 })
+			});
+			return builder.build();
+		};
+		const centre = [0.3, 4, -0.2];
+		const reach = (mesh: TreeMeshData, dir: number[]) => {
+			// Möller–Trumbore from the centre along `dir`: distance to the surface.
+			let best = Infinity;
+			const P = (i: number) => [
+				mesh.positions[i * 3],
+				mesh.positions[i * 3 + 1],
+				mesh.positions[i * 3 + 2]
+			];
+			for (let t = 0; t < mesh.indices.length; t += 3) {
+				const [a, b, c] = [P(mesh.indices[t]), P(mesh.indices[t + 1]), P(mesh.indices[t + 2])];
+				const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+				const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+				const p = [
+					dir[1] * e2[2] - dir[2] * e2[1],
+					dir[2] * e2[0] - dir[0] * e2[2],
+					dir[0] * e2[1] - dir[1] * e2[0]
+				];
+				const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+				if (Math.abs(det) < 1e-12) continue;
+				const s = [centre[0] - a[0], centre[1] - a[1], centre[2] - a[2]];
+				const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
+				if (u < -1e-9 || u > 1 + 1e-9) continue;
+				const q = [
+					s[1] * e1[2] - s[2] * e1[1],
+					s[2] * e1[0] - s[0] * e1[2],
+					s[0] * e1[1] - s[1] * e1[0]
+				];
+				const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
+				if (v < -1e-9 || u + v > 1 + 1e-9) continue;
+				const d = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+				if (d > 0 && d < best) best = d;
+			}
+			return best;
+		};
+		for (const [fine, coarse] of [
+			[2, 1],
+			[1, 0]
+		]) {
+			const visible = blob(fine, 1);
+			const proxy = blob(coarse, 0.95);
+			const points: number[][] = [];
+			for (let i = 0; i < proxy.positions.length; i += 3)
+				points.push([proxy.positions[i], proxy.positions[i + 1], proxy.positions[i + 2]]);
+			for (let t = 0; t < proxy.indices.length; t += 3) {
+				const [a, b, c] = [0, 1, 2].map((k) => proxy.indices[t + k] * 3);
+				points.push(
+					[0, 1, 2].map(
+						(k) => (proxy.positions[a + k] + proxy.positions[b + k] + proxy.positions[c + k]) / 3
+					)
+				);
+			}
+			for (const point of points) {
+				const d = [point[0] - centre[0], point[1] - centre[1], point[2] - centre[2]];
+				const length = Math.hypot(d[0], d[1], d[2]);
+				const dir = d.map((x) => x / length);
+				expect(length, `detail ${coarse} inside detail ${fine}`).toBeLessThanOrEqual(
+					reach(visible, dir) + 1e-6
+				);
+			}
+		}
 	});
 
 	it('keeps each prototype silhouette consistent across LODs (bounds within 15%)', () => {

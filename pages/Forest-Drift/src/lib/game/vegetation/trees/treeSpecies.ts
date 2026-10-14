@@ -46,7 +46,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 		instanceWidthScale: [0.88, 1.15],
 		instanceScale: [0.9, 1.08],
 		windResponse: 1,
-		triangleBudget: [900, 260, 80, 30]
+		triangleBudget: [10800, 2800, 560, 100]
 	},
 	pine: {
 		id: 'pine',
@@ -82,7 +82,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 		instanceWidthScale: [0.9, 1.1],
 		instanceScale: [0.88, 1.12],
 		windResponse: 0.55,
-		triangleBudget: [700, 220, 70, 24]
+		triangleBudget: [1800, 540, 176, 116]
 	},
 	cypress: {
 		id: 'cypress',
@@ -117,7 +117,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 		instanceWidthScale: [0.85, 1.12],
 		instanceScale: [0.88, 1.1],
 		windResponse: 0.4,
-		triangleBudget: [520, 180, 60, 32]
+		triangleBudget: [1000, 360, 130, 64]
 	},
 	ornamental: {
 		id: 'ornamental',
@@ -158,7 +158,7 @@ export const TREE_SPECIES: Readonly<Record<TreeSpeciesId, TreeSpeciesDefinition>
 		instanceWidthScale: [0.9, 1.15],
 		instanceScale: [0.85, 1.1],
 		windResponse: 1.2,
-		triangleBudget: [600, 200, 60, 30]
+		triangleBudget: [7300, 1900, 380, 100]
 	}
 };
 

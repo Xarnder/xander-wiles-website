@@ -112,6 +112,33 @@ describe('tree streaming and batching', () => {
 		expect(countMeshes(m.group)).toBe(0);
 	});
 
+	it('keeps re-evaluating LODs after a quality or settings change (no frozen far LODs)', () => {
+		for (const change of [
+			(m: TreeManager) =>
+				m.setQualityProfile({
+					lodDistanceScale: 1.3,
+					densityScale: 1,
+					maxShadowLod: 1,
+					wind: true,
+					surfaceDetail: 3
+				}),
+			(m: TreeManager) => m.notifyRenderingChanged()
+		]) {
+			const m = makeDenseForestManager(new FoundationManager(() => 2));
+			m.update(0, 0);
+			// Seen from far away: every tree is a silhouette.
+			m.updateView(new THREE.Vector3(2000, 5, 2000), 0.016);
+			expect(m.getRenderStats(null).loadedTreesByLod[3]).toBe(m.getStats().treeInstances);
+			change(m);
+			// Walk into the chunk: the nearest trees must come back to full detail.
+			for (let frame = 0; frame < 4; frame++) m.updateView(new THREE.Vector3(48, 5, 48), 0.016);
+			const lods = m.getRenderStats(null).loadedTreesByLod;
+			expect(lods[0]).toBeGreaterThan(0);
+			expect(lods[3]).toBe(0);
+			m.dispose();
+		}
+	});
+
 	it('never duplicates prototype geometry across chunks', () => {
 		const m = makeDenseForestManager(new FoundationManager(() => 2));
 		const camera = new THREE.Vector3(0, 5, 0);

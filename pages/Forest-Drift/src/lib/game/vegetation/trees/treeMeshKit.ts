@@ -134,14 +134,16 @@ export interface TubePoint {
 /**
  * A tapered, low-sided tube along a polyline (trunks, branches). Open at both ends: the base sits
  * below ground and the top disappears into foliage, so caps would be invisible triangles.
- * `shade(t, side)` gets the fraction along the tube (0 base … 1 top) and the side angle.
+ * `shade(t, side)` gets the fraction along the tube (0 base … 1 top) and the side angle;
+ * `radiusScale(t, angle)` optionally reshapes a ring (root buttresses at a trunk's base).
  */
 export function addTube(
 	builder: TreeMeshBuilder,
 	path: readonly TubePoint[],
 	sides: number,
 	shade: (t: number, angle: number, position: Vec3) => VertexShade,
-	angleOffset = 0
+	angleOffset = 0,
+	radiusScale?: (t: number, angle: number) => number
 ): void {
 	const rings: number[][] = [];
 	for (let i = 0; i < path.length; i++) {
@@ -176,10 +178,11 @@ export function addTube(
 				u[1] * cos + v[1] * sin,
 				u[2] * cos + v[2] * sin
 			];
+			const radius = point.radius * (radiusScale ? radiusScale(t, angle) : 1);
 			const position: Vec3 = [
-				point.position[0] + normal[0] * point.radius,
-				point.position[1] + normal[1] * point.radius,
-				point.position[2] + normal[2] * point.radius
+				point.position[0] + normal[0] * radius,
+				point.position[1] + normal[1] * radius,
+				point.position[2] + normal[2] * radius
 			];
 			ring.push(builder.addVertex(position, normal, shade(t, angle, position), axis));
 		}
@@ -278,6 +281,11 @@ export interface BlobOptions {
 	detail: number;
 	/** Surface lumpiness as a fraction of radius. */
 	lumpiness: number;
+	/**
+	 * A second, finer octave of lumps (as a fraction of `lumpiness`) — only worth it on finely
+	 * tessellated clusters, where it breaks up the round outline into leafy clumps.
+	 */
+	fineLumps?: number;
 	seed: number;
 	/**
 	 * The whole canopy's centre and radii. Normals are blended toward the direction from this
@@ -295,9 +303,16 @@ export function addBlob(builder: TreeMeshBuilder, options: BlobOptions): void {
 	const sphere = unitIcosphere(options.detail);
 	const { center, radii, lumpiness, seed, canopyCenter, canopyRadii } = options;
 	const indexOf: number[] = [];
+	const fine = options.fineLumps ?? 0;
 	const displaced: Vec3[] = sphere.vertices.map((v) => {
-		const lump =
+		let lump =
 			1 + (valueNoise3(v[0] * 1.7 + 3.1, v[1] * 1.7, v[2] * 1.7 - 2.3, seed) - 0.5) * 2 * lumpiness;
+		if (fine > 0)
+			lump +=
+				(valueNoise3(v[0] * 4.1 - 1.7, v[1] * 4.1 + 5.3, v[2] * 4.1, seed ^ 0x5bd1e995) - 0.5) *
+				2 *
+				lumpiness *
+				fine;
 		return [
 			center[0] + v[0] * radii[0] * lump,
 			center[1] + v[1] * radii[1] * lump,
@@ -340,15 +355,29 @@ export interface TierOptions {
 	points: number;
 	rimNotch: number;
 	droop: number;
-	/** Add a mid ring for a curved (convex) tier profile. */
-	midRing: boolean;
+	/**
+	 * Profile rings between the apex and the rim, apex side first: `fraction` of the radius at
+	 * `height` (0 = rim level … 1 = apex). More rings give a curved, skirt-like tier.
+	 */
+	rings: readonly { fraction: number; height: number }[];
+	/** Per-tip length (± fraction) and extra droop variation, so a tier's rim reads as branch tips. */
+	tipJitter?: number;
+	/** Seeds the tip jitter. */
+	seed?: number;
+	/** A raised ring under the tier: the underside becomes a shallow bowl instead of a flat fan. */
+	underRing?: boolean;
+	/**
+	 * Colour multiplier in the valleys between branches (the notched rim positions, all the way up
+	 * the tier): separate branch sprays read from shading, not extra triangles. 1 = off.
+	 */
+	valleyShade?: number;
 	rotation: number;
 	/** Horizontal offset of the tier centre (trunk lean). */
 	offset: [number, number];
 	shade: (position: Vec3, outward: number, underside: boolean) => VertexShade;
 }
 
-/** One conifer tier: a jagged, drooping cone with a shallow underside. */
+/** One conifer tier: a jagged, drooping skirt with a shallow underside. */
 export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 	const { baseY, apexY, radius, points, rimNotch, droop, rotation, offset } = options;
 	const rimCount = points * 2;
@@ -356,66 +385,115 @@ export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 	const apex: Vec3 = [offset[0], apexY, offset[1]];
 	const apexIndex = builder.addVertex(apex, [0, 1, 0], options.shade(apex, 0, false), [0, -1, 0]);
 
-	const ringAt = (fraction: number, yOf: (notch: boolean) => number, underside: boolean) => {
+	// Per-tip length and droop: a deterministic hash per rim position, so the same tier at the
+	// same tessellation always gets the same ragged rim.
+	const jitter = options.tipJitter ?? 0;
+	const tipLength: number[] = [];
+	const tipDroop: number[] = [];
+	for (let i = 0; i < rimCount; i++) {
+		const a = hashUnit(i, points, options.seed ?? 0);
+		const b = hashUnit(i + 977, points, options.seed ?? 0);
+		tipLength.push(1 + (a - 0.5) * 2 * jitter);
+		tipDroop.push(1 + (b - 0.5) * 2 * jitter * 1.5);
+	}
+
+	// The 2D profile (radius fraction, y) from the apex to the rim; drooping grows toward the tips.
+	const rimY = (notch: boolean, i: number) => baseY - (notch ? droop * 0.55 : droop) * tipDroop[i];
+	const profile = [
+		{ fraction: 0, y: apexY },
+		...options.rings.map((ring) => ({
+			fraction: ring.fraction,
+			y: baseY + height * ring.height - droop * Math.pow(ring.fraction, 3) * 0.6
+		})),
+		{ fraction: 1, y: baseY - droop }
+	];
+	const profileNormal = (k: number): [number, number] => {
+		const prev = profile[Math.max(0, k - 1)];
+		const next = profile[Math.min(profile.length - 1, k + 1)];
+		const dr = (next.fraction - prev.fraction) * radius;
+		const dy = next.y - prev.y;
+		// Outward normal of a surface running outward-and-down: (−dy, dr).
+		const len = Math.hypot(dy, dr) || 1;
+		return [-dy / len, dr / len];
+	};
+
+	const ringAt = (k: number, underside: boolean, underY?: number) => {
+		const fraction = underY === undefined ? profile[k].fraction : 0.55;
+		const [nr, ny] = underside ? [0.75, -0.55] : profileNormal(k);
 		const ring: number[] = [];
 		for (let i = 0; i < rimCount; i++) {
 			const notch = i % 2 === 1;
 			const angle = rotation + (i / rimCount) * Math.PI * 2;
-			const r = radius * fraction * (notch ? rimNotch : 1);
-			const position: Vec3 = [
-				offset[0] + Math.cos(angle) * r,
-				yOf(notch),
-				offset[1] + Math.sin(angle) * r
-			];
-			const slope = radius / Math.max(0.01, height);
-			const normal: Vec3 = underside
-				? [Math.cos(angle) * 0.75, -0.55, Math.sin(angle) * 0.75]
-				: [Math.cos(angle), slope * 0.9, Math.sin(angle)];
+			// Tips reach out further the closer the ring is to the rim.
+			const tip = 1 + (tipLength[i] - 1) * fraction * fraction;
+			const r = radius * fraction * (notch ? rimNotch : 1) * tip;
+			const isRim = fraction === 1 && underY === undefined;
+			const y =
+				underY !== undefined
+					? underY
+					: isRim || (underside && fraction === 1)
+						? rimY(notch, i)
+						: profile[k].y;
+			const position: Vec3 = [offset[0] + Math.cos(angle) * r, y, offset[1] + Math.sin(angle) * r];
+			const normal: Vec3 = [Math.cos(angle) * nr, ny, Math.sin(angle) * nr];
 			const grain = normalize([
 				position[0] - apex[0],
 				position[1] - apex[1],
 				position[2] - apex[2]
 			]);
-			ring.push(
-				builder.addVertex(position, normal, options.shade(position, fraction, underside), grain)
-			);
+			const shade = options.shade(position, fraction, underside);
+			const valley = options.valleyShade ?? 1;
+			if (notch && valley !== 1 && !underside) {
+				// Deeper toward the rim, where the sprays separate; none at the apex.
+				const k = 1 - (1 - valley) * Math.min(1, fraction * 1.4);
+				shade.color = [shade.color[0] * k, shade.color[1] * k, shade.color[2] * k];
+			}
+			ring.push(builder.addVertex(position, normal, shade, grain));
 		}
 		return ring;
 	};
-
-	const rimY = (notch: boolean) => baseY - (notch ? droop * 0.55 : droop);
-	let inner: number[] | null = null;
-	if (options.midRing) {
-		inner = ringAt(0.55, () => baseY + height * 0.42, false);
-		for (let i = 0; i < rimCount; i++) {
-			builder.addTriangle(apexIndex, inner[(i + 1) % rimCount], inner[i]);
-		}
-	}
-	const rim = ringAt(1, rimY, false);
-	if (inner) {
+	const band = (inner: number[], outer: number[]) => {
 		for (let i = 0; i < rimCount; i++) {
 			const a = inner[i];
 			const b = inner[(i + 1) % rimCount];
-			const c = rim[i];
-			const d = rim[(i + 1) % rimCount];
+			const c = outer[i];
+			const d = outer[(i + 1) % rimCount];
 			builder.addTriangle(a, b, c);
 			builder.addTriangle(b, d, c);
 		}
-	} else {
-		for (let i = 0; i < rimCount; i++)
-			builder.addTriangle(apexIndex, rim[(i + 1) % rimCount], rim[i]);
+	};
+
+	let previous: number[] | null = null;
+	for (let k = 1; k < profile.length; k++) {
+		const ring = ringAt(k, false);
+		if (previous) band(previous, ring);
+		else
+			for (let i = 0; i < rimCount; i++)
+				builder.addTriangle(apexIndex, ring[(i + 1) % rimCount], ring[i]);
+		previous = ring;
 	}
 	// Shallow underside back to the trunk, so the tier reads as a solid skirt from below.
 	const under: Vec3 = [offset[0], baseY + height * 0.18, offset[1]];
-	const underRim = ringAt(1, rimY, true);
+	const underRim = ringAt(profile.length - 1, true);
 	const underIndex = builder.addVertex(
 		under,
 		[0, -1, 0],
 		options.shade(under, 0, true),
 		[0, -1, 0]
 	);
+	let innerUnder = underRim;
+	if (options.underRing) {
+		const bowl = ringAt(profile.length - 1, true, baseY + height * 0.08 - droop * 0.35);
+		band(underRim, bowl);
+		innerUnder = bowl;
+	}
 	for (let i = 0; i < rimCount; i++)
-		builder.addTriangle(underIndex, underRim[i], underRim[(i + 1) % rimCount]);
+		builder.addTriangle(underIndex, innerUnder[i], innerUnder[(i + 1) % rimCount]);
+}
+
+/** Deterministic hash → [0, 1) for small integer inputs. */
+function hashUnit(a: number, b: number, seed: number): number {
+	return hashInts(a, b, 0x2545f491, seed);
 }
 
 export interface LatheOptions {
@@ -423,6 +501,8 @@ export interface LatheOptions {
 	profile: readonly { y: number; radius: number }[];
 	sides: number;
 	lumpiness: number;
+	/** A finer second octave of lumps (fraction of `lumpiness`): vertical sprays on near LODs. */
+	fineLumps?: number;
 	seed: number;
 	offset: [number, number];
 	/** Closes the top with a point at this y (and the bottom with a flat fan). */
@@ -446,8 +526,13 @@ export function addLathe(builder: TreeMeshBuilder, options: LatheOptions): void 
 			const angle = (s / sides) * Math.PI * 2 + ringIndex * 0.37;
 			const cos = Math.cos(angle);
 			const sin = Math.sin(angle);
-			const lump =
-				1 + (valueNoise3(cos * 1.3, point.y * 0.9, sin * 1.3, seed) - 0.5) * 2 * lumpiness;
+			let lump = 1 + (valueNoise3(cos * 1.3, point.y * 0.9, sin * 1.3, seed) - 0.5) * 2 * lumpiness;
+			if (options.fineLumps)
+				lump +=
+					(valueNoise3(cos * 3.4 + 7.1, point.y * 0.55, sin * 3.4, seed ^ 0x5bd1e995) - 0.5) *
+					2 *
+					lumpiness *
+					options.fineLumps;
 			const r = point.radius * lump;
 			const position: Vec3 = [offset[0] + cos * r, point.y, offset[1] + sin * r];
 			const normal = normalize([cos, -dr / dy, sin]);

@@ -97,6 +97,23 @@ describe('TreePrototypeCache', () => {
 		expect(cache.getGeometry('pine', 0, 3)).not.toBe(cache.getGeometry('oak', 0, 3));
 	});
 
+	it('appends a shadow proxy to broadleaf geometry and draws only the visible part by default', () => {
+		const cache = new TreePrototypeCache('proxy-world');
+		const oak = cache.getGeometry('oak', 0, 0);
+		const range = oak.userData.treeShadowRange as [number, number];
+		expect(range[0]).toBe(oak.drawRange.count);
+		expect(range[0] + range[1]).toBe(oak.index!.count);
+		expect(range[1]).toBeLessThan(range[0] * 0.4);
+		// Conifers and far LODs cast with their own triangles.
+		expect(cache.getGeometry('pine', 0, 0).userData.treeShadowRange).toBeUndefined();
+		expect(cache.getGeometry('oak', 0, 2).userData.treeShadowRange).toBeUndefined();
+		// Stats count what is drawn, not the proxy.
+		expect(cache.getStats().triangles).toBe(
+			(range[0] + cache.getGeometry('pine', 0, 0).index!.count) / 3 +
+				cache.getGeometry('oak', 0, 2).index!.count / 3
+		);
+	});
+
 	it('disposes geometry and rebuilds for a new world seed', () => {
 		const cache = new TreePrototypeCache('one');
 		const geometry = cache.getGeometry('cypress', 0, 0);
@@ -174,6 +191,29 @@ describe('TreeChunk batching', () => {
 		chunk.rebuildBatches(cache, material, policy);
 		expect([...chunk.getBatches()]).toEqual(before);
 		expect(chunk.assignLods(new THREE.Vector3(5000, 6, 0), DISTANCES)).toBe(true);
+		chunk.dispose();
+	});
+
+	it('switches batches to the shadow proxy for the shadow pass only', () => {
+		const chunk = new TreeChunk(0, 0, plantedGrid(60));
+		chunk.assignLods(new THREE.Vector3(0, 6, 0), DISTANCES);
+		chunk.rebuildBatches(cache, material, policy);
+		// The hooks only touch the batch's own geometry; three's arguments are irrelevant here.
+		const args = [] as unknown as Parameters<THREE.Object3D['onBeforeShadow']>;
+		let proxied = 0;
+		for (const mesh of chunk.getBatches()) {
+			const geometry = mesh.geometry;
+			const range = geometry.userData.treeShadowRange as [number, number] | undefined;
+			const visible = { ...geometry.drawRange };
+			mesh.onBeforeShadow(...args);
+			if (range) {
+				proxied++;
+				expect(geometry.drawRange).toMatchObject({ start: range[0], count: range[1] });
+			} else expect(geometry.drawRange).toEqual(visible);
+			mesh.onAfterShadow(...args);
+			expect(geometry.drawRange).toEqual(visible);
+		}
+		expect(proxied).toBeGreaterThan(0);
 		chunk.dispose();
 	});
 
