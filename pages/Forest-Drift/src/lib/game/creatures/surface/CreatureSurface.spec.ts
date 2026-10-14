@@ -10,8 +10,13 @@ import type { BodyPlanId, CreatureDefinition, SpeciesGenome } from '../CreatureT
 import {
 	deriveSurfaceGenome,
 	legacySurfaceGenome,
+	NOISE_FEATURE_TEXELS,
+	PATTERN_MAX_DETAIL,
+	PATTERN_REFERENCE_SCALE,
+	patternDetail,
 	patternFor,
 	patternMask,
+	sizedPattern,
 	resolveCreatureSurface,
 	validateSurfaceGenome,
 	type IndividualPattern
@@ -23,6 +28,7 @@ import {
 } from './CreaturePaletteGenerator';
 import { SURFACE_REGION } from './CreatureSurfaceClassifier';
 import { sampleCreatureNoise } from './CreatureSurfaceNoise';
+import { creatureSurfaceTable } from './CreatureSurfaceTable';
 
 const PLANS: BodyPlanId[] = ['quadruped', 'biped', 'hexapod', 'serpentine'];
 const definition = (
@@ -54,6 +60,47 @@ const individualPattern = (
 	...extra
 });
 const HEX = /^#[0-9a-f]{6}$/;
+/** Connected spots of `pattern` over the torso surface (rings × 32 sides, wrapping around). */
+function torsoSpots(c: ReturnType<typeof compileCreatureGeometry>, pattern: IndividualPattern) {
+	const torso = sampleVolume(
+		c.skeleton.volumes.find((v) => v.id === 'torso')!,
+		jointWorldPositions(c.skeleton)
+	);
+	const rings = torso.body,
+		sides = 32,
+		S = c.surfaceScale!;
+	const grid = rings.map((ring) =>
+		Array.from({ length: sides }, (_, k) => {
+			const p = ringPoint(ring, (k / sides) * Math.PI * 2);
+			return patternMask(pattern, { x: p.x / S, y: p.y / S, z: p.z / S }, 0, 0) > 0.5;
+		})
+	);
+	const seen = grid.map((r) => r.map(() => false));
+	let spots = 0;
+	for (let r = 0; r < grid.length; r++)
+		for (let k = 0; k < sides; k++) {
+			if (!grid[r][k] || seen[r][k]) continue;
+			spots++;
+			const stack = [[r, k]];
+			seen[r][k] = true;
+			while (stack.length) {
+				const [a, b] = stack.pop()!;
+				for (const [da, db] of [
+					[1, 0],
+					[-1, 0],
+					[0, 1],
+					[0, -1]
+				]) {
+					const na = a + da,
+						nb = (b + db + sides) % sides;
+					if (na < 0 || na >= grid.length || !grid[na][nb] || seen[na][nb]) continue;
+					seen[na][nb] = true;
+					stack.push([na, nb]);
+				}
+			}
+		}
+	return spots;
+}
 
 describe('palettes', () => {
 	it('are deterministic and validated for 100 species per plan', () => {
@@ -187,54 +234,73 @@ describe('pattern functions (CPU mirror of the shader)', () => {
 		expect(covered / N).toBeLessThan(0.42);
 		expect(soft).toBeGreaterThan(0);
 	});
-	it('produces 4–30 meaningful spots on a torso, for many species', () => {
+	it('produces 4–30 meaningful spots on a torso, for many species (as authored)', () => {
 		for (let seed = 0; seed < 25; seed++) {
 			const d = definition(seed, 'quadruped');
 			d.species = withPattern(d.species, 'spots');
 			const c = compileCreatureGeometry(d);
-			const surface = c.surface!;
-			const torso = sampleVolume(
-				c.skeleton.volumes.find((v) => v.id === 'torso')!,
-				jointWorldPositions(c.skeleton)
-			);
-			const rings = torso.body,
-				sides = 32,
-				S = c.surfaceScale!;
-			const grid = rings.map((ring) =>
-				Array.from({ length: sides }, (_, k) => {
-					const p = ringPoint(ring, (k / sides) * Math.PI * 2);
-					return (
-						patternMask(surface.primaryPattern, { x: p.x / S, y: p.y / S, z: p.z / S }, 0, 0) > 0.5
-					);
-				})
-			);
-			// Connected components on the (rings × sides, wrapping around) torso grid.
-			const seen = grid.map((r) => r.map(() => false));
-			let spots = 0;
-			for (let r = 0; r < grid.length; r++)
-				for (let k = 0; k < sides; k++) {
-					if (!grid[r][k] || seen[r][k]) continue;
-					spots++;
-					const stack = [[r, k]];
-					seen[r][k] = true;
-					while (stack.length) {
-						const [a, b] = stack.pop()!;
-						for (const [da, db] of [
-							[1, 0],
-							[-1, 0],
-							[0, 1],
-							[0, -1]
-						]) {
-							const na = a + da,
-								nb = (b + db + sides) % sides;
-							if (na < 0 || na >= grid.length || !grid[na][nb] || seen[na][nb]) continue;
-							seen[na][nb] = true;
-							stack.push([na, nb]);
-						}
-					}
-				}
+			const spots = torsoSpots(c, c.surface!.primaryPattern);
 			expect(spots, `seed ${seed}`).toBeGreaterThanOrEqual(4);
 			expect(spots, `seed ${seed}`).toBeLessThanOrEqual(30);
+		}
+	});
+	it('gives bigger bodies more, finer features — never fewer', () => {
+		expect(patternDetail(0.07)).toBe(1);
+		expect(patternDetail(PATTERN_REFERENCE_SCALE)).toBe(1);
+		expect(patternDetail(4)).toBeCloseTo(2, 9);
+		expect(patternDetail(1000)).toBe(PATTERN_MAX_DETAIL);
+		expect(patternDetail(Number.NaN)).toBe(1);
+		for (let s = 0.1; s < 60; s *= 1.3)
+			expect(patternDetail(s * 1.3)).toBeGreaterThanOrEqual(patternDetail(s));
+		const spots = individualPattern('spots');
+		expect(sizedPattern(spots, 0.5)).toBe(spots);
+		expect(sizedPattern(spots, 9)).toMatchObject({
+			scale: spots.scale * 3,
+			frequency: spots.frequency,
+			density: spots.density
+		});
+		const stripes = individualPattern('stripes');
+		expect(sizedPattern(stripes, 9).frequency).toBeCloseTo(stripes.frequency * 3, 9);
+		// Features still grow with the animal, just slower than it does (√ of the body scale).
+		const featureMetres = (S: number) => S / sizedPattern(spots, S).scale;
+		expect(featureMetres(16)).toBeGreaterThan(featureMetres(4));
+		expect(featureMetres(16) / featureMetres(4)).toBeCloseTo(2, 9);
+
+		let giants = 0;
+		for (let seed = 0; seed < 40; seed++) {
+			const d = definition(seed, 'quadruped');
+			d.species = withPattern(d.species, 'spots');
+			const c = compileCreatureGeometry(d, 2);
+			const S = c.surfaceScale!;
+			const authored = torsoSpots(c, c.surface!.primaryPattern);
+			const drawn = torsoSpots(c, sizedPattern(c.surface!.primaryPattern, S));
+			if (S <= PATTERN_REFERENCE_SCALE) expect(drawn, `seed ${seed}`).toBe(authored);
+			else if (S >= 6) {
+				giants++;
+				expect(drawn, `seed ${seed} S ${S.toFixed(1)}`).toBeGreaterThan(authored * 2);
+			}
+		}
+		expect(giants).toBeGreaterThanOrEqual(3);
+	});
+	it('the shader table carries the sized pattern, the CPU bake the same', () => {
+		const d = definition(1, 'quadruped');
+		d.species = withPattern(d.species, 'spots', 'stripes');
+		const giant = compileCreatureGeometry(d);
+		expect(giant.surfaceScale).toBeGreaterThan(9);
+		const table = creatureSurfaceTable();
+		const slot = table.allocate();
+		try {
+			table.write(slot, giant.surface!, 0, giant.surfaceScale!);
+			const texel = (i: number) =>
+				Array.from(table.data.subarray((slot * 8 + i) * 4, (slot * 8 + i + 1) * 4));
+			const A = sizedPattern(giant.surface!.primaryPattern, giant.surfaceScale!);
+			const B = sizedPattern(giant.surface!.secondaryPattern!, giant.surfaceScale!);
+			expect(texel(1)[0]).toBeCloseTo(A.scale * NOISE_FEATURE_TEXELS, 3);
+			expect(texel(5)[0]).toBeCloseTo(B.scale * NOISE_FEATURE_TEXELS, 3);
+			expect(texel(6)[0]).toBeCloseTo(B.frequency, 3);
+			expect(A.scale).toBeGreaterThan(giant.surface!.primaryPattern.scale * 2.5);
+		} finally {
+			table.release(slot);
 		}
 	});
 	it('bands follow the longitudinal coordinate at the requested frequency', () => {

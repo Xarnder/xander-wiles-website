@@ -3,6 +3,7 @@ import type { CreatureLod } from '../CreatureTypes';
 import {
 	NOISE_FEATURE_TEXELS,
 	patternCode,
+	sizedPattern,
 	type CreatureSurfaceDefinition,
 	type IndividualPattern
 } from './CreaturePatternGenerator';
@@ -86,10 +87,10 @@ class SurfaceTable {
 			this.texel(slot, base + 2, [p.frequency, p.phase, p.offset[0], p.offset[1]]);
 			this.texel(slot, base + 3, [p.offset[2], 0, 0, 0]);
 		};
-		row(0, surface.primaryPattern, secondary);
+		row(0, sizedPattern(surface.primaryPattern, bodyScale), secondary);
 		row(
 			4,
-			surface.secondaryPattern,
+			surface.secondaryPattern && sizedPattern(surface.secondaryPattern, bodyScale),
 			surface.secondaryPattern
 				? patternColor(surface.secondaryPattern, primary, secondary, under, accent)
 				: secondary

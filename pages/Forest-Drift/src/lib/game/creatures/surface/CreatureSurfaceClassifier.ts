@@ -2,7 +2,9 @@ import { Color, SRGBColorSpace } from 'three';
 import type { BodyPlanId, CreatureLod } from '../CreatureTypes';
 import type { GeometryAccumulator, RegionInfo } from '../SweptBodyVolume';
 import {
+	patternDetail,
 	patternMask,
+	sizedPattern,
 	type CreatureSurfaceDefinition,
 	type IndividualPattern
 } from './CreaturePatternGenerator';
@@ -184,7 +186,10 @@ export interface SurfaceClassification {
 export interface ClassifyOptions {
 	plan: BodyPlanId;
 	lod: CreatureLod;
-	/** Body scale (torso path length): patterns are sized relative to the animal. */
+	/**
+	 * Body scale (torso path length): patterns are sized relative to the animal, with extra detail
+	 * on big bodies (`sizedPattern`).
+	 */
 	bodyScale: number;
 	/** Arc-length fraction for a region's curve parameter (uniform band spacing). */
 	arc?: (region: number, t: number) => number;
@@ -223,8 +228,10 @@ export function classifyCreatureSurface(
 	const S = Math.max(1e-4, options.bodyScale);
 	const ub = surface.underbelly;
 	const bellyEdge = Math.cos(ub.width * Math.PI);
-	const A = surface.primaryPattern,
-		B = surface.secondaryPattern;
+	const A = sizedPattern(surface.primaryPattern, S),
+		B = surface.secondaryPattern && sizedPattern(surface.secondaryPattern, S);
+	// A big body's fine stripes would alias at far-LOD vertex spacing: bake their average instead.
+	const fineRepeats = patternDetail(S) > 2;
 	// Far LODs keep major colour blocks: band-like patterns are baked per vertex, noise patterns
 	// become their average tint, so a creature does not change colour when it switches LOD.
 	const bakeA = options.lod >= 2,
@@ -344,7 +351,11 @@ export function classifyCreatureSurface(
 				const bake = (pat: IndividualPattern, mask: number, colour: Color) => {
 					if (!mask) return;
 					const noiseLike =
-						pat.type === 'spots' || pat.type === 'mottled' || pat.type === 'dorsal-spots';
+						pat.type === 'spots' ||
+						pat.type === 'mottled' ||
+						pat.type === 'dorsal-spots' ||
+						(fineRepeats &&
+							(pat.type === 'stripes' || pat.type === 'bands' || pat.type === 'limb-bands'));
 					const amount = noiseLike
 						? pat.density *
 							pat.contrast *

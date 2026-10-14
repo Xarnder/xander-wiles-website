@@ -357,6 +357,43 @@ export function resolveCreatureSurface(
 
 /** Noise texels per pattern feature: `scale` counts features (blobs) per body length. */
 export const NOISE_FEATURE_TEXELS = 12;
+/** Body scale (metres) a recipe's feature counts are authored for; smaller bodies keep them. */
+export const PATTERN_REFERENCE_SCALE = 1;
+/** Most extra detail a giant gets: past this the 32-texel noise tile starts to show its repeat. */
+export const PATTERN_MAX_DETAIL = 6;
+/**
+ * Feature-count multiplier for a body of `bodyScale` metres. Patterns are sized against the
+ * animal, so without this a 25 m giant wears the same handful of spots as a 12 cm critter, just
+ * blown up to metres across. The square root splits the difference: features still grow with the
+ * animal (a giant's spots are bigger than a mouse's) but a bigger body carries many more, finer
+ * ones, the way real hide reads at scale.
+ */
+export function patternDetail(bodyScale: number): number {
+	if (!Number.isFinite(bodyScale)) return 1;
+	return Math.min(
+		PATTERN_MAX_DETAIL,
+		Math.max(1, Math.sqrt(Math.max(0, bodyScale) / PATTERN_REFERENCE_SCALE))
+	);
+}
+/**
+ * The pattern as drawn on a body of `bodyScale`: noise features and stripe/band repeats multiplied
+ * by `patternDetail`. Shader table and CPU bake both go through this, so they never disagree.
+ * Coverage (density), contrast and placement are unchanged.
+ */
+export function sizedPattern<T extends Pick<IndividualPattern, 'type' | 'scale' | 'frequency'>>(
+	pattern: T,
+	bodyScale: number
+): T {
+	const detail = patternDetail(bodyScale);
+	if (detail === 1) return pattern;
+	const repeats =
+		pattern.type === 'stripes' || pattern.type === 'bands' || pattern.type === 'limb-bands';
+	return {
+		...pattern,
+		scale: pattern.scale * detail,
+		frequency: repeats ? pattern.frequency * detail : pattern.frequency
+	};
+}
 /**
  * Fixed oblique rotation of pattern space: the 32-texel noise tile never repeats in line with the
  * body axes. Row-major; the shader uses the same numbers.
