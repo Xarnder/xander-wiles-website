@@ -1,0 +1,38 @@
+/* Guildford Cathedral only. Shared viewer controls read these variables. */
+html.page-guildford {
+    --primary: #008D98;
+    --glass-border: rgba(120, 206, 212, 0.34);
+}
+
+html.page-guildford .file-btn:not(.file-btn-secondary) {
+    box-shadow: 0 4px 14px rgba(0, 141, 152, 0.38);
+}
+
+@media (hover: hover) {
+    html.page-guildford .file-btn:hover {
+        background: #006E78;
+    }
+}
+
+html.page-guildford .app-modal-btn-primary {
+    border-color: #005E67;
+}
+
+html.page-guildford .thumb-card.active {
+    box-shadow: 0 0 20px rgba(0, 141, 152, 0.55);
+}
+
+html.page-guildford .drop-overlay {
+    border-color: rgba(0, 141, 152, 0.85);
+    background: rgba(4, 28, 32, 0.55);
+}
+
+html.page-guildford .app-modal-icon,
+html.page-guildford #lookHeading {
+    color: #8FE3E8;
+}
+
+html.page-guildford button.a-dialog-allow-button,
+html.page-guildford button.a-dialog-ok-button {
+    background-color: #008D98 !important;
+}

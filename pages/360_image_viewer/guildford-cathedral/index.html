@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" class="page-guildford">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Guildford Cathedral 360°</title>
+    <meta name="description" content="360° photographs of Guildford Cathedral.">
+
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+
+    <link rel="stylesheet" href="../shared/viewer.css">
+    <link rel="stylesheet" href="page.css">
+
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+
+    <meta name="theme-color" content="#06343A">
+    <script>
+        document.documentElement.classList.toggle(
+            'is-slim-mobile',
+            window.matchMedia('(max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) and (pointer: coarse)').matches
+        );
+    </script>
+</head>
+<body>
+<script>
+    if (document.documentElement.classList.contains('is-slim-mobile')) {
+        document.body.classList.add('is-ui-hidden');
+    }
+</script>
+    <div id="viewer-mount"></div>
+    <!-- Image list: images/manifest.json. See README.md. Viewer code: ../shared/. -->
+    <script>
+        window.PANORAMA_VIEWER = {
+            title: 'Guildford Cathedral',
+            subtitle: '360° photographs',
+            assetFolder: 'images/',
+            manifestUrl: 'images/manifest.json',
+            storageNamespace: 'xw-360-guildford'
+        };
+    </script>
+    <script src="../shared/config.js"></script>
+    <script src="../shared/boot.js"></script>
+</body>
+</html>

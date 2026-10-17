@@ -1,3 +1,4 @@
+// Shared 360° viewer. Titles and image collections come from window.PANORAMA_VIEWER.
 // --- A-FRAME COMPONENT: Drag to Rotate World (Right Controller) ---
 AFRAME.registerComponent('drag-rotate-world', {
     init: function () {
@@ -50,11 +51,23 @@ AFRAME.registerComponent('drag-rotate-world', {
     }
 });
 
+const ViewerConfig = window.PanoramaViewerConfig;
+if (!ViewerConfig) {
+    throw new Error('Panorama viewer config failed to load.');
+}
+const viewerConfig = ViewerConfig.resolveViewerConfig(window.PANORAMA_VIEWER);
+const displayName = ViewerConfig.displayName;
+const zoomPercentFromFov = ViewerConfig.zoomPercentFromFov;
+const fovFromZoomPercent = ViewerConfig.fovFromZoomPercent;
+const formatZoom = ViewerConfig.formatZoom;
+const formatLens = ViewerConfig.formatLens;
+
 // --- Global State ---
 let imageItems = []; 
 let thumbnails = []; 
 let currentIndex = 0;
-const SLIM_MOBILE_MQ = window.matchMedia('(max-width: 600px) and (orientation: portrait)');
+const SLIM_MOBILE_QUERY = '(max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) and (pointer: coarse)';
+const SLIM_MOBILE_MQ = window.matchMedia(SLIM_MOBILE_QUERY);
 let isUiVisible = !SLIM_MOBILE_MQ.matches;
 let isMotionEnabled = false; 
 let demoLoadActive = true;
@@ -125,11 +138,11 @@ const lookMap = document.getElementById('lookMap');
 const lookHeading = document.getElementById('lookHeading');
 const lookPitch = document.getElementById('lookPitch');
 const lookZoom = document.getElementById('lookZoom');
-const FOV_MIN = 20;
-const FOV_MAX = 100;
-const DEFAULT_FOV = 80;
-const LOOK_HUD_STORAGE_KEY = 'xw-360-look-hud-hidden';
-const HINT_STORAGE_KEY = 'xw-360-hint-dismissed';
+const FOV_MIN = ViewerConfig.FOV_MIN;
+const FOV_MAX = ViewerConfig.FOV_MAX;
+const DEFAULT_FOV = ViewerConfig.DEFAULT_FOV;
+const LOOK_HUD_STORAGE_KEY = viewerConfig.lookHudKey;
+const HINT_STORAGE_KEY = viewerConfig.hintKey;
 let isLookHudVisible = true;
 try {
     isLookHudVisible = localStorage.getItem(LOOK_HUD_STORAGE_KEY) !== '1';
@@ -187,24 +200,6 @@ function log(message, type = 'info') {
     if (type === 'error' && debugDetails) debugDetails.open = true;
 }
 
-function displayName(item) {
-    const raw = (item && (item.name || '')) || '';
-    return raw.replace(/\.(jpe?g|png|webp)$/i, '') || raw || 'Untitled';
-}
-
-function zoomPercentFromFov(fov) {
-    return ((FOV_MAX - fov) / (FOV_MAX - FOV_MIN)) * 100;
-}
-
-function fovFromZoomPercent(percent) {
-    return FOV_MAX - (percent / 100) * (FOV_MAX - FOV_MIN);
-}
-
-function formatZoom(fov) {
-    const zoom = DEFAULT_FOV / fov;
-    return `${zoom.toFixed(zoom >= 10 ? 0 : 1)}×`;
-}
-
 function abortMediaLoads() {
     if (mediaController) {
         mediaController.abort();
@@ -243,10 +238,6 @@ function showHiresChip(message) {
 
 function hideHiresChip() {
     hiresChip.classList.add('hidden');
-}
-
-function assetUrl(folder, filename) {
-    return encodeURI(folder + filename);
 }
 
 function isAbortError(err) {
@@ -427,19 +418,6 @@ async function applyBitmapToSky(bitmap, token, signal) {
     updateFlatView();
 }
 
-function normalizeManifestEntry(entry, folder) {
-    if (typeof entry === 'string') {
-        return { name: entry, preview: assetUrl(folder, entry), full: null, file: null, flipped: false };
-    }
-    return {
-        name: entry.name || entry.full || entry.preview,
-        preview: entry.preview ? assetUrl(folder, entry.preview) : null,
-        full: entry.full ? assetUrl(folder, entry.full) : null,
-        file: null,
-        flipped: false
-    };
-}
-
 function isSlimVerticalLayout() {
     return SLIM_MOBILE_MQ.matches;
 }
@@ -464,7 +442,8 @@ function updateSlimUiLayout(opts) {
 }
 
 // --- Initialization ---
-window.addEventListener('DOMContentLoaded', () => {
+function initViewer() {
+    ViewerConfig.applyViewerChrome(viewerConfig, document);
     log('System Initializing...');
     log('Pan mode: drag to look, pinch or scroll to zoom.');
     setFov(DEFAULT_FOV);
@@ -478,28 +457,44 @@ window.addEventListener('DOMContentLoaded', () => {
     else sceneEl.addEventListener('loaded', () => ensureLensPass(), { once: true });
     showHintIfNeeded();
     setTimeout(startDemoLoad, 0);
-});
+}
+
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', initViewer);
+} else {
+    setTimeout(initViewer, 0);
+}
 
 async function startDemoLoad() {
     if (!demoLoadActive) return;
 
-    const demoFolder = 'assets/360-images/';
     demoLoadController = new AbortController();
     const { signal } = demoLoadController;
+    const demoFiles = [];
+    let sawError = false;
 
-    try {
-        const response = await fetch(demoFolder + 'manifest.json', { signal });
-        if (!response.ok || !demoLoadActive) return;
-        const fileList = await response.json();
+    for (const collection of viewerConfig.collections) {
         if (!demoLoadActive) return;
-        const demoFiles = fileList.map(entry => normalizeManifestEntry(entry, demoFolder));
-        if (demoFiles.length > 0 && demoLoadActive) {
-            log(`Loading ${demoFiles.length} preview images in the background…`);
-            loadImagesIntoSystem(demoFiles);
+        try {
+            const response = await fetch(collection.manifestUrl, { signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status} for ${collection.manifestUrl}`);
+            const fileList = await response.json();
+            if (!demoLoadActive) return;
+            demoFiles.push(...ViewerConfig.manifestItems(fileList, collection.assetFolder, collection.title));
+        } catch (e) {
+            if (isAbortError(e) || !demoLoadActive) return;
+            sawError = true;
+            log(`Manifest Error: ${e.message}`, 'error');
         }
-    } catch (e) {
-        if (isAbortError(e)) return;
-        log(`Manifest Error: ${e.message}`, 'error');
+    }
+
+    if (!demoLoadActive) return;
+    if (demoFiles.length > 0) {
+        log(`Loading ${demoFiles.length} preview images in the background…`);
+        loadImagesIntoSystem(demoFiles);
+    } else if (!sawError) {
+        sceneEl.setAttribute('background', 'color: #000000');
+        if (viewerConfig.emptyLog) log(viewerConfig.emptyLog);
     }
 }
 
@@ -557,8 +552,9 @@ function isGalleryOpen() {
 
 function setGalleryOpen(open) {
     galleryModal.classList.toggle('hidden', !open);
+    document.body.classList.toggle('is-gallery-open', !!open);
     if (open) {
-        if (window.innerWidth < 600) mainUi.classList.add('hidden');
+        if (window.innerWidth < 600 || isSlimVerticalLayout()) mainUi.classList.add('hidden');
         const current = document.getElementById(`thumb-${currentIndex}`);
         if (current && current.scrollIntoView) {
             current.scrollIntoView({ block: 'nearest' });
@@ -566,6 +562,7 @@ function setGalleryOpen(open) {
     } else if (isUiVisible) {
         mainUi.classList.remove('hidden');
     }
+    syncChrome();
 }
 
 function setHelpOpen(open) {
@@ -578,6 +575,7 @@ function setHelpOpen(open) {
         btn.setAttribute('aria-label', open ? 'Hide shortcuts' : 'Show shortcuts');
         btn.title = open ? 'Hide shortcuts' : 'Shortcuts';
     });
+    syncChrome();
 }
 
 function closeOverlays() {
@@ -589,7 +587,10 @@ function closeOverlays() {
 function syncChrome() {
     const hasImages = imageItems.length > 0;
     const multi = imageItems.length > 1;
-    const showEdges = hasImages && multi && !isUiVisible && !sceneEl.is('vr-mode');
+    const helpOpen = helpPanel && !helpPanel.classList.contains('hidden');
+    const motionOpen = motionPermissionModal && !motionPermissionModal.classList.contains('hidden');
+    const showEdges = hasImages && multi && !sceneEl.is('vr-mode') && !isGalleryOpen() && !motionOpen
+        && (isSlimVerticalLayout() ? !helpOpen : !isUiVisible);
     edgePrev.classList.toggle('hidden', !showEdges);
     edgeNext.classList.toggle('hidden', !showEdges);
     const hideSceneHud = !hasImages || sceneEl.is('vr-mode') || (isUiVisible && !isSlimVerticalLayout());
@@ -746,6 +747,12 @@ if (window.visualViewport) {
     window.visualViewport.addEventListener('scroll', syncTogglePosition);
 }
 
+let sceneLayoutTimer = 0;
+function scheduleSceneLayout() {
+    clearTimeout(sceneLayoutTimer);
+    sceneLayoutTimer = setTimeout(refreshSceneAfterLayout, 80);
+}
+
 function onSlimLayoutChange() {
     updateSlimUiLayout();
 }
@@ -755,9 +762,13 @@ if (typeof SLIM_MOBILE_MQ.addEventListener === 'function') {
     SLIM_MOBILE_MQ.addListener(onSlimLayoutChange);
 }
 window.addEventListener('resize', onSlimLayoutChange);
-window.addEventListener('orientationchange', () => setTimeout(onSlimLayoutChange, 150));
+window.addEventListener('orientationchange', () => {
+    setTimeout(onSlimLayoutChange, 150);
+    setTimeout(scheduleSceneLayout, 160);
+});
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', onSlimLayoutChange);
+    window.visualViewport.addEventListener('resize', scheduleSceneLayout);
 }
 
 // --- Gallery Logic ---
@@ -774,7 +785,10 @@ function setMotionPermissionOpen(open, opts) {
     const denied = !!(opts && opts.denied);
     motionPermissionModal.classList.toggle('hidden', !open);
     motionPermissionModal.setAttribute('aria-hidden', open ? 'false' : 'true');
-    if (!open) return;
+    if (!open) {
+        syncChrome();
+        return;
+    }
     if (motionPermTitle) motionPermTitle.textContent = denied ? 'Tilt permission blocked' : 'Allow tilt sensors';
     if (motionPermCopy) {
         motionPermCopy.textContent = denied
@@ -786,6 +800,7 @@ function setMotionPermissionOpen(open, opts) {
         motionPermAllow.hidden = false;
     }
     if (motionPermDeny) motionPermDeny.hidden = denied;
+    syncChrome();
 }
 
 async function requestMotionPermission() {
@@ -1118,12 +1133,6 @@ function setFov(fov) {
     fovVal.textContent = formatZoom(next);
 }
 
-function formatLens(amount) {
-    if (amount <= 0.01) return 'Rectilinear';
-    if (amount >= 0.99) return 'Panini';
-    return String(Math.round(amount * 100));
-}
-
 function getLens() {
     return lensAmount;
 }
@@ -1451,11 +1460,64 @@ function bindPanZoom() {
     let panPointerId = null;
     let lastPan = null;
     let suppressPan = false;
+    let lastTap = null;
 
     function pointerDistance() {
         const pts = Array.from(pointers.values());
         if (pts.length < 2) return 0;
         return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    }
+
+    function releaseCapture(pointerId) {
+        const canvas = sceneEl && sceneEl.canvas;
+        if (!canvas || typeof canvas.hasPointerCapture !== 'function') return;
+        try {
+            if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+        } catch (err) { /* ignore */ }
+    }
+
+    function noteTap(point, x, y) {
+        if (!point || point.moved || suppressPan || sceneEl.is('vr-mode') || lookMode === 'flat') {
+            lastTap = null;
+            return;
+        }
+        const now = Date.now();
+        if (now - point.t > 350) {
+            lastTap = null;
+            return;
+        }
+        if (lastTap && now - lastTap.t < 320 && Math.hypot(x - lastTap.x, y - lastTap.y) < 36) {
+            lastTap = null;
+            resetView();
+            return;
+        }
+        lastTap = { x, y, t: now };
+    }
+
+    function endPointer(e, allowTap) {
+        const point = pointers.get(e.pointerId);
+        pointers.delete(e.pointerId);
+        releaseCapture(e.pointerId);
+        if (!point) return;
+        if (e.pointerId === panPointerId) {
+            panPointerId = null;
+            lastPan = null;
+        }
+        if (pointers.size < 2) pinchStartDist = 0;
+        if (pointers.size === 0) {
+            if (allowTap) noteTap(point, e.clientX, e.clientY);
+            else lastTap = null;
+            suppressPan = false;
+        }
+    }
+
+    function cancelGestures() {
+        pointers.forEach((_, id) => releaseCapture(id));
+        pointers.clear();
+        panPointerId = null;
+        lastPan = null;
+        pinchStartDist = 0;
+        suppressPan = false;
     }
 
     window.addEventListener('pointerdown', (e) => {
@@ -1466,7 +1528,14 @@ function bindPanZoom() {
             return;
         }
         if (helpPanel && !helpPanel.classList.contains('hidden')) setHelpOpen(false);
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        pointers.set(e.pointerId, {
+            x: e.clientX,
+            y: e.clientY,
+            ox: e.clientX,
+            oy: e.clientY,
+            t: Date.now(),
+            moved: false
+        });
         if (sceneEl.canvas) {
             try { sceneEl.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         }
@@ -1484,13 +1553,16 @@ function bindPanZoom() {
     });
 
     window.addEventListener('pointermove', (e) => {
-        if (!pointers.has(e.pointerId)) return;
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const point = pointers.get(e.pointerId);
+        if (!point) return;
+        point.x = e.clientX;
+        point.y = e.clientY;
+        if (Math.hypot(e.clientX - point.ox, e.clientY - point.oy) > 12) point.moved = true;
         if (pointers.size >= 2) {
             if (lookMode === 'flat' || lookMode === 'wander') return;
             if (e.cancelable) e.preventDefault();
             const dist = pointerDistance();
-            if (pinchStartDist > 0) setFov(pinchStartFov * (pinchStartDist / dist));
+            if (pinchStartDist >= 24 && dist >= 24) setFov(pinchStartFov * (pinchStartDist / dist));
             return;
         }
         if (lookMode !== 'pan' || suppressPan || panPointerId !== e.pointerId || sceneEl.is('vr-mode')) return;
@@ -1499,19 +1571,19 @@ function bindPanZoom() {
         lastPan = { x: e.clientX, y: e.clientY };
     }, { passive: false });
 
-    function endPointer(e) {
-        pointers.delete(e.pointerId);
-        if (e.pointerId === panPointerId) {
-            panPointerId = null;
-            lastPan = null;
-        }
-        if (pointers.size < 2) pinchStartDist = 0;
-        if (pointers.size === 0) suppressPan = false;
-    }
-    window.addEventListener('pointerup', endPointer);
-    window.addEventListener('pointercancel', endPointer);
+    window.addEventListener('touchmove', (e) => {
+        if (pointers.size === 0) return;
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('pointerup', (e) => endPointer(e, true));
+    window.addEventListener('pointercancel', (e) => endPointer(e, false));
     window.addEventListener('pointerleave', (e) => {
-        if (pointers.has(e.pointerId) && e.buttons === 0) endPointer(e);
+        if (pointers.has(e.pointerId) && e.buttons === 0) endPointer(e, false);
+    });
+    window.addEventListener('blur', cancelGestures);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) cancelGestures();
     });
 
     window.addEventListener('wheel', (e) => {
@@ -1523,6 +1595,13 @@ function bindPanZoom() {
 }
 
 bindPanZoom();
+
+[fovSlider, lensSlider, autoSpeedSlider].forEach((slider) => {
+    if (!slider) return;
+    const keepGesture = (e) => e.stopPropagation();
+    slider.addEventListener('pointerdown', keepGesture);
+    slider.addEventListener('touchstart', keepGesture, { passive: true });
+});
 
 window.addEventListener('dblclick', (e) => {
     if (isHudTarget(e.target) || sceneEl.is('vr-mode')) return;
@@ -1778,9 +1857,18 @@ async function startThumbnailGeneration() {
     thumbObjectUrls.forEach(url => URL.revokeObjectURL(url));
     thumbObjectUrls = [];
 
+    let lastGroup = '';
     for (let i = 0; i < imageItems.length; i++) {
         if (genId !== thumbGenId) return;
         const item = imageItems[i];
+        const group = item.group || '';
+        if (group && group !== lastGroup) {
+            const heading = document.createElement('h4');
+            heading.className = 'gallery-group';
+            heading.textContent = group;
+            galleryGrid.appendChild(heading);
+        }
+        lastGroup = group;
         const div = document.createElement('div');
         div.className = 'thumb-card';
         div.id = `thumb-${i}`;
