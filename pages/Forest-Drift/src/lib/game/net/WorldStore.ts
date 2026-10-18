@@ -353,16 +353,42 @@ function shapeProblem(op: WorldOp): string | null {
 		if (op.data.id !== undefined && op.data.id !== op.id) return 'Data and id disagree.';
 	}
 	if (op.op === 'patch') {
-		if (op.set !== undefined && (typeof op.set !== 'object' || Array.isArray(op.set))) {
+		if (op.set !== undefined && (!op.set || typeof op.set !== 'object' || Array.isArray(op.set))) {
 			return 'Malformed change.';
 		}
-		if (op.unset !== undefined && !Array.isArray(op.unset)) return 'Malformed change.';
+		if (op.unset !== undefined && (!Array.isArray(op.unset) || !op.unset.every(isSafeField))) {
+			return 'Malformed change.';
+		}
+		if (op.set && !Object.keys(op.set).every(isSafeField)) return 'Malformed change.';
+		if (
+			op.seen !== undefined &&
+			(!op.seen ||
+				typeof op.seen !== 'object' ||
+				Array.isArray(op.seen) ||
+				!Object.entries(op.seen).every(
+					([key, rev]) => isSafeField(key) && Number.isSafeInteger(rev) && rev >= 0
+				))
+		) {
+			return 'Malformed field revisions.';
+		}
 	}
-	if (op.op === 'del' && op.confirm !== undefined && !Array.isArray(op.confirm)) {
+	if (
+		op.op === 'del' &&
+		op.confirm !== undefined &&
+		(!Array.isArray(op.confirm) || !op.confirm.every((key) => typeof key === 'string'))
+	) {
 		return 'Malformed confirmation.';
 	}
 	if (JSON.stringify(op).length > MAX_OP_JSON_BYTES) return 'That object is too large to share.';
 	return null;
+}
+
+function isSafeField(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		!['__proto__', 'constructor', 'prototype'].includes(value)
+	);
 }
 
 /** An add (or a patch's result) whose parent, foundation, design or tree no longer exists. */

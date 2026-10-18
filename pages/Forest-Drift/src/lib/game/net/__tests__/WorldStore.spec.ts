@@ -62,6 +62,25 @@ const window = (id: string, minU: number, maxU: number): WorldOp => ({
 });
 
 describe('WorldStore', () => {
+	it.each([
+		{ set: null },
+		{ unset: [null] },
+		{ seen: null },
+		{ seen: { height: -1 } },
+		{ set: JSON.parse('{"__proto__":{"polluted":true}}') },
+		{ unset: ['constructor'] }
+	])('refuses malformed patches atomically: %j', (fields) => {
+		const world = store();
+		const before = world.checksum;
+		const result = world.applyBatch(SAM, [
+			window('valid-first-op', 2, 3),
+			{ op: 'patch', kind: 'wall', id: 'w1', ...fields } as unknown as WorldOp
+		]);
+		expect(result).toMatchObject({ ok: false, reason: 'invalid' });
+		expect(world.checksum).toBe(before);
+		expect(world.seq).toBe(1);
+	});
+
 	it('commits additions in order, with the creator and a revision', () => {
 		const world = store();
 		const result = world.applyBatch(SAM, [window('win-1', 2, 3)]);

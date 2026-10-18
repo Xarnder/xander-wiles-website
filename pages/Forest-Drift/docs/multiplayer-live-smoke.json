@@ -1,0 +1,16 @@
+{
+	"checkedAt": "2026-10-18T16:21:45.559Z",
+	"server": "https://forest-drift-mp.forest-drift-mp.workers.dev",
+	"worldId": "38b69bba-051c-4cf7-9a55-1ba1e114a03d",
+	"checks": [
+		"authenticated snapshot",
+		"owner/editor/viewer joins",
+		"visitor edits refused",
+		"editor commit broadcast to owner and visitor",
+		"edit persisted to snapshot",
+		"test edit removed",
+		"signed capability resumes same slot"
+	],
+	"firstCommitSeq": 2,
+	"passed": true
+}

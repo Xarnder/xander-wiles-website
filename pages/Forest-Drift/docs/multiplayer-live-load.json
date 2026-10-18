@@ -1,0 +1,16 @@
+{
+	"measuredAt": "2026-10-18",
+	"server": "https://forest-drift-mp.forest-drift-mp.workers.dev",
+	"description": "Node load bots over the internet against the deployed Cloudflare Worker. This measures transport, not browser GPU performance or a four-hour soak. Setup overlaps measurement for earlier bots, so per-bot rates include a small startup skew.",
+	"world": "Forest Drift Online",
+	"bots": 20,
+	"seconds": 30,
+	"posesSentPerBot": 10.3,
+	"snapshotsPerSecondPerBot": 18.5,
+	"entriesPerSecondPerBot": 186.7,
+	"downloadBytesPerSecondPerBot": 3990,
+	"uploadBytesPerSecondPerBot": 270,
+	"rttMs": { "p50": 22.8, "p90": 84.8, "p99": 112.8, "max": 118.9 },
+	"entryAgeMs": { "p50": 53, "p90": 79, "p99": 121, "max": 132 },
+	"disconnects": 0
+}

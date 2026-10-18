@@ -2,6 +2,7 @@ import { randomToken, sha256Hex } from '../../src/lib/game/net/capability';
 import { MAX_WORLD_JSON_BYTES, isValidWorldId } from '../../src/lib/game/net/protocol';
 import { maxSpeedForRunSpeed } from '../../src/lib/game/net/RoomCore';
 import type { Env } from './env';
+import { isRecord, readLimitedBody } from './http';
 import type { WorldAccess, WorldManifest } from './WorldRoom';
 
 export { WorldRoom } from './WorldRoom';
@@ -41,7 +42,8 @@ export default {
 			if (match[2] === 'ws') return room.fetch(request);
 			const method = match[2] === 'restore' ? 'POST' : 'GET';
 			if (request.method !== method) return json({ error: 'Method not allowed' }, 405, cors);
-			const body = method === 'POST' ? (await request.text()).slice(0, 1024) : undefined;
+			const body = method === 'POST' ? await readLimitedBody(request, 1024) : undefined;
+			if (body === null) return json({ error: 'Request too large.' }, 413, cors);
 			const response = await room.fetch(
 				new Request(`https://room/w/${match[1]}/${match[2]}`, {
 					method,
@@ -69,45 +71,46 @@ async function publish(
 		return json({ error: 'That admin key is not right.' }, 401, cors);
 	}
 
-	const declaredLength = Number(request.headers.get('Content-Length') ?? 0);
-	if (declaredLength > MAX_WORLD_JSON_BYTES + 1024) {
-		return json({ error: 'That world is too large to publish (10 MB limit).' }, 413, cors);
-	}
-	const text = await request.text();
-	if (text.length > MAX_WORLD_JSON_BYTES + 1024) {
+	const text = await readLimitedBody(request, MAX_WORLD_JSON_BYTES + 1024);
+	if (text === null) {
 		return json({ error: 'That world is too large to publish (10 MB limit).' }, 413, cors);
 	}
 
-	let body: { world?: unknown; generatorVersion?: unknown };
+	let body: unknown;
 	try {
-		body = JSON.parse(text) as typeof body;
+		body = JSON.parse(text);
 	} catch {
 		return json({ error: 'The request was not valid JSON.' }, 400, cors);
 	}
-	const world = body.world as Record<string, unknown> | undefined;
+	const world = isRecord(body) ? body.world : undefined;
 	if (
-		!world ||
-		typeof world !== 'object' ||
+		!isRecord(body) ||
+		!isRecord(world) ||
 		typeof world.name !== 'string' ||
 		typeof world.seed !== 'string' ||
-		typeof world.schemaVersion !== 'number' ||
-		typeof world.environment !== 'object' ||
-		typeof body.generatorVersion !== 'number'
+		!Number.isSafeInteger(world.schemaVersion) ||
+		!isRecord(world.environment) ||
+		typeof body.generatorVersion !== 'number' ||
+		!Number.isSafeInteger(body.generatorVersion)
 	) {
 		return json({ error: 'That does not look like a Forest Drift world.' }, 400, cors);
 	}
 
 	const worldId = crypto.randomUUID();
 	const worldJson = JSON.stringify(world);
+	const byteLength = new TextEncoder().encode(worldJson).byteLength;
+	if (byteLength > MAX_WORLD_JSON_BYTES) {
+		return json({ error: 'That world is too large to publish (10 MB limit).' }, 413, cors);
+	}
 	const player = (world.environment as { terrain?: { player?: { runSpeed?: unknown } } }).terrain
 		?.player;
 	const manifest: WorldManifest = {
 		worldId,
 		name: world.name.slice(0, 80),
-		schemaVersion: world.schemaVersion,
+		schemaVersion: world.schemaVersion as number,
 		generatorVersion: body.generatorVersion,
 		publishedAt: new Date().toISOString(),
-		byteLength: worldJson.length,
+		byteLength,
 		maxSpeed: maxSpeedForRunSpeed(Number(player?.runSpeed))
 	};
 	// One link per role (Q3-A). Only the tokens' hashes are stored; the tokens go back to the

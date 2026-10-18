@@ -7,11 +7,9 @@ import {
 } from './protocol';
 
 /**
- * The deployed multiplayer server, e.g. `https://forest-drift-mp.<your-subdomain>.workers.dev`.
- * Empty until the server is deployed (docs/2026/10-16/Multiplayer/cloudflare-setup-guide.md, step 10);
- * while empty, the production build hides every online feature. `VITE_FOREST_DRIFT_MP_URL` overrides it.
+ * Production room server. `VITE_FOREST_DRIFT_MP_URL` overrides it for another deployment.
  */
-export const DEPLOYED_SERVER_URL = '';
+export const DEPLOYED_SERVER_URL = 'https://forest-drift-mp.forest-drift-mp.workers.dev';
 
 const STORAGE_KEYS = {
 	playerId: 'forest-drift-mp-player-id',
