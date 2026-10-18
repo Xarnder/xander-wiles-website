@@ -12,17 +12,30 @@ The game stays at **https://xanderwiles.com/pages/Forest-Drift/** on Vercel.
 - Separate production `ADMIN_SECRET` and `CAPABILITY_SECRET` are installed as Worker secrets.
 - Local recovery copies are outside Git in `~/.config/forest-drift/production-secrets.json`
   (owner-readable only). Move the admin key into a password manager. Never commit or share this file.
-- The first world, **Forest Drift Online**, is a separate published copy of the bundled Main World.
+- The live world, **Forest Drift Online** (`b2c19e1b-3992-47df-bdc6-af40307a8988`), is a separate published copy of the bundled Main World.
+  It was migrated through the normal game loader to schema 9 before publication.
   Its private owner/editor/viewer invites are in `~/.config/forest-drift/production-world.json`.
   Keep the owner invite private; give builders the editor invite and visitors the viewer invite.
 - Deploy server updates with `npm run deploy` from `server/`. Deploy frontend changes through the
   existing GitHub → Vercel production pipeline. Avoid server deploys during a shared session.
 
+- The monthly $10 budget email alert is enabled. This is an alert, not a spending cap.
+- A private clickable invite sheet is at `~/.config/forest-drift/Forest Drift Online.html`.
+- A manual export is at `~/.config/forest-drift/backups/Forest Drift Online-2026-10-18.forestworld`;
+  the game package reader successfully validated its checksum, schema and import.
+
 ## Verification
 
 `docs/multiplayer-live-smoke.json` records checks against the actual Cloudflare endpoint:
+a disposable earlier-schema transport fixture (not the playable world above), including
 invite-only snapshots, all three roles, viewer edit denial, commit delivery to other players,
 persisted edits, cleanup of the test edit, and capability-based resume into the same slot.
+
+The production Vercel frontend was verified in the Browser with the playable world: **1 player**,
+**Saved online**. All six multiplayer E2E tests passed across Chromium, WebKit and Firefox,
+including co-building and permissions; all 2,009 unit tests passed. Type checks were clean.
+A separate 20-bot, 30-second live transport run had zero disconnects (see `docs/multiplayer-live-load.json`).
+This short run does not substitute for the planned four-hour soak.
 
 The request reader now enforces byte limits while streaming, including requests without
 Content-Length and multi-byte UTF-8. Malformed publish bodies and malformed field patches are

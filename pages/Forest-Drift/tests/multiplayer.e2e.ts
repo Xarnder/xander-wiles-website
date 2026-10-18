@@ -64,8 +64,17 @@ test.afterAll(() => {
 	if (stateDir) rmSync(stateDir, { recursive: true, force: true });
 });
 
+test.afterEach(async ({ browser }) => {
+	// These contexts are created manually, so Playwright's page fixture does not dispose them.
+	// Leaving earlier worlds rendering starves the three-client co-building test of GPU time.
+	await Promise.all(browser.contexts().map((context) => context.close()));
+});
+
 async function newPlayer(browser: Browser): Promise<Page> {
 	const context = await browser.newContext({ viewport: { width: 1100, height: 700 } });
+	// Functional multiplayer checks need several worlds on one GPU; graphics benchmarks separately
+	// exercise the higher presets. Use the real low preset rather than changing world generation.
+	await context.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
 	const page = await context.newPage();
 	// `?mpServer=` is remembered in this context, so invite links (which don't carry it) work too.
 	await page.goto(`/?mpServer=${encodeURIComponent(MP_URL)}`);
