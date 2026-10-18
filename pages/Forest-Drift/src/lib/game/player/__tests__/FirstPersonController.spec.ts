@@ -372,3 +372,45 @@ describe('FirstPersonController — jumping into a ceiling', () => {
 		expect(controller.getPitch()).toBe(0);
 	});
 });
+
+describe('example movement', () => {
+	let input: FakeTarget;
+	beforeEach(() => {
+		input = new FakeTarget();
+		vi.stubGlobal('window', input);
+		vi.stubGlobal('document', Object.assign(new FakeTarget(), { pointerLockElement: null }));
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('walks both lobes, jumps and ignores manual movement; stopping restores control', () => {
+		const { controller } = setup();
+		controller.spawn(-30, -30);
+		controller.setManualInputBlocked(true);
+		controller.setExampleMovement(true);
+		input.dispatch('keydown', { code: 'KeyS' });
+		controller.setTouchMovement(-1, -1);
+		let minX = -30,
+			maxX = -30,
+			maxY = 0;
+		for (let frame = 0; frame < 1260; frame++) {
+			controller.update(1 / 60);
+			minX = Math.min(minX, controller.worldPosition.x);
+			maxX = Math.max(maxX, controller.worldPosition.x);
+			maxY = Math.max(maxY, controller.worldPosition.y);
+		}
+		expect(minX).toBeLessThan(-35.5);
+		expect(maxX).toBeGreaterThan(-24.5);
+		expect(maxY).toBeGreaterThan(EYE_HEIGHT + 0.3);
+		expect(controller.worldPosition.x).toBeCloseTo(-30, 0);
+		controller.setExampleMovement(false);
+		const stopped = controller.worldPosition.clone();
+		for (let i = 0; i < 60; i++) controller.update(1 / 60);
+		expect(controller.worldPosition.x).toBe(stopped.x);
+		expect(controller.worldPosition.z).toBe(stopped.z);
+		controller.setManualInputBlocked(false);
+		input.dispatch('keydown', { code: 'KeyW' });
+		controller.update(0.1);
+		expect(controller.worldPosition.distanceTo(stopped)).toBeGreaterThan(0.1);
+		controller.dispose();
+	});
+});

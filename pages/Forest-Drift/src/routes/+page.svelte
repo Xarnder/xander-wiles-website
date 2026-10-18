@@ -39,6 +39,7 @@
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
+	import SessionPanels from '$lib/components/SessionPanels.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
 	import FurnitureCatalogueModal from '$lib/components/FurnitureCatalogueModal.svelte';
 	import MiniBuildChoiceDialog from '$lib/components/MiniBuildChoiceDialog.svelte';
@@ -175,6 +176,22 @@
 	let saveStatus = $state<SaveStatus>('saved');
 	let saveError = $state<string | null>(null);
 	let paused = $state(false);
+	let debugControlsOpen = $state(false);
+	let multiplayerMenuOpen = $state(false);
+	let exampleMovement = $state(false);
+	function closeDebugControls() {
+		exampleMovement = false;
+		debugControlsOpen = false;
+		session?.scene.setDebugControls(false, false);
+	}
+	$effect(() => {
+		session?.scene.setDebugControls(
+			debugControlsOpen,
+			exampleMovement,
+			debugControlsOpen || clockBlocked()
+		);
+	});
+
 	let saveToast = $state<string | null>(null);
 	let lookedAtDoorId = $state<string | null>(null);
 	/** Mini Build editor launch (null = closed) and the placed-object Edit choice (`F` in Place Object mode). */
@@ -238,6 +255,7 @@
 	function clockBlocked(): boolean {
 		return (
 			paused ||
+			multiplayerMenuOpen ||
 			settingsOpen ||
 			creatureLabOpen ||
 			midiOpen ||
@@ -423,6 +441,7 @@
 	}
 
 	function openPause() {
+		closeDebugControls();
 		if (paused) return;
 		lastPauseToggleTime = performance.now();
 		session?.scene.setTouchMovement(0, 0);
@@ -467,6 +486,14 @@
 			return;
 		}
 		if (screen !== 'game' || typing) return;
+		if (debugControlsOpen || multiplayerMenuOpen) {
+			if (event.code === 'Escape') {
+				closeDebugControls();
+				multiplayerMenuOpen = false;
+				paused = true;
+			}
+			return;
+		}
 		if (placementCustomizeOpen || placementHeightOpen) return;
 		if (miniBuildEditor || miniBuildEditChoice) return;
 		if (settingsOpen) {
@@ -681,7 +708,7 @@
 				if (wasLocked && !locked) {
 					if (showHelp) {
 						showHelp = false;
-					} else if (!paused && !clockBlocked()) {
+					} else if (!paused && !clockBlocked() && !debugControlsOpen) {
 						// Escape while pointer-locked is consumed natively by the browser to exit lock.
 						// Catching that transition here brings up the pause menu on the very first Escape press.
 						if (performance.now() - lastPauseToggleTime > 150) {
@@ -1014,6 +1041,8 @@
 			// Reset every piece of in-game UI state, so returning to a world later never inherits the
 			// previous session's HUD.
 			paused = false;
+			closeDebugControls();
+			multiplayerMenuOpen = false;
 			showHelp = false;
 			settingsOpen = false;
 			midiOpen = false;
@@ -1227,6 +1256,7 @@
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
 	<div
 		class="game-shell"
+		class:debug-sidebar={debugControlsOpen}
 		class:touch-mode={showTouchControls}
 		class:fps-on={!!stats?.showFpsCounter}
 	>
@@ -1236,1095 +1266,1109 @@
 			role="presentation"
 			bind:this={container}
 			onclick={() => {
-				if (showTouchControls && !pointerLocked) {
+				if (showTouchControls && !pointerLocked && !debugControlsOpen && !clockBlocked()) {
 					startTouchGameplay();
 				}
 			}}
 		></div>
 
-		<div
-			class="crosshair"
-			class:valid={buildHud?.crosshair === 'valid'}
-			class:invalid={buildHud?.crosshair === 'invalid'}
-		></div>
-
-		{#if buildHud?.level}
+		<div class="game-hud" inert={debugControlsOpen}>
 			<div
-				class="floor-selector"
-				data-testid="floor-selector"
-				role="region"
-				aria-label="Floor level selector"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<button
-					type="button"
-					class="floor-arrow"
-					data-testid="floor-up"
-					disabled={!buildHud.level.canMoveUp}
-					onclick={() => session?.scene.moveLevelUp()}
+				class="crosshair"
+				class:valid={buildHud?.crosshair === 'valid'}
+				class:invalid={buildHud?.crosshair === 'invalid'}
+			></div>
+
+			{#if buildHud?.level}
+				<div
+					class="floor-selector"
+					data-testid="floor-selector"
+					role="region"
+					aria-label="Floor level selector"
 					onpointerdown={(e) => e.stopPropagation()}
-					aria-label="Move up one building level"
 				>
-					<img class="floor-arrow-icon" src={upArrowIcon} alt="▲" />
-				</button>
-				<div class="floor-label">
-					<div class="floor-name" data-testid="floor-name">{buildHud.level.displayName}</div>
-					<div class="floor-elevation">{buildHud.level.baseY.toFixed(2)}m</div>
-				</div>
-				<button
-					type="button"
-					class="floor-arrow"
-					data-testid="floor-down"
-					disabled={!buildHud.level.canMoveDown}
-					onclick={() => session?.scene.moveLevelDown()}
-					onpointerdown={(e) => e.stopPropagation()}
-					aria-label="Move down one building level"
-				>
-					<img class="floor-arrow-icon" src={downArrowIcon} alt="▼" />
-				</button>
-			</div>
-		{/if}
-
-		{#if buildHud?.notice}
-			<div class="crosshair-notice" data-testid="crosshair-notice">{buildHud.notice}</div>
-		{/if}
-
-		{#if graphicsNotice}
-			<div
-				class="graphics-notice"
-				data-testid="graphics-notice"
-				role="status"
-				aria-live="polite"
-				out:fade={{ duration: 400 }}
-			>
-				<div class="graphics-notice-title">Render mode</div>
-				<div class="graphics-notice-level" data-testid="graphics-notice-level">
-					{graphicsQualityLabel(graphicsNotice).toUpperCase()}
-				</div>
-				<div class="graphics-notice-scale">
-					{#each GRAPHICS_LEVELS as level (level)}
-						<span class:active={level === graphicsNotice}>{graphicsQualityLabel(level)}</span>
-					{/each}
-				</div>
-				<div class="graphics-notice-hint">Press L to change</div>
-			</div>
-		{/if}
-
-		{#if buildHud?.snapBadge}
-			<div class={['snap-badge', 'snap-badge-division']} data-testid="snap-badge">
-				{buildHud.snapBadge}
-			</div>
-		{:else if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
-			<div
-				class={[
-					'snap-badge',
-					{
-						'snap-badge-inline': buildHud.snapMode === 'axis-inline',
-						'snap-badge-corners': buildHud.snapMode === 'wall-corners'
-					}
-				]}
-				data-testid="snap-badge"
-			>
-				{SNAP_MODE_TEXT[buildHud.snapMode]}
-			</div>
-		{/if}
-
-		{#if showTouchControls && pointerLocked && !clockBlocked() && !showHelp}
-			<TouchControls
-				scene={session?.scene}
-				{buildHud}
-				{hotbar}
-				{lookedAtDoorId}
-				{customizeToolId}
-				{heightToolId}
-				onOpenPause={openPause}
-				onOpenHelp={() => (showHelp = true)}
-			/>
-		{/if}
-
-		{#if !pointerLocked && !clockBlocked() && !showHelp}
-			<div class="instructions" class:fading={pointerLocked}>
-				<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
-				{#if showTouchControls}
-					<p class="headline">Tap to explore</p>
-					<p>Virtual joystick &amp; buttons to move, run, jump, look, and build</p>
 					<button
 						type="button"
-						class="touch-start-btn"
-						onclick={startTouchGameplay}
-						data-testid="touch-start-btn"
+						class="floor-arrow"
+						data-testid="floor-up"
+						disabled={!buildHud.level.canMoveUp}
+						onclick={() => session?.scene.moveLevelUp()}
+						onpointerdown={(e) => e.stopPropagation()}
+						aria-label="Move up one building level"
 					>
-						Tap to Play
+						<img class="floor-arrow-icon" src={upArrowIcon} alt="▲" />
 					</button>
-				{:else}
-					<p class="headline">Click to explore</p>
-					<p>WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu</p>
-					<p>
-						G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
-						(Settings, Help, Creature Lab) &middot; H for help
-					</p>
-				{/if}
-			</div>
-		{/if}
+					<div class="floor-label">
+						<div class="floor-name" data-testid="floor-name">{buildHud.level.displayName}</div>
+						<div class="floor-elevation">{buildHud.level.baseY.toFixed(2)}m</div>
+					</div>
+					<button
+						type="button"
+						class="floor-arrow"
+						data-testid="floor-down"
+						disabled={!buildHud.level.canMoveDown}
+						onclick={() => session?.scene.moveLevelDown()}
+						onpointerdown={(e) => e.stopPropagation()}
+						aria-label="Move down one building level"
+					>
+						<img class="floor-arrow-icon" src={downArrowIcon} alt="▼" />
+					</button>
+				</div>
+			{/if}
 
-		<div class="utility-buttons">
-			{#if isTouchDevice}
+			{#if buildHud?.notice}
+				<div class="crosshair-notice" data-testid="crosshair-notice">{buildHud.notice}</div>
+			{/if}
+
+			{#if graphicsNotice}
+				<div
+					class="graphics-notice"
+					data-testid="graphics-notice"
+					role="status"
+					aria-live="polite"
+					out:fade={{ duration: 400 }}
+				>
+					<div class="graphics-notice-title">Render mode</div>
+					<div class="graphics-notice-level" data-testid="graphics-notice-level">
+						{graphicsQualityLabel(graphicsNotice).toUpperCase()}
+					</div>
+					<div class="graphics-notice-scale">
+						{#each GRAPHICS_LEVELS as level (level)}
+							<span class:active={level === graphicsNotice}>{graphicsQualityLabel(level)}</span>
+						{/each}
+					</div>
+					<div class="graphics-notice-hint">Press L to change</div>
+				</div>
+			{/if}
+
+			{#if buildHud?.snapBadge}
+				<div class={['snap-badge', 'snap-badge-division']} data-testid="snap-badge">
+					{buildHud.snapBadge}
+				</div>
+			{:else if buildHud?.snapMode === 'axis' || buildHud?.snapMode === 'axis-inline' || buildHud?.snapMode === 'wall-corners'}
+				<div
+					class={[
+						'snap-badge',
+						{
+							'snap-badge-inline': buildHud.snapMode === 'axis-inline',
+							'snap-badge-corners': buildHud.snapMode === 'wall-corners'
+						}
+					]}
+					data-testid="snap-badge"
+				>
+					{SNAP_MODE_TEXT[buildHud.snapMode]}
+				</div>
+			{/if}
+
+			{#if showTouchControls && pointerLocked && !clockBlocked() && !showHelp}
+				<TouchControls
+					scene={session?.scene}
+					{buildHud}
+					{hotbar}
+					{lookedAtDoorId}
+					{customizeToolId}
+					{heightToolId}
+					onOpenPause={openPause}
+					onOpenHelp={() => (showHelp = true)}
+				/>
+			{/if}
+
+			{#if !pointerLocked && !clockBlocked() && !showHelp && !debugControlsOpen}
+				<div class="instructions" class:fading={pointerLocked}>
+					<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
+					{#if showTouchControls}
+						<p class="headline">Tap to explore</p>
+						<p>Virtual joystick &amp; buttons to move, run, jump, look, and build</p>
+						<button
+							type="button"
+							class="touch-start-btn"
+							onclick={startTouchGameplay}
+							data-testid="touch-start-btn"
+						>
+							Tap to Play
+						</button>
+					{:else}
+						<p class="headline">Click to explore</p>
+						<p>WASD to move &middot; Shift to run &middot; Mouse to look &middot; Esc for menu</p>
+						<p>
+							G to build &middot; 1&ndash;6 and 8 for tools &middot; Pause or Esc for the menu
+							(Settings, Help, Creature Lab) &middot; H for help
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			<div class="utility-buttons">
+				{#if isTouchDevice}
+					<button
+						class="help-toggle"
+						onclick={() => {
+							touchControlsEnabled = !showTouchControls;
+						}}
+						aria-label="Toggle touch screen controls"
+					>
+						{showTouchControls ? 'Touch: On' : 'Touch: Off'}
+					</button>
+				{/if}
 				<button
 					class="help-toggle"
-					onclick={() => {
-						touchControlsEnabled = !showTouchControls;
-					}}
-					aria-label="Toggle touch screen controls"
+					data-testid="pause-toggle"
+					onclick={openPause}
+					aria-label="Pause"
 				>
-					{showTouchControls ? 'Touch: On' : 'Touch: Off'}
+					Pause
 				</button>
-			{/if}
-			<button class="help-toggle" data-testid="pause-toggle" onclick={openPause} aria-label="Pause">
-				Pause
-			</button>
-		</div>
-
-		{#if showHelp}
-			<div class={['help-overlay', { 'over-menus': paused }]} data-testid="help-overlay">
-				<div class="help-panel">
-					<h2>Controls</h2>
-
-					<h3>Touch / iPad Controls</h3>
-					<dl>
-						<dt>Virtual Joystick</dt>
-						<dd>Drag thumb knob on the bottom-left in any direction to walk.</dd>
-						<dt>Run Button</dt>
-						<dd>Toggle sprint on or off next to the joystick.</dd>
-						<dt>Jump Button</dt>
-						<dd>Jump over obstacles and terrain.</dd>
-						<dt>Swipe to Look</dt>
-						<dd>Drag anywhere across the right side of the screen to turn and look.</dd>
-						<dt>Place Button</dt>
-						<dd>Place walls, roofs, openings, detailing, or objects.</dd>
-						<dt>Cancel Button</dt>
-						<dd>Cancel or deselect the current building placement.</dd>
-						<dt>Build Mode Button</dt>
-						<dd>Toggle build mode and show the hotbar along the bottom.</dd>
-						<dt>Music Button</dt>
-						<dd>
-							Toggle Music Garden mode. The hotbar switches to the instruments: Flower, Mushroom,
-							Fern, Reed, and Crystal.
-						</dd>
-						<dt>Hotbar Slots</dt>
-						<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
-						<dt>Type Button</dt>
-						<dd>Cycle tool variants within a slot, or switch roof shapes.</dd>
-						<dt>Rotate Button</dt>
-						<dd>Rotate roofs, timber beams, stairs, furniture, and floor detail patterns.</dd>
-						<dt>Snap Button</dt>
-						<dd>Cycle drawing snap modes (Axis &rarr; Axis + Inline &rarr; Wall Corners).</dd>
-						<dt>Edit Button</dt>
-						<dd>Customise dimensions, colours, or slab offset height before placing.</dd>
-						<dt>Undo Button</dt>
-						<dd>Undo the last placement.</dd>
-						<dt>Finish &amp; Undo Pt</dt>
-						<dd>Contextual buttons to complete or step back continuous walls and paths.</dd>
-						<dt>Rise + / Rise −</dt>
-						<dd>Adjust pitched roof rise during roof shaping.</dd>
-						<dt>Open / Close Door</dt>
-						<dd>
-							Tap the Open Door button that appears when hovering over a door to open or close it.
-						</dd>
-						<dt>Floor Selector</dt>
-						<dd>Tap the buttons on the right edge of the screen to change storeys.</dd>
-					</dl>
-
-					<h3>Movement</h3>
-					<dl>
-						<dt>WASD</dt>
-						<dd>Move</dd>
-						<dt>Shift</dt>
-						<dd>Run</dd>
-						<dt>Space</dt>
-						<dd>Jump</dd>
-						<dt>\</dt>
-						<dd>
-							Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
-							load, saves a PNG, then returns to your graphics setting
-						</dd>
-						<dt>C (hold)</dt>
-						<dd>Zoom in (field of view: Settings &rarr; Graphics &rarr; Display)</dd>
-						<dt>F</dt>
-						<dd>
-							Toggle flying. W/S fly where you look, A/D strafe, Space up, Shift down; the scroll
-							wheel sets the fly speed (default twice running speed, up to 600 m/s). While Place
-							Object is selected, F edits the object you are looking at instead.
-						</dd>
-						<dt>Mouse</dt>
-						<dd>Look around</dd>
-						<dt>Esc</dt>
-						<dd>
-							Release the mouse, then press again for the pause menu. Also closes Help, Settings,
-							and Creature Lab. Cancels the current placement once the mouse is free.
-						</dd>
-					</dl>
-
-					<h3>Building — general</h3>
-					<dl>
-						<dt>G</dt>
-						<dd>
-							Toggle Build Mode and the hotbar. Independent from M, which toggles Compose Mode.
-							Tools and placement sleep while Build Mode is off; the selected slot is remembered.
-						</dd>
-						<dt>1&ndash;6, 8</dt>
-						<dd>
-							Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
-							Detailing, 8 Place Object. Slot 7 is reserved.
-						</dd>
-						<dt>8 then E</dt>
-						<dd>
-							Open the Object Library — My Builds, Default Designs and Lights, or Create New to
-							build your own object from up to 16 cuboids in the Mini Build Editor.
-						</dd>
-						<dt>8: R / C / F</dt>
-						<dd>
-							Rotate the object 90° · Copy the object you are looking at (same design) · Edit the
-							object you are looking at (shared design or Make Unique).
-						</dd>
-						<dt>↑ / ↓</dt>
-						<dd>
-							Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing /
-							Skirting, Door / Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks /
-							Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last choice is remembered.
-							While a roof is being adjusted, ↑/↓ still change rise instead.
-						</dd>
-						<dt>Left click</dt>
-						<dd>Place / confirm</dd>
-						<dt>Right click</dt>
-						<dd>Cancel / deselect</dd>
-						<dt>−</dt>
-						<dd>
-							Undo the last placement (wall, continuous wall, window, door, beam, ceiling, floor,
-							roof, or floor detailing). Keeps the last five actions.
-						</dd>
-						<dt>] / [</dt>
-						<dd>
-							Change current building level (] up, [ down) — Page Up / Page Down still work, or
-							click the ▲ / ▼ floor selector on the left edge of the screen whenever a level-aware
-							tool is active
-						</dd>
-						<dt>B</dt>
-						<dd>
-							Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
-							Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
-							snaps to the room's wall corners below.
-						</dd>
-						<dt>E</dt>
-						<dd>
-							Customise the selected wall, window, door, beam, stairs, or floor detailing (carpets,
-							paths, planks, tiles) before placing. On Ceiling, Floor, or Roof, set how high the
-							next piece sits above this storey's floor. Esc or E again closes the panel. Settings
-							apply to the next piece, not ones already built.
-						</dd>
-					</dl>
-
-					<h3>Continuous Wall / Ceiling / Floor</h3>
-					<dl>
-						<dt>E</dt>
-						<dd>
-							On Wall or Continuous Wall — set the next wall's height and width (thickness). On
-							Ceiling or Floor — set how high the next slab sits above this storey's floor. Length
-							still comes from the points you click.
-						</dd>
-						<dt>Backspace</dt>
-						<dd>Undo last point</dd>
-						<dt>Enter</dt>
-						<dd>Finish an open wall path (Continuous Wall only)</dd>
-						<dt>Click first point again</dt>
-						<dd>Close the loop / shape</dd>
-					</dl>
-
-					<h3>Fence / Railing (2, then ↑/↓)</h3>
-					<dl>
-						<dt>Left click</dt>
-						<dd>
-							Add points like a Continuous Wall — on a floor (railings, balconies, stairs) or on
-							open ground (fences that follow the land). Click the first point again to close a
-							loop.
-						</dd>
-						<dt>Enter / Backspace</dt>
-						<dd>Finish the path · Undo the last point</dd>
-						<dt>E</dt>
-						<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
-						<dt>R / Q</dt>
-						<dd>Apply the current settings to the fence you're aiming at · Copy its style</dd>
-					</dl>
-
-					<h3>Skirting (2, then ↑/↓)</h3>
-					<dl>
-						<dt>Left click</dt>
-						<dd>
-							Click along a wall's centre line like drawing the wall; boards go on the face toward
-							you. Click the first point again to close a room.
-						</dd>
-						<dt>O</dt>
-						<dd>Offset: Auto (half the wall found on that line) / Manual</dd>
-						<dt>E</dt>
-						<dd>Offset, height, depth and colour</dd>
-					</dl>
-
-					<h3>Roof</h3>
-					<dl>
-						<dt>Left click</dt>
-						<dd>Trace the roof footprint, then click the first point again to close it</dd>
-						<dt>V</dt>
-						<dd>
-							After the footprint is closed, cycle roof type (Flat, Shed, Gable, Hip, Gambrel,
-							Mansard, Butterfly, M-Shaped, Dutch Gable)
-						</dd>
-						<dt>R</dt>
-						<dd>Rotate a sloped roof (ridge / high edge)</dd>
-						<dt>↑ / ↓</dt>
-						<dd>
-							Adjust rise (hold Shift for a finer step). These keys do not change hotbar variant
-							while you are adjusting a roof
-						</dd>
-						<dt>B</dt>
-						<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
-						<dt>E</dt>
-						<dd>
-							Set how high the roof eaves sit above this storey's floor. Reset follows the top of
-							the walls
-						</dd>
-						<dt>Click / Right click</dt>
-						<dd>Place the roof, or cancel</dd>
-					</dl>
-
-					<h3>Windows / Doors / Beams</h3>
-					<dl>
-						<dt>K</dt>
-						<dd>Open or close the door under the crosshair</dd>
-						<dt>Left click</dt>
-						<dd>Place a window/door hole or a timber beam on the wall</dd>
-						<dt>E</dt>
-						<dd>
-							Customise the next window, door, or beam — width, height (windows, doors, and
-							horizontal beams), sill / from-floor height (windows and doors), and colour. Applies
-							to the next piece you place, not ones already built.
-						</dd>
-						<dt>C</dt>
-						<dd>
-							Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) — snaps
-							the window, door, or beam centre to even splits of this wall's length, up to 16. A
-							horizontal beam's height follows the look point; a vertical beam spans the wall.
-						</dd>
-						<dt>R</dt>
-						<dd>
-							Flip the next beam between vertical (default, floor to top of the wall) and horizontal
-						</dd>
-						<dt>Floor</dt>
-						<dd>Only walls on the selected floor can be used — use ] / [ to match storey</dd>
-					</dl>
-
-					<h3>Stairs</h3>
-					<dl>
-						<dt>Left click</dt>
-						<dd>
-							Two-click rectangle on the current floor or foundation, then confirm the footprint
-						</dd>
-						<dt>Left / Right Arrow</dt>
-						<dd>Change stair direction</dd>
-						<dt>Enter / Left click</dt>
-						<dd>Confirm stairs</dd>
-						<dt>] / [</dt>
-						<dd>
-							Build on the selected storey. Stairs connect that floor to the one their rise reaches
-						</dd>
-						<dt>E</dt>
-						<dd>
-							Customise the next stair's colour, framing, railings, hole, and hole framing before
-							placing. Esc or E again closes. Applies to the next stair, not ones already built.
-						</dd>
-					</dl>
-
-					<h3>Floor Detailing</h3>
-					<dl>
-						<dt>6 / ↑ / ↓</dt>
-						<dd>
-							Slot 6 — ↑/↓ cycles Carpet / Path / Planks / Tiles. The last choice is remembered.
-						</dd>
-						<dt>Left click</dt>
-						<dd>
-							Two-click rectangle for carpet, planks, and tiles. Paths: two-click start &rarr; end
-							in Axis or Free mode; Bezier adds a third click that pulls the bend. Sits on the
-							current floor or foundation plane, just above it. Visual only — no collision.
-						</dd>
-						<dt>E</dt>
-						<dd>
-							Customise the next piece — 3D/2D (3D boards and tiles by default; 2D is a thin plane),
-							Colour 1 / Colour 2, plank width and direction, tile size and pattern (Solid / Checker
-							/ Diamond / Running bond), path width and timber framing. Reset on each field restores
-							that variant's default. Applies to the next piece you place.
-						</dd>
-						<dt>C</dt>
-						<dd>
-							On Path — cycle Axis snap (horizontal/vertical), Free (any heading), and Bezier
-							(start, end, then pull the curve)
-						</dd>
-						<dt>R</dt>
-						<dd>Cycle plank direction (X/Z), tile pattern, or path framing on/off</dd>
-						<dt>X</dt>
-						<dd>Remove Mode works on placed detailing</dd>
-						<dt>−</dt>
-						<dd>Undo the last detailing placement</dd>
-					</dl>
-
-					<h3>Remove Mode</h3>
-					<dl>
-						<dt>X</dt>
-						<dd>
-							Toggle Remove Mode — a global overlay independent of the hotbar; the tool you had
-							selected is remembered and restored when you exit
-						</dd>
-						<dt>Left click</dt>
-						<dd>
-							Remove the highlighted wall, wall segment, window, door, beam, ceiling, floor, roof,
-							staircase, floor detailing, or music plant. Clicking the foundation itself starts a
-							whole-foundation delete
-						</dd>
-						<dt>Delete / Backspace</dt>
-						<dd>
-							Delete the foundation under the crosshair and everything built on it. You must type
-							Confirm Delete before anything is removed. The cleared ground can be built on again
-						</dd>
-						<dt>X / Right click / Esc</dt>
-						<dd>Exit Remove Mode</dd>
-					</dl>
-
-					<h3>Paint Mode</h3>
-					<dl>
-						<dt>P</dt>
-						<dd>
-							Toggle Paint Mode — another global overlay, mutually exclusive with Remove Mode
-							(pressing the other key switches straight over); the tool you had selected is
-							remembered and restored when you exit
-						</dd>
-						<dt>C</dt>
-						<dd>Open the colour palette — releases the mouse so you can click a swatch</dd>
-						<dt>Left click</dt>
-						<dd>Paint the highlighted wall, wall segment, ceiling, floor, roof, or foundation</dd>
-						<dt>P / Right click / Esc</dt>
-						<dd>Exit Paint Mode</dd>
-					</dl>
-
-					<h3>Move Mode</h3>
-					<dl>
-						<dt>M</dt>
-						<dd>
-							Toggle Move Mode — pick up existing objects, drag them around, rotate, and edit them
-						</dd>
-						<dt>Aim + Left click</dt>
-						<dd>
-							Pick up the highlighted object (or drag it). Click again to place it at the new
-							location
-						</dd>
-						<dt>R</dt>
-						<dd>Rotate the held object in 90° increments</dd>
-						<dt>E</dt>
-						<dd>Edit the object's dimensions, colors, and parameters in the catalogue modal</dd>
-						<dt>Right click / Esc</dt>
-						<dd>
-							Cancel the move and restore the object to its original position (or exit Move Mode)
-						</dd>
-					</dl>
-
-					<h3>Music Garden</h3>
-					<p>
-						Every world starts with a glowing Music Tree nearby (a tree with a soft teal-green
-						glow). Walk up to it and press <strong>N</strong> &mdash; faint rings appear on the ground
-						around the tree. Aim at the ground inside the rings and a ghost flower shows where it will
-						land; left click to plant it. Your aim angle is completely free, but the distance from the
-						tree always snaps to the nearest ring &mdash; each ring is a moment in the music's loop, so
-						flowers close to the tree play early and flowers further out play later.
-					</p>
-					<dl>
-						<dt>N</dt>
-						<dd>Enter / exit Compose Mode. The nearest Music Tree becomes active.</dd>
-						<dt>Aim + Left click</dt>
-						<dd>
-							Plant the ghost preview at the snapped ring under your crosshair. Right click / Esc
-							cancels the current preview
-						</dd>
-						<dt>Q / E</dt>
-						<dd>Cycle the instrument, the same five choices as hotbar slots 1&ndash;5</dd>
-						<dt>&uarr; / &darr;</dt>
-						<dd>
-							Grow the plant taller or shorter before placing &mdash; this sets its pitch (short =
-							low note, tall = high note)
-						</dd>
-						<dt>&larr; / &rarr;</dt>
-						<dd>
-							Make the plant paler or more vivid before placing &mdash; this sets its volume (pale =
-							quiet, vivid = loud)
-						</dd>
-						<dt>, / .</dt>
-						<dd>Shorten or lengthen the note (duration in steps)</dd>
-						<dt>1&ndash;5</dt>
-						<dd>
-							Choose the instrument on the music hotbar &mdash; 1 Flower, 2 Mushroom, 3 Fern, 4
-							Reed, 5 Crystal. Click a slot to do the same
-						</dd>
-						<dt>J</dt>
-						<dd>Play / pause the tree's music loop</dd>
-						<dt>Import MIDI</dt>
-						<dd>
-							Button on the music HUD. Preview a file, then click open ground to grow the imported
-							garden (right click cancels)
-						</dd>
-						<dt>X</dt>
-						<dd>Switch to Remove Mode to delete a planted flower &mdash; aim at it and click</dd>
-					</dl>
-
-					<h3>Other</h3>
-					<dl>
-						<dt>H</dt>
-						<dd>
-							Toggle this help · G toggles Build Mode · N opens Music Garden · M toggles Move Mode
-						</dd>
-						<dt>Day / night</dt>
-						<dd>
-							The sun moves through a full day every 20 minutes of play. Pause, Settings, and other
-							menus freeze the clock. The current hour is at the top-right. Sky &rarr; Day &amp;
-							night sets the hour or turns the cycle off.
-						</dd>
-						<dt>Settings</dt>
-						<dd>Pause &rarr; Settings — world, terrain, building, music, sky, and graphics</dd>
-						<dt>Creature Lab</dt>
-						<dd>Pause &rarr; Creature Lab — design a creature, then place it in the world</dd>
-						<dt>F3</dt>
-						<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
-						<dt>FPS</dt>
-						<dd>
-							A counter in the top-left shows frames per second, dropped frames in the last second,
-							and the render mode (Low, Medium, High, or Ultra). Graphics &rarr; Show FPS counter
-							turns it off.
-						</dd>
-						<dt>L</dt>
-						<dd>
-							Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies
-							instantly and is remembered next time you visit
-						</dd>
-						<dt>Esc</dt>
-						<dd>
-							Release the mouse, then press again for the pause menu — Save, World (rename / export
-							/ duplicate), Settings, Help, Creature Lab, and Quit to Worlds
-						</dd>
-						<dt>Cmd / Ctrl + S</dt>
-						<dd>
-							Save the world now. Worlds also autosave a couple of seconds after you stop building
-						</dd>
-					</dl>
-
-					<button class="help-close" onclick={() => (showHelp = false)}>Close</button>
-				</div>
 			</div>
-		{/if}
 
-		{#if creatureLabOpen && session}<CreatureLabModal
-				onClose={closeCreatureLab}
-				onPlace={(definition) => {
-					session?.scene.placeCreature(definition);
-					closeCreatureLab();
-					paused = false;
-				}}
-			/>{/if}
-		{#if buildHud}
-			<div class="build-hud" data-testid="build-hud">
-				{#if buildHud.toolId === 'music'}<button
-						class="midi-import-button"
-						data-testid="import-midi"
-						onclick={openMidi}>Import MIDI</button
-					>{/if}
-				{#if buildHud.toolId === 'paint'}
-					<div class="paint-color-row" data-testid="paint-color-row">
-						Current Colour:
-						{#if buildHud.paintColor}
-							<span
-								class="paint-color-swatch"
-								style="background-color: {buildHud.paintColor}"
-								data-testid="paint-color-swatch"
-							></span>
-						{:else}
-							<span class="paint-color-default">Default</span>
-						{/if}
+			{#if showHelp}
+				<div class={['help-overlay', { 'over-menus': paused }]} data-testid="help-overlay">
+					<div class="help-panel">
+						<h2>Controls</h2>
+
+						<h3>Touch / iPad Controls</h3>
+						<dl>
+							<dt>Virtual Joystick</dt>
+							<dd>Drag thumb knob on the bottom-left in any direction to walk.</dd>
+							<dt>Run Button</dt>
+							<dd>Toggle sprint on or off next to the joystick.</dd>
+							<dt>Jump Button</dt>
+							<dd>Jump over obstacles and terrain.</dd>
+							<dt>Swipe to Look</dt>
+							<dd>Drag anywhere across the right side of the screen to turn and look.</dd>
+							<dt>Place Button</dt>
+							<dd>Place walls, roofs, openings, detailing, or objects.</dd>
+							<dt>Cancel Button</dt>
+							<dd>Cancel or deselect the current building placement.</dd>
+							<dt>Build Mode Button</dt>
+							<dd>Toggle build mode and show the hotbar along the bottom.</dd>
+							<dt>Music Button</dt>
+							<dd>
+								Toggle Music Garden mode. The hotbar switches to the instruments: Flower, Mushroom,
+								Fern, Reed, and Crystal.
+							</dd>
+							<dt>Hotbar Slots</dt>
+							<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
+							<dt>Type Button</dt>
+							<dd>Cycle tool variants within a slot, or switch roof shapes.</dd>
+							<dt>Rotate Button</dt>
+							<dd>Rotate roofs, timber beams, stairs, furniture, and floor detail patterns.</dd>
+							<dt>Snap Button</dt>
+							<dd>Cycle drawing snap modes (Axis &rarr; Axis + Inline &rarr; Wall Corners).</dd>
+							<dt>Edit Button</dt>
+							<dd>Customise dimensions, colours, or slab offset height before placing.</dd>
+							<dt>Undo Button</dt>
+							<dd>Undo the last placement.</dd>
+							<dt>Finish &amp; Undo Pt</dt>
+							<dd>Contextual buttons to complete or step back continuous walls and paths.</dd>
+							<dt>Rise + / Rise −</dt>
+							<dd>Adjust pitched roof rise during roof shaping.</dd>
+							<dt>Open / Close Door</dt>
+							<dd>
+								Tap the Open Door button that appears when hovering over a door to open or close it.
+							</dd>
+							<dt>Floor Selector</dt>
+							<dd>Tap the buttons on the right edge of the screen to change storeys.</dd>
+						</dl>
+
+						<h3>Movement</h3>
+						<dl>
+							<dt>WASD</dt>
+							<dd>Move</dd>
+							<dt>Shift</dt>
+							<dd>Run</dd>
+							<dt>Space</dt>
+							<dd>Jump</dd>
+							<dt>\</dt>
+							<dd>
+								Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
+								load, saves a PNG, then returns to your graphics setting
+							</dd>
+							<dt>C (hold)</dt>
+							<dd>Zoom in (field of view: Settings &rarr; Graphics &rarr; Display)</dd>
+							<dt>F</dt>
+							<dd>
+								Toggle flying. W/S fly where you look, A/D strafe, Space up, Shift down; the scroll
+								wheel sets the fly speed (default twice running speed, up to 600 m/s). While Place
+								Object is selected, F edits the object you are looking at instead.
+							</dd>
+							<dt>Mouse</dt>
+							<dd>Look around</dd>
+							<dt>Esc</dt>
+							<dd>
+								Release the mouse, then press again for the pause menu. Also closes Help, Settings,
+								and Creature Lab. Cancels the current placement once the mouse is free.
+							</dd>
+						</dl>
+
+						<h3>Building — general</h3>
+						<dl>
+							<dt>G</dt>
+							<dd>
+								Toggle Build Mode and the hotbar. Independent from M, which toggles Compose Mode.
+								Tools and placement sleep while Build Mode is off; the selected slot is remembered.
+							</dd>
+							<dt>1&ndash;6, 8</dt>
+							<dd>
+								Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
+								Detailing, 8 Place Object. Slot 7 is reserved.
+							</dd>
+							<dt>8 then E</dt>
+							<dd>
+								Open the Object Library — My Builds, Default Designs and Lights, or Create New to
+								build your own object from up to 16 cuboids in the Mini Build Editor.
+							</dd>
+							<dt>8: R / C / F</dt>
+							<dd>
+								Rotate the object 90° · Copy the object you are looking at (same design) · Edit the
+								object you are looking at (shared design or Make Unique).
+							</dd>
+							<dt>↑ / ↓</dt>
+							<dd>
+								Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing /
+								Skirting, Door / Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks /
+								Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last choice is
+								remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
+							</dd>
+							<dt>Left click</dt>
+							<dd>Place / confirm</dd>
+							<dt>Right click</dt>
+							<dd>Cancel / deselect</dd>
+							<dt>−</dt>
+							<dd>
+								Undo the last placement (wall, continuous wall, window, door, beam, ceiling, floor,
+								roof, or floor detailing). Keeps the last five actions.
+							</dd>
+							<dt>] / [</dt>
+							<dd>
+								Change current building level (] up, [ down) — Page Up / Page Down still work, or
+								click the ▲ / ▼ floor selector on the left edge of the screen whenever a level-aware
+								tool is active
+							</dd>
+							<dt>B</dt>
+							<dd>
+								Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
+								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
+								snaps to the room's wall corners below.
+							</dd>
+							<dt>E</dt>
+							<dd>
+								Customise the selected wall, window, door, beam, stairs, or floor detailing
+								(carpets, paths, planks, tiles) before placing. On Ceiling, Floor, or Roof, set how
+								high the next piece sits above this storey's floor. Esc or E again closes the panel.
+								Settings apply to the next piece, not ones already built.
+							</dd>
+						</dl>
+
+						<h3>Continuous Wall / Ceiling / Floor</h3>
+						<dl>
+							<dt>E</dt>
+							<dd>
+								On Wall or Continuous Wall — set the next wall's height and width (thickness). On
+								Ceiling or Floor — set how high the next slab sits above this storey's floor. Length
+								still comes from the points you click.
+							</dd>
+							<dt>Backspace</dt>
+							<dd>Undo last point</dd>
+							<dt>Enter</dt>
+							<dd>Finish an open wall path (Continuous Wall only)</dd>
+							<dt>Click first point again</dt>
+							<dd>Close the loop / shape</dd>
+						</dl>
+
+						<h3>Fence / Railing (2, then ↑/↓)</h3>
+						<dl>
+							<dt>Left click</dt>
+							<dd>
+								Add points like a Continuous Wall — on a floor (railings, balconies, stairs) or on
+								open ground (fences that follow the land). Click the first point again to close a
+								loop.
+							</dd>
+							<dt>Enter / Backspace</dt>
+							<dd>Finish the path · Undo the last point</dd>
+							<dt>E</dt>
+							<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
+							<dt>R / Q</dt>
+							<dd>Apply the current settings to the fence you're aiming at · Copy its style</dd>
+						</dl>
+
+						<h3>Skirting (2, then ↑/↓)</h3>
+						<dl>
+							<dt>Left click</dt>
+							<dd>
+								Click along a wall's centre line like drawing the wall; boards go on the face toward
+								you. Click the first point again to close a room.
+							</dd>
+							<dt>O</dt>
+							<dd>Offset: Auto (half the wall found on that line) / Manual</dd>
+							<dt>E</dt>
+							<dd>Offset, height, depth and colour</dd>
+						</dl>
+
+						<h3>Roof</h3>
+						<dl>
+							<dt>Left click</dt>
+							<dd>Trace the roof footprint, then click the first point again to close it</dd>
+							<dt>V</dt>
+							<dd>
+								After the footprint is closed, cycle roof type (Flat, Shed, Gable, Hip, Gambrel,
+								Mansard, Butterfly, M-Shaped, Dutch Gable)
+							</dd>
+							<dt>R</dt>
+							<dd>Rotate a sloped roof (ridge / high edge)</dd>
+							<dt>↑ / ↓</dt>
+							<dd>
+								Adjust rise (hold Shift for a finer step). These keys do not change hotbar variant
+								while you are adjusting a roof
+							</dd>
+							<dt>B</dt>
+							<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
+							<dt>E</dt>
+							<dd>
+								Set how high the roof eaves sit above this storey's floor. Reset follows the top of
+								the walls
+							</dd>
+							<dt>Click / Right click</dt>
+							<dd>Place the roof, or cancel</dd>
+						</dl>
+
+						<h3>Windows / Doors / Beams</h3>
+						<dl>
+							<dt>K</dt>
+							<dd>Open or close the door under the crosshair</dd>
+							<dt>Left click</dt>
+							<dd>Place a window/door hole or a timber beam on the wall</dd>
+							<dt>E</dt>
+							<dd>
+								Customise the next window, door, or beam — width, height (windows, doors, and
+								horizontal beams), sill / from-floor height (windows and doors), and colour. Applies
+								to the next piece you place, not ones already built.
+							</dd>
+							<dt>C</dt>
+							<dd>
+								Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) —
+								snaps the window, door, or beam centre to even splits of this wall's length, up to
+								16. A horizontal beam's height follows the look point; a vertical beam spans the
+								wall.
+							</dd>
+							<dt>R</dt>
+							<dd>
+								Flip the next beam between vertical (default, floor to top of the wall) and
+								horizontal
+							</dd>
+							<dt>Floor</dt>
+							<dd>Only walls on the selected floor can be used — use ] / [ to match storey</dd>
+						</dl>
+
+						<h3>Stairs</h3>
+						<dl>
+							<dt>Left click</dt>
+							<dd>
+								Two-click rectangle on the current floor or foundation, then confirm the footprint
+							</dd>
+							<dt>Left / Right Arrow</dt>
+							<dd>Change stair direction</dd>
+							<dt>Enter / Left click</dt>
+							<dd>Confirm stairs</dd>
+							<dt>] / [</dt>
+							<dd>
+								Build on the selected storey. Stairs connect that floor to the one their rise
+								reaches
+							</dd>
+							<dt>E</dt>
+							<dd>
+								Customise the next stair's colour, framing, railings, hole, and hole framing before
+								placing. Esc or E again closes. Applies to the next stair, not ones already built.
+							</dd>
+						</dl>
+
+						<h3>Floor Detailing</h3>
+						<dl>
+							<dt>6 / ↑ / ↓</dt>
+							<dd>
+								Slot 6 — ↑/↓ cycles Carpet / Path / Planks / Tiles. The last choice is remembered.
+							</dd>
+							<dt>Left click</dt>
+							<dd>
+								Two-click rectangle for carpet, planks, and tiles. Paths: two-click start &rarr; end
+								in Axis or Free mode; Bezier adds a third click that pulls the bend. Sits on the
+								current floor or foundation plane, just above it. Visual only — no collision.
+							</dd>
+							<dt>E</dt>
+							<dd>
+								Customise the next piece — 3D/2D (3D boards and tiles by default; 2D is a thin
+								plane), Colour 1 / Colour 2, plank width and direction, tile size and pattern (Solid
+								/ Checker / Diamond / Running bond), path width and timber framing. Reset on each
+								field restores that variant's default. Applies to the next piece you place.
+							</dd>
+							<dt>C</dt>
+							<dd>
+								On Path — cycle Axis snap (horizontal/vertical), Free (any heading), and Bezier
+								(start, end, then pull the curve)
+							</dd>
+							<dt>R</dt>
+							<dd>Cycle plank direction (X/Z), tile pattern, or path framing on/off</dd>
+							<dt>X</dt>
+							<dd>Remove Mode works on placed detailing</dd>
+							<dt>−</dt>
+							<dd>Undo the last detailing placement</dd>
+						</dl>
+
+						<h3>Remove Mode</h3>
+						<dl>
+							<dt>X</dt>
+							<dd>
+								Toggle Remove Mode — a global overlay independent of the hotbar; the tool you had
+								selected is remembered and restored when you exit
+							</dd>
+							<dt>Left click</dt>
+							<dd>
+								Remove the highlighted wall, wall segment, window, door, beam, ceiling, floor, roof,
+								staircase, floor detailing, or music plant. Clicking the foundation itself starts a
+								whole-foundation delete
+							</dd>
+							<dt>Delete / Backspace</dt>
+							<dd>
+								Delete the foundation under the crosshair and everything built on it. You must type
+								Confirm Delete before anything is removed. The cleared ground can be built on again
+							</dd>
+							<dt>X / Right click / Esc</dt>
+							<dd>Exit Remove Mode</dd>
+						</dl>
+
+						<h3>Paint Mode</h3>
+						<dl>
+							<dt>P</dt>
+							<dd>
+								Toggle Paint Mode — another global overlay, mutually exclusive with Remove Mode
+								(pressing the other key switches straight over); the tool you had selected is
+								remembered and restored when you exit
+							</dd>
+							<dt>C</dt>
+							<dd>Open the colour palette — releases the mouse so you can click a swatch</dd>
+							<dt>Left click</dt>
+							<dd>Paint the highlighted wall, wall segment, ceiling, floor, roof, or foundation</dd>
+							<dt>P / Right click / Esc</dt>
+							<dd>Exit Paint Mode</dd>
+						</dl>
+
+						<h3>Move Mode</h3>
+						<dl>
+							<dt>M</dt>
+							<dd>
+								Toggle Move Mode — pick up existing objects, drag them around, rotate, and edit them
+							</dd>
+							<dt>Aim + Left click</dt>
+							<dd>
+								Pick up the highlighted object (or drag it). Click again to place it at the new
+								location
+							</dd>
+							<dt>R</dt>
+							<dd>Rotate the held object in 90° increments</dd>
+							<dt>E</dt>
+							<dd>Edit the object's dimensions, colors, and parameters in the catalogue modal</dd>
+							<dt>Right click / Esc</dt>
+							<dd>
+								Cancel the move and restore the object to its original position (or exit Move Mode)
+							</dd>
+						</dl>
+
+						<h3>Music Garden</h3>
+						<p>
+							Every world starts with a glowing Music Tree nearby (a tree with a soft teal-green
+							glow). Walk up to it and press <strong>N</strong> &mdash; faint rings appear on the ground
+							around the tree. Aim at the ground inside the rings and a ghost flower shows where it will
+							land; left click to plant it. Your aim angle is completely free, but the distance from the
+							tree always snaps to the nearest ring &mdash; each ring is a moment in the music's loop,
+							so flowers close to the tree play early and flowers further out play later.
+						</p>
+						<dl>
+							<dt>N</dt>
+							<dd>Enter / exit Compose Mode. The nearest Music Tree becomes active.</dd>
+							<dt>Aim + Left click</dt>
+							<dd>
+								Plant the ghost preview at the snapped ring under your crosshair. Right click / Esc
+								cancels the current preview
+							</dd>
+							<dt>Q / E</dt>
+							<dd>Cycle the instrument, the same five choices as hotbar slots 1&ndash;5</dd>
+							<dt>&uarr; / &darr;</dt>
+							<dd>
+								Grow the plant taller or shorter before placing &mdash; this sets its pitch (short =
+								low note, tall = high note)
+							</dd>
+							<dt>&larr; / &rarr;</dt>
+							<dd>
+								Make the plant paler or more vivid before placing &mdash; this sets its volume (pale
+								= quiet, vivid = loud)
+							</dd>
+							<dt>, / .</dt>
+							<dd>Shorten or lengthen the note (duration in steps)</dd>
+							<dt>1&ndash;5</dt>
+							<dd>
+								Choose the instrument on the music hotbar &mdash; 1 Flower, 2 Mushroom, 3 Fern, 4
+								Reed, 5 Crystal. Click a slot to do the same
+							</dd>
+							<dt>J</dt>
+							<dd>Play / pause the tree's music loop</dd>
+							<dt>Import MIDI</dt>
+							<dd>
+								Button on the music HUD. Preview a file, then click open ground to grow the imported
+								garden (right click cancels)
+							</dd>
+							<dt>X</dt>
+							<dd>Switch to Remove Mode to delete a planted flower &mdash; aim at it and click</dd>
+						</dl>
+
+						<h3>Other</h3>
+						<dl>
+							<dt>H</dt>
+							<dd>
+								Toggle this help · G toggles Build Mode · N opens Music Garden · M toggles Move Mode
+							</dd>
+							<dt>Day / night</dt>
+							<dd>
+								The sun moves through a full day every 20 minutes of play. Pause, Settings, and
+								other menus freeze the clock. The current hour is at the top-right. Sky &rarr; Day
+								&amp; night sets the hour or turns the cycle off.
+							</dd>
+							<dt>Settings</dt>
+							<dd>Pause &rarr; Settings — world, terrain, building, music, sky, and graphics</dd>
+							<dt>Creature Lab</dt>
+							<dd>Pause &rarr; Creature Lab — design a creature, then place it in the world</dd>
+							<dt>F3</dt>
+							<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
+							<dt>FPS</dt>
+							<dd>
+								A counter in the top-left shows frames per second, dropped frames in the last
+								second, and the render mode (Low, Medium, High, or Ultra). Graphics &rarr; Show FPS
+								counter turns it off.
+							</dd>
+							<dt>L</dt>
+							<dd>
+								Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies
+								instantly and is remembered next time you visit
+							</dd>
+							<dt>Esc</dt>
+							<dd>
+								Release the mouse, then press again for the pause menu — Save, World (rename /
+								export / duplicate), Settings, Help, Creature Lab, and Quit to Worlds
+							</dd>
+							<dt>Cmd / Ctrl + S</dt>
+							<dd>
+								Save the world now. Worlds also autosave a couple of seconds after you stop building
+							</dd>
+						</dl>
+
+						<button class="help-close" onclick={() => (showHelp = false)}>Close</button>
 					</div>
-				{/if}
-				{#if buildHud.foundationDeleteId}
-					<button
-						type="button"
-						class="build-hud-action"
-						data-testid="delete-foundation-button"
-						onclick={() => {
-							const id = buildHud?.foundationDeleteId;
-							if (id) openFoundationDelete(id);
-						}}
-					>
-						Delete whole foundation
-					</button>
-				{/if}
-				{#each buildHud.hintLines as line, index (index)}
-					{#if line === ''}
-						<div class="build-hud-spacer"></div>
-					{:else}
-						<div>{line}</div>
+				</div>
+			{/if}
+
+			{#if creatureLabOpen && session}<CreatureLabModal
+					onClose={closeCreatureLab}
+					onPlace={(definition) => {
+						session?.scene.placeCreature(definition);
+						closeCreatureLab();
+						paused = false;
+					}}
+				/>{/if}
+			{#if buildHud}
+				<div class="build-hud" data-testid="build-hud">
+					{#if buildHud.toolId === 'music'}<button
+							class="midi-import-button"
+							data-testid="import-midi"
+							onclick={openMidi}>Import MIDI</button
+						>{/if}
+					{#if buildHud.toolId === 'paint'}
+						<div class="paint-color-row" data-testid="paint-color-row">
+							Current Colour:
+							{#if buildHud.paintColor}
+								<span
+									class="paint-color-swatch"
+									style="background-color: {buildHud.paintColor}"
+									data-testid="paint-color-swatch"
+								></span>
+							{:else}
+								<span class="paint-color-default">Default</span>
+							{/if}
+						</div>
 					{/if}
-				{/each}
-			</div>
-		{/if}
-
-		{#if stats}
-			<div class="sr-only" data-testid="world-load-status">
-				Loaded {stats.loadedChunks} &middot; Queued {stats.queuedChunks}
-			</div>
-		{/if}
-
-		{#if captureStage && screen === 'game'}
-			<div class="flight-badge capture-badge" data-testid="capture-badge">
-				{captureStage === 'loading'
-					? 'Movement locked · loading best quality…'
-					: 'Taking screenshot…'}
-			</div>
-		{/if}
-		{#if flight.flying && screen === 'game' && !captureStage}
-			<div class="flight-badge" data-testid="flight-badge">
-				Flying · {formatFlySpeed(flight.speed)}
-			</div>
-		{/if}
-		{#if stats?.dayCycleEnabled}
-			<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
-		{/if}
-
-		{#if stats?.miniBuildChunk && !miniBuildEditor}
-			{@const chunk = stats.miniBuildChunk}
-			{@const used = Math.min(1, chunk.primitives / chunk.budget)}
-			{@const adding = Math.max(0, Math.min(1 - used, chunk.added / chunk.budget))}
-			<div
-				class="mini-build-chunk"
-				class:below-clock={stats.dayCycleEnabled}
-				class:near={chunk.level === 'near'}
-				class:full={chunk.level === 'full'}
-				data-testid="mini-build-chunk-usage"
-				data-level={chunk.level}
-				title="Mini Build primitives in this 16m chunk ({chunk.instances} objects)"
-			>
-				<div class="mini-build-chunk-row">
-					<span class="mini-build-chunk-label"
-						>{chunk.placing ? 'Placing here' : 'Mini Builds'}</span
-					>
-					<span class="mini-build-chunk-value" data-testid="mini-build-chunk-value">
-						{chunk.primitives}{#if chunk.added > 0}<span class="mini-build-chunk-added"
-								>&nbsp;+{chunk.added}</span
-							>{/if}&nbsp;/&nbsp;{chunk.budget}
-					</span>
+					{#if buildHud.foundationDeleteId}
+						<button
+							type="button"
+							class="build-hud-action"
+							data-testid="delete-foundation-button"
+							onclick={() => {
+								const id = buildHud?.foundationDeleteId;
+								if (id) openFoundationDelete(id);
+							}}
+						>
+							Delete whole foundation
+						</button>
+					{/if}
+					{#each buildHud.hintLines as line, index (index)}
+						{#if line === ''}
+							<div class="build-hud-spacer"></div>
+						{:else}
+							<div>{line}</div>
+						{/if}
+					{/each}
 				</div>
-				<div class="mini-build-chunk-bar" aria-hidden="true">
-					<span class="mini-build-chunk-used" style:width="{used * 100}%"></span>
-					<span class="mini-build-chunk-adding" style:width="{adding * 100}%"></span>
-				</div>
-				<div class="mini-build-chunk-sub">
-					primitives · chunk {chunk.chunkId} · {chunk.instances}
-					{chunk.instances === 1 ? 'object' : 'objects'}
-				</div>
-			</div>
-		{/if}
+			{/if}
 
-		{#if stats?.showFpsCounter}
-			<div class="fps-counter" data-testid="fps-counter">
-				<span data-testid="fps-value">{stats.fps} FPS</span>
-				<span class="fps-dot" aria-hidden="true">&middot;</span>
-				<span class="fps-drops" class:dropping={stats.frameDrops > 0} data-testid="fps-drops">
-					{stats.frameDrops}
-					{stats.frameDrops === 1 ? 'drop' : 'drops'}
-				</span>
-				<span class="fps-dot" aria-hidden="true">&middot;</span>
-				<span data-testid="fps-quality">{graphicsQualityLabel(stats.graphicsQuality)}</span>
-			</div>
-		{/if}
-
-		{#if stats?.showRenderStats}
-			<div class="stats-overlay" class:below-fps={stats.showFpsCounter} data-testid="stats-overlay">
-				<div>
-					{stats.fps} FPS &middot; {stats.frameDrops} drops &middot; {graphicsQualityLabel(
-						stats.graphicsQuality
-					)} &middot; {stats.frameTimeMs.toFixed(1)} ms
-				</div>
-				<div>
-					Pos {stats.playerX.toFixed(1)}, {stats.playerY.toFixed(1)}, {stats.playerZ.toFixed(1)}
-				</div>
-				<div>Chunk {stats.chunkX}, {stats.chunkZ}</div>
-				<div data-testid="loaded-chunks">
+			{#if stats}
+				<div class="sr-only" data-testid="world-load-status">
 					Loaded {stats.loadedChunks} &middot; Queued {stats.queuedChunks}
 				</div>
-				<div>Terrain rev {stats.revision}</div>
-				<div>Triangles {stats.triangles.toLocaleString()}</div>
-				{#if stats.water}
-					<div data-testid="water-stats">
-						Water {stats.water.triangles.toLocaleString()} tris · {stats.water.drawCalls} draws ·
-						{stats.water.riverSections} river sections · {stats.water.lakes} lakes ·
-						{stats.water.rivers} rivers · region {stats.water.regionMs.toFixed(1)} ms
-					</div>
-				{/if}
-				{#if stats.particles}
-					{@const p = stats.particles}
-					<div data-testid="particle-stats">
-						Particles {p.activeParticles.toLocaleString()}/{p.capacity.toLocaleString()} · {p.drawCalls}
-						draws · {(p.bufferBytes / 1024).toFixed(0)} KB · {p.updateMs.toFixed(2)} ms · dropped {p.dropped}
-					</div>
-					<div>
-						Splash zones {p.splash.activeZones}/{p.splash.zones} active · {p.splash.visibleZones} visible
-						·
-						{p.splash.lakes} lakes
-					</div>
-				{/if}
-				{#if stats.weather}
-					{@const w = stats.weather}
-					<div data-testid="weather-stats">
-						Weather {w.type}
-						{(w.intensity * 100).toFixed(0)}% · {w.mode}{w.transition < 1
-							? ` · changing ${(w.transition * 100).toFixed(0)}%`
-							: ''} · wind {w.windSpeed.toFixed(1)} m/s · wet {(w.wetness * 100).toFixed(0)}%
-					</div>
-					<div>
-						Rain {w.rain}/{w.rainCapacity} · snow {w.snow}/{w.snowCapacity} · impacts {w.impactsPerSecond.toFixed(
-							0
-						)}/s · density {(w.densityScale * 100).toFixed(0)}%{w.sheltered ? ' · sheltered' : ''} · {w.updateMs.toFixed(
-							2
-						)} ms
-					</div>
-					<div>
-						Lightning {w.lightningStrikes} strikes · flash {w.flash.toFixed(2)} · thunder {w.thunderPlaying}
-						playing, {w.thunderPending} pending
-					</div>
-				{/if}
-				<div>
-					Trees {stats.loadedVegetationChunks}/{stats.queuedVegetationChunks} chunks &middot; {stats.treeInstances.toLocaleString()}
-					trees
+			{/if}
+
+			{#if captureStage && screen === 'game'}
+				<div class="flight-badge capture-badge" data-testid="capture-badge">
+					{captureStage === 'loading'
+						? 'Movement locked · loading best quality…'
+						: 'Taking screenshot…'}
 				</div>
-				<div>Vegetation rev {stats.vegetationRevision}</div>
-				{#if stats.trees}
-					{@const t = stats.trees}
-					<div data-testid="tree-stats">
-						Trees visible {t.visibleTrees.toLocaleString()} (LOD {t.visibleTreesByLod.join('/')})
-						&middot; {t.visibleBatches}/{t.activeBatches} batches
-					</div>
-					<div>
-						Tree prototypes {t.prototypeGeometries} &middot; {t.prototypeTriangles.toLocaleString()} tris
-						&middot; {(t.memoryBytes / 1048576).toFixed(1)} MB &middot; chunk {t.lastChunkBuildMs.toFixed(
-							1
-						)} ms
-					</div>
-				{/if}
-				{#if stats.plants?.enabled}
-					{@const p = stats.plants}
-					<div data-testid="plant-stats">
-						Plants {p.nearInstances.toLocaleString()} near · {p.cardInstances.toLocaleString()} cards
-						(LOD1/2
-						{p.cardLodInstances.join('/')}) · {p.nearDrawCalls}+{p.cardDrawCalls} draws · {p.triangles.toLocaleString()}
-						tris
-					</div>
-					<div>
-						Plants {p.activeSpecies} species · {p.prototypes} prototypes ({p.prototypeTriangles.toLocaleString()}
-						tris) · {(p.bufferBytes / 1048576).toFixed(2)} MB · gen {p.lastGenerationMs.toFixed(1)} ms
-						· adaptive
-						{p.adaptiveLevel.toFixed(2)}
-					</div>
-				{/if}
-				{#if stats.grass?.enabled}
-					{@const g = stats.grass}
-					<div data-testid="grass-stats">
-						Grass {g.visibleInstances.toLocaleString()} visible (LOD {g.lodInstances
-							.map((n) => n.toLocaleString())
-							.join('/')}) &middot; {g.drawCalls}/{g.activeChunks} chunks &middot; {g.triangles.toLocaleString()}
-						tris
-					</div>
-					<div>
-						Grass {(g.bufferBytes / 1048576).toFixed(2)} MB &middot; gen {g.lastGenerationMs.toFixed(
-							1
-						)} ms (avg {g.averageGenerationMs.toFixed(1)}) &middot; {g.queuedChunks} queued &middot; {g.renderDistance.toFixed(
-							0
-						)} m &middot; adaptive {g.adaptiveLevel.toFixed(2)}{g.budgetScale < 1
-							? ` · budget ${g.budgetScale.toFixed(2)}`
-							: ''}
-					</div>
-				{/if}
-				<div>
-					Creatures {stats.creatures.rendered}/{stats.creatures.active} active · {stats.creatures
-						.sleeping} sleeping · LOD {stats.creatures.lod0}/{stats.creatures.lod1}
+			{/if}
+			{#if flight.flying && screen === 'game' && !captureStage}
+				<div class="flight-badge" data-testid="flight-badge">
+					Flying · {formatFlySpeed(flight.speed)}
 				</div>
-				<div>
-					Fauna {stats.creatures.triangles.toLocaleString()} tris · {stats.creatures.animationMs.toFixed(
-						2
-					)} ms bones · {stats.creatures.behaviourMs.toFixed(2)} ms behaviour
+			{/if}
+			{#if stats?.dayCycleEnabled}
+				<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
+			{/if}
+
+			{#if stats?.miniBuildChunk && !miniBuildEditor}
+				{@const chunk = stats.miniBuildChunk}
+				{@const used = Math.min(1, chunk.primitives / chunk.budget)}
+				{@const adding = Math.max(0, Math.min(1 - used, chunk.added / chunk.budget))}
+				<div
+					class="mini-build-chunk"
+					class:below-clock={stats.dayCycleEnabled}
+					class:near={chunk.level === 'near'}
+					class:full={chunk.level === 'full'}
+					data-testid="mini-build-chunk-usage"
+					data-level={chunk.level}
+					title="Mini Build primitives in this 16m chunk ({chunk.instances} objects)"
+				>
+					<div class="mini-build-chunk-row">
+						<span class="mini-build-chunk-label"
+							>{chunk.placing ? 'Placing here' : 'Mini Builds'}</span
+						>
+						<span class="mini-build-chunk-value" data-testid="mini-build-chunk-value">
+							{chunk.primitives}{#if chunk.added > 0}<span class="mini-build-chunk-added"
+									>&nbsp;+{chunk.added}</span
+								>{/if}&nbsp;/&nbsp;{chunk.budget}
+						</span>
+					</div>
+					<div class="mini-build-chunk-bar" aria-hidden="true">
+						<span class="mini-build-chunk-used" style:width="{used * 100}%"></span>
+						<span class="mini-build-chunk-adding" style:width="{adding * 100}%"></span>
+					</div>
+					<div class="mini-build-chunk-sub">
+						primitives · chunk {chunk.chunkId} · {chunk.instances}
+						{chunk.instances === 1 ? 'object' : 'objects'}
+					</div>
 				</div>
-				<div data-testid="graphics-stats">
-					Graphics {stats.graphicsQuality.toUpperCase()} &middot; scale {stats.renderScale.toFixed(
-						2
-					)} &middot; dpr {stats.pixelRatio.toFixed(2)}
+			{/if}
+
+			{#if stats?.showFpsCounter}
+				<div class="fps-counter" data-testid="fps-counter">
+					<span data-testid="fps-value">{stats.fps} FPS</span>
+					<span class="fps-dot" aria-hidden="true">&middot;</span>
+					<span class="fps-drops" class:dropping={stats.frameDrops > 0} data-testid="fps-drops">
+						{stats.frameDrops}
+						{stats.frameDrops === 1 ? 'drop' : 'drops'}
+					</span>
+					<span class="fps-dot" aria-hidden="true">&middot;</span>
+					<span data-testid="fps-quality">{graphicsQualityLabel(stats.graphicsQuality)}</span>
 				</div>
-				<div>
-					Draws {stats.drawCalls} &middot; Geo {stats.geometries} &middot; Tex {stats.textures}
-				</div>
-				{#if stats.miniBuilds}
-					{@const mb = stats.miniBuilds}
-					<div data-testid="mini-build-stats">
-						Mini Builds {mb.definitions} designs &middot; cache {mb.cache.entries} ({(
-							mb.cache.estimatedBytes / 1024
-						).toFixed(0)} KB, {mb.cache.compiles} compiles)
+			{/if}
+
+			{#if stats?.showRenderStats}
+				<div
+					class="stats-overlay"
+					class:below-fps={stats.showFpsCounter}
+					data-testid="stats-overlay"
+				>
+					<div>
+						{stats.fps} FPS &middot; {stats.frameDrops} drops &middot; {graphicsQualityLabel(
+							stats.graphicsQuality
+						)} &middot; {stats.frameTimeMs.toFixed(1)} ms
 					</div>
 					<div>
-						Instances {mb.instances.renderedInstances}/{mb.instances.instances} rendered &middot; {mb
-							.instances.batches} batches &middot; {mb.instances.instancedMeshes} draws
+						Pos {stats.playerX.toFixed(1)}, {stats.playerY.toFixed(1)}, {stats.playerZ.toFixed(1)}
 					</div>
-					<div data-testid="mini-build-chunk-stats">
-						Chunk {mb.currentChunk.id}: primitives {mb.currentChunk.primitives} / {mb.currentChunk
-							.budget} &middot; {mb.currentChunk.instances} objects
+					<div>Chunk {stats.chunkX}, {stats.chunkZ}</div>
+					<div data-testid="loaded-chunks">
+						Loaded {stats.loadedChunks} &middot; Queued {stats.queuedChunks}
 					</div>
-					<div>
-						Geometry {mb.renderedVertices.toLocaleString()} verts &middot; {mb.renderedTriangles.toLocaleString()}
-						tris &middot; collision {mb.instances.collisionBoxes} boxes
-					</div>
-				{/if}
-				{#if stats.miniBuildTarget}
-					{@const t = stats.miniBuildTarget}
-					<div data-testid="mini-build-target-stats">
-						Target {t.designName} r{t.revision} &middot; {t.blocks} blocks &middot; {t.materialSlots}
-						mats &middot; {t.vertices}v/{t.triangles}t &middot; {t.collisionBoxes} col
-					</div>
-					<div class="stats-ids">
-						inst {t.instanceId.slice(0, 8)} &middot; design {t.designId.slice(0, 8)} &middot; chunk {t.chunkId}
-						&middot; {t.batchKey.length > 32 ? `${t.batchKey.slice(0, 32)}…` : t.batchKey}
-					</div>
-				{/if}
-				<div>
-					{#if stats.shadowsEnabled}
-						Shadows {stats.shadowCascades} cascades &middot; {stats.shadowDistance}m
-					{:else}
-						Shadows off
+					<div>Terrain rev {stats.revision}</div>
+					<div>Triangles {stats.triangles.toLocaleString()}</div>
+					{#if stats.water}
+						<div data-testid="water-stats">
+							Water {stats.water.triangles.toLocaleString()} tris · {stats.water.drawCalls} draws ·
+							{stats.water.riverSections} river sections · {stats.water.lakes} lakes ·
+							{stats.water.rivers} rivers · region {stats.water.regionMs.toFixed(1)} ms
+						</div>
 					{/if}
-					&middot; AO {stats.aoEnabled ? stats.aoQuality : 'off'} &middot; AA {stats.antialiasing.toUpperCase()}
+					{#if stats.particles}
+						{@const p = stats.particles}
+						<div data-testid="particle-stats">
+							Particles {p.activeParticles.toLocaleString()}/{p.capacity.toLocaleString()} · {p.drawCalls}
+							draws · {(p.bufferBytes / 1024).toFixed(0)} KB · {p.updateMs.toFixed(2)} ms · dropped {p.dropped}
+						</div>
+						<div>
+							Splash zones {p.splash.activeZones}/{p.splash.zones} active · {p.splash.visibleZones} visible
+							·
+							{p.splash.lakes} lakes
+						</div>
+					{/if}
+					{#if stats.weather}
+						{@const w = stats.weather}
+						<div data-testid="weather-stats">
+							Weather {w.type}
+							{(w.intensity * 100).toFixed(0)}% · {w.mode}{w.transition < 1
+								? ` · changing ${(w.transition * 100).toFixed(0)}%`
+								: ''} · wind {w.windSpeed.toFixed(1)} m/s · wet {(w.wetness * 100).toFixed(0)}%
+						</div>
+						<div>
+							Rain {w.rain}/{w.rainCapacity} · snow {w.snow}/{w.snowCapacity} · impacts {w.impactsPerSecond.toFixed(
+								0
+							)}/s · density {(w.densityScale * 100).toFixed(0)}%{w.sheltered ? ' · sheltered' : ''} ·
+							{w.updateMs.toFixed(2)} ms
+						</div>
+						<div>
+							Lightning {w.lightningStrikes} strikes · flash {w.flash.toFixed(2)} · thunder {w.thunderPlaying}
+							playing, {w.thunderPending} pending
+						</div>
+					{/if}
+					<div>
+						Trees {stats.loadedVegetationChunks}/{stats.queuedVegetationChunks} chunks &middot; {stats.treeInstances.toLocaleString()}
+						trees
+					</div>
+					<div>Vegetation rev {stats.vegetationRevision}</div>
+					{#if stats.trees}
+						{@const t = stats.trees}
+						<div data-testid="tree-stats">
+							Trees visible {t.visibleTrees.toLocaleString()} (LOD {t.visibleTreesByLod.join('/')})
+							&middot; {t.visibleBatches}/{t.activeBatches} batches
+						</div>
+						<div>
+							Tree prototypes {t.prototypeGeometries} &middot; {t.prototypeTriangles.toLocaleString()}
+							tris &middot; {(t.memoryBytes / 1048576).toFixed(1)} MB &middot; chunk {t.lastChunkBuildMs.toFixed(
+								1
+							)} ms
+						</div>
+					{/if}
+					{#if stats.plants?.enabled}
+						{@const p = stats.plants}
+						<div data-testid="plant-stats">
+							Plants {p.nearInstances.toLocaleString()} near · {p.cardInstances.toLocaleString()} cards
+							(LOD1/2
+							{p.cardLodInstances.join('/')}) · {p.nearDrawCalls}+{p.cardDrawCalls} draws · {p.triangles.toLocaleString()}
+							tris
+						</div>
+						<div>
+							Plants {p.activeSpecies} species · {p.prototypes} prototypes ({p.prototypeTriangles.toLocaleString()}
+							tris) · {(p.bufferBytes / 1048576).toFixed(2)} MB · gen {p.lastGenerationMs.toFixed(
+								1
+							)} ms · adaptive
+							{p.adaptiveLevel.toFixed(2)}
+						</div>
+					{/if}
+					{#if stats.grass?.enabled}
+						{@const g = stats.grass}
+						<div data-testid="grass-stats">
+							Grass {g.visibleInstances.toLocaleString()} visible (LOD {g.lodInstances
+								.map((n) => n.toLocaleString())
+								.join('/')}) &middot; {g.drawCalls}/{g.activeChunks} chunks &middot; {g.triangles.toLocaleString()}
+							tris
+						</div>
+						<div>
+							Grass {(g.bufferBytes / 1048576).toFixed(2)} MB &middot; gen {g.lastGenerationMs.toFixed(
+								1
+							)} ms (avg {g.averageGenerationMs.toFixed(1)}) &middot; {g.queuedChunks} queued &middot;
+							{g.renderDistance.toFixed(0)} m &middot; adaptive {g.adaptiveLevel.toFixed(
+								2
+							)}{g.budgetScale < 1 ? ` · budget ${g.budgetScale.toFixed(2)}` : ''}
+						</div>
+					{/if}
+					<div>
+						Creatures {stats.creatures.rendered}/{stats.creatures.active} active · {stats.creatures
+							.sleeping} sleeping · LOD {stats.creatures.lod0}/{stats.creatures.lod1}
+					</div>
+					<div>
+						Fauna {stats.creatures.triangles.toLocaleString()} tris · {stats.creatures.animationMs.toFixed(
+							2
+						)} ms bones · {stats.creatures.behaviourMs.toFixed(2)} ms behaviour
+					</div>
+					<div data-testid="graphics-stats">
+						Graphics {stats.graphicsQuality.toUpperCase()} &middot; scale {stats.renderScale.toFixed(
+							2
+						)} &middot; dpr {stats.pixelRatio.toFixed(2)}
+					</div>
+					<div>
+						Draws {stats.drawCalls} &middot; Geo {stats.geometries} &middot; Tex {stats.textures}
+					</div>
+					{#if stats.miniBuilds}
+						{@const mb = stats.miniBuilds}
+						<div data-testid="mini-build-stats">
+							Mini Builds {mb.definitions} designs &middot; cache {mb.cache.entries} ({(
+								mb.cache.estimatedBytes / 1024
+							).toFixed(0)} KB, {mb.cache.compiles} compiles)
+						</div>
+						<div>
+							Instances {mb.instances.renderedInstances}/{mb.instances.instances} rendered &middot; {mb
+								.instances.batches} batches &middot; {mb.instances.instancedMeshes} draws
+						</div>
+						<div data-testid="mini-build-chunk-stats">
+							Chunk {mb.currentChunk.id}: primitives {mb.currentChunk.primitives} / {mb.currentChunk
+								.budget} &middot; {mb.currentChunk.instances} objects
+						</div>
+						<div>
+							Geometry {mb.renderedVertices.toLocaleString()} verts &middot; {mb.renderedTriangles.toLocaleString()}
+							tris &middot; collision {mb.instances.collisionBoxes} boxes
+						</div>
+					{/if}
+					{#if stats.miniBuildTarget}
+						{@const t = stats.miniBuildTarget}
+						<div data-testid="mini-build-target-stats">
+							Target {t.designName} r{t.revision} &middot; {t.blocks} blocks &middot; {t.materialSlots}
+							mats &middot; {t.vertices}v/{t.triangles}t &middot; {t.collisionBoxes} col
+						</div>
+						<div class="stats-ids">
+							inst {t.instanceId.slice(0, 8)} &middot; design {t.designId.slice(0, 8)} &middot; chunk
+							{t.chunkId}
+							&middot; {t.batchKey.length > 32 ? `${t.batchKey.slice(0, 32)}…` : t.batchKey}
+						</div>
+					{/if}
+					<div>
+						{#if stats.shadowsEnabled}
+							Shadows {stats.shadowCascades} cascades &middot; {stats.shadowDistance}m
+						{:else}
+							Shadows off
+						{/if}
+						&middot; AO {stats.aoEnabled ? stats.aoQuality : 'off'} &middot; AA {stats.antialiasing.toUpperCase()}
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
 
-		{#if hotbar?.globalMode === 'music'}
-			<Hotbar
-				slots={musicHotbarSlots}
-				activeSlot={hotbar.musicActiveSlot}
-				showGlobalModes={false}
-				onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
-			/>
-		{:else if hotbar?.locked && onlineWorld}
-			<div class="view-only-badge" data-testid="view-only-badge" data-lock={mpBuildLock}>
-				{mpBuildLock === 'viewer'
-					? 'Viewing only — this link can look around but not build'
-					: mpBuildLock === 'offline'
-						? 'Reconnecting… building is paused until the connection is back'
-						: 'Joining…'}
-			</div>
-		{:else if hotbar?.buildModeActive}
-			<Hotbar
-				slots={hotbar.slots}
-				activeSlot={hotbar.activeSlot}
-				removeModeActive={hotbar.globalMode === 'remove'}
-				paintModeActive={hotbar.globalMode === 'paint'}
-				moveModeActive={hotbar.globalMode === 'move'}
-				onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
-				onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
-				onTogglePaintMode={() => session?.scene.togglePaintMode()}
-				onToggleMoveMode={() => session?.scene.toggleMoveMode()}
-			/>
-		{/if}
-
-		{#if removeOthersPrompt}
-			<ConfirmRemoveOthersDialog
-				items={removeOthersPrompt.items}
-				onConfirm={() => answerRemoveOthers(true)}
-				onCancel={() => answerRemoveOthers(false)}
-			/>
-		{/if}
-
-		{#if paintPaletteOpen && paintState}
-			<!-- Clicking the backdrop (outside the panel) closes the palette — the panel's own root div
-		     stops propagation so a click inside it never reaches this handler. -->
-			<div
-				class="palette-overlay"
-				data-testid="palette-overlay"
-				role="presentation"
-				onclick={() => session?.scene.closePaintPalette()}
-			>
-				<MaterialPalette
-					selected={paintState.selected}
-					savedPresets={paintState.savedPresets}
-					onSelect={(material) => session?.scene.selectPaintMaterial(material)}
-					onSave={() => session?.scene.savePaintPreset()}
-					onRemoveSaved={(id) => session?.scene.removePaintPreset(id)}
-					onClose={() => session?.scene.closePaintPalette()}
+			{#if hotbar?.globalMode === 'music'}
+				<Hotbar
+					slots={musicHotbarSlots}
+					activeSlot={hotbar.musicActiveSlot}
+					showGlobalModes={false}
+					onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
 				/>
-			</div>
-		{/if}
+			{:else if hotbar?.locked && onlineWorld}
+				<div class="view-only-badge" data-testid="view-only-badge" data-lock={mpBuildLock}>
+					{mpBuildLock === 'viewer'
+						? 'Viewing only — this link can look around but not build'
+						: mpBuildLock === 'offline'
+							? 'Reconnecting… building is paused until the connection is back'
+							: 'Joining…'}
+				</div>
+			{:else if hotbar?.buildModeActive}
+				<Hotbar
+					slots={hotbar.slots}
+					activeSlot={hotbar.activeSlot}
+					removeModeActive={hotbar.globalMode === 'remove'}
+					paintModeActive={hotbar.globalMode === 'paint'}
+					moveModeActive={hotbar.globalMode === 'move'}
+					onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
+					onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
+					onTogglePaintMode={() => session?.scene.togglePaintMode()}
+					onToggleMoveMode={() => session?.scene.toggleMoveMode()}
+				/>
+			{/if}
 
-		{#if screen === 'game'}
-			<!-- Small, always-present save state. Deliberately understated: autosave is meant to be
+			{#if removeOthersPrompt}
+				<ConfirmRemoveOthersDialog
+					items={removeOthersPrompt.items}
+					onConfirm={() => answerRemoveOthers(true)}
+					onCancel={() => answerRemoveOthers(false)}
+				/>
+			{/if}
+
+			{#if paintPaletteOpen && paintState}
+				<!-- Clicking the backdrop (outside the panel) closes the palette — the panel's own root div
+		     stops propagation so a click inside it never reaches this handler. -->
+				<div
+					class="palette-overlay"
+					data-testid="palette-overlay"
+					role="presentation"
+					onclick={() => session?.scene.closePaintPalette()}
+				>
+					<MaterialPalette
+						selected={paintState.selected}
+						savedPresets={paintState.savedPresets}
+						onSelect={(material) => session?.scene.selectPaintMaterial(material)}
+						onSave={() => session?.scene.savePaintPreset()}
+						onRemoveSaved={(id) => session?.scene.removePaintPreset(id)}
+						onClose={() => session?.scene.closePaintPalette()}
+					/>
+				</div>
+			{/if}
+
+			{#if screen === 'game'}
+				<!-- Small, always-present save state. Deliberately understated: autosave is meant to be
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
-			{#if onlineWorld}
-				<LocatorBar bind:element={locatorElement} />
-				<OnlineStatus
-					worldName={onlineWorld.name}
-					status={mpStatus}
-					detail={mpDetail}
-					players={mpPlayers}
-					selfSlot={mpSelfSlot}
-					role={mpRole}
-					links={inviteLinksFor(
-						onlineWorlds.find((w) => w.worldId === onlineWorld?.worldId) ?? null
-					)}
-					diagnostics={() => multiplayerSession?.diagnostics() ?? null}
+				{#if onlineWorld}
+					<LocatorBar bind:element={locatorElement} />
+					<OnlineStatus
+						worldName={onlineWorld.name}
+						status={mpStatus}
+						detail={mpDetail}
+						players={mpPlayers}
+						selfSlot={mpSelfSlot}
+						role={mpRole}
+						links={inviteLinksFor(
+							onlineWorlds.find((w) => w.worldId === onlineWorld?.worldId) ?? null
+						)}
+						diagnostics={() => multiplayerSession?.diagnostics() ?? null}
+					/>
+					<div class="save-indicator" data-testid="save-indicator" data-status="online">
+						<span
+							class="save-dot"
+							data-status={mpStatus !== 'connected' ? 'dirty' : mpSaving ? 'saving' : 'saved'}
+						></span>
+						{mpStatus !== 'connected'
+							? 'Changes will save when reconnected'
+							: mpSaving
+								? 'Saving…'
+								: 'Saved online'}
+					</div>
+				{:else}
+					<div class="save-indicator" data-testid="save-indicator" data-status={saveStatus}>
+						<span class="save-dot" data-status={saveStatus}></span>
+						{#if saveStatus === 'saving'}Saving…{:else if saveStatus === 'dirty'}Unsaved{:else if saveStatus === 'error'}Save
+							failed{:else}Saved{/if}
+					</div>
+				{/if}
+				{#if saveStatus === 'error'}
+					<div class="save-error-chip" data-testid="save-error-chip">
+						<p>{saveError ?? 'Unable to save world locally.'}</p>
+						<button type="button" onclick={() => void manualSave()}>Retry</button>
+					</div>
+				{/if}
+			{/if}
+
+			{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
+				{#if !showTouchControls}
+					<div
+						class="door-toast"
+						data-testid="door-toast"
+						role="button"
+						tabindex="0"
+						onclick={() => session?.scene.toggleLookedAtDoor()}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') session?.scene.toggleLookedAtDoor();
+						}}
+					>
+						Press K to open the door
+					</div>
+				{/if}
+			{/if}
+
+			{#if foundationDeleteId}
+				<ConfirmDeleteFoundationDialog
+					onCancel={closeFoundationDelete}
+					onConfirm={confirmFoundationDelete}
 				/>
-				<div class="save-indicator" data-testid="save-indicator" data-status="online">
-					<span
-						class="save-dot"
-						data-status={mpStatus !== 'connected' ? 'dirty' : mpSaving ? 'saving' : 'saved'}
-					></span>
-					{mpStatus !== 'connected'
-						? 'Changes will save when reconnected'
-						: mpSaving
-							? 'Saving…'
-							: 'Saved online'}
-				</div>
-			{:else}
-				<div class="save-indicator" data-testid="save-indicator" data-status={saveStatus}>
-					<span class="save-dot" data-status={saveStatus}></span>
-					{#if saveStatus === 'saving'}Saving…{:else if saveStatus === 'dirty'}Unsaved{:else if saveStatus === 'error'}Save
-						failed{:else}Saved{/if}
-				</div>
 			{/if}
-			{#if saveStatus === 'error'}
-				<div class="save-error-chip" data-testid="save-error-chip">
-					<p>{saveError ?? 'Unable to save world locally.'}</p>
-					<button type="button" onclick={() => void manualSave()}>Retry</button>
-				</div>
+
+			{#if placementCustomizeOpen && session && customizeToolId}
+				{#if customizeToolId === 'place-object'}
+					<ObjectLibraryModal
+						scene={session.scene}
+						onClose={() => session?.scene.closePlacementCustomize()}
+						onOpenEditor={openMiniBuildEditor}
+					/>
+				{:else if customizeToolId === 'skirting'}
+					<SkirtingCustomizeModal
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{:else if customizeToolId === 'barrier'}
+					<BarrierCustomizeModal
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{:else if customizeToolId === 'torch'}
+					<FurnitureCatalogueModal
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{:else}
+					<PlacementCustomizeModal
+						toolId={customizeToolId}
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{/if}
 			{/if}
-		{/if}
-
-		{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
-			{#if !showTouchControls}
-				<div
-					class="door-toast"
-					data-testid="door-toast"
-					role="button"
-					tabindex="0"
-					onclick={() => session?.scene.toggleLookedAtDoor()}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') session?.scene.toggleLookedAtDoor();
-					}}
-				>
-					Press K to open the door
-				</div>
+			{#if placementHeightOpen && session && heightToolId}
+				<PlacementHeightModal
+					toolId={heightToolId}
+					settings={session.scene.buildingSettings}
+					level={buildHud?.level}
+					onClose={() => session?.scene.closePlacementHeight()}
+				/>
 			{/if}
-		{/if}
-
-		{#if foundationDeleteId}
-			<ConfirmDeleteFoundationDialog
-				onCancel={closeFoundationDelete}
-				onConfirm={confirmFoundationDelete}
-			/>
-		{/if}
-
-		{#if placementCustomizeOpen && session && customizeToolId}
-			{#if customizeToolId === 'place-object'}
-				<ObjectLibraryModal
+			{#if miniBuildEditor && session}
+				<MiniBuildEditor
 					scene={session.scene}
-					onClose={() => session?.scene.closePlacementCustomize()}
-					onOpenEditor={openMiniBuildEditor}
-				/>
-			{:else if customizeToolId === 'skirting'}
-				<SkirtingCustomizeModal
-					settings={session.scene.buildingSettings}
-					onClose={() => session?.scene.closePlacementCustomize()}
-				/>
-			{:else if customizeToolId === 'barrier'}
-				<BarrierCustomizeModal
-					settings={session.scene.buildingSettings}
-					onClose={() => session?.scene.closePlacementCustomize()}
-				/>
-			{:else if customizeToolId === 'torch'}
-				<FurnitureCatalogueModal
-					settings={session.scene.buildingSettings}
-					onClose={() => session?.scene.closePlacementCustomize()}
-				/>
-			{:else}
-				<PlacementCustomizeModal
-					toolId={customizeToolId}
-					settings={session.scene.buildingSettings}
-					onClose={() => session?.scene.closePlacementCustomize()}
+					launch={miniBuildEditor}
+					onClose={() => (miniBuildEditor = null)}
+					onSaved={(definition) => {
+						miniBuildEditor = null;
+						session?.scene.selectPlaceObject({ type: 'mini-build', designId: definition.id });
+						session?.scene.enterPlaceObjectMode();
+						showSaveToast(`Saved ${definition.name}`);
+					}}
 				/>
 			{/if}
-		{/if}
-		{#if placementHeightOpen && session && heightToolId}
-			<PlacementHeightModal
-				toolId={heightToolId}
-				settings={session.scene.buildingSettings}
-				level={buildHud?.level}
-				onClose={() => session?.scene.closePlacementHeight()}
-			/>
-		{/if}
-		{#if miniBuildEditor && session}
-			<MiniBuildEditor
-				scene={session.scene}
-				launch={miniBuildEditor}
-				onClose={() => (miniBuildEditor = null)}
-				onSaved={(definition) => {
-					miniBuildEditor = null;
-					session?.scene.selectPlaceObject({ type: 'mini-build', designId: definition.id });
-					session?.scene.enterPlaceObjectMode();
-					showSaveToast(`Saved ${definition.name}`);
-				}}
-			/>
-		{/if}
-		{#if miniBuildEditChoice && session}
-			{@const choice = miniBuildEditChoice}
-			<MiniBuildChoiceDialog
-				testId="mini-build-edit-choice"
-				title={`Edit "${choice.name}"`}
-				lines={[
-					`${choice.copies} placed copies use this design.`,
-					'Editing the shared design updates all of them.'
-				]}
-				options={[
-					{
-						label: 'Edit Shared Design',
-						testId: 'mini-build-edit-shared',
-						tone: 'primary',
-						onSelect: () => {
-							const instance = session?.scene.miniBuilds.instances.get(choice.instanceId);
-							miniBuildEditChoice = null;
-							if (instance) openMiniBuildEditor({ kind: 'edit', designId: instance.designId });
+			{#if miniBuildEditChoice && session}
+				{@const choice = miniBuildEditChoice}
+				<MiniBuildChoiceDialog
+					testId="mini-build-edit-choice"
+					title={`Edit "${choice.name}"`}
+					lines={[
+						`${choice.copies} placed copies use this design.`,
+						'Editing the shared design updates all of them.'
+					]}
+					options={[
+						{
+							label: 'Edit Shared Design',
+							testId: 'mini-build-edit-shared',
+							tone: 'primary',
+							onSelect: () => {
+								const instance = session?.scene.miniBuilds.instances.get(choice.instanceId);
+								miniBuildEditChoice = null;
+								if (instance) openMiniBuildEditor({ kind: 'edit', designId: instance.designId });
+							}
+						},
+						{
+							label: 'Make Unique and Edit',
+							testId: 'mini-build-make-unique',
+							onSelect: () => {
+								const result = session?.scene.miniBuilds.makeUnique(choice.instanceId);
+								miniBuildEditChoice = null;
+								if (result?.ok) openMiniBuildEditor({ kind: 'edit', designId: result.value.id });
+								else if (result) showSaveToast(result.error);
+							}
 						}
-					},
-					{
-						label: 'Make Unique and Edit',
-						testId: 'mini-build-make-unique',
-						onSelect: () => {
-							const result = session?.scene.miniBuilds.makeUnique(choice.instanceId);
-							miniBuildEditChoice = null;
-							if (result?.ok) openMiniBuildEditor({ kind: 'edit', designId: result.value.id });
-							else if (result) showSaveToast(result.error);
-						}
-					}
-				]}
-				onCancel={() => (miniBuildEditChoice = null)}
-			/>
-		{/if}
-		{#if midiOpen && session}<MidiImportModal
-				music={session.scene.music}
-				onClose={closeMidi}
-			/>{/if}
+					]}
+					onCancel={() => (miniBuildEditChoice = null)}
+				/>
+			{/if}
+			{#if midiOpen && session}<MidiImportModal
+					music={session.scene.music}
+					onClose={closeMidi}
+				/>{/if}
+		</div>
 		{#if paused}
 			<PauseMenu
 				worldName={currentWorldName}
@@ -2354,12 +2398,34 @@
 				onOpenSettings={openSettings}
 				onOpenControls={() => (showHelp = true)}
 				onOpenCreatureLab={openCreatureLab}
+				onOpenDebug={() => {
+					debugControlsOpen = true;
+					paused = false;
+				}}
+				onOpenMultiplayer={() => {
+					multiplayerMenuOpen = true;
+					paused = false;
+				}}
 			/>
 		{/if}
 		{#if settingsOpen && session}
 			<SettingsMenu host={session.scene.settingsHost} onClose={closeSettings} />
 		{/if}
 	</div>
+	<SessionPanels
+		debugOpen={debugControlsOpen}
+		multiplayerOpen={multiplayerMenuOpen}
+		bind:exampleMovement
+		players={mpPlayers}
+		selfSlot={mpSelfSlot}
+		online={!!onlineWorld}
+		status={mpStatus}
+		onCloseDebug={closeDebugControls}
+		onCloseMultiplayer={() => {
+			multiplayerMenuOpen = false;
+			paused = true;
+		}}
+	/>
 {/if}
 
 {#if saveToast}
@@ -2706,6 +2772,23 @@
 		position: fixed;
 		inset: 0;
 		overflow: hidden;
+	}
+
+	.game-hud {
+		display: contents;
+	}
+	.game-shell.debug-sidebar {
+		transform: translateZ(0);
+	}
+	@media (min-width: 800px) {
+		.game-shell.debug-sidebar {
+			right: 22rem;
+		}
+	}
+	@media (max-width: 799px) {
+		.game-shell.debug-sidebar {
+			bottom: 15rem;
+		}
 	}
 
 	.canvas-container {

@@ -231,6 +231,51 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 		)
 	).toBeLessThanOrEqual(1);
 
+	// Pause exposes live roles, then a sidebar that leaves rendering and network movement running.
+	await owner.getByTestId('pause-toggle').click();
+	await owner.getByTestId('pause-multiplayer').click();
+	await expect(owner.getByTestId('multiplayer-menu')).toBeVisible();
+	await expect(owner.getByTestId('multiplayer-member')).toHaveCount(2);
+	await expect(
+		owner.getByTestId('multiplayer-member').filter({ hasText: 'Visitor' })
+	).toContainText('Cannot build');
+	await owner
+		.getByTestId('multiplayer-menu')
+		.getByRole('button', { name: 'Back', exact: true })
+		.click();
+	await owner.getByTestId('pause-debug').click();
+	await expect(owner.getByTestId('debug-panel')).toBeVisible();
+	await expect(owner.getByTestId('pause-menu')).toBeHidden();
+	const position = () =>
+		owner.evaluate(() => {
+			const scene = (
+				window as unknown as {
+					__forestSession: { scene: { controller: { worldPosition: { x: number; z: number } } } };
+				}
+			).__forestSession.scene;
+			return { x: scene.controller.worldPosition.x, z: scene.controller.worldPosition.z };
+		});
+	const before = await position();
+	await owner.getByTestId('example-movement').check();
+	await expect
+		.poll(
+			async () => {
+				const now = await position();
+				return Math.hypot(now.x - before.x, now.z - before.z);
+			},
+			{ timeout: 15_000 }
+		)
+		.toBeGreaterThan(0.5);
+	await expect(owner.getByTestId('online-status')).toHaveAttribute('data-status', 'connected');
+	await owner
+		.getByTestId('debug-panel')
+		.getByRole('button', { name: 'Close Dev and Debug controls' })
+		.click();
+	const stopped = await position();
+	await owner.waitForTimeout(300);
+	const after = await position();
+	expect(Math.hypot(after.x - stopped.x, after.z - stopped.z)).toBeLessThan(0.01);
+
 	// A deliberate leave frees the slot at once (no grace period).
 	await visitor.keyboard.press('Escape');
 	await visitor.getByTestId('pause-quit').click();

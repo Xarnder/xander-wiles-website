@@ -17,6 +17,8 @@
 		onOpenSettings: () => void;
 		onOpenControls: () => void;
 		onOpenCreatureLab: () => void;
+		onOpenDebug: () => void;
+		onOpenMultiplayer: () => void;
 	}
 
 	const {
@@ -34,7 +36,9 @@
 		onQuit,
 		onOpenSettings,
 		onOpenControls,
-		onOpenCreatureLab
+		onOpenCreatureLab,
+		onOpenDebug,
+		onOpenMultiplayer
 	}: Props = $props();
 
 	type Panel = 'root' | 'world' | 'rename';
@@ -91,8 +95,16 @@
 			</div>
 
 			<div class="section">
+				<p class="section-label">Session</p>
+				<button data-testid="pause-multiplayer" onclick={onOpenMultiplayer}>Multiplayer</button>
+				<button data-testid="pause-debug" onclick={onOpenDebug}>Dev &amp; Debug controls</button>
 				<p class="section-label">World</p>
-				<button data-testid="pause-respawn" onclick={onRespawn} disabled={busy} title="Respawn at start location">
+				<button
+					data-testid="pause-respawn"
+					onclick={onRespawn}
+					disabled={busy}
+					title="Respawn at start location"
+				>
 					Respawn
 				</button>
 				<button data-testid="pause-save" onclick={onSave} disabled={busy}>Save</button>

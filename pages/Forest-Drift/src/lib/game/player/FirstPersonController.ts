@@ -125,6 +125,30 @@ export class FirstPersonController {
 
 	/** All movement and look frozen (best-quality screenshot capture). */
 	private movementLocked = false;
+	private manualInputBlocked = false;
+	private exampleMovement: { x: number; z: number; time: number; nextJump: number } | null = null;
+
+	setManualInputBlocked(blocked: boolean): void {
+		this.manualInputBlocked = blocked;
+		if (blocked) {
+			this.keys.clear();
+			this.touchMoveX = this.touchMoveZ = 0;
+			this.touchJump = this.touchRunning = false;
+		}
+	}
+
+	/** Walk the normal collision/gravity path; never teleport through obstacles. */
+	setExampleMovement(enabled: boolean): void {
+		if (enabled === (this.exampleMovement !== null)) return;
+		this.keys.clear();
+		this.touchMoveX = this.touchMoveZ = 0;
+		this.touchJump = this.touchRunning = false;
+		this.exampleMovement = enabled
+			? { x: this.worldPosition.x, z: this.worldPosition.z, time: 0, nextJump: 3 }
+			: null;
+		if (enabled) this.setFlying(false);
+	}
+
 	/** Mouse/touch look scale — below 1 while zoomed in (C held), so aiming stays steady. */
 	private lookScale = 1;
 
@@ -151,13 +175,20 @@ export class FirstPersonController {
 	};
 
 	private readonly handleMouseMove = (event: MouseEvent) => {
-		if (!this.pointerLocked || this.movementLocked) return;
+		if (
+			!this.pointerLocked ||
+			this.movementLocked ||
+			this.manualInputBlocked ||
+			this.exampleMovement
+		)
+			return;
 		this.yaw -= event.movementX * MOUSE_SENSITIVITY * this.lookScale;
 		this.pitch -= event.movementY * MOUSE_SENSITIVITY * this.lookScale;
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
 	};
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
+		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.keys.add(event.code);
 		if (event.code === 'Escape' && this.pointerLocked) {
 			document.exitPointerLock();
@@ -170,12 +201,20 @@ export class FirstPersonController {
 
 	/** While flying (and in control of the mouse), the wheel sets fly speed — nothing else uses it in play. */
 	private readonly handleWheel = (event: WheelEvent) => {
-		if (!this.flying || !this.pointerLocked || this.movementLocked) return;
+		if (
+			!this.flying ||
+			!this.pointerLocked ||
+			this.movementLocked ||
+			this.manualInputBlocked ||
+			this.exampleMovement
+		)
+			return;
 		event.preventDefault();
 		this.setFlySpeed(flySpeedAfterWheel(this.getFlySpeed(), event.deltaY));
 	};
 
 	private readonly handleClick = () => {
+		if (this.manualInputBlocked || this.exampleMovement) return;
 		if (!this.pointerLocked) {
 			// requestPointerLock() can reject (e.g. permission denied, or an unsupported embedding
 			// context) — swallow it here so it doesn't surface as an unhandled promise rejection.
@@ -326,7 +365,7 @@ export class FirstPersonController {
 			this.syncCamera();
 			return;
 		}
-		if (this.flying) {
+		if (this.flying && !this.manualInputBlocked) {
 			this.updateFlying(deltaSeconds);
 			return;
 		}
@@ -334,12 +373,34 @@ export class FirstPersonController {
 		const backward = this.keys.has('KeyS') ? 1 : 0;
 		const left = this.keys.has('KeyA') ? 1 : 0;
 		const right = this.keys.has('KeyD') ? 1 : 0;
-		const running = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning;
-		const jumpPressed = this.keys.has('Space') || this.touchJump;
+		const running =
+			!this.exampleMovement &&
+			(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning);
+		let jumpPressed = this.keys.has('Space') || this.touchJump;
 		this.touchJump = false;
 
-		const moveX = right - left + this.touchMoveX;
-		const moveZ = forward - backward + this.touchMoveZ;
+		let moveX = right - left + this.touchMoveX;
+		let moveZ = forward - backward + this.touchMoveZ;
+		if (this.manualInputBlocked) {
+			moveX = moveZ = 0;
+			jumpPressed = false;
+		}
+		if (this.exampleMovement) {
+			const route = this.exampleMovement;
+			route.time += deltaSeconds;
+			const phase = route.time * 0.3;
+			const dx = route.x + 6 * Math.sin(phase) - this.worldPosition.x;
+			const dz = route.z + 3 * Math.sin(2 * phase) - this.worldPosition.z;
+			this.yaw = Math.atan2(-dx, -dz);
+			this.pitch = 0;
+			moveX = 0;
+			moveZ = Math.min(
+				1,
+				Math.hypot(dx, dz) / Math.max(0.001, this.settings.walkSpeed * deltaSeconds)
+			);
+			jumpPressed = route.time >= route.nextJump;
+			if (jumpPressed) route.nextJump += 4;
+		}
 
 		let worldX = this.worldPosition.x;
 		let worldZ = this.worldPosition.z;
@@ -540,20 +601,23 @@ export class FirstPersonController {
 	}
 
 	setTouchMovement(x: number, z: number): void {
+		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.touchMoveX = Math.max(-1, Math.min(1, x));
 		this.touchMoveZ = Math.max(-1, Math.min(1, z));
 	}
 
 	setTouchRunning(running: boolean): void {
+		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.touchRunning = running;
 	}
 
 	triggerTouchJump(): void {
+		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.touchJump = true;
 	}
 
 	addTouchLook(deltaX: number, deltaY: number): void {
-		if (this.movementLocked) return;
+		if (this.movementLocked || this.manualInputBlocked || this.exampleMovement) return;
 		const TOUCH_LOOK_SENSITIVITY = 0.0035;
 		this.yaw -= deltaX * TOUCH_LOOK_SENSITIVITY * this.lookScale;
 		this.pitch -= deltaY * TOUCH_LOOK_SENSITIVITY * this.lookScale;
@@ -572,7 +636,9 @@ export class FirstPersonController {
 	}
 
 	isPointerLocked(): boolean {
-		return this.pointerLocked || this.touchActive;
+		return (
+			!this.manualInputBlocked && !this.exampleMovement && (this.pointerLocked || this.touchActive)
+		);
 	}
 
 	dispose(): void {

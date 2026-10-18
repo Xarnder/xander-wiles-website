@@ -454,6 +454,14 @@ export interface ThreeSceneOptions {
  */
 export class ThreeScene implements WorldRuntime {
 	devPanelOpen = false;
+	/** Debug sidebar keeps rendering and networking alive, while blocking manual game input. */
+	debugControlsOpen = false;
+	setDebugControls(open: boolean, exampleMovement: boolean, blockManual = open): void {
+		this.debugControlsOpen = open;
+		this.controller.setManualInputBlocked(blockManual);
+		this.controller.setExampleMovement(open && exampleMovement);
+	}
+
 	/** Typed foundation-deletion prompt is open — blocks building keys the same way other modals do. */
 	foundationDeletePromptOpen = false;
 	/**
@@ -1487,6 +1495,7 @@ export class ThreeScene implements WorldRuntime {
 			musicTool: this.music,
 			isInputBlocked: () =>
 				this.devPanelOpen ||
+				this.debugControlsOpen ||
 				this.foundationDeletePromptOpen ||
 				this.miniBuildUiOpen ||
 				this.miniBuildEditorOpen ||
