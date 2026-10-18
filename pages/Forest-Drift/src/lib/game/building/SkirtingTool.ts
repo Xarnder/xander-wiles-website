@@ -492,6 +492,7 @@ export class SkirtingTool implements BuildTool {
 			level,
 			crosshair: !this.hover ? 'default' : check.valid || check.closing ? 'valid' : 'invalid',
 			notice: !check.valid && !check.closing && this.drawing ? check.reason : undefined,
+			canFinishOpenPath: this.drawing && this.points.length >= 2,
 			hintLines: lines
 		};
 	}

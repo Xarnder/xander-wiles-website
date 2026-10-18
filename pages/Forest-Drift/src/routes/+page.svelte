@@ -1448,8 +1448,11 @@
 							</dd>
 							<dt>Hotbar Slots</dt>
 							<dd>Tap slots 1&ndash;6 or 8 at the bottom of the screen to change active tools.</dd>
-							<dt>Type Button</dt>
-							<dd>Cycle tool variants within a slot, or switch roof shapes.</dd>
+							<dt>Type / Shape</dt>
+							<dd>
+								Cycle tool variants within a slot. After a roof footprint is closed, this button
+								becomes Shape and cycles Flat, Shed, Gable, Hip, and the other roof types.
+							</dd>
 							<dt>Rotate Button</dt>
 							<dd>Rotate roofs, timber beams, stairs, furniture, and floor detail patterns.</dd>
 							<dt>Snap Button</dt>
@@ -1458,10 +1461,19 @@
 							<dd>Customise dimensions, colours, or slab offset height before placing.</dd>
 							<dt>Undo Button</dt>
 							<dd>Undo the last placement.</dd>
-							<dt>Finish &amp; Undo Pt</dt>
-							<dd>Contextual buttons to complete or step back continuous walls and paths.</dd>
-							<dt>Rise + / Rise −</dt>
-							<dd>Adjust pitched roof rise during roof shaping.</dd>
+							<dt>Finish fence &amp; Undo Pt</dt>
+							<dd>
+								While drawing a fence, railing, continuous wall, or skirting, Undo Pt steps back one
+								point. Finish fence (or Finish) commits the path and leaves it open — it does not
+								close the loop. Place on the first point still closes it.
+							</dd>
+							<dt>Tool actions</dt>
+							<dd>
+								Extra buttons appear for the tool you are using. Rise + / Rise − shape a pitched
+								roof. Dir − / Dir + turn stairs. Offset toggles skirting. Copy and Apply restyle a
+								fence. Angle, Copy, Edit, Prev, and Next control placed objects. Pitch, Vol, Len, and
+								Play control the music garden. Snap becomes Mode on a floor path.
+							</dd>
 							<dt>Open / Close Door</dt>
 							<dd>
 								Tap the Open Door button that appears when hovering over a door to open or close it.
@@ -1584,7 +1596,10 @@
 								loop.
 							</dd>
 							<dt>Enter / Backspace</dt>
-							<dd>Finish the path · Undo the last point</dd>
+							<dd>
+								Finish the path without closing the loop · Undo the last point. On a touch screen,
+								Finish fence does the same.
+							</dd>
 							<dt>E</dt>
 							<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
 							<dt>R / Q</dt>
@@ -2497,6 +2512,20 @@
 		top: 2.75rem;
 	}
 
+	.touch-mode .day-clock,
+	.touch-mode .mini-build-chunk,
+	.touch-mode .mini-build-chunk.below-clock {
+		top: calc(var(--touch-top-height, 3.4rem) + 0.4rem);
+		right: max(0.55rem, env(safe-area-inset-right));
+		left: auto;
+		max-width: 7.6rem;
+		min-width: 0;
+	}
+
+	.touch-mode .mini-build-chunk.below-clock {
+		top: calc(var(--touch-top-height, 3.4rem) + 2.4rem);
+	}
+
 	.mini-build-chunk-row {
 		display: flex;
 		justify-content: space-between;
@@ -2708,16 +2737,20 @@
 	}
 
 	.touch-mode .save-indicator {
-		bottom: 10.5rem;
-		right: 0.75rem;
+		top: calc(var(--touch-top-height, 3.4rem) + 0.45rem);
+		left: max(14px, env(safe-area-inset-left));
+		right: auto;
+		bottom: auto;
 		background: rgba(10, 20, 15, 0.75);
 		backdrop-filter: blur(8px);
 		z-index: 40;
 	}
 
 	.touch-mode .save-error-chip {
-		bottom: 13rem;
-		right: 0.75rem;
+		top: calc(var(--touch-top-height, 3.4rem) + 0.45rem);
+		left: auto;
+		right: max(14px, env(safe-area-inset-right));
+		bottom: auto;
 		z-index: 40;
 	}
 
@@ -2963,6 +2996,13 @@
 		pointer-events: none;
 	}
 
+	.touch-mode .fps-counter {
+		top: calc(var(--touch-top-height, 3.4rem) + 0.75rem);
+		left: max(0.55rem, env(safe-area-inset-left));
+		max-width: calc(100vw - 1.2rem - env(safe-area-inset-left) - env(safe-area-inset-right));
+		z-index: 28;
+	}
+
 	.fps-drops {
 		color: #9fe0b8;
 	}
@@ -2988,6 +3028,16 @@
 
 	.stats-overlay.below-fps {
 		top: 2.85rem;
+	}
+
+	.touch-mode .stats-overlay {
+		top: calc(var(--touch-top-height, 3.4rem) + 0.4rem);
+		left: max(0.75rem, env(safe-area-inset-left));
+		max-width: calc(100vw - 8.5rem);
+	}
+
+	.touch-mode .stats-overlay.below-fps {
+		top: calc(var(--touch-top-height, 3.4rem) + 3.1rem);
 	}
 
 	.view-only-badge {
@@ -3034,8 +3084,14 @@
 	}
 
 	.touch-mode .build-hud {
-		bottom: 13.5rem;
-		left: 0.75rem;
+		top: auto;
+		bottom: calc(var(--touch-dock-height, 8.5rem) + 5.4rem);
+		left: max(0.75rem, env(safe-area-inset-left));
+		max-width: min(16rem, calc(100vw - 8.5rem));
+		max-height: calc(
+			100vh - var(--touch-top-height, 3.4rem) - var(--touch-dock-height, 8.5rem) - 9rem
+		);
+		overflow: hidden;
 		background: rgba(10, 20, 15, 0.8);
 		backdrop-filter: blur(8px);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
@@ -3260,12 +3316,20 @@
 		opacity: 0.75;
 	}
 
-	/* Touch mode floor selector styling with generous space on the right side */
+	/* Touch mode floor selector sits in the clear band between the top bar and the touch dock. */
 	.touch-mode .floor-selector {
-		top: 50%;
+		top: calc(var(--touch-top-height, 3.4rem) + 5.8rem);
+		bottom: calc(var(--touch-dock-height, 8.5rem) + 4.4rem);
 		right: max(16px, env(safe-area-inset-right));
 		left: auto;
-		transform: translateY(-50%);
+		transform: none;
+		height: max-content;
+		max-height: calc(
+			100vh - var(--touch-top-height, 3.4rem) - var(--touch-dock-height, 8.5rem) - 10.2rem
+		);
+		margin-top: auto;
+		margin-bottom: auto;
+		overflow: auto;
 		padding: 0.75rem 0.65rem;
 		gap: 0.4rem;
 		min-width: 4.4rem;
@@ -3313,22 +3377,29 @@
 		opacity: 0.85;
 	}
 
-	.touch-mode .save-indicator {
-		top: max(58px, calc(env(safe-area-inset-top) + 50px));
-		left: max(14px, env(safe-area-inset-left));
-		right: auto;
-		bottom: auto;
+	.touch-mode.fps-on .save-indicator,
+	.touch-mode.fps-on .save-error-chip,
+	.touch-mode.fps-on .day-clock,
+	.touch-mode.fps-on .mini-build-chunk,
+	.touch-mode.fps-on .mini-build-chunk.below-clock {
+		top: calc(var(--touch-top-height, 3.4rem) + 3.1rem);
 	}
 
-	.touch-mode.fps-on .save-indicator {
-		top: max(4.6rem, calc(env(safe-area-inset-top) + 3.6rem));
+	.touch-mode.fps-on .mini-build-chunk.below-clock {
+		top: calc(var(--touch-top-height, 3.4rem) + 5.1rem);
 	}
 
-	.touch-mode .save-error-chip {
-		top: max(88px, calc(env(safe-area-inset-top) + 80px));
-		left: max(14px, env(safe-area-inset-left));
-		right: auto;
-		bottom: auto;
+	.touch-mode.fps-on .floor-selector {
+		top: calc(var(--touch-top-height, 3.4rem) + 8.5rem);
+		max-height: calc(
+			100vh - var(--touch-top-height, 3.4rem) - var(--touch-dock-height, 8.5rem) - 12.9rem
+		);
+	}
+
+	.touch-mode.fps-on .build-hud {
+		max-height: calc(
+			100vh - var(--touch-top-height, 3.4rem) - var(--touch-dock-height, 8.5rem) - 11.6rem
+		);
 	}
 
 	.snap-badge {
@@ -3387,9 +3458,14 @@
 	}
 
 	.touch-mode .utility-buttons {
-		bottom: 10.75rem;
-		left: 0.75rem;
+		bottom: calc(var(--touch-dock-height, 8.5rem) + 3.5rem);
+		left: max(0.75rem, env(safe-area-inset-left));
 		z-index: 40;
+	}
+
+	.touch-mode :global(.hotbar) {
+		bottom: calc(var(--touch-dock-height, 8.5rem) + 0.35rem);
+		max-width: calc(100vw - 1rem);
 	}
 
 	.help-toggle {
@@ -3417,23 +3493,8 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 	}
 
-	@media (max-height: 650px) and (min-height: 501px) {
-		.touch-mode .utility-buttons {
-			bottom: 9rem;
-		}
-		.touch-mode .build-hud {
-			bottom: 11.5rem;
-		}
-	}
-
 	@media (max-height: 500px) and (orientation: landscape) {
-		.touch-mode :global(.hotbar) {
-			bottom: max(6px, env(safe-area-inset-bottom));
-			max-width: calc(100vw - 310px);
-		}
-
 		.touch-mode .utility-buttons {
-			bottom: 7.2rem;
 			left: max(8px, env(safe-area-inset-left));
 			gap: 0.3rem;
 		}
@@ -3445,7 +3506,6 @@
 		}
 
 		.touch-mode .build-hud {
-			bottom: 9.6rem;
 			left: max(8px, env(safe-area-inset-left));
 			font-size: 0.52rem;
 			line-height: 1.25;
@@ -3462,30 +3522,13 @@
 		}
 
 		.touch-mode .save-indicator {
-			top: max(44px, calc(env(safe-area-inset-top) + 38px));
-			bottom: auto;
 			left: max(8px, env(safe-area-inset-left));
-			right: auto;
 			font-size: 0.68rem;
 			padding: 0.2rem 0.5rem;
 		}
 
-		.touch-mode.fps-on .save-indicator {
-			top: max(4.4rem, calc(env(safe-area-inset-top) + 3.4rem));
-		}
-
-		.touch-mode .save-error-chip {
-			top: max(70px, calc(env(safe-area-inset-top) + 64px));
-			bottom: auto;
-			left: max(8px, env(safe-area-inset-left));
-			right: auto;
-		}
-
 		.touch-mode .floor-selector {
-			top: 38%;
-			transform: translateY(-50%);
 			right: max(10px, env(safe-area-inset-right));
-			left: auto;
 			padding: 0.5rem 0.45rem;
 			gap: 0.25rem;
 			min-width: 3.8rem;
@@ -3513,7 +3556,6 @@
 
 	@media (max-width: 600px) and (orientation: portrait) {
 		.touch-mode :global(.hotbar) {
-			bottom: 6.8rem;
 			width: calc(100vw - 16px);
 			max-width: calc(100vw - 16px);
 			left: 50%;
@@ -3521,7 +3563,6 @@
 		}
 
 		.touch-mode .utility-buttons {
-			bottom: 9.6rem;
 			left: max(8px, env(safe-area-inset-left));
 		}
 
@@ -3531,38 +3572,21 @@
 		}
 
 		.touch-mode .build-hud {
-			bottom: 11.8rem;
 			left: max(8px, env(safe-area-inset-left));
-			font-size: 0.72rem;
-			padding: 0.35rem 0.6rem;
-			max-width: calc(100vw - 16px);
+			font-size: 0.66rem;
+			line-height: 1.25;
+			padding: 0.25rem 0.5rem;
+			max-width: calc(100vw - 8.5rem);
 		}
 
 		.touch-mode .save-indicator {
-			top: max(48px, calc(env(safe-area-inset-top) + 42px));
-			bottom: auto;
 			left: max(8px, env(safe-area-inset-left));
-			right: auto;
 			font-size: 0.68rem;
 			padding: 0.2rem 0.5rem;
 		}
 
-		.touch-mode.fps-on .save-indicator {
-			top: max(4.5rem, calc(env(safe-area-inset-top) + 3.5rem));
-		}
-
-		.touch-mode .save-error-chip {
-			top: max(74px, calc(env(safe-area-inset-top) + 68px));
-			bottom: auto;
-			left: max(8px, env(safe-area-inset-left));
-			right: auto;
-		}
-
 		.touch-mode .floor-selector {
-			top: 38%;
-			transform: translateY(-50%);
 			right: max(10px, env(safe-area-inset-right));
-			left: auto;
 			padding: 0.6rem 0.5rem;
 			gap: 0.3rem;
 			min-width: 4.2rem;

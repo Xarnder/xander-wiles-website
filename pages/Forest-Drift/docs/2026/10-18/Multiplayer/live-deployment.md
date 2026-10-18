@@ -42,10 +42,35 @@ Content-Length and multi-byte UTF-8. Malformed publish bodies and malformed fiel
 rejected. The route and limit regression tests run with `npm run test:unit -- --run`; Worker types
 are checked separately with `npx tsc -p server/tsconfig.json`.
 
+The deployed multiplayer menu now includes an owner-only Cloudflare allowance breakdown
+(see `in-game-usage.md`); the locator, debug movement sidebar and rear-view name-tag fix are
+also integrated on `main`.
+
 ## Remaining release-gate work
 
 Being deployed does not complete the plan's Phase 4 certification. The four-hour 20-player soak,
-impaired-network test, real iPad/Safari playtest, in-room usage warning, presence outlines,
+impaired-network test, real iPad/Safari playtest, presence outlines,
 server-side Mini Build budgets, weekly R2 backups and backup restore drill still need their
 respective implementation or measurements. Existing SQLite restore points and manual exports
 remain available. No paid plan or payment method was added during this setup.
+
+## Cost constraint — confirmed 18 October 2026
+
+The owner requires a £10/month budget and an absolute £15/month ceiling, including
+taxes and currency conversion. This supersedes the earlier plan to enable Workers Paid
+during session months. Keep Workers Free and do not activate paid add-ons (including R2)
+without a new cost-control decision from the owner.
+
+The Cloudflare Billing → Subscriptions dashboard was checked: Workers Free is the only
+active subscription and there is no payment method on file. The current multiplayer
+Worker and SQLite Durable Objects therefore use free quotas; exceeding a quota fails
+operations rather than purchasing overage. Availability can stop when limits are hit.
+
+The existing $10 email alert is informational only, not a hard spending cap. Cloudflare
+budget alerts do not pause or cap usage. No £15 billing cap has been configured or claimed.
+A future paid setup must not rely on alerts or delayed billing monitors to guarantee this
+ceiling. Preserve the free-only setup unless a genuinely enforceable alternative is agreed.
+
+References:
+- https://developers.cloudflare.com/durable-objects/platform/pricing/
+- https://developers.cloudflare.com/billing/manage/budget-alerts/

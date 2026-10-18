@@ -804,6 +804,7 @@ export class BarrierTool implements BuildTool {
 			level,
 			crosshair: check.valid || check.closing ? 'valid' : 'invalid',
 			notice: !check.valid && !check.closing ? check.reason : undefined,
+			canFinishOpenPath: this.points.length >= 2,
 			hintLines: lines
 		};
 	}

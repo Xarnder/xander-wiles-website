@@ -757,6 +757,11 @@ export interface BuildUiState {
 	 */
 	notice?: string;
 	/**
+	 * Drawing an open path (fence, railing, continuous wall, skirting) with enough points to commit
+	 * it. Touch controls show a Finish button that ends the path without closing the loop.
+	 */
+	canFinishOpenPath?: boolean;
+	/**
 	 * The current building level, for the on-screen floor selector (▲ / name+elevation / ▼) — every
 	 * tool except Foundation provides this, Window/Door included: they report whichever wall's
 	 * foundation is being looked at, and only cut openings into walls on that foundation's selected

@@ -1,6 +1,12 @@
 <script lang="ts">
 	import type { ThreeScene } from '$lib/game/ThreeScene';
 	import type { BuildUiState, HotbarUiState, ToolId } from '$lib/game/building/FoundationTypes';
+	import {
+		snapKeyForHints,
+		snapLabelForHints,
+		touchToolActions,
+		variantControl
+	} from '$lib/components/touchToolActions';
 
 	// Bundled SVG icons from assets/SVGs
 	import jumpIcon from '$lib/assets/icons/jump.svg';
@@ -15,8 +21,6 @@
 	import rotateHIcon from '$lib/assets/icons/rotate-horiznontal.svg';
 	import handPointIcon from '$lib/assets/icons/hand-point.svg';
 	import pauseIcon from '$lib/assets/icons/pause.svg';
-	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
-	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import openDoorIcon from '$lib/assets/icons/open.svg';
 	import musicIcon from '$lib/assets/icons/music.svg';
 
@@ -48,6 +52,48 @@
 	let joystickKnobX = $state(0);
 	let joystickKnobY = $state(0);
 	let joystickBaseEl = $state<HTMLDivElement | undefined>(undefined);
+	let topBarEl = $state<HTMLElement | undefined>(undefined);
+	let movementEl = $state<HTMLElement | undefined>(undefined);
+	let actionsEl = $state<HTMLElement | undefined>(undefined);
+
+	/** Publishes the touch bars' size so the hotbar, floor selector, and HUD stay in the gap. */
+	$effect(() => {
+		const top = topBarEl;
+		const movement = movementEl;
+		const actions = actionsEl;
+		if (!top || !movement || !actions) return;
+		const shell = top.closest('.game-shell');
+		if (!(shell instanceof HTMLElement)) return;
+		const publish = () => {
+			const shellBox = shell.getBoundingClientRect();
+			const topBox = top.getBoundingClientRect();
+			const movementBox = movement.getBoundingClientRect();
+			const actionsBox = actions.getBoundingClientRect();
+			const dockTop = Math.min(movementBox.top, actionsBox.top);
+			shell.style.setProperty(
+				'--touch-top-height',
+				`${Math.ceil(topBox.bottom - shellBox.top)}px`
+			);
+			shell.style.setProperty(
+				'--touch-dock-height',
+				`${Math.ceil(shellBox.bottom - dockTop)}px`
+			);
+			shell.style.setProperty('--touch-move-width', `${Math.ceil(movementBox.width)}px`);
+		};
+		publish();
+		const observer = new ResizeObserver(publish);
+		observer.observe(top);
+		observer.observe(movement);
+		observer.observe(actions);
+		window.addEventListener('resize', publish);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener('resize', publish);
+			shell.style.removeProperty('--touch-top-height');
+			shell.style.removeProperty('--touch-dock-height');
+			shell.style.removeProperty('--touch-move-width');
+		};
+	});
 	const JOYSTICK_RADIUS = 48; // Max thumb knob travel in pixels
 
 	// Sprint state
@@ -154,6 +200,19 @@
 		lookPointerId = null;
 	}
 
+	const hintLines = $derived(buildHud?.hintLines ?? []);
+
+	/** Roof rise, stair direction, skirting offset, object copy, music pitch, and the other tool-only keys. */
+	const extraActions = $derived(
+		touchToolActions(hintLines, {
+			canFinishOpenPath: buildHud?.canFinishOpenPath === true,
+			toolId: buildHud?.toolId
+		})
+	);
+
+	const variant = $derived(variantControl(hintLines));
+	const snapLabel = $derived(snapLabelForHints(hintLines));
+
 	// Actions
 	function onPrimaryAction() {
 		scene?.triggerPrimaryAction();
@@ -168,17 +227,16 @@
 	}
 
 	function onCycleVariant() {
-		scene?.simulateKey('KeyV');
-		scene?.cycleSlotVariant(1);
+		if (variant.roofShape) scene?.simulateKey('KeyV');
+		else scene?.cycleSlotVariant(1);
 	}
 
 	function onToggleSnap() {
-		scene?.simulateKey('KeyB');
+		scene?.simulateKey(snapKeyForHints(hintLines));
 	}
 
 	function onRotate() {
 		scene?.simulateKey('KeyR');
-		scene?.simulateKey('ArrowRight');
 	}
 
 	function onCustomise() {
@@ -187,14 +245,6 @@
 
 	function onToggleDoor() {
 		scene?.toggleLookedAtDoor();
-	}
-
-	function onFinishContinuous() {
-		scene?.simulateKey('Enter');
-	}
-
-	function onUndoPoint() {
-		scene?.simulateKey('Backspace');
 	}
 
 	function onToggleBuildMode() {
@@ -217,16 +267,6 @@
 		scene?.toggleMusicMode();
 	}
 
-	const isContinuousOrPath = $derived.by(() => {
-		const notice = buildHud?.notice ?? '';
-		return notice.includes('Continuous Wall') || notice.includes('Path') || notice.includes('Enter');
-	});
-
-	const isRoofAdjusting = $derived.by(() => {
-		const notice = buildHud?.notice ?? '';
-		return notice.includes('Adjust rise') || notice.includes('Rise:');
-	});
-
 	const isDoorOpen = $derived.by(() => {
 		if (!lookedAtDoorId || !scene) return false;
 		return scene.isDoorOpen(lookedAtDoorId);
@@ -247,7 +287,7 @@
 	></div>
 
 	<!-- Top Bar Controls -->
-	<header class="touch-top-bar">
+	<header class="touch-top-bar" bind:this={topBarEl}>
 		<div class="touch-mode-buttons">
 			<button
 				type="button"
@@ -351,7 +391,7 @@
 	{/if}
 
 	<!-- Bottom Left: Virtual Joystick & Movement Buttons -->
-	<div class="touch-movement-cluster">
+	<div class="touch-movement-cluster" bind:this={movementEl}>
 		<div
 			class="touch-joystick-base"
 			bind:this={joystickBaseEl}
@@ -399,30 +439,22 @@
 	</div>
 
 	<!-- Bottom Right: Building Action Buttons -->
-	<div class="touch-actions-cluster">
-		<!-- Contextual Roof Rise actions -->
-		{#if isRoofAdjusting}
-			<div class="touch-path-actions" data-testid="touch-roof-actions">
-				<button
-					type="button"
-					class="touch-pill-btn"
-					onclick={() => scene?.simulateKey('ArrowDown')}
-					data-testid="touch-rise-down"
-					aria-label="Lower Roof Rise"
-				>
-					<img class="touch-icon" src={downArrowIcon} alt="" />
-					<span>Rise -</span>
-				</button>
-				<button
-					type="button"
-					class="touch-pill-btn"
-					onclick={() => scene?.simulateKey('ArrowUp')}
-					data-testid="touch-rise-up"
-					aria-label="Raise Roof Rise"
-				>
-					<img class="touch-icon" src={upArrowIcon} alt="" />
-					<span>Rise +</span>
-				</button>
+	<div class="touch-actions-cluster" bind:this={actionsEl}>
+		<!-- Tool-only actions: roof rise and shape, stair direction, fence finish, music, and the rest. -->
+		{#if extraActions.length > 0}
+			<div class="touch-path-actions" data-testid="touch-tool-actions">
+				{#each extraActions as action (action.id)}
+					<button
+						type="button"
+						class="touch-pill-btn"
+						class:primary={action.primary}
+						onclick={() => scene?.simulateKey(action.code)}
+						data-testid={action.testId}
+						aria-label={action.aria}
+					>
+						{action.label}
+					</button>
+				{/each}
 			</div>
 		{/if}
 
@@ -439,28 +471,6 @@
 				>
 					<img class="touch-icon" src={openDoorIcon} alt="" />
 					<span>{isDoorOpen ? 'Close Door' : 'Open Door'}</span>
-				</button>
-			</div>
-		{/if}
-
-		<!-- Contextual Continuous/Path actions -->
-		{#if isContinuousOrPath}
-			<div class="touch-path-actions">
-				<button
-					type="button"
-					class="touch-pill-btn"
-					onclick={onUndoPoint}
-					data-testid="touch-undo-pt"
-				>
-					Undo Pt
-				</button>
-				<button
-					type="button"
-					class="touch-pill-btn primary"
-					onclick={onFinishContinuous}
-					data-testid="touch-finish"
-				>
-					Finish
 				</button>
 			</div>
 		{/if}
@@ -484,10 +494,10 @@
 				onclick={onToggleSnap}
 				data-testid="touch-snap-btn"
 				title="Cycle Snap Mode"
-				aria-label="Cycle Snap"
+				aria-label={snapLabel === 'Mode' ? 'Cycle path mode' : 'Cycle Snap'}
 			>
 				<img class="touch-icon" src={magnetIcon} alt="" />
-				<span>Snap</span>
+				<span>{snapLabel}</span>
 			</button>
 
 			<button
@@ -495,11 +505,11 @@
 				class="touch-circle-btn"
 				onclick={onCycleVariant}
 				data-testid="touch-variant-btn"
-				title="Cycle Tool Variant"
-				aria-label="Cycle Tool Variant"
+				title={variant.roofShape ? 'Cycle roof shape' : 'Cycle Tool Variant'}
+				aria-label={variant.roofShape ? 'Cycle roof shape' : 'Cycle Tool Variant'}
 			>
 				<img class="touch-icon" src={spannerIcon} alt="" />
-				<span>Type</span>
+				<span>{variant.label}</span>
 			</button>
 
 			<button
@@ -584,9 +594,9 @@
 	/* Look swipe surface covers right half of screen */
 	.touch-look-zone {
 		position: absolute;
-		top: 60px;
+		top: calc(var(--touch-top-height, 60px) + 4px);
 		right: 0;
-		bottom: 120px;
+		bottom: calc(var(--touch-dock-height, 120px) + 4px);
 		width: 55%;
 		pointer-events: auto;
 		touch-action: none;
@@ -600,8 +610,10 @@
 		left: 14px;
 		right: 14px;
 		display: flex;
+		flex-wrap: wrap;
 		justify-content: space-between;
 		align-items: center;
+		row-gap: 6px;
 		pointer-events: auto;
 		z-index: 30;
 	}
@@ -801,11 +813,18 @@
 		gap: 12px;
 		pointer-events: auto;
 		z-index: 25;
+		max-width: calc(
+			100vw - var(--touch-move-width, 168px) - 36px - env(safe-area-inset-left) -
+				env(safe-area-inset-right)
+		);
 	}
 
 	.touch-path-actions {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 8px;
+		max-width: 100%;
 	}
 
 	.touch-pill-btn {
@@ -834,7 +853,10 @@
 
 	.touch-tools-row {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 8px;
+		max-width: 100%;
 	}
 
 	.touch-circle-btn {
@@ -875,8 +897,11 @@
 
 	.touch-primary-row {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 12px;
 		align-items: center;
+		max-width: 100%;
 	}
 
 	.touch-main-btn {
@@ -1051,6 +1076,29 @@
 			padding: 4px 10px;
 			font-size: 0.74rem;
 			gap: 4px;
+		}
+	}
+
+	@media (max-width: 520px) {
+		.touch-mode-btn span,
+		.touch-util-btn span {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
+		}
+
+		.touch-mode-btn,
+		.touch-util-btn {
+			position: relative;
+			justify-content: center;
+			min-width: 36px;
+			padding: 6px;
 		}
 	}
 

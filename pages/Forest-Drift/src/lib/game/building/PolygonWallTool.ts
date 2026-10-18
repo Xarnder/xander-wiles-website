@@ -705,6 +705,7 @@ export class PolygonWallTool implements BuildTool {
 				snapMode: this.snapMode,
 				level,
 				crosshair: 'valid',
+				canFinishOpenPath: this.points.length >= 2,
 				hintLines: [
 					...levelLines,
 					'',
@@ -724,6 +725,7 @@ export class PolygonWallTool implements BuildTool {
 			snapMode: this.snapMode,
 			level,
 			crosshair: 'valid',
+			canFinishOpenPath: this.points.length >= 2,
 			hintLines: [
 				...levelLines,
 				'',
@@ -749,6 +751,7 @@ export class PolygonWallTool implements BuildTool {
 			snapMode: this.snapMode,
 			level: this.currentLevelUiState(this.activeFoundationId ?? undefined),
 			crosshair: 'invalid',
+			canFinishOpenPath: this.points.length >= 2,
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),
 				'',
