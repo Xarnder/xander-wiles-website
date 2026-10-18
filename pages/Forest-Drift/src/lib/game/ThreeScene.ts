@@ -1,6 +1,21 @@
 import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
 import type { CreatureDefinition } from './creatures/CreatureTypes';
-import { timelineDefinition } from './music/MusicModel';
+import type { SceneMultiplayerHooks } from './net/MultiplayerSession';
+import type { PlayerBookmark, SharedEnvironment } from './net/protocol';
+import type { AffectedContent, SharedWorldPort } from './net/WorldOpFeed';
+import type { AuthoredContent } from './net/worldEntities';
+import {
+	LOCAL_SKY_KEYS,
+	SHARED_WEATHER_KEYS,
+	applyKnownFields,
+	omitKeys,
+	pickKeys
+} from './net/sharedEnvironment';
+import {
+	timelineDefinition,
+	type MusicPlantDefinition,
+	type MusicTreeDefinition
+} from './music/MusicModel';
 import { MusicPlantPlacementTool } from './music/MusicPlantPlacementTool';
 import { MiniBuildPersonalLibrary } from './miniBuild/MiniBuildPersonalLibrary';
 import { MiniBuildPreferences } from './miniBuild/MiniBuildPreferences';
@@ -127,6 +142,7 @@ import {
 	advanceTimeOfDay,
 	ensureDayCycleSettings,
 	resolveEffectiveSky,
+	wrapTimeOfDay,
 	type EffectiveSkyLook
 } from './sky/dayNightMath';
 import { CloudSystem } from './sky/CloudSystem';
@@ -154,6 +170,7 @@ import { ParticleEffectManager } from './particles/ParticleEffectManager';
 import { WEATHER_SURFACE_UNIFORMS } from './materials/shader/weatherSurface';
 import { WeatherExposureMap } from './weather/WeatherExposureMap';
 import { WeatherSystem, type WeatherFrame, type WeatherStats } from './weather/WeatherSystem';
+import { WEATHER_TYPES, type WeatherType } from './weather/WeatherTypes';
 import {
 	createDefaultParticleDebugSettings,
 	PARTICLE_QUALITY,
@@ -416,6 +433,11 @@ export interface ThreeSceneOptions {
 	 * scratch scene.
 	 */
 	world?: WorldDefinition;
+	/**
+	 * Present only in an online world: sends the local pose each frame and draws the other players.
+	 * Single player passes nothing and runs exactly as it always has.
+	 */
+	multiplayer?: SceneMultiplayerHooks;
 }
 
 /**
@@ -434,7 +456,10 @@ export class ThreeScene implements WorldRuntime {
 	devPanelOpen = false;
 	/** Typed foundation-deletion prompt is open — blocks building keys the same way other modals do. */
 	foundationDeletePromptOpen = false;
-	/** Pause menu: the render loop keeps running, but the day/night clock does not. */
+	/**
+	 * Pause menu: the render loop keeps running, but the day/night clock does not. Ignored in an
+	 * online world, whose clock is shared and keeps running while others play (Q12).
+	 */
 	simulationPaused = false;
 	readonly buildingSettings: BuildingSettings;
 	private readonly container: HTMLElement;
@@ -495,6 +520,15 @@ export class ThreeScene implements WorldRuntime {
 	private readonly removalManager: BuildingRemovalManager;
 	private readonly worldSurfaceSampler: WorldSurfaceSampler;
 	private readonly controller: FirstPersonController;
+	private multiplayer: SceneMultiplayerHooks | null = null;
+	/**
+	 * Online worlds: the room clock (seconds) when the sky, weather or time last changed, and the time
+	 * of day and weather clock then. Each frame's time of day and weather are derived from it, so every
+	 * player sees the same sky without any per-frame traffic.
+	 */
+	private sharedAnchor: SharedEnvironment['anchor'] | null = null;
+	/** F3-C: no free flight in online worlds. */
+	private flightDisabled = false;
 	private readonly foundationTool: FoundationTool;
 	private readonly wallTool: WallTool;
 	private readonly windowTool: WindowTool;
@@ -1420,6 +1454,7 @@ export class ThreeScene implements WorldRuntime {
 		this.doorInteraction = new DoorInteractionController({
 			camera: this.camera,
 			getHingePivots: () => this.buildingManager.getDoorHingePivots(),
+			onToggle: (id, open) => this.multiplayer?.doorToggled(id, open),
 			onLookedAtDoorChange: options.onLookedAtDoorChange
 		});
 
@@ -1509,6 +1544,7 @@ export class ThreeScene implements WorldRuntime {
 			sustain: this.sustainSettings,
 			musicVisual: this.musicVisual,
 			miniBuildDisplay: this.miniBuildPreferences.display,
+			worldAccess: 'local',
 			actions: {
 				miniBuildDisplay: () => {
 					this.miniBuildChunkBoundaries.setEnabled(
@@ -1549,16 +1585,21 @@ export class ThreeScene implements WorldRuntime {
 				hydrologyVisual: () => {
 					this.water.applyLook(this.hydrologyVisual);
 				},
-				weather: () => this.weather.applyDebugSelection(),
+				weather: () => {
+					this.weather.applyDebugSelection();
+					this.sharedEnvironmentEdited();
+				},
 				weatherSelect: () => {
 					this.weather.presetDebugValues();
 					this.weather.applyDebugSelection();
+					this.sharedEnvironmentEdited();
 				},
 				weatherLightning: () => this.weather.forceLightning(this.weatherFrame),
 				weatherForce: (type) => {
 					this.weather.debug.selection = type;
 					this.weather.presetDebugValues();
 					this.weather.applyDebugSelection();
+					this.sharedEnvironmentEdited();
 				},
 				particles: () => {
 					this.particles.setEnabled(this.particleSettings.enabled);
@@ -1646,6 +1687,7 @@ export class ThreeScene implements WorldRuntime {
 				sky: () => {
 					this.environmentRevision++;
 					this.applySkySettings();
+					this.sharedEnvironmentEdited();
 				},
 				graphicsQuality: (quality) => {
 					this.graphicsPipeline.setQuality(quality as GraphicsQuality);
@@ -1723,6 +1765,32 @@ export class ThreeScene implements WorldRuntime {
 
 		if (new URLSearchParams(location.search).has('musicTest'))
 			(window as unknown as { forestScene: ThreeScene }).forestScene = this;
+		if (options.multiplayer) {
+			// Until the room says who we are: no flight (ever, online), no building, and the world's
+			// shared settings read-only. The role in `welcome` then unlocks what it allows.
+			this.setFlightDisabled(true);
+			this.setBuildingLocked(true);
+			this.setWorldSettingsAccess('member');
+			this.sharedAnchor = {
+				roomSeconds: 0,
+				timeOfDay: ensureDayCycleSettings(this.skySettings).timeOfDay,
+				weatherTime: this.weather.controller.weatherTime
+			};
+			this.multiplayer = options.multiplayer;
+			this.multiplayer.attach({
+				scene: this.scene,
+				camera: this.camera,
+				registerMaterial: (material) => this.graphicsPipeline.registerMaterial(material),
+				environment: {
+					capture: () => this.captureSharedEnvironment(),
+					apply: (env) => this.applySharedEnvironment(env)
+				},
+				world: this.sharedWorldPort(),
+				setDoorOpen: (id, open) => this.doorInteraction.setOpen(id, open),
+				restorePlayer: (bookmark) => this.restoreBookmark(bookmark),
+				setBuildingLocked: (locked) => this.setBuildingLocked(locked)
+			});
+		}
 		this.animationFrameId = requestAnimationFrame(this.animate);
 	}
 
@@ -1837,10 +1905,229 @@ export class ThreeScene implements WorldRuntime {
 		this.applySkySettings();
 	}
 
-	/** F: toggles free flight. Returns the new state (flying, speed). */
+	/** F: toggles free flight. Returns the new state (flying, speed). Always off in online worlds. */
 	toggleFlying(): FlightState {
-		const flying = this.controller.toggleFlying();
+		const flying = this.flightDisabled ? false : this.controller.toggleFlying();
 		return { flying, speed: this.controller.getFlySpeed() };
+	}
+
+	isFlightDisabled(): boolean {
+		return this.flightDisabled;
+	}
+
+	/** F3-C: online worlds have no free flight (the room's speed check assumes running speed). */
+	setFlightDisabled(disabled: boolean): void {
+		this.flightDisabled = disabled;
+		if (disabled) this.controller.setFlying(false);
+	}
+
+	/** Viewers (and everyone, until the room confirms their role) can look but not build. */
+	setBuildingLocked(locked: boolean): void {
+		this.buildToolManager.setLocked(locked);
+	}
+
+	/**
+	 * Which world settings this player may change: everything in single player; in an online world
+	 * the land is locked for everyone and the sky, weather and time are the owner's (Q14-A).
+	 */
+	setWorldSettingsAccess(access: 'local' | 'owner' | 'member'): void {
+		this.settingsHost.worldAccess = access;
+	}
+
+	/**
+	 * Online worlds (Phase 3): how `WorldOpFeed` reads this scene's authored content and makes it
+	 * show what the room committed. Applying goes through the managers' low-level add/remove paths
+	 * (the same ones `loadWorld` uses), one foundation's building at a time, so nothing cascades,
+	 * nothing enters the undo history, and only what changed is rebuilt.
+	 */
+	private sharedWorldPort(): SharedWorldPort {
+		return {
+			captureContent: () => this.captureAuthoredContent(),
+			// Creatures are local (Q9-A) and bump their counter every few seconds: left out.
+			contentRevision: () =>
+				this.music.revision +
+				this.buildingManager.getRevision() +
+				this.foundationManager.getRevision() +
+				this.levelManager.getRevision() +
+				this.furnitureManager.getRevision() +
+				this.barrierManager.getRevision() +
+				this.miniBuilds.revision +
+				this.treeManager.getOverrideRevision(),
+			isTransactionOpen: () => this.moveTool.isHoldingObject(),
+			applyContent: (target, affected) => this.applyAuthoredContent(target, affected)
+		};
+	}
+
+	private captureAuthoredContent(): AuthoredContent {
+		return structuredClone({
+			foundations: this.getFoundations(),
+			buildings: this.getBuildings(),
+			buildingLevels: this.getBuildingLevels(),
+			barriers: this.getBarriers(),
+			furniture: this.getFurniture(),
+			miniBuilds: this.getMiniBuilds(),
+			musicTrees: this.getMusicTrees(),
+			musicPlants: this.getMusicPlants(),
+			proceduralOverrides: this.getProceduralOverrides()
+		});
+	}
+
+	private applyAuthoredContent(target: AuthoredContent, affected: AffectedContent): void {
+		const byId = <T extends { id: string }>(list: readonly T[]) =>
+			new Map(list.map((item) => [item.id, item] as const));
+		const spacing = vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution);
+		const sampler = this.terrainManager.getHeightSampler();
+		const sample = (x: number, z: number) => sampler.sample(x, z);
+
+		// Foundations first (building parts are placed relative to them), removals last.
+		const foundations = byId(target.foundations as FoundationDefinition[]);
+		const removedFoundations: string[] = [];
+		for (const id of affected.foundations) {
+			const definition = foundations.get(id);
+			if (!definition) {
+				removedFoundations.push(id);
+				continue;
+			}
+			this.foundationManager.removeFoundation(id);
+			this.foundationManager.addFoundation({
+				...structuredClone(definition),
+				bottomY: regroundedFoundationBottom(definition, spacing, sample)
+			});
+			affected.buildingFoundations.add(id);
+		}
+		const buildings = new Map(
+			(target.buildings as FoundationBuildingDefinition[]).map((b) => [b.foundationId, b] as const)
+		);
+		for (const foundationId of affected.buildingFoundations) {
+			const building = buildings.get(foundationId);
+			this.buildingManager.replaceFoundationBuilding(
+				foundationId,
+				building ? structuredClone(building) : undefined
+			);
+		}
+		if (affected.levels || removedFoundations.length > 0) {
+			for (const id of removedFoundations) this.levelManager.removeLevelsForFoundation(id);
+			this.levelManager.load(structuredClone(target.buildingLevels as BuildingLevelDefinition[]));
+		}
+		const furniture = byId(target.furniture as FurnitureDefinition[]);
+		for (const id of affected.furniture) {
+			this.furnitureManager.remove(id);
+			const definition = furniture.get(id);
+			if (definition) this.furnitureManager.add(structuredClone(definition));
+		}
+		const barriers = byId(target.barriers as BarrierDefinition[]);
+		for (const id of affected.barriers) {
+			this.barrierManager.remove(id);
+			const definition = barriers.get(id);
+			if (definition) this.barrierManager.add(structuredClone(definition));
+		}
+		if (affected.miniBuildDefinitions.size > 0) {
+			// A design changed (rare): reload the lot, so every copy recompiles from it.
+			this.miniBuilds.load(structuredClone(target.miniBuilds as MiniBuildWorldState));
+		} else if (affected.miniBuildInstances.size > 0) {
+			const instances = byId(target.miniBuilds.instances as MiniBuildWorldState['instances']);
+			for (const id of affected.miniBuildInstances) {
+				const instance = instances.get(id);
+				if (instance) this.miniBuilds.upsertInstance(instance);
+				else this.miniBuilds.removeInstance(id);
+			}
+		}
+		if (affected.music) {
+			this.music.load(
+				structuredClone(target.musicTrees as MusicTreeDefinition[]),
+				structuredClone(target.musicPlants as MusicPlantDefinition[])
+			);
+		}
+		if (affected.removedTrees) {
+			this.treeManager.setRemovedTreeIds(target.proceduralOverrides.removedTreeIds);
+		}
+		for (const id of removedFoundations) this.foundationManager.removeFoundation(id);
+	}
+
+	/** Q18: back where this player last left the world. The room stores feet height. */
+	private restoreBookmark(bookmark: PlayerBookmark): void {
+		this.controller.restoreState(
+			{ x: bookmark.x, y: bookmark.y + this.settings.player.eyeHeight, z: bookmark.z },
+			bookmark.yaw,
+			bookmark.pitch
+		);
+		this.terrainManager.primeAround(bookmark.x, bookmark.z, 1);
+	}
+
+	/** The sky, weather and time anchor as the owner shares them (see `SharedEnvironment`). */
+	private captureSharedEnvironment(): SharedEnvironment {
+		return {
+			anchor: { ...this.currentSharedAnchor() },
+			sky: omitKeys(this.skySettings, LOCAL_SKY_KEYS),
+			weather: pickKeys(this.weather.debug, SHARED_WEATHER_KEYS)
+		};
+	}
+
+	/** Applies the owner's shared sky, weather and time (welcome, or a live change). */
+	private applySharedEnvironment(env: SharedEnvironment): void {
+		applyKnownFields(this.skySettings, env.sky, LOCAL_SKY_KEYS);
+		ensureDayCycleSettings(this.skySettings);
+		const weather = { ...env.weather };
+		if (
+			weather.selection !== 'schedule' &&
+			!WEATHER_TYPES.includes(weather.selection as WeatherType)
+		) {
+			delete weather.selection;
+		}
+		applyKnownFields(this.weather.debug, weather);
+		this.weather.applyDebugSelection();
+		this.sharedAnchor = {
+			roomSeconds: env.anchor.roomSeconds,
+			timeOfDay: wrapTimeOfDay(env.anchor.timeOfDay),
+			weatherTime: env.anchor.weatherTime
+		};
+		this.updateSharedClock(true);
+		this.applySkySettings();
+	}
+
+	/**
+	 * The anchor for "now": the room clock, and the time of day and weather clock as shown this
+	 * frame. When the owner changes anything, everything after is derived from this.
+	 */
+	private currentSharedAnchor(): SharedEnvironment['anchor'] {
+		const room = this.multiplayer?.roomSeconds() ?? this.sharedAnchor?.roomSeconds ?? 0;
+		return {
+			roomSeconds: room,
+			timeOfDay: ensureDayCycleSettings(this.skySettings).timeOfDay,
+			weatherTime: this.weather.controller.weatherTime
+		};
+	}
+
+	/** The owner changed the sky, weather or time in the settings menu: re-anchor and share it. */
+	private sharedEnvironmentEdited(): void {
+		if (!this.multiplayer) return;
+		this.sharedAnchor = this.currentSharedAnchor();
+		this.multiplayer.environmentChanged();
+	}
+
+	/**
+	 * Online worlds: sets the time of day from the room clock and the shared anchor. Returns whether
+	 * the sky needs re-applying.
+	 */
+	private updateSharedClock(force = false): boolean {
+		const anchor = this.sharedAnchor;
+		const room = this.multiplayer?.roomSeconds() ?? null;
+		if (!anchor || room === null) return false;
+		const cycle = ensureDayCycleSettings(this.skySettings);
+		const next = cycle.enabled
+			? advanceTimeOfDay(anchor.timeOfDay, room - anchor.roomSeconds, cycle.durationSeconds)
+			: anchor.timeOfDay;
+		if (!force && Math.abs(next - cycle.timeOfDay) < 1e-7) return false;
+		cycle.timeOfDay = next;
+		return true;
+	}
+
+	/** Online worlds: the weather clock every player shares, or undefined to run it locally. */
+	private sharedWeatherTime(): number | undefined {
+		const anchor = this.sharedAnchor;
+		const room = this.multiplayer?.roomSeconds() ?? null;
+		if (!anchor || room === null) return undefined;
+		return Math.max(0, anchor.weatherTime + (room - anchor.roomSeconds));
 	}
 
 	/** Lets the Svelte hotbar UI's trash icon toggle Remove Mode by click, in addition to the `X` key shortcut. */
@@ -2673,6 +2960,11 @@ export class ThreeScene implements WorldRuntime {
 
 	/** Advances the clock and re-applies the sky when it moved. Returns whether it was applied. */
 	private updateDayCycle(deltaSeconds: number): boolean {
+		if (this.multiplayer) {
+			if (!this.updateSharedClock()) return false;
+			this.applySkySettings();
+			return true;
+		}
 		const cycle = ensureDayCycleSettings(this.skySettings);
 		if (!cycle.enabled || this.simulationPaused || deltaSeconds <= 0) return false;
 		cycle.timeOfDay = advanceTimeOfDay(cycle.timeOfDay, deltaSeconds, cycle.durationSeconds);
@@ -2695,7 +2987,8 @@ export class ThreeScene implements WorldRuntime {
 		frame.feetY = this.controller.worldPosition.y - this.settings.player.eyeHeight;
 		frame.viewportHeight = this.renderer.domElement.height || this.container.clientHeight || 1;
 		frame.cloudAltitude = this.skySettings.clouds.altitude;
-		this.weather.update(this.simulationPaused ? 0 : deltaSeconds, frame);
+		if (this.multiplayer) this.weather.update(deltaSeconds, frame, this.sharedWeatherTime());
+		else this.weather.update(this.simulationPaused ? 0 : deltaSeconds, frame);
 		const { smoothedFps, targetFps } = this.graphicsPipeline.getFrameRate();
 		this.weather.setPerformance(deltaSeconds, smoothedFps, targetFps);
 		this.treeManager.setWeatherWind(this.weather.treeWind());
@@ -3077,6 +3370,18 @@ export class ThreeScene implements WorldRuntime {
 
 		this.doorInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
+		if (this.multiplayer) {
+			const position = this.controller.worldPosition;
+			this.multiplayer.afterControllerUpdate({
+				x: position.x,
+				eyeY: position.y,
+				z: position.z,
+				yaw: this.controller.getYaw(),
+				pitch: this.controller.getPitch(),
+				flying: this.controller.isFlying(),
+				eyeHeight: this.settings.player.eyeHeight
+			});
+		}
 		this.underwaterTint.setActive(
 			this.hydrology.cameraUnderwater(
 				this.camera.position.x,
@@ -3159,6 +3464,7 @@ export class ThreeScene implements WorldRuntime {
 			this.camera.position.z
 		);
 		this.updateSunLightPosition();
+		this.multiplayer?.beforeRender(deltaSeconds);
 
 		this.updateFieldOfView(deltaSeconds);
 		this.graphicsPipeline.update(deltaSeconds);
@@ -3306,6 +3612,8 @@ export class ThreeScene implements WorldRuntime {
 
 	dispose(): void {
 		this.disposed = true;
+		this.multiplayer?.detach();
+		this.multiplayer = null;
 		window.clearTimeout(this.hydrologyRebuildTimer);
 		this.water.dispose();
 		this.lakeSplashes.dispose();

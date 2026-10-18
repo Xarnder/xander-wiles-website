@@ -310,6 +310,32 @@ export class WorldManager {
 	 * is a data-loss bug wearing a convenience feature's clothing. Explicit "replace this world" can
 	 * be added later as a deliberate, confirmed action.
 	 */
+	/**
+	 * Saves a world that arrived as data (an online world's live copy) as a new local world. Always a
+	 * new id: it's a copy, never a replacement of the world it came from.
+	 */
+	async importDefinition(
+		world: WorldDefinition,
+		suffix: string
+	): Promise<WorldOperationResult<WorldDefinition>> {
+		try {
+			const now = new Date().toISOString();
+			const imported: WorldDefinition = {
+				...world,
+				id: newWorldId(),
+				name: normalizeWorldName(`${world.name} (${suffix})`),
+				createdAt: now,
+				updatedAt: now,
+				lastPlayedAt: now,
+				saveRevision: world.saveRevision + 1
+			};
+			await this.repository.saveWorld(imported);
+			return { ok: true, value: imported };
+		} catch (error) {
+			return { ok: false, error: describeError(error, 'Unable to save the copy.') };
+		}
+	}
+
 	async importWorld(bytes: Uint8Array): Promise<WorldOperationResult<WorldDefinition>> {
 		const parsed = readWorldPackage(bytes);
 		if (!parsed.ok) return { ok: false, error: parsed.error };

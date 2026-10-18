@@ -3809,8 +3809,10 @@ function applyComposerFontSize(px) {
     });
     const down = document.getElementById('add-task-composer-font-down');
     const up = document.getElementById('add-task-composer-font-up');
+    const sizeEl = document.getElementById('add-task-composer-font-size');
     if (down) down.disabled = size <= COMPOSER_FONT_MIN;
     if (up) up.disabled = size >= COMPOSER_FONT_MAX;
+    if (sizeEl) sizeEl.textContent = String(size);
     return size;
 }
 

@@ -526,3 +526,25 @@ describe('weather save / load', () => {
 		expect(validateWorldDefinition(world).ok).toBe(false);
 	});
 });
+
+describe('WeatherController following a shared clock (online worlds)', () => {
+	it('lands on exactly the scheduled weather when it jumps, as every client does', () => {
+		const a = new WeatherController(4242);
+		const b = new WeatherController(4242);
+		a.followClock(5000);
+		for (let t = 0; t <= 5000; t += 2) b.followClock(t);
+		expect(a.weatherTime).toBe(5000);
+		expect(b.weatherTime).toBe(5000);
+		expect(a.state.type).toBe(b.state.type);
+		expect(a.currentSegment().index).toBe(b.currentSegment().index);
+	});
+
+	it('plays small steps through and ignores a clock that slips backwards slightly', () => {
+		const controller = new WeatherController(7);
+		controller.followClock(100);
+		controller.followClock(100.5);
+		expect(controller.weatherTime).toBeCloseTo(100.5);
+		controller.followClock(100.2);
+		expect(controller.weatherTime).toBeCloseTo(100.5);
+	});
+});

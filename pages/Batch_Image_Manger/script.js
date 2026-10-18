@@ -135,6 +135,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const filenameBaseInput = document.getElementById('filename-base');
     const filenameStartNumInput = document.getElementById('filename-start-num');
     const filenamePaddingInput = document.getElementById('filename-padding');
+    const filenameDropNamesToggle = document.getElementById('filename-drop-names-toggle');
+    const filenameNameToken = document.getElementById('filename-name-token');
+    const namingNumberInputs = document.getElementById('naming-number-inputs');
     const namingExampleText = document.getElementById('naming-example-text');
 
     // Height/Pos Controls
@@ -180,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridPreviewCanvas = document.getElementById('grid-preview-canvas');
     const gridPreviewCtx = gridPreviewCanvas.getContext('2d');
     const generateGridBtn = document.getElementById('generate-grid-btn');
+    const gridFormatSelect = document.getElementById('grid-format-select');
     const gridStatus = document.getElementById('grid-status');
     const openGridTabBtn = document.getElementById('open-grid-tab-btn');
     const gridProgressContainer = document.getElementById('grid-progress-container');
@@ -212,6 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const downscaleQualityValue = document.getElementById('downscale-quality-value');
     const downscalePrefixInput = document.getElementById('downscale-prefix');
     const downscaleSuffixInput = document.getElementById('downscale-suffix');
+    const downscaleDropNamesToggle = document.getElementById('downscale-drop-names-toggle');
+    const downscaleNumberInputs = document.getElementById('downscale-number-inputs');
+    const downscaleStartNumInput = document.getElementById('downscale-start-num');
+    const downscalePaddingInput = document.getElementById('downscale-padding');
+    const downscaleNameExample = document.getElementById('downscale-name-example');
     const downscaleGenerateBtn = document.getElementById('downscale-generate-btn');
     const downscaleStatus = document.getElementById('downscale-status');
     const downscaleErrorMessage = document.getElementById('downscale-error-message');
@@ -431,21 +440,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const JXL_MIME = 'image/jxl';
+    const JXL_ENCODE_URL = 'https://esm.sh/@jsquash/jxl@1.3.0/encode';
+    const JXL_DECODE_URL = 'https://esm.sh/@jsquash/jxl@1.3.0/decode';
+    const QUALITY_FORMATS = new Set(['image/jpeg', 'image/webp', 'image/avif', JXL_MIME]);
+    let jxlEncodePromise = null;
+    let jxlDecodePromise = null;
+
     // New Format Listeners
     exportFormatSelect.addEventListener('change', () => {
-        const format = exportFormatSelect.value;
-        const hideQuality = format === 'image/png' || format === 'original' || format === 'image/svg+xml';
-        mainQualityWrapper.classList.toggle('hidden', hideQuality);
+        updateCompressionControls('main', exportFormatSelect.value);
         updateNamingUI();
         updatePaddingControlState();
         if (addPaddingToggle.checked || fitAspectToggle.checked || fillAlphaToggle.checked || squircleToggle.checked) renderPreview();
     });
-    mainQualitySlider.addEventListener('input', () => {
-        mainQualityValue.textContent = mainQualitySlider.value;
-    });
+    bindCompressionInputs('main', () => exportFormatSelect.value);
 
     // Naming Mode Listeners
     filenameModeSelect.addEventListener('change', updateNamingUI);
+    filenameDropNamesToggle.addEventListener('change', updateNamingUI);
     [filenamePrefixInput, filenameSuffixInput, filenameBaseInput, filenameStartNumInput, filenamePaddingInput, filenameSpacingSelect].forEach(el => {
         el.addEventListener('input', updateNamingUI);
     });
@@ -479,6 +492,8 @@ document.addEventListener('DOMContentLoaded', () => {
     gridBorderColorInput.addEventListener('input', updateGridPreview);
     gridBgColorInput.addEventListener('input', updateGridPreview);
     generateGridBtn.addEventListener('click', handleGenerateGrid);
+    gridFormatSelect.addEventListener('change', () => updateCompressionControls('grid', gridFormatSelect.value));
+    bindCompressionInputs('grid', () => gridFormatSelect.value);
     openGridTabBtn.addEventListener('click', handleOpenGridInTab);
 
     // Downscale Listeners
@@ -491,9 +506,11 @@ document.addEventListener('DOMContentLoaded', () => {
     downscaleHeightInput.addEventListener('input', () => handleAspectRatioInputChange('height'));
     downscaleFitSelect.addEventListener('input', updateDownscaleUI);
     downscaleFormatSelect.addEventListener('input', updateDownscaleUI);
-    downscaleQualitySlider.addEventListener('input', () => {
-        downscaleQualityValue.textContent = downscaleQualitySlider.value;
+    downscaleDropNamesToggle.addEventListener('change', updateDownscaleUI);
+    [downscalePrefixInput, downscaleSuffixInput, downscaleStartNumInput, downscalePaddingInput, downscaleSpacingSelect].forEach(el => {
+        el.addEventListener('input', updateDownscaleNamingExample);
     });
+    bindCompressionInputs('downscale', () => downscaleFormatSelect.value);
     downscaleGenerateBtn.addEventListener('click', handleDownscaleGeneration);
 
     // Upscale Listeners
@@ -508,9 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
     upscaleHeightInput.addEventListener('input', () => { handleUpscaleAspectInputChange('height'); refreshUpscalePreview(); });
     upscaleMpInput.addEventListener('input', refreshUpscalePreview);
     upscaleFormatSelect.addEventListener('input', updateUpscaleUI);
-    upscaleQualitySlider.addEventListener('input', () => {
-        upscaleQualityValue.textContent = upscaleQualitySlider.value;
-    });
+    bindCompressionInputs('upscale', () => upscaleFormatSelect.value);
     upscaleGenerateBtn.addEventListener('click', handleUpscaleGeneration);
     upscaleCancelBtn.addEventListener('click', () => {
         if (upscaleRunning) {
@@ -554,6 +569,8 @@ document.addEventListener('DOMContentLoaded', () => {
         scheduleColourMatchPreview();
     }));
     colourMatchResetBtn.addEventListener('click', resetColourMatchControls);
+    colourMatchFormatSelect.addEventListener('change', () => updateCompressionControls('colour-match', colourMatchFormatSelect.value));
+    bindCompressionInputs('colour-match', () => colourMatchFormatSelect.value);
     colourMatchDownloadBtn.addEventListener('click', handleColourMatchDownload);
     colourMatchSendBtn.addEventListener('click', handleColourMatchSendToManager);
 
@@ -611,7 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
         imageFiles = []; imageTitles = []; imageFolders = []; pdfFiles = [];
         availableFolders = ["(Root)"]; currentIndex = 0;
 
-        const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i;
+        const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg|avif|jxl)$/i;
         const pdfRegex = /\.pdf$/i;
 
         // Separate Images/SVGs and PDFs (extension check covers empty/odd MIME types like text/xml for SVG)
@@ -948,7 +965,162 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatSupportsAlpha(format) {
-        return format === 'image/png' || format === 'image/webp' || format === 'image/avif';
+        return format === 'image/png' || format === 'image/webp' || format === 'image/avif' || format === JXL_MIME;
+    }
+
+    function isJxlFile(file) {
+        return file?.type === JXL_MIME || /\.jxl$/i.test(file?.name || '');
+    }
+
+    function formatLabel(format) {
+        switch (format) {
+            case 'image/jpeg': return 'JPG';
+            case 'image/webp': return 'WebP';
+            case 'image/avif': return 'AVIF';
+            case JXL_MIME: return 'JPEG XL';
+            case 'image/svg+xml': return 'SVG';
+            case 'original': return 'Original';
+            default: return 'PNG';
+        }
+    }
+
+    function readCompressionSettings(prefix) {
+        const qualitySlider = document.getElementById(`${prefix}-quality-slider`);
+        const effortSlider = document.getElementById(`${prefix}-effort-slider`);
+        const losslessToggle = document.getElementById(`${prefix}-lossless-toggle`);
+        return {
+            qualityPercent: qualitySlider ? parseInt(qualitySlider.value, 10) : 90,
+            effort: effortSlider ? parseInt(effortSlider.value, 10) : 7,
+            lossless: !!(losslessToggle && losslessToggle.checked)
+        };
+    }
+
+    function updateCompressionControls(prefix, format) {
+        const qualityWrapper = document.getElementById(`${prefix}-quality-wrapper`);
+        const effortWrapper = document.getElementById(`${prefix}-effort-wrapper`);
+        const losslessWrapper = document.getElementById(`${prefix}-lossless-wrapper`);
+        const losslessToggle = document.getElementById(`${prefix}-lossless-toggle`);
+        const qualitySlider = document.getElementById(`${prefix}-quality-slider`);
+        const qualityValue = document.getElementById(`${prefix}-quality-value`);
+        const effortSlider = document.getElementById(`${prefix}-effort-slider`);
+        const effortValue = document.getElementById(`${prefix}-effort-value`);
+        const isJxl = format === JXL_MIME;
+        const showQuality = QUALITY_FORMATS.has(format) && !(isJxl && losslessToggle?.checked);
+        if (qualityWrapper) qualityWrapper.classList.toggle('hidden', !showQuality);
+        if (effortWrapper) effortWrapper.classList.toggle('hidden', !isJxl);
+        if (losslessWrapper) losslessWrapper.classList.toggle('hidden', !isJxl);
+        if (qualitySlider && qualityValue) qualityValue.textContent = qualitySlider.value;
+        if (effortSlider && effortValue) effortValue.textContent = effortSlider.value;
+        if (prefix === 'grid' && generateGridBtn) {
+            generateGridBtn.textContent = `Download Grid (${formatLabel(format)})`;
+        }
+    }
+
+    function bindCompressionInputs(prefix, getFormat) {
+        const qualitySlider = document.getElementById(`${prefix}-quality-slider`);
+        const effortSlider = document.getElementById(`${prefix}-effort-slider`);
+        const losslessToggle = document.getElementById(`${prefix}-lossless-toggle`);
+        const refresh = () => updateCompressionControls(prefix, getFormat());
+        qualitySlider?.addEventListener('input', refresh);
+        effortSlider?.addEventListener('input', refresh);
+        losslessToggle?.addEventListener('change', refresh);
+        refresh();
+    }
+
+    function loadJxlEncoder() {
+        if (!jxlEncodePromise) {
+            jxlEncodePromise = import(JXL_ENCODE_URL)
+                .then((mod) => mod.default)
+                .catch((error) => {
+                    jxlEncodePromise = null;
+                    console.error('JPEG XL encoder failed to load:', error);
+                    throw new Error('Could not load the JPEG XL encoder. Check your connection and try again.');
+                });
+        }
+        return jxlEncodePromise;
+    }
+
+    function loadJxlDecoder() {
+        if (!jxlDecodePromise) {
+            jxlDecodePromise = import(JXL_DECODE_URL)
+                .then((mod) => mod.default)
+                .catch((error) => {
+                    jxlDecodePromise = null;
+                    console.error('JPEG XL decoder failed to load:', error);
+                    throw new Error('Could not load the JPEG XL decoder. Check your connection and try again.');
+                });
+        }
+        return jxlDecodePromise;
+    }
+
+    function jxlBytesFromEncoded(encoded) {
+        if (!encoded) throw new Error('JPEG XL encoder returned empty data.');
+        if (encoded instanceof ArrayBuffer) return new Uint8Array(encoded.slice(0));
+        if (ArrayBuffer.isView(encoded)) {
+            return new Uint8Array(encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength));
+        }
+        throw new Error('JPEG XL encoder returned an unexpected result.');
+    }
+
+    async function encodeCanvasToBlob(canvas, format, settings) {
+        if (format === JXL_MIME) {
+            const encode = await loadJxlEncoder();
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const encoded = await encode(imageData, {
+                quality: settings.lossless ? 100 : settings.qualityPercent,
+                effort: settings.effort,
+                lossless: !!settings.lossless
+            });
+            const bytes = jxlBytesFromEncoded(encoded);
+            if (bytes.byteLength < 2) throw new Error('JPEG XL encoder returned empty data.');
+            return new Blob([bytes], { type: JXL_MIME });
+        }
+
+        const quality = QUALITY_FORMATS.has(format)
+            ? Math.min(1, Math.max(0.01, (settings.qualityPercent || 90) / 100))
+            : undefined;
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, format, quality));
+        if (!blob) {
+            throw new Error(`This browser could not encode ${formatLabel(format)}.`);
+        }
+        return blob;
+    }
+
+    function loadImageElement(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                resolve(img);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error(`Could not load image ${file.name}`));
+            };
+            img.src = url;
+        });
+    }
+
+    async function decodeJxlToCanvas(file) {
+        const decode = await loadJxlDecoder();
+        const buffer = await file.arrayBuffer();
+        const decoded = await decode(buffer);
+        const width = decoded?.width;
+        const height = decoded?.height;
+        const pixels = decoded?.data;
+        if (!width || !height || !pixels) {
+            throw new Error(`Could not decode JPEG XL image ${file.name || ''}`.trim());
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const imageData = decoded instanceof ImageData
+            ? decoded
+            : new ImageData(new Uint8ClampedArray(pixels), width, height);
+        canvas.getContext('2d').putImageData(imageData, 0, 0);
+        return canvas;
     }
 
     function syncPaddingAmountInputs(source) {
@@ -1463,12 +1635,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return '.webp';
             case 'image/avif':
                 return '.avif';
+            case JXL_MIME:
+                return '.jxl';
             default:
                 return '.png';
         }
     }
 
-    async function getExportBlobForFile(file, index, options, format, quality, processCtx) {
+    async function getExportBlobForFile(file, index, options, format, compression, processCtx) {
         // Rename-only / SVG passthrough: keep original vector (or bytes) intact
         if (format === 'original') {
             return file;
@@ -1481,9 +1655,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         await drawImageWithTitle(processCtx, file, imageTitles[index], options, index);
-        const blob = await new Promise(resolve => processCtx.canvas.toBlob(resolve, format, quality));
-        if (!blob) throw new Error(`Failed to create blob for ${file.name}`);
-        return blob;
+        return encodeCanvasToBlob(processCtx.canvas, format, compression);
     }
 
     function updateAdjustmentLabels() {
@@ -1791,6 +1963,8 @@ document.addEventListener('DOMContentLoaded', () => {
         imageCounter.textContent = `${currentIndex + 1} / ${imageFiles.length}`;
         titleInput.value = imageTitles[currentIndex];
         folderSelect.value = imageFolders[currentIndex];
+        updateNamingUI();
+        updateDownscaleNamingExample();
         renderPreview();
     }
 
@@ -1816,7 +1990,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
         const format = exportFormatSelect.value;
-        const quality = parseInt(mainQualitySlider.value, 10) / 100;
+        const compression = readCompressionSettings('main');
         const passthrough = isPassthroughExportFormat(format);
 
         let successCount = 0;
@@ -1830,7 +2004,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 try {
                     const file = imageFiles[i];
-                    const blob = await getExportBlobForFile(file, i, options, format, quality, processCtx);
+                    const blob = await getExportBlobForFile(file, i, options, format, compression, processCtx);
                     const ext = getFileExtension(format, file);
                     const finalName = generateFilename(i, imageTitles[i], ext);
 
@@ -1879,7 +2053,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (imageFiles.length === 0) return;
 
         const format = exportFormatSelect.value;
-        const quality = parseInt(mainQualitySlider.value, 10) / 100;
+        const compression = readCompressionSettings('main');
         const file = imageFiles[currentIndex];
         const ext = getFileExtension(format, file);
         const finalName = generateFilename(currentIndex, imageTitles[currentIndex], ext);
@@ -1894,10 +2068,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            previewCanvas.toBlob(async (blob) => {
-                if (!blob) return;
-                await safeDownload(blob, finalName);
-            }, format, quality);
+            const blob = await encodeCanvasToBlob(previewCanvas, format, compression);
+            await safeDownload(blob, finalName);
         } catch (err) {
             showStatus(exportStatus, `Error: ${err.message}`, true);
         }
@@ -2536,26 +2708,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 drawTetrisBorders(finalCtx, layoutData, columns, finalWidth, finalHeight, scaleFactor, borderWidth, borderColor);
             }
 
-            finalCanvas.toBlob(async (blob) => {
-                if (openInTab) {
-                    const url = URL.createObjectURL(blob);
-                    window.open(url, '_blank');
-                    showStatus(gridStatus, `Opened in New Tab!`, false, false);
-                } else {
-                    const filename = `grid_${source.replace(/\s/g, '_')}.png`;
-                    await safeDownload(blob, filename);
-                    showStatus(gridStatus, `Downloaded!`, false, false);
-                }
-                // Hide progress bar after short delay
-                setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 2000);
-            }, 'image/png');
+            const format = gridFormatSelect.value;
+            const compression = readCompressionSettings('grid');
+            const blob = await encodeCanvasToBlob(finalCanvas, format, compression);
+            if (openInTab) {
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                showStatus(gridStatus, `Opened in New Tab!`, false, false);
+            } else {
+                const filename = `grid_${source.replace(/\s/g, '_')}${getFileExtension(format)}`;
+                await safeDownload(blob, filename);
+                showStatus(gridStatus, `Downloaded!`, false, false);
+            }
+            setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 2000);
 
         } catch (error) {
             console.error("DEBUG: Grid Gen Error", error);
             showStatus(gridStatus, 'Error occurred.', true);
             gridProgressContainer.classList.add('hidden');
         } finally {
-            generateGridBtn.disabled = false; generateGridBtn.textContent = 'Download Grid (PNG)';
+            generateGridBtn.disabled = false;
+            updateCompressionControls('grid', gridFormatSelect.value);
         }
     }
 
@@ -2593,9 +2766,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPad = downscaleFitSelect.value === 'pad';
         downscalePadColorWrapper.classList.toggle('hidden', !isPad || isLocked || !isDimensions);
 
-        const format = downscaleFormatSelect.value;
-        downscaleQualityWrapper.classList.toggle('hidden', format === 'image/png');
-        downscaleQualityValue.textContent = downscaleQualitySlider.value;
+        updateCompressionControls('downscale', downscaleFormatSelect.value);
+        updateDownscaleNamingExample();
+    }
+
+    function downscaleExportBase(index, originalName) {
+        const prefix = downscalePrefixInput.value || "";
+        const suffix = downscaleSuffixInput.value || "";
+        const spacing = downscaleSpacingSelect.value;
+        if (downscaleDropNamesToggle.checked) {
+            const number = formatSequenceNumber(index, downscaleStartNumInput, downscalePaddingInput);
+            return applySpacing(`${prefix}${number}${suffix}`, spacing);
+        }
+        return `${prefix}${applySpacing(originalName, spacing)}${suffix}`;
+    }
+
+    function updateDownscaleNamingExample() {
+        if (!downscaleNumberInputs || !downscaleNameExample) return;
+        const drop = downscaleDropNamesToggle.checked;
+        downscaleNumberInputs.classList.toggle('hidden', !drop);
+        const index = imageFiles.length ? currentIndex : 0;
+        const originalName = imageTitles[index] || "Image Name";
+        const ext = getFileExtension(downscaleFormatSelect.value);
+        const hint = drop ? ' — original names removed for the whole batch' : '';
+        downscaleNameExample.textContent = `Example: ${downscaleExportBase(index, originalName)}${ext}${hint}`;
     }
 
     async function handleAspectRatioInputChange(source) {
@@ -2623,10 +2817,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const processCtx = processCanvas.getContext('2d');
 
         const format = downscaleFormatSelect.value;
-        const quality = parseInt(downscaleQualitySlider.value, 10) / 100;
+        const compression = readCompressionSettings('downscale');
         const ext = getFileExtension(format);
-        const prefix = downscalePrefixInput.value || "";
-        const suffix = downscaleSuffixInput.value || "";
         const applyTitles = downscaleApplyTitlesToggle.checked;
         const useSubfolders = downscaleUseSubfoldersToggle.checked;
         const resizeMode = downscaleModeSelect.value;
@@ -2680,11 +2872,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 processCtx.drawImage(sourceImage, offsetX, offsetY, drawWidth, drawHeight);
 
-                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
+                const blob = await encodeCanvasToBlob(processCanvas, format, compression);
 
-                let baseName = imageTitles[i];
-                baseName = applySpacing(baseName, downscaleSpacingSelect.value);
-                const finalName = `${prefix}${baseName}${suffix}${ext}`;
+                const finalName = `${downscaleExportBase(i, imageTitles[i])}${ext}`;
 
                 if (useSubfolders && imageFolders[i] !== "(Root)") {
                     zip.folder(imageFolders[i]).file(finalName, blob);
@@ -2941,9 +3131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mode !== 'factor' || upscaleFactorSelect.value !== 'custom'
         );
 
-        const format = upscaleFormatSelect.value;
-        upscaleQualityWrapper.classList.toggle('hidden', format === 'image/png');
-        upscaleQualityValue.textContent = upscaleQualitySlider.value;
+        updateCompressionControls('upscale', upscaleFormatSelect.value);
     }
 
     async function handleUpscaleAspectInputChange(source) {
@@ -3032,7 +3220,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const zip = new JSZip();
         const format = upscaleFormatSelect.value;
-        const quality = parseInt(upscaleQualitySlider.value, 10) / 100;
+        const compression = readCompressionSettings('upscale');
         const ext = getFileExtension(format);
         const prefix = upscalePrefixInput.value || '';
         const suffix = upscaleSuffixInput.value || '';
@@ -3092,9 +3280,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     setUpscaleImageProgress(97, 'Creating file…');
                     await yieldToUI();
-                    const blob = await new Promise((resolve, reject) => {
-                        upscaled.toBlob((b) => (b ? resolve(b) : reject(new Error('Failed to encode image'))), format, quality);
-                    });
+                    const blob = await encodeCanvasToBlob(upscaled, format, compression);
 
                     let baseName = imageTitles[i];
                     baseName = applySpacing(baseName, upscaleSpacingSelect.value);
@@ -3356,9 +3542,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!completed || token !== colourMatchRunToken) return null;
 
         const format = colourMatchFormatSelect.value;
-        const quality = format === 'image/jpeg' ? 0.95 : undefined;
-        const blob = await new Promise(resolve => exportCanvas.toBlob(resolve, format, quality));
-        if (!blob) throw new Error('Could not generate corrected image.');
+        const compression = readCompressionSettings('colour-match');
+        const blob = await encodeCanvasToBlob(exportCanvas, format, compression);
 
         const baseName = colourTargetFile.name.replace(/\.[^/.]+$/, '') || 'corrected_target';
         const ext = getFileExtension(format);
@@ -3803,12 +3988,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadImage(file) {
         const drawableFile = await prepareFileForCanvas(file);
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error(`Could not load image ${file.name}`));
-            img.src = URL.createObjectURL(drawableFile);
-        });
+        try {
+            return await loadImageElement(drawableFile);
+        } catch (error) {
+            if (!isJxlFile(file) && !isJxlFile(drawableFile)) throw error;
+            return decodeJxlToCanvas(file);
+        }
     }
 
     function applySpacing(text, mode) {
@@ -3825,6 +4010,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function formatSequenceNumber(index, startInput = filenameStartNumInput, paddingInput = filenamePaddingInput) {
+        const startNum = parseInt(startInput.value, 10);
+        const padding = parseInt(paddingInput.value, 10);
+        const start = Number.isFinite(startNum) ? startNum : 1;
+        const digits = Number.isFinite(padding) ? Math.min(10, Math.max(1, padding)) : 1;
+        return (start + index).toString().padStart(digits, '0');
+    }
+
     function generateFilename(index, originalName, ext) {
         const mode = filenameModeSelect.value;
         const spacingMode = filenameSpacingSelect.value;
@@ -3832,10 +4025,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mode === 'sequential') {
             const base = filenameBaseInput.value || "Image";
-            const startNum = parseInt(filenameStartNumInput.value, 10) || 0;
-            const padding = parseInt(filenamePaddingInput.value, 10) || 1;
-            const numStr = (startNum + index).toString().padStart(padding, '0');
-            finalBase = `${base}_${numStr}`;
+            finalBase = `${base}_${formatSequenceNumber(index)}`;
+        } else if (filenameDropNamesToggle.checked) {
+            const prefix = filenamePrefixInput.value || "";
+            const suffix = filenameSuffixInput.value || "";
+            finalBase = `${prefix}${formatSequenceNumber(index)}${suffix}`;
         } else {
             const prefix = filenamePrefixInput.value || "";
             const suffix = filenameSuffixInput.value || "";
@@ -3847,18 +4041,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateNamingUI() {
         const mode = filenameModeSelect.value;
+        const dropNames = filenameDropNamesToggle.checked;
         namingOriginalInputs.classList.toggle('hidden', mode !== 'original');
         namingSequentialInputs.classList.toggle('hidden', mode !== 'sequential');
+        namingNumberInputs.classList.toggle('hidden', mode !== 'sequential' && !(mode === 'original' && dropNames));
+        if (filenameNameToken) filenameNameToken.classList.toggle('hidden', dropNames);
 
-        // Update example
         const format = exportFormatSelect.value;
-        const sampleFile = imageFiles[0] || { name: 'icon.svg' };
+        const sampleFile = imageFiles[currentIndex] || imageFiles[0] || { name: 'icon.svg' };
+        const sampleTitle = imageTitles[currentIndex] || imageTitles[0] || "Image Name";
+        const exampleIndex = imageFiles.length ? currentIndex : 0;
         const ext = getFileExtension(format, sampleFile);
-        const exampleName = generateFilename(0, "Image Name", ext);
+        const exampleName = generateFilename(exampleIndex, sampleTitle, ext);
         const passthroughHint = isPassthroughExportFormat(format)
             ? ' — keeps original file bytes (ideal for SVG rename)'
             : '';
-        namingExampleText.textContent = `Example: ${exampleName}${passthroughHint}`;
+        const renameHint = mode === 'original' && dropNames
+            ? ' — original names removed for the whole batch'
+            : '';
+        namingExampleText.textContent = `Example: ${exampleName}${passthroughHint}${renameHint}`;
     }
 
     // --- Batch Fast Crop Logic ---
@@ -4083,9 +4284,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         octx.drawImage(activeCropImage, x, y, w, h, 0, 0, w, h);
 
-        const format = exportFormatSelect.value;
-        const quality = parseInt(mainQualitySlider.value, 10) / 100;
-        const blob = await new Promise(resolve => offscreenCanvas.toBlob(resolve, format, quality));
+        const selectedFormat = exportFormatSelect.value;
+        const format = (selectedFormat === 'original' || selectedFormat === 'image/svg+xml') ? 'image/png' : selectedFormat;
+        const compression = readCompressionSettings('main');
+        const blob = await encodeCanvasToBlob(offscreenCanvas, format, compression);
         
         const originalFile = imageFiles[index];
         const newFile = new File([blob], originalFile.name, { type: format });

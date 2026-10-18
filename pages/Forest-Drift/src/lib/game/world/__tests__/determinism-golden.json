@@ -1,0 +1,65 @@
+{
+	"description": "Generated-world fingerprints per seed (see determinismReport.ts). Produced in Node (V8). Vitest requires an exact match in Node; the Playwright test requires every browser engine to match the coarse hashes and counts (the exact hashes differ between engines by last-bit rounding, which players never see). Regenerate only after an intentional generator change, and bump GENERATOR_VERSION in net/protocol.ts at the same time.",
+	"reports": [
+		{
+			"seed": "soft-lowlands-431",
+			"terrain": {
+				"exact": "a0379c03",
+				"coarse": "8125f366",
+				"count": 10000
+			},
+			"hydrology": {
+				"exact": "d0efa5c0",
+				"coarse": "454de015",
+				"count": 4096,
+				"lakes": 55,
+				"rivers": 38
+			},
+			"trees": {
+				"exact": "8d19580b",
+				"coarse": "2a4c41cb",
+				"count": 571
+			}
+		},
+		{
+			"seed": "peaceful-world",
+			"terrain": {
+				"exact": "276a8e84",
+				"coarse": "c49d724f",
+				"count": 10000
+			},
+			"hydrology": {
+				"exact": "80a092fc",
+				"coarse": "86db9f8d",
+				"count": 4096,
+				"lakes": 46,
+				"rivers": 23
+			},
+			"trees": {
+				"exact": "f851004d",
+				"coarse": "4023dc7b",
+				"count": 613
+			}
+		},
+		{
+			"seed": "Ünïcode seed #42",
+			"terrain": {
+				"exact": "067a0476",
+				"coarse": "51bb59d6",
+				"count": 10000
+			},
+			"hydrology": {
+				"exact": "c24426d7",
+				"coarse": "a8c8bcc6",
+				"count": 4096,
+				"lakes": 52,
+				"rivers": 32
+			},
+			"trees": {
+				"exact": "d1e61b53",
+				"coarse": "45b62f36",
+				"count": 555
+			}
+		}
+	]
+}

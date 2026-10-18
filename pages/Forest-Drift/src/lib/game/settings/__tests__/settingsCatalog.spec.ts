@@ -334,3 +334,49 @@ describe('creature settings', () => {
 		expect(firstMatchingCategoryId(catalog, 'thunderstorm')).toBe('weather');
 	});
 });
+
+describe('online worlds (Q14-A)', () => {
+	function fieldsOf(category: { groups: { fields: { disabled?: boolean }[] }[] } | undefined) {
+		return category?.groups.flatMap((group) => group.fields) ?? [];
+	}
+
+	function weatherHost(access: GameSettingsHost['worldAccess']): GameSettingsHost {
+		return { ...testHost(), weather: createDefaultWeatherDebugSettings(), worldAccess: access };
+	}
+
+	it('changes nothing in single player', () => {
+		const catalog = buildSettingsCatalog(weatherHost('local'));
+		expect(catalog.some((category) => category.lockedReason)).toBe(false);
+		expect(fieldsOf(catalog.find((c) => c.id === 'world')).every((f) => !f.disabled)).toBe(true);
+	});
+
+	it('locks the land for everyone, including the owner', () => {
+		const catalog = buildSettingsCatalog(weatherHost('owner'));
+		for (const id of ['world', 'terrain', 'vegetation', 'player']) {
+			const category = catalog.find((c) => c.id === id)!;
+			expect(category.lockedReason).toMatch(/same land/);
+			expect(fieldsOf(category).every((field) => field.disabled)).toBe(true);
+		}
+		expect(catalog.find((c) => c.id === 'sky')!.lockedReason).toBeUndefined();
+		expect(fieldsOf(catalog.find((c) => c.id === 'graphics')).some((f) => f.disabled)).toBe(false);
+	});
+
+	it("gives the sky and the shared weather to the owner, but leaves members' sound alone", () => {
+		const member = buildSettingsCatalog(weatherHost('member'));
+		expect(member.find((c) => c.id === 'sky')!.lockedReason).toMatch(/owner/);
+		const weather = member.find((c) => c.id === 'weather')!;
+		const field = (id: string) =>
+			weather.groups.flatMap((group) => group.fields).find((f) => f.id === id)!;
+		expect(field('weather.enabled').disabled).toBe(true);
+		expect(field('weather.allowSnow').disabled).toBe(true);
+		expect(field('weather.volume').disabled).toBeFalsy();
+		expect(field('weather.paused').disabled).toBe(true);
+
+		const owner = buildSettingsCatalog(weatherHost('owner')).find((c) => c.id === 'weather')!;
+		const ownerField = (id: string) =>
+			owner.groups.flatMap((group) => group.fields).find((f) => f.id === id)!;
+		expect(ownerField('weather.enabled').disabled).toBeFalsy();
+		// The weather clock follows the room clock online, even for the owner.
+		expect(ownerField('weather.timeScale').disabled).toBe(true);
+	});
+});

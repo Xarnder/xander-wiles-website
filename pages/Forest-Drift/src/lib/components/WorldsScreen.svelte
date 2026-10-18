@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
+	import type { OnlineWorldEntry } from '$lib/game/net/mpConfig';
 	import { generateWorldSeed } from '$lib/game/world/seedGenerator';
 	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
 
@@ -22,6 +23,20 @@
 		onDelete: (worldId: string) => void;
 		onImport: (file: File) => void;
 		onDismissError: () => void;
+		/** Present when a multiplayer server is configured: publish a world as an online copy. */
+		onPublish?: (worldId: string) => void;
+		/** Present when a multiplayer server is configured: join an online world from an invite link. */
+		onJoinOnline?: () => void;
+		/** Online worlds this browser has joined or published (empty without a multiplayer server). */
+		onlineWorlds?: OnlineWorldEntry[];
+		onJoinOnlineWorld?: (worldId: string) => void;
+		/** The publisher's three invite links. */
+		onShowInvites?: (worldId: string) => void;
+		onForgetOnlineWorld?: (worldId: string) => void;
+		/** The owner's live online world saved into My Worlds. */
+		onSaveOnlineCopy?: (worldId: string) => void;
+		/** The owner goes back to an earlier version of an online world. */
+		onRestoreOnline?: (worldId: string) => void;
 	}
 
 	const {
@@ -41,8 +56,18 @@
 		onExport,
 		onDelete,
 		onImport,
-		onDismissError
+		onDismissError,
+		onPublish,
+		onJoinOnline,
+		onlineWorlds = [],
+		onJoinOnlineWorld,
+		onShowInvites,
+		onForgetOnlineWorld,
+		onSaveOnlineCopy,
+		onRestoreOnline
 	}: Props = $props();
+
+	const ROLE_LABEL = { owner: 'Owner', editor: 'Builder', viewer: 'Visitor' } as const;
 
 	type Dialog =
 		| { kind: 'none' }
@@ -163,6 +188,11 @@
 			<button data-testid="import-world-button" onclick={() => fileInput?.click()} disabled={busy}>
 				Import World
 			</button>
+			{#if onJoinOnline}
+				<button data-testid="join-online-button" onclick={onJoinOnline} disabled={busy}>
+					Join Online
+				</button>
+			{/if}
 			<input
 				bind:this={fileInput}
 				class="file-input"
@@ -281,6 +311,15 @@
 								>
 									Export
 								</button>
+								{#if onPublish}
+									<button
+										role="menuitem"
+										data-testid="default-world-menu-publish"
+										onclick={() => onPublish(defaultWorld.id)}
+									>
+										Publish Online…
+									</button>
+								{/if}
 							{/if}
 							{#if onResetDefault}
 								<button
@@ -300,6 +339,71 @@
 	</section>
 
 	<div class="section-divider" aria-hidden="true"></div>
+
+	{#if onlineWorlds.length > 0}
+		<h2 class="section-title">Online Worlds</h2>
+		<ul class="online-worlds" data-testid="online-worlds">
+			{#each onlineWorlds as online (online.worldId)}
+				<li class="online-world" data-testid="online-world-{online.worldId}">
+					<div class="online-info">
+						<span class="online-name">{online.name}</span>
+						{#if online.role}<span class="pill-tag">{ROLE_LABEL[online.role]}</span>{/if}
+					</div>
+					<div class="online-actions">
+						{#if online.invites && onShowInvites}
+							<button type="button" onclick={() => onShowInvites(online.worldId)} disabled={busy}>
+								Invite links
+							</button>
+						{/if}
+						{#if online.invites && onSaveOnlineCopy}
+							<button
+								type="button"
+								title="Save the online world as it is now into My Worlds"
+								data-testid="online-world-save-copy"
+								onclick={() => onSaveOnlineCopy(online.worldId)}
+								disabled={busy}
+							>
+								Save a copy
+							</button>
+						{/if}
+						{#if online.invites && onRestoreOnline}
+							<button
+								type="button"
+								data-testid="online-world-restore"
+								onclick={() => onRestoreOnline(online.worldId)}
+								disabled={busy}
+							>
+								Restore…
+							</button>
+						{/if}
+						{#if onForgetOnlineWorld}
+							<button
+								type="button"
+								title="Remove from this list (the world itself stays online)"
+								onclick={() => onForgetOnlineWorld(online.worldId)}
+								disabled={busy}
+							>
+								Forget
+							</button>
+						{/if}
+						{#if onJoinOnlineWorld}
+							<button
+								type="button"
+								class="primary"
+								data-testid="online-world-join"
+								onclick={() => onJoinOnlineWorld(online.worldId)}
+								disabled={busy}
+							>
+								Join
+							</button>
+						{/if}
+					</div>
+				</li>
+			{/each}
+		</ul>
+
+		<div class="section-divider" aria-hidden="true"></div>
+	{/if}
 
 	<h2 class="section-title">My Worlds</h2>
 
@@ -379,6 +483,15 @@
 									>
 										Export
 									</button>
+									{#if onPublish}
+										<button
+											role="menuitem"
+											data-testid="world-menu-publish"
+											onclick={() => onPublish(world.id)}
+										>
+											Publish Online…
+										</button>
+									{/if}
 									<button
 										role="menuitem"
 										class="danger"
@@ -719,6 +832,65 @@
 
 	.play-icon {
 		font-size: 0.75rem;
+	}
+
+	.online-worlds {
+		max-width: 46rem;
+		margin: 0 auto;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.online-world {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.65rem 0.85rem;
+		border-radius: 12px;
+		background: rgba(10, 20, 15, 0.55);
+		border: 1px solid rgba(234, 246, 255, 0.12);
+	}
+
+	.online-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.online-name {
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.online-actions {
+		display: flex;
+		gap: 0.4rem;
+		flex-shrink: 0;
+	}
+
+	.online-actions button {
+		padding: 0.4rem 0.75rem;
+		border-radius: 8px;
+		border: 1px solid rgba(234, 246, 255, 0.25);
+		background: rgba(10, 20, 15, 0.55);
+		color: #eaf6ff;
+		font-family: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.online-actions button.primary {
+		background: rgba(57, 211, 83, 0.85);
+		border-color: rgba(57, 211, 83, 0.9);
+		color: #04121f;
 	}
 
 	.section-divider {

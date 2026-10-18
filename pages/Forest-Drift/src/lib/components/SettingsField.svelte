@@ -174,6 +174,7 @@
 		class="action"
 		type="button"
 		data-testid="settings-field-{field.id}"
+		disabled={field.disabled}
 		onclick={() => {
 			field.onClick();
 			onMutate?.();

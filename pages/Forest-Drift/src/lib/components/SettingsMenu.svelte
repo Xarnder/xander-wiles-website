@@ -110,6 +110,11 @@
 			<section class="content">
 				{#if active}
 					<p class="section-lead">{active.description}</p>
+					{#if active.lockedReason}
+						<p class="locked-note" data-testid="settings-locked-{active.id}">
+							{active.lockedReason}
+						</p>
+					{/if}
 					{#if !activeHasResults}
 						<p class="empty-results" data-testid="settings-empty">
 							No settings match “{query.trim()}”.
@@ -119,6 +124,9 @@
 						{#if showGroup(group)}
 							<div class="group" data-testid="settings-group-{group.id}">
 								<h3>{group.title}</h3>
+								{#if group.lockedReason}
+									<p class="locked-note small">{group.lockedReason}</p>
+								{/if}
 								{@render fieldList(group)}
 								{#if group.groups}
 									{#each group.groups as child (child.id)}
@@ -274,6 +282,22 @@
 		font-size: 0.82rem;
 		line-height: 1.45;
 		color: #c5ddcf;
+	}
+
+	.locked-note {
+		margin: 0;
+		padding: 0.6rem 0.85rem;
+		border-radius: 10px;
+		background: rgba(255, 196, 92, 0.1);
+		border: 1px solid rgba(255, 196, 92, 0.35);
+		font-size: 0.82rem;
+		line-height: 1.4;
+		color: #ffe2a8;
+	}
+
+	.locked-note.small {
+		margin: -0.35rem 0 0.75rem;
+		font-size: 0.76rem;
 	}
 
 	.empty-results {

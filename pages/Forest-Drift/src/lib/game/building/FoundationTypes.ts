@@ -796,6 +796,8 @@ export interface HotbarUiState {
 	 * moment it exits. See BuildToolManager's class doc comment.
 	 */
 	globalMode: 'none' | 'remove' | 'music' | 'paint' | 'move';
+	/** Online worlds: building is locked for this player (a viewer, or the role isn't known yet). */
+	locked?: boolean;
 	/**
 	 * 1-based instrument on the Compose Mode hotbar (1 Flower … 5 Crystal). Number keys 1–5 change
 	 * it without leaving Compose Mode.

@@ -1,0 +1,90 @@
+{
+	"description": "Multiplayer Phase 1 prototype measurements (docs/multiplayer-research.plan.md §10–11), taken 15–16 October 2026 on the development M4 MacBook Air against a local `wrangler dev` room (server/), Chromium at 60 Hz vsync, High quality. Nothing here has crossed the internet yet: the deployed workers.dev run, cross-device test and Cloudflare free-plan message counting wait for the Cloudflare account. Load bots: server/tools/bots.mjs (walk a 6 m circle at 6 m/s, 10 poses/s).",
+	"r1RemoteSmoothness": {
+		"description": "Requirement R1 (smooth remote movement). One browser tab watches a second player walking a circle; each row is a 6 s sample of the remote avatar, measured per rendered frame. framesWithoutMovement counts frames where a walking avatar did not move (visible stutter). speedVariation is the coefficient of variation of displayed speed (0 = perfectly even).",
+		"targets": "Plan §11: updated every frame, speed varies under 10% at a steady walk, no snaps over 10 cm except teleports. At 6 m/s and 60 fps an ordinary frame step is 10 cm, so maxStepCm 11.3–11.6 is normal walking plus the measured 5% speed variation, not a snap.",
+		"samples": [
+			{
+				"delayMs": 147.9,
+				"frames": 361,
+				"framesWithoutMovement": 0,
+				"maxStepCm": 11.6,
+				"meanSpeed": 5.994,
+				"speedVariation": 0.0551
+			},
+			{
+				"delayMs": 153.9,
+				"frames": 361,
+				"framesWithoutMovement": 0,
+				"maxStepCm": 11.6,
+				"meanSpeed": 5.984,
+				"speedVariation": 0.0506
+			},
+			{
+				"delayMs": 145.8,
+				"frames": 361,
+				"framesWithoutMovement": 0,
+				"maxStepCm": 11.3,
+				"meanSpeed": 5.995,
+				"speedVariation": 0.0471
+			}
+		],
+		"webkit": {
+			"description": "Playwright WebKit 26.5 (Safari's engine, headless, so ~48 fps) joined the same local room through the join dialog while one bot walked a circle. A sample of 6 s. Real Safari on the Mac and the iPad wait for the deployed server.",
+			"connectedAfterMs": 4437,
+			"frames": 288,
+			"frameMsP50": 21,
+			"framesWithoutMovement": 0,
+			"maxStepCm": 25.2,
+			"meanSpeed": 6.058,
+			"speedVariation": 0.0617,
+			"pageErrors": 0,
+			"note": "maxStepCm is one long headless frame (about 42 ms at 6 m/s), not a snap: speed per frame time varies by 6%."
+		},
+		"unitSimulation": "src/lib/game/net/__tests__/RemoteMotion.spec.ts runs the real PoseSender + RemoteMotion over simulated networks: delay stays ≤ 200 ms on a clean UK link and ≤ 300 ms with jitter, loss and bursts, with no frozen frames."
+	},
+	"twentyPlayerSpike": {
+		"description": "The game tab in a world with 19 load bots (20 players, the per-world cap; a 21st connection is refused with 'This world is full'). Frames sampled over 6 s.",
+		"zeroAvatars": {
+			"fps": 60,
+			"avgFrameMs": 16.67,
+			"p95FrameMs": 17.1,
+			"cpuFrameMs": 5.01,
+			"cpuRenderMs": 3.3,
+			"drawCalls": 942,
+			"triangles": 442634,
+			"multiplayerMsPerFrame": { "avg": 0.008, "p95": 0.1, "max": 0.2 },
+			"downloadKBps": 0.01
+		},
+		"nineteenAvatars": {
+			"fps": 60,
+			"avgFrameMs": 16.67,
+			"p95FrameMs": 17.2,
+			"cpuFrameMs": 5.01,
+			"cpuRenderMs": 3.41,
+			"drawCalls": 1162,
+			"triangles": 535962,
+			"multiplayerMsPerFrame": { "avg": 0.049, "p95": 0.1, "max": 0.3 },
+			"downloadKBps": 3.79
+		},
+		"bots": {
+			"bots": 19,
+			"seconds": 30,
+			"posesSentPerBot": 9.9,
+			"snapshotsPerSecondPerBot": 19.4,
+			"entriesPerSecondPerBot": 178.4,
+			"downloadBytesPerSecondPerBot": 3770,
+			"uploadBytesPerSecondPerBot": 256,
+			"rttMsP50": 0.5,
+			"entryAgeMs": { "p50": 27, "p90": 48 },
+			"disconnects": 0
+		}
+	},
+	"determinism": {
+		"description": "World generation fingerprints (src/lib/game/world/determinismReport.ts) in Node and in Playwright's Chromium, WebKit and Firefox, over the 3 pinned seeds plus 20 sweep seeds (/determinism/?dev&sweep=20). 'coarse' = what players see (heights to the mm, water type and level, lake and river counts, every tree's cell, species and variant); 'exact' = full float64 bit patterns.",
+		"seeds": 23,
+		"coarseMismatches": 0,
+		"exactMismatches": "terrain and hydrology differ between engines on every seed (last-bit rounding of Math.tanh/pow and friends); trees match exactly",
+		"conclusion": "No player-visible divergence, so the Q29-B maths fix isn't needed yet. tests/determinism.e2e.ts asserts the coarse hashes in all three engines."
+	}
+}

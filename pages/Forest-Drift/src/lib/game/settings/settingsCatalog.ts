@@ -649,6 +649,81 @@ function weatherCategories(host: GameSettingsHost): SettingsCategory[] {
 }
 
 export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[] {
+	return lockOnlineSettings(buildUnlockedCatalog(host), host.worldAccess ?? 'local');
+}
+
+/** Categories that shape the land itself: identical for everyone, so locked once a world is online. */
+const LAND_CATEGORY_IDS = new Set(['world', 'terrain', 'vegetation', 'player']);
+/** The owner's in an online world (Q14-A): sky and time of day. */
+const OWNER_CATEGORY_IDS = new Set(['sky']);
+/** Weather groups everyone shares; the owner changes them. */
+const OWNER_WEATHER_GROUP_IDS = new Set(['weather-manual', 'weather-current']);
+const OWNER_WEATHER_FIELD_IDS = new Set(['weather.allowSnow']);
+/** Meaningless online, where the weather follows the shared room clock. */
+const CLOCK_WEATHER_GROUP_IDS = new Set(['weather-clock']);
+
+export const ONLINE_LOCK_REASONS = {
+	land: 'Locked in online worlds so everyone walks on the same land. Change it in your own copy and publish again.',
+	owner: "Only the world's owner can change this in an online world.",
+	clock: 'Online, the weather follows the shared world clock.'
+} as const;
+
+/**
+ * Online worlds (decision Q14-A): the land is locked for everyone once published — every player
+ * generates it locally, so it must not differ — and the sky, weather and time belong to the owner.
+ * Personal settings (graphics, sound, controls) stay editable for all.
+ */
+export function lockOnlineSettings(
+	catalog: SettingsCategory[],
+	access: 'local' | 'owner' | 'member'
+): SettingsCategory[] {
+	if (access === 'local') return catalog;
+	const owner = access === 'owner';
+	return catalog.map((category) => {
+		if (LAND_CATEGORY_IDS.has(category.id)) return lockCategory(category, ONLINE_LOCK_REASONS.land);
+		if (OWNER_CATEGORY_IDS.has(category.id) && !owner) {
+			return lockCategory(category, ONLINE_LOCK_REASONS.owner);
+		}
+		if (category.id !== 'weather') return category;
+		return {
+			...category,
+			groups: category.groups.map((groupItem) => {
+				if (CLOCK_WEATHER_GROUP_IDS.has(groupItem.id)) {
+					return lockGroup(groupItem, ONLINE_LOCK_REASONS.clock);
+				}
+				if (owner) return groupItem;
+				if (OWNER_WEATHER_GROUP_IDS.has(groupItem.id)) {
+					return lockGroup(groupItem, ONLINE_LOCK_REASONS.owner);
+				}
+				return {
+					...groupItem,
+					fields: groupItem.fields.map((field) =>
+						OWNER_WEATHER_FIELD_IDS.has(field.id) ? { ...field, disabled: true } : field
+					)
+				};
+			})
+		};
+	});
+}
+
+function lockCategory(category: SettingsCategory, reason: string): SettingsCategory {
+	return {
+		...category,
+		lockedReason: reason,
+		groups: category.groups.map((groupItem) => lockGroup(groupItem, undefined))
+	};
+}
+
+function lockGroup(groupItem: SettingsGroup, reason: string | undefined): SettingsGroup {
+	return {
+		...groupItem,
+		lockedReason: reason,
+		fields: groupItem.fields.map((field) => ({ ...field, disabled: true })),
+		groups: groupItem.groups?.map((child) => lockGroup(child, undefined))
+	};
+}
+
+function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 	const { terrain, vegetation, sky, graphics, building, music, sustain, musicVisual, actions } =
 		host;
 	ensureDayCycleSettings(sky);

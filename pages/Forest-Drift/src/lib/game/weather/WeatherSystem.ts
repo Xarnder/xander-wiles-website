@@ -203,14 +203,21 @@ export class WeatherSystem {
 		return dirty;
 	}
 
-	update(deltaSeconds: number, frame: WeatherFrame): void {
+	/**
+	 * `sharedTime` (online worlds): the weather clock every player shares, derived from the room
+	 * clock. The schedule then follows it instead of this frame's delta (and ignores the local pause
+	 * and speed-up controls), so everyone sees the same weather. Lightning stays local and random.
+	 */
+	update(deltaSeconds: number, frame: WeatherFrame, sharedTime?: number): void {
 		const start = performance.now();
 		const dt = Math.min(0.25, Math.max(0, deltaSeconds));
-		this.controller.paused = this.debug.paused;
-		this.controller.timeScale = this.debug.timeScale;
+		const shared = sharedTime !== undefined && Number.isFinite(sharedTime);
+		this.controller.paused = shared ? false : this.debug.paused;
+		this.controller.timeScale = shared ? 1 : this.debug.timeScale;
 		this.lightning.frequency = this.debug.lightningFrequency;
 		this.controller.setAllowSnow(this.debug.allowSnow);
-		this.controller.update(dt);
+		if (shared) this.controller.followClock(sharedTime);
+		else this.controller.update(dt);
 		const env = this.current;
 
 		const camera = frame.camera.position;

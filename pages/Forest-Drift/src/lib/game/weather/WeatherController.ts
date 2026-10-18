@@ -12,6 +12,9 @@ import {
 
 export type WeatherMode = 'schedule' | 'manual';
 
+/** Larger forward jumps of a followed clock are seeks rather than played-through time. */
+const MAX_FOLLOW_STEP_SECONDS = 30;
+
 /**
  * Owns the logical weather: the weather clock, the procedural schedule, a forced (manual) weather
  * when a developer picks one, and the transition between whatever is showing and the target.
@@ -75,6 +78,26 @@ export class WeatherController {
 		this.time += step;
 		if (this.mode === 'schedule') this.syncSchedule(false);
 		return this.transition.update(step);
+	}
+
+	/**
+	 * Online worlds: moves the weather clock to a shared time. Small steps forward run normally (so
+	 * transitions play out); a jump (joining mid-session, a correction) lands exactly on the schedule.
+	 */
+	followClock(time: number): WeatherEnvironment {
+		const step = time - this.time;
+		if (step < -1 || step > MAX_FOLLOW_STEP_SECONDS) {
+			this.seek(time);
+			return this.transition.environment;
+		}
+		return this.update(Math.max(0, step));
+	}
+
+	/** Jumps the weather clock to `time`, reproducing the scheduled weather at that moment exactly. */
+	seek(time: number): void {
+		this.time = Math.max(0, time);
+		this.segmentIndex = -1;
+		if (this.mode === 'schedule') this.syncSchedule(true);
 	}
 
 	/** Forces a weather (developer selection). Moves there over `durationSeconds` (0 = automatic). */

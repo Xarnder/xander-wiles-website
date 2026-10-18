@@ -943,6 +943,11 @@ button:disabled {
     border-radius: var(--radius-lg);
 }
 
+.colour-match-export-controls {
+    width: 100%;
+    margin-top: 1rem;
+}
+
 .colour-match-actions {
     flex-wrap: wrap;
     align-items: center;

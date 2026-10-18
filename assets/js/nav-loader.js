@@ -60,6 +60,392 @@
         return path;
     }
 
+    const PAGE_ORDER_KEY = 'xw-page-order';
+    const PAGE_ORDERS = [
+        { id: 'alpha', label: 'A–Z' },
+        { id: 'alpha-desc', label: 'Z–A' },
+        { id: 'curated', label: 'Curated' }
+    ];
+    const pageOrderCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    let directoryOrderWatching = false;
+
+    function readPageOrder() {
+        try {
+            const value = localStorage.getItem(PAGE_ORDER_KEY);
+            if (PAGE_ORDERS.some((order) => order.id === value)) return value;
+        } catch (error) {
+            // Ignore private-mode storage failures.
+        }
+        return 'alpha';
+    }
+
+    function writePageOrder(value) {
+        try {
+            localStorage.setItem(PAGE_ORDER_KEY, value);
+        } catch (error) {
+            // Ignore private-mode storage failures.
+        }
+    }
+
+    function sortableEntries(list) {
+        return Array.from(list.children).filter((child) => child.matches('li, a.page-card'));
+    }
+
+    function entryLabel(entry) {
+        const named = entry.querySelector('.nav-item-label, h3');
+        return (named ? named.textContent : entry.textContent || '')
+            .replace(/\p{Extended_Pictographic}/gu, '')
+            .replace(/\uFE0F/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function stampEntryOrder(list) {
+        const entries = sortableEntries(list);
+        let max = -1;
+        entries.forEach((entry) => {
+            if (entry.hasAttribute('data-xw-order-index')) {
+                max = Math.max(max, Number(entry.dataset.xwOrderIndex));
+            }
+        });
+        entries.forEach((entry) => {
+            if (!entry.hasAttribute('data-xw-order-index')) {
+                max += 1;
+                entry.dataset.xwOrderIndex = String(max);
+            }
+        });
+    }
+
+    function compareEntries(mode, a, b) {
+        if (mode === 'curated') {
+            return Number(a.dataset.xwOrderIndex) - Number(b.dataset.xwOrderIndex);
+        }
+        const delta = pageOrderCollator.compare(entryLabel(a), entryLabel(b));
+        return mode === 'alpha-desc' ? -delta : delta;
+    }
+
+    function sortEntryList(list, mode) {
+        stampEntryOrder(list);
+        const entries = sortableEntries(list);
+        if (entries.length < 2) return;
+
+        const sorted = entries.slice().sort((a, b) => compareEntries(mode, a, b));
+        if (sorted.every((entry, index) => entry === entries[index])) return;
+
+        const fragment = document.createDocumentFragment();
+        sorted.forEach((entry) => fragment.appendChild(entry));
+        list.appendChild(fragment);
+    }
+
+    function directoryGrids() {
+        return Array.from(document.querySelectorAll('main .page-grid')).filter((grid) => {
+            return !grid.closest('#recent-section, #recent-editor, .top-section-grid');
+        });
+    }
+
+    function applyPageOrder(mode) {
+        const order = mode || readPageOrder();
+        document.querySelectorAll('.nav-submenu').forEach((list) => sortEntryList(list, order));
+        directoryGrids().forEach((grid) => sortEntryList(grid, order));
+        document.querySelectorAll('[data-xw-page-order]').forEach((select) => {
+            if (select.value !== order) select.value = order;
+        });
+    }
+
+    function createPageOrderControl(extraClass) {
+        const label = document.createElement('label');
+        label.className = `xw-page-order${extraClass ? ` ${extraClass}` : ''}`;
+        label.title = 'Alphabetical, reverse, or the original curated order';
+
+        const caption = document.createElement('span');
+        caption.className = 'xw-page-order-label';
+        caption.textContent = 'Order';
+
+        const select = document.createElement('select');
+        select.className = 'xw-page-order-select';
+        select.dataset.xwPageOrder = 'true';
+        PAGE_ORDERS.forEach((order) => {
+            const option = document.createElement('option');
+            option.value = order.id;
+            option.textContent = order.label;
+            select.appendChild(option);
+        });
+        select.value = readPageOrder();
+        select.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        select.addEventListener('change', () => {
+            writePageOrder(select.value);
+            applyPageOrder(select.value);
+        });
+
+        label.appendChild(caption);
+        label.appendChild(select);
+        return label;
+    }
+
+    const NAV_VIEW_KEY = 'xw-nav-view';
+
+    function readNavView() {
+        try {
+            const value = localStorage.getItem(NAV_VIEW_KEY);
+            if (value === 'icons' || value === 'names') return value;
+        } catch (error) {
+            // Ignore private-mode storage failures.
+        }
+        return 'icons';
+    }
+
+    function writeNavView(value) {
+        try {
+            localStorage.setItem(NAV_VIEW_KEY, value);
+        } catch (error) {
+            // Ignore private-mode storage failures.
+        }
+    }
+
+    function applyNavView(view) {
+        const mode = view === 'names' ? 'names' : 'icons';
+        document.querySelectorAll('[data-site-header]').forEach((header) => {
+            header.dataset.navView = mode;
+        });
+        document.querySelectorAll('[data-nav-view-choice]').forEach((button) => {
+            button.setAttribute('aria-pressed', button.dataset.navViewChoice === mode ? 'true' : 'false');
+        });
+    }
+
+    function createNavViewToggle() {
+        const group = document.createElement('div');
+        group.className = 'nav-view-toggle';
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Page display');
+
+        const choices = [
+            {
+                id: 'icons',
+                label: 'Icons',
+                title: 'Large icons',
+                icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="5" height="5" rx="1"></rect><rect x="9.5" y="1.5" width="5" height="5" rx="1"></rect><rect x="1.5" y="9.5" width="5" height="5" rx="1"></rect><rect x="9.5" y="9.5" width="5" height="5" rx="1"></rect></svg>'
+            },
+            {
+                id: 'names',
+                label: 'Names',
+                title: 'Names and icons',
+                icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5h3M7 4.5h7.5M1.5 8h3M7 8h7.5M1.5 11.5h3M7 11.5h7.5"></path></svg>'
+            }
+        ];
+
+        choices.forEach((choice) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.dataset.navViewChoice = choice.id;
+            button.title = choice.title;
+            button.innerHTML = `${choice.icon}<span>${choice.label}</span>`;
+            button.addEventListener('pointerdown', (event) => {
+                event.stopPropagation();
+            });
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                writeNavView(choice.id);
+                applyNavView(choice.id);
+            });
+            group.appendChild(button);
+        });
+
+        return group;
+    }
+
+    function mountNavViewToggles(root) {
+        root.querySelectorAll('.nav-submenu a').forEach((link) => {
+            if (link.hasAttribute('title')) return;
+            const label = link.querySelector('.nav-item-label');
+            if (label && label.textContent.trim()) link.title = label.textContent.trim();
+        });
+
+        const heading = root.querySelector('.nav-panel-heading');
+        if (heading && !heading.querySelector('.nav-view-toggle')) {
+            heading.appendChild(createNavViewToggle());
+        }
+
+        root.querySelectorAll('.nav-dropdown-header').forEach((dropdownHeader) => {
+            if (dropdownHeader.querySelector('.nav-view-toggle')) return;
+            const tools = document.createElement('div');
+            tools.className = 'nav-dropdown-tools';
+            const viewAll = dropdownHeader.querySelector('.nav-view-all');
+            if (viewAll) dropdownHeader.insertBefore(tools, viewAll);
+            else dropdownHeader.appendChild(tools);
+            tools.appendChild(createNavViewToggle());
+            if (viewAll) tools.appendChild(viewAll);
+        });
+
+        applyNavView(readNavView());
+        fitNavIcons(root);
+    }
+
+    const iconFitCache = new Map();
+    const iconFitPending = new Set();
+
+    function measureIconFit(image) {
+        const sample = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = sample;
+        canvas.height = sample;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+
+        context.clearRect(0, 0, sample, sample);
+        context.drawImage(image, 0, 0, sample, sample);
+
+        let pixels;
+        try {
+            pixels = context.getImageData(0, 0, sample, sample).data;
+        } catch (error) {
+            return null;
+        }
+
+        let minX = sample;
+        let minY = sample;
+        let maxX = -1;
+        let maxY = -1;
+        for (let y = 0; y < sample; y += 1) {
+            for (let x = 0; x < sample; x += 1) {
+                if (pixels[((y * sample) + x) * 4 + 3] <= 18) continue;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+        if (maxX < 0) return null;
+
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        const long = Math.max(width, height) / sample;
+        const short = Math.min(width, height) / sample;
+        if (long < 0.04) return null;
+
+        const contain = 0.92 / long;
+        const scale = Math.min(Math.max(contain, 1), 2.2);
+        const centerX = ((minX + maxX) / 2) / sample;
+        const centerY = ((minY + maxY) / 2) / sample;
+
+        return {
+            scale,
+            x: (0.5 - centerX) * scale * 100,
+            y: (0.5 - centerY) * scale * 100
+        };
+    }
+
+    function applyIconFit(element, fit) {
+        if (!fit) return;
+        if (fit.scale < 1.05 && Math.abs(fit.x) < 3 && Math.abs(fit.y) < 3) return;
+        element.style.setProperty('--icon-scale', fit.scale.toFixed(3));
+        element.style.setProperty('--icon-shift-x', `${fit.x.toFixed(2)}%`);
+        element.style.setProperty('--icon-shift-y', `${fit.y.toFixed(2)}%`);
+    }
+
+    function rememberIconFit(cacheKey, fit) {
+        iconFitCache.set(cacheKey, fit);
+        document.querySelectorAll('[data-site-header] img.nav-item-icon, [data-site-header] svg.nav-item-icon').forEach((icon) => {
+            const key = icon.getAttribute('src') || icon.dataset.iconFitKey;
+            if (key === cacheKey) applyIconFit(icon, fit);
+        });
+    }
+
+    function fitRasterIcon(element, cacheKey, image) {
+        if (iconFitCache.has(cacheKey)) {
+            applyIconFit(element, iconFitCache.get(cacheKey));
+            return;
+        }
+        if (iconFitPending.has(cacheKey)) return;
+        iconFitPending.add(cacheKey);
+        const finish = () => {
+            iconFitPending.delete(cacheKey);
+            rememberIconFit(cacheKey, measureIconFit(image));
+        };
+        if (image.complete && image.naturalWidth) finish();
+        else image.addEventListener('load', finish, { once: true });
+    }
+
+    function fitNavIcons(root) {
+        root.querySelectorAll('img.nav-item-icon').forEach((icon) => {
+            const source = icon.getAttribute('src');
+            if (!source) return;
+            const probe = new Image();
+            probe.src = source;
+            fitRasterIcon(icon, source, probe);
+        });
+
+        root.querySelectorAll('svg.nav-item-icon').forEach((icon, index) => {
+            const cacheKey = icon.dataset.iconFitKey || `svg:${index}:${icon.innerHTML.length}`;
+            icon.dataset.iconFitKey = cacheKey;
+            if (iconFitCache.has(cacheKey)) {
+                applyIconFit(icon, iconFitCache.get(cacheKey));
+                return;
+            }
+            const clone = icon.cloneNode(true);
+            clone.setAttribute('width', '64');
+            clone.setAttribute('height', '64');
+            const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const probe = new Image();
+            probe.onload = () => {
+                rememberIconFit(cacheKey, measureIconFit(probe));
+                URL.revokeObjectURL(url);
+            };
+            probe.onerror = () => URL.revokeObjectURL(url);
+            probe.src = url;
+        });
+    }
+
+    function mountNavOrderControls(root) {
+        const actions = root.querySelector('.nav-header-actions');
+        if (actions && !actions.querySelector('[data-xw-page-order]')) {
+            const search = actions.querySelector('[data-nav-search]');
+            const control = createPageOrderControl('xw-page-order-header');
+            if (search) actions.insertBefore(control, search);
+            else actions.prepend(control);
+        }
+
+        const heading = root.querySelector('.nav-panel-heading');
+        if (heading && !heading.querySelector('[data-xw-page-order]')) {
+            heading.appendChild(createPageOrderControl('xw-page-order-panel'));
+        }
+    }
+
+    function watchDirectoryGrids() {
+        if (directoryOrderWatching || !('MutationObserver' in window)) return;
+        const grids = directoryGrids();
+        if (!grids.length) return;
+
+        directoryOrderWatching = true;
+        const observer = new MutationObserver(() => {
+            const order = readPageOrder();
+            directoryGrids().forEach((grid) => sortEntryList(grid, order));
+        });
+        grids.forEach((grid) => {
+            observer.observe(grid, { childList: true, subtree: true, characterData: true });
+        });
+    }
+
+    function initDirectoryPageOrder() {
+        if (!document.querySelector('.section-jump-bar')) return;
+
+        const bar = document.querySelector('.section-jump-bar');
+        if (bar && !bar.querySelector('[data-xw-page-order]')) {
+            const tools = document.createElement('div');
+            tools.className = 'section-jump-tools';
+            tools.appendChild(createPageOrderControl('xw-page-order-directory'));
+            const inner = bar.querySelector('.section-jump-bar-inner');
+            if (inner) bar.insertBefore(tools, inner);
+            else bar.appendChild(tools);
+        }
+
+        applyPageOrder();
+        watchDirectoryGrids();
+    }
+
     function setActiveNavigation(navRoot) {
         const currentUrl = new URL(window.location.href);
         const currentPath = normalisePath(currentUrl.pathname);
@@ -397,6 +783,7 @@
         document.addEventListener('keydown', handleGlobalKeydown);
         const outsideInteractionEvent = 'PointerEvent' in window ? 'pointerdown' : 'mousedown';
         document.addEventListener(outsideInteractionEvent, (event) => {
+            if (event.target instanceof Element && event.target.closest('.xw-page-order')) return;
             if (!header.contains(event.target)) {
                 closeAllDropdowns();
                 if (menuOpen) closeMobileMenu({ restoreFocus: false });
@@ -429,6 +816,9 @@
             window.addEventListener('resize', updateHeaderHeight, { passive: true });
         }
 
+        mountNavOrderControls(placeholder);
+        mountNavViewToggles(placeholder);
+        applyPageOrder();
         setActiveNavigation(nav);
         updateHeaderHeight();
         placeholder.removeAttribute('aria-busy');
@@ -469,6 +859,8 @@
     ensureViewportFit();
 
     function runNavLoader() {
+        initDirectoryPageOrder();
+
         ensureRecentTracker().then((api) => {
             if (api && typeof api.recordCurrentPage === 'function') {
                 api.recordCurrentPage();

@@ -24,6 +24,18 @@ export default defineConfig({
 		{
 			name: 'chromium',
 			use: { ...devices['Desktop Chrome'] }
+		},
+		// Multiplayer has to work in every engine: the same world from a seed, and the same online
+		// session. These two run only the online checks (the full suite stays Chromium-only, as before).
+		{
+			name: 'webkit-online',
+			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
+			use: { ...devices['Desktop Safari'] }
+		},
+		{
+			name: 'firefox-online',
+			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
+			use: { ...devices['Desktop Firefox'] }
 		}
 	],
 	webServer: {

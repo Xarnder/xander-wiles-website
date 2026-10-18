@@ -3,6 +3,7 @@ import type { BuildUiState, HotbarUiState } from '../building/FoundationTypes';
 import type { PaintUiState } from '../building/PaintTool';
 import type { FlightState } from '../player/FirstPersonController';
 import type { GraphicsQuality } from '../graphics/GraphicsTypes';
+import type { SceneMultiplayerHooks } from '../net/MultiplayerSession';
 import { createDefaultSkySettings } from '../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../terrain/TerrainSettings';
 import { ThreeScene, type SceneStats } from '../ThreeScene';
@@ -33,6 +34,14 @@ export interface WorldSessionOptions {
 	onRequestFoundationDelete?: (foundationId: string) => void;
 	onMiniBuildEditRequest?: (instanceId: string) => void;
 	onMiniBuildNotice?: (message: string) => void;
+	/** An online world's connection to its room (see `MultiplayerSession`). */
+	multiplayer?: SceneMultiplayerHooks;
+	/**
+	 * False for an online world: nothing is autosaved, saved on quit or thumbnailed into local
+	 * IndexedDB. The server owns that world, and writing it locally could collide with the owner's own
+	 * single-player save of the same world. Defaults to true.
+	 */
+	persist?: boolean;
 }
 
 /**
@@ -50,10 +59,12 @@ export class WorldSession {
 	private readonly worldId: string;
 	private lastThumbnailAt = 0;
 	private disposed = false;
+	private readonly persist: boolean;
 
 	constructor(options: WorldSessionOptions) {
 		this.worldManager = options.worldManager;
 		this.worldId = options.world.id;
+		this.persist = options.persist ?? true;
 
 		// Fresh default settings objects, immediately overwritten in place by the world's own saved
 		// environment (see ThreeScene.loadWorld). Starting from defaults rather than from the world's
@@ -78,7 +89,8 @@ export class WorldSession {
 			onPlacementHeightChange: options.onPlacementHeightChange,
 			onRequestFoundationDelete: options.onRequestFoundationDelete,
 			onMiniBuildEditRequest: options.onMiniBuildEditRequest,
-			onMiniBuildNotice: options.onMiniBuildNotice
+			onMiniBuildNotice: options.onMiniBuildNotice,
+			multiplayer: options.multiplayer
 		});
 
 		this.autosave = new WorldAutosaveManager({
@@ -90,7 +102,7 @@ export class WorldSession {
 				if (this.shouldCaptureThumbnail(trigger)) await this.captureThumbnail();
 			}
 		});
-		this.autosave.start();
+		if (this.persist) this.autosave.start();
 
 		if (typeof document !== 'undefined') {
 			document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -101,11 +113,13 @@ export class WorldSession {
 	}
 
 	hasUnsavedChanges(): boolean {
+		if (!this.persist) return false;
 		return this.autosave.hasUnsavedChanges();
 	}
 
 	/** Flushes and resolves once the world is actually written. Used by manual save, Cmd/Ctrl+S, the pause menu, and quitting. */
 	async saveNow(trigger: SaveTrigger = 'manual'): Promise<{ ok: boolean; error?: string }> {
+		if (!this.persist) return { ok: true };
 		this.scene.markClockDirtyIfNeeded();
 		return this.autosave.saveNow(trigger);
 	}
@@ -115,6 +129,7 @@ export class WorldSession {
 	 * can never hold up (or fail) a world write — thumbnails are optional metadata.
 	 */
 	async captureThumbnail(): Promise<void> {
+		if (!this.persist) return;
 		const blob = await this.scene.captureThumbnail();
 		if (!blob) return;
 		this.lastThumbnailAt = Date.now();
@@ -134,13 +149,14 @@ export class WorldSession {
 	 * times rather than relying on a last-gasp save.
 	 */
 	private readonly handleVisibilityChange = (): void => {
-		if (document.visibilityState !== 'hidden') return;
+		if (!this.persist || document.visibilityState !== 'hidden') return;
 		this.scene.markClockDirtyIfNeeded();
 		if (!this.autosave.hasUnsavedChanges()) return;
 		void this.autosave.saveNow('lifecycle');
 	};
 
 	private readonly handlePageHide = (): void => {
+		if (!this.persist) return;
 		this.scene.markClockDirtyIfNeeded();
 		if (!this.autosave.hasUnsavedChanges()) return;
 		void this.autosave.saveNow('lifecycle');
@@ -169,9 +185,9 @@ export class WorldSession {
 			// Optional metadata; never block quitting on it.
 		}
 
-		let result: { ok: boolean; error?: string };
+		let result: { ok: boolean; error?: string } = { ok: true };
 		try {
-			result = await this.autosave.saveNow('lifecycle');
+			if (this.persist) result = await this.autosave.saveNow('lifecycle');
 		} catch (error) {
 			result = { ok: false, error: error instanceof Error ? error.message : String(error) };
 		}

@@ -2843,6 +2843,17 @@ html.add-task-composer-open body {
     justify-self: start;
 }
 
+.add-task-composer-font-size {
+    flex: 0 0 auto;
+    min-width: 2.6ch;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--text-secondary);
+}
+
 .add-task-composer.is-editing-task .add-task-composer-footer {
     display: none;
 }

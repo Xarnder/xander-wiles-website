@@ -19,6 +19,8 @@ export interface DoorInteractionControllerOptions {
 	aimRadius?: number;
 	/** Fires when the door under the crosshair changes, including to `null` when you look away. */
 	onLookedAtDoorChange?: (openingId: string | null) => void;
+	/** Fires when this player opens or closes a door (online worlds share it, Q13-A). */
+	onToggle?: (openingId: string, open: boolean) => void;
 }
 
 /**
@@ -33,6 +35,7 @@ export class DoorInteractionController {
 	private readonly maxDistance: number;
 	private readonly aimRadius: number;
 	private readonly onLookedAtDoorChange?: (openingId: string | null) => void;
+	private readonly onToggle?: (openingId: string, open: boolean) => void;
 	private lookedAtDoorId: string | null = null;
 	private readonly openById = new Set<string>();
 	private readonly lookOrigin = new THREE.Vector3();
@@ -54,6 +57,7 @@ export class DoorInteractionController {
 		this.maxDistance = options.maxDistance ?? DOOR_INTERACT_MAX_DISTANCE;
 		this.aimRadius = options.aimRadius ?? DOOR_INTERACT_AIM_RADIUS;
 		this.onLookedAtDoorChange = options.onLookedAtDoorChange;
+		this.onToggle = options.onToggle;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
@@ -82,7 +86,14 @@ export class DoorInteractionController {
 		if (!id) return null;
 		if (this.openById.has(id)) this.openById.delete(id);
 		else this.openById.add(id);
+		this.onToggle?.(id, this.openById.has(id));
 		return id;
+	}
+
+	/** Someone else opened or closed a door (it swings there as usual). */
+	setOpen(openingId: string, open: boolean): void {
+		if (open) this.openById.add(openingId);
+		else this.openById.delete(openingId);
 	}
 
 	update(deltaSeconds: number): void {

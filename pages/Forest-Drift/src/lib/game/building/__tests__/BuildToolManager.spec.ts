@@ -1012,3 +1012,41 @@ describe('BuildToolManager placement height (E)', () => {
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 	});
 });
+
+describe('BuildToolManager lock (online visitors)', () => {
+	const pointerLocked = { value: true };
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('ignores every way of building while locked, and restores build mode when unlocked', () => {
+		const { buildToolManager, foundationManager, removeTool, pointCrosshairAt, click, key } =
+			buildHarness(pointerLocked);
+		buildToolManager.setLocked(true);
+		expect(buildToolManager.isLocked()).toBe(true);
+
+		pointCrosshairAt(0, 0);
+		click(0);
+		pointCrosshairAt(8, 8);
+		click(0);
+		expect(foundationManager.getFoundations()).toHaveLength(0);
+
+		key('KeyX');
+		buildToolManager.toggleRemoveMode();
+		buildToolManager.togglePaintMode();
+		buildToolManager.toggleMoveMode();
+		buildToolManager.toggleMusicMode();
+		buildToolManager.selectSlot(2);
+		key('KeyG');
+		expect(buildToolManager.isRemoveModeActive()).toBe(false);
+		expect(removeTool.activateCount).toBe(0);
+
+		buildToolManager.setLocked(false);
+		pointCrosshairAt(0, 0);
+		click(0);
+		pointCrosshairAt(8, 8);
+		click(0);
+		expect(foundationManager.getFoundations()).toHaveLength(1);
+	});
+});

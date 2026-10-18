@@ -131,6 +131,11 @@ export class BuildToolManager {
 	 */
 	private placementCustomizeOpen = false;
 	private placementHeightOpen = false;
+	/**
+	 * Online worlds: viewers can look around but not build (and nobody builds until the room has
+	 * confirmed their role). Every way in — keys, clicks, the on-screen hotbar — checks this.
+	 */
+	private locked = false;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		const target = event.target as HTMLElement | null;
@@ -157,7 +162,7 @@ export class BuildToolManager {
 			}
 			return;
 		}
-		if (event.repeat) return;
+		if (event.repeat || this.locked) return;
 		if (event.code === 'KeyG') {
 			this.setPlacementCustomizeOpen(false);
 			this.setPlacementHeightOpen(false);
@@ -253,7 +258,7 @@ export class BuildToolManager {
 	};
 
 	private readonly handleMouseDown = (event: MouseEvent) => {
-		if (this.placementCustomizeOpen || this.placementHeightOpen) return;
+		if (this.locked || this.placementCustomizeOpen || this.placementHeightOpen) return;
 		if (this.isInputBlocked?.()) return;
 		if (event.button === 0) {
 			// Ungate: while pointer lock is not yet engaged, this exact click is the one that
@@ -316,7 +321,7 @@ export class BuildToolManager {
 	 */
 	selectSlot(slot: number): void {
 		// Empty keys (7, 9) must not exit Remove / Paint / Compose — there is no tool to switch to.
-		if (!this.slotDefinition(slot)) return;
+		if (this.locked || !this.slotDefinition(slot)) return;
 		if (!this.buildModeActive) this.setBuildMode(true);
 		if (this.globalMode !== 'none') this.setGlobalMode('none');
 		if (slot === this.activeSlotNumber) return;
@@ -351,7 +356,7 @@ export class BuildToolManager {
 	}
 
 	triggerPrimaryAction(): void {
-		if (this.placementCustomizeOpen || this.placementHeightOpen) return;
+		if (this.locked || this.placementCustomizeOpen || this.placementHeightOpen) return;
 		if (this.isInputBlocked?.()) return;
 		if (this.globalMode !== 'none') {
 			this.getGlobalTool()?.onPrimaryAction();
@@ -383,25 +388,46 @@ export class BuildToolManager {
 	}
 
 	toggleBuildMode(): void {
+		if (this.locked) return;
 		this.setBuildMode(!this.buildModeActive);
 	}
 
+	/** Locks (or unlocks) all building — see `locked`. Locking leaves any tool or mode cleanly first. */
+	setLocked(locked: boolean): void {
+		if (locked === this.locked) return;
+		if (locked) {
+			this.setGlobalMode('none');
+			this.setBuildMode(false);
+		}
+		this.locked = locked;
+		if (!locked) this.setBuildMode(true);
+		this.emitHotbarChange();
+	}
+
+	isLocked(): boolean {
+		return this.locked;
+	}
+
 	toggleRemoveMode(): void {
+		if (this.locked) return;
 		if (!this.buildModeActive) this.setBuildMode(true);
 		this.setGlobalMode(this.globalMode === 'remove' ? 'none' : 'remove');
 	}
 
 	togglePaintMode(): void {
+		if (this.locked) return;
 		if (!this.buildModeActive) this.setBuildMode(true);
 		this.setGlobalMode(this.globalMode === 'paint' ? 'none' : 'paint');
 	}
 
 	toggleMoveMode(): void {
+		if (this.locked) return;
 		if (!this.buildModeActive) this.setBuildMode(true);
 		this.setGlobalMode(this.globalMode === 'move' ? 'none' : 'move');
 	}
 
 	toggleMusicMode(): void {
+		if (this.locked) return;
 		if (this.musicTool) {
 			if (!this.buildModeActive) this.setBuildMode(true);
 			this.setGlobalMode(this.globalMode === 'music' ? 'none' : 'music');
@@ -657,6 +683,7 @@ export class BuildToolManager {
 			activeSlot: this.activeSlotNumber,
 			buildModeActive: this.buildModeActive,
 			globalMode: this.globalMode,
+			locked: this.locked,
 			musicActiveSlot:
 				((this.musicTool as { speciesIndex?: number } | undefined)?.speciesIndex ?? 0) + 1
 		});

@@ -143,6 +143,12 @@ export interface GameSettingsHost {
 	musicVisual: MusicVisualSettings;
 	/** Mini Build on-screen readouts (local preference, persisted by the action). */
 	miniBuildDisplay?: { showChunkUsage: boolean; showChunkBoundaries: boolean };
+	/**
+	 * Which world settings this player may change. `local` (single player): all of them. Online
+	 * worlds lock the land for everyone, and the sky, weather and time belong to the `owner` (Q14-A);
+	 * everyone else is a `member`. See `lockOnlineSettings`.
+	 */
+	worldAccess?: 'local' | 'owner' | 'member';
 	actions: GameSettingsActions;
 }
 
@@ -206,6 +212,7 @@ export type SettingsField =
 			id: string;
 			label: string;
 			onClick: () => void;
+			disabled?: boolean;
 	  };
 
 export interface SettingsGroup {
@@ -214,6 +221,8 @@ export interface SettingsGroup {
 	description?: string;
 	fields: SettingsField[];
 	groups?: SettingsGroup[];
+	/** Why this group's fields can't be changed right now (online worlds). */
+	lockedReason?: string;
 }
 
 export interface SettingsCategory {
@@ -221,4 +230,6 @@ export interface SettingsCategory {
 	title: string;
 	description: string;
 	groups: SettingsGroup[];
+	/** Why this category's fields can't be changed right now (online worlds). */
+	lockedReason?: string;
 }

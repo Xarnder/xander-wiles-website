@@ -374,6 +374,17 @@ export class MiniBuildSystem {
 		return result;
 	}
 
+	/**
+	 * Online worlds: puts a placed copy exactly as the room has it (same id), replacing any local
+	 * copy. Returns false if this player's budget check refuses it (it then simply isn't drawn).
+	 */
+	upsertInstance(instance: MiniBuildInstance): boolean {
+		this.instances.remove(instance.id);
+		const result = this.instances.add(structuredClone(instance));
+		this.notify();
+		return result.ok;
+	}
+
 	removeInstance(instanceId: string): boolean {
 		const removed = this.instances.remove(instanceId);
 		if (removed) this.notify();

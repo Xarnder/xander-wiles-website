@@ -53,6 +53,42 @@
 	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import TouchControls from '$lib/components/TouchControls.svelte';
 	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
+	import { version as appVersion } from '$app/environment';
+	import ConfirmRemoveOthersDialog from '$lib/components/ConfirmRemoveOthersDialog.svelte';
+	import InviteLinksDialog from '$lib/components/InviteLinksDialog.svelte';
+	import RestorePointsDialog from '$lib/components/RestorePointsDialog.svelte';
+	import JoinWorldDialog from '$lib/components/JoinWorldDialog.svelte';
+	import OnlineStatus from '$lib/components/OnlineStatus.svelte';
+	import PublishWorldDialog from '$lib/components/PublishWorldDialog.svelte';
+	// Type-only: the multiplayer code itself loads on demand, the first time someone goes online.
+	import type { BuildLock, MultiplayerSession } from '$lib/game/net/MultiplayerSession';
+	import type { DeletionItem } from '$lib/game/net/WorldOpFeed';
+	import {
+		findOnlineWorld,
+		forgetOnlineWorld,
+		inviteLink as buildInviteLink,
+		loadAdminKey,
+		loadIdentity,
+		loadOnlineWorlds,
+		multiplayerServerUrl,
+		rememberOnlineWorld,
+		saveAdminKey,
+		saveIdentity,
+		worldReferenceFromLocation,
+		type OnlineWorldEntry,
+		type PlayerIdentity,
+		type WorldReference
+	} from '$lib/game/net/mpConfig';
+	import type { NetStatus } from '$lib/game/net/NetSession';
+	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
+	import {
+		exportOnlineWorld,
+		fetchOnlineWorld,
+		listRestorePoints,
+		publishWorld,
+		restoreOnlineWorld,
+		type RestorePoint
+	} from '$lib/game/net/worldTransfer';
 	import type { BuildUiState, HotbarSlot, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import { species } from '$lib/game/music/MusicModel';
 
@@ -91,10 +127,11 @@
 	import { WorldManager } from '$lib/game/world/WorldManager';
 	import { InMemoryWorldRepository } from '$lib/game/world/WorldRepository';
 	import { WorldSession } from '$lib/game/world/WorldSession';
-	import type { SaveStatus, WorldMetadata } from '$lib/game/world/WorldTypes';
+	import type { SaveStatus, WorldDefinition, WorldMetadata } from '$lib/game/world/WorldTypes';
 
 	type ForestTestWindow = Window & {
 		__forestSession?: WorldSession | null;
+		__forestMultiplayer?: MultiplayerSession | null;
 		__setTestLookedAtDoor?: (id: string | null) => void;
 	};
 
@@ -149,6 +186,52 @@
 
 	let session = $state.raw<WorldSession>();
 
+	/** Multiplayer server base URL; null when multiplayer isn't available in this build. */
+	let mpServer = $state<string | null>(null);
+	let playerIdentity = $state<PlayerIdentity | null>(null);
+	/** Set while the open world is an online one (see `MultiplayerSession`). */
+	let onlineWorld = $state<{ worldId: string; name: string } | null>(null);
+	let mpStatus = $state<NetStatus>('connecting');
+	let mpDetail = $state<string | null>(null);
+	let mpPlayers = $state<PlayerInfo[]>([]);
+	let mpSelfSlot = $state<number | null>(null);
+	/** Our role in the open online world, once the room has confirmed it. */
+	let mpRole = $state<PlayerRole | null>(null);
+	let multiplayerSession = $state.raw<MultiplayerSession | null>(null);
+	/** Online worlds this browser has joined or published. */
+	let onlineWorlds = $state<OnlineWorldEntry[]>([]);
+	/** `target` null asks for a link; otherwise the world (and invite, if the link carried one). */
+	let joinDialog = $state<{
+		target: WorldReference | null;
+		busy: boolean;
+		error: string | null;
+	} | null>(null);
+	let publishDialog = $state<{
+		worldId: string;
+		worldName: string;
+		busy: boolean;
+		error: string | null;
+		published: OnlineWorldEntry | null;
+	} | null>(null);
+	/** The owner's invite links, opened from the Worlds screen. */
+	let invitesDialog = $state<OnlineWorldEntry | null>(null);
+	/** The owner's "Restore…" dialog for an online world. */
+	let restoreDialog = $state<{
+		entry: OnlineWorldEntry;
+		points: RestorePoint[] | null;
+		busy: boolean;
+		error: string | null;
+	} | null>(null);
+	/** Why building is off in the open online world (visitor, joining, offline too long). */
+	let mpBuildLock = $state<BuildLock>(null);
+	/** This player's changes are on their way to the room. */
+	let mpSaving = $state(false);
+	/** F2-B: a deletion that would take other people's additions with it, waiting for an answer. */
+	let removeOthersPrompt = $state<{
+		items: DeletionItem[];
+		resolve: (confirmed: boolean) => void;
+	} | null>(null);
+
 	function clockBlocked(): boolean {
 		return (
 			paused ||
@@ -160,7 +243,8 @@
 			placementHeightOpen ||
 			miniBuildEditor !== null ||
 			miniBuildEditChoice !== null ||
-			foundationDeleteId !== null
+			foundationDeleteId !== null ||
+			removeOthersPrompt !== null
 		);
 	}
 
@@ -190,6 +274,7 @@
 	}
 
 	function requestMiniBuildEdit(instanceId: string) {
+		if (hotbar?.locked) return;
 		const system = session?.scene.miniBuilds;
 		const instance = system?.instances.get(instanceId);
 		const design = instance ? system?.getDesign(instance.designId) : undefined;
@@ -205,6 +290,12 @@
 
 	$effect(() => {
 		if (session) session.scene.simulationPaused = clockBlocked();
+	});
+
+	// Q12: in an online world, the pause menu (and any other overlay) shows us as away to others while
+	// the shared world carries on.
+	$effect(() => {
+		multiplayerSession?.setAway(clockBlocked());
 	});
 	let worldManager: WorldManager | undefined;
 	let graphicsNoticeTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -420,6 +511,10 @@
 					(slot) => slot.slot === current.activeSlot && slot.toolId === 'place-object'
 				);
 			if (placingObject) return;
+			if (session.scene.isFlightDisabled()) {
+				showSaveToast('Flying is off in online worlds');
+				return;
+			}
 			const next = session.scene.toggleFlying();
 			showSaveToast(
 				next.flying
@@ -528,27 +623,41 @@
 			screen = 'worlds';
 			return;
 		}
+		await startSession(opened.value, opened.value.name);
+	}
 
-		loadingLabel = `Loading ${opened.value.name}…`;
+	/**
+	 * Starts the renderer for a world — a local one, or (with `multiplayer`) an online one, which is
+	 * never written to local storage.
+	 */
+	async function startSession(
+		world: WorldDefinition,
+		displayName: string,
+		multiplayer?: MultiplayerSession
+	): Promise<boolean> {
+		if (!worldManager) return false;
+		loadingLabel = `Loading ${displayName}…`;
 		screen = 'game';
 		// The canvas container only exists once the game screen has rendered.
 		await tick();
 		if (!container) {
 			screen = 'worlds';
 			worldsError = 'Unable to start the world renderer.';
-			return;
+			return false;
 		}
 
-		currentWorldName = opened.value.name;
-		currentWorldSeed = opened.value.seed;
+		currentWorldName = displayName;
+		currentWorldSeed = world.seed;
 		saveStatus = 'saved';
 		saveError = null;
 		paused = false;
 
 		session = new WorldSession({
 			container,
-			world: opened.value,
+			world,
 			worldManager,
+			multiplayer,
+			persist: !multiplayer,
 			onSaveStatusChange: (status, error) => {
 				saveStatus = status;
 				saveError = error;
@@ -595,14 +704,275 @@
 		if (typeof window !== 'undefined') {
 			const testWindow = window as ForestTestWindow;
 			testWindow.__forestSession = session;
+			testWindow.__forestMultiplayer = multiplayer ?? null;
 			testWindow.__setTestLookedAtDoor = (id: string | null) => {
 				lookedAtDoorId = id;
 			};
 		}
+		return true;
+	}
+
+	/**
+	 * Keeps `?mp=<world>` in the address bar while in an online world, so a refresh rejoins it. The
+	 * invite token is never left there (it's remembered in this browser instead): an address bar ends
+	 * up in screenshots and screen shares.
+	 */
+	function setLocationWorld(worldId: string | null) {
+		const url = new URL(window.location.href);
+		if (worldId) url.searchParams.set('mp', worldId);
+		else url.searchParams.delete('mp');
+		// Path and query only: the fragment (`#invite=…`) is dropped.
+		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
+	}
+
+	function openJoinDialog(target: WorldReference | null) {
+		if (!mpServer) return;
+		joinDialog = { target, busy: false, error: null };
+	}
+
+	function cancelJoin() {
+		joinDialog = null;
+		setLocationWorld(null);
+	}
+
+	/** The links this browser can share for a world: all three for the owner, otherwise its own. */
+	function inviteLinksFor(entry: OnlineWorldEntry | null): { role: PlayerRole; url: string }[] {
+		if (!entry) return [];
+		if (entry.invites) {
+			return (['editor', 'viewer', 'owner'] as const).map((role) => ({
+				role,
+				url: buildInviteLink(entry.worldId, entry.invites![role])
+			}));
+		}
+		return entry.role
+			? [{ role: entry.role, url: buildInviteLink(entry.worldId, entry.invite) }]
+			: [];
+	}
+
+	/**
+	 * Only the owner changes the sky, weather and time (Q14-A). Building on/off follows the role and
+	 * the connection, and is managed by `MultiplayerSession`.
+	 */
+	function applyRole(role: PlayerRole | null) {
+		if (!session || !role) return;
+		session.scene.setWorldSettingsAccess(role === 'owner' ? 'owner' : 'member');
+	}
+
+	function answerRemoveOthers(confirmed: boolean) {
+		const prompt = removeOthersPrompt;
+		removeOthersPrompt = null;
+		prompt?.resolve(confirmed);
+	}
+
+	async function joinOnline(reference: WorldReference, name: string, colour: string) {
+		if (!worldManager || !mpServer || screen !== 'worlds') return;
+		const { worldId } = reference;
+		saveIdentity(name, colour);
+		const identity: PlayerIdentity = { ...loadIdentity(), name, colour };
+		playerIdentity = identity;
+		const remembered = findOnlineWorld(worldId);
+		const invite = reference.invite ?? remembered?.invite ?? null;
+		const target = joinDialog?.target ?? reference;
+		if (!invite) {
+			joinDialog = {
+				target,
+				busy: false,
+				error: 'That link is missing its invite code. Ask the owner to send it again.'
+			};
+			return;
+		}
+		joinDialog = { target, busy: true, error: null };
+
+		const [fetched, { MultiplayerSession }] = await Promise.all([
+			fetchOnlineWorld(mpServer, worldId, invite),
+			import('$lib/game/net/MultiplayerSession')
+		]);
+		if (!fetched.ok) {
+			joinDialog = { target, busy: false, error: fetched.error };
+			return;
+		}
+		joinDialog = null;
+		setLocationWorld(worldId);
+
+		const { manifest, world } = fetched.value;
+		rememberOnlineWorld({
+			worldId,
+			name: manifest.name,
+			invite,
+			// A different link for the same world (say, an editor link after a viewer one) starts over.
+			capability: remembered?.invite === invite ? remembered.capability : null,
+			lastJoinedAt: new Date().toISOString()
+		});
+		onlineWorlds = loadOnlineWorlds();
+		onlineWorld = { worldId, name: manifest.name };
+		mpStatus = 'connecting';
+		mpDetail = null;
+		mpPlayers = [];
+		mpSelfSlot = null;
+		mpRole = null;
+		const server = mpServer;
+		const multiplayer = new MultiplayerSession({
+			serverUrl: mpServer,
+			worldId,
+			identity,
+			schemaVersion: manifest.schemaVersion,
+			build: appVersion,
+			sync: fetched.value.sync,
+			fetchSnapshot: async () => {
+				const fresh = await fetchOnlineWorld(server, worldId, invite);
+				return fresh.ok ? fresh.value.sync : null;
+			},
+			onNotice: (message) => showSaveToast(message),
+			onConfirmDeletion: (items) =>
+				new Promise<boolean>((resolve) => {
+					document.exitPointerLock?.();
+					removeOthersPrompt = { items, resolve };
+				}),
+			onBuildLock: (lock) => (mpBuildLock = lock),
+			onSaving: (saving) => (mpSaving = saving),
+			access: {
+				invite,
+				capability: remembered?.invite === invite ? (remembered.capability ?? null) : null
+			},
+			onStatus: (status, detail) => {
+				mpStatus = status;
+				mpDetail = detail;
+			},
+			onPlayers: (players, selfSlot) => {
+				mpPlayers = players;
+				mpSelfSlot = selfSlot;
+			},
+			onRole: (role) => {
+				mpRole = role;
+				rememberOnlineWorld({ worldId, role });
+				onlineWorlds = loadOnlineWorlds();
+				applyRole(role);
+			},
+			onCapability: (capability) => rememberOnlineWorld({ worldId, capability })
+		});
+		screen = 'loading';
+		const started = await startSession(world, manifest.name, multiplayer);
+		if (!started) {
+			multiplayer.detach();
+			onlineWorld = null;
+			setLocationWorld(null);
+			return;
+		}
+		multiplayerSession = multiplayer;
+		applyRole(mpRole);
+		showSaveToast(`Joined ${manifest.name} — everything you build is shared and saved online`);
+	}
+
+	function joinRememberedWorld(worldId: string) {
+		const entry = findOnlineWorld(worldId);
+		if (entry) openJoinDialog({ worldId, invite: entry.invite });
+	}
+
+	async function saveOnlineCopy(worldId: string) {
+		const entry = findOnlineWorld(worldId);
+		if (!entry?.invites || !mpServer || !worldManager) return;
+		const server = mpServer;
+		await withBusy(async () => {
+			const exported = await exportOnlineWorld(server, worldId, entry.invites!.owner);
+			if (!exported.ok) {
+				worldsError = exported.error;
+				return;
+			}
+			const saved = await worldManager!.importDefinition(exported.value, 'Online copy');
+			if (!saved.ok) {
+				worldsError = saved.error;
+				return;
+			}
+			await refreshWorlds();
+			showSaveToast(`Saved ${saved.value.name} to My Worlds`);
+		});
+	}
+
+	async function openRestore(worldId: string) {
+		const entry = findOnlineWorld(worldId);
+		if (!entry?.invites || !mpServer) return;
+		restoreDialog = { entry, points: null, busy: false, error: null };
+		const listed = await listRestorePoints(mpServer, worldId, entry.invites.owner);
+		if (restoreDialog?.entry.worldId !== worldId) return;
+		restoreDialog = listed.ok
+			? { ...restoreDialog, points: listed.value }
+			: { ...restoreDialog, points: [], error: listed.error };
+	}
+
+	async function restoreTo(pointId: number) {
+		const dialog = restoreDialog;
+		if (!dialog?.entry.invites || !mpServer) return;
+		restoreDialog = { ...dialog, busy: true, error: null };
+		const result = await restoreOnlineWorld(
+			mpServer,
+			dialog.entry.worldId,
+			dialog.entry.invites.owner,
+			pointId
+		);
+		if (!result.ok) {
+			restoreDialog = { ...dialog, busy: false, error: result.error };
+			return;
+		}
+		restoreDialog = null;
+		showSaveToast(`${dialog.entry.name} is back to that version`);
+	}
+
+	function forgetRememberedWorld(worldId: string) {
+		forgetOnlineWorld(worldId);
+		onlineWorlds = loadOnlineWorlds();
+	}
+
+	function openPublish(worldId: string) {
+		if (!mpServer) return;
+		const meta = worldId === DEFAULT_WORLD_ID ? defaultWorld : worlds.find((w) => w.id === worldId);
+		publishDialog = {
+			worldId,
+			worldName: meta?.name ?? 'World',
+			busy: false,
+			error: null,
+			published: null
+		};
+	}
+
+	async function submitPublish(adminKey: string, remember: boolean) {
+		const dialog = publishDialog;
+		if (!dialog || !worldManager || !mpServer) return;
+		publishDialog = { ...dialog, busy: true, error: null };
+		const exported = await worldManager.exportWorld(dialog.worldId);
+		if (!exported.ok) {
+			publishDialog = { ...dialog, busy: false, error: exported.error };
+			return;
+		}
+		const result = await publishWorld(mpServer, adminKey, exported.value.world);
+		if (!result.ok) {
+			publishDialog = { ...dialog, busy: false, error: result.error };
+			return;
+		}
+		saveAdminKey(remember ? adminKey : '');
+		const { worldId, name, invites } = result.value;
+		const published = rememberOnlineWorld({
+			worldId,
+			name,
+			invite: invites.owner,
+			role: 'owner',
+			invites
+		});
+		onlineWorlds = loadOnlineWorlds();
+		publishDialog = { ...dialog, busy: false, error: null, published };
+	}
+
+	function joinPublished() {
+		const published = publishDialog?.published ?? null;
+		publishDialog = null;
+		if (published) openJoinDialog({ worldId: published.worldId, invite: published.invite });
 	}
 
 	async function manualSave() {
 		if (!session) return;
+		if (onlineWorld) {
+			showSaveToast('Online worlds save themselves on the server');
+			return;
+		}
 		const result = await session.saveNow('manual');
 		showSaveToast(result.ok ? 'World Saved' : 'Unable to save world locally.');
 		if (!result.ok) saveError = result.error ?? null;
@@ -617,9 +987,20 @@
 			if (typeof window !== 'undefined') {
 				const testWindow = window as ForestTestWindow;
 				testWindow.__forestSession = null;
+				testWindow.__forestMultiplayer = null;
 				delete testWindow.__setTestLookedAtDoor;
 			}
 			lookedAtDoorId = null;
+			if (onlineWorld) {
+				onlineWorld = null;
+				multiplayerSession = null;
+				mpBuildLock = null;
+				if (removeOthersPrompt) answerRemoveOthers(false);
+				mpPlayers = [];
+				mpSelfSlot = null;
+				mpRole = null;
+				setLocationWorld(null);
+			}
 			if (!result.ok) worldsError = result.error ?? 'Unable to save world before quitting.';
 			worldManager?.closeWorld();
 
@@ -734,6 +1115,17 @@
 			worldsError = 'Local storage is unavailable in this browser, so worlds cannot be saved.';
 		}
 		void refreshWorlds();
+
+		mpServer = multiplayerServerUrl();
+		playerIdentity = loadIdentity();
+		onlineWorlds = loadOnlineWorlds();
+		const invited = worldReferenceFromLocation();
+		if (invited) {
+			// Take the token out of the address bar straight away; the dialog holds it from here.
+			setLocationWorld(invited.worldId);
+			if (mpServer) openJoinDialog(invited);
+			else worldsError = "Multiplayer isn't available in this version of the game yet.";
+		}
 	});
 
 	onDestroy(() => {
@@ -764,7 +1156,55 @@
 		onDelete={(id) => void deleteWorld(id)}
 		onImport={(file) => void importWorld(file)}
 		onDismissError={() => (worldsError = null)}
+		onPublish={mpServer ? (id) => openPublish(id) : undefined}
+		onJoinOnline={mpServer ? () => openJoinDialog(null) : undefined}
+		onlineWorlds={mpServer ? onlineWorlds : []}
+		onJoinOnlineWorld={joinRememberedWorld}
+		onShowInvites={(worldId) => (invitesDialog = findOnlineWorld(worldId))}
+		onForgetOnlineWorld={forgetRememberedWorld}
+		onSaveOnlineCopy={(worldId) => void saveOnlineCopy(worldId)}
+		onRestoreOnline={(worldId) => void openRestore(worldId)}
 	/>
+	{#if restoreDialog}
+		<RestorePointsDialog
+			worldName={restoreDialog.entry.name}
+			points={restoreDialog.points}
+			busy={restoreDialog.busy}
+			error={restoreDialog.error}
+			onRestore={(pointId) => void restoreTo(pointId)}
+			onClose={() => (restoreDialog = null)}
+		/>
+	{/if}
+	{#if publishDialog}
+		<PublishWorldDialog
+			worldName={publishDialog.worldName}
+			initialAdminKey={loadAdminKey()}
+			busy={publishDialog.busy}
+			error={publishDialog.error}
+			links={publishDialog.published ? inviteLinksFor(publishDialog.published) : null}
+			onPublish={(key, remember) => void submitPublish(key, remember)}
+			onJoin={joinPublished}
+			onClose={() => (publishDialog = null)}
+		/>
+	{/if}
+	{#if invitesDialog}
+		<InviteLinksDialog
+			worldName={invitesDialog.name}
+			links={inviteLinksFor(invitesDialog)}
+			onClose={() => (invitesDialog = null)}
+		/>
+	{/if}
+	{#if joinDialog && playerIdentity}
+		<JoinWorldDialog
+			target={joinDialog.target}
+			initialName={playerIdentity.name}
+			initialColour={playerIdentity.colour}
+			busy={joinDialog.busy}
+			error={joinDialog.error}
+			onJoin={(reference, name, colour) => void joinOnline(reference, name, colour)}
+			onCancel={cancelJoin}
+		/>
+	{/if}
 {/if}
 
 {#if screen === 'loading'}
@@ -1671,6 +2111,14 @@
 				showGlobalModes={false}
 				onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
 			/>
+		{:else if hotbar?.locked && onlineWorld}
+			<div class="view-only-badge" data-testid="view-only-badge" data-lock={mpBuildLock}>
+				{mpBuildLock === 'viewer'
+					? 'Viewing only — this link can look around but not build'
+					: mpBuildLock === 'offline'
+						? 'Reconnecting… building is paused until the connection is back'
+						: 'Joining…'}
+			</div>
 		{:else if hotbar?.buildModeActive}
 			<Hotbar
 				slots={hotbar.slots}
@@ -1682,6 +2130,14 @@
 				onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
 				onTogglePaintMode={() => session?.scene.togglePaintMode()}
 				onToggleMoveMode={() => session?.scene.toggleMoveMode()}
+			/>
+		{/if}
+
+		{#if removeOthersPrompt}
+			<ConfirmRemoveOthersDialog
+				items={removeOthersPrompt.items}
+				onConfirm={() => answerRemoveOthers(true)}
+				onCancel={() => answerRemoveOthers(false)}
 			/>
 		{/if}
 
@@ -1709,11 +2165,37 @@
 			<!-- Small, always-present save state. Deliberately understated: autosave is meant to be
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
-			<div class="save-indicator" data-testid="save-indicator" data-status={saveStatus}>
-				<span class="save-dot" data-status={saveStatus}></span>
-				{#if saveStatus === 'saving'}Saving…{:else if saveStatus === 'dirty'}Unsaved{:else if saveStatus === 'error'}Save
-					failed{:else}Saved{/if}
-			</div>
+			{#if onlineWorld}
+				<OnlineStatus
+					worldName={onlineWorld.name}
+					status={mpStatus}
+					detail={mpDetail}
+					players={mpPlayers}
+					selfSlot={mpSelfSlot}
+					role={mpRole}
+					links={inviteLinksFor(
+						onlineWorlds.find((w) => w.worldId === onlineWorld?.worldId) ?? null
+					)}
+					diagnostics={() => multiplayerSession?.diagnostics() ?? null}
+				/>
+				<div class="save-indicator" data-testid="save-indicator" data-status="online">
+					<span
+						class="save-dot"
+						data-status={mpStatus !== 'connected' ? 'dirty' : mpSaving ? 'saving' : 'saved'}
+					></span>
+					{mpStatus !== 'connected'
+						? 'Changes will save when reconnected'
+						: mpSaving
+							? 'Saving…'
+							: 'Saved online'}
+				</div>
+			{:else}
+				<div class="save-indicator" data-testid="save-indicator" data-status={saveStatus}>
+					<span class="save-dot" data-status={saveStatus}></span>
+					{#if saveStatus === 'saving'}Saving…{:else if saveStatus === 'dirty'}Unsaved{:else if saveStatus === 'error'}Save
+						failed{:else}Saved{/if}
+				</div>
+			{/if}
 			{#if saveStatus === 'error'}
 				<div class="save-error-chip" data-testid="save-error-chip">
 					<p>{saveError ?? 'Unable to save world locally.'}</p>
@@ -2410,6 +2892,25 @@
 
 	.stats-overlay.below-fps {
 		top: 2.85rem;
+	}
+
+	.view-only-badge {
+		position: fixed;
+		left: 50%;
+		bottom: 1.1rem;
+		transform: translateX(-50%);
+		z-index: 12;
+		padding: 0.45rem 0.9rem;
+		border-radius: 999px;
+		background: rgba(8, 16, 12, 0.62);
+		border: 1px solid rgba(234, 246, 255, 0.2);
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 0.8rem;
+		pointer-events: none;
 	}
 
 	/* Bottom-left, above the pause button; stats stay top-left and the hotbar is centred. */

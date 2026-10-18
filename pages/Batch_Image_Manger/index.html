@@ -356,7 +356,7 @@
                                     <button type="button" class="mini-btn fill-alpha-preset-btn" data-alpha-bg="#000000">Black</button>
                                 </div>
                             </div>
-                            <p class="padding-hint">Fills transparent pixels in PNG, WebP, and AVIF with this colour. JPEG is already opaque. Applies to every uploaded image.</p>
+                            <p class="padding-hint">Fills transparent pixels in PNG, WebP, AVIF, and JPEG XL with this colour. JPEG is already opaque. Applies to every uploaded image.</p>
                         </div>
                     </div>
 
@@ -376,9 +376,16 @@
                                     <label>Prefix / Suffix</label>
                                     <div class="filename-inputs">
                                         <input type="text" id="filename-prefix" placeholder="Prefix_" title="Prefix" />
-                                        <span style="color:var(--text-muted)">+ Name +</span>
+                                        <span id="filename-name-token" style="color:var(--text-muted)">+ Name +</span>
                                         <input type="text" id="filename-suffix" placeholder="_Suffix" title="Suffix" />
                                     </div>
+                                </div>
+                                <div class="control-group">
+                                    <label for="filename-drop-names-toggle" class="checkbox-label toggle-switch" title="Ignore every original filename and rename the whole batch from the prefix, number, and suffix">
+                                        <input type="checkbox" id="filename-drop-names-toggle" />
+                                        <span class="toggle-knob"></span>
+                                        Drop original names
+                                    </label>
                                 </div>
                             </div>
 
@@ -388,13 +395,16 @@
                                     <label for="filename-base">Base Name</label>
                                     <input type="text" id="filename-base" placeholder="Image" style="width: 120px;" />
                                 </div>
+                            </div>
+
+                            <div id="naming-number-inputs" class="inline-controls hidden">
                                 <div class="control-group">
                                     <label for="filename-start-num">Start</label>
                                     <input type="number" id="filename-start-num" value="1" min="0" style="width: 60px;" />
                                 </div>
                                 <div class="control-group">
-                                    <label for="filename-padding">Padding</label>
-                                    <input type="number" id="filename-padding" value="3" min="1" max="10" style="width: 60px;" />
+                                    <label for="filename-padding">Number padding</label>
+                                    <input type="number" id="filename-padding" value="3" min="1" max="10" style="width: 60px;" title="Digits in the number, filled with leading zeros" />
                                 </div>
                             </div>
 
@@ -414,6 +424,7 @@
                                     <option value="image/jpeg">JPG</option>
                                     <option value="image/webp">WebP</option>
                                     <option value="image/avif">AVIF</option>
+                                    <option value="image/jxl">JPEG XL</option>
                                     <option value="image/svg+xml">SVG</option>
                                     <option value="original">Original (Rename Only)</option>
                                 </select>
@@ -424,6 +435,17 @@
                         <div class="control-group hidden" id="main-quality-wrapper">
                             <label for="main-quality-slider">Quality: <span id="main-quality-value">90</span>%</label>
                             <input type="range" id="main-quality-slider" min="1" max="100" value="90" step="1" />
+                        </div>
+                        <div class="control-group hidden" id="main-effort-wrapper">
+                            <label for="main-effort-slider" title="Higher effort makes smaller JPEG XL files and takes longer to encode">Effort: <span id="main-effort-value">7</span></label>
+                            <input type="range" id="main-effort-slider" min="1" max="9" value="7" step="1" />
+                        </div>
+                        <div class="control-group hidden" id="main-lossless-wrapper">
+                            <label for="main-lossless-toggle" class="checkbox-label toggle-switch" title="Lossless JPEG XL keeps every pixel">
+                                <input type="checkbox" id="main-lossless-toggle" />
+                                <span class="toggle-knob"></span>
+                                Lossless
+                            </label>
                         </div>
                     </div>
 
@@ -647,6 +669,34 @@
                 </div>
             </div>
 
+            <div class="inline-controls" style="margin-top: 1rem;">
+                <div class="control-group">
+                    <label for="grid-format-select">Format</label>
+                    <select id="grid-format-select">
+                        <option value="image/png" selected>PNG</option>
+                        <option value="image/jpeg">JPG</option>
+                        <option value="image/webp">WebP</option>
+                        <option value="image/avif">AVIF</option>
+                        <option value="image/jxl">JPEG XL</option>
+                    </select>
+                </div>
+                <div id="grid-quality-wrapper" class="control-group hidden">
+                    <label for="grid-quality-slider">Quality: <span id="grid-quality-value">92</span>%</label>
+                    <input type="range" id="grid-quality-slider" min="1" max="100" value="92" step="1" />
+                </div>
+                <div id="grid-effort-wrapper" class="control-group hidden">
+                    <label for="grid-effort-slider" title="Higher effort makes smaller JPEG XL files and takes longer to encode">Effort: <span id="grid-effort-value">7</span></label>
+                    <input type="range" id="grid-effort-slider" min="1" max="9" value="7" step="1" />
+                </div>
+                <div id="grid-lossless-wrapper" class="control-group hidden">
+                    <label for="grid-lossless-toggle" class="checkbox-label toggle-switch" title="Lossless JPEG XL keeps every pixel">
+                        <input type="checkbox" id="grid-lossless-toggle" />
+                        <span class="toggle-knob"></span>
+                        Lossless
+                    </label>
+                </div>
+            </div>
+
             <div class="popup-actions" style="flex-wrap: wrap; gap: 1rem;">
                 <button id="generate-grid-btn" class="popup-generate-btn">Download Grid (PNG)</button>
                 <button id="open-grid-tab-btn" class="secondary-btn">Open in New Tab (Mobile Fix)</button>
@@ -731,6 +781,23 @@
                             <input type="text" id="downscale-suffix" placeholder="_Suffix" style="width: 80px;" />
                         </div>
                     </div>
+                    <div class="control-group">
+                        <label for="downscale-drop-names-toggle" class="checkbox-label toggle-switch" title="Ignore every original filename and rename the downscale batch from the prefix, number, and suffix">
+                            <input type="checkbox" id="downscale-drop-names-toggle" />
+                            <span class="toggle-knob"></span>
+                            Drop original names
+                        </label>
+                    </div>
+                    <div id="downscale-number-inputs" class="inline-controls hidden">
+                        <div class="control-group">
+                            <label for="downscale-start-num">Start</label>
+                            <input type="number" id="downscale-start-num" value="1" min="0" style="width: 60px;" />
+                        </div>
+                        <div class="control-group">
+                            <label for="downscale-padding">Number padding</label>
+                            <input type="number" id="downscale-padding" value="3" min="1" max="10" style="width: 60px;" title="Digits in the number, filled with leading zeros" />
+                        </div>
+                    </div>
 
                     <div class="control-group">
                         <label for="downscale-format-select">Format</label>
@@ -739,12 +806,24 @@
                             <option value="image/jpeg">JPG</option>
                             <option value="image/webp">WebP</option>
                             <option value="image/avif">AVIF</option>
+                            <option value="image/jxl">JPEG XL</option>
                         </select>
                     </div>
                     <div id="downscale-quality-wrapper" class="control-group hidden">
                         <label for="downscale-quality-slider">Quality: <span
                                 id="downscale-quality-value">92</span>%</label>
                         <input type="range" id="downscale-quality-slider" min="1" max="100" value="92" step="1" />
+                    </div>
+                    <div id="downscale-effort-wrapper" class="control-group hidden">
+                        <label for="downscale-effort-slider" title="Higher effort makes smaller JPEG XL files and takes longer to encode">Effort: <span id="downscale-effort-value">7</span></label>
+                        <input type="range" id="downscale-effort-slider" min="1" max="9" value="7" step="1" />
+                    </div>
+                    <div id="downscale-lossless-wrapper" class="control-group hidden">
+                        <label for="downscale-lossless-toggle" class="checkbox-label toggle-switch" title="Lossless JPEG XL keeps every pixel">
+                            <input type="checkbox" id="downscale-lossless-toggle" />
+                            <span class="toggle-knob"></span>
+                            Lossless
+                        </label>
                     </div>
                 </div>
 
@@ -772,6 +851,7 @@
                         </label>
                     </div>
                 </div>
+                <p id="downscale-name-example" class="status-message" style="margin-top: 0.8rem; font-style: italic;">Example: Image Name.png</p>
             </div>
 
             <p id="downscale-error-message" class="status-message" style="color: var(--accent-orange);"></p>
@@ -867,11 +947,23 @@
                             <option value="image/jpeg">JPG</option>
                             <option value="image/webp">WebP</option>
                             <option value="image/avif">AVIF</option>
+                            <option value="image/jxl">JPEG XL</option>
                         </select>
                     </div>
                     <div id="upscale-quality-wrapper" class="control-group hidden">
                         <label for="upscale-quality-slider">Quality: <span id="upscale-quality-value">92</span>%</label>
                         <input type="range" id="upscale-quality-slider" min="1" max="100" value="92" step="1" />
+                    </div>
+                    <div id="upscale-effort-wrapper" class="control-group hidden">
+                        <label for="upscale-effort-slider" title="Higher effort makes smaller JPEG XL files and takes longer to encode">Effort: <span id="upscale-effort-value">7</span></label>
+                        <input type="range" id="upscale-effort-slider" min="1" max="9" value="7" step="1" />
+                    </div>
+                    <div id="upscale-lossless-wrapper" class="control-group hidden">
+                        <label for="upscale-lossless-toggle" class="checkbox-label toggle-switch" title="Lossless JPEG XL keeps every pixel">
+                            <input type="checkbox" id="upscale-lossless-toggle" />
+                            <span class="toggle-knob"></span>
+                            Lossless
+                        </label>
                     </div>
                 </div>
 
@@ -1112,12 +1204,35 @@
                 </div>
             </div>
 
+            <div class="inline-controls colour-match-export-controls">
+                <div class="control-group">
+                    <label for="colour-match-format-select">Format</label>
+                    <select id="colour-match-format-select" aria-label="Download format">
+                        <option value="image/png" selected>PNG</option>
+                        <option value="image/jpeg">JPG</option>
+                        <option value="image/webp">WebP</option>
+                        <option value="image/avif">AVIF</option>
+                        <option value="image/jxl">JPEG XL</option>
+                    </select>
+                </div>
+                <div id="colour-match-quality-wrapper" class="control-group hidden">
+                    <label for="colour-match-quality-slider">Quality: <span id="colour-match-quality-value">92</span>%</label>
+                    <input type="range" id="colour-match-quality-slider" min="1" max="100" value="92" step="1" />
+                </div>
+                <div id="colour-match-effort-wrapper" class="control-group hidden">
+                    <label for="colour-match-effort-slider" title="Higher effort makes smaller JPEG XL files and takes longer to encode">Effort: <span id="colour-match-effort-value">7</span></label>
+                    <input type="range" id="colour-match-effort-slider" min="1" max="9" value="7" step="1" />
+                </div>
+                <div id="colour-match-lossless-wrapper" class="control-group hidden">
+                    <label for="colour-match-lossless-toggle" class="checkbox-label toggle-switch" title="Lossless JPEG XL keeps every pixel">
+                        <input type="checkbox" id="colour-match-lossless-toggle" />
+                        <span class="toggle-knob"></span>
+                        Lossless
+                    </label>
+                </div>
+            </div>
             <div class="popup-actions colour-match-actions">
                 <button id="colour-match-reset-btn" class="secondary-btn">Reset Controls</button>
-                <select id="colour-match-format-select" aria-label="Download format">
-                    <option value="image/png" selected>PNG</option>
-                    <option value="image/jpeg">JPEG</option>
-                </select>
                 <button id="colour-match-download-btn" class="popup-generate-btn" disabled>Download Corrected Image</button>
                 <button id="colour-match-send-btn" class="secondary-btn" disabled>Send to Image Manager</button>
             </div>

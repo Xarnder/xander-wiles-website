@@ -1,0 +1,16 @@
+{
+	// Forest Drift multiplayer: one Durable Object per shared world.
+	// Local: `npm run dev` (no Cloudflare account needed). Deploy: `npm run deploy` (needs `wrangler login`).
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "forest-drift-mp",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-10-01",
+	"observability": { "enabled": true },
+	"durable_objects": {
+		"bindings": [{ "name": "WORLD_ROOM", "class_name": "WorldRoom" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorldRoom"] }],
+	"vars": {
+		"ALLOWED_ORIGINS": "https://xanderwiles.com,https://www.xanderwiles.com"
+	}
+}

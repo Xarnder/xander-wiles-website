@@ -1491,6 +1491,53 @@ export class BuildingManager {
 	 * serialized data saved before those fields existed, so nothing breaks loading a pre-existing
 	 * save.
 	 */
+	/**
+	 * Online worlds: swaps one foundation's building parts for `building`'s (or removes them all),
+	 * through the same low-level add/remove path as `load`, so nothing cascades or lands in the undo
+	 * history — the parts arrive already consistent from the room.
+	 */
+	replaceFoundationBuilding(
+		foundationId: string,
+		building: FoundationBuildingDefinition | undefined
+	): void {
+		this.revision++;
+		const ofFoundation = <T extends { foundationId: string }>(list: readonly T[]) =>
+			list.filter((item) => item.foundationId === foundationId);
+		for (const wall of ofFoundation(this.wallManager.getAllWalls()))
+			this.wallManager.removeWall(wall.id);
+		for (const path of ofFoundation(this.wallPathManager.getAllPaths())) {
+			this.wallPathManager.removePath(path.id);
+		}
+		for (const slab of ofFoundation(this.slabManager.getAllSlabs()))
+			this.slabManager.removeSlab(slab.id);
+		for (const stair of ofFoundation(this.stairManager.getAllStairs())) {
+			this.stairManager.removeStair(stair.id);
+		}
+		for (const roof of ofFoundation(this.roofManager.getAllRoofs()))
+			this.roofManager.removeRoof(roof.id);
+		for (const detail of ofFoundation(this.floorDetailManager.getAllDetails())) {
+			this.floorDetailManager.removeFloorDetail(detail.id);
+		}
+		for (const run of ofFoundation(this.skirtingRunManager?.getAll() ?? [])) {
+			this.skirtingRunManager?.remove(run.id);
+		}
+		if (building) {
+			for (const wall of building.walls ?? [])
+				this.wallManager.addWall({ ...wall, baseY: wall.baseY ?? 0 });
+			for (const path of building.wallPaths ?? []) {
+				this.wallPathManager.addPath({ ...path, baseY: path.baseY ?? 0 });
+			}
+			for (const slab of building.slabs ?? []) this.slabManager.addSlab(slab);
+			for (const stair of building.stairs ?? []) this.stairManager.addStair(stair);
+			for (const roof of building.roofs ?? []) this.roofManager.addRoof(roof);
+			for (const detail of building.floorDetails ?? [])
+				this.floorDetailManager.addFloorDetail(detail);
+			for (const run of building.skirtingRuns ?? []) this.skirtingRunManager?.add(run);
+		}
+		this.wallManager.rebuildAllWalls();
+		this.wallPathManager.rebuildAllPaths();
+	}
+
 	load(definitions: readonly FoundationBuildingDefinition[]): void {
 		this.revision++;
 		for (const wall of this.wallManager.getAllWalls()) this.wallManager.removeWall(wall.id);
