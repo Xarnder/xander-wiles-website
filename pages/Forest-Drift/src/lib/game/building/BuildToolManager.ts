@@ -212,7 +212,7 @@ export class BuildToolManager {
 			}
 			return;
 		}
-		if (event.code === 'KeyX') {
+		if (event.code === 'KeyX' || (event.code === 'Digit9' && this.globalMode !== 'music')) {
 			this.setGlobalMode(this.globalMode === 'remove' ? 'none' : 'remove');
 			return;
 		}

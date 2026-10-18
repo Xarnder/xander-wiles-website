@@ -9,6 +9,7 @@
 		moveModeActive?: boolean;
 		musicModeActive?: boolean;
 		showGlobalModes?: boolean;
+		onCycleVariant?: (direction: -1 | 1) => void;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
 		onTogglePaintMode?: () => void;
@@ -23,160 +24,122 @@
 		moveModeActive = false,
 		musicModeActive = false,
 		showGlobalModes = true,
+		onCycleVariant,
 		onSelectSlot,
 		onToggleRemoveMode,
 		onTogglePaintMode,
 		onToggleMoveMode
 	}: Props = $props();
 
-	function reservedBetween(previous: number, next: number): number[] {
-		const numbers: number[] = [];
-		for (let slot = previous + 1; slot < next; slot++) numbers.push(slot);
-		return numbers;
+	const icons: Record<number, string> = {
+		1: 'foundation',
+		2: 'wall',
+		3: 'door',
+		4: 'roof',
+		5: 'stairs',
+		6: 'carpet',
+		8: 'chair'
+	};
+	const iconFiles = import.meta.glob('/src/lib/assets/build-icons/*.svg', {
+		eager: true,
+		query: '?url',
+		import: 'default'
+	}) as Record<string, string>;
+	function icon(name: string) {
+		return iconFiles[`/src/lib/assets/build-icons/${name}.svg`];
 	}
-
-	function autoScale(node: HTMLElement, _text?: string) {
-		function fit() {
-			node.style.transform = 'none';
-			const parent = node.parentElement;
-			if (!parent) return;
-
-			// Inside width of parent slot with small margin
-			const availableWidth = Math.max(10, parent.clientWidth - 4);
-			const scrollWidth = node.scrollWidth;
-
-			if (scrollWidth > availableWidth && availableWidth > 0) {
-				const scale = availableWidth / scrollWidth;
-				node.style.transform = `scale(${scale.toFixed(4)})`;
-				node.style.transformOrigin = 'center center';
-			} else {
-				node.style.transform = 'none';
-			}
-		}
-
-		fit();
-		if (typeof requestAnimationFrame !== 'undefined') {
-			requestAnimationFrame(fit);
-		}
-		if (typeof document !== 'undefined' && document.fonts) {
-			document.fonts.ready.then(fit);
-		}
-
-		let observer: ResizeObserver | null = null;
-		if (typeof ResizeObserver !== 'undefined') {
-			observer = new ResizeObserver(() => fit());
-			if (node.parentElement) observer.observe(node.parentElement);
-			observer.observe(node);
-		}
-
-		return {
-			update(_newText?: string) {
-				fit();
-				if (typeof requestAnimationFrame !== 'undefined') {
-					requestAnimationFrame(fit);
-				}
-			},
-			destroy() {
-				observer?.disconnect();
-			}
-		};
-	}
+	let selected = $derived(slots.find((slot) => slot.slot === activeSlot));
+	let overlay = $derived(
+		removeModeActive ? 'Remove' : paintModeActive ? 'Paint' : moveModeActive ? 'Move' : ''
+	);
 </script>
 
-<div class="hotbar" data-testid="hotbar">
-	{#each slots as slot, index (slot.slot)}
-		{#if index > 0}
-			{#each reservedBetween(slots[index - 1].slot, slot.slot) as reserved (reserved)}
-				<div class="slot reserved" title="Reserved" aria-hidden="true">
-					<span class="slot-number">{reserved}</span>
-					<span class="slot-label">—</span>
-				</div>
-			{/each}
+<div class="hotbar" class:build={showGlobalModes} data-testid="hotbar">
+	<div class="tool-tray">
+		{#each slots as slot (slot.slot)}
+			<button
+				type="button"
+				class="slot"
+				class:active={slot.slot === activeSlot && !overlay && !musicModeActive}
+				data-testid={`hotbar-slot-${slot.hotbarId ?? slot.toolId}`}
+				onclick={() => onSelectSlot?.(slot.slot)}
+				title={`${slot.label} · ${slot.slot}`}
+				aria-label={`${slot.label} (slot ${slot.slot})`}
+				aria-pressed={slot.slot === activeSlot && !overlay}
+			>
+				<span class="slot-number">{slot.slot}</span>
+				{#if showGlobalModes && icons[slot.slot]}
+					<img class="tool-icon" src={icon(icons[slot.slot])} alt="" />
+				{:else}<span class="slot-label">{slot.label}</span>{/if}
+			</button>
+		{/each}
+		{#if showGlobalModes}
+			<span class="divider" aria-hidden="true"></span>
+			<button
+				type="button"
+				class="slot remove-slot"
+				class:active={removeModeActive}
+				data-testid="hotbar-remove-toggle"
+				onclick={() => onToggleRemoveMode?.()}
+				title="Remove · 9 / X"
+				aria-label="Toggle Remove Mode"
+				aria-pressed={removeModeActive}
+			>
+				<span class="slot-number">9</span><span class="remove-icon" aria-hidden="true">×</span>
+			</button>
+			<button
+				type="button"
+				class="slot paint-slot"
+				class:active={paintModeActive}
+				data-testid="hotbar-paint-toggle"
+				onclick={() => onTogglePaintMode?.()}
+				title="Paint · P"
+				aria-label="Toggle Paint Mode"
+				aria-pressed={paintModeActive}
+			>
+				<span class="slot-number">P</span><img class="tool-icon" src={icon('paint')} alt="" />
+			</button>
+			<button
+				type="button"
+				class="slot move-slot"
+				class:active={moveModeActive}
+				data-testid="hotbar-move-toggle"
+				onclick={() => onToggleMoveMode?.()}
+				title="Move · M"
+				aria-label="Toggle Move Mode"
+				aria-pressed={moveModeActive}
+			>
+				<span class="slot-number">M</span><img class="tool-icon" src={icon('move')} alt="" />
+			</button>
 		{/if}
-		<button
-			type="button"
-			class="slot"
-			class:active={slot.slot === activeSlot &&
-				!removeModeActive &&
-				!paintModeActive &&
-				!moveModeActive &&
-				!musicModeActive}
-			data-testid={
-				slot.hotbarId
-					? `hotbar-slot-${slot.hotbarId}`
-					: slot.toolId !== 'none'
-						? `hotbar-slot-${slot.toolId}`
-						: undefined
-			}
-			onclick={() => onSelectSlot?.(slot.slot)}
-			aria-label={slot.variantCount > 1
-				? `${slot.label} (slot ${slot.slot}, ${slot.variantIndex + 1} of ${slot.variantCount} — up/down to switch)`
-				: undefined}
-		>
-			<span class="slot-number">{slot.slot}</span>
-			{#if slot.label}
-				<span class="slot-label" use:autoScale={slot.label}>{slot.label}</span>
+	</div>
+	{#if showGlobalModes && selected}
+		<div class="subtool-panel" aria-live="polite" aria-atomic="true">
+			<span class="eyebrow">{overlay ? 'EDIT MODE' : 'BUILD MODE'}</span>
+			<strong>{overlay || selected.label}</strong>
+			{#if !overlay && selected.variantCount > 1}
+				<div class="carousel">
+					<button
+						class="cycle"
+						aria-label="Previous build subtool"
+						onclick={() => onCycleVariant?.(-1)}>‹</button
+					>
+					<div
+						class="dots"
+						aria-label={`${selected.variantIndex + 1} of ${selected.variantCount} tools`}
+					>
+						{#each { length: selected.variantCount }, i}<span
+								class="dot"
+								class:current={i === selected.variantIndex}
+							></span>{/each}
+					</div>
+					<button class="cycle" aria-label="Next build subtool" onclick={() => onCycleVariant?.(1)}
+						>›</button
+					>
+					<span class="count">{selected.variantIndex + 1}/{selected.variantCount}</span>
+				</div>
 			{/if}
-			{#if slot.variantCount > 1}
-				{#if slot.variantCount <= 5}
-					<span class="slot-variants" aria-hidden="true">
-						{#each { length: slot.variantCount }, i}
-							<span class="slot-pip" class:current={i === slot.variantIndex}></span>
-						{/each}
-					</span>
-				{:else}
-					<span class="slot-variant-counter" aria-hidden="true">
-						<span class="slot-pip current"></span>
-						<span class="counter-text">{slot.variantIndex + 1}/{slot.variantCount}</span>
-					</span>
-				{/if}
-			{/if}
-		</button>
-	{/each}
-
-	<!-- Deliberately outside the numbered-slot loop above — Remove Mode and Paint Mode are global
-	     overlays, not hotbar selections, so neither ever takes a slot number (see
-	     BuildToolManager's class doc comment). The music hotbar hides these; its slots are the
-	     instruments. -->
-	{#if showGlobalModes}
-	<button
-		type="button"
-		class="slot remove-slot"
-		class:active={removeModeActive}
-		data-testid="hotbar-remove-toggle"
-		onclick={() => onToggleRemoveMode?.()}
-		aria-label="Toggle Remove Mode"
-		aria-pressed={removeModeActive}
-	>
-		<span class="slot-number">X</span>
-		<span class="slot-label" use:autoScale={'Remove'}>Remove</span>
-	</button>
-
-	<button
-		type="button"
-		class="slot paint-slot"
-		class:active={paintModeActive}
-		data-testid="hotbar-paint-toggle"
-		onclick={() => onTogglePaintMode?.()}
-		aria-label="Toggle Paint Mode"
-		aria-pressed={paintModeActive}
-	>
-		<span class="slot-number">P</span>
-		<span class="slot-label" use:autoScale={'Paint'}>Paint</span>
-	</button>
-
-	<button
-		type="button"
-		class="slot move-slot"
-		class:active={moveModeActive}
-		data-testid="hotbar-move-toggle"
-		onclick={() => onToggleMoveMode?.()}
-		aria-label="Toggle Move Mode"
-		aria-pressed={moveModeActive}
-	>
-		<span class="slot-number">M</span>
-		<span class="slot-label" use:autoScale={'Move'}>Move</span>
-	</button>
+		</div>
 	{/if}
 </div>
 
@@ -186,254 +149,252 @@
 		bottom: 1.25rem;
 		left: 50%;
 		transform: translateX(-50%);
-		display: flex;
-		gap: 0.4rem;
-		pointer-events: auto;
 		z-index: 35;
+		pointer-events: auto;
+		max-width: calc(100vw - 1.5rem);
+		font-family: system-ui, sans-serif;
+		color: #edf5e9;
 	}
-
-	.slot {
-		width: 3.4rem;
-		height: 3.4rem;
+	.tool-tray {
 		display: flex;
-		flex-direction: column;
+		gap: 5px;
+		padding: 7px;
+		border: 1px solid #d9ebc52b;
+		border-radius: 18px;
+		background: linear-gradient(150deg, #24352bf2, #101c18f2);
+		box-shadow:
+			0 12px 35px #0005,
+			inset 0 1px #ffffff0d;
+		backdrop-filter: blur(18px);
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.tool-tray::-webkit-scrollbar {
+		display: none;
+	}
+	.slot {
+		position: relative;
+		flex: 0 0 50px;
+		width: 50px;
+		height: 52px;
+		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.04rem;
-		padding: 0.08rem 0.08rem;
-		box-sizing: border-box;
-		background: rgba(10, 20, 15, 0.5);
-		border: 1px solid rgba(255, 255, 255, 0.18);
-		border-radius: 8px;
-		color: #eaf6ff;
-		font-family:
-			system-ui,
-			-apple-system,
-			sans-serif;
+		padding: 10px;
+		border: 1px solid transparent;
+		border-radius: 11px;
+		background: #ffffff05;
+		color: inherit;
 		cursor: pointer;
-		backdrop-filter: blur(2px);
 		transition:
-			border-color 0.15s ease,
-			background 0.15s ease;
-		overflow: hidden;
+			background 0.15s,
+			border-color 0.15s,
+			transform 0.15s;
 	}
-
 	.slot:hover {
-		background: rgba(20, 35, 28, 0.6);
+		background: #ffffff14;
+		transform: translateY(-2px);
 	}
-
+	.slot:focus-visible,
+	.cycle:focus-visible {
+		outline: 2px solid #e3d79c;
+		outline-offset: 2px;
+	}
 	.slot.active {
-		border-color: #ffcc33;
-		background: rgba(60, 50, 15, 0.6);
-		box-shadow: 0 0 0 1px rgba(255, 204, 51, 0.5);
+		background: linear-gradient(140deg, #cbd49d30, #9ea87d19);
+		border-color: #d6dfadad;
+		box-shadow: inset 0 0 15px #d5e3a50a;
 	}
-
-	.slot.reserved {
-		cursor: default;
-		opacity: 0.38;
+	.slot.active::after {
+		content: '';
+		position: absolute;
+		bottom: 4px;
+		width: 13px;
+		height: 2px;
+		border-radius: 2px;
+		background: #dce8b6;
+	}
+	.slot-number {
+		position: absolute;
+		top: 5px;
+		left: 6px;
+		font-size: 9px;
+		line-height: 1;
+		font-weight: 600;
+		color: #c5d1bd99;
+	}
+	.active .slot-number {
+		color: #edf2d2;
+	}
+	.tool-icon {
+		width: 28px;
+		height: 28px;
+		object-fit: contain;
+		filter: brightness(0) invert(1);
+		opacity: 0.82;
 		pointer-events: none;
 	}
-
-	/* A visual gap plus a distinct (red, not yellow) active color — Remove Mode isn't "another tool
-	   in the row", it's a different kind of thing, and its highlight shouldn't look like a normal
-	   hotbar selection. */
-	.remove-slot {
-		margin-left: 0.5rem;
+	.active .tool-icon {
+		opacity: 1;
 	}
-
-	.remove-slot.active {
-		border-color: #ff5c4d;
-		background: rgba(60, 15, 15, 0.6);
-		box-shadow: 0 0 0 1px rgba(255, 92, 77, 0.5);
-	}
-
-	/* No extra left margin — sits right next to Remove, both being global-mode toggles rather than
-	   numbered hotbar slots; a distinct (blue, not red or yellow) active colour keeps it visually
-	   separate from both. */
-	.paint-slot.active {
-		border-color: #4da6ff;
-		background: rgba(15, 35, 60, 0.6);
-		box-shadow: 0 0 0 1px rgba(77, 166, 255, 0.5);
-	}
-
-	.move-slot.active {
-		border-color: #39d353;
-		background: rgba(15, 60, 25, 0.6);
-		box-shadow: 0 0 0 1px rgba(57, 211, 83, 0.5);
-	}
-
-	.slot-number {
-		font-size: 0.62rem;
-		line-height: 1;
-		opacity: 0.7;
-		padding: 0;
-		margin: 0;
-	}
-
 	.slot-label {
-		font-size: 0.58rem;
-		line-height: 1;
+		font-size: 10px;
 		text-align: center;
-		padding: 0;
-		margin: 0;
-		white-space: nowrap !important;
-		overflow-wrap: normal !important;
-		word-break: keep-all !important;
-		display: inline-block;
-		max-width: 100%;
-		box-sizing: border-box;
 	}
-
-	.slot-variants {
-		display: flex;
-		gap: 0.12rem;
-		margin-top: 0.05rem;
-		justify-content: center;
+	.divider {
+		width: 1px;
+		flex-shrink: 0;
+		margin: 8px 3px;
+		background: #d4e3c52b;
 	}
-
-	.slot-variant-counter {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.15rem;
-		font-size: 0.5rem;
-		font-variant-numeric: tabular-nums;
+	.remove-icon {
+		font-size: 38px;
+		font-weight: 200;
 		line-height: 1;
-		margin-top: 0.04rem;
-		padding: 0.04rem 0.18rem;
-		border-radius: 4px;
-		background: rgba(255, 255, 255, 0.08);
-		color: rgba(255, 255, 255, 0.78);
-		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
-
-	.slot.active .slot-variant-counter {
-		background: rgba(255, 204, 51, 0.18);
-		color: #ffe066;
-		border-color: rgba(255, 204, 51, 0.35);
+	.remove-slot.active {
+		border-color: #e9a191;
+		background: #a6493938;
 	}
-
-	.slot-variant-counter .slot-pip {
-		width: 0.22rem;
-		height: 0.22rem;
+	.paint-slot.active {
+		border-color: #91cbe9;
+		background: #397aa638;
 	}
-
-	.counter-text {
-		font-weight: 500;
-		letter-spacing: 0.02em;
+	.move-slot.active {
+		border-color: #9dd5ad;
+		background: #45875838;
 	}
-
-	.slot-pip {
-		width: 0.28rem;
-		height: 0.28rem;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.28);
+	.subtool-panel {
+		position: absolute;
+		left: calc(100% + 12px);
+		bottom: 0;
+		width: 176px;
+		min-height: 68px;
+		box-sizing: border-box;
+		padding: 12px 15px;
+		border: 1px solid #d9ebc52b;
+		border-radius: 14px;
+		background: linear-gradient(140deg, #24352bf5, #101c18f5);
+		box-shadow: 0 8px 25px #0003;
+		backdrop-filter: blur(18px);
 	}
-
-	.slot-pip.current {
-		background: #ffcc33;
+	.eyebrow {
+		display: block;
+		font-size: 8px;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		color: #b3c5a7;
+		margin-bottom: 4px;
 	}
-
-	/* Responsive scaling for mobile / small screens */
-	@media (max-width: 850px) {
-		.hotbar {
-			gap: 0.25rem;
-			max-width: calc(100vw - 12px);
-			overflow-x: auto;
-			-webkit-overflow-scrolling: touch;
-			scrollbar-width: none;
-			padding: 2px 4px;
+	strong {
+		display: block;
+		font-size: 13px;
+		font-weight: 550;
+	}
+	.carousel {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin-top: 6px;
+	}
+	.dots {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+	}
+	.dot {
+		width: 4px;
+		height: 4px;
+		border-radius: 10px;
+		background: #b8c9ad55;
+	}
+	.dot.current {
+		width: 12px;
+		background: #dce8b6;
+	}
+	.cycle {
+		border: 0;
+		background: transparent;
+		color: #cfdbc5;
+		cursor: pointer;
+		padding: 0 4px;
+		font: 18px/18px system-ui;
+	}
+	.count {
+		margin-left: auto;
+		font-size: 9px;
+		color: #b3c5a7;
+		font-variant-numeric: tabular-nums;
+	}
+	@media (max-width: 1100px) {
+		.subtool-panel {
+			left: 50%;
+			bottom: calc(100% + 10px);
+			transform: translateX(-50%);
+			width: max-content;
+			min-width: 150px;
+			max-width: calc(100vw - 2rem);
+			text-align: center;
+			padding: 10px 16px;
 		}
-
-		.hotbar::-webkit-scrollbar {
-			display: none;
-		}
-
+	}
+	@media (max-width: 650px) {
 		.slot {
-			width: 2.6rem;
-			height: 2.6rem;
-			min-width: 2.6rem;
-			flex-shrink: 0;
-			border-radius: 6px;
-			padding: 0.06rem 0.06rem;
+			flex-basis: 40px;
+			width: 40px;
+			height: 44px;
+			padding: 8px;
 		}
-
-		.slot-number {
-			font-size: 0.52rem;
+		.tool-icon {
+			width: 24px;
+			height: 24px;
 		}
-
-		.slot-label {
-			font-size: 0.46rem;
-			padding: 0;
+		.tool-tray {
+			gap: 3px;
+			padding: 5px;
+			border-radius: 14px;
 		}
-
-		.remove-slot {
-			margin-left: 0.25rem;
+		.divider {
+			margin-inline: 1px;
 		}
 	}
-
-	@media (max-width: 500px) {
-		.hotbar {
-			gap: 0.18rem;
-		}
-
-		.slot {
-			width: 2.2rem;
-			height: 2.2rem;
-			min-width: 2.2rem;
-			border-radius: 6px;
-			padding: 0.05rem 0.05rem;
-		}
-
-		.slot-number {
-			font-size: 0.46rem;
-		}
-
-		.slot-label {
-			font-size: 0.4rem;
-			padding: 0;
-		}
-
-		.remove-slot {
-			margin-left: 0.18rem;
-		}
-	}
-
 	@media (max-height: 500px) and (orientation: landscape) {
 		.hotbar {
 			bottom: max(6px, env(safe-area-inset-bottom));
-			gap: 0.18rem;
 			max-width: calc(100vw - 320px);
-			overflow-x: auto;
-			-webkit-overflow-scrolling: touch;
-			scrollbar-width: none;
-			padding: 2px 4px;
 		}
-
-		.hotbar::-webkit-scrollbar {
-			display: none;
-		}
-
 		.slot {
-			width: 2.15rem;
-			height: 2.15rem;
-			min-width: 2.15rem;
-			flex-shrink: 0;
-			border-radius: 6px;
-			padding: 0.05rem 0.05rem;
+			flex-basis: 36px;
+			width: 36px;
+			height: 38px;
 		}
-
-		.slot-number {
-			font-size: 0.46rem;
+		.subtool-panel {
+			padding: 6px 12px;
+			min-height: 0;
 		}
-
-		.slot-label {
-			font-size: 0.4rem;
-			padding: 0;
+	}
+	@media (pointer: coarse) {
+		.slot {
+			flex-basis: 44px;
+			width: 44px;
+			min-height: 44px;
+			touch-action: manipulation;
 		}
-
-		.remove-slot {
-			margin-left: 0.18rem;
+		.cycle {
+			min-width: 44px;
+			min-height: 44px;
+			touch-action: manipulation;
+		}
+		.subtool-panel {
+			width: 210px;
+		}
+		.tool-tray {
+			touch-action: pan-x;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.slot {
+			transition: none;
 		}
 	}
 </style>

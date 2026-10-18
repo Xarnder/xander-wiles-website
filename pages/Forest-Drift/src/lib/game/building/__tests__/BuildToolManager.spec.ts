@@ -314,7 +314,6 @@ describe('BuildToolManager furniture slot 8', () => {
 		key('KeyX');
 		expect(removeTool.activateCount).toBe(1);
 		key('Digit7');
-		key('Digit9');
 		expect(removeTool.deactivateCount).toBe(0);
 		expect(hotbarStates.at(-1)?.globalMode).toBe('remove');
 	});
@@ -430,12 +429,14 @@ describe('BuildToolManager Remove Mode routing', () => {
 		expect(removeTool.deactivateCount).toBe(0);
 	});
 
-	it('never occupies a numbered hotbar slot — pressing a digit never activates the remove tool', () => {
+	it('toggles Remove Mode with 9 and restores the selected construction tool', () => {
 		const { removeTool, key } = buildHarness(pointerLocked);
 
-		for (const digit of ['Digit1', 'Digit2', 'Digit9']) key(digit);
-
-		expect(removeTool.activateCount).toBe(0);
+		key('Digit2');
+		key('Digit9');
+		expect(removeTool.activateCount).toBe(1);
+		key('Digit9');
+		expect(removeTool.deactivateCount).toBe(1);
 	});
 });
 

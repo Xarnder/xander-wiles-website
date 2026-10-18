@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Touch / iPad Controls', () => {
+	test.use({ hasTouch: true });
 	test('displays iPad touch controls and starts gameplay with tap', async ({ page }) => {
 		test.setTimeout(260_000);
 		const pageErrors: string[] = [];
@@ -122,15 +123,24 @@ test.describe('Touch / iPad Controls', () => {
 		await closeCustomiseBtn.click();
 		await expect(customizeModal).not.toBeVisible();
 
-		// Verify hotbar slot labels are strictly single-line (never wrap to new line)
-		const slotLabels = page.locator('.slot-label');
-		const labelCount = await slotLabels.count();
-		expect(labelCount).toBeGreaterThan(0);
-		for (let i = 0; i < labelCount; i++) {
-			const label = slotLabels.nth(i);
-			const whiteSpace = await label.evaluate((el) => window.getComputedStyle(el).whiteSpace);
-			expect(whiteSpace).toBe('nowrap');
+		// Exercise the icon hotbar and its carousel using actual touch events.
+		const icons = page.locator('.hotbar .tool-icon');
+		expect(await icons.count()).toBe(9);
+		expect(
+			await icons.evaluateAll((images) =>
+				images.every((image) => (image as HTMLImageElement).naturalWidth > 0)
+			)
+		).toBe(true);
+		await page.getByRole('button', { name: 'Next build subtool' }).tap();
+		await expect(page.locator('.subtool-panel strong')).toHaveText('Fence / Rail');
+		await page.getByRole('button', { name: 'Previous build subtool' }).tap();
+		await expect(page.locator('.subtool-panel strong')).toHaveText('Wall');
+		for (const mode of ['remove', 'paint', 'move']) {
+			await page.getByTestId(`hotbar-${mode}-toggle`).tap();
+			await expect(page.getByTestId(`hotbar-${mode}-toggle`)).toHaveClass(/active/);
 		}
+		await page.getByTestId('hotbar-slot-wall').tap();
+		await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
 
 		// Floor selector is visible on the right side for level-aware tools
 		const floorSelector = page.getByTestId('floor-selector');
@@ -287,6 +297,45 @@ test.describe('Touch / iPad Controls', () => {
 		await expect(page.getByTestId('touch-joystick')).toBeVisible();
 		await expect(page.getByTestId('hotbar')).toBeVisible();
 		await expect(page.getByTestId('touch-place-btn')).toBeVisible();
+
+		// The subtool panel stays above the tray and remains tappable on a narrow phone.
+		await page.getByTestId('hotbar-slot-wall').tap();
+		const hotbarBox = (await page.getByTestId('hotbar').boundingBox())!;
+		const subtoolBox = (await page.locator('.subtool-panel').boundingBox())!;
+		expect(subtoolBox.y).toBeGreaterThanOrEqual(0);
+		expect(subtoolBox.y + subtoolBox.height).toBeLessThan(hotbarBox.y);
+		const portraitHudBox = (await page.getByTestId('build-hud').boundingBox())!;
+		expect(portraitHudBox.y + portraitHudBox.height).toBeLessThan(subtoolBox.y);
+		const nextTool = page.getByRole('button', { name: 'Next build subtool' });
+		const nextBox = (await nextTool.boundingBox())!;
+		expect(nextBox.width).toBeGreaterThanOrEqual(44);
+		expect(nextBox.height).toBeGreaterThanOrEqual(44);
+		await nextTool.tap();
+		await expect(page.locator('.subtool-panel strong')).toHaveText('Fence / Rail');
+
+		// Swipe the overflowing tray, then tap an editor mode at its far end.
+		const tray = page.locator('.tool-tray');
+		await tray.evaluate((node) => {
+			node.scrollLeft = 0;
+		});
+		const trayBox = (await tray.boundingBox())!;
+		const cdp = await page.context().newCDPSession(page);
+		const y = trayBox.y + trayBox.height / 2;
+		await cdp.send('Input.dispatchTouchEvent', {
+			type: 'touchStart',
+			touchPoints: [{ x: trayBox.x + trayBox.width - 20, y }]
+		});
+		for (let step = 1; step <= 8; step++) {
+			await cdp.send('Input.dispatchTouchEvent', {
+				type: 'touchMove',
+				touchPoints: [{ x: trayBox.x + trayBox.width - 20 - step * 30, y }]
+			});
+		}
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+		await expect.poll(() => tray.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+		await page.getByTestId('hotbar-move-toggle').tap();
+		await expect(page.getByTestId('hotbar-move-toggle')).toHaveClass(/active/);
+		await page.getByTestId('hotbar-slot-stairs').tap();
 
 		// Floor selector on portrait phone: right side, above action cluster, no collision
 		await expect(floorSelector).toBeVisible();

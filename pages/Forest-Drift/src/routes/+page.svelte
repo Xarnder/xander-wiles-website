@@ -2192,6 +2192,7 @@
 					paintModeActive={hotbar.globalMode === 'paint'}
 					moveModeActive={hotbar.globalMode === 'move'}
 					onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
+					onCycleVariant={(direction) => session?.scene.cycleSlotVariant(direction)}
 					onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
 					onTogglePaintMode={() => session?.scene.togglePaintMode()}
 					onToggleMoveMode={() => session?.scene.toggleMoveMode()}
@@ -3555,6 +3556,11 @@
 	}
 
 	@media (max-width: 600px) and (orientation: portrait) {
+		/* Leave a separate row for the build subtool carousel above the tray. */
+		.touch-mode:has(:global(.subtool-panel)) .build-hud {
+			bottom: calc(var(--touch-dock-height, 8.5rem) + 13rem);
+		}
+
 		.touch-mode :global(.hotbar) {
 			width: calc(100vw - 16px);
 			max-width: calc(100vw - 16px);
