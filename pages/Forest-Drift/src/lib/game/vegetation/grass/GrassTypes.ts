@@ -38,6 +38,8 @@ export interface GrassSettings {
 	lod0Density: number;
 	lod1Density: number;
 	lod2Density: number;
+	/** Sparse distant patch experiment; false restores the original near-only renderer. */
+	distantPatches?: boolean;
 	/** Tuft height range, metres (before region bias). */
 	minHeight: number;
 	maxHeight: number;
@@ -76,6 +78,7 @@ export function createDefaultGrassSettings(): GrassSettings {
 		lod0Density: 1,
 		lod1Density: 0.5,
 		lod2Density: 0.22,
+		distantPatches: true,
 		minHeight: 0.7,
 		maxHeight: 1.8,
 		widthRatio: 1.55,

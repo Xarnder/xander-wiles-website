@@ -461,7 +461,7 @@ describe('GrassManager streaming', () => {
 		};
 		const cache = new Map<string, TerrainSurfaceLattice>();
 		const vegetation = {
-			grass: createDefaultGrassSettings(),
+			grass: { ...createDefaultGrassSettings(), distantPatches: false },
 			debug: { showGrassChunks: false, showGrassLod: false, showGrassCandidates: false }
 		};
 		const manager = new GrassManager({
@@ -502,6 +502,48 @@ describe('GrassManager streaming', () => {
 			manager.updateView(camera, 1 / 60, { x, feetY: 1, z });
 		}
 	}
+
+	it('requeues unbuilt chunks when settings change while generation is pending', () => {
+		const { manager } = createManager();
+		manager.update(0, 0, 0);
+		expect(manager.getRenderStats(null).queuedChunks).toBeGreaterThan(0);
+		manager.notifySettingsChanged();
+		settle(manager, 0, 0);
+		expect(manager.getRenderStats(null).activeChunks).toBeGreaterThan(0);
+		manager.dispose();
+	});
+
+	it('streams bounded distant batches with one shared texture and unloads them when disabled', () => {
+		const { manager, vegetation } = createManager();
+		vegetation.grass.distantPatches = true;
+		manager.setSeed('loaded-world-seed');
+		settle(manager, 0, 0);
+		const initial = manager.getRenderStats(null);
+		expect(initial.distantInstances).toBeGreaterThan(0);
+		expect(initial.distantRenderDistance).toBeGreaterThan(initial.renderDistance * 2);
+		const far = manager.group.getObjectByName('distant-grass-patches')!;
+		expect(far).toBeDefined();
+		const materials = new Set(
+			far.children.filter((c) => c instanceof THREE.Mesh).map((c) => (c as THREE.Mesh).material)
+		);
+		expect(materials.size).toBe(1);
+		expect(manager.getSharedMaterials()).toHaveLength(2);
+		for (let i = 1; i <= 6; i++) settle(manager, i * 192, i * 48);
+		const moved = manager.getRenderStats(null);
+		expect(moved.queuedChunks).toBe(0);
+		expect(moved.bufferBytes).toBeLessThan(initial.bufferBytes * 1.3);
+		expect(moved.activeChunks).toBeLessThan(initial.activeChunks + 20);
+		vegetation.grass.distantPatches = false;
+		manager.notifySettingsChanged();
+		settle(manager, 1152, 288);
+		expect(manager.getRenderStats(null).distantInstances).toBe(0);
+		expect(far.children).toHaveLength(0);
+		vegetation.grass.distantPatches = true;
+		manager.notifySettingsChanged();
+		settle(manager, 1152, 288);
+		expect(manager.getRenderStats(null).distantInstances).toBeGreaterThan(0);
+		manager.dispose();
+	});
 
 	it.each([
 		[0.2, 0.52],

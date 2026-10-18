@@ -247,3 +247,26 @@ export function generateGrassAtlas(tileSize = 128): GrassAtlas {
 export function grassVariantName(variant: number): string {
 	return VARIANTS[variant]?.name ?? 'unknown';
 }
+
+/** Wide meadow patch: many slender blades baked once, shared by all distant cards. */
+export function generateGrassPatchAtlas(tileSize = 64): GrassAtlas {
+	const tiles = VARIANTS.map((recipe, index) =>
+		renderTile(
+			{
+				...recipe,
+				blades: recipe.blades * 3,
+				spread: 0.9,
+				width: [recipe.width[0] / 3, recipe.width[1] / 3],
+				lean: recipe.lean / 3
+			},
+			index,
+			tileSize
+		)
+	);
+	const { levels, coverage } = buildAtlasLevels(tiles, GRASS_ATLAS_COLUMNS, GRASS_ATLAS_ROWS, {
+		cutoff: GRASS_ATLAS_ALPHA_CUTOFF,
+		minTile: MIN_TILE_TEXELS,
+		rgbScale: 0.5
+	});
+	return { tileSize, levels, coverage };
+}

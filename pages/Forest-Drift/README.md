@@ -3004,6 +3004,34 @@ Instance data is three attributes — no Matrix4:
 
 20 bytes per tuft against 64 for a matrix. CPU copies are dropped once uploaded.
 
+### Distant grass patch experiment
+
+`vegetation.grass.distantPatches` (the **Distant grass patches (experiment)** setting) adds a
+coarse layer behind the existing grass. One procedural 64 px-per-variant atlas is baked on first
+use and retained across chunk streaming and toggles. Wide cards contain groups of slender blades;
+they fade in across 42–84% of the near draw distance and fade out at roughly three times that
+distance (96–220 m). The near fade adapts with the near grass quality.
+
+Patches use 48 m batches, at least 3.2 m candidate spacing, single cards, no shadows, wind or
+player bending, and a 6,000-instance budget target. Both layers share the existing 3 ms generation
+time slice (a started chunk finishes); nearby grass gets priority. An infinite world cannot be
+baked entirely at startup, so patch positions are generated only as chunks stream in and unloaded
+behind the player. They reuse terrain, biome, water and building exclusion sampling. No per-blade
+CPU update is added. Stats include both layers and expose distant instances/draw calls separately.
+
+The approach follows [AMD's sparse patch LOD example](https://gpuopen.com/learn/work_graphs_mesh_nodes/work_graphs_mesh_nodes-procedural_generation/)
+and [NVIDIA's grass batching and distance fading guidance](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-7-rendering-countless-blades-waving-grass).
+It uses ordinary WebGL instancing, not the mesh-shader/work-graph APIs in AMD's implementation.
+
+A local 1200×760 LOW-preset browser sample held 60 FPS with and without patches. In that view,
+patches added 13 draw calls, 2,132 triangles and 33,080 bytes of instance buffers; the retained
+patch atlas adds 174,080 bytes separately. CPU frame averages were 2.19 ms off / 3.33 ms on.
+These are one scene's capped measurements, not a device-wide performance guarantee.
+
+The streaming tests cover bounded memory during travel, toggling and stale pending generation
+jobs after settings changes. The latter also fixes missing chunks in the near layer: pending jobs
+must be replaced when their generation revision changes, even before they have a chunk record.
+
 ### Billboarding and the near crossed pair
 
 The card is **axial**: rooted at its bottom centre, always upright, turned about world Y to face

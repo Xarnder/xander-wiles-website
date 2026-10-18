@@ -40,7 +40,8 @@ export class GrassChunk {
 		data: GrassChunkData,
 		template: ReturnType<typeof createGrassCardTemplate>,
 		material: THREE.Material,
-		maxTuftHeight: number
+		maxTuftHeight: number,
+		boundsPad = BOUNDS_PAD
 	) {
 		this.count = data.count;
 		this.candidates = data.candidates;
@@ -83,8 +84,8 @@ export class GrassChunk {
 		// every invisible chunk at once — the per-tuft data never needs a bounds pass.
 		const top = data.maxY + maxTuftHeight;
 		geometry.boundingBox = new THREE.Box3(
-			new THREE.Vector3(-BOUNDS_PAD, data.minY - 0.1, -BOUNDS_PAD),
-			new THREE.Vector3(chunkSize + BOUNDS_PAD, top, chunkSize + BOUNDS_PAD)
+			new THREE.Vector3(-boundsPad, data.minY - 0.1, -boundsPad),
+			new THREE.Vector3(chunkSize + boundsPad, top, chunkSize + boundsPad)
 		);
 		geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
 		this.geometry = geometry;

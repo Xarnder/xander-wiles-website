@@ -2555,6 +2555,13 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 				]),
 				group('grass', 'Grass', [
 					boolField(
+						'vegetation.grass.distantPatches',
+						'Distant grass patches (experiment)',
+						vegetation.grass,
+						'distantPatches',
+						actions.grassSettings
+					),
+					boolField(
 						'vegetation.grass.enabled',
 						'Grass',
 						vegetation.grass,

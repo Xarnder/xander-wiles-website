@@ -10,7 +10,7 @@ import {
 } from '../../terrain/terrainSurfaceLattice';
 import { hashStringToUint32 } from '../../terrain/seededRandom';
 import type { VegetationRegionSampler } from '../VegetationRegionSampler';
-import { generateGrassAtlas, type GrassAtlas } from './grassAtlas';
+import { generateGrassAtlas, generateGrassPatchAtlas, type GrassAtlas } from './grassAtlas';
 import { GrassChunk } from './GrassChunk';
 import { GrassAdaptiveQuality, resolveGrassLod, type GrassLodState } from './grassLod';
 import {
@@ -56,6 +56,8 @@ export interface GrassDebugSettings {
 }
 
 export interface GrassManagerOptions {
+	/** Internal sparse-patch renderer; never recursively creates another layer. */
+	distantLayer?: boolean;
 	settings: GrassSettings;
 	debug: GrassDebugSettings;
 	seed: string;
@@ -82,6 +84,9 @@ export interface GrassManagerOptions {
 
 export interface GrassRenderStats {
 	enabled: boolean;
+	distantInstances: number;
+	distantDrawCalls: number;
+	distantRenderDistance: number;
 	/** Tufts in chunks inside the camera frustum this frame. */
 	visibleInstances: number;
 	/** Visible tufts by LOD band (by each chunk's nearest distance). */
@@ -158,6 +163,8 @@ export class GrassManager {
 	readonly group = new THREE.Group();
 
 	private readonly settings: GrassSettings;
+	private distant?: GrassManager;
+	private readonly chunkSize: number;
 	private readonly debug: GrassDebugSettings;
 	private readonly options: GrassManagerOptions;
 	private readonly atlas: GrassAtlas;
@@ -175,6 +182,8 @@ export class GrassManager {
 	private readonly records = new Map<ChunkKey, GrassChunkRecord>();
 	private readonly queue = new TerrainGenerationQueue();
 	private seedHash = 0;
+	private currentSeed = '';
+	private distantSyncKey = '';
 	private revision = 0;
 	private terrainRevision = -1;
 	private exclusionRevision = -1;
@@ -194,24 +203,29 @@ export class GrassManager {
 
 	constructor(options: GrassManagerOptions) {
 		this.options = options;
+		this.chunkSize = options.distantLayer ? 48 : GRASS_CHUNK_SIZE;
 		this.settings = options.settings;
 
 		this.debug = options.debug;
-		this.atlas = generateGrassAtlas(options.atlasTileSize ?? 128);
+		this.atlas = options.distantLayer
+			? generateGrassPatchAtlas(64)
+			: generateGrassAtlas(options.atlasTileSize ?? 128);
 		this.atlasTexture = createGrassAtlasTexture(this.atlas);
 		this.material = createGrassMaterial(this.atlasTexture, this.uniforms);
 		this.uniforms.uGrassMisc.value.x = 1 / this.atlas.tileSize;
-		this.group.name = 'grass';
+		this.group.name = options.distantLayer ? 'distant-grass-patches' : 'grass';
 		this.setSeed(options.seed);
 		this.lod = resolveGrassLod(this.settings, this.quality, 1, 1);
 	}
 
 	/** The one grass material — register it with the shadow pipeline once. */
 	getSharedMaterials(): THREE.Material[] {
-		return [this.material];
+		return [this.material, ...(this.distant?.getSharedMaterials() ?? [])];
 	}
 
 	setSeed(seed: string): void {
+		this.currentSeed = seed;
+		this.distant?.setSeed(seed);
 		// Saved environment values are applied AFTER manager construction. Upgrade here
 		// before generation, including same-seed reloads, so old values cannot overwrite it.
 		// Upgrade the previous shipped defaults in saved worlds as well as new worlds.
@@ -230,6 +244,12 @@ export class GrassManager {
 	}
 
 	setQualityProfile(profile: GrassQualityProfile): void {
+		if (
+			(Object.keys(profile) as (keyof GrassQualityProfile)[]).every(
+				(key) => profile[key] === this.quality[key]
+			)
+		)
+			return;
 		const regenerate = profile.densityScale !== this.quality.densityScale;
 		this.quality = { ...profile };
 		this.lastLoadRadius = -1;
@@ -238,6 +258,11 @@ export class GrassManager {
 
 	/** Placement-affecting settings changed (density, spacing, heights): regenerate loaded chunks. */
 	notifySettingsChanged(): void {
+		this.distantSyncKey = '';
+		this.distant?.notifySettingsChanged();
+		// Pending chunks may not have records yet. Drop their old revisions so the
+		// next area refresh can enqueue them again instead of silently discarding them.
+		this.queue.clear();
 		this.revision++;
 		this.lastLoadRadius = -1;
 		for (const record of this.records.values())
@@ -256,6 +281,7 @@ export class GrassManager {
 		wind: { strengthScale: number; dirX: number; dirZ: number; lean: number },
 		wetness: number
 	): void {
+		this.distant?.setWeather(wind, wetness);
 		this.weather.strengthScale = wind.strengthScale;
 		this.weather.dirX = wind.dirX;
 		this.weather.dirZ = wind.dirZ;
@@ -275,11 +301,17 @@ export class GrassManager {
 	}
 
 	/** Streaming: load/unload chunks around the player and run the generation queue (time-sliced). */
-	update(playerX: number, playerZ: number): void {
+	update(playerX: number, playerZ: number, budgetMs = GENERATION_BUDGET_MS): void {
+		const started = performance.now();
 		const enabled = this.settings.enabled;
 		this.group.visible = enabled;
 		if (!enabled) {
-			if (this.records.size > 0) this.unloadAll();
+			this.distantSyncKey = '';
+			if (this.records.size > 0 || this.queue.size > 0) this.unloadAll();
+			if (this.distant) {
+				this.distant.settings.enabled = false;
+				this.distant.update(playerX, playerZ, 0);
+			}
 			return;
 		}
 		const terrainRevision = this.options.terrain.getRevision();
@@ -289,7 +321,11 @@ export class GrassManager {
 		}
 		this.syncExclusions();
 		this.refreshActiveArea(playerX, playerZ);
-		this.processQueue(playerX, playerZ);
+		this.processQueue(playerX, playerZ, budgetMs);
+		if (!this.options.distantLayer) {
+			this.syncDistantLayer();
+			this.distant?.update(playerX, playerZ, Math.max(0, budgetMs - (performance.now() - started)));
+		}
 	}
 
 	/** Per frame: uniforms, then one distance check + instance count per chunk. */
@@ -320,6 +356,9 @@ export class GrassManager {
 
 		this.lod = resolveGrassLod(this.settings, this.quality, this.adaptive.level, this.budgetScale);
 		const lod = this.lod;
+		if (!this.options.distantLayer && this.distant) {
+			this.distant.uniforms.uGrassPatch.value.set(lod.end * 0.42, lod.end * 0.84, 2.8, 1);
+		}
 		u.uGrassLod.value.set(lod.lod0, lod.lod1, lod.lod2, lod.end);
 		u.uGrassDensity.value.x = lod.density0;
 		u.uGrassDensity.value.y = lod.density1;
@@ -348,6 +387,7 @@ export class GrassManager {
 			);
 		}
 		this.updateBudget(total);
+		this.distant?.updateView(camera, deltaSeconds, player);
 	}
 
 	/**
@@ -392,17 +432,22 @@ export class GrassManager {
 			lodInstances[band] += chunk.drawn;
 		}
 		const atlasBytes = grassAtlasBytes(this.atlas);
+		const far = this.distant?.getRenderStats(frustum);
+		lodInstances[2] += far?.visibleInstances ?? 0;
 		return {
 			enabled: this.settings.enabled,
-			visibleInstances: visible,
+			distantInstances: far?.visibleInstances ?? 0,
+			distantDrawCalls: far?.drawCalls ?? 0,
+			distantRenderDistance: far?.renderDistance ?? 0,
+			visibleInstances: visible + (far?.visibleInstances ?? 0),
 			lodInstances,
-			activeChunks: active,
-			drawCalls,
-			triangles,
-			loadedInstances: loaded,
-			bufferBytes: bytes + atlasBytes,
-			atlasBytes,
-			queuedChunks: this.queue.size,
+			activeChunks: active + (far?.activeChunks ?? 0),
+			drawCalls: drawCalls + (far?.drawCalls ?? 0),
+			triangles: triangles + (far?.triangles ?? 0),
+			loadedInstances: loaded + (far?.loadedInstances ?? 0),
+			bufferBytes: bytes + atlasBytes + (far?.bufferBytes ?? 0),
+			atlasBytes: atlasBytes + (far?.atlasBytes ?? 0),
+			queuedChunks: this.queue.size + (far?.queuedChunks ?? 0),
 			lastGenerationMs: this.lastGenerationMs,
 			averageGenerationMs: this.averageGenerationMs,
 			adaptiveLevel: this.adaptive.level,
@@ -420,6 +465,7 @@ export class GrassManager {
 	}
 
 	dispose(): void {
+		this.distant?.dispose();
 		this.unloadAll();
 		this.queue.clear();
 		this.material.dispose();
@@ -428,6 +474,48 @@ export class GrassManager {
 	}
 
 	// ------------------------------------------------------------------------------- streaming
+
+	/** One coarse layer, generated only when chunks stream in and sharing a fixed atlas.
+	 * Near generation has priority; both layers share the same per-frame time budget. */
+	private syncDistantLayer(): void {
+		const enabled = this.settings.enabled && this.settings.distantPatches !== false;
+		if (!this.distant && !enabled) return;
+		if (!this.distant) {
+			this.distant = new GrassManager({
+				...this.options,
+				distantLayer: true,
+				seed: this.currentSeed,
+				settings: { ...this.settings },
+				debug: { showGrassChunks: false, showGrassLod: false, showGrassCandidates: false }
+			});
+			this.group.add(this.distant.group);
+		}
+		const key = `${this.revision}:${enabled}:${this.quality.densityScale}:${this.quality.distanceScale}`;
+		if (key === this.distantSyncKey) return;
+		this.distantSyncKey = key;
+		const far = this.distant;
+		const nearEnd = this.settings.renderDistance * this.quality.distanceScale;
+		Object.assign(far.settings, this.settings, {
+			enabled,
+			candidateSpacing: Math.max(3.2, this.settings.candidateSpacing * 8),
+			renderDistance: Math.min(220, Math.max(96, nearEnd * 3)),
+			lod0Distance: nearEnd,
+			lod1Distance: nearEnd * 1.5,
+			lod2Distance: nearEnd * 2.2,
+			lod0Density: 1,
+			lod1Density: 0.85,
+			lod2Density: 0.6,
+			playerInteraction: false
+		});
+		far.setQualityProfile({
+			densityScale: this.quality.densityScale,
+			distanceScale: 1,
+			crossedCards: false,
+			receiveShadows: false,
+			wind: false,
+			maxVisibleInstances: 6000
+		});
+	}
 
 	private loadRadius(): number {
 		return this.settings.renderDistance * this.quality.distanceScale + PREFETCH_MARGIN;
@@ -439,7 +527,7 @@ export class GrassManager {
 		if (radius === this.lastLoadRadius && moved < 4) return;
 		this.lastLoadRadius = radius;
 		this.lastLoadCenter.set(playerX, playerZ);
-		const size = GRASS_CHUNK_SIZE;
+		const size = this.chunkSize;
 		const minX = Math.floor((playerX - radius) / size);
 		const maxX = Math.floor((playerX + radius) / size);
 		const minZ = Math.floor((playerZ - radius) / size);
@@ -465,13 +553,13 @@ export class GrassManager {
 		this.queue.pruneToRequired(required);
 	}
 
-	private processQueue(playerX: number, playerZ: number): void {
+	private processQueue(playerX: number, playerZ: number, budgetMs: number): void {
 		if (this.queue.size === 0) return;
 		const started = performance.now();
-		const playerChunkX = Math.floor(playerX / GRASS_CHUNK_SIZE);
-		const playerChunkZ = Math.floor(playerZ / GRASS_CHUNK_SIZE);
+		const playerChunkX = Math.floor(playerX / this.chunkSize);
+		const playerChunkZ = Math.floor(playerZ / this.chunkSize);
 		const deferred: { chunkX: number; chunkZ: number; revision: number }[] = [];
-		while (this.queue.size > 0 && performance.now() - started < GENERATION_BUDGET_MS) {
+		while (this.queue.size > 0 && performance.now() - started < budgetMs) {
 			const [job] = this.queue.take(playerChunkX, playerChunkZ, 1);
 			if (!job) break;
 			if (job.revision !== this.revision) continue;
@@ -484,7 +572,7 @@ export class GrassManager {
 	/** Builds one chunk. Returns false when the terrain under it is not built yet. */
 	private generate(chunkX: number, chunkZ: number): boolean {
 		const started = performance.now();
-		const size = GRASS_CHUNK_SIZE;
+		const size = this.chunkSize;
 		const originX = chunkX * size;
 		const originZ = chunkZ * size;
 		const terrainSize = this.options.terrain.chunkSize();
@@ -541,7 +629,8 @@ export class GrassManager {
 			data,
 			this.template,
 			this.material,
-			maxHeight
+			maxHeight,
+			Math.max(0.6, maxHeight * this.settings.widthRatio * (this.options.distantLayer ? 2.5 : 1))
 		);
 		record.chunk = chunk;
 		this.group.add(chunk.mesh);
@@ -570,7 +659,7 @@ export class GrassManager {
 		surface: (x: number, z: number, out: SurfacePoint) => boolean
 	): GrassGrid {
 		const nodes = REGION_NODES;
-		const spacing = GRASS_CHUNK_SIZE / (nodes - 1);
+		const spacing = this.chunkSize / (nodes - 1);
 		const data = new Float32Array(nodes * nodes * REGION_CHANNELS);
 		const biome = createBiomeWeights();
 		const region = createGrassRegion();
@@ -600,7 +689,7 @@ export class GrassManager {
 	private buildWaterGrid(originX: number, originZ: number): GrassGrid | null {
 		const { waterDepthAt, hasWaterNear } = this.options;
 		if (!waterDepthAt) return null;
-		const size = GRASS_CHUNK_SIZE;
+		const size = this.chunkSize;
 		if (
 			hasWaterNear &&
 			!hasWaterNear(originX - 2, originZ - 2, originX + size + 2, originZ + size + 2)
@@ -622,14 +711,16 @@ export class GrassManager {
 	}
 
 	private exclusionsFor(originX: number, originZ: number): Float32Array {
-		const pad = 0.3;
+		const pad = this.options.distantLayer
+			? this.settings.maxHeight * this.settings.widthRatio * 2.5
+			: 0.3;
 		const rects: number[] = [];
 		for (const rect of this.options.getExclusions()) {
 			if (
 				rect.maxX + pad < originX ||
-				rect.minX - pad > originX + GRASS_CHUNK_SIZE ||
+				rect.minX - pad > originX + this.chunkSize ||
 				rect.maxZ + pad < originZ ||
-				rect.minZ - pad > originZ + GRASS_CHUNK_SIZE
+				rect.minZ - pad > originZ + this.chunkSize
 			)
 				continue;
 			rects.push(rect.minX - pad, rect.minZ - pad, rect.maxX + pad, rect.maxZ + pad);
@@ -659,15 +750,18 @@ export class GrassManager {
 			if (!current.has(id)) dirty.push(parseRect(id, previous));
 		this.knownExclusions.clear();
 		for (const [id, rect] of current) this.knownExclusions.set(id, signature(rect));
+		const pad = this.options.distantLayer
+			? this.settings.maxHeight * this.settings.widthRatio * 2.5
+			: 0.5;
 		for (const rect of dirty) {
 			for (const record of this.records.values()) {
-				const x0 = record.chunkX * GRASS_CHUNK_SIZE;
-				const z0 = record.chunkZ * GRASS_CHUNK_SIZE;
+				const x0 = record.chunkX * this.chunkSize;
+				const z0 = record.chunkZ * this.chunkSize;
 				if (
-					rect.maxX + 0.5 < x0 ||
-					rect.minX - 0.5 > x0 + GRASS_CHUNK_SIZE ||
-					rect.maxZ + 0.5 < z0 ||
-					rect.minZ - 0.5 > z0 + GRASS_CHUNK_SIZE
+					rect.maxX + pad < x0 ||
+					rect.minX - pad > x0 + this.chunkSize ||
+					rect.maxZ + pad < z0 ||
+					rect.minZ - pad > z0 + this.chunkSize
 				)
 					continue;
 				this.queue.enqueue(record.chunkX, record.chunkZ, this.revision);
@@ -682,7 +776,7 @@ export class GrassManager {
 			return;
 		}
 		if (!record.lines) {
-			const s = GRASS_CHUNK_SIZE;
+			const s = this.chunkSize;
 			const x0 = record.chunkX * s;
 			const z0 = record.chunkZ * s;
 			const y = this.options.heightSampler.sample(x0 + s / 2, z0 + s / 2) + 0.3;

@@ -20,6 +20,7 @@ import { GRASS_RANK_FADE } from './grassLod';
  *   base and lighter tip, and the instance's terrain-matched colour.
  */
 export interface GrassUniforms {
+	uGrassPatch: { value: THREE.Vector4 };
 	uGrassAtlas: { value: THREE.Texture | null };
 	/** lod0, lod1, lod2, end distances (metres). */
 	uGrassLod: { value: THREE.Vector4 };
@@ -40,6 +41,7 @@ export interface GrassUniforms {
 
 export function createGrassUniforms(): GrassUniforms {
 	return {
+		uGrassPatch: { value: new THREE.Vector4(0, 0, 1, 0) },
 		uGrassAtlas: { value: null },
 		uGrassLod: { value: new THREE.Vector4(14, 32, 50, 64) },
 		uGrassDensity: { value: new THREE.Vector4(1, 0.5, 0.22, GRASS_RANK_FADE) },
@@ -59,6 +61,7 @@ attribute vec4 aGrassTint;
 uniform vec4 uGrassLod;
 uniform vec4 uGrassDensity;
 uniform vec4 uGrassSize;
+uniform vec4 uGrassPatch;
 uniform vec4 uGrassWind;
 uniform float uGrassTime;
 uniform vec4 uGrassPlayer;
@@ -83,9 +86,11 @@ const VERTEX_BUILD = /* glsl */ `
 	float grassDens = grassDensityAt(grassDist);
 	float grassT = clamp((grassDens - aGrassShape.z) / uGrassDensity.w, 0.0, 1.0);
 	float grassVis = grassT * grassT * (3.0 - 2.0 * grassT);
+	// Distant patches overlap the near fade rather than starting at a visible ring.
+	if (uGrassPatch.w > 0.5) grassVis *= smoothstep(uGrassPatch.x, uGrassPatch.y, grassDist);
 	float grassHeight = (uGrassSize.x + aGrassShape.x * uGrassSize.y) * grassVis;
 	// Survivors of a thinned LOD widen a little, so coverage falls slower than the count.
-	float grassWidth = grassHeight * uGrassSize.z * mix(0.78, 1.22, aGrassShape.y) * (1.0 + (1.0 - min(grassDens, 1.0)) * 0.4);
+	float grassWidth = grassHeight * uGrassSize.z * uGrassPatch.z * mix(0.78, 1.22, aGrassShape.y) * (1.0 + (1.0 - min(grassDens, 1.0)) * 0.4);
 	vec2 grassFace = grassDist > 1e-3 ? grassToCam / grassDist : vec2(0.0, 1.0);
 	vec2 grassBill = vec2(grassFace.y, -grassFace.x);
 	float grassYaw = aGrassShape.z * 41.0 + aGrassShape.w * 13.0;
@@ -172,7 +177,7 @@ export function createGrassMaterial(
 	uniforms.uGrassAtlas.value = atlas;
 	const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, alphaTest: 0.5 });
 	material.name = 'grass';
-	setOwnShaderHook(material, grassHook(uniforms), 'grass-v1', uniforms);
+	setOwnShaderHook(material, grassHook(uniforms), 'grass-patches-v2', uniforms);
 	return material;
 }
 
