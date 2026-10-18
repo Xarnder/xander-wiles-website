@@ -5,7 +5,7 @@ import type { SurfacePoint, TerrainSurfaceLattice } from '../../../terrain/terra
 import type { GrassGrid } from '../../grass/grassPlacement';
 import type { VegetationRegionSampler } from '../../VegetationRegionSampler';
 import { generatePlantAtlas, PLANT_ATLAS_ALPHA_CUTOFF, PLANT_ATLAS_COLUMNS } from '../plantAtlas';
-import { PlantEcology, plantColony, plantSuitability } from '../plantEcology';
+import { PlantEcology, dominantFlowerAt, plantColony, plantSuitability } from '../plantEcology';
 import { PlantManager } from '../PlantManager';
 import { paletteIssues } from '../plantPalette';
 import {
@@ -572,4 +572,24 @@ describe('PlantManager streaming', () => {
 		expect(manager.getRenderStats(null).adaptiveLevel).toBe(1);
 		manager.dispose();
 	});
+});
+
+it('flowers keep one dominant species across neighbouring points in a patch', () => {
+	const ecology = new PlantEcology({ seedHash: 1234, speciesScale: () => 1 });
+	const flowers = ecology.regionSpecies(0, 0).filter((s) => s.kind === 'flower');
+	const env = { forest: 0.1, openness: 1, wet: 0.1, height: 5 };
+	let same = 0;
+	let occupied = 0;
+	const types = new Set<number>();
+	for (let x = 0; x < 100; x += 2)
+		for (let z = 0; z < 100; z += 2) {
+			const a = dominantFlowerAt(flowers, x, z, env);
+			if (a === undefined) continue;
+			types.add(a);
+			occupied++;
+			if (a === dominantFlowerAt(flowers, x + 0.5, z + 0.5, env)) same++;
+		}
+	expect(types.size).toBeGreaterThan(1);
+	expect(occupied).toBeGreaterThan(100);
+	expect(same / occupied).toBeGreaterThan(0.9);
 });

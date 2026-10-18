@@ -76,9 +76,9 @@ export function createDefaultGrassSettings(): GrassSettings {
 		lod0Density: 1,
 		lod1Density: 0.5,
 		lod2Density: 0.22,
-		minHeight: 0.2,
-		maxHeight: 0.52,
-		widthRatio: 1.45,
+		minHeight: 0.7,
+		maxHeight: 1.8,
+		widthRatio: 1.55,
 		windStrength: 1,
 		alphaTest: 0.5,
 		playerInteraction: true

@@ -39,8 +39,9 @@
 	onDestroy(() => window.removeEventListener('keydown', onKeyDown, true));
 </script>
 
-<div class="backdrop" role="presentation">
+<div data-ui-backdrop class="backdrop" role="presentation">
 	<div
+		data-ui-surface="panel"
 		class="dialog"
 		role="alertdialog"
 		aria-modal="true"

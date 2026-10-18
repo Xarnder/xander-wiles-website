@@ -72,12 +72,14 @@
 {/snippet}
 
 <div
+	data-ui-backdrop
 	class="placement-backdrop"
 	role="presentation"
 	onclick={onBackdropClick}
 	onkeydown={onBackdropKey}
 >
 	<div
+		data-ui-surface="panel"
 		class="placement-panel"
 		role="dialog"
 		tabindex="-1"

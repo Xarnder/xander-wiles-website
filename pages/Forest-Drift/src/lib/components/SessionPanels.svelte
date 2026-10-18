@@ -51,7 +51,7 @@
 </script>
 
 {#if debugOpen}
-	<aside class="debug-panel" aria-label="Dev and Debug controls" data-testid="debug-panel">
+	<aside data-ui-surface="panel" class="debug-panel" aria-label="Dev and Debug controls" data-testid="debug-panel">
 		<header>
 			<h2>Dev &amp; Debug</h2>
 			<button
@@ -93,7 +93,7 @@
 	</aside>
 {/if}
 
-<dialog
+<dialog data-ui-surface="panel"
 	bind:this={dialog}
 	oncancel={(event) => {
 		event.preventDefault();

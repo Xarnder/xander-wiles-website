@@ -160,7 +160,7 @@ export class CreatureLab {
 	private frameCount = 0;
 	private frameStart = performance.now();
 	constructor(readonly container: HTMLElement) {
-		this.scene.background = new THREE.Color('#e5e9de');
+		this.scene.background = new THREE.Color('#171310');
 		this.scene.add(new THREE.HemisphereLight(0xe9f6ff, 0x5b6144, 2.4));
 		const light = new THREE.DirectionalLight(0xfff0d4, 3);
 		light.position.set(4, 7, 5);

@@ -3008,7 +3008,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 					boolField('sky.sunDisk', 'Show sun disk', sky.sky, 'showSunDisk', actions.sky),
 					numberField(
 						'sky.sunSize',
-						'Sun disk size',
+						'Sun angular radius (radians)',
 						sky.sky,
 						'sunDiskSize',
 						0.002,
@@ -3031,9 +3031,9 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'Sun disk softness',
 						sky.sky,
 						'sunDiskSoftness',
-						0.001,
-						0.1,
-						0.001,
+						0.0002,
+						0.01,
+						0.0002,
 						actions.sky
 					)
 				]),

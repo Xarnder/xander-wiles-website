@@ -195,6 +195,7 @@ export class GrassManager {
 	constructor(options: GrassManagerOptions) {
 		this.options = options;
 		this.settings = options.settings;
+
 		this.debug = options.debug;
 		this.atlas = generateGrassAtlas(options.atlasTileSize ?? 128);
 		this.atlasTexture = createGrassAtlasTexture(this.atlas);
@@ -211,6 +212,17 @@ export class GrassManager {
 	}
 
 	setSeed(seed: string): void {
+		// Saved environment values are applied AFTER manager construction. Upgrade here
+		// before generation, including same-seed reloads, so old values cannot overwrite it.
+		// Upgrade the previous shipped defaults in saved worlds as well as new worlds.
+		// Explicitly tuned height ranges remain under the player's control.
+		if (
+			(this.settings.minHeight === 0.2 && this.settings.maxHeight === 0.52) ||
+			(this.settings.minHeight === 0.35 && this.settings.maxHeight === 0.9)
+		) {
+			this.settings.minHeight = 0.7;
+			this.settings.maxHeight = 1.8;
+		}
 		// The generator version salts the hash: a future placement version never re-plants old worlds.
 		const version = this.settings.generatorVersion || GRASS_GENERATOR_VERSION;
 		this.seedHash = hashStringToUint32(`grass:v${version}:${seed}`, 0x6a55);

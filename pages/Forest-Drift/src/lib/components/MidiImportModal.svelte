@@ -96,8 +96,9 @@
 	}
 </script>
 
-<div class="midi-backdrop" role="presentation">
+<div data-ui-backdrop class="midi-backdrop" role="presentation">
 	<div
+		data-ui-surface="panel"
 		class="midi-panel"
 		role="dialog"
 		tabindex="-1"

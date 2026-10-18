@@ -18,11 +18,11 @@ export const NIGHT_SKY = {
 } as const;
 
 export const TWILIGHT_SKY = {
-	topColor: '#2a3878',
-	midColor: '#e07038',
-	horizonColor: '#ffc090',
-	groundHazeColor: '#c49268',
-	sunColor: '#ffb060'
+	topColor: '#303f80',
+	midColor: '#ba7899',
+	horizonColor: '#ffb36d',
+	groundHazeColor: '#b57c74',
+	sunColor: '#ffb44d'
 } as const;
 
 export function createDefaultDayCycleSettings(): DayCycleSettings {
@@ -160,7 +160,7 @@ export function resolveEffectiveSky(settings: SkySettings): EffectiveSkyLook {
 		sunColor: settings.atmosphere.sunColor
 	};
 	const nightBlend = mixPalette(NIGHT_SKY, daySky, day);
-	const palette = mixPalette(nightBlend, TWILIGHT_SKY, twilight * (0.35 + (1 - day) * 0.5));
+	const palette = mixPalette(nightBlend, TWILIGHT_SKY, twilight * (0.65 + (1 - day) * 0.25));
 
 	const sunIntensity =
 		settings.atmosphere.sunEnabled === false
@@ -176,7 +176,7 @@ export function resolveEffectiveSky(settings: SkySettings): EffectiveSkyLook {
 			midColor: palette.midColor,
 			horizonColor: palette.horizonColor,
 			groundHazeColor: palette.groundHazeColor,
-			brightness: settings.sky.brightness * (0.38 + 0.62 * day),
+			brightness: settings.sky.brightness * Math.min(1, 0.38 + 0.62 * day + 0.18 * twilight),
 			showSunDisk: settings.sky.showSunDisk && elevation > -1.5
 		},
 		atmosphere: {

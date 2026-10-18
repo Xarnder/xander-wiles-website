@@ -185,12 +185,13 @@
 	});
 </script>
 
-<div class="backdrop">
+<div data-ui-backdrop class="backdrop">
 	<div
 		role="dialog"
 		aria-modal="true"
 		aria-label="Creature Lab"
 		tabindex="-1"
+		data-ui-surface="panel"
 		class="lab"
 		data-testid="creature-lab"
 	>

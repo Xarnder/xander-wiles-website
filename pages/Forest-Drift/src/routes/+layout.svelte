@@ -1,4 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import '$lib/ui/theme.css';
+	import { initializeUiWood } from '$lib/ui/woodTexture';
+	onMount(() => {
+		void initializeUiWood();
+	});
 	let { children } = $props();
 </script>
 
@@ -19,7 +25,7 @@
 		padding: 0;
 		height: 100%;
 		overflow: hidden;
-		background: #bfe3ff;
+		background: #100e0c;
 		font-family:
 			system-ui,
 			-apple-system,

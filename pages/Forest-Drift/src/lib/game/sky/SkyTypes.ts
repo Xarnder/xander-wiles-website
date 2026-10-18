@@ -23,6 +23,7 @@ export interface VisibleSkySettings {
 	horizonSoftness: number;
 	brightness: number;
 	showSunDisk: boolean;
+	/** Angular radius in radians (small-angle chord approximation). */
 	sunDiskSize: number;
 	sunDiskBrightness: number;
 	sunDiskSoftness: number;
@@ -131,9 +132,9 @@ export function createDefaultSkySettings(): SkySettings {
 			horizonSoftness: 0.12,
 			brightness: 1.0,
 			showSunDisk: true,
-			sunDiskSize: 0.02,
-			sunDiskBrightness: 3.2,
-			sunDiskSoftness: 0.012
+			sunDiskSize: 0.008,
+			sunDiskBrightness: 1.8,
+			sunDiskSoftness: 0.0012
 		},
 
 		hdri: {

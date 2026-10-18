@@ -1,0 +1,678 @@
+/* Shared visual skin for menus and dialogs. Explicit opt-ins keep game canvases,
+   material swatches and the in-world HUD out of the menu cascade. The few !important
+   declarations own skin properties over legacy scoped Svelte rules; layouts stay local. */
+:root {
+	--fd-gold: #edbb4a;
+	--fd-amber: #db9128;
+	--fd-wood: #514334;
+	--fd-ink: #100e0c;
+	--fd-surface: #201713;
+	--fd-text: #f7edd9;
+	--fd-muted: #b8a68c;
+	--fd-line: #edbb4a35;
+	--fd-wood-image: none;
+	--fd-wood-face: linear-gradient(180deg, #100e0b50, #15120f99), var(--fd-wood-image);
+	--fd-panel-face: linear-gradient(180deg, #14120fdf, #12110ff5), var(--fd-wood-image);
+}
+html {
+	color-scheme: dark;
+}
+[data-ui-backdrop] {
+	background: #080706d9 !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+}
+[data-ui-surface] {
+	color: var(--fd-text) !important;
+	font-family: 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+	accent-color: var(--fd-gold);
+	scrollbar-color: #8e5b32 #19130f;
+	scrollbar-width: thin;
+}
+/* Fit one continuous grain image to each surface instead of tiling knots. */
+[data-ui-surface='panel'] {
+	background-color: var(--fd-surface) !important;
+	background-image: var(--fd-panel-face) !important;
+	background-size:
+		auto,
+		100% 100% !important;
+	background-repeat: no-repeat !important;
+	border: 1px solid #db91287a !important;
+	border-radius: 18px;
+	box-shadow:
+		0 0 0 3px #351b16,
+		0 0 0 4px #edbb4a24,
+		inset 0 1px #f6d88450,
+		inset 0 -3px #0006,
+		0 24px 70px #0009 !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+}
+[data-ui-surface='panel']::backdrop {
+	background: #080706d9;
+	backdrop-filter: none;
+}
+html [data-ui-surface] > header,
+html [data-ui-surface] .palette-header {
+	background-color: var(--fd-wood);
+	background-image: var(--fd-wood-face);
+	background-size:
+		auto,
+		100% 100%;
+	background-repeat: no-repeat;
+	border-bottom: 1px solid #edbb4a66;
+	box-shadow:
+		inset 0 1px #f8da8f24,
+		0 3px 12px #0003;
+}
+html [data-ui-surface] :is(h1, h2, h3, h4) {
+	color: var(--fd-text);
+	letter-spacing: -0.025em;
+}
+html
+	[data-ui-surface]
+	:is(.eyebrow, .section-label, .section-title, .detail, .label, .field-title) {
+	color: var(--fd-gold);
+}
+html
+	[data-ui-surface]
+	:is(
+		.hint,
+		.muted,
+		.modal-hint,
+		.menu-hint,
+		.section-lead,
+		.empty-body,
+		.description,
+		.seed-line
+	) {
+	color: var(--fd-muted);
+	opacity: 1;
+	line-height: 1.6;
+}
+/* Colour swatches are real material values, so never paint the theme over them. */
+html [data-ui-surface] button:not(:where(.swatch, .color-swatch, [style*='background'])) {
+	color: var(--fd-text) !important;
+	background-color: var(--fd-wood) !important;
+	background-image: var(--fd-wood-face) !important;
+	background-size:
+		auto,
+		100% 100% !important;
+	background-repeat: no-repeat !important;
+	border: 1px solid #db91286b !important;
+	border-radius: 9px;
+	box-shadow:
+		inset 0 1px #ffe4a632,
+		inset 0 -2px #210c0b80,
+		0 2px 0 #0c0806;
+	font-weight: 650;
+	text-shadow: 0 1px #0005;
+	transition:
+		border-color 120ms,
+		box-shadow 120ms,
+		color 120ms;
+	touch-action: manipulation;
+}
+html
+	[data-ui-surface]
+	button:not(:where(.swatch, .color-swatch, [style*='background'])):hover:not(:disabled) {
+	border-color: var(--fd-gold) !important;
+	box-shadow:
+		inset 0 1px #ffdf9770,
+		inset 0 0 0 1px #edbb4a30,
+		0 2px 0 #0c0806;
+}
+html
+	[data-ui-surface]
+	button:is(
+		.primary,
+		.active,
+		.selected,
+		[aria-selected='true'],
+		[aria-pressed='true'],
+		[aria-current='true']
+	):not(:where(.swatch, .color-swatch, [style*='background'])) {
+	color: #2c190a !important;
+	background: linear-gradient(
+		175deg,
+		#f6d979 0%,
+		var(--fd-gold) 48%,
+		var(--fd-amber) 100%
+	) !important;
+	border-color: #f7d87b !important;
+	box-shadow:
+		inset 0 1px #fff3c2,
+		inset 0 -3px #9e54254d,
+		0 3px 0 #6e3223,
+		0 4px 10px #0003;
+	text-shadow: 0 1px #fff4c633;
+}
+html [data-ui-surface] button.danger:not(:where(.swatch, [style*='background'])) {
+	color: #ffd3c0 !important;
+	border-color: #cf69588c !important;
+}
+html [data-ui-surface] button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+html [data-ui-surface] button.link {
+	color: var(--fd-gold) !important;
+}
+html
+	[data-ui-surface]
+	:is(input, select, textarea):not([type='range']):not([type='checkbox']):not([type='color']) {
+	background: #100d0beb !important;
+	color: var(--fd-text) !important;
+	border: 1px solid #b1874b5c !important;
+	border-radius: 8px;
+	box-shadow: inset 0 2px 5px #0005;
+	min-height: 36px;
+}
+html [data-ui-surface] input::placeholder,
+html [data-ui-surface] textarea::placeholder {
+	color: #a18e75;
+	opacity: 1;
+}
+html [data-ui-surface] input[type='range'] {
+	accent-color: var(--fd-gold);
+}
+html [data-ui-surface] input[type='checkbox']:checked {
+	background-color: var(--fd-gold);
+	border-color: var(--fd-gold);
+}
+html [data-ui-surface] :is(button, input, select, textarea, a):focus-visible {
+	outline: 2px solid var(--fd-gold);
+	outline-offset: 3px;
+}
+html
+	[data-ui-surface]
+	:is(
+		.toolbar,
+		.properties,
+		.inspector,
+		.catalogue-list,
+		nav,
+		.group,
+		.subgroup,
+		.fields,
+		.section,
+		.palette-section
+	) {
+	border-color: var(--fd-line);
+}
+html [data-ui-surface] :is(.toolbar, .properties, .inspector, nav) {
+	background-color: #130f0c;
+}
+html [data-ui-surface] :is(.group, .subgroup) {
+	background: #ffffff03;
+}
+html [data-ui-surface] :is(.badge, .pill-tag, .role-badge) {
+	background: #edbb4a12;
+	color: var(--fd-gold);
+	border-color: #edbb4a40;
+}
+html [data-ui-surface] :is(.menu, [role='menu']) {
+	background: #241711;
+	border-color: #db91286b;
+	box-shadow: 0 12px 35px #0008;
+}
+html [data-ui-surface] .menu button {
+	box-shadow: none;
+}
+html [data-ui-surface] :is(.card, .design-card) {
+	border-color: #ad804442;
+	background-color: #241a13;
+}
+/* Start screen: a quiet, dark canvas with a broad wooden feature card. */
+html [data-ui-surface='start'] {
+	background:
+		radial-gradient(ellipse at 12% 0%, #53261c60, transparent 48%),
+		radial-gradient(ellipse at 90% 100%, #5e432019, transparent 55%), #100e0c !important;
+	padding: clamp(24px, 5vw, 72px) clamp(18px, 5vw, 80px) 48px;
+}
+html [data-ui-surface='start'] .worlds-header {
+	max-width: 1080px;
+	margin: 0 auto 54px;
+	display: grid;
+	grid-template-columns: 280px 1fr;
+	gap: 64px;
+	align-items: center;
+	background: none;
+	border: 0;
+	box-shadow: none;
+}
+html [data-ui-surface='start'] .start-brand {
+	text-align: center;
+}
+html [data-ui-surface='start'] .title-mark {
+	width: 250px;
+	max-width: 100%;
+	filter: none;
+}
+html [data-ui-surface='start'] .start-tagline {
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	color: var(--fd-muted);
+	margin: 12px 0 0;
+}
+html [data-ui-surface='start'] .start-eyebrow {
+	font-size: 10px;
+	letter-spacing: 0.2em;
+	color: var(--fd-gold);
+	margin: 0 0 14px;
+}
+html [data-ui-surface='start'] h1 {
+	font-size: clamp(28px, 3.2vw, 44px);
+	line-height: 1.12;
+	font-weight: 650;
+	margin: 0 0 14px;
+}
+html [data-ui-surface='start'] .start-description {
+	color: var(--fd-muted);
+	font-size: 14px;
+	line-height: 1.65;
+	max-width: 390px;
+	margin: 0 0 24px;
+}
+html [data-ui-surface='start'] .worlds-actions {
+	justify-content: flex-start;
+	gap: 10px;
+}
+html [data-ui-surface='start'] .worlds-actions button {
+	padding: 12px 20px;
+	min-height: 46px;
+}
+html
+	[data-ui-surface='start']
+	:is(
+		.default-world-section,
+		.world-list,
+		.online-worlds,
+		.section-title,
+		.section-divider,
+		.empty-state,
+		.storage-note,
+		.worlds-error,
+		.worlds-busy
+	) {
+	max-width: 1080px;
+}
+html [data-ui-surface='start'] .section-title {
+	font-size: 10px;
+	letter-spacing: 0.16em;
+	opacity: 1;
+}
+html [data-ui-surface='start'] .section-header {
+	margin-bottom: 16px;
+	justify-content: space-between;
+}
+html [data-ui-surface='start'] .default-world-card {
+	display: grid;
+	grid-template-columns: minmax(220px, 0.9fr) 1fr auto;
+	gap: 28px;
+	padding: 16px;
+	border: 1px solid #db912879;
+	border-radius: 16px;
+	background-color: var(--fd-wood);
+	background-image: linear-gradient(110deg, #17141080, #171410b8), var(--fd-wood-image);
+	background-size:
+		auto,
+		100% 100%;
+	background-repeat: no-repeat;
+	box-shadow:
+		inset 0 1px #edbb4a50,
+		0 3px 0 #4b241a,
+		0 16px 40px #0004;
+}
+html [data-ui-surface='start'] .default-world-card:hover {
+	transform: none;
+	border-color: #edbb4aa0;
+}
+html [data-ui-surface='start'] .default-thumbnail {
+	width: 100%;
+	height: 190px;
+	border: 1px solid #edbb4a4d;
+	border-radius: 10px;
+}
+html [data-ui-surface='start'] .default-world-card .world-name {
+	font-size: 25px;
+	letter-spacing: -0.025em;
+}
+html [data-ui-surface='start'] .world-desc {
+	color: #ead6bf;
+	font-size: 13px;
+	line-height: 1.7;
+	margin: 12px 0;
+}
+html [data-ui-surface='start'] .world-meta {
+	color: var(--fd-muted);
+}
+html [data-ui-surface='start'] .default-world-card .world-meta {
+	color: #d9b29a;
+}
+html [data-ui-surface='start'] .default-world-card .world-buttons {
+	flex-direction: column;
+	align-items: stretch;
+}
+html [data-ui-surface='start'] .play-btn {
+	min-height: 48px;
+	min-width: 100px;
+	justify-content: center;
+}
+html [data-ui-surface='start'] :is(.world-card, .online-world) {
+	background: #211811;
+	border-color: #edbb4a26;
+	padding: 14px;
+}
+html [data-ui-surface='start'] .section-divider {
+	background: linear-gradient(90deg, #edbb4a44, #edbb4a0c);
+	margin: 32px auto;
+}
+html [data-ui-surface='start'] .empty-state {
+	background: #ffffff02;
+	border-color: #edbb4a24;
+	padding: 32px 20px;
+}
+html [data-ui-surface='start'] .empty-title {
+	color: #e7d5ba;
+	font-size: 16px;
+}
+html [data-ui-surface='start'] .thumbnail-placeholder {
+	background: linear-gradient(135deg, #443021, #1b1610);
+}
+html [data-ui-surface='start'] .storage-note {
+	text-align: left;
+	color: var(--fd-muted);
+}
+html [data-ui-surface='panel'].pause-panel {
+	width: min(27rem, 92vw);
+	gap: 12px;
+	padding: 24px;
+}
+html [data-ui-surface='panel'].pause-panel h2 {
+	font-size: 26px;
+}
+html [data-ui-surface='panel'].pause-panel > .primary {
+	min-height: 48px;
+	font-size: 15px;
+}
+html [data-ui-surface='panel'].pause-panel .section {
+	gap: 7px;
+}
+html [data-ui-surface='panel'].pause-panel .section-label {
+	margin: 8px 0 2px;
+	font-size: 9px;
+	letter-spacing: 0.15em;
+}
+html [data-ui-surface='panel'].pause-panel button {
+	min-height: 38px;
+}
+html [data-ui-loading] {
+	background: radial-gradient(ellipse at 50% 35%, #442119, #100e0c 65%) !important;
+	color: var(--fd-text);
+}
+html [data-ui-loading] .loading-bar {
+	background: #321b12;
+	border: 1px solid #db91286b;
+}
+html [data-ui-loading] .loading-bar span {
+	background: linear-gradient(90deg, var(--fd-amber), var(--fd-gold));
+}
+@media (max-width: 850px) {
+	html [data-ui-surface='start'] .worlds-header {
+		grid-template-columns: 200px 1fr;
+		gap: 28px;
+		margin-bottom: 36px;
+	}
+	html [data-ui-surface='start'] .default-world-card {
+		grid-template-columns: 1fr 1fr;
+		gap: 18px;
+	}
+	html [data-ui-surface='start'] .default-world-card .world-buttons {
+		grid-column: 1 / -1;
+		flex-direction: row;
+	}
+	html [data-ui-surface='start'] .default-world-card .play-btn {
+		flex: 1;
+	}
+}
+@media (max-width: 600px) {
+	html [data-ui-surface='start'] .worlds-header {
+		display: flex;
+		gap: 24px;
+		text-align: center;
+	}
+	html [data-ui-surface='start'] .title-mark {
+		width: 170px;
+	}
+	html [data-ui-surface='start'] .start-description {
+		margin-inline: auto;
+	}
+	html [data-ui-surface='start'] .worlds-actions {
+		justify-content: center;
+	}
+	html [data-ui-surface='start'] .worlds-actions button {
+		padding: 11px 14px;
+	}
+	html [data-ui-surface='start'] .default-world-card {
+		grid-template-columns: 1fr;
+	}
+	html [data-ui-surface='start'] .default-thumbnail {
+		height: 180px;
+	}
+	html [data-ui-surface='start'] .default-world-card .world-info {
+		padding: 0 6px;
+	}
+	html [data-ui-surface='start'] .world-card {
+		flex-wrap: wrap;
+	}
+	html [data-ui-surface='start'] .world-card .world-buttons {
+		width: 100%;
+		justify-content: flex-end;
+	}
+}
+@media (pointer: coarse) {
+	html [data-ui-surface] button:not(:where(.swatch, .color-swatch)) {
+		min-height: 44px;
+	}
+	html
+		[data-ui-surface]
+		:is(input, select):not([type='checkbox']):not([type='range']):not([type='color']) {
+		min-height: 44px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	html [data-ui-surface] *,
+	html [data-ui-loading] * {
+		transition: none !important;
+		animation: none !important;
+	}
+}
+html [data-ui-surface] :is(aside, fieldset, .stats, .thumb, .preview, .preview-wrap) {
+	border-color: var(--fd-line);
+}
+html [data-ui-surface] :is(.thumb, .preview, .preview-wrap) {
+	background: #171310;
+}
+html [data-ui-surface].lab :is(.stats, pre) {
+	background: #100d0b;
+	color: var(--fd-muted);
+}
+html [data-ui-surface] :is(.meta, legend, .stats dt) {
+	color: var(--fd-muted);
+}
+html [data-ui-surface='panel'] > header {
+	border-radius: 14px 14px 0 0;
+}
+html [data-ui-surface='panel'].panel > header {
+	padding: 14px 16px;
+	top: 0;
+}
+/* Menus must sit above the hotbar, with settings/help above the pause layer. */
+html .pause-overlay[data-ui-backdrop] {
+	z-index: 45;
+}
+html .settings-overlay[data-ui-backdrop] {
+	z-index: 50;
+}
+html .help-overlay[data-ui-backdrop],
+html .help-overlay.over-menus[data-ui-backdrop] {
+	z-index: 55;
+}
+html [data-ui-surface].pause-panel .section:has(> [data-testid='pause-multiplayer']) {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+}
+html
+	[data-ui-surface].pause-panel
+	.section:has(> [data-testid='pause-multiplayer'])
+	.section-label {
+	grid-column: 1 / -1;
+}
+html [data-ui-surface='panel']:is(.modal, .dialog) {
+	max-height: calc(100dvh - 32px);
+	overflow-y: auto;
+}
+html [data-ui-surface] :is(.empty, .preview-label, .preview-title, .preview-hint, output) {
+	color: var(--fd-muted);
+}
+html [data-ui-surface] .card.selected {
+	border-color: var(--fd-gold);
+	box-shadow: 0 0 0 1px var(--fd-gold);
+}
+html [data-ui-surface] .card-main {
+	border-radius: 0;
+}
+/* The build tray shares the same static grain as the menus, with no backdrop blur. */
+html .hotbar .tool-tray,
+html .hotbar .subtool-panel {
+	background-color: var(--fd-surface);
+	background-image: var(--fd-panel-face);
+	background-size:
+		auto,
+		100% 100%;
+	background-repeat: no-repeat;
+	border-color: #db91286b;
+	backdrop-filter: none;
+}
+html .hotbar .slot.active:not(.remove-slot):not(.paint-slot):not(.move-slot) {
+	background: #edbb4a24;
+	border-color: var(--fd-gold);
+}
+html .hotbar .dot.current,
+html .hotbar .slot.active::after {
+	background: var(--fd-gold);
+}
+html .hotbar :is(.eyebrow, .count, .cycle) {
+	color: var(--fd-gold);
+}
+html:root [data-ui-surface] h3 {
+	color: var(--fd-gold);
+}
+html:root [data-ui-surface] :is(dd, label) {
+	color: var(--fd-text);
+}
+html:root [data-ui-surface] .section-hint {
+	color: var(--fd-muted);
+}
+
+/* HUD surfaces use the same decoded, once-baked image as the menus. No filters,
+   extra canvases, texture generation or animations are needed for these controls. */
+html
+	.game-shell
+	:is(
+		.build-hud,
+		.floor-selector,
+		.fps-counter,
+		.stats-overlay,
+		.mini-build-chunk,
+		.day-clock,
+		.flight-badge,
+		.view-only-badge,
+		.save-indicator,
+		.save-error-chip,
+		.door-toast,
+		.crosshair-notice,
+		.graphics-notice,
+		.snap-badge,
+		.help-toggle,
+		.touch-start-btn,
+		.build-hud-action,
+		.midi-import-button,
+		.floor-arrow,
+		.touch-top-bar,
+		.touch-controls-layer button,
+		.touch-joystick-base,
+		.touch-joystick-knob
+	),
+html .app-toast,
+html [data-ui-surface].editor :is(.toolbar, .properties, .stats, .shared-banner, .toast, .keys) {
+	background-color: var(--fd-wood) !important;
+	background-image: var(--fd-wood-face) !important;
+	background-size:
+		auto,
+		100% 100% !important;
+	background-repeat: no-repeat !important;
+	border-color: var(--fd-line) !important;
+	color: var(--fd-text) !important;
+	box-shadow:
+		inset 0 1px #edbb4a20,
+		0 2px 8px #0004;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+}
+html .game-shell :is(.floor-name, .mini-build-chunk-label, .graphics-notice-title) {
+	color: var(--fd-gold);
+}
+html .game-shell :is(.floor-elevation, .mini-build-chunk-sub) {
+	color: var(--fd-muted);
+}
+html .touch-controls-layer button:is(.active, .primary, .place-btn, .highlight) {
+	border-color: var(--fd-gold) !important;
+	box-shadow:
+		inset 0 0 0 1px var(--fd-gold),
+		0 2px 8px #0004;
+}
+html .hotbar .slot {
+	background-image: var(--fd-wood-face);
+	background-size:
+		auto,
+		100% 100%;
+	background-repeat: no-repeat;
+}
+html .hotbar .slot.active {
+	border-color: var(--fd-gold);
+	box-shadow: inset 0 0 0 1px var(--fd-gold);
+}
+html .hotbar .move-slot .tool-icon {
+	width: 20px;
+	height: 20px;
+	transform: translateY(3px);
+}
+html .hotbar .slot-number {
+	z-index: 1;
+	color: var(--fd-text);
+}
+html .pause-overlay[data-ui-backdrop] {
+	background: #000c !important;
+}
+/* The click/tap-to-resume screen also needs contrast against bright skies. */
+html .game-shell:has(.instructions) .canvas-container::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: #0009;
+	pointer-events: none;
+}
+
+/* Keep edit controls inset from the textured header edge on desktop and touch. */
+html [data-ui-surface='panel'] > header {
+	padding: 16px 20px;
+	box-sizing: border-box;
+	gap: 16px;
+}
+@media (max-width: 600px) {
+	html [data-ui-surface='panel'] > header {
+		padding: 12px 14px;
+	}
+}

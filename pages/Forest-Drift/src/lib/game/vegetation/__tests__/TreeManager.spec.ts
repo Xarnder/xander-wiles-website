@@ -20,7 +20,10 @@ function makeFlatTerrainSampler(): TerrainHeightSampler {
 	} as unknown as TerrainHeightSampler;
 }
 
-function makeDenseForestManager(foundationManager: FoundationManager): TreeManager {
+function makeDenseForestManager(
+	foundationManager: FoundationManager,
+	viewDistance = 0
+): TreeManager {
 	const terrainSettings = createDefaultTerrainSettings();
 	const vegetationSettings = createDefaultVegetationSettings();
 
@@ -33,7 +36,7 @@ function makeDenseForestManager(foundationManager: FoundationManager): TreeManag
 	vegetationSettings.trees.treeDensityMultiplier = 1;
 	vegetationSettings.trees.maxTreeSlopeDegrees = 89;
 	vegetationSettings.trees.enableTreeLine = false;
-	vegetationSettings.loading.treeViewDistanceChunks = 0;
+	vegetationSettings.loading.treeViewDistanceChunks = viewDistance;
 	vegetationSettings.loading.treeChunksGeneratedPerFrame = 4;
 
 	return new TreeManager({
@@ -206,3 +209,71 @@ function collectMeshes(root: THREE.Object3D): THREE.InstancedMesh[] {
 function countMeshes(root: THREE.Object3D): number {
 	return collectMeshes(root).length;
 }
+
+describe('trunk removal', () => {
+	it('does not rebuild neighbouring chunks for local or synchronized removals', () => {
+		const m = makeDenseForestManager(new FoundationManager(() => 2), 1);
+		m.update(0, 0);
+		m.updateView(new THREE.Vector3(10, 5, 10), 0.016);
+		const batches = m.group.children.filter((o) => o.name.startsWith('trees:'));
+		expect(batches.length).toBeGreaterThan(1);
+		const batch = m.group.getObjectByProperty('isInstancedMesh', true) as THREE.InstancedMesh;
+		const owner = batch.parent;
+		const matrix = new THREE.Matrix4();
+		batch.getMatrixAt(0, matrix);
+		const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+		const hit = m.pickTrunk(
+			new THREE.Raycaster(
+				new THREE.Vector3(position.x - 2, 0.5, position.z),
+				new THREE.Vector3(1, 0, 0),
+				0,
+				3
+			)
+		)!;
+		expect(hit).not.toBeNull();
+		m.removeProceduralTree(hit.cellX, hit.cellZ);
+		for (const other of batches) if (other !== owner) expect(m.group.children).toContain(other);
+		const after = [...m.group.children];
+		m.setRemovedTreeIds(m.getRemovedTreeIds());
+		expect(m.group.children).toEqual(after);
+		m.setRemovedTreeIds([]);
+		for (const other of batches) if (other !== owner) expect(m.group.children).toContain(other);
+		m.dispose();
+	});
+
+	it('targets trunks at short range and keeps removals after streaming and reload', () => {
+		const m = makeDenseForestManager(new FoundationManager(() => 2));
+		m.update(0, 0);
+		m.updateView(new THREE.Vector3(10, 5, 10), 0.016);
+		const batch = m.group.getObjectByProperty('isInstancedMesh', true) as THREE.InstancedMesh;
+		expect(batch).toBeDefined();
+		const matrix = new THREE.Matrix4();
+		batch.getMatrixAt(0, matrix);
+		const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+		const ray = new THREE.Raycaster(
+			new THREE.Vector3(position.x - 2, 0.5, position.z),
+			new THREE.Vector3(1, 0, 0),
+			0,
+			3
+		);
+		const hit = m.pickTrunk(ray);
+		expect(hit).not.toBeNull();
+		ray.far = 0.01;
+		expect(m.pickTrunk(ray)).toBeNull();
+		ray.far = 3;
+		const count = m.getStats().treeInstances;
+		expect(m.removeProceduralTree(hit!.cellX, hit!.cellZ)).toBe(true);
+		expect(m.getStats().treeInstances).toBe(count - 1);
+		expect(m.removeProceduralTree(hit!.cellX, hit!.cellZ)).toBe(false);
+		const saved = m.getRemovedTreeIds();
+		m.update(5000, 5000);
+		m.update(0, 0);
+		expect(m.getStats().treeInstances).toBe(count - 1);
+		const restored = makeDenseForestManager(new FoundationManager(() => 2));
+		restored.setRemovedTreeIds(saved);
+		restored.update(0, 0);
+		expect(restored.getStats().treeInstances).toBe(count - 1);
+		m.dispose();
+		restored.dispose();
+	});
+});

@@ -56,9 +56,9 @@ export class FurniturePreviewRenderer {
 		this.renderer.setPixelRatio(MAX_PIXEL_RATIO);
 		this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 		this.renderer.shadowMap.enabled = false;
-		this.renderer.setClearColor(0x0c1c14, 1);
+		this.renderer.setClearColor(0x171310, 1);
 
-		this.scene.background = new THREE.Color(0x0c1c14);
+		this.scene.background = new THREE.Color(0x171310);
 		this.scene.add(new THREE.HemisphereLight(0xd7efe3, 0x1c2a20, 1.35));
 		const key = new THREE.DirectionalLight(0xfff3d6, 1.55);
 		key.position.set(2.4, 3.2, 1.8);
@@ -144,8 +144,8 @@ export class FurniturePreviewRenderer {
 		const sphere = box.getBoundingSphere(new THREE.Sphere());
 		group.position.sub(center);
 		const radius = Math.max(0.6, sphere.radius);
-		this.orbitRadius = radius * 2.35;
-		this.cameraHeight = radius * 0.55;
+		this.orbitRadius = radius * 3.15;
+		this.cameraHeight = radius * 0.74;
 		this.camera.near = Math.max(0.05, radius / 40);
 		this.camera.far = Math.max(20, radius * 12);
 		this.camera.position.set(

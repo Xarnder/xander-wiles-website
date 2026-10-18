@@ -21,7 +21,12 @@
 import { hashCellToFloat01 } from '../cellHash';
 import { sampleGrassGrid, type GrassGrid } from '../grass/grassPlacement';
 import { createSurfacePoint, type SurfacePoint } from '../../terrain/terrainSurfaceLattice';
-import { plantColony, plantSuitability, type PlantEnvironment } from './plantEcology';
+import {
+	dominantFlowerAt,
+	plantColony,
+	plantSuitability,
+	type PlantEnvironment
+} from './plantEcology';
 import { speciesHash01 } from './plantPrototype';
 import {
 	PLANT_SPACING,
@@ -170,13 +175,17 @@ export function generatePlantChunk(input: PlantChunkInput): PlantChunkData {
 				env.openness = sampleGrassGrid(input.environment, x, z, ENV_OPENNESS);
 				env.wet = sampleGrassGrid(input.environment, x, z, ENV_WET);
 				env.height = surface.height;
+				const flowerSeed = dominantFlowerAt(regionSpecies, x, z, env);
 				let best = 0;
 				let total = 0;
 				let bestColony = 0;
 				for (const species of options) {
 					const kindDensity =
 						species.kind === 'flower' ? settings.flowerDensity : settings.groundPlantDensity;
-					const colony = plantColony(species, x, z);
+					const colony =
+						species.kind === 'flower' && species.seed !== flowerSeed
+							? 0
+							: plantColony(species, x, z);
 					const w =
 						colony > 0
 							? plantSuitability(species, env) *

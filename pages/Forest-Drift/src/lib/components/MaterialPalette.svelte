@@ -83,6 +83,7 @@
      to the full-screen backdrop's own "click outside to close" handler (see +page.svelte's
      `.palette-overlay`) — the panel itself has no interactive semantics of its own to expose. -->
 <div
+	data-ui-surface="panel"
 	class="palette"
 	data-testid="material-palette"
 	role="presentation"

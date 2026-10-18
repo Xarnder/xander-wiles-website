@@ -1415,6 +1415,7 @@ export class ThreeScene implements WorldRuntime {
 		);
 		this.scene.add(this.creatures.group);
 		this.removeTool = new RemoveTool({
+			trees: this.treeManager,
 			music: this.music,
 			furniture: this.furnitureManager,
 			miniBuilds: this.miniBuilds,
@@ -3465,7 +3466,7 @@ export class ThreeScene implements WorldRuntime {
 			this.collisionVisualizer.update();
 		}
 
-		this.skySystem.update(this.camera.position);
+		this.skySystem.update(this.camera.position, nowMs / 1000);
 		this.cloudSystem.setSunDirection(
 			this.cloudSunScratch
 				.copy(this.sunLight.position)

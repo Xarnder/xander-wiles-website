@@ -190,3 +190,28 @@ export class PlantEcology {
 		return species;
 	}
 }
+
+/** One flower type owns each organic patch, across all plant spacing classes.
+ * Evaluated during chunk generation only; continuous world noise keeps borders seamless. */
+export function dominantFlowerAt(
+	species: readonly PlantSpeciesDefinition[],
+	x: number,
+	z: number,
+	env: PlantEnvironment
+): number | undefined {
+	let winner: number | undefined;
+	let best = 0;
+	for (const flower of species) {
+		if (flower.kind !== 'flower') continue;
+		const score =
+			plantColony(flower, x, z) *
+			plantSuitability(flower, env) *
+			flower.growth.density *
+			(0.4 + plantValueNoise(x / 9, z / 9, flower.seed ^ 0x734f19) * 0.6);
+		if (score > best) {
+			best = score;
+			winner = flower.seed;
+		}
+	}
+	return winner;
+}

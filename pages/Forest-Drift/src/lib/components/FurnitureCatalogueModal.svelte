@@ -223,6 +223,7 @@
 {/snippet}
 
 <div
+	data-ui-backdrop
 	class="placement-backdrop"
 	role="presentation"
 	data-testid="furniture-catalogue-modal"
@@ -230,6 +231,7 @@
 	onkeydown={onBackdropKey}
 >
 	<div
+		data-ui-surface="panel"
 		class="placement-panel"
 		role="dialog"
 		tabindex="-1"

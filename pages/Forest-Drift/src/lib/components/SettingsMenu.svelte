@@ -61,6 +61,7 @@
 {/snippet}
 
 <div
+	data-ui-backdrop
 	class="settings-overlay"
 	data-testid="settings-overlay"
 	role="presentation"
@@ -68,7 +69,7 @@
 		if (event.currentTarget === event.target) onClose();
 	}}
 >
-	<div class="settings-panel" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+	<div data-ui-surface="panel" class="settings-panel" role="dialog" aria-labelledby="settings-title" aria-modal="true">
 		<header>
 			<div>
 				<p class="eyebrow">Forest Drift</p>

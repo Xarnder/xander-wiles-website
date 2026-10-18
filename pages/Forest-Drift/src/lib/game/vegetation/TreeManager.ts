@@ -57,7 +57,15 @@ const DEFAULT_QUALITY: TreeQualityProfile = {
 	surfaceDetail: 2
 };
 
+export interface TreeTrunkHit {
+	cellX: number;
+	cellZ: number;
+	bounds: THREE.Box3;
+	distance: number;
+}
+
 interface VegetationChunkRecord {
+	trunks: Omit<TreeTrunkHit, 'distance'>[];
 	chunkX: number;
 	chunkZ: number;
 	revision: number;
@@ -154,6 +162,7 @@ export class TreeManager {
 	 */
 	private removedTreeIds = new Set<string>();
 	private overrideRevision = 0;
+	private readonly pickPoint = new THREE.Vector3();
 
 	private revision = 0;
 	private lastPlayerChunkX = Number.NaN;
@@ -201,9 +210,30 @@ export class TreeManager {
 
 	/** Applied on world load, before any chunk is generated, so removed trees never appear even briefly. */
 	setRemovedTreeIds(ids: Iterable<string>): void {
-		this.removedTreeIds = new Set(ids);
+		const next = new Set(ids);
+		const changed = [...next].filter((id) => !this.removedTreeIds.has(id));
+		for (const id of this.removedTreeIds) if (!next.has(id)) changed.push(id);
+		if (changed.length === 0) return;
+		this.removedTreeIds = next;
 		this.overrideRevision++;
-		this.notifySettingsChanged();
+		const chunks = new Set<string>();
+		for (const id of changed) {
+			const [x, z] = id.split(':').map(Number);
+			if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+			const cellSize = this.settings.trees.treeCellSize;
+			const size = this.terrainSettings.chunkSize;
+			chunks.add(chunkKey(Math.floor((x * cellSize) / size), Math.floor((z * cellSize) / size)));
+		}
+		// Remote edits and restores also rebuild only changed, currently loaded chunks.
+		for (const key of chunks) {
+			const record = this.active.get(key as ChunkKey);
+			if (record)
+				this.materializeJob({
+					chunkX: record.chunkX,
+					chunkZ: record.chunkZ,
+					revision: this.revision
+				});
+		}
 	}
 
 	/** Removes one deterministic tree, permanently for this world. Returns `false` if it was already removed. */
@@ -212,8 +242,48 @@ export class TreeManager {
 		if (this.removedTreeIds.has(id)) return false;
 		this.removedTreeIds.add(id);
 		this.overrideRevision++;
-		this.notifySettingsChanged();
+		const chunkSize = this.terrainSettings.chunkSize;
+		const cellSize = this.settings.trees.treeCellSize;
+		const chunkX = Math.floor((cellX * cellSize) / chunkSize);
+		const chunkZ = Math.floor((cellZ * cellSize) / chunkSize);
+		// Rebuild only the owning chunk; other tree batches and prototypes stay intact.
+		if (this.active.has(chunkKey(chunkX, chunkZ))) {
+			this.materializeJob({ chunkX, chunkZ, revision: this.revision });
+		}
 		return true;
+	}
+
+	/** Trunk-only picking, used only while Remove Mode is active. Broad phase skips
+	 * chunks outside the short interaction range; foliage is never raycast. */
+	pickTrunk(raycaster: THREE.Raycaster): TreeTrunkHit | null {
+		if (!this.group.visible || !Number.isFinite(raycaster.far)) return null;
+		const size = this.terrainSettings.chunkSize;
+		const padding = this.settings.trees.treeCellSize;
+		const origin = raycaster.ray.origin;
+		let closest: TreeTrunkHit | null = null;
+		for (const record of this.active.values()) {
+			const x = record.chunkX * size;
+			const z = record.chunkZ * size;
+			if (
+				origin.x + raycaster.far < x - padding ||
+				origin.x - raycaster.far > x + size + padding ||
+				origin.z + raycaster.far < z - padding ||
+				origin.z - raycaster.far > z + size + padding
+			)
+				continue;
+			for (const trunk of record.trunks) {
+				if (!raycaster.ray.intersectBox(trunk.bounds, this.pickPoint)) continue;
+				const distance = origin.distanceTo(this.pickPoint);
+				if (
+					distance < raycaster.near ||
+					distance > raycaster.far ||
+					(closest && distance >= closest.distance)
+				)
+					continue;
+				closest = { ...trunk, distance };
+			}
+		}
+		return closest;
 	}
 
 	getOverrideRevision(): number {
@@ -526,6 +596,7 @@ export class TreeManager {
 			this.clearChunk(record);
 		} else {
 			record = {
+				trunks: [],
 				chunkX: job.chunkX,
 				chunkZ: job.chunkZ,
 				revision: job.revision,
@@ -554,6 +625,7 @@ export class TreeManager {
 		const debugEvaluations: CellEvaluation[] = [];
 		const planted: PlantedTree[] = [];
 		const maxTrees = Math.max(0, this.settings.trees.maxTreesPerChunk);
+		let eligibleCount = 0;
 		const sample = createHeightSample();
 
 		for (let cx = cellMinX; cx <= cellMaxX; cx++) {
@@ -562,17 +634,32 @@ export class TreeManager {
 				if (collectDebug) debugEvaluations.push(evaluation);
 				const tree = evaluation.tree;
 				if (!evaluation.accepted || !tree) continue;
-				if (planted.length >= maxTrees) continue;
-				// The world save stores *exceptions* to the deterministic forest, never the forest itself.
-				if (this.removedTreeIds.has(proceduralTreeId(cx, cz))) continue;
+				if (eligibleCount >= maxTrees) continue;
 				const crown =
 					canopyRadius(getTreeSpecies(tree.speciesId)) * tree.scale * tree.widthScale * 0.7;
 				if (this.blockedByBuilding(tree.worldX, tree.worldZ, crown)) continue;
+				// Removed trees still occupy their deterministic budget slot, so deleting at
+				// the chunk cap cannot spawn a replacement tree elsewhere in the chunk.
+				eligibleCount++;
+				if (this.removedTreeIds.has(proceduralTreeId(cx, cz))) continue;
 				this.terrainHeightSampler.sampleWithNormal(tree.worldX, tree.worldZ, sample);
 				planted.push({ tree, groundY: sample.height, normalY: sample.normalY });
 			}
 		}
 
+		record.trunks = planted.map(({ tree, groundY }) => {
+			const trunk = getTreeSpecies(tree.speciesId).trunk;
+			const radius = Math.max(0.15, trunk.radius[1] * tree.scale * tree.widthScale);
+			const height = trunk.height[0] * tree.scale;
+			return {
+				cellX: tree.cellX,
+				cellZ: tree.cellZ,
+				bounds: new THREE.Box3(
+					new THREE.Vector3(tree.worldX - radius, groundY - 0.3, tree.worldZ - radius),
+					new THREE.Vector3(tree.worldX + radius, groundY + height, tree.worldZ + radius)
+				)
+			};
+		});
 		const chunk = new TreeChunk(job.chunkX, job.chunkZ, planted);
 		record.trees = chunk;
 		this.group.add(chunk.group);
@@ -591,6 +678,7 @@ export class TreeManager {
 	}
 
 	private clearChunk(record: VegetationChunkRecord): void {
+		record.trunks = [];
 		record.trees?.dispose();
 		record.trees = null;
 		if (record.debugPoints) {

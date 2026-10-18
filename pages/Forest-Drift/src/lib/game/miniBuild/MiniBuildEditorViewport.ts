@@ -35,7 +35,7 @@ import {
 	type SnapAngle
 } from './MiniBuildTypes';
 
-const BACKGROUND = 0x262b2e;
+const BACKGROUND = 0x171310;
 const SELECT_COLOR = 0xffd166;
 const INVALID_COLOR = 0xf85149;
 const AXIS_COLORS: Record<Axis, number> = { x: 0xe5534b, y: 0x57ab5a, z: 0x539bf5 };

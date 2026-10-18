@@ -1,4 +1,5 @@
 <script lang="ts">
+	import titleMark from '$lib/assets/forest-drift-title.svg';
 	import type { SaveStatus } from '$lib/game/world/WorldTypes';
 
 	interface Props {
@@ -62,9 +63,11 @@
 	}
 </script>
 
-<div class="pause-overlay" data-testid="pause-menu">
-	<div class="pause-panel">
+<div data-ui-backdrop class="pause-overlay" data-testid="pause-menu">
+	<div data-ui-surface="panel" class="pause-panel">
 		{#if panel === 'root'}
+			<img class="pause-logo" src={titleMark} alt="Forest Drift" width="625" height="362" />
+			<p class="pause-eyebrow">TAKE A BREATHER</p>
 			<h2>Paused</h2>
 			<p class="world-line" data-testid="pause-world-name">{worldName}</p>
 			<div class="status-line" data-testid="save-status" data-status={saveStatus}>
@@ -162,6 +165,18 @@
 </div>
 
 <style>
+	.pause-logo {
+		width: 132px;
+		height: auto;
+		margin: 0 auto;
+	}
+	.pause-eyebrow {
+		text-align: center;
+		margin: 0;
+		color: var(--fd-gold);
+		font-size: 0.62rem;
+		letter-spacing: 0.18em;
+	}
 	.pause-overlay {
 		position: fixed;
 		inset: 0;

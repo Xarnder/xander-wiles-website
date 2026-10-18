@@ -119,7 +119,7 @@ export class MiniBuildThumbnailRenderer {
 
 			this.renderer.shadowMap.autoUpdate = false;
 			this.renderer.setRenderTarget(target);
-			this.renderer.setClearColor(0x183426, 1);
+			this.renderer.setClearColor(0x171310, 1);
 			this.renderer.clear(true, true, true);
 			this.renderer.render(this.scene, this.camera);
 			const pixels = new Uint8Array(this.size * this.size * 4);

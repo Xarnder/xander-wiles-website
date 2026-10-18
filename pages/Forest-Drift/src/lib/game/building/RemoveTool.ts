@@ -1,3 +1,4 @@
+import type { TreeManager, TreeTrunkHit } from '../vegetation/TreeManager';
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import { fitBoundsHighlight } from '../miniBuild/MiniBuildGhost';
 import type { MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
@@ -72,6 +73,7 @@ interface BeamPickingProxy {
 }
 
 export interface RemoveToolOptions {
+	trees?: TreeManager;
 	music?: MusicPlantPlacementTool;
 	furniture?: FurnitureManager;
 	miniBuilds?: MiniBuildSystem;
@@ -108,6 +110,8 @@ export interface RemoveToolOptions {
  */
 export class RemoveTool implements BuildTool {
 	readonly toolId: ToolId = 'remove';
+	private readonly trees?: TreeManager;
+	private treeTarget: TreeTrunkHit | null = null;
 	private music?: MusicPlantPlacementTool;
 	private furniture?: FurnitureManager;
 	private musicId?: string;
@@ -169,6 +173,7 @@ export class RemoveTool implements BuildTool {
 	private hoveredFoundationId: string | null = null;
 
 	constructor(options: RemoveToolOptions) {
+		this.trees = options.trees;
 		this.music = options.music;
 		this.furniture = options.furniture;
 		this.barriers = options.barriers;
@@ -218,6 +223,7 @@ export class RemoveTool implements BuildTool {
 		window.removeEventListener('keydown', this.handleShift);
 		window.removeEventListener('keyup', this.handleShift);
 		this.barrierTarget = null;
+		this.treeTarget = null;
 		this.musicId = undefined;
 		this.furnitureId = undefined;
 		this.miniBuildId = undefined;
@@ -253,6 +259,7 @@ export class RemoveTool implements BuildTool {
 		];
 		const hits = candidates.length > 0 ? this.raycaster.intersectObjects(candidates, false) : [];
 		const hit = hits[0];
+		this.treeTarget = null;
 		this.musicId = undefined;
 		this.furnitureId = undefined;
 		this.miniBuildId = undefined;
@@ -266,6 +273,28 @@ export class RemoveTool implements BuildTool {
 		const furnitureCloser = furnitureHit && (!hit || furnitureHit.distance < hit.distance);
 		this.barrierTarget = null;
 		const barrierHit = this.barriers?.pick(this.raycaster) ?? null;
+		const treeHit = this.trees?.pickTrunk(this.raycaster);
+		if (
+			treeHit &&
+			[hit, plantHit, furnitureHit, miniBuildHit, barrierHit].every(
+				(other) => !other || treeHit.distance < other.distance
+			)
+		) {
+			this.treeTarget = treeHit;
+			this.hoveredFoundationId = null;
+			this.setHoveredTarget(null, null);
+			treeHit.bounds.getCenter(this.furnitureHighlight.position);
+			treeHit.bounds.getSize(this.furnitureHighlight.scale);
+			this.furnitureHighlight.rotation.set(0, 0, 0);
+			this.furnitureHighlight.visible = true;
+			this.onHudChange?.({
+				toolId: 'remove',
+				crosshair: 'valid',
+				notice: 'Tree',
+				hintLines: ['REMOVE TREE', 'Aim at the trunk', 'Click / tap: remove tree', 'X: exit']
+			});
+			return;
+		}
 		if (
 			barrierHit &&
 			this.barriers &&
@@ -393,6 +422,7 @@ export class RemoveTool implements BuildTool {
 		this.hoveredKey = null;
 		this.hoveredTarget = null;
 		this.hoveredFoundationId = null;
+		this.treeTarget = null;
 		this.musicId = undefined;
 		this.furnitureId = undefined;
 		this.miniBuildId = undefined;
@@ -403,6 +433,12 @@ export class RemoveTool implements BuildTool {
 	}
 
 	onPrimaryAction(): void {
+		if (this.active && this.treeTarget && this.trees) {
+			this.trees.removeProceduralTree(this.treeTarget.cellX, this.treeTarget.cellZ);
+			this.treeTarget = null;
+			this.furnitureHighlight.visible = false;
+			return;
+		}
 		if (this.active && this.barrierTarget && this.barriers) {
 			const { id, segmentIndex } = this.barrierTarget;
 			if (this.shiftHeld) this.barriers.remove(id);
@@ -413,6 +449,7 @@ export class RemoveTool implements BuildTool {
 		}
 		if (this.active && this.musicId) {
 			this.music?.remove(this.musicId);
+			this.treeTarget = null;
 			this.musicId = undefined;
 			this.musicHighlight.visible = false;
 			return;
@@ -722,11 +759,11 @@ export class RemoveTool implements BuildTool {
 		return {
 			toolId: 'remove',
 			crosshair: 'default',
-			notice: 'Look at a building element',
+			notice: 'Look at a building element or tree trunk',
 			hintLines: [
 				'REMOVE',
 				'',
-				'Look at a building element',
+				'Look at a building element or tree trunk',
 				'Left Click: Remove one piece',
 				'Delete: whole foundation under the crosshair',
 				'X / Right Click: Exit'

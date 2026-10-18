@@ -29,9 +29,10 @@
 	}
 </script>
 
-<div class="modal-backdrop" role="presentation">
+<div data-ui-backdrop class="modal-backdrop" role="presentation">
 	{#if links}
 		<div
+			data-ui-surface="panel"
 			class="modal"
 			data-testid="publish-world-done"
 			role="dialog"
@@ -54,7 +55,7 @@
 			</div>
 		</div>
 	{:else}
-		<form class="modal" data-testid="publish-world-dialog" onsubmit={submit}>
+		<form data-ui-surface="panel" class="modal" data-testid="publish-world-dialog" onsubmit={submit}>
 			<h3>Publish &ldquo;{worldName}&rdquo; online</h3>
 			<p class="modal-hint">
 				Creates a separate online copy that friends can join with a link. Your local world stays as

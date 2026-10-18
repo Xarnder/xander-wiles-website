@@ -162,6 +162,7 @@
 </script>
 
 <div
+	data-ui-surface="start"
 	class="worlds-screen"
 	data-testid="worlds-screen"
 	class:drag-active={dragActive}
@@ -175,35 +176,49 @@
 	ondrop={handleDrop}
 >
 	<header class="worlds-header">
-		<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
-		<div class="worlds-actions">
-			<button
-				class="primary"
-				data-testid="new-world-button"
-				onclick={openCreateDialog}
-				disabled={busy}
-			>
-				+ New World
-			</button>
-			<button data-testid="import-world-button" onclick={() => fileInput?.click()} disabled={busy}>
-				Import World
-			</button>
-			{#if onJoinOnline}
-				<button data-testid="join-online-button" onclick={onJoinOnline} disabled={busy}>
-					Join Online
+		<div class="start-brand">
+			<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
+			<p class="start-tagline">Explore. Build. Make it yours.</p>
+		</div>
+		<div class="start-welcome">
+			<p class="start-eyebrow">YOUR NEXT CHAPTER</p>
+			<h1>A world of your making.</h1>
+			<p class="start-description">
+				Find a quiet corner of the forest. Build something extraordinary.
+			</p>
+			<div class="worlds-actions">
+				<button
+					class="primary"
+					data-testid="new-world-button"
+					onclick={openCreateDialog}
+					disabled={busy}
+				>
+					+ New World
 				</button>
-			{/if}
-			<input
-				bind:this={fileInput}
-				class="file-input"
-				type="file"
-				accept=".forestworld,application/zip"
-				data-testid="import-world-input"
-				onchange={(event) => {
-					handleFiles(event.currentTarget.files);
-					event.currentTarget.value = '';
-				}}
-			/>
+				<button
+					data-testid="import-world-button"
+					onclick={() => fileInput?.click()}
+					disabled={busy}
+				>
+					Import World
+				</button>
+				{#if onJoinOnline}
+					<button data-testid="join-online-button" onclick={onJoinOnline} disabled={busy}>
+						Join Online
+					</button>
+				{/if}
+				<input
+					bind:this={fileInput}
+					class="file-input"
+					type="file"
+					accept=".forestworld,application/zip"
+					data-testid="import-world-input"
+					onchange={(event) => {
+						handleFiles(event.currentTarget.files);
+						event.currentTarget.value = '';
+					}}
+				/>
+			</div>
 		</div>
 	</header>
 
@@ -220,8 +235,8 @@
 
 	<section class="default-world-section" data-testid="default-world-section">
 		<div class="section-header">
-			<h2 class="section-title">Default World</h2>
-			<span class="badge">Featured</span>
+			<h2 class="section-title">The forest awaits</h2>
+			<span class="badge">Featured world</span>
 		</div>
 
 		<div class="default-world-card" data-testid="default-world-card">
@@ -240,11 +255,14 @@
 
 			<div class="world-info">
 				<div class="world-name-row">
-					<div class="world-name" data-testid="default-world-name">{defaultWorld?.name ?? 'Main World'}</div>
+					<div class="world-name" data-testid="default-world-name">
+						{defaultWorld?.name ?? 'Main World'}
+					</div>
 					<span class="pill-tag">Always Available</span>
 				</div>
 				<p class="world-desc">
-					Explore a crafted forest outpost featuring multi-tier buildings, stairs, roofs, and scenic woods.
+					Explore a crafted forest outpost featuring multi-tier buildings, stairs, roofs, and scenic
+					woods.
 				</p>
 				<div class="world-meta subtle">
 					Seed <code>{defaultWorld?.seed ?? 'soft-lowlands-431'}</code>
@@ -518,8 +536,13 @@
 	{/if}
 
 	{#if dialog.kind === 'create'}
-		<div class="modal-backdrop" role="presentation">
-			<form class="modal" data-testid="create-world-dialog" onsubmit={submitCreate}>
+		<div data-ui-backdrop class="modal-backdrop" role="presentation">
+			<form
+				data-ui-surface="panel"
+				class="modal"
+				data-testid="create-world-dialog"
+				onsubmit={submitCreate}
+			>
 				<h3>New World</h3>
 				<label>
 					World Name
@@ -559,8 +582,13 @@
 			</form>
 		</div>
 	{:else if dialog.kind === 'rename'}
-		<div class="modal-backdrop" role="presentation">
-			<form class="modal" data-testid="rename-world-dialog" onsubmit={submitRename}>
+		<div data-ui-backdrop class="modal-backdrop" role="presentation">
+			<form
+				data-ui-surface="panel"
+				class="modal"
+				data-testid="rename-world-dialog"
+				onsubmit={submitRename}
+			>
 				<h3>Rename World</h3>
 				<label>
 					World Name
@@ -586,8 +614,8 @@
 			</form>
 		</div>
 	{:else if dialog.kind === 'delete'}
-		<div class="modal-backdrop" role="presentation">
-			<div class="modal" data-testid="delete-world-dialog">
+		<div data-ui-backdrop class="modal-backdrop" role="presentation">
+			<div data-ui-surface="panel" class="modal" data-testid="delete-world-dialog">
 				<h3>Delete &ldquo;{dialog.name}&rdquo;?</h3>
 				<p class="modal-hint">
 					This will permanently remove the locally saved world from this browser. This cannot be
@@ -618,8 +646,8 @@
 			</div>
 		</div>
 	{:else if dialog.kind === 'reset-default'}
-		<div class="modal-backdrop" role="presentation">
-			<div class="modal" data-testid="reset-default-dialog">
+		<div data-ui-backdrop class="modal-backdrop" role="presentation">
+			<div data-ui-surface="panel" class="modal" data-testid="reset-default-dialog">
 				<h3>Reset &ldquo;Main World&rdquo; to Original?</h3>
 				<p class="modal-hint">
 					This will revert any buildings and changes made in Main World back to the pristine default
@@ -781,13 +809,20 @@
 		border-radius: 14px;
 		background: linear-gradient(135deg, rgba(17, 38, 28, 0.75) 0%, rgba(10, 24, 18, 0.65) 100%);
 		border: 1px solid rgba(57, 211, 83, 0.35);
-		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(57, 211, 83, 0.08);
-		transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+		box-shadow:
+			0 8px 30px rgba(0, 0, 0, 0.4),
+			0 0 20px rgba(57, 211, 83, 0.08);
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease,
+			transform 0.2s ease;
 	}
 
 	.default-world-card:hover {
 		border-color: rgba(87, 226, 111, 0.65);
-		box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5), 0 0 26px rgba(57, 211, 83, 0.18);
+		box-shadow:
+			0 10px 36px rgba(0, 0, 0, 0.5),
+			0 0 26px rgba(57, 211, 83, 0.18);
 		transform: translateY(-1px);
 	}
 

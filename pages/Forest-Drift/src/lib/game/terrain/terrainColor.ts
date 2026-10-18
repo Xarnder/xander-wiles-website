@@ -3,8 +3,8 @@
 import { smoothstep } from './mathUtils';
 import type { BiomeWeights } from './TerrainHeightSampler';
 
-const LOW = [0.16, 0.22, 0.1];
-const MID = [0.27, 0.38, 0.17];
+const LOW = [0.12, 0.3, 0.045];
+const MID = [0.22, 0.49, 0.075];
 const HIGH = [0.52, 0.52, 0.44];
 const ROCK = [0.38, 0.36, 0.32];
 
@@ -15,9 +15,9 @@ const ROCK = [0.38, 0.36, 0.32];
  */
 export const terrainColorOptions = { groundVariation: true };
 
-const WARM_GRASS = [0.27, 0.4, 0.1];
+const WARM_GRASS = [0.24, 0.52, 0.045];
 const DRY = [0.42, 0.42, 0.2];
-const LUSH = [0.18, 0.32, 0.11];
+const LUSH = [0.1, 0.43, 0.045];
 const EARTH = [0.3, 0.23, 0.15];
 
 function latticeHash(x: number, z: number, seed: number): number {

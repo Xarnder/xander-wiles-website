@@ -53,8 +53,9 @@
 
 <svelte:window onkeydowncapture={onWindowKeyDown} />
 
-<div class="backdrop" role="presentation" onclick={onCancel}>
+<div data-ui-backdrop class="backdrop" role="presentation" onclick={onCancel}>
 	<div
+		data-ui-surface="panel"
 		class="dialog"
 		role="alertdialog"
 		aria-modal="true"

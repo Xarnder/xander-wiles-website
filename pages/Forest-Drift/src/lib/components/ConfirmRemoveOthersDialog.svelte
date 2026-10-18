@@ -51,8 +51,9 @@
 	});
 </script>
 
-<div class="modal-backdrop" role="presentation">
+<div data-ui-backdrop class="modal-backdrop" role="presentation">
 	<div
+		data-ui-surface="panel"
 		class="modal"
 		data-testid="confirm-remove-others"
 		role="alertdialog"

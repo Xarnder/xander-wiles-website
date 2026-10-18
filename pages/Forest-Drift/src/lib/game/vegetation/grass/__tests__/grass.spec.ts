@@ -503,6 +503,46 @@ describe('GrassManager streaming', () => {
 		}
 	}
 
+	it.each([
+		[0.2, 0.52],
+		[0.35, 0.9]
+	])(
+		'upgrades saved grass heights %s–%s after construction and sends them to the shader',
+		(minHeight, maxHeight) => {
+			const { manager, vegetation } = createManager();
+			// ThreeScene constructs the manager first, then loads a world's environment
+			// into the same settings object and calls setSeed (even for the same seed).
+			Object.assign(vegetation.grass, { minHeight, maxHeight });
+			manager.setSeed('grass-test');
+			settle(manager, 0, 0);
+			const material = manager.getSharedMaterials()[0];
+			const shader = {
+				uniforms: {} as Record<string, THREE.IUniform>,
+				vertexShader: '',
+				fragmentShader: ''
+			};
+			material.onBeforeCompile(
+				shader as Parameters<typeof material.onBeforeCompile>[0],
+				{} as THREE.WebGLRenderer
+			);
+			const size = shader.uniforms.uGrassSize.value as THREE.Vector4;
+			expect(size.x).toBe(0.7);
+			expect(size.x + size.y).toBeCloseTo(1.8);
+			expect(vegetation.grass.minHeight).toBe(0.7);
+			expect(vegetation.grass.maxHeight).toBe(1.8);
+			manager.dispose();
+		}
+	);
+
+	it('preserves custom heights when loading a world', () => {
+		const { manager, vegetation } = createManager();
+		Object.assign(vegetation.grass, { minHeight: 1.2, maxHeight: 2.4 });
+		manager.setSeed('grass-test');
+		expect(vegetation.grass.minHeight).toBe(1.2);
+		expect(vegetation.grass.maxHeight).toBe(2.4);
+		manager.dispose();
+	});
+
 	it('uses one mesh per chunk with shared material/atlas, and stays bounded over a long walk', () => {
 		const { manager } = createManager();
 		settle(manager, 0, 0);

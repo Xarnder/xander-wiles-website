@@ -41,8 +41,8 @@
 	}
 </script>
 
-<div class="modal-backdrop" role="presentation">
-	<form class="modal" data-testid="join-world-dialog" onsubmit={submit}>
+<div data-ui-backdrop class="modal-backdrop" role="presentation">
+	<form data-ui-surface="panel" class="modal" data-testid="join-world-dialog" onsubmit={submit}>
 		<h3>Join an online world</h3>
 		{#if !target}
 			<label>

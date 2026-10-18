@@ -85,9 +85,9 @@ const ALPINE: MaterialPaletteDefinition = {
 			gravel: '#8B8478'
 		},
 		grass: {
-			base: '#557F35',
-			dark: '#30521D',
-			light: '#82A347',
+			base: '#4A9630',
+			dark: '#245C12',
+			light: '#8BBD35',
 			dry: '#A99E5D',
 			soil: '#5A4631',
 			flower: '#E2C24A'

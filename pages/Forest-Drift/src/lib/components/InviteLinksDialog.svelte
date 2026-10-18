@@ -11,8 +11,9 @@
 	const { worldName, links, onClose }: Props = $props();
 </script>
 
-<div class="modal-backdrop" role="presentation">
+<div data-ui-backdrop class="modal-backdrop" role="presentation">
 	<div
+		data-ui-surface="panel"
 		class="modal"
 		data-testid="invite-links-dialog"
 		role="dialog"

@@ -1244,7 +1244,7 @@
 {/if}
 
 {#if screen === 'loading'}
-	<div class="loading-screen" data-testid="loading-screen">
+	<div class="loading-screen" data-ui-loading data-testid="loading-screen">
 		<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
 		<p class="loading-label">{loadingLabel}</p>
 		<div class="loading-bar"><span></span></div>
@@ -1421,9 +1421,16 @@
 			</div>
 
 			{#if showHelp}
-				<div class={['help-overlay', { 'over-menus': paused }]} data-testid="help-overlay">
-					<div class="help-panel">
-						<h2>Controls</h2>
+				<div
+					data-ui-backdrop
+					class={['help-overlay', { 'over-menus': paused }]}
+					data-testid="help-overlay"
+				>
+					<div class="help-panel" data-ui-surface="panel">
+						<header class="help-heading">
+							<div><p class="eyebrow">FIELD GUIDE</p><h2>Controls</h2></div>
+							<button class="help-close" onclick={() => (showHelp = false)}>Done</button>
+						</header>
 
 						<h3>Touch / iPad Controls</h3>
 						<dl>
@@ -1874,7 +1881,6 @@
 							</dd>
 						</dl>
 
-						<button class="help-close" onclick={() => (showHelp = false)}>Close</button>
 					</div>
 				</div>
 			{/if}
@@ -2211,6 +2217,7 @@
 				<!-- Clicking the backdrop (outside the panel) closes the palette — the panel's own root div
 		     stops propagation so a click inside it never reaches this handler. -->
 				<div
+					data-ui-backdrop
 					class="palette-overlay"
 					data-testid="palette-overlay"
 					role="presentation"
@@ -3691,6 +3698,21 @@
 		margin: 0;
 		color: #cfe8dc;
 	}
+
+	.help-heading {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem;
+		margin-bottom: 1rem;
+	}
+	.help-heading .eyebrow { margin: 0 0 .25rem; font-size: .65rem; letter-spacing: .16em; }
+	.help-heading h2 { margin: 0; }
+	.help-heading .help-close { margin: 0; }
 
 	.help-close {
 		margin-top: 1.25rem;

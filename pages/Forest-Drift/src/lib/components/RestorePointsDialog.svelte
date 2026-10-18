@@ -26,8 +26,8 @@
 	}
 </script>
 
-<div class="modal-backdrop" role="presentation">
-	<div class="modal" data-testid="restore-dialog" role="dialog" aria-labelledby="restore-title">
+<div data-ui-backdrop class="modal-backdrop" role="presentation">
+	<div data-ui-surface="panel" class="modal" data-testid="restore-dialog" role="dialog" aria-labelledby="restore-title">
 		<h3 id="restore-title">Restore &ldquo;{worldName}&rdquo;</h3>
 		<p class="hint">
 			Puts the online world back the way it was. Everything built since is undone for everyone, and

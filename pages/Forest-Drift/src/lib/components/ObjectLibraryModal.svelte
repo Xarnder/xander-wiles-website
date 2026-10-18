@@ -399,12 +399,13 @@
 {/snippet}
 
 <div
+	data-ui-backdrop
 	class="backdrop"
 	role="presentation"
 	data-testid="object-library-modal"
 	onclick={onBackdropClick}
 >
-	<div class="panel" role="dialog" aria-modal="true" aria-labelledby="object-library-title">
+	<div data-ui-surface="panel" class="panel" role="dialog" aria-modal="true" aria-labelledby="object-library-title">
 		<header>
 			<div>
 				<p class="eyebrow">PLACE OBJECT</p>

@@ -429,6 +429,7 @@
 </script>
 
 <div
+	data-ui-surface="panel"
 	class="editor"
 	data-testid="mini-build-editor"
 	role="dialog"
@@ -866,8 +867,8 @@
 	</div>
 
 	{#if namePrompt}
-		<div class="dialog-backdrop">
-			<form class="dialog" onsubmit={submitName} data-testid="mini-build-name-dialog">
+		<div data-ui-backdrop class="dialog-backdrop">
+			<form data-ui-surface="panel" class="dialog" onsubmit={submitName} data-testid="mini-build-name-dialog">
 				<h3>{namePrompt.mode === 'save-as' ? 'Save As New Design' : 'Name Your Build'}</h3>
 				<p>
 					{namePrompt.mode === 'save-as'
@@ -891,8 +892,8 @@
 	{/if}
 
 	{#if confirmDiscard}
-		<div class="dialog-backdrop">
-			<div class="dialog" role="alertdialog" data-testid="mini-build-discard-dialog">
+		<div data-ui-backdrop class="dialog-backdrop">
+			<div data-ui-surface="panel" class="dialog" role="alertdialog" data-testid="mini-build-discard-dialog">
 				<h3>Discard changes?</h3>
 				<p>Your changes to this build have not been saved.</p>
 				<div class="dialog-actions">
