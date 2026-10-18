@@ -1,4 +1,5 @@
 import {
+	PLAYER_COLOURS,
 	PLAYER_ROLES,
 	isTokenShaped,
 	sanitizeColour,
@@ -20,19 +21,8 @@ const STORAGE_KEYS = {
 	worlds: 'forest-drift-mp-worlds'
 } as const;
 
-/** Bright, distinct avatar colours that read well against forest greens and sky blues. */
-export const AVATAR_COLOURS = [
-	'#e4572e',
-	'#f3a712',
-	'#e83f6f',
-	'#7b2cbf',
-	'#2e86ab',
-	'#ffd166',
-	'#ff7f51',
-	'#c1121f',
-	'#3a86ff',
-	'#f15bb5'
-] as const;
+/** The colours offered when joining: the first dozen of the shared palette (see `PLAYER_COLOURS`). */
+export const AVATAR_COLOURS = PLAYER_COLOURS.slice(0, 12);
 
 export interface PlayerIdentity {
 	playerId: string;

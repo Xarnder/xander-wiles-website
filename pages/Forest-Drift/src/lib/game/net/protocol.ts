@@ -38,6 +38,35 @@ export const GENERATOR_VERSION = 1;
 /** Locked decision Q19: 20 players per world at launch. */
 export const MAX_PLAYERS_PER_WORLD = 20;
 
+/**
+ * Twenty clearly different player colours, one per possible player, chosen to stay distinct from
+ * each other and from forest greens and sky blues. Players pick from the first dozen; when two pick
+ * the same one, the room gives the later one the first colour nobody is using, so every avatar —
+ * and its dot on the locator bar — can be told apart.
+ */
+export const PLAYER_COLOURS = [
+	'#e6194b',
+	'#f58231',
+	'#ffe119',
+	'#bfef45',
+	'#42d4f4',
+	'#4363d8',
+	'#911eb4',
+	'#f032e6',
+	'#fabed4',
+	'#469990',
+	'#dcbeff',
+	'#ffffff',
+	'#9a6324',
+	'#800000',
+	'#aaffc3',
+	'#808000',
+	'#ffd8b1',
+	'#000075',
+	'#a9a9a9',
+	'#fffac8'
+] as const;
+
 /** How often the room flushes batched snapshots while anyone is moving. */
 export const ROOM_TICK_MS = 50;
 

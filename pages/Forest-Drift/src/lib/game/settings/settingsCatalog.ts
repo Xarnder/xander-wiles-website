@@ -3383,6 +3383,13 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'showFpsCounter',
 						actions.graphicsFpsCounter
 					),
+					boolField(
+						'graphics.locatorBar',
+						'Show locator bar (online worlds)',
+						graphics,
+						'showLocatorBar',
+						actions.graphicsLocatorBar
+					),
 					numberField(
 						'graphics.fov',
 						'Field of view (°)',

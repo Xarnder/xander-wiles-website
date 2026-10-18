@@ -56,6 +56,7 @@
 	import { version as appVersion } from '$app/environment';
 	import ConfirmRemoveOthersDialog from '$lib/components/ConfirmRemoveOthersDialog.svelte';
 	import InviteLinksDialog from '$lib/components/InviteLinksDialog.svelte';
+	import LocatorBar from '$lib/components/LocatorBar.svelte';
 	import RestorePointsDialog from '$lib/components/RestorePointsDialog.svelte';
 	import JoinWorldDialog from '$lib/components/JoinWorldDialog.svelte';
 	import OnlineStatus from '$lib/components/OnlineStatus.svelte';
@@ -226,6 +227,8 @@
 	let mpBuildLock = $state<BuildLock>(null);
 	/** This player's changes are on their way to the room. */
 	let mpSaving = $state(false);
+	/** The locator bar's element, handed to the multiplayer session to place markers in. */
+	let locatorElement = $state<HTMLDivElement | null>(null);
 	/** F2-B: a deletion that would take other people's additions with it, waiting for an answer. */
 	let removeOthersPrompt = $state<{
 		items: DeletionItem[];
@@ -290,6 +293,10 @@
 
 	$effect(() => {
 		if (session) session.scene.simulationPaused = clockBlocked();
+	});
+
+	$effect(() => {
+		multiplayerSession?.setLocatorElement(locatorElement);
 	});
 
 	// Q12: in an online world, the pause menu (and any other overlay) shows us as away to others while
@@ -2166,6 +2173,7 @@
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
 			{#if onlineWorld}
+				<LocatorBar bind:element={locatorElement} />
 				<OnlineStatus
 					worldName={onlineWorld.name}
 					status={mpStatus}

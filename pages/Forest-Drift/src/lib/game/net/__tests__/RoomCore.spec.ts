@@ -18,6 +18,7 @@ import {
 	CLOSE_CODES,
 	GENERATOR_VERSION,
 	GRACE_PERIOD_MS,
+	PLAYER_COLOURS,
 	MESSAGE_TYPE,
 	POSE_FLAGS,
 	PROTOCOL_VERSION,
@@ -181,7 +182,8 @@ describe('RoomCore handshake', () => {
 			playerId: 'player-bbbb',
 			slot: 1,
 			name: 'Bea',
-			colour: '#336699',
+			// Alex already has the test colour, so Bea gets the first free palette colour.
+			colour: PLAYER_COLOURS[0],
 			role: 'viewer',
 			away: false
 		});
@@ -268,6 +270,25 @@ describe('RoomCore handshake', () => {
 		await hello(room, impostor, 'player-victim', { name: 'Impostor' });
 		expect(impostor.closed?.code).toBe(CLOSE_CODES.alreadyConnected);
 		expect(victim.closed).toBeNull();
+	});
+
+	it('gives a player whose colour is taken the first free palette colour', async () => {
+		const { room } = setup();
+		const a = new FakeConnection();
+		const b = new FakeConnection();
+		await hello(room, a, 'player-aaaa');
+		await hello(room, b, 'player-bbbb');
+		const colours = b.last('welcome')!.players.map((player) => player.colour);
+		expect(colours[0]).toBe('#336699');
+		expect(colours[1]).toBe(PLAYER_COLOURS[0]);
+		expect(new Set(colours).size).toBe(2);
+		// The same player coming back keeps their own colour.
+		room.onClose(a, 1006);
+		const again = new FakeConnection();
+		await hello(room, again, 'player-aaaa', { capability: a.last('welcome')!.capability });
+		expect(again.last('welcome')!.players.find((p) => p.playerId === 'player-aaaa')!.colour).toBe(
+			'#336699'
+		);
 	});
 
 	it('gives duplicate names a suffix', async () => {

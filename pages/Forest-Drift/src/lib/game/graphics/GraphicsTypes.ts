@@ -339,6 +339,11 @@ export interface GraphicsSettings {
 	 * On by default; Graphics → Show FPS counter turns it off. Remembered per browser.
 	 */
 	showFpsCounter: boolean;
+	/**
+	 * Online worlds: the strip across the top showing which way other players are. On by default;
+	 * Graphics → Show locator bar turns it off. Remembered per browser.
+	 */
+	showLocatorBar: boolean;
 	/** Live-tunable GTAO look parameters — see `AoTuning`'s own doc comment. */
 	aoTuning: AoTuning;
 	/** Procedural PBR materials on buildings and terrain (see `materials/`). Off = the original flat-colour look, kept for comparison and for very weak devices. */
@@ -408,6 +413,7 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		toneMappingExposure: 1.0,
 		showRenderStats: false,
 		showFpsCounter: true,
+		showLocatorBar: true,
 		aoTuning: createDefaultAoTuning(),
 		proceduralMaterials: true,
 		antiTiling: true,

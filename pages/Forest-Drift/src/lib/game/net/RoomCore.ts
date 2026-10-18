@@ -9,6 +9,7 @@ import {
 	MESSAGE_TYPE,
 	POSE_BYTES,
 	POSE_FLAGS,
+	PLAYER_COLOURS,
 	PROTOCOL_VERSION,
 	ROOM_TICK_MS,
 	binaryMessageType,
@@ -552,7 +553,7 @@ export class RoomCore {
 			slot: existing?.info.slot ?? this.freeSlot()!,
 			playerId: hello.playerId,
 			name: this.uniqueName(name, hello.playerId),
-			colour,
+			colour: this.uniqueColour(colour, hello.playerId),
 			role: auth.role,
 			away: false,
 			offline: false
@@ -952,6 +953,20 @@ export class RoomCore {
 		const used = new Set([...this.players.values()].map((player) => player.info.slot));
 		for (let slot = 0; slot < this.maxPlayers; slot++) if (!used.has(slot)) return slot;
 		return null;
+	}
+
+	/**
+	 * Two players with the same colour can't be told apart (in the world or on the locator bar), so
+	 * the later one gets the first palette colour nobody here is using.
+	 */
+	private uniqueColour(colour: string, playerId: string): string {
+		const taken = new Set(
+			[...this.players.values()]
+				.filter((player) => player.info.playerId !== playerId)
+				.map((player) => player.info.colour)
+		);
+		if (!taken.has(colour)) return colour;
+		return PLAYER_COLOURS.find((candidate) => !taken.has(candidate)) ?? colour;
 	}
 
 	/** Locked decision Q6: duplicate names in one world get a suffix, e.g. "Sam (2)". */

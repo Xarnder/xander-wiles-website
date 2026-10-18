@@ -84,6 +84,8 @@ export interface GameSettingsActions {
 	graphicsFieldOfView?: () => void;
 	/** FPS counter checkbox (applies live; saved per browser). */
 	graphicsFpsCounter?: () => void;
+	/** Locator bar checkbox (applies live; saved per browser). */
+	graphicsLocatorBar?: () => void;
 	graphicsExposure: () => void;
 	graphicsAo: () => void;
 	graphicsExport: () => void;

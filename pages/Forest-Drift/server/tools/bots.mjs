@@ -23,6 +23,30 @@
  * `wrangler dev` (same machine clock); against a deployed room it's as good as this machine's clock.
  */
 
+/** The game's player colours (src/lib/game/net/protocol.ts PLAYER_COLOURS). */
+const PALETTE = [
+	'#e6194b',
+	'#f58231',
+	'#ffe119',
+	'#bfef45',
+	'#42d4f4',
+	'#4363d8',
+	'#911eb4',
+	'#f032e6',
+	'#fabed4',
+	'#469990',
+	'#dcbeff',
+	'#ffffff',
+	'#9a6324',
+	'#800000',
+	'#aaffc3',
+	'#808000',
+	'#ffd8b1',
+	'#000075',
+	'#a9a9a9',
+	'#fffac8'
+];
+
 const args = parseArgs(process.argv.slice(2));
 const server = (args.server ?? 'http://localhost:8787').replace(/\/+$/, '');
 const worldId = args.world;
@@ -47,7 +71,9 @@ if (!snapshotResponse.ok) {
 	console.error(`Could not load world ${worldId}: HTTP ${snapshotResponse.status}`);
 	process.exit(1);
 }
-const { manifest, world } = await snapshotResponse.json();
+const { manifest, base, world: legacyWorld } = await snapshotResponse.json();
+// The world's spawn lives in its base record (Phase 3 snapshots), or the whole world (older ones).
+const world = base ?? legacyWorld ?? {};
 const [centerX, centerZ] = args.center
 	? args.center.split(',').map(Number)
 	: [world.player?.position?.x ?? 0, world.player?.position?.z ?? 0];
@@ -106,7 +132,8 @@ async function startBot(index) {
 				generatorVersion: manifest.generatorVersion,
 				playerId: `bot-${index.toString().padStart(3, '0')}-${Math.random().toString(36).slice(2, 10)}`,
 				name: `Bot ${index + 1}`,
-				colour: '#8a9a92'
+				// A different palette colour per bot, like real players get.
+				colour: PALETTE[index % PALETTE.length]
 			});
 			socket.send(hello);
 			bot.bytesOut += hello.length;

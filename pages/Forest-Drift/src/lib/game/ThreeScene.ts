@@ -654,6 +654,7 @@ export class ThreeScene implements WorldRuntime {
 		this.graphicsSettings = createDefaultGraphicsSettings();
 		if (savedGraphicsQuality) this.graphicsSettings.quality = savedGraphicsQuality;
 		this.graphicsSettings.showFpsCounter = this.graphicsSettingsStore.getShowFpsCounter();
+		this.graphicsSettings.showLocatorBar = this.graphicsSettingsStore.getShowLocatorBar();
 		this.graphicsSettings.fieldOfView = clampFieldOfView(
 			this.graphicsSettingsStore.getFieldOfView() ?? this.graphicsSettings.fieldOfView
 		);
@@ -1705,6 +1706,9 @@ export class ThreeScene implements WorldRuntime {
 					this.graphicsSettingsStore.setShowFpsCounter(this.graphicsSettings.showFpsCounter);
 					this.emitStats();
 				},
+				graphicsLocatorBar: () => {
+					this.graphicsSettingsStore.setShowLocatorBar(this.graphicsSettings.showLocatorBar);
+				},
 				graphicsExposure: () =>
 					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
 				graphicsAo: () => this.graphicsPipeline.refreshAoTuning(),
@@ -1788,7 +1792,8 @@ export class ThreeScene implements WorldRuntime {
 				world: this.sharedWorldPort(),
 				setDoorOpen: (id, open) => this.doorInteraction.setOpen(id, open),
 				restorePlayer: (bookmark) => this.restoreBookmark(bookmark),
-				setBuildingLocked: (locked) => this.setBuildingLocked(locked)
+				setBuildingLocked: (locked) => this.setBuildingLocked(locked),
+				showLocatorBar: () => this.graphicsSettings.showLocatorBar
 			});
 		}
 		this.animationFrameId = requestAnimationFrame(this.animate);

@@ -1,10 +1,12 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
+import { LocatorBar } from '../hud/LocatorBar';
 import { createId, type PlayerIdentity } from './mpConfig';
 import { webSocketUrl } from './mpConfig';
 import { NetDiagnostics, type NetDiagnosticsReport } from './NetDiagnostics';
 import { NetSession, type NetStats, type NetStatus, type WelcomeInfo } from './NetSession';
 import {
 	MAX_ENV_JSON_BYTES,
+	POSE_FLAGS,
 	OFFLINE_EDIT_OPS,
 	OFFLINE_EDIT_SECONDS,
 	type PlayerBookmark,
@@ -40,6 +42,8 @@ export interface SceneMultiplayerContext {
 	restorePlayer: (bookmark: PlayerBookmark) => void;
 	/** Building on/off for this player (visitor, not yet joined, or offline too long). */
 	setBuildingLocked: (locked: boolean) => void;
+	/** Settings → Graphics → Show locator bar. */
+	showLocatorBar: () => boolean;
 }
 
 /** The local player's state after `FirstPersonController.update`, each rendered frame. */
@@ -124,6 +128,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private lock: BuildLock = 'joining';
 	private resyncing = false;
 	private saving = false;
+	private readonly locator = new LocatorBar();
+	private localFeetY = 0;
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
@@ -207,6 +213,16 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.net.setAway(away);
 	}
 
+	/** The HUD's locator bar element (null when it's not on screen). */
+	setLocatorElement(element: HTMLElement | null): void {
+		this.locator.attach(element);
+	}
+
+	/** For tests: markers currently on the locator bar. */
+	get locatorMarkers(): number {
+		return this.locator.visibleCount;
+	}
+
 	/** Test hook: the connection dies the way a lost network kills it (the room isn't told). */
 	simulateNetworkDrop(): void {
 		this.net.simulateNetworkDrop();
@@ -243,6 +259,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	}
 
 	afterControllerUpdate(local: LocalPlayerFrame): void {
+		this.localFeetY = local.eyeY - local.eyeHeight;
 		this.net.samplePose({
 			x: local.x,
 			feetY: local.eyeY - local.eyeHeight,
@@ -262,11 +279,19 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			this.options.onSaving?.(saving);
 		}
 		if (!this.avatars || !this.context) return;
-		this.avatars.update(
-			this.net.remoteFrames(deltaSeconds * 1000),
-			deltaSeconds,
-			this.context.camera
-		);
+		const views = this.net.remoteFrames(deltaSeconds * 1000);
+		this.avatars.update(views, deltaSeconds, this.context.camera);
+		const camera = this.context.camera;
+		if (camera instanceof THREE.PerspectiveCamera) {
+			this.locator.setEnabled(this.context.showLocatorBar());
+			this.locator.beginFrame(camera, this.localFeetY);
+			for (const { info, frame } of views) {
+				const dim =
+					info.away || info.offline || frame.stale || (frame.flags & POSE_FLAGS.away) !== 0;
+				this.locator.place(info.playerId, frame.x, frame.y, frame.z, info.colour, info.name, dim);
+			}
+			this.locator.endFrame();
+		}
 	}
 
 	roomSeconds(): number | null {
@@ -293,6 +318,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		// still sends it (the socket closes right after, deliberately).
 		this.feed?.flushLocal();
 		this.net.dispose();
+		this.locator.dispose();
 		this.avatars?.dispose();
 		this.avatars = null;
 		this.context = null;
