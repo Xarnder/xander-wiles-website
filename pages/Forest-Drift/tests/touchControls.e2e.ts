@@ -6,6 +6,10 @@ test.describe('Touch / iPad Controls', () => {
 		const pageErrors: string[] = [];
 		page.on('pageerror', (error) => pageErrors.push(error.message));
 
+		// This checks controls/layout, not GPU performance. Keep shader compilation and rendering
+		// from consuming the test deadline on software-rendered CI browsers.
+		await page.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
+
 		// Load with touch enabled
 		await page.goto('/?touch=1');
 
@@ -186,13 +190,16 @@ test.describe('Touch / iPad Controls', () => {
 		const doorClusterBtn = page.getByTestId('touch-door-cluster-btn');
 		await expect(doorHoverBtn).toBeVisible();
 		await expect(doorHoverBtn).toContainText('Open Door');
-		await expect(doorHoverBtn.locator('img')).toHaveAttribute('src', /(open.*\.svg|data:image\/svg\+xml)/);
+		await expect(doorHoverBtn.locator('img')).toHaveAttribute(
+			'src',
+			/(open.*\.svg|data:image\/svg\+xml)/
+		);
 		await expect(doorClusterBtn).toBeVisible();
 		await expect(doorClusterBtn).toContainText('Open Door');
 
 		// Capture screenshot with the contextual door hover button visible
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/touch_door_hover_screenshot.png'
+			path: test.info().outputPath('touch_door_hover_screenshot.png')
 		});
 
 		// Clear door hover state
@@ -203,7 +210,7 @@ test.describe('Touch / iPad Controls', () => {
 
 		// Capture screenshot of the gameplay screen with raised UI elements
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/touch_controls_screenshot.png'
+			path: test.info().outputPath('touch_controls_screenshot.png')
 		});
 
 		// --- Test Phone Landscape (e.g. iPhone 13/14 landscape 844x390) ---
@@ -236,7 +243,7 @@ test.describe('Touch / iPad Controls', () => {
 		}
 
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_landscape_screenshot.png'
+			path: test.info().outputPath('phone_landscape_screenshot.png')
 		});
 
 		// Switch to Stairs tool (which has rich options: railings, framing, hole, width, color)
@@ -267,7 +274,7 @@ test.describe('Touch / iPad Controls', () => {
 		expect(shortScrolled).toBeGreaterThan(0);
 
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_landscape_edit_modal.png'
+			path: test.info().outputPath('phone_landscape_edit_modal.png')
 		});
 
 		await closeCustomiseBtn.click();
@@ -289,7 +296,7 @@ test.describe('Touch / iPad Controls', () => {
 		expect(portraitBox.y + portraitBox.height).toBeLessThan(portraitActionsBox.y);
 
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_portrait_screenshot.png'
+			path: test.info().outputPath('phone_portrait_screenshot.png')
 		});
 
 		// In constrained portrait viewport (e.g. 390x600 phone with keyboard or browser bars):
@@ -313,7 +320,7 @@ test.describe('Touch / iPad Controls', () => {
 		expect(portraitScrolled).toBeGreaterThan(0);
 
 		await page.screenshot({
-			path: '/Users/xanderwiles/.gemini/antigravity-ide/brain/c76a6ac6-8fac-473c-a095-69a31c283f0c/phone_portrait_edit_modal.png'
+			path: test.info().outputPath('phone_portrait_edit_modal.png')
 		});
 
 		await closeCustomiseBtn.click();
