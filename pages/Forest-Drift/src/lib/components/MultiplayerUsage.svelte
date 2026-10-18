@@ -203,16 +203,33 @@
 		margin: 0.15rem 0;
 	}
 	progress {
+		appearance: none;
 		width: 100%;
 		height: 0.6rem;
-		accent-color: #65db9a;
+		border: 0;
+		border-radius: 99px;
+		background: #30493d;
+		color: var(--usage-fill, #65db9a);
 	}
-	[data-level='warning'] progress {
-		accent-color: #ffcf69;
+	progress::-webkit-progress-bar {
+		background: #30493d;
+		border-radius: 99px;
 	}
-	[data-level='critical'] progress {
-		accent-color: #ff8f8f;
+	progress::-webkit-progress-value {
+		background: var(--usage-fill, #65db9a);
+		border-radius: 99px;
 	}
+	progress::-moz-progress-bar {
+		background: var(--usage-fill, #65db9a);
+		border-radius: 99px;
+	}
+	[data-level='warning'] {
+		--usage-fill: #ffcf69;
+	}
+	[data-level='critical'] {
+		--usage-fill: #ff8f8f;
+	}
+
 	.warning {
 		color: #ffcf69;
 	}
