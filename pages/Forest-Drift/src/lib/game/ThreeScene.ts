@@ -1794,6 +1794,7 @@ export class ThreeScene implements WorldRuntime {
 				scene: this.scene,
 				camera: this.camera,
 				registerMaterial: (material) => this.graphicsPipeline.registerMaterial(material),
+				excludeFromAo: (object) => this.graphicsPipeline.excludeFromAo(object),
 				environment: {
 					capture: () => this.captureSharedEnvironment(),
 					apply: (env) => this.applySharedEnvironment(env)

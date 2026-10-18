@@ -33,6 +33,8 @@ export interface SceneMultiplayerContext {
 	camera: THREE.Camera;
 	/** Registers a lit material with the shadow pipeline (see `GraphicsPipeline.registerMaterial`). */
 	registerMaterial: (material: THREE.Material) => void;
+	/** Exclude camera-facing name tags from the solid depth/normal pass; returns cleanup. */
+	excludeFromAo: (object: THREE.Object3D) => () => void;
 	environment: SharedEnvironmentPort;
 	/** The authored world, for shared building (Phase 3). */
 	world: SharedWorldPort;
@@ -230,7 +232,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 
 	attach(context: SceneMultiplayerContext): void {
 		this.context = context;
-		this.avatars = new RemoteAvatarRenderer(context.registerMaterial);
+		this.avatars = new RemoteAvatarRenderer(context.registerMaterial, context.excludeFromAo);
 		context.scene.add(this.avatars.group);
 		context.setBuildingLocked(true);
 		this.feed = new WorldOpFeed({

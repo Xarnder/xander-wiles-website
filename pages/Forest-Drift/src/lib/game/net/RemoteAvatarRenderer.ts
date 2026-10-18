@@ -18,6 +18,7 @@ interface Avatar {
 	label: THREE.Sprite;
 	labelTexture: THREE.CanvasTexture;
 	labelMaterial: THREE.SpriteMaterial;
+	releaseLabelAo: () => void;
 	bodyMaterial: THREE.MeshStandardMaterial;
 	headMaterial: THREE.MeshStandardMaterial;
 	name: string;
@@ -47,7 +48,10 @@ export class RemoteAvatarRenderer {
 	});
 	private readonly cameraPosition = new THREE.Vector3();
 
-	constructor(private readonly registerMaterial: (material: THREE.Material) => void) {
+	constructor(
+		private readonly registerMaterial: (material: THREE.Material) => void,
+		private readonly excludeFromAo: (object: THREE.Object3D) => () => void
+	) {
 		this.group.name = 'remote-players';
 		this.registerMaterial(this.visorMaterial);
 	}
@@ -137,12 +141,19 @@ export class RemoteAvatarRenderer {
 		const labelMaterial = new THREE.SpriteMaterial({
 			map: labelTexture,
 			transparent: true,
-			depthWrite: false
+			depthWrite: false,
+			// Names are UI: keep their white lettering independent of scene exposure and fog.
+			toneMapped: false,
+			fog: false
 		});
 		const label = new THREE.Sprite(labelMaterial);
 		label.position.y = LABEL_HEIGHT;
 		label.renderOrder = 10;
 		root.add(label);
+		// GTAO replaces sprite materials with a solid normal/depth material. That replacement
+		// ignores the label texture and billboarding, darkening the whole card from behind.
+		// Keep the label in the colour pass only; the avatar still receives normal scene shading.
+		const releaseLabelAo = this.excludeFromAo(label);
 
 		const avatar: Avatar = {
 			root,
@@ -151,6 +162,7 @@ export class RemoteAvatarRenderer {
 			label,
 			labelTexture,
 			labelMaterial,
+			releaseLabelAo,
 			bodyMaterial,
 			headMaterial,
 			name: '',
@@ -200,6 +212,7 @@ export class RemoteAvatarRenderer {
 	}
 
 	private disposeAvatar(avatar: Avatar): void {
+		avatar.releaseLabelAo();
 		avatar.root.removeFromParent();
 		avatar.bodyMaterial.dispose();
 		avatar.headMaterial.dispose();

@@ -165,8 +165,9 @@ export class GraphicsPipeline {
 	 * effects — particles, rain, lightning — which GTAO would otherwise render as solid surfaces and
 	 * darken the world around (a dark halo round every raindrop and bolt).
 	 */
-	excludeFromAo(object: THREE.Object3D): void {
+	excludeFromAo(object: THREE.Object3D): () => void {
 		this.aoExcluded.add(object);
+		return () => this.aoExcluded.delete(object);
 	}
 
 	/** Smoothed frame rate and the target — other systems (weather) scale themselves down first. */
