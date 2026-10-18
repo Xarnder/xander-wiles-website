@@ -2,6 +2,9 @@ import type { WorldRoom } from './WorldRoom';
 
 export interface Env {
 	WORLD_ROOM: DurableObjectNamespace<WorldRoom>;
+	/** Server-only, Account Analytics Read. Never forward to clients. */
+	CLOUDFLARE_ANALYTICS_TOKEN?: string;
+	CLOUDFLARE_ACCOUNT_ID?: string;
 	/**
 	 * Locked decision Q2-A: only the admin publishes worlds. Set with `wrangler secret put ADMIN_SECRET`
 	 * in production and in `.dev.vars` locally. Publishing is refused while it is unset.

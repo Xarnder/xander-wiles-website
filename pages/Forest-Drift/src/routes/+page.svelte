@@ -2414,6 +2414,11 @@
 	</div>
 	<SessionPanels
 		debugOpen={debugControlsOpen}
+		usageAccess={onlineWorld && mpServer ? {
+			server: mpServer, worldId: onlineWorld.worldId,
+			invite: onlineWorlds.find((entry) => entry.worldId === onlineWorld?.worldId)?.invite ?? '',
+			owner: mpRole === 'owner'
+		} : null}
 		multiplayerOpen={multiplayerMenuOpen}
 		bind:exampleMovement
 		players={mpPlayers}

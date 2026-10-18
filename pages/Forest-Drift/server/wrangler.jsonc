@@ -11,6 +11,7 @@
 	},
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["WorldRoom"] }],
 	"vars": {
+		"CLOUDFLARE_ACCOUNT_ID": "486cee976614a9cd516317f5ce022092",
 		"ALLOWED_ORIGINS": "https://xanderwiles.com,https://www.xanderwiles.com"
 	}
 }

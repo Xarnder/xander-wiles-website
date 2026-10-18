@@ -384,11 +384,12 @@ export class WorldRoom extends DurableObject<Env> {
 			return this.snapshotResponse(manifest);
 		}
 
-		if (/\/(export|restore-points|restore)$/.test(url.pathname)) {
+		if (/\/(export|restore-points|restore|usage)$/.test(url.pathname)) {
 			const token = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
 			if ((await this.roleForInvite(token)) !== 'owner') {
 				return Response.json({ error: 'Only the owner can do that.' }, { status: 403 });
 			}
+			if (url.pathname.endsWith('/usage')) return new Response(null, { status: 204 });
 			if (url.pathname.endsWith('/export')) {
 				return new Response(this.exportWorld(), {
 					headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }

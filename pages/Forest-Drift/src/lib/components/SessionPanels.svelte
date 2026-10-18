@@ -1,7 +1,10 @@
 <script lang="ts">
+	import MultiplayerUsage from './MultiplayerUsage.svelte';
+	import type { UsageAccess } from '$lib/game/net/CloudflareUsage';
 	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
 	interface Props {
 		debugOpen: boolean;
+		usageAccess: UsageAccess | null;
 		multiplayerOpen: boolean;
 		exampleMovement: boolean;
 		players: PlayerInfo[];
@@ -13,6 +16,7 @@
 	}
 	let {
 		debugOpen,
+		usageAccess,
 		multiplayerOpen,
 		exampleMovement = $bindable(false),
 		players,
@@ -104,6 +108,7 @@
 	</header>
 	{#if online}
 		<p>{status} · {players.length} / 20 players</p>
+		{#if multiplayerOpen}<MultiplayerUsage access={usageAccess} />{/if}
 		<ul>
 			{#each players as player (player.playerId)}
 				<li data-testid="multiplayer-member">

@@ -3,6 +3,7 @@ import { MAX_WORLD_JSON_BYTES, isValidWorldId } from '../../src/lib/game/net/pro
 import { maxSpeedForRunSpeed } from '../../src/lib/game/net/RoomCore';
 import type { Env } from './env';
 import { isRecord, readLimitedBody } from './http';
+import { getUsage } from './usage';
 import type { WorldAccess, WorldManifest } from './WorldRoom';
 
 export { WorldRoom } from './WorldRoom';
@@ -34,7 +35,9 @@ export default {
 		if (url.pathname === '/health') return json({ ok: true }, 200, cors);
 		if (url.pathname === '/w' && request.method === 'POST') return publish(request, env, cors);
 
-		const match = /^\/w\/([^/]+)\/(snapshot|ws|export|restore-points|restore)$/.exec(url.pathname);
+		const match = /^\/w\/([^/]+)\/(snapshot|ws|export|restore-points|restore|usage)$/.exec(
+			url.pathname
+		);
 		if (match && isValidWorldId(match[1])) {
 			const room = env.WORLD_ROOM.get(env.WORLD_ROOM.idFromName(match[1]), {
 				locationHint: 'weur'
@@ -51,6 +54,7 @@ export default {
 					body
 				})
 			);
+			if (match[2] === 'usage' && response.ok) return json(await getUsage(env), 200, cors);
 			return withHeaders(response, cors);
 		}
 

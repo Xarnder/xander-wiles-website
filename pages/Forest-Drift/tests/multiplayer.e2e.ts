@@ -233,9 +233,37 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 
 	// Pause exposes live roles, then a sidebar that leaves rendering and network movement running.
 	await owner.getByTestId('pause-toggle').click();
+	await owner.route('**/w/*/usage', async (route) =>
+		route.fulfill({
+			json: {
+				status: 'ok',
+				asOf: '2026-10-18T12:00:00Z',
+				periodStart: '2026-10-18T00:00:00Z',
+				resetsAt: '2026-10-19T00:00:00Z',
+				stale: false,
+				metrics: [
+					{
+						id: 'rowsWritten',
+						label: 'Database rows written',
+						used: 95_000,
+						limit: 100_000,
+						unit: 'rows',
+						period: 'day'
+					}
+				]
+			}
+		})
+	);
 	await owner.getByTestId('pause-multiplayer').click();
 	await expect(owner.getByTestId('multiplayer-menu')).toBeVisible();
 	await expect(owner.getByTestId('multiplayer-member')).toHaveCount(2);
+	await expect(owner.getByTestId('usage-summary')).toContainText('Near the free allowance');
+	await expect(owner.getByTestId('usage-rowsWritten')).toContainText('95.0%');
+	await expect(owner.getByRole('progressbar', { name: 'Database rows written' })).toHaveAttribute(
+		'value',
+		'95'
+	);
+
 	await expect(
 		owner.getByTestId('multiplayer-member').filter({ hasText: 'Visitor' })
 	).toContainText('Cannot build');

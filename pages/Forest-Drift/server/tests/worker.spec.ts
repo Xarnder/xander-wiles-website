@@ -52,3 +52,33 @@ describe('multiplayer HTTP routes', () => {
 		expect(denied.status).toBe(403);
 	});
 });
+
+describe('usage endpoint authentication', () => {
+	it('checks the world owner before accessing analytics or returning cached totals', async () => {
+		const roomFetch = vi.fn().mockResolvedValue(new Response('Owner only', { status: 403 }));
+		const config = {
+			...env,
+			WORLD_ROOM: { idFromName: (id: string) => id, get: () => ({ fetch: roomFetch }) }
+		} as unknown as Env;
+		const response = await worker.fetch(
+			new Request('https://room.test/w/b2c19e1b-3992-47df-bdc6-af40307a8988/usage'),
+			config
+		);
+		expect(response.status).toBe(403);
+		expect(await response.text()).toBe('Owner only');
+	});
+	it('returns explicit unavailable state to an authenticated owner when not configured', async () => {
+		const roomFetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+		const config = {
+			...env,
+			WORLD_ROOM: { idFromName: (id: string) => id, get: () => ({ fetch: roomFetch }) }
+		} as unknown as Env;
+		const response = await worker.fetch(
+			new Request('https://room.test/w/b2c19e1b-3992-47df-bdc6-af40307a8988/usage'),
+			config
+		);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ status: 'unavailable', metrics: [] });
+		expect(response.headers.get('Cache-Control')).toBe('no-store');
+	});
+});
