@@ -41,7 +41,8 @@ let avatars: RemoteAvatarRenderer | null = null;
 					name: 'Player Test',
 					colour: '#e6194b',
 					role: 'editor',
-					away: false
+					away: false,
+					offline: false
 				},
 				frame: { x: 0, y: 0, z: 0, yaw, pitch: 0, speed: 0, flags: 0, stale: false }
 			}
