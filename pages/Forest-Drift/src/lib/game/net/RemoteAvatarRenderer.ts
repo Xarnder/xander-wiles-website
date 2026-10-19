@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { RemotePlayerView } from './NetSession';
 import { POSE_FLAGS } from './protocol';
+import { CharacterAssetCache } from '../characters/CharacterAssetCache';
+import { CharacterInstance, type CharacterSurface } from '../characters/CharacterInstance';
 
 /** Stride length of the walk cycle, m: one full bob cycle covers two steps. */
 const STRIDE = 1.5;
@@ -12,6 +14,8 @@ const LABEL_WORLD_HEIGHT = 0.3;
 const DRAW_DISTANCE = 600;
 
 interface Avatar {
+	character: CharacterInstance | null;
+	detailed: boolean;
 	root: THREE.Group;
 	body: THREE.Group;
 	head: THREE.Group;
@@ -27,12 +31,8 @@ interface Avatar {
 	seenThisFrame: boolean;
 }
 
-/**
- * Draws the other players: a simple stylised figure in each player's chosen colour with a floating
- * name tag (locked decision Q17). Feet sit at the pose's `y`; the figure faces the pose's yaw (the
- * same convention as the first-person camera, which looks down −Z at yaw 0); the head tilts with
- * pitch; and the walk bob and lean follow the *displayed* speed from `RemoteMotion`, so the animation
- * always matches how fast the avatar is actually moving across the screen (requirement R1).
+/** Network adapter: owns identity labels, a shared asset cache and independent character rigs.
+ * The existing capsule remains the loading/failure fallback and distant proxy.
  */
 export class RemoteAvatarRenderer {
 	readonly group = new THREE.Group();
@@ -46,11 +46,16 @@ export class RemoteAvatarRenderer {
 		roughness: 0.35,
 		metalness: 0.1
 	});
+	private readonly assetCache = new CharacterAssetCache();
+	private template: THREE.Group | null = null;
+	private loading = false;
+	private disposed = false;
 	private readonly cameraPosition = new THREE.Vector3();
 
 	constructor(
 		private readonly registerMaterial: (material: THREE.Material) => void,
-		private readonly excludeFromAo: (object: THREE.Object3D) => () => void
+		private readonly excludeFromAo: (object: THREE.Object3D) => () => void,
+		private readonly surface?: CharacterSurface
 	) {
 		this.group.name = 'remote-players';
 		this.registerMaterial(this.visorMaterial);
@@ -62,6 +67,19 @@ export class RemoteAvatarRenderer {
 
 	update(views: RemotePlayerView[], deltaSeconds: number, camera: THREE.Camera): void {
 		camera.getWorldPosition(this.cameraPosition);
+		if (views.length && !this.loading) {
+			this.loading = true;
+			void this.assetCache
+				.load()
+				.then((template) => {
+					if (!this.disposed) this.template = template;
+				})
+				.catch((error) => {
+					if (!this.disposed)
+						console.warn('Character asset unavailable; using fallback avatar.', error);
+				});
+		}
+		let created = false; // Spread joins over frames rather than cloning all rigs in one frame.
 		for (const avatar of this.avatars.values()) avatar.seenThisFrame = false;
 
 		for (const { info, frame } of views) {
@@ -74,6 +92,11 @@ export class RemoteAvatarRenderer {
 				this.applyIdentity(avatar, info.name, info.colour);
 			}
 			avatar.seenThisFrame = true;
+			if (this.template && !avatar.character && !created) {
+				avatar.character = new CharacterInstance(this.template, info.colour, this.registerMaterial);
+				avatar.root.add(avatar.character.object);
+				created = true;
+			}
 
 			const away = (frame.flags & POSE_FLAGS.away) !== 0;
 			const walking = Math.min(1, frame.speed / 4);
@@ -81,12 +104,20 @@ export class RemoteAvatarRenderer {
 				(avatar.walkPhase + (frame.speed * deltaSeconds * Math.PI) / STRIDE) % (Math.PI * 2);
 			const bob = Math.abs(Math.sin(avatar.walkPhase)) * BOB_HEIGHT * walking;
 
-			avatar.root.position.set(frame.x, frame.y + bob, frame.z);
+			avatar.root.position.set(frame.x, frame.y + (avatar.character ? 0 : bob), frame.z);
 			avatar.root.rotation.y = frame.yaw;
 			// Leaning into the direction of travel (−Z is forward, so a forward lean is a negative tilt).
 			avatar.body.rotation.x = -Math.min(MAX_LEAN, frame.speed / 60);
 			avatar.head.rotation.x = frame.pitch * 0.6;
 			avatar.labelMaterial.opacity = away || frame.stale ? 0.45 : 1;
+			const distance = avatar.root.position.distanceTo(this.cameraPosition);
+			const detailed = !!avatar.character && distance < (avatar.detailed ? 110 : 90);
+			avatar.detailed = detailed;
+			avatar.body.visible = !detailed;
+			if (avatar.character) {
+				avatar.character.object.visible = detailed;
+				if (detailed) avatar.character.update(frame, deltaSeconds, distance, this.surface);
+			}
 			avatar.root.visible =
 				avatar.root.position.distanceToSquared(this.cameraPosition) < DRAW_DISTANCE * DRAW_DISTANCE;
 		}
@@ -99,6 +130,7 @@ export class RemoteAvatarRenderer {
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		for (const avatar of this.avatars.values()) this.disposeAvatar(avatar);
 		this.avatars.clear();
 		this.bodyGeometry.dispose();
@@ -106,6 +138,8 @@ export class RemoteAvatarRenderer {
 		this.visorGeometry.dispose();
 		this.visorMaterial.dispose();
 		this.group.removeFromParent();
+		this.assetCache.dispose();
+		this.template = null;
 	}
 
 	private createAvatar(name: string, colour: string): Avatar {
@@ -156,6 +190,8 @@ export class RemoteAvatarRenderer {
 		const releaseLabelAo = this.excludeFromAo(label);
 
 		const avatar: Avatar = {
+			character: null,
+			detailed: false,
 			root,
 			body,
 			head,
@@ -177,6 +213,7 @@ export class RemoteAvatarRenderer {
 	private applyIdentity(avatar: Avatar, name: string, colour: string): void {
 		avatar.name = name;
 		avatar.colour = colour;
+		avatar.character?.setColour(colour);
 		avatar.bodyMaterial.color.set(colour);
 		avatar.headMaterial.color.set(colour).lerp(new THREE.Color(0xffffff), 0.35);
 		avatar.root.name = `remote-player:${name}`;
@@ -212,6 +249,7 @@ export class RemoteAvatarRenderer {
 	}
 
 	private disposeAvatar(avatar: Avatar): void {
+		avatar.character?.dispose();
 		avatar.releaseLabelAo();
 		avatar.root.removeFromParent();
 		avatar.bodyMaterial.dispose();

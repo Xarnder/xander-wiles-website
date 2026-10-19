@@ -142,6 +142,111 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 	await expect(visitor.getByTestId('online-status')).toHaveAttribute('data-role', 'viewer');
 	await expect.poll(() => playerCount(owner), { timeout: 15_000 }).toBe('2 players');
 
+	// Both clients load real independently skinned characters through the production renderer.
+	const characterState = (page: Page) =>
+		page.evaluate(() => {
+			const session = (
+				window as unknown as { __forestSession: { scene: { scene: import('three').Scene } } }
+			).__forestSession;
+			const models: import('three').Object3D[] = [];
+			session.scene.scene.traverse((object) => {
+				if (object.name === 'character-model') models.push(object);
+			});
+			return models.map((model) => ({
+				state: model.userData.animation as string,
+				bones: (() => {
+					let n = 0;
+					model.traverse((o) => {
+						if (o.type === 'Bone') n++;
+					});
+					return n;
+				})(),
+				leg: model.getObjectByName('mixamorigLeftUpLeg')?.quaternion.toArray()
+			}));
+		});
+	await expect
+		.poll(async () => (await characterState(owner))[0]?.bones, { timeout: 30000 })
+		.toBeGreaterThan(20);
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.bones, { timeout: 30000 })
+		.toBeGreaterThan(20);
+	const idleLeg = (await characterState(visitor))[0].leg;
+	await owner.evaluate(() => {
+		(
+			window as unknown as {
+				__forestSession: { scene: { controller: { setExampleMovement(enabled: boolean): void } } };
+			}
+		).__forestSession.scene.controller.setExampleMovement(true);
+	});
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.state, { timeout: 15000 })
+		.toBe('moving');
+	expect((await characterState(visitor))[0].leg).not.toEqual(idleLeg);
+	await owner.evaluate(() => {
+		(
+			window as unknown as {
+				__forestSession: { scene: { controller: { setExampleMovement(enabled: boolean): void } } };
+			}
+		).__forestSession.scene.controller.setExampleMovement(false);
+	});
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.state, { timeout: 15000 })
+		.toBe('idle');
+	await visitor.screenshot({ path: test.info().outputPath('remote-character.png') });
+
+	if (process.env.FOREST_DRIFT_GPU === '1') {
+		const report = await visitor.evaluate(async () => {
+			type View = import('../src/lib/game/net/NetSession').RemotePlayerView;
+			type Update = (views: View[], dt: number, camera: import('three').Camera) => void;
+			const scene = (
+				window as unknown as {
+					__forestSession: {
+						scene: {
+							controller: { worldPosition: { x: number; y: number; z: number } };
+							settings: { player: { eyeHeight: number } };
+							multiplayer: { avatars: { update: Update } };
+							measureFrames(ms: number): Promise<unknown>;
+						};
+					};
+				}
+			).__forestSession.scene;
+			const baseline = await scene.measureFrames(2000);
+			const renderer = scene.multiplayer.avatars;
+			const original = renderer.update;
+			const origin = { ...scene.controller.worldPosition };
+			let time = 0;
+			renderer.update = function (views, dt, camera) {
+				time += dt;
+				const seed = views[0];
+				if (!seed) return original.call(this, views, dt, camera);
+				const crowd = Array.from({ length: 18 }, (_, i) => ({
+					info: { ...seed.info, playerId: `character-benchmark-${i}`, name: `Character ${i}` },
+					frame: {
+						...seed.frame,
+						x: origin.x + ((i % 6) - 2.5) * 1.2 + Math.sin(time * 2) * 0.5,
+						y: origin.y - scene.settings.player.eyeHeight,
+						z: origin.z - 4 - Math.floor(i / 6) * 1.3,
+						yaw: 0,
+						flags: 9,
+						stale: false
+					}
+				}));
+				original.call(this, [...views, ...crowd], dt, camera);
+			};
+			try {
+				await new Promise((resolve) => setTimeout(resolve, 1500));
+				return { baseline, crowd19: await scene.measureFrames(4000) };
+			} finally {
+				renderer.update = original;
+			}
+		});
+		const path = test.info().outputPath('character-world-performance.json');
+		writeFileSync(path, JSON.stringify(report, null, 2));
+		await test
+			.info()
+			.attach('character-world-performance', { path, contentType: 'application/json' });
+	}
+
 	// Visitors can look but not build (Q3-A), nobody flies online (F3-C).
 	await expect(visitor.getByTestId('view-only-badge')).toContainText('Viewing only');
 	await visitor.keyboard.press('KeyF');

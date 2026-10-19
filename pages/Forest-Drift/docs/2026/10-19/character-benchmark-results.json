@@ -1,0 +1,57 @@
+{
+	"date": "2026-10-19",
+	"hardware": "Apple M4, Chromium ANGLE Metal",
+	"worldViewport": "1100x700",
+	"worldGraphics": "low",
+	"clients": 2,
+	"note": "Synthetic crowd: one real remote plus 18 injected remote views through the production renderer. Isolated preview uses 1100x800. Short warmed samples, not a mobile benchmark or network soak.",
+	"world": {
+		"baseline": {
+			"fps": 60,
+			"avgFrameMs": 16.67,
+			"p95FrameMs": 17.4,
+			"cpuFrameMs": 3,
+			"cpuRenderMs": 2.42,
+			"drawCalls": 727,
+			"triangles": 216434,
+			"geometries": 371
+		},
+		"crowd19": {
+			"fps": 60,
+			"avgFrameMs": 16.67,
+			"p95FrameMs": 17.5,
+			"cpuFrameMs": 4.11,
+			"cpuRenderMs": 2.8,
+			"drawCalls": 778,
+			"triangles": 321728,
+			"geometries": 372
+		}
+	},
+	"isolated": {
+		"count": 19,
+		"cpuP95": 1,
+		"drawCalls": 39,
+		"triangles": 111112,
+		"states": [
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving",
+			"moving"
+		]
+	}
+}

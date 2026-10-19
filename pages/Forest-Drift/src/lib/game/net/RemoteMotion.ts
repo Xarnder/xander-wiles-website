@@ -15,6 +15,8 @@ export interface MotionSample {
 
 /** What the renderer draws this frame. */
 export interface MotionFrame {
+	/** Changes once when displayed motion jumps; animation must release foot locks. */
+	discontinuity?: number;
 	x: number;
 	y: number;
 	z: number;
@@ -47,7 +49,7 @@ const STATS_WINDOW = 30;
 /** Delay changes by at most this fraction of elapsed time (a 5% playback stretch, never a jump). */
 const DELAY_SLEW_RATE = 0.05;
 const DELAY_MARGIN_MS = 10;
-const SPEED_SMOOTHING = 0.25;
+const SPEED_SMOOTHING_TAU_MS = 58;
 
 /**
  * Smooth movement for one remote player — release requirement R1.
@@ -85,6 +87,8 @@ export class RemoteMotion {
 	private offsetY = 0;
 	private offsetZ = 0;
 	private smoothedSpeed = 0;
+	private discontinuity = 0;
+	private lastTeleportTime = Number.NEGATIVE_INFINITY;
 
 	constructor(options: RemoteMotionOptions = {}) {
 		this.minDelay = options.minDelayMs ?? 60;
@@ -178,12 +182,30 @@ export class RemoteMotion {
 			z: raw.z + this.offsetZ
 		};
 
-		if (this.lastFrame && dt > 0) {
+		const teleport = this.samples.findLast(
+			(sample) => sample.t <= renderTime && (sample.flags & POSE_FLAGS.teleport) !== 0
+		);
+		const jumped =
+			(teleport && teleport.t > this.lastTeleportTime) ||
+			(this.lastFrame &&
+				Math.hypot(
+					frame.x - this.lastFrame.x,
+					frame.y - this.lastFrame.y,
+					frame.z - this.lastFrame.z
+				) >= this.snapDistance);
+		if (teleport) this.lastTeleportTime = Math.max(this.lastTeleportTime, teleport.t);
+		if (jumped) {
+			this.smoothedSpeed = 0;
+			this.discontinuity++;
+		}
+		if (this.lastFrame && dt > 0 && !jumped) {
 			const instant =
 				Math.hypot(frame.x - this.lastFrame.x, frame.z - this.lastFrame.z) / (dt / 1000);
-			this.smoothedSpeed += (instant - this.smoothedSpeed) * SPEED_SMOOTHING;
+			this.smoothedSpeed +=
+				(instant - this.smoothedSpeed) * (1 - Math.exp(-dt / SPEED_SMOOTHING_TAU_MS));
 		}
 		frame.speed = this.smoothedSpeed;
+		frame.discontinuity = this.discontinuity;
 
 		this.lastRenderTime = renderTime;
 		this.lastFrame = frame;
@@ -234,7 +256,7 @@ export class RemoteMotion {
 			z: h00 * a.z + h10 * h * va.z + h01 * b.z + h11 * h * vb.z,
 			yaw: lerpAngle(a.yaw, b.yaw, u),
 			pitch: a.pitch + (b.pitch - a.pitch) * u,
-			flags: b.flags,
+			flags: a.flags,
 			speed: 0,
 			stale: false
 		};

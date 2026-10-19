@@ -9,6 +9,8 @@ export interface LocalPose {
 	yaw: number;
 	pitch: number;
 	flying: boolean;
+	grounded?: boolean;
+	running?: boolean;
 }
 
 /**
@@ -85,7 +87,7 @@ export class PoseSender {
 		const changing = !previous || poseChanged(previous, pose);
 		const teleported =
 			previous !== null && Math.hypot(pose.x - previous.x, pose.z - previous.z) > TELEPORT_DISTANCE;
-		let flags = pose.flying ? POSE_FLAGS.flying : 0;
+		let flags = poseFlags(pose);
 		if (this.away) {
 			if ((this.lastSentFlags & POSE_FLAGS.away) !== 0 && !teleported) return null;
 			flags |= POSE_FLAGS.away;
@@ -107,7 +109,7 @@ export class PoseSender {
 	markAway(now: number, serverNow: number): PoseSample | null {
 		if (!this.latest || !Number.isFinite(serverNow)) return null;
 		if ((this.lastSentFlags & POSE_FLAGS.away) !== 0) return null;
-		const flags = (this.latest.flying ? POSE_FLAGS.flying : 0) | POSE_FLAGS.away;
+		const flags = poseFlags(this.latest) | POSE_FLAGS.away;
 		return this.emit(this.latest, flags, now, serverNow);
 	}
 
@@ -136,5 +138,13 @@ function poseChanged(a: LocalPose, b: LocalPose): boolean {
 		Math.abs(a.z - b.z) > POSITION_EPSILON ||
 		Math.abs(a.yaw - b.yaw) > ANGLE_EPSILON ||
 		Math.abs(a.pitch - b.pitch) > ANGLE_EPSILON
+	);
+}
+
+function poseFlags(pose: LocalPose): number {
+	return (
+		(pose.flying ? POSE_FLAGS.flying : 0) |
+		(pose.grounded ? POSE_FLAGS.grounded : 0) |
+		(pose.running ? POSE_FLAGS.running : 0)
 	);
 }

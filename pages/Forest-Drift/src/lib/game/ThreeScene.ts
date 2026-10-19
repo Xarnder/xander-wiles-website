@@ -1792,6 +1792,7 @@ export class ThreeScene implements WorldRuntime {
 			};
 			this.multiplayer = options.multiplayer;
 			this.multiplayer.attach({
+				characterSurface: (x, z, y) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y),
 				scene: this.scene,
 				camera: this.camera,
 				registerMaterial: (material) => this.graphicsPipeline.registerMaterial(material),
@@ -3395,6 +3396,8 @@ export class ThreeScene implements WorldRuntime {
 				yaw: this.controller.getYaw(),
 				pitch: this.controller.getPitch(),
 				flying: this.controller.isFlying(),
+				grounded: this.controller.isGrounded(),
+				running: this.controller.isRunning(),
 				eyeHeight: this.settings.player.eyeHeight
 			});
 		}

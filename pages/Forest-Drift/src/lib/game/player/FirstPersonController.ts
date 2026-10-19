@@ -156,6 +156,14 @@ export class FirstPersonController {
 	private pitch = 0;
 	private verticalVelocity = 0;
 	private grounded = true;
+	private running = false;
+
+	isGrounded(): boolean {
+		return this.grounded;
+	}
+	isRunning(): boolean {
+		return this.running && this.grounded && !this.flying;
+	}
 	private walkBob = createWalkBobState();
 
 	private readonly keys = new Set<string>();
@@ -361,6 +369,7 @@ export class FirstPersonController {
 	}
 
 	update(deltaSeconds: number): void {
+		this.running = false;
 		if (this.movementLocked) {
 			this.syncCamera();
 			return;
@@ -417,6 +426,7 @@ export class FirstPersonController {
 			const dirX = normalizedX * cosYaw - normalizedZ * sinYaw;
 			const dirZ = -normalizedX * sinYaw - normalizedZ * cosYaw;
 
+			this.running = running;
 			const baseSpeed = running ? this.settings.runSpeed : this.settings.walkSpeed;
 			const speed = baseSpeed * Math.min(1, length);
 			worldX += dirX * speed * deltaSeconds;
