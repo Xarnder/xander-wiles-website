@@ -27,9 +27,9 @@ const browser = await chromium.launch({
 	headless: true,
 	args: process.platform === 'darwin' ? ['--use-angle=metal', '--enable-gpu'] : []
 });
-let socket, timer;
+let socket, timer, page;
 try {
-	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	page.on('pageerror', (e) => report.errors.push(redact(e.message)));
 	await page.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
 	await page.goto(`${base}?mp=${config.worldId}#invite=${config.invites.viewer}`);
@@ -48,7 +48,8 @@ try {
 			headers: { Authorization: `Bearer ${config.invites.viewer}` }
 		})
 	).json();
-	const name = `Gesture QA ${Date.now()}`;
+	// Keep within the server name limit so the rendered identity matches the probe.
+	const name = `Gesture ${Date.now().toString(36)}`;
 	socket = new WebSocket(`${config.server.replace(/^http/, 'ws')}/w/${config.worldId}/ws`);
 	await new Promise((resolve, reject) => {
 		const timeout = setTimeout(() => reject(Error('Viewer join timed out')), 15000);
@@ -102,8 +103,9 @@ try {
 			})
 		);
 	}, 100);
-	const waitPose = (field, min, max) =>
-		page.waitForFunction(
+	const waitPose = (field, min, max) => {
+		report.stage = `${field}: ${min}..${max}`;
+		return page.waitForFunction(
 			({ name, field, min, max }) => {
 				const pose = window.__forestSession.scene.scene
 					.getObjectByName(`remote-player:${name}`)
@@ -113,6 +115,7 @@ try {
 			{ name, field, min, max },
 			{ timeout: 30000 }
 		);
+	};
 	await waitPose('bodyYaw', -0.01, 0.01);
 	yaw = 0.4;
 	pitch = 0.5;
@@ -148,9 +151,33 @@ try {
 	await page.evaluate(() => window.__forestMultiplayer?.detach());
 } catch (error) {
 	report.failure = redact(error.message);
+	report.diagnostics = await page
+		?.evaluate(() => {
+			const scene = window.__forestSession?.scene;
+			const models = [];
+			scene?.scene.traverse((o) => {
+				if (o.name.startsWith('remote-player:'))
+					models.push({
+						name: o.name,
+						position: o.position.toArray(),
+						state: o.getObjectByName('character-model')?.userData.animationState
+					});
+			});
+			return { models, observer: scene?.controller.worldPosition.toArray() };
+		})
+		.catch(() => null);
 } finally {
 	clearInterval(timer);
-	socket?.close(CLIENT_LEAVE_CODE, 'QA completed');
+	if (socket?.readyState === WebSocket.OPEN) {
+		await new Promise((resolve) => {
+			const timeout = setTimeout(resolve, 3000);
+			socket.onclose = () => {
+				clearTimeout(timeout);
+				resolve();
+			};
+			socket.close(CLIENT_LEAVE_CODE, 'QA completed');
+		});
+	}
 	await browser.close();
 	await fs.writeFile(output, JSON.stringify(report, null, 2));
 	console.log(JSON.stringify(report));

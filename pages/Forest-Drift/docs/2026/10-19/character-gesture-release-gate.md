@@ -24,3 +24,5 @@ The full browser run also exposed a pointer-lock race in the pause-menu test hel
 Run `node scripts/live-character-gestures.mjs` after deployment. It reads the existing private viewer configuration outside Git, connects a browser plus one pose client, checks independent head look, building reach, body following and landing recovery, then leaves cleanly. It does not change world contents. `FOREST_GESTURE_OUTPUT` selects the JSON output path.
 
 The wire protocol and worker code are unchanged; the existing deployed multiplayer worker is compatible. Frontend production deployment uses the existing main-to-Vercel pipeline.
+
+Production deployment of `943fcecd` completed successfully. The live viewer-only smoke check passed independent look/reach, body following, airborne motion and landing recovery with zero browser errors. See `character-gesture-live.json`. The smoke helper uses a short player name compatible with server normalization and waits for its socket to leave cleanly.
