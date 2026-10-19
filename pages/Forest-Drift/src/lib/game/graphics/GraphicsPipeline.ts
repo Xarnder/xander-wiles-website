@@ -34,6 +34,7 @@ const AO_RESOLUTION_SCALE: Record<AoQuality, number> = {
 
 /** How often (seconds) the dynamic-resolution check re-evaluates — deliberately not every frame, see GraphicsTypes.ts's `dynamicResolutionEnabled` doc. */
 const DYNAMIC_RES_CHECK_INTERVAL = 1;
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
 /** Exponential-moving-average time constant (seconds) for the smoothed FPS the dynamic-resolution logic reacts to. */
 const FPS_SMOOTHING_TIME_CONSTANT = 0.5;
 /**
@@ -319,15 +320,47 @@ export class GraphicsPipeline {
 		this.updateDynamicResolution(deltaSeconds);
 	}
 
+	private warmupPending = true;
+
+	/** Upload and initialize off-camera draw variants during the next startup frame. */
+	prewarm(): void {
+		this.warmupPending = true;
+	}
+
 	render(): void {
 		// Count the entire frame, including shadows and postprocessing rather than only its final quad.
 		const autoReset = this.renderer.info.autoReset;
+		const warmup = this.warmupPending;
+		this.warmupPending = false;
+		const orientation = warmup ? this.camera.quaternion.clone() : null;
 		this.renderer.info.autoReset = false;
 		this.renderer.info.reset();
-		try {
+		const draw = () => {
 			if (this.composer) this.composer.render();
 			else this.renderer.render(this.scene, this.camera);
+		};
+		try {
+			if (orientation) {
+				// A compile-only warmup misses lazy driver/pipeline work on the first visible
+				// draw. Render the other directions during startup, then draw the real view
+				// last. All happen before presentation; controller/input state is untouched.
+				for (let i = 0; i < 3; i++) {
+					this.camera.rotateOnWorldAxis(UP_AXIS, Math.PI / 2);
+					this.camera.updateMatrixWorld();
+					this.csm?.update();
+					draw();
+				}
+				this.camera.quaternion.copy(orientation);
+				this.camera.updateMatrixWorld();
+				this.csm?.update();
+			}
+			draw();
 		} finally {
+			if (orientation) {
+				this.camera.quaternion.copy(orientation);
+				this.camera.updateMatrixWorld();
+				this.csm?.update();
+			}
 			this.renderer.info.autoReset = autoReset;
 		}
 	}
@@ -375,7 +408,9 @@ export class GraphicsPipeline {
 		// history, and don't let it re-evaluate (and potentially downscale) until it's had a moment to
 		// actually run at the new settings.
 		this.smoothedFps = this.settings.targetFps;
-		this.dynamicResCooldown = DYNAMIC_RES_CHECK_INTERVAL;
+		// Initial shader/texture uploads are CPU stalls, not sustained GPU pressure.
+		// Let them settle before resizing every postprocessing target in response.
+		this.dynamicResCooldown = 5;
 		this.resolutionBudget.reset();
 
 		this.applyShadowSettings(preset);

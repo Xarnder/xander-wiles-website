@@ -1767,7 +1767,15 @@ export class ThreeScene implements WorldRuntime {
 		const hdrUrl = new URL('hdri/sky.hdr', document.baseURI).toString();
 		void this.hdriSystem
 			.initialize(hdrUrl, this.skySettings.sky.topColor, this.skySettings.sky.horizonColor)
-			.then(() => this.applySkySettings());
+			.then(() => {
+				if (this.disposed) return;
+				this.applySkySettings();
+				this.furnitureManager.updateLights(this.camera.position, 0);
+				return this.graphicsPipeline.prewarm();
+			})
+			.catch((error) =>
+				console.warn('[graphics] Shader prewarm failed; drawing will retry.', error)
+			);
 
 		this.resizeObserver = new ResizeObserver(() => this.handleResize());
 		this.resizeObserver.observe(this.container);

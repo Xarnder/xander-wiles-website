@@ -1,12 +1,25 @@
 import * as THREE from 'three';
 import { totalSteps, waveRadius, type MusicTreeDefinition } from './MusicModel';
 import { disposeGroup } from './MusicPlantManager';
+const PATCH_SIZE = 224;
+const PATCH_SEGMENTS = 112;
+const PATCH_SIDE = PATCH_SEGMENTS + 1;
+const PATCH_STEP = PATCH_SIZE / PATCH_SEGMENTS;
+const FOLLOW_STEP = 16;
+
 /** Static ground-projected mesh; only uniforms change per frame. No terrain sampling in animation. */
 export class MusicWaveRenderer {
 	readonly group = new THREE.Group();
 	private patchX = NaN;
 	private patchZ = NaN;
-	private geometry = new THREE.PlaneGeometry(224, 224, 112, 112).rotateX(-Math.PI / 2);
+	private readonly heights = new Float32Array(PATCH_SIDE * PATCH_SIDE);
+	private readonly nextHeights = new Float32Array(PATCH_SIDE * PATCH_SIDE);
+	private geometry = new THREE.PlaneGeometry(
+		PATCH_SIZE,
+		PATCH_SIZE,
+		PATCH_SEGMENTS,
+		PATCH_SEGMENTS
+	).rotateX(-Math.PI / 2);
 	readonly material = new THREE.ShaderMaterial({
 		transparent: true,
 		depthWrite: false,
@@ -51,14 +64,28 @@ export class MusicWaveRenderer {
 		this.material.uniforms.bar.value = s.subdivisionsPerBeat * s.beatsPerBar;
 	}
 	follow(x: number, z: number) {
-		const cx = Math.round(x / 16) * 16,
-			cz = Math.round(z / 16) * 16;
-		if (cx === this.patchX && cz === this.patchZ) return;
+		// Keep a full cell of hysteresis: hovering near a rounding boundary must not
+		// re-project 12,769 vertices on every change of direction.
+		if (Math.abs(x - this.patchX) <= FOLLOW_STEP && Math.abs(z - this.patchZ) <= FOLLOW_STEP)
+			return;
+		const cx = Math.round(x / FOLLOW_STEP) * FOLLOW_STEP,
+			cz = Math.round(z / FOLLOW_STEP) * FOLLOW_STEP;
+		const shiftX = (cx - this.patchX) / PATCH_STEP,
+			shiftZ = (cz - this.patchZ) / PATCH_STEP;
+		const pos = this.geometry.getAttribute('position');
+		for (let i = 0; i < pos.count; i++) {
+			const oldX = (i % PATCH_SIDE) + shiftX,
+				oldZ = Math.floor(i / PATCH_SIDE) + shiftZ;
+			const height =
+				oldX >= 0 && oldX < PATCH_SIDE && oldZ >= 0 && oldZ < PATCH_SIDE
+					? this.heights[oldZ * PATCH_SIDE + oldX]
+					: this.surface(pos.getX(i) + cx, pos.getZ(i) + cz) + 0.08;
+			this.nextHeights[i] = height;
+			pos.setY(i, height);
+		}
+		this.heights.set(this.nextHeights);
 		this.patchX = cx;
 		this.patchZ = cz;
-		const pos = this.geometry.getAttribute('position');
-		for (let i = 0; i < pos.count; i++)
-			pos.setY(i, this.surface(pos.getX(i) + cx, pos.getZ(i) + cz) + 0.08);
 		pos.needsUpdate = true;
 		this.geometry.computeBoundingSphere();
 		this.group.position.set(cx, 0, cz);
