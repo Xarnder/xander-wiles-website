@@ -86,6 +86,66 @@ test.describe('Touch / iPad Controls', () => {
 		await expect(page.getByTestId('hotbar')).toBeVisible();
 		await expect(page.getByTestId('touch-build-toggle')).toHaveClass(/active/);
 
+		// Interrupted gestures must return to neutral and accept the next touch.
+		const joystick = page.getByTestId('touch-joystick');
+		const knob = joystick.locator('.touch-joystick-knob');
+		const joystickSession = await page.context().newCDPSession(page);
+		for (const interruption of ['capture', 'cancel', 'blur', 'release-outside']) {
+			const box = (await joystick.boundingBox())!;
+			await joystick.evaluate((element) => {
+				element.addEventListener(
+					'pointerdown',
+					(event) => {
+						(element as HTMLElement).dataset.testPointerId = String(
+							(event as PointerEvent).pointerId
+						);
+					},
+					{ once: true }
+				);
+			});
+			await joystickSession.send('Input.dispatchTouchEvent', {
+				type: 'touchStart',
+				touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 4 }]
+			});
+			await joystickSession.send('Input.dispatchTouchEvent', {
+				type: 'touchMove',
+				touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 5 }]
+			});
+			await expect(knob).toHaveClass(/active/);
+			if (interruption === 'capture') {
+				await joystick.evaluate((element) => {
+					const id = Number((element as HTMLElement).dataset.testPointerId);
+					element.releasePointerCapture(id);
+				});
+				await joystickSession.send('Input.dispatchTouchEvent', {
+					type: 'touchMove',
+					touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 3 }]
+				});
+			} else if (interruption === 'blur') {
+				await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+			} else if (interruption === 'release-outside') {
+				// An unrelated finger ending must not stop the movement finger.
+				await page.evaluate(() =>
+					window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 999 }))
+				);
+				await expect(knob).toHaveClass(/active/);
+				await joystickSession.send('Input.dispatchTouchEvent', {
+					type: 'touchMove',
+					touchPoints: [{ x: box.x + box.width + 30, y: box.y - 20 }]
+				});
+			}
+			if (interruption === 'capture' || interruption === 'blur') {
+				await expect(knob).not.toHaveClass(/active/);
+			}
+			await joystickSession.send('Input.dispatchTouchEvent', {
+				type: interruption === 'cancel' ? 'touchCancel' : 'touchEnd',
+				touchPoints: []
+			});
+			await expect(knob).not.toHaveClass(/active/);
+			await expect(knob).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+		}
+		await joystickSession.detach();
+
 		// Tapping Build toggle turns build mode off and hides hotbar
 		await page.getByTestId('touch-build-toggle').click();
 		await expect(page.getByTestId('hotbar')).not.toBeVisible();

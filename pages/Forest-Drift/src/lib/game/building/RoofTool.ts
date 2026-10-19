@@ -122,20 +122,10 @@ function validateOpenChain(points: { x: number; z: number }[]): {
 }
 
 /**
- * Multi-type pitched Roof Tool — draws the SAME closed-polygon footprint every slab tool draws (see
- * SlabToolBase, which this deliberately does NOT extend: a roof needs a whole extra modal phase
- * SlabToolBase has no concept of), then enters an `'adjusting'` phase once the polygon closes: `V`
- * cycles the roof type, `R` rotates its orientation (ridge direction, or shed's high edge), and
- * `↑`/`↓` adjust rise (Shift for the finer step) — all live against a real preview built via
- * `RoofGeometryBuilder.buildRoofGeometry`, exactly the geometry that will actually be placed. A
- * second click confirms; right-click cancels the whole placement, mirroring StairTool's
- * `'choosing-direction'` phase (see its class doc comment) rather than stepping back to `'drawing'`.
- *
- * Only `'flat'` (via `SlabGeometryBuilder`, reused as-is) supports an arbitrary polygon; every other
- * type requires the closed footprint to be an axis-aligned rectangle (see roofMath.ts's
- * `axisAlignedRectangleOf`) — cycling `V` onto an incompatible type while adjusting shows "requires a
- * compatible footprint" instead of ever building corrupt geometry, exactly like
- * `BuildingManager.addRoof` itself would reject it at confirm time.
+ * Two opposite corners define a rectangular roof footprint by default. E switches
+ * footprint mode; B enters polygon mode, then cycles the existing polygon snaps.
+ * Both workflows share the live type/orientation/rise adjustment and confirmation.
+ * Pitched types require rectangular footprints; flat roofs also support polygons.
  */
 export class RoofTool implements BuildTool {
 	readonly toolId: ToolId = 'flat-roof';
@@ -178,6 +168,7 @@ export class RoofTool implements BuildTool {
 
 	private active = false;
 	private state: RoofToolState = 'idle';
+	private footprintMode: 'rectangle' | 'polygon' = 'rectangle';
 	private points: BuildingGridPoint[] = [];
 	private activeFoundationId: string | null = null;
 	private activeLevelIndex = 0;
@@ -189,7 +180,7 @@ export class RoofTool implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/** Cycled by `B` while idle/drawing — same convention (and same "defaults to wall-corners on activate" reasoning) as every other polygon-drawing build tool; see SlabToolBase's doc comment. */
+	/** Polygon-mode snap, cycled by B after entering polygon drawing. */
 	private snapMode: SnapMode = 'wall-corners';
 
 	// --- Live roof parameters, only meaningful once `state === 'adjusting'` (set in `enterAdjusting`) ---
@@ -200,6 +191,12 @@ export class RoofTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
+		const target = event.target as HTMLElement | null;
+		if (
+			['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '') ||
+			target?.isContentEditable
+		)
+			return;
 
 		if (this.state === 'adjusting') {
 			if (event.code === 'KeyV') {
@@ -214,6 +211,19 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 
+		if (event.repeat) return;
+		if (event.code === 'KeyE') {
+			this.footprintMode = this.footprintMode === 'rectangle' ? 'polygon' : 'rectangle';
+			// Keep the initial corner when returning from a partly drawn polygon.
+			this.points = this.points.slice(0, 1);
+			this.refreshVisuals();
+			return;
+		}
+		if (event.code === 'KeyB' && this.footprintMode === 'rectangle') {
+			this.footprintMode = 'polygon';
+			this.refreshVisuals();
+			return;
+		}
 		if (event.code === 'KeyB') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
@@ -324,6 +334,7 @@ export class RoofTool implements BuildTool {
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
 		this.snapMode = 'wall-corners';
+		this.footprintMode = 'rectangle';
 		this.applyRoofDefaults();
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
@@ -344,7 +355,9 @@ export class RoofTool implements BuildTool {
 
 	isCapturingKey(code: string): boolean {
 		return (
-			this.active && this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown')
+			this.active &&
+			((this.state !== 'adjusting' && code === 'KeyE') ||
+				(this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown')))
 		);
 	}
 
@@ -391,7 +404,11 @@ export class RoofTool implements BuildTool {
 				hit.gridPoint,
 				this.wallCornersOnCurrentLevel(hit.foundationId)
 			);
-		} else if (this.state === 'drawing' && hit.foundationId === this.activeFoundationId) {
+		} else if (
+			this.footprintMode === 'polygon' &&
+			this.state === 'drawing' &&
+			hit.foundationId === this.activeFoundationId
+		) {
 			gridPoint = snapDrawingPoint(this.points, hit.gridPoint, this.snapMode);
 		}
 
@@ -435,6 +452,14 @@ export class RoofTool implements BuildTool {
 
 		// drawing
 		if (this.hoverTarget.foundationId !== this.activeFoundationId) return;
+
+		if (this.footprintMode === 'rectangle') {
+			const rectangle = this.rectanglePoints(this.hoverTarget.point);
+			if (!rectangle) return;
+			this.points = rectangle;
+			this.enterAdjusting();
+			return;
+		}
 
 		if (this.isHoveringFirstPoint() && this.points.length >= 3) {
 			this.enterAdjusting();
@@ -484,6 +509,17 @@ export class RoofTool implements BuildTool {
 			this.hoverTarget.point.gridX === first.gridX &&
 			this.hoverTarget.point.gridZ === first.gridZ
 		);
+	}
+
+	private rectanglePoints(opposite: BuildingGridPoint): BuildingGridPoint[] | null {
+		const first = this.points[0];
+		if (!first || first.gridX === opposite.gridX || first.gridZ === opposite.gridZ) return null;
+		return [
+			{ ...first },
+			{ gridX: opposite.gridX, gridZ: first.gridZ },
+			{ ...opposite },
+			{ gridX: first.gridX, gridZ: opposite.gridZ }
+		];
 	}
 
 	private localPointsOf(points: BuildingGridPoint[]): { x: number; z: number }[] {
@@ -604,6 +640,24 @@ export class RoofTool implements BuildTool {
 		}
 
 		const sameFoundation = this.hoverTarget.foundationId === this.activeFoundationId;
+		if (this.footprintMode === 'rectangle') {
+			const valid = sameFoundation && this.rectanglePoints(this.hoverTarget.point) !== null;
+			this.updateHoverMarker(valid ? VALID_COLOR : INVALID_COLOR);
+			if (valid) {
+				this.updateDrawingPreview(false);
+				this.onHudChange?.(this.buildDrawingHud(false));
+			} else {
+				this.hidePreview();
+				this.onHudChange?.(
+					this.buildInvalidHud(
+						sameFoundation
+							? 'Choose an opposite corner with width and depth'
+							: 'Must stay on the same foundation'
+					)
+				);
+			}
+			return;
+		}
 		const closingLoop = this.isHoveringFirstPoint() && this.points.length >= 3;
 		const last = this.points[this.points.length - 1];
 		const duplicate =
@@ -704,7 +758,12 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 
-		const previewPoints = closing ? this.points : [...this.points, this.hoverTarget.point];
+		const previewPoints =
+			this.footprintMode === 'rectangle'
+				? (this.rectanglePoints(this.hoverTarget.point) ?? [])
+				: closing
+					? this.points
+					: [...this.points, this.hoverTarget.point];
 		if (previewPoints.length < 3) {
 			this.hidePreview();
 			return;
@@ -901,6 +960,12 @@ export class RoofTool implements BuildTool {
 		return label ? [label] : [];
 	}
 
+	private footprintModeHints(): string[] {
+		return this.footprintMode === 'rectangle'
+			? ['E: Polygon mode', 'B: Polygon mode (Snap)']
+			: ['E: Rectangle mode', 'B: Cycle snap'];
+	}
+
 	private buildIdleHud(): BuildUiState {
 		return {
 			toolId: this.toolId,
@@ -912,10 +977,9 @@ export class RoofTool implements BuildTool {
 				'',
 				'Roof',
 				'',
-				'Look at the roof: click to start',
+				this.footprintMode === 'rectangle' ? 'Click: First corner' : 'Click: Start polygon',
 				...this.snapHudLines(),
-				'B: Cycle snap',
-				'E set height'
+				...this.footprintModeHints()
 			]
 		};
 	}
@@ -923,7 +987,11 @@ export class RoofTool implements BuildTool {
 	private buildDrawingHud(closingLoop: boolean): BuildUiState {
 		const levelLines = this.levelHudLines(this.activeFoundationId ?? undefined);
 		const level = this.currentLevelUiState(this.activeFoundationId ?? undefined);
-		const common = ['Roof', '', `Points: ${this.points.length}`];
+		const common = [
+			'Roof',
+			this.footprintMode === 'rectangle' ? 'Rectangle footprint' : 'Polygon footprint',
+			`Points: ${this.points.length}`
+		];
 
 		if (closingLoop) {
 			return {
@@ -937,8 +1005,7 @@ export class RoofTool implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'B: Cycle snap',
-					'E set height',
+					...this.footprintModeHints(),
 					'Click to close footprint'
 				]
 			};
@@ -955,11 +1022,11 @@ export class RoofTool implements BuildTool {
 				...common,
 				'',
 				...this.snapHudLines(),
-				'Click: Add point',
-				'Click first point: Close',
+				...(this.footprintMode === 'rectangle'
+					? ['Click: Opposite corner']
+					: ['Click: Add point', 'Click first point: Close']),
 				'Backspace: Undo point',
-				'B: Cycle snap',
-				'E set height',
+				...this.footprintModeHints(),
 				'Right click: Cancel'
 			]
 		};
@@ -980,8 +1047,7 @@ export class RoofTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Backspace: Undo point',
-				'B: Cycle snap',
-				'E set height',
+				...this.footprintModeHints(),
 				'Right click: Cancel'
 			]
 		};

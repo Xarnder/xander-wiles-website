@@ -990,6 +990,21 @@ describe('BuildToolManager placement height (E)', () => {
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 	});
 
+	it('lets the roof own E while drawing and opens height once adjustment begins', () => {
+		const { buildToolManager, roofTool, key } = buildHarness(pointerLocked);
+		const capture = vi.fn().mockReturnValue(true);
+		(roofTool as BuildTool).isCapturingKey = capture;
+		key('Digit4');
+		key('ArrowDown');
+		key('ArrowDown');
+		key('KeyE');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+		expect(capture).toHaveBeenCalledWith('KeyE');
+		capture.mockReturnValue(false);
+		key('KeyE');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+	});
+
 	it('does not open from C, and does not open on Wall (Wall E still customises)', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 

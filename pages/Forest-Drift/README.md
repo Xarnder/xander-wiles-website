@@ -1118,8 +1118,8 @@ thickness setting) — one shared implementation for the click-to-add-a-point,
 click-first-point-to-close polygon interaction (always closed; there's no "open slab" concept,
 unlike a wall path), live stepped preview, and per-tool HUD. Roof used to be a third `SlabToolBase`
 configuration (`'flat-roof'`) but is now its own, considerably larger multi-type system — see
-"Roofs" below — that happens to reuse this exact same polygon-drawing interaction as its first
-phase, rather than extending `SlabToolBase` itself (a pitched roof needs a whole extra modal phase
+"Roofs" below — with two-corner rectangular placement by default and this same polygon-drawing
+interaction available via E or B, rather than extending `SlabToolBase` itself (a pitched roof needs a whole extra modal phase
 `SlabToolBase` has no concept of).
 
 ### Multi-level collision (`WorldSurfaceSampler.ts`, `FirstPersonController.ts`)
@@ -1736,14 +1736,13 @@ L-shaped/U-shaped/spiral stairs, landings, railings/bannisters, a stair material
 decorative trim, curved stairs, elevators, ladders, ramps, automatic stair generation between
 arbitrary floors, and precise head-clearance-driven (rather than full-footprint) opening sizing.
 
-## Roofs: nine procedural pitched roof types over one polygon-drawing workflow (`RoofTypes.ts`, `roofMath.ts`, `RoofGeometryBuilder.ts`, `RoofManager.ts`, `RoofTool.ts`)
+## Roofs: nine procedural roof types with rectangular and polygon footprints (`RoofTypes.ts`, `roofMath.ts`, `RoofGeometryBuilder.ts`, `RoofManager.ts`, `RoofTool.ts`)
 
-The original Roof Tool was just Ceiling/Floor's flat-slab workflow relabelled (see the "Roofs" note
-in the Slabs section above). This replaces it on the hotbar with a real pitched-roof system —
-`flat | shed | gable | hip | gambrel | mansard | butterfly | m-shaped | dutch-gable` — while
-deliberately keeping the exact same footprint-drawing interaction the flat version (and every slab
-tool) already used: draw a closed polygon, click the first point to close it. What changes is what
-happens next.
+Roof placement supports `flat | shed | gable | hip | gambrel | mansard | butterfly | m-shaped |
+dutch-gable`. By default, choose two opposite corners to define a rectangle or square, then adjust
+the roof shape, orientation and rise before confirming. Press `E` or `B` (the touch Snap button,
+labelled Polygon) before or after choosing the first corner to enter polygon drawing. The first
+corner is preserved; add points and click the first point again to close the footprint.
 
 ### Data model: a logical definition, never generated vertices (`RoofTypes.ts`)
 
@@ -1825,12 +1824,16 @@ needing to be rebuilt from scratch.
 
 ### Placement: draw, then adjust, then confirm (`RoofTool.ts`)
 
-`RoofToolState = 'idle' | 'drawing' | 'adjusting'`. The first two phases are the identical
-polygon-drawing interaction every slab tool already uses (same draw-snap cycling via `C`, the same
-building-grid overlay, Backspace to undo a point, right-click to cancel) — closing the loop (clicking
-the first point with ≥3 points) freezes the footprint and enters `'adjusting'` instead of confirming
-immediately. From there:
+`RoofToolState = 'idle' | 'drawing' | 'adjusting'`. The first corner starts drawing; the
+opposite corner freezes a rectangular footprint and enters adjustment. Zero-width or zero-depth
+footprints are rejected. `E` toggles rectangle/polygon mode while idle or drawing, preserving the
+first corner. `B` enters polygon mode from rectangle mode, then cycles polygon draw snapping.
+Polygon mode retains the building-grid overlay, Backspace to undo a point, right-click to cancel,
+and click-first-point-to-close interaction (at least three points). Switching back to rectangle
+mode keeps only the first point. Selecting the roof tool again defaults to rectangle mode.
+After either footprint workflow enters adjustment:
 
+- **`E`** opens the existing roof eave-height panel.
 - **`V`** cycles `ROOF_TYPE_ORDER`, wrapping.
 - **`R`** rotates — toggles `direction` between X/Z axis for most types, cycles `shedDirection`
   through all four compass directions for `shed`, and is a no-op for `flat`/`hip`/`mansard` (see

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { touchButton } from '$lib/components/touchButton';
 	import type { HotbarSlot } from '$lib/game/building/FoundationTypes';
 
 	interface Props {
@@ -31,6 +33,33 @@
 		onToggleMoveMode
 	}: Props = $props();
 
+	let tray: HTMLDivElement;
+	let panel = $state<HTMLDivElement>();
+	let panelAbove = $state(true);
+
+	onMount(() => {
+		const updateLayout = () => {
+			if (!tray || !panel) return;
+			const bounds = tray.getBoundingClientRect();
+			panelAbove = bounds.right + 12 + panel.offsetWidth + 16 > window.innerWidth;
+		};
+		const observer = new ResizeObserver(updateLayout);
+		observer.observe(tray);
+		// The selector can appear after mounting when build state arrives.
+		const mutations = new MutationObserver(() => {
+			if (panel) observer.observe(panel);
+			updateLayout();
+		});
+		mutations.observe(tray.parentElement!, { childList: true });
+		window.addEventListener('resize', updateLayout);
+		updateLayout();
+		return () => {
+			observer.disconnect();
+			mutations.disconnect();
+			window.removeEventListener('resize', updateLayout);
+		};
+	});
+
 	const icons: Record<number, string> = {
 		1: 'foundation',
 		2: 'wall',
@@ -55,14 +84,14 @@
 </script>
 
 <div class="hotbar" class:build={showGlobalModes} data-testid="hotbar">
-	<div class="tool-tray">
+	<div class="tool-tray" bind:this={tray}>
 		{#each slots as slot (slot.slot)}
 			<button
 				type="button"
 				class="slot"
 				class:active={slot.slot === activeSlot && !overlay && !musicModeActive}
 				data-testid={`hotbar-slot-${slot.hotbarId ?? slot.toolId}`}
-				onclick={() => onSelectSlot?.(slot.slot)}
+				use:touchButton={() => onSelectSlot?.(slot.slot)}
 				title={`${slot.label} · ${slot.slot}`}
 				aria-label={`${slot.label} (slot ${slot.slot})`}
 				aria-pressed={slot.slot === activeSlot && !overlay}
@@ -80,7 +109,7 @@
 				class="slot remove-slot"
 				class:active={removeModeActive}
 				data-testid="hotbar-remove-toggle"
-				onclick={() => onToggleRemoveMode?.()}
+				use:touchButton={() => onToggleRemoveMode?.()}
 				title="Remove · 9 / X"
 				aria-label="Toggle Remove Mode"
 				aria-pressed={removeModeActive}
@@ -92,7 +121,7 @@
 				class="slot paint-slot"
 				class:active={paintModeActive}
 				data-testid="hotbar-paint-toggle"
-				onclick={() => onTogglePaintMode?.()}
+				use:touchButton={() => onTogglePaintMode?.()}
 				title="Paint · P"
 				aria-label="Toggle Paint Mode"
 				aria-pressed={paintModeActive}
@@ -104,7 +133,7 @@
 				class="slot move-slot"
 				class:active={moveModeActive}
 				data-testid="hotbar-move-toggle"
-				onclick={() => onToggleMoveMode?.()}
+				use:touchButton={() => onToggleMoveMode?.()}
 				title="Move · M"
 				aria-label="Toggle Move Mode"
 				aria-pressed={moveModeActive}
@@ -114,7 +143,13 @@
 		{/if}
 	</div>
 	{#if showGlobalModes && selected}
-		<div class="subtool-panel" aria-live="polite" aria-atomic="true">
+		<div
+			class="subtool-panel"
+			class:above={panelAbove}
+			bind:this={panel}
+			aria-live="polite"
+			aria-atomic="true"
+		>
 			<span class="eyebrow">{overlay ? 'EDIT MODE' : 'BUILD MODE'}</span>
 			<strong>{overlay || selected.label}</strong>
 			{#if !overlay && selected.variantCount > 1}
@@ -122,7 +157,7 @@
 					<button
 						class="cycle"
 						aria-label="Previous build subtool"
-						onclick={() => onCycleVariant?.(-1)}>‹</button
+						use:touchButton={() => onCycleVariant?.(-1)}>‹</button
 					>
 					<div
 						class="dots"
@@ -133,8 +168,10 @@
 								class:current={i === selected.variantIndex}
 							></span>{/each}
 					</div>
-					<button class="cycle" aria-label="Next build subtool" onclick={() => onCycleVariant?.(1)}
-						>›</button
+					<button
+						class="cycle"
+						aria-label="Next build subtool"
+						use:touchButton={() => onCycleVariant?.(1)}>›</button
 					>
 					<span class="count">{selected.variantIndex + 1}/{selected.variantCount}</span>
 				</div>
@@ -145,12 +182,15 @@
 
 <style>
 	.hotbar {
-		position: absolute;
-		bottom: 1.25rem;
+		position: fixed;
+		bottom: max(8px, env(safe-area-inset-bottom));
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 35;
 		pointer-events: auto;
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-touch-callout: none;
 		max-width: calc(100vw - 1.5rem);
 		font-family: system-ui, sans-serif;
 		color: #edf5e9;
@@ -268,7 +308,8 @@
 		position: absolute;
 		left: calc(100% + 12px);
 		bottom: 0;
-		width: 176px;
+		width: 240px;
+		max-width: calc(100vw - 2rem);
 		min-height: 68px;
 		box-sizing: border-box;
 		padding: 12px 15px;
@@ -313,12 +354,23 @@
 		background: #dce8b6;
 	}
 	.cycle {
-		border: 0;
-		background: transparent;
-		color: #cfdbc5;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 44px;
+		width: 44px;
+		height: 44px;
+		border: 1px solid #d9ebc566;
+		border-radius: 10px;
+		background: linear-gradient(145deg, #52634b, #2a3d30);
+		box-shadow:
+			0 2px 5px #0005,
+			inset 0 1px #ffffff20;
+		color: #edf5e9;
 		cursor: pointer;
 		padding: 0 4px;
-		font: 18px/18px system-ui;
+		font: 30px/1 system-ui;
+		touch-action: manipulation;
 	}
 	.count {
 		margin-left: auto;
@@ -326,17 +378,19 @@
 		color: #b3c5a7;
 		font-variant-numeric: tabular-nums;
 	}
-	@media (max-width: 1100px) {
-		.subtool-panel {
-			left: 50%;
-			bottom: calc(100% + 10px);
-			transform: translateX(-50%);
-			width: max-content;
-			min-width: 150px;
-			max-width: calc(100vw - 2rem);
-			text-align: center;
-			padding: 10px 16px;
-		}
+	.cycle:hover {
+		background: #52694b;
+		border-color: #dce8b6;
+	}
+	.cycle:active {
+		background: #203326;
+		box-shadow: inset 0 2px 4px #0005;
+	}
+	.subtool-panel.above {
+		left: 50%;
+		bottom: calc(100% + 10px);
+		transform: translateX(-50%);
+		text-align: center;
 	}
 	@media (max-width: 650px) {
 		.slot {
@@ -386,7 +440,7 @@
 			touch-action: manipulation;
 		}
 		.subtool-panel {
-			width: 210px;
+			width: 240px;
 		}
 		.tool-tray {
 			touch-action: pan-x;

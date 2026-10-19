@@ -644,6 +644,7 @@ export class BuildToolManager {
 			this.buildModeActive &&
 			this.globalMode === 'none' &&
 			isSlabHeightTool(this.getActiveToolId()) &&
+			!this.getActiveTool()?.isCapturingKey?.('KeyE') &&
 			!this.isInputBlocked?.()
 		);
 	}

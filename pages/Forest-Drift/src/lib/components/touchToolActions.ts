@@ -208,11 +208,18 @@ export function snapKeyForHints(hintLines: readonly string[]): 'KeyC' | 'KeyB' {
 }
 
 export function snapLabelForHints(hintLines: readonly string[]): string {
-	return has(hintLines, 'C path mode') ? 'Mode' : 'Snap';
+	return has(hintLines, 'B: Polygon mode')
+		? 'Polygon'
+		: has(hintLines, 'C path mode')
+			? 'Mode'
+			: 'Snap';
 }
 
 /** While a roof footprint is closed, Type cycles roof shape instead of leaving the tool. */
-export function variantControl(hintLines: readonly string[]): { label: string; roofShape: boolean } {
+export function variantControl(hintLines: readonly string[]): {
+	label: string;
+	roofShape: boolean;
+} {
 	const roofShape = has(hintLines, 'V: Cycle type');
 	return { label: roofShape ? 'Shape' : 'Type', roofShape };
 }

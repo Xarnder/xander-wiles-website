@@ -433,7 +433,7 @@ test('Remove Mode removes one copy, reclaims budget and keeps the design', async
 	expect(pageErrors).toEqual([]);
 });
 
-test('shows chunk primitive usage in normal view and while placing, and toggles chunk boundaries from settings', async ({
+test('shows chunk primitive usage only in mini build mode, and toggles chunk boundaries from settings', async ({
 	page
 }) => {
 	test.setTimeout(120_000);
@@ -444,9 +444,20 @@ test('shows chunk primitive usage in normal view and while placing, and toggles 
 	await page.evaluate(() => localStorage.removeItem('forest-drift.mini-builds.prefs.v1'));
 	await createAndEnterWorld(page, { name: 'Chunk Readout World', seed: 'chunk-readout-seed' });
 
-	// Normal view: the counter for the chunk the player is standing in.
+	// The counter is exclusive to slot 8, including when another mode overlays it.
 	const usage = page.getByTestId('mini-build-chunk-usage');
+	await expect(usage).not.toBeVisible();
+	await page.keyboard.press('8');
 	await expect(usage).toBeVisible();
+	await page.keyboard.press('2');
+	await expect(usage).not.toBeVisible();
+	await page.keyboard.press('8');
+	for (const mode of ['x', 'p', 'm', 'g']) {
+		await page.keyboard.press(mode);
+		await expect(usage).not.toBeVisible();
+		await page.keyboard.press(mode);
+		await expect(usage).toBeVisible();
+	}
 	await expect(page.getByTestId('mini-build-chunk-value')).toContainText('0');
 	await expect(page.getByTestId('mini-build-chunk-value')).toContainText('512');
 
