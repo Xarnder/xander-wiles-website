@@ -80,27 +80,28 @@
 				const speed = mode === 'run' ? 12 : mode === 'walk' ? 6 : 0;
 				const x = (i % 5) * 1.5;
 				const z = Math.floor(i / 5) * 1.5;
+				const jumpTime = elapsed % 2;
+				const jumpHeight =
+					mode === 'jump' && jumpTime < 0.8 ? 4 * 0.9 * (jumpTime / 0.8) * (1 - jumpTime / 0.8) : 0;
 				// Translate both character and tracking camera for a real world-space gait.
-				c.object.position.set(
-					x,
-					mode === 'flight' ? 0.7 : mode === 'jump' ? Math.abs(Math.sin(elapsed * 2)) * 0.8 : 0,
-					z - speed * elapsed
-				);
+				c.object.position.set(x, mode === 'flight' ? 0.7 : jumpHeight, z - speed * elapsed);
 				c.update(
 					{
 						x,
 						y: c.object.position.y,
 						z: z - speed * elapsed,
-						yaw: 0,
-						pitch: 0,
+						yaw: mode === 'look' || mode === 'build' ? Math.sin(elapsed * 0.8) * 1.1 : 0,
+						pitch: mode === 'look' || mode === 'build' ? Math.sin(elapsed * 1.2) * 0.7 : 0,
 						speed,
 						stale: false,
 						flags:
 							mode === 'flight'
 								? POSE_FLAGS.flying
-								: mode === 'jump'
+								: mode === 'jump' && jumpHeight > 0.001
 									? 0
-									: POSE_FLAGS.grounded | (mode === 'run' ? POSE_FLAGS.running : 0)
+									: POSE_FLAGS.grounded |
+										(mode === 'run' ? POSE_FLAGS.running : 0) |
+										(mode === 'build' ? POSE_FLAGS.building : 0)
 					},
 					dt,
 					4,
@@ -149,9 +150,9 @@
 	<strong>Character preview</strong><span data-testid="character-status">{status}</span>
 	<label
 		>Animation <select bind:value={mode}
-			><option>idle</option><option>walk</option><option>run</option><option>jump</option><option
-				>flight</option
-			></select
+			><option>idle</option><option>look</option><option>build</option><option>walk</option><option
+				>run</option
+			><option>jump</option><option>flight</option></select
 		></label
 	>
 	<label

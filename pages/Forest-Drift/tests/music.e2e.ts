@@ -11,7 +11,7 @@ test('compose garden, free angle chords, controls and persistent reload', async 
 	page.on('pageerror', (e) => errors.push(e.message));
 	await page.goto('/?musicTest');
 	await createAndEnterWorld(page, { name: 'Music Garden' });
-	await page.keyboard.press('m');
+	await page.keyboard.press('n');
 	await expect(page.getByTestId('build-hud')).toContainText('MUSIC GARDEN');
 	const song = await page.evaluate(() => {
 		const m = window.forestScene.music;
@@ -56,7 +56,7 @@ test('compose garden, free angle chords, controls and persistent reload', async 
 			)
 		)
 		.toBe(true);
-	await page.keyboard.press('m');
+	await page.keyboard.press('n');
 	await page.keyboard.press('ControlOrMeta+s');
 	await expect(page.getByTestId('save-indicator')).toHaveAttribute('data-status', 'saved');
 	await page.reload();
@@ -72,7 +72,7 @@ test('all instruments, tempo changes, render stalls and existing Remove Mode', a
 	page.on('pageerror', (e) => errors.push(e.message));
 	await page.goto('/?musicTest');
 	await createAndEnterWorld(page, { name: 'Music lifecycle' });
-	await page.keyboard.press('m');
+	await page.keyboard.press('n');
 	const state = await page.evaluate(() => {
 		const m = window.forestScene.music;
 		const t = m.activeTree!;
@@ -151,7 +151,7 @@ test('sustained notes: duration control, radial trail, live illumination, loop c
 	page.on('pageerror', (e) => errors.push(e.message));
 	await page.goto('/?musicTest');
 	await createAndEnterWorld(page, { name: 'Sustain Garden' });
-	await page.keyboard.press('m');
+	await page.keyboard.press('n');
 	await expect(page.getByTestId('build-hud')).toContainText('MUSIC GARDEN');
 
 	// Aim the camera straight down at the ring-5 target so the tool's own per-frame `update()` (the
@@ -250,11 +250,17 @@ test('sustained notes: duration control, radial trail, live illumination, loop c
 		m.duration = 999;
 		const lastRing = 30; // totalSteps=32 by default -> max duration from ring 30 is 2
 		const radius = t.loop.firstRingRadius + lastRing * t.loop.ringSpacing;
-		const p = m.previewAt(
-			t.position.x + Math.cos(-1.2) * radius,
-			t.position.z + Math.sin(-1.2) * radius
-		);
-		return p ? { durationSteps: p.durationSteps, endRing: p.ringIndex + p.durationSteps } : null;
+		// Terrain and water can reject a particular angle. Find real open ground on the
+		// same final ring; keep the production placement checks and duration clamp active.
+		for (let i = 0; i < 64; i++) {
+			const angle = -1.2 + (i / 64) * Math.PI * 2;
+			const p = m.previewAt(
+				t.position.x + Math.cos(angle) * radius,
+				t.position.z + Math.sin(angle) * radius
+			);
+			if (p) return { durationSteps: p.durationSteps, endRing: p.ringIndex + p.durationSteps };
+		}
+		return null;
 	});
 	expect(clamp).not.toBeNull();
 	expect(clamp!.endRing).toBeLessThanOrEqual(32);

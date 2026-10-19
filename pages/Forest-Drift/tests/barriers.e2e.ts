@@ -21,7 +21,7 @@ test('slot 2 cycles to Fence / Railing, E customises it, and a fence survives a 
 	await page.keyboard.press('ArrowDown');
 	const slot = page.getByTestId('hotbar-slot-barrier');
 	await expect(slot).toHaveClass(/active/);
-	await expect(slot).toContainText('Fence / Rail');
+	await expect(slot).toHaveAccessibleName('Fence / Rail (slot 2)');
 	await expect(page.getByTestId('build-hud')).toContainText('FENCE / RAILING');
 
 	await page.keyboard.press('e');

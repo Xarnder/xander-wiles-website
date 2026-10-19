@@ -68,7 +68,7 @@ describe('runtime character asset and ownership', () => {
 				step < 8
 					? POSE_FLAGS.grounded
 					: step < 16
-						? POSE_FLAGS.grounded | POSE_FLAGS.running
+						? POSE_FLAGS.grounded | POSE_FLAGS.running | POSE_FLAGS.building
 						: POSE_FLAGS.flying;
 			a.object.position.z = -step * 0.15;
 			a.object.rotation.y = step * 0.1;
@@ -81,10 +81,12 @@ describe('runtime character asset and ownership', () => {
 			a.object.updateMatrixWorld(true);
 			for (const mesh of meshes) {
 				expect(mesh.frustumCulled).toBe(true);
+				let outsideBounds = 0;
 				for (let i = 0; i < mesh.geometry.attributes.position.count; i++) {
 					mesh.getVertexPosition(i, vertex);
-					expect(mesh.boundingSphere!.containsPoint(vertex)).toBe(true);
+					if (!mesh.boundingSphere!.containsPoint(vertex)) outsideBounds++;
 				}
+				expect(outsideBounds).toBe(0);
 			}
 		}
 		const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
@@ -99,6 +101,35 @@ describe('runtime character asset and ownership', () => {
 		expect(meshes.some((mesh) => frustum.intersectsObject(mesh))).toBe(false);
 		a.dispose();
 		b.dispose();
+	});
+
+	it('aims the actual head in world axes and extends the building hand without turning the feet', () => {
+		const c = new CharacterInstance(template, '#ffffff', () => {});
+		c.update(frame(), 1 / 60, 4, () => 0);
+		const head = bone(c, 'Head').getWorldQuaternion(new THREE.Quaternion());
+		const hand = bone(c, 'RightHand').getWorldPosition(new THREE.Vector3());
+		const foot = bone(c, 'LeftFoot').getWorldPosition(new THREE.Vector3());
+		for (let i = 0; i < 60; i++)
+			c.update(
+				{ ...frame(), yaw: 0.4, pitch: 0.5, flags: POSE_FLAGS.grounded | POSE_FLAGS.building },
+				1 / 60,
+				4,
+				() => 0
+			);
+		const delta = bone(c, 'Head')
+			.getWorldQuaternion(new THREE.Quaternion())
+			.multiply(head.invert());
+		const look = new THREE.Vector3(0, 0, -1).applyQuaternion(delta);
+		expect(Math.atan2(-look.x, -look.z)).toBeCloseTo(0.4, 2);
+		expect(Math.asin(look.y)).toBeCloseTo(0.5, 2);
+		expect(c.animation.bodyYaw).toBe(0);
+		expect(bone(c, 'RightHand').getWorldPosition(new THREE.Vector3()).z).toBeLessThan(
+			hand.z - 0.15
+		);
+		expect(bone(c, 'LeftFoot').getWorldPosition(new THREE.Vector3()).distanceTo(foot)).toBeLessThan(
+			0.02
+		);
+		c.dispose();
 	});
 
 	it('keeps a planted ankle stationary and rejects an upstairs support surface', () => {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { PROCEDURAL_VARIANTS } from '../src/lib/game/materials/ProceduralMaterialTypes';
 
 /**
  * Procedural materials in the real game and the material dev tools. Screenshots are attached to the
@@ -30,6 +31,8 @@ interface SceneHandle {
 	whenMaterialsReady(): Promise<void>;
 	getMaterialStats(): { textureSets: number; bindings: number; mappedGeometries: number };
 	controller: FrozenController;
+	graphicsSettings: { dynamicResolutionEnabled: boolean };
+	vegetationSettings: { grass: { enabled: boolean }; plants: { enabled: boolean } };
 }
 type GameWindow = Window & { __forestSession: { scene: SceneHandle } };
 
@@ -60,6 +63,10 @@ async function openMainWorld(page: Page, query = ''): Promise<void> {
 	});
 	await page.evaluate((pose) => {
 		const scene = (window as unknown as GameWindow).__forestSession.scene;
+		// Compare texture detail with identical lighting, pixel density and unobscured ground.
+		scene.graphicsSettings.dynamicResolutionEnabled = false;
+		scene.vegetationSettings.grass.enabled = false;
+		scene.vegetationSettings.plants.enabled = false;
 		const controller = scene.controller;
 		controller.restoreState(pose.position, pose.yaw, pose.pitch);
 		// Freeze the camera at the pose (no gravity, ground snapping or walk bob).
@@ -127,7 +134,7 @@ test('Main World renders procedural materials with real surface detail and no er
 	const flatPaving = await detailEnergy(page, PAVING_REGION);
 	const flatGrass = await detailEnergy(page, GRASS_REGION);
 
-	await openMainWorld(page);
+	await openMainWorld(page, '?lighting=classic');
 	await info.attach('main-world-procedural.png', {
 		body: await page.screenshot(),
 		contentType: 'image/png'
@@ -178,6 +185,9 @@ test('material gallery generates every material', async ({ page }) => {
 	await expect(page.getByTestId('gallery-status')).toContainText('ms', { timeout: 60_000 });
 	await page.getByTestId('gallery-new-seed').click();
 	await expect(page.getByTestId('gallery-status')).toContainText('ms', { timeout: 60_000 });
-	await expect(page.locator('.swatches button')).toHaveCount(24, { timeout: 120_000 });
+	await expect(page.locator('.swatches button')).toHaveCount(
+		Object.values(PROCEDURAL_VARIANTS).reduce((count, variants) => count + variants.length, 0),
+		{ timeout: 120_000 }
+	);
 	expect(problems).toEqual([]);
 });

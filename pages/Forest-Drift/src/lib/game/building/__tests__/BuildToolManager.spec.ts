@@ -233,6 +233,22 @@ describe('BuildToolManager + FoundationTool click routing', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('exposes a short placement gesture, expires it, and hides it when building is locked', () => {
+		const { buildToolManager } = buildHarness(pointerLocked);
+		let now = 100;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		buildToolManager.triggerPrimaryAction();
+		expect(buildToolManager.isConstructionGestureActive()).toBe(true);
+		now += 700;
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		buildToolManager.triggerPrimaryAction();
+		buildToolManager.setLocked(true);
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		clock.mockRestore();
+		buildToolManager.dispose();
+	});
+
 	it('does not place a foundation from the click that only acquires pointer lock', () => {
 		const { foundationManager, pointCrosshairAt, click } = buildHarness(pointerLocked);
 

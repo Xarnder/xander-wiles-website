@@ -136,6 +136,7 @@ export class BuildToolManager {
 	 * confirmed their role). Every way in — keys, clicks, the on-screen hotbar — checks this.
 	 */
 	private locked = false;
+	private constructionUntil = 0;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		const target = event.target as HTMLElement | null;
@@ -229,10 +230,7 @@ export class BuildToolManager {
 			return;
 		}
 		if (this.globalMode !== 'none') {
-			if (
-				this.globalMode === 'remove' &&
-				(event.code === 'Delete' || event.code === 'Backspace')
-			) {
+			if (this.globalMode === 'remove' && (event.code === 'Delete' || event.code === 'Backspace')) {
 				event.preventDefault();
 				this.removeTool.requestFoundationDeletion?.();
 				return;
@@ -270,7 +268,7 @@ export class BuildToolManager {
 				return;
 			}
 			if (!this.buildModeActive) return;
-			this.getActiveTool()?.onPrimaryAction();
+			this.performConstructionAction();
 		} else if (event.button === 2) {
 			if (this.globalMode !== 'none') {
 				if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
@@ -363,7 +361,7 @@ export class BuildToolManager {
 			return;
 		}
 		if (!this.buildModeActive) return;
-		this.getActiveTool()?.onPrimaryAction();
+		this.performConstructionAction();
 	}
 
 	triggerSecondaryAction(): void {
@@ -390,6 +388,31 @@ export class BuildToolManager {
 	toggleBuildMode(): void {
 		if (this.locked) return;
 		this.setBuildMode(!this.buildModeActive);
+	}
+
+	/** Short cosmetic reach for a placement attempt; also active while carrying an object. */
+	isConstructionGestureActive(): boolean {
+		const tool =
+			this.globalMode === 'move'
+				? this.moveTool
+				: this.globalMode === 'none' && this.buildModeActive
+					? this.getActiveTool()
+					: undefined;
+		return (
+			!!tool &&
+			!this.locked &&
+			!this.isInputBlocked?.() &&
+			!this.placementCustomizeOpen &&
+			!this.placementHeightOpen &&
+			(performance.now() < this.constructionUntil || !!tool?.isHoldingObject?.())
+		);
+	}
+
+	private performConstructionAction(): void {
+		const tool = this.getActiveTool();
+		if (!tool) return;
+		this.constructionUntil = performance.now() + 650;
+		tool.onPrimaryAction();
 	}
 
 	/** Locks (or unlocks) all building — see `locked`. Locking leaves any tool or mode cleanly first. */
@@ -453,7 +476,8 @@ export class BuildToolManager {
 	/** Compose Mode hotbar: pick an instrument without leaving Compose Mode. */
 	selectMusicSpecies(index: number): void {
 		if (this.globalMode !== 'music') return;
-		const tool = this.musicTool as (BuildTool & { selectSpecies?(index: number): void }) | undefined;
+		const tool = this.musicTool as
+			(BuildTool & { selectSpecies?(index: number): void }) | undefined;
 		tool?.selectSpecies?.(index);
 		this.emitHotbarChange();
 	}

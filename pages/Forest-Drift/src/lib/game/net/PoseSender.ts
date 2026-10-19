@@ -11,6 +11,7 @@ export interface LocalPose {
 	flying: boolean;
 	grounded?: boolean;
 	running?: boolean;
+	building?: boolean;
 }
 
 /**
@@ -145,6 +146,7 @@ function poseFlags(pose: LocalPose): number {
 	return (
 		(pose.flying ? POSE_FLAGS.flying : 0) |
 		(pose.grounded ? POSE_FLAGS.grounded : 0) |
-		(pose.running ? POSE_FLAGS.running : 0)
+		(pose.running ? POSE_FLAGS.running : 0) |
+		(pose.building ? POSE_FLAGS.building : 0)
 	);
 }

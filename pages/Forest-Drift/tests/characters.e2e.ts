@@ -76,3 +76,35 @@ test('real character renders, animates, and scales to a room of independent rigs
 	await page.screenshot({ path: info.outputPath('character.png') });
 	expect(errors).toEqual([]);
 });
+
+test('building reach, independent look and landing recovery are visible in the preview', async ({
+	page
+}, info) => {
+	await page.goto('/characters');
+	await expect(page.getByTestId('character-status')).toHaveText('Ready');
+	const state = () =>
+		page.evaluate(
+			() =>
+				(
+					window as unknown as {
+						__characterLab: {
+							characters: { animation: { reach: number; headYaw: number; compression: number } }[];
+						};
+					}
+				).__characterLab.characters[0]?.animation
+		);
+	await page.locator('select').nth(0).selectOption('build');
+	await expect.poll(async () => (await state())?.reach).toBeGreaterThan(0.8);
+	await page.screenshot({ path: info.outputPath('building-reach.png') });
+	await page.locator('select').nth(0).selectOption('look');
+	await expect.poll(async () => Math.abs((await state())?.headYaw ?? 0)).toBeGreaterThan(0.2);
+	await expect.poll(async () => (await state())?.reach).toBeLessThan(0.01);
+	await page.screenshot({ path: info.outputPath('independent-look.png') });
+	await page.locator('select').nth(0).selectOption('jump');
+	await expect
+		.poll(async () => (await state())?.compression, { intervals: [40] })
+		.toBeGreaterThan(0.025);
+	await page.screenshot({ path: info.outputPath('landing.png') });
+	await page.locator('select').nth(0).selectOption('idle');
+	await expect.poll(async () => (await state())?.compression).toBe(0);
+});

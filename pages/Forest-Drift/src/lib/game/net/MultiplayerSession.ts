@@ -60,6 +60,7 @@ export interface LocalPlayerFrame {
 	flying: boolean;
 	grounded?: boolean;
 	running?: boolean;
+	building?: boolean;
 	eyeHeight: number;
 }
 
@@ -277,7 +278,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			pitch: local.pitch,
 			flying: local.flying,
 			grounded: local.grounded,
-			running: local.running
+			running: local.running,
+			building: local.building
 		});
 	}
 

@@ -154,6 +154,13 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 			});
 			return models.map((model) => ({
 				state: model.userData.animation as string,
+				pose: model.userData.animationState as {
+					bodyYaw: number;
+					headYaw: number;
+					pitch: number;
+					reach: number;
+					compression: number;
+				},
 				bones: (() => {
 					let n = 0;
 					model.traverse((o) => {
@@ -192,6 +199,84 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 	await expect
 		.poll(async () => (await characterState(visitor))[0]?.state, { timeout: 15000 })
 		.toBe('idle');
+	// Camera look remains networked at the existing pose rate; body following is cosmetic.
+	await owner.evaluate(() => {
+		const controller = (
+			window as unknown as {
+				__forestSession: {
+					scene: {
+						controller: import('../src/lib/game/player/FirstPersonController').FirstPersonController;
+					};
+				};
+			}
+		).__forestSession.scene.controller;
+		const p = controller.worldPosition;
+		controller.restoreState({ x: p.x, y: p.y, z: p.z }, controller.getYaw() + 0.35, 0.45);
+	});
+	await expect
+		.poll(async () => Math.abs((await characterState(visitor))[0]?.pose.headYaw ?? 0), {
+			timeout: 15000
+		})
+		.toBeGreaterThan(0.2);
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.pose.pitch, { timeout: 15000 })
+		.toBeCloseTo(0.45, 1);
+	await owner.evaluate(() => {
+		const scene = (
+			window as unknown as { __forestSession: { scene: { triggerPrimaryAction(): void } } }
+		).__forestSession.scene;
+		scene.triggerPrimaryAction();
+	});
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.pose.reach, {
+			timeout: 15000,
+			intervals: [50]
+		})
+		.toBeGreaterThan(0.25);
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.pose.reach, { timeout: 15000 })
+		.toBeLessThan(0.01);
+	await owner.evaluate(() => {
+		const controller = (
+			window as unknown as {
+				__forestSession: {
+					scene: {
+						controller: import('../src/lib/game/player/FirstPersonController').FirstPersonController;
+					};
+				};
+			}
+		).__forestSession.scene.controller;
+		controller.setTouchActive(true);
+		controller.triggerTouchJump();
+	});
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.state, {
+			timeout: 15000,
+			intervals: [50]
+		})
+		.toBe('airborne');
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.pose.compression, {
+			timeout: 15000,
+			intervals: [50]
+		})
+		.toBeGreaterThan(0.01);
+	await expect
+		.poll(async () => (await characterState(visitor))[0]?.pose.compression, { timeout: 15000 })
+		.toBe(0);
+	await owner.evaluate(() => {
+		(
+			window as unknown as {
+				__forestSession: {
+					scene: {
+						controller: import('../src/lib/game/player/FirstPersonController').FirstPersonController;
+					};
+				};
+			}
+		).__forestSession.scene.controller.setTouchActive(false);
+	});
+	// Leaving simulated touch control opens the normal pause menu; restore the prior UI state.
+	await owner.getByTestId('pause-resume').click();
 	await visitor.screenshot({ path: test.info().outputPath('remote-character.png') });
 
 	if (process.env.FOREST_DRIFT_GPU === '1') {
@@ -527,8 +612,17 @@ test('co-building: shared, saved, permission-checked, and clashes resolved in or
 				.filter((id) => id.endsWith('-pad'))
 				.join(',')
 		);
-	await expect.poll(() => pads(owner), { timeout: 20_000 }).toMatch(/^(owner-pad|builder-pad)$/);
-	await expect.poll(() => pads(builder), { timeout: 20_000 }).toBe(await pads(owner));
+	// Both replicas begin with optimistic local pads. Read both on every retry so the
+	// expectation cannot capture the owner's losing pad before server reconciliation.
+	await expect
+		.poll(
+			async () => {
+				const [ownerPad, builderPad] = await Promise.all([pads(owner), pads(builder)]);
+				return /^(owner-pad|builder-pad)$/.test(ownerPad) && ownerPad === builderPad;
+			},
+			{ timeout: 20_000 }
+		)
+		.toBe(true);
 
 	// Saved on the server: someone joining fresh gets all of it.
 	const latecomer = await newPlayer(browser);

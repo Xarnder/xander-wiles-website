@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
+import { CharacterAnimationState } from './CharacterAnimationState';
 import { TwoBoneIK } from './twoBoneIK';
 import manifest from './assets/character.manifest.json';
 import { POSE_FLAGS } from '../net/protocol';
@@ -50,11 +51,14 @@ export class CharacterInstance {
 	private time = 0;
 	private blend = 0;
 	private initialized = false;
-	private lastYaw = 0;
 	private lastDiscontinuity = 0;
 	private probeTime = 0;
-	private wasGrounded = true;
-	private landing = 0;
+	readonly animation = new CharacterAnimationState();
+	private readonly aimRotation = new THREE.Quaternion();
+	private readonly aimParent = new THREE.Quaternion();
+	private readonly aimAxis = new THREE.Vector3();
+	private readonly armTarget = new THREE.Vector3();
+	private readonly armCurrent = new THREE.Vector3();
 	private disposed = false;
 
 	constructor(
@@ -64,6 +68,7 @@ export class CharacterInstance {
 	) {
 		this.object = clone(template);
 		this.object.name = 'character-model';
+		this.object.userData.animationState = this.animation;
 		this.object.traverse((object) => {
 			if (object instanceof THREE.Bone) {
 				this.bones.set(object.name, object);
@@ -134,10 +139,7 @@ export class CharacterInstance {
 		dt = Math.max(0, Math.min(dt, 0.05));
 		this.time += dt;
 		this.probeTime += dt;
-		const yawDelta = Math.atan2(
-			Math.sin(frame.yaw - this.lastYaw),
-			Math.cos(frame.yaw - this.lastYaw)
-		);
+		const previousBodyYaw = this.animation.bodyYaw;
 		this.point.set(frame.x, frame.y, frame.z);
 		this.movement.subVectors(this.point, this.previous);
 		const reset =
@@ -153,8 +155,19 @@ export class CharacterInstance {
 				leg.normal.set(0, 1, 0);
 			}
 		}
+		const horizontalSpeed = dt > 0 ? Math.hypot(this.movement.x, this.movement.z) / dt : 0;
+		this.animation.update(frame, dt, reset, this.movement.y, horizontalSpeed);
+		const yawDelta = Math.atan2(
+			Math.sin(this.animation.bodyYaw - previousBodyYaw),
+			Math.cos(this.animation.bodyYaw - previousBodyYaw)
+		);
+		// The parent may face the camera yaw; this mesh independently follows the body heading.
+		if (this.object.parent) this.object.parent.getWorldQuaternion(this.aimParent);
+		else this.aimParent.identity();
+		this.aimAxis.set(0, 0, -1).applyQuaternion(this.aimParent);
+		const parentYaw = Math.atan2(-this.aimAxis.x, -this.aimAxis.z);
+		this.object.rotation.y = this.animation.bodyYaw - parentYaw;
 		this.previous.copy(this.point);
-		this.lastYaw = frame.yaw;
 		this.lastDiscontinuity = frame.discontinuity ?? 0;
 		this.initialized = true;
 		const flying = !!(frame.flags & POSE_FLAGS.flying);
@@ -168,9 +181,7 @@ export class CharacterInstance {
 			((moving ? Math.min(1, speed / 1.2) : 0) - this.blend) * (1 - Math.exp(-dt / 0.1));
 		const stride = running ? 2.4 : 1.6;
 		if (grounded) this.phase = (this.phase + (travelled / stride) * TAU) % TAU;
-		if (grounded && !this.wasGrounded) this.landing = 0.06;
-		this.wasGrounded = grounded;
-		this.landing *= Math.exp(-dt / 0.12);
+
 		for (const rest of this.rest) {
 			rest.bone.position.copy(rest.position);
 			rest.bone.quaternion.copy(rest.rotation);
@@ -186,17 +197,41 @@ export class CharacterInstance {
 		else this.localMovement.set(0, 0, -1);
 		// Base breathing and landing are small visual pelvis offsets in the source rig's units.
 		const hips = this.bone('Hips');
-		hips.position.y += (Math.sin(this.time * 1.8) * 0.004 - this.landing) / manifest.scale;
-		this.offset('Head', X, frame.pitch * 0.55);
-		this.offset('Spine2', X, frame.pitch * 0.12);
+		hips.position.y +=
+			(Math.sin(this.time * 1.8) * 0.004 - this.animation.compression) / manifest.scale;
+
 		const swing = Math.sin(this.phase) * this.blend * 0.65;
 		this.offset('LeftArm', X, swing);
-		this.offset('RightArm', X, -swing);
+		this.offset('RightArm', X, -swing * (1 - this.animation.reach));
 		if (flying) {
 			this.offset('LeftArm', X, -0.25);
 			this.offset('RightArm', X, -0.25);
 		}
 		this.object.updateWorldMatrix(true, true);
+		// Rotate in body/world axes rather than assuming the imported bones use Three's axes.
+		this.aimAxis.copy(X).applyQuaternion(this.rootRotation);
+		this.offsetWorld('Spine2', this.aimAxis, -this.animation.compression * 0.7);
+		this.offsetWorld('Neck', UP, this.animation.headYaw * 0.25);
+		this.offsetWorld('Head', UP, this.animation.headYaw * 0.75);
+		this.aimAxis.copy(X).applyAxisAngle(UP, frame.yaw);
+		this.offsetWorld('Neck', this.aimAxis, this.animation.pitch * 0.25);
+		this.offsetWorld('Head', this.aimAxis, this.animation.pitch * 0.75);
+		if (this.animation.reach > 0.001) {
+			const arm = this.bone('RightArm'),
+				elbow = this.bone('RightForeArm'),
+				hand = this.bone('RightHand');
+			arm.getWorldPosition(this.armTarget);
+			this.aimAxis
+				.set(0, 0, -1)
+				.applyAxisAngle(X, this.animation.pitch)
+				.applyAxisAngle(UP, frame.yaw);
+			this.armTarget.addScaledVector(this.aimAxis, 0.48);
+			this.armTarget.y -= 0.08;
+			hand.getWorldPosition(this.armCurrent);
+			this.armTarget.lerpVectors(this.armCurrent, this.armTarget, this.animation.reach);
+			this.pole.set(1, -0.7, 0).applyQuaternion(this.rootRotation);
+			this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
+		}
 		const probe = this.probeTime >= (distance < 15 ? 1 / 30 : 1 / 15);
 		if (probe) this.probeTime = 0;
 		this.pole.set(0, 0, -1).applyQuaternion(this.rootRotation);
@@ -281,6 +316,14 @@ export class CharacterInstance {
 		if (Number.isFinite(dx) && Number.isFinite(dz) && Math.abs(dx) < 0.04 && Math.abs(dz) < 0.04)
 			leg.normal.set(-dx / 0.08, 1, -dz / 0.08).normalize();
 		else leg.normal.set(0, 1, 0);
+	}
+	private offsetWorld(name: string, axis: THREE.Vector3, radians: number): void {
+		const bone = this.bone(name);
+		bone.getWorldQuaternion(this.aimRotation);
+		this.rotation.setFromAxisAngle(axis, radians).multiply(this.aimRotation);
+		bone.parent!.getWorldQuaternion(this.aimParent).invert();
+		bone.quaternion.copy(this.aimParent.multiply(this.rotation));
+		bone.updateWorldMatrix(false, true);
 	}
 	private offset(name: string, axis: THREE.Vector3, radians: number): void {
 		this.bone(name).quaternion.multiply(this.rotation.setFromAxisAngle(axis, radians));

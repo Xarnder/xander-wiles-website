@@ -9,6 +9,17 @@ function at(x: number, overrides: Partial<LocalPose> = {}): LocalPose {
 }
 
 describe('PoseSender', () => {
+	it('replicates a stationary construction gesture immediately without extra periodic traffic', () => {
+		const sender = new PoseSender();
+		sender.sample(at(0), 0, 0);
+		sender.sample(at(0), 16, 16);
+		expect(
+			sender.sample(at(0, { building: true }), 32, 32)!.flags & POSE_FLAGS.building
+		).toBeTruthy();
+		expect(sender.sample(at(0, { building: true }), 48, 48)).toBeNull();
+		expect(sender.sample(at(0, { building: false }), 64, 64)!.flags & POSE_FLAGS.building).toBe(0);
+	});
+
 	it('sends every 100 ms (every 6th frame at 60 fps) while moving', () => {
 		const sender = new PoseSender();
 		const sendTimes: number[] = [];
