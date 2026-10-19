@@ -41,10 +41,21 @@ test('real character renders, animates, and scales to a room of independent rigs
 			cpuP95: samples[Math.floor(samples.length * 0.95)],
 			drawCalls: lab.drawCalls,
 			triangles: lab.triangles,
-			states: lab.characters.map((c) => c.object.userData.animation)
+			states: lab.characters.map((c) => c.object.userData.animation),
+			colours: lab.characters.map((c) => {
+				let colour = '';
+				c.object.traverse((object) => {
+					const material = (object as import('three').Mesh)
+						.material as import('three').MeshStandardMaterial;
+					if (material?.name === 'Clothing') colour = material.color.getHexString();
+				});
+				return colour;
+			})
 		};
 	});
 	expect(result.count).toBe(19);
+	expect(new Set(result.colours).size).toBe(19);
+	expect(result.colours.every(Boolean)).toBe(true);
 	expect(result.drawCalls).toBe(39); // Two primitives/character plus grid.
 	expect(result.triangles).toBe(19 * 5848);
 	expect(result.states.every((s) => s === 'moving')).toBe(true);

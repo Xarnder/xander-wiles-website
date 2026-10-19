@@ -19,33 +19,11 @@
  *   --speed    walking speed m/s (default 6)
  *   --json     print the report as JSON only
  *
- * Needs Node 22+ (global WebSocket). Bots stamp poses with Date.now(): accurate against a local
+ * Needs Node 22.18+ (global WebSocket). Bots stamp poses with Date.now(): accurate against a local
  * `wrangler dev` (same machine clock); against a deployed room it's as good as this machine's clock.
  */
 
-/** The game's player colours (src/lib/game/net/protocol.ts PLAYER_COLOURS). */
-const PALETTE = [
-	'#e6194b',
-	'#f58231',
-	'#ffe119',
-	'#bfef45',
-	'#42d4f4',
-	'#4363d8',
-	'#911eb4',
-	'#f032e6',
-	'#fabed4',
-	'#469990',
-	'#dcbeff',
-	'#ffffff',
-	'#9a6324',
-	'#800000',
-	'#aaffc3',
-	'#808000',
-	'#ffd8b1',
-	'#000075',
-	'#a9a9a9',
-	'#fffac8'
-];
+import { PLAYER_COLOURS as PALETTE, PROTOCOL_VERSION } from '../../src/lib/game/net/protocol.ts';
 
 const args = parseArgs(process.argv.slice(2));
 const server = (args.server ?? 'http://localhost:8787').replace(/\/+$/, '');
@@ -80,7 +58,12 @@ const [centerX, centerZ] = args.center
 const feetY = (world.player?.position?.y ?? 1.7) - 1.7;
 
 const bots = [];
-for (let i = 0; i < count; i++) bots.push(await startBot(i));
+try {
+	for (let i = 0; i < count; i++) bots.push(await startBot(i));
+} catch (error) {
+	for (const bot of bots) bot.stop();
+	throw error;
+}
 log(`${count} bots connected to "${manifest.name}"; walking for ${seconds}s…`);
 await sleep(seconds * 1000);
 for (const bot of bots) bot.stop();
@@ -121,10 +104,14 @@ async function startBot(index) {
 	let running = true;
 	let welcomed = false;
 	await new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			socket.close();
+			reject(new Error('Timed out waiting for welcome'));
+		}, 15000);
 		socket.onopen = () => {
 			const hello = JSON.stringify({
 				t: 'hello',
-				protocol: 3,
+				protocol: PROTOCOL_VERSION,
 				build: 'load-bot',
 				invite,
 				capability: null,
@@ -145,10 +132,15 @@ async function startBot(index) {
 				const message = JSON.parse(event.data);
 				if (message.t === 'welcome' && !welcomed) {
 					welcomed = true;
+					clearTimeout(timeout);
 					resolve();
 				}
 				if (message.t === 'pong') bot.rtts.push(performance.now() - message.c);
-				if (message.t === 'error') reject(new Error(message.message));
+				if (message.t === 'error') {
+					clearTimeout(timeout);
+					socket.close();
+					reject(new Error(message.message));
+				}
 				return;
 			}
 			bot.bytesIn += event.data.byteLength;
@@ -160,9 +152,15 @@ async function startBot(index) {
 			for (let i = 0; i < entries; i++) bot.ages.push(view.getUint16(6 + i * 20 + 18, true));
 		};
 		socket.onclose = () => {
+			clearTimeout(timeout);
+			if (!welcomed) reject(new Error('Connection closed before welcome'));
 			if (running) bot.closedEarly = true;
 		};
-		socket.onerror = () => reject(new Error('WebSocket error'));
+		socket.onerror = () => {
+			clearTimeout(timeout);
+			socket.close();
+			reject(new Error('WebSocket error'));
+		};
 	});
 
 	const phase = (index / Math.max(1, count)) * Math.PI * 2;
