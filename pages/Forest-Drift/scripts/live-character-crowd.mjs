@@ -61,9 +61,10 @@ try {
 		const s = window.__forestSession.scene,
 			p = s.controller.worldPosition;
 		const height = s.terrainManager.getHeightSampler();
-		const cx = p.x,
+		// Move the observer and crowd into the open area beside the spawn buildings.
+		const cx = p.x + 30,
 			cz = p.z - 22;
-		s.controller.restoreState({ x: p.x, y: p.y, z: p.z }, 0, -0.07);
+		s.controller.restoreState({ x: cx, y: height.sample(cx, p.z) + 1.7, z: p.z }, 0, -0.07);
 		return Array.from({ length: 19 }, (_, i) =>
 			Array.from({ length: 128 }, (_, j) => {
 				const a = (j / 128) * Math.PI * 2;

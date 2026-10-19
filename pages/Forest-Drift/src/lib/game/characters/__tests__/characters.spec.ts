@@ -53,6 +53,54 @@ describe('runtime character asset and ownership', () => {
 		expect(b.object.children.length).toBeGreaterThan(0);
 		b.dispose();
 	});
+	it('keeps animated vertices inside fixed per-instance culling bounds', () => {
+		const a = new CharacterInstance(template, '#ffffff', () => {});
+		const b = new CharacterInstance(template, '#000000', () => {});
+		const meshes: THREE.SkinnedMesh[] = [];
+		a.object.traverse((o) => {
+			if (o instanceof THREE.SkinnedMesh) meshes.push(o);
+		});
+		const other = b.object.getObjectByName(meshes[0].name) as THREE.SkinnedMesh;
+		expect(meshes[0].boundingSphere).not.toBe(other.boundingSphere);
+		const vertex = new THREE.Vector3();
+		for (let step = 0; step < 24; step++) {
+			const flags =
+				step < 8
+					? POSE_FLAGS.grounded
+					: step < 16
+						? POSE_FLAGS.grounded | POSE_FLAGS.running
+						: POSE_FLAGS.flying;
+			a.object.position.z = -step * 0.15;
+			a.object.rotation.y = step * 0.1;
+			a.update(
+				{ ...frame(a.object.position.z, flags), yaw: step * 0.1, pitch: 0.6 },
+				1 / 60,
+				8,
+				() => 0
+			);
+			a.object.updateMatrixWorld(true);
+			for (const mesh of meshes) {
+				expect(mesh.frustumCulled).toBe(true);
+				for (let i = 0; i < mesh.geometry.attributes.position.count; i++) {
+					mesh.getVertexPosition(i, vertex);
+					expect(mesh.boundingSphere!.containsPoint(vertex)).toBe(true);
+				}
+			}
+		}
+		const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+		camera.position.z = 5;
+		camera.updateMatrixWorld();
+		const frustum = new THREE.Frustum().setFromProjectionMatrix(
+			new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+		);
+		expect(meshes.every((mesh) => frustum.intersectsObject(mesh))).toBe(true);
+		a.object.position.x = 100;
+		a.object.updateMatrixWorld(true);
+		expect(meshes.some((mesh) => frustum.intersectsObject(mesh))).toBe(false);
+		a.dispose();
+		b.dispose();
+	});
+
 	it('keeps a planted ankle stationary and rejects an upstairs support surface', () => {
 		const a = new CharacterInstance(template, '#ffffff', () => {});
 		a.update(frame(), 1 / 60, 4, () => 0);

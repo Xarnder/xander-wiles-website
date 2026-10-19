@@ -32,6 +32,7 @@
 		let animation = 0;
 		let last = performance.now();
 		let elapsed = 0;
+		let framedCount = 1;
 		const samples: number[] = [];
 		const resize = () => {
 			renderer.setSize(innerWidth, innerHeight);
@@ -55,6 +56,19 @@
 			const dt = Math.min((now - last) / 1000, 0.05);
 			last = now;
 			elapsed += dt;
+			if (framedCount !== count) {
+				framedCount = count;
+				const centerX = (Math.min(count, 5) - 1) * 0.75;
+				const centerZ = Math.floor((count - 1) / 5) * 0.75;
+				const speed = mode === 'run' ? 12 : mode === 'walk' ? 6 : 0;
+				controls.target.set(centerX, 0.9, centerZ - speed * elapsed);
+				camera.position.set(
+					centerX + (count === 1 ? 3 : 8),
+					count === 1 ? 2.3 : 6,
+					controls.target.z - (count === 1 ? 4 : 10)
+				);
+				controls.update();
+			}
 			if (template && characters.length < count) {
 				const c = new CharacterInstance(template, PLAYER_COLOURS[characters.length], () => {});
 				characters.push(c);
@@ -96,7 +110,7 @@
 			samples.push(performance.now() - start);
 			if (samples.length > 3600) samples.shift();
 			const speed = mode === 'run' ? 12 : mode === 'walk' ? 6 : 0;
-			const targetZ = -speed * elapsed;
+			const targetZ = Math.floor((count - 1) / 5) * 0.75 - speed * elapsed;
 			camera.position.z += targetZ - controls.target.z;
 			controls.target.z = targetZ;
 			controls.update();

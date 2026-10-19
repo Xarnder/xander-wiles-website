@@ -1,3 +1,4 @@
+import { ResolutionBudget } from './ResolutionBudget';
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -33,7 +34,6 @@ const AO_RESOLUTION_SCALE: Record<AoQuality, number> = {
 
 /** How often (seconds) the dynamic-resolution check re-evaluates — deliberately not every frame, see GraphicsTypes.ts's `dynamicResolutionEnabled` doc. */
 const DYNAMIC_RES_CHECK_INTERVAL = 1;
-const DYNAMIC_RES_STEP = 0.08;
 /** Exponential-moving-average time constant (seconds) for the smoothed FPS the dynamic-resolution logic reacts to. */
 const FPS_SMOOTHING_TIME_CONSTANT = 0.5;
 /**
@@ -122,6 +122,7 @@ export class GraphicsPipeline {
 	private renderScale = 1;
 	private smoothedFps = 60;
 	private dynamicResCooldown = 0;
+	private readonly resolutionBudget = new ResolutionBudget();
 
 	constructor(options: GraphicsPipelineOptions) {
 		this.renderer = options.renderer;
@@ -375,6 +376,7 @@ export class GraphicsPipeline {
 		// actually run at the new settings.
 		this.smoothedFps = this.settings.targetFps;
 		this.dynamicResCooldown = DYNAMIC_RES_CHECK_INTERVAL;
+		this.resolutionBudget.reset();
 
 		this.applyShadowSettings(preset);
 		this.rebuildComposer(preset);
@@ -531,6 +533,7 @@ export class GraphicsPipeline {
 		}
 
 		if (!this.settings.dynamicResolutionEnabled) {
+			this.resolutionBudget.reset();
 			if (this.renderScale !== 1) {
 				this.renderScale = 1;
 				this.applyRenderSize();
@@ -545,13 +548,14 @@ export class GraphicsPipeline {
 		const floor = this.currentPreset.minDynamicResolutionScale;
 		const targetFps = this.settings.targetFps;
 
-		if (this.smoothedFps < targetFps * 0.9 && this.renderScale > floor) {
-			this.renderScale = Math.max(floor, this.renderScale - DYNAMIC_RES_STEP);
-			this.applyRenderSize();
-		} else if (this.smoothedFps > targetFps * 0.97 && this.renderScale < 1) {
-			// Recover at the same rate resolution was dropped, not slower — a slow recovery reads as
-			// "stuck" at reduced quality/frame rate even once the hardware can comfortably do better.
-			this.renderScale = Math.min(1, this.renderScale + DYNAMIC_RES_STEP);
+		const scale = this.resolutionBudget.nextScale(
+			this.smoothedFps,
+			targetFps,
+			this.renderScale,
+			floor
+		);
+		if (scale !== this.renderScale) {
+			this.renderScale = scale;
 			this.applyRenderSize();
 		}
 	}

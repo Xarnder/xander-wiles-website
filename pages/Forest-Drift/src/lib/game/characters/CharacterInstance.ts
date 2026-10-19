@@ -80,12 +80,25 @@ export class CharacterInstance {
 				this.materials.push(material);
 				registerMaterial(material);
 				object.castShadow = object.receiveShadow = true;
-				// Conservative fixed bounds avoid per-frame skinned bounding-box scans and disappearing limbs.
-				object.frustumCulled = false;
+				// Bounds are assigned below in each mesh's bind-space coordinates.
+				object.frustumCulled = true;
 				this.meshes.push(object);
 			}
 		});
 		this.object.updateMatrixWorld(true);
+		// A fixed envelope around the normalized 1.8 m character includes arm swings, foot IK,
+		// breathing and airborne poses. Convert to mesh space once: no per-frame vertex scans,
+		// and off-screen meshes can be rejected in the camera, AO and each shadow cascade.
+		for (const mesh of this.meshes) {
+			const modelToMesh = new THREE.Matrix4()
+				.copy(mesh.matrixWorld)
+				.invert()
+				.multiply(this.object.matrixWorld);
+			mesh.boundingSphere = new THREE.Sphere(
+				new THREE.Vector3(0, manifest.height / 2, 0),
+				1.6
+			).applyMatrix4(modelToMesh);
+		}
 		this.legs = ['Left', 'Right'].map((side) => {
 			const foot = this.bone(`${side}Foot`);
 			const ankle = this.object.worldToLocal(foot.getWorldPosition(new THREE.Vector3()));
@@ -162,7 +175,8 @@ export class CharacterInstance {
 			rest.bone.position.copy(rest.position);
 			rest.bone.quaternion.copy(rest.rotation);
 		}
-		this.object.updateWorldMatrix(true, true);
+		// Only the root transform is needed here; descendants update after posing below.
+		this.object.updateWorldMatrix(true, false);
 		this.object.getWorldQuaternion(this.rootRotation);
 		this.localMovement
 			.copy(this.movement)
