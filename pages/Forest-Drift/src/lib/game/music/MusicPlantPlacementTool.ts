@@ -38,6 +38,10 @@ interface Options {
 	camera: THREE.PerspectiveCamera;
 	surface: (x: number, z: number) => number;
 	targets: () => THREE.Object3D[];
+	prepareSurfaces?: (
+		points: Iterable<{ x: number; z: number }>,
+		cancelled: () => boolean
+	) => Promise<void>;
 	blocked: (x: number, z: number, radius?: number, height?: number) => boolean;
 	sustainSettings: SustainSettings;
 	hud?: (hud: BuildUiState | null) => void;
@@ -614,6 +618,23 @@ export class MusicPlantPlacementTool implements BuildTool {
 		const staged = new MusicPlantManager(this.options.surface, this.options.sustainSettings);
 		this.committing = true;
 		try {
+			if (imported.length >= 512 && this.options.prepareSurfaces) {
+				// Include every retry angle and slope probe; hydrology deduplicates region halos.
+				const points = function* () {
+					for (const p of imported) {
+						const radius = t.loop.firstRingRadius + p.ringIndex * t.loop.ringSpacing;
+						for (let attempt = 0; attempt < 80; attempt++) {
+							const angle = p.angle + attempt * 2.3999632297;
+							const x = t.position.x + Math.cos(angle) * radius;
+							const z = t.position.z + Math.sin(angle) * radius;
+							yield { x, z };
+							yield { x: x + 0.3, z };
+							yield { x, z: z + 0.3 };
+						}
+					}
+				};
+				await this.options.prepareSurfaces(points(), () => this.disposed);
+			}
 			const treeMap = new Map(trees.map((tree) => [tree.id, tree]));
 			const importedIds = new Set<string>(imported.map((p) => p.id));
 			for (const p of definitions)

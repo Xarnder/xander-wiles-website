@@ -1,6 +1,6 @@
 # Character gestures, head look and jump landings
 
-Implemented locally on 19 October 2026. These changes have not been deployed.
+Implemented on 19 October 2026. See the accompanying release-validation report for the final test gate.
 
 ## Behaviour
 
@@ -22,4 +22,4 @@ Added scalar animation tests, actual-asset world-space head/hand/foot checks, co
 
 A local GPU world sample with 19 remote rigs reported 60 fps average, 18.4 ms p95 frame time and 6.18 ms average CPU frame time. This synthetic rendering sample is not a live 20-client network load test or a guarantee for other hardware.
 
-Final checks: 2,052 unit tests across 161 files passed with two workers; `npm run check` reported zero errors/warnings; all four Chromium preview/multiplayer tests passed. Build, independent-look and landing screenshots were inspected. The build succeeded with its existing large-chunk warning. The optional sky HDR request still reports a missing asset during world tests; it did not prevent the tests from passing.
+Final checks: 2,052 unit tests across 161 files passed with two workers; `npm run check` reported zero errors/warnings; all 93 browser cases passed across the full run and corrected affected-test rerun, including multiplayer in Chromium, WebKit and Firefox. Build, independent-look and landing screenshots were inspected. The build succeeded with its existing large-chunk warning. The optional sky HDR request still reports a missing asset during world tests; it did not prevent the tests from passing.

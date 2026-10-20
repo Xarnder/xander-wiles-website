@@ -20,7 +20,7 @@ test('local MIDI preview, cancel, new placement, replace confirmation and reload
 	page.on('pageerror', (e) => errors.push(e.message));
 	await page.goto('/?musicTest');
 	await createAndEnterWorld(page, { name: 'MIDI garden' });
-	await page.keyboard.press('m');
+	await page.keyboard.press('n');
 	const original = await page.evaluate(() => window.forestScene.music.plants.definitions);
 	await page.getByRole('button', { name: 'Import MIDI', exact: true }).click();
 	await page.getByTestId('midi-file').setInputFiles({

@@ -52,15 +52,9 @@ export async function openWorldMenu(page: Page, name: string) {
 	return card;
 }
 
-/**
- * Opens the in-game pause menu.
- *
- * Escape has to reach the page's own handler, and the first Escape while pointer-locked is consumed
- * by the browser releasing the pointer — but these tests never engage pointer lock (it's unreliable
- * to drive in automation), so a single press is enough.
- */
+/** Open through the visible control; Resume may reacquire pointer lock and consume Escape. */
 export async function openPauseMenu(page: Page): Promise<void> {
-	await page.keyboard.press('Escape');
+	await page.getByTestId('pause-toggle').click();
 	await expect(page.getByTestId('pause-menu')).toBeVisible();
 }
 

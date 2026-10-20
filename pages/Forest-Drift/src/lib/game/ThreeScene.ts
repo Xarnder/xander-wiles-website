@@ -1394,6 +1394,7 @@ export class ThreeScene implements WorldRuntime {
 			);
 		};
 		this.music = new MusicPlantPlacementTool({
+			prepareSurfaces: (points, cancelled) => this.hydrology.preparePoints(points, cancelled),
 			scene: this.scene,
 			camera: this.camera,
 			surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),

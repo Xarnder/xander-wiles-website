@@ -30,6 +30,7 @@ import {
 	type HydrologySettings,
 	type LakeDefinition,
 	type RiverDefinition,
+	type RiverSample,
 	type RiverEdgeTint
 } from './HydrologyTypes';
 import { cameraIsUnderwater } from './underwater';
@@ -54,6 +55,10 @@ export interface HydrologyStats {
  */
 export class HydrologySystem implements HydrologyCarver {
 	private seedHash: number;
+	private preparing = 0;
+	// River geometry is immutable after generation; only width and linked lake levels
+	// can change the bank probe. Weak keys release cached probes with invalidated rivers.
+	private bankCaps = new WeakMap<RiverSample, { edge: number; lakes: string; low: number }>();
 	private generator: HydrologyRegionGenerator;
 	private readonly index = new HydrologySpatialIndex();
 	private readonly ready = new Set<string>();
@@ -108,6 +113,7 @@ export class HydrologySystem implements HydrologyCarver {
 
 	invalidate(): void {
 		this.generator = this.createGenerator();
+		this.bankCaps = new WeakMap();
 		this.index.clear();
 		this.ready.clear();
 		this.indexedRivers.clear();
@@ -140,7 +146,7 @@ export class HydrologySystem implements HydrologyCarver {
 
 	/** Builds a little of the queued halo. Returns immediately when the queue is empty. */
 	tick(budgetMs = 8): void {
-		if (!this.settings.enabled) return;
+		if (!this.settings.enabled || this.preparing > 0) return;
 		this.queueHalo(this.focusX, this.focusZ);
 		const start = performance.now();
 		while (this.pending.length > 0 && performance.now() - start < budgetMs) {
@@ -168,6 +174,62 @@ export class HydrologySystem implements HydrologyCarver {
 			}
 		}
 		this.finalizeReady();
+	}
+
+	/** Prepare bulk placement probes without resolving the whole river network per point. */
+	async preparePoints(
+		points: Iterable<{ x: number; z: number }>,
+		cancelled: () => boolean = () => false
+	): Promise<void> {
+		if (!this.settings.enabled) return;
+		const generator = this.generator;
+		const { regionSize } = clampedHydrology(this.settings);
+		const checkCancelled = () => {
+			if (cancelled() || this.generator !== generator)
+				throw new Error('Terrain preparation cancelled.');
+		};
+		checkCancelled();
+		const regions = new Map<string, { rx: number; rz: number }>();
+		let scanned = 0,
+			sliceStart = performance.now();
+		for (const point of points) {
+			if (++scanned % 1024 === 0 && performance.now() - sliceStart >= 8) {
+				await new Promise<void>((resolve) => setTimeout(resolve, 0));
+				checkCancelled();
+				sliceStart = performance.now();
+			}
+			const rx = floorDiv(point.x, regionSize),
+				rz = floorDiv(point.z, regionSize);
+			for (let dz = -1; dz <= 1; dz++)
+				for (let dx = -1; dx <= 1; dx++) {
+					const x = rx + dx,
+						z = rz + dz;
+					if (!generator.hasRivers(x, z)) regions.set(regionKey(x, z), { rx: x, rz: z });
+				}
+		}
+		checkCancelled();
+		this.preparing++;
+		try {
+			let start = performance.now();
+			for (const { rx, rz } of regions.values()) {
+				checkCancelled();
+				if (!generator.hasRivers(rx, rz)) this.buildRegion(rx, rz);
+				if (performance.now() - start >= 8) {
+					await new Promise<void>((resolve) => setTimeout(resolve, 0));
+					start = performance.now();
+				}
+			}
+			checkCancelled();
+		} finally {
+			this.preparing--;
+			if (this.generator === generator) {
+				for (let i = this.pending.length - 1; i >= 0; i--) {
+					const job = this.pending[i];
+					if (generator.hasRivers(job.rx, job.rz)) this.pending.splice(i, 1);
+				}
+				this.finalizeReady();
+			}
+		}
 	}
 
 	shapeHeight(worldX: number, worldZ: number, baseHeight: number): number {
@@ -408,6 +470,7 @@ export class HydrologySystem implements HydrologyCarver {
 			this.generator.lakeById(river.outletOfLakeId),
 			this.generator.lakeById(river.sinkLakeId)
 		].filter((lake): lake is LakeDefinition => lake !== null);
+		const lakeStamp = ownLakes.map((lake) => `${lake.id}:${lake.waterLevel}`).join('|');
 		let water = river.samples[0].waterY;
 		for (let i = 0; i < last; i++) {
 			const sample = river.samples[i];
@@ -416,16 +479,21 @@ export class HydrologySystem implements HydrologyCarver {
 				continue;
 			}
 			const edge = riverWaterEdge(sample.width, scale);
-			const px = -sample.tangentZ;
-			const pz = sample.tangentX;
-			let low = Number.POSITIVE_INFINITY;
-			for (const dist of [edge, edge + 1.6]) {
-				const ax = sample.x + px * dist;
-				const az = sample.z + pz * dist;
-				const bx = sample.x - px * dist;
-				const bz = sample.z - pz * dist;
-				low = Math.min(low, this.generator.bankGround(ax, az, ownLakes));
-				low = Math.min(low, this.generator.bankGround(bx, bz, ownLakes));
+			const cached = this.bankCaps.get(sample);
+			let low = cached?.low ?? Number.POSITIVE_INFINITY;
+			if (!cached || cached.edge !== edge || cached.lakes !== lakeStamp) {
+				const px = -sample.tangentZ;
+				const pz = sample.tangentX;
+				low = Number.POSITIVE_INFINITY;
+				for (const dist of [edge, edge + 1.6]) {
+					const ax = sample.x + px * dist;
+					const az = sample.z + pz * dist;
+					const bx = sample.x - px * dist;
+					const bz = sample.z - pz * dist;
+					low = Math.min(low, this.generator.bankGround(ax, az, ownLakes));
+					low = Math.min(low, this.generator.bankGround(bx, bz, ownLakes));
+				}
+				this.bankCaps.set(sample, { edge, lakes: lakeStamp, low });
 			}
 			water = Math.min(sample.waterY, water, low - RIVER_BANK_CLEARANCE);
 			sample.waterY = water;
@@ -833,6 +901,14 @@ export function resolveConfluence(
 			if (other.priority < tributary.priority) continue;
 			if (other.priority === tributary.priority && other.id >= tributary.id) continue;
 			if (sameLakePair(tributary, other)) continue;
+			// Only samples within merge distance can receive this tributary's flow.
+			if (
+				endSample.x < other.bounds.minX - merge ||
+				endSample.x > other.bounds.maxX + merge ||
+				endSample.z < other.bounds.minZ - merge ||
+				endSample.z > other.bounds.maxZ + merge
+			)
+				continue;
 			const limit = other.endIndex;
 			for (let i = 0; i < limit; i++) {
 				const sample = other.samples[i];
@@ -859,13 +935,41 @@ export function resolveConfluence(
 	}
 }
 
+// Sample positions never change after generation. Rebuild only when confluence changes
+// the usable river length or the merge radius changes; weak keys share the river lifetime.
+const approachGrids = new WeakMap<
+	RiverDefinition,
+	{
+		limit: number;
+		merge: number;
+		cells: Map<number, RiverSample[]>;
+	}
+>();
+
 function firstApproach(river: RiverDefinition, other: RiverDefinition, merge: number): number {
 	const limit = other.endIndex;
+	let grid = approachGrids.get(other);
+	if (!grid || grid.limit !== limit || grid.merge !== merge) {
+		grid = { limit, merge, cells: new Map() };
+		for (let j = 0; j < limit; j++) {
+			const p = other.samples[j];
+			const key = packCell(floorDiv(p.x, merge), floorDiv(p.z, merge));
+			const cell = grid.cells.get(key);
+			if (cell) cell.push(p);
+			else grid.cells.set(key, [p]);
+		}
+		approachGrids.set(other, grid);
+	}
 	for (let i = 2; i < river.samples.length; i++) {
 		const sample = river.samples[i];
-		for (let j = 0; j < limit; j++) {
-			const otherSample = other.samples[j];
-			if (Math.hypot(sample.x - otherSample.x, sample.z - otherSample.z) < merge) return i;
+		const cx = floorDiv(sample.x, merge),
+			cz = floorDiv(sample.z, merge);
+		for (let dz = -1; dz <= 1; dz++) {
+			for (let dx = -1; dx <= 1; dx++) {
+				for (const candidate of grid.cells.get(packCell(cx + dx, cz + dz)) ?? []) {
+					if (Math.hypot(sample.x - candidate.x, sample.z - candidate.z) < merge) return i;
+				}
+			}
 		}
 	}
 	return -1;

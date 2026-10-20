@@ -230,7 +230,10 @@ test('E opens stairs customise with colour, framing, railings, hole and hole fra
 	await expect(modal).toContainText('Customise Stairs');
 	await expect(page.getByTestId('placement-preview-canvas')).toBeVisible();
 	await expect(page.getByTestId('placement-color')).toBeVisible();
-	await expect(page.getByTestId('placement-stair-frame-on')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('placement-stair-frame-on')).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
 	await expect(page.getByTestId('placement-stair-railings-on')).toHaveAttribute(
 		'aria-pressed',
 		'true'
@@ -345,7 +348,7 @@ test('the build HUD does not sit underneath the pause button', async ({ page }) 
 	expect(pageErrors).toEqual([]);
 });
 
-test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it off', async ({
+test('Wall Tool defaults to Axis + Inline snap on entry, and B still toggles it off', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -355,8 +358,8 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it 
 	await createAndEnterWorld(page);
 
 	// The badge only (re-)renders once the tool's HUD is actually rebuilt (on a target change, or a
-	// `C` press forcing one) — with no foundation in view there's nothing to target here, so the
-	// default itself is verified indirectly, through the very first `C` press's transition:
+	// `B` press forcing one) — with no foundation in view there's nothing to target here, so the
+	// default itself is verified indirectly, through the very first `B` press's transition:
 	// `'axis-inline' -> 'off'` (the new default) is observably different from the old `'off' ->
 	// 'axis'` a single press would have produced.
 	await page.keyboard.press('2');
@@ -364,21 +367,21 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and C still toggles it 
 	await expect(page.getByTestId('hotbar-slot-wall')).toBeVisible();
 	const snapBadge = page.getByTestId('snap-badge');
 
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 	await expect(snapBadge).not.toBeVisible(); // axis-inline -> off: proves the default was Axis + Inline, not Off
 
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 	await expect(snapBadge).toBeVisible();
 	await expect(snapBadge).toHaveText('AXIS SNAP'); // off -> axis
 
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 	await expect(snapBadge).not.toBeVisible(); // axis -> off (Wall Tool never reaches axis-inline by cycling)
 
 	// Re-selecting the tool resets back to the default rather than remembering the last choice —
-	// the very next `C` press goes straight back to `off` again, not `axis`.
+	// the very next `B` press goes straight back to `off` again, not `axis`.
 	await page.keyboard.press('1');
 	await page.keyboard.press('2');
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 	await expect(snapBadge).not.toBeVisible();
 
 	await page.keyboard.press('1');
@@ -413,7 +416,7 @@ test('toggles the help overlay with the H key and from the pause menu, listing c
 	await page.getByTestId('pause-controls').click();
 	await expect(helpOverlay).toBeVisible();
 
-	await helpOverlay.getByRole('button', { name: 'Close' }).click();
+	await helpOverlay.getByRole('button', { name: 'Done', exact: true }).click();
 	await expect(helpOverlay).not.toBeVisible();
 	await expect(page.getByTestId('pause-menu')).toBeVisible();
 

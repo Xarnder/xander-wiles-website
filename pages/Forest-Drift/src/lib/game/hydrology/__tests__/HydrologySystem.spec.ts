@@ -48,6 +48,55 @@ function activeRivers(system: HydrologySystem) {
 }
 
 describe('hydrology determinism', () => {
+	it('bulk preparation matches point-by-point terrain and remains usable after cancellation', async () => {
+		const points = [
+			{ x: 0, z: -400 },
+			{ x: 1800, z: -200 },
+			{ x: 2600, z: -400 }
+		];
+		const bulk = systemFor(slope),
+			sequential = systemFor(slope);
+		await bulk.preparePoints(points);
+		for (const p of points) sequential.ensureSync(p.x, p.z);
+		for (const p of points)
+			expect(bulk.sampleWater(p.x, p.z)).toEqual(sequential.sampleWater(p.x, p.z));
+		await expect(bulk.preparePoints([{ x: -8000, z: 8000 }], () => true)).rejects.toThrow(
+			'cancelled'
+		);
+		expect(bulk.sampleWater(0, -400)).toEqual(sequential.sampleWater(0, -400));
+	});
+
+	it('reuses unchanged bank probes without changing river surfaces as regions expand', () => {
+		let cachedCalls = 0,
+			freshCalls = 0;
+		const cached = systemFor((x, z) => {
+			cachedCalls++;
+			return slope(x, z);
+		});
+		const fresh = systemFor((x, z) => {
+			freshCalls++;
+			return slope(x, z);
+		});
+		for (const [x, z] of [
+			[0, -400],
+			[1800, -200],
+			[2600, -400]
+		]) {
+			// Reference run discards probes before each expansion, reproducing full resampling.
+			(fresh as unknown as { bankCaps: WeakMap<object, unknown> }).bankCaps = new WeakMap();
+			cached.ensureSync(x, z);
+			fresh.ensureSync(x, z);
+			expect(cached.getRivers().map((r) => r.samples.map((p) => p.waterY))).toEqual(
+				fresh.getRivers().map((r) => r.samples.map((p) => p.waterY))
+			);
+		}
+		expect(cachedCalls).toBeLessThan(freshCalls);
+		cached.invalidate();
+		cached.ensureSync(0, -400);
+		const clean = systemFor(slope);
+		clean.ensureSync(0, -400);
+		expect(cached.sampleWater(0, -400)).toEqual(clean.sampleWater(0, -400));
+	});
 	it('does not depend on which area was generated first', () => {
 		const first = systemFor(slope, {}, 'order-seed');
 		first.ensureSync(0, -400);

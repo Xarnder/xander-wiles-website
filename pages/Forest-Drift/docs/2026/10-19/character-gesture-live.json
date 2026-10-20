@@ -1,0 +1,13 @@
+{
+	"at": "2026-10-19T21:43:23.331Z",
+	"passed": true,
+	"errors": [],
+	"stage": "compression: 0..0",
+	"lookAndReach": true,
+	"bodyFollowing": true,
+	"landing": {
+		"airborne": true,
+		"compression": 0.08666386686948534
+	},
+	"testedGameCommit": "943fcecd"
+}

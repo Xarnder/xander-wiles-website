@@ -612,8 +612,17 @@ test('co-building: shared, saved, permission-checked, and clashes resolved in or
 				.filter((id) => id.endsWith('-pad'))
 				.join(',')
 		);
-	await expect.poll(() => pads(owner), { timeout: 20_000 }).toMatch(/^(owner-pad|builder-pad)$/);
-	await expect.poll(() => pads(builder), { timeout: 20_000 }).toBe(await pads(owner));
+	// Both replicas begin with optimistic local pads. Read both on every retry so the
+	// expectation cannot capture the owner's losing pad before server reconciliation.
+	await expect
+		.poll(
+			async () => {
+				const [ownerPad, builderPad] = await Promise.all([pads(owner), pads(builder)]);
+				return /^(owner-pad|builder-pad)$/.test(ownerPad) && ownerPad === builderPad;
+			},
+			{ timeout: 20_000 }
+		)
+		.toBe(true);
 
 	// Saved on the server: someone joining fresh gets all of it.
 	const latecomer = await newPlayer(browser);
