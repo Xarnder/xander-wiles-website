@@ -30,6 +30,9 @@ export class TerrainManager {
 	private active = new Map<ChunkKey, TerrainChunk>();
 	private pool: TerrainChunk[] = [];
 	private queue = new TerrainGenerationQueue();
+	private generating: { job: ChunkJob; chunk: TerrainChunk; rows: Generator<void> } | null = null;
+	/** Leave most of the 16.7 ms frame for scene updates and drawing. */
+	private readonly generationBudgetMs = 2;
 
 	/** Kept in sync with `active` incrementally (push/splice) so callers raycasting every frame never allocate a fresh array. */
 	private readonly activeMeshes: THREE.Mesh[] = [];
@@ -48,7 +51,10 @@ export class TerrainManager {
 	private sampleWater: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null =
 		null;
 
-	constructor(settings: TerrainSettings) {
+	constructor(
+		settings: TerrainSettings,
+		private readonly now = () => performance.now()
+	) {
 		this.settings = settings;
 		this.sampler = new TerrainHeightSampler(settings);
 		this.resolutionAtLastRebuild = settings.chunkResolution;
@@ -135,6 +141,7 @@ export class TerrainManager {
 	 * by empty space while the normal budgeted queue catches up on the rest of the view distance.
 	 */
 	primeAround(worldX: number, worldZ: number, immediateRadius: number): void {
+		this.cancelGeneration(true);
 		const chunkX = worldToChunkCoord(worldX, this.settings.chunkSize);
 		const chunkZ = worldToChunkCoord(worldZ, this.settings.chunkSize);
 
@@ -149,6 +156,9 @@ export class TerrainManager {
 
 	/** Non-topology settings changed (noise, shape, seed, warp): regenerate visible chunks in place, progressively. */
 	notifySettingsChanged(): void {
+		this.cancelGeneration(false);
+		this.queue.clear();
+		this.lastPlayerChunkX = Number.NaN;
 		this.revision++;
 		for (const chunk of this.active.values()) {
 			this.queue.enqueue(chunk.chunkX, chunk.chunkZ, this.revision);
@@ -163,6 +173,7 @@ export class TerrainManager {
 
 	/** chunkSize / chunkResolution changed: vertex topology is different, so every chunk must be rebuilt from scratch. */
 	notifyTopologyChanged(): void {
+		this.cancelGeneration(false);
 		this.revision++;
 		for (const chunk of this.active.values()) {
 			this.group.remove(chunk.mesh);
@@ -205,7 +216,7 @@ export class TerrainManager {
 		}
 		return {
 			loadedChunks: this.active.size,
-			queuedChunks: this.queue.size,
+			queuedChunks: this.queue.size + Number(this.generating !== null),
 			pooledChunks: this.pool.length,
 			revision: this.revision,
 			triangles
@@ -213,6 +224,7 @@ export class TerrainManager {
 	}
 
 	dispose(): void {
+		this.cancelGeneration(false);
 		for (const chunk of this.active.values()) chunk.dispose();
 		for (const chunk of this.pool) chunk.dispose();
 		this.active.clear();
@@ -234,7 +246,11 @@ export class TerrainManager {
 				const cz = playerChunkZ + dz;
 				const key = chunkKey(cx, cz);
 				required.add(key);
-				if (!this.active.has(key) && !this.queue.has(cx, cz)) {
+				if (
+					!this.active.has(key) &&
+					!this.queue.has(cx, cz) &&
+					!(this.generating?.job.chunkX === cx && this.generating.job.chunkZ === cz)
+				) {
 					this.queue.enqueue(cx, cz, this.revision);
 				}
 			}
@@ -244,12 +260,75 @@ export class TerrainManager {
 			if (!required.has(key)) this.recycle(key, chunk);
 		}
 
+		if (
+			this.generating &&
+			!required.has(chunkKey(this.generating.job.chunkX, this.generating.job.chunkZ))
+		)
+			this.cancelGeneration(false);
 		this.queue.pruneToRequired(required);
 	}
 
+	private cancelGeneration(requeue: boolean): void {
+		const work = this.generating;
+		if (!work) return;
+		work.rows.return(undefined);
+		work.chunk.setActive(false);
+		this.pool.push(work.chunk);
+		if (requeue) this.queue.enqueue(work.job.chunkX, work.job.chunkZ, this.revision);
+		this.generating = null;
+	}
+
 	private processQueue(playerChunkX: number, playerChunkZ: number): void {
-		const jobs = this.queue.take(playerChunkX, playerChunkZ, this.settings.chunksGeneratedPerFrame);
-		for (const job of jobs) this.materializeJob(job);
+		const started = this.now();
+		let completed = 0;
+		while (completed < this.settings.chunksGeneratedPerFrame) {
+			if (!this.generating) {
+				const job = this.queue.take(playerChunkX, playerChunkZ, 1)[0];
+				if (!job) return;
+				if (job.revision !== this.revision) continue;
+				const x = (job.chunkX + 0.5) * this.settings.chunkSize;
+				const z = (job.chunkZ + 0.5) * this.settings.chunkSize;
+				if (this.hydrologyReady && !this.hydrologyReady(x, z)) {
+					this.queue.enqueue(job.chunkX, job.chunkZ, job.revision);
+					return;
+				}
+				const chunk = this.acquireChunk();
+				chunk.setActive(false);
+				this.generating = {
+					job,
+					chunk,
+					rows: chunk.populateRows(
+						job.chunkX,
+						job.chunkZ,
+						this.settings.chunkSize,
+						this.sampler,
+						this.revision,
+						this.settings.rendering.debugView,
+						this.vegetationRegionSampler,
+						this.sampleWater,
+						this.groundTint
+					)
+				};
+			}
+			const { job, chunk, rows } = this.generating;
+			if (rows.next().done) {
+				const key = chunkKey(job.chunkX, job.chunkZ);
+				const previous = this.active.get(key);
+				if (previous) this.recycle(key, previous);
+				this.active.set(key, chunk);
+				this.activeMeshes.push(chunk.mesh);
+				this.group.add(chunk.mesh, chunk.borderLines);
+				chunk.setActive(true);
+				chunk.setBorderVisible(this.settings.rendering.showChunkBorders);
+				chunk.setCoordinateLabelVisible(
+					this.settings.rendering.showChunkCoordinates,
+					this.settings.chunkSize
+				);
+				this.generating = null;
+				completed++;
+			}
+			if (this.now() - started >= this.generationBudgetMs) return;
+		}
 	}
 
 	private materializeJob(job: ChunkJob, syncHydrology = false): void {

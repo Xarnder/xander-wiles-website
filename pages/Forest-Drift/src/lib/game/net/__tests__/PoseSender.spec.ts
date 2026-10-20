@@ -9,6 +9,17 @@ function at(x: number, overrides: Partial<LocalPose> = {}): LocalPose {
 }
 
 describe('PoseSender', () => {
+	it('replicates a stationary construction gesture immediately without extra periodic traffic', () => {
+		const sender = new PoseSender();
+		sender.sample(at(0), 0, 0);
+		sender.sample(at(0), 16, 16);
+		expect(
+			sender.sample(at(0, { building: true }), 32, 32)!.flags & POSE_FLAGS.building
+		).toBeTruthy();
+		expect(sender.sample(at(0, { building: true }), 48, 48)).toBeNull();
+		expect(sender.sample(at(0, { building: false }), 64, 64)!.flags & POSE_FLAGS.building).toBe(0);
+	});
+
 	it('sends every 100 ms (every 6th frame at 60 fps) while moving', () => {
 		const sender = new PoseSender();
 		const sendTimes: number[] = [];
@@ -84,5 +95,26 @@ describe('PoseSender', () => {
 		sender.setAway(false);
 		const back = sender.sample(at(0), 1000, 1000)!;
 		expect(back.flags & POSE_FLAGS.away).toBe(0);
+	});
+});
+
+describe('character state flags', () => {
+	it('sends ground and run transitions immediately without enlarging the pose', () => {
+		const sender = new PoseSender();
+		const pose = {
+			x: 0,
+			feetY: 0,
+			z: 0,
+			yaw: 0,
+			pitch: 0,
+			flying: false,
+			grounded: true,
+			running: false
+		};
+		expect(sender.sample(pose, 0, 0)!.flags & POSE_FLAGS.grounded).toBe(POSE_FLAGS.grounded);
+		const jump = sender.sample({ ...pose, grounded: false }, 10, 10)!;
+		expect(jump.flags & POSE_FLAGS.grounded).toBe(0);
+		const run = sender.sample({ ...pose, running: true }, 20, 20)!;
+		expect(run.flags & POSE_FLAGS.running).toBe(POSE_FLAGS.running);
 	});
 });

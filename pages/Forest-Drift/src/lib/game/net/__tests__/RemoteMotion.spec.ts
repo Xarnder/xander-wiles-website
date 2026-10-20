@@ -218,3 +218,23 @@ describe('RemoteMotion corrections', () => {
 		expect(frame.x).toBe(500);
 	});
 });
+
+describe('character motion state', () => {
+	it('holds discrete grounded state until its sampled time', () => {
+		const motion = new RemoteMotion();
+		motion.push({ t: 0, x: 0, y: 1, z: 0, yaw: 0, pitch: 0, flags: POSE_FLAGS.moving }, 0);
+		motion.push({ t: 100, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flags: POSE_FLAGS.grounded }, 100);
+		expect(motion.evaluate(50)!.flags & POSE_FLAGS.grounded).toBe(0);
+		expect(motion.evaluate(100)!.flags & POSE_FLAGS.grounded).toBe(POSE_FLAGS.grounded);
+	});
+	it('resets animation speed once at a teleport rather than interpreting it as a sprint', () => {
+		const motion = new RemoteMotion({ initialDelayMs: 100, minDelayMs: 100, maxDelayMs: 100 });
+		motion.push({ t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flags: 0 }, 0);
+		motion.update(100, 16);
+		motion.push({ t: 100, x: 100, y: 0, z: 0, yaw: 0, pitch: 0, flags: POSE_FLAGS.teleport }, 100);
+		const jumped = motion.update(200, 16)!;
+		expect(jumped.speed).toBe(0);
+		expect(jumped.discontinuity).toBe(1);
+		expect(motion.update(216, 16)!.discontinuity).toBe(1);
+	});
+});

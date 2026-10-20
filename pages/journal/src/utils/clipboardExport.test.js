@@ -108,6 +108,32 @@ test('formatEntryToText formats entries with metadata and sections', () => {
     assert.ok(text.includes('- Exercise (mins): 45'));
 });
 
+test('formatEntryToText and markdown include photo times from the entry date', () => {
+    const entry = {
+        id: '2026-10-20',
+        title: 'Walk',
+        content: 'Went outside.',
+        images: [
+            {
+                url: 'https://example.com/photo.webp',
+                caption: 'At the lake',
+                takenAt: '2026-10-20T15:45:09'
+            },
+            {
+                url: 'https://example.com/older.webp',
+                takenAt: '2026-10-10T08:15:00'
+            }
+        ]
+    };
+
+    const text = formatEntryToText(entry);
+    assert.ok(text.includes('[Attachments: Photo 1: 3:45 PM — At the lake; Photo 2: 10 Oct, 8:15 AM]'));
+
+    const markdown = formatEntryToMarkdown(entry);
+    assert.ok(markdown.includes('- 📷 Attachment 1: 3:45 PM — *At the lake* ([link](https://example.com/photo.webp))'));
+    assert.ok(markdown.includes('- 📷 Attachment 2: 10 Oct, 8:15 AM ([link](https://example.com/older.webp))'));
+});
+
 test('formatEntryToMarkdown formats entries cleanly in markdown', () => {
     const entry = {
         id: '2026-09-21',

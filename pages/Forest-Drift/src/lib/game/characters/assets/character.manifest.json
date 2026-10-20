@@ -1,0 +1,10 @@
+{
+	"source": "assets/Character Model/Breathing Idle.fbx",
+	"sha256": "dcbad0b74679a289bf91fd200518e590331005b645d28d39709581c0776631b2",
+	"height": 1.8,
+	"triangles": 5848,
+	"materials": 2,
+	"bytes": 865360,
+	"basePose": "First frame of supplied breathing idle; procedural animation at runtime",
+	"scale": 0.09941883662177928
+}

@@ -1,0 +1,93 @@
+{
+  "site": "https://xanderwiles.com/pages/Forest-Drift/",
+  "worker": "https://forest-drift-mp.forest-drift-mp.workers.dev",
+  "checks": {
+    "bothClientsRigged": true,
+    "initial": [
+      {
+        "exists": true,
+        "bones": 28,
+        "meshes": 2,
+        "visible": true,
+        "animation": "idle",
+        "leg": [
+          0.03638010695169527,
+          0.10973180247999462,
+          0.9931784903038097,
+          -0.015228451678383702
+        ]
+      },
+      {
+        "exists": true,
+        "bones": 28,
+        "meshes": 2,
+        "visible": true,
+        "animation": "idle",
+        "leg": [
+          0.03633581747554282,
+          0.11237298469417635,
+          0.9928861115069955,
+          -0.015139030874674133
+        ]
+      }
+    ],
+    "remoteMovementAnimated": true,
+    "stopSettlesToIdle": true,
+    "reconnectRestoresRig": true,
+    "final": [
+      {
+        "exists": true,
+        "bones": 28,
+        "meshes": 2,
+        "visible": true,
+        "animation": "idle",
+        "leg": [
+          0.0377128580171882,
+          0.006687609839801779,
+          0.9991379149056814,
+          -0.016013844408306523
+        ]
+      },
+      {
+        "exists": true,
+        "bones": 28,
+        "meshes": 2,
+        "visible": true,
+        "animation": "idle",
+        "leg": [
+          0.035610615875473386,
+          0.14927892746608032,
+          0.9880709116773141,
+          -0.012789032360090779
+        ]
+      }
+    ]
+  },
+  "protocols": [
+    4,
+    4,
+    4
+  ],
+  "assetResponses": [
+    {
+      "status": 200,
+      "url": "https://www.xanderwiles.com/pages/Forest-Drift/_app/immutable/assets/character.BGv4tXnJ.glb"
+    },
+    {
+      "status": 200,
+      "url": "https://www.xanderwiles.com/pages/Forest-Drift/_app/immutable/assets/character.BGv4tXnJ.glb"
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "verifiedAtUtc": "2026-10-19T17:17:42.013962+00:00",
+  "release": {
+    "commit": "13dc3adb5ca43eb77f0137a6f7232e18a59fbcaf",
+    "branch": "main",
+    "vercelDeployment": "5pSK9RPhFk9SVCnJWKCAk2e4wRsB",
+    "workerVersion": "a5af4f2d-79dd-47d7-ac20-dfa378a1d0f5",
+    "workerTrafficPercent": 100,
+    "previousWorkerVersion": "50b3778d-432e-4482-bac0-4e31bf109e59"
+  },
+  "testScope": "Two Chromium/Metal browser contexts joined the existing live world as visitors; no world edits. Both sessions were detached and closed after the test."
+}

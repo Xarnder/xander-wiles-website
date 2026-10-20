@@ -233,6 +233,22 @@ describe('BuildToolManager + FoundationTool click routing', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('exposes a short placement gesture, expires it, and hides it when building is locked', () => {
+		const { buildToolManager } = buildHarness(pointerLocked);
+		let now = 100;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		buildToolManager.triggerPrimaryAction();
+		expect(buildToolManager.isConstructionGestureActive()).toBe(true);
+		now += 700;
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		buildToolManager.triggerPrimaryAction();
+		buildToolManager.setLocked(true);
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		clock.mockRestore();
+		buildToolManager.dispose();
+	});
+
 	it('does not place a foundation from the click that only acquires pointer lock', () => {
 		const { foundationManager, pointCrosshairAt, click } = buildHarness(pointerLocked);
 
@@ -970,6 +986,21 @@ describe('BuildToolManager placement height (E)', () => {
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
 
 		key('ArrowDown');
+		key('KeyE');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
+	});
+
+	it('lets the roof own E while drawing and opens height once adjustment begins', () => {
+		const { buildToolManager, roofTool, key } = buildHarness(pointerLocked);
+		const capture = vi.fn().mockReturnValue(true);
+		(roofTool as BuildTool).isCapturingKey = capture;
+		key('Digit4');
+		key('ArrowDown');
+		key('ArrowDown');
+		key('KeyE');
+		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
+		expect(capture).toHaveBeenCalledWith('KeyE');
+		capture.mockReturnValue(false);
 		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);
 	});

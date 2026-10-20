@@ -1,0 +1,913 @@
+{
+  "at": "2026-10-19T19:32:15.971Z",
+  "scope": "One Chromium browser, 19 real WebSocket clients; 1280x800",
+  "quality": "high",
+  "platform": "darwin",
+  "errors": [],
+  "joins": [
+    {
+      "slot": 1,
+      "players": 2,
+      "colours": [
+        "#ffffff",
+        "#e6194b"
+      ]
+    },
+    {
+      "slot": 2,
+      "players": 3,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231"
+      ]
+    },
+    {
+      "slot": 3,
+      "players": 4,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119"
+      ]
+    },
+    {
+      "slot": 4,
+      "players": 5,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45"
+      ]
+    },
+    {
+      "slot": 5,
+      "players": 6,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4"
+      ]
+    },
+    {
+      "slot": 6,
+      "players": 7,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8"
+      ]
+    },
+    {
+      "slot": 7,
+      "players": 8,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4"
+      ]
+    },
+    {
+      "slot": 8,
+      "players": 9,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6"
+      ]
+    },
+    {
+      "slot": 9,
+      "players": 10,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4"
+      ]
+    },
+    {
+      "slot": 10,
+      "players": 11,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990"
+      ]
+    },
+    {
+      "slot": 11,
+      "players": 12,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff"
+      ]
+    },
+    {
+      "slot": 12,
+      "players": 13,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324"
+      ]
+    },
+    {
+      "slot": 13,
+      "players": 14,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000"
+      ]
+    },
+    {
+      "slot": 14,
+      "players": 15,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3"
+      ]
+    },
+    {
+      "slot": 15,
+      "players": 16,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3",
+        "#808000"
+      ]
+    },
+    {
+      "slot": 16,
+      "players": 17,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3",
+        "#808000",
+        "#ffd8b1"
+      ]
+    },
+    {
+      "slot": 17,
+      "players": 18,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3",
+        "#808000",
+        "#ffd8b1",
+        "#000075"
+      ]
+    },
+    {
+      "slot": 18,
+      "players": 19,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3",
+        "#808000",
+        "#ffd8b1",
+        "#000075",
+        "#a9a9a9"
+      ]
+    },
+    {
+      "slot": 19,
+      "players": 20,
+      "colours": [
+        "#ffffff",
+        "#e6194b",
+        "#f58231",
+        "#ffe119",
+        "#bfef45",
+        "#42d4f4",
+        "#4363d8",
+        "#911eb4",
+        "#f032e6",
+        "#fabed4",
+        "#469990",
+        "#dcbeff",
+        "#9a6324",
+        "#800000",
+        "#aaffc3",
+        "#808000",
+        "#ffd8b1",
+        "#000075",
+        "#a9a9a9",
+        "#fffac8"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "mode": "idle",
+      "avatarCpuMs": 0.6639666912864322,
+      "fps": 60,
+      "avgFrameMs": 16.67,
+      "p95FrameMs": 17.6,
+      "cpuFrameMs": 9.37,
+      "cpuRenderMs": 7.25,
+      "drawCalls": 3986,
+      "triangles": 1909074,
+      "geometries": 496,
+      "p99FrameMs": 17.700000000004366,
+      "framesOver25Ms": 0,
+      "totalFrames": 1200
+    },
+    {
+      "mode": "idle",
+      "avatarCpuMs": 0.6999242986178055,
+      "fps": 60,
+      "avgFrameMs": 16.67,
+      "p95FrameMs": 17.5,
+      "cpuFrameMs": 9.83,
+      "cpuRenderMs": 7.38,
+      "drawCalls": 3982,
+      "triangles": 1902026,
+      "geometries": 494,
+      "p99FrameMs": 17.60000000000582,
+      "framesOver25Ms": 0,
+      "totalFrames": 1200
+    },
+    {
+      "mode": "idle",
+      "avatarCpuMs": 1.0396183204104883,
+      "fps": 59.4,
+      "avgFrameMs": 16.85,
+      "p95FrameMs": 17.3,
+      "cpuFrameMs": 14.56,
+      "cpuRenderMs": 11.68,
+      "drawCalls": 3978,
+      "triangles": 1886922,
+      "geometries": 494,
+      "p99FrameMs": 33.19999999999709,
+      "framesOver25Ms": 13,
+      "totalFrames": 1187
+    }
+  ],
+  "baseline": {
+    "fps": 60,
+    "avgFrameMs": 16.67,
+    "p95FrameMs": 17,
+    "cpuFrameMs": 6.31,
+    "cpuRenderMs": 4.86,
+    "drawCalls": 3667,
+    "triangles": 1035280,
+    "geometries": 490
+  },
+  "before": [
+    {
+      "name": "Crowd 1",
+      "colour": "#e6194b",
+      "jacket": "e6194b",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.04278227204231386,
+        -0.3206211795711664,
+        0.9438155281210382,
+        -0.0677051348635899
+      ]
+    },
+    {
+      "name": "Crowd 2",
+      "colour": "#f58231",
+      "jacket": "f58231",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03217554848610917,
+        0.3301411237613161,
+        0.9432841970654067,
+        -0.0136563555864915
+      ]
+    },
+    {
+      "name": "Crowd 3",
+      "colour": "#ffe119",
+      "jacket": "ffe119",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.030268072718356288,
+        0.31278037795588226,
+        0.9491692434558237,
+        0.01816662371469733
+      ]
+    },
+    {
+      "name": "Crowd 4",
+      "colour": "#bfef45",
+      "jacket": "bfef45",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.04123979759021403,
+        -0.03520693938584671,
+        0.9967206615270272,
+        -0.06006391095262433
+      ]
+    },
+    {
+      "name": "Crowd 5",
+      "colour": "#42d4f4",
+      "jacket": "42d4f4",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.042101425293530524,
+        -0.12335048590185302,
+        0.9894564046629057,
+        -0.06315180826853568
+      ]
+    },
+    {
+      "name": "Crowd 6",
+      "colour": "#4363d8",
+      "jacket": "4363d8",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.0404579542350427,
+        0.04759151996708702,
+        0.9961638198507354,
+        -0.06128495073612021
+      ]
+    },
+    {
+      "name": "Crowd 7",
+      "colour": "#911eb4",
+      "jacket": "911eb4",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.0367458861678501,
+        0.08730530814746838,
+        0.9953752208531388,
+        -0.015990394947582913
+      ]
+    },
+    {
+      "name": "Crowd 8",
+      "colour": "#f032e6",
+      "jacket": "f032e6",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.025953515730489245,
+        0.43305039915274435,
+        0.9002773438289849,
+        0.035978757664814176
+      ]
+    },
+    {
+      "name": "Crowd 9",
+      "colour": "#fabed4",
+      "jacket": "fabed4",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.04079334782898204,
+        -0.30185594278016287,
+        0.9516866905939237,
+        -0.03887589905826282
+      ]
+    },
+    {
+      "name": "Crowd 10",
+      "colour": "#469990",
+      "jacket": "469990",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.039399901305264266,
+        -0.03697494478323463,
+        0.9979690501999401,
+        -0.033738347298605906
+      ]
+    },
+    {
+      "name": "Crowd 11",
+      "colour": "#dcbeff",
+      "jacket": "dcbeff",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03545595838745229,
+        0.0982339029549748,
+        0.9945315268604014,
+        -0.0001319309626544151
+      ]
+    },
+    {
+      "name": "Crowd 12",
+      "colour": "#9a6324",
+      "jacket": "9a6324",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03268138963013959,
+        0.15574804469565104,
+        0.9869080926511363,
+        0.02620858647505967
+      ]
+    },
+    {
+      "name": "Crowd 13",
+      "colour": "#800000",
+      "jacket": "800000",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        -0.04102795114016543,
+        0.04325544845712748,
+        -0.9966475710160394,
+        0.05602939042896563
+      ]
+    },
+    {
+      "name": "Crowd 14",
+      "colour": "#aaffc3",
+      "jacket": "aaffc3",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03137854680274221,
+        0.2780601289163814,
+        0.9599601582695658,
+        0.013207802338905223
+      ]
+    },
+    {
+      "name": "Crowd 15",
+      "colour": "#808000",
+      "jacket": "808000",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03706223121707456,
+        0.06693492883108372,
+        0.9969291203658677,
+        -0.016686380258383506
+      ]
+    },
+    {
+      "name": "Crowd 16",
+      "colour": "#ffd8b1",
+      "jacket": "ffd8b1",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03218756395784064,
+        0.1639084760901967,
+        0.9854582732842236,
+        0.031144241970635596
+      ]
+    },
+    {
+      "name": "Crowd 17",
+      "colour": "#000075",
+      "jacket": "000075",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.04210119318391913,
+        -0.17783660463481574,
+        0.9813555494850515,
+        -0.05952240821188732
+      ]
+    },
+    {
+      "name": "Crowd 18",
+      "colour": "#a9a9a9",
+      "jacket": "a9a9a9",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03735579497492008,
+        0.1657317357813966,
+        0.984609400478842,
+        -0.04101054529474581
+      ]
+    },
+    {
+      "name": "Crowd 19",
+      "colour": "#fffac8",
+      "jacket": "fffac8",
+      "visible": true,
+      "state": "moving",
+      "leg": [
+        0.03229261994439014,
+        0.16486741878513636,
+        0.9853455086331931,
+        0.029498297182169505
+      ]
+    }
+  ],
+  "after": [
+    {
+      "name": "Crowd 1",
+      "colour": "#e6194b",
+      "jacket": "e6194b",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.035739031544319275,
+        0.0768095408634307,
+        0.996405044593454,
+        -0.000056261350206895976
+      ]
+    },
+    {
+      "name": "Crowd 2",
+      "colour": "#f58231",
+      "jacket": "f58231",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03512696994716333,
+        0.15103388250733327,
+        0.9878832518368752,
+        -0.006445390391051726
+      ]
+    },
+    {
+      "name": "Crowd 3",
+      "colour": "#ffe119",
+      "jacket": "ffe119",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.0364521065501035,
+        0.1858710836604573,
+        0.9813420921033894,
+        -0.033028509701320964
+      ]
+    },
+    {
+      "name": "Crowd 4",
+      "colour": "#bfef45",
+      "jacket": "bfef45",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03405922481390743,
+        0.14164677589911667,
+        0.9892769457598025,
+        0.010357831366553907
+      ]
+    },
+    {
+      "name": "Crowd 5",
+      "colour": "#42d4f4",
+      "jacket": "42d4f4",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.037766987180244446,
+        0.009214573326910608,
+        0.9990970473051075,
+        -0.01714165639445797
+      ]
+    },
+    {
+      "name": "Crowd 6",
+      "colour": "#4363d8",
+      "jacket": "4363d8",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.043189625226080844,
+        -0.08072484195601985,
+        0.9923535862395098,
+        -0.08277992535385884
+      ]
+    },
+    {
+      "name": "Crowd 7",
+      "colour": "#911eb4",
+      "jacket": "911eb4",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.0343257478933689,
+        0.20364865491539652,
+        0.9784123373060767,
+        -0.007633255528974937
+      ]
+    },
+    {
+      "name": "Crowd 8",
+      "colour": "#f032e6",
+      "jacket": "f032e6",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.032847375318292855,
+        0.31986376739983047,
+        0.946687728512928,
+        -0.01976271546420655
+      ]
+    },
+    {
+      "name": "Crowd 9",
+      "colour": "#fabed4",
+      "jacket": "fabed4",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03856363736348181,
+        0.15935173072081837,
+        0.9848380485088004,
+        -0.056691180962786185
+      ]
+    },
+    {
+      "name": "Crowd 10",
+      "colour": "#469990",
+      "jacket": "469990",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03003620776866764,
+        0.30228185004021213,
+        0.9524297914121532,
+        0.024515337846881414
+      ]
+    },
+    {
+      "name": "Crowd 11",
+      "colour": "#dcbeff",
+      "jacket": "dcbeff",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        -0.03396712185011523,
+        0.17323977177768077,
+        -0.9828622530480041,
+        -0.05306606864124565
+      ]
+    },
+    {
+      "name": "Crowd 12",
+      "colour": "#9a6324",
+      "jacket": "9a6324",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.039711134001295646,
+        -0.30362871140123027,
+        0.9516682262702904,
+        -0.02366893653544329
+      ]
+    },
+    {
+      "name": "Crowd 13",
+      "colour": "#800000",
+      "jacket": "800000",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.0392449287907262,
+        -0.31399475566327417,
+        0.9484540321264108,
+        -0.017380389044109205
+      ]
+    },
+    {
+      "name": "Crowd 14",
+      "colour": "#aaffc3",
+      "jacket": "aaffc3",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03967234407970409,
+        -0.307928755403608,
+        0.9502983601897811,
+        -0.023216660643157083
+      ]
+    },
+    {
+      "name": "Crowd 15",
+      "colour": "#808000",
+      "jacket": "808000",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03252596703449243,
+        0.12698038780287882,
+        0.9907747857712401,
+        0.03440009392218053
+      ]
+    },
+    {
+      "name": "Crowd 16",
+      "colour": "#ffd8b1",
+      "jacket": "ffd8b1",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03918121638517371,
+        0.021479740109598584,
+        0.9982447459062819,
+        -0.038870043965817495
+      ]
+    },
+    {
+      "name": "Crowd 17",
+      "colour": "#000075",
+      "jacket": "000075",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.03907304690660836,
+        -0.21844536365896325,
+        0.9749491720730645,
+        -0.015133802409960116
+      ]
+    },
+    {
+      "name": "Crowd 18",
+      "colour": "#a9a9a9",
+      "jacket": "a9a9a9",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.040024030074895335,
+        -0.3624273996422922,
+        0.9306590986846763,
+        -0.030300149183050636
+      ]
+    },
+    {
+      "name": "Crowd 19",
+      "colour": "#fffac8",
+      "jacket": "fffac8",
+      "visible": true,
+      "state": "idle",
+      "leg": [
+        0.043882102729667916,
+        -0.19280958731551212,
+        0.9766118477449485,
+        -0.0844282117745172
+      ]
+    }
+  ],
+  "net": {
+    "bytesIn": 291367,
+    "bytesOut": 1089,
+    "snapshotsIn": 1355,
+    "posesOut": 23,
+    "reconnects": 0,
+    "rttMs": 26.799999952316284,
+    "avatars": 19
+  },
+  "graphics": {
+    "quality": "high",
+    "renderScale": 0.7,
+    "pixelRatio": 1,
+    "drawCalls": 3978,
+    "triangles": 1886922,
+    "geometries": 494,
+    "textures": 128,
+    "shadowsEnabled": true,
+    "shadowCascades": 3,
+    "shadowDistance": 100,
+    "aoEnabled": true,
+    "aoQuality": "medium",
+    "antialiasing": "smaa"
+  },
+  "browser": "151.0.7922.34",
+  "passed": true
+}

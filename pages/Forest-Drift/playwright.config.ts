@@ -23,7 +23,14 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] }
+			use: {
+				...devices['Desktop Chrome'],
+				// Opt in for GPU measurements; keep functional CI behaviour unchanged.
+				launchOptions:
+					process.env.FOREST_DRIFT_GPU === '1' && process.platform === 'darwin'
+						? { args: ['--use-angle=metal', '--enable-gpu'] }
+						: undefined
+			}
 		},
 		// Multiplayer has to work in every engine: the same world from a seed, and the same online
 		// session. These two run only the online checks (the full suite stays Chromium-only, as before).

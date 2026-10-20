@@ -1,12 +1,20 @@
 import { useMemo, useState } from 'react'
+import { parseBullets } from '../bullets/parseBullets'
+import type { PromptMode } from '../bullets/promptSettings'
 import { BtnLabel } from './BtnLabel'
 import { AlertModal, ConfirmModal } from './Modal'
+import { TriggerPhraseField } from './TriggerPhraseField'
 import { IconClose } from './icons'
 
 interface ScriptEditorProps {
   script: string
   onChange: (value: string) => void
   onClose: () => void
+  promptMode?: PromptMode
+  trigger?: string
+  onTriggerChange?: (next: string) => void
+  backTrigger?: string
+  onBackTriggerChange?: (next: string) => void
 }
 
 function countStats(text: string) {
@@ -17,13 +25,26 @@ function countStats(text: string) {
   return { words, chars: text.length, lines }
 }
 
-export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
+export function ScriptEditor({
+  script,
+  onChange,
+  onClose,
+  promptMode = 'follow',
+  trigger = 'next slide',
+  backTrigger = 'backwards slide',
+  onTriggerChange,
+  onBackTriggerChange,
+}: ScriptEditorProps) {
   const [copied, setCopied] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [alert, setAlert] = useState<{ title: string; message: string } | null>(
     null,
   )
   const stats = useMemo(() => countStats(script), [script])
+  const bulletCount = useMemo(
+    () => (promptMode === 'bullets' ? parseBullets(script).length : 0),
+    [promptMode, script],
+  )
 
   const onFile = async (file: File | null) => {
     if (!file) return
@@ -68,6 +89,13 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
         <div className="panel-header-stack">
           <h2>Edit script</h2>
           <p className="editor-stats" aria-live="polite">
+            {promptMode === 'bullets' ? (
+              <>
+                {bulletCount.toLocaleString()}{' '}
+                {bulletCount === 1 ? 'bullet' : 'bullets'}
+                {' · '}
+              </>
+            ) : null}
             {stats.words.toLocaleString()} words · {stats.lines.toLocaleString()}{' '}
             lines · {stats.chars.toLocaleString()} chars
             <span className="editor-stats-note"> · autosaved</span>
@@ -84,12 +112,43 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
           <span>Done</span>
         </button>
       </div>
+      {promptMode === 'bullets' && onTriggerChange ? (
+        <div className="script-editor-trigger">
+          <TriggerPhraseField
+            label="Next slide phrase"
+            hint="Saying this moves to the next point."
+            value={trigger}
+            reserved={backTrigger}
+            onChange={onTriggerChange}
+          />
+          {onBackTriggerChange ? (
+            <TriggerPhraseField
+              label="Backwards slide phrase"
+              hint="Saying this moves back one point."
+              value={backTrigger}
+              reserved={trigger}
+              onChange={onBackTriggerChange}
+            />
+          ) : null}
+          <p className="settings-hint">
+            One point per line. A dash, star, dot, number, or plain line all
+            work, with or without a space after a marker. Blank lines are
+            skipped. Indent
+            a line to continue the previous point. Switching back to voice
+            follow keeps this text.
+          </p>
+        </div>
+      ) : null}
       <textarea
         className="script-editor-input"
         value={script}
         onChange={(e) => onChange(e.target.value)}
         spellCheck
-        placeholder="Paste or type your script…"
+        placeholder={
+          promptMode === 'bullets'
+            ? 'One bullet point per line…\n- Introduction to our company\n- The problem we are solving'
+            : 'Paste or type your script…'
+        }
         autoFocus
       />
       <div className="script-editor-toolbar">

@@ -399,7 +399,9 @@ export class MusicPlantPlacementTool implements BuildTool {
 		for (const [id, r] of this.runtimes) {
 			const t = r.sequencer.tree,
 				e = r.sequencer.elapsed;
-			r.wave.follow(this.options.camera.position.x, this.options.camera.position.z);
+			// Hidden guides and stopped waves need no ground projection while walking.
+			if (r.sequencer.started || (this.active && this.activeTree?.id === id))
+				r.wave.follow(this.options.camera.position.x, this.options.camera.position.z);
 			r.wave.update(
 				e,
 				r.sequencer.started,

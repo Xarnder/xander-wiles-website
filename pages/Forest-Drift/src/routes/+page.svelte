@@ -38,6 +38,8 @@
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
+	import { preventTouchPageZoom } from '$lib/components/preventTouchPageZoom';
+	import { touchButton } from '$lib/components/touchButton';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
 	import SessionPanels from '$lib/components/SessionPanels.svelte';
 	import PauseMenu from '$lib/components/PauseMenu.svelte';
@@ -147,6 +149,7 @@
 	let hotbar = $state<HotbarUiState | null>(null);
 	let buildHud = $state<BuildUiState | null>(null);
 	let showHelp = $state(false);
+	let utilityButtonsHeight = $state(44);
 	let settingsOpen = $state(false);
 	let paintPaletteOpen = $state(false);
 	let placementCustomizeOpen = $state(false);
@@ -1256,6 +1259,8 @@
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
 	<div
 		class="game-shell"
+		class:touch-zoom-locked={isTouchDevice || showTouchControls}
+		use:preventTouchPageZoom={isTouchDevice || showTouchControls}
 		class:debug-sidebar={debugControlsOpen}
 		class:touch-mode={showTouchControls}
 		class:fps-on={!!stats?.showFpsCounter}
@@ -1292,7 +1297,7 @@
 						class="floor-arrow"
 						data-testid="floor-up"
 						disabled={!buildHud.level.canMoveUp}
-						onclick={() => session?.scene.moveLevelUp()}
+						use:touchButton={() => session?.scene.moveLevelUp()}
 						onpointerdown={(e) => e.stopPropagation()}
 						aria-label="Move up one building level"
 					>
@@ -1307,7 +1312,7 @@
 						class="floor-arrow"
 						data-testid="floor-down"
 						disabled={!buildHud.level.canMoveDown}
-						onclick={() => session?.scene.moveLevelDown()}
+						use:touchButton={() => session?.scene.moveLevelDown()}
 						onpointerdown={(e) => e.stopPropagation()}
 						aria-label="Move down one building level"
 					>
@@ -1398,11 +1403,11 @@
 				</div>
 			{/if}
 
-			<div class="utility-buttons">
+			<div class="utility-buttons" bind:clientHeight={utilityButtonsHeight}>
 				{#if isTouchDevice}
 					<button
 						class="help-toggle"
-						onclick={() => {
+						use:touchButton={() => {
 							touchControlsEnabled = !showTouchControls;
 						}}
 						aria-label="Toggle touch screen controls"
@@ -1413,7 +1418,7 @@
 				<button
 					class="help-toggle"
 					data-testid="pause-toggle"
-					onclick={openPause}
+					use:touchButton={openPause}
 					aria-label="Pause"
 				>
 					Pause
@@ -1629,7 +1634,7 @@
 						<h3>Roof</h3>
 						<dl>
 							<dt>Left click</dt>
-							<dd>Trace the roof footprint, then click the first point again to close it</dd>
+							<dd>Choose two opposite corners for a rectangular roof footprint</dd>
 							<dt>V</dt>
 							<dd>
 								After the footprint is closed, cycle roof type (Flat, Shed, Gable, Hip, Gambrel,
@@ -1643,11 +1648,12 @@
 								while you are adjusting a roof
 							</dd>
 							<dt>B</dt>
-							<dd>Cycle draw-snap, including Wall Corners onto the room below</dd>
+							<dd>Switch to polygon drawing; in polygon mode, cycle draw-snap including Wall Corners</dd>
 							<dt>E</dt>
 							<dd>
-								Set how high the roof eaves sit above this storey's floor. Reset follows the top of
-								the walls
+								Switch between rectangle and polygon drawing, keeping the first corner. In polygon
+								mode, click the first point again to close the footprint. After the footprint is
+								complete, E sets the roof eave height; Reset follows the top of the walls
 							</dd>
 							<dt>Click / Right click</dt>
 							<dd>Place the roof, or cancel</dd>
@@ -1894,11 +1900,15 @@
 					}}
 				/>{/if}
 			{#if buildHud}
-				<div class="build-hud" data-testid="build-hud">
+				<div
+					class="build-hud"
+					data-testid="build-hud"
+					style:--utility-buttons-height={`${utilityButtonsHeight}px`}
+				>
 					{#if buildHud.toolId === 'music'}<button
 							class="midi-import-button"
 							data-testid="import-midi"
-							onclick={openMidi}>Import MIDI</button
+							use:touchButton={openMidi}>Import MIDI</button
 						>{/if}
 					{#if buildHud.toolId === 'paint'}
 						<div class="paint-color-row" data-testid="paint-color-row">
@@ -1919,7 +1929,7 @@
 							type="button"
 							class="build-hud-action"
 							data-testid="delete-foundation-button"
-							onclick={() => {
+							use:touchButton={() => {
 								const id = buildHud?.foundationDeleteId;
 								if (id) openFoundationDelete(id);
 							}}
@@ -1959,7 +1969,7 @@
 				<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
 			{/if}
 
-			{#if stats?.miniBuildChunk && !miniBuildEditor}
+			{#if stats?.miniBuildChunk && !miniBuildEditor && hotbar?.buildModeActive && hotbar.activeSlot === 8 && hotbar.globalMode === 'none' && !hotbar.locked}
 				{@const chunk = stats.miniBuildChunk}
 				{@const used = Math.min(1, chunk.primitives / chunk.budget)}
 				{@const adding = Math.max(0, Math.min(1 - used, chunk.added / chunk.budget))}
@@ -2820,6 +2830,18 @@
 		overflow: hidden;
 	}
 
+	/* Scrollable panels need this too; their gesture handling can stop before the shell.
+	   Low specificity preserves the joystick's none and the hotbar's pan-x rules. */
+	:global(.touch-zoom-locked :where(*)) {
+		touch-action: pan-x pan-y;
+	}
+
+	.game-shell.touch-zoom-locked {
+		/* Allow panel scrolling, with no pinch or double-tap page zoom. */
+		touch-action: pan-x pan-y;
+		overscroll-behavior: none;
+	}
+
 	.game-hud {
 		display: contents;
 	}
@@ -3093,7 +3115,8 @@
 
 	.touch-mode .build-hud {
 		top: auto;
-		bottom: calc(var(--touch-dock-height, 8.5rem) + 5.4rem);
+		/* Measure the utility row so larger text and iPad buttons keep a 12px gap. */
+		bottom: calc(var(--touch-dock-height, 8.5rem) + 3.5rem + var(--utility-buttons-height, 44px) + 12px);
 		left: max(0.75rem, env(safe-area-inset-left));
 		max-width: min(16rem, calc(100vw - 8.5rem));
 		max-height: calc(
@@ -3472,8 +3495,14 @@
 	}
 
 	.touch-mode :global(.hotbar) {
-		bottom: calc(var(--touch-dock-height, 8.5rem) + 0.35rem);
+		bottom: max(8px, env(safe-area-inset-bottom));
 		max-width: calc(100vw - 1rem);
+	}
+
+	/* Keep the tray at the screen edge and leave touch actions above its row. */
+	.touch-mode:has(:global(.hotbar)) :global(.touch-movement-cluster),
+	.touch-mode:has(:global(.hotbar)) :global(.touch-actions-cluster) {
+		bottom: calc(76px + env(safe-area-inset-bottom));
 	}
 
 	.help-toggle {

@@ -132,6 +132,25 @@
             <div id="scene-outline-list" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 5px;">
                 <div style="color: #aaa; font-size: 0.85rem; padding: 5px;">No objects found.</div>
             </div>
+
+            <div id="position-panel" hidden>
+                <h4>Position <span id="position-target"></span></h4>
+                <div class="coord-row">
+                    <label>X
+                        <input id="pos-x" type="number" step="0.01" inputmode="decimal">
+                    </label>
+                    <label>Y
+                        <input id="pos-y" type="number" step="0.01" inputmode="decimal">
+                    </label>
+                    <label>Z
+                        <input id="pos-z" type="number" step="0.01" inputmode="decimal">
+                    </label>
+                </div>
+                <button id="reset-position-btn" class="action-btn secondary" type="button">Reset Position</button>
+            </div>
+
+            <button id="delete-object-btn" class="action-btn" type="button" disabled>Delete Selected</button>
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">Select an object, then delete it here or press Delete.</p>
         </div>
 
         <!-- Controls Card -->
@@ -154,8 +173,8 @@
             </div>
 
             <div class="control-group">
-                <label for="amb-slider">Ambient Light Intensity <span id="amb-val">0</span></label>
-                <input type="range" id="amb-slider" min="0" max="5" step="0.1" value="0">
+                <label for="amb-slider">Ambient Light Intensity <span id="amb-val">1.5</span></label>
+                <input type="range" id="amb-slider" min="0" max="5" step="0.1" value="1.5">
             </div>
 
             <div class="control-group">
@@ -182,6 +201,7 @@
             <div class="control-group">
                 <button id="add-light-btn" class="action-btn">Add Point Light</button>
                 <button id="toggle-helpers-btn" class="action-btn secondary">Hide Light Wireframes</button>
+                <button id="toggle-floor-btn" class="action-btn secondary">Hide Floor Plane</button>
                 <button id="toggle-grid-btn" class="action-btn secondary">Show Floor Grid</button>
                 <button id="reset-cam-btn" class="action-btn secondary">Reset Camera</button>
             </div>

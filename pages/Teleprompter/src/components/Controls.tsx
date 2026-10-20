@@ -22,6 +22,8 @@ import {
   type TeleprompterSettings,
 } from '../hooks/useTeleprompter'
 import type { SpeechStatus } from '../asr/useSpeechStream'
+import type { BulletMicState } from '../bullets/bulletMic'
+import type { PromptMode } from '../bullets/promptSettings'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
 import {
   VIDEO_RESOLUTION_OPTIONS,
@@ -31,6 +33,7 @@ import {
 import { ConfirmModal } from './Modal'
 import { BtnLabel } from './BtnLabel'
 import { ScriptStats } from './ScriptStats'
+import { HeaderTriggerField, TriggerPhraseField } from './TriggerPhraseField'
 import {
   IconArrowDown,
   IconArrowLeft,
@@ -84,6 +87,13 @@ interface ControlsProps {
   onFacingModeChange: (mode: FacingMode) => void
   onNudge: (delta: number) => void
   onNudgeSentence: (direction: 'up' | 'down') => void
+  bulletMic: BulletMicState
+  bulletMicLabel: string
+  bulletSessionActive: boolean
+  bulletIndex: number
+  bulletCount: number
+  onBulletPrev: () => void
+  onBulletNext: () => void
   onUpdateSettings: (patch: Partial<TeleprompterSettings>) => void
   onResetSettings: () => void
 }
@@ -167,16 +177,30 @@ function SliderField({
 function StartPauseButton({
   isRunning,
   status,
+  sessionActive = false,
   onStart,
   onPause,
   className = 'btn primary start-btn',
 }: {
   isRunning: boolean
   status: SpeechStatus
+  sessionActive?: boolean
   onStart: () => void
   onPause: () => void
   className?: string
 }) {
+  if (sessionActive) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={onPause}
+        title="Pause (Space)"
+      >
+        <BtnLabel>Pause</BtnLabel>
+      </button>
+    )
+  }
   if (!isRunning || status !== 'listening') {
     return (
       <button
@@ -287,6 +311,13 @@ export function Controls({
   onFacingModeChange,
   onNudge,
   onNudgeSentence,
+  bulletMic,
+  bulletMicLabel,
+  bulletSessionActive,
+  bulletIndex,
+  bulletCount,
+  onBulletPrev,
+  onBulletNext,
   onUpdateSettings,
   onResetSettings,
 }: ControlsProps) {
@@ -295,11 +326,22 @@ export function Controls({
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>('script')
   const [advancedSettings, setAdvancedSettings] = useState(false)
   const mobileChromeRef = useRef<HTMLDivElement>(null)
+  const bulletMode = settings.promptMode === 'bullets'
   const isLiveScroll = status === 'listening' && alignState === 'tracking'
   const isHoldingOffScript = status === 'listening' && alignState === 'off_script'
-  const scrollMode: 'live' | 'paused' = isLiveScroll ? 'live' : 'paused'
+  const scrollMode: 'live' | 'paused' | 'error' = bulletMode
+    ? bulletMic === 'listening'
+      ? 'live'
+      : bulletMic === 'error' || bulletMic === 'unavailable'
+        ? 'error'
+        : 'paused'
+    : isLiveScroll
+      ? 'live'
+      : 'paused'
 
-  const statusLabel = isLiveScroll
+  const statusLabel = bulletMode
+    ? bulletMicLabel
+    : isLiveScroll
     ? recordingActive
       ? 'Live scroll · recording'
       : 'Live scroll'
@@ -402,13 +444,37 @@ export function Controls({
 
   const primaryActions = (
     <>
+      <div className="prompt-mode" role="group" aria-label="Teleprompter mode">
+        <button
+          type="button"
+          className={`btn prompt-mode-btn${settings.promptMode === 'follow' ? ' active' : ''}`}
+          aria-pressed={settings.promptMode === 'follow'}
+          title="Voice follow — scroll with the script"
+          onClick={() => onUpdateSettings({ promptMode: 'follow' })}
+        >
+          <BtnLabel>Follow</BtnLabel>
+        </button>
+        <button
+          type="button"
+          className={`btn prompt-mode-btn${settings.promptMode === 'bullets' ? ' active' : ''}`}
+          aria-pressed={settings.promptMode === 'bullets'}
+          title="Bulletpoint trigger — advance when you say the trigger phrase"
+          onClick={() => onUpdateSettings({ promptMode: 'bullets' })}
+        >
+          <BtnLabel>Bullets</BtnLabel>
+        </button>
+      </div>
       <button
         type="button"
         className="btn"
         onClick={() => runAndCloseMenu(onReset)}
-        title="Reset to start (R)"
+        title={
+          bulletMode
+            ? 'End presentation and return to the first bullet (R)'
+            : 'Reset to start (R)'
+        }
       >
-        <BtnLabel>Reset</BtnLabel>
+        <BtnLabel>{bulletMode ? 'End' : 'Reset'}</BtnLabel>
       </button>
       <button
         type="button"
@@ -502,7 +568,42 @@ export function Controls({
     </>
   )
 
-  const nudgeGroup = (
+  const atFirstBullet = bulletIndex <= 0
+  const atLastBullet = bulletCount === 0 || bulletIndex >= bulletCount - 1
+  const bulletPosition = bulletCount === 0 ? 0 : bulletIndex + 1
+
+  const bulletStats = (
+    <div className="stats-strip" aria-label="Bullet progress">
+      <div className="stat-chips">
+        <span className="stat-chip">
+          Point <em>{bulletPosition} / {bulletCount}</em>
+        </span>
+      </div>
+    </div>
+  )
+
+  const nudgeGroup = bulletMode ? (
+    <div className="nudge-group" role="group" aria-label="Bullet navigation">
+      <button
+        type="button"
+        className="btn ghost nudge-btn"
+        onClick={onBulletPrev}
+        disabled={atFirstBullet}
+        title="Previous bullet (←)"
+      >
+        <BtnLabel>Previous</BtnLabel>
+      </button>
+      <button
+        type="button"
+        className="btn ghost nudge-btn"
+        onClick={onBulletNext}
+        disabled={atLastBullet}
+        title="Next bullet (→)"
+      >
+        <BtnLabel>Next</BtnLabel>
+      </button>
+    </div>
+  ) : (
     <div className="nudge-group" role="group" aria-label="Nudge cursor">
       <button
         type="button"
@@ -630,6 +731,60 @@ export function Controls({
         >
           {!advancedSettings ? (
             <>
+              <p className="settings-section-label">Mode</p>
+              <label className="settings-mic">
+                <span>Teleprompter mode</span>
+                <select
+                  value={settings.promptMode}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      promptMode: e.target.value as PromptMode,
+                    })
+                  }
+                >
+                  <option value="follow">Voice follow</option>
+                  <option value="bullets">Bulletpoint trigger</option>
+                </select>
+              </label>
+              {settings.promptMode === 'bullets' ? (
+                <>
+                  <TriggerPhraseField
+                    label="Next slide phrase"
+                    hint="Saying this moves to the next point. It can sit inside a normal sentence."
+                    value={settings.bulletTrigger}
+                    reserved={settings.bulletBackTrigger}
+                    onChange={(bulletTrigger) =>
+                      onUpdateSettings({ bulletTrigger })
+                    }
+                  />
+                  <TriggerPhraseField
+                    label="Backwards slide phrase"
+                    hint="Saying this moves back one point. It can sit inside a normal sentence."
+                    value={settings.bulletBackTrigger}
+                    reserved={settings.bulletTrigger}
+                    onChange={(bulletBackTrigger) =>
+                      onUpdateSettings({ bulletBackTrigger })
+                    }
+                  />
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.showNextBullet}
+                      onChange={(e) =>
+                        onUpdateSettings({ showNextBullet: e.target.checked })
+                      }
+                    />
+                    <span>Preview the next bullet</span>
+                  </label>
+                  <p className="settings-hint settings-hint-span">
+                    One point stays on screen until you say a trigger phrase or
+                    press Previous or Next. Each point scales to fill the screen,
+                    so a long point uses smaller type than a short one. Bold
+                    and script mirror still apply.
+                  </p>
+                </>
+              ) : null}
+
               <p className="settings-section-label">Script</p>
               <SliderField
                 label="Font size"
@@ -834,6 +989,57 @@ export function Controls({
 
           {advancedSettings && settingsTab === 'script' ? (
             <>
+              <label className="settings-mic">
+                <span>Teleprompter mode</span>
+                <select
+                  value={settings.promptMode}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      promptMode: e.target.value as PromptMode,
+                    })
+                  }
+                >
+                  <option value="follow">Voice follow</option>
+                  <option value="bullets">Bulletpoint trigger</option>
+                </select>
+              </label>
+              {settings.promptMode === 'bullets' ? (
+                <>
+                  <TriggerPhraseField
+                    label="Next slide phrase"
+                    hint="Saying this moves to the next point. It can sit inside a normal sentence."
+                    value={settings.bulletTrigger}
+                    reserved={settings.bulletBackTrigger}
+                    onChange={(bulletTrigger) =>
+                      onUpdateSettings({ bulletTrigger })
+                    }
+                  />
+                  <TriggerPhraseField
+                    label="Backwards slide phrase"
+                    hint="Saying this moves back one point. It can sit inside a normal sentence."
+                    value={settings.bulletBackTrigger}
+                    reserved={settings.bulletTrigger}
+                    onChange={(bulletBackTrigger) =>
+                      onUpdateSettings({ bulletBackTrigger })
+                    }
+                  />
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.showNextBullet}
+                      onChange={(e) =>
+                        onUpdateSettings({ showNextBullet: e.target.checked })
+                      }
+                    />
+                    <span>Preview the next bullet</span>
+                  </label>
+                </>
+              ) : (
+                <p className="settings-hint settings-hint-span">
+                  Display mode below applies to voice follow. Switch to
+                  Bulletpoint trigger for a one-point presentation.
+                </p>
+              )}
               <SliderField
                 label="Font size"
                 valueLabel={`${settings.fontSize}px`}
@@ -1578,6 +1784,7 @@ export function Controls({
             <StartPauseButton
               isRunning={isRunning}
               status={status}
+              sessionActive={bulletSessionActive}
               onStart={onStart}
               onPause={onPause}
             />
@@ -1621,7 +1828,19 @@ export function Controls({
             </div>
 
             <div className="control-row secondary-actions">
-              {statsStrip}
+              {bulletMode ? bulletStats : statsStrip}
+              {bulletMode ? (
+                <HeaderTriggerField
+                  forward={settings.bulletTrigger}
+                  back={settings.bulletBackTrigger}
+                  onSave={({ forward, back }) =>
+                    onUpdateSettings({
+                      bulletTrigger: forward,
+                      bulletBackTrigger: back,
+                    })
+                  }
+                />
+              ) : null}
               {nudgeGroup}
             </div>
           </div>
@@ -1634,6 +1853,7 @@ export function Controls({
           <StartPauseButton
             isRunning={isRunning}
             status={status}
+            sessionActive={bulletSessionActive}
             onStart={onStart}
             onPause={onPause}
             className="btn primary start-btn mobile-chrome-btn"
@@ -1694,7 +1914,9 @@ export function Controls({
               {primaryActions}
             </div>
 
-            {showAnyStat ? (
+            {bulletMode ? (
+              <div className="mobile-menu-stats">{bulletStats}</div>
+            ) : showAnyStat ? (
               <div className="mobile-menu-stats">{statsStrip}</div>
             ) : null}
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { BulletPresentation } from './components/BulletPresentation'
 import { CameraPreview } from './components/CameraPreview'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
@@ -86,6 +87,7 @@ export default function App() {
   const cameraPreviewFullscreen = cameraPreviewSize === 'fullscreen'
 
   const isListening = tp.speech.status === 'listening'
+  const bulletSessionActive = tp.bullet.sessionActive
   useWakeLock(isListening && tp.settings.wakeLock)
   const facingMode = tp.settings.facingMode
   const previewMirror =
@@ -321,7 +323,7 @@ export default function App() {
       switch (e.key) {
         case ' ':
           e.preventDefault()
-          if (isListening) tp.pause()
+          if (isListening || bulletSessionActive) tp.pause()
           else void requestStart()
           break
         case 'r':
@@ -361,19 +363,23 @@ export default function App() {
           break
         case 'ArrowLeft':
           e.preventDefault()
-          tp.nudge(-1)
+          if (tp.settings.promptMode === 'bullets') tp.bullet.prev()
+          else tp.nudge(-1)
           break
         case 'ArrowRight':
           e.preventDefault()
-          tp.nudge(1)
+          if (tp.settings.promptMode === 'bullets') tp.bullet.next()
+          else tp.nudge(1)
           break
         case 'ArrowUp':
           e.preventDefault()
-          tp.nudgeSentence('up')
+          if (tp.settings.promptMode === 'bullets') tp.bullet.prev()
+          else tp.nudgeSentence('up')
           break
         case 'ArrowDown':
           e.preventDefault()
-          tp.nudgeSentence('down')
+          if (tp.settings.promptMode === 'bullets') tp.bullet.next()
+          else tp.nudgeSentence('down')
           break
         default:
           break
@@ -388,6 +394,7 @@ export default function App() {
     dismissSpeechError,
     editorOpen,
     howToOpen,
+    bulletSessionActive,
     isListening,
     replaceOpen,
     reviewOpen,
@@ -470,6 +477,13 @@ export default function App() {
         onFacingModeChange={(mode) => tp.updateSettings({ facingMode: mode })}
         onNudge={tp.nudge}
         onNudgeSentence={tp.nudgeSentence}
+        bulletMic={tp.bullet.mic}
+        bulletMicLabel={tp.bullet.micLabel}
+        bulletSessionActive={tp.bullet.sessionActive}
+        bulletIndex={tp.bullet.index}
+        bulletCount={tp.bullet.count}
+        onBulletPrev={tp.bullet.prev}
+        onBulletNext={tp.bullet.next}
         onUpdateSettings={tp.updateSettings}
         onResetSettings={tp.resetSettings}
       />
@@ -502,6 +516,29 @@ export default function App() {
               script={tp.script}
               onChange={tp.setScript}
               onClose={() => setEditorOpen(false)}
+              promptMode={tp.settings.promptMode}
+              trigger={tp.settings.bulletTrigger}
+              onTriggerChange={(bulletTrigger) =>
+                tp.updateSettings({ bulletTrigger })
+              }
+              backTrigger={tp.settings.bulletBackTrigger}
+              onBackTriggerChange={(bulletBackTrigger) =>
+                tp.updateSettings({ bulletBackTrigger })
+              }
+            />
+          ) : tp.settings.promptMode === 'bullets' ? (
+            <BulletPresentation
+              current={tp.bullet.current}
+              nextBullet={tp.bullet.nextBullet}
+              index={tp.bullet.index}
+              count={tp.bullet.count}
+              trigger={tp.settings.bulletTrigger}
+              backTrigger={tp.settings.bulletBackTrigger}
+              fontSize={tp.settings.fontSize}
+              lineWidth={tp.settings.lineWidth}
+              lineHeight={tp.settings.lineHeight}
+              mirror={tp.settings.mirror}
+              showNext={tp.settings.showNextBullet}
             />
           ) : (
             <ScriptView
@@ -557,6 +594,7 @@ export default function App() {
 
       <StartChoiceModal
         open={startChoiceOpen}
+        presentation={tp.settings.promptMode === 'bullets'}
         recordingSupported={
           tp.speech.recordingSupported && isMediaRecorderSupported()
         }
@@ -566,7 +604,7 @@ export default function App() {
       />
 
       <AlertModal
-        open={tp.speech.error != null}
+        open={tp.speech.error != null && !tp.bullet.suppressError}
         title={tp.speech.error?.title}
         message={tp.speech.error?.message ?? ''}
         fix={tp.speech.error?.fix}

@@ -291,6 +291,18 @@ describe('RoomCore handshake', () => {
 		);
 	});
 
+	it('assigns distinct colours to a full room even when every player requests the same colour', async () => {
+		const { room } = setup();
+		let last = new FakeConnection();
+		for (let i = 0; i < 20; i++) {
+			last = new FakeConnection();
+			await hello(room, last, `crowd-player-${i}`);
+		}
+		const colours = last.last('welcome')!.players.map((player) => player.colour);
+		expect(colours).toHaveLength(20);
+		expect(new Set(colours).size).toBe(20);
+	});
+
 	it('gives duplicate names a suffix', async () => {
 		const { room } = setup();
 		await hello(room, new FakeConnection(), 'player-0001', { name: 'Sam' });

@@ -15,6 +15,7 @@ import { useEntryUi } from '../context/EntryUiContext';
 import { AlertCircle, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
+import { extractImageTakenAt, formatImageTakenLabel, formatImageList, imagesForSave, imageForSave, normalizeStoredTakenAt } from '../utils/imageTakenAt';
 import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
@@ -169,24 +170,34 @@ function WritingProgress({
     );
 }
 
+function withStoredTakenAt(image) {
+    if (!image || typeof image !== 'object') return image;
+    const takenAt = normalizeStoredTakenAt(image.takenAt);
+    if (takenAt) return image.takenAt === takenAt ? image : { ...image, takenAt };
+    if (image.takenAt == null) return image;
+    const { takenAt: _removed, ...rest } = image;
+    return rest;
+}
+
 function normalizeImages(data) {
-    if (Array.isArray(data.images)) return data.images;
-    if (typeof data.imageUrl === 'string' && data.imageUrl) {
-        return [{
+    let images = [];
+    if (Array.isArray(data.images)) {
+        images = data.images;
+    } else if (typeof data.imageUrl === 'string' && data.imageUrl) {
+        images = [{
             url: data.imageUrl,
             path: data.imagePath || null,
             size: data.imageSize || 0
         }];
-    }
-    if (data.imageMetadata && typeof data.imageMetadata === 'object' && typeof data.imageMetadata.url === 'string') {
-        return [{
+    } else if (data.imageMetadata && typeof data.imageMetadata === 'object' && typeof data.imageMetadata.url === 'string') {
+        images = [{
             url: data.imageMetadata.url,
             path: data.imageMetadata.path || null,
             size: data.imageMetadata.sizeInBytes || 0
         }];
     }
 
-    return [];
+    return images.map(withStoredTakenAt);
 }
 
 function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilterByFields) {
@@ -260,7 +271,7 @@ export default function EntryEditor() {
     const useNativeEditor = useMemo(shouldUseNativeEditor, []);
 
     // Image State
-    const [images, setImages] = useState([]); // Array of { url, path, size }
+    const [images, setImages] = useState([]); // Array of { url, path, size, caption, takenAt }
     const [imageToDelete, setImageToDelete] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [uploadQueueCount, setUploadQueueCount] = useState(0);
@@ -618,14 +629,15 @@ export default function EntryEditor() {
             const inferredTitle = autoTitleEnabled ? content.split('\n')[0].replace('#', '').trim() : '';
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
-            const mainImage = images.length > 0 ? images[0] : null;
+            const savedImages = imagesForSave(images);
+            const mainImage = savedImages.length > 0 ? savedImages[0] : null;
             
             await setDoc(docRef, {
                 date: parseISO(date),
                 title: trimmedTitle || inferredTitle,
                 content: content,
                 updatedAt: serverTimestamp(),
-                images,
+                images: savedImages,
                 tags: selectedTags,
                 mood: mood,
                 isSpecial: isSpecial,
@@ -1061,6 +1073,9 @@ export default function EntryEditor() {
                     setStatusMessage(`Compressing image ${i + 1}...`);
                 }
 
+                // Read the camera time before conversion. Compression drops this metadata.
+                const takenAt = await extractImageTakenAt(file);
+
                 // Compress
                 const compressedFile = await compressImage(file);
 
@@ -1073,15 +1088,17 @@ export default function EntryEditor() {
                 await uploadBytes(storageRef, compressedFile);
                 const downloadUrl = await getDownloadURL(storageRef);
 
-                newImages.push({
+                const savedImage = imageForSave({
                     url: downloadUrl,
                     path: storagePath,
                     size: compressedFile.size,
-                    caption: ''
+                    caption: '',
+                    takenAt
                 });
+                if (savedImage) newImages.push(savedImage);
             }
 
-            const combinedImages = [...images, ...newImages];
+            const combinedImages = imagesForSave([...images, ...newImages]);
             const mainImage = combinedImages[0] || null;
             await setDoc(doc(db, 'users', currentUser.uid, 'entries', date), {
                 date: parseISO(date),
@@ -1096,7 +1113,7 @@ export default function EntryEditor() {
         } catch (error) {
             console.error("Error uploading image:", error);
             if (newImages.length > 0) {
-                const recoveredImages = [...images, ...newImages];
+                const recoveredImages = imagesForSave([...images, ...newImages]);
                 setImages(recoveredImages);
                 try {
                     const mainImage = recoveredImages[0] || null;
@@ -1331,7 +1348,7 @@ export default function EntryEditor() {
         setUploading(true);
         try {
             const image = images[imageToDelete];
-            const newImages = images.filter((_, index) => index !== imageToDelete);
+            const newImages = imagesForSave(images.filter((_, index) => index !== imageToDelete));
             const mainImage = newImages[0] || null;
             const entryRef = doc(db, 'users', currentUser.uid, 'entries', date);
 
@@ -1469,14 +1486,15 @@ export default function EntryEditor() {
                     numericEntriesToPlainText(cleanedNumericEntries, numericFields)
                 ]).size;
                 // For backward compatibility until migration is complete or ignored
-                const mainImage = images.length > 0 ? images[0] : null;
+                const savedImages = imagesForSave(images);
+                const mainImage = savedImages.length > 0 ? savedImages[0] : null;
 
                 await setDoc(docRef, {
                     date: parseISO(date),
                     title: trimmedTitle || inferredTitle,
                     content: content,
                     updatedAt: serverTimestamp(),
-                    images: images, // Array of {url, path, size}
+                    images: savedImages,
                     tags: selectedTags, // Array of tag IDs
                     isSpecial: isSpecial,
                     mood: mood,
@@ -1547,7 +1565,8 @@ export default function EntryEditor() {
             const numericEntryText = visibleNumericEntries
                 .map((entry) => `${entry.field.name}: ${entry.value}`)
                 .join('\n');
-            const textToCopy = [displayDate, title, displayContent, subEntryText, numericEntryText].filter(Boolean).join('\n\n');
+            const photoText = formatImageList(images, date, 'lines');
+            const textToCopy = [displayDate, title, displayContent, subEntryText, numericEntryText, photoText].filter(Boolean).join('\n\n');
             await navigator.clipboard.writeText(textToCopy);
             success('Entry copied to clipboard');
         } catch (err) {
@@ -1712,6 +1731,10 @@ export default function EntryEditor() {
             </button>
         </div>
     );
+
+    const lightboxTakenLabel = lightboxImage
+        ? formatImageTakenLabel(lightboxImage.takenAt, date)
+        : null;
 
     return (
         <div className={`flex flex-col relative text-text ${isEditing && stickySaveButton ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : isEditing ? '' : 'h-full'}`}>
@@ -1967,7 +1990,9 @@ export default function EntryEditor() {
 
                 {images.length > 0 && !isEditing && (
                     <div className={`mb-6 ${images.length <= 2 || entryImageColumns === 1 ? 'columns-1' : 'columns-2'} gap-2 sm:gap-4`}>
-                        {images.map((img, idx) => (
+                        {images.map((img, idx) => {
+                            const takenLabel = formatImageTakenLabel(img.takenAt, date);
+                            return (
                             <div
                                 key={idx}
                                 onClick={() => handleImageClick(img)}
@@ -1979,15 +2004,23 @@ export default function EntryEditor() {
                                     className="w-full"
                                     imgClassName="block h-auto w-full"
                                 />
-                                {img.caption && (
-                                    <div className="p-3 bg-white/5 backdrop-blur-sm border-t border-white/10">
-                                        <p className="text-center text-sm text-gray-300 italic font-medium leading-relaxed">
-                                            {img.caption}
-                                        </p>
+                                {(takenLabel || img.caption) && (
+                                    <div className="px-3 py-2 bg-white/5 backdrop-blur-sm border-t border-white/10">
+                                        {takenLabel && (
+                                            <p className="text-center text-xs font-medium tracking-wide text-text-muted">
+                                                {takenLabel}
+                                            </p>
+                                        )}
+                                        {img.caption && (
+                                            <p className={`text-center text-sm text-gray-300 italic font-medium leading-relaxed ${takenLabel ? 'mt-1' : ''}`}>
+                                                {img.caption}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
@@ -2069,11 +2102,13 @@ export default function EntryEditor() {
                         {/* Image Upload Area */}
                         <div className="mb-3 sm:mb-4">
                             {(images.length > 0 || uploading) && (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
-                                    {images.map((img, idx) => (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2 items-start">
+                                    {images.map((img, idx) => {
+                                        const takenLabel = formatImageTakenLabel(img.takenAt, date);
+                                        return (
                                         <div
                                             key={idx}
-                                            className={`relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center cursor-move transition-transform duration-200 ${dragOverImageIndex === idx ? 'scale-105 ring-2 ring-primary/80 z-10' : ''} ${draggedImageIndex === idx ? 'opacity-50' : ''}`}
+                                            className={`group flex flex-col cursor-move transition-transform duration-200 ${dragOverImageIndex === idx ? 'scale-105 z-10' : ''} ${draggedImageIndex === idx ? 'opacity-50' : ''}`}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, idx)}
                                             onDragEnter={(e) => handleDragEnter(e, idx)}
@@ -2081,6 +2116,7 @@ export default function EntryEditor() {
                                             onDrop={(e) => handleDrop(e, idx)}
                                             onDragEnd={handleDragEnd}
                                         >
+                                            <div className={`relative aspect-square overflow-hidden rounded-lg border border-white/10 bg-black/40 ${dragOverImageIndex === idx ? 'ring-2 ring-primary/80' : ''}`}>
                                             <ImageWithSkeleton
                                                 src={img.url}
                                                 alt={`Uploaded ${idx}`}
@@ -2109,8 +2145,15 @@ export default function EntryEditor() {
                                                     {img.caption}
                                                 </div>
                                             )}
+                                            </div>
+                                            {takenLabel && (
+                                                <p className="px-1 pt-1 text-center text-[10px] sm:text-xs leading-tight text-text-muted">
+                                                    {takenLabel}
+                                                </p>
+                                            )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     {uploading && Array.from({ length: uploadQueueCount }).map((_, idx) => (
                                         <div
                                             key={`uploading-${idx}`}
@@ -2833,6 +2876,11 @@ export default function EntryEditor() {
                                 }}
                             />
                         </div>
+                        {lightboxTakenLabel && (
+                            <p className="mt-3 text-center text-sm font-medium text-white/80">
+                                {lightboxTakenLabel}
+                            </p>
+                        )}
                     </div>
 
                     {/* Zoom Controls & Close - Fixed at bottom center (floating) */}

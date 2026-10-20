@@ -115,9 +115,11 @@ test('Guildford Cathedral config pairs low-res previews with full-res images', (
     assert.equal(main.collections[1].manifestUrl, 'guildford-cathedral/images/manifest.json');
     assert.equal(main.collections[1].assetFolder, 'guildford-cathedral/images/');
     assert.equal(manifest.length, 25);
+    const featuredOrder = [11, 9, 10, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+    assert.deepEqual(manifest.map((entry) => Number(entry.name.slice(-2))), featuredOrder);
 
-    manifest.forEach((entry, index) => {
-        const n = String(index + 1).padStart(2, '0');
+    manifest.forEach((entry) => {
+        const n = entry.name.slice(-2);
         assert.equal(entry.name, `Guildford Cathedral ${n}`);
         assert.equal(entry.preview, `Low_Res_Guildford_Cathedral/Guildford Cathedral ${n}.webp`);
         assert.equal(entry.full, `Full_Res_Guildford_Cathedral/Full_Res_Guildford_Cathedral_${n}.jpg`);
@@ -141,8 +143,15 @@ test('Guildford Cathedral config pairs low-res previews with full-res images', (
     assert.match(read('guildford-cathedral/index.html'), /href="apple-touch-icon\.png"/);
     assert.match(read('guildford-cathedral/index.html'), /href="site\.webmanifest"/);
     assert.equal(read('guildford-cathedral/index.html').includes('../favicon.ico'), false);
-    assert.match(read('../All-Pages/index.html'), /guildford-cathedral\/favicon-dark\.svg/);
-    assert.match(read('../../nav.html'), /guildford-cathedral\/favicon-dark\.svg/);
+    const catalogue = read('../All-Pages/index.html');
+    const catalogueCard = catalogue.indexOf('/pages/360_image_viewer/guildford-cathedral/');
+    assert.ok(catalogueCard > catalogue.indexOf('id="guides"'));
+    assert.ok(catalogue.slice(catalogue.indexOf('id="images"'), catalogue.indexOf('id="guides"')).includes('guildford-cathedral') === false);
+    const nav = read('../../nav.html');
+    const imagesMenu = nav.slice(nav.indexOf('id="nav-images-menu"'), nav.indexOf('id="nav-guides-menu"'));
+    const guidesMenu = nav.slice(nav.indexOf('id="nav-guides-menu"'), nav.indexOf('id="nav-playlists-menu"'));
+    assert.equal(imagesMenu.includes('guildford-cathedral'), false);
+    assert.match(guidesMenu, /guildford-cathedral\/favicon-dark\.svg/);
     assert.match(read('guildford-cathedral/index.html'), /page\.css/);
     assert.doesNotMatch(read('index.html'), /page-guildford/);
     assert.doesNotMatch(read('index.html'), /page\.css/);

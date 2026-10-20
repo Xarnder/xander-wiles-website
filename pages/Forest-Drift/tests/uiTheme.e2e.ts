@@ -52,7 +52,9 @@ test('fullscreen menus and editor use the shared theme without rebaking', async 
 	await page.keyboard.press('2');
 	await expect(page.getByTestId('build-hud')).toHaveCSS('background-image', /blob:/);
 	await expect(page.getByTestId('fps-counter')).toHaveCSS('background-image', /blob:/);
+	await page.keyboard.press('8');
 	await expect(page.getByTestId('mini-build-chunk-usage')).toHaveCSS('background-image', /blob:/);
+	await page.keyboard.press('2');
 	for (const width of [1440, 390]) {
 		await page.setViewportSize({ width, height: 900 });
 		const move = page.getByTestId('hotbar-move-toggle');

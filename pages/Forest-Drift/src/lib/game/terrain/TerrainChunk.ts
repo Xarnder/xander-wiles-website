@@ -152,7 +152,13 @@ export class TerrainChunk {
 	}
 
 	/** Recomputes every vertex from absolute world coordinates. Never uses chunk-relative noise input. */
-	populate(
+	populate(...args: Parameters<TerrainChunk['populateRows']>): void {
+		// Startup and explicit synchronous callers retain identical geometry.
+		for (const _row of this.populateRows(...args)) void _row;
+	}
+
+	/** One row per step; callers publish the mesh only after the iterator completes. */
+	*populateRows(
 		chunkX: number,
 		chunkZ: number,
 		chunkSize: number,
@@ -162,7 +168,7 @@ export class TerrainChunk {
 		vegetationRegionSampler: VegetationRegionSampler | null = null,
 		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null,
 		groundTint: TerrainGroundTint | null = null
-	): void {
+	): Generator<void> {
 		this.chunkX = chunkX;
 		this.chunkZ = chunkZ;
 		this.revision = revision;
@@ -259,6 +265,7 @@ export class TerrainChunk {
 				this.uvs[uvIndex] = worldX / 8;
 				this.uvs[uvIndex + 1] = worldZ / 8;
 			}
+			yield;
 		}
 
 		this.geometry.attributes.position.needsUpdate = true;

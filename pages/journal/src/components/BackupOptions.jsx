@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 
 import { useBackup } from '../context/BackupContext';
 import { ENTRY_SECTIONS_SETTINGS_DOC, normalizeEntrySections, normalizeNumericEntryFields } from '../utils/entrySections';
+import { formatImageExportSection, formatImageTakenLabel } from '../utils/imageTakenAt';
 
 export default function BackupOptions({ showTrigger = true }) {
     const { currentUser } = useAuth();
@@ -169,13 +170,25 @@ export default function BackupOptions({ showTrigger = true }) {
         const date = entry.id;
         const subEntryText = formatSubEntries(entry.subEntries, fmt);
         const numericEntryText = formatNumericEntries(entry.numericEntries, fmt);
+        const images = Array.isArray(entry.images) && entry.images.length > 0
+            ? entry.images
+            : (entry.imageUrl ? [{ url: entry.imageUrl }] : []);
+        const imageText = formatImageExportSection(images, date, fmt);
 
         if (fmt === 'json') {
-            return JSON.stringify({ ...entry, title: cleanTitle(entry.title) }, null, 2);
+            const exportedImages = images.map((image) => {
+                const takenLabel = formatImageTakenLabel(image?.takenAt, date);
+                return takenLabel ? { ...image, takenLabel } : image;
+            });
+            return JSON.stringify({
+                ...entry,
+                title: cleanTitle(entry.title),
+                ...(exportedImages.length > 0 ? { images: exportedImages } : {})
+            }, null, 2);
         } else if (fmt === 'md') {
-            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}${subEntryText}${numericEntryText}`;
+            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}${subEntryText}${numericEntryText}${imageText}`;
         } else { // txt
-            return `Date: ${date}\nTitle: ${title}\n\n${body}${subEntryText}${numericEntryText}`;
+            return `Date: ${date}\nTitle: ${title}\n\n${body}${subEntryText}${numericEntryText}${imageText}`;
         }
     };
 
@@ -223,7 +236,8 @@ export default function BackupOptions({ showTrigger = true }) {
 
     const formatGroupedContent = (entries, fmt) => {
         if (fmt === 'json') {
-            return JSON.stringify(entries, null, 2);
+            const exported = entries.map((entry) => JSON.parse(formatEntryContent(entry, 'json')));
+            return JSON.stringify(exported, null, 2);
         }
 
         return entries.map(e => formatEntryContent(e, fmt)).join('\n\n' + '='.repeat(20) + '\n\n');

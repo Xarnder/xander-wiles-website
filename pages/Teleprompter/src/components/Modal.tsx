@@ -201,6 +201,8 @@ export function AlertModal({
 interface StartChoiceModalProps {
   open: boolean
   recordingSupported: boolean
+  /** Bullet presentations don't follow a scrolling script. */
+  presentation?: boolean
   onStartScriptOnly: () => void
   onStartWithRecording: () => void
   onCancel: () => void
@@ -210,10 +212,12 @@ interface StartChoiceModalProps {
 export function StartChoiceModal({
   open,
   recordingSupported,
+  presentation = false,
   onStartScriptOnly,
   onStartWithRecording,
   onCancel,
 }: StartChoiceModalProps) {
+  const onlyLabel = presentation ? 'Presentation only' : 'Script only'
   return (
     <Modal
       open={open}
@@ -234,7 +238,7 @@ export function StartChoiceModal({
             className="btn"
             onClick={onStartScriptOnly}
           >
-            <BtnLabel>Script only</BtnLabel>
+            <BtnLabel>{onlyLabel}</BtnLabel>
           </button>
           <button
             type="button"
@@ -243,7 +247,9 @@ export function StartChoiceModal({
             disabled={!recordingSupported}
             title={
               recordingSupported
-                ? 'Start following the script and begin camera recording'
+                ? presentation
+                  ? 'Start the presentation and begin camera recording'
+                  : 'Start following the script and begin camera recording'
                 : 'Video recording is not supported in this browser'
             }
           >
@@ -253,8 +259,9 @@ export function StartChoiceModal({
       }
     >
       <p className="modal-message">
-        Do you want to start camera recording as well, or only start following
-        the script?
+        {presentation
+          ? 'Do you want to start camera recording as well, or only start the bullet presentation?'
+          : 'Do you want to start camera recording as well, or only start following the script?'}
       </p>
       <p className="modal-fix">
         You can turn this prompt off in Settings. Record stays available anytime

@@ -1766,7 +1766,15 @@ export class ThreeScene implements WorldRuntime {
 		const hdrUrl = new URL('hdri/sky.hdr', document.baseURI).toString();
 		void this.hdriSystem
 			.initialize(hdrUrl, this.skySettings.sky.topColor, this.skySettings.sky.horizonColor)
-			.then(() => this.applySkySettings());
+			.then(() => {
+				if (this.disposed) return;
+				this.applySkySettings();
+				this.furnitureManager.updateLights(this.camera.position, 0);
+				return this.graphicsPipeline.prewarm();
+			})
+			.catch((error) =>
+				console.warn('[graphics] Shader prewarm failed; drawing will retry.', error)
+			);
 
 		this.resizeObserver = new ResizeObserver(() => this.handleResize());
 		this.resizeObserver.observe(this.container);
@@ -1792,6 +1800,7 @@ export class ThreeScene implements WorldRuntime {
 			};
 			this.multiplayer = options.multiplayer;
 			this.multiplayer.attach({
+				characterSurface: (x, z, y) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y),
 				scene: this.scene,
 				camera: this.camera,
 				registerMaterial: (material) => this.graphicsPipeline.registerMaterial(material),
@@ -3395,6 +3404,9 @@ export class ThreeScene implements WorldRuntime {
 				yaw: this.controller.getYaw(),
 				pitch: this.controller.getPitch(),
 				flying: this.controller.isFlying(),
+				grounded: this.controller.isGrounded(),
+				running: this.controller.isRunning(),
+				building: this.buildToolManager.isConstructionGestureActive(),
 				eyeHeight: this.settings.player.eyeHeight
 			});
 		}

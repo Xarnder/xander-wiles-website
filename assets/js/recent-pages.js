@@ -130,6 +130,11 @@
         const absolute = resolveAbsoluteIcon(icon, href);
         if (!absolute) return guessIconFromPath(href);
 
+        // Vite copies public/ to the app root, so /pages/journal/public/... 404s once deployed.
+        if (absolute.includes('/public/favicon')) {
+            return absolute.replace('/public/favicon', '/favicon');
+        }
+
         // Homepage cards almost always use favicon-dark.svg (or an explicit png).
         // If we only captured a generic favicon.ico / light svg from the page <head>,
         // prefer the dark SVG path used by the cards.

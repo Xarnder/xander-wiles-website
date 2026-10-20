@@ -29,6 +29,7 @@ export interface SharedEnvironmentPort {
 
 /** What `ThreeScene` hands a multiplayer session when it starts. */
 export interface SceneMultiplayerContext {
+	characterSurface?: (x: number, z: number, referenceY: number) => number;
 	scene: THREE.Scene;
 	camera: THREE.Camera;
 	/** Registers a lit material with the shadow pipeline (see `GraphicsPipeline.registerMaterial`). */
@@ -57,6 +58,9 @@ export interface LocalPlayerFrame {
 	yaw: number;
 	pitch: number;
 	flying: boolean;
+	grounded?: boolean;
+	running?: boolean;
+	building?: boolean;
 	eyeHeight: number;
 }
 
@@ -232,7 +236,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 
 	attach(context: SceneMultiplayerContext): void {
 		this.context = context;
-		this.avatars = new RemoteAvatarRenderer(context.registerMaterial, context.excludeFromAo);
+		this.avatars = new RemoteAvatarRenderer(
+			context.registerMaterial,
+			context.excludeFromAo,
+			context.characterSurface
+		);
 		context.scene.add(this.avatars.group);
 		context.setBuildingLocked(true);
 		this.feed = new WorldOpFeed({
@@ -268,7 +276,10 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			z: local.z,
 			yaw: local.yaw,
 			pitch: local.pitch,
-			flying: local.flying
+			flying: local.flying,
+			grounded: local.grounded,
+			running: local.running,
+			building: local.building
 		});
 	}
 

@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 
 import html2pdf from 'html2pdf.js';
 import { useToast } from '../context/ToastContext';
+import { formatImageTakenLabel } from '../utils/imageTakenAt';
 
 export default function PdfExportView() {
     const { currentUser } = useAuth();
@@ -860,20 +861,28 @@ export default function PdfExportView() {
                                                         >
                                                             {entry.images && entry.images.length > 0 && (
                                                                 <div className={`mb-4 ${imageLayout === 'wrap' ? 'float-left w-[45%] mr-6' : 'grid gap-4'} ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                                                    {entry.images.map((img, i) => (
+                                                                    {entry.images.map((img, i) => {
+                                                                        const takenLabel = formatImageTakenLabel(img.takenAt, entry.date);
+                                                                        return (
                                                                         <div key={i} className="break-inside-avoid">
                                                                             <img
                                                                                 src={img.url}
                                                                                 alt={`Attachment ${i + 1}`}
                                                                                 className="w-full h-auto object-contain rounded-lg border border-gray-200 max-h-[500px]"
                                                                             />
+                                                                            {takenLabel && (
+                                                                                <div className="text-center text-gray-600 text-xs mt-1 font-medium">
+                                                                                    {takenLabel}
+                                                                                </div>
+                                                                            )}
                                                                             {img.caption && (
                                                                                 <div className="text-center text-gray-500 text-sm mt-1 italic font-serif">
                                                                                     {img.caption}
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                    ))}
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
                                                             <ReactMarkdown>{entry.content}</ReactMarkdown>

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlignmentEngine, type AlignmentState } from '../alignment/AlignmentEngine'
 import { useSpeechStream } from '../asr/useSpeechStream'
+import type { TranscriptEvent } from '../bullets/TriggerDetector'
+import {
+  parseBulletBackTrigger,
+  parseBulletTrigger,
+  parsePromptMode,
+  phrasesMatch,
+  type PromptMode,
+} from '../bullets/promptSettings'
+import { useBulletPrompt } from './useBulletPrompt'
 import type { FacingMode, VideoResolution } from '../media/platform'
 import { isVideoResolution } from '../media/platform'
 import { useScrollController, type ScrollAnchorMode } from '../scroll/useScrollController'
@@ -171,6 +180,14 @@ export interface TeleprompterSettings {
   showEstRemainingTime: boolean
   /** Show estimated total script time from start. */
   showEstTotalTime: boolean
+  /** Voice-follow scrolling, or bullet points advanced by a spoken trigger. */
+  promptMode: PromptMode
+  /** Phrase that advances the bullet presentation. */
+  bulletTrigger: string
+  /** Phrase that moves back one bullet. */
+  bulletBackTrigger: string
+  /** Show a dim preview of the following bullet. */
+  showNextBullet: boolean
 }
 
 export const DEFAULT_SETTINGS: TeleprompterSettings = {
@@ -222,6 +239,10 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   showElapsedTime: true,
   showEstRemainingTime: true,
   showEstTotalTime: true,
+  promptMode: 'follow',
+  bulletTrigger: 'next slide',
+  bulletBackTrigger: 'backwards slide',
+  showNextBullet: true,
 }
 
 const SETTINGS_STORAGE_KEY = 'voice-follow-settings'
@@ -230,6 +251,8 @@ const SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY =
   'voice-follow-reliable-video-v1'
 const SETTINGS_LINE_WIDTH_135_MIGRATION_KEY =
   'voice-follow-line-width-135-v1'
+const SETTINGS_BULLET_NEXT_SLIDE_MIGRATION_KEY =
+  'voice-follow-bullet-next-slide-v1'
 const SCRIPT_STORAGE_KEY = 'voice-follow-script'
 const DEVICE_STORAGE_KEY = 'voice-follow-mic'
 
@@ -452,6 +475,13 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.showEstTotalTime === 'boolean'
         ? p.showEstTotalTime
         : DEFAULT_SETTINGS.showEstTotalTime,
+    promptMode: parsePromptMode(p.promptMode),
+    bulletTrigger: parseBulletTrigger(p.bulletTrigger),
+    bulletBackTrigger: parseBulletBackTrigger(p.bulletBackTrigger),
+    showNextBullet:
+      typeof p.showNextBullet === 'boolean'
+        ? p.showNextBullet
+        : DEFAULT_SETTINGS.showNextBullet,
   }
 }
 
@@ -465,6 +495,7 @@ function loadStoredSettings(): TeleprompterSettings {
         localStorage.setItem(SETTINGS_PREVIEW_AUTO_MIGRATION_KEY, '1')
         localStorage.setItem(SETTINGS_RELIABLE_VIDEO_MIGRATION_KEY, '1')
         localStorage.setItem(SETTINGS_LINE_WIDTH_135_MIGRATION_KEY, '1')
+        localStorage.setItem(SETTINGS_BULLET_NEXT_SLIDE_MIGRATION_KEY, '1')
       } catch {
         // ignore migration-marker failures
       }
@@ -534,6 +565,26 @@ function loadStoredSettings(): TeleprompterSettings {
           typeof rawObj.lineWidth !== 'number'
         ) {
           settings = { ...settings, lineWidth: 135 }
+          settingsChanged = true
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
+
+    // One-time: the untouched forward phrase used to be "Next".
+    try {
+      const migrated = localStorage.getItem(
+        SETTINGS_BULLET_NEXT_SLIDE_MIGRATION_KEY,
+      )
+      if (!migrated) {
+        localStorage.setItem(SETTINGS_BULLET_NEXT_SLIDE_MIGRATION_KEY, '1')
+        if (
+          !rawObj ||
+          rawObj.bulletTrigger == null ||
+          rawObj.bulletTrigger.trim().toLowerCase() === 'next'
+        ) {
+          settings = { ...settings, bulletTrigger: 'next slide' }
           settingsChanged = true
         }
       }
@@ -829,8 +880,18 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     }
   }, [applyCursorOffset, scrollToCursor])
 
+  const bulletConsumeRef = useRef<(event: TranscriptEvent) => void>(() => {})
+
   const onPartial = useCallback(
     (text: string) => {
+      if (settingsRef.current.promptMode === 'bullets') {
+        bulletConsumeRef.current({
+          text,
+          kind: 'interim',
+          coverage: 'segment',
+        })
+        return
+      }
       partialWordsRef.current = tokenizeTranscript(text)
       feedAlignment()
     },
@@ -839,6 +900,14 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
 
   const onCommitted = useCallback(
     (text: string) => {
+      if (settingsRef.current.promptMode === 'bullets') {
+        bulletConsumeRef.current({
+          text,
+          kind: 'final',
+          coverage: 'segment',
+        })
+        return
+      }
       const words = tokenizeTranscript(text)
       committedWordsRef.current = [
         ...committedWordsRef.current,
@@ -880,14 +949,35 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     onCommitted,
   })
 
-  // Auto-scroll only while mic is live, tracking, and showing the full script
+  const bullet = useBulletPrompt({
+    enabled: settings.promptMode === 'bullets',
+    script,
+    trigger: settings.bulletTrigger,
+    backTrigger: settings.bulletBackTrigger,
+    speechStatus: status,
+    errorKind: error?.kind ?? null,
+    errorDetail: error?.summary ?? errorMessage,
+    startSpeech,
+    stopSpeech,
+    onForcedStop: () => setIsRunning(false),
+  })
+  bulletConsumeRef.current = bullet.consume
+  const bulletStartRef = useRef(bullet.start)
+  const bulletPauseRef = useRef(bullet.pause)
+  const bulletEndRef = useRef(bullet.end)
+  bulletStartRef.current = bullet.start
+  bulletPauseRef.current = bullet.pause
+  bulletEndRef.current = bullet.end
+
+  // Auto-scroll only while voice-follow is live on the full script.
   useEffect(() => {
     setLiveScroll(
-      status === 'listening' &&
+      settings.promptMode !== 'bullets' &&
+        status === 'listening' &&
         alignState === 'tracking' &&
         settings.displayMode === 'script',
     )
-  }, [status, alignState, settings.displayMode])
+  }, [status, alignState, settings.displayMode, settings.promptMode])
 
   useEffect(() => {
     const wasListening = listeningRef.current
@@ -899,6 +989,12 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
   }, [status])
 
   const start = useCallback(async () => {
+    if (settingsRef.current.promptMode === 'bullets') {
+      setIsRunning(true)
+      const ok = await bulletStartRef.current()
+      if (!ok) setIsRunning(false)
+      return
+    }
     setIsRunning(true)
     sentenceStartIndexRef.current = cursor
     sentenceStartTsRef.current = performance.now()
@@ -908,11 +1004,20 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
   }, [cursor, startSpeech])
 
   const pause = useCallback(() => {
+    if (settingsRef.current.promptMode === 'bullets') {
+      setIsRunning(false)
+      void bulletPauseRef.current()
+      return
+    }
     void stopSpeech()
     setIsRunning(false)
   }, [stopSpeech])
 
   const reset = useCallback(() => {
+    if (settingsRef.current.promptMode === 'bullets') {
+      setIsRunning(false)
+      void bulletEndRef.current()
+    }
     void stopSpeech()
     resetTranscript()
     committedWordsRef.current = []
@@ -927,7 +1032,13 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     accumulatedMsRef.current = 0
     activeStartTsRef.current = null
     setElapsedSeconds(0)
-  }, [applyCursorOffset, resetPaceTracking, resetScroll, resetTranscript, stopSpeech])
+  }, [
+    applyCursorOffset,
+    resetPaceTracking,
+    resetScroll,
+    resetTranscript,
+    stopSpeech,
+  ])
 
   /** Jump the reading position to a display word (click-to-seek / keyboard nudge). */
   const seekTo = useCallback(
@@ -982,7 +1093,37 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
 
   const updateSettings = useCallback(
     (patch: Partial<TeleprompterSettings>) => {
-      setSettings((prev) => ({ ...prev, ...patch }))
+      setSettings((prev) => {
+        const nextPatch: Partial<TeleprompterSettings> = { ...patch }
+        const cleanPhrase = (
+          key: 'bulletTrigger' | 'bulletBackTrigger',
+          other: string,
+        ): string => {
+          if (!(key in nextPatch)) return other
+          const raw = nextPatch[key]
+          if (typeof raw !== 'string') {
+            delete nextPatch[key]
+            return other
+          }
+          const collapsed = raw.trim().replace(/\s+/g, ' ')
+          const parsed =
+            key === 'bulletTrigger'
+              ? parseBulletTrigger(collapsed)
+              : parseBulletBackTrigger(collapsed)
+          if (parsed !== collapsed || phrasesMatch(collapsed, other)) {
+            delete nextPatch[key]
+            return other
+          }
+          nextPatch[key] = collapsed
+          return collapsed
+        }
+        const forward =
+          'bulletTrigger' in nextPatch
+            ? cleanPhrase('bulletTrigger', prev.bulletBackTrigger)
+            : prev.bulletTrigger
+        cleanPhrase('bulletBackTrigger', forward)
+        return { ...prev, ...nextPatch }
+      })
     },
     [],
   )
@@ -1063,6 +1204,18 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     start,
     pause,
     reset,
+    bullet: {
+      index: bullet.index,
+      count: bullet.count,
+      current: bullet.current,
+      nextBullet: bullet.nextBullet,
+      mic: bullet.mic,
+      micLabel: bullet.micLabel,
+      sessionActive: bullet.sessionActive,
+      suppressError: bullet.suppressError,
+      next: bullet.next,
+      prev: bullet.prev,
+    },
     /** Compact chrome active (manual setting or small-screen breakpoint). */
     compactLayout,
     /** Scroll anchor forced by layout: top in compact, hybrid on wide screens. */

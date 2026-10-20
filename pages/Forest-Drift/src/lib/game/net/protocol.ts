@@ -26,7 +26,8 @@ import type { EntityKind, WorldOp } from './worldEntities';
  * 2: invite tokens and capabilities, roles, presence, room clock, shared sky and weather.
  * 3: shared building (ops, commits, catch-up), doors, bookmarks.
  */
-export const PROTOCOL_VERSION = 3;
+// 4: pose grounded/running flags are now required for character animation.
+export const PROTOCOL_VERSION = 4;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world

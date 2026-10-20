@@ -9,6 +9,7 @@ import {
     subMonths,
     isValid
 } from 'date-fns';
+import { formatImageList } from './imageTakenAt.js';
 
 /**
  * Calculates start and end YYYY-MM-DD date keys based on a preset.
@@ -252,10 +253,8 @@ export function formatEntryToText(entry, options = {}) {
     if (includeImages) {
         const images = entry.images || (entry.imageUrl ? [{ url: entry.imageUrl }] : []);
         if (Array.isArray(images) && images.length > 0) {
-            const imgDetails = images.map((img, i) => {
-                return img.caption ? `Photo ${i + 1}: ${img.caption}` : `Photo ${i + 1}`;
-            });
-            parts.push(`[Attachments: ${imgDetails.join('; ')}]`);
+            const imgDetails = formatImageList(images, dateKey, 'text');
+            if (imgDetails) parts.push(`[Attachments: ${imgDetails}]`);
         }
     }
 
@@ -344,11 +343,8 @@ export function formatEntryToMarkdown(entry, options = {}) {
     if (includeImages) {
         const images = entry.images || (entry.imageUrl ? [{ url: entry.imageUrl }] : []);
         if (Array.isArray(images) && images.length > 0) {
-            const imgLines = images.map((img, i) => {
-                const caption = img.caption ? ` - *${img.caption}*` : '';
-                return `- 📷 Attachment ${i + 1}${caption}${img.url ? ` ([link](${img.url}))` : ''}`;
-            });
-            parts.push(`**Attachments**:\n${imgLines.join('\n')}`);
+            const imgLines = formatImageList(images, dateKey, 'markdown');
+            if (imgLines) parts.push(`**Attachments**:\n${imgLines}`);
         }
     }
 

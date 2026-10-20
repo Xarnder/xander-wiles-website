@@ -29,7 +29,7 @@ let lastStateBeforeDrag = null;
 const container = document.getElementById('canvas-container');
 
 // --- Money Mode Globals ---
-let moneyGroup, floorGrid;
+let moneyGroup, floorGrid, groundPlane;
 let moneyLabels = []; // Array to track denomination tags
 const loadedMoneyModels = new Map(); // cache for GLTFs
 const moneyDenominations = [
@@ -94,7 +94,7 @@ function init() {
             roughness: 0.8,
             metalness: 0.1
         });
-        const groundPlane = new THREE.Mesh(planeGeo, planeMat);
+        groundPlane = new THREE.Mesh(planeGeo, planeMat);
         groundPlane.rotation.x = -Math.PI / 2;
         groundPlane.position.y = -0.01; // Slightly below grid to avoid Z-fighting
         groundPlane.receiveShadow = true;
@@ -158,13 +158,9 @@ function init() {
         transformControl.addEventListener('change', function () {
             // Sync light handles if a light is being transformed
             if (transformControl.object && transformControl.object.isLight) {
-                const light = transformControl.object;
-                const handle = selectableObjects.find(h => h.userData.light === light);
-                if (handle) {
-                    handle.position.copy(light.position);
-                    handle.userData.helper.update();
-                }
+                syncLightHandle(transformControl.object);
             }
+            refreshPositionFields();
         });
         scene.add(transformControl.getHelper());
 
@@ -205,7 +201,7 @@ function init() {
 
 function setupLighting() {
     // Ambient Light (Base fill)
-    ambientLight = new THREE.AmbientLight(0xffffff, 0);
+    ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
     scene.add(ambientLight);
 
     // Directional Light (The Sun)
@@ -293,7 +289,7 @@ function setupPostProcessing() {
 // --- Loading Logic ---
 
 // Shared success handler
-function onModelLoaded(gltf, name = 'Standard Model') {
+function onModelLoaded(gltf, name = 'Standard Model', sourcePath = '') {
     const loadingContainer = document.getElementById('loading-bar-container');
     const keepExisting = document.getElementById('keep-existing-check')?.checked || false;
 
@@ -324,6 +320,8 @@ function onModelLoaded(gltf, name = 'Standard Model') {
 
     scene.add(modelObj);
     loadedModels.push({ name: name, object: modelObj });
+    rememberHomePosition(modelObj);
+    applyFloorForModel(sourcePath);
 
     // Auto-center camera
     fitCameraToSelection(camera, controls, [modelObj]);
@@ -417,7 +415,7 @@ function loadGLBFromUrl(url, name = 'Standard Model') {
 
         loader.load(url, function (gltf) {
             try {
-                onModelLoaded(gltf, name);
+                onModelLoaded(gltf, name, url);
             } catch (error) {
                 logToScreen('Model Setup Error: ' + error.message, 'error');
                 loadingContainer.style.display = 'none';
@@ -611,6 +609,7 @@ async function generateMoney(targetAmount) {
                 
                 instance.position.x = clusterOffsetX + (col * (size.x + stackSpacing));
                 instance.position.z = spawnPos.z + (row * (size.z + stackSpacing));
+                rememberHomePosition(instance);
                 
                 moneyGroup.add(instance);
             }
@@ -732,7 +731,8 @@ function createTextLabel(text, position) {
 
     group.position.copy(position);
     // Align to bottom edge on floor
-    group.position.y = height / 2 + 0.01; 
+    group.position.y = height / 2 + 0.01;
+    rememberHomePosition(group);
     
     return group;
 }
@@ -751,29 +751,69 @@ function formatLargeCurrency(value) {
         return `£${value.toLocaleString()}`;
     }
 }
-function fitCameraToSelection(camera, controls, selection, fitOffset = 1.2) {
-    const box = new THREE.Box3();
-    for (const object of selection) box.expandByObject(object);
-
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-
-    const maxSize = Math.max(size.x, size.y, size.z);
+function fitDistanceForSize(maxSize, fitOffset) {
     const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
     const fitWidthDistance = fitHeightDistance / camera.aspect;
-    const distance = fitOffset * Math.max(fitHeightDistance, fitWidthDistance);
+    return fitOffset * Math.max(fitHeightDistance, fitWidthDistance);
+}
 
-    const direction = controls.target.clone().sub(camera.position).normalize().multiplyScalar(distance);
+function fitCameraToSelection(camera, controls, selection, fitOffset = 1.2) {
+    const frameBox = new THREE.Box3();
+    for (const object of selection) frameBox.expandByObject(object);
 
-    controls.maxDistance = distance * 10;
+    const frameSize = frameBox.getSize(new THREE.Vector3());
+    const center = frameBox.getCenter(new THREE.Vector3());
+    const frameDistance = fitDistanceForSize(Math.max(frameSize.x, frameSize.y, frameSize.z), fitOffset);
+
+    // Fog, zoom limit, and clip planes follow the whole scene. Framing only the
+    // new object would thicken the fog and pull the far plane in, so a small
+    // model added after a large one fades or cuts off the large one.
+    const sceneBox = frameBox.clone();
+    loadedModels.forEach(m => sceneBox.expandByObject(m.object));
+    if (moneyGroup && moneyGroup.children.length > 0) sceneBox.expandByObject(moneyGroup);
+    const sceneSize = sceneBox.getSize(new THREE.Vector3());
+    const sceneDistance = fitDistanceForSize(Math.max(sceneSize.x, sceneSize.y, sceneSize.z), fitOffset);
+    const viewDistance = Math.max(frameDistance, sceneDistance);
+
+    const direction = controls.target.clone().sub(camera.position).normalize().multiplyScalar(frameDistance);
+
+    controls.maxDistance = viewDistance * 10;
     controls.target.copy(center);
 
-    camera.near = distance / 100;
-    camera.far = distance * 100;
+    camera.near = Math.max(frameDistance / 100, 0.01);
+    camera.far = viewDistance * 100;
     camera.updateProjectionMatrix();
 
     camera.position.copy(controls.target).sub(direction);
     controls.update();
+
+    if (scene.fog && scene.fog.isFogExp2) {
+        const readableDensity = -Math.log(0.72) / Math.max(viewDistance, 0.001);
+        scene.fog.density = Math.min(0.02, readableDensity);
+    }
+}
+
+function setFloorPlaneVisible(visible) {
+    if (groundPlane) groundPlane.visible = visible;
+    const btn = document.getElementById('toggle-floor-btn');
+    if (btn) btn.textContent = visible ? 'Hide Floor Plane' : 'Show Floor Plane';
+}
+
+function setFloorGridVisible(visible) {
+    if (floorGrid) floorGrid.visible = visible;
+    const btn = document.getElementById('toggle-grid-btn');
+    if (btn) btn.textContent = visible ? 'Hide Floor Grid' : 'Show Floor Grid';
+}
+
+function applyFloorForModel(sourcePath) {
+    const config = models.find(m => m.path === sourcePath);
+    if (config?.hideFloor) {
+        setFloorPlaneVisible(false);
+        setFloorGridVisible(false);
+        logToScreen('Floor plane and grid hidden for this model.', 'info');
+        return;
+    }
+    setFloorPlaneVisible(true);
 }
 
 // --- UI Logic ---
@@ -908,10 +948,14 @@ function setupUI() {
     // 5.5 Toggle Helpers Button (NEW)
     document.getElementById('toggle-helpers-btn').addEventListener('click', toggleHelpers);
 
-    // 5.6 Toggle Grid Button
-    document.getElementById('toggle-grid-btn').addEventListener('click', (e) => {
-        floorGrid.visible = !floorGrid.visible;
-        e.target.textContent = floorGrid.visible ? 'Hide Floor Grid' : 'Show Floor Grid';
+    // 5.6 Toggle Floor Plane and Grid
+    document.getElementById('toggle-floor-btn').addEventListener('click', () => {
+        setFloorPlaneVisible(!groundPlane.visible);
+        logToScreen(`Floor Plane ${groundPlane.visible ? 'Visible' : 'Hidden'}`);
+    });
+
+    document.getElementById('toggle-grid-btn').addEventListener('click', () => {
+        setFloorGridVisible(!floorGrid.visible);
         logToScreen(`Floor Grid ${floorGrid.visible ? 'Visible' : 'Hidden'}`);
     });
 
@@ -995,27 +1039,28 @@ function setupUI() {
     });
 
     deleteBtn.addEventListener('click', () => {
-        if (selectedLightHandle) {
-            const light = selectedLightHandle.userData.light;
-            const helper = selectedLightHandle.userData.helper;
-
-            scene.remove(light);
-            scene.remove(helper);
-            scene.remove(selectedLightHandle);
-
-            // Remove from selectables
-            const index = selectableObjects.indexOf(selectedLightHandle);
-            if (index > -1) selectableObjects.splice(index, 1);
-
-            if (transformControl && transformControl.object === light) transformControl.detach();
-            if (selectionHelper) selectionHelper.visible = false;
-
-            selectedLightHandle = null;
-            updateSelectionUI();
-            updateSceneOutline();
-            logToScreen('Light deleted.', 'info');
-        }
+        deleteSelectedObject();
     });
+
+    const deleteObjectBtn = document.getElementById('delete-object-btn');
+    if (deleteObjectBtn) {
+        deleteObjectBtn.addEventListener('click', () => {
+            deleteSelectedObject();
+        });
+    }
+
+    ['pos-x', 'pos-y', 'pos-z'].forEach((id) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('focus', beginPositionEdit);
+        input.addEventListener('input', applyPositionFields);
+        input.addEventListener('change', commitPositionEdit);
+    });
+
+    const resetPositionBtn = document.getElementById('reset-position-btn');
+    if (resetPositionBtn) {
+        resetPositionBtn.addEventListener('click', resetSelectedPosition);
+    }
 
     // 8. Movement Buttons (Touch/Click)
     const moveStep = 0.5;
@@ -1127,6 +1172,7 @@ function setupUI() {
                 
                 logToScreen('Undone last move', 'info');
                 updateUndoButtonVisibility();
+                refreshPositionFields();
             }
         });
     }
@@ -1183,6 +1229,8 @@ function updateSceneOutline() {
     
     if (outlineObjects.length === 0) {
         listContainer.innerHTML = '<div class="no-objects">No objects found.</div>';
+        updateDeleteButton();
+        updatePositionPanel();
         return;
     }
     
@@ -1205,6 +1253,181 @@ function updateSceneOutline() {
         
         listContainer.appendChild(div);
     });
+
+    updateDeleteButton();
+    updatePositionPanel();
+}
+
+function updateDeleteButton() {
+    const btn = document.getElementById('delete-object-btn');
+    if (!btn) return;
+    btn.disabled = !transformControl?.object;
+}
+
+function rememberHomePosition(object) {
+    if (!object.userData.homePosition) {
+        object.userData.homePosition = object.position.clone();
+    }
+}
+
+function syncLightHandle(light) {
+    const handle = selectableObjects.find(h => h.userData.light === light);
+    if (!handle) return;
+    handle.position.copy(light.position);
+    handle.userData.helper.update();
+}
+
+let writingPosition = false;
+let positionEditSnapshot = null;
+
+function updatePositionPanel() {
+    const panel = document.getElementById('position-panel');
+    if (!panel) return;
+
+    const obj = transformControl?.object;
+    const selected = outlineObjects.find(item => item.object === obj);
+    panel.hidden = !selected;
+    if (!selected) return;
+
+    const target = document.getElementById('position-target');
+    if (target) target.textContent = selected.name;
+    refreshPositionFields();
+}
+
+function refreshPositionFields() {
+    if (writingPosition) return;
+    const active = document.activeElement;
+    if (active && (active.id === 'pos-x' || active.id === 'pos-y' || active.id === 'pos-z')) return;
+
+    const obj = transformControl?.object;
+    if (!obj) return;
+    const format = (value) => String(Math.round(value * 1000) / 1000);
+    document.getElementById('pos-x').value = format(obj.position.x);
+    document.getElementById('pos-y').value = format(obj.position.y);
+    document.getElementById('pos-z').value = format(obj.position.z);
+}
+
+function beginPositionEdit() {
+    const obj = transformControl?.object;
+    if (!obj || positionEditSnapshot) return;
+    positionEditSnapshot = {
+        object: obj,
+        position: obj.position.clone(),
+        rotation: obj.rotation.clone(),
+        scale: obj.scale.clone()
+    };
+}
+
+function applyPositionFields() {
+    const obj = transformControl?.object;
+    if (!obj) return;
+
+    const x = parseFloat(document.getElementById('pos-x').value);
+    const y = parseFloat(document.getElementById('pos-y').value);
+    const z = parseFloat(document.getElementById('pos-z').value);
+    if (![x, y, z].every(Number.isFinite)) return;
+
+    beginPositionEdit();
+    writingPosition = true;
+    obj.position.set(x, y, z);
+    if (obj.isLight) syncLightHandle(obj);
+    if (selectionHelper?.visible) selectionHelper.setFromObject(obj);
+    writingPosition = false;
+}
+
+function commitPositionEdit() {
+    const obj = transformControl?.object;
+    if (!positionEditSnapshot || positionEditSnapshot.object !== obj) {
+        positionEditSnapshot = null;
+        return;
+    }
+
+    if (!obj.position.equals(positionEditSnapshot.position)) {
+        undoHistory.push(positionEditSnapshot);
+        if (undoHistory.length > MAX_UNDO) undoHistory.shift();
+        updateUndoButtonVisibility();
+    }
+    positionEditSnapshot = null;
+    refreshPositionFields();
+}
+
+function resetSelectedPosition() {
+    const obj = transformControl?.object;
+    const home = obj?.userData?.homePosition;
+    if (!obj || !home || obj.position.equals(home)) return;
+
+    undoHistory.push({
+        object: obj,
+        position: obj.position.clone(),
+        rotation: obj.rotation.clone(),
+        scale: obj.scale.clone()
+    });
+    if (undoHistory.length > MAX_UNDO) undoHistory.shift();
+
+    obj.position.copy(home);
+    if (obj.isLight) syncLightHandle(obj);
+    if (selectionHelper?.visible) selectionHelper.setFromObject(obj);
+    updateUndoButtonVisibility();
+    refreshPositionFields();
+    logToScreen('Position reset.', 'info');
+}
+
+function deleteSelectedObject() {
+    const target = transformControl?.object;
+    if (!target) {
+        logToScreen('Select an object to delete.', 'info');
+        return;
+    }
+
+    const handle = selectableObjects.includes(target)
+        ? target
+        : selectableObjects.find(h => h.userData.light === target);
+
+    if (handle) {
+        const light = handle.userData.light;
+        const helper = handle.userData.helper;
+        scene.remove(light);
+        scene.remove(helper);
+        scene.remove(handle);
+
+        const index = selectableObjects.indexOf(handle);
+        if (index > -1) selectableObjects.splice(index, 1);
+        if (selectedLightHandle === handle) selectedLightHandle = null;
+
+        finishObjectDelete(light, 'Point light');
+        return;
+    }
+
+    const modelIndex = loadedModels.findIndex(m => m.object === target);
+    if (modelIndex > -1) {
+        const model = loadedModels[modelIndex];
+        scene.remove(model.object);
+        loadedModels.splice(modelIndex, 1);
+        finishObjectDelete(model.object, model.name);
+        return;
+    }
+
+    if (moneyGroup && target.parent === moneyGroup) {
+        const labelIndex = moneyLabels.indexOf(target);
+        if (labelIndex > -1) moneyLabels.splice(labelIndex, 1);
+        moneyGroup.remove(target);
+        finishObjectDelete(target, target.name || 'Cash stack');
+        return;
+    }
+
+    logToScreen('That object cannot be deleted.', 'info');
+}
+
+function finishObjectDelete(object, name) {
+    if (transformControl && transformControl.object === object) transformControl.detach();
+    if (selectionHelper) selectionHelper.visible = false;
+    if (lastStateBeforeDrag && lastStateBeforeDrag.object === object) lastStateBeforeDrag = null;
+
+    undoHistory = undoHistory.filter(entry => entry.object !== object);
+    updateUndoButtonVisibility();
+    updateSelectionUI();
+    updateSceneOutline();
+    logToScreen(`Deleted ${name}.`, 'info');
 }
 
 function updateUndoButtonVisibility() {
@@ -1370,6 +1593,7 @@ function addInteractableLight(position = null, intensity = 50) {
 
     // Link them up
     handle.userData = { light: pl, helper: helper };
+    rememberHomePosition(pl);
 
     scene.add(handle);
     selectableObjects.push(handle);
@@ -1516,9 +1740,18 @@ function moveSelectedLight(xDelta, yDelta, zDelta) {
     // Sync handle and helper
     handle.position.copy(light.position);
     helper.update();
+    refreshPositionFields();
 }
 
 function onKeyDown(event) {
+    const tag = event.target?.tagName;
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable;
+    if (!typing && (event.key === 'Delete' || event.key === 'Backspace') && transformControl?.object) {
+        event.preventDefault();
+        deleteSelectedObject();
+        return;
+    }
+
     if (!selectedLightHandle) return;
 
     const moveStep = 0.5; // Meters per keypress

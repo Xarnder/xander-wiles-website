@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { touchButton } from '$lib/components/touchButton';
 	import type { ThreeScene } from '$lib/game/ThreeScene';
 	import type { BuildUiState, HotbarUiState, ToolId } from '$lib/game/building/FoundationTypes';
 	import {
@@ -70,14 +72,8 @@
 			const movementBox = movement.getBoundingClientRect();
 			const actionsBox = actions.getBoundingClientRect();
 			const dockTop = Math.min(movementBox.top, actionsBox.top);
-			shell.style.setProperty(
-				'--touch-top-height',
-				`${Math.ceil(topBox.bottom - shellBox.top)}px`
-			);
-			shell.style.setProperty(
-				'--touch-dock-height',
-				`${Math.ceil(shellBox.bottom - dockTop)}px`
-			);
+			shell.style.setProperty('--touch-top-height', `${Math.ceil(topBox.bottom - shellBox.top)}px`);
+			shell.style.setProperty('--touch-dock-height', `${Math.ceil(shellBox.bottom - dockTop)}px`);
 			shell.style.setProperty('--touch-move-width', `${Math.ceil(movementBox.width)}px`);
 		};
 		publish();
@@ -125,12 +121,68 @@
 	function handleJoystickPointerUp(event: PointerEvent) {
 		if (event.pointerId !== joystickPointerId) return;
 		event.preventDefault();
+		resetJoystick();
+	}
+
+	function resetJoystick() {
+		const pointerId = joystickPointerId;
 		joystickActive = false;
 		joystickPointerId = null;
 		joystickKnobX = 0;
 		joystickKnobY = 0;
 		scene?.setTouchMovement(0, 0);
+		if (pointerId !== null && joystickBaseEl?.hasPointerCapture(pointerId)) {
+			joystickBaseEl.releasePointerCapture(pointerId);
+		}
 	}
+
+	function resetTouchInput() {
+		resetJoystick();
+		lookActive = false;
+		lookPointerId = null;
+		sprintToggled = false;
+		scene?.setTouchRunning(false);
+	}
+
+	onMount(() => {
+		// Capture phase also sees releases over UI that stops event propagation.
+		const releasePointer = (event: PointerEvent) => {
+			if (event.pointerId === joystickPointerId) resetJoystick();
+			if (event.pointerId === lookPointerId) {
+				lookActive = false;
+				lookPointerId = null;
+			}
+		};
+		const visibilityChanged = () => {
+			if (document.hidden) resetTouchInput();
+		};
+		// Safari can interrupt pointer delivery for native gestures. Once every
+		// finger is lifted, no virtual control should retain an active pointer.
+		const releaseTouches = (event: TouchEvent) => {
+			if (event.touches.length === 0) {
+				resetJoystick();
+				lookActive = false;
+				lookPointerId = null;
+			}
+		};
+		window.addEventListener('pointerup', releasePointer, true);
+		window.addEventListener('pointercancel', releasePointer, true);
+		window.addEventListener('touchend', releaseTouches, true);
+		window.addEventListener('touchcancel', releaseTouches, true);
+		window.addEventListener('blur', resetTouchInput);
+		window.addEventListener('pagehide', resetTouchInput);
+		document.addEventListener('visibilitychange', visibilityChanged);
+		return () => {
+			window.removeEventListener('pointerup', releasePointer, true);
+			window.removeEventListener('pointercancel', releasePointer, true);
+			window.removeEventListener('touchend', releaseTouches, true);
+			window.removeEventListener('touchcancel', releaseTouches, true);
+			window.removeEventListener('blur', resetTouchInput);
+			window.removeEventListener('pagehide', resetTouchInput);
+			document.removeEventListener('visibilitychange', visibilityChanged);
+			resetTouchInput();
+		};
+	});
 
 	function updateJoystickPosition(clientX: number, clientY: number) {
 		if (!joystickBaseEl) return;
@@ -212,6 +264,9 @@
 
 	const variant = $derived(variantControl(hintLines));
 	const snapLabel = $derived(snapLabelForHints(hintLines));
+	const editingRoofFootprint = $derived(
+		buildHud?.toolId === 'flat-roof' && hintLines.some((line) => line.startsWith('E: '))
+	);
 
 	// Actions
 	function onPrimaryAction() {
@@ -273,7 +328,16 @@
 	});
 </script>
 
-<div class="touch-controls-layer" data-testid="touch-controls">
+<div
+	class="touch-controls-layer"
+	data-testid="touch-controls"
+	role="group"
+	aria-label="Touch game controls"
+	oncontextmenu={(event) => {
+		event.preventDefault();
+		resetTouchInput();
+	}}
+>
 	<!-- Look swipe surface covering right half of screen -->
 	<div
 		class="touch-look-zone"
@@ -284,6 +348,7 @@
 		onpointermove={handleLookPointerMove}
 		onpointerup={handleLookPointerUp}
 		onpointercancel={handleLookPointerUp}
+		onlostpointercapture={handleLookPointerUp}
 	></div>
 
 	<!-- Top Bar Controls -->
@@ -293,7 +358,7 @@
 				type="button"
 				class="touch-mode-btn"
 				class:active={hotbar?.buildModeActive && hotbar?.globalMode === 'none'}
-				onclick={onToggleBuildMode}
+				use:touchButton={onToggleBuildMode}
 				data-testid="touch-build-toggle"
 				aria-label="Toggle Build Mode"
 			>
@@ -305,7 +370,7 @@
 				type="button"
 				class="touch-mode-btn danger"
 				class:active={hotbar?.globalMode === 'remove'}
-				onclick={onToggleRemove}
+				use:touchButton={onToggleRemove}
 				data-testid="touch-remove-toggle"
 				aria-label="Toggle Remove Mode"
 			>
@@ -317,7 +382,7 @@
 				type="button"
 				class="touch-mode-btn"
 				class:active={hotbar?.globalMode === 'paint'}
-				onclick={onTogglePaint}
+				use:touchButton={onTogglePaint}
 				data-testid="touch-paint-toggle"
 				aria-label="Toggle Paint Mode"
 			>
@@ -329,7 +394,7 @@
 				type="button"
 				class="touch-mode-btn"
 				class:active={hotbar?.globalMode === 'move'}
-				onclick={onToggleMove}
+				use:touchButton={onToggleMove}
 				data-testid="touch-move-toggle"
 				aria-label="Toggle Move Mode"
 			>
@@ -341,7 +406,7 @@
 				type="button"
 				class="touch-mode-btn music"
 				class:active={hotbar?.globalMode === 'music'}
-				onclick={onToggleMusic}
+				use:touchButton={onToggleMusic}
 				data-testid="touch-music-toggle"
 				aria-label="Toggle Music Mode"
 			>
@@ -354,7 +419,7 @@
 			<button
 				type="button"
 				class="touch-util-btn"
-				onclick={onOpenHelp}
+				use:touchButton={onOpenHelp}
 				data-testid="touch-help-btn"
 				aria-label="Help"
 			>
@@ -363,7 +428,7 @@
 			<button
 				type="button"
 				class="touch-util-btn"
-				onclick={onOpenPause}
+				use:touchButton={onOpenPause}
 				data-testid="touch-pause-btn"
 				aria-label="Pause Game"
 			>
@@ -379,7 +444,7 @@
 			<button
 				type="button"
 				class="touch-door-btn"
-				onclick={onToggleDoor}
+				use:touchButton={onToggleDoor}
 				onpointerdown={(e) => e.stopPropagation()}
 				data-testid="touch-door-button"
 				aria-label={isDoorOpen ? 'Close door' : 'Open door'}
@@ -390,7 +455,7 @@
 		</div>
 	{/if}
 
-	<!-- Bottom Left: Virtual Joystick & Movement Buttons -->
+	<!-- Bottom Left: Virtual Joystick -->
 	<div class="touch-movement-cluster" bind:this={movementEl}>
 		<div
 			class="touch-joystick-base"
@@ -404,6 +469,7 @@
 			onpointermove={handleJoystickPointerMove}
 			onpointerup={handleJoystickPointerUp}
 			onpointercancel={handleJoystickPointerUp}
+			onlostpointercapture={handleJoystickPointerUp}
 		>
 			<div
 				class="touch-joystick-knob"
@@ -411,34 +477,9 @@
 				style={`transform: translate(${joystickKnobX}px, ${joystickKnobY}px);`}
 			></div>
 		</div>
-
-		<div class="touch-locomotion-buttons">
-			<button
-				type="button"
-				class="touch-action-btn run-btn"
-				class:active={sprintToggled}
-				onclick={toggleSprint}
-				data-testid="touch-run-btn"
-				aria-label="Sprint"
-			>
-				<img class="touch-icon" src={runIcon} alt="" />
-				<span>Run</span>
-			</button>
-
-			<button
-				type="button"
-				class="touch-action-btn jump-btn"
-				onclick={triggerJump}
-				data-testid="touch-jump-btn"
-				aria-label="Jump"
-			>
-				<img class="touch-icon" src={jumpIcon} alt="" />
-				<span>Jump</span>
-			</button>
-		</div>
 	</div>
 
-	<!-- Bottom Right: Building Action Buttons -->
+	<!-- Bottom Right: Building and Locomotion Buttons -->
 	<div class="touch-actions-cluster" bind:this={actionsEl}>
 		<!-- Tool-only actions: roof rise and shape, stair direction, fence finish, music, and the rest. -->
 		{#if extraActions.length > 0}
@@ -448,7 +489,7 @@
 						type="button"
 						class="touch-pill-btn"
 						class:primary={action.primary}
-						onclick={() => scene?.simulateKey(action.code)}
+						use:touchButton={() => scene?.simulateKey(action.code)}
 						data-testid={action.testId}
 						aria-label={action.aria}
 					>
@@ -464,7 +505,7 @@
 				<button
 					type="button"
 					class="touch-pill-btn primary"
-					onclick={onToggleDoor}
+					use:touchButton={onToggleDoor}
 					onpointerdown={(e) => e.stopPropagation()}
 					data-testid="touch-door-cluster-btn"
 					aria-label={isDoorOpen ? 'Close door' : 'Open door'}
@@ -475,12 +516,25 @@
 			</div>
 		{/if}
 
+		{#if hotbar?.globalMode === 'paint'}
+			<button
+				type="button"
+				class="touch-pill-btn primary"
+				use:touchButton={() => scene?.simulateKey('KeyC')}
+				data-testid="touch-paint-palette"
+				aria-label="Open paint and colour selector"
+			>
+				<img class="touch-icon" src={paintIcon} alt="" />
+				<span>Paint &amp; colour</span>
+			</button>
+		{/if}
+
 		<!-- Secondary Tool Controls (Rotate, Customise, Snap, Variant, Undo) -->
 		<div class="touch-tools-row">
 			<button
 				type="button"
 				class="touch-circle-btn"
-				onclick={onUndo}
+				use:touchButton={onUndo}
 				data-testid="touch-undo-btn"
 				title="Undo last placement"
 				aria-label="Undo"
@@ -491,10 +545,14 @@
 			<button
 				type="button"
 				class="touch-circle-btn"
-				onclick={onToggleSnap}
+				use:touchButton={onToggleSnap}
 				data-testid="touch-snap-btn"
-				title="Cycle Snap Mode"
-				aria-label={snapLabel === 'Mode' ? 'Cycle path mode' : 'Cycle Snap'}
+				title={snapLabel === 'Polygon' ? 'Switch to polygon roof drawing' : 'Cycle Snap Mode'}
+				aria-label={snapLabel === 'Polygon'
+					? 'Switch to polygon roof drawing'
+					: snapLabel === 'Mode'
+						? 'Cycle path mode'
+						: 'Cycle Snap'}
 			>
 				<img class="touch-icon" src={magnetIcon} alt="" />
 				<span>{snapLabel}</span>
@@ -503,7 +561,7 @@
 			<button
 				type="button"
 				class="touch-circle-btn"
-				onclick={onCycleVariant}
+				use:touchButton={onCycleVariant}
 				data-testid="touch-variant-btn"
 				title={variant.roofShape ? 'Cycle roof shape' : 'Cycle Tool Variant'}
 				aria-label={variant.roofShape ? 'Cycle roof shape' : 'Cycle Tool Variant'}
@@ -515,7 +573,7 @@
 			<button
 				type="button"
 				class="touch-circle-btn"
-				onclick={onRotate}
+				use:touchButton={onRotate}
 				data-testid="touch-rotate-btn"
 				title="Rotate"
 				aria-label="Rotate"
@@ -528,13 +586,13 @@
 				<button
 					type="button"
 					class="touch-circle-btn highlight"
-					onclick={onCustomise}
+					use:touchButton={onCustomise}
 					data-testid="touch-edit-btn"
-					title="Customise piece"
-					aria-label="Customise"
+					title={editingRoofFootprint ? 'Switch roof footprint mode' : 'Customise piece'}
+					aria-label={editingRoofFootprint ? 'Switch roof footprint mode' : 'Customise'}
 				>
 					<img class="touch-icon" src={editIcon} alt="" />
-					<span>Edit</span>
+					<span>{editingRoofFootprint ? 'Mode' : 'Edit'}</span>
 				</button>
 			{/if}
 		</div>
@@ -544,7 +602,7 @@
 				<button
 					type="button"
 					class="touch-pill-btn"
-					onclick={() => scene?.simulateKey('Delete')}
+					use:touchButton={() => scene?.simulateKey('Delete')}
 					data-testid="touch-delete-foundation"
 					aria-label="Delete whole foundation"
 				>
@@ -558,7 +616,7 @@
 			<button
 				type="button"
 				class="touch-main-btn cancel-btn"
-				onclick={onSecondaryAction}
+				use:touchButton={onSecondaryAction}
 				data-testid="touch-cancel-btn"
 				aria-label="Cancel or Deselect"
 			>
@@ -569,12 +627,40 @@
 			<button
 				type="button"
 				class="touch-main-btn place-btn"
-				onclick={onPrimaryAction}
+				use:touchButton={onPrimaryAction}
 				data-testid="touch-place-btn"
-				aria-label="Place or Confirm"
+				aria-label={hotbar?.globalMode === 'remove' ? 'Delete' : 'Place or Confirm'}
 			>
-				<img class="touch-icon" src={hexPlaceIcon} alt="" />
-				<span>Place</span>
+				<img
+					class="touch-icon"
+					src={hotbar?.globalMode === 'remove' ? breakIcon : hexPlaceIcon}
+					alt=""
+				/>
+				<span>{hotbar?.globalMode === 'remove' ? 'Delete' : 'Place'}</span>
+			</button>
+		</div>
+		<div class="touch-locomotion-buttons">
+			<button
+				type="button"
+				class="touch-action-btn run-btn"
+				class:active={sprintToggled}
+				use:touchButton={toggleSprint}
+				data-testid="touch-run-btn"
+				aria-label="Sprint"
+			>
+				<img class="touch-icon" src={runIcon} alt="" />
+				<span>Run</span>
+			</button>
+
+			<button
+				type="button"
+				class="touch-action-btn jump-btn"
+				use:touchButton={triggerJump}
+				data-testid="touch-jump-btn"
+				aria-label="Jump"
+			>
+				<img class="touch-icon" src={jumpIcon} alt="" />
+				<span>Jump</span>
 			</button>
 		</div>
 	</div>
@@ -587,6 +673,7 @@
 		pointer-events: none;
 		user-select: none;
 		-webkit-user-select: none;
+		-webkit-touch-callout: none;
 		z-index: 20;
 		touch-action: none;
 	}
@@ -642,7 +729,10 @@
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-		transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+		transition:
+			background 0.15s ease,
+			border-color 0.15s ease,
+			transform 0.1s ease;
 	}
 
 	.touch-mode-btn:active,
@@ -702,8 +792,12 @@
 		cursor: pointer;
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 16px rgba(57, 211, 83, 0.35);
-		transition: transform 0.1s ease, background 0.15s ease;
+		box-shadow:
+			0 6px 20px rgba(0, 0, 0, 0.45),
+			0 0 16px rgba(57, 211, 83, 0.35);
+		transition:
+			transform 0.1s ease,
+			background 0.15s ease;
 		touch-action: manipulation;
 		white-space: nowrap;
 	}
@@ -744,7 +838,9 @@
 		justify-content: center;
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 14px rgba(0, 0, 0, 0.4);
+		box-shadow:
+			0 8px 24px rgba(0, 0, 0, 0.5),
+			inset 0 0 14px rgba(0, 0, 0, 0.4);
 		touch-action: none;
 	}
 
@@ -766,7 +862,7 @@
 
 	.touch-locomotion-buttons {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		gap: 10px;
 	}
 
@@ -915,7 +1011,9 @@
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
 		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-		transition: transform 0.1s ease, filter 0.15s ease;
+		transition:
+			transform 0.1s ease,
+			filter 0.15s ease;
 	}
 
 	.touch-main-btn:active {
@@ -940,7 +1038,9 @@
 		border: 2px solid rgba(135, 245, 158, 0.8);
 		color: #04121f;
 		font-size: 1.05rem;
-		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4), 0 0 20px rgba(57, 211, 83, 0.4);
+		box-shadow:
+			0 6px 24px rgba(0, 0, 0, 0.4),
+			0 0 20px rgba(57, 211, 83, 0.4);
 	}
 
 	.place-btn .touch-icon {

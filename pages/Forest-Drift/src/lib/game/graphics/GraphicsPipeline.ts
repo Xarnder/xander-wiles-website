@@ -1,3 +1,4 @@
+import { ResolutionBudget } from './ResolutionBudget';
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -33,7 +34,7 @@ const AO_RESOLUTION_SCALE: Record<AoQuality, number> = {
 
 /** How often (seconds) the dynamic-resolution check re-evaluates — deliberately not every frame, see GraphicsTypes.ts's `dynamicResolutionEnabled` doc. */
 const DYNAMIC_RES_CHECK_INTERVAL = 1;
-const DYNAMIC_RES_STEP = 0.08;
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
 /** Exponential-moving-average time constant (seconds) for the smoothed FPS the dynamic-resolution logic reacts to. */
 const FPS_SMOOTHING_TIME_CONSTANT = 0.5;
 /**
@@ -122,6 +123,7 @@ export class GraphicsPipeline {
 	private renderScale = 1;
 	private smoothedFps = 60;
 	private dynamicResCooldown = 0;
+	private readonly resolutionBudget = new ResolutionBudget();
 
 	constructor(options: GraphicsPipelineOptions) {
 		this.renderer = options.renderer;
@@ -318,15 +320,47 @@ export class GraphicsPipeline {
 		this.updateDynamicResolution(deltaSeconds);
 	}
 
+	private warmupPending = true;
+
+	/** Upload and initialize off-camera draw variants during the next startup frame. */
+	prewarm(): void {
+		this.warmupPending = true;
+	}
+
 	render(): void {
 		// Count the entire frame, including shadows and postprocessing rather than only its final quad.
 		const autoReset = this.renderer.info.autoReset;
+		const warmup = this.warmupPending;
+		this.warmupPending = false;
+		const orientation = warmup ? this.camera.quaternion.clone() : null;
 		this.renderer.info.autoReset = false;
 		this.renderer.info.reset();
-		try {
+		const draw = () => {
 			if (this.composer) this.composer.render();
 			else this.renderer.render(this.scene, this.camera);
+		};
+		try {
+			if (orientation) {
+				// A compile-only warmup misses lazy driver/pipeline work on the first visible
+				// draw. Render the other directions during startup, then draw the real view
+				// last. All happen before presentation; controller/input state is untouched.
+				for (let i = 0; i < 3; i++) {
+					this.camera.rotateOnWorldAxis(UP_AXIS, Math.PI / 2);
+					this.camera.updateMatrixWorld();
+					this.csm?.update();
+					draw();
+				}
+				this.camera.quaternion.copy(orientation);
+				this.camera.updateMatrixWorld();
+				this.csm?.update();
+			}
+			draw();
 		} finally {
+			if (orientation) {
+				this.camera.quaternion.copy(orientation);
+				this.camera.updateMatrixWorld();
+				this.csm?.update();
+			}
 			this.renderer.info.autoReset = autoReset;
 		}
 	}
@@ -374,7 +408,10 @@ export class GraphicsPipeline {
 		// history, and don't let it re-evaluate (and potentially downscale) until it's had a moment to
 		// actually run at the new settings.
 		this.smoothedFps = this.settings.targetFps;
-		this.dynamicResCooldown = DYNAMIC_RES_CHECK_INTERVAL;
+		// Initial shader/texture uploads are CPU stalls, not sustained GPU pressure.
+		// Let them settle before resizing every postprocessing target in response.
+		this.dynamicResCooldown = 5;
+		this.resolutionBudget.reset();
 
 		this.applyShadowSettings(preset);
 		this.rebuildComposer(preset);
@@ -531,6 +568,7 @@ export class GraphicsPipeline {
 		}
 
 		if (!this.settings.dynamicResolutionEnabled) {
+			this.resolutionBudget.reset();
 			if (this.renderScale !== 1) {
 				this.renderScale = 1;
 				this.applyRenderSize();
@@ -545,13 +583,14 @@ export class GraphicsPipeline {
 		const floor = this.currentPreset.minDynamicResolutionScale;
 		const targetFps = this.settings.targetFps;
 
-		if (this.smoothedFps < targetFps * 0.9 && this.renderScale > floor) {
-			this.renderScale = Math.max(floor, this.renderScale - DYNAMIC_RES_STEP);
-			this.applyRenderSize();
-		} else if (this.smoothedFps > targetFps * 0.97 && this.renderScale < 1) {
-			// Recover at the same rate resolution was dropped, not slower — a slow recovery reads as
-			// "stuck" at reduced quality/frame rate even once the hardware can comfortably do better.
-			this.renderScale = Math.min(1, this.renderScale + DYNAMIC_RES_STEP);
+		const scale = this.resolutionBudget.nextScale(
+			this.smoothedFps,
+			targetFps,
+			this.renderScale,
+			floor
+		);
+		if (scale !== this.renderScale) {
+			this.renderScale = scale;
 			this.applyRenderSize();
 		}
 	}

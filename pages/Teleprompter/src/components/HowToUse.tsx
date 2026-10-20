@@ -57,6 +57,11 @@ export function HowToUse({ onClose }: HowToUseProps) {
             afterward).
           </li>
           <li>
+            Or switch to <strong>Bullets</strong> for a presentation: one point
+            per line, and a trigger phrase such as “Next”. The current point
+            stays up until you say that phrase or press Next. There is no timer.
+          </li>
+          <li>
             Read the highlighted word aloud at a natural pace. The script scrolls
             with you.
           </li>
@@ -154,10 +159,11 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <kbd>Esc</kbd> — Close panel / exit fullscreen
           </li>
           <li>
-            <kbd>←</kbd> <kbd>→</kbd> — Nudge one word
+            <kbd>←</kbd> <kbd>→</kbd> — Nudge one word, or previous / next bullet
           </li>
           <li>
-            <kbd>↑</kbd> <kbd>↓</kbd> — Jump sentence start / end
+            <kbd>↑</kbd> <kbd>↓</kbd> — Jump sentence start / end, or previous /
+            next bullet
           </li>
         </ul>
 
@@ -266,6 +272,36 @@ export function HowToUse({ onClose }: HowToUseProps) {
           <li>
             <strong>Record</strong> — start/stop camera capture independently of
             voice-follow. Audio is shared with speech recognition when both run.
+          </li>
+        </ul>
+
+        <h3>Bulletpoint trigger</h3>
+        <ul className="howto-list">
+          <li>
+            Choose <strong>Bullets</strong> in the header or in Settings. Edit
+            the script as one point per line. A dash, star, dot, number, or
+            plain line all count, with or without a space after the marker. The
+            original text is kept if you
+            switch back to voice follow.
+          </li>
+          <li>
+            “next slide” moves forward and “backwards slide” moves back. Change
+            either phrase in the header, Settings, or Edit. The first point
+            shows both phrases; later points stay blank except for the current
+            line and the next one. Each phrase can sit inside a normal
+            sentence. A common single word will also match while you are
+            talking, so keep the phrases specific if that gets in the way.
+          </li>
+          <li>
+            Pause stops hands-free advances. Previous and Next always work.
+            End returns to the first point. The last point does not advance
+            further.
+          </li>
+          <li>
+            Listening works while this tab is visible. Switching away or locking
+            the phone pauses the microphone; come back to the tab and it
+            reconnects if the presentation is still running. It does not listen
+            on the lock screen.
           </li>
         </ul>
 

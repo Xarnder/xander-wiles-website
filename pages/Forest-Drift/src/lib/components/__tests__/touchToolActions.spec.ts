@@ -57,17 +57,9 @@ describe('touchToolActions', () => {
 				'↑/↓  Recent objects'
 			])
 		).toEqual(['snap-angle', 'copy-object', 'edit-object', 'recent-prev', 'recent-next']);
-		expect(ids(['↑ ↓ Pitch · ← → Vibrancy', '1–5 Instrument · Click: Plant · J Play/Pause'])).toEqual(
-			[
-				'pitch-down',
-				'pitch-up',
-				'vol-down',
-				'vol-up',
-				'len-down',
-				'len-up',
-				'play'
-			]
-		);
+		expect(
+			ids(['↑ ↓ Pitch · ← → Vibrancy', '1–5 Instrument · Click: Plant · J Play/Pause'])
+		).toEqual(['pitch-down', 'pitch-up', 'vol-down', 'vol-up', 'len-down', 'len-up', 'play']);
 	});
 
 	it('sends C for opening snap and path mode, and B otherwise', () => {
@@ -76,5 +68,14 @@ describe('touchToolActions', () => {
 		expect(snapLabelForHints(['C path mode'])).toBe('Mode');
 		expect(snapKeyForHints(['B: Cycle snap'])).toBe('KeyB');
 		expect(snapLabelForHints(['B: Cycle snap'])).toBe('Snap');
+	});
+});
+
+describe('roof footprint touch controls', () => {
+	it('labels the snap button Polygon before switching, then restores Snap for polygon drawing', () => {
+		const hints = ['Roof', 'E: Polygon mode', 'B: Polygon mode (Snap)'];
+		expect(snapKeyForHints(hints)).toBe('KeyB');
+		expect(snapLabelForHints(hints)).toBe('Polygon');
+		expect(snapLabelForHints(['Roof', 'B: Cycle snap'])).toBe('Snap');
 	});
 });

@@ -41,6 +41,19 @@ export const models = [
     {
         name: 'Ford Fiesta',
         path: '/assets/models/Ford_Fiesta.glb'
+    },
+    {
+        name: 'Guildford Cathedral',
+        path: '/assets/models/Guildford-Catheral.glb',
+        hideFloor: true
+    },
+    {
+        name: 'House',
+        path: '/assets/models/House.glb'
+    },
+    {
+        name: 'SpaceX Starship',
+        path: '/assets/models/Space-X-Starship.glb'
     }
 ];
 
