@@ -3,7 +3,7 @@ import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc,
 import { state } from './store.js';
 import { generateId, showToast } from './utils.js';
 import { ARCHIVE_RETENTION_MS, archivedTaskRetentionAction } from './archive-retention.js';
-import { buildKanbanStatusUpdate, isValidKanbanStatus, KANBAN_STAGES } from './kanban.js';
+import { buildKanbanStatusUpdate, isValidKanbanStatus, isListGroupByTagEnabled, KANBAN_STAGES } from './kanban.js';
 import {
     migrateNestedTree,
     setNodeCompleted,
@@ -79,14 +79,33 @@ export function handleAddTask(e, listId, nestedIdeas) {
     batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
 
     const isBottom = state.appData.settings.addTaskLocation === 'bottom';
+    const listObj = state.appData.rawLists.find(l => l.id === listId);
+    const userUpdate = {};
+    const previousIds = (listObj && Array.isArray(listObj.taskIds)) ? [...listObj.taskIds] : null;
+    const previousSort = state.appData.settings.sortMode;
+    let groupedAdd = false;
 
-    if (isBottom) {
+    if (listObj && isListGroupByTagEnabled(listObj)) {
+        groupedAdd = true;
+        state.appData.tasks[newId] = newTask;
+        const groupedIds = taskIdsAfterAdding(listId, [newId], { atStart: !isBottom });
+        if (groupedIds) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", listId), {
+                taskIds: groupedIds
+            });
+            if (state.appData.settings.sortMode !== 'custom') {
+                state.appData.settings.sortMode = 'custom';
+                const sortSelect = document.getElementById('sort-select');
+                if (sortSelect) sortSelect.value = 'custom';
+                userUpdate['settings.sortMode'] = 'custom';
+            }
+        }
+    } else if (isBottom) {
         batch.update(doc(db, "users", state.currentUser.uid, "lists", listId), {
             taskIds: arrayUnion(newId)
         });
     } else {
         // Add to top -> Prepend
-        const listObj = state.appData.rawLists.find(l => l.id === listId);
         let validIds = [];
         if (listObj && listObj.taskIds) validIds = [...listObj.taskIds];
 
@@ -100,7 +119,8 @@ export function handleAddTask(e, listId, nestedIdeas) {
     // Backup Reminder Logic
     const currentCount = state.appData.settings.tasksSinceBackup || 0;
     const newCount = currentCount + 1;
-    batch.update(doc(db, "users", state.currentUser.uid), { "settings.tasksSinceBackup": newCount });
+    userUpdate['settings.tasksSinceBackup'] = newCount;
+    batch.update(doc(db, "users", state.currentUser.uid), userUpdate);
 
     // Note: Validation for backup popup logic is now in UI or Main, checking state.
     // API just updates the data.
@@ -108,7 +128,18 @@ export function handleAddTask(e, listId, nestedIdeas) {
     return batch.commit().then(() => {
         input.focus();
         return newCount; // Return new count for UI to decide on popup
-    }).catch(e => handleSyncError(e));
+    }).catch(e => {
+        if (groupedAdd) {
+            delete state.appData.tasks[newId];
+            if (listObj && previousIds) {
+                listObj.taskIds = previousIds;
+                const mirror = (state.appData.lists || []).find((l) => l.id === listId);
+                if (mirror && mirror !== listObj) mirror.taskIds = previousIds;
+            }
+            if (state.appData.settings) state.appData.settings.sortMode = previousSort;
+        }
+        handleSyncError(e);
+    });
 }
 
 export function archivedTaskPatch() {
@@ -137,9 +168,12 @@ export function unarchiveTask(taskId) {
 
     let restoredToFirst = false;
     if (isOrphan && state.appData.lists.length > 0) {
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", state.appData.lists[0].id), {
-            taskIds: arrayUnion(taskId)
-        });
+        const restoreListId = state.appData.lists[0].id;
+        const groupedIds = taskIdsAfterAdding(restoreListId, [taskId]);
+        batch.update(doc(db, "users", state.currentUser.uid, "lists", restoreListId), groupedIds
+            ? { taskIds: groupedIds }
+            : { taskIds: arrayUnion(taskId) });
+        if (groupedIds) rememberGroupingSort(batch);
         restoredToFirst = true;
     }
     return batch.commit().then(() => {
@@ -550,9 +584,11 @@ export function rescueOrphanTasks() {
                 const chunk = orphans.slice(i, i + CHUNK_SIZE);
                 const batch = writeBatch(db);
                 if (i === 0) {
-                    batch.update(doc(db, "users", state.currentUser.uid, "lists", targetList.id), {
-                        taskIds: arrayUnion(...orphans)
-                    });
+                    const groupedIds = taskIdsAfterAdding(targetList.id, orphans);
+                    batch.update(doc(db, "users", state.currentUser.uid, "lists", targetList.id), groupedIds
+                        ? { taskIds: groupedIds }
+                        : { taskIds: arrayUnion(...orphans) });
+                    if (groupedIds) rememberGroupingSort(batch);
                 }
                 chunk.forEach(tid => {
                     batch.update(doc(db, "users", state.currentUser.uid, "tasks", tid), {
@@ -687,9 +723,32 @@ export function setActiveTagId(tagId) {
 export function setTaskTag(taskId, tagId) {
     const tagsById = getTagsById(state.appData.settings.tags);
     const nextId = tagsById[tagId] ? tagId : MISC_TAG_ID;
-    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+    if (state.appData.tasks[taskId]) {
+        state.appData.tasks[taskId].tagId = nextId;
+        state.appData.tasks[taskId].updatedAt = Date.now();
+    }
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
         tagId: nextId,
         updatedAt: Date.now()
+    });
+
+    let regrouped = false;
+    (state.appData.rawLists || []).forEach((list) => {
+        if (!isListGroupByTagEnabled(list) || !Array.isArray(list.taskIds) || !list.taskIds.includes(taskId)) return;
+        const nextIds = orderTaskIdsIfGrouping(list, list.taskIds);
+        if (!nextIds) return;
+        const same = nextIds.length === list.taskIds.length && nextIds.every((id, i) => id === list.taskIds[i]);
+        if (same) return;
+        assignListTaskIds(list.id, nextIds);
+        batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), { taskIds: nextIds });
+        regrouped = true;
+    });
+    if (regrouped) rememberGroupingSort(batch);
+
+    return batch.commit().then(() => {
+        if (regrouped) import('./ui.js').then((UI) => UI.renderBoard());
     }).catch(e => handleSyncError(e));
 }
 
@@ -760,6 +819,50 @@ export function reorderTags(orderedIds) {
     return updateSetting('tags', result.tags).then(() => true);
 }
 
+function assignListTaskIds(listId, taskIds) {
+    const list = (state.appData.rawLists || []).find((l) => l.id === listId);
+    if (list) list.taskIds = taskIds;
+    const mirror = (state.appData.lists || []).find((l) => l.id === listId);
+    if (mirror && mirror !== list) mirror.taskIds = taskIds;
+}
+
+/** Group `taskIds` when this list's category toggle is on. Returns null when it is off. */
+export function orderTaskIdsIfGrouping(list, taskIds) {
+    if (!list || !isListGroupByTagEnabled(list)) return null;
+    const tags = ensureDefaultTags(state.appData.settings).tags;
+    return groupTaskIdsByTag(Array.isArray(taskIds) ? taskIds : [], state.appData.tasks, tags);
+}
+
+/**
+ * Append (or prepend) ids, then place them with their category when grouping is on.
+ * Returns the full taskIds array, or null when grouping is off.
+ */
+export function taskIdsAfterAdding(listId, newIds, { atStart = false } = {}) {
+    const list = (state.appData.rawLists || []).find((l) => l.id === listId);
+    const grouped = orderTaskIdsIfGrouping(list, []);
+    if (!list || !grouped) return null;
+    const incoming = (Array.isArray(newIds) ? newIds : [newIds]).filter(Boolean);
+    const incomingSet = new Set(incoming);
+    let ids = Array.isArray(list.taskIds) ? list.taskIds.filter((id) => !incomingSet.has(id)) : [];
+    ids = atStart ? [...incoming, ...ids] : [...ids, ...incoming];
+    const next = orderTaskIdsIfGrouping(list, ids);
+    assignListTaskIds(listId, next);
+    return next;
+}
+
+/** Keep category groups visible. Custom order is what the board actually renders. */
+export function rememberGroupingSort(batch) {
+    if (!state.appData.settings) state.appData.settings = {};
+    if (state.appData.settings.sortMode === 'custom') return false;
+    state.appData.settings.sortMode = 'custom';
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) sortSelect.value = 'custom';
+    if (batch && state.currentUser) {
+        batch.update(doc(db, "users", state.currentUser.uid), { "settings.sortMode": "custom" });
+    }
+    return true;
+}
+
 /**
  * Rewrite a list's taskIds so tasks with the same tag sit together,
  * following the tag order from Settings.
@@ -807,6 +910,53 @@ export function groupListTasksByTag(listId) {
         .catch((e) => {
             handleSyncError(e);
             return false;
+        });
+}
+
+/**
+ * Turn category grouping on or off for one list.
+ * Turning it on groups the tasks now and keeps grouping each task added later.
+ * Returns true when on, false when off, or null if the write failed.
+ */
+export function toggleListGroupByTag(listId) {
+    if (!state.currentUser || !listId || listId === 'orphan-archive') return Promise.resolve(null);
+    const list = (state.appData.rawLists || []).find((l) => l.id === listId);
+    if (!list) return Promise.resolve(null);
+
+    const prevOn = isListGroupByTagEnabled(list);
+    const next = !prevOn;
+    const prevIds = Array.isArray(list.taskIds) ? [...list.taskIds] : [];
+    const prevSort = state.appData.settings?.sortMode;
+    const mirror = (state.appData.lists || []).find((l) => l.id === listId);
+
+    list.groupByTag = next;
+    if (mirror && mirror !== list) mirror.groupByTag = next;
+
+    const batch = writeBatch(db);
+    const listUpdate = { groupByTag: next };
+    if (next && prevIds.length > 1) {
+        const tags = ensureDefaultTags(state.appData.settings).tags;
+        const nextIds = groupTaskIdsByTag(prevIds, state.appData.tasks, tags);
+        const changed = nextIds.length !== prevIds.length || nextIds.some((id, i) => id !== prevIds[i]);
+        if (changed) {
+            assignListTaskIds(listId, nextIds);
+            listUpdate.taskIds = nextIds;
+        }
+    }
+    if (next) rememberGroupingSort(batch);
+    batch.update(doc(db, "users", state.currentUser.uid, "lists", listId), listUpdate);
+
+    return batch.commit()
+        .then(() => next)
+        .catch((e) => {
+            handleSyncError(e);
+            list.groupByTag = prevOn;
+            if (mirror && mirror !== list) mirror.groupByTag = prevOn;
+            if (Array.isArray(list.taskIds)) assignListTaskIds(listId, prevIds);
+            if (state.appData.settings && prevSort) state.appData.settings.sortMode = prevSort;
+            const sortSelect = document.getElementById('sort-select');
+            if (sortSelect && prevSort) sortSelect.value = prevSort;
+            return null;
         });
 }
 
@@ -1018,14 +1168,25 @@ export async function processAutomatedLists() {
         }
 
         const batch = writeBatch(db);
+        const groupedAdds = new Map();
         pendingMoves.forEach(move => {
-            batch.update(doc(db, "users", state.currentUser.uid, "lists", move.fromListId), {
-                taskIds: arrayRemove(...move.taskIds),
-                ...(move.isScheduleRun ? { lastScheduleRun: now } : {})
-            });
-            batch.update(doc(db, "users", state.currentUser.uid, "lists", move.toListId), {
-                taskIds: arrayUnion(...move.taskIds)
-            });
+            const dest = (state.appData.rawLists || []).find((l) => l.id === move.toListId);
+            if (!isListGroupByTagEnabled(dest)) return;
+            const prev = groupedAdds.get(move.toListId) || [];
+            groupedAdds.set(move.toListId, prev.concat(move.taskIds));
+        });
+        pendingMoves.forEach(move => {
+            if (!groupedAdds.has(move.fromListId)) {
+                batch.update(doc(db, "users", state.currentUser.uid, "lists", move.fromListId), {
+                    taskIds: arrayRemove(...move.taskIds),
+                    ...(move.isScheduleRun ? { lastScheduleRun: now } : {})
+                });
+            }
+            if (!groupedAdds.has(move.toListId)) {
+                batch.update(doc(db, "users", state.currentUser.uid, "lists", move.toListId), {
+                    taskIds: arrayUnion(...move.taskIds)
+                });
+            }
             move.taskIds.forEach(taskId => {
                 batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
                     [`listAddedAt.${move.toListId}`]: now,
@@ -1036,6 +1197,25 @@ export async function processAutomatedLists() {
                 });
             });
         });
+        groupedAdds.forEach((ids, listId) => {
+            const list = (state.appData.rawLists || []).find((l) => l.id === listId);
+            const removed = new Set();
+            pendingMoves.forEach((move) => {
+                if (move.fromListId !== listId) return;
+                move.taskIds.forEach((id) => removed.add(id));
+            });
+            if (list && removed.size && Array.isArray(list.taskIds)) {
+                list.taskIds = list.taskIds.filter((id) => !removed.has(id));
+            }
+            const nextIds = taskIdsAfterAdding(listId, ids);
+            if (!nextIds) return;
+            const scheduleMove = pendingMoves.find((move) => move.fromListId === listId && move.isScheduleRun);
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", listId), {
+                taskIds: nextIds,
+                ...(scheduleMove ? { lastScheduleRun: now } : {})
+            });
+        });
+        if (groupedAdds.size > 0) rememberGroupingSort(batch);
 
         await batch.commit();
         console.log(`[Automation] Successfully processed ${pendingMoves.length} lists.`);

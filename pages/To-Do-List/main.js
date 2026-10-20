@@ -31,6 +31,7 @@ const nestedRollupPromptedTaskIds = new Set();
 
 let nestedMigrationPersistInFlight = false;
 let recentArchiveHeld = false;
+let searchArchiveHeld = false;
 
 function releaseRecentCompletedHold() {
     if (!recentArchiveHeld) return;
@@ -360,6 +361,7 @@ window.openBoardManager = UI.openBoardManager;
 window.openDedupModal = UI.openDedupModal;
 window.clearCompletedInList = API.clearCompletedInList;
 window.groupListByTag = UI.groupListByTag;
+window.toggleListGroupByTag = UI.toggleListGroupByTag;
 window.toggleListFreezeImportant = UI.toggleListFreezeImportant;
 window.toggleMasonryFocus = UI.toggleMasonryFocus;
 window.stepMasonryFont = UI.stepMasonryFont;
@@ -508,6 +510,7 @@ onAuthStateChanged(auth, (user) => {
         serverSettingsReady = false;
         serverListsReady = false;
         recentArchiveHeld = false;
+        searchArchiveHeld = false;
         API.forceReleaseArchivedTasks();
         cleanupListeners();
         dateReset();
@@ -689,10 +692,6 @@ function setupFirestoreListeners(uid) {
             document.body.classList.toggle('disable-important-animation', !!state.appData.settings.disableImportantAnimation);
             if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
             if (document.getElementById('ai-summary-on-cards-toggle')) document.getElementById('ai-summary-on-cards-toggle').checked = !!state.appData.settings.aiSummaryOnCards;
-            const featuredHeaderSelect = document.getElementById('mobile-featured-header-btn');
-            if (featuredHeaderSelect) {
-                featuredHeaderSelect.value = UI.getMobileFeaturedHeaderBtn();
-            }
             syncListTopGapUI();
             syncListBottomGapUI();
             syncToolPanelBottomOffsetUI();
@@ -872,6 +871,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Add List
     document.getElementById('add-list-btn').onclick = API.addNewList;
+    const headerAddTaskBtn = document.getElementById('header-add-task-btn');
+    if (headerAddTaskBtn) headerAddTaskBtn.onclick = () => openHeaderAddTask();
 
     // Mobile Reorder
     document.getElementById('mobile-reorder-lists-btn').onclick = () => {
@@ -954,6 +955,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon.className = 'ph ph-arrows-in-simple';
                 Utils.showToast("Expanded View Enabled");
             }
+            const compactOpt = document.querySelector('#mobile-tool-dropup [data-action="compact"]');
+            if (compactOpt) compactOpt.textContent = state.compactView ? 'Expanded view' : 'Compact view';
             UI.renderBoard();
         };
     }
@@ -1055,13 +1058,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('disable-important-animation-toggle', 'disableImportantAnimation', true, (checked) => {
         document.body.classList.toggle('disable-important-animation', !!checked);
         return !!checked;
-    });
-    setupSettingListener('mobile-featured-header-btn', 'mobileFeaturedHeaderBtn', false, (val) => {
-        const valid = UI.MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === val);
-        const next = valid ? val : 'multi-edit';
-        state.appData.settings.mobileFeaturedHeaderBtn = next;
-        requestAnimationFrame(() => UI.layoutSlimChrome());
-        return next;
     });
 
     bindCloudLayoutSlider('list-top-gap-slider', {
@@ -1421,9 +1417,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const idSet = new Set(idsArr);
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", finalTargetId), {
-            taskIds: arrayUnion(...idsArr)
-        });
+        const groupedTargetIds = API.taskIdsAfterAdding(finalTargetId, idsArr);
+        if (groupedTargetIds) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", finalTargetId), {
+                taskIds: groupedTargetIds
+            });
+            API.rememberGroupingSort(batch);
+        } else {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", finalTargetId), {
+                taskIds: arrayUnion(...idsArr)
+            });
+        }
 
         idsArr.forEach(taskId => {
             batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
@@ -1543,9 +1547,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const batch = writeBatch(db);
-            batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
-                taskIds: arrayUnion(taskId)
-            });
+            const groupedLinkIds = API.taskIdsAfterAdding(targetListId, [taskId]);
+            if (groupedLinkIds) {
+                batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
+                    taskIds: groupedLinkIds
+                });
+                API.rememberGroupingSort(batch);
+            } else {
+                batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
+                    taskIds: arrayUnion(taskId)
+                });
+            }
             batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
                 archived: false,
                 [`listAddedAt.${targetListId}`]: Date.now(),
@@ -1562,16 +1574,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const batch = writeBatch(db);
+        const groupedMoveIds = API.taskIdsAfterAdding(targetListId, [taskId]);
         state.appData.rawLists.forEach(list => {
+            if (groupedMoveIds && list.id === targetListId) return;
             if (list.taskIds && list.taskIds.includes(taskId)) {
                 batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
                     taskIds: arrayRemove(taskId)
                 });
             }
         });
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
-            taskIds: arrayUnion(taskId)
-        });
+        if (groupedMoveIds) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
+                taskIds: groupedMoveIds
+            });
+            API.rememberGroupingSort(batch);
+        } else {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
+                taskIds: arrayUnion(taskId)
+            });
+        }
         batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             archived: false,
             [`listAddedAt.${targetListId}`]: Date.now(),
@@ -1614,6 +1635,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const listId = bulkModal.dataset.listId;
             const batch = writeBatch(db);
             const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
+            const newIds = [];
 
             items.forEach(item => {
                 const newId = Utils.generateId();
@@ -1628,9 +1650,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     tagId: state.appData.settings.activeTagId || MISC_TAG_ID,
                     listAddedAt: { [listId]: Date.now() }
                 };
+                state.appData.tasks[newId] = newTask;
+                newIds.push(newId);
                 batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
-                batch.update(listRef, { taskIds: arrayUnion(newId) });
             });
+            const groupedIds = API.taskIdsAfterAdding(listId, newIds);
+            if (groupedIds) {
+                batch.update(listRef, { taskIds: groupedIds });
+                API.rememberGroupingSort(batch);
+            } else {
+                newIds.forEach((newId) => {
+                    batch.update(listRef, { taskIds: arrayUnion(newId) });
+                });
+            }
             batch.commit().then(() => {
                 Utils.showToast("Bulk tasks added successfully", "success");
             }).catch(e => API.handleSyncError(e));
@@ -1652,33 +1684,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Search
+    // Search — one modal, switched between tasks and lists
     const searchModal = document.getElementById('search-modal-overlay');
     const searchInput = document.getElementById('search-input');
-
-    // List Search - Correct Implementation
-    const searchListModal = document.getElementById('search-list-modal-overlay');
     const searchListInput = document.getElementById('search-list-input');
+    const searchTasksPanel = document.getElementById('search-tasks-panel');
+    const searchListsPanel = document.getElementById('search-lists-panel');
 
-    document.getElementById('search-list-btn').onclick = () => {
-        searchListModal.classList.remove('hidden');
-        searchListInput.value = state.listSearchTerm || '';
-        searchListInput.focus();
+    function setSearchMode(mode) {
+        const lists = mode === 'lists';
+        searchTasksPanel.classList.toggle('hidden', lists);
+        searchListsPanel.classList.toggle('hidden', !lists);
+        searchModal.classList.toggle('is-searching-lists', lists);
+        document.getElementById('search-modal-title').textContent = lists ? 'Search Lists' : 'Search Tasks';
+        const tasksBtn = document.getElementById('search-mode-tasks');
+        const listsBtn = document.getElementById('search-mode-lists');
+        tasksBtn.classList.toggle('is-active', !lists);
+        listsBtn.classList.toggle('is-active', lists);
+        tasksBtn.setAttribute('aria-selected', lists ? 'false' : 'true');
+        listsBtn.setAttribute('aria-selected', lists ? 'true' : 'false');
+        if (lists) {
+            searchListInput.value = state.listSearchTerm || '';
+            searchListInput.focus();
+        } else {
+            searchInput.focus();
+        }
+    }
+
+    async function ensureSearchArchiveHold() {
+        if (!state.searchShowArchived || searchArchiveHeld) return;
+        searchArchiveHeld = true;
+        await API.holdArchivedTasks();
+    }
+
+    function releaseSearchArchiveHold() {
+        if (!searchArchiveHeld) return;
+        searchArchiveHeld = false;
+        API.releaseArchivedTasks();
+    }
+
+    async function openSearch(mode) {
+        searchModal.classList.remove('hidden');
+        setSearchMode(mode);
+        if (mode !== 'lists') {
+            await ensureSearchArchiveHold();
+            UI.performSearch(searchInput.value);
+        }
+    }
+
+    document.getElementById('search-mode-tasks').onclick = async () => {
+        setSearchMode('tasks');
+        await ensureSearchArchiveHold();
+        UI.performSearch(searchInput.value);
     };
+    document.getElementById('search-mode-lists').onclick = () => setSearchMode('lists');
 
-    document.getElementById('close-search-list-btn').onclick = () => {
-        searchListModal.classList.add('hidden');
+    document.getElementById('search-list-btn').onclick = () => openSearch('lists');
+    document.getElementById('view-reordered-btn').onclick = () => {
+        searchModal.classList.add('hidden');
+        searchModal.classList.remove('is-searching-lists');
+        releaseSearchArchiveHold();
     };
-
-    document.getElementById('view-reordered-btn').onclick = () => searchListModal.classList.add('hidden');
-
     document.getElementById('clear-list-search-btn').onclick = () => {
         state.listSearchTerm = "";
         searchListInput.value = "";
         UI.renderBoard();
-        searchListModal.classList.add('hidden');
+        searchModal.classList.add('hidden');
+        releaseSearchArchiveHold();
     };
-
     searchListInput.oninput = (e) => {
         state.listSearchTerm = e.target.value.trim();
         UI.renderBoard();
@@ -1686,20 +1759,142 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('search-show-archived-toggle').onchange = async (e) => {
         state.searchShowArchived = e.target.checked;
-        if (e.target.checked) await API.holdArchivedTasks();
-        else API.releaseArchivedTasks();
+        if (e.target.checked) await ensureSearchArchiveHold();
+        else releaseSearchArchiveHold();
         UI.performSearch(searchInput.value);
     };
-    document.getElementById('search-btn').onclick = async () => {
-        searchModal.classList.remove('hidden');
-        searchInput.focus();
-        if (state.searchShowArchived) await API.holdArchivedTasks();
-        UI.performSearch(searchInput.value);
-    };
+    document.getElementById('search-btn').onclick = () => openSearch('tasks');
     document.getElementById('close-search-btn').onclick = () => {
         searchModal.classList.add('hidden');
-        if (state.searchShowArchived) API.releaseArchivedTasks();
+        searchModal.classList.remove('is-searching-lists');
+        releaseSearchArchiveHold();
     };
+
+    const mobileToolTrigger = document.getElementById('mobile-tool-menu-btn');
+    const mobileToolDropup = document.getElementById('mobile-tool-dropup');
+    if (mobileToolTrigger && mobileToolDropup) {
+        const compactItem = mobileToolDropup.querySelector('[data-action="compact"]');
+        if (compactItem) compactItem.textContent = state.compactView ? 'Expanded view' : 'Compact view';
+
+        let moreMenuOpen = false;
+
+        const placeMoreMenu = () => {
+            const rect = mobileToolTrigger.getBoundingClientRect();
+            const vv = window.visualViewport;
+            const offsetLeft = vv ? vv.offsetLeft : 0;
+            const offsetTop = vv ? vv.offsetTop : 0;
+            const viewWidth = vv ? vv.width : window.innerWidth;
+            const margin = 8;
+            mobileToolDropup.hidden = false;
+            const width = Math.min(Math.max(rect.width, 176), viewWidth - margin * 2);
+            let left = rect.right - width;
+            left = Math.max(margin, Math.min(left, viewWidth - width - margin));
+            mobileToolDropup.style.width = `${width}px`;
+            mobileToolDropup.style.left = `${left + offsetLeft}px`;
+            const height = mobileToolDropup.offsetHeight;
+            const top = Math.max(margin, rect.top - height - 6);
+            mobileToolDropup.style.top = `${top + offsetTop}px`;
+        };
+
+        const closeMoreMenu = () => {
+            if (!moreMenuOpen && mobileToolDropup.hidden) return;
+            moreMenuOpen = false;
+            mobileToolDropup.hidden = true;
+            mobileToolTrigger.setAttribute('aria-expanded', 'false');
+            mobileToolTrigger.classList.remove('is-open');
+            if (mobileToolDropup.parentElement !== mobileToolTrigger.parentElement) {
+                mobileToolTrigger.parentElement.appendChild(mobileToolDropup);
+            }
+        };
+
+        const openMoreMenu = () => {
+            moreMenuOpen = true;
+            document.body.appendChild(mobileToolDropup);
+            mobileToolTrigger.setAttribute('aria-expanded', 'true');
+            mobileToolTrigger.classList.add('is-open');
+            placeMoreMenu();
+        };
+
+        const runMoreAction = (action) => {
+            closeMoreMenu();
+            if (action === 'search') openSearch('tasks');
+            else if (action === 'add-list') document.getElementById('add-list-btn')?.click();
+            else if (action === 'settings') document.getElementById('options-btn')?.click();
+            else if (action === 'compact') document.getElementById('compact-view-btn')?.click();
+        };
+
+        let suppressClickUntil = 0;
+        const toggleMoreMenu = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (moreMenuOpen) closeMoreMenu();
+            else openMoreMenu();
+        };
+        // touchend opens the menu on iPhone Safari. preventDefault stops the extra click
+        // that would immediately close it again.
+        mobileToolTrigger.addEventListener('touchend', (event) => {
+            if (event.changedTouches?.length !== 1) return;
+            suppressClickUntil = Date.now() + 700;
+            toggleMoreMenu(event);
+        }, { passive: false });
+        mobileToolTrigger.addEventListener('click', (event) => {
+            if (Date.now() < suppressClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            toggleMoreMenu(event);
+        });
+
+        const activateMoreItem = (item) => {
+            if (!item || !mobileToolDropup.contains(item)) return;
+            runMoreAction(item.dataset.action);
+        };
+        mobileToolDropup.addEventListener('touchend', (event) => {
+            const item = event.target.closest?.('[data-action]');
+            if (!item || !mobileToolDropup.contains(item)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            suppressClickUntil = Date.now() + 700;
+            activateMoreItem(item);
+        }, { passive: false });
+        mobileToolDropup.addEventListener('click', (event) => {
+            if (Date.now() < suppressClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            const item = event.target.closest('[data-action]');
+            event.preventDefault();
+            event.stopPropagation();
+            activateMoreItem(item);
+        });
+
+        const onOutsidePointer = (event) => {
+            if (!moreMenuOpen) return;
+            const target = event.target;
+            if (mobileToolDropup.contains(target) || mobileToolTrigger.contains(target)) return;
+            closeMoreMenu();
+        };
+        document.addEventListener('pointerdown', onOutsidePointer, true);
+        document.addEventListener('touchstart', onOutsidePointer, { capture: true, passive: true });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeMoreMenu();
+        });
+
+        const followViewport = () => {
+            if (!moreMenuOpen) return;
+            if (!window.matchMedia('(max-width: 500px)').matches) {
+                closeMoreMenu();
+                return;
+            }
+            placeMoreMenu();
+        };
+        window.addEventListener('resize', followViewport);
+        window.visualViewport?.addEventListener('resize', followViewport);
+        window.visualViewport?.addEventListener('scroll', followViewport);
+    }
 
     let searchTimeout;
     searchInput.addEventListener('input', (e) => {
@@ -4070,18 +4265,59 @@ function openTaskInComposer(taskId, listId) {
     focusComposerField(field, null, true);
 }
 
+function resolveAddTargetListId() {
+    if (state.focusedKanbanListId) return state.focusedKanbanListId;
+    if (state.focusedMasonryListId) return state.focusedMasonryListId;
+    const columns = [...document.querySelectorAll('#board-container > .list-column[data-list-id]')]
+        .filter((col) => col.dataset.listId && col.dataset.listId !== 'orphan-archive');
+    if (!columns.length) {
+        const first = (state.appData.lists || []).find((list) => list.id && list.id !== 'orphan-archive');
+        return first ? first.id : null;
+    }
+    const board = document.getElementById('board-container');
+    const view = board ? board.getBoundingClientRect() : { left: 0, width: window.innerWidth };
+    const mid = view.left + view.width / 2;
+    let best = columns[0];
+    let bestDist = Infinity;
+    columns.forEach((col) => {
+        const rect = col.getBoundingClientRect();
+        if (rect.width < 8) return;
+        const dist = Math.abs((rect.left + rect.width / 2) - mid);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = col;
+        }
+    });
+    return best.dataset.listId;
+}
+
+function openHeaderAddTask() {
+    const listId = resolveAddTargetListId();
+    if (!listId) {
+        Utils.showToast('Add a list first', 'info');
+        return;
+    }
+    openAddTaskComposerForList(listId);
+}
+
 function openAddTaskComposer(sourceInput) {
     if (!isFullscreenAddEnabled() || composerSubmitting) return;
+    const ctx = getAddTaskContext(sourceInput);
+    if (!ctx) return;
+    openAddTaskComposerForList(ctx.listId, sourceInput);
+}
+
+function openAddTaskComposerForList(listId, sourceInput = null) {
+    if (!listId || composerSubmitting) return;
     const rootEl = document.getElementById('add-task-composer');
     const openingFresh = !rootEl || rootEl.classList.contains('hidden');
     if (openingFresh && Date.now() - composerToggleAt < COMPOSER_TOGGLE_GUARD_MS) return;
     bindComposerOnce();
-    const ctx = getAddTaskContext(sourceInput);
     const root = document.getElementById('add-task-composer');
     const field = document.getElementById('add-task-composer-input');
-    if (!ctx || !root || !field) return;
+    if (!root || !field) return;
 
-    if (composerSession && !composerSession.taskId && composerSession.listId !== ctx.listId) {
+    if (composerSession && !composerSession.taskId && composerSession.listId !== listId) {
         rememberDraft(composerSession.listId, field.value);
         const prev = findAddTaskInput(composerSession.listId);
         if (prev) prev.value = field.value;
@@ -4090,26 +4326,30 @@ function openAddTaskComposer(sourceInput) {
 
     const already = composerSession
         && !composerSession.taskId
-        && composerSession.listId === ctx.listId
+        && composerSession.listId === listId
         && !root.classList.contains('hidden');
 
     if (!already) {
-        composerSession = { listId: ctx.listId };
+        composerSession = { listId };
         UI.setComposerEditTask(null);
         field.placeholder = 'Type an idea to add';
         field.setAttribute('aria-label', 'New task');
-        field.value = sourceInput.value || addTaskDrafts.get(ctx.listId) || '';
-        rebuildComposerSubtasks(addTaskSubtaskDrafts.get(ctx.listId) || []);
-        rememberDraft(ctx.listId, field.value);
+        field.value = (sourceInput && sourceInput.value) || addTaskDrafts.get(listId) || '';
+        rebuildComposerSubtasks(addTaskSubtaskDrafts.get(listId) || []);
+        rememberDraft(listId, field.value);
         const titleEl = document.getElementById('add-task-composer-list');
-        const titleInput = ctx.host.querySelector('input.list-title');
-        const title = titleInput ? titleInput.value.trim() : '';
+        const host = sourceInput && sourceInput.closest
+            ? sourceInput.closest('.list-column, .kanban-focus-shell')
+            : document.querySelector(`.list-column[data-list-id="${CSS.escape(listId)}"], .kanban-focus-shell[data-list-id="${CSS.escape(listId)}"]`);
+        const titleInput = host ? host.querySelector('input.list-title') : null;
+        const list = (state.appData.rawLists || []).find((item) => item.id === listId);
+        const title = (titleInput && titleInput.value.trim()) || (list && list.title) || '';
         if (titleEl) titleEl.textContent = title;
         composerToggleAt = Date.now();
         root.classList.remove('hidden');
         root.setAttribute('aria-hidden', 'false');
         document.documentElement.classList.add('add-task-composer-open');
-        resetTimerForList(ctx.listId);
+        resetTimerForList(listId);
         startComposerViewportWatch();
         positionAddTaskComposer();
         syncComposerEditChrome();

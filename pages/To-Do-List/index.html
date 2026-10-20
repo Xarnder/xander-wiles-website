@@ -137,7 +137,7 @@
                 <div class="header-row header-row-meta">
                     <div class="sort-container control-item header-meta-control">
                         <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
-                        <select id="sort-select" class="glass-select">
+                        <select id="sort-select" class="glass-select" aria-label="Order">
                             <option value="custom">Custom</option>
                             <option value="alphabetical">A-Z</option>
                             <option value="newest">Newest</option>
@@ -145,23 +145,40 @@
                         </select>
                     </div>
 
-                    <div class="toggle-group control-item header-meta-control" title="Enable Dragging">
-                        <span class="label">Drag:</span>
-                        <label class="switch-small">
-                            <input type="checkbox" id="drag-tasks-toggle">
-                            <span class="slider-small round"></span>
+                    <div class="toggle-group control-item header-meta-control drag-fill" title="Enable Dragging">
+                        <label class="switch-small drag-fill-switch">
+                            <input type="checkbox" id="drag-tasks-toggle" aria-label="Drag tasks">
+                            <span class="slider-small drag-fill-slider"></span>
+                            <span class="drag-fill-text" aria-hidden="true"><span class="drag-fill-half is-off">No drag</span><span class="drag-fill-half is-on">Drag</span></span>
                         </label>
                     </div>
 
                     <button type="button" id="tag-filter-toggle" class="tag-filter-toggle header-meta-control" aria-pressed="false" title="Filter the board by the selected category">Filter</button>
+
+                    <div class="sort-container control-item header-meta-control mobile-tool-menu">
+                        <button type="button" id="mobile-tool-menu-btn" class="mobile-tool-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="mobile-tool-dropup">More</button>
+                        <div id="mobile-tool-dropup" class="mobile-tool-dropup" role="menu" hidden>
+                            <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="search">Search</button>
+                            <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="add-list">Add list</button>
+                            <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="compact">Compact view</button>
+                            <button type="button" class="mobile-tool-dropup-item is-settings" role="menuitem" data-action="settings"><span class="mobile-tool-settings-icon" aria-hidden="true"></span>Settings</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div id="tag-mode-row" class="header-row tag-mode-row" role="radiogroup" aria-label="Tag mode for new tasks">
-                    <div id="tag-mode-buttons" class="tag-mode-buttons"></div>
+                <div id="tag-mode-row" class="header-row tag-mode-row">
+                    <div class="tag-mode-with-add">
+                        <div id="tag-mode-buttons" class="tag-mode-buttons" role="radiogroup" aria-label="Tag mode for new tasks"></div>
+                        <button type="button" id="header-add-task-btn" class="header-add-task-btn" aria-label="Add task" title="Add task">
+                            <i class="ph ph-plus" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Action buttons: dynamic equal slots on mobile; one optional double-height featured slot -->
+            <!-- Phones: Board, Drag, More, then Select, Filter, Recent. -->
+            <div id="mobile-dock-grid" class="mobile-dock-grid"></div>
+
             <div id="header-action-slots" class="header-action-slots header-row" aria-label="Header actions">
                 <button id="search-btn" class="icon-btn-large" data-slot-id="search" title="Search Tasks">
                     <i class="ph ph-magnifying-glass"></i>
@@ -171,6 +188,7 @@
                 </button>
                 <button id="recent-completed-btn" class="icon-btn-large" data-slot-id="recent-completed" title="Show Recent Completed">
                     <i class="ph ph-check-circle"></i>
+                    <span class="mobile-dock-label">Recent</span>
                 </button>
                 <button id="compact-view-btn" class="icon-btn-large control-item active" data-slot-id="compact-view" title="Toggle Compact View">
                     <i class="ph ph-arrows-out-simple"></i>
@@ -180,6 +198,7 @@
                         <path d="M44,2.5H19c-2.6,0-4.7,2.1-4.7,4.7V8c0,0.5,0.3,0.8,0.8,0.8h22.7c2.6,0,4.7,2.1,4.7,4.7v24.3 c0,0.5,0.3,0.8,0.8,0.8H44c2.6,0,4.7-2.1,4.7-4.7V7.2C48.7,4.6,46.6,2.5,44,2.5z"/>
                         <path d="M33,13.5H8c-2.6,0-4.7,2.1-4.7,4.7v26.6c0,2.6,2.1,4.7,4.7,4.7H33c2.6,0,4.7-2.1,4.7-4.7V18.2 C37.8,15.6,35.6,13.5,33,13.5z M31,26.8l-12,12c-0.5,0.5-1,0.7-1.6,0.7c-0.5,0-1.2-0.2-1.6-0.7l-5.8-5.8c-0.5-0.5-0.5-1.2,0-1.6 l1.6-1.6c0.5-0.5,1.2-0.5,1.6,0l4.2,4.2l10.3-10.3c0.5-0.5,1.2-0.5,1.6,0l1.6,1.6C31.4,25.6,31.4,26.4,31,26.8z"/>
                     </svg>
+                    <span class="mobile-dock-label">Select</span>
                 </button>
                 <button id="add-list-btn" class="btn primary" data-slot-id="add-list">+ List</button>
                 <button id="options-btn" class="btn options-btn-styled" data-slot-id="options" title="Open Settings">
@@ -211,6 +230,13 @@
                 <div class="settings-header-spacer" aria-hidden="true"></div>
             </header>
             <div class="options-list settings-page-content">
+                <section id="settings-mobile-summary" class="settings-mobile-summary" aria-label="Board summary">
+                    <div id="settings-mobile-stats" class="settings-mobile-stats"></div>
+                    <div class="settings-mobile-order-block">
+                        <label class="settings-mobile-order-label" for="sort-select">Order</label>
+                        <div id="settings-mobile-order"></div>
+                    </div>
+                </section>
                 <button id="archive-mode-btn" class="menu-action-item" title="Open Archived Tasks">
                     <i class="ph ph-archive-box"></i> Archived Tasks
                 </button>
@@ -334,22 +360,6 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
-
-                <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <span><i class="ph ph-device-mobile"></i> Mobile Featured Header Button</span>
-                    </div>
-                    <p class="kanban-labels-hint" style="margin: 0;">On phones, one action button gets a double-height slot. Pick which one.</p>
-                    <select id="mobile-featured-header-btn" class="glass-select full-width">
-                        <option value="multi-edit">Multi-select</option>
-                        <option value="search">Search tasks</option>
-                        <option value="search-list">Search lists</option>
-                        <option value="recent-completed">Recent completed</option>
-                        <option value="compact-view">Compact view</option>
-                        <option value="add-list">Add list</option>
-                        <option value="options">Settings</option>
-                    </select>
-                </div>
 
                 <div class="menu-action-item settings-slider-block" style="cursor: default;">
                     <div class="settings-slider-header">
@@ -577,50 +587,47 @@
 
     <!-- SEARCH MODAL -->
     <div id="search-modal-overlay" class="modal-overlay hidden">
-        <div class="modal glass-panel" style="max-height: 90vh;">
+        <div class="modal glass-panel search-modal" style="max-height: 90vh;">
             <div class="modal-header-row">
-                <h2>Search Tasks</h2>
-                <button id="close-search-btn" class="icon-btn-large">&times;</button>
+                <h2 id="search-modal-title">Search</h2>
+                <button id="close-search-btn" class="icon-btn-large" aria-label="Close search">&times;</button>
             </div>
-            <div style="margin-bottom: 10px; display: flex; justify-content: flex-end;">
-                <label class="dropdown-item-toggle"
-                    style="padding: 6px 12px; font-size: 0.9rem; background: oklch(0 0 0 / 0.2);">
-                    <span style="margin-right: 10px;">Show Archived</span>
-                    <div class="switch-small">
-                        <input type="checkbox" id="search-show-archived-toggle">
-                        <span class="slider-small round"></span>
-                    </div>
-                </label>
+            <div class="search-mode-switch" role="tablist" aria-label="Search for">
+                <button type="button" id="search-mode-tasks" class="search-mode-btn is-active" role="tab" aria-selected="true">Tasks</button>
+                <button type="button" id="search-mode-lists" class="search-mode-btn" role="tab" aria-selected="false">Lists</button>
             </div>
-            <input type="text" id="search-input" class="add-task-input" placeholder="Type to search..."
-                style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
-            <div id="search-results-container" class="task-list" style="overflow-y: auto; max-height: 60vh;">
-                <!-- Results injected here -->
+            <div id="search-tasks-panel">
+                <div style="margin-bottom: 10px; display: flex; justify-content: flex-end;">
+                    <label class="dropdown-item-toggle"
+                        style="padding: 6px 12px; font-size: 0.9rem; background: oklch(0 0 0 / 0.2);">
+                        <span style="margin-right: 10px;">Show Archived</span>
+                        <div class="switch-small">
+                            <input type="checkbox" id="search-show-archived-toggle">
+                            <span class="slider-small round"></span>
+                        </div>
+                    </label>
+                </div>
+                <input type="text" id="search-input" class="add-task-input" placeholder="Type to search tasks..."
+                    style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <div id="search-results-container" class="task-list" style="overflow-y: auto; max-height: 60vh;">
+                    <!-- Results injected here -->
+                </div>
+                <div id="search-empty-state" class="hidden"
+                    style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                    <i class="ph ph-magnifying-glass" style="font-size: 3rem; opacity: 0.5; margin-bottom: 10px;"></i>
+                    <p>No tasks found.</p>
+                </div>
             </div>
-            <div id="search-empty-state" class="hidden"
-                style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                <i class="ph ph-magnifying-glass" style="font-size: 3rem; opacity: 0.5; margin-bottom: 10px;"></i>
-                <p>No tasks found.</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- SEARCH LIST MODAL -->
-    <div id="search-list-modal-overlay" class="modal-overlay hidden">
-        <div class="modal glass-panel">
-            <div class="modal-header-row">
-                <h2>Search Lists</h2>
-                <button id="close-search-list-btn" class="icon-btn-large">&times;</button>
-            </div>
-            <p style="color: var(--text-secondary); margin-bottom: 15px;">
-                Type a list name. Matching lists will be moved to the start of the board.
-            </p>
-            <input type="text" id="search-list-input" class="add-task-input" placeholder="List Name..."
-                style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
-
-            <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button id="view-reordered-btn" class="btn primary">View Reordered Lists</button>
-                <button id="clear-list-search-btn" class="btn secondary">Clear & Close</button>
+            <div id="search-lists-panel" class="hidden">
+                <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                    Type a list name. Matching lists move to the start of the board.
+                </p>
+                <input type="text" id="search-list-input" class="add-task-input" placeholder="List name..."
+                    style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <div class="search-list-actions">
+                    <button id="view-reordered-btn" class="btn primary">View lists</button>
+                    <button id="clear-list-search-btn" class="btn secondary">Clear & Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1272,8 +1279,8 @@
                         </ol>
                         <h4>Turn filtering off</h4>
                         <p>Press <strong>Filter</strong> again to show every task.</p>
-                        <h4>Group a list by tag</h4>
-                        <p>Tap the <strong>stack</strong> button at the top of a list to pull matching tags together (e.g. all Work tasks). Order follows the tag order in Settings.</p>
+                        <h4>Group a list by category</h4>
+                        <p>Tap the <strong>stack</strong> button at the top of a list to turn grouping on. Tasks in the same category sit together, following the category order in Settings. Leave it on and each new task joins its category straight away. Tap the button again to turn grouping off.</p>
                         <h4>Reorder tag categories</h4>
                         <p>In <strong>Settings → Task Tags</strong>, drag the handle or use the up/down arrows to change category order. That order is what Group by tag uses.</p>
                         <p class="features-help-tip"><strong>Note:</strong> Filtering is temporary for this session. It is not saved. Manage tag names, colours, and order under <strong>Task Tags</strong> in Settings (up to 10 tags, including black with white text and white with black text).</p>

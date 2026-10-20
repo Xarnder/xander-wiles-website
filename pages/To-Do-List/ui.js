@@ -13,11 +13,11 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, groupListTasksByTag, rescueOrphanLists, rescueOrphanTasks, holdArchivedTasks, releaseArchivedTasks } from './api.js';
+import { handleAddTask, updateListTitle, updateListFreezeImportant, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor, reorderTags, toggleListGroupByTag as persistListGroupByTag, taskIdsAfterAdding, orderTaskIdsIfGrouping, rememberGroupingSort, rescueOrphanLists, rescueOrphanTasks, holdArchivedTasks, releaseArchivedTasks } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
-import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask, isListFreezeImportantEnabled, GROUP_BY_TAG_ICON } from './kanban.js';
+import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask, isListFreezeImportantEnabled, isListGroupByTagEnabled, groupByTagButtonHtml } from './kanban.js';
 import {
     MISC_TAG_ID,
     ensureDefaultTags,
@@ -395,24 +395,15 @@ function populateKanbanFocus(list) {
 
     let number = 1;
 
-    const isBottom = state.appData.settings.addTaskLocation === 'bottom';
     const addTop = document.getElementById(`kanban-add-top-${list.id}`);
     const addBottom = document.getElementById(`kanban-add-bottom-${list.id}`);
-    const addFormHtml = `
-        <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
-            <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <textarea class="add-task-input" placeholder="Type an idea to add" name="taskText" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
-                <button type="submit" class="btn primary">+</button>
-            </form>
-        </div>`;
-
     if (addTop) {
-        addTop.innerHTML = isBottom ? '' : addFormHtml;
-        addTop.classList.toggle('hidden', isBottom);
+        addTop.innerHTML = '';
+        addTop.classList.add('hidden');
     }
     if (addBottom) {
-        addBottom.innerHTML = isBottom ? addFormHtml : '';
-        addBottom.classList.toggle('hidden', !isBottom);
+        addBottom.innerHTML = '';
+        addBottom.classList.add('hidden');
     }
 
     const pinnedBand = document.getElementById(`kanban-pinned-band-${list.id}`);
@@ -914,6 +905,8 @@ export function renderBoard() {
             }
         }
 
+        appendAddListPlaceholder();
+
         // Restore Scroll Positions
         scrollMap.forEach((scrollTop, listId) => {
             const container = document.getElementById(`task-list-${listId}`);
@@ -933,19 +926,26 @@ export function renderBoard() {
             fallbackOnBody: true,
             delay: 200,
             delayOnTouchOnly: true,
-            onEnd: (evt) => {
-                if (evt.newIndex !== evt.oldIndex) {
-                    // Reorder Logic
-                    const movedList = state.appData.lists.splice(evt.oldIndex, 1)[0];
-                    state.appData.lists.splice(evt.newIndex, 0, movedList);
-                    // Update Order in DB
-                    const newOrder = state.appData.lists.map(l => l.id).filter(id => id !== 'orphan-archive');
-                    const boardId = state.appData.currentBoardId;
-                    if (boardId) {
-                        updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
-                    } else {
-                        updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
-                    }
+            onEnd: () => {
+                const placeholder = boardContainer.querySelector('.add-list-placeholder');
+                if (placeholder) boardContainer.appendChild(placeholder);
+
+                const newOrder = [...boardContainer.querySelectorAll(':scope > .list-column')]
+                    .map(el => el.dataset.listId)
+                    .filter(id => id && id !== 'orphan-archive');
+                const previous = state.appData.lists.map(l => l.id).filter(id => id !== 'orphan-archive');
+                if (newOrder.length === previous.length && newOrder.every((id, index) => id === previous[index])) return;
+
+                const byId = new Map(state.appData.lists.map(l => [l.id, l]));
+                const nextLists = newOrder.map(id => byId.get(id)).filter(Boolean);
+                if (nextLists.length !== newOrder.length) return;
+                state.appData.lists = nextLists;
+
+                const boardId = state.appData.currentBoardId;
+                if (boardId) {
+                    updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
+                } else {
+                    updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
                 }
             }
         });
@@ -1290,101 +1290,78 @@ export function layoutSlimChrome() {
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
 }
 
-export const MOBILE_FEATURED_HEADER_OPTIONS = [
-    { id: 'multi-edit', label: 'Multi-select' },
-    { id: 'search', label: 'Search tasks' },
-    { id: 'search-list', label: 'Search lists' },
-    { id: 'recent-completed', label: 'Recent completed' },
-    { id: 'compact-view', label: 'Compact view' },
-    { id: 'add-list', label: 'Add list' },
-    { id: 'options', label: 'Settings' }
-];
-
-const DEFAULT_FEATURED_HEADER_BTN = 'multi-edit';
-
-export function getMobileFeaturedHeaderBtn() {
-    const raw = state.appData.settings?.mobileFeaturedHeaderBtn;
-    const valid = MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === raw);
-    return valid ? raw : DEFAULT_FEATURED_HEADER_BTN;
-}
-
 /**
- * Mobile dock: compute how many equal-width action slots fit, pack buttons into a
- * 2-row CSS grid, and give one chosen button a double-height (2-row) featured slot.
+ * Phone dock is two rows of three: Board · Drag · More, then Select · Filter · Recent.
+ * Order and the task counts live at the top of Settings on a phone.
  */
 export function layoutMobileHeaderSlots() {
     const grid = document.getElementById('header-action-slots');
-    if (!grid) return;
+    const dock = document.getElementById('mobile-dock-grid');
+    const metaRow = document.querySelector('.header-row-meta');
+    const headerLeft = document.querySelector('.header-left');
+    const header = document.querySelector('.app-header');
+    if (!grid || !dock || !metaRow || !header) return;
 
     const isMobile = window.matchMedia('(max-width: 500px)').matches;
-    const items = Array.from(grid.querySelectorAll('[data-slot-id]'));
+    const items = Array.from(document.querySelectorAll('[data-slot-id]'));
     if (!items.length) return;
 
+    const mobileSlots = new Set(['multi-edit', 'recent-completed']);
+    const desktopOrder = ['search', 'search-list', 'recent-completed', 'compact-view', 'multi-edit', 'add-list', 'options'];
+    const placeSlots = (ids) => {
+        ids.forEach((id) => {
+            const el = document.querySelector(`[data-slot-id="${id}"]`);
+            if (el) grid.appendChild(el);
+        });
+    };
+    const sortWrap = document.getElementById('sort-select')?.closest('.sort-container');
+    const drag = document.querySelector('.drag-fill');
+    const more = document.querySelector('.mobile-tool-menu');
+    const board = document.getElementById('board-toggle-container');
+    const filterBtn = document.getElementById('tag-filter-toggle');
+    const selectBtn = document.querySelector('[data-slot-id="multi-edit"]');
+    const recentBtn = document.querySelector('[data-slot-id="recent-completed"]');
+    const total = document.getElementById('total-task-count');
+    const orderHost = document.getElementById('settings-mobile-order');
+
     if (!isMobile) {
-        grid.classList.remove('is-slot-layout');
+        header.classList.remove('is-phone-dock');
+        grid.classList.remove('is-slot-layout', 'is-mobile-pair');
         grid.style.removeProperty('--slot-cols');
         grid.style.removeProperty('--slot-row-h');
         grid.style.removeProperty('--slot-gap');
         items.forEach((el) => {
-            el.classList.remove('is-featured-slot');
+            el.classList.remove('is-featured-slot', 'is-mobile-dock-hidden');
             el.style.removeProperty('grid-row');
             el.style.removeProperty('grid-column');
         });
+        if (sortWrap) metaRow.appendChild(sortWrap);
+        if (drag) metaRow.appendChild(drag);
+        if (filterBtn) metaRow.appendChild(filterBtn);
+        if (more) metaRow.appendChild(more);
+        if (board && headerLeft && total) headerLeft.insertBefore(board, total);
+        placeSlots(desktopOrder);
+        updateTotalTaskCount();
         return;
     }
 
-    grid.classList.add('is-slot-layout');
+    header.classList.add('is-phone-dock');
+    grid.classList.add('is-slot-layout', 'is-mobile-pair');
+    if (board) dock.appendChild(board);
+    if (drag) dock.appendChild(drag);
+    if (more) dock.appendChild(more);
+    if (selectBtn) dock.appendChild(selectBtn);
+    if (filterBtn) dock.appendChild(filterBtn);
+    if (recentBtn) dock.appendChild(recentBtn);
+    if (orderHost && sortWrap) orderHost.appendChild(sortWrap);
 
-    const gap = 4;
-    const minCell = 38;
-    let width = Math.max(0, grid.clientWidth);
-    if (width < 40) {
-        width = Math.max(0, (grid.parentElement?.clientWidth || window.innerWidth) - 16);
-    }
-
-    const maxColsByWidth = Math.max(3, Math.min(7, Math.floor((width + gap) / (minCell + gap)) || 3));
-    const featuredId = getMobileFeaturedHeaderBtn();
-    const featured = items.find((el) => el.dataset.slotId === featuredId)
-        || items.find((el) => el.dataset.slotId === DEFAULT_FEATURED_HEADER_BTN);
-    const remaining = Math.max(0, items.length - (featured ? 1 : 0));
-
-    // Prefer a column count that fills a 2-row grid with minimal empty cells
-    // (featured uses 2 cells in one column).
-    let cols = maxColsByWidth;
-    let bestWaste = Infinity;
-    for (let c = 3; c <= maxColsByWidth; c++) {
-        const capacity = c * 2 - (featured ? 2 : 0);
-        if (capacity < remaining) continue;
-        const waste = capacity - remaining;
-        if (waste < bestWaste) {
-            bestWaste = waste;
-            cols = c;
-        }
-    }
-    // If nothing fits in 2 rows, use max width cols (grid may grow to 3+ rows)
-    if (bestWaste === Infinity) cols = maxColsByWidth;
-
-    const rowH = 30;
-    grid.style.setProperty('--slot-cols', String(cols));
-    grid.style.setProperty('--slot-row-h', `${rowH}px`);
-    grid.style.setProperty('--slot-gap', `${gap}px`);
-
-    const ordered = featured
-        ? [featured, ...items.filter((el) => el !== featured)]
-        : items;
-
-    ordered.forEach((el) => {
-        const isFeatured = !!featured && el === featured;
-        el.classList.toggle('is-featured-slot', isFeatured);
-        if (isFeatured) {
-            el.style.gridRow = '1 / span 2';
-            el.style.gridColumn = '1';
-        } else {
-            el.style.removeProperty('grid-row');
-            el.style.removeProperty('grid-column');
-        }
-        grid.appendChild(el);
+    items.forEach((el) => {
+        el.classList.remove('is-featured-slot');
+        el.classList.toggle('is-mobile-dock-hidden', !mobileSlots.has(el.dataset.slotId));
+        el.style.removeProperty('grid-row');
+        el.style.removeProperty('grid-column');
     });
+    updateTotalTaskCount();
 }
 
 function getTagButtonStyle(tag) {
@@ -1867,11 +1844,21 @@ export function syncTagDisplayModeUI() {
     if (fillBtn) fillBtn.classList.toggle('active', mode === TAG_DISPLAY_MODE_FILL);
 }
 
-export function groupListByTag(listId) {
-    return groupListTasksByTag(listId).then((ok) => {
-        if (ok) renderBoard();
-        return ok;
+export function toggleListGroupByTag(listId) {
+    if (!listId || listId === 'orphan-archive') return Promise.resolve(null);
+    return persistListGroupByTag(listId).then((enabled) => {
+        if (enabled === true) {
+            showToast('Grouping by category. New tasks join their category.', 'success');
+        } else if (enabled === false) {
+            showToast('Category grouping off.', 'info');
+        }
+        renderBoard();
+        return enabled;
     });
+}
+
+export function groupListByTag(listId) {
+    return toggleListGroupByTag(listId);
 }
 
 function isMasonrySlim() {
@@ -2001,6 +1988,22 @@ export function initTagsSettingsUI() {
     };
 }
 
+function appendAddListPlaceholder() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'add-list-placeholder';
+    button.id = 'add-list-placeholder';
+    button.setAttribute('aria-label', 'Click to add new list');
+    button.innerHTML = `
+        <span class="add-list-placeholder-icon" aria-hidden="true"><i class="ph ph-plus"></i></span>
+        <span class="add-list-placeholder-label">Click to add new list</span>
+    `;
+    button.addEventListener('click', () => {
+        document.getElementById('add-list-btn')?.click();
+    });
+    boardContainer.appendChild(button);
+}
+
 function renderListColumn(list, isOrphan, isCustomSort) {
     const listEl = document.createElement('div');
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
@@ -2049,21 +2052,11 @@ function renderListColumn(list, isOrphan, isCustomSort) {
              ${masonryFontBtns}
              ${kanbanBtn}
              ${freezeBtn}
-             <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">${GROUP_BY_TAG_ICON}</button>
+             ${groupByTagButtonHtml(list)}
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
               <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
               <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
             </div>`;
-
-    const isBottom = state.appData.settings.addTaskLocation === 'bottom';
-
-    let addFormHtml = isOrphan ? '' : `
-        <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
-            <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <textarea class="add-task-input" placeholder="Type an idea to add" name="taskText" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
-                <button type="submit" class="btn primary">+</button>
-            </form>
-        </div>`;
 
     // Multi-Board & Duplicate Name Indicators
     let multiBoardBadgeHtml = '';
@@ -2105,25 +2098,13 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         ${descriptionHtml}
     `;
 
-    if (isBottom) {
-        listEl.innerHTML = `
-            ${listHeader}
-            <div class="task-list" id="task-list-${list.id}">
-                <div class="frozen-tasks-container" id="frozen-container-${list.id}"></div>
-                <div class="normal-tasks-container" id="container-${list.id}"></div>
-            </div>
-            ${addFormHtml}
-        `;
-    } else {
-        listEl.innerHTML = `
-            ${listHeader}
-            ${addFormHtml}
-            <div class="task-list" id="task-list-${list.id}">
-                <div class="frozen-tasks-container" id="frozen-container-${list.id}"></div>
-                <div class="normal-tasks-container" id="container-${list.id}"></div>
-            </div>
-        `;
-    }
+    listEl.innerHTML = `
+        ${listHeader}
+        <div class="task-list" id="task-list-${list.id}">
+            <div class="frozen-tasks-container" id="frozen-container-${list.id}"></div>
+            <div class="normal-tasks-container" id="container-${list.id}"></div>
+        </div>
+    `;
 
     const frozenContainer = listEl.querySelector('.frozen-tasks-container');
     const normalContainer = listEl.querySelector('.normal-tasks-container');
@@ -3304,7 +3285,8 @@ export function updateTotalTaskCount() {
         totalBoard = boardTaskIds.size;
     }
 
-    if (totalAll > 0) {
+    const slim = window.matchMedia('(max-width: 500px)').matches;
+    if (!slim && totalAll > 0) {
         const prefix = isArchivedView ? "Archived " : "";
         if (filtering) {
             totalTaskCountEl.textContent = `${prefix}Total All: ${totalAll} | In Board: ${filteredBoard}/${totalBoard}`;
@@ -3318,10 +3300,26 @@ export function updateTotalTaskCount() {
         totalTaskCountEl.classList.add('hidden');
     }
 
+    const settingsStats = document.getElementById('settings-mobile-stats');
+    if (settingsStats) {
+        settingsStats.replaceChildren();
+        const lines = [
+            filtering ? `${filteredBoard} of ${totalBoard} on this board` : `${totalBoard} on this board`,
+            `${totalAll} tasks in total`,
+            `${dailyCompleted} completed today`
+        ];
+        lines.forEach((text, index) => {
+            const line = document.createElement('p');
+            line.className = index === 0 ? 'settings-stat-line is-primary' : 'settings-stat-line';
+            line.textContent = text;
+            settingsStats.appendChild(line);
+        });
+    }
+
     const dailyCompletedCountEl = document.getElementById('daily-completed-count');
     if (dailyCompletedCountEl) {
+        dailyCompletedCountEl.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 4px;"></i> ${dailyCompleted}`;
         if (dailyCompleted > 0) {
-            dailyCompletedCountEl.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 4px;"></i> ${dailyCompleted}`;
             dailyCompletedCountEl.style.display = 'inline-flex';
             dailyCompletedCountEl.style.alignItems = 'center';
         } else {
@@ -3486,6 +3484,7 @@ export function handleDragEnd(evt) {
     };
 
     const batch = state.currentUser ? writeBatch(db) : null;
+    let snappedToGroup = false;
 
     if (toIdRaw !== 'orphan-archive') {
         const toContainer = document.getElementById(`container-${toIdRaw}`);
@@ -3496,12 +3495,22 @@ export function handleDragEnd(evt) {
             .filter(Boolean) : [];
 
         const hiddenToIds = getHiddenTaskIds(toIdRaw);
-        const finalToIds = [...frozenToIds, ...newToIds, ...hiddenToIds];
+        let finalToIds = [...frozenToIds, ...newToIds, ...hiddenToIds];
+
+        // A task dropped onto a grouped list joins its category instead of staying where it landed.
+        const toRawList = state.appData.rawLists.find(l => l.id === toIdRaw);
+        if (fromIdRaw !== toIdRaw && isListGroupByTagEnabled(toRawList)) {
+            const groupedIds = orderTaskIdsIfGrouping(toRawList, finalToIds);
+            if (groupedIds) {
+                snappedToGroup = groupedIds.some((id, i) => id !== finalToIds[i]);
+                finalToIds = groupedIds;
+                if (batch) rememberGroupingSort(batch);
+            }
+        }
 
         // Update in-memory lists immediately
         const toList = state.appData.lists.find(l => l.id === toIdRaw);
         if (toList) toList.taskIds = finalToIds;
-        const toRawList = state.appData.rawLists.find(l => l.id === toIdRaw);
         if (toRawList) toRawList.taskIds = finalToIds;
 
         if (toContainer) updateDomTaskNumbers(toContainer);
@@ -3588,6 +3597,7 @@ export function handleDragEnd(evt) {
     if (batch) {
         batch.commit().catch(e => handleSyncError(e));
     }
+    if (snappedToGroup) renderBoard();
 }
 
 // --- MODALS & INTERACTIONS ---
@@ -5065,10 +5075,11 @@ export function openEditListModal(listId) {
 
         const batch = writeBatch(db);
         const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
+        const newIds = [];
 
         items.forEach(item => {
             const newId = generateId();
-            batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), {
+            const newTask = {
                 text: item.text,
                 nestedIdeas: item.nestedIdeas || [],
                 completed: false,
@@ -5077,9 +5088,20 @@ export function openEditListModal(listId) {
                 images: [],
                 tagId: state.appData.settings.activeTagId || MISC_TAG_ID,
                 listAddedAt: { [listId]: Date.now() }
-            });
-            batch.update(listRef, { taskIds: arrayUnion(newId) });
+            };
+            state.appData.tasks[newId] = newTask;
+            newIds.push(newId);
+            batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
         });
+        const groupedIds = taskIdsAfterAdding(listId, newIds);
+        if (groupedIds) {
+            batch.update(listRef, { taskIds: groupedIds });
+            rememberGroupingSort(batch);
+        } else {
+            newIds.forEach((newId) => {
+                batch.update(listRef, { taskIds: arrayUnion(newId) });
+            });
+        }
         batch.commit().catch(e => handleSyncError(e));
         bulkInput.value = '';
         showToast("Bulk tasks added!", "success");

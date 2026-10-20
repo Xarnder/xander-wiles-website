@@ -91,6 +91,20 @@ export function isListFreezeImportantEnabled(list) {
     return !state.appData.settings?.disableImportantPinning;
 }
 
+/** Per-list toggle. While on, task order stays grouped by category. */
+export function isListGroupByTagEnabled(list) {
+    return list?.groupByTag === true;
+}
+
+export function groupByTagButtonHtml(list) {
+    const on = isListGroupByTagEnabled(list);
+    const label = on ? 'Turn off category grouping' : 'Group by category';
+    const title = on
+        ? 'Grouping by category. New tasks join their category.'
+        : 'Group by category and keep new tasks with their category';
+    return `<button type="button" class="icon-btn group-by-tag-btn${on ? ' active' : ''}" onclick="window.toggleListGroupByTag('${list.id}')" title="${title}" aria-label="${label}" aria-pressed="${on ? 'true' : 'false'}">${GROUP_BY_TAG_ICON}</button>`;
+}
+
 export function partitionListTasksByStage(list) {
     const buckets = {};
     KANBAN_STAGES.forEach((stage) => {
@@ -234,9 +248,7 @@ export function renderKanbanFocus(boardContainer, list) {
                 <button type="button" class="icon-btn freeze-list-btn ${isListFreezeImportantEnabled(list) ? 'active' : ''}" onclick="window.toggleListFreezeImportant('${list.id}')" title="${isListFreezeImportantEnabled(list) ? 'Important tasks frozen at top (click to unfreeze)' : 'Important tasks unfrozen (click to freeze at top)'}" aria-label="Toggle freeze important tasks" aria-pressed="${isListFreezeImportantEnabled(list)}">
                     <i class="${isListFreezeImportantEnabled(list) ? 'ph-fill ph-push-pin' : 'ph ph-push-pin'}"></i>
                 </button>
-                <button type="button" class="icon-btn group-by-tag-btn" onclick="window.groupListByTag('${list.id}')" title="Group by tag" aria-label="Group tasks by tag">
-                    ${GROUP_BY_TAG_ICON}
-                </button>
+                ${groupByTagButtonHtml(list)}
                 <button type="button" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List">
                     <i class="ph ph-check-square-offset"></i>
                 </button>

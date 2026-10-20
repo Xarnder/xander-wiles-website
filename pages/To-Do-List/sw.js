@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v131';
+const CACHE_NAME = 'taskmaster-todo-v145';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -22,6 +22,7 @@ const ASSETS_TO_CACHE = [
     './favicon.ico',
     './favicon-light.svg',
     './favicon-dark.svg',
+    './setting-icon.svg',
     'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js',
     'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js',
     'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js',
