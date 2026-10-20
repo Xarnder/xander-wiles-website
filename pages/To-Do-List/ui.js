@@ -1291,6 +1291,19 @@ export function layoutSlimChrome() {
 }
 
 /**
+ * Reorder only when the sequence is actually wrong. appendChild on a node that
+ * is already in place detaches it, which cancels the drag-handle slide.
+ */
+function placeInOrder(parent, elements) {
+    if (!parent) return;
+    const wanted = elements.filter(Boolean);
+    const current = Array.from(parent.children).filter((el) => wanted.includes(el));
+    const same = current.length === wanted.length && wanted.every((el, i) => current[i] === el);
+    if (same) return;
+    wanted.forEach((el) => parent.appendChild(el));
+}
+
+/**
  * Phone dock is two rows of three: Board · Drag · More, then Select · Filter · Recent.
  * Order and the task counts live at the top of Settings on a phone.
  */
@@ -1335,11 +1348,10 @@ export function layoutMobileHeaderSlots() {
             el.style.removeProperty('grid-row');
             el.style.removeProperty('grid-column');
         });
-        if (sortWrap) metaRow.appendChild(sortWrap);
-        if (drag) metaRow.appendChild(drag);
-        if (filterBtn) metaRow.appendChild(filterBtn);
-        if (more) metaRow.appendChild(more);
-        if (board && headerLeft && total) headerLeft.insertBefore(board, total);
+        placeInOrder(metaRow, [sortWrap, drag, filterBtn, more]);
+        if (board && headerLeft && total && (board.parentElement !== headerLeft || board.nextElementSibling !== total)) {
+            headerLeft.insertBefore(board, total);
+        }
         placeSlots(desktopOrder);
         updateTotalTaskCount();
         return;
@@ -1347,13 +1359,8 @@ export function layoutMobileHeaderSlots() {
 
     header.classList.add('is-phone-dock');
     grid.classList.add('is-slot-layout', 'is-mobile-pair');
-    if (board) dock.appendChild(board);
-    if (drag) dock.appendChild(drag);
-    if (more) dock.appendChild(more);
-    if (selectBtn) dock.appendChild(selectBtn);
-    if (filterBtn) dock.appendChild(filterBtn);
-    if (recentBtn) dock.appendChild(recentBtn);
-    if (orderHost && sortWrap) orderHost.appendChild(sortWrap);
+    placeInOrder(dock, [board, drag, more, selectBtn, filterBtn, recentBtn]);
+    if (orderHost && sortWrap && sortWrap.parentElement !== orderHost) orderHost.appendChild(sortWrap);
 
     items.forEach((el) => {
         el.classList.remove('is-featured-slot');
