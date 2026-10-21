@@ -58,6 +58,9 @@
 		pointer-events: none;
 	}
 	.preview-canvas {
+		/* Keep renderer dimensions from changing the grid track that sizes this canvas. */
+		position: absolute;
+		inset: 0;
 		display: block;
 		width: 100%;
 		height: 100%;

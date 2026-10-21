@@ -1,3 +1,12 @@
+import { TerrainEdits, type TerrainStroke } from './terrain/TerrainEdits';
+import { ShovelTool } from './terrain/ShovelTool';
+import type { WallCollisionRect } from './building/wallCollision';
+import { resolvePlayerInteractionPose } from './player/PlayerInteractionPoseResolver';
+import { MiniBuildInteractionRuntime } from './miniBuild/MiniBuildInteractionRuntime';
+import type { InteractionPrompt } from './player/PlayerInteractionController';
+import { PLAYER_BODY } from './player/PlayerBodyDimensions';
+import { PillarTool } from './building/PillarTool';
+import { skyBackgroundBlend } from './sky/skyBackgroundBlend';
 import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
 import type { CreatureDefinition } from './creatures/CreatureTypes';
 import type { SceneMultiplayerHooks } from './net/MultiplayerSession';
@@ -53,7 +62,10 @@ import { BuildUndoManager } from './building/BuildUndoManager';
 import { BuildingManager } from './building/BuildingManager';
 import { BuildToolManager } from './building/BuildToolManager';
 import { CeilingTool } from './building/CeilingTool';
-import { DoorInteractionController } from './building/DoorInteractionController';
+import {
+	DoorInteractionController,
+	type OpeningInteractionState
+} from './building/DoorInteractionController';
 import { CollisionVisualizer } from './building/CollisionVisualizer';
 import { BeamTool } from './building/BeamTool';
 import { DoorTool } from './building/DoorTool';
@@ -242,7 +254,7 @@ function deepAssign<T extends object>(target: T, source: Partial<T>): void {
 }
 
 /** Player's horizontal collision radius against building walls — see resolveHorizontalCollision wiring below. */
-const PLAYER_COLLISION_RADIUS = 0.35;
+const PLAYER_COLLISION_RADIUS = PLAYER_BODY.collisionRadius;
 
 export interface SceneStats {
 	creatures: CreatureRuntimeManager['stats'];
@@ -411,6 +423,8 @@ export interface ThreeSceneOptions {
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
+	onMiniBuildInteractionChange?: (prompt: InteractionPrompt | null) => void;
+	onOpeningInteractionChange?: (state: OpeningInteractionState | null) => void;
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
@@ -518,6 +532,7 @@ export class ThreeScene implements WorldRuntime {
 	/** Hand-drawn skirting boards (hotbar 2 → Skirting). */
 	private readonly skirtingRunManager: SkirtingRunManager;
 	private readonly skirtingTool: SkirtingTool;
+	private readonly pillarTool: PillarTool;
 	private readonly furnitureManager: FurnitureManager;
 	/** Fences and railings (hotbar 2 → Fence / Railing) — see BarrierManager.ts. */
 	private readonly barrierManager: BarrierManager;
@@ -538,10 +553,16 @@ export class ThreeScene implements WorldRuntime {
 	/** F3-C: no free flight in online worlds. */
 	private flightDisabled = false;
 	private readonly foundationTool: FoundationTool;
+	readonly shovelTool: ShovelTool;
+	private readonly terrainEdits: TerrainEdits;
+	private terrainProtectedRects: WallCollisionRect[] = [];
+	private terrainProtectedFoundations: FoundationDefinition[] = [];
+	private readonly shovelWaterSample = createHydrologySample();
 	private readonly wallTool: WallTool;
 	private readonly windowTool: WindowTool;
 	private readonly doorTool: DoorTool;
 	private readonly beamTool: BeamTool;
+	readonly miniBuildInteraction: MiniBuildInteractionRuntime;
 	private readonly doorInteraction: DoorInteractionController;
 	private readonly polygonWallTool: PolygonWallTool;
 	private readonly ceilingTool: CeilingTool;
@@ -698,7 +719,17 @@ export class ThreeScene implements WorldRuntime {
 			}
 		});
 
-		this.hdriSystem = new HdriEnvironmentSystem(this.renderer, this.scene, this.skySettings.hdri);
+		this.hdriSystem = new HdriEnvironmentSystem(
+			this.renderer,
+			this.scene,
+			this.skySettings.hdri,
+			() => {
+				if (this.disposed) return;
+				this.applySkySettings();
+				this.furnitureManager.updateLights(this.camera.position, 0);
+				this.graphicsPipeline.prewarm();
+			}
+		);
 
 		this.terrainManager = new TerrainManager(this.settings);
 		this.scene.add(this.terrainManager.group);
@@ -793,6 +824,24 @@ export class ThreeScene implements WorldRuntime {
 			buildingSettings
 		);
 		this.scene.add(this.foundationManager.group);
+		this.terrainEdits = new TerrainEdits(
+			vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution)
+		);
+		this.terrainManager.getHeightSampler().setHeightModifier((x, z, base) => {
+			const automatic = this.foundationManager.sampleEarthHeight(x, z, base);
+			return this.foundationManager.constrainTerrainHeight(
+				x,
+				z,
+				automatic,
+				this.terrainEdits.sample(x, z, automatic, this.sampleTerrainWithoutShovel)
+			);
+		});
+		this.foundationManager.setTerrainEditHandler((bounds) => {
+			this.terrainManager.notifyTerrainEdited(bounds);
+			this.foundationManager.refreshTerrainSupport(bounds, (x, z) =>
+				this.terrainManager.getHeightSampler().sample(x, z)
+			);
+		});
 
 		this.wallManager = new WallManager({
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
@@ -802,6 +851,8 @@ export class ThreeScene implements WorldRuntime {
 			materialManager: this.materialManager,
 			buildingSettings,
 			glassMaterial,
+			getShutterLoops: (foundationId) =>
+				this.wallPathManager?.getPathsForFoundation(foundationId) ?? [],
 			getRoomLids: (foundationId) =>
 				roomLidsFromSlabs(
 					this.slabManager.getSlabsForFoundation(foundationId),
@@ -817,6 +868,8 @@ export class ThreeScene implements WorldRuntime {
 			materialManager: this.materialManager,
 			buildingSettings,
 			glassMaterial,
+			getShutterLoops: (foundationId) =>
+				this.wallPathManager?.getPathsForFoundation(foundationId) ?? [],
 			getRoomLids: (foundationId) =>
 				roomLidsFromSlabs(
 					this.slabManager.getSlabsForFoundation(foundationId),
@@ -927,6 +980,12 @@ export class ThreeScene implements WorldRuntime {
 		});
 
 		this.undoManager = new BuildUndoManager(this.buildingManager, {
+			canEdit: () =>
+				!this.simulationPaused &&
+				!this.devPanelOpen &&
+				!this.miniBuildEditorOpen &&
+				!this.miniBuildUiOpen &&
+				!this.buildToolManager?.isLocked(),
 			removeBarrier: (id) => this.barrierManager.remove(id),
 			removeFurniture: (id) => this.furnitureManager.remove(id),
 			removeMiniBuild: (id) => this.miniBuilds.removeInstance(id)
@@ -1039,8 +1098,11 @@ export class ThreeScene implements WorldRuntime {
 			heightSampler: this.terrainManager.getHeightSampler(),
 			vegetationRegionSampler: this.treeManager.getVegetationRegionSampler(),
 			groundCover: (x, z) => this.plantManager?.flowerCover(x, z) ?? 0,
-			getExclusions: () => this.foundationManager.getFootprints(),
-			getExclusionRevision: () => this.foundationManager.getRevision(),
+			getExclusions: () => [
+				...this.foundationManager.getFootprints(),
+				...this.terrainEdits.getFootprints()
+			],
+			getExclusionRevision: () => this.foundationManager.getRevision() + this.terrainEdits.revision,
 			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z),
 			hasWaterNear: (minX, minZ, maxX, maxZ) => {
 				const x = (minX + maxX) / 2;
@@ -1071,8 +1133,11 @@ export class ThreeScene implements WorldRuntime {
 			},
 			heightSampler: this.terrainManager.getHeightSampler(),
 			vegetationRegionSampler: this.treeManager.getVegetationRegionSampler(),
-			getExclusions: () => this.foundationManager.getFootprints(),
-			getExclusionRevision: () => this.foundationManager.getRevision(),
+			getExclusions: () => [
+				...this.foundationManager.getFootprints(),
+				...this.terrainEdits.getFootprints()
+			],
+			getExclusionRevision: () => this.foundationManager.getRevision() + this.terrainEdits.revision,
 			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z),
 			hasWaterNear: (minX, minZ, maxX, maxZ) => {
 				const x = (minX + maxX) / 2;
@@ -1127,6 +1192,39 @@ export class ThreeScene implements WorldRuntime {
 		const origin = this.dryGroundNear(0, 0);
 		this.controller.spawn(origin.x, origin.z);
 		this.terrainManager.primeAround(origin.x, origin.z, 1);
+
+		this.shovelTool = new ShovelTool({
+			scene: this.scene,
+			camera: this.camera,
+			edits: this.terrainEdits,
+			undo: this.undoManager,
+			meshes: () => this.terrainManager.getActiveMeshes(),
+			sample: (x, z) => this.terrainManager.getHeightSampler().sample(x, z),
+			prepare: () => {
+				this.terrainProtectedFoundations = this.foundationManager.getFoundations();
+				this.terrainProtectedRects = [
+					...this.furnitureManager.getCollisionRects(),
+					...this.barrierManager.getCollisionRects(),
+					...this.miniBuilds.instances.getNearbyCollisionRects(),
+					...this.wallManager.getAllCollisionRects(),
+					...this.wallPathManager.getAllCollisionRects(),
+					...(this.doorInteraction?.getCollisionRects() ?? [])
+				];
+			},
+			allowed: this.terrainEditBlockReason,
+			changed: (stroke) => this.publishTerrainStroke(stroke),
+			canUse: () =>
+				!this.simulationPaused &&
+				!this.devPanelOpen &&
+				!this.debugControlsOpen &&
+				!this.miniBuildUiOpen &&
+				!this.miniBuildEditorOpen &&
+				!this.foundationDeletePromptOpen &&
+				!this.buildToolManager?.isPlacementCustomizeOpen() &&
+				!this.buildToolManager?.isLocked(),
+			heldInput: () => this.controller.isPointerLocked(),
+			onHud: options.onBuildHudChange
+		});
 
 		this.foundationTool = new FoundationTool({
 			scene: this.scene,
@@ -1222,6 +1320,21 @@ export class ThreeScene implements WorldRuntime {
 			getPlayerPosition: () => this.controller.worldPosition,
 			onHudChange: options.onBuildHudChange
 		});
+
+		this.pillarTool = new PillarTool({
+			scene: this.scene,
+			camera: this.camera,
+			foundationManager: this.foundationManager,
+			levelManager: this.levelManager,
+			furnitureManager: this.furnitureManager,
+			undoManager: this.undoManager,
+			buildingSettings,
+			getVertexSpacing: () =>
+				vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution),
+			onHudChange: options.onBuildHudChange
+		});
+		for (const material of this.pillarTool.getPreviewMaterials())
+			this.graphicsPipeline.registerMaterial(material);
 
 		this.polygonWallTool = new PolygonWallTool({
 			scene: this.scene,
@@ -1464,15 +1577,19 @@ export class ThreeScene implements WorldRuntime {
 
 		this.doorInteraction = new DoorInteractionController({
 			camera: this.camera,
-			getHingePivots: () => this.buildingManager.getDoorHingePivots(),
-			onToggle: (id, open) => this.multiplayer?.doorToggled(id, open),
-			onLookedAtDoorChange: options.onLookedAtDoorChange
+			getHingePivots: () => this.buildingManager.getOpeningInteractionPivots(),
+			// The shared active-id list stores closed shutters and open doors.
+			onToggle: (id, open) =>
+				this.multiplayer?.doorToggled(id, this.doorInteraction.isShutter(id) ? !open : open),
+			onLookedAtDoorChange: options.onLookedAtDoorChange,
+			onInteractionChange: options.onOpeningInteractionChange
 		});
 
 		this.buildToolManager = new BuildToolManager({
 			domElement: this.renderer.domElement,
 			tools: {
 				foundation: this.foundationTool,
+				shovel: this.shovelTool,
 				wall: this.wallTool,
 				window: this.windowTool,
 				door: this.doorTool,
@@ -1480,6 +1597,7 @@ export class ThreeScene implements WorldRuntime {
 				'polygon-wall': this.polygonWallTool,
 				barrier: this.barrierTool,
 				skirting: this.skirtingTool,
+				pillar: this.pillarTool,
 				ceiling: this.ceilingTool,
 				floor: this.floorTool,
 				'flat-roof': this.roofTool,
@@ -1509,6 +1627,44 @@ export class ThreeScene implements WorldRuntime {
 			onPlacementCustomizeChange: options.onPlacementCustomizeChange,
 			onPlacementHeightChange: options.onPlacementHeightChange
 		});
+		this.miniBuildInteraction = new MiniBuildInteractionRuntime({
+			system: this.miniBuilds,
+			scene: this.scene,
+			camera: this.camera,
+			player: this.controller,
+			surfaces: this.worldSurfaceSampler,
+			getWalls: () => [
+				...this.wallManager.getAllCollisionRects(),
+				...this.wallPathManager.getAllCollisionRects(),
+				...this.stairManager.getAllCollisionRects(),
+				...this.doorInteraction.getCollisionRects(),
+				...this.furnitureManager.getCollisionRects(),
+				...this.barrierManager.getCollisionRects()
+			],
+			getOccluders: () => [
+				...this.buildingManager.getRaycastableWallMeshes(),
+				...this.buildingManager.getRaycastableSlabMeshes(),
+				...this.buildingManager.getRaycastableRoofMeshes(),
+				...this.foundationManager.getMeshes()
+			],
+			inputAllowed: () =>
+				this.controller.isPointerLocked() &&
+				!this.simulationPaused &&
+				!this.devPanelOpen &&
+				!this.debugControlsOpen &&
+				!this.miniBuildUiOpen &&
+				!this.miniBuildEditorOpen &&
+				!this.buildToolManager.isEditingWorld(),
+			waterBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
+			eyeHeight: () => this.settings.player.eyeHeight,
+			onPrompt: (prompt) => options.onMiniBuildInteractionChange?.(prompt),
+			registerMaterial: (m) => this.graphicsPipeline.registerMaterial(m)
+		});
+
+		this.miniBuildInteraction.controller.onStateChange = (location) =>
+			this.multiplayer?.interactionChanged?.(location);
+		this.miniBuildInteraction.showDebug =
+			this.miniBuildPreferences.display.showInteractionLocations;
 		this.music.onSpeciesChange = () => this.buildToolManager.refreshHotbar();
 
 		this.collisionVisualizer = new CollisionVisualizer(this.scene, {
@@ -1562,6 +1718,8 @@ export class ThreeScene implements WorldRuntime {
 					this.miniBuildChunkBoundaries.setEnabled(
 						this.miniBuildPreferences.display.showChunkBoundaries
 					);
+					this.miniBuildInteraction.showDebug =
+						this.miniBuildPreferences.display.showInteractionLocations;
 					this.miniBuildPreferences.saveDisplay();
 					this.emitStats();
 				},
@@ -1764,18 +1922,10 @@ export class ThreeScene implements WorldRuntime {
 		// loading, so the world looks right from the very first frame. The HDRI itself loads async
 		// and only affects lighting/reflections (and optionally the background) once it resolves.
 		this.applySkySettings();
-		const hdrUrl = new URL('hdri/sky.hdr', document.baseURI).toString();
-		void this.hdriSystem
-			.initialize(hdrUrl, this.skySettings.sky.topColor, this.skySettings.sky.horizonColor)
-			.then(() => {
-				if (this.disposed) return;
-				this.applySkySettings();
-				this.furnitureManager.updateLights(this.camera.position, 0);
-				return this.graphicsPipeline.prewarm();
-			})
-			.catch((error) =>
-				console.warn('[graphics] Shader prewarm failed; drawing will retry.', error)
-			);
+		void this.hdriSystem.initialize(
+			this.skySettings.sky.topColor,
+			this.skySettings.sky.horizonColor
+		);
 
 		this.resizeObserver = new ResizeObserver(() => this.handleResize());
 		this.resizeObserver.observe(this.container);
@@ -1801,6 +1951,28 @@ export class ThreeScene implements WorldRuntime {
 			};
 			this.multiplayer = options.multiplayer;
 			this.multiplayer.attach({
+				resolveInteractionPose: (ref) => {
+					const location = this.miniBuildInteraction.resolve(ref.instanceId, ref.locationId);
+					return location
+						? resolvePlayerInteractionPose(location.type, location.position, location.yaw)
+						: null;
+				},
+				setInteractions: (locations, self, authoritative) => {
+					const controller = this.miniBuildInteraction.controller;
+					controller.occupancy.sync(locations, self);
+					const state = controller.state;
+					if (
+						authoritative &&
+						state.type === 'mini-build' &&
+						!locations.some(
+							(l) =>
+								l.playerId === self &&
+								l.instanceId === state.location.instanceId &&
+								l.locationId === state.location.locationId
+						)
+					)
+						controller.exit();
+				},
 				characterSurface: (x, z, y) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y),
 				scene: this.scene,
 				camera: this.camera,
@@ -1811,7 +1983,7 @@ export class ThreeScene implements WorldRuntime {
 					apply: (env) => this.applySharedEnvironment(env)
 				},
 				world: this.sharedWorldPort(),
-				setDoorOpen: (id, open) => this.doorInteraction.setOpen(id, open),
+				setDoorOpen: (id, active) => this.doorInteraction.setActiveState(id, active),
 				restorePlayer: (bookmark) => this.restoreBookmark(bookmark),
 				setBuildingLocked: (locked) => this.setBuildingLocked(locked),
 				showLocatorBar: () => this.graphicsSettings.showLocatorBar
@@ -1831,16 +2003,18 @@ export class ThreeScene implements WorldRuntime {
 	 */
 	private loadWorld(world: WorldDefinition): void {
 		this.applyEnvironment(world.environment, world.seed);
+		this.terrainEdits.spacing = vertexSpacingFor(
+			this.settings.chunkSize,
+			this.settings.chunkResolution
+		);
+		this.terrainEdits.load(world.proceduralOverrides?.terrainEdits);
 
 		// Terrain under a foundation may have changed since it was placed: re-ground each one so its
 		// block always reaches half a metre below the lowest terrain point under it.
-		const spacing = vertexSpacingFor(this.settings.chunkSize, this.settings.chunkResolution);
-		const sampler = this.terrainManager.getHeightSampler();
-		const sample = (x: number, z: number) => sampler.sample(x, z);
 		this.foundationManager.load(
 			structuredClone(world.foundations).map((foundation) => ({
 				...foundation,
-				bottomY: regroundedFoundationBottom(foundation, spacing, sample)
+				bottomY: foundation.bottomY
 			}))
 		);
 		this.buildingManager.load(structuredClone(world.buildings));
@@ -1978,8 +2152,9 @@ export class ThreeScene implements WorldRuntime {
 				this.furnitureManager.getRevision() +
 				this.barrierManager.getRevision() +
 				this.miniBuilds.revision +
-				this.treeManager.getOverrideRevision(),
-			isTransactionOpen: () => this.moveTool.isHoldingObject(),
+				this.treeManager.getOverrideRevision() +
+				this.terrainEdits.revision,
+			isTransactionOpen: () => this.moveTool.isHoldingObject() || this.shovelTool.isStrokeOpen(),
 			applyContent: (target, affected) => this.applyAuthoredContent(target, affected)
 		};
 	}
@@ -2063,6 +2238,34 @@ export class ThreeScene implements WorldRuntime {
 				structuredClone(target.musicTrees as MusicTreeDefinition[]),
 				structuredClone(target.musicPlants as MusicPlantDefinition[])
 			);
+		}
+		if (affected.terrain) {
+			this.shovelTool.prepareForCustomize();
+			const before = this.terrainEdits.serialize();
+			this.terrainEdits.load(target.proceduralOverrides.terrainEdits);
+			const after = this.terrainEdits.serialize();
+			const old = new Map(before.points.map((p) => [`${p[0]},${p[1]}`, p]));
+			const changed: [number, number, number][] = [];
+			for (const p of after.points) {
+				const key = `${p[0]},${p[1]}`;
+				if (old.get(key)?.[2] !== p[2]) changed.push(p);
+				old.delete(key);
+			}
+			changed.push(...old.values());
+			// Publish only changed tiles, not one huge rectangle spanning distant edits.
+			const tiles = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number }>();
+			for (const p of changed) {
+				const tx = Math.floor(p[0] / 16),
+					tz = Math.floor(p[1] / 16),
+					s = after.spacing;
+				tiles.set(`${tx},${tz}`, {
+					minX: (tx * 16 - 1) * s,
+					maxX: (tx * 16 + 17) * s,
+					minZ: (tz * 16 - 1) * s,
+					maxZ: (tz * 16 + 17) * s
+				});
+			}
+			for (const bounds of tiles.values()) this.publishTerrainStroke({ patches: [], bounds });
 		}
 		if (affected.removedTrees) {
 			this.treeManager.setRemovedTreeIds(target.proceduralOverrides.removedTreeIds);
@@ -2886,7 +3089,8 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	getPlayerState(): SavedPlayerState {
-		const position = this.controller.worldPosition;
+		const state = this.miniBuildInteraction.controller.state;
+		const position = state.type === 'mini-build' ? state.entry : this.controller.worldPosition;
 		return {
 			position: { x: position.x, y: position.y, z: position.z },
 			yaw: this.controller.getYaw(),
@@ -2896,10 +3100,88 @@ export class ThreeScene implements WorldRuntime {
 		};
 	}
 
+	private sampleTerrainWithoutShovel = (x: number, z: number): number =>
+		this.foundationManager.sampleEarthHeight(
+			x,
+			z,
+			this.terrainManager.getHeightSampler().sampleUnmodified(x, z)
+		);
+
+	private publishTerrainStroke(stroke: TerrainStroke): void {
+		this.terrainManager.notifyTerrainEdited(stroke.bounds);
+		this.grassManager.notifyTerrainRegion(stroke.bounds);
+		this.plantManager.notifyTerrainRegion(stroke.bounds);
+		this.foundationManager.refreshTerrainSupport(stroke.bounds, (x, z) =>
+			this.terrainManager.getHeightSampler().sample(x, z)
+		);
+	}
+
+	private terrainEditBlockReason = (
+		x: number,
+		z: number,
+		height: number,
+		footprintOnly = false
+	): string | null => {
+		if (!Number.isFinite(height) || Math.abs(height) > 1000) return 'Terrain height limit reached.';
+		const s = this.terrainEdits.spacing;
+		for (const d of this.terrainProtectedFoundations) {
+			const dx = Math.max(d.minGridX * s - x, 0, x - d.maxGridX * s),
+				dz = Math.max(d.minGridZ * s - z, 0, z - d.maxGridZ * s);
+			const distance = Math.hypot(dx, dz);
+			if (
+				distance === 0 &&
+				(d.style === 'earth' ||
+					(x > d.minGridX * s && x < d.maxGridX * s && z > d.minGridZ * s && z < d.maxGridZ * s))
+			) {
+				if (footprintOnly) continue;
+				return d.style === 'earth'
+					? 'Grass foundation: the flat building surface is locked.'
+					: 'Stone foundation: digging beneath buildings is protected.';
+			}
+			const current = this.terrainManager.getHeightSampler().sample(x, z);
+			if (
+				d.style !== 'earth' &&
+				height > Math.max(current, d.topY - 0.05 + distance * 0.65) + 0.001
+			)
+				return 'Ground cannot cover a stone foundation.';
+			if (d.style !== 'earth' && height < Math.min(current, d.topY - 4 - distance * 0.65) - 0.001)
+				return 'Maximum exposed stone height reached.';
+		}
+		for (let dz = -2; dz <= 2; dz += 2)
+			for (let dx = -2; dx <= 2; dx += 2) {
+				this.hydrology.sampleWaterInto(x + dx, z + dz, this.shovelWaterSample);
+				if (
+					this.shovelWaterSample.waterDepth > 0.001 ||
+					this.shovelWaterSample.terrainInfluence > 0.001
+				)
+					return 'Water and shorelines are protected.';
+			}
+		if (this.treeManager.isRootProtected(x, z, 1))
+			return 'Remove the tree before editing its roots.';
+		for (const r of this.terrainProtectedRects) {
+			const dx = x - r.centerX,
+				dz = z - r.centerZ;
+			if (
+				Math.abs(dx * r.dirX + dz * r.dirZ) <= r.halfLength + 0.75 &&
+				Math.abs(-dx * r.dirZ + dz * r.dirX) <= r.halfThickness + 0.75
+			)
+				return 'Move the object or clear the doorway before editing here.';
+		}
+		if (!footprintOnly) {
+			const base = this.sampleTerrainWithoutShovel(x, z);
+			if (
+				Math.abs(this.foundationManager.constrainTerrainHeight(x, z, base, height) - height) > 0.001
+			)
+				return 'Maximum safe bank slope reached.';
+		}
+		return null;
+	};
+
 	getProceduralOverrides(): ProceduralWorldOverrides {
 		return {
 			...createEmptyProceduralOverrides(),
-			removedTreeIds: this.treeManager.getRemovedTreeIds()
+			removedTreeIds: this.treeManager.getRemovedTreeIds(),
+			...(this.terrainEdits.hasEdits ? { terrainEdits: this.terrainEdits.serialize() } : {})
 		};
 	}
 
@@ -2915,7 +3197,7 @@ export class ThreeScene implements WorldRuntime {
 				this.barrierManager.getRevision() +
 				this.miniBuilds.revision,
 			environment: this.environmentRevision,
-			procedural: this.treeManager.getOverrideRevision()
+			procedural: this.treeManager.getOverrideRevision() + this.terrainEdits.revision
 		};
 	}
 
@@ -3047,6 +3329,25 @@ export class ThreeScene implements WorldRuntime {
 		return this.weather.consumeLookChange();
 	}
 
+	/** Apply the window editor selection to the opening under the crosshair. */
+	applyWindowShuttersToAimedWindow(): boolean {
+		const raycaster = new THREE.Raycaster();
+		raycaster.setFromCamera(new THREE.Vector2(), this.camera);
+		const hit = raycaster.intersectObjects(
+			[
+				...this.buildingManager.getRaycastableWallMeshes(),
+				...this.buildingManager.getRaycastableRoofMeshes()
+			],
+			false
+		)[0];
+		return this.buildingManager.applyWindowShuttersFromView(
+			this.camera.position,
+			raycaster.ray.direction,
+			this.buildingSettings.windowShutterMode ?? 'auto',
+			hit ? hit.distance + 0.3 : Infinity
+		);
+	}
+
 	/**
 	 * Re-applies every sky/HDRI/atmosphere/cloud setting. Called once at startup, once more when
 	 * the (async) HDRI finishes loading, and directly from the GUI on every change — all of these
@@ -3058,7 +3359,6 @@ export class ThreeScene implements WorldRuntime {
 		const look = this.weather.applyToLook(resolveEffectiveSky(this.skySettings));
 		this.dayNightLook = look;
 		this.skySystem.applySettings(look.sky, look.atmosphere);
-		this.cloudSystem.applySettings(look.clouds);
 		this.cloudSystem.applyDebugSettings(this.skySettings.debug);
 		this.hdriSystem.applySettings();
 		this.scene.environmentIntensity = look.hdriIntensity;
@@ -3103,13 +3403,22 @@ export class ThreeScene implements WorldRuntime {
 		this.miniBuilds.group.visible = !showSkyOnly;
 	}
 
-	/** `scene.background` is contested between "let the sky dome show" and "debug: show the raw HDRI" — this is the single place that decides. */
+	/** Blend the procedural dome/clouds over the sharp daytime panorama using game time. */
 	private applyBackgroundAndFog(): void {
 		const look = this.dayNightLook;
 		const backgroundTexture = this.hdriSystem.getBackgroundTexture();
+		const blend = backgroundTexture
+			? skyBackgroundBlend(ensureDayCycleSettings(this.skySettings).timeOfDay)
+			: 0;
+		const sky = look?.sky ?? this.skySettings.sky;
+		const clouds = look?.clouds ?? this.skySettings.clouds;
+		this.skySystem.setHdriBlend(blend);
+		this.skySystem.mesh.visible = sky.enabled && blend < 1;
+		this.cloudSystem.applySettings({ ...clouds, opacity: clouds.opacity * (1 - blend) });
+		this.cloudSystem.group.visible = clouds.enabled && blend < 1;
+		this.scene.backgroundIntensity = sky.brightness;
 		this.scene.background =
-			backgroundTexture ??
-			new THREE.Color(look?.sky.groundHazeColor ?? this.skySettings.sky.groundHazeColor);
+			backgroundTexture && blend > 0 ? backgroundTexture : new THREE.Color(sky.groundHazeColor);
 
 		const atmosphere = look?.atmosphere ?? this.skySettings.atmosphere;
 		if (!atmosphere.fogEnabled) {
@@ -3257,6 +3566,29 @@ export class ThreeScene implements WorldRuntime {
 		}
 	}
 
+	/** Initial loading only: report real terrain work, then wait for a few settled frames.
+	 * Distant vegetation continues streaming in play; a slow worker must not trap the player. */
+	async whenInitialWorldReady(onProgress: (progress: number) => void): Promise<void> {
+		const start = performance.now();
+		let stable = 0;
+		while (!this.disposed && performance.now() - start < 12000) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const position = this.controller.worldPosition;
+			const x = worldToChunkCoord(position.x, this.settings.chunkSize);
+			const z = worldToChunkCoord(position.z, this.settings.chunkSize);
+			let loaded = 0;
+			for (let dx = -1; dx <= 1; dx++) {
+				for (let dz = -1; dz <= 1; dz++) {
+					if (this.terrainManager.getSurfaceLattice(x + dx, z + dz)) loaded++;
+				}
+			}
+			onProgress(loaded / 9);
+			const ready = loaded === 9;
+			stable = ready ? stable + 1 : 0;
+			if (stable >= 3 && performance.now() - start >= 500) return;
+		}
+	}
+
 	/**
 	 * Resolves true once everything that streams in after a quality change has finished: terrain
 	 * and tree chunk queues empty, hydrology regions built, procedural textures generated, and full
@@ -3331,6 +3663,18 @@ export class ThreeScene implements WorldRuntime {
 	private flushDirtyFlags(): void {
 		const musicSurfaceChanged = this.dirty.topology || this.dirty.seed || this.dirty.settings;
 		if (this.dirty.topology) {
+			// The authored grid is world data. Changing chunk size may repartition it, never rescale it.
+			if (this.terrainEdits.hasEdits || this.foundationManager.getFoundations().length > 0) {
+				this.settings.chunkResolution = Math.max(
+					1,
+					Math.round(this.settings.chunkSize / this.terrainEdits.spacing)
+				);
+				this.settings.chunkSize = this.settings.chunkResolution * this.terrainEdits.spacing;
+			} else
+				this.terrainEdits.spacing = vertexSpacingFor(
+					this.settings.chunkSize,
+					this.settings.chunkResolution
+				);
 			this.terrainManager.notifyTopologyChanged();
 			this.treeManager.notifyTerrainChanged();
 			this.dirty.topology = false;
@@ -3395,9 +3739,13 @@ export class ThreeScene implements WorldRuntime {
 		this.flushDirtyFlags();
 
 		this.doorInteraction.update(deltaSeconds);
+		this.miniBuildInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
+		this.miniBuildInteraction.afterPlayerUpdate();
 		if (this.multiplayer) {
-			const position = this.controller.worldPosition;
+			const interaction = this.miniBuildInteraction.controller.state;
+			const position =
+				interaction.type === 'mini-build' ? interaction.entry : this.controller.worldPosition;
 			this.multiplayer.afterControllerUpdate({
 				x: position.x,
 				eyeY: position.y,
@@ -3654,9 +4002,11 @@ export class ThreeScene implements WorldRuntime {
 		cancelAnimationFrame(this.animationFrameId);
 		this.resizeObserver.disconnect();
 		this.buildToolManager.dispose();
+		this.shovelTool.dispose();
 		this.foundationTool.dispose();
 		this.wallTool.dispose();
 		this.windowTool.dispose();
+		this.miniBuildInteraction.dispose();
 		this.doorInteraction.dispose();
 		this.doorTool.dispose();
 		this.beamTool.dispose();
@@ -3695,6 +4045,7 @@ export class ThreeScene implements WorldRuntime {
 		this.stairManager.dispose();
 		this.floorDetailManager.dispose();
 		this.skirtingTool.dispose();
+		this.pillarTool.dispose();
 		this.skirtingRunManager.dispose();
 		this.levelManager.dispose();
 		this.undoManager.dispose();

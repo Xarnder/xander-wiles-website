@@ -1,3 +1,5 @@
+import { testDefinition } from '../../miniBuild/__tests__/miniBuildFixtures';
+import { createInteraction } from '../../miniBuild/MiniBuildInteractions';
 import { describe, expect, it } from 'vitest';
 import { WorldStore, publishedRows } from '../WorldStore';
 import { flattenWorld } from '../worldEntities';
@@ -847,5 +849,58 @@ describe('RoomCore shared building (Phase 3)', () => {
 		const welcome = back.last('welcome')!;
 		expect(welcome.bookmark).toMatchObject({ x: 12, y: 3, z: -4 });
 		expect(welcome.names['player-aaaa']).toBe('Alex');
+	});
+});
+
+describe('Mini Build interaction occupancy', () => {
+	it('allows one player per authored location, rejects missing anchors, and releases on disconnect', async () => {
+		const definition = testDefinition([[0, 0, 0, 32, 16, 32]], { unit: 1 });
+		const location = createInteraction('sit', { x: 16, y: 16, z: 16 });
+		definition.interactionLocations = [location];
+		const { id, ...data } = definition;
+		const store = new WorldStore({
+			rows: publishedRows([
+				{ kind: 'miniBuildDefinition', id, data },
+				{
+					kind: 'miniBuildInstance',
+					id: 'seat',
+					data: { designId: id, position: { x: 0, y: 0, z: 0 }, rotationY: 0 }
+				}
+			]),
+			seq: 1,
+			epoch: 1
+		});
+		const room = new RoomCore({
+			world: WORLD,
+			now: () => 1_000_000,
+			authorize: fakeAuthorize,
+			persistence: new MemoryPersistence(),
+			store
+		});
+		const a = new FakeConnection(),
+			b = new FakeConnection();
+		await hello(room, a, 'player-aaaa');
+		await hello(room, b, 'player-bbbb');
+		pose(room, a, 1, 0);
+		pose(room, b, 1, 1);
+		const request = { t: 'interaction', location: { instanceId: 'seat', locationId: location.id } };
+		await room.onMessage(a, JSON.stringify(request));
+		expect(a.last('interactions')?.locations).toEqual([
+			{ ...request.location, playerId: 'player-aaaa' }
+		]);
+		await room.onMessage(b, JSON.stringify(request));
+		expect(b.last('interactions')?.locations).toHaveLength(1);
+		expect(b.last('interactions')?.replyTo).toBe('player-bbbb');
+		room.onClose(a);
+		expect(b.last('interactions')?.locations).toHaveLength(0);
+		await room.onMessage(
+			b,
+			JSON.stringify({ ...request, location: { ...request.location, locationId: 'missing' } })
+		);
+		expect(b.last('interactions')?.locations).toHaveLength(0);
+		await room.onMessage(b, JSON.stringify(request));
+		expect(b.last('interactions')?.locations[0].playerId).toBe('player-bbbb');
+		await room.onMessage(b, JSON.stringify({ t: 'interaction', location: null }));
+		expect(b.last('interactions')?.locations).toEqual([]);
 	});
 });

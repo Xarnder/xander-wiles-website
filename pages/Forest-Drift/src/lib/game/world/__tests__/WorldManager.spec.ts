@@ -284,3 +284,74 @@ describe('storage estimate', () => {
 		expect(spy).toHaveBeenCalled();
 	});
 });
+
+describe('backup reliability', () => {
+	it('exports current runtime edits even after a failed local save, without changing the stored world', async () => {
+		const world = await seed();
+		await manager.openWorld(world.id);
+		const runtime = runtimeFromWorld(structuredClone(world));
+		runtime.buildings[0].walls[0].openings[0].doorStyle = { double: true, arched: true };
+		runtime.player.position.x = 123;
+		const content = captureWorldContent(runtime);
+		vi.spyOn(repository, 'saveWorld').mockRejectedValue(new Error('Storage is full'));
+		expect((await manager.saveCurrentWorld(content)).ok).toBe(false);
+		const exported = await manager.exportWorld(world.id, content);
+		expect(exported.ok).toBe(true);
+		if (!exported.ok) return;
+		expect(exported.value.world.player.position.x).toBe(123);
+		expect(exported.value.world.buildings[0].walls[0].openings[0].doorStyle).toEqual({
+			double: true,
+			arched: true
+		});
+		expect((await repository.loadWorld(world.id))?.player.position.x).toBe(world.player.position.x);
+		const imported = await new WorldManager(new InMemoryWorldRepository()).importWorld(
+			await createWorldPackage(exported.value.world)
+		);
+		expect(imported.ok).toBe(true);
+		if (imported.ok) expect(imported.value.player.position.x).toBe(123);
+	});
+
+	it('does not let thumbnail read failures block export', async () => {
+		const world = await seed();
+		vi.spyOn(repository, 'getThumbnail').mockRejectedValue(new Error('Thumbnail unavailable'));
+		expect((await manager.exportWorld(world.id)).ok).toBe(true);
+	});
+
+	it('reports successful import if only optional thumbnail storage fails', async () => {
+		vi.spyOn(repository, 'putThumbnail').mockRejectedValue(new Error('Thumbnail quota'));
+		const result = await manager.importWorld(
+			await createWorldPackage(richWorld(), new Blob(['image']))
+		);
+		expect(result.ok).toBe(true);
+		expect(await repository.listWorlds()).toHaveLength(1);
+	});
+
+	it('uses separate ids for simultaneous imports so neither can overwrite the other', async () => {
+		const bytes = await createWorldPackage(richWorld());
+		const [a, b] = await Promise.all([manager.importWorld(bytes), manager.importWorld(bytes)]);
+		expect(a.ok && b.ok).toBe(true);
+		if (a.ok && b.ok) {
+			expect(a.value.id).not.toBe(b.value.id);
+			expect(a.value.id).not.toBe(richWorld().id);
+		}
+		expect(await repository.listWorlds()).toHaveLength(2);
+	});
+});
+
+it('captures every live subsystem, exports, imports, and reopens it without losing content', async () => {
+	const { exportAuditWorld } = await import('./exportAuditFixture');
+	const world = exportAuditWorld();
+	await seed(world);
+	await manager.openWorld(world.id);
+	const content = captureWorldContent(runtimeFromWorld(world));
+	const exported = await manager.exportWorld(world.id, content);
+	expect(exported.ok).toBe(true);
+	if (!exported.ok) return;
+	const destination = new WorldManager(new InMemoryWorldRepository());
+	const imported = await destination.importWorld(await createWorldPackage(exported.value.world));
+	expect(imported.ok).toBe(true);
+	if (!imported.ok) return;
+	const reopened = await destination.openWorld(imported.value.id);
+	expect(reopened.ok).toBe(true);
+	if (reopened.ok) expect(captureWorldContent(runtimeFromWorld(reopened.value))).toEqual(content);
+});

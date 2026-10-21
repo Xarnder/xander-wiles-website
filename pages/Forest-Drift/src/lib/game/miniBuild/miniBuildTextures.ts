@@ -1,6 +1,6 @@
 /**
- * The procedural surfaces a Mini Build material slot can use. These are the game's EXISTING
- * procedural materials (the same generators and shaders as walls, roofs, framing and paths) — this
+ * The procedural surfaces a Mini Build material slot can use. These share the game's cached
+ * material generators and shaders, including woven upholstery fabric — this
  * file only names a curated set of them for players and says how each goes onto Mini Build
  * geometry. Pure data, no Three.js.
  *
@@ -22,7 +22,7 @@ import {
 
 export interface MiniBuildTextureEntry {
 	label: string;
-	group: 'Wood' | 'Plaster' | 'Stone' | 'Ground' | 'Glass';
+	group: 'Fabric' | 'Wood' | 'Plaster' | 'Stone' | 'Ground' | 'Glass';
 	style: SurfaceStyle;
 	/** sRGB `#RRGGBB` close to the texture's natural average — the colour picking it suggests. */
 	swatch: string;
@@ -41,6 +41,12 @@ const textured = (
 export const MINI_BUILD_TEXTURES: Readonly<
 	Record<Exclude<MiniBuildTextureId, 'auto' | 'flat'>, MiniBuildTextureEntry>
 > = {
+	'woven-fabric': {
+		label: 'Woven fabric',
+		group: 'Fabric',
+		style: textured('fabric', { variant: 'woven' }),
+		swatch: '#D8CFBC'
+	},
 	'dark-oak': { label: 'Dark oak', group: 'Wood', style: wood('dark-oak'), swatch: '#3E2A1C' },
 	'aged-oak': { label: 'Aged oak', group: 'Wood', style: wood('aged-brown'), swatch: '#6B4730' },
 	'weathered-wood': {
@@ -172,7 +178,7 @@ export const MINI_BUILD_TEXTURES: Readonly<
  */
 export const MINI_BUILD_AUTO_TEXTURE: Readonly<Record<MiniBuildFinish, MiniBuildTextureId>> = {
 	wood: 'aged-oak',
-	fabric: 'lime-plaster',
+	fabric: 'woven-fabric',
 	stone: 'dressed-stone',
 	glass: 'clear-glass',
 	metal: 'flat',

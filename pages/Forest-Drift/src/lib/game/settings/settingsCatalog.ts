@@ -1,3 +1,5 @@
+import { audioSettingsCategory } from './personalSettingsCatalog';
+import { HDRI_PRESETS, resolveHdriPreset } from '../sky/hdriPresets';
 import { ensureDayCycleSettings, formatDayClock } from '../sky/dayNightMath';
 import type {
 	GameSettingsHost,
@@ -81,7 +83,7 @@ function selectField(
 	key: string,
 	options: readonly SettingsSelectOption[],
 	onChange?: () => void
-): SettingsField {
+): Extract<SettingsField, { kind: 'select' }> {
 	return {
 		kind: 'select',
 		id,
@@ -744,6 +746,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 	};
 
 	return [
+		audioSettingsCategory(),
 		{
 			id: 'world',
 			title: 'World',
@@ -1231,7 +1234,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 					),
 					numberField(
 						'music.volume',
-						'Master volume',
+						'World music volume',
 						musicVisual,
 						'masterMusicVolume',
 						0,
@@ -2666,7 +2669,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						vegetation.grass,
 						'minHeight',
 						0.05,
-						1.5,
+						1,
 						0.01,
 						undefined,
 						actions.grassSettings
@@ -2677,7 +2680,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						vegetation.grass,
 						'maxHeight',
 						0.1,
-						2,
+						1,
 						0.01,
 						undefined,
 						actions.grassSettings
@@ -3045,6 +3048,17 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 					)
 				]),
 				group('hdri', 'HDRI', [
+					{
+						...selectField(
+							'sky.hdri.preset',
+							'Environment panorama',
+							sky.hdri,
+							'preset',
+							HDRI_PRESETS,
+							actions.sky
+						),
+						get: () => resolveHdriPreset(sky.hdri.preset)
+					},
 					boolField('sky.hdri.enabled', 'HDRI enabled', sky.hdri, 'enabled', actions.sky),
 					numberField(
 						'sky.hdri.intensity',
@@ -3064,13 +3078,6 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						0,
 						360,
 						1,
-						actions.sky
-					),
-					boolField(
-						'sky.hdri.background',
-						'Show as background',
-						sky.hdri,
-						'showAsBackground',
 						actions.sky
 					)
 				]),
@@ -3677,6 +3684,13 @@ function miniBuildDisplayFields(host: GameSettingsHost, idPrefix: string): Setti
 	const apply = host.actions.miniBuildDisplay;
 	if (!display || !apply) return [];
 	return [
+		boolField(
+			`${idPrefix}.interactions`,
+			'Show Mini Build Interaction Locations (look at an object)',
+			display,
+			'showInteractionLocations',
+			apply
+		),
 		boolField(
 			`${idPrefix}.boundaries`,
 			'Show Mini Build chunk boundaries (16m grid + usage labels)',

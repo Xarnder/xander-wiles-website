@@ -87,7 +87,9 @@ export function surfaceOffsetLevels(
 	materials: readonly Pick<MiniBuildMaterialSlot, 'finish'>[]
 ): number[] {
 	const ranks = surfaceRanks(blocks, materials);
-	const boxes = blocks.map((block) => (isAngledBlock(block) ? null : blockBox(block)));
+	const boxes = blocks.map((block) =>
+		isAngledBlock(block) || (block.shape && block.shape !== 'cuboid') ? null : blockBox(block)
+	);
 	const losersFirst = [...ranks].sort((a, b) => (surfaceWins(a, b) ? 1 : -1));
 	const levels = new Array<number>(blocks.length).fill(0);
 	const placed: number[] = [];

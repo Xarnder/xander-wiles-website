@@ -1,3 +1,4 @@
+import type { WindowShutters } from './windowShutterMath';
 import type { SkirtingRunDefinition } from './skirtingRunMath';
 /**
  * Building-element types. Framework- and Three.js-free, same rule as FoundationTypes.ts — this is
@@ -15,6 +16,11 @@ import type { StairDefinition } from './StairTypes';
 import type { WallPathDefinition } from './WallPathTypes';
 
 export type WallOpeningType = 'window' | 'door';
+
+export interface DoorStyle {
+	double: boolean;
+	arched: boolean;
+}
 
 /**
  * Per-wall (or per-path) override of the global wall-edge-framing defaults (see WallFrameBuilder.ts
@@ -42,6 +48,10 @@ export interface WallFrameOverride {
 export interface WallOpeningDefinition {
 	id: string;
 	type: WallOpeningType;
+	/** Missing on older windows means automatic exterior shutters. */
+	shutters?: WindowShutters;
+	/** Missing on older doors means a single rectangular leaf. */
+	doorStyle?: DoorStyle;
 	minU: number;
 	maxU: number;
 	minY: number;

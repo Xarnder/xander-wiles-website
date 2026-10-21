@@ -1,3 +1,5 @@
+import type { InteractionPrompt } from '../player/PlayerInteractionController';
+import type { OpeningInteractionState } from '../building/DoorInteractionController';
 import { createDefaultBuildingSettings } from '../building/FoundationTypes';
 import type { BuildUiState, HotbarUiState } from '../building/FoundationTypes';
 import type { PaintUiState } from '../building/PaintTool';
@@ -26,6 +28,8 @@ export interface WorldSessionOptions {
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
+	onMiniBuildInteractionChange?: (prompt: InteractionPrompt | null) => void;
+	onOpeningInteractionChange?: (state: OpeningInteractionState | null) => void;
 	onPaintPaletteChange?: (open: boolean) => void;
 	onPaintStateChange?: (state: PaintUiState) => void;
 	onGraphicsQualityChange?: (quality: GraphicsQuality) => void;
@@ -82,6 +86,8 @@ export class WorldSession {
 			onHotbarChange: options.onHotbarChange,
 			onBuildHudChange: options.onBuildHudChange,
 			onLookedAtDoorChange: options.onLookedAtDoorChange,
+			onOpeningInteractionChange: options.onOpeningInteractionChange,
+			onMiniBuildInteractionChange: options.onMiniBuildInteractionChange,
 			onPaintPaletteChange: options.onPaintPaletteChange,
 			onPaintStateChange: options.onPaintStateChange,
 			onGraphicsQualityChange: options.onGraphicsQualityChange,

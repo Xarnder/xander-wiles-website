@@ -51,13 +51,19 @@
 </script>
 
 {#if debugOpen}
-	<aside data-ui-surface="panel" class="debug-panel" aria-label="Dev and Debug controls" data-testid="debug-panel">
+	<aside
+		data-ui-surface="panel"
+		data-pause-panel
+		class="debug-panel"
+		aria-label="Dev and Debug controls"
+		data-testid="debug-panel"
+	>
 		<header>
 			<h2>Dev &amp; Debug</h2>
 			<button
 				bind:this={closeDebugButton}
 				onclick={onCloseDebug}
-				aria-label="Close Dev and Debug controls">Close</button
+				aria-label="Close Dev and Debug controls">Back</button
 			>
 		</header>
 		<p>
@@ -79,7 +85,7 @@
 		</p>
 		<p>
 			Turn off the toggle to stop. Closing this panel also stops the test and restores manual
-			controls. Click the game to resume.
+			controls. Return to Pause, then choose Resume to continue.
 		</p>
 		<dl>
 			<dt>Session</dt>
@@ -93,7 +99,9 @@
 	</aside>
 {/if}
 
-<dialog data-ui-surface="panel"
+<dialog
+	data-ui-surface="panel"
+	data-pause-panel
 	bind:this={dialog}
 	oncancel={(event) => {
 		event.preventDefault();

@@ -1,3 +1,4 @@
+import { shutterSideFacingPlayer, type WindowShutters } from './windowShutterMath';
 import * as THREE from 'three';
 import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
@@ -526,6 +527,29 @@ export class OpeningToolBase implements BuildTool {
 		);
 	}
 
+	private placementShutters(): WindowShutters | undefined {
+		if (this.config.openingType !== 'window' || !this.target) return undefined;
+		const mode = this.buildingSettings.windowShutterMode ?? 'auto';
+		if (mode !== 'manual') return { mode };
+		const transform =
+			this.target.kind === 'wall'
+				? this.buildingManager.getWallTransform(this.target.wallId)
+				: this.buildingManager.getRoofFaceTarget(this.target.roofId, this.target.face)?.transform;
+		return {
+			mode,
+			side: transform
+				? shutterSideFacingPlayer(
+						transform.dirX,
+						transform.dirZ,
+						transform.originWorldX,
+						transform.originWorldZ,
+						this.camera.position.x,
+						this.camera.position.z
+					)
+				: 1
+		};
+	}
+
 	onPrimaryAction(): void {
 		if (!this.active || !this.target || !this.target.valid) return;
 
@@ -542,7 +566,15 @@ export class OpeningToolBase implements BuildTool {
 				maxY: this.target.maxY,
 				edgeMargin: this.buildingSettings.openingEdgeMargin,
 				spacing: this.buildingSettings.openingSpacing,
-				material: this.placementMaterial()
+				material: this.placementMaterial(),
+				shutters: this.placementShutters(),
+				doorStyle:
+					this.config.openingType === 'door'
+						? {
+								double: this.buildingSettings.doorDouble ?? false,
+								arched: this.buildingSettings.doorArched ?? false
+							}
+						: undefined
 			});
 			if (!result.valid || !result.value) return;
 			this.undoManager.record({
@@ -579,7 +611,15 @@ export class OpeningToolBase implements BuildTool {
 				maxY: this.target.maxY,
 				edgeMargin: this.buildingSettings.openingEdgeMargin,
 				spacing: this.buildingSettings.openingSpacing,
-				material: this.placementMaterial()
+				material: this.placementMaterial(),
+				shutters: this.placementShutters(),
+				doorStyle:
+					this.config.openingType === 'door'
+						? {
+								double: this.buildingSettings.doorDouble ?? false,
+								arched: this.buildingSettings.doorArched ?? false
+							}
+						: undefined
 			});
 			if (!result.valid || !result.value) return;
 			this.undoManager.record({

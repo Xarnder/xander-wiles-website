@@ -18,7 +18,8 @@ describe('MiniBuildPreferences display', () => {
 		stubStorage();
 		expect(new MiniBuildPreferences().display).toEqual({
 			showChunkUsage: true,
-			showChunkBoundaries: false
+			showChunkBoundaries: false,
+			showInteractionLocations: false
 		});
 	});
 
@@ -30,7 +31,8 @@ describe('MiniBuildPreferences display', () => {
 		first.saveDisplay();
 		expect(new MiniBuildPreferences().display).toEqual({
 			showChunkUsage: false,
-			showChunkBoundaries: true
+			showChunkBoundaries: true,
+			showInteractionLocations: false
 		});
 	});
 
@@ -42,7 +44,8 @@ describe('MiniBuildPreferences display', () => {
 		);
 		expect(new MiniBuildPreferences().display).toEqual({
 			showChunkUsage: true,
-			showChunkBoundaries: false
+			showChunkBoundaries: false,
+			showInteractionLocations: false
 		});
 	});
 });

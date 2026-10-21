@@ -624,7 +624,7 @@ export class MiniBuildInstanceManager {
 	}
 
 	private batchKeyFor(record: InstanceRecord, definition: MiniBuildDefinition): string {
-		return `${record.chunkId}|${definition.id}|r${definition.revision}|${this.signature(record.instance)}`;
+		return `${record.chunkId}|${definition.id}|r${definition.geometryRevision ?? definition.revision}|${this.signature(record.instance)}`;
 	}
 
 	private renderRecord(record: InstanceRecord, commit: boolean): void {

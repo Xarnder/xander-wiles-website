@@ -10,6 +10,14 @@ import {
 } from './openingVisualMath';
 import type { DoorHandlePlacement, UvRect } from './openingVisualMath';
 import type { WallOpeningDefinition } from './WallTypes';
+import { shutterSwingAngle } from './windowShutterMath';
+import {
+	archedDoorFrameGeometry,
+	archedDoorLeafGeometry,
+	doorArchInfillGeometry,
+	doorArchSpringY,
+	doorArchCollisionSegments
+} from './doorGeometry';
 
 /** How thick the glass pane itself is (metres), independent of the frame's own configured depth — kept inside the wall via `clampInteriorDepth`, while the frame itself always sits proud of both faces. */
 const GLASS_THICKNESS = 0.02;
@@ -72,10 +80,12 @@ export interface OpeningVisualResult {
 	/** The single object to parent under the owning wall/segment's own wall-local frame — see WallManager/WallPathManager's doc comments on why that placement alone is enough for this to work on straight, diagonal, and polygon-wall-segment walls identically. */
 	object: THREE.Object3D;
 	/**
-	 * Present only for a door — `DoorInteractionController` swings the leaf by animating
-	 * `hingePivot.rotation.y` (see `buildDoorVisual`'s doc comment).
+	 * Present only for a door: a single hinge, or a double-door assembly containing two hinges.
+	 * `DoorInteractionController` animates the leaf pivots (see `buildDoorVisual`).
 	 */
 	hingePivot?: THREE.Object3D;
+	/** A pair of independently hinged shutter leaves, initially folded open. */
+	shutterAssembly?: THREE.Object3D;
 }
 
 /**
@@ -95,7 +105,9 @@ export function buildOpeningVisual(
 	wallThickness: number,
 	settings: OpeningVisualSettings,
 	materialManager: BuildingMaterialManager,
-	glassMaterial: THREE.Material
+	glassMaterial: THREE.Material,
+	automaticExteriorSide: 1 | -1 = 1,
+	wallSurfaceMaterial?: THREE.Material
 ): OpeningVisualResult | null {
 	if (opening.maxU <= opening.minU || opening.maxY <= opening.minY) return null;
 
@@ -105,12 +117,19 @@ export function buildOpeningVisual(
 			wallThickness,
 			settings,
 			materialManager,
-			glassMaterial
+			glassMaterial,
+			automaticExteriorSide
 		);
-		return object ? { object } : null;
+		return object ? { object, shutterAssembly: object.getObjectByName('window-shutters') } : null;
 	}
 
-	const result = buildDoorVisual(opening, wallThickness, settings, materialManager);
+	const result = buildDoorVisual(
+		opening,
+		wallThickness,
+		settings,
+		materialManager,
+		wallSurfaceMaterial
+	);
 	return result ? { object: result.group, hingePivot: result.hingePivot } : null;
 }
 
@@ -156,9 +175,11 @@ function buildWindowVisual(
 	wallThickness: number,
 	settings: OpeningVisualSettings,
 	materialManager: BuildingMaterialManager,
-	glassMaterial: THREE.Material
+	glassMaterial: THREE.Material,
+	automaticExteriorSide: 1 | -1
 ): THREE.Group | null {
 	if (
+		opening.shutters?.mode === 'off' &&
 		!settings.windowFramesEnabled &&
 		!settings.windowGlassEnabled &&
 		!settings.showOpeningBounds &&
@@ -203,6 +224,76 @@ function buildWindowVisual(
 		}
 	}
 
+	if (opening.shutters?.mode !== 'off') {
+		const side =
+			opening.shutters?.mode === 'manual' ? (opening.shutters.side ?? 1) : automaticExteriorSide;
+		const width = (rect.maxU - rect.minU) / 2;
+		const height = rect.maxY - rect.minY;
+		const depth = Math.min(0.05, width * 0.15);
+		const shutters = new THREE.Group();
+		shutters.name = 'window-shutters';
+		Object.assign(shutters.userData, {
+			interactionKind: 'shutters',
+			openingId: opening.id,
+			side,
+			panelWidth: width,
+			minU: rect.minU,
+			maxU: rect.maxU,
+			minY: rect.minY,
+			maxY: rect.maxY
+		});
+		// The hinge axes meet the jamb edges without a lateral gap. Leave enough depth
+		// for the inner cross rails to clear the frame when the leaves are closed.
+		const hingeZ = side * (Math.max(wallThickness, layout.frameDepth) / 2 + depth * 0.85 + 0.002);
+		for (const hinge of ['left', 'right'] as const) {
+			const pivot = new THREE.Group();
+			pivot.name = `window-shutter-${hinge}-hinge`;
+			pivot.userData.hingeSide = hinge;
+			pivot.position.set(hinge === 'left' ? rect.minU : rect.maxU, rect.minY, hingeZ);
+			pivot.rotation.y = shutterSwingAngle(side, hinge, 1);
+			const center = ((hinge === 'left' ? 1 : -1) * width) / 2;
+			const geometries: THREE.BufferGeometry[] = [];
+			const addBox = (w: number, h: number, d: number, x: number, y: number, z: number) => {
+				const box = new THREE.BoxGeometry(w, h, d);
+				box.translate(x, y, z);
+				geometries.push(box);
+			};
+			const planks = Math.max(2, Math.min(8, Math.ceil(width / 0.14)));
+			const plankWidth = width / planks;
+			for (let index = 0; index < planks; index++) {
+				addBox(
+					plankWidth - Math.min(0.006, plankWidth * 0.06),
+					height,
+					depth,
+					center - width / 2 + (index + 0.5) * plankWidth,
+					height / 2,
+					0
+				);
+			}
+			for (const fraction of [0.2, 0.8]) {
+				addBox(
+					width,
+					Math.min(0.075, height * 0.1),
+					depth * 0.45,
+					center,
+					height * fraction,
+					-side * depth * 0.6
+				);
+			}
+			const merged = mergeGeometries(geometries, false);
+			for (const geometry of geometries) geometry.dispose();
+			if (merged) {
+				const leaf = new THREE.Mesh(merged, materialManager.getMaterial('door-leaf', undefined));
+				leaf.name = 'window-shutter-leaf';
+				leaf.castShadow = true;
+				leaf.receiveShadow = true;
+				pivot.add(leaf);
+				shutters.add(pivot);
+			}
+		}
+		group.add(shutters);
+	}
+
 	if (settings.showOpeningBounds) {
 		addWireframeBox(group, rect, wallThickness, openingBoundsMaterial, 'debug-opening-bounds');
 	}
@@ -220,11 +311,12 @@ function buildWindowVisual(
 }
 
 /**
- * `DoorAssembly = frame + hingePivot > doorLeaf` (see the class-level doc comment and the README).
+ * `DoorAssembly = frame + hingePivot > doorLeaf`, or a shared assembly containing two hinges.
  * The leaf's own geometry is translated so its LOCAL origin sits exactly on the hinge edge —
  * `hingeU`, at `hingePivot`'s own position — rather than being centred the way every other piece
  * here is; `DoorInteractionController` swings it open by animating `hingePivot.rotation.y`, with
- * no geometry rebuild and no repositioning.
+ * no geometry rebuild and no repositioning. Double doors return a parent assembly and animate its
+ * two child hinges in opposite directions.
  *
  * `DoorInteractionController.getCollisionRects()` builds a live leaf collider from this pivot's
  * world matrix (closed = fills the doorway hole; open = swung aside so the hole is walkable).
@@ -233,7 +325,8 @@ function buildDoorVisual(
 	opening: WallOpeningDefinition,
 	wallThickness: number,
 	settings: OpeningVisualSettings,
-	materialManager: BuildingMaterialManager
+	materialManager: BuildingMaterialManager,
+	wallSurfaceMaterial?: THREE.Material
 ): { group: THREE.Group; hingePivot: THREE.Object3D | undefined } | null {
 	const rect: UvRect = opening;
 	const hingeSide = hingeSideForOpening(opening.id);
@@ -249,13 +342,35 @@ function buildDoorVisual(
 	const group = new THREE.Group();
 	group.name = 'door-visual';
 
+	const arched = opening.doorStyle?.arched === true;
+	const double = opening.doorStyle?.double === true;
+	const springY = doorArchSpringY(rect);
+	if (arched) {
+		const infill = new THREE.Mesh(
+			doorArchInfillGeometry(rect, wallThickness),
+			wallSurfaceMaterial ?? materialManager.getMaterial('wall', undefined)
+		);
+		infill.name = 'door-arch-infill';
+		infill.castShadow = infill.receiveShadow = true;
+		group.add(infill);
+	}
 	if (settings.doorFramesEnabled) {
 		const frameMaterial = materialManager.getMaterial('door-frame', undefined);
-		const frameMesh = buildMergedBoxMesh(
-			[layout.left, layout.right, layout.top],
-			layout.frameDepth,
-			frameMaterial
-		);
+		const inner = computeDoorFrameLayout(
+			rect,
+			settings.doorFrameWidth,
+			settings.doorFrameDepth,
+			wallThickness,
+			0,
+			hingeSide
+		).leaf;
+		const frameMesh = arched
+			? new THREE.Mesh(archedDoorFrameGeometry(rect, inner, layout.frameDepth), frameMaterial)
+			: buildMergedBoxMesh(
+					[layout.left, layout.right, layout.top],
+					layout.frameDepth,
+					frameMaterial
+				);
 		if (frameMesh) {
 			frameMesh.castShadow = true;
 			frameMesh.receiveShadow = true;
@@ -267,42 +382,84 @@ function buildDoorVisual(
 	const leafWidth = layout.leaf.maxU - layout.leaf.minU;
 	const leafHeight = layout.leaf.maxY - layout.leaf.minY;
 	const doorThickness = Math.max(0.01, settings.doorThickness);
-
 	let hingePivot: THREE.Object3D | undefined;
 	if (leafWidth > 0 && leafHeight > 0) {
-		hingePivot = new THREE.Object3D();
-		hingePivot.name = 'door-hinge-pivot';
-		hingePivot.userData.openingId = opening.id;
-		hingePivot.userData.hingeSide = hingeSide;
-		hingePivot.userData.aimU = (rect.minU + rect.maxU) / 2;
-		hingePivot.userData.aimY = (rect.minY + rect.maxY) / 2;
-		hingePivot.userData.minU = rect.minU;
-		hingePivot.userData.maxU = rect.maxU;
-		hingePivot.userData.minY = rect.minY;
-		hingePivot.userData.maxY = rect.maxY;
-		hingePivot.userData.wallThickness = wallThickness;
-		hingePivot.userData.doorThickness = doorThickness;
-		hingePivot.userData.leafWidth = leafWidth;
-		hingePivot.userData.leafHeight = leafHeight;
-		hingePivot.position.set(layout.hingeU, layout.leaf.minY, 0);
-		const leafGeometry = new THREE.BoxGeometry(leafWidth, leafHeight, doorThickness);
-		const sign = hingeSide === 'left' ? 1 : -1;
-		leafGeometry.translate(sign * (leafWidth / 2), leafHeight / 2, 0);
+		const middle = (layout.leaf.minU + layout.leaf.maxU) / 2;
+		const seam = Math.min(0.002, leafWidth * 0.01);
+		const leaves = double
+			? [
+					{ rect: { ...layout.leaf, maxU: middle - seam }, side: 'left' as const },
+					{ rect: { ...layout.leaf, minU: middle + seam }, side: 'right' as const }
+				]
+			: [{ rect: layout.leaf, side: hingeSide }];
+		if (double) {
+			hingePivot = new THREE.Group();
+			hingePivot.name = 'door-hinge-pivot';
+			Object.assign(hingePivot.userData, {
+				openingId: opening.id,
+				interactionKind: 'double-door',
+				aimU: (rect.minU + rect.maxU) / 2,
+				aimY: (rect.minY + rect.maxY) / 2
+			});
+			group.add(hingePivot);
+		}
+		for (const { rect: leaf, side } of leaves) {
+			const pivot = new THREE.Object3D();
+			const width = leaf.maxU - leaf.minU;
+			const hingeU = side === 'left' ? leaf.minU : leaf.maxU;
+			pivot.name = double ? 'door-leaf-hinge' : 'door-hinge-pivot';
+			Object.assign(pivot.userData, {
+				openingId: opening.id,
+				hingeSide: side,
+				aimU: (rect.minU + rect.maxU) / 2,
+				aimY: (rect.minY + rect.maxY) / 2,
+				minU: double && side === 'right' ? middle : rect.minU,
+				maxU: double && side === 'left' ? middle : rect.maxU,
+				minY: rect.minY,
+				maxY: rect.maxY,
+				wallThickness,
+				doorThickness,
+				leafWidth: width,
+				leafHeight
+			});
+			pivot.position.set(hingeU, leaf.minY, 0);
+			const geometry = arched
+				? archedDoorLeafGeometry(layout.leaf, leaf, springY, doorThickness)
+				: new THREE.BoxGeometry(width, leafHeight, doorThickness).translate(
+						(leaf.minU + leaf.maxU) / 2,
+						(leaf.minY + leaf.maxY) / 2,
+						0
+					);
+			geometry.translate(-hingeU, -leaf.minY, 0);
+			const leafMesh = new THREE.Mesh(
+				geometry,
+				materialManager.getMaterial('door-leaf', opening.material)
+			);
+			leafMesh.castShadow = leafMesh.receiveShadow = true;
+			leafMesh.name = 'door-leaf';
+			pivot.add(leafMesh);
+			// Keep handles below the curve even on unusually wide, low arched doors.
+			const handleHeight = arched
+				? Math.min(leafHeight, Math.max(0.1, springY - leaf.minY))
+				: leafHeight;
+			const handles = buildDoorHandleMesh(
+				computeDoorHandlePlacement(width, handleHeight, side),
+				doorThickness,
+				materialManager.getMaterial('door-handle', undefined)
+			);
+			if (handles) pivot.add(handles);
+			if (settings.showDoorHinge) addHingeMarker(pivot);
+			if (double) hingePivot!.add(pivot);
+			else {
+				hingePivot = pivot;
+				group.add(pivot);
+			}
+		}
+	}
 
-		const leafMaterial = materialManager.getMaterial('door-leaf', opening.material);
-		const leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
-		leafMesh.castShadow = true;
-		leafMesh.receiveShadow = true;
-		leafMesh.name = 'door-leaf';
-		hingePivot.add(leafMesh);
-		const handles = buildDoorHandleMesh(
-			computeDoorHandlePlacement(leafWidth, leafHeight, hingeSide),
-			doorThickness,
-			materialManager.getMaterial('door-handle', undefined)
-		);
-		if (handles) hingePivot.add(handles);
-		if (settings.showDoorHinge) addHingeMarker(hingePivot);
-		group.add(hingePivot);
+	if (arched && hingePivot) {
+		hingePivot.userData.archCorners = doorArchCollisionSegments(rect);
+		hingePivot.userData.archWallThickness = wallThickness;
 	}
 
 	if (settings.showOpeningBounds) {

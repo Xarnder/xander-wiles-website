@@ -1,3 +1,6 @@
+import { createInteraction } from '../../miniBuild/MiniBuildInteractions';
+import { MINI_BUILD_LIMITS } from '../../miniBuild/MiniBuildTypes';
+import { resolvePlayerInteractionPose } from '../../player/PlayerInteractionPoseResolver';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -183,5 +186,76 @@ describe('analytic leg solver', () => {
 			expect(knee.position.length()).toBe(1);
 			expect(foot.position.length()).toBe(1);
 		}
+	});
+});
+
+describe('authored player poses on the real character skeleton', () => {
+	it.each([0, Math.PI / 2, Math.PI, Math.PI * 1.5])(
+		'seats the hips and bends both knees in the authored facing direction at %s',
+		(yaw) => {
+			const c = new CharacterInstance(template, '#ffffff', () => {});
+			const root = new THREE.Group();
+			root.rotation.y = yaw;
+			root.add(c.object);
+			const pose = resolvePlayerInteractionPose('sit', { x: 0, y: 0, z: 0 }, yaw);
+			c.poseInteraction(pose);
+			const hips = bone(c, 'Hips').getWorldPosition(new THREE.Vector3());
+			expect(hips.y).toBeCloseTo(pose.pelvisSupportOffset);
+			const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+			for (const side of ['Left', 'Right']) {
+				const knee = bone(c, `${side}Leg`).getWorldPosition(new THREE.Vector3());
+				const ankle = bone(c, `${side}Foot`).getWorldPosition(new THREE.Vector3());
+				expect(knee.clone().sub(hips).dot(forward)).toBeGreaterThan(0.15);
+				expect(ankle.y).toBeLessThan(knee.y - 0.15);
+			}
+			c.dispose();
+		}
+	);
+	it.each(['sit', 'lie'] as const)(
+		'fits the actual %s skinned body inside its generated occupancy box',
+		(action) => {
+			const c = new CharacterInstance(template, '#ffffff', () => {});
+			const root = new THREE.Group();
+			root.add(c.object);
+			c.poseInteraction(resolvePlayerInteractionPose(action, { x: 0, y: 0, z: 0 }, 0));
+			root.updateMatrixWorld(true);
+			const bounds = new THREE.Box3().makeEmpty(),
+				point = new THREE.Vector3();
+			c.object.traverse((object) => {
+				if (object instanceof THREE.SkinnedMesh)
+					for (let i = 0; i < object.geometry.attributes.position.count; i++) {
+						object.getVertexPosition(i, point);
+						object.localToWorld(point);
+						bounds.expandByPoint(point);
+					}
+			});
+			const box = createInteraction(action, { x: 0, y: 0, z: 0 }).collider,
+				g = MINI_BUILD_LIMITS.gridSize;
+			for (const axis of ['x', 'y', 'z'] as const) {
+				expect(bounds.min[axis], `${action} ${axis} lower`).toBeGreaterThanOrEqual(
+					(box.centerOffsetGrid[axis] - box.sizeGrid[axis] / 2) * g - 0.015
+				);
+				expect(bounds.max[axis], `${action} ${axis} upper`).toBeLessThanOrEqual(
+					(box.centerOffsetGrid[axis] + box.sizeGrid[axis] / 2) * g + 0.015
+				);
+			}
+			c.dispose();
+		}
+	);
+
+	it('lies face-up with the head along the authored -Z arrow', () => {
+		const c = new CharacterInstance(template, '#ffffff', () => {});
+		const root = new THREE.Group();
+		root.add(c.object);
+		const pose = resolvePlayerInteractionPose('lie', { x: 0, y: 0, z: 0 }, 0);
+		c.poseInteraction(pose);
+		const hips = bone(c, 'Hips').getWorldPosition(new THREE.Vector3()),
+			head = bone(c, 'Head').getWorldPosition(new THREE.Vector3());
+		expect(hips.y).toBeCloseTo(pose.pelvisSupportOffset);
+		expect(head.z).toBeLessThan(hips.z - 0.4);
+		expect(new THREE.Vector3(0, 0, -1).applyQuaternion(c.object.quaternion).y).toBeGreaterThan(
+			0.99
+		);
+		c.dispose();
 	});
 });

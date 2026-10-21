@@ -1,3 +1,4 @@
+import { furnitureSecondaryKind } from './furnitureSurfaceKinds';
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import {
@@ -191,6 +192,31 @@ export class FurnitureManager {
 				dimensions: item.dimensions,
 				parameters: item.parameters
 			});
+			if (input.pillar) {
+				const p = input.pillar;
+				const bottom = p.bottomEnabled ? p.bottomHeight : 0;
+				const top = p.topEnabled ? p.topHeight : 0;
+				const pieces = [
+					{ width: p.width, y: item.y + bottom, height: p.height - bottom - top },
+					...(bottom > 0 ? [{ width: p.bottomWidth, y: item.y, height: bottom }] : []),
+					...(top > 0 ? [{ width: p.topWidth, y: item.y + p.height - top, height: top }] : [])
+				];
+				for (const piece of pieces) {
+					const rect = furnitureCollisionRect(
+						item.x,
+						piece.y,
+						item.z,
+						piece.width,
+						piece.width,
+						piece.height,
+						item.rotationY ?? 0,
+						'box'
+					);
+					if (rect) rects.push(rect);
+				}
+				continue;
+			}
+
 			const rect = furnitureCollisionRect(
 				item.x,
 				item.y,
@@ -254,7 +280,9 @@ export class FurnitureManager {
 	updateLights(camera: THREE.Vector3, timeSeconds: number): void {
 		const ranked = this.orderedIds
 			.map((id) => this.items.get(id)!)
-			.filter((item) => item.kind === 'torch' || item.kind === 'lantern' || item.kind === 'fireplace')
+			.filter(
+				(item) => item.kind === 'torch' || item.kind === 'lantern' || item.kind === 'fireplace'
+			)
 			.map((item) => ({
 				item,
 				distance: (item.x - camera.x) ** 2 + (item.y - camera.y) ** 2 + (item.z - camera.z) ** 2
@@ -309,8 +337,11 @@ export class FurnitureManager {
 		const secondary =
 			item.secondaryMaterial ?? furnitureColorMaterial(undefined, entry.defaultSecondary);
 		return {
-			primary: this.materialManager.getMaterial('furniture', primary),
-			secondary: this.materialManager.getMaterial('furniture-accent', secondary),
+			primary: this.materialManager.getMaterial(
+				item.kind === 'wooden-pillar' ? 'wall-beam' : 'furniture',
+				primary
+			),
+			secondary: this.materialManager.getMaterial(furnitureSecondaryKind(item.kind), secondary),
 			accent: this.materialManager.getMaterial('furniture-accent', secondary),
 			emissive: this.flameMaterial
 		};

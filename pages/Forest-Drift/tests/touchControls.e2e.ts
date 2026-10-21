@@ -1,3 +1,4 @@
+import { openWorldsScreen } from './worldHelpers';
 import { expect, test } from '@playwright/test';
 
 test.describe('Touch / iPad Controls', () => {
@@ -13,6 +14,7 @@ test.describe('Touch / iPad Controls', () => {
 
 		// Load with touch enabled
 		await page.goto('/?touch=1');
+		await openWorldsScreen(page);
 
 		await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
 		await page.getByTestId('play-default-world').click();

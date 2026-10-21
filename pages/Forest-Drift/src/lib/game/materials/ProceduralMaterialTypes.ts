@@ -8,9 +8,10 @@
  */
 
 export type ProceduralMaterialType =
-	'plaster' | 'timber' | 'slate' | 'masonry' | 'paving' | 'ground' | 'grass' | 'glass';
+	'fabric' | 'plaster' | 'timber' | 'slate' | 'masonry' | 'paving' | 'ground' | 'grass' | 'glass';
 
 export const PROCEDURAL_MATERIAL_TYPES: readonly ProceduralMaterialType[] = [
+	'fabric',
 	'plaster',
 	'timber',
 	'slate',
@@ -34,6 +35,7 @@ export type GrassVariant = 'meadow' | 'dry' | 'detail';
 export type GlassVariant = 'clear' | 'old';
 
 export interface ProceduralVariantMap {
+	fabric: 'woven';
 	plaster: PlasterVariant;
 	timber: TimberVariant;
 	slate: SlateVariant;
@@ -47,6 +49,7 @@ export interface ProceduralVariantMap {
 export const PROCEDURAL_VARIANTS: {
 	readonly [T in ProceduralMaterialType]: readonly ProceduralVariantMap[T][];
 } = {
+	fabric: ['woven'],
 	plaster: ['lime', 'rough'],
 	timber: ['dark-oak', 'aged-brown', 'weathered', 'fresh', 'dark-stained'],
 	slate: ['natural', 'irregular'],

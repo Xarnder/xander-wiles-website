@@ -126,6 +126,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 	const doorTool = makeFakeTool('door');
 	const windowTool = makeFakeTool('window');
 	const beamTool = makeFakeTool('beam');
+	const pillarTool = makeFakeTool('pillar');
 	const ceilingTool = makeFakeTool('ceiling');
 	const floorTool = makeFakeTool('floor');
 	const roofTool = makeFakeTool('flat-roof');
@@ -149,6 +150,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 			door: doorTool,
 			window: windowTool,
 			beam: beamTool,
+			pillar: pillarTool,
 			ceiling: ceilingTool,
 			floor: floorTool,
 			'flat-roof': roofTool,
@@ -210,6 +212,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		doorTool,
 		windowTool,
 		beamTool,
+		pillarTool,
 		ceilingTool,
 		floorTool,
 		roofTool,
@@ -325,13 +328,13 @@ describe('BuildToolManager furniture slot 8', () => {
 		expect(torchTool.activateCount).toBe(0);
 	});
 
-	it('does not exit Remove Mode when an unused digit is pressed', () => {
+	it('exits Remove Mode when the shovel slot is selected', () => {
 		const { removeTool, key, hotbarStates } = buildHarness(pointerLocked);
 		key('KeyX');
 		expect(removeTool.activateCount).toBe(1);
 		key('Digit7');
-		expect(removeTool.deactivateCount).toBe(0);
-		expect(hotbarStates.at(-1)?.globalMode).toBe('remove');
+		expect(removeTool.deactivateCount).toBe(1);
+		expect(hotbarStates.at(-1)?.globalMode).toBe('none');
 	});
 });
 
@@ -745,6 +748,20 @@ describe('Hotbar slot variants (↑/↓)', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('reaches Wooden Pillars fifth in slot 2 and opens its customise panel', () => {
+		const { buildToolManager, pillarTool, key, hotbarStates } = buildHarness(pointerLocked);
+		key('Digit2');
+		for (let index = 0; index < 4; index++) key('ArrowDown');
+		expect(pillarTool.activateCount).toBe(1);
+		expect(hotbarStates.at(-1)).toMatchObject({
+			toolId: 'pillar',
+			variantIndex: 4,
+			variantCount: 5
+		});
+		key('KeyE');
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
+	});
+
 	it('selects each group default from the number keys', () => {
 		const { polyWallTool, doorTool, ceilingTool, key, hotbarStates } = buildHarness(pointerLocked);
 
@@ -914,11 +931,12 @@ describe('BuildToolManager placement customize (E)', () => {
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 	});
 
-	it('does nothing on Foundation, with Build Mode off, or in Compose Mode', () => {
+	it('opens foundation styles but does nothing with Build Mode off or in Compose Mode', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 
 		key('KeyE');
-		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(false);
+		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
+		key('Escape');
 
 		key('Digit3');
 		key('KeyG');

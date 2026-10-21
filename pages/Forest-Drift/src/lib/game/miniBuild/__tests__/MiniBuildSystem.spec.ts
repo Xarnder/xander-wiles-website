@@ -1,3 +1,4 @@
+import { createInteraction } from '../MiniBuildInteractions';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { BuildingMaterialManager } from '../../building/BuildingMaterialManager';
@@ -128,6 +129,32 @@ describe('MiniBuildSystem — design vs instance', () => {
 });
 
 describe('MiniBuildSystem — shared edits and Make Unique', () => {
+	it('propagates anchor-only revisions and unique copies without recompiling or replacing geometry', () => {
+		const system = createSystem();
+		const design = mustCreate(system, draftFrom(CHAIR));
+		const a = mustPlace(system, design.id, 1, 1),
+			b = mustPlace(system, design.id, 3, 1);
+		const batches = system.instances.getBatches(),
+			compiles = system.cache.compileCount;
+		const location = createInteraction('sit', { x: 4, y: 8, z: 4 });
+		const save = system.saveDesign(design.id, { ...design, interactionLocations: [location] });
+		expect(save.ok).toBe(true);
+		expect(system.cache.compileCount).toBe(compiles);
+		expect(system.instances.getBatches()[0]).toBe(batches[0]);
+		mustPlace(system, design.id, 5, 1);
+		expect(system.instances.getBatches()).toHaveLength(1);
+		expect(system.getDesign(system.instances.get(a.id)!.designId)!.interactionLocations).toEqual([
+			location
+		]);
+		const copy = system.makeUnique(b.id);
+		expect(copy.ok).toBe(true);
+		if (!copy.ok) return;
+		expect(copy.value.interactionLocations).toEqual([location]);
+		system.saveDesign(copy.value.id, { ...copy.value, interactionLocations: [] });
+		expect(system.getDesign(design.id)!.interactionLocations).toHaveLength(1);
+		system.dispose();
+	});
+
 	it('editing a shared design updates every copy with one compile and preserves transforms and ids', () => {
 		const system = createSystem();
 		const chair = mustCreate(system, draftFrom(CHAIR));

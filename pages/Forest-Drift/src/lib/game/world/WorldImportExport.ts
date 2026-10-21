@@ -71,6 +71,10 @@ export async function createWorldPackage(
 	now: string = new Date().toISOString()
 ): Promise<Uint8Array> {
 	const worldBytes = new TextEncoder().encode(JSON.stringify(world));
+	if (worldBytes.byteLength > IMPORT_LIMITS.worldJsonBytes)
+		throw new Error('This world is too large to export as an importable package.');
+	if (thumbnail && thumbnail.size > IMPORT_LIMITS.thumbnailBytes)
+		throw new Error('The world thumbnail is too large to export.');
 	const manifest: WorldPackageManifest = {
 		format: WORLD_PACKAGE_FORMAT,
 		formatVersion: WORLD_PACKAGE_FORMAT_VERSION,
@@ -83,15 +87,21 @@ export async function createWorldPackage(
 		checksum: checksumBytes(worldBytes)
 	};
 
+	const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+	if (manifestBytes.byteLength > IMPORT_LIMITS.manifestBytes)
+		throw new Error('The world metadata is too large to export.');
 	const entries: Record<string, [Uint8Array, { level?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 }]> = {
-		[MANIFEST_ENTRY]: [new TextEncoder().encode(JSON.stringify(manifest, null, 2)), { level: 6 }],
+		[MANIFEST_ENTRY]: [manifestBytes, { level: 6 }],
 		[WORLD_ENTRY]: [worldBytes, { level: 6 }]
 	};
 	if (thumbnail) {
 		entries[THUMBNAIL_ENTRY] = [new Uint8Array(await thumbnail.arrayBuffer()), { level: 0 }];
 	}
 
-	return zipSync(entries);
+	const bytes = zipSync(entries);
+	if (bytes.byteLength > IMPORT_LIMITS.packageBytes)
+		throw new Error('This world is too large to export as an importable package.');
+	return bytes;
 }
 
 /**
@@ -107,8 +117,27 @@ export function readWorldPackage(bytes: Uint8Array): ImportResult {
 
 	let files: Record<string, Uint8Array>;
 	try {
-		files = unzipSync(bytes);
-	} catch {
+		const limits: Record<string, number> = {
+			[MANIFEST_ENTRY]: IMPORT_LIMITS.manifestBytes,
+			[WORLD_ENTRY]: IMPORT_LIMITS.worldJsonBytes,
+			[THUMBNAIL_ENTRY]: IMPORT_LIMITS.thumbnailBytes
+		};
+		const seen = new Set<string>();
+		files = unzipSync(bytes, {
+			filter: (file) => {
+				if (!Object.hasOwn(limits, file.name)) return false;
+				const limit = limits[file.name];
+				if (limit === undefined) return false;
+				if (seen.has(file.name)) throw new Error('Duplicate world package entry.');
+				seen.add(file.name);
+				if (file.originalSize > limit || file.size > limit)
+					throw new Error('World package entry is too large.');
+				return true;
+			}
+		});
+	} catch (error) {
+		if (error instanceof Error && error.message.includes('too large'))
+			return { ok: false, error: 'This world file is too large to import.' };
 		return { ok: false, error: 'This file is not a valid world package.' };
 	}
 
@@ -123,17 +152,21 @@ export function readWorldPackage(bytes: Uint8Array): ImportResult {
 
 	let manifest: WorldPackageManifest;
 	try {
-		manifest = JSON.parse(new TextDecoder().decode(manifestBytes)) as WorldPackageManifest;
+		manifest = JSON.parse(
+			new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)
+		) as WorldPackageManifest;
 	} catch {
 		return { ok: false, error: 'This world file has an unreadable manifest.' };
 	}
-	if (manifest?.format !== WORLD_PACKAGE_FORMAT) {
+	if (
+		!manifest ||
+		typeof manifest !== 'object' ||
+		Array.isArray(manifest) ||
+		manifest.format !== WORLD_PACKAGE_FORMAT
+	) {
 		return { ok: false, error: 'This file was not exported by Forest Drift.' };
 	}
-	if (
-		typeof manifest.formatVersion !== 'number' ||
-		manifest.formatVersion > WORLD_PACKAGE_FORMAT_VERSION
-	) {
+	if (manifest.formatVersion > WORLD_PACKAGE_FORMAT_VERSION) {
 		return {
 			ok: false,
 			error:
@@ -141,13 +174,20 @@ export function readWorldPackage(bytes: Uint8Array): ImportResult {
 		};
 	}
 
-	if (typeof manifest.checksum === 'string' && checksumBytes(worldBytes) !== manifest.checksum) {
+	if (
+		!Number.isInteger(manifest.formatVersion) ||
+		manifest.formatVersion < 1 ||
+		typeof manifest.checksum !== 'string' ||
+		!/^[0-9a-f]{8}$/i.test(manifest.checksum)
+	)
+		return { ok: false, error: 'This world file has an invalid manifest or missing checksum.' };
+	if (checksumBytes(worldBytes) !== manifest.checksum.toLowerCase()) {
 		return { ok: false, error: 'This world file appears to be corrupted (checksum mismatch).' };
 	}
 
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(new TextDecoder().decode(worldBytes));
+		parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(worldBytes));
 	} catch {
 		return { ok: false, error: 'This world file contains invalid world data.' };
 	}
@@ -155,26 +195,40 @@ export function readWorldPackage(bytes: Uint8Array): ImportResult {
 	// Migrate first, then validate: migrations own backwards compatibility, validation owns "is this
 	// actually loadable", and keeping them in that order means validation only ever sees the current
 	// schema and never has to know what old worlds looked like.
-	const migrated = migrateWorld(parsed);
-	if (!migrated.ok) return { ok: false, error: migrated.error };
+	try {
+		if (typeof parsed === 'object' && parsed !== null) {
+			const payload = parsed as Record<string, unknown>;
+			if (
+				(manifest.worldId !== undefined && manifest.worldId !== payload.id) ||
+				(manifest.schemaVersion !== undefined && manifest.schemaVersion !== payload.schemaVersion)
+			) {
+				return { ok: false, error: 'This world file has inconsistent manifest data.' };
+			}
+		}
+		const migrated = migrateWorld(parsed);
+		if (!migrated.ok) return { ok: false, error: migrated.error };
 
-	const validated = validateWorldDefinition(migrated.value);
-	if (!validated.ok) {
-		return { ok: false, error: `This world file is invalid: ${validated.error}` };
+		const validated = validateWorldDefinition(migrated.value);
+		if (!validated.ok) {
+			return { ok: false, error: `This world file is invalid: ${validated.error}` };
+		}
+
+		const thumbnailBytes = files[THUMBNAIL_ENTRY];
+		const thumbnail =
+			thumbnailBytes && thumbnailBytes.byteLength > 0
+				? new Blob([thumbnailBytes as BlobPart], { type: 'image/webp' })
+				: undefined;
+
+		return { ok: true, world: validated.value, thumbnail, manifest };
+	} catch {
+		return { ok: false, error: 'This world file contains invalid world data.' };
 	}
-
-	const thumbnailBytes = files[THUMBNAIL_ENTRY];
-	const thumbnail =
-		thumbnailBytes && thumbnailBytes.byteLength > 0
-			? new Blob([thumbnailBytes as BlobPart], { type: 'image/webp' })
-			: undefined;
-
-	return { ok: true, world: validated.value, thumbnail, manifest };
 }
 
 /** Keeps exported filenames safe across platforms without mangling ordinary names into unreadable slugs. */
 export function worldFileName(worldName: string): string {
 	const safe = worldName
+		.replace(/\p{Cc}/gu, '')
 		.replace(/[/\\?%*:|"<>]/g, '-')
 		.replace(/\s+/g, ' ')
 		.trim()

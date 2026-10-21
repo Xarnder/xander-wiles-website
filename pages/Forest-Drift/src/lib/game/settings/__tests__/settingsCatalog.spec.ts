@@ -93,6 +93,7 @@ describe('buildSettingsCatalog', () => {
 	it('covers every former debug-panel section', () => {
 		const catalog = buildSettingsCatalog(testHost());
 		expect(catalog.map((category) => category.id)).toEqual([
+			'audio',
 			'world',
 			'terrain',
 			'player',
@@ -379,4 +380,39 @@ describe('online worlds (Q14-A)', () => {
 		// The weather clock follows the room clock online, even for the owner.
 		expect(ownerField('weather.timeScale').disabled).toBe(true);
 	});
+});
+
+it('offers the bundled panoramas and defaults older worlds to Sunny', () => {
+	const host = testHost();
+	delete host.sky.hdri.preset;
+	const sky = buildSettingsCatalog(host).find((category) => category.id === 'sky')!;
+	const field = sky.groups
+		.find((group) => group.id === 'hdri')!
+		.fields.find((field) => field.id === 'sky.hdri.preset')!;
+	expect(field.kind).toBe('select');
+	if (field.kind !== 'select') throw new Error('Expected panorama selector');
+	expect(field.get()).toBe('cloudscape-sunny');
+	expect(field.options.map((option) => option.label)).toEqual([
+		'Cloudscape Sunny',
+		'Cloudscape Moody',
+		'Procedural gradient'
+	]);
+	field.set('cloudscape-moody');
+	expect(host.sky.hdri.preset).toBe('cloudscape-moody');
+});
+
+it('keeps personal audio preferences editable for online members', () => {
+	const host = testHost();
+	host.worldAccess = 'member';
+	const audio = buildSettingsCatalog(host).find((category) => category.id === 'audio')!;
+	expect(audio.lockedReason).toBeUndefined();
+	expect(audio.groups.flatMap((group) => group.fields).map((field) => field.id)).toEqual([
+		'audio.muted',
+		'audio.master',
+		'audio.music',
+		'audio.ambience'
+	]);
+	expect(audio.groups.flatMap((group) => group.fields).every((field) => !field.disabled)).toBe(
+		true
+	);
 });

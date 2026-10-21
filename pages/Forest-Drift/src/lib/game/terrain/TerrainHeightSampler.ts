@@ -75,6 +75,10 @@ export class TerrainHeightSampler {
 	private readonly settings: TerrainSettings;
 	private seed = '';
 	private initialized = false;
+	private heightModifier: ((x: number, z: number, height: number) => number) | null = null;
+	setHeightModifier(modifier: ((x: number, z: number, height: number) => number) | null): void {
+		this.heightModifier = modifier;
+	}
 	private hydrology: HydrologyCarver | null = null;
 
 	private biomeNoise!: Noise2D;
@@ -402,10 +406,17 @@ export class TerrainHeightSampler {
 	}
 
 	/** Final terrain: pre-water height, then river channels and lake basins when hydrology is on. */
-	sample(worldX: number, worldZ: number): number {
+	sampleUnmodified(worldX: number, worldZ: number): number {
 		const base = this.sampleBase(worldX, worldZ);
-		if (!this.hydrology?.settings.enabled) return base;
-		return this.hydrology.shapeHeight(worldX, worldZ, base);
+		const height = this.hydrology?.settings.enabled
+			? this.hydrology.shapeHeight(worldX, worldZ, base)
+			: base;
+		return height;
+	}
+
+	sample(worldX: number, worldZ: number): number {
+		const height = this.sampleUnmodified(worldX, worldZ);
+		return this.heightModifier?.(worldX, worldZ, height) ?? height;
 	}
 
 	/**

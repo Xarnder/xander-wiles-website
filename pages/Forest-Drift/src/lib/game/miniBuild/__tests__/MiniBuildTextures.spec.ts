@@ -22,7 +22,7 @@ describe('Mini Build textures', () => {
 		});
 		expect(miniBuildSurfaceStyle({ finish: 'stone' })?.type).toBe('masonry');
 		expect(miniBuildSurfaceStyle({ finish: 'glass' })?.type).toBe('glass');
-		expect(miniBuildSurfaceStyle({ finish: 'fabric' })?.type).toBe('plaster');
+		expect(miniBuildSurfaceStyle({ finish: 'fabric' })?.type).toBe('fabric');
 		expect(miniBuildSurfaceStyle({ finish: 'metal' })).toBeNull();
 		expect(miniBuildSurfaceStyle({ finish: 'plain' })).toBeNull();
 		expect(miniBuildSurfaceStyle({ finish: 'wood', texture: 'flat' })).toBeNull();

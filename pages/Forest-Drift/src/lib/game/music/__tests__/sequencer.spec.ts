@@ -141,9 +141,9 @@ describe('MusicTreeSequencer lifecycle', () => {
 		q.reindex([bass, bell]);
 		await q.play(); // schedules both notes at time 0.08 (both on ring 0 — a chord)
 
-		// gains[0] is the shared mix bus; per-note gains follow in scheduling order.
-		const bassGain = mock.gains[1];
-		const bellGain = mock.gains[2];
+		// The tree mix bus and persistent music output precede per-note envelopes.
+		const bassGain = mock.gains[2];
+		const bellGain = mock.gains[3];
 
 		// Bass (gated): holds flat through the full 1.0s sustain, THEN releases over 0.2s.
 		expect(bassGain.setValueAtTime).toHaveBeenCalledWith(expect.any(Number), 1.08);

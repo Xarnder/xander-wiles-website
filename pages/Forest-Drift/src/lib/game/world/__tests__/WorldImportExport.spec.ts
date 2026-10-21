@@ -234,3 +234,134 @@ describe('worldFileName', () => {
 		expect(worldFileName('   ')).toBe(`World${WORLD_FILE_EXTENSION}`);
 	});
 });
+
+function rewritePackage(
+	bytes: Uint8Array,
+	edit: (files: Record<string, Uint8Array>) => void
+): Uint8Array {
+	const files = unzipSync(bytes);
+	edit(files);
+	return zipSync(files);
+}
+
+describe('bounded extraction and integrity', () => {
+	it.each(['manifest.json', 'world.json', 'thumbnail.webp'])(
+		'checks %s declared size before decompression',
+		async (name) => {
+			const bytes = await createWorldPackage(richWorld(), new Blob(['thumbnail']));
+			// Change only the central-directory uncompressed size: no giant allocation is needed
+			// to prove the importer rejects an archive claiming to expand to 2 GiB.
+			const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+			for (let i = 0; i + 46 <= bytes.length; i++) {
+				if (view.getUint32(i, true) !== 0x02014b50) continue;
+				const length = view.getUint16(i + 28, true);
+				if (new TextDecoder().decode(bytes.subarray(i + 46, i + 46 + length)) === name) {
+					view.setUint32(i + 24, 0x7fffffff, true);
+					break;
+				}
+			}
+			const result = readWorldPackage(bytes);
+			expect(result.ok).toBe(false);
+			if (!result.ok) expect(result.error).toMatch(/too large/i);
+		}
+	);
+
+	it('skips unrecognized archive entries rather than expanding them', async () => {
+		const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+			files['unused.bin'] = new Uint8Array(1024);
+		});
+		const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+		for (let i = 0; i + 46 <= bytes.length; i++) {
+			if (view.getUint32(i, true) !== 0x02014b50) continue;
+			const length = view.getUint16(i + 28, true);
+			if (new TextDecoder().decode(bytes.subarray(i + 46, i + 46 + length)) === 'unused.bin')
+				view.setUint32(i + 24, 0x7fffffff, true);
+		}
+		expect(readWorldPackage(bytes).ok).toBe(true);
+	});
+
+	it.each([undefined, 123, 'not-a-checksum'])(
+		'requires a valid checksum (%s)',
+		async (checksum) => {
+			const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+				const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']));
+				manifest.checksum = checksum;
+				files['manifest.json'] = encoder.encode(JSON.stringify(manifest));
+			});
+			expect(readWorldPackage(bytes).ok).toBe(false);
+		}
+	);
+
+	it.each([0, -1, 1.5, '1', null])('rejects invalid package version %s', async (version) => {
+		const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+			const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']));
+			manifest.formatVersion = version;
+			files['manifest.json'] = encoder.encode(JSON.stringify(manifest));
+		});
+		expect(readWorldPackage(bytes).ok).toBe(false);
+	});
+
+	it('rejects manifest identity mismatches', async () => {
+		const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+			const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']));
+			manifest.worldId = 'another-world';
+			files['manifest.json'] = encoder.encode(JSON.stringify(manifest));
+		});
+		expect(readWorldPackage(bytes).ok).toBe(false);
+	});
+
+	it.each([
+		null,
+		[],
+		{},
+		{ schemaVersion: 1, buildings: [null] },
+		{ schemaVersion: 9, musicTrees: [null] }
+	])('returns a failure instead of throwing for malformed payload %j', async (payload) => {
+		const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+			files['world.json'] = encoder.encode(JSON.stringify(payload));
+			files['manifest.json'] = encoder.encode(
+				JSON.stringify({
+					format: WORLD_PACKAGE_FORMAT,
+					formatVersion: 1,
+					checksum: checksumBytes(files['world.json'])
+				})
+			);
+		});
+		expect(() => readWorldPackage(bytes)).not.toThrow();
+		expect(readWorldPackage(bytes).ok).toBe(false);
+	});
+
+	it('removes control characters from exported filenames', () => {
+		expect(worldFileName('My\u0000World\n')).toBe(`MyWorld${WORLD_FILE_EXTENSION}`);
+	});
+});
+
+describe('complete authored content', () => {
+	it('preserves buildings, openings, door styles, shutters, pillars, music, creatures, Mini Builds, sky and player state', async () => {
+		const { exportAuditWorld } = await import('./exportAuditFixture');
+		const world = exportAuditWorld();
+		const bytes = await createWorldPackage(world);
+		const result = readWorldPackage(bytes);
+		expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+		if (result.ok) expect(result.world).toEqual(world);
+	});
+});
+
+it('rejects duplicate required entries instead of accepting whichever appears last', async () => {
+	const bytes = rewritePackage(await createWorldPackage(richWorld()), (files) => {
+		files['spare.json'] = files['world.json'];
+	});
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	for (let i = 0; i + 46 <= bytes.length; i++) {
+		if (view.getUint32(i, true) !== 0x02014b50) continue;
+		const length = view.getUint16(i + 28, true);
+		if (new TextDecoder().decode(bytes.subarray(i + 46, i + 46 + length)) === 'spare.json')
+			bytes.set(encoder.encode('world.json'), i + 46);
+	}
+	expect(readWorldPackage(bytes).ok).toBe(false);
+});
+
+it('refuses to produce a package whose metadata cannot be imported', async () => {
+	const world = richWorld({ name: 'x'.repeat(70_000) });
+	await expect(createWorldPackage(world)).rejects.toThrow(/metadata.*too large/i);
+});

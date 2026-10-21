@@ -101,8 +101,8 @@ export class RoofManager {
 	private readonly roots: FoundationRootRegistry;
 
 	private readonly roofs = new Map<string, RoofEntry>();
-	/** openingId -> its door's hingePivot, for doors in vertical roof faces — merged with the walls' own by BuildingManager.getDoorHingePivots. */
-	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
+	/** Opening id -> door hinge or shutter assembly, for shared hover targeting and animation. */
+	private readonly openingInteractionPivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: RoofManagerOptions) {
@@ -238,7 +238,7 @@ export class RoofManager {
 		existing: THREE.Group | null | undefined
 	): THREE.Group | null {
 		if (existing) {
-			clearDoorHingePivotsFrom(existing, this.doorHingePivots);
+			clearOpeningInteractionPivotsFrom(existing, this.openingInteractionPivots);
 			disposeOpeningVisual(existing);
 		}
 		const openings = definition.openings ?? [];
@@ -258,11 +258,18 @@ export class RoofManager {
 					openingDepth,
 					this.buildingSettings,
 					this.materialManager,
-					this.glassMaterial
+					this.glassMaterial,
+					1,
+					this.materialManager.getMaterial(
+						'wall',
+						this.getEndWallStyle?.(definition.foundationId)?.material
+					)
 				);
 				if (!result) continue;
 				faceGroup.add(result.object);
-				if (result.hingePivot) this.doorHingePivots.set(opening.id, result.hingePivot);
+				if (result.hingePivot) this.openingInteractionPivots.set(opening.id, result.hingePivot);
+				if (result.shutterAssembly)
+					this.openingInteractionPivots.set(opening.id, result.shutterAssembly);
 			}
 			group.add(faceGroup);
 		}
@@ -365,7 +372,15 @@ export class RoofManager {
 
 	/** Every door hinge pivot in a roof face — `DoorInteractionController` swings these alongside the walls' own. */
 	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
-		return this.doorHingePivots;
+		return new Map(
+			[...this.openingInteractionPivots].filter(
+				([, pivot]) => pivot.userData.interactionKind !== 'shutters'
+			)
+		);
+	}
+
+	getOpeningInteractionPivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.openingInteractionPivots;
 	}
 
 	/** Every roof's real mesh, for Remove/Paint Mode raycasting — already carries `userData.roofId`/`userData.foundationId` (see `buildEntry`). */
@@ -377,7 +392,7 @@ export class RoofManager {
 		const entry = this.roofs.get(id);
 		if (!entry) return false;
 		if (entry.openingVisuals) {
-			clearDoorHingePivotsFrom(entry.openingVisuals, this.doorHingePivots);
+			clearOpeningInteractionPivotsFrom(entry.openingVisuals, this.openingInteractionPivots);
 			disposeOpeningVisual(entry.openingVisuals);
 		}
 		entry.mesh.geometry.dispose();
@@ -483,9 +498,15 @@ export class RoofManager {
 	}
 }
 
-function clearDoorHingePivotsFrom(root: THREE.Object3D, pivots: Map<string, THREE.Object3D>): void {
+function clearOpeningInteractionPivotsFrom(
+	root: THREE.Object3D,
+	pivots: Map<string, THREE.Object3D>
+): void {
 	root.traverse((child) => {
-		if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
+		if (
+			(child.name === 'door-hinge-pivot' || child.name === 'window-shutters') &&
+			typeof child.userData.openingId === 'string'
+		) {
 			pivots.delete(child.userData.openingId);
 		}
 	});

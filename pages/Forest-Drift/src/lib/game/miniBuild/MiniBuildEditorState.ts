@@ -1,3 +1,6 @@
+import { shapeCount, shapeLimit, shapeLimitError } from './miniBuildShapes';
+import { createInteraction, validateInteractions } from './MiniBuildInteractions';
+import type { MiniBuildInteractionLocation, MiniBuildInteractionType } from './MiniBuildTypes';
 /**
  * The Mini Build editor's working copy. Pure logic — no Three.js, no DOM — so every rule the editor
  * enforces (16 blocks, grid snapping, 4m bounds, 4 materials) is unit-tested directly.
@@ -19,6 +22,7 @@ import {
 	boundsFit,
 	boundsSizeGrid,
 	cloneBlock,
+	cloneInteraction,
 	cloneMaterials,
 	computeBounds,
 	contentHash,
@@ -71,6 +75,8 @@ export const EDITOR_ERRORS = {
 const MAX_HISTORY = 200;
 
 interface Snapshot {
+	interactionLocations: MiniBuildInteractionLocation[];
+	selectedInteractionId: string | null;
 	blocks: MiniBuildBlock[];
 	materials: MiniBuildMaterialSlot[];
 	selectedBlockId: string | null;
@@ -90,6 +96,8 @@ function defaultSlot(index: number): MiniBuildMaterialSlot {
 
 export class MiniBuildEditorState {
 	private blocks: MiniBuildBlock[];
+	private interactionLocations: MiniBuildInteractionLocation[] = [];
+	selectedInteractionId: string | null = null;
 	private materials: MiniBuildMaterialSlot[];
 	private nameValue: string;
 	private semantic: MiniBuildSemanticType | undefined;
@@ -110,6 +118,7 @@ export class MiniBuildEditorState {
 		sourceRevision: number | null
 	) {
 		this.blocks = draft.blocks.map(cloneBlock);
+		this.interactionLocations = (draft.interactionLocations ?? []).map(cloneInteraction);
 		this.materials = cloneMaterials(draft.materials);
 		this.nameValue = draft.name;
 		this.semantic = draft.semanticType;
@@ -132,6 +141,7 @@ export class MiniBuildEditorState {
 	): MiniBuildEditorState {
 		const draft: MiniBuildDraft = {
 			name: definition.name,
+			interactionLocations: definition.interactionLocations,
 			blocks: definition.blocks,
 			materials: definition.materials,
 			semanticType: definition.semanticType
@@ -139,6 +149,71 @@ export class MiniBuildEditorState {
 		return options.asTemplate
 			? new MiniBuildEditorState(draft, null, null)
 			: new MiniBuildEditorState(draft, definition.id, definition.revision);
+	}
+
+	getInteractions(): readonly MiniBuildInteractionLocation[] {
+		return this.interactionLocations;
+	}
+	get selectedInteraction(): MiniBuildInteractionLocation | undefined {
+		return this.interactionLocations.find((l) => l.id === this.selectedInteractionId);
+	}
+	selectInteraction(id: string | null): void {
+		this.selectedBlockId = null;
+		this.selectedInteractionId = id;
+		this.version++;
+	}
+	private commitInteractions(
+		next: MiniBuildInteractionLocation[],
+		selected: string | null
+	): EditorResult {
+		const validated = validateInteractions(next);
+		if (!validated.ok) return validated;
+		this.undoStack.push(this.snapshot());
+		if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
+		this.redoStack = [];
+		this.interactionLocations = validated.value;
+		this.selectInteraction(selected);
+		return { ok: true };
+	}
+	addInteraction(type: MiniBuildInteractionType): EditorResult {
+		const block = this.selectedBlock;
+		const box = block
+			? blockExtentBox(block)
+			: this.blocks.length
+				? computeBounds(this.blocks)
+				: null;
+		const position = box
+			? {
+					x: Math.round((box.min.x + box.max.x) / 2),
+					y: Math.ceil(box.max.y),
+					z: Math.round((box.min.z + box.max.z) / 2)
+				}
+			: { x: 0, y: 16, z: 0 };
+		const location = createInteraction(type, position);
+		return this.commitInteractions([...this.interactionLocations, location], location.id);
+	}
+	updateInteraction(
+		id: string,
+		changes: Partial<Pick<MiniBuildInteractionLocation, 'positionGrid' | 'rotationY' | 'enabled'>>
+	): EditorResult {
+		return this.commitInteractions(
+			this.interactionLocations.map((l) => (l.id === id ? { ...l, ...changes } : l)),
+			id
+		);
+	}
+	deleteInteraction(): EditorResult {
+		return this.commitInteractions(
+			this.interactionLocations.filter((l) => l.id !== this.selectedInteractionId),
+			null
+		);
+	}
+	duplicateInteraction(): EditorResult {
+		const source = this.selectedInteraction;
+		if (!source) return { ok: false, error: 'Select an interaction first.' };
+		const copy = cloneInteraction(source);
+		copy.id = newId();
+		copy.positionGrid.x += 4;
+		return this.commitInteractions([...this.interactionLocations, copy], copy.id);
 	}
 
 	get name(): string {
@@ -162,7 +237,7 @@ export class MiniBuildEditorState {
 	}
 
 	get canAddBlock(): boolean {
-		return this.blocks.length < MINI_BUILD_LIMITS.maxBlocks;
+		return shapeCount(this.blocks, 'cuboid') < MINI_BUILD_LIMITS.maxBlocks;
 	}
 
 	get canAddMaterial(): boolean {
@@ -199,6 +274,7 @@ export class MiniBuildEditorState {
 	toDraft(): MiniBuildDraft {
 		return {
 			name: sanitizeName(this.nameValue),
+			interactionLocations: this.interactionLocations.map(cloneInteraction),
 			blocks: this.blocks.map(cloneBlock),
 			materials: cloneMaterials(this.materials),
 			...(this.semantic ? { semanticType: this.semantic } : {})
@@ -235,6 +311,7 @@ export class MiniBuildEditorState {
 	 * selection is raised again.
 	 */
 	selectBlock(id: string | null): void {
+		this.selectedInteractionId = null;
 		this.selectedBlockId = id && this.blocks.some((block) => block.id === id) ? id : null;
 		this.raiseSelectedPlane();
 		this.version++;
@@ -252,8 +329,12 @@ export class MiniBuildEditorState {
 		this.selectBlock(this.blocks[next].id);
 	}
 
-	addBlock(): EditorResult {
-		if (!this.canAddBlock) return { ok: false, error: EDITOR_ERRORS.maxBlocks };
+	addBlock(shape: NonNullable<MiniBuildBlock['shape']> = 'cuboid'): EditorResult {
+		if (shapeCount(this.blocks, shape) >= shapeLimit(shape))
+			return {
+				ok: false,
+				error: `Maximum ${shapeLimit(shape)} ${shape === 'cuboid' ? 'blocks' : shape + 's'}.`
+			};
 		const size = MINI_BUILD_LIMITS.defaultBlockSizeGrid;
 		const bounds = this.blocks.length > 0 ? computeBounds(this.blocks) : null;
 		const slot = this.selectedBlock?.materialSlot ?? 0;
@@ -268,6 +349,7 @@ export class MiniBuildEditorState {
 			for (const position of candidates) {
 				const block: MiniBuildBlock = {
 					id: newId(),
+					shape,
 					positionGrid: { ...position },
 					sizeGrid: { x: sizeGrid, y: sizeGrid, z: sizeGrid },
 					rotation: { x: 0, y: 0, z: 0 },
@@ -281,9 +363,11 @@ export class MiniBuildEditorState {
 	}
 
 	duplicateSelected(): EditorResult {
+		if (this.selectedInteraction) return this.duplicateInteraction();
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
-		if (!this.canAddBlock) return { ok: false, error: EDITOR_ERRORS.maxBlocks };
+		const limitError = shapeLimitError([...this.blocks, source]);
+		if (limitError) return { ok: false, error: limitError };
 		// Four grid units (0.125m) so the copy is visibly offset; smaller steps as fallbacks near the edges.
 		const offsets: GridVec3[] = [4, 2, 1].flatMap((d) => [
 			{ x: d, y: 0, z: 0 },
@@ -312,7 +396,8 @@ export class MiniBuildEditorState {
 	mirrorDuplicateX(): EditorResult {
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
-		if (!this.canAddBlock) return { ok: false, error: EDITOR_ERRORS.maxBlocks };
+		const limitError = shapeLimitError([...this.blocks, source]);
+		if (limitError) return { ok: false, error: limitError };
 		const bounds = computeBounds(this.blocks);
 		const copy = cloneBlock(source);
 		copy.id = newId();
@@ -343,6 +428,7 @@ export class MiniBuildEditorState {
 	}
 
 	deleteSelected(): EditorResult {
+		if (this.selectedInteraction) return this.deleteInteraction();
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
 		const index = this.blocks.indexOf(source);
@@ -352,6 +438,15 @@ export class MiniBuildEditorState {
 	}
 
 	moveSelected(delta: Partial<GridVec3>): EditorResult {
+		const location = this.selectedInteraction;
+		if (location)
+			return this.updateInteraction(location.id, {
+				positionGrid: {
+					x: location.positionGrid.x + (delta.x ?? 0),
+					y: location.positionGrid.y + (delta.y ?? 0),
+					z: location.positionGrid.z + (delta.z ?? 0)
+				}
+			});
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
 		return this.setBlockGrid(source.id, {
@@ -429,6 +524,13 @@ export class MiniBuildEditorState {
 		direction: 1 | -1 = 1,
 		step: number = MINI_BUILD_ROTATION.defaultStep
 	): EditorResult {
+		const location = this.selectedInteraction;
+		if (location)
+			return axis === 'y'
+				? this.updateInteraction(location.id, {
+						rotationY: stepAngle(location.rotationY, step, direction)
+					})
+				: { ok: false, error: 'Interaction planes stay horizontal. Rotate them around Y.' };
 		const source = this.selectedBlock;
 		if (!source) return { ok: false, error: EDITOR_ERRORS.noSelection };
 		return this.setBlockAngle(source.id, axis, stepAngle(source.rotation[axis], step, direction));
@@ -605,13 +707,19 @@ export class MiniBuildEditorState {
 	}
 
 	private hash(): string {
-		return contentHash({ blocks: this.blocks, materials: this.materials }) + (this.semantic ?? '');
+		return (
+			contentHash({ blocks: this.blocks, materials: this.materials }) +
+			(this.semantic ?? '') +
+			JSON.stringify(this.interactionLocations)
+		);
 	}
 
 	private check(blocks: readonly MiniBuildBlock[]): EditorResult {
-		if (blocks.length > MINI_BUILD_LIMITS.maxBlocks)
-			return { ok: false, error: EDITOR_ERRORS.maxBlocks };
+		const limitError = shapeLimitError(blocks);
+		if (limitError) return { ok: false, error: limitError };
 		for (const block of blocks) {
+			if (block.shape && block.shape !== 'cuboid' && flatAxisCount(block.sizeGrid))
+				return { ok: false, error: 'Cylinders and spheres need positive size on all axes.' };
 			if (flatAxisCount(block.sizeGrid) > MINI_BUILD_LIMITS.maxFlatAxesPerBlock)
 				return { ok: false, error: EDITOR_ERRORS.flat };
 			if (!blockInWorkspace(block)) return { ok: false, error: EDITOR_ERRORS.workspace };
@@ -634,6 +742,7 @@ export class MiniBuildEditorState {
 		this.blocks = blocks.map(cloneBlock);
 		this.materials = cloneMaterials(materials);
 		this.selectedBlockId = selectedBlockId;
+		if (selectedBlockId) this.selectedInteractionId = null;
 		this.raiseSelectedPlane();
 		this.version++;
 		return { ok: true };
@@ -641,6 +750,8 @@ export class MiniBuildEditorState {
 
 	private snapshot(): Snapshot {
 		return {
+			interactionLocations: this.interactionLocations.map(cloneInteraction),
+			selectedInteractionId: this.selectedInteractionId,
 			blocks: this.blocks.map(cloneBlock),
 			materials: cloneMaterials(this.materials),
 			selectedBlockId: this.selectedBlockId
@@ -648,12 +759,15 @@ export class MiniBuildEditorState {
 	}
 
 	private restore(snapshot: Snapshot): void {
+		this.interactionLocations = snapshot.interactionLocations.map(cloneInteraction);
+		this.selectedInteractionId = snapshot.selectedInteractionId;
 		this.blocks = snapshot.blocks.map(cloneBlock);
 		this.materials = cloneMaterials(snapshot.materials);
 		this.selectedBlockId =
 			snapshot.selectedBlockId && this.blocks.some((block) => block.id === snapshot.selectedBlockId)
 				? snapshot.selectedBlockId
 				: (this.blocks[0]?.id ?? null);
+		if (this.selectedInteractionId) this.selectedBlockId = null;
 		this.raiseSelectedPlane();
 		this.version++;
 	}
@@ -664,6 +778,11 @@ export class MiniBuildEditorState {
 		const bounds = computeBounds(this.blocks);
 		const shiftX = -Math.floor((bounds.min.x + bounds.max.x) / 2);
 		const shiftZ = -Math.floor((bounds.min.z + bounds.max.z) / 2);
+		for (const location of this.interactionLocations) {
+			location.positionGrid.x += shiftX;
+			location.positionGrid.y -= bounds.min.y;
+			location.positionGrid.z += shiftZ;
+		}
 		this.blocks = this.blocks.map((block) => ({
 			...cloneBlock(block),
 			positionGrid: {
@@ -783,6 +902,7 @@ function finishForTexture(
 	group: MiniBuildTextureEntry['group'],
 	current: MiniBuildFinish
 ): MiniBuildFinish {
+	if (group === 'Fabric') return 'fabric';
 	if (group === 'Wood') return 'wood';
 	if (group === 'Stone') return 'stone';
 	if (group === 'Glass') return 'glass';

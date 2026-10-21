@@ -569,21 +569,27 @@ describe('GrassManager streaming', () => {
 			);
 			const size = shader.uniforms.uGrassSize.value as THREE.Vector4;
 			expect(size.x).toBe(0.7);
-			expect(size.x + size.y).toBeCloseTo(1.8);
+			expect(size.x + size.y).toBeCloseTo(1);
 			expect(vegetation.grass.minHeight).toBe(0.7);
-			expect(vegetation.grass.maxHeight).toBe(1.8);
+			expect(vegetation.grass.maxHeight).toBe(1);
 			manager.dispose();
 		}
 	);
 
-	it('preserves custom heights when loading a world', () => {
-		const { manager, vegetation } = createManager();
-		Object.assign(vegetation.grass, { minHeight: 1.2, maxHeight: 2.4 });
-		manager.setSeed('grass-test');
-		expect(vegetation.grass.minHeight).toBe(1.2);
-		expect(vegetation.grass.maxHeight).toBe(2.4);
-		manager.dispose();
-	});
+	it.each([
+		[0.4, 0.85],
+		[1.2, 2.4]
+	])(
+		'preserves custom heights %s–%s within the one-metre cap when loading',
+		(minHeight, maxHeight) => {
+			const { manager, vegetation } = createManager();
+			Object.assign(vegetation.grass, { minHeight, maxHeight });
+			manager.setSeed('grass-test');
+			expect(vegetation.grass.minHeight).toBe(Math.min(minHeight, 1));
+			expect(vegetation.grass.maxHeight).toBe(Math.min(maxHeight, 1));
+			manager.dispose();
+		}
+	);
 
 	it('uses one mesh per chunk with shared material/atlas, and stays bounded over a long walk', () => {
 		const { manager } = createManager();

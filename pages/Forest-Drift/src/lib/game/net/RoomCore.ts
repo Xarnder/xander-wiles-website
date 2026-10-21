@@ -1,3 +1,14 @@
+import { obbsOverlap } from '../miniBuild/miniBuildGrid';
+import { entityKey } from './worldEntities';
+import {
+	validateMiniBuildDefinition,
+	validateMiniBuildInstance
+} from '../miniBuild/MiniBuildValidation';
+import {
+	resolveMiniBuildInteraction,
+	MINI_BUILD_INTERACTION_RANGE
+} from '../miniBuild/MiniBuildInteractions';
+import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
 import {
 	CLIENT_LEAVE_CODE,
 	CLOSE_CODES,
@@ -231,6 +242,11 @@ export class RoomCore {
 	};
 
 	private readonly world: RoomWorldInfo;
+	private interactionsStoreSeq = -1;
+	private readonly interactions = new Map<
+		string,
+		OccupiedMiniBuildInteraction & { signature: string }
+	>();
 	private readonly authorize: RoomCoreOptions['authorize'];
 	private readonly now: () => number;
 	private readonly maxPlayers: number;
@@ -367,6 +383,7 @@ export class RoomCore {
 		const player = this.byConn.get(conn);
 		if (!player) return;
 		this.byConn.delete(conn);
+		if (this.interactions.delete(player.info.playerId)) this.broadcastInteractions();
 		player.conn = null;
 		if (code === CLIENT_LEAVE_CODE) {
 			this.removePlayer(player);
@@ -417,6 +434,21 @@ export class RoomCore {
 
 	/** Sends each player one snapshot holding every other player whose pose changed since their last one. */
 	tick(): void {
+		let changed = false;
+		if (this.interactions.size && this.store?.seq !== this.interactionsStoreSeq)
+			for (const [playerId, entry] of this.interactions) {
+				const resolved = this.resolveInteraction(entry);
+				if (
+					!resolved ||
+					JSON.stringify(resolved) !== entry.signature ||
+					!this.players.get(playerId)?.conn
+				) {
+					this.interactions.delete(playerId);
+					changed = true;
+				}
+			}
+		if (this.interactions.size) this.interactionsStoreSeq = this.store?.seq ?? -1;
+		if (changed) this.broadcastInteractions();
 		const now = this.now();
 		for (const receiver of this.byConn.values()) {
 			const entries = this.collectEntries(receiver, now, false);
@@ -460,6 +492,43 @@ export class RoomCore {
 			else this.stats.messagesDropped++;
 			return;
 		}
+		if (message.t === 'interaction') {
+			if (!player) return;
+			const id = player.info.playerId;
+			if (message.location === null) this.interactions.delete(id);
+			else {
+				const resolved = this.resolveInteraction(message.location);
+				const occupied = [...this.interactions.values()].some((entry) => {
+					if (entry.playerId === id) return false;
+					if (
+						entry.instanceId === message.location!.instanceId &&
+						entry.locationId === message.location!.locationId
+					)
+						return true;
+					const other = this.resolveInteraction(entry);
+					return !!resolved && !!other && obbsOverlap(resolved.box, other.box, -0.015);
+				});
+				const pose = player.pose;
+				if (
+					resolved &&
+					pose &&
+					!occupied &&
+					Math.hypot(
+						resolved.position.x - pose.x,
+						resolved.position.y - pose.y,
+						resolved.position.z - pose.z
+					) <=
+						MINI_BUILD_INTERACTION_RANGE + 1
+				)
+					this.interactions.set(id, {
+						...message.location,
+						playerId: id,
+						signature: JSON.stringify(resolved)
+					});
+			}
+			this.broadcastInteractions(id);
+			return;
+		}
 		if (message.t === 'door') {
 			if (!player) return;
 			if (message.open) this.openDoors.add(message.id);
@@ -471,6 +540,42 @@ export class RoomCore {
 			return;
 		}
 		return this.handleHello(conn, message);
+	}
+
+	private resolveInteraction(ref: MiniBuildInteractionRef) {
+		const instanceRow = this.store?.get(entityKey('miniBuildInstance', ref.instanceId));
+		if (!instanceRow) return null;
+		const designId = instanceRow.data.designId;
+		if (typeof designId !== 'string') return null;
+		const designRow = this.store?.get(entityKey('miniBuildDefinition', designId));
+		if (!designRow) return null;
+		const definition = validateMiniBuildDefinition({ ...designRow.data, id: designId });
+		if (!definition.ok) return null;
+		const instance = validateMiniBuildInstance(
+			{ ...instanceRow.data, id: ref.instanceId },
+			new Set([designId])
+		);
+		if (!instance.ok) return null;
+		const location = definition.value.interactionLocations?.find(
+			(l) => l.id === ref.locationId && l.enabled
+		);
+		return location
+			? resolveMiniBuildInteraction(definition.value, instance.value, location)
+			: null;
+	}
+	private interactionList(): OccupiedMiniBuildInteraction[] {
+		return [...this.interactions.values()].map(({ playerId, instanceId, locationId }) => ({
+			playerId,
+			instanceId,
+			locationId
+		}));
+	}
+	private broadcastInteractions(replyTo?: string): void {
+		this.broadcast({
+			t: 'interactions',
+			locations: this.interactionList(),
+			...(replyTo ? { replyTo } : {})
+		});
 	}
 
 	private async handleHello(conn: RoomConnection, hello: HelloMessage): Promise<void> {
@@ -597,6 +702,7 @@ export class RoomCore {
 			resync: catchUp === null,
 			bookmark: saved?.bookmark ?? null,
 			doors: [...this.openDoors],
+			interactions: this.interactionList(),
 			names: this.playerNames()
 		});
 		this.broadcast({ t: 'joined', player: { ...info } }, conn);

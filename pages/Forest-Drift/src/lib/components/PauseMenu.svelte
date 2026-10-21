@@ -63,8 +63,8 @@
 	}
 </script>
 
-<div data-ui-backdrop class="pause-overlay" data-testid="pause-menu">
-	<div data-ui-surface="panel" class="pause-panel">
+<div data-ui-backdrop data-pause-backdrop class="pause-overlay" data-testid="pause-menu">
+	<div data-ui-surface="panel" data-pause-panel class="pause-panel">
 		{#if panel === 'root'}
 			<img class="pause-logo" src={titleMark} alt="Forest Drift" width="625" height="362" />
 			<p class="pause-eyebrow">TAKE A BREATHER</p>
@@ -147,7 +147,13 @@
 			<h2>Rename World</h2>
 			<form onsubmit={submitRename}>
 				<!-- svelte-ignore a11y_autofocus -->
-				<input data-testid="pause-rename-input" autofocus bind:value={renameValue} maxlength="80" />
+				<input
+					aria-label="World name"
+					data-testid="pause-rename-input"
+					autofocus
+					bind:value={renameValue}
+					maxlength="80"
+				/>
 				<div class="menu-buttons">
 					<button type="button" onclick={() => (panel = 'world')}>Cancel</button>
 					<button

@@ -67,6 +67,7 @@
 		4: 'roof',
 		5: 'stairs',
 		6: 'carpet',
+		7: 'shovel',
 		8: 'chair'
 	};
 	const iconFiles = import.meta.glob('/src/lib/assets/build-icons/*.svg', {

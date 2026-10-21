@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { OpeningInteractionState } from '$lib/game/building/DoorInteractionController';
 	import { onMount } from 'svelte';
 	import { touchButton } from '$lib/components/touchButton';
 	import type { ThreeScene } from '$lib/game/ThreeScene';
@@ -31,6 +32,7 @@
 		buildHud: BuildUiState | null;
 		hotbar: HotbarUiState | null;
 		lookedAtDoorId: string | null;
+		lookedAtOpening?: OpeningInteractionState | null;
 		customizeToolId: ToolId | undefined;
 		heightToolId: ToolId | undefined;
 		onOpenPause: () => void;
@@ -42,6 +44,7 @@
 		buildHud,
 		hotbar,
 		lookedAtDoorId,
+		lookedAtOpening = null,
 		customizeToolId,
 		heightToolId,
 		onOpenPause,
@@ -324,8 +327,15 @@
 
 	const isDoorOpen = $derived.by(() => {
 		if (!lookedAtDoorId || !scene) return false;
-		return scene.isDoorOpen(lookedAtDoorId);
+		return lookedAtOpening?.id === lookedAtDoorId
+			? lookedAtOpening.open
+			: scene.isDoorOpen(lookedAtDoorId);
 	});
+	const openingNoun = $derived(
+		lookedAtOpening?.id === lookedAtDoorId && lookedAtOpening?.kind === 'shutters'
+			? 'shutters'
+			: 'door'
+	);
 </script>
 
 <div
@@ -438,7 +448,7 @@
 		</div>
 	</header>
 
-	<!-- Contextual Door Hover Button (appears right when aiming/hovering over a door) -->
+	<!-- Contextual opening action for doors and window shutters -->
 	{#if lookedAtDoorId}
 		<div class="touch-door-bar">
 			<button
@@ -447,10 +457,12 @@
 				use:touchButton={onToggleDoor}
 				onpointerdown={(e) => e.stopPropagation()}
 				data-testid="touch-door-button"
-				aria-label={isDoorOpen ? 'Close door' : 'Open door'}
+				aria-label={`${isDoorOpen ? 'Close' : 'Open'} ${openingNoun}`}
 			>
 				<img class="touch-icon" src={openDoorIcon} alt="" />
-				<span>{isDoorOpen ? 'Close Door' : 'Open Door'}</span>
+				<span
+					>{isDoorOpen ? 'Close' : 'Open'} {openingNoun === 'shutters' ? 'Shutters' : 'Door'}</span
+				>
 			</button>
 		</div>
 	{/if}
@@ -499,7 +511,7 @@
 			</div>
 		{/if}
 
-		<!-- Contextual Door Action (also under the right thumb when hovering over a door) -->
+		<!-- Also put the opening action under the right thumb -->
 		{#if lookedAtDoorId}
 			<div class="touch-path-actions">
 				<button
@@ -508,10 +520,13 @@
 					use:touchButton={onToggleDoor}
 					onpointerdown={(e) => e.stopPropagation()}
 					data-testid="touch-door-cluster-btn"
-					aria-label={isDoorOpen ? 'Close door' : 'Open door'}
+					aria-label={`${isDoorOpen ? 'Close' : 'Open'} ${openingNoun}`}
 				>
 					<img class="touch-icon" src={openDoorIcon} alt="" />
-					<span>{isDoorOpen ? 'Close Door' : 'Open Door'}</span>
+					<span
+						>{isDoorOpen ? 'Close' : 'Open'}
+						{openingNoun === 'shutters' ? 'Shutters' : 'Door'}</span
+					>
 				</button>
 			</div>
 		{/if}
@@ -618,10 +633,10 @@
 				class="touch-main-btn cancel-btn"
 				use:touchButton={onSecondaryAction}
 				data-testid="touch-cancel-btn"
-				aria-label="Cancel or Deselect"
+				aria-label={buildHud?.toolId === 'shovel' ? 'Lower terrain' : 'Cancel or Deselect'}
 			>
 				<img class="touch-icon" src={crossIcon} alt="" />
-				<span>Cancel</span>
+				<span>{buildHud?.toolId === 'shovel' ? 'Lower' : 'Cancel'}</span>
 			</button>
 
 			<button
@@ -629,14 +644,24 @@
 				class="touch-main-btn place-btn"
 				use:touchButton={onPrimaryAction}
 				data-testid="touch-place-btn"
-				aria-label={hotbar?.globalMode === 'remove' ? 'Delete' : 'Place or Confirm'}
+				aria-label={hotbar?.globalMode === 'remove'
+					? 'Delete'
+					: buildHud?.toolId === 'shovel'
+						? 'Raise terrain'
+						: 'Place or Confirm'}
 			>
 				<img
 					class="touch-icon"
 					src={hotbar?.globalMode === 'remove' ? breakIcon : hexPlaceIcon}
 					alt=""
 				/>
-				<span>{hotbar?.globalMode === 'remove' ? 'Delete' : 'Place'}</span>
+				<span
+					>{hotbar?.globalMode === 'remove'
+						? 'Delete'
+						: buildHud?.toolId === 'shovel'
+							? 'Raise'
+							: 'Place'}</span
+				>
 			</button>
 		</div>
 		<div class="touch-locomotion-buttons">

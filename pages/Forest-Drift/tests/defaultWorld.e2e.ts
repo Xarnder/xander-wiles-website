@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openPauseMenu } from './worldHelpers';
+import { openPauseMenu, openWorldsScreen } from './worldHelpers';
 
 test('shows the default world in its own dedicated section and starts playing with one click', async ({
 	page
@@ -8,6 +8,7 @@ test('shows the default world in its own dedicated section and starts playing wi
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 
 	// Worlds screen is visible
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
@@ -46,6 +47,7 @@ test('shows the default world in its own dedicated section and starts playing wi
 
 test('duplicating the default world adds a copy to My Worlds', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
 
 	// Open default world menu and click Duplicate
@@ -55,6 +57,8 @@ test('duplicating the default world adds a copy to My Worlds', async ({ page }) 
 
 	// My Worlds now has 1 card: "Main World Copy"
 	await expect(page.getByTestId('world-card')).toHaveCount(1, { timeout: 15_000 });
-	await expect(page.getByTestId('world-card').filter({ hasText: 'Main World Copy' })).toHaveCount(1);
+	await expect(page.getByTestId('world-card').filter({ hasText: 'Main World Copy' })).toHaveCount(
+		1
+	);
 	await expect(page.getByTestId('worlds-empty')).toHaveCount(0);
 });

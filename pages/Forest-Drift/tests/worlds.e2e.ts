@@ -1,19 +1,19 @@
 import { expect, test } from '@playwright/test';
 import {
 	createAndEnterWorld,
+	openWorldsScreen,
 	openPauseMenu,
 	openWorldMenu,
 	openWorldNamed,
 	waitForSaved
 } from './worldHelpers';
 
-test('opens on the Worlds screen with an empty state, not straight into a world', async ({
-	page
-}) => {
+test('opens Worlds from the main menu with an empty state', async ({ page }) => {
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByTestId('worlds-empty')).toBeVisible();
@@ -32,6 +32,7 @@ test('creates a named world with a chosen seed, opens it, and lists it afterward
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Forest House', seed: 'quiet-grove-123' });
 
 	await openPauseMenu(page);
@@ -50,10 +51,12 @@ test('a created world survives a full page reload with its terrain seed intact',
 	page
 }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Persisted World', seed: 'stubborn-ridge-77' });
 	await waitForSaved(page);
 
 	await page.reload();
+	await openWorldsScreen(page);
 
 	// The world came back from IndexedDB, not from any in-memory state that a reload would have lost.
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
@@ -67,6 +70,7 @@ test('a created world survives a full page reload with its terrain seed intact',
 
 test('the pause menu saves on demand and reports the result', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page);
 
 	await openPauseMenu(page);
@@ -79,6 +83,7 @@ test('the pause menu saves on demand and reports the result', async ({ page }) =
 
 test('Cmd/Ctrl+S saves without leaving the game', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page);
 
 	await page.keyboard.press('ControlOrMeta+s');
@@ -92,6 +97,7 @@ test('Quit to Worlds returns to the list and tears the world down', async ({ pag
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Quittable' });
 	await openPauseMenu(page);
 	await page.getByTestId('pause-quit').click();
@@ -105,6 +111,7 @@ test('Quit to Worlds returns to the list and tears the world down', async ({ pag
 
 test('renames a world from the Worlds screen without creating a second one', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Before Rename' });
 	await openPauseMenu(page);
 	await page.getByTestId('pause-quit').click();
@@ -122,6 +129,7 @@ test('renames a world from the Worlds screen without creating a second one', asy
 
 test('duplicating a world produces a second, independent entry', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Original' });
 	await openPauseMenu(page);
 	await page.getByTestId('pause-quit').click();
@@ -136,6 +144,7 @@ test('duplicating a world produces a second, independent entry', async ({ page }
 
 test('deleting a world requires confirmation and can be cancelled', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Deletable' });
 	await openPauseMenu(page);
 	await page.getByTestId('pause-quit').click();
@@ -166,6 +175,7 @@ test('exports a world to a downloadable file and imports it back as a separate c
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'Exportable', seed: 'export-seed-9' });
 	await waitForSaved(page);
 	await openPauseMenu(page);
@@ -196,6 +206,7 @@ test('rejects an invalid world file with a useful message instead of crashing', 
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
 
 	await page.getByTestId('import-world-input').setInputFiles({
@@ -212,6 +223,7 @@ test('rejects an invalid world file with a useful message instead of crashing', 
 
 test('the world browser lists worlds without opening any of them', async ({ page }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'World One' });
 	await openPauseMenu(page);
 	await page.getByTestId('pause-quit').click();
@@ -236,6 +248,7 @@ test('renaming from inside the pause menu updates the world without changing wor
 	page
 }) => {
 	await page.goto('/');
+	await openWorldsScreen(page);
 	await createAndEnterWorld(page, { name: 'In-Game Rename' });
 
 	await openPauseMenu(page);

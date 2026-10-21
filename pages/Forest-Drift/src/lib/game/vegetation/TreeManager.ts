@@ -286,6 +286,25 @@ export class TreeManager {
 		return closest;
 	}
 
+	isRootProtected(x: number, z: number, margin: number): boolean {
+		const size = this.terrainSettings.chunkSize;
+		for (let cz = Math.floor((z - margin) / size); cz <= Math.floor((z + margin) / size); cz++)
+			for (let cx = Math.floor((x - margin) / size); cx <= Math.floor((x + margin) / size); cx++) {
+				const record = this.active.get(chunkKey(cx, cz));
+				if (
+					record?.trunks.some(
+						(t) =>
+							x >= t.bounds.min.x - margin &&
+							x <= t.bounds.max.x + margin &&
+							z >= t.bounds.min.z - margin &&
+							z <= t.bounds.max.z + margin
+					)
+				)
+					return true;
+			}
+		return false;
+	}
+
 	getOverrideRevision(): number {
 		return this.overrideRevision;
 	}

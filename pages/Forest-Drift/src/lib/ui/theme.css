@@ -675,3 +675,542 @@ html [data-ui-surface='panel'] > header {
 		padding: 12px 14px;
 	}
 }
+
+/* The world library is the same carved inn sign as the main menu, widened into a board. */
+html .worlds-screen[data-ui-surface='start'] {
+	isolation: isolate;
+	background: #15211340 !important;
+	padding: clamp(16px, 4vw, 64px) max(14px, env(safe-area-inset-right))
+		max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+	font-family: Georgia, 'Times New Roman', serif;
+}
+.worlds-board {
+	max-width: 1120px;
+	margin: 0 auto;
+	padding: clamp(22px, 4vw, 48px);
+	border: 4px double #bd9454;
+	border-radius: 34px 46px 34px 46px;
+	background-color: #2a2016;
+	background-image:
+		linear-gradient(100deg, #130f0bbd, #24190ed9 60%, #100d09eb), var(--fd-wood-image);
+	background-size:
+		100% 100%,
+		100% 320px;
+	box-shadow:
+		0 0 0 5px #20180fcc,
+		inset 0 0 0 5px #110e0b99,
+		inset 0 0 36px #0008,
+		0 24px 70px #0b100cb3;
+}
+.board-topline {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 30px;
+}
+.chapter-label {
+	font:
+		10px/1.5 system-ui,
+		sans-serif;
+	letter-spacing: 0.22em;
+	color: #cbb383;
+}
+.leaf-mark {
+	color: #a4aa60;
+	font-size: 42px;
+	line-height: 1;
+}
+html .worlds-screen[data-ui-surface='start'] .worlds-header {
+	grid-template-columns: 220px minmax(0, 1fr);
+	gap: clamp(24px, 5vw, 70px);
+	margin-bottom: 34px;
+}
+.worlds-logo {
+	font:
+		bold 58px/0.86 Georgia,
+		serif;
+	letter-spacing: -3px;
+	text-transform: uppercase;
+	color: #f5e4bb;
+	text-shadow:
+		0 3px 1px #080603,
+		0 6px 8px #0008;
+}
+.worlds-logo span {
+	display: block;
+}
+.worlds-logo span:last-child {
+	color: #efbd57;
+	font-size: 65px;
+	margin-top: 5px;
+}
+html .worlds-screen[data-ui-surface='start'] h1 {
+	font-size: clamp(30px, 4vw, 48px);
+	font-weight: 700;
+	color: #f4e3bd;
+	text-shadow: 0 3px 2px #0007;
+}
+html .worlds-screen[data-ui-surface='start'] .start-tagline {
+	color: #cbb58e;
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	margin-top: 18px;
+}
+html .worlds-screen[data-ui-surface='start'] .start-description {
+	color: #d5c19c;
+	font:
+		15px/1.65 Georgia,
+		serif;
+	max-width: 420px;
+	margin-bottom: 20px;
+}
+html .worlds-screen[data-ui-surface='start'] button {
+	min-height: 44px;
+	min-width: 44px;
+	border-radius: 12px;
+	font-family: Georgia, serif;
+	font-size: 15px;
+	border: 1px solid #ad813d !important;
+	background-image: linear-gradient(180deg, #63492f55, #100b08ac), var(--fd-wood-image) !important;
+	box-shadow:
+		inset 0 0 0 2px #1b130d,
+		inset 0 4px 2px #dbb87944,
+		0 3px 4px #0008;
+}
+html .worlds-screen[data-ui-surface='start'] button.primary {
+	color: #33200b !important;
+	background-image:
+		linear-gradient(180deg, #ffe084e6, #efb13bc9 55%, #bd7d25d9), var(--fd-wood-image) !important;
+	border-color: #ffcf6b !important;
+	box-shadow:
+		inset 0 0 0 2px #80521d,
+		inset 0 4px 2px #fff0ab,
+		0 3px 4px #0009;
+}
+html .worlds-screen[data-ui-surface='start'] button:hover:not(:disabled) {
+	filter: brightness(1.15);
+}
+html .worlds-screen[data-ui-surface='start'] button:focus-visible {
+	outline: 3px solid #ffda83;
+	outline-offset: 4px;
+}
+html .worlds-screen[data-ui-surface='start'] .section-title {
+	font-size: 15px;
+	font-weight: 400;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+html .worlds-screen[data-ui-surface='start'] .badge,
+html .worlds-screen[data-ui-surface='start'] .pill-tag {
+	color: #e4c17a;
+	background: #c1984320;
+	border: 1px solid #b38a4a66;
+	font:
+		10px/1.5 system-ui,
+		sans-serif;
+	padding: 4px 8px;
+}
+html .worlds-screen[data-ui-surface='start'] .default-world-card {
+	grid-template-columns: minmax(200px, 1fr) 1fr auto;
+	gap: 22px;
+	padding: 18px;
+	border: 2px solid #a87a3d;
+	border-radius: 22px;
+	background-image: linear-gradient(110deg, #44302088, #17110be0), var(--fd-wood-image);
+	box-shadow:
+		inset 0 0 0 3px #1c130c,
+		inset 0 5px 3px #e7bb6d44,
+		0 7px 15px #0005;
+}
+html .worlds-screen[data-ui-surface='start'] .default-thumbnail {
+	height: 210px;
+	border: 3px ridge #a77f43;
+	border-radius: 12px;
+}
+html .worlds-screen[data-ui-surface='start'] .default-world-card .world-name {
+	font-size: 28px;
+}
+html .worlds-screen[data-ui-surface='start'] .world-desc {
+	font:
+		14px/1.7 Georgia,
+		serif;
+	color: #ead8b4;
+}
+html .worlds-screen[data-ui-surface='start'] .world-meta {
+	font:
+		11px/1.7 system-ui,
+		sans-serif;
+	overflow-wrap: anywhere;
+	color: #baa583;
+	opacity: 1;
+}
+html .worlds-screen[data-ui-surface='start'] .world-meta code {
+	font-size: 11px;
+}
+html .worlds-screen[data-ui-surface='start'] .world-name-row {
+	flex-wrap: wrap;
+}
+html .worlds-screen[data-ui-surface='start'] .world-card,
+html .worlds-screen[data-ui-surface='start'] .online-world {
+	background-color: #35271b;
+	background-image: linear-gradient(#21170b88, #100c08bb), var(--fd-wood-image);
+	background-size: 100% 100%;
+	border: 1px solid #a47b3c;
+	border-radius: 16px;
+	box-shadow:
+		inset 0 2px #edc68133,
+		0 3px 8px #0005;
+}
+html .worlds-screen[data-ui-surface='start'] .empty-state {
+	border: 1px solid #a27b3e66;
+	border-radius: 18px;
+	background: radial-gradient(ellipse at top, #a6843020, transparent 70%), #100e0a55;
+	padding: 26px 18px;
+}
+html .worlds-screen[data-ui-surface='start'] .empty-title {
+	font-size: 22px;
+	color: #efdab0;
+}
+html .worlds-screen[data-ui-surface='start'] .empty-body {
+	font:
+		14px/1.7 Georgia,
+		serif;
+	color: #c7b28d;
+}
+html .worlds-screen[data-ui-surface='start'] .section-divider {
+	margin: 26px auto;
+	background: linear-gradient(90deg, transparent, #d0a45699, transparent);
+}
+html .worlds-screen[data-ui-surface='start'] .menu {
+	background: #261b11;
+	border: 1px solid #b48a44;
+	max-width: min(300px, calc(100vw - 64px));
+}
+html .worlds-screen[data-ui-surface='start'] .storage-note {
+	font:
+		11px/1.6 system-ui,
+		sans-serif;
+	color: #c7b28d;
+	opacity: 1;
+	margin-top: 20px;
+}
+html .worlds-screen[data-ui-surface='start'] .modal {
+	max-height: calc(100dvh - 32px);
+	overflow-y: auto;
+}
+@media (max-width: 900px) {
+	html .worlds-screen[data-ui-surface='start'] .default-world-card {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+	html .worlds-screen[data-ui-surface='start'] .default-world-card .world-buttons {
+		grid-column: 1 / -1;
+		flex-direction: row;
+	}
+	html .worlds-screen[data-ui-surface='start'] .play-btn {
+		flex: 1;
+	}
+}
+@media (max-width: 600px) {
+	.worlds-board {
+		padding: 18px;
+		border-radius: 24px;
+	}
+	.board-topline {
+		margin-bottom: 24px;
+		gap: 8px;
+	}
+	.chapter-label {
+		display: none;
+	}
+	html .worlds-screen[data-ui-surface='start'] .worlds-header {
+		display: flex;
+		flex-direction: column;
+		gap: 22px;
+		margin-bottom: 28px;
+	}
+	.worlds-logo {
+		font-size: 44px;
+	}
+	.worlds-logo span:last-child {
+		font-size: 50px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .start-tagline {
+		margin-top: 12px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .worlds-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	html .worlds-screen[data-ui-surface='start'] .worlds-actions .primary {
+		grid-column: 1 / -1;
+	}
+	html .worlds-screen[data-ui-surface='start'] .worlds-actions button {
+		padding: 10px 8px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .default-world-card {
+		grid-template-columns: minmax(0, 1fr);
+		padding: 12px;
+		gap: 16px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .default-thumbnail {
+		height: auto;
+		aspect-ratio: 16/10;
+	}
+	html .worlds-screen[data-ui-surface='start'] .section-header {
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .world-card {
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .world-card .thumbnail {
+		width: 80px;
+		height: 60px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .world-card .world-info {
+		flex-basis: 90px;
+	}
+	html .worlds-screen[data-ui-surface='start'] .online-world {
+		flex-wrap: wrap;
+	}
+	html .worlds-screen[data-ui-surface='start'] .online-actions {
+		flex-wrap: wrap;
+	}
+}
+
+/* In-world menus share a left-hand wooden board. The transparent shield blocks
+   accidental game input without obscuring the scene beside the board. */
+html [data-ui-backdrop][data-pause-backdrop] {
+	position: fixed;
+	inset: 0;
+	padding: 0;
+	display: block;
+	background: transparent !important;
+	backdrop-filter: none !important;
+}
+html [data-ui-surface][data-pause-panel] {
+	box-sizing: border-box;
+	position: fixed;
+	inset: 0 auto 0 0;
+	margin: 0;
+	width: min(480px, 86vw);
+	max-width: none;
+	height: 100dvh;
+	max-height: none;
+	padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom))
+		max(24px, env(safe-area-inset-left));
+	overflow: auto;
+	overscroll-behavior: contain;
+	border-radius: 0 24px 24px 0;
+	border: 1px solid #c3934d !important;
+	background-image:
+		linear-gradient(90deg, #110d09dd, #21170cbb 75%, #100b08eb), var(--fd-wood-image) !important;
+	box-shadow:
+		inset 0 0 0 5px #120b08,
+		inset 0 0 0 6px #c3944655,
+		12px 0 35px #0005 !important;
+	color: var(--fd-text);
+}
+html [data-ui-surface][data-pause-panel]::backdrop {
+	background: transparent;
+	backdrop-filter: none;
+}
+html [data-ui-surface][data-pause-panel] :is(h2, h3, h4) {
+	font-family: Georgia, serif;
+}
+html [data-ui-surface][data-pause-panel] h2 {
+	font-size: clamp(24px, 3vw, 32px);
+}
+html [data-ui-surface][data-pause-panel] button {
+	min-height: 44px;
+}
+html [data-ui-surface][data-pause-panel] :is(input, select) {
+	min-width: 0;
+	max-width: 100%;
+}
+html [data-ui-surface][data-pause-panel] :is(p, dd, code, h2) {
+	overflow-wrap: anywhere;
+}
+html [data-ui-surface][data-pause-panel] > header {
+	padding: 16px;
+	border-radius: 12px;
+	margin-bottom: 16px;
+}
+html .pause-panel[data-pause-panel] {
+	gap: 14px;
+}
+html .pause-panel .pause-logo {
+	width: 160px;
+}
+html .pause-panel .section {
+	gap: 8px;
+}
+html .pause-panel .section-label {
+	margin: 10px 0 4px;
+	letter-spacing: 0.16em;
+	font-size: 10px;
+}
+html .pause-panel button {
+	font:
+		bold 16px Georgia,
+		serif;
+}
+html .pause-panel button.primary {
+	min-height: 56px;
+	font-size: 23px;
+}
+html .pause-panel .tool-grid {
+	grid-template-columns: 1fr 1fr;
+}
+html .pause-panel .tool-grid button:last-child {
+	grid-column: 1 / -1;
+}
+html .pause-panel .world-line {
+	color: #ebd6ac;
+	opacity: 1;
+}
+html .pause-panel .menu-hint {
+	padding-top: 12px;
+	border-top: 1px solid var(--fd-line);
+}
+
+/* Settings keep their categories and search, with a horizontal category strip
+   and a single independently scrolling column of fields. */
+html .settings-panel[data-pause-panel] {
+	padding: 12px;
+	overflow: hidden;
+}
+html .settings-panel[data-pause-panel] header {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 16px;
+	margin: 0;
+}
+html .settings-panel[data-pause-panel] .header-actions {
+	width: 100%;
+}
+html .settings-panel[data-pause-panel] .search {
+	width: 0;
+	min-width: 0;
+	flex: 1;
+}
+html .settings-panel[data-pause-panel] .body {
+	display: flex;
+	flex-direction: column;
+}
+html .settings-panel[data-pause-panel] nav {
+	flex-direction: row;
+	flex-wrap: nowrap;
+	flex-shrink: 0;
+	padding: 14px 4px;
+	gap: 8px;
+	border: 0;
+	border-bottom: 1px solid var(--fd-line);
+}
+html .settings-panel[data-pause-panel] nav button {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+html .settings-panel[data-pause-panel] .content {
+	padding: 18px 4px;
+	min-height: 0;
+}
+html .settings-panel[data-pause-panel] .group {
+	padding: 14px 12px;
+}
+html .settings-panel[data-pause-panel] .fields {
+	gap: 20px;
+}
+html .help-panel[data-pause-panel] .help-heading {
+	top: -24px;
+	padding: 16px 0;
+}
+html .help-panel[data-pause-panel] dl {
+	grid-template-columns: 1fr;
+	gap: 6px;
+}
+html .help-panel[data-pause-panel] dt {
+	white-space: normal;
+	color: var(--fd-gold);
+}
+html .help-panel[data-pause-panel] dd {
+	margin-bottom: 14px;
+	color: var(--fd-text);
+}
+html .help-panel[data-pause-panel] :is(p, h3) {
+	color: var(--fd-text);
+}
+
+/* The lab preview stays above its controls in the narrow drawer. */
+html .lab[data-pause-panel] {
+	padding: 12px;
+	overflow: auto;
+}
+html .lab[data-pause-panel] header {
+	flex-shrink: 0;
+}
+html .lab[data-pause-panel] .content {
+	display: flex;
+	flex-direction: column;
+	flex: none;
+}
+html .lab[data-pause-panel] main {
+	order: -1;
+	flex: none;
+}
+html .lab[data-pause-panel] .viewport {
+	height: 260px;
+	flex: none;
+}
+html .lab[data-pause-panel] aside {
+	overflow: visible;
+	border: 0;
+}
+html .lab[data-pause-panel] .views {
+	flex-wrap: wrap;
+}
+html .lab[data-pause-panel] .stats {
+	background: #100c08aa;
+}
+html .debug-panel[data-pause-panel] .status {
+	background: #100c08aa;
+}
+@media (max-width: 520px) {
+	html [data-ui-surface][data-pause-panel] {
+		padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+		border-radius: 0 16px 16px 0;
+	}
+	html .pause-panel .pause-logo {
+		width: 120px;
+	}
+	html .pause-panel .tool-grid {
+		grid-template-columns: 1fr;
+	}
+	html .lab[data-pause-panel] .viewport {
+		height: 210px;
+	}
+	html .help-panel[data-pause-panel] .help-heading {
+		top: -16px;
+	}
+}
+html .lab[data-pause-panel] :is(header > div, aside, label, .pair > button) {
+	min-width: 0;
+}
+html .lab[data-pause-panel] :is(input, select, button) {
+	box-sizing: border-box;
+}
+html .lab[data-pause-panel] header {
+	align-items: flex-start;
+	gap: 10px;
+}
+html .lab[data-pause-panel] header button {
+	flex-shrink: 0;
+}
+html .lab[data-pause-panel] .viewport {
+	overflow: hidden;
+}
+html .lab[data-pause-panel] .viewport canvas {
+	max-width: 100%;
+}

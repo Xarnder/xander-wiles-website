@@ -1,3 +1,4 @@
+import { interactionHelper, disposeInteractionHelpers } from './MiniBuildInteractionHelpers';
 import * as THREE from 'three';
 import {
 	clampBlockSize,
@@ -81,6 +82,8 @@ interface DragState {
 export interface MiniBuildEditorViewportCallbacks {
 	getState: () => MiniBuildEditorState;
 	onSelect: (blockId: string | null) => void;
+	onSelectInteraction?: (id: string) => void;
+	onMoveInteraction?: (id: string, position: GridVec3) => void;
 	onCommitTransform: (blockId: string, position: GridVec3, size: GridVec3) => EditorResult;
 	/** Rotation ring released on a new angle. */
 	onCommitRotation: (blockId: string, axis: Axis, angle: SnapAngle) => EditorResult;
@@ -118,6 +121,14 @@ const DEG = Math.PI / 180;
  * follow the block's own axes.
  */
 export class MiniBuildEditorViewport {
+	private readonly interactionHelpers = new THREE.Group();
+	private interactionDrag: {
+		id: string;
+		plane: THREE.Plane;
+		start: THREE.Vector3;
+		grid: GridVec3;
+		next: GridVec3;
+	} | null = null;
 	private readonly renderer: THREE.WebGLRenderer;
 	private readonly scene = new THREE.Scene();
 	private readonly camera = new THREE.PerspectiveCamera(40, 1, 0.02, 100);
@@ -304,6 +315,12 @@ export class MiniBuildEditorViewport {
 		if (state.version !== this.lastVersion) {
 			this.lastVersion = state.version;
 			this.rebuildBlocks();
+			disposeInteractionHelpers(this.interactionHelpers);
+			for (const location of state.getInteractions())
+				this.interactionHelpers.add(
+					interactionHelper(location, location.id === state.selectedInteractionId)
+				);
+			this.scene.add(this.interactionHelpers);
 			this.needsRender = true;
 		}
 		if (!this.needsRender) return;
@@ -495,7 +512,13 @@ export class MiniBuildEditorViewport {
 	 * places it at that compile's anchor.
 	 */
 	private applyBlockMesh(mesh: THREE.Mesh, block: MiniBuildBlock): void {
-		const shapeKey = JSON.stringify([block.id, block.positionGrid, block.sizeGrid, block.rotation]);
+		const shapeKey = JSON.stringify([
+			block.id,
+			block.shape,
+			block.positionGrid,
+			block.sizeGrid,
+			block.rotation
+		]);
 		if (mesh.userData.shapeKey !== shapeKey) {
 			if (mesh.geometry !== this.emptyGeometry) mesh.geometry.dispose();
 			mesh.geometry = compileBlockGeometry(block);
@@ -671,6 +694,29 @@ export class MiniBuildEditorViewport {
 		this.setPointer(event);
 		const state = this.callbacks.getState();
 		const selected = state.selectedBlock;
+		if (event.button === 0 && !event.altKey) {
+			const hit = this.raycaster
+				.intersectObject(this.interactionHelpers, true)
+				.find((h) => h.object.userData.interactionId);
+			if (hit) {
+				const id = hit.object.userData.interactionId as string;
+				this.callbacks.onSelectInteraction?.(id);
+				const location = state.getInteractions().find((l) => l.id === id)!;
+				const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+					this.camera.getWorldDirection(new THREE.Vector3()),
+					hit.point
+				);
+				this.interactionDrag = {
+					id,
+					plane,
+					start: hit.point.clone(),
+					grid: { ...location.positionGrid },
+					next: { ...location.positionGrid }
+				};
+				this.canvas.setPointerCapture?.(event.pointerId);
+				return;
+			}
+		}
 		if (event.button === 0 && selected && this.handlesGroup.visible) {
 			const hit = this.raycaster.intersectObjects(this.handleMeshes, false)[0];
 			if (hit) {
@@ -735,6 +781,26 @@ export class MiniBuildEditorViewport {
 	};
 
 	private readonly onPointerMove = (event: PointerEvent): void => {
+		if (this.interactionDrag) {
+			this.setPointer(event);
+			const d = this.interactionDrag;
+			const point = this.raycaster.ray.intersectPlane(d.plane, new THREE.Vector3());
+			if (point) {
+				for (const axis of AXES)
+					d.next[axis] =
+						d.grid[axis] + Math.round((point[axis] - d.start[axis]) / MINI_BUILD_LIMITS.gridSize);
+				const helper = this.interactionHelpers.children.find(
+					(o) => o.userData.interactionId === d.id
+				);
+				helper?.position.set(
+					gridToMeters(d.next.x),
+					gridToMeters(d.next.y),
+					gridToMeters(d.next.z)
+				);
+				this.needsRender = true;
+			}
+			return;
+		}
 		if (this.drag) {
 			this.setPointer(event);
 			const drag = this.drag;
@@ -801,6 +867,15 @@ export class MiniBuildEditorViewport {
 	};
 
 	private readonly onPointerUp = (event: PointerEvent): void => {
+		if (this.interactionDrag) {
+			const d = this.interactionDrag;
+			this.interactionDrag = null;
+			if (AXES.some((axis) => d.grid[axis] !== d.next[axis]))
+				this.callbacks.onMoveInteraction?.(d.id, d.next);
+			this.lastVersion = -1;
+			this.needsRender = true;
+			return;
+		}
 		if (this.drag) {
 			const drag = this.drag;
 			this.drag = null;

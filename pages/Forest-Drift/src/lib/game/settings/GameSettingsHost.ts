@@ -144,7 +144,11 @@ export interface GameSettingsHost {
 	sustain: SustainSettings;
 	musicVisual: MusicVisualSettings;
 	/** Mini Build on-screen readouts (local preference, persisted by the action). */
-	miniBuildDisplay?: { showChunkUsage: boolean; showChunkBoundaries: boolean };
+	miniBuildDisplay?: {
+		showChunkUsage: boolean;
+		showChunkBoundaries: boolean;
+		showInteractionLocations?: boolean;
+	};
 	/**
 	 * Which world settings this player may change. `local` (single player): all of them. Online
 	 * worlds lock the land for everyone, and the sky, weather and time belong to the `owner` (Q14-A);

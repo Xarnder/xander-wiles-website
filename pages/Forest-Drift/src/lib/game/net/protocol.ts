@@ -405,8 +405,31 @@ export interface ClientDoorMessage {
 	open: boolean;
 }
 
+/** Ephemeral semantic poses: no camera matrices, helpers or occupancy in saved content. */
+export interface MiniBuildInteractionRef {
+	instanceId: string;
+	locationId: string;
+}
+export interface OccupiedMiniBuildInteraction extends MiniBuildInteractionRef {
+	playerId: string;
+}
+export interface ClientInteractionMessage {
+	t: 'interaction';
+	location: MiniBuildInteractionRef | null;
+}
+export interface ServerInteractionsMessage {
+	t: 'interactions';
+	locations: OccupiedMiniBuildInteraction[];
+	replyTo?: string;
+}
+
 export type ClientJsonMessage =
-	HelloMessage | PingMessage | ClientEnvMessage | OpsMessage | ClientDoorMessage;
+	| HelloMessage
+	| PingMessage
+	| ClientEnvMessage
+	| OpsMessage
+	| ClientDoorMessage
+	| ClientInteractionMessage;
 
 export interface WelcomeMessage {
 	t: 'welcome';
@@ -436,6 +459,7 @@ export interface WelcomeMessage {
 	bookmark: PlayerBookmark | null;
 	/** Doors open right now (Q13-A). */
 	doors: string[];
+	interactions?: OccupiedMiniBuildInteraction[];
 	/** Names of everyone who has ever built here, for "Sam added this" notices. */
 	names: Record<string, string>;
 }
@@ -564,7 +588,8 @@ export type ServerJsonMessage =
 	| RejectMessage
 	| AckMessage
 	| SyncedMessage
-	| ServerDoorMessage;
+	| ServerDoorMessage
+	| ServerInteractionsMessage;
 
 const NAME_MAX = 20;
 const NAME_MIN = 2;
@@ -666,6 +691,28 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		if (!Array.isArray(message.ops)) return null;
 		return { t: 'ops', batchId: message.batchId, ops: message.ops as WorldOp[] };
 	}
+	if (message.t === 'interaction') {
+		const location = message.location as Record<string, unknown> | null;
+		if (location === null) return { t: 'interaction', location: null };
+		if (
+			!location ||
+			typeof location !== 'object' ||
+			!['instanceId', 'locationId'].every(
+				(k) =>
+					typeof location[k] === 'string' &&
+					(location[k] as string).length > 0 &&
+					(location[k] as string).length <= 128
+			)
+		)
+			return null;
+		return {
+			t: 'interaction',
+			location: {
+				instanceId: location.instanceId as string,
+				locationId: location.locationId as string
+			}
+		};
+	}
 	if (message.t === 'door') {
 		if (typeof message.id !== 'string' || message.id.length > 200) return null;
 		return { t: 'door', id: message.id, open: message.open === true };
@@ -694,7 +741,8 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'reject' ||
 		t === 'ack' ||
 		t === 'synced' ||
-		t === 'door'
+		t === 'door' ||
+		t === 'interactions'
 		? (value as ServerJsonMessage)
 		: null;
 }

@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import type { BuildingSettings, CustomizablePlacementToolId } from './FoundationTypes';
-import { buildPlacementPreviewModel, disposePreviewObject } from './placementPreviewModel';
+import {
+	buildPlacementPreviewModel,
+	centerPlacementPreviewModel,
+	disposePreviewObject
+} from './placementPreviewModel';
 
 const MAX_PIXEL_RATIO = 1;
 const YAW_SPEED = 0.28;
@@ -121,12 +125,20 @@ export class PlacementPreviewRenderer {
 	}
 
 	private frameContent(group: THREE.Group): void {
-		const box = new THREE.Box3().setFromObject(group);
-		const center = box.getCenter(new THREE.Vector3());
+		const box = centerPlacementPreviewModel(group);
 		const sphere = box.getBoundingSphere(new THREE.Sphere());
-		group.position.sub(center);
 		const radius = Math.max(0.6, sphere.radius);
-		this.orbitRadius = radius * 3.15;
+		const size = box.getSize(new THREE.Vector3());
+		const horizontalRadius = Math.hypot(size.x, size.z) / 2;
+		const verticalTangent = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+		// Fit tall pillars and wide bases, including their diagonal at every orbit angle.
+		const fitDistance =
+			1.15 *
+			Math.max(
+				horizontalRadius / (verticalTangent * this.camera.aspect) + horizontalRadius,
+				size.y / (2 * verticalTangent) + horizontalRadius
+			);
+		this.orbitRadius = Math.max(radius * 3.15, fitDistance);
 		this.cameraHeight = radius * 0.74;
 		this.camera.near = Math.max(0.05, radius / 40);
 		this.camera.far = Math.max(20, radius * 12);
@@ -147,6 +159,8 @@ export class PlacementPreviewRenderer {
 		this.renderer.setSize(width, height, false);
 		this.camera.aspect = width / height;
 		this.camera.updateProjectionMatrix();
+		const model = this.content.children[0];
+		if (model instanceof THREE.Group) this.frameContent(model);
 	}
 
 	private readonly onVisibility = (): void => {

@@ -170,6 +170,28 @@ describe('BuildingManager.addOpening', () => {
 		return result.value;
 	}
 
+	it('copies a double arched door style into saved geometry independently of editor settings', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = addTestWall(buildingManager);
+		const style = { double: true, arched: true };
+		const result = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'door',
+			minU: 2,
+			maxU: 4,
+			minY: 0,
+			maxY: 2.5,
+			edgeMargin: 0.1,
+			spacing: 0.15,
+			doorStyle: style
+		});
+		expect(result.valid).toBe(true);
+		style.double = false;
+		const saved = JSON.parse(JSON.stringify(buildingManager.serialize()));
+		expect(saved[0].walls[0].openings[0].doorStyle).toEqual({ double: true, arched: true });
+	});
+
 	it('adds a valid window opening', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
@@ -773,6 +795,27 @@ function slabPoint(gridX: number, gridZ: number) {
 const DEFAULT_SLAB_PARAMS = { type: 'ceiling' as const, levelIndex: 0, localY: 3, thickness: 0.2 };
 
 describe('BuildingManager.addSlab — validation', () => {
+	it.each(['floor', 'ceiling'] as const)('allows separate %s pieces to share an edge', (type) => {
+		const { foundationManager, buildingManager, slabManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		for (const x of [0, 4]) {
+			const result = buildingManager.addSlab({
+				...DEFAULT_SLAB_PARAMS,
+				type,
+				points: [slabPoint(x, 0), slabPoint(x + 4, 0), slabPoint(x + 4, 4), slabPoint(x, 4)]
+			});
+			expect(result.valid).toBe(true);
+		}
+		expect(slabManager.getAllSlabs()).toHaveLength(2);
+		const overlapping = buildingManager.addSlab({
+			...DEFAULT_SLAB_PARAMS,
+			type,
+			points: [slabPoint(2, 0), slabPoint(6, 0), slabPoint(6, 4), slabPoint(2, 4)]
+		});
+		expect(overlapping.valid).toBe(false);
+		expect(slabManager.getAllSlabs()).toHaveLength(2);
+	});
+
 	it('accepts a simple rectangular slab', () => {
 		const { foundationManager, buildingManager } = setup();
 		foundationManager.addFoundation(makeFoundation());
@@ -2806,5 +2849,51 @@ describe('BuildingManager.addFloorDetail', () => {
 		expect(result.valid).toBe(true);
 		expect(buildingManager.removeFloorDetail(result.value!.id)).toBe(true);
 		expect(buildingManager.getFloorDetail(result.value!.id)).toBeUndefined();
+	});
+});
+
+describe('editing existing window shutters', () => {
+	it('stores a viewer-facing manual side, supports off/auto, and survives building save/load', () => {
+		const { foundationManager, buildingManager } = setup();
+		foundationManager.addFoundation(makeFoundation());
+		const wall = buildingManager.addWall({
+			start: { foundationId: 'foundation-a', gridX: 2, gridZ: 2 },
+			end: { foundationId: 'foundation-a', gridX: 12, gridZ: 2 },
+			...DEFAULT_WALL_PARAMS
+		}).value!;
+		const opening = buildingManager.addOpening({
+			wallId: wall.id,
+			type: 'window',
+			minU: 1,
+			maxU: 2,
+			minY: 0.8,
+			maxY: 2.1,
+			edgeMargin: 0.1,
+			spacing: 0.1
+		}).value!;
+		const transform = buildingManager.getWallTransform(wall.id)!;
+		const position = {
+			x: transform.originWorldX + 1.5,
+			y: transform.originWorldY + 1.4,
+			z: transform.originWorldZ - 3
+		};
+		const direction = { x: 0, y: 0, z: 1 };
+		expect(buildingManager.applyWindowShuttersFromView(position, direction, 'manual')).toBe(true);
+		expect(opening.shutters).toEqual({ mode: 'manual', side: -1 });
+		const restored = setup();
+		restored.foundationManager.addFoundation(makeFoundation());
+		restored.buildingManager.load(buildingManager.serialize());
+		expect(restored.buildingManager.getWall(wall.id)!.openings[0].shutters).toEqual({
+			mode: 'manual',
+			side: -1
+		});
+		expect(buildingManager.applyWindowShuttersFromView(position, direction, 'off')).toBe(true);
+		expect(opening.shutters).toEqual({ mode: 'off' });
+		expect(buildingManager.applyWindowShuttersFromView(position, direction, 'auto')).toBe(true);
+		expect(opening.shutters).toEqual({ mode: 'auto' });
+		expect(opening.minU).toBe(1);
+		expect(opening.maxU).toBe(2);
+		expect(buildingManager.applyWindowShuttersFromView(position, direction, 'off', 1)).toBe(false);
+		expect(opening.shutters).toEqual({ mode: 'auto' });
 	});
 });

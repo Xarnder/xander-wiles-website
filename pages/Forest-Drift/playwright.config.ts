@@ -32,6 +32,11 @@ export default defineConfig({
 						: undefined
 			}
 		},
+		{
+			name: 'webkit-worlds',
+			testMatch: /worldPortability\.e2e\.ts$/,
+			use: { ...devices['Desktop Safari'] }
+		},
 		// Multiplayer has to work in every engine: the same world from a seed, and the same online
 		// session. These two run only the online checks (the full suite stays Chromium-only, as before).
 		{

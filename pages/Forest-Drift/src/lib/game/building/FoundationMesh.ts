@@ -46,6 +46,13 @@ export class FoundationMesh {
 		this.object.userData.foundationId = definition.id;
 	}
 
+	setSupportDepth(top: number, bottom: number): void {
+		const originalHeight = this.geometry.parameters.height;
+		this.object.scale.y = (top - bottom) / originalHeight;
+		this.object.position.y = (top + bottom) / 2;
+		this.object.updateMatrixWorld(true);
+	}
+
 	setMaterial(material: THREE.Material | THREE.Material[]): void {
 		this.object.material = material;
 	}

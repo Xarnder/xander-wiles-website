@@ -312,13 +312,15 @@ describe('opening visuals: wall integration', () => {
 		expect(material.color.getHexString().toUpperCase()).toBe('00AACC');
 	});
 
-	it('disabling frames/glass in settings suppresses the visual entirely', () => {
+	it('disabling frames/glass keeps the independently enabled outdoor shutters', () => {
 		const { manager, settings } = makeManager();
 		settings.windowFramesEnabled = false;
 		settings.windowGlassEnabled = false;
 		manager.addWall(wallWithWindow());
 		const mesh = manager.getMeshForWall('wall-1')!;
 		const group = openingVisualsOf(mesh);
-		expect(group.children.length).toBe(0);
+		expect(findByName(group, 'window-frame')).toBeUndefined();
+		expect(findByName(group, 'window-glass')).toBeUndefined();
+		expect(findByName(group, 'window-shutters')).toBeDefined();
 	});
 });

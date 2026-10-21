@@ -3,7 +3,7 @@
  * this is the persisted, player-authored contract. Nothing here is a mesh, a geometry or a material
  * instance — compiled render assets are always regenerated from these recipes.
  *
- * A Mini Build is deliberately constrained (16 cuboids on a 0.03125m grid, 4m bounds, 4 material
+ * A Mini Build is deliberately constrained (16 cuboids, 4 cylinders and 2 spheres on a 0.03125m grid, 4m bounds, 4 material
  * slots, rotations snapped to 7.5° units). A cuboid may be flat (size 0) on one axis, which makes it a plane.
  * Those limits are the creative rule of the system, so they live in exactly one place and every layer
  * (editor, validation, loader, compiler) reads them from here.
@@ -19,8 +19,10 @@ import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
  *      every saved design keeps exactly its size and shape in metres.
  * v4 — block rotations may be any multiple of 7.5° (not just quarter turns). Coordinates unchanged;
  *      every v3 design is a valid v4 design as-is.
+ * v5 — optional authored interaction locations; geometry revision separated from semantic edits.
+ * v6 — optional primitive shape, with fixed low-poly cylinders and spheres.
  */
-export const MINI_BUILD_SCHEMA_VERSION = 4;
+export const MINI_BUILD_SCHEMA_VERSION = 6;
 
 /** Current grid units per v1 grid unit (0.125m / 0.03125m): v1 designs are scaled by this when loaded. */
 export const MINI_BUILD_V1_GRID_SCALE = 4;
@@ -39,10 +41,14 @@ export function miniBuildGridScaleFor(schemaVersion: number): number {
  * Part of the asset cache key and the content hash, so an improved compiler regenerates assets
  * rather than reusing stale ones — saved designs themselves never need migrating for it.
  */
-export const MINI_BUILD_COMPILER_VERSION = 4;
+export const MINI_BUILD_COMPILER_VERSION = 5;
 
 export const MINI_BUILD_LIMITS = {
+	maxInteractionLocations: 8,
 	maxBlocks: 16,
+	maxCylinders: 4,
+	maxSpheres: 2,
+	maxPrimitives: 22,
 	/** Snap increment in metres for positions and sizes (3.125 cm). */
 	gridSize: 0.03125,
 	maxBounds: { x: 4, y: 4, z: 4 },
@@ -148,7 +154,11 @@ export interface MiniBuildBlockRotation {
 
 export type MiniBuildBlockCollision = 'auto' | 'solid' | 'none';
 
+export type MiniBuildShape = 'cuboid' | 'cylinder' | 'sphere';
+
 export interface MiniBuildBlock {
+	/** Omitted in legacy designs: cuboid. Curved shapes have fixed, low-poly topology. */
+	shape?: MiniBuildShape;
 	id: string;
 	/**
 	 * Min corner of the block's grid box (its effective, quarter-turn-rotated box), in grid units. An
@@ -186,6 +196,7 @@ export const MINI_BUILD_FINISH_LABELS: Record<MiniBuildFinish, string> = {
  * picks one from the slot's finish; `flat` is plain colour.
  */
 export const MINI_BUILD_TEXTURE_IDS = [
+	'woven-fabric',
 	'auto',
 	'flat',
 	'dark-oak',
@@ -247,7 +258,23 @@ export interface MiniBuildBounds {
 	max: GridVec3;
 }
 
+export type MiniBuildInteractionType = 'sit' | 'lie';
+
+/** Editor-grid pelvis support point, not a camera or world position. Local -Z is
+ * forward (sit) / head (lie). Occupancy box offsets/sizes use the same integer grid. */
+export interface MiniBuildInteractionLocation {
+	id: string;
+	type: MiniBuildInteractionType;
+	positionGrid: GridVec3;
+	rotationY: SnapAngle;
+	enabled: boolean;
+	collider: { type: 'box'; centerOffsetGrid: GridVec3; sizeGrid: GridVec3 };
+}
+
 export interface MiniBuildDefinition {
+	interactionLocations?: MiniBuildInteractionLocation[];
+	/** Geometry-only revision: semantic edits can reuse GPU assets. */
+	geometryRevision?: number;
 	schemaVersion: number;
 	id: string;
 	name: string;
@@ -294,6 +321,7 @@ export function createEmptyMiniBuildWorldState(): MiniBuildWorldState {
 
 /** What the editor edits: a definition minus identity/bookkeeping. */
 export interface MiniBuildDraft {
+	interactionLocations?: MiniBuildInteractionLocation[];
 	name: string;
 	blocks: MiniBuildBlock[];
 	materials: MiniBuildMaterialSlot[];

@@ -98,6 +98,114 @@ describe('polygonsOverlap', () => {
 		expect(polygonsOverlap(squareA, squareB)).toBe(true);
 	});
 
+	it.each([
+		[
+			'partial shared edge',
+			[
+				[4, 1],
+				[6, 1],
+				[6, 3],
+				[4, 3]
+			],
+			false
+		],
+		[
+			'shared corner',
+			[
+				[4, 4],
+				[6, 4],
+				[6, 6],
+				[4, 6]
+			],
+			false
+		],
+		[
+			'horizontal shared edge',
+			[
+				[0, 4],
+				[4, 4],
+				[4, 8],
+				[0, 8]
+			],
+			false
+		],
+		[
+			'identical footprint',
+			[
+				[0, 0],
+				[4, 0],
+				[4, 4],
+				[0, 4]
+			],
+			true
+		],
+		[
+			'overlapping collinear edges',
+			[
+				[2, 0],
+				[6, 0],
+				[6, 4],
+				[2, 4]
+			],
+			true
+		],
+		[
+			'contained with all vertices on boundary',
+			[
+				[2, 0],
+				[4, 2],
+				[2, 4],
+				[0, 2]
+			],
+			true
+		]
+	] as const)('%s', (_name, coordinates, expected) => {
+		const other = coordinates.map(([x, z]) => ({ x, z }));
+		for (const polygon of [other, [...other].reverse()]) {
+			expect(polygonsOverlap(squareA, polygon)).toBe(expected);
+			expect(polygonsOverlap(polygon, squareA)).toBe(expected);
+		}
+	});
+
+	it('allows a piece to fill a concave notch with shared edges', () => {
+		const l = [
+			{ x: 0, z: 0 },
+			{ x: 4, z: 0 },
+			{ x: 4, z: 2 },
+			{ x: 2, z: 2 },
+			{ x: 2, z: 4 },
+			{ x: 0, z: 4 }
+		];
+		const notch = [
+			{ x: 2, z: 2 },
+			{ x: 4, z: 2 },
+			{ x: 4, z: 4 },
+			{ x: 2, z: 4 }
+		];
+		expect(polygonsOverlap(l, notch)).toBe(false);
+		expect(
+			polygonsOverlap(
+				l,
+				notch.map((p) => ({ x: p.x - 0.25, z: p.z }))
+			)
+		).toBe(true);
+	});
+
+	it('allows triangles to share a diagonal', () => {
+		const lower = [
+			{ x: 0, z: 0 },
+			{ x: 4, z: 0 },
+			{ x: 4, z: 4 }
+		];
+		const upper = [
+			{ x: 0, z: 0 },
+			{ x: 4, z: 4 },
+			{ x: 0, z: 4 }
+		];
+		expect(polygonsOverlap(lower, upper)).toBe(false);
+		expect(polygonsOverlap(lower, [...upper].reverse())).toBe(false);
+	});
+
 	it('detects full containment (nesting) with no edge crossings', () => {
 		const inner: Point2D[] = [
 			{ x: 1, z: 1 },
@@ -126,9 +234,8 @@ describe('polygonsOverlap', () => {
 			{ x: 8, z: 4 },
 			{ x: 4, z: 4 }
 		];
-		// Sharing the x=4 edge is a touch, not an area overlap — accept either answer is defensible,
-		// but confirm it doesn't crash and is deterministic for this "adjacent, not overlapping" case.
-		expect(typeof polygonsOverlap(squareA, adjacent)).toBe('boolean');
+		expect(polygonsOverlap(squareA, adjacent)).toBe(false);
+		expect(polygonsOverlap(adjacent, [...squareA].reverse())).toBe(false);
 	});
 });
 

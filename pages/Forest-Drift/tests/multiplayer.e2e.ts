@@ -1,3 +1,4 @@
+import { openWorldsScreen } from './worldHelpers';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -78,6 +79,7 @@ async function newPlayer(browser: Browser): Promise<Page> {
 	const page = await context.newPage();
 	// `?mpServer=` is remembered in this context, so invite links (which don't carry it) work too.
 	await page.goto(`/?mpServer=${encodeURIComponent(MP_URL)}`);
+	await openWorldsScreen(page);
 	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 30_000 });
 	return page;
 }
@@ -497,7 +499,7 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 	// A deliberate leave frees the slot at once (no grace period).
 	await visitor.keyboard.press('Escape');
 	await visitor.getByTestId('pause-quit').click();
-	await expect(visitor.getByTestId('worlds-screen')).toBeVisible({ timeout: 30_000 });
+	await openWorldsScreen(visitor);
 	await expect.poll(() => playerCount(owner), { timeout: 10_000 }).toBe('1 player');
 
 	// The world is remembered for the visitor, with its role.

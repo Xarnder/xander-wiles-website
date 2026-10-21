@@ -7,6 +7,7 @@ test('menus share one baked wood image across dialogs and touch layouts', async 
 		if (worker.url().includes('woodTexture')) woodWorkers++;
 	});
 	await page.goto('/');
+	await page.getByRole('button', { name: 'Worlds', exact: true }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-ui-wood', 'ready');
 	const texture = await page.evaluate(() =>
 		document.documentElement.style.getPropertyValue('--fd-wood-image')
@@ -14,9 +15,15 @@ test('menus share one baked wood image across dialogs and touch layouts', async 
 	expect(texture).toContain('blob:');
 	for (const viewport of [
 		{ width: 1440, height: 1000 },
-		{ width: 390, height: 844 }
+		{ width: 390, height: 844 },
+		{ width: 280, height: 653 }
 	]) {
 		await page.setViewportSize(viewport);
+		expect(
+			await page
+				.getByTestId('worlds-screen')
+				.evaluate((element) => element.scrollWidth <= element.clientWidth)
+		).toBe(true);
 		await page.getByTestId('new-world-button').click();
 		const dialog = page.getByTestId('create-world-dialog');
 		await expect(dialog).toHaveAttribute('data-ui-surface', 'panel');
@@ -46,6 +53,7 @@ test('fullscreen menus and editor use the shared theme without rebaking', async 
 	});
 	await page.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
 	await page.goto('/');
+	await page.getByRole('button', { name: 'Worlds', exact: true }).click();
 	await createAndEnterWorld(page);
 	await expect(page.getByTestId('pause-toggle')).toHaveCSS('background-image', /blob:/);
 	await expect(page.getByTestId('save-indicator')).toHaveCSS('background-image', /blob:/);
@@ -126,6 +134,7 @@ test('touch dialogs stay usable when wood generation is unavailable', async ({ b
 	const page = await context.newPage();
 	await page.route('**/*woodTexture.worker*', (route) => route.abort());
 	await page.goto('/');
+	await page.getByRole('button', { name: 'Worlds', exact: true }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-ui-wood', 'fallback');
 	await page.getByTestId('new-world-button').tap();
 	const create = page.getByTestId('create-world-confirm');

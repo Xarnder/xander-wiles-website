@@ -1,3 +1,4 @@
+import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
 import { ClockSync } from './ClockSync';
 import type { PlayerIdentity } from './mpConfig';
 import { PoseSender, type LocalPose } from './PoseSender';
@@ -52,6 +53,7 @@ export interface WelcomeInfo {
 	resync: boolean;
 	bookmark: PlayerBookmark | null;
 	doors: string[];
+	interactions?: OccupiedMiniBuildInteraction[];
 	names: Record<string, string>;
 	/** True only for the first welcome of this session (not reconnects). */
 	first: boolean;
@@ -67,6 +69,7 @@ export interface WorldTraffic {
 	/** Catch-up finished: pending batches can be resent. */
 	onSynced(): void;
 	onDoor(id: string, open: boolean): void;
+	onInteractions?(locations: OccupiedMiniBuildInteraction[], replyTo?: string): void;
 }
 
 /** Window and document events the session listens to; injected in tests. */
@@ -315,6 +318,10 @@ export class NetSession {
 		return this.sendText({ t: 'ops', batchId, ops });
 	}
 
+	sendInteraction(location: MiniBuildInteractionRef | null): void {
+		this.sendText({ t: 'interaction', location });
+	}
+
 	sendDoor(id: string, open: boolean): void {
 		this.sendText({ t: 'door', id, open });
 	}
@@ -435,6 +442,7 @@ export class NetSession {
 					resync: message.resync,
 					bookmark: message.bookmark ?? null,
 					doors: message.doors ?? [],
+					interactions: message.interactions ?? [],
 					names: message.names ?? {},
 					first
 				});
@@ -483,6 +491,9 @@ export class NetSession {
 				break;
 			case 'synced':
 				this.options.world?.onSynced();
+				break;
+			case 'interactions':
+				this.options.world?.onInteractions?.(message.locations, message.replyTo);
 				break;
 			case 'door':
 				this.options.world?.onDoor(message.id, message.open);

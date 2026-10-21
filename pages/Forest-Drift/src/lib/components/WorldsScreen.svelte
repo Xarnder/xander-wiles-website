@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import titleMark from '$lib/assets/forest-drift-title.svg';
+	import CountrysideBackground from './CountrysideBackground.svelte';
 	import type { OnlineWorldEntry } from '$lib/game/net/mpConfig';
 	import { generateWorldSeed } from '$lib/game/world/seedGenerator';
 	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
 
 	interface Props {
+		onBack?: () => void;
 		worlds: WorldMetadata[];
 		thumbnails: Record<string, string>;
 		defaultWorld?: WorldMetadata | null;
@@ -40,6 +41,7 @@
 	}
 
 	const {
+		onBack,
 		worlds,
 		thumbnails,
 		defaultWorld = null,
@@ -175,366 +177,375 @@
 	ondragleave={() => (dragActive = false)}
 	ondrop={handleDrop}
 >
-	<header class="worlds-header">
-		<div class="start-brand">
-			<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
-			<p class="start-tagline">Explore. Build. Make it yours.</p>
+	<CountrysideBackground />
+	<div class="worlds-board">
+		<div class="board-topline">
+			{#if onBack}<button class="back-button" onclick={onBack}>← Main menu</button>{/if}
+			<span class="chapter-label">THE WORLD AT YOUR DOORSTEP</span>
+			<span class="leaf-mark" aria-hidden="true">❧</span>
 		</div>
-		<div class="start-welcome">
-			<p class="start-eyebrow">YOUR NEXT CHAPTER</p>
-			<h1>A world of your making.</h1>
-			<p class="start-description">
-				Find a quiet corner of the forest. Build something extraordinary.
-			</p>
-			<div class="worlds-actions">
-				<button
-					class="primary"
-					data-testid="new-world-button"
-					onclick={openCreateDialog}
-					disabled={busy}
-				>
-					+ New World
-				</button>
-				<button
-					data-testid="import-world-button"
-					onclick={() => fileInput?.click()}
-					disabled={busy}
-				>
-					Import World
-				</button>
-				{#if onJoinOnline}
-					<button data-testid="join-online-button" onclick={onJoinOnline} disabled={busy}>
-						Join Online
-					</button>
-				{/if}
-				<input
-					bind:this={fileInput}
-					class="file-input"
-					type="file"
-					accept=".forestworld,application/zip"
-					data-testid="import-world-input"
-					onchange={(event) => {
-						handleFiles(event.currentTarget.files);
-						event.currentTarget.value = '';
-					}}
-				/>
-			</div>
-		</div>
-	</header>
-
-	{#if busy}
-		<div class="worlds-busy" data-testid="worlds-busy">Working…</div>
-	{/if}
-
-	{#if error}
-		<div class="worlds-error" data-testid="worlds-error" role="alert">
-			<span>{error}</span>
-			<button class="link" onclick={onDismissError}>Dismiss</button>
-		</div>
-	{/if}
-
-	<section class="default-world-section" data-testid="default-world-section">
-		<div class="section-header">
-			<h2 class="section-title">The forest awaits</h2>
-			<span class="badge">Featured world</span>
-		</div>
-
-		<div class="default-world-card" data-testid="default-world-card">
-			<div class="thumbnail default-thumbnail">
-				{#if defaultThumbnail || (defaultWorld && thumbnails[defaultWorld.id])}
-					<img
-						src={defaultThumbnail || (defaultWorld ? thumbnails[defaultWorld.id] : '')}
-						alt="Main World Preview"
-						width="320"
-						height="180"
-					/>
-				{:else}
-					<div class="thumbnail-placeholder" aria-hidden="true"></div>
-				{/if}
-			</div>
-
-			<div class="world-info">
-				<div class="world-name-row">
-					<div class="world-name" data-testid="default-world-name">
-						{defaultWorld?.name ?? 'Main World'}
-					</div>
-					<span class="pill-tag">Always Available</span>
+		<header class="worlds-header">
+			<div class="start-brand">
+				<div class="worlds-logo" aria-label="Forest Drift">
+					<span>Forest</span><span>Drift</span>
 				</div>
-				<p class="world-desc">
-					Explore a crafted forest outpost featuring multi-tier buildings, stairs, roofs, and scenic
-					woods.
+				<p class="start-tagline">Explore. Build. Make it yours.</p>
+			</div>
+			<div class="start-welcome">
+				<p class="start-eyebrow">CHOOSE YOUR NEXT CHAPTER</p>
+				<h1>Your worlds await.</h1>
+				<p class="start-description">
+					Find a quiet corner of the forest. Build something extraordinary.
 				</p>
-				<div class="world-meta subtle">
-					Seed <code>{defaultWorld?.seed ?? 'soft-lowlands-431'}</code>
-					{#if defaultWorld?.updatedAt}
-						&middot; Updated {relativeTime(defaultWorld.updatedAt)}
-					{/if}
-				</div>
-			</div>
-
-			<div class="world-buttons">
-				<button
-					class="primary play-btn"
-					data-testid="play-default-world"
-					onclick={() => {
-						if (onPlayDefault) {
-							onPlayDefault();
-						} else if (defaultWorld) {
-							onPlay(defaultWorld.id);
-						}
-					}}
-					disabled={busy}
-				>
-					<span class="play-icon" aria-hidden="true">▶</span> Play
-				</button>
-				<div class="menu-anchor">
+				<div class="worlds-actions">
 					<button
-						class="icon"
-						data-testid="default-world-menu-button"
-						aria-label="More actions for Default World"
-						aria-expanded={openMenuId === 'default-world'}
-						onclick={(event) => {
-							event.stopPropagation();
-							openMenuId = openMenuId === 'default-world' ? null : 'default-world';
-						}}
+						class="primary"
+						data-testid="new-world-button"
+						onclick={openCreateDialog}
+						disabled={busy}
 					>
-						&hellip;
+						+ New World
 					</button>
-					{#if openMenuId === 'default-world'}
-						<div class="menu" data-testid="default-world-menu" role="menu">
-							<button
-								role="menuitem"
-								onclick={() => {
-									if (onPlayDefault) {
-										onPlayDefault();
-									} else if (defaultWorld) {
-										onPlay(defaultWorld.id);
-									}
-								}}
-							>
-								Play
-							</button>
-							{#if defaultWorld}
-								<button
-									role="menuitem"
-									data-testid="default-world-menu-duplicate"
-									onclick={() => onDuplicate(defaultWorld.id)}
-								>
-									Duplicate to My Worlds
-								</button>
-								<button
-									role="menuitem"
-									data-testid="default-world-menu-export"
-									onclick={() => onExport(defaultWorld.id)}
-								>
-									Export
-								</button>
-								{#if onPublish}
-									<button
-										role="menuitem"
-										data-testid="default-world-menu-publish"
-										onclick={() => onPublish(defaultWorld.id)}
-									>
-										Publish Online…
-									</button>
-								{/if}
-							{/if}
-							{#if onResetDefault}
-								<button
-									role="menuitem"
-									class="danger"
-									data-testid="default-world-menu-reset"
-									onclick={() => (dialog = { kind: 'reset-default' })}
-								>
-									Reset to Original
-								</button>
-							{/if}
-						</div>
+					<button
+						data-testid="import-world-button"
+						onclick={() => fileInput?.click()}
+						disabled={busy}
+					>
+						Import World
+					</button>
+					{#if onJoinOnline}
+						<button data-testid="join-online-button" onclick={onJoinOnline} disabled={busy}>
+							Join Online
+						</button>
 					{/if}
+					<input
+						bind:this={fileInput}
+						class="file-input"
+						type="file"
+						accept=".forestworld,application/zip"
+						data-testid="import-world-input"
+						onchange={(event) => {
+							handleFiles(event.currentTarget.files);
+							event.currentTarget.value = '';
+						}}
+					/>
 				</div>
 			</div>
-		</div>
-	</section>
+		</header>
 
-	<div class="section-divider" aria-hidden="true"></div>
+		{#if busy}
+			<div class="worlds-busy" data-testid="worlds-busy">Working…</div>
+		{/if}
 
-	{#if onlineWorlds.length > 0}
-		<h2 class="section-title">Online Worlds</h2>
-		<ul class="online-worlds" data-testid="online-worlds">
-			{#each onlineWorlds as online (online.worldId)}
-				<li class="online-world" data-testid="online-world-{online.worldId}">
-					<div class="online-info">
-						<span class="online-name">{online.name}</span>
-						{#if online.role}<span class="pill-tag">{ROLE_LABEL[online.role]}</span>{/if}
-					</div>
-					<div class="online-actions">
-						{#if online.invites && onShowInvites}
-							<button type="button" onclick={() => onShowInvites(online.worldId)} disabled={busy}>
-								Invite links
-							</button>
-						{/if}
-						{#if online.invites && onSaveOnlineCopy}
-							<button
-								type="button"
-								title="Save the online world as it is now into My Worlds"
-								data-testid="online-world-save-copy"
-								onclick={() => onSaveOnlineCopy(online.worldId)}
-								disabled={busy}
-							>
-								Save a copy
-							</button>
-						{/if}
-						{#if online.invites && onRestoreOnline}
-							<button
-								type="button"
-								data-testid="online-world-restore"
-								onclick={() => onRestoreOnline(online.worldId)}
-								disabled={busy}
-							>
-								Restore…
-							</button>
-						{/if}
-						{#if onForgetOnlineWorld}
-							<button
-								type="button"
-								title="Remove from this list (the world itself stays online)"
-								onclick={() => onForgetOnlineWorld(online.worldId)}
-								disabled={busy}
-							>
-								Forget
-							</button>
-						{/if}
-						{#if onJoinOnlineWorld}
-							<button
-								type="button"
-								class="primary"
-								data-testid="online-world-join"
-								onclick={() => onJoinOnlineWorld(online.worldId)}
-								disabled={busy}
-							>
-								Join
-							</button>
-						{/if}
-					</div>
-				</li>
-			{/each}
-		</ul>
+		{#if error}
+			<div class="worlds-error" data-testid="worlds-error" role="alert">
+				<span>{error}</span>
+				<button class="link" onclick={onDismissError}>Dismiss</button>
+			</div>
+		{/if}
 
-		<div class="section-divider" aria-hidden="true"></div>
-	{/if}
+		<section class="default-world-section" data-testid="default-world-section">
+			<div class="section-header">
+				<h2 class="section-title">The forest awaits</h2>
+				<span class="badge">Featured world</span>
+			</div>
 
-	<h2 class="section-title">My Worlds</h2>
+			<div class="default-world-card" data-testid="default-world-card">
+				<div class="thumbnail default-thumbnail">
+					{#if defaultThumbnail || (defaultWorld && thumbnails[defaultWorld.id])}
+						<img
+							src={defaultThumbnail || (defaultWorld ? thumbnails[defaultWorld.id] : '')}
+							alt="Main World Preview"
+							width="320"
+							height="180"
+						/>
+					{:else}
+						<div class="thumbnail-placeholder" aria-hidden="true"></div>
+					{/if}
+				</div>
 
-	{#if worlds.length === 0}
-		<div class="empty-state" data-testid="worlds-empty">
-			<p class="empty-title">No worlds yet</p>
-			<p class="empty-body">Create a world to start exploring and building.</p>
-		</div>
-	{:else}
-		<ul class="world-list" data-testid="world-list">
-			{#each worlds as world (world.id)}
-				<li class="world-card" data-testid="world-card" data-world-id={world.id}>
-					<div class="thumbnail">
-						{#if thumbnails[world.id]}
-							<img src={thumbnails[world.id]} alt="" width="320" height="180" />
-						{:else}
-							<div class="thumbnail-placeholder" aria-hidden="true"></div>
-						{/if}
-					</div>
-
-					<div class="world-info">
-						<div class="world-name" data-testid="world-name">{world.name}</div>
-						<div class="world-meta">
-							Updated {relativeTime(world.updatedAt)}
-							{#if world.byteSize}&middot; {formatBytes(world.byteSize)}{/if}
+				<div class="world-info">
+					<div class="world-name-row">
+						<div class="world-name" data-testid="default-world-name">
+							{defaultWorld?.name ?? 'Main World'}
 						</div>
-						<div class="world-meta subtle">
-							Created {new Date(world.createdAt).toLocaleDateString()} &middot; seed
-							<code>{world.seed}</code>
-						</div>
+						<span class="pill-tag">Always Available</span>
 					</div>
+					<p class="world-desc">
+						Explore a crafted forest outpost featuring multi-tier buildings, stairs, roofs, and
+						scenic woods.
+					</p>
+					<div class="world-meta subtle">
+						Seed <code>{defaultWorld?.seed ?? 'soft-lowlands-431'}</code>
+						{#if defaultWorld?.updatedAt}
+							&middot; Updated {relativeTime(defaultWorld.updatedAt)}
+						{/if}
+					</div>
+				</div>
 
-					<div class="world-buttons">
+				<div class="world-buttons">
+					<button
+						class="primary play-btn"
+						data-testid="play-default-world"
+						onclick={() => {
+							if (onPlayDefault) {
+								onPlayDefault();
+							} else if (defaultWorld) {
+								onPlay(defaultWorld.id);
+							}
+						}}
+						disabled={busy}
+					>
+						<span class="play-icon" aria-hidden="true">▶</span> Play
+					</button>
+					<div class="menu-anchor">
 						<button
-							class="primary"
-							data-testid="play-world"
-							onclick={() => onPlay(world.id)}
-							disabled={busy}
+							class="icon"
+							data-testid="default-world-menu-button"
+							aria-label="More actions for Default World"
+							aria-expanded={openMenuId === 'default-world'}
+							onclick={(event) => {
+								event.stopPropagation();
+								openMenuId = openMenuId === 'default-world' ? null : 'default-world';
+							}}
 						>
-							Play
+							&hellip;
 						</button>
-						<div class="menu-anchor">
-							<button
-								class="icon"
-								data-testid="world-menu-button"
-								aria-label={`More actions for ${world.name}`}
-								aria-expanded={openMenuId === world.id}
-								onclick={(event) => {
-									event.stopPropagation();
-									openMenuId = openMenuId === world.id ? null : world.id;
-								}}
-							>
-								&hellip;
-							</button>
-							{#if openMenuId === world.id}
-								<div class="menu" data-testid="world-menu" role="menu">
-									<button role="menuitem" onclick={() => onPlay(world.id)}>Play</button>
+						{#if openMenuId === 'default-world'}
+							<div class="menu" data-testid="default-world-menu" role="menu">
+								<button
+									role="menuitem"
+									onclick={() => {
+										if (onPlayDefault) {
+											onPlayDefault();
+										} else if (defaultWorld) {
+											onPlay(defaultWorld.id);
+										}
+									}}
+								>
+									Play
+								</button>
+								{#if defaultWorld}
 									<button
 										role="menuitem"
-										data-testid="world-menu-rename"
-										onclick={() =>
-											(dialog = { kind: 'rename', worldId: world.id, name: world.name })}
+										data-testid="default-world-menu-duplicate"
+										onclick={() => onDuplicate(defaultWorld.id)}
 									>
-										Rename
+										Duplicate to My Worlds
 									</button>
 									<button
 										role="menuitem"
-										data-testid="world-menu-duplicate"
-										onclick={() => onDuplicate(world.id)}
-									>
-										Duplicate
-									</button>
-									<button
-										role="menuitem"
-										data-testid="world-menu-export"
-										onclick={() => onExport(world.id)}
+										data-testid="default-world-menu-export"
+										onclick={() => onExport(defaultWorld.id)}
 									>
 										Export
 									</button>
 									{#if onPublish}
 										<button
 											role="menuitem"
-											data-testid="world-menu-publish"
-											onclick={() => onPublish(world.id)}
+											data-testid="default-world-menu-publish"
+											onclick={() => onPublish(defaultWorld.id)}
 										>
 											Publish Online…
 										</button>
 									{/if}
+								{/if}
+								{#if onResetDefault}
 									<button
 										role="menuitem"
 										class="danger"
-										data-testid="world-menu-delete"
-										onclick={() =>
-											(dialog = { kind: 'delete', worldId: world.id, name: world.name })}
+										data-testid="default-world-menu-reset"
+										onclick={() => (dialog = { kind: 'reset-default' })}
 									>
-										Delete
+										Reset to Original
 									</button>
-								</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<div class="section-divider" aria-hidden="true"></div>
+
+		{#if onlineWorlds.length > 0}
+			<h2 class="section-title">Online Worlds</h2>
+			<ul class="online-worlds" data-testid="online-worlds">
+				{#each onlineWorlds as online (online.worldId)}
+					<li class="online-world" data-testid="online-world-{online.worldId}">
+						<div class="online-info">
+							<span class="online-name">{online.name}</span>
+							{#if online.role}<span class="pill-tag">{ROLE_LABEL[online.role]}</span>{/if}
+						</div>
+						<div class="online-actions">
+							{#if online.invites && onShowInvites}
+								<button type="button" onclick={() => onShowInvites(online.worldId)} disabled={busy}>
+									Invite links
+								</button>
+							{/if}
+							{#if online.invites && onSaveOnlineCopy}
+								<button
+									type="button"
+									title="Save the online world as it is now into My Worlds"
+									data-testid="online-world-save-copy"
+									onclick={() => onSaveOnlineCopy(online.worldId)}
+									disabled={busy}
+								>
+									Save a copy
+								</button>
+							{/if}
+							{#if online.invites && onRestoreOnline}
+								<button
+									type="button"
+									data-testid="online-world-restore"
+									onclick={() => onRestoreOnline(online.worldId)}
+									disabled={busy}
+								>
+									Restore…
+								</button>
+							{/if}
+							{#if onForgetOnlineWorld}
+								<button
+									type="button"
+									title="Remove from this list (the world itself stays online)"
+									onclick={() => onForgetOnlineWorld(online.worldId)}
+									disabled={busy}
+								>
+									Forget
+								</button>
+							{/if}
+							{#if onJoinOnlineWorld}
+								<button
+									type="button"
+									class="primary"
+									data-testid="online-world-join"
+									onclick={() => onJoinOnlineWorld(online.worldId)}
+									disabled={busy}
+								>
+									Join
+								</button>
 							{/if}
 						</div>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	{/if}
+					</li>
+				{/each}
+			</ul>
 
-	{#if storage.usage !== undefined}
-		<p class="storage-note" data-testid="storage-note">
-			Storage used: {formatBytes(storage.usage)}{#if storage.quota}
-				of {formatBytes(storage.quota)}{/if}
-		</p>
-	{/if}
+			<div class="section-divider" aria-hidden="true"></div>
+		{/if}
 
+		<h2 class="section-title">My Worlds</h2>
+
+		{#if worlds.length === 0}
+			<div class="empty-state" data-testid="worlds-empty">
+				<p class="empty-title">No worlds yet</p>
+				<p class="empty-body">Create a world to start exploring and building.</p>
+			</div>
+		{:else}
+			<ul class="world-list" data-testid="world-list">
+				{#each worlds as world (world.id)}
+					<li class="world-card" data-testid="world-card" data-world-id={world.id}>
+						<div class="thumbnail">
+							{#if thumbnails[world.id]}
+								<img src={thumbnails[world.id]} alt="" width="320" height="180" />
+							{:else}
+								<div class="thumbnail-placeholder" aria-hidden="true"></div>
+							{/if}
+						</div>
+
+						<div class="world-info">
+							<div class="world-name" data-testid="world-name">{world.name}</div>
+							<div class="world-meta">
+								Updated {relativeTime(world.updatedAt)}
+								{#if world.byteSize}&middot; {formatBytes(world.byteSize)}{/if}
+							</div>
+							<div class="world-meta subtle">
+								Created {new Date(world.createdAt).toLocaleDateString()} &middot; seed
+								<code>{world.seed}</code>
+							</div>
+						</div>
+
+						<div class="world-buttons">
+							<button
+								class="primary"
+								data-testid="play-world"
+								onclick={() => onPlay(world.id)}
+								disabled={busy}
+							>
+								Play
+							</button>
+							<div class="menu-anchor">
+								<button
+									class="icon"
+									data-testid="world-menu-button"
+									aria-label={`More actions for ${world.name}`}
+									aria-expanded={openMenuId === world.id}
+									onclick={(event) => {
+										event.stopPropagation();
+										openMenuId = openMenuId === world.id ? null : world.id;
+									}}
+								>
+									&hellip;
+								</button>
+								{#if openMenuId === world.id}
+									<div class="menu" data-testid="world-menu" role="menu">
+										<button role="menuitem" onclick={() => onPlay(world.id)}>Play</button>
+										<button
+											role="menuitem"
+											data-testid="world-menu-rename"
+											onclick={() =>
+												(dialog = { kind: 'rename', worldId: world.id, name: world.name })}
+										>
+											Rename
+										</button>
+										<button
+											role="menuitem"
+											data-testid="world-menu-duplicate"
+											onclick={() => onDuplicate(world.id)}
+										>
+											Duplicate
+										</button>
+										<button
+											role="menuitem"
+											data-testid="world-menu-export"
+											onclick={() => onExport(world.id)}
+										>
+											Export
+										</button>
+										{#if onPublish}
+											<button
+												role="menuitem"
+												data-testid="world-menu-publish"
+												onclick={() => onPublish(world.id)}
+											>
+												Publish Online…
+											</button>
+										{/if}
+										<button
+											role="menuitem"
+											class="danger"
+											data-testid="world-menu-delete"
+											onclick={() =>
+												(dialog = { kind: 'delete', worldId: world.id, name: world.name })}
+										>
+											Delete
+										</button>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
+		{#if storage.usage !== undefined}
+			<p class="storage-note" data-testid="storage-note">
+				Storage used: {formatBytes(storage.usage)}{#if storage.quota}
+					of {formatBytes(storage.quota)}{/if}
+			</p>
+		{/if}
+	</div>
 	{#if dialog.kind === 'create'}
 		<div data-ui-backdrop class="modal-backdrop" role="presentation">
 			<form
@@ -697,12 +708,6 @@
 		align-items: center;
 		gap: 1rem;
 		margin-bottom: 2rem;
-	}
-
-	.title-mark {
-		width: min(18rem, 60vw);
-		height: auto;
-		filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.55));
 	}
 
 	.worlds-actions {
@@ -1182,10 +1187,6 @@
 			margin-bottom: 1.25rem;
 		}
 
-		.title-mark {
-			width: min(15rem, 72vw);
-		}
-
 		.default-world-card {
 			flex-direction: column;
 			align-items: stretch;
@@ -1221,10 +1222,6 @@
 
 		.worlds-header {
 			margin-bottom: 1rem;
-		}
-
-		.title-mark {
-			width: min(12rem, 35vw);
 		}
 
 		.default-thumbnail {

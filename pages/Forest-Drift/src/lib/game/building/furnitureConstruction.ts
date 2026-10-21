@@ -1,3 +1,4 @@
+import { createDefaultPillarSettings } from './PillarTypes';
 /**
  * Procedural furniture construction. Pure (no Three.js): each kind is a list of local-space
  * primitives whose structural sizes stay nearly constant while width/depth/height change the
@@ -11,14 +12,7 @@ import type { FurnitureCollisionType } from './furnitureCatalogue';
 export type FurnitureMaterialSlot = 'primary' | 'secondary' | 'accent' | 'emissive';
 
 export type FurniturePrimitiveRole =
-	| 'leg'
-	| 'top'
-	| 'shelf'
-	| 'panel'
-	| 'body'
-	| 'mattress'
-	| 'trim'
-	| 'flame';
+	'leg' | 'top' | 'shelf' | 'panel' | 'body' | 'mattress' | 'trim' | 'flame';
 
 interface PrimitiveBase {
 	material: FurnitureMaterialSlot;
@@ -420,7 +414,16 @@ function buildBed(input: FurnitureBuildInput): FurnitureConstruction {
 	const rail = 0.055;
 	a.fourLegs(w, d, frameH * 0.85, LEG, 0.06);
 	a.box(0, frameH / 2, 0, w, frameH, d, 'primary', 'body');
-	a.box(0, frameH + mattressH / 2, 0, w - rail * 1.4, mattressH, d - rail * 1.4, 'secondary', 'mattress');
+	a.box(
+		0,
+		frameH + mattressH / 2,
+		0,
+		w - rail * 1.4,
+		mattressH,
+		d - rail * 1.4,
+		'secondary',
+		'mattress'
+	);
 	a.box(0, frameH * 0.7, d / 2 - rail / 2, w, frameH * 0.7, rail, 'primary', 'trim');
 	a.box(0, frameH * 0.7, -(d / 2 - rail / 2), w, frameH * 0.7, rail, 'primary', 'trim');
 	a.box(w / 2 - rail / 2, frameH * 0.7, 0, rail, frameH * 0.7, d - rail * 2, 'primary', 'trim');
@@ -514,8 +517,26 @@ function buildBench(input: FurnitureBuildInput): FurnitureConstruction {
 	for (let i = 0; i < supportCount; i++) {
 		const t = supportCount === 1 ? 0.5 : i / (supportCount - 1);
 		const x = -w / 2 + INSET + t * (w - INSET * 2);
-		a.box(x, (seatH - seatT) / 2, -d / 2 + INSET + legW / 2, legW, seatH - seatT, legW, 'primary', 'leg');
-		a.box(x, (seatH - seatT) / 2, d / 2 - INSET - legW / 2, legW, seatH - seatT, legW, 'primary', 'leg');
+		a.box(
+			x,
+			(seatH - seatT) / 2,
+			-d / 2 + INSET + legW / 2,
+			legW,
+			seatH - seatT,
+			legW,
+			'primary',
+			'leg'
+		);
+		a.box(
+			x,
+			(seatH - seatT) / 2,
+			d / 2 - INSET - legW / 2,
+			legW,
+			seatH - seatT,
+			legW,
+			'primary',
+			'leg'
+		);
 	}
 	a.box(0, seatH - seatT / 2, 0, w, seatT, d, 'primary', 'top');
 	a.box(0, (seatH - seatT) * 0.45, 0, w - INSET * 2, 0.03, 0.03, 'primary', 'trim');
@@ -564,7 +585,17 @@ function buildCounter(input: FurnitureBuildInput, sink: boolean): FurnitureConst
 	for (let i = 0; i < doors; i++) {
 		const x = -w / 2 + 0.04 + doorW * (i + 0.5);
 		a.box(x, plinth + bodyH / 2, frontZ, doorW - 0.02, bodyH - 0.08, 0.018, 'secondary', 'panel');
-		a.cyl(x + doorW * 0.28, plinth + bodyH * 0.55, frontZ + 0.02, 0.01, 0.01, 0.05, 'accent', 'trim', 6);
+		a.cyl(
+			x + doorW * 0.28,
+			plinth + bodyH * 0.55,
+			frontZ + 0.02,
+			0.01,
+			0.01,
+			0.05,
+			'accent',
+			'trim',
+			6
+		);
 	}
 	if (sink) {
 		const basinW = clamp(w * 0.38, 0.32, 0.55);
@@ -656,7 +687,16 @@ function buildShelfUnit(input: FurnitureBuildInput, enclosed: boolean): Furnitur
 	for (let i = 0; i < count; i++) {
 		const t = count === 1 ? 0.5 : i / (count - 1);
 		const y = enclosed ? board + t * (h - board * 2) : 0.04 + t * (h - 0.08);
-		a.box(0, y, 0, w - (enclosed ? post : 0.02), board, d - (enclosed ? 0.02 : 0), 'primary', 'shelf');
+		a.box(
+			0,
+			y,
+			0,
+			w - (enclosed ? post : 0.02),
+			board,
+			d - (enclosed ? 0.02 : 0),
+			'primary',
+			'shelf'
+		);
 	}
 	return a.finish(input, 'box');
 }
@@ -701,8 +741,25 @@ function buildTorch(input: FurnitureBuildInput): FurnitureConstruction {
 	return a.finish(input, 'none');
 }
 
+function buildPillar(input: FurnitureBuildInput): FurnitureConstruction {
+	const p = input.pillar ?? createDefaultPillarSettings();
+	const a = new Assembler();
+	const bottom = p.bottomEnabled ? p.bottomHeight : 0;
+	const top = p.topEnabled ? p.topHeight : 0;
+	const part = (width: number, height: number, y: number, role: FurniturePrimitiveRole) => {
+		if (p.shape === 'circular') a.cyl(0, y, 0, width / 2, width / 2, height, 'primary', role, 20);
+		else a.box(0, y, 0, width, height, width, 'primary', role);
+	};
+	part(p.width, p.height - bottom - top, bottom + (p.height - bottom - top) / 2, 'body');
+	if (bottom > 0) part(p.bottomWidth, bottom, bottom / 2, 'trim');
+	if (top > 0) part(p.topWidth, top, p.height - top / 2, 'top');
+	return a.finish(input, 'box');
+}
+
 export function buildFurnitureConstruction(input: FurnitureBuildInput): FurnitureConstruction {
 	switch (input.kind) {
+		case 'wooden-pillar':
+			return buildPillar(input);
 		case 'bed':
 			return buildBed(input);
 		case 'small-table':

@@ -320,3 +320,46 @@ describe('malicious or corrupt size guards', () => {
 		expectRejected(world, /removedTreeIds/);
 	});
 });
+
+describe('window shutter import settings', () => {
+	it('accepts old windows and valid saved manual shutter sides', () => {
+		const world = richWorld();
+		expect(validateWorldDefinition(world).ok).toBe(true);
+		world.buildings[0].walls[0].openings[0].shutters = { mode: 'manual', side: -1 };
+		expect(validateWorldDefinition(world).ok).toBe(true);
+	});
+	it('rejects unknown modes or invalid side values before creating geometry', () => {
+		const world = richWorld();
+		Object.assign(world.buildings[0].walls[0].openings[0], { shutters: { mode: 'invalid' } });
+		expectRejected(world, /shutter mode/i);
+		Object.assign(world.buildings[0].walls[0].openings[0], {
+			shutters: { mode: 'manual', side: 0 }
+		});
+		expectRejected(world, /shutter side/i);
+	});
+});
+
+describe('door style import settings', () => {
+	it('retains double arched door settings through JSON export and import', () => {
+		const world = richWorld();
+		Object.assign(world.buildings[0].walls[0].openings[0], {
+			type: 'door',
+			doorStyle: { double: true, arched: true }
+		});
+		const result = validateWorldDefinition(JSON.parse(JSON.stringify(world)));
+		expect(result.ok).toBe(true);
+		if (result.ok)
+			expect(result.value.buildings[0].walls[0].openings[0].doorStyle).toEqual({
+				double: true,
+				arched: true
+			});
+	});
+	it.each([null, 'arched', { double: 'yes', arched: true }, { double: true }])(
+		'rejects malformed door style %j',
+		(doorStyle) => {
+			const world = richWorld();
+			Object.assign(world.buildings[0].walls[0].openings[0], { doorStyle });
+			expectRejected(world, /door style/i);
+		}
+	);
+});

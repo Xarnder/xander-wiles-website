@@ -9,24 +9,33 @@ import {
 	stepAngleToward,
 	type Vec3
 } from './doorInteractionMath';
-import type { HingeSide } from './openingVisualMath';
+import type { HingeSide, UvRect } from './openingVisualMath';
 import type { WallCollisionRect } from './wallCollision';
+import { SHUTTER_SWING_DURATION, shutterSwingAngle } from './windowShutterMath';
+
+export interface OpeningInteractionState {
+	id: string;
+	open: boolean;
+	kind: 'door' | 'shutters';
+}
 
 export interface DoorInteractionControllerOptions {
 	camera: THREE.Camera;
 	getHingePivots: () => Iterable<readonly [string, THREE.Object3D]>;
 	maxDistance?: number;
 	aimRadius?: number;
-	/** Fires when the door under the crosshair changes, including to `null` when you look away. */
+	/** Fires when the interactive opening under the crosshair changes, including to `null` when you look away. */
 	onLookedAtDoorChange?: (openingId: string | null) => void;
-	/** Fires when this player opens or closes a door (online worlds share it, Q13-A). */
+	/** Fires when this player opens or closes a door or window shutters. */
 	onToggle?: (openingId: string, open: boolean) => void;
+	/** Includes changes to the target’s open state, for desktop and touch prompts. */
+	onInteractionChange?: (state: OpeningInteractionState | null) => void;
 }
 
 /**
- * Look-at door toggle — `K` swings the door under the crosshair open or closed. Open state is
+ * Look-at opening toggle — `K` swings doors or window shutters open and closed. State is
  * keyed by opening id (not the Three.js pivot), so painting a wall or tweaking frame settings
- * rebuilds the leaf without slamming every door shut. `getCollisionRects()` exposes the leaf as a
+ * rebuilds the visual without resetting its pose. Shutters use two outward-swinging hinge pivots. `getCollisionRects()` exposes the leaf as a
  * live wall-style collider so a closed door blocks the doorway and an open one does not.
  */
 export class DoorInteractionController {
@@ -37,7 +46,16 @@ export class DoorInteractionController {
 	private readonly onLookedAtDoorChange?: (openingId: string | null) => void;
 	private readonly onToggle?: (openingId: string, open: boolean) => void;
 	private lookedAtDoorId: string | null = null;
-	private readonly openById = new Set<string>();
+	// Active means an open door or closed shutters: both are deviations from their
+	// default pose, so the existing multiplayer active-id list also works on late join.
+	private readonly activeById = new Set<string>();
+	private readonly shutterProgress = new Map<string, number>();
+	private readonly shutterKinds = new Map<string, boolean>();
+	private readonly onInteractionChange?: (state: OpeningInteractionState | null) => void;
+	private interaction: OpeningInteractionState | null = null;
+	private readonly inverseParent = new THREE.Matrix4();
+	private readonly localOrigin = new THREE.Vector3();
+	private readonly localDirection = new THREE.Vector3();
 	private readonly lookOrigin = new THREE.Vector3();
 	private readonly lookDirection = new THREE.Vector3();
 	private readonly aimWorld = new THREE.Vector3();
@@ -58,14 +76,24 @@ export class DoorInteractionController {
 		this.aimRadius = options.aimRadius ?? DOOR_INTERACT_AIM_RADIUS;
 		this.onLookedAtDoorChange = options.onLookedAtDoorChange;
 		this.onToggle = options.onToggle;
+		this.onInteractionChange = options.onInteractionChange;
 		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
 	isOpen(openingId: string): boolean {
-		return this.openById.has(openingId);
+		return this.isShutter(openingId) !== this.activeById.has(openingId);
 	}
 
-	/** The door currently under the crosshair, or `null` if none is in range. */
+	isShutter(openingId: string): boolean {
+		const cached = this.shutterKinds.get(openingId);
+		if (cached !== undefined) return cached;
+		for (const [id, pivot] of this.getHingePivots()) {
+			if (id === openingId) return pivot.userData.interactionKind === 'shutters';
+		}
+		return false;
+	}
+
+	/** The interactive opening under the crosshair, or `null` if none is in range. */
 	getLookedAtDoor(): string | null {
 		return this.lookedAtDoorId;
 	}
@@ -74,26 +102,36 @@ export class DoorInteractionController {
 	getCollisionRects(): WallCollisionRect[] {
 		const rects: WallCollisionRect[] = [];
 		for (const [, pivot] of this.getHingePivots()) {
-			const rect = this.collisionRectFor(pivot);
-			if (rect) rects.push(rect);
+			this.appendArchCollisionRects(pivot, rects);
+			const leaves = pivot.userData.interactionKind === 'double-door' ? pivot.children : [pivot];
+			for (const leaf of leaves) {
+				const rect = this.collisionRectFor(leaf);
+				if (rect) rects.push(rect);
+			}
 		}
 		return rects;
 	}
 
 	/** Returns the opening id that toggled, or `null` if nothing was under the crosshair. */
 	toggleLookedAtDoor(): string | null {
-		const id = this.lookedAtDoorId ?? this.pickLookedAtDoor();
+		const id = this.pickLookedAtDoor();
 		if (!id) return null;
-		if (this.openById.has(id)) this.openById.delete(id);
-		else this.openById.add(id);
-		this.onToggle?.(id, this.openById.has(id));
+		this.setActiveState(id, !this.activeById.has(id));
+		this.onToggle?.(id, this.isOpen(id));
+		this.setLookedAtDoor(id);
 		return id;
 	}
 
-	/** Someone else opened or closed a door (it swings there as usual). */
+	/** Set a physical open/closed pose (shutters start open, doors start closed). */
 	setOpen(openingId: string, open: boolean): void {
-		if (open) this.openById.add(openingId);
-		else this.openById.delete(openingId);
+		this.setActiveState(openingId, this.isShutter(openingId) ? !open : open);
+	}
+
+	/** Shared session state records deviations from the default pose for both kinds. */
+	setActiveState(openingId: string, active: boolean): void {
+		if (active) this.activeById.add(openingId);
+		else this.activeById.delete(openingId);
+		if (openingId === this.lookedAtDoorId) this.setLookedAtDoor(openingId);
 	}
 
 	update(deltaSeconds: number): void {
@@ -101,19 +139,50 @@ export class DoorInteractionController {
 		const liveIds = new Set<string>();
 		for (const [id, pivot] of this.getHingePivots()) {
 			liveIds.add(id);
-			const hingeSide = (pivot.userData.hingeSide as HingeSide | undefined) ?? 'left';
-			const target = doorTargetAngle(hingeSide, this.openById.has(id));
-			pivot.rotation.y = stepAngleToward(pivot.rotation.y, target, maxStep);
+			const shutter = pivot.userData.interactionKind === 'shutters';
+			this.shutterKinds.set(id, shutter);
+			if (shutter) {
+				const target = this.activeById.has(id) ? 0 : 1;
+				const progress = stepAngleToward(
+					this.shutterProgress.get(id) ?? 1,
+					target,
+					Math.max(0, deltaSeconds) / SHUTTER_SWING_DURATION
+				);
+				this.shutterProgress.set(id, progress);
+				const side = pivot.userData.side === -1 ? -1 : 1;
+				for (const leaf of pivot.children) {
+					const hinge = leaf.userData.hingeSide;
+					if (hinge === 'left' || hinge === 'right') {
+						const angle = shutterSwingAngle(side, hinge, progress);
+						if (leaf.rotation.y !== angle) leaf.rotation.y = angle;
+					}
+				}
+				continue;
+			}
+			const leaves = pivot.userData.interactionKind === 'double-door' ? pivot.children : [pivot];
+			for (const leaf of leaves) {
+				const hingeSide = (leaf.userData.hingeSide as HingeSide | undefined) ?? 'left';
+				const target = doorTargetAngle(hingeSide, this.activeById.has(id));
+				leaf.rotation.y = stepAngleToward(leaf.rotation.y, target, maxStep);
+			}
 		}
-		for (const id of Array.from(this.openById)) {
-			if (!liveIds.has(id)) this.openById.delete(id);
+		for (const id of Array.from(this.activeById)) {
+			if (!liveIds.has(id)) this.activeById.delete(id);
+		}
+		for (const id of this.shutterKinds.keys()) {
+			if (!liveIds.has(id)) {
+				this.shutterKinds.delete(id);
+				this.shutterProgress.delete(id);
+			}
 		}
 		this.refreshLookedAtDoor();
 	}
 
 	dispose(): void {
 		window.removeEventListener('keydown', this.handleKeyDown);
-		this.openById.clear();
+		this.activeById.clear();
+		this.shutterProgress.clear();
+		this.shutterKinds.clear();
 		this.setLookedAtDoor(null);
 	}
 
@@ -122,9 +191,25 @@ export class DoorInteractionController {
 	}
 
 	private setLookedAtDoor(openingId: string | null): void {
-		if (openingId === this.lookedAtDoorId) return;
-		this.lookedAtDoorId = openingId;
-		this.onLookedAtDoorChange?.(openingId);
+		if (openingId !== this.lookedAtDoorId) {
+			this.lookedAtDoorId = openingId;
+			this.onLookedAtDoorChange?.(openingId);
+		}
+		const state: OpeningInteractionState | null = openingId
+			? {
+					id: openingId,
+					open: this.isOpen(openingId),
+					kind: this.isShutter(openingId) ? 'shutters' : 'door'
+				}
+			: null;
+		if (
+			state?.id !== this.interaction?.id ||
+			state?.open !== this.interaction?.open ||
+			state?.kind !== this.interaction?.kind
+		) {
+			this.interaction = state;
+			this.onInteractionChange?.(state);
+		}
 	}
 
 	private pickLookedAtDoor(): string | null {
@@ -142,14 +227,41 @@ export class DoorInteractionController {
 		};
 		const candidates: { id: string; aim: Vec3 }[] = [];
 		for (const [id, pivot] of this.getHingePivots()) {
-			const aim = this.aimWorldOf(pivot);
+			const aim =
+				pivot.userData.interactionKind === 'shutters'
+					? this.windowRayHit(pivot)
+					: this.aimWorldOf(pivot);
 			if (!aim) continue;
 			candidates.push({ id, aim });
 		}
 		return pickDoorAlongRay(origin, direction, candidates, this.maxDistance, this.aimRadius);
 	}
 
+	private appendArchCollisionRects(pivot: THREE.Object3D, rects: WallCollisionRect[]): void {
+		const corners = pivot.userData.archCorners as UvRect[] | undefined;
+		const parent = pivot.parent;
+		if (!corners || !parent) return;
+		parent.updateWorldMatrix(true, false);
+		this.leafDirection.set(1, 0, 0).transformDirection(parent.matrixWorld);
+		for (const corner of corners) {
+			this.aimWorld
+				.set((corner.minU + corner.maxU) / 2, corner.minY, 0)
+				.applyMatrix4(parent.matrixWorld);
+			rects.push({
+				centerX: this.aimWorld.x,
+				centerZ: this.aimWorld.z,
+				halfLength: (corner.maxU - corner.minU) / 2,
+				halfThickness: pivot.userData.archWallThickness / 2,
+				dirX: this.leafDirection.x,
+				dirZ: this.leafDirection.z,
+				minWorldY: this.aimWorld.y,
+				maxWorldY: this.aimWorld.y + corner.maxY - corner.minY
+			});
+		}
+	}
+
 	private collisionRectFor(pivot: THREE.Object3D): WallCollisionRect | null {
+		if (pivot.userData.interactionKind === 'shutters') return null;
 		const minU = pivot.userData.minU;
 		const maxU = pivot.userData.maxU;
 		const minY = pivot.userData.minY;
@@ -225,6 +337,25 @@ export class DoorInteractionController {
 			wallHalfThickness: wallThickness / 2,
 			leafHalfThickness: doorThickness / 2
 		});
+	}
+
+	/** Hit the full window rectangle from either side, including wide windows' corners. */
+	private windowRayHit(assembly: THREE.Object3D): Vec3 | null {
+		const parent = assembly.parent;
+		if (!parent) return null;
+		parent.updateWorldMatrix(true, false);
+		this.inverseParent.copy(parent.matrixWorld).invert();
+		this.localOrigin.copy(this.lookOrigin).applyMatrix4(this.inverseParent);
+		this.localDirection.copy(this.lookDirection).transformDirection(this.inverseParent);
+		if (Math.abs(this.localDirection.z) < 1e-8) return null;
+		const distance = -this.localOrigin.z / this.localDirection.z;
+		if (distance < 0) return null;
+		const u = this.localOrigin.x + this.localDirection.x * distance;
+		const y = this.localOrigin.y + this.localDirection.y * distance;
+		const { minU, maxU, minY, maxY } = assembly.userData;
+		if (u < minU || u > maxU || y < minY || y > maxY) return null;
+		this.aimWorld.set(u, y, 0).applyMatrix4(parent.matrixWorld);
+		return { x: this.aimWorld.x, y: this.aimWorld.y, z: this.aimWorld.z };
 	}
 
 	private aimWorldOf(pivot: THREE.Object3D): Vec3 | null {

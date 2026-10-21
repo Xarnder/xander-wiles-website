@@ -1,3 +1,4 @@
+import { audioOutput } from '../audio/AudioPreferences';
 import { AudioScheduler } from './AudioScheduler';
 import { audioContext, InstrumentLibrary } from './InstrumentLibrary';
 import {
@@ -45,7 +46,7 @@ export class MusicTreeSequencer {
 			this.compressor.threshold.value = -18;
 			this.compressor.ratio.value = 8;
 			this.bus.connect(this.compressor);
-			this.compressor.connect(this.context.destination);
+			this.compressor.connect(audioOutput(this.context, 'music'));
 			this.library = new InstrumentLibrary(this.context, this.bus);
 		}
 		this.playing = true;

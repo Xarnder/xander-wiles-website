@@ -5,7 +5,7 @@
  * *closed* wall path's point list, geometrically) rather than re-implementing it.
  */
 
-import { pathSelfIntersects, segmentsIntersect } from './wallPathMath';
+import { pathSelfIntersects } from './wallPathMath';
 import type { Point2D } from './wallPathMath';
 
 const EPSILON = 1e-6;
@@ -63,22 +63,55 @@ export function polygonSelfIntersects(points: readonly Point2D[]): boolean {
 }
 
 /**
- * True if two *simple* (non-self-intersecting) polygons overlap at all — any edge crossing, or one
- * fully containing the other with no edge crossings (nesting). Good enough for rejecting duplicate/
- * overlapping same-level slabs; not a general polygon-boolean library.
+ * True only when two simple polygons share interior area. Shared edges and corners
+ * are legal slab seams. Keep pointInPolygon2D boundary-inclusive for surface queries.
  */
 export function polygonsOverlap(a: readonly Point2D[], b: readonly Point2D[]): boolean {
+	if (a.length < 3 || b.length < 3) return false;
+	const cross = (p: Point2D, q: Point2D, r: Point2D) =>
+		(q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+	const opposite = (x: number, y: number) =>
+		(x > EPSILON && y < -EPSILON) || (x < -EPSILON && y > EPSILON);
+
+	// A proper edge crossing necessarily creates shared area. Touching endpoints
+	// or collinear edges do not, so those are resolved by the interior test below.
 	for (let i = 0; i < a.length; i++) {
-		const a0 = a[i];
-		const a1 = a[(i + 1) % a.length];
+		const p = a[i],
+			q = a[(i + 1) % a.length];
 		for (let j = 0; j < b.length; j++) {
-			const b0 = b[j];
-			const b1 = b[(j + 1) % b.length];
-			if (segmentsIntersect(a0, a1, b0, b1)) return true;
+			const r = b[j],
+				s = b[(j + 1) % b.length];
+			if (opposite(cross(p, q, r), cross(p, q, s)) && opposite(cross(r, s, p), cross(r, s, q)))
+				return true;
 		}
 	}
-	if (a.length > 0 && pointInPolygon2D(a[0], b)) return true;
-	if (b.length > 0 && pointInPolygon2D(b[0], a)) return true;
+
+	// Without proper crossings, edge ordering is fixed between consecutive vertex
+	// heights. One scanline per band therefore covers containment, identical shapes,
+	// concave polygons, and overlaps whose vertices all lie on the other boundary.
+	const heights = [...new Set([...a, ...b].map((p) => p.z))].sort((x, y) => x - y);
+	function crossings(polygon: readonly Point2D[], z: number): number[] {
+		const xs: number[] = [];
+		for (let i = 0; i < polygon.length; i++) {
+			const p = polygon[i],
+				q = polygon[(i + 1) % polygon.length];
+			if (p.z > z !== q.z > z) {
+				xs.push(p.x + ((z - p.z) * (q.x - p.x)) / (q.z - p.z));
+			}
+		}
+		return xs.sort((x, y) => x - y);
+	}
+	for (let i = 1; i < heights.length; i++) {
+		if (heights[i] - heights[i - 1] <= EPSILON) continue;
+		const z = (heights[i] + heights[i - 1]) / 2;
+		const ax = crossings(a, z),
+			bx = crossings(b, z);
+		for (let j = 0; j + 1 < ax.length; j += 2) {
+			for (let k = 0; k + 1 < bx.length; k += 2) {
+				if (Math.min(ax[j + 1], bx[k + 1]) - Math.max(ax[j], bx[k]) > EPSILON) return true;
+			}
+		}
+	}
 	return false;
 }
 

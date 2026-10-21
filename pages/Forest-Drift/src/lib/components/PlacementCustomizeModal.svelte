@@ -15,11 +15,13 @@
 	let {
 		toolId,
 		settings,
-		onClose
+		onClose,
+		onApplyWindowShutters
 	}: {
 		toolId: CustomizablePlacementToolId;
 		settings: BuildingSettings;
 		onClose: () => void;
+		onApplyWindowShutters?: () => boolean;
 	} = $props();
 
 	type SizeKey = keyof typeof PLACEMENT_CUSTOMIZE_LIMITS;
@@ -33,6 +35,15 @@
 		tiles: 'Customise Tiles'
 	};
 
+	let doorStyle = $derived.by(() => {
+		void revision;
+		return { double: settings.doorDouble ?? false, arched: settings.doorArched ?? false };
+	});
+	let shutterFeedback = $state('');
+	let shutterMode = $derived.by(() => {
+		void revision;
+		return settings.windowShutterMode ?? 'auto';
+	});
 	let revision = $state(0);
 	let resetEpoch = $state(0);
 	let isWall = $derived(toolId === 'wall' || toolId === 'polygon-wall');
@@ -819,6 +830,86 @@
 								heightDisplay
 							)}
 						{/if}
+						{#if toolId === 'door'}
+							<div
+								class="row direction-row shutter-row"
+								role="group"
+								aria-labelledby="door-leaves-label"
+							>
+								<span id="door-leaves-label">Door leaves</span>
+								{#each [false, true] as double (double)}
+									<button
+										type="button"
+										aria-pressed={doorStyle.double === double}
+										data-testid={double ? 'door-double' : 'door-single'}
+										onclick={() => {
+											settings.doorDouble = double;
+											bump();
+										}}>{double ? 'Double' : 'Single'}</button
+									>
+								{/each}
+							</div>
+							<div
+								class="row direction-row shutter-row"
+								role="group"
+								aria-labelledby="door-shape-label"
+							>
+								<span id="door-shape-label">Door shape</span>
+								{#each [false, true] as arched (arched)}
+									<button
+										type="button"
+										aria-pressed={doorStyle.arched === arched}
+										data-testid={arched ? 'door-arched' : 'door-rectangular'}
+										onclick={() => {
+											settings.doorArched = arched;
+											bump();
+										}}>{arched ? 'Arched' : 'Rectangular'}</button
+									>
+								{/each}
+							</div>
+							<p class="hint">
+								Width is the total doorway width. Both double-door leaves open together with K.
+							</p>
+						{/if}
+						{#if toolId === 'window'}
+							<div
+								class="row direction-row shutter-row"
+								role="group"
+								aria-labelledby="window-shutter-label"
+							>
+								<span id="window-shutter-label">Outdoor shutters</span>
+								{#each ['auto', 'manual', 'off'] as mode (mode)}
+									<button
+										type="button"
+										aria-pressed={shutterMode === mode}
+										data-testid={`window-shutters-${mode}`}
+										onclick={() => {
+											settings.windowShutterMode = mode as BuildingSettings['windowShutterMode'];
+											shutterFeedback = '';
+											bump();
+										}}
+										>{mode === 'auto' ? 'Automatic' : mode === 'manual' ? 'Manual' : 'Off'}</button
+									>
+								{/each}
+							</div>
+							<p>
+								Automatic uses closed wall loops and ceilings to find the outside. Manual places
+								shutters on your side of the wall. Each panel is half the window width.
+							</p>
+							{#if onApplyWindowShutters}
+								<button
+									type="button"
+									data-testid="window-shutters-apply-existing"
+									onclick={() => {
+										shutterFeedback = onApplyWindowShutters?.()
+											? 'Shutters updated on the window in view.'
+											: 'Aim at an existing window before opening this panel.';
+									}}>Apply shutters to window in view</button
+								>
+								<p role="status">{shutterFeedback}</p>
+							{/if}
+						{/if}
+
 						{#if isOpening}
 							{@render sizeRow(
 								'placement-sill',
@@ -990,6 +1081,17 @@
 	}
 	.direction-row {
 		grid-template-columns: 5.2rem 1fr 1fr auto;
+	}
+	.shutter-row {
+		display: flex;
+		flex-wrap: wrap;
+	}
+	.shutter-row span {
+		flex-basis: 100%;
+	}
+	.shutter-row button {
+		flex: 1;
+		min-height: 2.75rem;
 	}
 	.pattern-row {
 		grid-template-columns: 5.2rem 1fr 1fr 1fr 1fr auto;

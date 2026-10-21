@@ -1,3 +1,4 @@
+import { MINI_BUILD_SHAPE_TRIANGLES, shapeLimitError } from './miniBuildShapes';
 /**
  * The Mini Build compiler: logical cuboids → one merged, indexed surface per material slot.
  *
@@ -37,7 +38,6 @@
  */
 import {
 	MINI_BUILD_COLLISION,
-	MINI_BUILD_LIMITS,
 	type MiniBuildBlock,
 	type MiniBuildDefinition
 } from './MiniBuildTypes';
@@ -139,13 +139,15 @@ function coord(box: GridBox, which: 'min' | 'max', axis: 0 | 1 | 2): number {
 
 export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledMiniBuildData {
 	const blocks = definition.blocks;
-	if (blocks.length === 0 || blocks.length > MINI_BUILD_LIMITS.maxBlocks) {
+	if (blocks.length === 0 || shapeLimitError(blocks)) {
 		throw new Error(
-			`Mini Build ${definition.id} must have 1–${MINI_BUILD_LIMITS.maxBlocks} blocks`
+			`Mini Build ${definition.id}: ${shapeLimitError(blocks) ?? 'needs at least one block'}`
 		);
 	}
 	// Angled blocks have no grid box that means anything for covering faces.
-	const boxes = blocks.map((block) => (isAngledBlock(block) ? null : blockBox(block)));
+	const boxes = blocks.map((block) =>
+		isAngledBlock(block) || (block.shape && block.shape !== 'cuboid') ? null : blockBox(block)
+	);
 	const ranks = surfaceRanks(blocks, definition.materials);
 	const bounds = computeBounds(blocks);
 	const anchor = anchorGrid(bounds);
@@ -162,6 +164,11 @@ export function compileMiniBuildData(definition: MiniBuildDefinition): CompiledM
 			builders.set(slot, builder);
 		}
 		const firstVertex = builder.positions.length / 3;
+		if (blocks[i].shape === 'cylinder' || blocks[i].shape === 'sphere') {
+			emitCurvedBlock(builder, blocks[i], anchor);
+			appendWoodCoords(builder, firstVertex, blocks[i], anchor);
+			continue;
+		}
 		if (!box) {
 			quads += emitAngledBlock(builder, blocks[i], anchor);
 			appendWoodCoords(builder, firstVertex, blocks[i], anchor);
@@ -438,5 +445,39 @@ function emitQuad(
 		builder.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
 	} else {
 		builder.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+	}
+}
+
+/** Curved primitives join the same per-material buffers and shared instance batches as cuboids. */
+function emitCurvedBlock(
+	builder: GroupBuilder,
+	block: MiniBuildBlock,
+	anchor: { x: number; y: number; z: number }
+): void {
+	const m = orientationMatrix(block.rotation),
+		c = blockCenterGrid(block);
+	const size = [block.sizeGrid.x, block.sizeGrid.y, block.sizeGrid.z];
+	const centre = [c.x - anchor.x, c.y - anchor.y, c.z - anchor.z];
+	for (const triangle of MINI_BUILD_SHAPE_TRIANGLES[block.shape as 'cylinder' | 'sphere']) {
+		const points = triangle.map((p) => {
+			const local = p.map((v, i) => v * size[i]);
+			return [0, 1, 2].map((r) =>
+				gridToMeters(
+					centre[r] + m[r * 3] * local[0] + m[r * 3 + 1] * local[1] + m[r * 3 + 2] * local[2]
+				)
+			);
+		});
+		const a = points[1].map((v, i) => v - points[0][i]),
+			b = points[2].map((v, i) => v - points[0][i]);
+		const n = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+		const length = Math.hypot(...n);
+		const normal = n.map((v) => v / length);
+		const base = builder.positions.length / 3;
+		for (const p of points) {
+			builder.positions.push(...p);
+			builder.normals.push(...normal);
+			builder.uvs.push(p[0] * MINI_BUILD_UV_SCALE, p[1] * MINI_BUILD_UV_SCALE);
+		}
+		builder.indices.push(base, base + 1, base + 2);
 	}
 }

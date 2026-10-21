@@ -1,5 +1,10 @@
 <script lang="ts">
-	import type { GameSettingsHost, SettingsGroup } from '$lib/game/settings/GameSettingsHost';
+	import { onMount } from 'svelte';
+	import type {
+		GameSettingsHost,
+		SettingsGroup,
+		SettingsCategory
+	} from '$lib/game/settings/GameSettingsHost';
 	import {
 		buildSettingsCatalog,
 		categoryMatchesQuery,
@@ -10,11 +15,19 @@
 	import SettingsField from './SettingsField.svelte';
 
 	interface Props {
-		host: GameSettingsHost;
+		host?: GameSettingsHost;
+		categories?: SettingsCategory[];
+		fullscreen?: boolean;
 		onClose: () => void;
 	}
 
-	let { host, onClose }: Props = $props();
+	let { host, onClose, categories, fullscreen = false }: Props = $props();
+	let panel: HTMLDivElement;
+	onMount(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		panel.focus();
+		return () => previous?.focus();
+	});
 
 	let categoryId = $state('world');
 	let query = $state('');
@@ -23,7 +36,7 @@
 
 	const catalog = $derived.by(() => {
 		// Reading formRevision rebuilds the menu after a button writes a plain settings object.
-		return formRevision >= 0 ? buildSettingsCatalog(host) : [];
+		return formRevision >= 0 ? (categories ?? (host ? buildSettingsCatalog(host) : [])) : [];
 	});
 	const normalizedQuery = $derived(query.trim().toLowerCase());
 	const active = $derived(catalog.find((category) => category.id === categoryId) ?? catalog[0]);
@@ -60,8 +73,38 @@
 	</div>
 {/snippet}
 
+<svelte:window
+	onkeydown={(event) => {
+		if (event.key === 'Tab') {
+			const controls = Array.from(
+				panel.querySelectorAll<HTMLElement>(
+					'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]'
+				)
+			).filter((el) => el.getClientRects().length);
+			const first = controls[0],
+				last = controls[controls.length - 1];
+			if (
+				event.shiftKey &&
+				(document.activeElement === first || document.activeElement === panel)
+			) {
+				event.preventDefault();
+				last?.focus();
+			} else if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault();
+				first?.focus();
+			}
+		}
+		if (fullscreen && event.key === 'Escape') {
+			event.preventDefault();
+			onClose();
+		}
+	}}
+/>
+
 <div
+	class:fullscreen
 	data-ui-backdrop
+	data-pause-backdrop={!fullscreen || undefined}
 	class="settings-overlay"
 	data-testid="settings-overlay"
 	role="presentation"
@@ -69,7 +112,16 @@
 		if (event.currentTarget === event.target) onClose();
 	}}
 >
-	<div data-ui-surface="panel" class="settings-panel" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+	<div
+		bind:this={panel}
+		tabindex="-1"
+		data-pause-panel={!fullscreen || undefined}
+		data-ui-surface="panel"
+		class="settings-panel"
+		role="dialog"
+		aria-labelledby="settings-title"
+		aria-modal="true"
+	>
 		<header>
 			<div>
 				<p class="eyebrow">Forest Drift</p>
@@ -356,6 +408,103 @@
 			flex-wrap: wrap;
 			border-right: none;
 			border-bottom: 1px solid rgba(164, 214, 186, 0.14);
+		}
+	}
+	.fullscreen.settings-overlay {
+		padding: 0;
+		z-index: 60;
+	}
+	.fullscreen .settings-panel {
+		width: 100%;
+		height: 100%;
+		height: 100dvh;
+		border-radius: 0;
+		border: 0 !important;
+		box-shadow: none !important;
+		outline: none;
+	}
+	.fullscreen header {
+		padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 24px
+			max(24px, env(safe-area-inset-left));
+	}
+	.fullscreen h2 {
+		font:
+			bold clamp(28px, 4vw, 46px) Georgia,
+			serif;
+	}
+	.fullscreen .body {
+		grid-template-columns: clamp(190px, 23vw, 290px) minmax(0, 1fr);
+	}
+	.fullscreen nav {
+		padding: 24px 16px;
+		gap: 12px;
+	}
+	.fullscreen nav button {
+		min-height: 54px;
+		font:
+			bold 18px Georgia,
+			serif;
+		padding: 14px;
+	}
+	.fullscreen .content {
+		padding: clamp(18px, 4vw, 52px);
+		padding-bottom: max(24px, env(safe-area-inset-bottom));
+	}
+	.fullscreen .group {
+		width: 100%;
+		max-width: 900px;
+		padding: clamp(18px, 3vw, 32px);
+		border-color: #b38b4b55;
+	}
+	.fullscreen .section-lead {
+		max-width: 750px;
+		font-size: 15px;
+	}
+	.fullscreen h3 {
+		font:
+			bold 23px Georgia,
+			serif;
+		margin-bottom: 24px;
+	}
+	.fullscreen .fields {
+		gap: 26px;
+	}
+	.fullscreen .search,
+	.fullscreen .close {
+		min-height: 44px;
+	}
+	@media (max-width: 720px) {
+		.fullscreen header {
+			align-items: stretch;
+			flex-direction: column;
+			padding: 20px 16px;
+			gap: 16px;
+		}
+		.fullscreen .header-actions {
+			width: 100%;
+		}
+		.fullscreen .search {
+			width: 0;
+			flex: 1;
+			min-width: 0;
+		}
+		.fullscreen .body {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: auto minmax(0, 1fr);
+		}
+		.fullscreen nav {
+			padding: 12px 16px;
+			flex-wrap: nowrap;
+		}
+		.fullscreen nav button {
+			flex: 1;
+			white-space: nowrap;
+			min-height: 48px;
+			font-size: 15px;
+			padding: 10px;
+		}
+		.fullscreen .content {
+			padding: 18px 14px;
 		}
 	}
 </style>

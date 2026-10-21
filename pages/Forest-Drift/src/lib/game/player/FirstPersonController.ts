@@ -1,3 +1,4 @@
+import type { PlayerInteractionPose } from './PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import type { PlayerSettings } from '../terrain/TerrainSettings';
 import { createWalkBobState, stepWalkBob, walkBobOffset } from './walkBob';
@@ -94,6 +95,33 @@ export interface FirstPersonControllerOptions {
  */
 export class FirstPersonController {
 	readonly worldPosition = new THREE.Vector3();
+	interactionPose: PlayerInteractionPose | null = null;
+	onInteractionExit: (() => void) | null = null;
+	interactionThirdPerson = false;
+	private interactionAge = 0;
+	private readonly interactionStart = new THREE.Vector3();
+	private interactionStartYaw = 0;
+	private interactionStartPitch = 0;
+	get interactionBlend(): number {
+		const t = Math.min(1, this.interactionAge / 0.3);
+		return t * t * (3 - 2 * t);
+	}
+	beginInteraction(pose: PlayerInteractionPose): void {
+		this.interactionStart.copy(this.worldPosition);
+		this.interactionStartYaw = this.yaw;
+		this.interactionStartPitch = this.pitch;
+		this.interactionPose = pose;
+		this.interactionAge = 0;
+		this.setFlying(false);
+		this.keys.clear();
+		this.verticalVelocity = 0;
+		this.walkBob = createWalkBobState();
+	}
+	endInteraction(position: { x: number; y: number; z: number }): void {
+		this.interactionPose = null;
+		this.interactionThirdPerson = false;
+		this.restoreState(position, this.yaw, 0);
+	}
 
 	private readonly domElement: HTMLElement;
 	private readonly camera: THREE.PerspectiveCamera;
@@ -197,6 +225,28 @@ export class FirstPersonController {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (this.manualInputBlocked || this.exampleMovement) return;
+		if (this.interactionPose && this.isPointerLocked()) {
+			if (event.code === 'KeyV' && !event.repeat) {
+				this.interactionThirdPerson = !this.interactionThirdPerson;
+				return;
+			}
+			if (
+				[
+					'KeyW',
+					'KeyA',
+					'KeyS',
+					'KeyD',
+					'Space',
+					'KeyF',
+					'KeyG',
+					'KeyN',
+					'KeyX',
+					'KeyP',
+					'KeyM'
+				].includes(event.code)
+			)
+				this.onInteractionExit?.();
+		}
 		this.keys.add(event.code);
 		if (event.code === 'Escape' && this.pointerLocked) {
 			document.exitPointerLock();
@@ -256,6 +306,7 @@ export class FirstPersonController {
 	 * expressed as a plain case of getSupportingSurfaceY's referenceY ceiling.
 	 */
 	spawn(worldX: number, worldZ: number): void {
+		this.onInteractionExit?.();
 		const groundHeight = this.getSupportingSurfaceY(worldX, worldZ, Infinity);
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		if (this.resolveHorizontalCollision) {
@@ -358,6 +409,8 @@ export class FirstPersonController {
 	 */
 	restoreState(position: { x: number; y: number; z: number }, yaw: number, pitch: number): void {
 		if (![position.x, position.y, position.z, yaw, pitch].every(Number.isFinite)) return;
+		this.interactionPose = null;
+		this.interactionThirdPerson = false;
 		this.worldPosition.set(position.x, position.y, position.z);
 		this.yaw = yaw;
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
@@ -370,6 +423,30 @@ export class FirstPersonController {
 
 	update(deltaSeconds: number): void {
 		this.running = false;
+		if (this.interactionPose) {
+			const pose = this.interactionPose;
+			const wasBlending = this.interactionAge < 0.3;
+			if (!this.movementLocked && !this.manualInputBlocked)
+				this.interactionAge += Math.max(0, deltaSeconds);
+			const t = this.interactionBlend;
+			this.worldPosition.set(
+				this.interactionStart.x + (pose.eye.x - this.interactionStart.x) * t,
+				this.interactionStart.y + (pose.eye.y - this.interactionStart.y) * t,
+				this.interactionStart.z + (pose.eye.z - this.interactionStart.z) * t
+			);
+			if (wasBlending) {
+				this.yaw =
+					this.interactionStartYaw +
+					Math.atan2(
+						Math.sin(pose.yaw - this.interactionStartYaw),
+						Math.cos(pose.yaw - this.interactionStartYaw)
+					) *
+						t;
+				this.pitch = this.interactionStartPitch + (pose.pitch - this.interactionStartPitch) * t;
+			}
+			this.syncCamera();
+			return;
+		}
 		if (this.movementLocked) {
 			this.syncCamera();
 			return;
@@ -607,10 +684,20 @@ export class FirstPersonController {
 		const bob = walkBobOffset(this.walkBob, running);
 		this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
 		this.camera.position.copy(this.worldPosition);
-		if (bob.y !== 0) this.camera.translateY(bob.y);
+		if (bob.y !== 0 && !this.interactionPose) this.camera.translateY(bob.y);
+		if (this.interactionPose && this.interactionThirdPerson) {
+			this.camera.position.set(
+				this.worldPosition.x + Math.sin(this.yaw) * 2.8,
+				this.worldPosition.y + 1.1,
+				this.worldPosition.z + Math.cos(this.yaw) * 2.8
+			);
+			this.camera.lookAt(this.worldPosition);
+		}
 	}
 
 	setTouchMovement(x: number, z: number): void {
+		if (this.interactionPose && Math.hypot(x, z) > 0.1 && !this.manualInputBlocked)
+			this.onInteractionExit?.();
 		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.touchMoveX = Math.max(-1, Math.min(1, x));
 		this.touchMoveZ = Math.max(-1, Math.min(1, z));
@@ -622,6 +709,7 @@ export class FirstPersonController {
 	}
 
 	triggerTouchJump(): void {
+		if (this.interactionPose && !this.manualInputBlocked) this.onInteractionExit?.();
 		if (this.manualInputBlocked || this.exampleMovement) return;
 		this.touchJump = true;
 	}

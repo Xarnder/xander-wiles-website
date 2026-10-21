@@ -40,6 +40,7 @@ const ALPINE: MaterialPaletteDefinition = {
 	id: 'alpine',
 	label: 'Alpine timber-framed',
 	colors: {
+		fabric: { base: '#D8CFBC' },
 		plaster: {
 			base: '#DCCAA6',
 			light: '#E9DCC0',

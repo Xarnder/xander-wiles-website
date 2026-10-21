@@ -1,4 +1,10 @@
 <script lang="ts">
+	import ShovelSettings from '$lib/components/ShovelSettings.svelte';
+	import { IMPORT_LIMITS } from '$lib/game/world/WorldValidation';
+	import { captureWorldContent } from '$lib/game/world/WorldSerializer';
+	import type { InteractionPrompt } from '$lib/game/player/PlayerInteractionController';
+	let miniBuildInteractionPrompt = $state<InteractionPrompt | null>(null);
+	import type { OpeningInteractionState } from '$lib/game/building/DoorInteractionController';
 	import ConfirmDeleteFoundationDialog from '$lib/components/ConfirmDeleteFoundationDialog.svelte';
 	import CreatureLabModal from '$lib/components/CreatureLabModal.svelte';
 	let creatureLabOpen = $state(false);
@@ -34,7 +40,10 @@
 		if (session) session.scene.music.importPanelOpen = false;
 	}
 	import { onDestroy, onMount, tick } from 'svelte';
+	import WorldLoadingScreen from '$lib/components/WorldLoadingScreen.svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
+	import LandingMenu from '$lib/components/LandingMenu.svelte';
+	let showWorldLibrary = $state(false);
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
@@ -50,6 +59,8 @@
 	} from '$lib/components/MiniBuildEditor.svelte';
 	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
 	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
+	import FoundationCustomizeModal from '$lib/components/FoundationCustomizeModal.svelte';
+	import PillarCustomizeModal from '$lib/components/PillarCustomizeModal.svelte';
 	import BarrierCustomizeModal from '$lib/components/BarrierCustomizeModal.svelte';
 	import SkirtingCustomizeModal from '$lib/components/SkirtingCustomizeModal.svelte';
 	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
@@ -167,6 +178,8 @@
 	/** Which top-level screen is showing. The game's Three.js scene only exists while this is `game`. */
 	let screen = $state<'worlds' | 'loading' | 'game'>('worlds');
 	let loadingLabel = $state('Loading world…');
+	let loadingVisible = $state(false);
+	let loadingProgress = $state(0);
 	let worlds = $state<WorldMetadata[]>([]);
 	let defaultWorld = $state<WorldMetadata | null>(null);
 	let defaultThumbnail = $state<string>(DEFAULT_WORLD_THUMBNAIL_DATA_URL);
@@ -197,6 +210,7 @@
 
 	let saveToast = $state<string | null>(null);
 	let lookedAtDoorId = $state<string | null>(null);
+	let lookedAtOpening = $state<OpeningInteractionState | null>(null);
 	/** Mini Build editor launch (null = closed) and the placed-object Edit choice (`F` in Place Object mode). */
 	let miniBuildEditor = $state<MiniBuildEditorLaunch | null>(null);
 	let miniBuildEditChoice = $state<{ instanceId: string; name: string; copies: number } | null>(
@@ -257,6 +271,7 @@
 
 	function clockBlocked(): boolean {
 		return (
+			loadingVisible ||
 			paused ||
 			multiplayerMenuOpen ||
 			settingsOpen ||
@@ -652,11 +667,18 @@
 	async function openWorld(worldId: string) {
 		if (!worldManager || screen !== 'worlds') return;
 		screen = 'loading';
-		loadingLabel = 'Loading world…';
+		loadingVisible = true;
+		loadingProgress = 0.04;
+		loadingLabel = 'Opening your world…';
+		await tick();
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
 
 		const opened = await worldManager.openWorld(worldId);
 		if (!opened.ok) {
 			worldsError = opened.error;
+			loadingVisible = false;
 			screen = 'worlds';
 			return;
 		}
@@ -673,80 +695,111 @@
 		multiplayer?: MultiplayerSession
 	): Promise<boolean> {
 		if (!worldManager) return false;
-		loadingLabel = `Loading ${displayName}…`;
-		screen = 'game';
-		// The canvas container only exists once the game screen has rendered.
-		await tick();
-		if (!container) {
-			screen = 'worlds';
-			worldsError = 'Unable to start the world renderer.';
-			return false;
-		}
+		try {
+			loadingVisible = true;
+			loadingProgress = 0.15;
+			loadingLabel = `Preparing ${displayName}…`;
+			screen = 'game';
+			// The canvas container only exists once the game screen has rendered.
+			await tick();
+			await new Promise<void>((resolve) =>
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+			);
+			if (!container) {
+				screen = 'worlds';
+				worldsError = 'Unable to start the world renderer.';
+				loadingVisible = false;
+				return false;
+			}
 
-		currentWorldName = displayName;
-		currentWorldSeed = world.seed;
-		saveStatus = 'saved';
-		saveError = null;
-		paused = false;
+			currentWorldName = displayName;
+			currentWorldSeed = world.seed;
+			saveStatus = 'saved';
+			saveError = null;
+			paused = false;
 
-		session = new WorldSession({
-			container,
-			world,
-			worldManager,
-			multiplayer,
-			persist: !multiplayer,
-			onSaveStatusChange: (status, error) => {
-				saveStatus = status;
-				saveError = error;
-			},
-			onStatsUpdate: (next) => (stats = next),
-			onFlightChange: (next) => {
-				const speedChanged = next.flying && flight.flying && next.speed !== flight.speed;
-				flight = next;
-				if (speedChanged) showSaveToast(`Fly speed ${formatFlySpeed(next.speed)}`);
-			},
-			onPointerLockChange: (locked) => {
-				const wasLocked = pointerLocked;
-				pointerLocked = locked;
-				if (wasLocked && !locked) {
-					if (showHelp) {
-						showHelp = false;
-					} else if (!paused && !clockBlocked() && !debugControlsOpen) {
-						// Escape while pointer-locked is consumed natively by the browser to exit lock.
-						// Catching that transition here brings up the pause menu on the very first Escape press.
-						if (performance.now() - lastPauseToggleTime > 150) {
-							openPause();
+			session = new WorldSession({
+				container,
+				world,
+				worldManager,
+				multiplayer,
+				persist: !multiplayer,
+				onSaveStatusChange: (status, error) => {
+					saveStatus = status;
+					saveError = error;
+				},
+				onStatsUpdate: (next) => (stats = next),
+				onFlightChange: (next) => {
+					const speedChanged = next.flying && flight.flying && next.speed !== flight.speed;
+					flight = next;
+					if (speedChanged) showSaveToast(`Fly speed ${formatFlySpeed(next.speed)}`);
+				},
+				onPointerLockChange: (locked) => {
+					const wasLocked = pointerLocked;
+					pointerLocked = locked;
+					if (wasLocked && !locked) {
+						if (showHelp) {
+							showHelp = false;
+						} else if (!paused && !clockBlocked() && !debugControlsOpen) {
+							// Escape while pointer-locked is consumed natively by the browser to exit lock.
+							// Catching that transition here brings up the pause menu on the very first Escape press.
+							if (performance.now() - lastPauseToggleTime > 150) {
+								openPause();
+							}
 						}
 					}
-				}
-			},
-			onHotbarChange: (next) => (hotbar = next),
-			onBuildHudChange: (next) => (buildHud = next),
-			onLookedAtDoorChange: (id) => (lookedAtDoorId = id),
-			onPaintPaletteChange: (open) => (paintPaletteOpen = open),
-			onPaintStateChange: (next) => (paintState = next),
-			onGraphicsQualityChange: (quality) => showGraphicsNotice(quality),
-			onPlacementCustomizeChange: (open) => {
-				placementCustomizeOpen = open;
-				if (open) showHelp = false;
-			},
-			onPlacementHeightChange: (open) => {
-				placementHeightOpen = open;
-				if (open) showHelp = false;
-			},
-			onRequestFoundationDelete: (foundationId) => openFoundationDelete(foundationId),
-			onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
-			onMiniBuildNotice: (message) => showSaveToast(message)
-		});
-		if (typeof window !== 'undefined') {
-			const testWindow = window as ForestTestWindow;
-			testWindow.__forestSession = session;
-			testWindow.__forestMultiplayer = multiplayer ?? null;
-			testWindow.__setTestLookedAtDoor = (id: string | null) => {
-				lookedAtDoorId = id;
-			};
+				},
+				onHotbarChange: (next) => (hotbar = next),
+				onBuildHudChange: (next) => (buildHud = next),
+				onLookedAtDoorChange: (id) => (lookedAtDoorId = id),
+				onOpeningInteractionChange: (state) => (lookedAtOpening = state),
+				onMiniBuildInteractionChange: (prompt) => (miniBuildInteractionPrompt = prompt),
+				onPaintPaletteChange: (open) => (paintPaletteOpen = open),
+				onPaintStateChange: (next) => (paintState = next),
+				onGraphicsQualityChange: (quality) => showGraphicsNotice(quality),
+				onPlacementCustomizeChange: (open) => {
+					placementCustomizeOpen = open;
+					if (open) showHelp = false;
+				},
+				onPlacementHeightChange: (open) => {
+					placementHeightOpen = open;
+					if (open) showHelp = false;
+				},
+				onRequestFoundationDelete: (foundationId) => openFoundationDelete(foundationId),
+				onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
+				onMiniBuildNotice: (message) => showSaveToast(message)
+			});
+			if (typeof window !== 'undefined') {
+				const testWindow = window as ForestTestWindow;
+				testWindow.__forestSession = session;
+				testWindow.__forestMultiplayer = multiplayer ?? null;
+				testWindow.__setTestLookedAtDoor = (id: string | null) => {
+					lookedAtDoorId = id;
+				};
+			}
+			const activeSession = session;
+
+			await activeSession.scene.whenInitialWorldReady((progress) => {
+				loadingProgress = Math.max(loadingProgress, 0.2 + progress * 0.7);
+				loadingLabel = `Finding your place in ${displayName}…`;
+			});
+			if (session !== activeSession) return false;
+			loadingProgress = 1;
+			loadingLabel = 'Your adventure awaits';
+			await new Promise((resolve) => setTimeout(resolve, 700));
+			loadingVisible = false;
+
+			return true;
+		} catch (error) {
+			loadingVisible = false;
+			worldsError = error instanceof Error ? error.message : 'Unable to open this world.';
+			if (session) {
+				await session.dispose();
+				session = undefined;
+			}
+			screen = 'worlds';
+			return false;
 		}
-		return true;
 	}
 
 	/**
@@ -1028,6 +1081,7 @@
 				delete testWindow.__setTestLookedAtDoor;
 			}
 			lookedAtDoorId = null;
+			lookedAtOpening = null;
 			if (onlineWorld) {
 				onlineWorld = null;
 				multiplayerSession = null;
@@ -1068,21 +1122,33 @@
 
 	async function exportWorld(worldId: string) {
 		await withBusy(async () => {
-			// Flush first: exporting a world that's open must include the edits made a second ago.
-			if (session && worldManager?.getCurrentWorldId() === worldId) await session.saveNow('manual');
-			const result = await worldManager!.exportWorld(worldId);
-			if (!result.ok) {
-				worldsError = result.error;
-				return;
+			try {
+				// Capture the live scene even if IndexedDB is unavailable or autosave failed.
+				const content =
+					session && worldManager?.getCurrentWorldId() === worldId
+						? captureWorldContent(session.scene)
+						: undefined;
+				const result = await worldManager!.exportWorld(worldId, content);
+				if (!result.ok) {
+					worldsError = result.error;
+					return;
+				}
+				const bytes = await createWorldPackage(result.value.world, result.value.thumbnail);
+				downloadWorldPackage(bytes, worldFileName(result.value.world.name));
+				worldsError = null;
+			} catch (error) {
+				worldsError = error instanceof Error ? error.message : 'Unable to export world.';
 			}
-			const bytes = await createWorldPackage(result.value.world, result.value.thumbnail);
-			downloadWorldPackage(bytes, worldFileName(result.value.world.name));
 		});
 	}
 
 	async function importWorld(file: File) {
 		await withBusy(async () => {
 			try {
+				if (file.size > IMPORT_LIMITS.packageBytes) {
+					worldsError = 'This world file is too large to import.';
+					return;
+				}
 				const bytes = new Uint8Array(await file.arrayBuffer());
 				const result = await worldManager!.importWorld(bytes);
 				if (!result.ok) {
@@ -1177,33 +1243,44 @@
 </script>
 
 {#if screen === 'worlds'}
-	<WorldsScreen
-		{worlds}
-		{thumbnails}
-		{defaultWorld}
-		{defaultThumbnail}
-		{storage}
-		busy={worldsBusy}
-		error={worldsError}
-		onPlay={(id) => void openWorld(id)}
-		onPlayDefault={() => void playDefaultWorld()}
-		onResetDefault={() => void resetDefaultWorld()}
-		onCreate={(name, seed) => void createWorld(name, seed)}
-		onRename={(id, name) => void renameWorld(id, name)}
-		onDuplicate={(id) => void duplicateWorld(id)}
-		onExport={(id) => void exportWorld(id)}
-		onDelete={(id) => void deleteWorld(id)}
-		onImport={(file) => void importWorld(file)}
-		onDismissError={() => (worldsError = null)}
-		onPublish={mpServer ? (id) => openPublish(id) : undefined}
-		onJoinOnline={mpServer ? () => openJoinDialog(null) : undefined}
-		onlineWorlds={mpServer ? onlineWorlds : []}
-		onJoinOnlineWorld={joinRememberedWorld}
-		onShowInvites={(worldId) => (invitesDialog = findOnlineWorld(worldId))}
-		onForgetOnlineWorld={forgetRememberedWorld}
-		onSaveOnlineCopy={(worldId) => void saveOnlineCopy(worldId)}
-		onRestoreOnline={(worldId) => void openRestore(worldId)}
-	/>
+	{#if !showWorldLibrary}
+		<LandingMenu
+			onPlay={() => void playDefaultWorld()}
+			onWorlds={() => (showWorldLibrary = true)}
+			onOnline={mpServer ? () => openJoinDialog(null) : undefined}
+			busy={worldsBusy || !defaultWorld}
+			error={worldsError}
+		/>
+	{:else}
+		<WorldsScreen
+			onBack={() => (showWorldLibrary = false)}
+			{worlds}
+			{thumbnails}
+			{defaultWorld}
+			{defaultThumbnail}
+			{storage}
+			busy={worldsBusy}
+			error={worldsError}
+			onPlay={(id) => void openWorld(id)}
+			onPlayDefault={() => void playDefaultWorld()}
+			onResetDefault={() => void resetDefaultWorld()}
+			onCreate={(name, seed) => void createWorld(name, seed)}
+			onRename={(id, name) => void renameWorld(id, name)}
+			onDuplicate={(id) => void duplicateWorld(id)}
+			onExport={(id) => void exportWorld(id)}
+			onDelete={(id) => void deleteWorld(id)}
+			onImport={(file) => void importWorld(file)}
+			onDismissError={() => (worldsError = null)}
+			onPublish={mpServer ? (id) => openPublish(id) : undefined}
+			onJoinOnline={mpServer ? () => openJoinDialog(null) : undefined}
+			onlineWorlds={mpServer ? onlineWorlds : []}
+			onJoinOnlineWorld={joinRememberedWorld}
+			onShowInvites={(worldId) => (invitesDialog = findOnlineWorld(worldId))}
+			onForgetOnlineWorld={forgetRememberedWorld}
+			onSaveOnlineCopy={(worldId) => void saveOnlineCopy(worldId)}
+			onRestoreOnline={(worldId) => void openRestore(worldId)}
+		/>
+	{/if}
 	{#if restoreDialog}
 		<RestorePointsDialog
 			worldName={restoreDialog.entry.name}
@@ -1246,12 +1323,8 @@
 	{/if}
 {/if}
 
-{#if screen === 'loading'}
-	<div class="loading-screen" data-ui-loading data-testid="loading-screen">
-		<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
-		<p class="loading-label">{loadingLabel}</p>
-		<div class="loading-bar"><span></span></div>
-	</div>
+{#if loadingVisible}
+	<WorldLoadingScreen progress={loadingProgress} label={loadingLabel} />
 {/if}
 
 {#if screen === 'game'}
@@ -1259,6 +1332,7 @@
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
 	<div
 		class="game-shell"
+		inert={loadingVisible}
 		class:touch-zoom-locked={isTouchDevice || showTouchControls}
 		use:preventTouchPageZoom={isTouchDevice || showTouchControls}
 		class:debug-sidebar={debugControlsOpen}
@@ -1371,6 +1445,7 @@
 					{buildHud}
 					{hotbar}
 					{lookedAtDoorId}
+					{lookedAtOpening}
 					{customizeToolId}
 					{heightToolId}
 					onOpenPause={openPause}
@@ -1428,12 +1503,16 @@
 			{#if showHelp}
 				<div
 					data-ui-backdrop
+					data-pause-backdrop
 					class={['help-overlay', { 'over-menus': paused }]}
 					data-testid="help-overlay"
 				>
-					<div class="help-panel" data-ui-surface="panel">
+					<div class="help-panel" data-ui-surface="panel" data-pause-panel>
 						<header class="help-heading">
-							<div><p class="eyebrow">FIELD GUIDE</p><h2>Controls</h2></div>
+							<div>
+								<p class="eyebrow">FIELD GUIDE</p>
+								<h2>Controls</h2>
+							</div>
 							<button class="help-close" onclick={() => (showHelp = false)}>Done</button>
 						</header>
 
@@ -1483,13 +1562,11 @@
 							<dd>
 								Extra buttons appear for the tool you are using. Rise + / Rise − shape a pitched
 								roof. Dir − / Dir + turn stairs. Offset toggles skirting. Copy and Apply restyle a
-								fence. Angle, Copy, Edit, Prev, and Next control placed objects. Pitch, Vol, Len, and
-								Play control the music garden. Snap becomes Mode on a floor path.
+								fence. Angle, Copy, Edit, Prev, and Next control placed objects. Pitch, Vol, Len,
+								and Play control the music garden. Snap becomes Mode on a floor path.
 							</dd>
 							<dt>Open / Close Door</dt>
-							<dd>
-								Tap the Open Door button that appears when hovering over a door to open or close it.
-							</dd>
+							<dd>Tap the Open or Close button when aiming at a door or window shutters.</dd>
 							<dt>Floor Selector</dt>
 							<dd>Tap the buttons on the right edge of the screen to change storeys.</dd>
 						</dl>
@@ -1549,9 +1626,9 @@
 							<dt>↑ / ↓</dt>
 							<dd>
 								Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing /
-								Skirting, Door / Window / Beam, Ceiling / Floor / Roof, Carpet / Path / Planks /
-								Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last choice is
-								remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
+								Skirting / Wooden Pillars, Door / Window / Beam, Ceiling / Floor / Roof, Carpet /
+								Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last
+								choice is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
 							</dd>
 							<dt>Left click</dt>
 							<dd>Place / confirm</dd>
@@ -1648,7 +1725,9 @@
 								while you are adjusting a roof
 							</dd>
 							<dt>B</dt>
-							<dd>Switch to polygon drawing; in polygon mode, cycle draw-snap including Wall Corners</dd>
+							<dd>
+								Switch to polygon drawing; in polygon mode, cycle draw-snap including Wall Corners
+							</dd>
 							<dt>E</dt>
 							<dd>
 								Switch between rectangle and polygon drawing, keeping the first corner. In polygon
@@ -1662,7 +1741,7 @@
 						<h3>Windows / Doors / Beams</h3>
 						<dl>
 							<dt>K</dt>
-							<dd>Open or close the door under the crosshair</dd>
+							<dd>Open or close the door or window shutters under the crosshair</dd>
 							<dt>Left click</dt>
 							<dd>Place a window/door hole or a timber beam on the wall</dd>
 							<dt>E</dt>
@@ -1886,7 +1965,6 @@
 								Save the world now. Worlds also autosave a couple of seconds after you stop building
 							</dd>
 						</dl>
-
 					</div>
 				</div>
 			{/if}
@@ -2288,7 +2366,26 @@
 				{/if}
 			{/if}
 
-			{#if lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
+			{#if miniBuildInteractionPrompt && pointerLocked && !clockBlocked() && !showHelp}
+				<button
+					class="door-toast mini-interaction-toast"
+					data-testid="mini-build-interaction-prompt"
+					onclick={() => session?.scene.miniBuildInteraction.controller.toggle()}
+				>
+					{showTouchControls
+						? ''
+						: '[K] '}{miniBuildInteractionPrompt.label}{miniBuildInteractionPrompt.active &&
+					!showTouchControls
+						? ' · WASD / Jump to exit · V to view pose'
+						: ''}
+				</button>
+				{#if miniBuildInteractionPrompt.active && showTouchControls}<button
+						class="door-toast mini-interaction-toast interaction-view"
+						onclick={() => session?.scene.miniBuildInteraction.toggleView()}>Change view</button
+					>{/if}
+			{/if}
+
+			{#if !miniBuildInteractionPrompt && lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
 				{#if !showTouchControls}
 					<div
 						class="door-toast"
@@ -2300,7 +2397,10 @@
 							if (e.key === 'Enter' || e.key === ' ') session?.scene.toggleLookedAtDoor();
 						}}
 					>
-						Press K to open the door
+						Press K to {lookedAtOpening?.open ? 'close' : 'open'} the {lookedAtOpening?.kind ===
+						'shutters'
+							? 'shutters'
+							: 'door'}
 					</div>
 				{/if}
 			{/if}
@@ -2313,11 +2413,26 @@
 			{/if}
 
 			{#if placementCustomizeOpen && session && customizeToolId}
-				{#if customizeToolId === 'place-object'}
+				{#if customizeToolId === 'shovel'}
+					<ShovelSettings
+						settings={session.scene.shovelTool.settings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{:else if customizeToolId === 'foundation'}
+					<FoundationCustomizeModal
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
+					/>
+				{:else if customizeToolId === 'place-object'}
 					<ObjectLibraryModal
 						scene={session.scene}
 						onClose={() => session?.scene.closePlacementCustomize()}
 						onOpenEditor={openMiniBuildEditor}
+					/>
+				{:else if customizeToolId === 'pillar'}
+					<PillarCustomizeModal
+						settings={session.scene.buildingSettings}
+						onClose={() => session?.scene.closePlacementCustomize()}
 					/>
 				{:else if customizeToolId === 'skirting'}
 					<SkirtingCustomizeModal
@@ -2339,6 +2454,7 @@
 						toolId={customizeToolId}
 						settings={session.scene.buildingSettings}
 						onClose={() => session?.scene.closePlacementCustomize()}
+						onApplyWindowShutters={() => session?.scene.applyWindowShuttersToAimedWindow() ?? false}
 					/>
 				{/if}
 			{/if}
@@ -2351,17 +2467,37 @@
 				/>
 			{/if}
 			{#if miniBuildEditor && session}
-				<MiniBuildEditor
-					scene={session.scene}
-					launch={miniBuildEditor}
-					onClose={() => (miniBuildEditor = null)}
-					onSaved={(definition) => {
-						miniBuildEditor = null;
-						session?.scene.selectPlaceObject({ type: 'mini-build', designId: definition.id });
-						session?.scene.enterPlaceObjectMode();
-						showSaveToast(`Saved ${definition.name}`);
-					}}
-				/>
+				<svelte:boundary>
+					<MiniBuildEditor
+						scene={session.scene}
+						launch={miniBuildEditor}
+						onClose={() => (miniBuildEditor = null)}
+						onSaved={(definition) => {
+							miniBuildEditor = null;
+							session?.scene.selectPlaceObject({ type: 'mini-build', designId: definition.id });
+							session?.scene.enterPlaceObjectMode();
+							showSaveToast(`Saved ${definition.name}`);
+						}}
+					/>
+					{#snippet failed()}
+						<MiniBuildChoiceDialog
+							testId="mini-build-editor-error"
+							title="Unable to open the build editor"
+							lines={[
+								'Your world and saved build are unchanged. Close this dialog to return to the game.'
+							]}
+							options={[
+								{
+									label: 'Return to game',
+									testId: 'mini-build-editor-error-close',
+									tone: 'primary',
+									onSelect: () => (miniBuildEditor = null)
+								}
+							]}
+							onCancel={() => (miniBuildEditor = null)}
+						/>
+					{/snippet}
+				</svelte:boundary>
 			{/if}
 			{#if miniBuildEditChoice && session}
 				{@const choice = miniBuildEditChoice}
@@ -2402,7 +2538,7 @@
 					onClose={closeMidi}
 				/>{/if}
 		</div>
-		{#if paused}
+		{#if paused && !settingsOpen && !showHelp && !creatureLabOpen}
 			<PauseMenu
 				worldName={currentWorldName}
 				seed={currentWorldSeed}
@@ -2447,18 +2583,25 @@
 	</div>
 	<SessionPanels
 		debugOpen={debugControlsOpen}
-		usageAccess={onlineWorld && mpServer ? {
-			server: mpServer, worldId: onlineWorld.worldId,
-			invite: onlineWorlds.find((entry) => entry.worldId === onlineWorld?.worldId)?.invite ?? '',
-			owner: mpRole === 'owner'
-		} : null}
+		usageAccess={onlineWorld && mpServer
+			? {
+					server: mpServer,
+					worldId: onlineWorld.worldId,
+					invite:
+						onlineWorlds.find((entry) => entry.worldId === onlineWorld?.worldId)?.invite ?? '',
+					owner: mpRole === 'owner'
+				}
+			: null}
 		multiplayerOpen={multiplayerMenuOpen}
 		bind:exampleMovement
 		players={mpPlayers}
 		selfSlot={mpSelfSlot}
 		online={!!onlineWorld}
 		status={mpStatus}
-		onCloseDebug={closeDebugControls}
+		onCloseDebug={() => {
+			closeDebugControls();
+			paused = true;
+		}}
 		onCloseMultiplayer={() => {
 			multiplayerMenuOpen = false;
 			paused = true;
@@ -2671,63 +2814,6 @@
 		font: inherit;
 		cursor: pointer;
 	}
-	.loading-screen {
-		position: fixed;
-		inset: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 1rem;
-		background: radial-gradient(circle at 50% 30%, #2c4b39 0%, #16241d 60%, #0d1512 100%);
-		color: #eaf6ff;
-		font-family:
-			system-ui,
-			-apple-system,
-			sans-serif;
-		z-index: 40;
-	}
-
-	.loading-screen .title-mark {
-		width: min(16rem, 55vw);
-		height: auto;
-		filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.55));
-	}
-
-	.loading-label {
-		margin: 0;
-		font-size: 0.9rem;
-		opacity: 0.85;
-	}
-
-	/* An indeterminate sweep rather than a fake percentage: chunk generation has no meaningful
-	   total to divide by, and inventing one would just be a lie with a number on it. */
-	.loading-bar {
-		width: min(18rem, 70vw);
-		height: 3px;
-		border-radius: 999px;
-		background: rgba(234, 246, 255, 0.15);
-		overflow: hidden;
-	}
-
-	.loading-bar span {
-		display: block;
-		width: 40%;
-		height: 100%;
-		border-radius: 999px;
-		background: #39d353;
-		animation: loading-sweep 1.1s ease-in-out infinite;
-	}
-
-	@keyframes loading-sweep {
-		0% {
-			transform: translateX(-100%);
-		}
-		100% {
-			transform: translateX(250%);
-		}
-	}
-
 	/* Bottom-right stays clear of the pause button (bottom-left) and the hotbar. */
 	.save-indicator {
 		position: absolute;
@@ -2799,6 +2885,17 @@
 
 	.save-dot[data-status='error'] {
 		background: #ff6b6b;
+	}
+
+	.mini-interaction-toast {
+		pointer-events: auto !important;
+		max-width: calc(100vw - 32px);
+		white-space: normal !important;
+		text-align: center;
+		min-height: 44px;
+	}
+	.interaction-view {
+		margin-top: 52px;
 	}
 
 	.door-toast {
@@ -3116,7 +3213,9 @@
 	.touch-mode .build-hud {
 		top: auto;
 		/* Measure the utility row so larger text and iPad buttons keep a 12px gap. */
-		bottom: calc(var(--touch-dock-height, 8.5rem) + 3.5rem + var(--utility-buttons-height, 44px) + 12px);
+		bottom: calc(
+			var(--touch-dock-height, 8.5rem) + 3.5rem + var(--utility-buttons-height, 44px) + 12px
+		);
 		left: max(0.75rem, env(safe-area-inset-left));
 		max-width: min(16rem, calc(100vw - 8.5rem));
 		max-height: calc(
@@ -3739,9 +3838,17 @@
 		padding: 1rem;
 		margin-bottom: 1rem;
 	}
-	.help-heading .eyebrow { margin: 0 0 .25rem; font-size: .65rem; letter-spacing: .16em; }
-	.help-heading h2 { margin: 0; }
-	.help-heading .help-close { margin: 0; }
+	.help-heading .eyebrow {
+		margin: 0 0 0.25rem;
+		font-size: 0.65rem;
+		letter-spacing: 0.16em;
+	}
+	.help-heading h2 {
+		margin: 0;
+	}
+	.help-heading .help-close {
+		margin: 0;
+	}
 
 	.help-close {
 		margin-top: 1.25rem;

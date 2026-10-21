@@ -1,3 +1,4 @@
+import type { PlayerInteractionPose } from '../player/PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { CharacterAnimationState } from './CharacterAnimationState';
@@ -293,6 +294,35 @@ export class CharacterInstance {
 				? 'flight'
 				: 'airborne';
 	}
+	/** Pose the same calibrated skeleton used for walking; no furniture-specific bones. */
+	poseInteraction(pose: PlayerInteractionPose, blend = 1): void {
+		for (const rest of this.rest) {
+			rest.bone.position.copy(rest.position);
+			rest.bone.quaternion.copy(rest.rotation);
+		}
+		this.object.rotation.set(0, 0, 0);
+		this.object.position.set(0, 0, 0);
+		this.object.updateWorldMatrix(true, true);
+		if (pose.action === 'sit') {
+			this.aimAxis.copy(X);
+			if (this.object.parent)
+				this.aimAxis.applyQuaternion(this.object.parent.getWorldQuaternion(this.rotation));
+			for (const side of ['Left', 'Right']) {
+				this.offsetWorld(`${side}UpLeg`, this.aimAxis, (Math.PI / 2) * blend);
+				this.offsetWorld(`${side}Leg`, this.aimAxis, (-Math.PI / 2) * blend);
+				this.offsetWorld(`${side}ForeArm`, this.aimAxis, -0.35 * blend);
+			}
+		}
+		this.object.rotation.x = pose.bodyTilt * blend;
+		this.object.rotation.y = pose.bodyYawOffset * blend;
+		this.object.updateWorldMatrix(true, true);
+		const hips = this.bone('Hips').getWorldPosition(this.point);
+		if (this.object.parent) this.object.parent.worldToLocal(hips);
+		this.object.position.set(-hips.x, pose.pelvisSupportOffset - hips.y, -hips.z);
+		this.object.updateWorldMatrix(true, true);
+		this.object.userData.animation = pose.action;
+	}
+
 	private support(
 		target: THREE.Vector3,
 		feetY: number,

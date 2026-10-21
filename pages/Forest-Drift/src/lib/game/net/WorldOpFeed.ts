@@ -27,6 +27,7 @@ export interface AffectedContent {
 	miniBuildInstances: Set<string>;
 	music: boolean;
 	removedTrees: boolean;
+	terrain?: boolean;
 }
 
 /** What the game scene offers the feed. `ThreeScene` implements it; tests use a plain object. */
@@ -403,7 +404,8 @@ export function isEmpty(affected: AffectedContent): boolean {
 		affected.miniBuildDefinitions.size === 0 &&
 		affected.miniBuildInstances.size === 0 &&
 		!affected.music &&
-		!affected.removedTrees
+		!affected.removedTrees &&
+		!affected.terrain
 	);
 }
 
@@ -440,6 +442,9 @@ export function affectedBetween(
 			case 'musicTree':
 			case 'musicPlant':
 				affected.music = true;
+				break;
+			case 'terrainTile':
+				affected.terrain = true;
 				break;
 			case 'removedTree':
 				affected.removedTrees = true;

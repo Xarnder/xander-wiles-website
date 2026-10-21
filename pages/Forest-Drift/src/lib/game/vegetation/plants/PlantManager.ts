@@ -247,6 +247,22 @@ export class PlantManager {
 		if (regenerate) this.notifySettingsChanged();
 	}
 
+	notifyTerrainRegion(bounds: { minX: number; maxX: number; minZ: number; maxZ: number }): void {
+		this.terrainRevision = this.options.terrain.getRevision();
+		this.nearDirty = true;
+		for (const record of this.records.values()) {
+			const x = record.chunkX * PLANT_CHUNK_SIZE,
+				z = record.chunkZ * PLANT_CHUNK_SIZE;
+			if (
+				x <= bounds.maxX + 1 &&
+				x + PLANT_CHUNK_SIZE >= bounds.minX - 1 &&
+				z <= bounds.maxZ + 1 &&
+				z + PLANT_CHUNK_SIZE >= bounds.minZ - 1
+			)
+				this.queue.enqueue(record.chunkX, record.chunkZ, this.revision);
+		}
+	}
+
 	notifySettingsChanged(): void {
 		this.revision++;
 		this.lastLoadRadius = -1;

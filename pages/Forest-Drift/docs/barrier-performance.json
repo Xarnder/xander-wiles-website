@@ -1,5 +1,5 @@
 {
-	"date": "2026-10-14T10:23:00.177Z",
+	"date": "2026-10-21T16:53:35.162Z",
 	"single": [
 		{
 			"preset": "simple-wood-fence",
@@ -19,7 +19,7 @@
 				264
 			],
 			"gpuBytes": 93456,
-			"buildMs": 3.9
+			"buildMs": 5.2
 		},
 		{
 			"preset": "simple-wood-fence",
@@ -39,7 +39,7 @@
 				1224
 			],
 			"gpuBytes": 452496,
-			"buildMs": 3.5
+			"buildMs": 4.7
 		},
 		{
 			"preset": "simple-wood-fence",
@@ -59,7 +59,7 @@
 				2424
 			],
 			"gpuBytes": 901296,
-			"buildMs": 5.1
+			"buildMs": 6.2
 		},
 		{
 			"preset": "fancy-newel",
@@ -79,7 +79,7 @@
 				180
 			],
 			"gpuBytes": 477192,
-			"buildMs": 3.5
+			"buildMs": 3.2
 		},
 		{
 			"preset": "fancy-newel",
@@ -99,7 +99,7 @@
 				756
 			],
 			"gpuBytes": 2252616,
-			"buildMs": 7.9
+			"buildMs": 9.6
 		},
 		{
 			"preset": "fancy-newel",
@@ -119,16 +119,16 @@
 				1476
 			],
 			"gpuBytes": 5184240,
-			"buildMs": 14.6
+			"buildMs": 18.5
 		}
 	],
 	"stress": [
 		{
 			"paths": 0,
-			"fps": 180.6,
-			"frameMs": 5.54,
-			"cpuMs": 5.13,
-			"drawCalls": 655,
+			"fps": 149.9,
+			"frameMs": 6.67,
+			"cpuMs": 6.17,
+			"drawCalls": 670,
 			"barriers": 0,
 			"objects": 0,
 			"meshes": 0,
@@ -145,15 +145,15 @@
 				0
 			],
 			"bytes": 0,
-			"lastBuildMs": 14.5,
-			"totalBuildMs": 38
+			"lastBuildMs": 18.399999976158142,
+			"totalBuildMs": 47.000000059604645
 		},
 		{
 			"paths": 20,
-			"fps": 170.5,
-			"frameMs": 5.87,
-			"cpuMs": 5.64,
-			"drawCalls": 841,
+			"fps": 140.5,
+			"frameMs": 7.12,
+			"cpuMs": 6.89,
+			"drawCalls": 856,
 			"barriers": 20,
 			"objects": 152,
 			"meshes": 72,
@@ -170,15 +170,15 @@
 				4560
 			],
 			"bytes": 4841088,
-			"lastBuildMs": 1.399999976158142,
-			"totalBuildMs": 58.80000001192093
+			"lastBuildMs": 1.7000000476837158,
+			"totalBuildMs": 73.20000004768372
 		},
 		{
 			"paths": 50,
-			"fps": 156.6,
-			"frameMs": 6.39,
-			"cpuMs": 6.21,
-			"drawCalls": 1073,
+			"fps": 128,
+			"frameMs": 7.81,
+			"cpuMs": 7.59,
+			"drawCalls": 1086,
 			"barriers": 50,
 			"objects": 380,
 			"meshes": 180,
@@ -195,15 +195,15 @@
 				11400
 			],
 			"bytes": 12102720,
-			"lastBuildMs": 1.4000000059604645,
-			"totalBuildMs": 108.30000007152557
+			"lastBuildMs": 1.600000023841858,
+			"totalBuildMs": 138.00000005960464
 		},
 		{
 			"paths": 100,
-			"fps": 148.7,
-			"frameMs": 6.73,
-			"cpuMs": 6.53,
-			"drawCalls": 1227,
+			"fps": 118.8,
+			"frameMs": 8.42,
+			"cpuMs": 8.22,
+			"drawCalls": 1238,
 			"barriers": 100,
 			"objects": 760,
 			"meshes": 360,
@@ -220,9 +220,9 @@
 				22800
 			],
 			"bytes": 24205440,
-			"lastBuildMs": 1,
-			"totalBuildMs": 196.70000007748604
+			"lastBuildMs": 1.100000023841858,
+			"totalBuildMs": 237.00000017881393
 		}
 	],
-	"heapBytes": 116000000
+	"heapBytes": 131000000
 }

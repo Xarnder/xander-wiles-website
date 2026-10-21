@@ -229,13 +229,13 @@ export class GrassManager {
 		// Saved environment values are applied AFTER manager construction. Upgrade here
 		// before generation, including same-seed reloads, so old values cannot overwrite it.
 		// Upgrade the previous shipped defaults in saved worlds as well as new worlds.
-		// Explicitly tuned height ranges remain under the player's control.
+		// Custom ranges remain unchanged within the one-metre height limit.
 		if (
 			(this.settings.minHeight === 0.2 && this.settings.maxHeight === 0.52) ||
 			(this.settings.minHeight === 0.35 && this.settings.maxHeight === 0.9)
 		) {
 			this.settings.minHeight = 0.7;
-			this.settings.maxHeight = 1.8;
+			this.settings.maxHeight = 1;
 		}
 		// The generator version salts the hash: a future placement version never re-plants old worlds.
 		const version = this.settings.generatorVersion || GRASS_GENERATOR_VERSION;
@@ -258,6 +258,9 @@ export class GrassManager {
 
 	/** Placement-affecting settings changed (density, spacing, heights): regenerate loaded chunks. */
 	notifySettingsChanged(): void {
+		// Apply the cap to saved worlds and live settings as well as new worlds.
+		this.settings.maxHeight = Math.min(1, this.settings.maxHeight);
+		this.settings.minHeight = Math.min(this.settings.minHeight, this.settings.maxHeight);
 		this.distantSyncKey = '';
 		this.distant?.notifySettingsChanged();
 		// Pending chunks may not have records yet. Drop their old revisions so the
@@ -267,6 +270,23 @@ export class GrassManager {
 		this.lastLoadRadius = -1;
 		for (const record of this.records.values())
 			this.queue.enqueue(record.chunkX, record.chunkZ, this.revision);
+	}
+
+	/** Local terrain strokes must not invalidate the entire visible meadow. */
+	notifyTerrainRegion(bounds: { minX: number; maxX: number; minZ: number; maxZ: number }): void {
+		this.terrainRevision = this.options.terrain.getRevision();
+		this.distant?.notifyTerrainRegion(bounds);
+		for (const record of this.records.values()) {
+			const x = record.chunkX * this.chunkSize,
+				z = record.chunkZ * this.chunkSize;
+			if (
+				x <= bounds.maxX + 1 &&
+				x + this.chunkSize >= bounds.minX - 1 &&
+				z <= bounds.maxZ + 1 &&
+				z + this.chunkSize >= bounds.minZ - 1
+			)
+				this.queue.enqueue(record.chunkX, record.chunkZ, this.revision);
+		}
 	}
 
 	notifyTerrainChanged(): void {
@@ -368,7 +388,7 @@ export class GrassManager {
 			: 0;
 		u.uGrassSize.value.set(
 			this.settings.minHeight,
-			Math.max(0.01, this.settings.maxHeight - this.settings.minHeight),
+			Math.max(0, this.settings.maxHeight - this.settings.minHeight),
 			this.settings.widthRatio,
 			crossedEnd
 		);

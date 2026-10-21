@@ -1,3 +1,5 @@
+import { createFurnitureGroup } from './FurnitureGeometry';
+import { pillarDefinition } from './PillarTypes';
 import * as THREE from 'three';
 import { compileBarrierLevel } from './BarrierGeometryCompiler';
 import { layoutBarrier } from './barrierLayout';
@@ -140,7 +142,10 @@ function buildWallPreview(
 	const thickness = Math.max(0.05, settings.wallThickness);
 	const openingWidth =
 		openings[0] !== undefined ? openings[0].maxU - openings[0].minU : settings.beamHeight;
-	const length = Math.max(3.2, openingWidth + 1.4);
+	const length = Math.max(
+		3.2,
+		openings[0]?.type === 'window' ? openingWidth * 2 + 0.8 : openingWidth + 1.4
+	);
 	const fitted = openings.map((opening, index) => {
 		const placed = fitOpening(
 			length,
@@ -514,7 +519,16 @@ export function buildPlacementPreviewModel(
 	materials: PlacementPreviewMaterials
 ): THREE.Group {
 	let group: THREE.Group;
-	if (toolId === 'window') {
+	if (toolId === 'pillar') {
+		const wood = materials.building.getMaterial('wall-beam', undefined);
+		group = new THREE.Group();
+		group.add(
+			createFurnitureGroup(
+				pillarDefinition(settings.pillar, { x: 0, y: 0, z: 0 }, null, 'pillar-preview'),
+				{ primary: wood, secondary: wood, accent: wood, emissive: wood }
+			)
+		);
+	} else if (toolId === 'window') {
 		const color = placementColorForTool(settings, 'window');
 		group = buildWallPreview(
 			settings,
@@ -522,6 +536,7 @@ export function buildPlacementPreviewModel(
 			[
 				{
 					id: 'preview-window',
+					shutters: { mode: settings.windowShutterMode ?? 'auto', side: 1 },
 					type: 'window',
 					minU: 0,
 					maxU: settings.windowWidth,
@@ -540,6 +555,7 @@ export function buildPlacementPreviewModel(
 			[
 				{
 					id: 'preview-door',
+					doorStyle: { double: settings.doorDouble ?? false, arched: settings.doorArched ?? false },
 					type: 'door',
 					minU: 0,
 					maxU: settings.doorWidth,
@@ -568,6 +584,16 @@ export function buildPlacementPreviewModel(
 
 	disableShadows(group);
 	return group;
+}
+
+/** Refresh fixed child matrices before measuring, so repeated resizes never re-centre stale bounds. */
+export function centerPlacementPreviewModel(group: THREE.Group): THREE.Box3 {
+	group.updateMatrixWorld(true);
+	const box = new THREE.Box3().setFromObject(group);
+	const center = box.getCenter(new THREE.Vector3());
+	group.position.sub(center);
+	group.updateMatrixWorld(true);
+	return box.translate(center.negate());
 }
 
 /** Disposes mesh/line geometries under a preview root. Shared glass / cached paint materials stay. */

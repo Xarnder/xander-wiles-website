@@ -1,3 +1,4 @@
+import type { PlayerInteractionPose } from '../player/PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import type { RemotePlayerView } from './NetSession';
 import { POSE_FLAGS } from './protocol';
@@ -55,7 +56,8 @@ export class RemoteAvatarRenderer {
 	constructor(
 		private readonly registerMaterial: (material: THREE.Material) => void,
 		private readonly excludeFromAo: (object: THREE.Object3D) => () => void,
-		private readonly surface?: CharacterSurface
+		private readonly surface?: CharacterSurface,
+		private readonly interactionPose?: (playerId: string) => PlayerInteractionPose | null
 	) {
 		this.group.name = 'remote-players';
 		this.registerMaterial(this.visorMaterial);
@@ -98,6 +100,8 @@ export class RemoteAvatarRenderer {
 				created = true;
 			}
 
+			const interaction = this.interactionPose?.(info.playerId);
+
 			const away = (frame.flags & POSE_FLAGS.away) !== 0;
 			const walking = Math.min(1, frame.speed / 4);
 			avatar.walkPhase =
@@ -116,7 +120,21 @@ export class RemoteAvatarRenderer {
 			avatar.body.visible = !detailed;
 			if (avatar.character) {
 				avatar.character.object.visible = detailed;
-				if (detailed) avatar.character.update(frame, deltaSeconds, distance, this.surface);
+				if (detailed) {
+					if (interaction) {
+						avatar.root.position.set(
+							interaction.anchor.x,
+							interaction.anchor.y,
+							interaction.anchor.z
+						);
+						avatar.root.rotation.y = interaction.yaw;
+						avatar.character.poseInteraction(interaction);
+					} else {
+						avatar.character.object.position.set(0, 0, 0);
+						avatar.character.object.rotation.x = 0;
+						avatar.character.update(frame, deltaSeconds, distance, this.surface);
+					}
+				}
 			}
 			avatar.root.visible =
 				avatar.root.position.distanceToSquared(this.cameraPosition) < DRAW_DISTANCE * DRAW_DISTANCE;

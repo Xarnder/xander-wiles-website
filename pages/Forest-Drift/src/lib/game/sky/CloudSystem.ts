@@ -24,7 +24,7 @@ const LAYER_RECIPES: readonly LayerRecipe[] = [
 	{
 		altitudeOffset: 0,
 		scaleMul: 1.0,
-		opacityMul: 1.0,
+		opacityMul: 1.1,
 		coverageBias: 0.0,
 		speedMul: 1.0,
 		useDirection: 1
@@ -32,7 +32,7 @@ const LAYER_RECIPES: readonly LayerRecipe[] = [
 	{
 		altitudeOffset: 55,
 		scaleMul: 0.55,
-		opacityMul: 0.7,
+		opacityMul: 0.8,
 		coverageBias: -0.08,
 		speedMul: 1.0,
 		useDirection: 2
@@ -163,7 +163,8 @@ const FRAGMENT_SHADER = /* glsl */ `
 		if (alpha <= 0.002) discard;
 
 		// Seen from below: thick cores are grey underneath, thin edges let light through and glow.
-		float thickness = smoothstep(uEdgeThreshold, uEdgeThreshold + 0.7, density);
+		// Reach a solid, shaded core sooner using the density already sampled above.
+		float thickness = smoothstep(uEdgeThreshold, uEdgeThreshold + 0.38, density);
 		// One step toward the sun on the large shapes only (cheap): where the cloud thins toward the
 		// sun, that side is lit.
 		float macroSun = fbm3((warped + uSunXZ * 0.045) * uMacroScale + uOffsetMacro);
@@ -177,7 +178,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 		color = mix(color, uCoolColor * (uBaseColor.r), uCoolTint * 0.2);
 
 		// Dense cores are nearly opaque; thin edges stay soft.
-		gl_FragColor = vec4(color, alpha * mix(0.75, 1.0, thickness) * uOpacity);
+		gl_FragColor = vec4(color, alpha * mix(0.92, 1.0, thickness) * uOpacity);
 	}
 `;
 
@@ -264,7 +265,7 @@ export class CloudSystem {
 
 		const baseColor = new THREE.Color(0xffffff).multiplyScalar(settings.brightness);
 		// Undersides: a cool grey (stronger than the old flat tint) so clouds read against a pale sky.
-		const shadowColor = new THREE.Color(0x8e9aaa)
+		const shadowColor = new THREE.Color(0x8190a3)
 			.multiplyScalar(settings.brightness)
 			.lerp(baseColor, 1 - Math.min(1, settings.shadowTint * 1.6));
 
@@ -278,7 +279,8 @@ export class CloudSystem {
 			u.uCoverage.value = settings.coverage + layer.recipe.coverageBias;
 			u.uEdgeThreshold.value = settings.edgeThreshold;
 			u.uEdgeSoftness.value = Math.max(0.02, settings.edgeSoftness * (0.5 + settings.softness));
-			u.uOpacity.value = settings.opacity * layer.recipe.opacityMul;
+			// Strengthen the lower decks without adding sheets, samples, or fragment coverage.
+			u.uOpacity.value = Math.min(1, settings.opacity * layer.recipe.opacityMul);
 			(u.uBaseColor.value as THREE.Color).copy(baseColor);
 			(u.uShadowColor.value as THREE.Color).copy(shadowColor);
 			u.uLightResponse.value = settings.lightResponse;

@@ -1,3 +1,5 @@
+import { createInteraction } from './MiniBuildInteractions';
+import type { MiniBuildInteractionType } from './MiniBuildTypes';
 /**
  * The starter library. Every design here is an ordinary MiniBuildDefinition built under the exact
  * player rules — ≤16 cuboids, 0.03125m grid, ≤4 materials, ≤4m bounds — and is validated by the same
@@ -45,6 +47,20 @@ const BOOK_RED = slot('Book Red', 'fabric', '#8B1E2D');
 const BOOK_BLUE = slot('Book Blue', 'fabric', '#1F3A5F');
 const CABINET = slot('Cabinet', 'wood', '#E8D5B5');
 
+const AUTHORED_INTERACTIONS: Record<
+	string,
+	[MiniBuildInteractionType, number, number, number, number][]
+> = {
+	chair: [['sit', 2, 4, 2, 180]],
+	'arm-chair': [['sit', 3.5, 4, 3.5, 180]],
+	stool: [['sit', 2, 6, 2, 180]],
+	bench: [
+		['sit', 1.5, 4, 1.5, 180],
+		['sit', 10.5, 4, 1.5, 180]
+	],
+	bed: [['lie', 6, 6, 9, 0]]
+};
+
 function design(
 	defaultId: string,
 	name: string,
@@ -66,6 +82,17 @@ function design(
 		id: `default-${defaultId}`,
 		name,
 		revision: 1,
+		interactionLocations: (AUTHORED_INTERACTIONS[defaultId] ?? []).map(
+			([type, x, y, z, rotationY], index) => ({
+				...createInteraction(type, {
+					x: x * AUTHORED_SCALE,
+					y: y * AUTHORED_SCALE,
+					z: z * AUTHORED_SCALE
+				}),
+				id: `${defaultId}-interaction-${index + 1}`,
+				rotationY
+			})
+		),
 		blocks,
 		materials: materials.map((entry) => ({ ...entry, material: { ...entry.material } })),
 		bounds: computeBounds(blocks),

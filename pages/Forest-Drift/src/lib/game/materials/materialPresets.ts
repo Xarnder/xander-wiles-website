@@ -28,6 +28,18 @@ export interface MaterialPreset {
 }
 
 export const MATERIAL_PRESETS: Readonly<Record<ProceduralMaterialType, MaterialPreset>> = {
+	fabric: {
+		variant: 'woven',
+		seed: 0xfa81c,
+		tileWidth: 0.125,
+		tileHeight: 0.125,
+		roughness: 0.96,
+		weathering: 0,
+		dirt: 0,
+		moss: 0,
+		variation: 0.35,
+		normalStrength: 0.65
+	},
 	plaster: {
 		variant: 'lime',
 		seed: 0x51a7,

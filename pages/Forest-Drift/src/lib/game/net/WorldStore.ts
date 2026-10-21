@@ -1,3 +1,4 @@
+import { validTerrainEditData } from '../terrain/TerrainEdits';
 import {
 	MAX_OP_JSON_BYTES,
 	MAX_OPS_PER_BATCH,
@@ -229,6 +230,12 @@ export class WorldStore {
 					const previous = fieldRevs[field];
 					const previousBy = previous?.by ?? current.createdBy;
 					const seen = op.seen?.[field] ?? 0;
+					if (current.kind === 'terrainTile' && previous && seen < previous.rev)
+						return {
+							ok: false,
+							reason: 'fit',
+							message: 'This terrain changed while you were digging. Try the stroke again.'
+						};
 					if (previousBy !== author.playerId && previous && seen < previous.rev) {
 						overwritten.push({
 							kind: current.kind,
@@ -470,6 +477,54 @@ function fitConflict(
 	row: StoredRow
 ): Extract<BatchResult, { ok: false }> | null {
 	const key = rowKey(row);
+	if (row.kind === 'terrainTile') {
+		if (!validTerrainEditData(row.data) || row.data.points.length > 256)
+			return { ok: false, reason: 'invalid', message: 'Invalid terrain tile.' };
+		const d = row.data;
+		const previous = new Map(
+			((rows.get(key)?.data.points ?? []) as [number, number, number][]).map((p) => [
+				`${p[0]},${p[1]}`,
+				p[2]
+			])
+		);
+		for (const p of d.points) {
+			if (`${Math.floor(p[0] / 16)},${Math.floor(p[1] / 16)}` !== row.id)
+				return { ok: false, reason: 'invalid', message: 'Terrain point outside tile.' };
+			for (const other of rows.values()) {
+				if (other.kind === 'terrainTile' && other.data.spacing !== d.spacing)
+					return { ok: false, reason: 'invalid', message: 'Terrain grid mismatch.' };
+				if (other.kind === 'foundation' && previous.get(`${p[0]},${p[1]}`) !== p[2]) {
+					const f = other.data,
+						minX = Number(f.minGridX),
+						maxX = Number(f.maxGridX),
+						minZ = Number(f.minGridZ),
+						maxZ = Number(f.maxGridZ);
+					const interior = p[0] > minX && p[0] < maxX && p[1] > minZ && p[1] < maxZ;
+					const contact = p[0] >= minX && p[0] <= maxX && p[1] >= minZ && p[1] <= maxZ;
+					if (interior || (contact && f.style === 'earth'))
+						return {
+							ok: false,
+							reason: 'fit',
+							message: 'A foundation protects this terrain. Try another point.'
+						};
+					const distance =
+						Math.hypot(
+							Math.max(minX - p[0], 0, p[0] - maxX),
+							Math.max(minZ - p[1], 0, p[1] - maxZ)
+						) * d.spacing;
+					if (contact && f.style !== 'earth') {
+						const old = previous.get(`${p[0]},${p[1]}`);
+						if (
+							p[2] > Math.max(old ?? -Infinity, Number(f.topY) - 0.05 + distance * 0.65) + 0.001 ||
+							p[2] < Math.min(old ?? Infinity, Number(f.topY) - 4 - distance * 0.65) - 0.001
+						)
+							return { ok: false, reason: 'fit', message: 'Stone retaining-wall limits reached.' };
+					}
+				}
+			}
+		}
+		return null;
+	}
 	const isOpening =
 		row.kind === 'wallOpening' || row.kind === 'pathOpening' || row.kind === 'roofOpening';
 	if (isOpening) {

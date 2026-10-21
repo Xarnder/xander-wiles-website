@@ -48,6 +48,7 @@ const DIGIT_TO_SLOT: Record<string, number> = {
 	Digit4: 4,
 	Digit5: 5,
 	Digit6: 6,
+	Digit7: 7,
 	Digit8: 8
 };
 
@@ -251,13 +252,14 @@ export class BuildToolManager {
 			return;
 		}
 		if (event.code === 'Escape') {
-			this.getActiveTool()?.onSecondaryAction();
+			if (this.getActiveToolId() !== 'shovel') this.getActiveTool()?.onSecondaryAction();
 		}
 	};
 
 	private readonly handleMouseDown = (event: MouseEvent) => {
 		if (this.locked || this.placementCustomizeOpen || this.placementHeightOpen) return;
 		if (this.isInputBlocked?.()) return;
+		if (this.getActiveToolId() === 'shovel' && !this.isPointerLocked()) return;
 		if (event.button === 0) {
 			// Ungate: while pointer lock is not yet engaged, this exact click is the one that
 			// acquires it (see FirstPersonController) — it must not also place a foundation, remove,
@@ -455,6 +457,10 @@ export class BuildToolManager {
 			if (!this.buildModeActive) this.setBuildMode(true);
 			this.setGlobalMode(this.globalMode === 'music' ? 'none' : 'music');
 		}
+	}
+
+	isEditingWorld(): boolean {
+		return this.buildModeActive || this.globalMode !== 'none';
 	}
 
 	isRemoveModeActive(): boolean {
@@ -656,6 +662,7 @@ export class BuildToolManager {
 		const next = open && this.canOpenPlacementCustomize();
 		if (next === this.placementCustomizeOpen) return;
 		this.placementCustomizeOpen = next;
+		if (next) this.getActiveTool()?.prepareForCustomize?.();
 		if (next && typeof document !== 'undefined') document.exitPointerLock?.();
 		this.onPlacementCustomizeChange?.(next);
 		if (!next && this.globalMode === 'move') {
@@ -674,6 +681,7 @@ export class BuildToolManager {
 		const next = open && this.canOpenPlacementHeight();
 		if (next === this.placementHeightOpen) return;
 		this.placementHeightOpen = next;
+		if (next) this.getActiveTool()?.prepareForCustomize?.();
 		if (next && typeof document !== 'undefined') document.exitPointerLock?.();
 		this.onPlacementHeightChange?.(next);
 	}

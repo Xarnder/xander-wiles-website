@@ -1,3 +1,4 @@
+import { paintFabric } from './generators/fabric';
 import { paintGlass, paintGrass, paintGround } from './generators/ground';
 import { paintPlaster } from './generators/plaster';
 import { paintSlate } from './generators/slate';
@@ -26,6 +27,7 @@ interface GeneratorEntry {
  * generator and one entry here — no Three.js, cache or world-generation code changes.
  */
 const GENERATORS: Readonly<Record<ProceduralMaterialType, GeneratorEntry>> = {
+	fabric: { paint: paintFabric, resolutionScale: 0.25, cavityAo: 0, cavityRadius: 0.001 },
 	plaster: { paint: paintPlaster, resolutionScale: 1, cavityAo: 120, cavityRadius: 0.01 },
 	timber: { paint: paintTimber, resolutionScale: 0.5, cavityAo: 150, cavityRadius: 0.006 },
 	slate: { paint: paintSlate, resolutionScale: 1, cavityAo: 60, cavityRadius: 0.025 },

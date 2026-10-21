@@ -1,7 +1,17 @@
 import { expect, type Page } from '@playwright/test';
 
+/** Wait for hydration, then follow the real landing-menu route into Worlds. */
+export async function openWorldsScreen(page: Page): Promise<void> {
+	await expect(page.getByTestId('landing-menu').or(page.getByTestId('worlds-screen'))).toBeVisible({
+		timeout: 30000
+	});
+	if (await page.getByTestId('landing-menu').isVisible())
+		await page.getByRole('button', { name: 'Worlds', exact: true }).click();
+	await expect(page.getByTestId('worlds-screen')).toBeVisible();
+}
+
 /**
- * The game now opens on the Worlds screen rather than dropping straight into a world, so every test
+ * The game opens on the main menu rather than dropping straight into a world, so every test
  * that wants to be *inside* a world starts here. Kept in one place so the entry flow can change
  * without touching every gameplay test.
  */
@@ -9,7 +19,7 @@ export async function createAndEnterWorld(
 	page: Page,
 	{ name = 'Test World', seed = 'test-seed-001' }: { name?: string; seed?: string } = {}
 ): Promise<void> {
-	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 15_000 });
+	await openWorldsScreen(page);
 	await page.getByTestId('new-world-button').click();
 	await expect(page.getByTestId('create-world-dialog')).toBeVisible();
 	await page.getByTestId('create-world-name').fill(name);
@@ -21,6 +31,7 @@ export async function createAndEnterWorld(
 		timeout: 20_000
 	});
 	await expect(page.getByTestId('save-indicator')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 20_000 });
 }
 
 /** Turns on the optional render-stats overlay so tests can read FPS / geometry counts. */
@@ -37,11 +48,13 @@ export async function enableRenderStats(page: Page): Promise<void> {
 
 /** Opens an existing world from the Worlds list by its displayed name. */
 export async function openWorldNamed(page: Page, name: string): Promise<void> {
+	await openWorldsScreen(page);
 	const card = page.getByTestId('world-card').filter({ hasText: name }).first();
 	await card.getByTestId('play-world').click();
 	await expect(page.getByTestId('canvas-container').locator('canvas')).toBeVisible({
 		timeout: 20_000
 	});
+	await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 20_000 });
 }
 
 /** Opens the per-world overflow menu on the Worlds screen. */

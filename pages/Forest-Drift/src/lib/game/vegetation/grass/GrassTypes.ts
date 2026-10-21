@@ -80,7 +80,7 @@ export function createDefaultGrassSettings(): GrassSettings {
 		lod2Density: 0.22,
 		distantPatches: true,
 		minHeight: 0.7,
-		maxHeight: 1.8,
+		maxHeight: 1,
 		widthRatio: 1.55,
 		windStrength: 1,
 		alphaTest: 0.5,

@@ -1,3 +1,5 @@
+import { furnitureSecondaryKind } from './furnitureSurfaceKinds';
+import { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import type { BuildingSettings } from './FoundationTypes';
@@ -19,7 +21,8 @@ export class FurniturePreviewRenderer {
 	private readonly scene = new THREE.Scene();
 	private readonly camera = new THREE.PerspectiveCamera(32, 1, 0.08, 40);
 	private readonly content = new THREE.Group();
-	private readonly materials = new BuildingMaterialManager();
+	private readonly procedural = new ProceduralMaterialLibrary({ quality: 'low' });
+	private readonly materials = new BuildingMaterialManager(undefined, this.procedural);
 	private readonly flameMaterial = new THREE.MeshStandardMaterial({
 		color: 0xffb347,
 		emissive: 0xff6a1a,
@@ -90,7 +93,7 @@ export class FurniturePreviewRenderer {
 				item.material ?? furnitureColorMaterial(undefined, entry.defaultPrimary)
 			),
 			secondary: this.materials.getMaterial(
-				'furniture-accent',
+				furnitureSecondaryKind(item.kind),
 				item.secondaryMaterial ?? furnitureColorMaterial(undefined, entry.defaultSecondary)
 			),
 			accent: this.materials.getMaterial(
@@ -118,6 +121,7 @@ export class FurniturePreviewRenderer {
 
 		this.clearContent();
 		this.materials.dispose();
+		this.procedural.dispose();
 		this.flameMaterial.dispose();
 		this.scene.traverse((child) => {
 			if (child instanceof THREE.Light) child.dispose();

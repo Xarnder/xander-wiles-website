@@ -1,3 +1,4 @@
+import { validTerrainEditData } from '../terrain/TerrainEdits';
 import { validateCreatureWorldState } from '../creatures/CreaturePersistence';
 import { validateMusic } from '../music/MusicValidation';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
@@ -63,6 +64,8 @@ export const IMPORT_LIMITS = {
 	/** Uncompressed world JSON size ceiling for an import, in bytes. */
 	worldJsonBytes: 64 * 1024 * 1024,
 	/** Compressed package size ceiling for an import, in bytes. */
+	manifestBytes: 64 * 1024,
+	thumbnailBytes: 8 * 1024 * 1024,
 	packageBytes: 32 * 1024 * 1024
 } as const;
 
@@ -109,6 +112,27 @@ function validateOpening(value: unknown, where: string): ValidationResult<WallOp
 		if (!isFiniteNumber(value[key]))
 			return fail(`${where}: opening ${key} must be a finite number`);
 	}
+	if (
+		value.doorStyle !== undefined &&
+		(!isRecord(value.doorStyle) ||
+			typeof value.doorStyle.double !== 'boolean' ||
+			typeof value.doorStyle.arched !== 'boolean')
+	)
+		return fail(`${where}: invalid door style`);
+	if (value.shutters !== undefined) {
+		if (
+			!isRecord(value.shutters) ||
+			!['auto', 'manual', 'off'].includes(String(value.shutters.mode))
+		)
+			return fail(`${where}: invalid shutter mode`);
+		if (
+			value.shutters.side !== undefined &&
+			value.shutters.side !== 1 &&
+			value.shutters.side !== -1
+		)
+			return fail(`${where}: invalid shutter side`);
+	}
+
 	const material = validateMaterial(value.material, where);
 	if (!material.ok) return material;
 	return { ok: true, value: value as unknown as WallOpeningDefinition };
@@ -425,6 +449,13 @@ function validateFloorDetail(
 
 function validateFoundation(value: unknown, where: string): ValidationResult<FoundationDefinition> {
 	if (!isRecord(value)) return fail(`${where}: foundation must be an object`);
+	if (value.style !== undefined && value.style !== 'stone' && value.style !== 'earth')
+		return fail(`${where}: unknown foundation style`);
+	if (
+		value.blendWidth !== undefined &&
+		(!isFiniteNumber(value.blendWidth) || value.blendWidth < 1 || value.blendWidth > 1024)
+	)
+		return fail(`${where}: invalid earth blend width`);
 	if (!isNonEmptyString(value.id)) return fail(`${where}: foundation id missing`);
 	for (const key of ['minGridX', 'maxGridX', 'minGridZ', 'maxGridZ', 'topY', 'bottomY'] as const) {
 		if (!isFiniteNumber(value[key]))
@@ -640,6 +671,11 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	}
 
 	if (!isRecord(value.proceduralOverrides)) return fail('World proceduralOverrides missing');
+	if (
+		value.proceduralOverrides.terrainEdits !== undefined &&
+		!validTerrainEditData(value.proceduralOverrides.terrainEdits)
+	)
+		return fail('Invalid terrain edits');
 	const removedTreeIds = value.proceduralOverrides.removedTreeIds;
 	if (!Array.isArray(removedTreeIds))
 		return fail('proceduralOverrides.removedTreeIds must be an array');

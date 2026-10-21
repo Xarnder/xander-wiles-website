@@ -1,3 +1,5 @@
+import { automaticShutterSide } from './windowShutterMath';
+import type { WallPathDefinition as ShutterWallLoop } from './WallPathTypes';
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
@@ -59,6 +61,7 @@ export interface WallPathManagerOptions {
 	/** The one shared window-glass material — optional, defaulting to `getGlassMaterial()`'s own lazily-created singleton. */
 	glassMaterial?: THREE.Material;
 	getRoomLids?: (foundationId: string) => readonly RoomLid[];
+	getShutterLoops?: (foundationId: string) => readonly ShutterWallLoop[];
 }
 
 /**
@@ -79,13 +82,14 @@ export class WallPathManager {
 	private readonly buildingSettings: BuildingSettings;
 	private readonly glassMaterial: THREE.Material;
 	private readonly getRoomLids?: (foundationId: string) => readonly RoomLid[];
+	private readonly getShutterLoops?: (foundationId: string) => readonly ShutterWallLoop[];
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly paths = new Map<string, PathEntry>();
 	/** segmentId -> owning path id, so a raycast hit's segmentId resolves back to its path in O(1). */
 	private readonly segmentToPath = new Map<string, string>();
-	/** openingId -> its door's hingePivot — mirrors WallManager; `DoorInteractionController` reads this. */
-	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
+	/** Opening id -> door hinge or shutter assembly, for shared hover targeting and animation. */
+	private readonly openingInteractionPivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: WallPathManagerOptions) {
@@ -96,6 +100,7 @@ export class WallPathManager {
 		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
 		this.getRoomLids = options.getRoomLids;
+		this.getShutterLoops = options.getShutterLoops;
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -213,11 +218,7 @@ export class WallPathManager {
 			const segmentDefinition = definition.segments.find((s) => s.id === segment.segmentId);
 			const existingVisuals = existing?.openingVisuals.get(segment.segmentId);
 			if (existingVisuals) {
-				existingVisuals.traverse((child) => {
-					if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
-						this.doorHingePivots.delete(child.userData.openingId);
-					}
-				});
+				clearOpeningInteractionPivotsFrom(existingVisuals, this.openingInteractionPivots);
 				disposeOpeningVisual(existingVisuals);
 			}
 			const visualsGroup = new THREE.Group();
@@ -230,11 +231,33 @@ export class WallPathManager {
 					definition.wallThickness,
 					this.buildingSettings,
 					this.materialManager,
-					this.glassMaterial
+					this.glassMaterial,
+					automaticShutterSide(
+						{ x: segment.localX, z: segment.localZ },
+						{
+							x: segment.localX + Math.cos(segment.headingRadians) * segment.length,
+							z: segment.localZ + Math.sin(segment.headingRadians) * segment.length
+						},
+						(opening.minU + opening.maxU) / 2,
+						definition.wallThickness,
+						definition.baseY,
+						definition.wallHeight,
+						lids,
+						[
+							...(this.getShutterLoops?.(definition.foundationId) ??
+								this.getPathsForFoundation(definition.foundationId)),
+							definition
+						],
+						this.getBuildingGridSize()
+					),
+					this.materialManager.getMaterial('wall', segmentDefinition?.material)
 				);
 				if (!visualResult) continue;
 				visualsGroup.add(visualResult.object);
-				if (visualResult.hingePivot) this.doorHingePivots.set(opening.id, visualResult.hingePivot);
+				if (visualResult.hingePivot)
+					this.openingInteractionPivots.set(opening.id, visualResult.hingePivot);
+				if (visualResult.shutterAssembly)
+					this.openingInteractionPivots.set(opening.id, visualResult.shutterAssembly);
 			}
 			buildingRoot.add(visualsGroup);
 			openingVisuals.set(segment.segmentId, visualsGroup);
@@ -303,7 +326,10 @@ export class WallPathManager {
 				}
 			}
 			for (const [segmentId, group] of existing.openingVisuals) {
-				if (!openingVisuals.has(segmentId)) disposeOpeningVisual(group);
+				if (!openingVisuals.has(segmentId)) {
+					clearOpeningInteractionPivotsFrom(group, this.openingInteractionPivots);
+					disposeOpeningVisual(group);
+				}
 			}
 			for (const [segmentId, group] of existing.beamVisuals ?? []) {
 				if (!beamVisuals.has(segmentId)) disposeOpeningVisual(group);
@@ -359,7 +385,7 @@ export class WallPathManager {
 		for (const group of entry.beamVisuals.values()) disposeOpeningVisual(group);
 		for (const group of entry.skirting.values()) disposeSkirting(group);
 		for (const segment of entry.definition.segments) {
-			for (const opening of segment.openings) this.doorHingePivots.delete(opening.id);
+			for (const opening of segment.openings) this.openingInteractionPivots.delete(opening.id);
 		}
 		this.paths.delete(pathId);
 		return true;
@@ -378,11 +404,20 @@ export class WallPathManager {
 
 	/** The hinge pivot for a door opening on a path segment, if it has one — mirrors `WallManager.getDoorHingePivot`. */
 	getDoorHingePivot(openingId: string): THREE.Object3D | undefined {
-		return this.doorHingePivots.get(openingId);
+		const pivot = this.openingInteractionPivots.get(openingId);
+		return pivot?.userData.interactionKind === 'shutters' ? undefined : pivot;
 	}
 
 	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
-		return this.doorHingePivots;
+		return new Map(
+			[...this.openingInteractionPivots].filter(
+				([, pivot]) => pivot.userData.interactionKind !== 'shutters'
+			)
+		);
+	}
+
+	getOpeningInteractionPivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.openingInteractionPivots;
 	}
 
 	removePathsForFoundation(foundationId: string): void {
@@ -528,4 +563,18 @@ export class WallPathManager {
 		this.buildingRoots.clear();
 		this.group.clear();
 	}
+}
+
+function clearOpeningInteractionPivotsFrom(
+	group: THREE.Object3D,
+	pivots: Map<string, THREE.Object3D>
+): void {
+	group.traverse((child) => {
+		if (
+			(child.name === 'door-hinge-pivot' || child.name === 'window-shutters') &&
+			typeof child.userData.openingId === 'string'
+		) {
+			pivots.delete(child.userData.openingId);
+		}
+	});
 }

@@ -1,3 +1,5 @@
+import { createDefaultPillarSettings, type PillarSettings } from './PillarTypes';
+import type { WindowShutterMode } from './windowShutterMath';
 /**
  * Building-system types. Framework- and Three.js-free, same rule as terrain/TerrainSettings.ts —
  * this is plain, serializable world-state data plus the dev-only settings that control the
@@ -39,6 +41,10 @@ export interface TerrainGridPoint {
  * same "undefined = inherit the default" convention this mirrors.
  */
 export interface FoundationDefinition {
+	/** Missing in older saves means the original stone foundation. */
+	style?: 'stone' | 'earth';
+	/** World metres of smooth terrain transition outside an earth pad. */
+	blendWidth?: number;
 	id: string;
 	minGridX: number;
 	maxGridX: number;
@@ -50,6 +56,7 @@ export interface FoundationDefinition {
 }
 
 export type ToolId =
+	| 'shovel'
 	| 'foundation'
 	| 'wall'
 	| 'window'
@@ -58,6 +65,7 @@ export type ToolId =
 	| 'polygon-wall'
 	| 'barrier'
 	| 'skirting'
+	| 'pillar'
 	| 'ceiling'
 	| 'floor'
 	| 'flat-roof'
@@ -102,9 +110,9 @@ export interface HotbarSlot {
 }
 
 /**
- * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing/Skirting · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
+ * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing/Skirting/Wooden Pillars · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
  * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Place Object (Mini Builds + lights, chosen in
- * the Object Library with `E`). Slot 7 is unused.
+ * the Object Library with `E`). Slot 7 is the Shovel.
  */
 export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 	{ slot: 1, variants: [{ toolId: 'foundation', label: 'Foundation' }] },
@@ -114,7 +122,8 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 			{ toolId: 'polygon-wall', label: 'Poly Wall' },
 			{ toolId: 'wall', label: 'Wall' },
 			{ toolId: 'barrier', label: 'Fence / Rail' },
-			{ toolId: 'skirting', label: 'Skirting' }
+			{ toolId: 'skirting', label: 'Skirting' },
+			{ toolId: 'pillar', label: 'Wooden Pillars' }
 		]
 	},
 	{
@@ -143,6 +152,7 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 			{ toolId: 'floor-tiles', label: 'Tiles' }
 		]
 	},
+	{ slot: 7, variants: [{ toolId: 'shovel', label: 'Shovel' }] },
 	{ slot: 8, variants: [{ toolId: 'place-object', label: 'Place Object' }] }
 ];
 
@@ -188,6 +198,8 @@ export function isFloorDetailTool(id: ToolId): id is FloorDetailToolId {
 }
 
 export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
+	'shovel',
+	'foundation',
 	'window',
 	'door',
 	'beam',
@@ -195,6 +207,7 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'polygon-wall',
 	'barrier',
 	'skirting',
+	'pillar',
 	'stairs',
 	'floor-carpet',
 	'floor-path',
@@ -207,6 +220,8 @@ export type CustomizablePlacementToolId = (typeof CUSTOMIZABLE_PLACEMENT_TOOLS)[
 
 export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlacementToolId {
 	return (
+		id === 'shovel' ||
+		id === 'foundation' ||
 		id === 'window' ||
 		id === 'door' ||
 		id === 'beam' ||
@@ -214,6 +229,7 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'polygon-wall' ||
 		id === 'barrier' ||
 		id === 'skirting' ||
+		id === 'pillar' ||
 		id === 'stairs' ||
 		id === 'torch' ||
 		id === 'place-object' ||
@@ -296,6 +312,7 @@ export interface BuildingSettings {
 	foundationGridDisplayRadius: number;
 	maxFoundationCells: number;
 	foundationUndergroundDepth: number;
+	foundationStyle: 'stone' | 'earth';
 	showFoundationHighestPoint: boolean;
 	showFoundationBounds: boolean;
 	previewOpacity: number;
@@ -310,14 +327,18 @@ export interface BuildingSettings {
 	showWallBounds: boolean;
 	showCollisionGeometry: boolean;
 
+	pillar: PillarSettings;
 	windowWidth: number;
 	windowHeight: number;
 	/** Bottom of the next window, metres above the wall base. Copied onto the opening as `minY`. */
 	windowSillHeight: number;
 	/** Next-window frame colour (`#RRGGBB`). Copied onto the opening at place time. */
 	windowColor: string;
+	windowShutterMode: WindowShutterMode;
 
 	doorWidth: number;
+	doorDouble: boolean;
+	doorArched: boolean;
 	doorHeight: number;
 	/** Bottom of the next door, metres above the wall base (`0` = this storey's floor). Copied onto the opening as `minY`. */
 	doorSillHeight: number;
@@ -573,6 +594,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		foundationGridDisplayRadius: 5,
 		maxFoundationCells: 64,
 		foundationUndergroundDepth: 1,
+		foundationStyle: 'stone',
 		showFoundationHighestPoint: true,
 		showFoundationBounds: false,
 		previewOpacity: 0.45,
@@ -587,12 +609,16 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		showWallBounds: false,
 		showCollisionGeometry: false,
 
+		pillar: createDefaultPillarSettings(),
+		windowShutterMode: 'auto',
 		windowWidth: 1.2,
 		windowHeight: 1.2,
 		windowSillHeight: 0.9,
 		windowColor: DEFAULT_WINDOW_COLOR,
 
 		doorWidth: 1.2,
+		doorDouble: false,
+		doorArched: false,
 		doorHeight: 2.1,
 		doorSillHeight: 0,
 		doorColor: DEFAULT_DOOR_COLOR,

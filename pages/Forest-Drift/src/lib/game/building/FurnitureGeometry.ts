@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { furnitureBasis } from './furnitureMath';
-import type { FurnitureConstruction, FurnitureMaterialSlot, FurniturePrimitive } from './furnitureConstruction';
+import type {
+	FurnitureConstruction,
+	FurnitureMaterialSlot,
+	FurniturePrimitive
+} from './furnitureConstruction';
 import { buildFurnitureConstruction } from './furnitureConstruction';
 import { resolveFurnitureBuildInput } from './furnitureCatalogue';
 import type { FurnitureDefinition } from './FurnitureTypes';
@@ -54,7 +58,28 @@ export function createFurnitureSlotGeometries(
 		emissive: []
 	};
 	for (const primitive of construction.primitives) {
-		buckets[primitive.material].push(primitiveToGeometry(primitive));
+		const geometry = primitiveToGeometry(primitive);
+		// Metre-scaled UVs keep the weave and wood grain the same size on every furniture part.
+		const positions = geometry.getAttribute('position');
+		const normals = geometry.getAttribute('normal');
+		const uv = geometry.getAttribute('uv');
+		if (primitive.shape === 'box') {
+			for (let i = 0; i < positions.count; i++) {
+				const nx = Math.abs(normals.getX(i)),
+					ny = Math.abs(normals.getY(i));
+				uv.setXY(
+					i,
+					nx > 0.5 ? positions.getZ(i) : positions.getX(i),
+					ny > 0.5 ? positions.getZ(i) : positions.getY(i)
+				);
+			}
+		} else {
+			geometry.computeBoundingBox();
+			const size = geometry.boundingBox!.getSize(new THREE.Vector3());
+			for (let i = 0; i < uv.count; i++)
+				uv.setXY(i, uv.getX(i) * Math.PI * Math.max(size.x, size.z), uv.getY(i) * size.y);
+		}
+		buckets[primitive.material].push(geometry);
 	}
 	const result: FurnitureSlotGeometries = {};
 	for (const slot of Object.keys(buckets) as FurnitureMaterialSlot[]) {
@@ -111,7 +136,10 @@ export function composeFurnitureMatrix(
 export function createTorchBodyGeometry(): THREE.BufferGeometry {
 	const slots = createFurnitureSlotGeometries(
 		buildFurnitureConstruction(
-			resolveFurnitureBuildInput({ kind: 'torch', dimensions: { width: 0.12, depth: 0.12, height: 0.5 } })
+			resolveFurnitureBuildInput({
+				kind: 'torch',
+				dimensions: { width: 0.12, depth: 0.12, height: 0.5 }
+			})
 		)
 	);
 	const body = slots.primary;
@@ -124,7 +152,10 @@ export function createTorchBodyGeometry(): THREE.BufferGeometry {
 export function createTorchFlameGeometry(): THREE.BufferGeometry {
 	const slots = createFurnitureSlotGeometries(
 		buildFurnitureConstruction(
-			resolveFurnitureBuildInput({ kind: 'torch', dimensions: { width: 0.12, depth: 0.12, height: 0.5 } })
+			resolveFurnitureBuildInput({
+				kind: 'torch',
+				dimensions: { width: 0.12, depth: 0.12, height: 0.5 }
+			})
 		)
 	);
 	slots.primary?.dispose();

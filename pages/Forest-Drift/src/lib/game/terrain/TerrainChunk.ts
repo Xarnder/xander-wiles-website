@@ -167,7 +167,8 @@ export class TerrainChunk {
 		debugView: TerrainDebugView = 'normal',
 		vegetationRegionSampler: VegetationRegionSampler | null = null,
 		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null,
-		groundTint: TerrainGroundTint | null = null
+		groundTint: TerrainGroundTint | null = null,
+		dirty?: { minX: number; maxX: number; minZ: number; maxZ: number }
 	): Generator<void> {
 		this.chunkX = chunkX;
 		this.chunkZ = chunkZ;
@@ -185,8 +186,10 @@ export class TerrainChunk {
 
 		for (let zi = 0; zi < verticesPerSide; zi++) {
 			const worldZ = originZ + zi * step;
+			if (dirty && (worldZ < dirty.minZ - 1 || worldZ > dirty.maxZ + 1)) continue;
 			for (let xi = 0; xi < verticesPerSide; xi++) {
 				const worldX = originX + xi * step;
+				if (dirty && (worldX < dirty.minX - 1 || worldX > dirty.maxX + 1)) continue;
 				const vertexIndex = zi * verticesPerSide + xi;
 				const p = vertexIndex * 3;
 
@@ -265,13 +268,27 @@ export class TerrainChunk {
 				this.uvs[uvIndex] = worldX / 8;
 				this.uvs[uvIndex + 1] = worldZ / 8;
 			}
+			if (dirty) {
+				const first = Math.max(0, Math.ceil((dirty.minX - 1 - originX) / step));
+				const last = Math.min(resolution, Math.floor((dirty.maxX + 1 - originX) / step));
+				if (last >= first)
+					for (const name of ['position', 'normal', 'color', 'aShore']) {
+						(this.geometry.getAttribute(name) as THREE.BufferAttribute).addUpdateRange(
+							(zi * verticesPerSide + first) * 3,
+							(last - first + 1) * 3
+						);
+					}
+			}
 			yield;
 		}
+		if (!dirty)
+			for (const name of ['position', 'normal', 'color', 'aShore'])
+				(this.geometry.getAttribute(name) as THREE.BufferAttribute).clearUpdateRanges();
 
 		this.geometry.attributes.position.needsUpdate = true;
 		this.geometry.attributes.normal.needsUpdate = true;
 		this.geometry.attributes.color.needsUpdate = true;
-		this.geometry.attributes.uv.needsUpdate = true;
+		if (!dirty) this.geometry.attributes.uv.needsUpdate = true;
 		this.geometry.attributes.aShore.needsUpdate = true;
 		this.geometry.computeBoundingBox();
 		this.geometry.computeBoundingSphere();

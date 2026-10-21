@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clampBlockSize, EDITOR_ERRORS, MiniBuildEditorState } from '../MiniBuildEditorState';
-import { blockBox, effectiveSize, flatAxis, isPlaneBlock } from '../miniBuildGrid';
+import { blockBox, effectiveSize, flatAxis, isPlaneBlock, cloneDefinition } from '../miniBuildGrid';
+import { createInteraction } from '../MiniBuildInteractions';
 import { MINI_BUILD_LIMITS } from '../MiniBuildTypes';
 import { testDefinition } from './miniBuildFixtures';
 
@@ -213,4 +214,44 @@ describe('MiniBuildEditorState', () => {
 	it('refuses to save an empty design', () => {
 		expect(MiniBuildEditorState.createNew().validateForSave().ok).toBe(false);
 	});
+});
+
+/** Svelte's $state wraps the template definition and its nested arrays in proxies. */
+function reactiveProxy<T extends object>(value: T): T {
+	return new Proxy(value, {
+		get(target, key, receiver) {
+			const child = Reflect.get(target, key, receiver);
+			return child && typeof child === 'object' ? reactiveProxy(child) : child;
+		}
+	});
+}
+
+it('opens a reactive template with an empty interaction list without a DataCloneError', () => {
+	const definition = testDefinition([[0, 0, 0, 8, 8, 8]]);
+	definition.interactionLocations = [];
+	expect(() =>
+		MiniBuildEditorState.fromDefinition(reactiveProxy(definition), { asTemplate: true })
+	).not.toThrow();
+});
+
+it('copies nested reactive interactions independently and supports duplicate, undo, redo and draft export', () => {
+	const definition = testDefinition([[0, 0, 0, 8, 8, 8]]);
+	definition.interactionLocations = [createInteraction('sit', { x: 8, y: 16, z: 8 })];
+	const proxy = reactiveProxy(definition);
+	const editor = MiniBuildEditorState.fromDefinition(proxy, { asTemplate: true });
+	const clone = cloneDefinition(proxy);
+	expect(() => structuredClone(editor.toDraft())).not.toThrow();
+	expect(() => structuredClone(clone)).not.toThrow();
+	clone.interactionLocations![0].collider.sizeGrid.x += 20;
+	expect(definition.interactionLocations[0].collider.sizeGrid.x).not.toBe(
+		clone.interactionLocations![0].collider.sizeGrid.x
+	);
+	editor.selectInteraction(editor.getInteractions()[0].id);
+	expect(editor.duplicateInteraction().ok).toBe(true);
+	expect(editor.getInteractions()).toHaveLength(2);
+	editor.undo();
+	expect(editor.getInteractions()).toHaveLength(1);
+	editor.redo();
+	expect(editor.getInteractions()).toHaveLength(2);
+	expect(definition.interactionLocations).toHaveLength(1);
 });

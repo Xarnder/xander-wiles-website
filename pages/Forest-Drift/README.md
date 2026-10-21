@@ -54,6 +54,9 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `2` then `↑`/`↓` to Skirting — draw skirting boards along a wall's centre line; each board goes on
   the wall face toward you, offset by half the wall found on that line (`O` switches to a manual
   offset, `E` sets offset, height, depth and colour) — see "Skirting"
+- `2` then `↑`/`↓` to Wooden Pillars (fifth subtool) — place vertical timber posts on the building
+  grid at the selected storey; `E` chooses square/circular, height, thickness, and independent
+  top/bottom base widths, heights, and on/off settings
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up
@@ -438,6 +441,51 @@ authoritatively — `openingEdgeMargin` (clearance from the wall's own ends/top/
 opening is an opening regardless of type. Only a _confirmed_ click rebuilds the wall's actual
 geometry — hovering never touches it — and only that one wall regenerates, never every wall in the
 world.
+
+### Double and arched doors
+
+The Door **E / Customise** modal offers **Single / Double** leaves and **Rectangular / Arched**
+shapes independently. Width is the total doorway width. The preview updates immediately; these
+choices are copied onto newly placed doors, including doors in polygon walls and roof gables.
+Older doors remain single and rectangular. Style survives save/load and JSON import/export.
+
+Double doors have opposite hinges and paired handles. **K** and the touch Open/Close button swing
+both halves together using the existing shared session state. Arched leaves follow one continuous
+curve across the pair, surrounded by a curved timber frame and matching wall infill at the upper
+corners. Fixed corner colliders remain when the leaves are open; there is no raised threshold.
+
+### Outdoor window shutters
+
+Every window, including older saved openings and gable windows, defaults to two open wooden
+shutters. Each panel is half the opening width and matches its height. Planks and cross rails
+share one merged mesh per leaf and the cached timber material. Hinges line up with the outer
+frame edges, with no lateral gap. Aim at any part of the window and press **K**, or tap the
+**Open / Close Shutters** touch button, to swing both leaves outward together. Animation reverses
+smoothly and keeps its current pose through wall/frame rebuilds. Online sessions share shutter
+state, including with players who join later. Shutters do not change the opening, glass, or collision.
+
+The Window **E / Customise** panel offers **Automatic**, **Manual**, and **Off**. Automatic probes
+both wall faces against same-storey closed polygon wall paths, then ceiling/floor lids, to infer
+the outside. Ambiguous isolated walls use a stable default face; Manual chooses the face whose
+normal points towards the player and saves that side with the window, so walking around it does
+not flip the shutters. Roof/gable faces already provide an outward normal. Off hides only the
+shutters. These choices apply to the next placement; **Apply shutters to window in view** updates
+one existing window under the crosshair, retaining its dimensions and colour. Mode and manual
+side survive save/load and import/export. Missing shutter metadata on older windows means Auto.
+
+### Wooden pillars (slot 2, fifth tool)
+
+`PillarTool.ts` targets the same foundation-local grid/construction plane as walls, including
+upper storeys. Defaults are a square 0.25m shaft, 3m total height, and separate 0.4m × 0.12m
+wooden top/bottom bases. The E panel offers circular shafts/bases, total height, shaft thickness,
+independent base widths/heights/on/off, reset, and a live preview. Caps are clamped so the shaft
+always has positive height; duplicate posts at the same grid point/storey are rejected.
+
+Pillars use the existing placed-object storage (`FurnitureDefinition.kind = 'wooden-pillar'`),
+with authored settings in `parameters`. They stay out of the furniture catalogue because slot 2
+owns their editor. This reuses world import/export, online replication, undo, removal, painting,
+move/copy, and foundation cascade removal. One merged timber mesh contains the shaft and caps;
+three height-aware collision boxes keep wider caps from widening the entire shaft collider.
 
 ### Collision (`wallCollision.ts`)
 
@@ -1343,6 +1391,22 @@ crossed) underside. `tests/game.e2e.ts` confirms the hotbar's Ceiling/Floor/Roof
 Levels/Slabs GUI folders render with no console errors, plus that the on-screen floor selector stays
 hidden until a foundation is actually targeted (never shows a misleading "Ground Floor" for a world
 with no foundations at all) and that Page Up/Page Down never throw with no active foundation yet.
+
+### Export/import reliability
+
+Exports of an open world capture its current live content directly, including unsaved edits when
+local storage is full. Exporting does not require a successful local write. Packages carry authored
+buildings and materials, door styles, shutters, pillars/furniture, Mini Build designs and interactions,
+music, persistent creature recipes, environment settings, player state, and procedural-world deltas.
+Generated meshes and shared application assets are rebuilt on load.
+
+Imports always use a fresh local world id, including repeated or simultaneous imports and packages
+of the built-in world. A thumbnail storage/read failure does not invalidate the world itself.
+Extraction accepts only the expected archive entries, rejects duplicates, and checks declared sizes
+before allocating decompression buffers: 32 MiB package, 64 MiB world JSON, 64 KiB manifest, and
+8 MiB thumbnail. Checksum verification is mandatory, malformed data returns an error, and exported
+packages obey the same limits. Chromium and WebKit portability tests cover upload, durable storage,
+download, content equality, reimport, and corrupt-file handling through the UI.
 
 ### Not implemented yet
 
@@ -3453,8 +3517,8 @@ no plant, species or buffer is ever saved — they regenerate from the seed.
 `src/lib/game/sky/` adds three independent, framework-free systems, all driven from one
 `SkySettings` object (`SkyTypes.ts`) and one GUI folder (`TerrainDebugGui.addSkyFolder()`). None of
 them touch terrain or vegetation generation — `ThreeScene` calls `applySkySettings()` from the sky
-GUI's single `onChange` callback, never a dirty-flag/revision bump, since every sky/cloud/HDRI change
-is a cheap uniform or scene-property update, not a regeneration.
+settings menu's sky callback. Uniform and scene-property changes stay cheap; switching an HDRI
+preset requests one asynchronous load/conversion, cached independently of per-frame sky updates.
 
 - **`SkySystem.ts`** — the actual visible sky: one large sphere (`SKY_RADIUS = 1900`, inside the
   camera's `far = 2000`) rendered back-face-in with a `ShaderMaterial` gradient (horizon → mid → top,
@@ -3471,12 +3535,11 @@ is a cheap uniform or scene-property update, not a regeneration.
   A radial fade hides each plane's own boundary, and every layer is recentred on the player's X/Z
   every frame (`update(deltaSeconds, settings, cameraX, cameraZ)`), so there is never a cloud "edge"
   to fly to no matter how far the player walks.
-- **`HdriEnvironmentSystem.ts`** — loads an equirectangular HDRI purely for lighting/reflections
-  (`scene.environment` via `THREE.PMREMGenerator`), **not** as the visible sky by default
-  (`showHdriAsBackground: false`) — the visible sky is always `SkySystem`'s gradient dome unless you
-  explicitly opt into showing the HDRI itself. This avoids "double clouds": if the HDRI has visible
-  clouds baked into its panorama _and_ it were also shown as the background, they'd float behind (and
-  disagree with) the procedural cloud layers.
+- **`HdriEnvironmentSystem.ts`** — loads the selected panorama for lighting/reflections
+  (`scene.environment` via `THREE.PMREMGenerator`) and the visible daytime background.
+  Game time caps the HDRI at a 50% contribution, reached at 08:30 and held until 18:30.
+  It fades in from 08:00–08:30 and out from 18:30–19:00. The gradient dome and procedural
+  clouds retain at least 50% visibility throughout daytime, restoring the full night sky afterward.
 
 ### Sun, atmosphere, and fog
 
@@ -3499,29 +3562,45 @@ systems use "we always load around the player," applied to a single mesh instead
 There's no view-distance boundary to configure because there's nothing to stream in: one dome mesh
 and 2–3 cloud planes cover the entire visible sky from wherever the player currently is.
 
-### Swapping in an HDRI
+### Bundled environment panoramas
 
-No `.hdr` ships with this project by default — `HdriEnvironmentSystem.initialize()` tries to fetch
-`hdri/sky.hdr` (resolved from `document.baseURI`, so it works whether the app is served from `/` or
-a subpath) and, if that fails for any reason (missing file, network error, bad format), catches it
-and falls back to a tiny procedural canvas-gradient environment instead — `hdriEnabled: true` always
-works out of the box, it just won't have real reflections until you add a file. To add one:
+**Settings → Sky → HDRI → Environment panorama** selects **Cloudscape Sunny** (default),
+**Cloudscape Moody**, or **Procedural gradient**. Older saved worlds without a preset use Sunny.
+The supplied panoramas live in `assets/HDRI/`; both are 1774 × 887, 2:1 equirectangular sRGB images.
+The WebP files are about 184 KB and 149 KB. These are colour panoramas, not floating-point HDR
+radiance files, so they use sRGB image decoding rather than `HDRLoader`. The alternate JPEG XL
+sources remain in the asset folder; runtime uses the baked `Cloudscape Sunny Seamless.webp` and
+`Cloudscape Moody Seamless.webp` copies and does not fetch the originals. Their 64-pixel edge
+strips use a feathered, wrap-aware Gaussian blur (sigma 18), baked once by
+`node scripts/bake-hdri-seams.mjs` (requires Playwright Chromium and `cwebp`). The image centres
+remain unfiltered; WebP export uses quality 95. This adds no runtime blur, shader work or texture
+dimensions. Originals are preserved.
 
-1. Download a **clear or lightly-clouded** equirectangular HDRI from
-   [Poly Haven](https://polyhaven.com/hdris) (search "sky" — a mostly-clear noon/afternoon sky
-   works best). Avoid heavily-clouded HDRIs — since `showHdriAsBackground` is off by default the
-   clouds in the HDRI won't normally be visible, but if you _do_ turn that on, its clouds would
-   otherwise visually compete with `CloudSystem`'s procedural layers.
-2. Save it as `static/hdri/sky.hdr` in this project (create the `hdri/` folder — it doesn't exist
-   yet).
-3. Reload — `HdriEnvironmentSystem` picks it up automatically, no code change needed. You should see
-   the fallback console message (`[sky] No HDRI found at "..."`) stop appearing.
+`hdriPresets.ts` imports the WebPs with Vite `?url` so production emits hashed assets that work
+under `/pages/Forest-Drift/` as well as `/`; the development allow-list includes this asset folder.
+The missing `hdri/sky.hdr` request is gone. Only the selected panorama loads, asynchronously, and stays cached through the night so time
+transitions do not fetch or convert it again. Bitmap decoding sets image orientation explicitly and falls back
+to native image decoding if necessary. Network requests abort on replacement/teardown, and stale
+decodes are disposed before they can touch the scene.
+
+Each loaded image gets one PMREM conversion. A two-entry LRU cache avoids repeated downloads and
+conversions when switching Sunny/Moody, while bounding GPU and decoded-image memory. Source
+mipmaps are disabled; PMREM supplies the roughness-filtered lighting. Eviction and scene teardown
+dispose complete render targets, source textures and bitmap memory. Load failures use the small
+procedural gradient and do not cause a retry every frame.
+
+The daytime background uses the sharp original panorama, not the blurred PMREM. The gradient
+uses shader opacity over that panorama, with a 50/50 daytime blend; procedural clouds retain
+half their configured opacity during the day and fade back to full opacity at night. At night the panorama is not drawn. Rotation
+applies to both reflections and background; day/night and weather still control lighting and
+brightness. The legacy `showAsBackground` save field no longer gates the automatic schedule.
+Selecting **Procedural gradient** keeps the procedural sky throughout the day.
 
 ### GUI controls added
 
 One new top-level **Sky** folder, with five sub-folders matching `SkySettings`'s groups exactly:
-**Sky** (dome gradient colors, horizon shape, sun disc), **HDRI** (`hdriEnabled`/`hdriIntensity`/
-`hdriRotation`/`showHdriAsBackground`), **Sun & Atmosphere** (sun direction/color/intensity,
+**Sky** (dome gradient colors, horizon shape, sun disc), **HDRI** (environment panorama, enabled,
+intensity, rotation), **Sun & Atmosphere** (sun direction/color/intensity,
 hemisphere fill, and all fog controls), **Clouds** (coverage, softness, opacity, per-layer speed and
 direction, the three noise-octave scales), and **Debug** (`showCloudBounds`,
 `showCloudLayerWireframe`, `showSkyOnly` — hides terrain/trees/foundations to inspect the sky/clouds

@@ -217,6 +217,7 @@ export class MiniBuildSystem {
 					name: template.name,
 					blocks: template.blocks.map(cloneBlock),
 					materials: cloneMaterials(template.materials),
+					interactionLocations: structuredClone(template.interactionLocations ?? []),
 					semanticType: template.semanticType
 				},
 				{ sourceDefaultId: template.id }
@@ -274,7 +275,8 @@ export class MiniBuildSystem {
 		const updated = this.library.update(designId, validated.value);
 		if (!updated.ok) return updated;
 		this.cache.getData(updated.value);
-		this.instances.onDesignUpdated(designId);
+		if ((existing.geometryRevision ?? existing.revision) !== updated.value.geometryRevision)
+			this.instances.onDesignUpdated(designId);
 		this.notify();
 		return updated;
 	}
@@ -321,6 +323,7 @@ export class MiniBuildSystem {
 			name: `${source.name} Copy`,
 			blocks: source.blocks.map(cloneBlock),
 			materials: cloneMaterials(source.materials),
+			interactionLocations: structuredClone(source.interactionLocations ?? []),
 			semanticType: source.semanticType
 		});
 		if (!copy.ok) return copy;

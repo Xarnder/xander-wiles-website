@@ -323,6 +323,14 @@ export class FakeWorldRuntime implements WorldRuntime {
 	overrides: ProceduralWorldOverrides = createEmptyProceduralOverrides();
 	counters: WorldRevisionCounters = { structural: 0, environment: 0, procedural: 0 };
 
+	musicTrees: WorldDefinition['musicTrees'] = [];
+	musicPlants: WorldDefinition['musicPlants'] = [];
+	getMusicTrees() {
+		return this.musicTrees;
+	}
+	getMusicPlants() {
+		return this.musicPlants;
+	}
 	getEnvironment() {
 		return this.environment;
 	}
@@ -367,6 +375,8 @@ export class FakeWorldRuntime implements WorldRuntime {
 export function runtimeFromWorld(world: WorldDefinition): FakeWorldRuntime {
 	const runtime = new FakeWorldRuntime();
 	runtime.creatures = world.creatures;
+	runtime.musicTrees = world.musicTrees;
+	runtime.musicPlants = world.musicPlants;
 	runtime.environment = world.environment;
 	runtime.foundations = world.foundations;
 	runtime.buildings = world.buildings;

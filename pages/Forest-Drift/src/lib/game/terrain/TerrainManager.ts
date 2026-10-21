@@ -165,6 +165,43 @@ export class TerrainManager {
 		}
 	}
 
+	/** Rebuild only edited terrain and touching chunks; sampling and mesh grounding change together. */
+	notifyTerrainEdited(bounds: { minX: number; maxX: number; minZ: number; maxZ: number }): void {
+		const previous = this.revision;
+		this.cancelGeneration(false);
+		this.queue.clear();
+		this.revision++;
+		this.lastPlayerChunkX = Number.NaN;
+		const size = this.settings.chunkSize;
+		for (const chunk of this.active.values()) {
+			const affected =
+				(chunk.chunkX + 1) * size >= bounds.minX - 1 &&
+				chunk.chunkX * size <= bounds.maxX + 1 &&
+				(chunk.chunkZ + 1) * size >= bounds.minZ - 1 &&
+				chunk.chunkZ * size <= bounds.maxZ + 1;
+			if (affected && chunk.revision === previous) {
+				chunk.populate(
+					chunk.chunkX,
+					chunk.chunkZ,
+					size,
+					this.sampler,
+					this.revision,
+					this.settings.rendering.debugView,
+					this.vegetationRegionSampler,
+					this.sampleWater,
+					this.groundTint,
+					bounds
+				);
+			} else if (affected)
+				this.materializeJob(
+					{ chunkX: chunk.chunkX, chunkZ: chunk.chunkZ, revision: this.revision },
+					true
+				);
+			else if (chunk.revision === previous) chunk.revision = this.revision;
+			else this.queue.enqueue(chunk.chunkX, chunk.chunkZ, this.revision);
+		}
+	}
+
 	/** Seed text changed: rebuild the noise generators, then regenerate like any other settings change. */
 	notifySeedChanged(): void {
 		this.sampler.setSeed(this.settings.seed);

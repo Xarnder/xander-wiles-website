@@ -1,3 +1,4 @@
+import type { TerrainEditData } from '../terrain/TerrainEdits';
 /**
  * The shared world as rows (plan §7.2): every authored thing is an *entity* with its own id, and
  * the parts people add to each other's builds — windows and doors, beams, wall-path segments, slab
@@ -28,7 +29,8 @@ export type TopEntityKind =
 	| 'miniBuildInstance'
 	| 'musicTree'
 	| 'musicPlant'
-	| 'removedTree';
+	| 'removedTree'
+	| 'terrainTile';
 
 export type SubEntityKind =
 	| 'wallOpening'
@@ -57,7 +59,8 @@ export const TOP_ENTITY_KINDS: readonly TopEntityKind[] = [
 	'miniBuildInstance',
 	'musicTree',
 	'musicPlant',
-	'removedTree'
+	'removedTree',
+	'terrainTile'
 ];
 
 /** Which array of a parent holds which kind of sub-entity. */
@@ -177,7 +180,7 @@ export interface AuthoredContent {
 	miniBuilds: { definitions: Loose[]; instances: Loose[] };
 	musicTrees: Loose[];
 	musicPlants: Loose[];
-	proceduralOverrides: { removedTreeIds: string[] };
+	proceduralOverrides: { removedTreeIds: string[]; terrainEdits?: TerrainEditData };
 }
 
 /** Splits authored content into rows. */
@@ -203,6 +206,23 @@ export function flattenWorld(content: AuthoredContent): EntityRow[] {
 	for (const plant of content.musicPlants ?? []) top('musicPlant', plant);
 	for (const id of content.proceduralOverrides?.removedTreeIds ?? []) {
 		rows.push({ kind: 'removedTree', id, data: {} });
+	}
+	const terrain = content.proceduralOverrides?.terrainEdits;
+	if (terrain) {
+		const tiles = new Map<string, TerrainEditData['points']>();
+		for (const p of terrain.points) {
+			const id = `${Math.floor(p[0] / 16)},${Math.floor(p[1] / 16)}`;
+			let points = tiles.get(id);
+			if (!points) tiles.set(id, (points = []));
+			points.push(p);
+		}
+		for (const [id, points] of tiles)
+			top('terrainTile', {
+				id,
+				version: 1,
+				spacing: terrain.spacing,
+				points: points.sort((a, b) => a[1] - b[1] || a[0] - b[0])
+			});
 	}
 	return rows;
 }
@@ -317,7 +337,18 @@ export function unflattenWorld(rows: Iterable<EntityRow>): AuthoredContent {
 		musicTrees: all('musicTree'),
 		musicPlants: all('musicPlant'),
 		proceduralOverrides: {
-			removedTreeIds: [...(byKind.get('removedTree') ?? [])].map((row) => row.id).sort()
+			removedTreeIds: [...(byKind.get('removedTree') ?? [])].map((row) => row.id).sort(),
+			...(byKind.get('terrainTile')?.length
+				? {
+						terrainEdits: {
+							version: 1,
+							spacing: byKind.get('terrainTile')![0].data.spacing,
+							points: byKind
+								.get('terrainTile')!
+								.flatMap((row) => row.data.points as [number, number, number][])
+						}
+					}
+				: {})
 		}
 	} as unknown as AuthoredContent;
 }

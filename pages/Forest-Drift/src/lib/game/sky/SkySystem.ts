@@ -23,6 +23,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 	uniform float uHorizonHeight;
 	uniform float uHorizonSoftness;
 	uniform float uBrightness;
+	uniform float uGradientOpacity;
 
 	uniform vec3 uSunDirection;
 	uniform vec3 uSunColor;
@@ -99,7 +100,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 				stars = tint * point * twinkle * night * smoothstep(0.015, 0.18, h) * 1.6;
 			}
 		}
-		gl_FragColor = vec4(color * uBrightness + stars, 1.0);
+		gl_FragColor = vec4(color * uBrightness + stars, uGradientOpacity);
 		#include <tonemapping_fragment>
 		#include <colorspace_fragment>
 	}
@@ -109,7 +110,7 @@ const FRAGMENT_SHADER = /* glsl */ `
  * The visible sky: a large inverted sphere with a gradient+haze+sun shader, always re-centred on
  * the camera (see update()) so it behaves like an infinite backdrop rather than a fixed-position
  * object the player could ever approach or leave. This is what actually renders on screen — the
- * HDRI (HdriEnvironmentSystem) only contributes lighting, never this visible gradient.
+ * HDRI (HdriEnvironmentSystem) supplies the daytime panorama behind this fading gradient.
  */
 export class SkySystem {
 	readonly mesh: THREE.Mesh;
@@ -125,8 +126,10 @@ export class SkySystem {
 			side: THREE.BackSide,
 			depthWrite: false,
 			fog: false,
+			transparent: true,
 			uniforms: {
 				uStarTime: { value: 0 },
+				uGradientOpacity: { value: 1 },
 				uTopColor: { value: new THREE.Color() },
 				uMidColor: { value: new THREE.Color() },
 				uHorizonColor: { value: new THREE.Color() },
@@ -171,6 +174,11 @@ export class SkySystem {
 		u.uSunIntensity.value = atmosphere.sunEnabled ? atmosphere.sunIntensity : 0;
 
 		this.mesh.visible = sky.enabled;
+	}
+
+	/** Crossfade over the native HDRI background without another sky mesh or texture copy. */
+	setHdriBlend(blend: number): void {
+		this.material.uniforms.uGradientOpacity.value = 1 - THREE.MathUtils.clamp(blend, 0, 1);
 	}
 
 	/** The current sun direction, already computed by the last applySettings() call — reused by ThreeScene to aim the directional light. */

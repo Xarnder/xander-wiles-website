@@ -1,7 +1,5 @@
 import { createDefaultCreatureState } from '../creatures/CreaturePersistence';
 import type { CreatureWorldState } from '../creatures/CreatureTypes';
-import { createMusicTree, timelineDefinition } from '../music/MusicModel';
-import { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
 import type { BuildingLevelDefinition } from '../building/BuildingLevelTypes';
 import type { BarrierDefinition } from '../building/BarrierTypes';
@@ -167,13 +165,7 @@ export function createWorldDefinition({
 		seed,
 		environment: cloned,
 		creatures: createDefaultCreatureState(),
-		musicTrees: [
-			(() => {
-				const t = createMusicTree(0, new TerrainHeightSampler(cloned.terrain).sample(0, -10), -10);
-				t.loop.timeline = timelineDefinition(t.loop);
-				return t;
-			})()
-		],
+		musicTrees: [],
 		musicPlants: [],
 		furniture: [],
 		miniBuilds: createEmptyMiniBuildWorldState(),

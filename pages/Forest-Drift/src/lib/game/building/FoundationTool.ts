@@ -269,6 +269,15 @@ export class FoundationTool implements BuildTool {
 			this.buildingSettings.foundationUndergroundDepth
 		);
 		if (!result.valid || this.footprintInWater(result)) return;
+		const conflict = this.foundationManager.placementConflict({
+			...result,
+			id: 'preview',
+			style: this.buildingSettings.foundationStyle
+		});
+		if (conflict) {
+			this.onHudChange?.(this.buildInvalidHud(conflict));
+			return;
+		}
 
 		this.foundationManager.addFoundation({
 			id: crypto.randomUUID(),
@@ -277,7 +286,11 @@ export class FoundationTool implements BuildTool {
 			minGridZ: result.minGridZ,
 			maxGridZ: result.maxGridZ,
 			topY: result.topY,
-			bottomY: result.bottomY
+			bottomY: result.bottomY,
+			style: this.buildingSettings.foundationStyle ?? 'stone',
+			...(this.buildingSettings.foundationStyle === 'earth'
+				? { blendWidth: Math.max(6, this.vertexSpacing() * 3, (result.topY - result.bottomY) * 2) }
+				: {})
 		});
 
 		this.state = 'idle';
@@ -322,18 +335,25 @@ export class FoundationTool implements BuildTool {
 			this.buildingSettings.foundationUndergroundDepth
 		);
 
+		const conflict = result.valid
+			? this.foundationManager.placementConflict({
+					...result,
+					id: 'preview',
+					style: this.buildingSettings.foundationStyle
+				})
+			: null;
 		const inWater = result.valid && this.footprintInWater(result);
 		this.updateTargetMarker(
 			this.currentHoverPoint,
-			result.valid && !inWater ? VALID_COLOR : INVALID_COLOR
+			result.valid && !inWater && !conflict ? VALID_COLOR : INVALID_COLOR
 		);
 
-		if (!result.valid || inWater) {
+		if (!result.valid || inWater || conflict) {
 			this.hidePreview();
 			this.highestPointMarker.visible = false;
 			this.onHudChange?.(
 				this.buildInvalidHud(
-					inWater ? 'Overlaps deep water' : (result.reason ?? 'Invalid selection')
+					conflict ?? (inWater ? 'Overlaps deep water' : (result.reason ?? 'Invalid selection'))
 				)
 			);
 			return;
@@ -465,7 +485,13 @@ export class FoundationTool implements BuildTool {
 		return {
 			toolId: 'foundation',
 			crosshair: this.hasTarget ? 'valid' : 'default',
-			hintLines: ['FOUNDATION', '', 'Look at terrain', 'Left click: Select corner']
+			hintLines: [
+				'FOUNDATION',
+				'',
+				'Look at terrain',
+				'Left click: Select corner',
+				'E: Foundation style'
+			]
 		};
 	}
 

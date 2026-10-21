@@ -1,3 +1,5 @@
+import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
+import type { PlayerInteractionPose } from '../player/PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import { LocatorBar } from '../hud/LocatorBar';
 import { createId, type PlayerIdentity } from './mpConfig';
@@ -29,6 +31,12 @@ export interface SharedEnvironmentPort {
 
 /** What `ThreeScene` hands a multiplayer session when it starts. */
 export interface SceneMultiplayerContext {
+	setInteractions?: (
+		locations: OccupiedMiniBuildInteraction[],
+		self: string,
+		authoritative: boolean
+	) => void;
+	resolveInteractionPose?: (ref: MiniBuildInteractionRef) => PlayerInteractionPose | null;
 	characterSurface?: (x: number, z: number, referenceY: number) => number;
 	scene: THREE.Scene;
 	camera: THREE.Camera;
@@ -78,7 +86,9 @@ export interface SceneMultiplayerHooks {
 	/** The local player changed the shared sky, weather or time (only the owner can). */
 	environmentChanged(): void;
 	/** The local player opened or closed a door (Q13-A). */
+
 	doorToggled(openingId: string, open: boolean): void;
+	interactionChanged?(location: MiniBuildInteractionRef | null): void;
 	detach(): void;
 }
 
@@ -136,6 +146,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private saving = false;
 	private readonly locator = new LocatorBar();
 	private localFeetY = 0;
+	private interactions: OccupiedMiniBuildInteraction[] = [];
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
@@ -154,7 +165,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			onStatus: (status, detail) => {
 				this.status = status;
 				if (status === 'connected') this.disconnectedSince = null;
-				else this.disconnectedSince ??= Date.now();
+				else {
+					this.disconnectedSince ??= Date.now();
+					this.interactions = [];
+					this.context?.setInteractions?.([], this.options.identity.playerId, true);
+				}
 				this.updateLock();
 				options.onStatus?.(status, detail);
 			},
@@ -176,7 +191,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 				onReject: (reject) => this.feed?.onReject(reject),
 				onAck: (batchId) => this.feed?.onAck(batchId),
 				onSynced: () => this.feed?.resendPending(),
-				onDoor: (id, open) => this.context?.setDoorOpen(id, open)
+				onDoor: (id, open) => this.context?.setDoorOpen(id, open),
+				onInteractions: (locations, replyTo) => {
+					const self = this.options.identity.playerId;
+					const authoritative =
+						replyTo === self || this.interactions.some((l) => l.playerId === self);
+					this.interactions = locations;
+					this.context?.setInteractions?.(locations, self, authoritative);
+				}
 			}
 		});
 		this.diagnosticsReader = new NetDiagnostics(() => ({
@@ -239,7 +261,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.avatars = new RemoteAvatarRenderer(
 			context.registerMaterial,
 			context.excludeFromAo,
-			context.characterSurface
+			context.characterSurface,
+			(playerId) => {
+				const ref = this.interactions.find((l) => l.playerId === playerId);
+				return ref ? (context.resolveInteractionPose?.(ref) ?? null) : null;
+			}
 		);
 		context.scene.add(this.avatars.group);
 		context.setBuildingLocked(true);
@@ -320,6 +346,10 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		}, wait);
 	}
 
+	interactionChanged(location: MiniBuildInteractionRef | null): void {
+		this.net.sendInteraction(location);
+	}
+
 	doorToggled(openingId: string, open: boolean): void {
 		this.net.sendDoor(openingId, open);
 	}
@@ -346,6 +376,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		Object.assign(this.names, welcome.names);
 		this.options.onRole?.(welcome.role);
 		if (welcome.env) this.applyEnvironment(welcome.env);
+		this.interactions = welcome.interactions ?? [];
+		this.context?.setInteractions?.(this.interactions, this.options.identity.playerId, true);
 		for (const id of welcome.doors) this.context.setDoorOpen(id, true);
 		if (welcome.first && welcome.bookmark) this.context.restorePlayer(welcome.bookmark);
 		if (welcome.resync) void this.resync();

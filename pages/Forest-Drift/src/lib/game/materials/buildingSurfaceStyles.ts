@@ -24,10 +24,13 @@ const JOINERY_TIMBER: SurfaceStyle = {
  * exactly as before. Adding a preset or re-dressing a surface is a one-line change here, never a
  * change to a procedural generator.
  *
- * Kinds without an entry (furniture, mini-build slots, door handles) keep their flat look — their
- * colours are player-authored per object, and a texture would fight that.
+ * Furniture uses shared wood maps and upholstered parts use fabric; colour overrides tint those maps.
+ * Kinds without an entry (such as door handles) keep their flat look.
  */
 export const BUILDING_SURFACE_STYLES: Readonly<Partial<Record<MaterialKind, SurfaceStyle>>> = {
+	furniture: { type: 'timber', options: { variant: 'aged-brown' }, mapping: 'native' },
+	'furniture-accent': { type: 'timber', options: { variant: 'aged-brown' }, mapping: 'native' },
+	'mini-build-fabric': { type: 'fabric', mapping: 'native' },
 	wall: { type: 'plaster', mapping: 'planar' },
 	foundation: { type: 'masonry', options: { variant: 'cut-block' }, mapping: 'planar' },
 	'foundation-top': { type: 'paving', options: { variant: 'cobble' }, mapping: 'planar' },

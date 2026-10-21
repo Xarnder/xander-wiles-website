@@ -1,3 +1,4 @@
+import { resolvePlayerInteractionPose } from '../PlayerInteractionPoseResolver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { FirstPersonController, ceilingCameraClearance } from '../FirstPersonController';
@@ -126,6 +127,26 @@ describe('FirstPersonController — walking up/down stairs', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+	});
+
+	it('lands exactly on the resting camera pose at low frame rates and then permits free look', () => {
+		const { controller, camera } = setup();
+		controller.restoreState({ x: 0, y: 1.7, z: 2 }, 0, 0);
+		controller.setTouchActive(true);
+		const pose = resolvePlayerInteractionPose('lie', { x: 0, y: 0.5, z: 0 }, Math.PI);
+		controller.beginInteraction(pose);
+		controller.update(0.1);
+		controller.update(0.1);
+		controller.update(0.1);
+		expect(controller.worldPosition.toArray()).toEqual([pose.eye.x, pose.eye.y, pose.eye.z]);
+		expect(camera.rotation.y).toBeCloseTo(Math.PI);
+		expect(camera.rotation.x).toBeCloseTo(pose.pitch);
+		expect(camera.rotation.z).toBe(0);
+		controller.addTouchLook(100, 0);
+		const yaw = camera.rotation.y;
+		controller.update(0.1);
+		expect(camera.rotation.y).toBe(yaw);
+		controller.dispose();
 	});
 
 	it('climbs a full staircase smoothly at a normal (60fps) frame rate, without jumping', () => {

@@ -4,6 +4,7 @@ import type { BuildingManager } from './BuildingManager';
 const MAX_HISTORY = 5;
 
 export type BuildAction =
+	| { kind: 'terrain'; undo: () => boolean | void; redo: () => boolean | void }
 	| { kind: 'wall'; wallId: string }
 	| { kind: 'wallPath'; pathId: string }
 	| { kind: 'opening'; wallId: string; openingId: string }
@@ -18,6 +19,7 @@ export type BuildAction =
 	| { kind: 'skirtingRun'; skirtingRunId: string };
 
 export interface BuildUndoManagerOptions {
+	canEdit?: () => boolean;
 	removeFurniture?: (id: string) => boolean;
 	removeMiniBuild?: (instanceId: string) => boolean;
 	removeBarrier?: (id: string) => boolean;
@@ -37,10 +39,12 @@ export interface BuildUndoManagerOptions {
  */
 export class BuildUndoManager {
 	private readonly buildingManager: BuildingManager;
+	private readonly canEdit: () => boolean;
 	private readonly removeFurniture?: (id: string) => boolean;
 	private readonly removeMiniBuild?: (instanceId: string) => boolean;
 	private readonly removeBarrier?: (id: string) => boolean;
 	private readonly history: BuildAction[] = [];
+	private readonly future: BuildAction[] = [];
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		// Typing "-" into a name or search field must never undo a build action.
@@ -50,6 +54,10 @@ export class BuildUndoManager {
 			(['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName ?? '') || target.isContentEditable)
 		)
 			return;
+		if (event.code === 'Equal' || event.code === 'NumpadAdd') {
+			this.redo();
+			return;
+		}
 		if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
 			this.undo();
 		}
@@ -57,6 +65,7 @@ export class BuildUndoManager {
 
 	constructor(buildingManager: BuildingManager, options: BuildUndoManagerOptions = {}) {
 		this.buildingManager = buildingManager;
+		this.canEdit = options.canEdit ?? (() => true);
 		this.removeFurniture = options.removeFurniture;
 		this.removeMiniBuild = options.removeMiniBuild;
 		this.removeBarrier = options.removeBarrier;
@@ -64,16 +73,25 @@ export class BuildUndoManager {
 	}
 
 	record(action: BuildAction): void {
+		this.future.length = 0;
 		this.history.push(action);
 		if (this.history.length > MAX_HISTORY) this.history.shift();
 	}
 
 	/** Pops and reverses the most recent action. Returns whether anything was actually undone. */
 	undo(): boolean {
+		if (!this.canEdit()) return false;
 		const action = this.history.pop();
 		if (!action) return false;
 
 		switch (action.kind) {
+			case 'terrain':
+				if (action.undo() === false) {
+					this.history.push(action);
+					return false;
+				}
+				this.future.push(action);
+				return true;
 			case 'wall':
 				return this.buildingManager.removeWall(action.wallId);
 			case 'wallPath':
@@ -99,6 +117,18 @@ export class BuildUndoManager {
 			case 'skirtingRun':
 				return this.buildingManager.removeSkirtingRun(action.skirtingRunId);
 		}
+	}
+
+	redo(): boolean {
+		if (!this.canEdit()) return false;
+		const action = this.future.pop();
+		if (!action || action.kind !== 'terrain') return false;
+		if (action.redo() === false) {
+			this.future.push(action);
+			return false;
+		}
+		this.history.push(action);
+		return true;
 	}
 
 	dispose(): void {

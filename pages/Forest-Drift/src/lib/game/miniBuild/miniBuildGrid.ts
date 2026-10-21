@@ -12,6 +12,7 @@ import {
 	type MiniBuildBlockRotation,
 	type MiniBuildBounds,
 	type MiniBuildDefinition,
+	type MiniBuildInteractionLocation,
 	type MiniBuildMaterialSlot,
 	type QuarterTurn,
 	type SnapAngle,
@@ -643,7 +644,7 @@ export function contentHash(definition: Pick<MiniBuildDefinition, 'blocks' | 'ma
 		const s = block.sizeGrid;
 		const r = block.rotation;
 		parts.push(
-			`b${p.x},${p.y},${p.z}|${s.x},${s.y},${s.z}|${r.x},${r.y},${r.z}|${block.materialSlot}|${block.collision ?? 'auto'}|${block.layer ?? 0}`
+			`b${block.shape ?? 'cuboid'}|${p.x},${p.y},${p.z}|${s.x},${s.y},${s.z}|${r.x},${r.y},${r.z}|${block.materialSlot}|${block.collision ?? 'auto'}|${block.layer ?? 0}`
 		);
 	}
 	for (const slot of definition.materials) {
@@ -686,6 +687,7 @@ export function sanitizeName(name: string): string {
 export function cloneBlock(block: MiniBuildBlock): MiniBuildBlock {
 	return {
 		id: block.id,
+		...(block.shape && block.shape !== 'cuboid' ? { shape: block.shape } : {}),
 		positionGrid: { ...block.positionGrid },
 		sizeGrid: { ...block.sizeGrid },
 		rotation: { ...block.rotation },
@@ -707,9 +709,28 @@ export function cloneMaterials(
 	}));
 }
 
+/** Copy logical interaction data explicitly: reactive UI proxies cannot be structured-cloned. */
+export function cloneInteraction(
+	location: MiniBuildInteractionLocation
+): MiniBuildInteractionLocation {
+	return {
+		id: location.id,
+		type: location.type,
+		rotationY: location.rotationY,
+		enabled: location.enabled,
+		positionGrid: { ...location.positionGrid },
+		collider: {
+			type: location.collider.type,
+			centerOffsetGrid: { ...location.collider.centerOffsetGrid },
+			sizeGrid: { ...location.collider.sizeGrid }
+		}
+	};
+}
+
 export function cloneDefinition(definition: MiniBuildDefinition): MiniBuildDefinition {
 	return {
 		...definition,
+		interactionLocations: (definition.interactionLocations ?? []).map(cloneInteraction),
 		blocks: definition.blocks.map(cloneBlock),
 		materials: cloneMaterials(definition.materials),
 		bounds: {

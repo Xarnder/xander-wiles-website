@@ -267,7 +267,8 @@ export class SlabManager {
 	 * Every existing slab on `foundationId` at `localY` whose foundation-local polygon overlaps
 	 * `localPolygon` — the "same level, overlapping footprint" duplicate-prevention check. Slabs at
 	 * a *different* localY are never considered, regardless of polygon shape (see the README —
-	 * different floors are meant to overlap in X/Z).
+	 * different floors are meant to overlap in X/Z). Shared edges/corners are allowed; only
+	 * overlapping interior area is rejected.
 	 */
 	findOverlappingSlabAtLevel(
 		foundationId: string,

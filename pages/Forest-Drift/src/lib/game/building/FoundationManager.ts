@@ -1,3 +1,8 @@
+import {
+	EarthFoundationField,
+	earthFoundationBounds,
+	type EarthBounds
+} from './EarthFoundationField';
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { FoundationMesh } from './FoundationMesh';
@@ -35,6 +40,20 @@ export class FoundationManager {
 	private readonly materialManager: BuildingMaterialManager;
 	private readonly buildingSettings: BuildingSettings;
 	private readonly foundations = new Map<string, FoundationEntry>();
+	private readonly earthField = new EarthFoundationField();
+	private onTerrainEdit: ((bounds: EarthBounds) => void) | null = null;
+	private readonly earthProxyMaterial = new THREE.MeshBasicMaterial({ visible: false });
+	setTerrainEditHandler(handler: (bounds: EarthBounds) => void): void {
+		this.onTerrainEdit = handler;
+	}
+	constrainTerrainHeight = (x: number, z: number, base: number, height: number): number =>
+		this.earthField.constrainManual(x, z, base, height);
+	sampleEarthHeight = (x: number, z: number, base: number): number =>
+		this.earthField.sample(x, z, base);
+	private refreshEarth(definition: FoundationDefinition): void {
+		this.earthField.rebuild(this.getFoundations(), this.getVertexSpacing());
+		this.onTerrainEdit?.(earthFoundationBounds(definition, this.getVertexSpacing()));
+	}
 	private showBounds = false;
 	/** Monotonic change counter polled by world persistence — see BuildingManager.revision for why this exists rather than re-serializing to detect changes. */
 	private revision = 0;
@@ -61,13 +80,17 @@ export class FoundationManager {
 
 	addFoundation(definition: FoundationDefinition): void {
 		this.revision++;
-		const materials = this.materialManager.getFoundationMaterials(definition.material);
+		const materials =
+			definition.style === 'earth'
+				? this.earthProxyMaterial
+				: this.materialManager.getFoundationMaterials(definition.material);
 		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), materials);
 		mesh.setBoundsVisible(this.showBounds);
 		this.group.add(mesh.object);
 		const entry: FoundationEntry = { definition, mesh, frame: null };
 		this.rebuildFrame(entry);
 		this.foundations.set(definition.id, entry);
+		this.refreshEarth(definition);
 	}
 
 	/** Sets (or, given `undefined`, clears) a foundation's material override — visual only, never touching its grid footprint, `topY`/`bottomY`, or collision. A no-op returning `false` if the foundation isn't found. */
@@ -76,7 +99,11 @@ export class FoundationManager {
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
 		entry.definition = { ...entry.definition, material };
-		entry.mesh.setMaterial(this.materialManager.getFoundationMaterials(material));
+		entry.mesh.setMaterial(
+			entry.definition.style === 'earth'
+				? this.earthProxyMaterial
+				: this.materialManager.getFoundationMaterials(material)
+		);
 		return true;
 	}
 
@@ -88,7 +115,54 @@ export class FoundationManager {
 		this.group.remove(entry.mesh.object);
 		entry.mesh.dispose();
 		this.foundations.delete(id);
+		this.refreshEarth(entry.definition);
 		return true;
+	}
+
+	/** Retaining-wall geometry is derived, never written into the authored bottomY. */
+	refreshTerrainSupport(bounds: EarthBounds, sample: (x: number, z: number) => number): void {
+		const s = this.getVertexSpacing();
+		for (const entry of this.foundations.values()) {
+			const d = entry.definition;
+			if (d.style === 'earth') continue;
+			const minX = d.minGridX * s,
+				maxX = d.maxGridX * s,
+				minZ = d.minGridZ * s,
+				maxZ = d.maxGridZ * s;
+			if (maxX < bounds.minX || minX > bounds.maxX || maxZ < bounds.minZ || minZ > bounds.maxZ)
+				continue;
+			let bottom = d.bottomY;
+			for (let x = minX; x <= maxX + 0.001; x += s / 2)
+				bottom = Math.min(bottom, sample(x, minZ) - 0.5, sample(x, maxZ) - 0.5);
+			for (let z = minZ; z <= maxZ + 0.001; z += s / 2)
+				bottom = Math.min(bottom, sample(minX, z) - 0.5, sample(maxX, z) - 0.5);
+			entry.mesh.setSupportDepth(d.topY, bottom);
+		}
+	}
+
+	placementConflict(candidate: FoundationDefinition): string | null {
+		const s = this.getVertexSpacing();
+		for (const { definition: d } of this.foundations.values()) {
+			const dx = Math.max(d.minGridX - candidate.maxGridX, candidate.minGridX - d.maxGridX, 0) * s;
+			const dz = Math.max(d.minGridZ - candidate.maxGridZ, candidate.minGridZ - d.maxGridZ, 0) * s;
+			if (
+				candidate.minGridX < d.maxGridX &&
+				candidate.maxGridX > d.minGridX &&
+				candidate.minGridZ < d.maxGridZ &&
+				candidate.maxGridZ > d.minGridZ
+			)
+				return 'Foundation interiors cannot overlap.';
+			if (candidate.style === 'earth' || d.style === 'earth') {
+				const distance = Math.hypot(dx, dz);
+				const reveal = candidate.style === d.style ? 0 : 0.05;
+				if (
+					Math.abs(candidate.topY - d.topY) + reveal > distance * 0.65 + 0.001 &&
+					distance < (candidate.blendWidth ?? 6)
+				)
+					return 'Not enough room for a safe bank between these foundations.';
+			}
+		}
+		return null;
 	}
 
 	getRevision(): number {
@@ -133,6 +207,7 @@ export class FoundationManager {
 		}
 		const spacing = this.getVertexSpacing();
 		const { definition } = entry;
+		if (definition.style === 'earth') return;
 		const frame = buildFoundationFrame(
 			{
 				id: definition.id,
@@ -223,5 +298,8 @@ export class FoundationManager {
 		}
 		this.foundations.clear();
 		this.group.clear();
+		this.earthProxyMaterial.dispose();
+		this.earthField.rebuild([], this.getVertexSpacing());
+		this.onTerrainEdit = null;
 	}
 }

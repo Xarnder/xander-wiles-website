@@ -9,6 +9,7 @@
 import { colorMaterialFromHex, type BuildingMaterialDefinition } from './MaterialTypes';
 
 export const FURNITURE_KINDS = [
+	'wooden-pillar',
 	'bed',
 	'small-table',
 	'wardrobe',
@@ -82,11 +83,7 @@ function isValidColorString(value: unknown): value is string {
 	return typeof value === 'string' && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
 }
 
-function validateOptionalMaterial(
-	value: unknown,
-	id: string,
-	field: string
-): string | null {
+function validateOptionalMaterial(value: unknown, id: string, field: string): string | null {
 	if (value === undefined) return null;
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		return `Furniture ${id} ${field} must be an object`;
@@ -144,7 +141,11 @@ export function validateFurniture(
 			return `Furniture ${item.id} rotationY must be a finite number`;
 		}
 		if (item.dimensions !== undefined) {
-			if (!item.dimensions || typeof item.dimensions !== 'object' || Array.isArray(item.dimensions)) {
+			if (
+				!item.dimensions ||
+				typeof item.dimensions !== 'object' ||
+				Array.isArray(item.dimensions)
+			) {
 				return `Furniture ${item.id} dimensions must be an object`;
 			}
 			const dims = item.dimensions as Record<string, unknown>;
@@ -168,7 +169,11 @@ export function validateFurniture(
 		);
 		if (secondaryError) return secondaryError;
 		if (item.parameters !== undefined) {
-			if (!item.parameters || typeof item.parameters !== 'object' || Array.isArray(item.parameters)) {
+			if (
+				!item.parameters ||
+				typeof item.parameters !== 'object' ||
+				Array.isArray(item.parameters)
+			) {
 				return `Furniture ${item.id} parameters must be an object`;
 			}
 			for (const [key, param] of Object.entries(item.parameters as Record<string, unknown>)) {
@@ -177,7 +182,8 @@ export function validateFurniture(
 					typeof param === 'boolean' ||
 					typeof param === 'string' ||
 					(typeof param === 'number' && Number.isFinite(param));
-				if (!ok) return `Furniture ${item.id} parameter ${key} must be a number, string, or boolean`;
+				if (!ok)
+					return `Furniture ${item.id} parameter ${key} must be a number, string, or boolean`;
 			}
 		}
 	}

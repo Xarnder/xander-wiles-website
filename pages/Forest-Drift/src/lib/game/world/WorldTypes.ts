@@ -77,6 +77,7 @@ export interface SavedPlayerState {
  * follow the same delta shape rather than materialising the generated world into the save.
  */
 export interface ProceduralWorldOverrides {
+	terrainEdits?: import('../terrain/TerrainEdits').TerrainEditData;
 	/** Deterministic ids of procedural trees the player has removed. */
 	removedTreeIds: string[];
 }

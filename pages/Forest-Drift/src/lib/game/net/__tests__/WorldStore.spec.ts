@@ -286,3 +286,51 @@ describe('WorldStore', () => {
 		).toMatchObject({ ok: false, reason: 'invalid' });
 	});
 });
+
+describe('terrain authority', () => {
+	it('rejects malformed tiles and edits inside a fixed building footprint', () => {
+		const world = store();
+		const apply = (points: unknown) =>
+			world.applyBatch(OWNER, [
+				{ op: 'add', kind: 'terrainTile', id: '0,0', data: { version: 1, spacing: 2, points } }
+			]);
+		expect(apply([[1, 1, NaN]])).toMatchObject({ ok: false, reason: 'invalid' });
+		expect(apply([[1, 1, 0]])).toMatchObject({ ok: false, reason: 'fit' });
+		expect(world.seq).toBe(1);
+	});
+	it('rejects stale terrain patches instead of overwriting a concurrent stroke', () => {
+		const world = store();
+		expect(
+			world.applyBatch(SAM, [
+				{
+					op: 'add',
+					kind: 'terrainTile',
+					id: '2,0',
+					data: { version: 1, spacing: 2, points: [[32, 0, 1]] }
+				}
+			]).ok
+		).toBe(true);
+		expect(
+			world.applyBatch(SAM, [
+				{
+					op: 'patch',
+					kind: 'terrainTile',
+					id: '2,0',
+					set: { points: [[32, 0, 1.5]] },
+					seen: { points: 0 }
+				}
+			]).ok
+		).toBe(true);
+		expect(
+			world.applyBatch(ALEX, [
+				{
+					op: 'patch',
+					kind: 'terrainTile',
+					id: '2,0',
+					set: { points: [[32, 0, 2]] },
+					seen: { points: 0 }
+				}
+			])
+		).toMatchObject({ ok: false, reason: 'fit' });
+	});
+});

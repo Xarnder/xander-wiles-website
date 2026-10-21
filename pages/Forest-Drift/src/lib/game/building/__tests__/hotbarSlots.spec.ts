@@ -8,7 +8,7 @@ import {
 
 describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 	it('uses numbered slots 1–6 and 8 with the requested defaults', () => {
-		expect(DEFAULT_HOTBAR_SLOTS.map((s) => s.slot)).toEqual([1, 2, 3, 4, 5, 6, 8]);
+		expect(DEFAULT_HOTBAR_SLOTS.map((s) => s.slot)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[1], 0).toolId).toBe('polygon-wall');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 0).toolId).toBe('door');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 1).toolId).toBe('window');
@@ -19,7 +19,18 @@ describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 1).toolId).toBe('floor-path');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 2).toolId).toBe('floor-planks');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 3).toolId).toBe('floor-tiles');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[6], 0).toolId).toBe('place-object');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[7], 0).toolId).toBe('place-object');
+	});
+
+	it('adds customizable Wooden Pillars as the fifth wall subtool', () => {
+		const wallSlot = DEFAULT_HOTBAR_SLOTS.find((slot) => slot.slot === 2)!;
+		expect(wallSlot.variants).toHaveLength(5);
+		expect(resolveHotbarSlot(wallSlot, 4)).toMatchObject({
+			toolId: 'pillar',
+			label: 'Wooden Pillars',
+			variantIndex: 4
+		});
+		expect(isCustomizablePlacementTool('pillar')).toBe(true);
 	});
 
 	it('keeps stairs on their own slot', () => {
@@ -27,7 +38,7 @@ describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 	});
 
 	it('makes slot 8 a single Place Object tool (objects are chosen in the Object Library)', () => {
-		const slot8 = DEFAULT_HOTBAR_SLOTS[6];
+		const slot8 = DEFAULT_HOTBAR_SLOTS[7];
 		expect(slot8.slot).toBe(8);
 		expect(slot8.variants).toEqual([{ toolId: 'place-object', label: 'Place Object' }]);
 		expect(isCustomizablePlacementTool('place-object')).toBe(true);
@@ -58,7 +69,7 @@ describe('isCustomizablePlacementTool', () => {
 		expect(isCustomizablePlacementTool('floor-path')).toBe(true);
 		expect(isCustomizablePlacementTool('floor-planks')).toBe(true);
 		expect(isCustomizablePlacementTool('floor-tiles')).toBe(true);
-		expect(isCustomizablePlacementTool('foundation')).toBe(false);
+		expect(isCustomizablePlacementTool('foundation')).toBe(true);
 		expect(isCustomizablePlacementTool('stairs')).toBe(true);
 		expect(isCustomizablePlacementTool('torch')).toBe(true);
 	});

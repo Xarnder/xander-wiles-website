@@ -149,3 +149,16 @@ describe('buildPlacementPreviewModel', () => {
 		disposePreviewObject(group);
 	});
 });
+
+it('shows both arched door leaves in the placement preview', () => {
+	const settings = createDefaultBuildingSettings();
+	settings.doorDouble = true;
+	settings.doorArched = true;
+	const shared = materials();
+	const group = buildPlacementPreviewModel('door', settings, shared);
+	expect(names(group).filter((name) => name === 'door-leaf')).toHaveLength(2);
+	expect(names(group)).toContain('door-arch-infill');
+	disposePreviewObject(group);
+	shared.building.dispose();
+	shared.floorDetail.dispose();
+});

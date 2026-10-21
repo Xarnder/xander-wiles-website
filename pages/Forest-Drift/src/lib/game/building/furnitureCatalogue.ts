@@ -1,12 +1,8 @@
+import { normalizePillarSettings, type PillarSettings } from './PillarTypes';
 import type { FurnitureKind } from './FurnitureTypes';
 
 export type FurnitureCategory =
-	| 'sleeping'
-	| 'seating'
-	| 'tables'
-	| 'kitchen'
-	| 'storage'
-	| 'lighting';
+	'sleeping' | 'seating' | 'tables' | 'kitchen' | 'storage' | 'lighting';
 
 export interface FurnitureDimensionRules {
 	minWidth: number;
@@ -99,6 +95,31 @@ function dims(
 }
 
 const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
+	'wooden-pillar': {
+		kind: 'wooden-pillar',
+		name: 'Wooden Pillar',
+		category: 'storage',
+		placement: 'surface',
+		collision: 'box',
+		dimensions: dims({
+			minWidth: 0.05,
+			maxWidth: 2,
+			minDepth: 0.05,
+			maxDepth: 2,
+			minHeight: 0.3,
+			maxHeight: 10,
+			defaultWidth: 0.4,
+			defaultDepth: 0.4,
+			defaultHeight: 3,
+			widthStep: 0.001,
+			depthStep: 0.001,
+			heightStep: 0.001
+		}),
+		params: [],
+		presets: [],
+		defaultPrimary: FURNITURE_WOOD,
+		defaultSecondary: FURNITURE_WOOD
+	},
 	bed: {
 		kind: 'bed',
 		name: 'Bed',
@@ -497,7 +518,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			depthStep: 0.025,
 			heightStep: 0.05
 		}),
-		params: [{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 4, min: 2, max: 8 }],
+		params: [
+			{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 4, min: 2, max: 8 }
+		],
 		presets: [],
 		defaultPrimary: FURNITURE_WOOD,
 		defaultSecondary: FURNITURE_DARK_WOOD
@@ -522,7 +545,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 			depthStep: 0.025,
 			heightStep: 0.05
 		}),
-		params: [{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 5, min: 2, max: 8 }],
+		params: [
+			{ key: 'shelfCount', label: 'Shelves', type: 'integer', defaultValue: 5, min: 2, max: 8 }
+		],
 		presets: [],
 		defaultPrimary: FURNITURE_WOOD,
 		defaultSecondary: FURNITURE_DARK_WOOD
@@ -605,7 +630,9 @@ const CATALOGUE: Record<FurnitureKind, FurnitureCatalogueEntry> = {
 };
 
 export const FURNITURE_CATALOGUE: readonly FurnitureCatalogueEntry[] = Object.freeze(
-	(Object.keys(CATALOGUE) as FurnitureKind[]).map((kind) => CATALOGUE[kind])
+	(Object.keys(CATALOGUE) as FurnitureKind[])
+		.filter((kind) => kind !== 'wooden-pillar')
+		.map((kind) => CATALOGUE[kind])
 );
 
 export function getFurnitureCatalogueEntry(kind: FurnitureKind): FurnitureCatalogueEntry {
@@ -629,6 +656,7 @@ export function furnitureEntriesByCategory(): {
 }
 
 export interface FurnitureBuildInput {
+	pillar?: PillarSettings;
 	kind: FurnitureKind;
 	width: number;
 	depth: number;
@@ -705,6 +733,10 @@ export function resolveFurnitureBuildInput(args: {
 	const headboardField = entry.params.find((param) => param.key === 'headboard');
 	const shelfField = entry.params.find((param) => param.key === 'shelfCount');
 	return {
+		pillar:
+			args.kind === 'wooden-pillar'
+				? normalizePillarSettings({ ...args.parameters, height: dims.height })
+				: undefined,
 		kind: args.kind,
 		width: dims.width,
 		depth: dims.depth,

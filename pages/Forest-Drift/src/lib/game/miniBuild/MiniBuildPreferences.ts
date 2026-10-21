@@ -12,6 +12,7 @@ export interface MiniBuildDisplayPreferences {
 	showChunkUsage: boolean;
 	/** 16m Mini Build chunk grid drawn on the ground around the player, with per-chunk usage. */
 	showChunkBoundaries: boolean;
+	showInteractionLocations: boolean;
 }
 
 interface PersistedPreferences {
@@ -49,7 +50,7 @@ function defaults(): PersistedPreferences {
 		lastSelection: { type: 'default-design', defaultId: STARTER_MINI_BUILD_ID },
 		recent: [],
 		sort: 'recent',
-		display: { showChunkUsage: true, showChunkBoundaries: false }
+		display: { showChunkUsage: true, showChunkBoundaries: false, showInteractionLocations: false }
 	};
 }
 
@@ -131,7 +132,8 @@ export class MiniBuildPreferences {
 						typeof parsed.display?.showChunkUsage === 'boolean'
 							? parsed.display.showChunkUsage
 							: true,
-					showChunkBoundaries: parsed.display?.showChunkBoundaries === true
+					showChunkBoundaries: parsed.display?.showChunkBoundaries === true,
+					showInteractionLocations: parsed.display?.showInteractionLocations === true
 				}
 			};
 		} catch {

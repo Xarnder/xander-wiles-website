@@ -1,3 +1,5 @@
+import { automaticShutterSide } from './windowShutterMath';
+import type { WallPathDefinition as ShutterWallLoop } from './WallPathTypes';
 import * as THREE from 'three';
 import { BuildingMaterialManager } from './BuildingMaterialManager';
 import { foundationLocalFrame } from './FoundationLocalMath';
@@ -48,6 +50,7 @@ export interface WallManagerOptions {
 	glassMaterial?: THREE.Material;
 	/** Live lids (ceilings / floors / flat roofs) on a foundation — called at rebuild time so a slab added later can dress existing walls. Optional so tests that never place slabs can omit it. */
 	getRoomLids?: (foundationId: string) => readonly RoomLid[];
+	getShutterLoops?: (foundationId: string) => readonly ShutterWallLoop[];
 }
 
 /**
@@ -71,11 +74,12 @@ export class WallManager {
 	private readonly buildingSettings: BuildingSettings;
 	private readonly glassMaterial: THREE.Material;
 	private readonly getRoomLids?: (foundationId: string) => readonly RoomLid[];
+	private readonly getShutterLoops?: (foundationId: string) => readonly ShutterWallLoop[];
 
 	private readonly buildingRoots = new Map<string, THREE.Group>();
 	private readonly walls = new Map<string, WallEntry>();
-	/** openingId -> its door's hingePivot — `DoorInteractionController` reads this to swing leaves. */
-	private readonly doorHingePivots = new Map<string, THREE.Object3D>();
+	/** Opening id -> door hinge or shutter assembly, for shared hover targeting and animation. */
+	private readonly openingInteractionPivots = new Map<string, THREE.Object3D>();
 	private showBounds = false;
 
 	constructor(options: WallManagerOptions) {
@@ -86,6 +90,7 @@ export class WallManager {
 		this.buildingSettings = options.buildingSettings ?? createDefaultBuildingSettings();
 		this.glassMaterial = options.glassMaterial ?? getGlassMaterial();
 		this.getRoomLids = options.getRoomLids;
+		this.getShutterLoops = options.getShutterLoops;
 	}
 
 	private getOrCreateBuildingRoot(foundationId: string): THREE.Group | null {
@@ -197,7 +202,7 @@ export class WallManager {
 		existing: THREE.Group | undefined
 	): THREE.Group {
 		if (existing) {
-			clearDoorHingePivotsFrom(existing, this.doorHingePivots);
+			clearOpeningInteractionPivotsFrom(existing, this.openingInteractionPivots);
 			disposeOpeningVisual(existing);
 		}
 
@@ -209,11 +214,31 @@ export class WallManager {
 				definition.thickness,
 				this.buildingSettings,
 				this.materialManager,
-				this.glassMaterial
+				this.glassMaterial,
+				automaticShutterSide(
+					{
+						x: definition.startGridX * this.getBuildingGridSize(),
+						z: definition.startGridZ * this.getBuildingGridSize()
+					},
+					{
+						x: definition.endGridX * this.getBuildingGridSize(),
+						z: definition.endGridZ * this.getBuildingGridSize()
+					},
+					(opening.minU + opening.maxU) / 2,
+					definition.thickness,
+					definition.baseY,
+					definition.height,
+					this.getRoomLids?.(definition.foundationId) ?? [],
+					this.getShutterLoops?.(definition.foundationId) ?? [],
+					this.getBuildingGridSize()
+				),
+				this.materialManager.getMaterial('wall', definition.material)
 			);
 			if (!result) continue;
 			group.add(result.object);
-			if (result.hingePivot) this.doorHingePivots.set(opening.id, result.hingePivot);
+			if (result.hingePivot) this.openingInteractionPivots.set(opening.id, result.hingePivot);
+			if (result.shutterAssembly)
+				this.openingInteractionPivots.set(opening.id, result.shutterAssembly);
 		}
 		mesh.add(group);
 		return group;
@@ -310,7 +335,8 @@ export class WallManager {
 		disposeOpeningVisual(entry.beamVisuals);
 		if (entry.edgeFraming) disposeWallFrame(entry.edgeFraming);
 		if (entry.skirting) disposeSkirting(entry.skirting);
-		for (const opening of entry.definition.openings) this.doorHingePivots.delete(opening.id);
+		for (const opening of entry.definition.openings)
+			this.openingInteractionPivots.delete(opening.id);
 		entry.mesh.geometry.dispose();
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
@@ -331,11 +357,20 @@ export class WallManager {
 
 	/** The hinge pivot for a door opening, if it has one — `undefined` for a window opening, a disabled/frame-less door, or an unknown id. */
 	getDoorHingePivot(openingId: string): THREE.Object3D | undefined {
-		return this.doorHingePivots.get(openingId);
+		const pivot = this.openingInteractionPivots.get(openingId);
+		return pivot?.userData.interactionKind === 'shutters' ? undefined : pivot;
 	}
 
 	getDoorHingePivots(): ReadonlyMap<string, THREE.Object3D> {
-		return this.doorHingePivots;
+		return new Map(
+			[...this.openingInteractionPivots].filter(
+				([, pivot]) => pivot.userData.interactionKind !== 'shutters'
+			)
+		);
+	}
+
+	getOpeningInteractionPivots(): ReadonlyMap<string, THREE.Object3D> {
+		return this.openingInteractionPivots;
 	}
 
 	/** Cascade delete: removes every wall belonging to a foundation, and that foundation's now-empty BuildingRoot. */
@@ -427,9 +462,15 @@ export class WallManager {
 	}
 }
 
-function clearDoorHingePivotsFrom(root: THREE.Object3D, pivots: Map<string, THREE.Object3D>): void {
+function clearOpeningInteractionPivotsFrom(
+	root: THREE.Object3D,
+	pivots: Map<string, THREE.Object3D>
+): void {
 	root.traverse((child) => {
-		if (child.name === 'door-hinge-pivot' && typeof child.userData.openingId === 'string') {
+		if (
+			(child.name === 'door-hinge-pivot' || child.name === 'window-shutters') &&
+			typeof child.userData.openingId === 'string'
+		) {
 			pivots.delete(child.userData.openingId);
 		}
 	});

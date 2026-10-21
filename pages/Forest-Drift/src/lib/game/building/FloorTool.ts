@@ -23,7 +23,7 @@ export interface FloorToolOptions {
  * Floor Tool — thin wrapper around SlabToolBase for placing an upper-storey floor. Uses the same
  * live elevation as CeilingTool (wall-top, or the C-panel height), so a floor here and a ceiling
  * from the storey below can still be the same physical slab — BuildingManager.addSlab rejects a
- * second coplanar piece; see SlabToolBase.ts.
+ * second overlapping coplanar piece; see SlabToolBase.ts.
  */
 export class FloorTool extends SlabToolBase {
 	constructor(options: FloorToolOptions) {

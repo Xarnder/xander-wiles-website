@@ -8,10 +8,11 @@ import {
 import { FURNITURE_KINDS } from '../FurnitureTypes';
 
 describe('furniture catalogue', () => {
-	it('registers every kind once with a builder-ready definition', () => {
+	it('registers placeable catalogue kinds, with structural pillars available from slot 2', () => {
 		const kinds = FURNITURE_CATALOGUE.map((entry) => entry.kind);
-		expect(kinds).toEqual([...FURNITURE_KINDS]);
-		expect(new Set(kinds).size).toBe(FURNITURE_KINDS.length);
+		expect(kinds).toEqual(FURNITURE_KINDS.filter((kind) => kind !== 'wooden-pillar'));
+		expect(getFurnitureCatalogueEntry('wooden-pillar').collision).toBe('box');
+		expect(new Set(kinds).size).toBe(FURNITURE_KINDS.length - 1);
 	});
 
 	it('keeps dimension ranges valid and defaults inside them', () => {

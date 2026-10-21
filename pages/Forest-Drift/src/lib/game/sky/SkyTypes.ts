@@ -1,13 +1,11 @@
+import type { HdriPreset } from './hdriPresets';
+
 /**
  * Sky/atmosphere configuration. Framework-free, same rule as TerrainSettings/VegetationSettings —
  * read directly by SkySystem/CloudSystem/HdriEnvironmentSystem, mutated live by the debug GUI.
  *
- * ARCHITECTURE: the HDRI (HdriEnvironmentSystem) contributes *lighting/reflections only* — it is
- * not the visible sky by default (`showAsBackground` defaults false). The visible sky is entirely
- * procedural (SkySystem's gradient dome + CloudSystem's cloud layers), which is what gives control
- * over sky colour, horizon haze, fog matching, and moving clouds without being stuck inside a
- * static photographed panorama. See the README "Sky, HDRI and clouds" section for the full
- * rationale, including why an HDRI with visible clouds would double up with CloudSystem.
+ * ARCHITECTURE: HDRI supplies lighting/reflections and the daytime panorama. The gradient dome
+ * and procedural clouds fade in around dusk and out around morning, driven by game time.
  */
 
 export interface VisibleSkySettings {
@@ -30,10 +28,13 @@ export interface VisibleSkySettings {
 }
 
 export interface HdriSettings {
+	/** Missing in older worlds: defaults to Cloudscape Sunny. */
+	preset?: HdriPreset;
 	enabled: boolean;
 	intensity: number;
 	/** Degrees, converted to radians internally. */
 	rotation: number;
+	/** Legacy save field; visible backgrounds now follow game time automatically. */
 	showAsBackground: boolean;
 }
 
@@ -117,8 +118,8 @@ export interface SkySettings {
 /**
  * Defaults chosen to look calm and pleasant immediately: clean blue upper sky, soft pale horizon
  * haze, gentle matching fog, warm mid-elevation sun, and two large soft cloud layers drifting
- * slowly. HDRI is on by default but only for lighting (see module doc) — with no asset present it
- * falls back to a lightweight procedural gradient environment rather than failing silently.
+ * slowly. Cloudscape Sunny provides environment lighting by default; image-loading failures
+ * fall back to a lightweight procedural gradient environment.
  */
 export function createDefaultSkySettings(): SkySettings {
 	return {
@@ -138,6 +139,7 @@ export function createDefaultSkySettings(): SkySettings {
 		},
 
 		hdri: {
+			preset: 'cloudscape-sunny',
 			enabled: true,
 			intensity: 1.0,
 			rotation: 0,

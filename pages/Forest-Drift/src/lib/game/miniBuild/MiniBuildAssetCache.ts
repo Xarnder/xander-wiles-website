@@ -7,9 +7,9 @@ import {
 import { MINI_BUILD_COMPILER_VERSION, type MiniBuildDefinition } from './MiniBuildTypes';
 
 export function miniBuildAssetKey(
-	definition: Pick<MiniBuildDefinition, 'id' | 'revision'>
+	definition: Pick<MiniBuildDefinition, 'id' | 'revision' | 'geometryRevision'>
 ): string {
-	return `${definition.id}:r${definition.revision}:c${MINI_BUILD_COMPILER_VERSION}`;
+	return `${definition.id}:r${definition.geometryRevision ?? definition.revision}:c${MINI_BUILD_COMPILER_VERSION}`;
 }
 
 interface CacheEntry {
@@ -37,9 +37,8 @@ export interface MiniBuildAssetCacheOptions {
 }
 
 /**
- * Compile once, share everywhere. Keyed by design id + revision + compiler version, so a saved
- * edit (revision++) naturally produces one new compile while every other design's asset is
- * untouched.
+ * Compile once, share everywhere. Keyed by design id + geometry revision + compiler version. Geometry/material edits
+ * compile once; semantic interaction-only revisions retain the existing GPU asset.
  *
  * Lifecycle is reference counted per *consumer* (a render batch, the ghost preview), not per
  * placed copy: 100 chairs in one chunk hold a single reference. When the last reference is
@@ -85,11 +84,11 @@ export class MiniBuildAssetCache {
 		}
 	}
 
-	has(definition: Pick<MiniBuildDefinition, 'id' | 'revision'>): boolean {
+	has(definition: Pick<MiniBuildDefinition, 'id' | 'revision' | 'geometryRevision'>): boolean {
 		return this.entries.has(miniBuildAssetKey(definition));
 	}
 
-	refCount(definition: Pick<MiniBuildDefinition, 'id' | 'revision'>): number {
+	refCount(definition: Pick<MiniBuildDefinition, 'id' | 'revision' | 'geometryRevision'>): number {
 		return this.entries.get(miniBuildAssetKey(definition))?.refs ?? 0;
 	}
 

@@ -8,6 +8,8 @@
 </script>
 
 <script lang="ts">
+	import { shapeCount, shapeLimit } from '$lib/game/miniBuild/miniBuildShapes';
+	import { metersToGrid, snapAngle, computeBounds } from '$lib/game/miniBuild/miniBuildGrid';
 	import type { Attachment } from 'svelte/attachments';
 	import { onDestroy, onMount } from 'svelte';
 	import {
@@ -93,6 +95,44 @@
 		void version;
 		return [...editor.getBlocks()];
 	});
+	const interactions = $derived.by(() => {
+		void version;
+		return [...editor.getInteractions()];
+	});
+	const interactionWarnings = $derived.by(() => {
+		void version;
+		const locations = editor.getInteractions(),
+			bounds = computeBounds(editor.getBlocks());
+		const warnings: string[] = [];
+		for (const [i, l] of locations.entries()) {
+			if (
+				bounds &&
+				(['x', 'y', 'z'] as const).some(
+					(a) => l.positionGrid[a] < bounds.min[a] - 8 || l.positionGrid[a] > bounds.max[a] + 8
+				)
+			)
+				warnings.push(`Location ${i + 1} is outside the build. Check its support surface.`);
+			if (
+				locations
+					.slice(0, i)
+					.some(
+						(other) =>
+							Math.hypot(
+								l.positionGrid.x - other.positionGrid.x,
+								l.positionGrid.y - other.positionGrid.y,
+								l.positionGrid.z - other.positionGrid.z
+							) < 8
+					)
+			)
+				warnings.push(`Location ${i + 1} is very close to another location.`);
+		}
+		return warnings;
+	});
+	const interaction = $derived.by(() => {
+		void version;
+		return editor.selectedInteraction;
+	});
+
 	const materials = $derived.by(() => {
 		void version;
 		return [...editor.getMaterials()];
@@ -151,6 +191,13 @@
 	const attachViewport: Attachment<HTMLCanvasElement> = (canvas) => {
 		viewport = new MiniBuildEditorViewport(canvas, {
 			getState: () => editor,
+			onSelectInteraction: (id) => {
+				editor.selectInteraction(id);
+				refresh();
+			},
+			onMoveInteraction: (id, positionGrid) => {
+				run(editor.updateInteraction(id, { positionGrid }));
+			},
 			onSelect: (id) => {
 				editor.selectBlock(id);
 				refresh();
@@ -452,10 +499,10 @@
 			/>
 		</div>
 		<dl class="stats">
-			<div class:limit={blocks.length >= MINI_BUILD_LIMITS.maxBlocks}>
-				<dt>Blocks</dt>
+			<div class:limit={shapeCount(blocks, 'cuboid') >= MINI_BUILD_LIMITS.maxBlocks}>
+				<dt>Cuboids</dt>
 				<dd data-testid="mini-build-block-count">
-					{blocks.length} / {MINI_BUILD_LIMITS.maxBlocks}
+					{shapeCount(blocks, 'cuboid')} / {MINI_BUILD_LIMITS.maxBlocks}
 				</dd>
 			</div>
 			<div>
@@ -516,13 +563,25 @@
 			<button
 				type="button"
 				data-testid="mini-build-add"
-				disabled={blocks.length >= MINI_BUILD_LIMITS.maxBlocks}
+				disabled={shapeCount(blocks, 'cuboid') >= MINI_BUILD_LIMITS.maxBlocks}
 				onclick={() => run(editor.addBlock())}
 			>
-				{blocks.length >= MINI_BUILD_LIMITS.maxBlocks
+				{shapeCount(blocks, 'cuboid') >= MINI_BUILD_LIMITS.maxBlocks
 					? `${MINI_BUILD_LIMITS.maxBlocks} / ${MINI_BUILD_LIMITS.maxBlocks}`
 					: '+ Add Cuboid'}
 			</button>
+			{#each ['cylinder', 'sphere'] as const as shape (shape)}
+				<button
+					type="button"
+					data-testid={`mini-build-add-${shape}`}
+					disabled={shapeCount(blocks, shape) >= shapeLimit(shape)}
+					onclick={() => run(editor.addBlock(shape))}
+				>
+					+ {shape === 'cylinder' ? 'Cylinder' : 'Sphere'} ({shapeCount(blocks, shape)}/{shapeLimit(
+						shape
+					)})
+				</button>
+			{/each}
 			<button
 				type="button"
 				data-testid="mini-build-duplicate"
@@ -581,6 +640,36 @@
 				onclick={() => run(editor.deleteSelected())}>Delete Block</button
 			>
 
+			<p class="section-label">
+				Interactions · {interactions.length} / {MINI_BUILD_LIMITS.maxInteractionLocations}
+			</p>
+			<button
+				data-testid="mini-build-add-sit"
+				disabled={interactions.length >= MINI_BUILD_LIMITS.maxInteractionLocations}
+				onclick={() => run(editor.addInteraction('sit'))}>+ Sitting Location</button
+			>
+			<button
+				data-testid="mini-build-add-lie"
+				disabled={interactions.length >= MINI_BUILD_LIMITS.maxInteractionLocations}
+				onclick={() => run(editor.addInteraction('lie'))}>+ Lying Location</button
+			>
+			<ol class="block-list">
+				{#each interactions as location, index (location.id)}
+					<li>
+						<button
+							aria-pressed={interaction?.id === location.id}
+							onclick={() => {
+								editor.selectInteraction(location.id);
+								refresh();
+							}}
+							>{location.type === 'sit' ? 'Sitting' : 'Lying'} Location {index + 1}{location.enabled
+								? ''
+								: ' (disabled)'}</button
+						>
+					</li>
+				{/each}
+			</ol>
+
 			<p class="section-label">Blocks</p>
 			<ol class="block-list">
 				{#each blocks as block, index (block.id)}
@@ -596,13 +685,19 @@
 							}}
 						>
 							<span class="swatch" style:background={slot?.material.color}></span>
-							{isPlaneBlock(block) ? 'Plane' : 'Block'}
+							{block.shape === 'cylinder'
+								? 'Cylinder'
+								: block.shape === 'sphere'
+									? 'Sphere'
+									: isPlaneBlock(block)
+										? 'Plane'
+										: 'Block'}
 							{index + 1}
 						</button>
 					</li>
 				{/each}
 				{#if blocks.length === 0}
-					<li class="empty">No blocks yet — add a cuboid to start.</li>
+					<li class="empty">No pieces yet — add a shape to start.</li>
 				{/if}
 			</ol>
 		</aside>
@@ -627,6 +722,79 @@
 		</section>
 
 		<aside class="properties" aria-label="Properties">
+			{#if interaction}
+				<section data-testid="mini-build-interaction-properties">
+					<h3>{interaction.type === 'sit' ? 'Sitting' : 'Lying'} Location</h3>
+					<p class="hint">ID: {interaction.id}</p>
+					{#each interactionWarnings as warning (warning)}<p class="hint" role="status">
+							⚠ {warning}
+						</p>{/each}
+					<p class="hint">
+						White dot: pelvis support point. Place it on the seat or sleeping surface. Arrow: {interaction.type ===
+						'sit'
+							? 'player forward'
+							: 'toward the head'}. Drag the plane to move; use these fields for precise placement.
+					</p>
+					<div class="interaction-coordinates">
+						{#each AXIS_LIST as axis (axis)}
+							<label
+								>{axis.toUpperCase()} (m)<input
+									type="number"
+									data-testid={`mini-build-interaction-${axis}`}
+									step={MINI_BUILD_LIMITS.gridSize}
+									value={gridToMeters(interaction.positionGrid[axis])}
+									onchange={(e) =>
+										run(
+											editor.updateInteraction(interaction.id, {
+												positionGrid: {
+													...interaction.positionGrid,
+													[axis]: metersToGrid(Number(e.currentTarget.value))
+												}
+											})
+										)}
+								/></label
+							>
+						{/each}
+					</div>
+					<label
+						>Facing (degrees)<input
+							type="number"
+							data-testid="mini-build-interaction-yaw"
+							step={rotationStep}
+							value={interaction.rotationY}
+							onchange={(e) =>
+								run(
+									editor.updateInteraction(interaction.id, {
+										rotationY: snapAngle(Number(e.currentTarget.value), rotationStep)
+									})
+								)}
+						/></label
+					>
+					<button
+						onclick={() =>
+							run(
+								editor.updateInteraction(interaction.id, {
+									rotationY: snapAngle(interaction.rotationY + rotationStep)
+								})
+							)}>Rotate ↻</button
+					>
+					<label
+						><input
+							type="checkbox"
+							checked={interaction.enabled}
+							onchange={(e) =>
+								run(editor.updateInteraction(interaction.id, { enabled: e.currentTarget.checked }))}
+						/> Enabled</label
+					>
+					<p class="hint">
+						Player footprint and occupancy box: automatic, based on the avatar. Markers do not use
+						your block budget. Check the wireframe for clearance; legs may extend beyond the build.
+					</p>
+					<button onclick={() => run(editor.duplicateInteraction())}>Duplicate Location</button>
+					<button onclick={() => run(editor.deleteInteraction())}>Delete Location</button>
+				</section>
+			{/if}
+
 			<p class="section-label">
 				{selected && isPlaneBlock(selected) ? 'Selected Plane' : 'Selected Block'}
 			</p>
@@ -706,7 +874,10 @@
 					</select>
 				</label>
 				<p class="hint" data-testid="mini-build-plane-hint">
-					{#if flatAxis(selectedSize)}
+					{#if selected.shape === 'cylinder' || selected.shape === 'sphere'}
+						Low-poly {selected.shape} · {selected.shape === 'cylinder' ? 32 : 48} triangles. All sizes
+						must be at least {MINI_BUILD_LIMITS.gridSize}m.
+					{:else if flatAxis(selectedSize)}
 						Flat on {flatAxis(selectedSize)?.toUpperCase()} — drawn as a two-sided plane. Give it a size
 						to make it a cuboid again.
 					{:else}
@@ -868,7 +1039,12 @@
 
 	{#if namePrompt}
 		<div data-ui-backdrop class="dialog-backdrop">
-			<form data-ui-surface="panel" class="dialog" onsubmit={submitName} data-testid="mini-build-name-dialog">
+			<form
+				data-ui-surface="panel"
+				class="dialog"
+				onsubmit={submitName}
+				data-testid="mini-build-name-dialog"
+			>
 				<h3>{namePrompt.mode === 'save-as' ? 'Save As New Design' : 'Name Your Build'}</h3>
 				<p>
 					{namePrompt.mode === 'save-as'
@@ -893,7 +1069,12 @@
 
 	{#if confirmDiscard}
 		<div data-ui-backdrop class="dialog-backdrop">
-			<div data-ui-surface="panel" class="dialog" role="alertdialog" data-testid="mini-build-discard-dialog">
+			<div
+				data-ui-surface="panel"
+				class="dialog"
+				role="alertdialog"
+				data-testid="mini-build-discard-dialog"
+			>
 				<h3>Discard changes?</h3>
 				<p>Your changes to this build have not been saved.</p>
 				<div class="dialog-actions">
@@ -911,6 +1092,21 @@
 </div>
 
 <style>
+	.interaction-coordinates {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 6px;
+	}
+	.interaction-coordinates label {
+		display: grid;
+		gap: 4px;
+	}
+	.interaction-coordinates input {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
+	}
+
 	.editor {
 		position: fixed;
 		inset: 0;

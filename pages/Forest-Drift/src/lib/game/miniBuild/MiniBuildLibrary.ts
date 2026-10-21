@@ -1,3 +1,4 @@
+import { validateInteractions } from './MiniBuildInteractions';
 import {
 	cloneBlock,
 	cloneDefinition,
@@ -89,6 +90,8 @@ export class MiniBuildLibrary {
 			id: newId(),
 			name,
 			revision: 1,
+			geometryRevision: 1,
+			interactionLocations: structuredClone(validated.value.interactionLocations ?? []),
 			blocks: validated.value.blocks,
 			materials: validated.value.materials,
 			bounds: computeBounds(validated.value.blocks),
@@ -117,6 +120,11 @@ export class MiniBuildLibrary {
 			...existing,
 			name: validated.value.name,
 			revision: existing.revision + 1,
+			geometryRevision:
+				contentHash(existing) === contentHash(validated.value)
+					? (existing.geometryRevision ?? existing.revision)
+					: existing.revision + 1,
+			interactionLocations: structuredClone(validated.value.interactionLocations ?? []),
 			blocks: validated.value.blocks,
 			materials: validated.value.materials,
 			bounds: computeBounds(validated.value.blocks),
@@ -138,6 +146,7 @@ export class MiniBuildLibrary {
 				name: `${existing.name} Copy`,
 				blocks: existing.blocks.map(cloneBlock),
 				materials: cloneMaterials(existing.materials),
+				interactionLocations: structuredClone(existing.interactionLocations ?? []),
 				semanticType: existing.semanticType
 			},
 			{ now }
@@ -193,7 +202,12 @@ export class MiniBuildLibrary {
 		const hash = contentHash(template);
 		let match: MiniBuildDefinition | undefined;
 		for (const definition of this.definitions.values()) {
-			if (definition.sourceDefaultId === template.id && contentHash(definition) === hash) {
+			if (
+				definition.sourceDefaultId === template.id &&
+				contentHash(definition) === hash &&
+				JSON.stringify(validateInteractions(definition.interactionLocations)) ===
+					JSON.stringify(validateInteractions(template.interactionLocations))
+			) {
 				match = definition;
 				break;
 			}

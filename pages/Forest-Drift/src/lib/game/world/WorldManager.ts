@@ -285,18 +285,23 @@ export class WorldManager {
 	}
 
 	async exportWorld(
-		worldId: string
+		worldId: string,
+		content?: WorldContentSnapshot
 	): Promise<WorldOperationResult<{ world: WorldDefinition; thumbnail?: Blob }>> {
 		try {
 			let world =
 				this.current?.id === worldId ? this.current : await this.repository.loadWorld(worldId);
-			let thumbnail = await this.repository.getThumbnail(worldId);
+			// A missing thumbnail must never block backing up the world itself.
+			let thumbnail = await this.repository.getThumbnail(worldId).catch(() => undefined);
 			if (!world && worldId === DEFAULT_WORLD_ID) {
 				world = getDefaultWorldDefinition();
 				thumbnail = getDefaultWorldThumbnailBlob();
 			}
 			if (!world) return { ok: false, error: 'World not found.' };
-			return { ok: true, value: { world, thumbnail } };
+			// A live export must also work when saving locally failed (for example, storage is full).
+			if (content && this.current?.id === worldId)
+				world = applyContentToWorld(world, deepClone(content));
+			return { ok: true, value: { world: deepClone(world), thumbnail } };
 		} catch (error) {
 			return { ok: false, error: describeError(error, 'Unable to export world.') };
 		}
@@ -345,14 +350,15 @@ export class WorldManager {
 			const now = new Date().toISOString();
 			const imported: WorldDefinition = {
 				...parsed.world,
-				id: existing ? newWorldId() : parsed.world.id,
+				// Every import is independent, including built-in ids and simultaneous imports.
+				id: newWorldId(),
 				name: existing ? normalizeWorldName(`${parsed.world.name} (Imported)`) : parsed.world.name,
 				updatedAt: now,
 				lastPlayedAt: now,
 				saveRevision: parsed.world.saveRevision + 1
 			};
 			await this.repository.saveWorld(imported);
-			if (parsed.thumbnail) await this.repository.putThumbnail(imported.id, parsed.thumbnail);
+			if (parsed.thumbnail) await this.saveThumbnail(imported.id, parsed.thumbnail);
 			return { ok: true, value: imported };
 		} catch (error) {
 			return { ok: false, error: describeError(error, 'Unable to import world.') };

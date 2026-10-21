@@ -1,3 +1,9 @@
+import {
+	shutterSideFacingPlayer,
+	windowRayDistance,
+	type WindowShutters,
+	type WindowShutterMode
+} from './windowShutterMath';
 import type { SkirtingRunManager } from './SkirtingRunManager';
 import type { SkirtingRunDefinition, WallLine } from './skirtingRunMath';
 import { cloneBarrierStyle, type BarrierStyleDefinition } from './BarrierTypes';
@@ -50,6 +56,7 @@ import type {
 	WallBeamDefinition,
 	WallDefinition,
 	WallOpeningDefinition,
+	DoorStyle,
 	WallOpeningType
 } from './WallTypes';
 
@@ -136,6 +143,7 @@ export interface AddFloorDetailParams {
 }
 
 export interface OpeningCandidate {
+	doorStyle?: DoorStyle;
 	type: WallOpeningType;
 	minU: number;
 	maxU: number;
@@ -144,6 +152,7 @@ export interface OpeningCandidate {
 }
 
 export interface AddOpeningParams extends OpeningCandidate {
+	shutters?: WindowShutters;
 	wallId: string;
 	edgeMargin: number;
 	spacing: number;
@@ -159,6 +168,7 @@ export interface RoofOpeningCandidate extends OpeningCandidate {
 }
 
 export interface AddRoofOpeningParams extends RoofOpeningCandidate {
+	shutters?: WindowShutters;
 	/** Copied onto the opening at place time, same as a wall opening's. */
 	material?: BuildingMaterialDefinition;
 }
@@ -401,12 +411,16 @@ export class BuildingManager {
 		};
 
 		this.wallPathManager.addPath(path);
+		this.rebuildSkirtingForFoundation(foundationId);
 		return { valid: true, value: path };
 	}
 
 	removeWallPath(pathId: string): boolean {
 		this.revision++;
-		return this.wallPathManager.removePath(pathId);
+		const path = this.wallPathManager.getPath(pathId);
+		const removed = this.wallPathManager.removePath(pathId);
+		if (removed && path) this.rebuildSkirtingForFoundation(path.foundationId);
+		return removed;
 	}
 
 	/**
@@ -465,6 +479,7 @@ export class BuildingManager {
 		if (!path.closed) {
 			addIfValid(path.points.slice(0, index + 1), path.segments.slice(0, index));
 			addIfValid(path.points.slice(index + 1), path.segments.slice(index + 1));
+			this.rebuildSkirtingForFoundation(path.foundationId);
 			return true;
 		}
 
@@ -476,6 +491,7 @@ export class BuildingManager {
 			(_, k) => path.segments[(index + 1 + k) % n]
 		);
 		addIfValid(rotatedPoints, rotatedSegments);
+		this.rebuildSkirtingForFoundation(path.foundationId);
 		return true;
 	}
 
@@ -669,7 +685,9 @@ export class BuildingManager {
 			maxU: params.maxU,
 			minY: params.minY,
 			maxY: params.maxY,
-			...(params.material ? { material: params.material } : {})
+			...(params.material ? { material: params.material } : {}),
+			...(params.type === 'window' && params.shutters ? { shutters: { ...params.shutters } } : {}),
+			...(params.type === 'door' && params.doorStyle ? { doorStyle: { ...params.doorStyle } } : {})
 		};
 		roof.openings = [...(roof.openings ?? []), opening];
 		this.roofManager.rebuildRoof(roof.id);
@@ -1059,7 +1077,9 @@ export class BuildingManager {
 			maxU: params.maxU,
 			minY: params.minY,
 			maxY: params.maxY,
-			...(params.material ? { material: params.material } : {})
+			...(params.material ? { material: params.material } : {}),
+			...(params.type === 'window' && params.shutters ? { shutters: { ...params.shutters } } : {}),
+			...(params.type === 'door' && params.doorStyle ? { doorStyle: { ...params.doorStyle } } : {})
 		};
 
 		const standaloneWall = this.wallManager.getWall(params.wallId);
@@ -1190,6 +1210,78 @@ export class BuildingManager {
 		);
 	}
 
+	/** Update only the window under the crosshair; preserve dimensions, colour, and other openings. */
+	applyWindowShuttersFromView(
+		position: { x: number; y: number; z: number },
+		direction: { x: number; y: number; z: number },
+		mode: WindowShutterMode,
+		maxDistance = Infinity
+	): boolean {
+		let nearest: { distance: number; apply: () => void } | undefined;
+		const consider = (
+			opening: WallOpeningDefinition,
+			transform: NonNullable<ReturnType<BuildingManager['getWallTransform']>>,
+			rebuild: () => void
+		) => {
+			if (opening.type !== 'window') return;
+			const distance = windowRayDistance(opening, transform, position, direction);
+			if (distance === null || distance > maxDistance || (nearest && distance >= nearest.distance))
+				return;
+			nearest = {
+				distance,
+				apply: () => {
+					opening.shutters = {
+						mode,
+						...(mode === 'manual'
+							? {
+									side: shutterSideFacingPlayer(
+										transform.dirX,
+										transform.dirZ,
+										transform.originWorldX,
+										transform.originWorldZ,
+										position.x,
+										position.z
+									)
+								}
+							: {})
+					};
+					rebuild();
+				}
+			};
+		};
+		const walls = [
+			...this.wallManager.getAllWalls(),
+			...this.wallPathManager
+				.getAllPaths()
+				.flatMap((path) =>
+					path.segments
+						.map((segment) => this.wallPathManager.getSegmentAsWallView(segment.id))
+						.filter((wall): wall is WallDefinition => !!wall)
+				)
+		];
+		for (const wall of walls) {
+			const transform = this.getWallTransform(wall.id);
+			if (!transform) continue;
+			for (const opening of wall.openings)
+				consider(opening, transform, () => {
+					const path = this.wallPathManager.findSegment(wall.id);
+					if (path) this.wallPathManager.rebuildPath(path.path.id);
+					else this.wallManager.rebuildWall(wall.id);
+				});
+		}
+		for (const roof of this.roofManager.getAllRoofs()) {
+			for (const opening of roof.openings ?? []) {
+				const target = this.getRoofFaceTarget(roof.id, opening.face);
+				if (target)
+					consider(opening, target.transform, () => this.roofManager.rebuildRoof(roof.id));
+			}
+		}
+		if (!nearest) return false;
+		nearest.apply();
+		this.revision++;
+		return true;
+	}
+
 	/** Every raycastable wall surface — standalone wall meshes plus wall-path segment picking meshes — for Window/Door tool and Remove Mode targeting. */
 	getRaycastableWallMeshes() {
 		return [
@@ -1229,6 +1321,15 @@ export class BuildingManager {
 			...this.wallManager.getDoorHingePivots(),
 			...this.wallPathManager.getDoorHingePivots(),
 			...this.roofManager.getDoorHingePivots()
+		];
+	}
+
+	/** Door leaves and window shutter assemblies share one nearest-target interaction. */
+	getOpeningInteractionPivots() {
+		return [
+			...this.wallManager.getOpeningInteractionPivots(),
+			...this.wallPathManager.getOpeningInteractionPivots(),
+			...this.roofManager.getOpeningInteractionPivots()
 		];
 	}
 

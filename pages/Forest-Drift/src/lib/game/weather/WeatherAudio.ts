@@ -1,3 +1,4 @@
+import { audioOutput } from '../audio/AudioPreferences';
 import { audioContext } from '../music/InstrumentLibrary';
 import type {
 	ThunderVoice,
@@ -162,7 +163,7 @@ export class WeatherAudio implements ThunderVoiceBackend {
 
 		this.master = context.createGain();
 		this.master.gain.value = 0;
-		this.master.connect(context.destination);
+		this.master.connect(audioOutput(context, 'ambience'));
 
 		// Rain: white noise, high-passed (patter, not hiss), then a low-pass that drops when sheltered.
 		const rain = context.createBufferSource();

@@ -1,3 +1,5 @@
+import { shapeLimitError } from './miniBuildShapes';
+import { validateInteractions } from './MiniBuildInteractions';
 /**
  * Untrusted-data validation for Mini Builds. Every definition that enters the runtime — from
  * IndexedDB, an imported world file or the personal library — passes through here, so a
@@ -103,6 +105,8 @@ function validateBlock(
 	const label = `Block ${index + 1}`;
 	if (!isRecord(value)) return fail(`${label} must be an object`);
 	if (!isId(value.id)) return fail(`${label} id missing`);
+	if (value.shape !== undefined && !['cuboid', 'cylinder', 'sphere'].includes(String(value.shape)))
+		return fail(`${label} has an unknown shape`);
 	const position = value.positionGrid;
 	const size = value.sizeGrid;
 	const rotation = value.rotation;
@@ -121,6 +125,8 @@ function validateBlock(
 		if (!isSnapAngle(rotation[axis]))
 			return fail(`${label} rotation must be a multiple of 7.5° from 0 to 352.5`);
 	}
+	if (value.shape && value.shape !== 'cuboid' && [size.x, size.y, size.z].some((s) => s === 0))
+		return fail(`${label} curved shapes need positive size on all axes`);
 	const flat = [size.x, size.y, size.z].filter((s) => s === 0).length;
 	if (flat > MINI_BUILD_LIMITS.maxFlatAxesPerBlock) {
 		return fail(`${label} can be flat (size 0) on only one axis`);
@@ -152,6 +158,7 @@ function validateBlock(
 		ok: true,
 		value: cloneBlock({
 			id: value.id,
+			shape: value.shape as MiniBuildBlock['shape'],
 			positionGrid: { x: position.x as number, y: position.y as number, z: position.z as number },
 			sizeGrid: { x: size.x as number, y: size.y as number, z: size.z as number },
 			rotation: { x: rotation.x as number, y: rotation.y as number, z: rotation.z as number },
@@ -181,8 +188,10 @@ export function validateMiniBuildContent(
 
 	if (!Array.isArray(blocksRaw)) return fail('Blocks must be an array');
 	if (blocksRaw.length < 1) return fail('A Mini Build needs at least one block');
-	if (blocksRaw.length > MINI_BUILD_LIMITS.maxBlocks) {
-		return fail(`Maximum ${MINI_BUILD_LIMITS.maxBlocks} blocks.`);
+	if (blocksRaw.length > MINI_BUILD_LIMITS.maxPrimitives) {
+		return fail(
+			`Maximum ${MINI_BUILD_LIMITS.maxPrimitives} pieces (16 cuboids, 4 cylinders, 2 spheres).`
+		);
 	}
 	const blocks: MiniBuildBlock[] = [];
 	const ids = new Set<string>();
@@ -193,6 +202,8 @@ export function validateMiniBuildContent(
 		ids.add(result.value.id);
 		blocks.push(result.value);
 	}
+	const shapeError = shapeLimitError(blocks);
+	if (shapeError) return fail(shapeError);
 	if (!boundsFit(computeBounds(blocks))) return fail('Mini Build must fit within 4m × 4m × 4m');
 	return { ok: true, value: { blocks: groundBlocks(blocks), materials } };
 }
@@ -202,10 +213,17 @@ export function validateMiniBuildDraft(
 ): MiniBuildValidationResult<MiniBuildDraft> {
 	const content = validateMiniBuildContent(draft.blocks, draft.materials);
 	if (!content.ok) return content;
+	const interactions = validateInteractions(draft.interactionLocations);
+	if (!interactions.ok) return interactions;
+	const shiftY = computeBounds(draft.blocks).min.y;
+	for (const location of interactions.value) location.positionGrid.y -= shiftY;
+	const groundedInteractions = validateInteractions(interactions.value);
+	if (!groundedInteractions.ok) return groundedInteractions;
 	return {
 		ok: true,
 		value: {
 			name: sanitizeName(draft.name),
+			interactionLocations: interactions.value,
 			blocks: content.value.blocks,
 			materials: content.value.materials,
 			semanticType: draft.semanticType
@@ -235,6 +253,12 @@ export function validateMiniBuildDefinition(
 	const blocksRaw = scale === 1 ? value.blocks : scaleLegacyBlocks(value.blocks, scale);
 	const content = validateMiniBuildContent(blocksRaw, value.materials);
 	if (!content.ok) return fail(`${label}: ${content.error}`);
+	const interactions = validateInteractions(value.interactionLocations);
+	if (!interactions.ok) return fail(`${label}: ${interactions.error}`);
+	const shiftY = computeBounds(blocksRaw as MiniBuildBlock[]).min.y;
+	for (const location of interactions.value) location.positionGrid.y -= shiftY;
+	const groundedInteractions = validateInteractions(interactions.value);
+	if (!groundedInteractions.ok) return groundedInteractions;
 	if (
 		value.anchor !== undefined &&
 		(!isRecord(value.anchor) || value.anchor.type !== 'bottom-center')
@@ -260,6 +284,17 @@ export function validateMiniBuildDefinition(
 			id: value.id,
 			name: sanitizeName(value.name),
 			revision: value.revision,
+			interactionLocations: interactions.value,
+			...(value.geometryRevision === undefined
+				? {}
+				: {
+						geometryRevision:
+							isGridInteger(value.geometryRevision) &&
+							value.geometryRevision > 0 &&
+							value.geometryRevision <= value.revision
+								? value.geometryRevision
+								: value.revision
+					}),
 			blocks,
 			materials: content.value.materials,
 			bounds: computeBounds(blocks),
