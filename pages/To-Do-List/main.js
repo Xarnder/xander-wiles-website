@@ -873,6 +873,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('add-list-btn').onclick = API.addNewList;
     const headerAddTaskBtn = document.getElementById('header-add-task-btn');
     if (headerAddTaskBtn) headerAddTaskBtn.onclick = () => openHeaderAddTask();
+    const boardForAddTarget = document.getElementById('board-container');
+    if (boardForAddTarget) {
+        boardForAddTarget.addEventListener('pointerdown', (e) => {
+            if (e.button != null && e.button !== 0) return;
+            if (isPhoneLayout()) return;
+            const col = e.target.closest('.list-column');
+            if (!col || !boardForAddTarget.contains(col)) return;
+            const listId = col.dataset.listId;
+            if (!listId || listId === 'orphan-archive') return;
+            if (state.selectedAddListId === listId) return;
+            state.selectedAddListId = listId;
+            syncAddTargetIndicator();
+        });
+        boardForAddTarget.addEventListener('scroll', scheduleAddTargetIndicator, { passive: true });
+    }
+    document.addEventListener('input', (e) => {
+        if (!e.target.classList || !e.target.classList.contains('list-title')) return;
+        scheduleAddTargetIndicator();
+    });
 
     // Mobile Reorder
     document.getElementById('mobile-reorder-lists-btn').onclick = () => {
@@ -911,8 +930,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Measure fixed bottom tool panel → list/multi-bar clearance (normal + Kanban)
     const scheduleSlimChrome = () => requestAnimationFrame(() => UI.layoutSlimChrome());
     scheduleSlimChrome();
-    window.addEventListener('resize', scheduleSlimChrome);
-    window.addEventListener('orientationchange', scheduleSlimChrome);
+    window.addEventListener('resize', () => {
+        scheduleSlimChrome();
+        scheduleAddTargetIndicator();
+    });
+    window.addEventListener('orientationchange', () => {
+        scheduleSlimChrome();
+        scheduleAddTargetIndicator();
+    });
 
     // Toggle Archive View
     document.getElementById('archive-mode-btn').onclick = async function () {
@@ -4265,15 +4290,16 @@ function openTaskInComposer(taskId, listId) {
     focusComposerField(field, null, true);
 }
 
-function resolveAddTargetListId() {
-    if (state.focusedKanbanListId) return state.focusedKanbanListId;
-    if (state.focusedMasonryListId) return state.focusedMasonryListId;
-    const columns = [...document.querySelectorAll('#board-container > .list-column[data-list-id]')]
+function isPhoneLayout() {
+    return window.matchMedia('(max-width: 500px)').matches;
+}
+
+function visibleAddColumns() {
+    return [...document.querySelectorAll('#board-container > .list-column[data-list-id]')]
         .filter((col) => col.dataset.listId && col.dataset.listId !== 'orphan-archive');
-    if (!columns.length) {
-        const first = (state.appData.lists || []).find((list) => list.id && list.id !== 'orphan-archive');
-        return first ? first.id : null;
-    }
+}
+
+function centeredAddColumn(columns) {
     const board = document.getElementById('board-container');
     const view = board ? board.getBoundingClientRect() : { left: 0, width: window.innerWidth };
     const mid = view.left + view.width / 2;
@@ -4288,7 +4314,63 @@ function resolveAddTargetListId() {
             best = col;
         }
     });
-    return best.dataset.listId;
+    return best;
+}
+
+function resolveAddTargetListId() {
+    if (state.focusedKanbanListId) return state.focusedKanbanListId;
+    if (state.focusedMasonryListId) return state.focusedMasonryListId;
+    const columns = visibleAddColumns();
+    if (!columns.length) {
+        const first = (state.appData.lists || []).find((list) => list.id && list.id !== 'orphan-archive');
+        return first ? first.id : null;
+    }
+    if (!isPhoneLayout() && state.selectedAddListId) {
+        const selected = columns.find((col) => col.dataset.listId === state.selectedAddListId);
+        if (selected) return state.selectedAddListId;
+        state.selectedAddListId = null;
+    }
+    return centeredAddColumn(columns).dataset.listId;
+}
+
+function addTargetListTitle(listId) {
+    if (!listId) return '';
+    let titleInput = null;
+    try {
+        titleInput = document.querySelector(`.list-column[data-list-id="${CSS.escape(listId)}"] input.list-title`);
+    } catch (_) {}
+    const typed = titleInput && titleInput.value.trim();
+    if (typed) return typed;
+    const lists = state.appData.rawLists || state.appData.lists || [];
+    const list = lists.find((item) => item && item.id === listId);
+    return (list && String(list.title || '').trim()) || '';
+}
+
+let addTargetScrollTimer = 0;
+
+function syncAddTargetIndicator() {
+    const listId = resolveAddTargetListId();
+    if (isPhoneLayout() && listId) state.selectedAddListId = listId;
+    const title = addTargetListTitle(listId);
+    document.querySelectorAll('.list-column.is-add-target').forEach((el) => el.classList.remove('is-add-target'));
+    if (listId) {
+        let column = null;
+        try {
+            column = document.querySelector(`#board-container > .list-column[data-list-id="${CSS.escape(listId)}"]`);
+        } catch (_) {}
+        if (column) column.classList.add('is-add-target');
+    }
+    const btn = document.getElementById('header-add-task-btn');
+    if (btn) {
+        const next = title ? `Add task to ${title}` : 'Add task';
+        btn.title = next;
+        btn.setAttribute('aria-label', next);
+    }
+}
+
+function scheduleAddTargetIndicator() {
+    clearTimeout(addTargetScrollTimer);
+    addTargetScrollTimer = setTimeout(syncAddTargetIndicator, 70);
 }
 
 function openHeaderAddTask() {
@@ -4665,5 +4747,6 @@ window.onBoardRendered = function() {
         }
     }
     syncRenderedAddInputs();
+    syncAddTargetIndicator();
 };
 

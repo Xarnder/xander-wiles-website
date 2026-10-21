@@ -57,6 +57,8 @@ export const state = {
     compactView: true,
     focusedKanbanListId: null,
     focusedMasonryListId: null,
+    /** List the header Add button writes to. On a phone this follows the list in view. */
+    selectedAddListId: null,
     sortableInstances: [],
     nestedSortableInstances: [],
     listSortable: null,

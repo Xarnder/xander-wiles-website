@@ -5626,6 +5626,11 @@ html.add-task-composer-open #backup-reminder-modal-overlay {
     outline: none;
 }
 
+.board-container > .list-column.is-add-target {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent-blue) 62%, transparent);
+}
+
 /* Desktop (header at top): filter label sits below the tag buttons */
 .tag-filter-label {
     order: 2;
