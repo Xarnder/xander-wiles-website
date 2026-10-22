@@ -8,6 +8,8 @@ const clamp = (value: number, low: number, high: number) => Math.max(low, Math.m
 export class CharacterAnimationState {
 	bodyYaw = 0;
 	headYaw = 0;
+	torsoYaw = 0;
+	backpedaling = false;
 	pitch = 0;
 	reach = 0;
 	compression = 0;
@@ -24,7 +26,8 @@ export class CharacterAnimationState {
 		dt: number,
 		reset: boolean,
 		verticalDelta: number,
-		speed = frame.speed
+		speed = frame.speed,
+		travelYaw?: number
 	): void {
 		const flying = !!(frame.flags & POSE_FLAGS.flying);
 		const grounded = !!(frame.flags & POSE_FLAGS.grounded) && !flying;
@@ -37,20 +40,36 @@ export class CharacterAnimationState {
 			this.airTime = this.fallSpeed = this.impact = this.compression = this.reach = 0;
 			this.landingAge = 1;
 			this.turning = false;
+			this.backpedaling = false;
+		}
+		const locomotion = grounded && !inactive && speed > 0.2 && travelYaw !== undefined;
+		let targetYaw = frame.yaw;
+		if (locomotion) {
+			let travelOffset = angle(travelYaw - frame.yaw);
+			// Backpedal instead of turning the whole body away and twisting the neck 180°.
+			// Hysteresis keeps tiny sideways velocity/camera changes from flipping the hips 180°.
+			if (Math.abs(travelOffset) > Math.PI / 2 + 0.18) this.backpedaling = true;
+			else if (Math.abs(travelOffset) < Math.PI / 2 + 0.02) this.backpedaling = false;
+			if (this.backpedaling) travelOffset = angle(travelOffset + Math.PI);
+			targetYaw = frame.yaw + travelOffset;
 		}
 		let error = angle(frame.yaw - this.bodyYaw);
 		if (Math.abs(error) > 0.65) this.turning = true;
 		if (Math.abs(error) < 0.1) this.turning = false;
 		if ((speed > 0.2 && !inactive) || this.turning) {
-			this.bodyYaw = angle(this.bodyYaw + error * (1 - Math.exp(-dt * 8)));
+			this.bodyYaw = angle(
+				this.bodyYaw + angle(targetYaw - this.bodyYaw) * (1 - Math.exp(-dt * 8))
+			);
 		}
 		error = angle(frame.yaw - this.bodyYaw);
-		// Large camera flicks cannot twist the neck past its comfortable range.
-		if (Math.abs(error) > 1) {
-			this.bodyYaw = angle(frame.yaw - Math.sign(error));
-			error = Math.sign(error);
+		const maxTwist = locomotion ? Math.PI / 2 + 0.18 : 1;
+		if (Math.abs(error) > maxTwist) {
+			this.bodyYaw = angle(frame.yaw - Math.sign(error) * maxTwist);
+			error = Math.sign(error) * maxTwist;
 		}
-		this.headYaw = error;
+		// Share a sideways look between the chest and neck while hips/feet follow travel.
+		this.torsoYaw = locomotion ? clamp(error * 0.35, -0.55, 0.55) : 0;
+		this.headYaw = error - this.torsoYaw;
 		this.pitch += (clamp(frame.pitch, -1.15, 1.15) - this.pitch) * (1 - Math.exp(-dt * 16));
 		const building = !inactive && !!(frame.flags & POSE_FLAGS.building);
 		this.reach += ((building ? 1 : 0) - this.reach) * (1 - Math.exp(-dt * (building ? 12 : 9)));

@@ -65,3 +65,25 @@ describe('layered character animation', () => {
 		expect(s.compression).toBe(0);
 	});
 });
+
+it.each([-1, 1])('keeps sideways heading stable near the backward boundary (%s)', (side) => {
+	const s = new CharacterAnimationState();
+	s.update(pose(), 0, true, 0);
+	for (let i = 0; i < 180; i++)
+		s.update(pose(), 1 / 60, false, 0, 2, side * (Math.PI / 2 + (i % 2 ? 0.07 : -0.01)));
+	expect(s.backpedaling).toBe(false);
+	expect(Math.sign(s.bodyYaw)).toBe(side);
+	expect(Math.abs(s.bodyYaw)).toBeGreaterThan(1.4);
+});
+it('backpedals without turning away and resumes left/forward travel', () => {
+	const s = new CharacterAnimationState();
+	s.update(pose(), 0, true, 0);
+	for (let i = 0; i < 120; i++) s.update(pose(), 1 / 60, false, 0, 2, Math.PI);
+	expect(s.backpedaling).toBe(true);
+	expect(s.bodyYaw).toBeCloseTo(0);
+	for (let i = 0; i < 120; i++) s.update(pose(), 1 / 60, false, 0, 2, Math.PI / 2);
+	expect(s.backpedaling).toBe(false);
+	expect(s.bodyYaw).toBeCloseTo(Math.PI / 2, 2);
+	for (let i = 0; i < 120; i++) s.update(pose(), 1 / 60, false, 0, 2, 0);
+	expect(s.bodyYaw).toBeCloseTo(0, 2);
+});

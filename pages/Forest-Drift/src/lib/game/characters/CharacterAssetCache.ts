@@ -1,3 +1,5 @@
+import { acquireCharacterTextures } from './CharacterTextures';
+import { MeshStandardMaterial } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Group, SkinnedMesh, Material } from 'three';
 import characterUrl from './assets/character.glb?url';
@@ -7,12 +9,20 @@ export class CharacterAssetCache {
 	private pending: Promise<Group> | null = null;
 	private asset: Group | null = null;
 	private disposed = false;
+	private textures: ReturnType<typeof acquireCharacterTextures> | null = null;
 	load(): Promise<Group> {
 		return (this.pending ??= new GLTFLoader().loadAsync(characterUrl).then(({ scene }) => {
 			if (this.disposed) {
 				disposeAsset(scene);
 				throw new Error('Character cache disposed');
 			}
+			this.textures = acquireCharacterTextures();
+			scene.traverse((object) => {
+				const mesh = object as SkinnedMesh;
+				if (!mesh.isMesh) return;
+				for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+					if (material instanceof MeshStandardMaterial) this.textures!.bind(material);
+			});
 			this.asset = scene;
 			return scene;
 		}));
@@ -21,6 +31,8 @@ export class CharacterAssetCache {
 		this.disposed = true;
 		if (this.asset) disposeAsset(this.asset);
 		this.asset = null;
+		this.textures?.release();
+		this.textures = null;
 	}
 }
 function disposeAsset(root: Group): void {

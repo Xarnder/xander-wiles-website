@@ -70,6 +70,10 @@ export class ShovelTool implements BuildTool {
 	isStrokeOpen(): boolean {
 		return this.direction !== 0;
 	}
+	isPlacementInProgress(): boolean {
+		return this.isStrokeOpen();
+	}
+
 	activate(): void {
 		this.active = true;
 		this.lastPreview = 0;

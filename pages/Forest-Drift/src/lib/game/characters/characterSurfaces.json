@@ -1,0 +1,20 @@
+{
+	"tileSize": 128,
+	"gutter": 8,
+	"columns": 4,
+	"rows": 2,
+	"surfaces": ["fabric", "leather", "fur", "skin", "metal", "hair", "eyes"],
+	"materials": {
+		"Skin": "skin",
+		"Shoes": "leather",
+		"Fur": "fur",
+		"Trousers": "fabric",
+		"Under Shirt": "fabric",
+		"Sleeve Fur": "fur",
+		"Main Jacket Colour": "fabric",
+		"Belt": "leather",
+		"Gold": "metal",
+		"Hair on Head": "hair",
+		"Eyes": "eyes"
+	}
+}

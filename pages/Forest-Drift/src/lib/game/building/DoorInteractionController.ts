@@ -21,6 +21,8 @@ export interface OpeningInteractionState {
 
 export interface DoorInteractionControllerOptions {
 	camera: THREE.Camera;
+	/** Physical player eye used for reach; aiming always comes from the camera. */
+	getPlayerEye?: () => Vec3;
 	getHingePivots: () => Iterable<readonly [string, THREE.Object3D]>;
 	maxDistance?: number;
 	aimRadius?: number;
@@ -40,6 +42,7 @@ export interface DoorInteractionControllerOptions {
  */
 export class DoorInteractionController {
 	private readonly camera: THREE.Camera;
+	private readonly getPlayerEye?: () => Vec3;
 	private readonly getHingePivots: () => Iterable<readonly [string, THREE.Object3D]>;
 	private readonly maxDistance: number;
 	private readonly aimRadius: number;
@@ -71,6 +74,7 @@ export class DoorInteractionController {
 
 	constructor(options: DoorInteractionControllerOptions) {
 		this.camera = options.camera;
+		this.getPlayerEye = options.getPlayerEye;
 		this.getHingePivots = options.getHingePivots;
 		this.maxDistance = options.maxDistance ?? DOOR_INTERACT_MAX_DISTANCE;
 		this.aimRadius = options.aimRadius ?? DOOR_INTERACT_AIM_RADIUS;
@@ -225,6 +229,8 @@ export class DoorInteractionController {
 			y: this.lookDirection.y,
 			z: this.lookDirection.z
 		};
+		const eye = this.getPlayerEye?.();
+		const cameraOffset = eye ? Math.hypot(origin.x - eye.x, origin.y - eye.y, origin.z - eye.z) : 0;
 		const candidates: { id: string; aim: Vec3 }[] = [];
 		for (const [id, pivot] of this.getHingePivots()) {
 			const aim =
@@ -232,9 +238,17 @@ export class DoorInteractionController {
 					? this.windowRayHit(pivot)
 					: this.aimWorldOf(pivot);
 			if (!aim) continue;
+			if (eye && Math.hypot(aim.x - eye.x, aim.y - eye.y, aim.z - eye.z) > this.maxDistance)
+				continue;
 			candidates.push({ id, aim });
 		}
-		return pickDoorAlongRay(origin, direction, candidates, this.maxDistance, this.aimRadius);
+		return pickDoorAlongRay(
+			origin,
+			direction,
+			candidates,
+			this.maxDistance + cameraOffset,
+			this.aimRadius
+		);
 	}
 
 	private appendArchCollisionRects(pivot: THREE.Object3D, rects: WallCollisionRect[]): void {

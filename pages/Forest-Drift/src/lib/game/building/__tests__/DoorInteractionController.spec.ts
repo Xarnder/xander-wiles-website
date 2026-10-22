@@ -175,3 +175,34 @@ describe('DoorInteractionController', () => {
 		controller.dispose();
 	});
 });
+
+it('uses player reach while retaining the third-person camera aim for doors and shutters', () => {
+	for (const kind of ['door', 'shutters']) {
+		const camera = new THREE.PerspectiveCamera();
+		camera.position.set(0, 1.7, 5.2);
+		const parent = new THREE.Group();
+		const pivot = new THREE.Group();
+		parent.add(pivot);
+		pivot.userData = {
+			interactionKind: kind,
+			aimU: 0,
+			aimY: 1.7,
+			minU: -1,
+			maxU: 1,
+			minY: 0,
+			maxY: 3
+		};
+		const eye = new THREE.Vector3(0, 1.7, 2);
+		const controller = new DoorInteractionController({
+			camera,
+			getPlayerEye: () => eye,
+			getHingePivots: () => [['opening', pivot]]
+		});
+		controller.update(0);
+		expect(controller.getLookedAtDoor()).toBe('opening');
+		eye.z = 5;
+		controller.update(0);
+		expect(controller.getLookedAtDoor()).toBeNull();
+		controller.dispose();
+	}
+});

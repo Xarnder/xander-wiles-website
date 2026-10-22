@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import manifest from '../assets/character.manifest.json';
 import { createInteraction } from '../../miniBuild/MiniBuildInteractions';
 import { MINI_BUILD_LIMITS } from '../../miniBuild/MiniBuildTypes';
 import { resolvePlayerInteractionPose } from '../../player/PlayerInteractionPoseResolver';
@@ -34,6 +36,25 @@ const bone = (character: CharacterInstance, name: string) =>
 	character.object.getObjectByName(`mixamorig${name}`) as THREE.Bone;
 
 describe('runtime character asset and ownership', () => {
+	it('was generated from the supplied V2 source', async () => {
+		const source = await readFile(
+			new URL(
+				'../../../../../assets/Character Model/New Forest Drift Charachter V2.fbx',
+				import.meta.url
+			)
+		);
+		expect(manifest.sha256).toBe(createHash('sha256').update(source).digest('hex'));
+	});
+	it('breathes vertically despite the imported Z-up armature', () => {
+		const c = new CharacterInstance(template, '#ffffff', () => {});
+		const before = bone(c, 'Hips').getWorldPosition(new THREE.Vector3());
+		for (let i = 0; i < 30; i++) c.update(frame(), 1 / 60, 4);
+		const after = bone(c, 'Hips').getWorldPosition(new THREE.Vector3());
+		expect(after.x).toBeCloseTo(before.x, 6);
+		expect(after.z).toBeCloseTo(before.z, 6);
+		expect(after.y - before.y).toBeCloseTo(Math.sin(0.5 * 1.8) * 0.004, 6);
+		c.dispose();
+	});
 	it('loads the real skinned asset with two draw primitives and independent poses/colours', () => {
 		const a = new CharacterInstance(template, '#ff0000', () => {});
 		const b = new CharacterInstance(template, '#0000ff', () => {});
@@ -42,7 +63,7 @@ describe('runtime character asset and ownership', () => {
 			if (o instanceof THREE.SkinnedMesh) meshes.push(o);
 		});
 		expect(meshes).toHaveLength(2);
-		expect(meshes.reduce((n, m) => n + m.geometry.index!.count / 3, 0)).toBe(5848);
+		expect(meshes.reduce((n, m) => n + m.geometry.index!.count / 3, 0)).toBe(manifest.triangles);
 		const before = bone(b, 'LeftUpLeg').quaternion.clone();
 		for (let i = 0; i < 60; i++) {
 			a.object.position.z = -i / 60;
@@ -56,6 +77,49 @@ describe('runtime character asset and ownership', () => {
 		expect(b.object.children.length).toBeGreaterThan(0);
 		b.dispose();
 	});
+	it.each([0, 1.5, 4])('keeps both arms away from the torso at speed %s', (speed) => {
+		const c = new CharacterInstance(template, '#ffffff', () => {});
+		const rest = ['Left', 'Right'].map((side) =>
+			Math.abs(bone(c, `${side}Hand`).getWorldPosition(new THREE.Vector3()).x)
+		);
+		for (let i = 0; i < 90; i++) {
+			c.object.position.z = (-i * speed) / 60;
+			c.update(
+				frame(c.object.position.z, POSE_FLAGS.grounded | (speed > 2 ? POSE_FLAGS.running : 0)),
+				1 / 60,
+				4,
+				() => 0
+			);
+			for (const [index, side] of ['Left', 'Right'].entries()) {
+				const hand = bone(c, `${side}Hand`).getWorldPosition(new THREE.Vector3());
+				expect(Math.abs(hand.x)).toBeGreaterThan(rest[index] + 0.05);
+			}
+		}
+		c.dispose();
+	});
+
+	it.each([-1, 1])(
+		'turns the lower body toward sideways travel while looking forward (%s)',
+		(side) => {
+			const c = new CharacterInstance(template, '#ffffff', () => {});
+			c.update(frame(), 1 / 60, 4);
+			const head = bone(c, 'Head').getWorldQuaternion(new THREE.Quaternion());
+			for (let i = 1; i <= 120; i++) {
+				c.object.position.x = (side * i) / 60;
+				c.update({ ...frame(), x: c.object.position.x }, 1 / 60, 4);
+			}
+			expect(c.animation.bodyYaw).toBeCloseTo((-side * Math.PI) / 2, 2);
+			const headDelta = bone(c, 'Head')
+				.getWorldQuaternion(new THREE.Quaternion())
+				.multiply(head.invert());
+			const look = new THREE.Vector3(0, 0, -1).applyQuaternion(headDelta);
+			expect(look.x).toBeCloseTo(0, 2);
+			expect(look.z).toBeCloseTo(-1, 2);
+			expect(Math.abs(c.animation.headYaw)).toBeLessThan(1.1);
+			c.dispose();
+		}
+	);
+
 	it('keeps animated vertices inside fixed per-instance culling bounds', () => {
 		const a = new CharacterInstance(template, '#ffffff', () => {});
 		const b = new CharacterInstance(template, '#000000', () => {});
@@ -207,6 +271,11 @@ describe('authored player poses on the real character skeleton', () => {
 				const ankle = bone(c, `${side}Foot`).getWorldPosition(new THREE.Vector3());
 				expect(knee.clone().sub(hips).dot(forward)).toBeGreaterThan(0.15);
 				expect(ankle.y).toBeLessThan(knee.y - 0.15);
+				const hand = bone(c, `${side}Hand`).getWorldPosition(new THREE.Vector3());
+				const lap = new THREE.Vector3(side === 'Left' ? -0.13 : 0.13, 0.08, -0.23)
+					.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
+					.add(hips);
+				expect(hand.distanceTo(lap)).toBeLessThan(0.08);
 			}
 			c.dispose();
 		}
@@ -258,4 +327,47 @@ describe('authored player poses on the real character skeleton', () => {
 		);
 		c.dispose();
 	});
+});
+
+it.each([-1, 1])('animates actual left/right stride under a moving player parent (%s)', (side) => {
+	const c = new CharacterInstance(template, '#ffffff', () => {});
+	const root = new THREE.Group();
+	root.add(c.object);
+	const heights: number[] = [];
+	for (let i = 0; i < 180; i++) {
+		root.position.x = (side * i * 3) / 60;
+		c.object.rotation.set(0, 0, 0);
+		c.update({ ...frame(), x: root.position.x }, 1 / 60, 0);
+		if (i > 60) heights.push(bone(c, 'LeftFoot').getWorldPosition(new THREE.Vector3()).y);
+	}
+	expect(Math.max(...heights) - Math.min(...heights)).toBeGreaterThan(0.06);
+	c.dispose();
+});
+
+it('continues alternating leg motion during a running jump without airborne running flags', () => {
+	const c = new CharacterInstance(template, '#ffffff', () => {});
+	for (let i = 0; i < 30; i++) {
+		c.object.position.z = -i * 0.08;
+		c.update(frame(c.object.position.z, POSE_FLAGS.grounded | POSE_FLAGS.running), 1 / 60, 4);
+	}
+	const left: number[] = [],
+		right: number[] = [];
+	const surface = () => {
+		throw new Error('Airborne gait must not probe the ground');
+	};
+	for (let i = 0; i < 40; i++) {
+		c.object.position.z -= 0.08;
+		c.object.position.y = 0.5;
+		c.update({ ...frame(c.object.position.z, 0), y: 0.5 }, 1 / 60, 4, surface);
+		left.push(bone(c, 'LeftFoot').getWorldPosition(new THREE.Vector3()).y);
+		right.push(bone(c, 'RightFoot').getWorldPosition(new THREE.Vector3()).y);
+	}
+	expect(Math.max(...left) - Math.min(...left)).toBeGreaterThan(0.06);
+	expect(Math.max(...right) - Math.min(...right)).toBeGreaterThan(0.06);
+	expect(left.some((y, i) => y > right[i] + 0.04)).toBe(true);
+	expect(right.some((y, i) => y > left[i] + 0.04)).toBe(true);
+	c.object.position.y = 0;
+	for (let i = 0; i < 60; i++) c.update(frame(c.object.position.z), 1 / 60, 4, () => 0);
+	expect(c.object.userData.animation).toBe('idle');
+	c.dispose();
 });

@@ -258,6 +258,10 @@ export class SlabToolBase implements BuildTool {
 		return this.defaultLocalY(foundationId);
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.state !== 'idle';
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

@@ -24,7 +24,11 @@ function fixture() {
 			ignore?: string
 		) => { id: string; box: ReturnType<typeof resolveMiniBuildInteraction>['box'] }[]
 	>(() => [] as { id: string; box: ReturnType<typeof resolveMiniBuildInteraction>['box'] }[]);
+	const raycast = vi.fn<
+		(ray: THREE.Raycaster) => { id: string; distance: number; point: THREE.Vector3 } | null
+	>(() => null);
 	const instances = {
+		raycast,
 		get: () => instance,
 		getChunkOf: () => '0,0',
 		isChunkActive: () => true,
@@ -35,14 +39,16 @@ function fixture() {
 		getCeilingBlockY: vi.fn(() => null as number | null)
 	};
 	let walls: WallCollisionRect[] = [];
+	const camera = new THREE.PerspectiveCamera();
+	const player = {
+		worldPosition: new THREE.Vector3(0, 1.7, 2),
+		onInteractionExit: null
+	} as unknown as FirstPersonController;
 	const runtime = new MiniBuildInteractionRuntime({
 		system: { instances, getDesign: () => definition } as unknown as MiniBuildSystem,
 		scene: new THREE.Scene(),
-		camera: new THREE.PerspectiveCamera(),
-		player: {
-			worldPosition: new THREE.Vector3(0, 1.7, 2),
-			onInteractionExit: null
-		} as unknown as FirstPersonController,
+		camera,
+		player,
 		surfaces: surfaces as unknown as WorldSurfaceSampler,
 		getWalls: () => walls,
 		getOccluders: () => [],
@@ -54,6 +60,9 @@ function fixture() {
 	});
 	return {
 		runtime,
+		camera,
+		player,
+		raycast,
 		surfaces,
 		queryCollisionBoxes,
 		location: resolveMiniBuildInteraction(definition, instance, location),
@@ -64,6 +73,24 @@ function fixture() {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('interaction clearance and exits', () => {
+	it('casts from the third-person camera without spending player reach on the boom', () => {
+		const f = fixture();
+		const p = f.location.position;
+		f.player.worldPosition.set(p.x, p.y + 1, p.z + 2);
+		f.camera.position.set(p.x, p.y + 1.55, p.z + 5.2);
+		const target = new THREE.Vector3(p.x, p.y, p.z);
+		f.camera.lookAt(target);
+		f.raycast.mockImplementation((ray) => {
+			expect(ray.ray.origin.distanceTo(f.camera.position)).toBeLessThan(1e-6);
+			const distance = f.camera.position.distanceTo(target);
+			return ray.far >= distance ? { id: 'owner', distance, point: target } : null;
+		});
+		expect(f.runtime.controller.host.pick()?.instanceId).toBe('owner');
+		f.player.worldPosition.z += 5;
+		expect(f.runtime.controller.host.pick()).toBeNull();
+		f.runtime.dispose();
+	});
+
 	it('checks walls, other instances, overhead slabs, and raised ground while excluding only its own instance', () => {
 		const f = fixture();
 		expect(f.runtime.blocked(f.location.box, 'owner')).toBe(false);

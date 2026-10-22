@@ -261,6 +261,10 @@ export class StairTool implements BuildTool {
 		return [this.previewMaterial, this.roughBoxMaterial];
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.state !== 'idle';
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

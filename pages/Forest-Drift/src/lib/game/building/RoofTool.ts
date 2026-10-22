@@ -324,6 +324,10 @@ export class RoofTool implements BuildTool {
 		return this.defaultBaseY(foundationId);
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.state !== 'idle';
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

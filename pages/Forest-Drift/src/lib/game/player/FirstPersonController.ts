@@ -1,3 +1,4 @@
+import { ThirdPersonCamera, type CameraObstacles } from './ThirdPersonCamera';
 import type { PlayerInteractionPose } from './PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import type { PlayerSettings } from '../terrain/TerrainSettings';
@@ -22,6 +23,8 @@ export function ceilingCameraClearance(near: number): number {
  */
 const STEP_SWEEP_SAMPLE_SPACING = 0.08;
 const MAX_STEP_SWEEP_SAMPLES = 24;
+/** Follow small downhill steps without alternating walk/air poses; larger ledges remain falls. */
+const GROUND_FOLLOW_DISTANCE = 0.3;
 
 /** Flying speed range (m/s). The default is twice the run speed; the scroll wheel scales it. */
 export const FLY_SPEED_MIN = 1;
@@ -43,6 +46,7 @@ export function flySpeedAfterWheel(speed: number, deltaY: number): number {
 }
 
 export interface FirstPersonControllerOptions {
+	getCameraObstacles?: () => CameraObstacles;
 	domElement: HTMLElement;
 	camera: THREE.PerspectiveCamera;
 	/**
@@ -98,6 +102,38 @@ export class FirstPersonController {
 	interactionPose: PlayerInteractionPose | null = null;
 	onInteractionExit: (() => void) | null = null;
 	interactionThirdPerson = false;
+	thirdPerson = false;
+	thirdPersonDistance = 0;
+	private readonly thirdPersonCamera = new ThirdPersonCamera();
+	private cameraDt = 1 / 60;
+	private readonly getCameraObstacles?: () => CameraObstacles;
+	toggleThirdPerson(): void {
+		if (this.interactionPose) this.interactionThirdPerson = !this.interactionThirdPerson;
+		else this.thirdPerson = !this.thirdPerson;
+		this.thirdPersonCamera.reset();
+	}
+	get usesThirdPerson(): boolean {
+		return this.interactionPose ? this.interactionThirdPerson : this.thirdPerson;
+	}
+	/** Keep the crosshair clear when looking steeply down through the local body. */
+	get localAvatarVisible(): boolean {
+		if (!this.usesThirdPerson || this.thirdPersonDistance <= 0.85) return false;
+		if (this.interactionPose) return true;
+		const dx = this.worldPosition.x - this.camera.position.x;
+		const dz = this.worldPosition.z - this.camera.position.z;
+		const fx = -Math.sin(this.yaw) * Math.cos(this.pitch);
+		const fy = Math.sin(this.pitch);
+		const fz = -Math.cos(this.yaw) * Math.cos(this.pitch);
+		for (const height of [0.9, 1.55]) {
+			const dy = this.worldPosition.y - this.eyeHeight + height - this.camera.position.y;
+			const along = dx * fx + dy * fy + dz * fz;
+			if (along > 0 && dx * dx + dy * dy + dz * dz - along * along < 0.45 ** 2) return false;
+		}
+		return true;
+	}
+	get eyeHeight(): number {
+		return this.settings.eyeHeight;
+	}
 	private interactionAge = 0;
 	private readonly interactionStart = new THREE.Vector3();
 	private interactionStartYaw = 0;
@@ -111,6 +147,7 @@ export class FirstPersonController {
 		this.interactionStartYaw = this.yaw;
 		this.interactionStartPitch = this.pitch;
 		this.interactionPose = pose;
+		this.interactionThirdPerson = this.thirdPerson;
 		this.interactionAge = 0;
 		this.setFlying(false);
 		this.keys.clear();
@@ -225,6 +262,17 @@ export class FirstPersonController {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (this.manualInputBlocked || this.exampleMovement) return;
+		if (
+			event.code === 'F5' &&
+			this.isPointerLocked() &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			!event.altKey
+		) {
+			event.preventDefault();
+			if (!event.repeat) this.toggleThirdPerson();
+			return;
+		}
 		if (this.interactionPose && this.isPointerLocked()) {
 			if (event.code === 'KeyV' && !event.repeat) {
 				this.interactionThirdPerson = !this.interactionThirdPerson;
@@ -283,6 +331,7 @@ export class FirstPersonController {
 	constructor(options: FirstPersonControllerOptions) {
 		this.domElement = options.domElement;
 		this.camera = options.camera;
+		this.getCameraObstacles = options.getCameraObstacles;
 		this.getSupportingSurfaceY = options.getSupportingSurfaceY;
 		this.getCeilingBlockY = options.getCeilingBlockY;
 		this.settings = options.settings;
@@ -422,6 +471,7 @@ export class FirstPersonController {
 	}
 
 	update(deltaSeconds: number): void {
+		this.cameraDt = deltaSeconds;
 		this.running = false;
 		if (this.interactionPose) {
 			const pose = this.interactionPose;
@@ -566,7 +616,13 @@ export class FirstPersonController {
 				}
 			}
 
-			if (proposedY <= groundHeight) {
+			const followingGround =
+				this.grounded &&
+				!jumpPressed &&
+				this.verticalVelocity <= 0 &&
+				(worldX !== this.worldPosition.x || worldZ !== this.worldPosition.z) &&
+				this.worldPosition.y - groundHeight <= GROUND_FOLLOW_DISTANCE;
+			if (proposedY <= groundHeight || followingGround) {
 				worldY = groundHeight;
 				this.verticalVelocity = 0;
 				this.grounded = true;
@@ -685,13 +741,21 @@ export class FirstPersonController {
 		this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
 		this.camera.position.copy(this.worldPosition);
 		if (bob.y !== 0 && !this.interactionPose) this.camera.translateY(bob.y);
-		if (this.interactionPose && this.interactionThirdPerson) {
-			this.camera.position.set(
-				this.worldPosition.x + Math.sin(this.yaw) * 2.8,
-				this.worldPosition.y + 1.1,
-				this.worldPosition.z + Math.cos(this.yaw) * 2.8
+		if (this.usesThirdPerson) {
+			this.thirdPersonDistance = this.thirdPersonCamera.update(
+				this.camera,
+				this.worldPosition,
+				this.cameraDt,
+				this.getCameraObstacles?.() ?? {
+					walls: [],
+					meshes: [],
+					terrain: (x, z) => this.getSupportingSurfaceY(x, z, this.worldPosition.y - this.eyeHeight)
+				}
 			);
-			this.camera.lookAt(this.worldPosition);
+		} else {
+			this.thirdPersonDistance = 0;
+			this.thirdPersonCamera.reset();
+			this.camera.updateMatrixWorld(true);
 		}
 	}
 

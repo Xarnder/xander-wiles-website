@@ -212,6 +212,10 @@ export class OpeningToolBase implements BuildTool {
 		this.overlayGroup.add(this.previewMesh, this.highlightMesh, this.ticksMesh);
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.active && !!this.target;
+	}
+
 	activate(): void {
 		this.active = true;
 		this.hoveredKey = null;

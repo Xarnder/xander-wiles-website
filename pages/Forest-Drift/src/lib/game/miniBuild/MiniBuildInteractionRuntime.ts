@@ -86,7 +86,10 @@ export class MiniBuildInteractionRuntime {
 			: null;
 	}
 	private pick(): ResolvedMiniBuildInteraction | null {
-		this.ray.far = MINI_BUILD_INTERACTION_RANGE;
+		// The boom must not consume the player's interaction reach. chooseInteraction below
+		// still checks the physical player-to-seat distance, keeping remote chairs out of reach.
+		this.ray.far =
+			MINI_BUILD_INTERACTION_RANGE + this.o.camera.position.distanceTo(this.o.player.worldPosition);
 		this.o.camera.getWorldDirection(this.direction);
 		this.ray.set(this.o.camera.position, this.direction);
 		const hit = this.o.system.instances.raycast(this.ray);
@@ -194,29 +197,8 @@ export class MiniBuildInteractionRuntime {
 		if (this.o.inputAllowed() && this.o.player.interactionPose)
 			this.o.player.interactionThirdPerson = !this.o.player.interactionThirdPerson;
 	}
-	afterPlayerUpdate(): void {
-		this.view.update(this.o.player);
-		if (!this.o.player.interactionPose || !this.o.player.interactionThirdPerson) return;
-		const eye = this.o.player.worldPosition;
-		this.direction.copy(this.o.camera.position).sub(eye);
-		const distance = this.direction.length();
-		if (distance < 0.001) return;
-		this.direction.divideScalar(distance);
-		this.ray.set(eye, this.direction);
-		this.ray.far = distance;
-		const wall = this.ray.intersectObjects(this.o.getOccluders(), false)[0];
-		const object = this.o.system.instances.raycast(this.ray);
-		const limit = Math.min(distance, wall?.distance ?? distance, object?.distance ?? distance);
-		if (limit < distance)
-			this.o.camera.position
-				.copy(eye)
-				.addScaledVector(this.direction, Math.max(0.12, limit - 0.15));
-		const camera = this.o.camera.position;
-		camera.y = Math.max(
-			camera.y,
-			this.o.surfaces.getSupportingSurfaceY(camera.x, camera.z, camera.y) + 0.15
-		);
-		this.o.camera.lookAt(eye);
+	afterPlayerUpdate(dt = 1 / 60, building = false): void {
+		this.view.update(this.o.player, dt, building);
 	}
 
 	private updateDebug(instanceId: string, locations: ResolvedMiniBuildInteraction[]): void {

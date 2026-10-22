@@ -25,6 +25,7 @@ interface Leg {
 	swing: boolean;
 	initialized: boolean;
 	surfaceY: number | null;
+	plantedYaw: number;
 	normal: THREE.Vector3;
 }
 const UP = new THREE.Vector3(0, 1, 0);
@@ -49,6 +50,8 @@ export class CharacterInstance {
 	private readonly rootRotation = new THREE.Quaternion();
 	private readonly footRotation = new THREE.Quaternion();
 	private phase = 0;
+	private runJumpSpeed = 0;
+	private wasGrounded = true;
 	private time = 0;
 	private blend = 0;
 	private initialized = false;
@@ -120,6 +123,7 @@ export class CharacterInstance {
 				swing: false,
 				initialized: false,
 				surfaceY: null,
+				plantedYaw: 0,
 				normal: new THREE.Vector3(0, 1, 0)
 			};
 		});
@@ -157,7 +161,14 @@ export class CharacterInstance {
 			}
 		}
 		const horizontalSpeed = dt > 0 ? Math.hypot(this.movement.x, this.movement.z) / dt : 0;
-		this.animation.update(frame, dt, reset, this.movement.y, horizontalSpeed);
+		this.animation.update(
+			frame,
+			dt,
+			reset,
+			this.movement.y,
+			horizontalSpeed,
+			horizontalSpeed > 0.2 ? Math.atan2(-this.movement.x, -this.movement.z) : undefined
+		);
 		const yawDelta = Math.atan2(
 			Math.sin(this.animation.bodyYaw - previousBodyYaw),
 			Math.cos(this.animation.bodyYaw - previousBodyYaw)
@@ -176,12 +187,26 @@ export class CharacterInstance {
 		const inactive = frame.stale || !!(frame.flags & POSE_FLAGS.away);
 		const travelled = inactive ? 0 : Math.hypot(this.movement.x, this.movement.z);
 		const speed = dt > 0 ? travelled / dt : 0;
-		const running = !!(frame.flags & POSE_FLAGS.running);
-		const moving = grounded && speed > 0.08;
+		// Running flags are ground-only on the network. Retain the take-off cadence locally
+		// so both local and remote running jumps continue their stride without protocol changes.
+		if (reset || flying || inactive) this.runJumpSpeed = 0;
+		if (grounded) this.runJumpSpeed = frame.flags & POSE_FLAGS.running ? speed : 0;
+		const runningJump = !grounded && !flying && !inactive && this.runJumpSpeed > 0.08;
+		const running = !!(frame.flags & POSE_FLAGS.running) || runningJump;
+		const moving = (grounded && speed > 0.08) || runningJump;
+		const gaitSpeed = runningJump ? this.runJumpSpeed : speed;
+		if (grounded && !this.wasGrounded) {
+			for (const leg of this.legs) {
+				leg.initialized = false;
+				leg.surfaceY = null;
+			}
+		}
+		this.wasGrounded = grounded;
 		this.blend +=
-			((moving ? Math.min(1, speed / 1.2) : 0) - this.blend) * (1 - Math.exp(-dt / 0.1));
+			((moving ? Math.min(1, gaitSpeed / 1.2) : 0) - this.blend) * (1 - Math.exp(-dt / 0.1));
 		const stride = running ? 2.4 : 1.6;
-		if (grounded) this.phase = (this.phase + (travelled / stride) * TAU) % TAU;
+		if (grounded || runningJump)
+			this.phase = (this.phase + ((runningJump ? gaitSpeed * dt : travelled) / stride) * TAU) % TAU;
 
 		for (const rest of this.rest) {
 			rest.bone.position.copy(rest.position);
@@ -196,22 +221,31 @@ export class CharacterInstance {
 		this.localMovement.y = 0;
 		if (this.localMovement.lengthSq() > 1e-10) this.localMovement.normalize();
 		else this.localMovement.set(0, 0, -1);
-		// Base breathing and landing are small visual pelvis offsets in the source rig's units.
+		// The V2 armature is Z-up locally. Convert world displacement through its parent
+		// instead of assuming a bone's local Y axis is vertical (including imported scale).
 		const hips = this.bone('Hips');
-		hips.position.y +=
-			(Math.sin(this.time * 1.8) * 0.004 - this.animation.compression) / manifest.scale;
-
-		const swing = Math.sin(this.phase) * this.blend * 0.65;
-		this.offset('LeftArm', X, swing);
-		this.offset('RightArm', X, -swing * (1 - this.animation.reach));
-		if (flying) {
-			this.offset('LeftArm', X, -0.25);
-			this.offset('RightArm', X, -0.25);
-		}
+		hips.getWorldPosition(this.point);
+		this.point.y += Math.sin(this.time * 1.8) * 0.004 - this.animation.compression;
+		hips.position.copy(hips.parent!.worldToLocal(this.point));
 		this.object.updateWorldMatrix(true, true);
+		const swing = Math.sin(this.phase) * this.blend * 0.65 * (this.animation.backpedaling ? -1 : 1);
+		this.aimAxis.copy(X).applyQuaternion(this.rootRotation);
+		this.offsetWorld('LeftArm', this.aimAxis, swing + (flying ? -0.25 : 0));
+		this.offsetWorld(
+			'RightArm',
+			this.aimAxis,
+			-swing * (1 - this.animation.reach) + (flying ? -0.25 : 0)
+		);
+		// Keep the elbows and hands clear of the jacket throughout the stride, in body axes.
+		// The building arm blends back to its dedicated reach pose; seated poses are separate.
+		const armSpread = 0.24 + this.blend * (running ? 0.08 : 0.04);
+		this.aimAxis.set(0, 0, 1).applyQuaternion(this.rootRotation);
+		this.offsetWorld('LeftArm', this.aimAxis, -armSpread);
+		this.offsetWorld('RightArm', this.aimAxis, armSpread * (1 - this.animation.reach));
 		// Rotate in body/world axes rather than assuming the imported bones use Three's axes.
 		this.aimAxis.copy(X).applyQuaternion(this.rootRotation);
 		this.offsetWorld('Spine2', this.aimAxis, -this.animation.compression * 0.7);
+		this.offsetWorld('Spine2', UP, this.animation.torsoYaw);
 		this.offsetWorld('Neck', UP, this.animation.headYaw * 0.25);
 		this.offsetWorld('Head', UP, this.animation.headYaw * 0.75);
 		this.aimAxis.copy(X).applyAxisAngle(UP, frame.yaw);
@@ -242,13 +276,24 @@ export class CharacterInstance {
 			const stance = running ? 0.5 : 0.6;
 			const swinging = moving && cycle >= stance;
 			this.point.copy(leg.ankle);
-			if (distance > 40 && grounded) {
+			if ((distance > 40 && grounded) || runningJump) {
 				this.point.addScaledVector(this.localMovement, Math.cos(cycle * TAU) * 0.24 * this.blend);
 				this.point.y += Math.max(0, Math.sin(cycle * TAU)) * 0.12 * this.blend;
 			}
 			if (!grounded) this.point.z += flying ? 0.12 : 0.08;
 			this.object.localToWorld(this.point);
-			if (!leg.initialized || !grounded || Math.abs(yawDelta) > 0.12 || distance > 40) {
+			const plantedTurn = Math.atan2(
+				Math.sin(this.animation.bodyYaw - leg.plantedYaw),
+				Math.cos(this.animation.bodyYaw - leg.plantedYaw)
+			);
+			if (
+				!leg.initialized ||
+				!grounded ||
+				Math.abs(yawDelta) > 0.12 ||
+				Math.abs(plantedTurn) > 0.3 ||
+				distance > 40
+			) {
+				leg.plantedYaw = this.animation.bodyYaw;
 				leg.target.copy(this.point);
 				leg.start.copy(this.point);
 				leg.end.copy(this.point);
@@ -257,7 +302,10 @@ export class CharacterInstance {
 			}
 			if (grounded && distance <= 40) {
 				if (swinging) {
-					if (!leg.swing) leg.start.copy(leg.target);
+					if (!leg.swing) {
+						leg.start.copy(leg.target);
+						leg.plantedYaw = this.animation.bodyYaw;
+					}
 					leg.end
 						.copy(leg.ankle)
 						.addScaledVector(this.localMovement, Math.min(0.36, stride * 0.16) * this.blend);
@@ -310,7 +358,25 @@ export class CharacterInstance {
 			for (const side of ['Left', 'Right']) {
 				this.offsetWorld(`${side}UpLeg`, this.aimAxis, (Math.PI / 2) * blend);
 				this.offsetWorld(`${side}Leg`, this.aimAxis, (-Math.PI / 2) * blend);
-				this.offsetWorld(`${side}ForeArm`, this.aimAxis, -0.35 * blend);
+			}
+			// Solve in body space so both hands rest on the thighs for any seat heading.
+			this.object.getWorldQuaternion(this.rootRotation);
+			const hips = this.bone('Hips').getWorldPosition(this.point);
+			for (const [side, sign] of [
+				['Left', -1],
+				['Right', 1]
+			] as const) {
+				this.armTarget
+					.set(sign * 0.13, 0.08, -0.23)
+					.applyQuaternion(this.rootRotation)
+					.add(hips);
+				const arm = this.bone(`${side}Arm`),
+					elbow = this.bone(`${side}ForeArm`),
+					hand = this.bone(`${side}Hand`);
+				hand.getWorldPosition(this.armCurrent);
+				this.armTarget.lerpVectors(this.armCurrent, this.armTarget, blend);
+				this.pole.set(sign, -0.3, 0).applyQuaternion(this.rootRotation);
+				this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
 			}
 		}
 		this.object.rotation.x = pose.bodyTilt * blend;
@@ -354,9 +420,6 @@ export class CharacterInstance {
 		bone.parent!.getWorldQuaternion(this.aimParent).invert();
 		bone.quaternion.copy(this.aimParent.multiply(this.rotation));
 		bone.updateWorldMatrix(false, true);
-	}
-	private offset(name: string, axis: THREE.Vector3, radians: number): void {
-		this.bone(name).quaternion.multiply(this.rotation.setFromAxisAngle(axis, radians));
 	}
 	dispose(): void {
 		if (this.disposed) return;

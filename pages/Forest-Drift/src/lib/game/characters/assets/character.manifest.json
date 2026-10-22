@@ -1,10 +1,19 @@
 {
-  "source": "assets/Character Model/Breathing Idle.fbx",
-  "sha256": "dcbad0b74679a289bf91fd200518e590331005b645d28d39709581c0776631b2",
+  "source": "assets/Character Model/New Forest Drift Charachter V2.fbx",
+  "sha256": "87e876bd6ab2fba0ef9acca838b44e8010849239df140f53a0c4fef34d2d5e40",
   "height": 1.8,
-  "triangles": 5848,
+  "dimensions": {
+    "bodyWidth": 0.829906025305022,
+    "bodyDepth": 0.6753606831457422,
+    "pelvisHeight": 0.7434275743517668,
+    "pelvisDepthOffset": -0.006907415661024083,
+    "upperLegLength": 0.29122579887449174,
+    "lowerLegLength": 0.26601642773853607,
+    "seatedFootDrop": 0.43600847457754394
+  },
+  "triangles": 8554,
   "materials": 2,
-  "bytes": 865360,
-  "basePose": "First frame of supplied breathing idle; procedural animation at runtime",
-  "scale": 0.09941883662177928
+  "bytes": 605732,
+  "basePose": "First frame of V2 supplied animation; procedural animation at runtime",
+  "scale": 1.0553005646291205
 }

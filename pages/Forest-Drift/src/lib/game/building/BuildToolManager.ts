@@ -34,6 +34,8 @@ export interface BuildTool {
 	prepareForCustomize?(): void;
 	onCustomizeClosed?(): void;
 	isHoldingObject?(): boolean;
+	/** A multi-step placement or a live one-click placement preview is pending. */
+	isPlacementInProgress?(): boolean;
 	/**
 	 * Remove Mode: start the typed "Confirm Delete" prompt for the foundation under the crosshair.
 	 * Does not delete anything itself.
@@ -392,7 +394,7 @@ export class BuildToolManager {
 		this.setBuildMode(!this.buildModeActive);
 	}
 
-	/** Short cosmetic reach for a placement attempt; also active while carrying an object. */
+	/** Hold the reach throughout placement; brief follow-through after single-click actions. */
 	isConstructionGestureActive(): boolean {
 		const tool =
 			this.globalMode === 'move'
@@ -406,7 +408,9 @@ export class BuildToolManager {
 			!this.isInputBlocked?.() &&
 			!this.placementCustomizeOpen &&
 			!this.placementHeightOpen &&
-			(performance.now() < this.constructionUntil || !!tool?.isHoldingObject?.())
+			(performance.now() < this.constructionUntil ||
+				!!tool.isHoldingObject?.() ||
+				!!tool.isPlacementInProgress?.())
 		);
 	}
 

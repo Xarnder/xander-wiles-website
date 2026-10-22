@@ -5,6 +5,10 @@
 			rows: [
 				['W / A / S / D', 'Walk forward, left, backward and right.'],
 				['Mouse', 'Look around. Click into the world to capture the mouse.'],
+				[
+					'F5 / touch View',
+					'Switch first-person and above-head third-person camera. Aim and build using the centre crosshair; the camera moves closer near walls.'
+				],
 				['Shift', 'Hold to run while walking.'],
 				['Space', 'Jump.'],
 				['C (hold)', 'Zoom in when the current tool is not using C for its own action.'],

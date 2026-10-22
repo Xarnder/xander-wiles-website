@@ -180,6 +180,14 @@ export class PlaceObjectTool implements BuildTool {
 		if (this.active) this.syncDelegation();
 	}
 
+	isPlacementInProgress(): boolean {
+		return (
+			this.active &&
+			(this.preview !== null ||
+				(this.delegatingToLight && this.furnitureTool.isPlacementInProgress()))
+		);
+	}
+
 	activate(): void {
 		this.active = true;
 		this.preview = null;

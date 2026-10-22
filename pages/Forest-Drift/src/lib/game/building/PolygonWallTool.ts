@@ -210,6 +210,10 @@ export class PolygonWallTool implements BuildTool {
 		).baseY;
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.state !== 'idle';
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

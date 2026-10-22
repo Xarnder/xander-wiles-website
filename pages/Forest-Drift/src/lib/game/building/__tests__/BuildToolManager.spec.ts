@@ -252,6 +252,20 @@ describe('BuildToolManager + FoundationTool click routing', () => {
 		buildToolManager.dispose();
 	});
 
+	it('holds the arm throughout a multi-step foundation placement until cancelled', () => {
+		const { buildToolManager, pointCrosshairAt } = buildHarness(pointerLocked);
+		let now = 100;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+		pointCrosshairAt(0, 0);
+		buildToolManager.triggerPrimaryAction();
+		now += 5000;
+		expect(buildToolManager.isConstructionGestureActive()).toBe(true);
+		buildToolManager.triggerSecondaryAction();
+		expect(buildToolManager.isConstructionGestureActive()).toBe(false);
+		clock.mockRestore();
+		buildToolManager.dispose();
+	});
+
 	it('does not place a foundation from the click that only acquires pointer lock', () => {
 		const { foundationManager, pointCrosshairAt, click } = buildHarness(pointerLocked);
 

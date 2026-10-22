@@ -1158,6 +1158,23 @@ export class ThreeScene implements WorldRuntime {
 		}
 
 		this.controller = new FirstPersonController({
+			getCameraObstacles: () => ({
+				walls: [
+					...this.wallManager.getAllCollisionRects(),
+					...this.wallPathManager.getAllCollisionRects(),
+					...this.stairManager.getAllCollisionRects(),
+					...(this.doorInteraction?.getCollisionRects() ?? []),
+					...this.furnitureManager.getCollisionRects(),
+					...this.barrierManager.getCollisionRects(),
+					...this.miniBuilds.instances.getNearbyCollisionRects()
+				],
+				meshes: [
+					...this.foundationManager.getMeshes(),
+					...this.slabManager.getMeshesForRaycast(),
+					...this.roofManager.getMeshesForRaycast()
+				],
+				terrain: (x, z) => this.terrainManager.getHeightSampler().sample(x, z)
+			}),
 			domElement: this.renderer.domElement,
 			camera: this.camera,
 			getSupportingSurfaceY: (x, z, referenceY) =>
@@ -1577,6 +1594,7 @@ export class ThreeScene implements WorldRuntime {
 
 		this.doorInteraction = new DoorInteractionController({
 			camera: this.camera,
+			getPlayerEye: () => this.controller.worldPosition,
 			getHingePivots: () => this.buildingManager.getOpeningInteractionPivots(),
 			// The shared active-id list stores closed shutters and open doors.
 			onToggle: (id, open) =>
@@ -3723,6 +3741,10 @@ export class ThreeScene implements WorldRuntime {
 		}
 	}
 
+	toggleThirdPerson(): void {
+		this.controller.toggleThirdPerson();
+	}
+
 	private readonly animate = (nowMs: number): void => {
 		if (this.disposed) return;
 		this.animationFrameId = requestAnimationFrame(this.animate);
@@ -3741,7 +3763,10 @@ export class ThreeScene implements WorldRuntime {
 		this.doorInteraction.update(deltaSeconds);
 		this.miniBuildInteraction.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
-		this.miniBuildInteraction.afterPlayerUpdate();
+		this.miniBuildInteraction.afterPlayerUpdate(
+			deltaSeconds,
+			this.buildToolManager.isConstructionGestureActive()
+		);
 		if (this.multiplayer) {
 			const interaction = this.miniBuildInteraction.controller.state;
 			const position =

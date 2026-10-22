@@ -6,15 +6,8 @@ import manifest from '../characters/assets/character.manifest.json' with { type:
  */
 export const PLAYER_BODY = {
 	standingHeight: manifest.height,
-	bodyWidth: 0.995,
-	bodyDepth: 0.51,
-	pelvisHeight: 0.75,
-	pelvisDepthOffset: -0.021,
-	/** Sole-to-pelvis drop measured after applying the seated skeleton pose. */
-	seatedFootDrop: 0.453,
+	...manifest.dimensions,
 	eyeHeight: 1.7,
-	upperLegLength: 0.267,
-	lowerLegLength: 0.29,
 	collisionRadius: 0.35,
 	clearance: 0.06
 } as const;

@@ -218,6 +218,10 @@ export class BarrierTool implements BuildTool {
 		return vertexSpacingFor(t.chunkSize, t.chunkResolution);
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.active && this.points.length > 0;
+	}
+
 	activate(): void {
 		this.active = true;
 		this.resetPath();

@@ -1,3 +1,4 @@
+import manifest from '../src/lib/game/characters/assets/character.manifest.json' with { type: 'json' };
 import { expect, test } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 
@@ -38,6 +39,25 @@ test('real character renders, animates, and scales to a room of independent rigs
 		const samples = lab.cpuSamples.slice(-120).sort((a, b) => a - b);
 		return {
 			count: lab.count,
+			textureSets: (() => {
+				const maps = new Set<string>();
+				let textured = 0;
+				for (const c of lab.characters)
+					c.object.traverse((object) => {
+						const material = (object as import('three').Mesh)
+							.material as import('three').MeshStandardMaterial;
+						if (
+							material?.map &&
+							material.normalMap &&
+							material.roughnessMap &&
+							material.metalnessMap
+						) {
+							textured++;
+							maps.add(material.map.uuid + material.normalMap.uuid + material.roughnessMap.uuid);
+						}
+					});
+				return { shared: maps.size, textured };
+			})(),
 			cpuP95: samples[Math.floor(samples.length * 0.95)],
 			drawCalls: lab.drawCalls,
 			triangles: lab.triangles,
@@ -54,10 +74,11 @@ test('real character renders, animates, and scales to a room of independent rigs
 		};
 	});
 	expect(result.count).toBe(19);
+	expect(result.textureSets).toEqual({ shared: 1, textured: 38 });
 	expect(new Set(result.colours).size).toBe(19);
 	expect(result.colours.every(Boolean)).toBe(true);
 	expect(result.drawCalls).toBe(39); // Two primitives/character plus grid.
-	expect(result.triangles).toBe(19 * 5848);
+	expect(result.triangles).toBe(19 * manifest.triangles);
 	expect(result.states.every((s) => s === 'moving')).toBe(true);
 	writeFileSync(info.outputPath('character-benchmark.json'), JSON.stringify(result, null, 2));
 	await info.attach('character-benchmark', {

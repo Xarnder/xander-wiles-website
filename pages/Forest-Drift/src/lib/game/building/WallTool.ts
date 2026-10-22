@@ -177,6 +177,10 @@ export class WallTool implements BuildTool {
 		return vertexSpacingFor(this.terrainSettings.chunkSize, this.terrainSettings.chunkResolution);
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.state !== 'idle';
+	}
+
 	activate(): void {
 		this.active = true;
 		this.state = 'idle';

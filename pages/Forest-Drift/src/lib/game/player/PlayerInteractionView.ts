@@ -1,3 +1,4 @@
+import { POSE_FLAGS } from '../net/protocol';
 import { PLAYER_BODY } from './PlayerBodyDimensions';
 import * as THREE from 'three';
 import { CharacterAssetCache } from '../characters/CharacterAssetCache';
@@ -18,14 +19,13 @@ export class PlayerInteractionView {
 	) {
 		rootName(this.root);
 	}
-	update(player: FirstPersonController): void {
+	update(player: FirstPersonController, dt = 1 / 60, building = false): void {
 		const pose = player.interactionPose;
-		this.root.visible = !!pose && player.interactionThirdPerson;
-		if (!pose) {
-			this.wasActive = false;
-			return;
-		}
-		if (!this.wasActive) {
+		// Hide the avatar as the camera reaches the head in cramped rooms.
+		this.root.visible = player.localAvatarVisible;
+		if (!pose) this.wasActive = false;
+		if (!pose && !player.thirdPerson) return;
+		if (pose && !this.wasActive) {
 			this.entry.copy(player.worldPosition);
 			this.entry.y -= PLAYER_BODY.eyeHeight - PLAYER_BODY.pelvisHeight;
 			this.wasActive = true;
@@ -43,6 +43,34 @@ export class PlayerInteractionView {
 				.catch((error) => {
 					if (!this.disposed) console.warn('Interaction avatar unavailable', error);
 				});
+		}
+		if (!pose) {
+			this.root.position.copy(player.worldPosition);
+			this.root.position.y -= player.eyeHeight;
+			this.root.rotation.y = player.getYaw();
+			if (this.character) {
+				this.character.object.position.set(0, 0, 0);
+				this.character.object.rotation.set(0, 0, 0);
+				this.character.update(
+					{
+						x: this.root.position.x,
+						y: this.root.position.y,
+						z: this.root.position.z,
+						yaw: player.getYaw(),
+						pitch: player.getPitch(),
+						speed: 0,
+						stale: false,
+						flags:
+							(player.isGrounded() ? POSE_FLAGS.grounded : 0) |
+							(player.isFlying() ? POSE_FLAGS.flying : 0) |
+							(player.isRunning() ? POSE_FLAGS.running : 0) |
+							(building ? POSE_FLAGS.building : 0)
+					},
+					dt,
+					0
+				);
+			}
+			return;
 		}
 		this.root.position
 			.copy(this.entry)

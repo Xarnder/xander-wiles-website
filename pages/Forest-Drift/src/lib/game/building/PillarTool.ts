@@ -42,6 +42,10 @@ export class PillarTool implements BuildTool {
 	getPreviewMaterials(): THREE.Material[] {
 		return [this.material];
 	}
+	isPlacementInProgress(): boolean {
+		return this.active && !!this.target;
+	}
+
 	activate(): void {
 		this.active = true;
 		this.update();

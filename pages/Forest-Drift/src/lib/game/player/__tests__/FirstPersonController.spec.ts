@@ -138,7 +138,9 @@ describe('FirstPersonController — walking up/down stairs', () => {
 		controller.update(0.1);
 		controller.update(0.1);
 		controller.update(0.1);
-		expect(controller.worldPosition.toArray()).toEqual([pose.eye.x, pose.eye.y, pose.eye.z]);
+		// Interpolated endpoints can differ by one floating-point ULP with measured rig dimensions.
+		for (const axis of ['x', 'y', 'z'] as const)
+			expect(controller.worldPosition[axis]).toBeCloseTo(pose.eye[axis], 12);
 		expect(camera.rotation.y).toBeCloseTo(Math.PI);
 		expect(camera.rotation.x).toBeCloseTo(pose.pitch);
 		expect(camera.rotation.z).toBe(0);
@@ -147,6 +149,37 @@ describe('FirstPersonController — walking up/down stairs', () => {
 		controller.update(0.1);
 		expect(camera.rotation.y).toBe(yaw);
 		controller.dispose();
+	});
+
+	it.each(['KeyA', 'KeyS'])('keeps the walking gait grounded downhill with %s', (key) => {
+		const { controller } = setup();
+		(
+			controller as unknown as { getSupportingSurfaceY: (x: number, z: number) => number }
+		).getSupportingSurfaceY = (x, z) => x * 0.15 - z * 0.15;
+		controller.spawn(0, 0);
+		controller.setTouchActive(true);
+		fakeWindow.dispatch('keydown', { code: key });
+		for (let i = 0; i < 120; i++) {
+			controller.update(1 / 60);
+			expect(controller.isGrounded(), `downhill frame ${i}`).toBe(true);
+		}
+		controller.dispose();
+	});
+
+	it('does not attach jumps or large ledge drops to the ground', () => {
+		for (const jumping of [false, true]) {
+			const { controller } = setup();
+			(
+				controller as unknown as { getSupportingSurfaceY: (x: number) => number }
+			).getSupportingSurfaceY = (x) => (jumping ? x * 0.15 : x < -0.02 ? -2 : 0);
+			controller.spawn(0, 0);
+			controller.setTouchActive(true);
+			fakeWindow.dispatch('keydown', { code: 'KeyA' });
+			if (jumping) fakeWindow.dispatch('keydown', { code: 'Space' });
+			controller.update(1 / 60);
+			expect(controller.isGrounded()).toBe(false);
+			controller.dispose();
+		}
 	});
 
 	it('climbs a full staircase smoothly at a normal (60fps) frame rate, without jumping', () => {

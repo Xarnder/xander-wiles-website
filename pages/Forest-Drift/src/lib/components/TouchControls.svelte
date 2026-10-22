@@ -667,6 +667,13 @@
 		<div class="touch-locomotion-buttons">
 			<button
 				type="button"
+				class="touch-action-btn"
+				use:touchButton={() => scene?.toggleThirdPerson()}
+				aria-label="Switch camera view"
+				data-testid="touch-camera-btn"><span>View</span></button
+			>
+			<button
+				type="button"
 				class="touch-action-btn run-btn"
 				class:active={sprintToggled}
 				use:touchButton={toggleSprint}

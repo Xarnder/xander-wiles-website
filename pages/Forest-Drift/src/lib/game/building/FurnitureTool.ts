@@ -190,6 +190,10 @@ export class FurnitureTool implements BuildTool {
 		];
 	}
 
+	isPlacementInProgress(): boolean {
+		return this.active && this.preview !== null;
+	}
+
 	activate(): void {
 		this.active = true;
 		this.preview = null;
