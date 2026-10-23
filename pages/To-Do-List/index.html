@@ -404,10 +404,22 @@
                         <span><i class="ph ph-dock-bottom"></i> Tool Panel Bottom Offset</span>
                         <span id="tool-panel-bottom-offset-value" class="settings-slider-value" aria-live="polite">8px</span>
                     </div>
-                    <p class="kanban-labels-hint" style="margin: 0;">How far the tool panel sits above the screen bottom (−64 to 64). Negative sinks it lower.</p>
+                    <p class="kanban-labels-hint" style="margin: 0;">Space under the tool buttons (0 to 64). 0 sits them on the screen bottom. Raise it to clear the home indicator.</p>
                     <div class="settings-slider-track">
-                        <input id="tool-panel-bottom-offset-slider" class="settings-slider" type="range" min="-64" max="64" step="1" value="8"
-                            aria-valuemin="-64" aria-valuemax="64" aria-valuenow="8" aria-label="Tool panel bottom offset">
+                        <input id="tool-panel-bottom-offset-slider" class="settings-slider" type="range" min="0" max="64" step="1" value="8"
+                            aria-valuemin="0" aria-valuemax="64" aria-valuenow="8" aria-label="Tool panel bottom offset">
+                    </div>
+                </div>
+
+                <div class="menu-action-item settings-slider-block" style="cursor: default;">
+                    <div class="settings-slider-header">
+                        <span><i class="ph ph-arrows-horizontal"></i> Tool Panel Side Padding</span>
+                        <span id="tool-panel-side-padding-value" class="settings-slider-value" aria-live="polite">14px</span>
+                    </div>
+                    <p class="kanban-labels-hint" style="margin: 0;">Inset for the buttons on the left and right (0 to 48). Raise it so the phone’s round corners don’t cover them.</p>
+                    <div class="settings-slider-track">
+                        <input id="tool-panel-side-padding-slider" class="settings-slider" type="range" min="0" max="48" step="1" value="14"
+                            aria-valuemin="0" aria-valuemax="48" aria-valuenow="14" aria-label="Tool panel side padding">
                     </div>
                 </div>
 

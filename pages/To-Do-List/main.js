@@ -618,7 +618,7 @@ function setupFirestoreListeners(uid) {
         if (!docSnap.metadata.fromCache) updateLastSync();
         if (docSnap.exists()) {
             const data = docSnap.data();
-            state.appData.settings = { ...state.appData.settings, ...data.settings };
+            state.appData.settings = mergeSettingsFromSnapshot(data.settings);
             if (!Array.isArray(state.appData.settings.boardOrder)) {
                 state.appData.settings.boardOrder = [];
             }
@@ -698,6 +698,7 @@ function setupFirestoreListeners(uid) {
             syncListTopGapUI();
             syncListBottomGapUI();
             syncToolPanelBottomOffsetUI();
+            syncToolPanelSidePaddingUI();
             requestAnimationFrame(() => UI.layoutSlimChrome());
             syncKanbanLabelsUI();
             if (typeof UI.syncTagDisplayModeUI === 'function') UI.syncTagDisplayModeUI();
@@ -1120,6 +1121,12 @@ document.addEventListener('DOMContentLoaded', () => {
         key: 'toolPanelBottomOffset',
         clamp: UI.clampToolPanelBottomOffset,
         sync: syncToolPanelBottomOffsetUI,
+        apply: () => requestAnimationFrame(() => UI.layoutSlimChrome())
+    });
+    bindCloudLayoutSlider('tool-panel-side-padding-slider', {
+        key: 'toolPanelSidePadding',
+        clamp: UI.clampToolPanelSidePadding,
+        sync: syncToolPanelSidePaddingUI,
         apply: () => requestAnimationFrame(() => UI.layoutSlimChrome())
     });
 
@@ -2603,6 +2610,21 @@ function syncToolPanelBottomOffsetUI(forcedValue) {
     if (label) label.textContent = `${offset}px`;
 }
 
+function syncToolPanelSidePaddingUI(forcedValue) {
+    const slider = document.getElementById('tool-panel-side-padding-slider');
+    const label = document.getElementById('tool-panel-side-padding-value');
+    const padding = forcedValue !== undefined
+        ? UI.clampToolPanelSidePadding(forcedValue)
+        : UI.getToolPanelSidePadding();
+    if (slider && document.activeElement !== slider) {
+        slider.value = String(padding);
+        slider.setAttribute('aria-valuenow', String(padding));
+    } else if (slider) {
+        slider.setAttribute('aria-valuenow', String(padding));
+    }
+    if (label) label.textContent = `${padding}px`;
+}
+
 /** Pending layout slider values waiting for a debounced Firestore write. */
 const pendingLayoutSettings = new Map();
 let layoutSettingsSaveTimer = null;
@@ -2611,6 +2633,28 @@ function queueLayoutSettingSave(key, value) {
     pendingLayoutSettings.set(key, value);
     if (layoutSettingsSaveTimer) clearTimeout(layoutSettingsSaveTimer);
     layoutSettingsSaveTimer = setTimeout(() => flushPendingLayoutSettings(), 280);
+}
+
+const LAYOUT_SLIDER_IDS = {
+    listTopGap: 'list-top-gap-slider',
+    listBottomGap: 'list-bottom-gap-slider',
+    toolPanelBottomOffset: 'tool-panel-bottom-offset-slider',
+    toolPanelSidePadding: 'tool-panel-side-padding-slider'
+};
+
+/** Keep a slider the user is moving, and any value not saved yet, ahead of a server snapshot. */
+function mergeSettingsFromSnapshot(serverSettings) {
+    const local = state.appData.settings || {};
+    const merged = { ...local, ...(serverSettings || {}) };
+    Object.keys(LAYOUT_SLIDER_IDS).forEach((key) => {
+        if (pendingLayoutSettings.has(key)) {
+            merged[key] = pendingLayoutSettings.get(key);
+            return;
+        }
+        const slider = document.getElementById(LAYOUT_SLIDER_IDS[key]);
+        if (slider && document.activeElement === slider) merged[key] = local[key];
+    });
+    return merged;
 }
 
 function flushPendingLayoutSettings() {
@@ -2639,6 +2683,8 @@ function bindCloudLayoutSlider(elementId, { key, clamp, sync, apply }) {
 
     const applyValue = (raw, { persistImmediate = false } = {}) => {
         const next = clamp(raw);
+        // Hold the value before any snapshot can merge server settings back over it.
+        pendingLayoutSettings.set(key, next);
         state.appData.settings[key] = next;
         sync(next);
         if (typeof apply === 'function') apply(next);

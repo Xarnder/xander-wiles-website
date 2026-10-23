@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v157';
+const CACHE_NAME = 'taskmaster-todo-v159';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',

@@ -1228,12 +1228,18 @@ export function getListTopGap() {
 export function applyListTopGap() {
     const gap = getListTopGap();
     const root = document.documentElement;
+    const padding = Math.max(0, gap);
+    const pull = Math.min(0, gap);
     // Padding can't be negative — pull upward with margin when below 0.
-    root.style.setProperty('--list-top-gap', `${Math.max(0, gap)}px`);
-    root.style.setProperty('--list-top-pull', `${Math.min(0, gap)}px`);
+    root.style.setProperty('--list-top-gap', `${padding}px`);
+    root.style.setProperty('--list-top-pull', `${pull}px`);
+    const board = document.querySelector('.board-container');
+    if (!board) return;
+    board.style.setProperty('padding-top', `${padding}px`, 'important');
+    board.style.setProperty('margin-top', `${pull}px`, 'important');
 }
 
-export const TOOL_PANEL_BOTTOM_OFFSET_MIN = -64;
+export const TOOL_PANEL_BOTTOM_OFFSET_MIN = 0;
 export const TOOL_PANEL_BOTTOM_OFFSET_MAX = 64;
 export const DEFAULT_TOOL_PANEL_BOTTOM_OFFSET = 8;
 
@@ -1245,6 +1251,20 @@ export function clampToolPanelBottomOffset(value) {
 
 export function getToolPanelBottomOffset() {
     return clampToolPanelBottomOffset(state.appData.settings?.toolPanelBottomOffset);
+}
+
+export const TOOL_PANEL_SIDE_PADDING_MIN = 0;
+export const TOOL_PANEL_SIDE_PADDING_MAX = 48;
+export const DEFAULT_TOOL_PANEL_SIDE_PADDING = 14;
+
+export function clampToolPanelSidePadding(value) {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isFinite(n)) return DEFAULT_TOOL_PANEL_SIDE_PADDING;
+    return Math.min(TOOL_PANEL_SIDE_PADDING_MAX, Math.max(TOOL_PANEL_SIDE_PADDING_MIN, n));
+}
+
+export function getToolPanelSidePadding() {
+    return clampToolPanelSidePadding(state.appData.settings?.toolPanelSidePadding);
 }
 
 /**
@@ -1266,16 +1286,30 @@ export function layoutSlimChrome() {
             }
         });
     }
+    const header = document.querySelector('.app-header');
+    const board = document.querySelector('.board-container');
     if (!slim) {
         root.style.removeProperty('--slim-bottom-clearance');
         root.style.removeProperty('--tool-panel-bottom-offset');
+        root.style.removeProperty('--tool-panel-side-padding');
+        if (header) {
+            header.style.removeProperty('padding-left');
+            header.style.removeProperty('padding-right');
+            header.style.removeProperty('padding-bottom');
+        }
+        if (board) board.style.removeProperty('padding-bottom');
         return;
     }
 
     const offset = getToolPanelBottomOffset();
+    const side = getToolPanelSidePadding();
     root.style.setProperty('--tool-panel-bottom-offset', `${offset}px`);
-
-    const header = document.querySelector('.app-header');
+    root.style.setProperty('--tool-panel-side-padding', `${side}px`);
+    if (header) {
+        header.style.setProperty('padding-left', `${side}px`, 'important');
+        header.style.setProperty('padding-right', `${side}px`, 'important');
+        header.style.setProperty('padding-bottom', `${offset}px`, 'important');
+    }
     if (!header) return;
 
     // Distance from header top to viewport bottom, plus user gap (may be negative to tuck under).
@@ -1283,6 +1317,7 @@ export function layoutSlimChrome() {
     const gap = getListBottomGap();
     const clearance = Math.max(0, Math.ceil(window.innerHeight - top) + gap);
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
+    if (board) board.style.setProperty('padding-bottom', `${clearance}px`, 'important');
 }
 
 /**

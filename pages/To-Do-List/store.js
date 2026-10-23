@@ -41,6 +41,7 @@ export const state = {
             listBottomGap: 12,
             listTopGap: 10,
             toolPanelBottomOffset: 8,
+            toolPanelSidePadding: 14,
             boardOrder: []
         },
         listOrder: [],
@@ -125,6 +126,7 @@ export function resetState() {
             listBottomGap: 12,
             listTopGap: 10,
             toolPanelBottomOffset: 8,
+            toolPanelSidePadding: 14,
             boardOrder: []
         },
         listOrder: [],
