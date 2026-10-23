@@ -2,6 +2,8 @@
 
 Research and repository review: 20 October 2026.
 
+For the concrete execution sequence, use the [implementation order and task checklist](../10-22/Forest-Drift-implementation-order.md), added on 22 October 2026. It breaks this design into individually trackable tasks with completion criteria, including the village system, and defines the default implementation order.
+
 This is a design and implementation plan, not a claim that the proposed features have been built. It contains no implementation timescales. The numbered backlog is ordered from most important to least important; dependencies and completion criteria explain how to deliver it safely.
 
 ## 1. Recommended direction

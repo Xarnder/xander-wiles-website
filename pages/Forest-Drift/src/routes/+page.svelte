@@ -86,6 +86,7 @@
 		loadIdentity,
 		loadOnlineWorlds,
 		multiplayerServerUrl,
+		onlineWorldsOn,
 		rememberOnlineWorld,
 		saveAdminKey,
 		saveIdentity,
@@ -885,13 +886,15 @@
 		setLocationWorld(worldId);
 
 		const { manifest, world } = fetched.value;
+		const server = mpServer;
 		rememberOnlineWorld({
 			worldId,
 			name: manifest.name,
 			invite,
 			// A different link for the same world (say, an editor link after a viewer one) starts over.
 			capability: remembered?.invite === invite ? remembered.capability : null,
-			lastJoinedAt: new Date().toISOString()
+			lastJoinedAt: new Date().toISOString(),
+			serverUrl: server
 		});
 		onlineWorlds = loadOnlineWorlds();
 		onlineWorld = { worldId, name: manifest.name };
@@ -900,7 +903,6 @@
 		mpPlayers = [];
 		mpSelfSlot = null;
 		mpRole = null;
-		const server = mpServer;
 		const multiplayer = new MultiplayerSession({
 			serverUrl: mpServer,
 			worldId,
@@ -953,9 +955,19 @@
 		showSaveToast(`Joined ${manifest.name} — everything you build is shared and saved online`);
 	}
 
+	/**
+	 * A remembered world rejoins in one click, as the name and colour last used. The join dialog only
+	 * asks first when this browser has no name saved yet.
+	 */
 	function joinRememberedWorld(worldId: string) {
 		const entry = findOnlineWorld(worldId);
-		if (entry) openJoinDialog({ worldId, invite: entry.invite });
+		if (!entry) return;
+		const reference = { worldId, invite: entry.invite };
+		if (playerIdentity?.name) {
+			void joinOnline(reference, playerIdentity.name, playerIdentity.colour);
+		} else {
+			openJoinDialog(reference);
+		}
 	}
 
 	async function saveOnlineCopy(worldId: string) {
@@ -1045,7 +1057,8 @@
 			name,
 			invite: invites.owner,
 			role: 'owner',
-			invites
+			invites,
+			serverUrl: mpServer
 		});
 		onlineWorlds = loadOnlineWorlds();
 		publishDialog = { ...dialog, busy: false, error: null, published };
@@ -1273,7 +1286,7 @@
 			onDismissError={() => (worldsError = null)}
 			onPublish={mpServer ? (id) => openPublish(id) : undefined}
 			onJoinOnline={mpServer ? () => openJoinDialog(null) : undefined}
-			onlineWorlds={mpServer ? onlineWorlds : []}
+			onlineWorlds={onlineWorldsOn(onlineWorlds, mpServer)}
 			onJoinOnlineWorld={joinRememberedWorld}
 			onShowInvites={(worldId) => (invitesDialog = findOnlineWorld(worldId))}
 			onForgetOnlineWorld={forgetRememberedWorld}
@@ -1317,7 +1330,9 @@
 			initialColour={playerIdentity.colour}
 			busy={joinDialog.busy}
 			error={joinDialog.error}
+			recentWorlds={onlineWorldsOn(onlineWorlds, mpServer)}
 			onJoin={(reference, name, colour) => void joinOnline(reference, name, colour)}
+			onForget={forgetRememberedWorld}
 			onCancel={cancelJoin}
 		/>
 	{/if}

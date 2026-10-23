@@ -3,6 +3,7 @@
 	import CountrysideBackground from './CountrysideBackground.svelte';
 	import type { OnlineWorldEntry } from '$lib/game/net/mpConfig';
 	import { generateWorldSeed } from '$lib/game/world/seedGenerator';
+	import { relativeTime } from '$lib/ui/relativeTime';
 	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
 
 	interface Props {
@@ -139,21 +140,6 @@
 	onDestroy(() => {
 		openMenuId = null;
 	});
-
-	function relativeTime(iso: string): string {
-		const then = new Date(iso).getTime();
-		if (!Number.isFinite(then)) return 'unknown';
-		const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
-		if (seconds < 60) return 'just now';
-		const minutes = Math.round(seconds / 60);
-		if (minutes < 60) return `${minutes}m ago`;
-		const hours = Math.round(minutes / 60);
-		if (hours < 24) return `${hours}h ago`;
-		const days = Math.round(hours / 24);
-		if (days === 1) return 'yesterday';
-		if (days < 30) return `${days}d ago`;
-		return new Date(iso).toLocaleDateString();
-	}
 
 	function formatBytes(bytes: number | undefined): string {
 		if (bytes === undefined || !Number.isFinite(bytes)) return '';
@@ -377,6 +363,9 @@
 						<div class="online-info">
 							<span class="online-name">{online.name}</span>
 							{#if online.role}<span class="pill-tag">{ROLE_LABEL[online.role]}</span>{/if}
+							{#if online.lastJoinedAt}
+								<span class="online-played">Played {relativeTime(online.lastJoinedAt)}</span>
+							{/if}
 						</div>
 						<div class="online-actions">
 							{#if online.invites && onShowInvites}
@@ -906,6 +895,12 @@
 		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.online-played {
+		font-size: 0.75rem;
+		opacity: 0.65;
 		white-space: nowrap;
 	}
 

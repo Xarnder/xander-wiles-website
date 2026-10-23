@@ -119,6 +119,8 @@ export interface OnlineWorldEntry {
 	/** Signed proof of our role from the last `welcome`, for quick resumes. */
 	capability?: string | null;
 	lastJoinedAt?: string;
+	/** The room server the world lives on; missing for worlds remembered before this was recorded. */
+	serverUrl?: string;
 }
 
 export function loadOnlineWorlds(): OnlineWorldEntry[] {
@@ -155,6 +157,19 @@ export function forgetOnlineWorld(worldId: string): void {
 	safeSet(STORAGE_KEYS.worlds, JSON.stringify(rest));
 }
 
+/**
+ * The remembered worlds that can be joined from `serverUrl`. A world on another server (say, a local
+ * `?mpServer=` one) would only fail to load, so it stays hidden until that server is in use again.
+ * Worlds remembered before servers were recorded are assumed to be on this one.
+ */
+export function onlineWorldsOn(
+	worlds: OnlineWorldEntry[],
+	serverUrl: string | null
+): OnlineWorldEntry[] {
+	if (!serverUrl) return [];
+	return worlds.filter((entry) => !entry.serverUrl || entry.serverUrl === serverUrl);
+}
+
 function isOnlineWorldEntry(value: unknown): value is OnlineWorldEntry {
 	if (!value || typeof value !== 'object') return false;
 	const entry = value as Record<string, unknown>;
@@ -163,7 +178,8 @@ function isOnlineWorldEntry(value: unknown): value is OnlineWorldEntry {
 		isWorldId(entry.worldId) &&
 		typeof entry.name === 'string' &&
 		isTokenShaped(entry.invite) &&
-		(entry.role === null || PLAYER_ROLES.includes(entry.role as PlayerRole))
+		(entry.role === null || PLAYER_ROLES.includes(entry.role as PlayerRole)) &&
+		(entry.serverUrl === undefined || typeof entry.serverUrl === 'string')
 	);
 }
 

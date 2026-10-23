@@ -504,6 +504,19 @@ test('publish, join with roles, share the sky, survive a dropped connection, lea
 
 	// The world is remembered for the visitor, with its role.
 	await expect(visitor.getByTestId('online-worlds')).toContainText('Visitor');
+
+	// Coming back later, the landing page's Online button lists it, and one click rejoins with the
+	// same name and role: no invite link to find again.
+	await visitor.getByRole('button', { name: 'Main menu' }).click();
+	await visitor.getByRole('button', { name: 'Online', exact: true }).click();
+	const recent = visitor.getByTestId('recent-worlds');
+	await expect(recent).toContainText('Visitor');
+	await recent.getByTestId('recent-world-join').click();
+	await expect(
+		visitor.locator('[data-testid="online-status"][data-status="connected"]')
+	).toBeVisible({ timeout: 180_000 });
+	await expect(visitor.getByTestId('online-status')).toHaveAttribute('data-role', 'viewer');
+	await expect.poll(() => playerCount(owner), { timeout: 15_000 }).toBe('2 players');
 });
 
 /** The scene's internals, for driving builds the way the tools do (pointer lock can't be automated). */
