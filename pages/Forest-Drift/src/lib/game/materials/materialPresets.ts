@@ -137,6 +137,18 @@ export const MATERIAL_PRESETS: Readonly<Record<ProceduralMaterialType, MaterialP
 		moss: 0,
 		variation: 0.3,
 		normalStrength: 0.15
+	},
+	metal: {
+		variant: 'iron',
+		seed: 0x3e7a1,
+		tileWidth: 0.25,
+		tileHeight: 0.25,
+		roughness: 0.42,
+		weathering: 0.3,
+		dirt: 0,
+		moss: 0,
+		variation: 0.5,
+		normalStrength: 0.8
 	}
 };
 

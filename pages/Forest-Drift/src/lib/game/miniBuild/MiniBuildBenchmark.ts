@@ -246,10 +246,12 @@ export function placeMiniBuildBenchmark(
 	};
 }
 
-/** Planning cost per slot: a fixed average for mixed props keeps the in-chunk grid stable. */
+/**
+ * Planning cost per slot: a fixed figure keeps the in-chunk grid stable. The default furniture set
+ * averages ~15 primitives, so mixed plans like the 16-block chair scenes.
+ */
 function pickDesignPreview(scenario: MiniBuildBenchmarkScenario): number {
-	if (scenario === 'simple') return 2.5;
-	return scenario === 'mixed' ? 12 : 16;
+	return scenario === 'simple' ? 2.5 : 16;
 }
 
 /** Removes every benchmark design and its instances. Player designs are never touched. */

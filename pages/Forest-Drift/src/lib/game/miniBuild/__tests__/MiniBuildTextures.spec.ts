@@ -7,6 +7,7 @@ import { MiniBuildSystem } from '../MiniBuildSystem';
 import {
 	effectiveMiniBuildTexture,
 	MINI_BUILD_TEXTURES,
+	miniBuildBindingOptions,
 	miniBuildSurfaceStyle,
 	miniBuildTextureGroups
 } from '../miniBuildTextures';
@@ -15,7 +16,7 @@ import { validateMiniBuildDefinition } from '../MiniBuildValidation';
 import { testDefinition } from './miniBuildFixtures';
 
 describe('Mini Build textures', () => {
-	it('gives every finish a procedural default except metal and plain', () => {
+	it('gives every finish a procedural default except plain', () => {
 		expect(miniBuildSurfaceStyle({ finish: 'wood' })).toMatchObject({
 			type: 'timber',
 			mapping: 'wood'
@@ -23,10 +24,30 @@ describe('Mini Build textures', () => {
 		expect(miniBuildSurfaceStyle({ finish: 'stone' })?.type).toBe('masonry');
 		expect(miniBuildSurfaceStyle({ finish: 'glass' })?.type).toBe('glass');
 		expect(miniBuildSurfaceStyle({ finish: 'fabric' })?.type).toBe('fabric');
-		expect(miniBuildSurfaceStyle({ finish: 'metal' })).toBeNull();
+		expect(miniBuildSurfaceStyle({ finish: 'metal' })).toMatchObject({
+			type: 'metal',
+			options: { variant: 'iron' }
+		});
 		expect(miniBuildSurfaceStyle({ finish: 'plain' })).toBeNull();
 		expect(miniBuildSurfaceStyle({ finish: 'wood', texture: 'flat' })).toBeNull();
 		expect(effectiveMiniBuildTexture({ finish: 'metal', texture: 'cobbles' })).toBe('cobbles');
+		expect(miniBuildSurfaceStyle({ finish: 'metal', texture: 'brass' })).toMatchObject({
+			type: 'metal',
+			options: { variant: 'brass' }
+		});
+		expect(miniBuildSurfaceStyle({ finish: 'stone', texture: 'smooth-stone' })).toMatchObject({
+			type: 'paving',
+			options: { variant: 'plain' }
+		});
+	});
+
+	it('binds wood on its own coordinates without lifting dark woods to the floor-plank minimum', () => {
+		const wood = miniBuildBindingOptions(miniBuildSurfaceStyle({ finish: 'wood' })!);
+		expect(wood.ownWoodCoords).toBe(true);
+		expect(wood.woodMinLuma).toBeLessThan(0.04);
+		expect(miniBuildBindingOptions(miniBuildSurfaceStyle({ finish: 'metal' })!)).toEqual({
+			uvUnitMeters: 1
+		});
 	});
 
 	it('catalogues every texture id, with textures mapped on their metre UVs and wood as solid wood', () => {
@@ -66,6 +87,9 @@ describe('Mini Build textures', () => {
 		});
 		state.updateMaterialSlot(0, { texture: 'pine' });
 		expect(state.getMaterials()[0].finish).toBe('wood');
+		state.updateMaterialSlot(0, { texture: 'brass' });
+		expect(state.getMaterials()[0].finish).toBe('metal');
+		state.updateMaterialSlot(0, { texture: 'pine' });
 		// Recolouring keeps the texture; Auto keeps the colour.
 		state.updateMaterialSlot(0, { color: '#AA3322' });
 		expect(state.getMaterials()[0]).toMatchObject({

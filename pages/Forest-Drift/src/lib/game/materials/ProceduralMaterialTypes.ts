@@ -8,7 +8,16 @@
  */
 
 export type ProceduralMaterialType =
-	'fabric' | 'plaster' | 'timber' | 'slate' | 'masonry' | 'paving' | 'ground' | 'grass' | 'glass';
+	| 'fabric'
+	| 'plaster'
+	| 'timber'
+	| 'slate'
+	| 'masonry'
+	| 'paving'
+	| 'ground'
+	| 'grass'
+	| 'glass'
+	| 'metal';
 
 export const PROCEDURAL_MATERIAL_TYPES: readonly ProceduralMaterialType[] = [
 	'fabric',
@@ -19,7 +28,8 @@ export const PROCEDURAL_MATERIAL_TYPES: readonly ProceduralMaterialType[] = [
 	'paving',
 	'ground',
 	'grass',
-	'glass'
+	'glass',
+	'metal'
 ];
 
 export type PlasterVariant = 'lime' | 'rough';
@@ -33,6 +43,8 @@ export type GroundVariant = 'soil' | 'path' | 'gravel';
 /** `detail` is a near-neutral variant for multiplying over terrain vertex colours (the colour comes from the terrain, the texture adds structure). */
 export type GrassVariant = 'meadow' | 'dry' | 'detail';
 export type GlassVariant = 'clear' | 'old';
+/** Hand-worked hardware: blackened forged iron, or cast/drawn brass. */
+export type MetalVariant = 'iron' | 'brass';
 
 export interface ProceduralVariantMap {
 	fabric: 'woven';
@@ -44,6 +56,7 @@ export interface ProceduralVariantMap {
 	ground: GroundVariant;
 	grass: GrassVariant;
 	glass: GlassVariant;
+	metal: MetalVariant;
 }
 
 export const PROCEDURAL_VARIANTS: {
@@ -57,7 +70,8 @@ export const PROCEDURAL_VARIANTS: {
 	paving: ['cobble', 'setts', 'flagstone', 'plain'],
 	ground: ['soil', 'path', 'gravel'],
 	grass: ['meadow', 'dry', 'detail'],
-	glass: ['clear', 'old']
+	glass: ['clear', 'old'],
+	metal: ['iron', 'brass']
 };
 
 /**

@@ -21,6 +21,8 @@ export class SurfaceCanvas {
 	readonly roughness: Float32Array;
 	/** Ambient occlusion, 1 = fully open. */
 	readonly ao: Float32Array;
+	/** 0 for every non-metal; only the metal generator paints it. */
+	readonly metalness: Float32Array;
 
 	constructor(size: number, tileWidth: number, tileHeight: number) {
 		if (!Number.isInteger(Math.log2(size))) {
@@ -36,6 +38,7 @@ export class SurfaceCanvas {
 		this.height = new Float32Array(count);
 		this.roughness = new Float32Array(count);
 		this.ao = new Float32Array(count).fill(1);
+		this.metalness = new Float32Array(count);
 	}
 
 	setColor(index: number, color: RgbColor): void {
@@ -187,18 +190,20 @@ export function finalizeSurface(canvas: SurfaceCanvas, options: FinalizeOptions)
 		for (let x = 0; x < ormSize; x++) {
 			let ao = 0;
 			let rough = 0;
+			let metal = 0;
 			for (let dy = 0; dy < step; dy++) {
 				for (let dx = 0; dx < step; dx++) {
 					const i = (y * step + dy) * size + (x * step + dx);
 					ao += canvas.ao[i];
 					rough += canvas.roughness[i];
+					metal += canvas.metalness[i];
 				}
 			}
 			const n = step * step;
 			const o = (y * ormSize + x) * 4;
 			orm[o] = toByte(ao / n);
 			orm[o + 1] = toByte(rough / n);
-			orm[o + 2] = 0;
+			orm[o + 2] = toByte(metal / n);
 			orm[o + 3] = 255;
 		}
 	}

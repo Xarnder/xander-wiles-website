@@ -221,7 +221,10 @@ export const MINI_BUILD_TEXTURE_IDS = [
 	'meadow-grass',
 	'dry-grass',
 	'clear-glass',
-	'old-glass'
+	'old-glass',
+	'forged-iron',
+	'brass',
+	'smooth-stone'
 ] as const;
 export type MiniBuildTextureId = (typeof MINI_BUILD_TEXTURE_IDS)[number];
 

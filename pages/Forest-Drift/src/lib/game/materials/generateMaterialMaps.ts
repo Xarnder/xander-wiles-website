@@ -1,5 +1,6 @@
 import { paintFabric } from './generators/fabric';
 import { paintGlass, paintGrass, paintGround } from './generators/ground';
+import { paintMetal } from './generators/metal';
 import { paintPlaster } from './generators/plaster';
 import { paintSlate } from './generators/slate';
 import { paintMasonry, paintPaving } from './generators/stone';
@@ -35,7 +36,9 @@ const GENERATORS: Readonly<Record<ProceduralMaterialType, GeneratorEntry>> = {
 	paving: { paint: paintPaving, resolutionScale: 1, cavityAo: 45, cavityRadius: 0.03 },
 	ground: { paint: paintGround, resolutionScale: 1, cavityAo: 60, cavityRadius: 0.015 },
 	grass: { paint: paintGrass, resolutionScale: 1, cavityAo: 50, cavityRadius: 0.012 },
-	glass: { paint: paintGlass, resolutionScale: 0.25, cavityAo: 0, cavityRadius: 0.01 }
+	glass: { paint: paintGlass, resolutionScale: 0.25, cavityAo: 0, cavityRadius: 0.01 },
+	// Hardware is small on screen and its tile is a hand's width: a quarter tier resolves the facets.
+	metal: { paint: paintMetal, resolutionScale: 0.25, cavityAo: 30, cavityRadius: 0.004 }
 };
 
 /** Albedo/normal resolution for a recipe — exposed so caches and tests agree on it. */

@@ -92,13 +92,18 @@ the brief, the measured performance and the known limitations.
       can sit beside another bench at 45° instead of being judged by the square around it.
       Highlights in Place / Move / Remove turn with the object.
 11. **Procedural textures on material slots.** Every slot has a `texture` (`miniBuildTextures.ts`):
-    a curated set of the game's existing procedural materials — solid wood (dark oak, aged oak,
-    weathered, pine, mahogany), oak planks, lime/rough plaster, dressed/cut/field/rough stone,
-    cobbles, setts, flagstones, slate, soil, gravel, earth path, meadow/dry grass, clear/old glass
-    — or `flat`. Omitted means `auto`, chosen from the finish: wood → aged oak, stone → dressed
-    stone, fabric → lime plaster, glass → clear glass; metal and plain stay flat (no procedural
-    metal, and a texture would drop metalness). So every design, including the defaults, is
-    procedurally textured unless its slot says otherwise.
+    a curated set of the game's existing procedural materials — woven fabric, solid wood (dark
+    oak, aged oak, weathered, pine, mahogany), oak planks, forged iron, brass, lime/rough plaster,
+    dressed/cut/field/rough/smooth stone, cobbles, setts, flagstones, slate, soil, gravel, earth
+    path, meadow/dry grass, clear/old glass — or `flat`. Omitted means `auto`, chosen from the
+    finish: wood → aged oak, stone → dressed stone, fabric → woven fabric, glass → clear glass,
+    metal → forged iron; only plain stays flat. The metal generator (`generators/metal.ts`) is the
+    one material that paints metalness (ORM blue): bare metal stays metallic, rust or verdigris
+    patches do not. So every design is procedurally textured unless its slot says otherwise, and
+    every default design names a texture for every slot (the defaults test enforces it).
+    - Wood slots keep the player's colour down to a near-black floor (`woodMinLuma` 0.03, see
+      `miniBuildBindingOptions`): floor planks lift anything darker than ~`#7E5A3E` so their grain
+      stays visible, which made a dark oak slot look exactly like an oak one.
     - The slot colour **tints** the texture (its average becomes the colour), exactly like painting
       a wall, so material overrides and recolouring still work. Picking a texture in the editor
       sets the colour to the texture's natural swatch and moves the finish into line (wood, stone,
@@ -154,7 +159,7 @@ MiniBuildDefinition (≤16 logical cuboids)
 | `MiniBuildEditorViewport.ts`     | Editor viewport: orbit camera, grid, axes, bounds, anchor, handles, rings |
 | `MiniBuildPersonalLibrary.ts`    | Cross-world IndexedDB "My Builds" + thumbnails                            |
 | `MiniBuildThumbnails.ts`         | Thumbnails rendered offscreen through the game renderer                   |
-| `defaultMiniBuilds.ts`           | 16 starter designs under the same rules                                   |
+| `defaultMiniBuilds.ts`           | 27 starter designs under the same rules (review them at `/mini-builds/`)  |
 | `MiniBuildBenchmark.ts`          | Stress scenes (repeated, unique, simple, dense, mixed)                    |
 
 UI: `ObjectLibraryModal.svelte`, `MiniBuildEditor.svelte`, `MiniBuildChoiceDialog.svelte`, wired in

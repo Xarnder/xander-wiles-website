@@ -25,7 +25,7 @@ import {
 } from './miniBuildGrid';
 import { compileMiniBuildData } from './MiniBuildCompiler';
 import { surfaceOffsetLevels } from './miniBuildSurfaces';
-import { miniBuildSurfaceStyle } from './miniBuildTextures';
+import { miniBuildBindingOptions, miniBuildSurfaceStyle } from './miniBuildTextures';
 import type { ProceduralMaterialLibrary } from '../materials/ProceduralMaterialLibrary';
 import {
 	MINI_BUILD_LIMITS,
@@ -437,7 +437,7 @@ export class MiniBuildEditorViewport {
 			if (procedural && style) {
 				procedural.bindMaterial(material, style, {
 					tint: color,
-					...(style.mapping === 'wood' ? { ownWoodCoords: true } : { uvUnitMeters: 1 })
+					...miniBuildBindingOptions(style)
 				});
 				void procedural.whenIdle().then(() => (this.needsRender = true));
 			}

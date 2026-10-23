@@ -12,6 +12,7 @@
  * `native` mapping at one metre per UV unit. Wood uses the solid-wood shader with the per-block
  * `woodCoord` attribute the compiler emits (each block is one piece of timber, like a beam).
  */
+import type { ProceduralBindingOptions } from '../materials/ProceduralMaterialLibrary';
 import type { SurfaceStyle } from '../materials/ProceduralMaterialTypes';
 import {
 	MINI_BUILD_TEXTURE_IDS,
@@ -22,7 +23,7 @@ import {
 
 export interface MiniBuildTextureEntry {
 	label: string;
-	group: 'Fabric' | 'Wood' | 'Plaster' | 'Stone' | 'Ground' | 'Glass';
+	group: 'Fabric' | 'Wood' | 'Metal' | 'Plaster' | 'Stone' | 'Ground' | 'Glass';
 	style: SurfaceStyle;
 	/** sRGB `#RRGGBB` close to the texture's natural average — the colour picking it suggests. */
 	swatch: string;
@@ -68,6 +69,18 @@ export const MINI_BUILD_TEXTURES: Readonly<
 		style: textured('timber', { variant: 'aged-brown', planks: true, weathering: 0.15 }),
 		swatch: '#7A5134'
 	},
+	'forged-iron': {
+		label: 'Forged iron',
+		group: 'Metal',
+		style: textured('metal', { variant: 'iron' }),
+		swatch: '#45423F'
+	},
+	brass: {
+		label: 'Brass',
+		group: 'Metal',
+		style: textured('metal', { variant: 'brass' }),
+		swatch: '#B08A3E'
+	},
 	'lime-plaster': {
 		label: 'Lime plaster',
 		group: 'Plaster',
@@ -103,6 +116,12 @@ export const MINI_BUILD_TEXTURES: Readonly<
 		group: 'Stone',
 		style: textured('masonry', { variant: 'rough' }),
 		swatch: '#7F7A70'
+	},
+	'smooth-stone': {
+		label: 'Smooth stone',
+		group: 'Stone',
+		style: textured('paving', { variant: 'plain', moss: 0, dirt: 0, variation: 0.65 }),
+		swatch: '#524E4A'
 	},
 	cobbles: {
 		label: 'Cobbles',
@@ -173,15 +192,15 @@ export const MINI_BUILD_TEXTURES: Readonly<
 };
 
 /**
- * What `auto` means for each finish. Metal and plain stay flat: there is no procedural metal, and a
- * texture would drop the metal's metalness.
+ * What `auto` means for each finish. Plain stays flat — it is the "just a colour" finish. Metal
+ * textures carry their own metalness, so a metal slot stays metallic where it is worn bright.
  */
 export const MINI_BUILD_AUTO_TEXTURE: Readonly<Record<MiniBuildFinish, MiniBuildTextureId>> = {
 	wood: 'aged-oak',
 	fabric: 'woven-fabric',
 	stone: 'dressed-stone',
 	glass: 'clear-glass',
-	metal: 'flat',
+	metal: 'forged-iron',
 	plain: 'flat'
 };
 
@@ -204,6 +223,19 @@ export function miniBuildSurfaceStyle(
 ): SurfaceStyle | null {
 	const id = effectiveMiniBuildTexture(slot);
 	return id === 'flat' ? null : MINI_BUILD_TEXTURES[id].style;
+}
+
+/**
+ * How a slot's style goes onto compiled Mini Build geometry — shared by the world and the editor so
+ * both draw a slot identically. Wood keeps the player's colour down to a near-black floor (a dark
+ * oak stays darker than an oak); other textures read the metre UVs.
+ */
+export function miniBuildBindingOptions(
+	style: SurfaceStyle
+): Omit<ProceduralBindingOptions, 'tint'> {
+	return style.mapping === 'wood'
+		? { ownWoodCoords: true, woodMinLuma: 0.03 }
+		: { uvUnitMeters: 1 };
 }
 
 /** Texture choices grouped for a picker, in catalogue order. */

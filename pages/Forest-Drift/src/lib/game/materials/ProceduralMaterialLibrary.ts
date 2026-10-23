@@ -61,6 +61,11 @@ export interface ProceduralBindingOptions {
 	 * details build them per box), so the binder leaves it alone and the vertex colour tints the wood.
 	 */
 	ownWoodCoords?: boolean;
+	/**
+	 * With `ownWoodCoords`: the luma a darker chosen colour is lifted to so its grain stays visible.
+	 * Default 0.12 (floor planks); Mini Builds go lower so a dark wood stays darker than a light one.
+	 */
+	woodMinLuma?: number;
 }
 
 interface TextureSet {
@@ -84,6 +89,7 @@ interface FlatLook {
 	map: THREE.Texture | null;
 	normalMap: THREE.Texture | null;
 	roughnessMap: THREE.Texture | null;
+	metalnessMap: THREE.Texture | null;
 	aoMap: THREE.Texture | null;
 	opacity: number;
 	envMapIntensity: number;
@@ -141,6 +147,7 @@ function captureFlatLook(material: THREE.MeshStandardMaterial): FlatLook {
 		map: material.map,
 		normalMap: material.normalMap,
 		roughnessMap: material.roughnessMap,
+		metalnessMap: material.metalnessMap,
 		aoMap: material.aoMap,
 		opacity: material.opacity,
 		envMapIntensity: material.envMapIntensity
@@ -490,7 +497,7 @@ export class ProceduralMaterialLibrary {
 		setWoodUniforms(uniforms, resolveWoodParameters(preset.base, preset.overrides), {
 			tintMode: tint || binding.options.ownWoodCoords ? 'relative' : 'absolute',
 			// Floor details: lift very dark chosen colours (~#7E5A3E) so the grain stays visible.
-			minLuma: binding.options.ownWoodCoords ? 0.12 : 0,
+			minLuma: binding.options.ownWoodCoords ? (binding.options.woodMinLuma ?? 0.12) : 0,
 			finish: preset.finish
 		});
 		const programChanged =
@@ -498,6 +505,7 @@ export class ProceduralMaterialLibrary {
 		material.map = null;
 		material.normalMap = null;
 		material.roughnessMap = null;
+		material.metalnessMap = null;
 		material.aoMap = null;
 		// A painted colour becomes the wood's average colour; otherwise the preset's own colours show.
 		material.color.set(tint ?? 0xffffff);
@@ -580,15 +588,19 @@ export class ProceduralMaterialLibrary {
 		const material = binding.material;
 		const glass = binding.style.type === 'glass';
 		const normalMap = this.relief ? set.normalMap : null;
+		// Only metal paints metalness (ORM blue); every other surface is a dielectric.
+		const metalnessMap = binding.style.type === 'metal' ? set.ormMap : null;
 		const programChanged =
 			material.map !== set.map ||
 			material.vertexColors !== (glass ? false : true) ||
-			material.normalMap !== normalMap;
+			material.normalMap !== normalMap ||
+			material.metalnessMap !== metalnessMap;
 		material.map = set.map;
 		material.normalMap = normalMap;
 		material.roughnessMap = set.ormMap;
 		material.roughness = 1;
-		material.metalness = 0;
+		material.metalnessMap = metalnessMap;
+		material.metalness = metalnessMap ? 1 : 0;
 
 		const mean = set.meanLinear;
 		const laidOut = isShaderLaidOut(binding.shaderKind);
@@ -649,6 +661,7 @@ export class ProceduralMaterialLibrary {
 		const programChanged =
 			material.map !== flat.map ||
 			material.normalMap !== flat.normalMap ||
+			material.metalnessMap !== flat.metalnessMap ||
 			material.vertexColors !== flat.vertexColors;
 		material.color.copy(flat.color);
 		material.roughness = flat.roughness;
@@ -657,6 +670,7 @@ export class ProceduralMaterialLibrary {
 		material.map = flat.map;
 		material.normalMap = flat.normalMap;
 		material.roughnessMap = flat.roughnessMap;
+		material.metalnessMap = flat.metalnessMap;
 		material.aoMap = flat.aoMap;
 		material.opacity = flat.opacity;
 		material.envMapIntensity = flat.envMapIntensity;

@@ -469,12 +469,15 @@ test('shows chunk primitive usage only in mini build mode, and toggles chunk bou
 		.click();
 	await aimAtGround(page, 0);
 	await expect(usage).toContainText('Placing here');
-	await expect(page.getByTestId('mini-build-chunk-value')).toContainText('+8');
-	await expect(page.getByTestId('build-hud')).toContainText('Area detail: 0 + 8 / 512 primitives');
+	// The stock chair is 18 primitives (12 cuboids, 4 cylinders, 2 spheres).
+	await expect(page.getByTestId('mini-build-chunk-value')).toContainText('+18');
+	await expect(page.getByTestId('build-hud')).toContainText('Area detail: 0 + 18 / 512 primitives');
 	await page.evaluate(() =>
 		(window as unknown as TestWindow).__forestSession.scene.triggerPrimaryAction()
 	);
-	await expect(page.getByTestId('build-hud')).toContainText('Area detail: 8 + 8 / 512 primitives');
+	await expect(page.getByTestId('build-hud')).toContainText(
+		'Area detail: 18 + 18 / 512 primitives'
+	);
 
 	// Settings → Mini Builds → Show Mini Build chunk boundaries.
 	await expect(page.locator('.mini-build-chunk-marker')).toHaveCount(0);

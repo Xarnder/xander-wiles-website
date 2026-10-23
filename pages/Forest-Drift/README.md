@@ -2474,6 +2474,7 @@ upgrade that renames a chunk degrades to plain sampling rather than breaking a s
 | Ground   | `soil`, `path`, `gravel`                                                    | Clumped soil with discrete pebbles per Voronoi cell. Available for future paths.                                                                                  |
 | Grass    | `meadow`, `dry`, `detail`                                                   | Thousands of drawn blades over soil. `detail` is a near-neutral variant multiplied over terrain vertex colours.                                                   |
 | Glass    | `clear`, `old`                                                              | Dark tint, low roughness, faint smudges and waviness; `MeshPhysicalMaterial` with environment reflections.                                                        |
+| Metal    | `iron`, `brass`                                                             | Hand-worked hardware: hammer facets, draw-file streaks, rust/verdigris patches. The only generator that writes metalness (ORM blue), bound as `metalnessMap`.     |
 
 Open `/materials/` under `npm run dev` to inspect any of them on real-sized sample geometry, with
 live seed/scale/roughness/weathering/dirt/moss/variation/quality/palette controls and the raw

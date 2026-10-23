@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MINI_BUILDS } from '../defaultMiniBuilds';
 import {
-	blockBox,
+	blockExtentBox,
 	chunkIdForPosition,
 	contentHash,
 	effectiveSize,
@@ -24,6 +24,8 @@ import {
 	MINI_BUILD_WORLD_LIMITS
 } from '../MiniBuildTypes';
 import { compileMiniBuildData } from '../MiniBuildCompiler';
+import { shapeCount, shapeLimit } from '../miniBuildShapes';
+import { effectiveMiniBuildTexture } from '../miniBuildTextures';
 import { sixteenBlockDefinition, testDefinition, testGridBoxes } from './miniBuildFixtures';
 
 describe('miniBuildGrid', () => {
@@ -295,18 +297,29 @@ describe('validateMiniBuildInstance / world state', () => {
 
 describe('default designs', () => {
 	it('are ordinary player-legal Mini Builds', () => {
-		expect(DEFAULT_MINI_BUILDS.length).toBeGreaterThanOrEqual(15);
+		expect(DEFAULT_MINI_BUILDS.length).toBeGreaterThanOrEqual(27);
 		const ids = new Set<string>();
 		for (const definition of DEFAULT_MINI_BUILDS) {
 			expect(ids.has(definition.id)).toBe(false);
 			ids.add(definition.id);
 			const result = validateMiniBuildDefinition(definition);
 			expect(result.ok, `${definition.name}: ${!result.ok ? result.error : ''}`).toBe(true);
-			expect(definition.blocks.length).toBeLessThanOrEqual(MINI_BUILD_LIMITS.maxBlocks);
+			for (const shape of ['cuboid', 'cylinder', 'sphere'] as const) {
+				expect(shapeCount(definition.blocks, shape)).toBeLessThanOrEqual(shapeLimit(shape));
+			}
 			expect(definition.materials.length).toBeLessThanOrEqual(MINI_BUILD_LIMITS.maxMaterialSlots);
+			// Every slot is drawn with a procedural surface — no stock piece is flat colour.
+			for (const slot of definition.materials) {
+				expect(effectiveMiniBuildTexture(slot), `${definition.name} ${slot.name}`).not.toBe('flat');
+			}
+			// No unused slots.
+			expect(new Set(definition.blocks.map((block) => block.materialSlot)).size).toBe(
+				definition.materials.length
+			);
 			expect(blocksOnGrid(definition.blocks)).toBe(true);
-			// Grounded: something touches Y = 0.
-			expect(Math.min(...definition.blocks.map((block) => blockBox(block).min.y))).toBe(0);
+			// Grounded: the lowest drawn point touches Y = 0. (An angled block is judged by what it
+			// draws, as grounding and the editor workspace do — its stored grid box may reach lower.)
+			expect(Math.min(...definition.blocks.map((block) => blockExtentBox(block).min.y))).toBe(0);
 			const compiled = compileMiniBuildData(definition);
 			expect(compiled.groups.length).toBeLessThanOrEqual(definition.materials.length);
 			expect(compiled.collision.length).toBeGreaterThan(0);
@@ -330,7 +343,18 @@ describe('default designs', () => {
 			'Chest',
 			'Barrel',
 			'Shelf',
-			'Bookcase'
+			'Bookcase',
+			'Round Table',
+			'Coffee Table',
+			'Trestle Table',
+			'Console Table',
+			'Writing Desk',
+			'Picnic Table',
+			'Plank Chest',
+			'Travel Trunk',
+			'Strongbox',
+			'Lamp Post',
+			'Water Well'
 		]) {
 			expect(names).toContain(required);
 		}

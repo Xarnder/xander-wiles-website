@@ -96,6 +96,12 @@ const ALPINE: MaterialPaletteDefinition = {
 		glass: {
 			tint: '#24323A',
 			sheen: '#9FB6C2'
+		},
+		metal: {
+			base: '#45423F',
+			dark: '#2A2826',
+			light: '#625E58',
+			patina: '#6B4630'
 		}
 	},
 	variantColors: {
@@ -150,6 +156,10 @@ const ALPINE: MaterialPaletteDefinition = {
 				soil: '#6A6052',
 				flower: '#C9C2A0'
 			}
+		},
+		metal: {
+			// Verdigris rather than rust.
+			brass: { base: '#B08A3E', dark: '#7D6029', light: '#D3B066', patina: '#5E6E52' }
 		}
 	}
 };

@@ -11,7 +11,7 @@ import {
 import { chunkIdForPosition, cloneBlock, cloneMaterials, newId } from './miniBuildGrid';
 import { MiniBuildInstanceManager, type MiniBuildInstanceStats } from './MiniBuildInstanceManager';
 import { MiniBuildLibrary } from './MiniBuildLibrary';
-import { miniBuildSurfaceStyle } from './miniBuildTextures';
+import { miniBuildBindingOptions, miniBuildSurfaceStyle } from './miniBuildTextures';
 import { validateMiniBuildDefinition, validateMiniBuildDraft } from './MiniBuildValidation';
 import {
 	MINI_BUILD_WORLD_LIMITS,
@@ -59,6 +59,23 @@ export interface MiniBuildChunkReadout {
 export function formatAreaDetail(readout: MiniBuildChunkReadout): string {
 	const added = readout.added > 0 ? ` + ${readout.added}` : '';
 	return `Area detail: ${readout.primitives}${added} / ${readout.budget} primitives`;
+}
+
+/**
+ * The world material for a slot: its procedural texture (`miniBuildTextures.ts` — `auto` follows
+ * the finish) tinted by its colour, or a flat colour. Solid wood reads the compiled `woodCoord`.
+ */
+export function resolveMiniBuildMaterial(
+	materialManager: BuildingMaterialManager,
+	slot: Pick<MiniBuildMaterialSlot, 'finish' | 'material' | 'texture'>
+): THREE.Material {
+	const style = miniBuildSurfaceStyle(slot);
+	return materialManager.getStyledMaterial(
+		`mini-build-${slot.finish}` as MaterialKind,
+		slot.material,
+		style,
+		style ? miniBuildBindingOptions(style) : {}
+	);
 }
 
 export interface MiniBuildDesignSummary {
@@ -129,20 +146,10 @@ export class MiniBuildSystem {
 		return () => this.listeners.delete(listener);
 	}
 
-	/**
-	 * The world material for a slot: its procedural texture (`miniBuildTextures.ts` — `auto` follows
-	 * the finish) tinted by its colour, or a flat colour. Solid wood reads the compiled `woodCoord`.
-	 */
 	resolveMaterial(
 		slot: Pick<MiniBuildMaterialSlot, 'finish' | 'material' | 'texture'>
 	): THREE.Material {
-		const style = miniBuildSurfaceStyle(slot);
-		return this.materialManager.getStyledMaterial(
-			`mini-build-${slot.finish}` as MaterialKind,
-			slot.material,
-			style,
-			style?.mapping === 'wood' ? { ownWoodCoords: true } : { uvUnitMeters: 1 }
-		);
+		return resolveMiniBuildMaterial(this.materialManager, slot);
 	}
 
 	/** The procedural library world materials use (null without one, e.g. in tests). */

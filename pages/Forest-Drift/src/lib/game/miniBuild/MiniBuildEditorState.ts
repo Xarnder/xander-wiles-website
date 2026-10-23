@@ -904,6 +904,7 @@ function finishForTexture(
 ): MiniBuildFinish {
 	if (group === 'Fabric') return 'fabric';
 	if (group === 'Wood') return 'wood';
+	if (group === 'Metal') return 'metal';
 	if (group === 'Stone') return 'stone';
 	if (group === 'Glass') return 'glass';
 	return current === 'glass' || current === 'metal' ? 'plain' : current;
