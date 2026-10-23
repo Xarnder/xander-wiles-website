@@ -153,11 +153,12 @@
                         </label>
                     </div>
 
-                    <button type="button" id="tag-filter-toggle" class="tag-filter-toggle header-meta-control" aria-pressed="false" title="Filter the board by the selected category">Filter</button>
-
                     <div class="sort-container control-item header-meta-control mobile-tool-menu">
                         <button type="button" id="mobile-tool-menu-btn" class="mobile-tool-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="mobile-tool-dropup">More</button>
                         <div id="mobile-tool-dropup" class="mobile-tool-dropup" role="menu" hidden>
+                            <div id="mobile-tool-drag-slot" class="mobile-tool-drag-slot is-off">
+                                <p class="mobile-tool-drag-caption is-off" data-drag-state>Drag is off</p>
+                            </div>
                             <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="search">Search</button>
                             <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="add-list">Add list</button>
                             <button type="button" class="mobile-tool-dropup-item" role="menuitem" data-action="compact">Compact view</button>
@@ -168,7 +169,7 @@
 
                 <div id="tag-mode-row" class="header-row tag-mode-row">
                     <div class="tag-mode-with-add">
-                        <div id="tag-mode-buttons" class="tag-mode-buttons" role="radiogroup" aria-label="Tag mode for new tasks"></div>
+                        <div id="tag-mode-buttons" class="tag-mode-buttons" role="radiogroup" aria-label="Category filter"></div>
                         <button type="button" id="header-add-task-btn" class="header-add-task-btn" aria-label="Add task" title="Add task">
                             <i class="ph ph-plus" aria-hidden="true"></i>
                         </button>
@@ -176,7 +177,7 @@
                 </div>
             </div>
 
-            <!-- Phones: Board, Drag, More, then Select, Filter, Recent. -->
+            <!-- Phones: Select and Recent, then Board and More. -->
             <div id="mobile-dock-grid" class="mobile-dock-grid"></div>
 
             <div id="header-action-slots" class="header-action-slots header-row" aria-label="Header actions">
@@ -230,6 +231,19 @@
                 <div class="settings-header-spacer" aria-hidden="true"></div>
             </header>
             <div class="options-list settings-page-content">
+                <section class="settings-drag-link is-off options-span-all" aria-label="Drag tasks">
+                    <div class="settings-drag-head">
+                        <span class="settings-drag-title">Drag tasks</span>
+                        <span class="settings-drag-state is-off" data-drag-state>Drag is off</span>
+                    </div>
+                    <div class="toggle-group drag-fill settings-drag-fill" title="Enable dragging">
+                        <label class="switch-small drag-fill-switch">
+                            <input type="checkbox" id="settings-drag-tasks-toggle" aria-label="Drag tasks">
+                            <span class="slider-small drag-fill-slider"></span>
+                            <span class="drag-fill-text" aria-hidden="true"><span class="drag-fill-half is-on">Drag</span><span class="drag-fill-half is-off">No drag</span></span>
+                        </label>
+                    </div>
+                </section>
                 <section id="settings-mobile-summary" class="settings-mobile-summary" aria-label="Board summary">
                     <div id="settings-mobile-stats" class="settings-mobile-stats"></div>
                     <div class="settings-mobile-order-block">
@@ -1269,16 +1283,9 @@
                 <details class="features-help-section" id="help-section-tags" open>
                     <summary><i class="ph ph-tag"></i> <span class="features-help-title">Tags &amp; filtering</span></summary>
                     <div class="features-help-content">
-                        <h4>Tag Mode (new tasks)</h4>
-                        <p>The category control sets which category <strong>new</strong> tasks get. On a phone, press and hold it, drag to another category, and release. On a wider screen, tap a category. It stays selected until you pick another.</p>
-                        <h4>Filter the board by category</h4>
-                        <ol>
-                            <li>Select a category.</li>
-                            <li>Press <strong>Filter</strong>, next to Custom and Drag. Only tasks in that category stay visible.</li>
-                            <li>A bordered <strong>Filtering: …</strong> label appears, and the header count shows matching tasks vs the board total (e.g. <code>12/40</code>).</li>
-                        </ol>
-                        <h4>Turn filtering off</h4>
-                        <p>Press <strong>Filter</strong> again to show every task.</p>
+                        <h4>Category filter</h4>
+                        <p>The category control filters the board and chooses the category for <strong>new</strong> tasks. <strong>All</strong> is the default and shows every task. Choose a category and only those tasks stay visible. Choose <strong>All</strong> again to show every task. On a phone, press and hold the category, drag to another, and release. On a wider screen, tap one.</p>
+                        <p>The header count shows matching tasks against the board total while a category is selected (e.g. <code>12/40</code>).</p>
                         <h4>Group a list by category</h4>
                         <p>Tap the <strong>stack</strong> button at the top of a list to turn grouping on. Tasks in the same category sit together, following the category order in Settings. Leave it on and each new task joins its category straight away. Tap the button again to turn grouping off.</p>
                         <h4>Reorder tag categories</h4>

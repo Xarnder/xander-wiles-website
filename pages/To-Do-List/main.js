@@ -680,7 +680,10 @@ function setupFirestoreListeners(uid) {
             if (projectTitleInput) projectTitleInput.value = state.appData.projectTitle;
             if (document.getElementById('auto-archive-toggle')) document.getElementById('auto-archive-toggle').checked = state.appData.settings.autoArchive;
             if (document.getElementById('show-numbers-toggle')) document.getElementById('show-numbers-toggle').checked = state.appData.settings.showNumbers;
-            if (document.getElementById('drag-tasks-toggle')) document.getElementById('drag-tasks-toggle').checked = state.appData.settings.dragEnabled;
+            if (document.getElementById('drag-tasks-toggle')) {
+                document.getElementById('drag-tasks-toggle').checked = !!state.appData.settings.dragEnabled;
+                applyDragEnabled(!!state.appData.settings.dragEnabled);
+            }
             if (document.getElementById('sort-select')) document.getElementById('sort-select').value = state.appData.settings.sortMode;
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
@@ -1032,6 +1035,22 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('auto-archive-toggle', 'autoArchive', true);
     setupSettingListener('show-numbers-toggle', 'showNumbers', true);
     setupSettingListener('drag-tasks-toggle', 'dragEnabled', true);
+    const settingsDragToggle = document.getElementById('settings-drag-tasks-toggle');
+    if (settingsDragToggle) {
+        settingsDragToggle.addEventListener('change', () => {
+            const mainDrag = document.getElementById('drag-tasks-toggle');
+            if (!mainDrag) {
+                applyDragEnabled(settingsDragToggle.checked);
+                return;
+            }
+            if (mainDrag.checked !== settingsDragToggle.checked) {
+                mainDrag.checked = settingsDragToggle.checked;
+                mainDrag.dispatchEvent(new Event('change'));
+                return;
+            }
+            applyDragEnabled(settingsDragToggle.checked);
+        });
+    }
     setupSettingListener('time-automation-confirm-toggle', 'timeAutomationConfirm', true);
     setupSettingListener('sort-select', 'sortMode', false);
     setupSettingListener('daily-reset-time-input', 'dailyResetTime', false);
@@ -1811,7 +1830,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const viewWidth = vv ? vv.width : window.innerWidth;
             const margin = 8;
             mobileToolDropup.hidden = false;
-            const width = Math.min(Math.max(rect.width, 176), viewWidth - margin * 2);
+            const width = Math.min(Math.max(rect.width, 240), viewWidth - margin * 2);
             let left = rect.right - width;
             left = Math.max(margin, Math.min(left, viewWidth - width - margin));
             mobileToolDropup.style.width = `${width}px`;
@@ -1884,6 +1903,7 @@ document.addEventListener('DOMContentLoaded', () => {
             activateMoreItem(item);
         }, { passive: false });
         mobileToolDropup.addEventListener('click', (event) => {
+            if (event.target.closest('.mobile-tool-drag-slot, .drag-fill')) return;
             if (Date.now() < suppressClickUntil) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -2483,6 +2503,23 @@ function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle
         modal.classList.add('hidden');
     };
 }
+function applyDragEnabled(checked) {
+    const on = !!checked;
+    ['drag-tasks-toggle', 'settings-drag-tasks-toggle'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.checked !== on) el.checked = on;
+    });
+    document.querySelectorAll('[data-drag-state]').forEach((el) => {
+        el.textContent = on ? 'Drag is on' : 'Drag is off';
+        el.classList.toggle('is-on', on);
+        el.classList.toggle('is-off', !on);
+    });
+    document.querySelectorAll('.mobile-tool-drag-slot, .settings-drag-link').forEach((el) => {
+        el.classList.toggle('is-on', on);
+        el.classList.toggle('is-off', !on);
+    });
+}
+
 function setupSettingListener(id, settingKey, isCheckbox, processVal) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -2493,6 +2530,7 @@ function setupSettingListener(id, settingKey, isCheckbox, processVal) {
         state.appData.settings[settingKey] = val;
         if (settingKey === 'autoAddIdleTime') refreshIdleCountdownMarks();
         if (settingKey === 'dragEnabled') {
+            applyDragEnabled(!!val);
             UI.enableSortables(val);
         } else if (settingKey === 'sortMode' || settingKey === 'showNumbers' || settingKey === 'autoArchive' || settingKey === 'disableImportantPinning' || settingKey === 'disableImportantAnimation' || settingKey === 'addTaskLocation') {
             UI.renderBoard();

@@ -3822,6 +3822,7 @@ body.settings-page-open #sync-console {
 
     .settings-page-content > hr.dropdown-divider,
     .settings-page-content > .options-span-all,
+    .settings-page-content > .settings-drag-link,
     .settings-page-content > #kanban-labels-settings,
     .settings-page-content > .sync-info-menu-item,
     .settings-page-content > .app-version-menu-item,
@@ -4307,6 +4308,105 @@ html.add-task-composer-open #backup-reminder-modal-overlay {
 
 [data-theme="light"] .mobile-tool-dropup {
     background: oklch(0.98 0.005 270 / 0.98);
+}
+
+.mobile-tool-drag-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 0 4px;
+    padding: 8px;
+    border-radius: 12px;
+    background: color-mix(in oklch, var(--accent-red) 16%, transparent);
+}
+
+.mobile-tool-drag-slot.is-on {
+    background: color-mix(in oklch, var(--accent-green) 18%, transparent);
+}
+
+.mobile-tool-drag-caption {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+}
+
+.mobile-tool-drag-caption.is-off,
+.settings-drag-state.is-off {
+    color: var(--accent-red);
+}
+
+.mobile-tool-drag-caption.is-on,
+.settings-drag-state.is-on {
+    color: var(--accent-green);
+}
+
+.mobile-tool-drag-slot .drag-fill,
+.settings-drag-link .drag-fill {
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+}
+
+.settings-drag-link .drag-fill {
+    width: min(100%, 280px);
+}
+
+.mobile-tool-drag-slot .drag-fill-switch,
+.settings-drag-link .drag-fill-switch {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 46px;
+    margin: 0;
+    transform: none !important;
+}
+
+.mobile-tool-drag-slot .drag-fill-half,
+.settings-drag-link .drag-fill-half {
+    font-size: 0.82rem;
+}
+
+.settings-drag-link {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in oklch, var(--accent-red) 45%, var(--glass-border));
+    background: color-mix(in oklch, var(--accent-red) 12%, oklch(0 0 0 / 0.2));
+}
+
+.settings-drag-link.is-on {
+    border-color: color-mix(in oklch, var(--accent-green) 50%, var(--glass-border));
+    background: color-mix(in oklch, var(--accent-green) 12%, oklch(0 0 0 / 0.2));
+}
+
+.settings-drag-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.settings-drag-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.settings-drag-state {
+    font-size: 0.85rem;
+    font-weight: 800;
 }
 
 .mobile-dock-label {
@@ -4823,20 +4923,21 @@ html.add-task-composer-open #backup-reminder-modal-overlay {
         .app-header {
             position: fixed !important;
             top: auto !important;
-            bottom: var(--tool-panel-bottom-offset, 8px) !important;
-            left: 8px !important;
-            right: 8px !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
             margin: 0 !important;
-            padding: 6px 8px 5px !important;
+            padding: 8px 14px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: stretch !important;
             justify-content: flex-start !important;
             gap: 3px !important;
             z-index: 9000 !important;
-            border-radius: 18px !important;
+            border-radius: 18px 18px 0 0 !important;
             background: var(--dropdown-bg-glass) !important;
             border: 1px solid var(--glass-border) !important;
+            border-bottom: none !important;
             box-shadow: 0 10px 40px oklch(0 0 0 / 0.6) !important;
             backdrop-filter: blur(25px) !important;
             -webkit-backdrop-filter: blur(25px) !important;
@@ -5866,6 +5967,23 @@ html.add-task-composer-open #backup-reminder-modal-overlay {
     );
     opacity: 0.75;
     animation: tagSelectedOverlayPulse 2.8s ease-in-out infinite;
+}
+
+#tag-mode-buttons .tag-mode-btn.is-all {
+    border-color: oklch(1 0 0 / 0.55) !important;
+    color: white !important;
+    background-color: transparent !important;
+    background-image: linear-gradient(90deg, #FC466B 0%, #3F5EFB 100%) !important;
+}
+
+#tag-mode-buttons .tag-mode-btn.is-all.is-selected {
+    box-shadow:
+        inset 0 0 0 2px oklch(1 0 0 / 0.82),
+        0 8px 22px -16px oklch(0 0 0 / 0.7) !important;
+}
+
+#tag-mode-buttons .tag-mode-btn.is-all.is-selected::before {
+    display: none !important;
 }
 
 @keyframes tagSelectedPulse {
@@ -10239,6 +10357,20 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
         flex: 0 0 auto;
     }
 
+    #tag-mode-buttons:not(.is-picking) .tag-mode-btn.is-selected {
+        justify-content: center;
+        padding: 0 16px !important;
+    }
+
+    #tag-mode-buttons:not(.is-picking) .tag-mode-btn.is-selected::after {
+        position: absolute;
+        right: 16px;
+        left: auto;
+        top: 50%;
+        margin: 0;
+        transform: translateY(calc(-50% + 2px)) rotate(-45deg);
+    }
+
     #tag-mode-buttons:not(.is-picking) .tag-mode-btn.is-selected:active {
         transform: scale(0.985);
     }
@@ -10288,6 +10420,10 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
     #tag-mode-buttons.is-picking .tag-mode-btn.is-selected {
         order: 1;
         box-shadow: inset 0 0 0 2px currentColor !important;
+    }
+
+    #tag-mode-buttons.is-picking .tag-mode-btn.is-all {
+        order: 2;
     }
 
     #tag-mode-buttons.is-picking .tag-mode-btn.is-selected::after {
@@ -10499,7 +10635,7 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
         border-color: color-mix(in oklch, var(--accent-green) 55%, transparent) !important;
     }
 
-    /* Phone: two rows of three. Stats and order move into Settings. */
+    /* Phone: two rows of two. Stats and order move into Settings. */
     .app-header.is-phone-dock .header-row-1,
     .app-header.is-phone-dock .header-row-meta,
     .app-header.is-phone-dock #header-action-slots {
@@ -10508,10 +10644,10 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
 
     .app-header.is-phone-dock #mobile-dock-grid {
         display: grid !important;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
         width: auto;
-        margin-inline: 14px;
+        margin-inline: 0;
         order: 4;
     }
 

@@ -38,6 +38,8 @@ export function fitCategoryDropupText(bar) {
         if (cs.display === 'none' || btn.clientWidth < 8 || btn.clientHeight < 8) continue;
         const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
         const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+        // The chevron is overlaid, so it must not shift the label. Reserve its
+        // width on both sides of a centred label so the letters stay clear of it.
         const chevron = !picking && btn.classList.contains('is-selected') ? 22 : 0;
         const maxW = Math.max(8, btn.clientWidth - padX - chevron - 2);
         const maxH = Math.max(8, Math.floor(btn.clientHeight - padY - 2));

@@ -97,38 +97,29 @@ function syncTagFilterChrome() {
 
     const row = document.getElementById('tag-mode-row');
     const tools = document.querySelector('.tag-tools-block');
+    const bar = document.getElementById('tag-mode-buttons');
+    const filterName = filterTag?.name || 'category';
     if (row) {
         row.classList.toggle('is-filtering', filtering);
-        const baseLabel = 'Tag mode for new tasks';
         row.setAttribute(
             'aria-label',
             filtering
-                ? `${baseLabel}. Board filtered to tag ${filterTag?.name || 'selected'}. Press Filter to show every task.`
-                : `${baseLabel}. Press Filter to show only the selected category.`
+                ? `Showing ${filterName} tasks. New tasks use ${filterName}.`
+                : 'Showing every task.'
+        );
+    }
+    if (bar) {
+        bar.setAttribute(
+            'aria-label',
+            filtering ? `Category filter, ${filterName}` : 'Category filter, all tasks'
         );
     }
     if (tools) tools.classList.toggle('is-filtering', filtering);
 
-    const filterBtn = document.getElementById('tag-filter-toggle');
-    if (filterBtn) {
-        filterBtn.classList.toggle('is-on', filtering);
-        filterBtn.setAttribute('aria-pressed', filtering ? 'true' : 'false');
-        const name = filterTag?.name || 'category';
-        filterBtn.title = filtering
-            ? `Filtering by ${name}. Press to show every task.`
-            : 'Filter the board by the selected category';
-    }
-
     const filterLabel = document.getElementById('tag-filter-label');
     if (filterLabel) {
-        if (filtering) {
-            const name = filterTag?.name || 'tag';
-            filterLabel.textContent = `Filtering: ${name}`;
-            filterLabel.hidden = false;
-        } else {
-            filterLabel.hidden = true;
-            filterLabel.textContent = 'Filtering board';
-        }
+        filterLabel.hidden = true;
+        filterLabel.textContent = 'Filtering board';
     }
 
     document.getElementById('tag-filter-badge')?.remove();
@@ -137,21 +128,25 @@ function syncTagFilterChrome() {
     requestAnimationFrame(() => layoutSlimChrome());
 }
 
-function toggleBoardTagFilter() {
-    const activeId = state.appData.settings.activeTagId || MISC_TAG_ID;
-    state.tagFilterId = state.tagFilterId ? null : activeId;
-    renderTagModeBar();
-    debouncedRenderBoardForTagFilter();
-}
+const ALL_HEADER_CATEGORY = '__all__';
 
 function selectHeaderCategory(tagId) {
-    const activeId = state.appData.settings.activeTagId || MISC_TAG_ID;
-    if (!tagId || tagId === activeId) return;
-    const filtering = !!state.tagFilterId;
+    if (tagId === ALL_HEADER_CATEGORY) {
+        if (!state.tagFilterId) return;
+        state.tagFilterId = null;
+        syncTagFilterChrome();
+        renderTagModeBar();
+        debouncedRenderBoardForTagFilter();
+        return;
+    }
+    const tags = state.appData.settings.tags || [];
+    if (!tagId || !tags.some((tag) => tag && tag.id === tagId)) return;
+    if (state.tagFilterId === tagId && (state.appData.settings.activeTagId || MISC_TAG_ID) === tagId) return;
     setActiveTagId(tagId);
-    if (filtering) state.tagFilterId = tagId;
+    state.tagFilterId = tagId;
+    syncTagFilterChrome();
     renderTagModeBar();
-    if (filtering) debouncedRenderBoardForTagFilter();
+    debouncedRenderBoardForTagFilter();
 }
 
 function clearTagFilter(options = {}) {
@@ -1304,8 +1299,8 @@ function placeInOrder(parent, elements) {
 }
 
 /**
- * Phone dock is two rows of three: Board · Drag · More, then Select · Filter · Recent.
- * Order and the task counts live at the top of Settings on a phone.
+ * Phone dock is two rows of two: Select · Recent, then Board · More.
+ * Drag lives in the More menu and at the top of Settings. Order and counts stay in Settings.
  */
 export function layoutMobileHeaderSlots() {
     const grid = document.getElementById('header-action-slots');
@@ -1328,10 +1323,10 @@ export function layoutMobileHeaderSlots() {
         });
     };
     const sortWrap = document.getElementById('sort-select')?.closest('.sort-container');
-    const drag = document.querySelector('.drag-fill');
+    const drag = document.querySelector('.header-row-meta > .drag-fill, #mobile-tool-drag-slot > .drag-fill');
     const more = document.querySelector('.mobile-tool-menu');
     const board = document.getElementById('board-toggle-container');
-    const filterBtn = document.getElementById('tag-filter-toggle');
+    const dragSlot = document.getElementById('mobile-tool-drag-slot');
     const selectBtn = document.querySelector('[data-slot-id="multi-edit"]');
     const recentBtn = document.querySelector('[data-slot-id="recent-completed"]');
     const total = document.getElementById('total-task-count');
@@ -1348,7 +1343,7 @@ export function layoutMobileHeaderSlots() {
             el.style.removeProperty('grid-row');
             el.style.removeProperty('grid-column');
         });
-        placeInOrder(metaRow, [sortWrap, drag, filterBtn, more]);
+        placeInOrder(metaRow, [sortWrap, drag, more]);
         if (board && headerLeft && total && (board.parentElement !== headerLeft || board.nextElementSibling !== total)) {
             headerLeft.insertBefore(board, total);
         }
@@ -1359,7 +1354,8 @@ export function layoutMobileHeaderSlots() {
 
     header.classList.add('is-phone-dock');
     grid.classList.add('is-slot-layout', 'is-mobile-pair');
-    placeInOrder(dock, [board, drag, more, selectBtn, filterBtn, recentBtn]);
+    if (drag && dragSlot && drag.parentElement !== dragSlot) dragSlot.appendChild(drag);
+    placeInOrder(dock, [selectBtn, recentBtn, board, more]);
     if (orderHost && sortWrap && sortWrap.parentElement !== orderHost) orderHost.appendChild(sortWrap);
 
     items.forEach((el) => {
@@ -1394,8 +1390,7 @@ function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId =
     btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
     let aria = labelMode === 'composer' ? tag.name : `Tag mode: ${tag.name}`;
     if (isSelected) aria += ', selected';
-    if (isFiltering) aria += ', filtering board';
-    else if (isSelected && labelMode !== 'composer') aria += '. Press again to filter board by this tag';
+    if (isFiltering || (isSelected && labelMode !== 'composer')) aria += ', filtering the board';
     btn.setAttribute('aria-label', aria);
     btn.style.cssText = getTagButtonStyle(tag);
     const tone = getTagColorTone(tag.glowColor);
@@ -1409,6 +1404,24 @@ function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId =
             onSelect(tag.id);
         };
     }
+    return btn;
+}
+
+function buildAllCategoryButton(selected) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `tag-mode-btn tag-mode-btn-compact is-all${selected ? ' is-selected' : ''}`;
+    btn.dataset.tagId = ALL_HEADER_CATEGORY;
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+    btn.setAttribute('aria-label', selected ? 'All, showing every task' : 'All');
+    btn.textContent = 'All';
+    btn.onclick = (e) => {
+        e.preventDefault();
+        const bar = btn.closest('#tag-mode-buttons');
+        if (bar && (bar.dataset.suppressClick === '1' || isSlimCategoryDropup())) return;
+        selectHeaderCategory(ALL_HEADER_CATEGORY);
+    };
     return btn;
 }
 
@@ -1426,44 +1439,19 @@ export function renderTagModeBar() {
     }
 
     const tags = sortTags(ensured.tags);
-    const activeId = ensured.activeTagId || MISC_TAG_ID;
     const filterId = state.tagFilterId;
+    const filtered = !!(filterId && tags.some((tag) => tag.id === filterId));
 
     const header = document.querySelector('.app-header');
     if (header) header.classList.toggle('has-dense-tags', tags.length >= DENSE_TAG_LAYOUT_MIN);
-
-    const filterBtn = document.getElementById('tag-filter-toggle');
-    if (filterBtn && filterBtn.dataset.bound !== '1') {
-        filterBtn.dataset.bound = '1';
-        filterBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            toggleBoardTagFilter();
-        });
-    }
 
     initCategoryDropup(container, selectHeaderCategory);
 
     container.innerHTML = '';
     tags.forEach((tag) => {
-        container.appendChild(buildTagButton(tag, activeId, (tagId) => {
-            if (tagId === activeId) {
-                // Already selected: 2nd press turns filter on, 3rd turns it off
-                const nextFilter = state.tagFilterId === tagId ? null : tagId;
-                state.tagFilterId = nextFilter;
-                syncTagFilterChrome();
-                renderTagModeBar();
-                debouncedRenderBoardForTagFilter();
-                return;
-            }
-
-            // Selecting any other tag clears the filter
-            const hadFilter = !!state.tagFilterId;
-            clearTagFilter({ rerender: false });
-            setActiveTagId(tagId);
-            renderTagModeBar();
-            if (hadFilter) renderBoard();
-        }, { compact: true, filterId }));
+        container.appendChild(buildTagButton(tag, filtered ? filterId : null, selectHeaderCategory, { compact: true }));
     });
+    container.appendChild(buildAllCategoryButton(!filtered));
 
     syncTagFilterChrome();
     fitCategoryDropupText(container);
@@ -1554,13 +1542,12 @@ export function selectComposerTag(tagId) {
     if (!tags.some((tag) => tag.id === tagId)) return;
 
     const activeId = ensured.activeTagId || MISC_TAG_ID;
-    if (tagId === activeId) return;
+    if (tagId === activeId && state.tagFilterId === tagId) return;
 
-    const hadFilter = !!state.tagFilterId;
-    clearTagFilter({ rerender: false });
     setActiveTagId(tagId);
+    state.tagFilterId = tagId;
     renderTagModeBar();
-    if (hadFilter) renderBoard();
+    debouncedRenderBoardForTagFilter();
 }
 
 export function renderTaskTagPicker(containerId, selectedId, onSelect) {
