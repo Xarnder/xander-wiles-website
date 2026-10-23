@@ -1,5 +1,6 @@
 import { CellHashChannel, hashCellToFloat01 } from './cellHash';
 import { getTreeSpecies } from './trees/treeSpecies';
+import type { TreeSpeciesDefinition } from './trees/TreeSpeciesTypes';
 import { TreeSpeciesSelector } from './trees/TreeSpeciesSelector';
 import {
 	createDefaultVegetationSettings,
@@ -17,6 +18,28 @@ const RADIANS_PER_DEGREE = Math.PI / 180;
 const SEED_SALT = 0x7ee5;
 
 export type RejectionReason = 'density' | 'slope' | 'water' | null;
+
+/**
+ * A species' size roll: young trees (`youngFraction` of them, by the age roll) take `youngScale`;
+ * the rest spread over `instanceScale`, skewed by `sizeSkew` so the top of the range — the odd
+ * giant — is rare.
+ */
+export function speciesScale(
+	species: Pick<
+		TreeSpeciesDefinition,
+		'instanceScale' | 'sizeSkew' | 'youngFraction' | 'youngScale'
+	>,
+	sizeRoll: number,
+	ageRoll: number
+): number {
+	const young = species.youngFraction ?? 0;
+	if (species.youngScale && ageRoll < young) {
+		const [min, max] = species.youngScale;
+		return min + sizeRoll * (max - min);
+	}
+	const [min, max] = species.instanceScale;
+	return min + Math.pow(sizeRoll, species.sizeSkew ?? 1) * (max - min);
+}
 
 export interface TreePlacementOptions {
 	/** Species-per-site rules (defaults to the default species mix). */
@@ -142,7 +165,6 @@ export class TreePlacementGenerator {
 		);
 		const species = getTreeSpecies(speciesId);
 		const prototypes = this.options.getPrototypesPerSpecies() || species.prototypeCount;
-		const [scaleMin, scaleMax] = species.instanceScale;
 		const [widthMin, widthMax] = species.instanceWidthScale;
 		const placementScale =
 			settings.minTreeScale +
@@ -157,7 +179,8 @@ export class TreePlacementGenerator {
 			worldX,
 			worldZ,
 			scale:
-				placementScale * (scaleMin + roll(CellHashChannel.Scale + 100) * (scaleMax - scaleMin)),
+				placementScale *
+				speciesScale(species, roll(CellHashChannel.Scale + 100), roll(CellHashChannel.Age)),
 			widthScale: widthMin + roll(CellHashChannel.Width) * (widthMax - widthMin),
 			rotationY: roll(CellHashChannel.Rotation) * Math.PI * 2,
 			tint: roll(CellHashChannel.Tint)

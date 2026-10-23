@@ -2815,25 +2815,42 @@ The forest is a runtime ecosystem, not hand-placed hero trees:
 species definition (rules + ranges)            trees/treeSpecies.ts
   → a few seeded prototype designs per species  trees/treePrototypeGenerator.ts
     → compiled once per LOD, shared world-wide  trees/TreePrototypeCache.ts
+      (+ foliage cards for LOD0/1, one atlas)   trees/treeCardAtlas.ts
       → lightweight deterministic instances     TreePlacementGenerator + trees/TreeSpeciesSelector.ts
         → per-chunk InstancedMesh batches        trees/TreeChunk.ts
-          (one per prototype × LOD, real bounds)
+          (one per prototype × LOD, real bounds; near ones carry a card batch)
             → budgeted LOD updates, wind, stats  TreeManager.ts, trees/treeLod.ts, trees/treeMaterial.ts
 ```
 
+Open `/trees` under `npm run dev` (or `/trees?dev` on a build) for the **Tree Lab**: every species'
+prototypes side by side or one prototype at LOD0 → LOD3, foliage cards on/off and a wind slider,
+drawn with the game's own cache, materials and atlas.
+
 ### Species
 
-| Species      | Family          | Silhouette                                                       | Prototypes | Triangles LOD0 / 1 / 2 / 3           | Shadow proxy LOD0 / 1 |
-| ------------ | --------------- | ---------------------------------------------------------------- | ---------- | ------------------------------------ | --------------------- |
-| `oak`        | broadleaf       | buttressed trunk, limbs, 4–6 clumped cluster masses              | 4          | 6608–9856 / 1688–2520 / 340–500 / 88 | 1620–2420 / 420–620   |
-| `pine`       | conifer         | straight trunk, 5–7 ragged drooping tiers                        | 4          | 1200–1616 / 416–488 / 160 / 104      | — (casts itself)      |
-| `cypress`    | slim conifer    | narrow lathed spindle with vertical sprays, trunk mostly hidden  | 3          | 928 / 320 / 116 / 56                 | — (casts itself)      |
-| `ornamental` | small broadleaf | short trunk, 2–4 clumped clusters; one autumn-coloured prototype | 3          | 4984–6608 / 1272–1688 / 260–340 / 88 | 1220–1620 / 320–420   |
+| Species      | Family          | Silhouette                                                               | Height at scale 1 | Prototypes | Triangles LOD0 / 1 / 2 / 3            | Foliage cards LOD0 / 1 (tile)        |
+| ------------ | --------------- | ------------------------------------------------------------------------ | ----------------- | ---------- | ------------------------------------- | ------------------------------------ |
+| `oak`        | broadleaf       | buttressed trunk, limbs, 4–6 clumped cluster masses                      | 6–8 m             | 3          | 6608–9856 / 1688–2520 / 340–500 / 88  | 80–84 / 40–42 (`oak`, lobed leaves)  |
+| `pine`       | conifer         | straight trunk, 5–7 ragged drooping tiers                                | 11–14 m           | 3          | 1200–1616 / 416–488 / 160 / 104       | 61–88 / 36–49 (`needles`)            |
+| `cypress`    | slim conifer    | narrow lathed spindle with vertical sprays, trunk mostly hidden          | 9–12 m            | 2          | 928 / 320 / 116 / 56                  | 58 / 29 (`scales`)                   |
+| `ornamental` | small broadleaf | short trunk, 2–4 clumped clusters; one autumn-coloured prototype         | 4–5 m             | 3          | 3408–5008 / 888–1288 / 180–260 / 88   | 42–44 / 21–22 (`small-leaf`)         |
+| `spruce`     | tall conifer    | towering narrow spire: 12–15 tiers drooping more toward the bottom       | 21–26 m           | 3          | 2864–3280 / 632–704 / 188 / 104       | 160–193 / 62–73 (`spruce` fronds)    |
+| `birch`      | broadleaf       | slender white trunk with black marks, tall narrow crown, drooping sprays | 11–13 m           | 3          | 8232–11456 / 2104–2920 / 420–580 / 88 | 93–96 / 47–48 (`birch`); one gold    |
+| `scotsPine`  | pine            | tall bare orange trunk, limbs to a high, flat, layered crown             | 13–16 m           | 2          | 6656–9880 / 1720–2536 / 340–500 / 88  | 62 / 31 (`needles`, tufts upward)    |
+| `willow`     | weeping         | wide low crown, leaning trunk, curtains hanging almost to the ground     | 6–8 m             | 2          | 8256–11456 / 2120–2920 / 420–580 / 88 | 97–98 / 49 (`small-leaf` + `willow`) |
 
 A species is a `TreeSpeciesDefinition`: trunk rules (height, radius, taper, bend, branches), a
-canopy rule (`blobs`, `tiers` or `spindle` with their ranges), a colour style, prototype count,
-per-instance width/scale ranges, wind response and a triangle budget per LOD that the tests
-enforce. A new species is a new entry — no meshes are authored.
+canopy rule (`blobs`, `tiers` or `spindle` with their ranges — blob crowns can `spread` their
+clusters into a tall crown, tiers can `taper` into a spire), a colour style, prototype count,
+size rules, foliage-card layers, wind response and a triangle budget per LOD that the tests
+enforce. A new species is a new entry — no meshes are authored. Species ids are stored as indices
+(`TREE_SPECIES_IDS`) and weights are index-aligned, so new species are appended, never reordered.
+
+**Size variety.** Each tree's scale is the placement scale (0.75–1.35) × a species roll
+(`speciesScale` in `TreePlacementGenerator.ts`): `instanceScale` skewed by `sizeSkew` so the top of
+the range is rare, or — for `youngFraction` of trees, by a separate age roll — `youngScale`
+(saplings and half-grown trees). A spruce stand mixes 6–12 m young trees, 20–30 m mature ones and
+the odd 40 m giant; oaks run from 3 m saplings to ~13 m.
 
 ### Prototype generation
 
@@ -2916,6 +2933,41 @@ lie inside, so the proxy never shadows the crown's own lit side (a ray-cast test
 Conifers cast with their own triangles: their tiers merge differently per LOD, so a coarser stack
 would poke out of the visible one, and they are cheap already.
 
+### Foliage cards (detail planes)
+
+The crown and tier meshes give the silhouette; **foliage cards** give it a fine, leafy edge. Each
+near prototype LOD carries a set of alpha-tested sprays — a twig with its leaves, a needle brush, a
+spruce frond, a cypress spray or a willow strand per card — generated with the design
+(`buildTreeCards`, from the design's seed only, so cards never change the crown they sit on):
+
+- `surface` layers grow out of blob clusters (and cypress spindles), pointing outward ± a lift,
+  part of each card inside the crown; few underneath (they read as dark bunches) and low ones
+  reach outward rather than down;
+- `rim` layers sit on the tips of the tiers that LOD actually draws, following each tier's droop,
+  plus a sparser inner ring that breaks up the cone surface;
+- `hang` layers hang long curtains from a weeping crown's outer skirt (three segments, so wind
+  bends them).
+
+A card is a V-folded strip (edge, spine, edge), so it keeps a little volume edge-on. Vertex colours
+are the crown's own foliage shading, sampled part way back toward where the spray leaves the
+crown, and normals are the crown's (tipped slightly toward the outward face) — cards light as part
+of the crown, not as flat paper. LOD1 keeps every other card, 25 % larger; LOD2/3 have none.
+
+**Textures stay procedural.** All sprays come from ONE 1024 × 512 atlas (`treeCardAtlas.ts`, 4 × 2
+tiles of 256 texels), painted analytically at startup (~80 ms) from strokes and leaf outlines — no
+bitmaps. Channels are masks (shade, new growth, per-leaf hue lean, coverage) coloured by the
+crown's vertex colours × instance tint; mips are the coverage-preserving chain from
+`atlas/alphaAtlas.ts`, so distant sprays keep their density under the alpha test.
+
+**Cost control.** Cards are one more instanced draw per near batch (`TreeChunk`'s card meshes
+share the batch's instance-matrix and tint buffers — no per-tree data is copied), with one
+material (`createTreeCardMaterial`: alpha-tested, double-sided Lambert). They **never cast
+shadows** (the crown under them does) and are kept out of the GTAO pre-pass, which would draw them
+as solid quads. In the vertex shader each card shrinks toward its anchor between 72 % and 96 % of
+the LOD2 distance, so they are gone (nothing rasterised) before a tree switches to its card-less
+LOD2 — no pop. Presets: Low draws cards on LOD0 only; Medium–Ultra on LOD0 and LOD1. Settings →
+Vegetation → Foliage cards turns them off.
+
 ### Procedural bark and leaves
 
 Near trees get procedural surfaces in the same shader — still no textures, no UVs, no extra draw
@@ -2924,12 +2976,13 @@ foliage kind, plus a grain direction — the trunk/branch axis for bark, the spr
 conifer foliage); the fragment shader evaluates the pattern on the tree's undisplaced local
 position (so nothing swims in the wind), offset per instance so trees sharing a prototype differ.
 
-| Species    | Bark                                                                 | Foliage                                                                                |
-| ---------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Oak        | `furrowed`: long vertical furrows along noise contours, corky ridges | `broadleaf`: two overlapping layers of oval leaves (11 cm cells), darker inner foliage |
-| Pine       | `plated`: elongated plates split by irregular dark cracks            | `needles`: tufts stretched down each tier, fine needle streaks                         |
-| Cypress    | `fibrous`: long stringy strands                                      | `scales`: small sprays stretched upward                                                |
-| Ornamental | `smooth`: soft mottling with horizontal lenticels                    | `small-leaf`: as broadleaf, 7.5 cm cells                                               |
+| Species    | Bark                                                                  | Foliage                                                                                |
+| ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Oak        | `furrowed`: long vertical furrows along noise contours, corky ridges  | `broadleaf`: two overlapping layers of oval leaves (11 cm cells), darker inner foliage |
+| Birch      | `papery`: pale bark, dark lenticel dashes, black fissured patches low | `small-leaf`                                                                           |
+| Pine       | `plated`: elongated plates split by irregular dark cracks             | `needles`: tufts stretched down each tier, fine needle streaks                         |
+| Cypress    | `fibrous`: long stringy strands                                       | `scales`: small sprays stretched upward                                                |
+| Ornamental | `smooth`: soft mottling with horizontal lenticels                     | `small-leaf`: as broadleaf, 7.5 cm cells                                               |
 
 Bark adds lichen patches (more near the ground). Every leaf has its own tone, hue and a normal tilt,
 so it catches the sun slightly differently from its neighbours. All patterns average ~1, so the
@@ -2945,12 +2998,12 @@ prototype vertex (shared by every instance).
 
 ### Quality presets and developer controls
 
-| Preset | LOD distance scale | Density scale | Tree shadows | Wind |
-| ------ | ------------------ | ------------- | ------------ | ---- |
-| Low    | 0.65               | 0.75          | none         | off  |
-| Medium | 0.85               | 0.9           | LOD0         | on   |
-| High   | 1                  | 1             | LOD0         | on   |
-| Ultra  | 1.3                | 1             | LOD0–1       | on   |
+| Preset | LOD distance scale | Density scale | Tree shadows | Wind | Foliage cards |
+| ------ | ------------------ | ------------- | ------------ | ---- | ------------- |
+| Low    | 0.65               | 0.75          | none         | off  | LOD0          |
+| Medium | 0.85               | 0.9           | LOD0         | on   | LOD0–1        |
+| High   | 1                  | 1             | LOD0         | on   | LOD0–1        |
+| Ultra  | 1.3                | 1             | LOD0–1       | on   | LOD0–1        |
 
 A lower density scale keeps a stable subset of the same trees (same rolls, lower threshold).
 Settings → Vegetation adds: minimum spacing (enforced deterministically by keeping each candidate
@@ -2963,9 +3016,17 @@ main pass), prototype count and triangles, tree memory, and the last chunk build
 ### Species placement
 
 `TreeSpeciesSelector` (placement layer only) weights species by a seed-named, low-frequency
-conifer/broadleaf region map plus elevation (broadleaf woods, pine forests, mixed woodland between),
-and puts ornamentals on open, gentle, low ground (density², so never deep forest). No water or
-hydrology system exists yet, so there is no water avoidance.
+conifer/broadleaf region map plus elevation (broadleaf woods, conifer forests, mixed woodland
+between), then by local density and slope: tall spruces crowd dense and higher conifer forest,
+Scots pines take open conifer ground, birches fill mixed woodland and forest edges, and
+ornamentals and weeping willows grow on open, gentle, low ground (density², so never deep forest).
+Each species also has its own low-frequency **stand** map (`standScale` 150 m, `standStrength`
+0.9), so trees of a kind gather into groves — a spruce stand, a birch copse — which looks natural
+and keeps the number of species (and so prototype batches) per chunk down.
+Trees standing in water are rejected by placement (`TREE_WATER_CLEARANCE`).
+
+Adding species changed which species (and size) each cell rolls, so `GENERATOR_VERSION` went to 2
+and the determinism golden was regenerated (tree positions and counts are unchanged).
 
 ### Performance
 
@@ -3005,25 +3066,51 @@ is under 60 fps on this canvas with or without trees (20.3 ms with none) — tha
 cascades and relief, not trees. Tree memory (prototype geometry + per-chunk data) grows from ~1.1 MB
 to ~3.9 MB (the old figure also left out the `treeSurface` attribute, now counted).
 
-**Tuning recommendations:** draw calls scale with prototypes per species — keep 3–4. On weak GPUs,
-lower LOD distances (or the preset) before density. Shadow cost is the largest tree cost at
-High/Ultra; `treeShadowMaxLod = 0` is the right default. If far forests ever dominate, raise
-`lod3Distance`'s hysteresis rather than adding detail.
+**Foliage cards and new species (2026-10-23)** — same harness and canvas, `docs/tree-cards-performance.json`.
+Before and after were built from isolated copies of the project and run interleaved, but another
+session was loading the machine (load average 5–10 in round 1, up to 52 in round 2), so treat
+these as ± ~1.5 ms. Round 1, High:
+
+| View                                           | Before         | After                        | Same run, scene with no trees at all |
+| ---------------------------------------------- | -------------- | ---------------------------- | ------------------------------------ |
+| oak / pine / cypress close-ups                 | 11.4–11.7 ms   | 13.3–13.6 ms                 | 9.2 → 10.5 ms (+1.3 ms drift)        |
+| ornamental close-up / oak 32 m                 | 10.8 / 11.4 ms | 13.4 / 14.1 ms               |                                      |
+| forest, ground level / far                     | 12.9 / 11.8 ms | 13.7 / 12.7 ms               |                                      |
+| spruce / birch / Scots pine / willow close-ups | —              | 14.0 / 13.2 / 12.6 / 13.3 ms |                                      |
+
+Corrected for the drift (the no-trees scene is identical in both builds), the new trees cost
+−0.4 to +1.4 ms at High: every view stays at 71–79 fps on this Retina canvas. The cards themselves
+are ~0.2–0.4 ms (forest view with vs without cards, same run); most of the rest is draw calls —
+more species means more prototype batches per chunk. **Species stands** (each species' own
+low-frequency map, `standScale` / `standStrength`) group trees into groves, which cut the forest
+view from 201 to 158 visible batches (122 before) and read more naturally than an even mix;
+oak/pine dropped to 3 prototypes and cypress/Scots pine to 2 for the same reason. Ultra stays where
+it was (~40 fps on this canvas with or without the change; its no-trees scene is ~45 fps).
+
+**Tuning recommendations:** draw calls scale with prototypes per species — keep 2–4, and keep
+species stands on (they set how many species share a chunk). On weak GPUs, lower LOD distances
+(or the preset) before density. Shadow cost is the largest tree cost at High/Ultra;
+`treeShadowMaxLod = 0` is the right default. If far forests ever dominate, raise
+`lod3Distance`'s hysteresis rather than adding detail; if near forests do, lower the card counts.
 
 ### Tests
 
 `trees/__tests__/treePrototypeGenerator.spec.ts` (budgets per LOD, LODs strictly cheaper, valid
 finite geometry, outward winding, determinism, silhouette consistency across LODs, shadow proxies
-cheaper and inside the crown);
+cheaper and inside the crown; foliage cards only on LOD0/1 with fewer on LOD1, valid card
+geometry with UVs inside their atlas tiles, cards never moving the crown; the card atlas's
+per-tile coverage, coverage-preserving mips and determinism);
 `trees/__tests__/treeRuntime.spec.ts` (LOD thresholds and hysteresis, uniform-range skipping,
 shadow policy, prototype cache reuse and per-species LOD3 sharing, the appended shadow proxy and the
 batches' shadow-pass range switch, batch grouping covering every
 tree once, bounding spheres containing instances, far chunks collapsing to one batch per species,
 batch reuse, disposal, species selection determinism and rules); `TreePlacementGenerator.spec.ts`
 (minimum spacing, deterministic species/variant/variation, density-scale subsets, prototype count);
-`TreeManager.spec.ts` (foundation exclusion, chunk load/unload releasing batches, LODs still
-re-evaluated after a quality/settings change, no prototype duplication across chunks, per-chunk cap,
-crown clearance). `tests/treePerformance.e2e.ts` is the LOD benchmark and review-shot harness.
+`TreeManager.spec.ts` (foundation exclusion, chunk load/unload releasing batches and their card
+meshes, LODs still re-evaluated after a quality/settings change, no prototype duplication across
+chunks, per-chunk cap, crown clearance). `tests/treePerformance.e2e.ts` is the LOD benchmark and
+review-shot harness (close-ups of every species, and the forest view without cards, without tree
+shadows and without trees).
 
 ### Limitations and next steps
 
@@ -3032,7 +3119,10 @@ crown clearance). `tests/treePerformance.e2e.ts` is the LOD benchmark and review
 - Shadow depth passes don't apply wind, so shadows don't sway.
 - Far chunks still cost one batch per species; merging LOD3 batches across 2×2 chunk regions would
   cut far draw calls further if needed.
-- Optional species (dead, bent, flowering, willow) are not implemented.
+- Optional species (dead, bent, flowering) are not implemented.
+- Foliage cards are alpha-tested; on tile-based GPUs that costs more per pixel than opaque crowns,
+  which is why they stop at LOD1 and never cast shadows. If near forests ever dominate, lower the
+  card counts in `treeSpecies.ts` (cost scales with screen coverage, not triangles).
 
 ## Grass: procedural billboard tufts, density LOD and terrain hand-off (`vegetation/grass/`)
 

@@ -96,7 +96,16 @@ async function viewOfTree(
 	return page.evaluate(
 		({ species, near, distance }) => {
 			const s = (window as unknown as TestWindow).__forestSession.scene;
-			const ids = ['oak', 'pine', 'cypress', 'ornamental'];
+			const ids = [
+				'oak',
+				'pine',
+				'cypress',
+				'ornamental',
+				'spruce',
+				'birch',
+				'scotsPine',
+				'willow'
+			];
 			const trees: { x: number; y: number; z: number; scale: number; species: string }[] = [];
 			for (const record of s.treeManager.active.values()) {
 				const c = record.trees;
@@ -121,7 +130,13 @@ async function viewOfTree(
 				);
 			const target = candidates[0];
 			if (!target) return null;
-			const mid = species === 'pine' || species === 'cypress' ? 5.5 : 3.6;
+			const mid =
+				(
+					{ pine: 5.5, cypress: 5.5, spruce: 9, birch: 7, scotsPine: 12, willow: 3.5 } as Record<
+						string,
+						number
+					>
+				)[species] ?? 3.6;
 			let best: { yaw: number; blockers: number } = { yaw: 0, blockers: Infinity };
 			for (let k = 0; k < 16; k++) {
 				const yaw = (k / 16) * Math.PI * 2;
@@ -171,6 +186,7 @@ async function measure(page: Page, sampleMs = 2500) {
 			triangles: frames.triangles,
 			visibleTreesByLod: trees.visibleTreesByLod,
 			visibleBatches: trees.visibleBatches,
+			visibleCardBatches: trees.visibleCardBatches,
 			prototypeTriangles: trees.prototypeTriangles,
 			treeMemoryMB: Math.round((trees.memoryBytes / 1048576) * 100) / 100
 		};
@@ -227,8 +243,11 @@ test('tree LOD review shots and benchmark', async ({ page }) => {
 		});
 
 		const views: { id: string; view: View | null }[] = [];
-		for (const species of ['oak', 'pine', 'cypress', 'ornamental'])
+		for (const species of ['oak', 'pine', 'cypress', 'ornamental', 'birch', 'willow'])
 			views.push({ id: `${species}-near`, view: await viewOfTree(page, species, forest, 11) });
+		// Tall trees need more room to fit in the frame.
+		views.push({ id: 'spruce-near', view: await viewOfTree(page, 'spruce', forest, 18) });
+		views.push({ id: 'scotsPine-near', view: await viewOfTree(page, 'scotsPine', forest, 20) });
 		views.push({ id: 'oak-mid', view: await viewOfTree(page, 'oak', forest, 32) });
 		views.push({ id: 'pine-mid', view: await viewOfTree(page, 'pine', forest, 38) });
 		const fy = await ground(forest.x, forest.z);
@@ -254,14 +273,18 @@ test('tree LOD review shots and benchmark', async ({ page }) => {
 			results.push({ label, quality, scene: id, ...numbers });
 			if (shots) await page.screenshot({ path: `${shots}/${label}-${quality}-${id}.png` });
 		}
-		// What the trees cost in the ground-level forest view: without tree shadows, without trees.
+		// What the trees cost in the ground-level forest view: without foliage cards, without tree
+		// shadows, without trees (each on top of the previous).
 		const groundView = views.find((v) => v.id === 'forest-ground')?.view;
 		if (groundView) {
 			await place(page, groundView);
-			for (const variant of ['no-tree-shadows', 'no-trees'] as const) {
+			for (const variant of ['no-cards', 'no-tree-shadows', 'no-trees'] as const) {
 				await page.evaluate((variant) => {
 					const s = (window as unknown as TestWindow).__forestSession.scene;
-					if (variant === 'no-tree-shadows') {
+					if (variant === 'no-cards') {
+						s.vegetationSettings.rendering.foliageCards = false;
+						s.treeManager.notifyRenderingChanged();
+					} else if (variant === 'no-tree-shadows') {
 						s.vegetationSettings.rendering.castShadows = false;
 						s.treeManager.notifyRenderingChanged();
 					} else s.treeManager.group.visible = false;
@@ -276,6 +299,7 @@ test('tree LOD review shots and benchmark', async ({ page }) => {
 			}
 			await page.evaluate(() => {
 				const s = (window as unknown as TestWindow).__forestSession.scene;
+				s.vegetationSettings.rendering.foliageCards = true;
 				s.vegetationSettings.rendering.castShadows = true;
 				s.treeManager.notifyRenderingChanged();
 				s.treeManager.group.visible = true;

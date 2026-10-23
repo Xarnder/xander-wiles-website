@@ -417,9 +417,15 @@ export function addTier(builder: TreeMeshBuilder, options: TierOptions): void {
 		return [-dy / len, dr / len];
 	};
 
+	// Underside normals lean outward-down (lit like the skirt above) — but a small, steep,
+	// drooping tier (a spruce spire) has an underside that faces inward, so lean less there.
+	const underTop = options.underRing ? baseY + height * 0.08 - droop * 0.35 : baseY + height * 0.18;
+	const underReach = Math.max(1e-3, radius * (options.underRing ? 0.45 : 1));
+	const underSlope = (underTop - (baseY - droop)) / underReach;
+	const underOut = Math.max(-0.5, 0.75 - Math.max(0, underSlope - 0.6) * 1.2);
 	const ringAt = (k: number, underside: boolean, underY?: number) => {
 		const fraction = underY === undefined ? profile[k].fraction : 0.55;
-		const [nr, ny] = underside ? [0.75, -0.55] : profileNormal(k);
+		const [nr, ny] = underside ? [underOut, -0.55] : profileNormal(k);
 		const ring: number[] = [];
 		for (let i = 0; i < rimCount; i++) {
 			const notch = i % 2 === 1;

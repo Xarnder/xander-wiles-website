@@ -74,6 +74,18 @@ export interface TreeSpeciesMixSettings {
 	pineWeight: number;
 	cypressWeight: number;
 	ornamentalWeight: number;
+	/** Tall spruces: conifer country, denser forest and higher ground. */
+	spruceWeight: number;
+	/** Birches: mixed woodland and forest edges. */
+	birchWeight: number;
+	/** Scots pines: open conifer ground. */
+	scotsPineWeight: number;
+	/** Weeping willows: open, gentle lowland. */
+	willowWeight: number;
+	/** World-unit scale of the per-species stand maps (groves of one kind). */
+	standScale: number;
+	/** 0 = an even mix everywhere … 1 = species only inside their own stands. */
+	standStrength: number;
 	/** World-unit scale of the conifer-vs-broadleaf region map. */
 	coniferRegionScale: number;
 	/** Elevation band over which forests shift toward conifers. */
@@ -99,6 +111,8 @@ export interface TreeRenderingSettings {
 	castShadows: boolean;
 	/** Prototype designs per species; 0 = each species' own default. Draw calls scale with this. */
 	prototypesPerSpecies: number;
+	/** Alpha-tested foliage sprays on near trees (the graphics preset limits which LODs get them). */
+	foliageCards: boolean;
 }
 
 /** How vegetation chunks are loaded around the player — independent of terrain's own view distance. */
@@ -181,9 +195,15 @@ export function createDefaultVegetationSettings(): VegetationSettings {
 
 		species: {
 			oakWeight: 1,
-			pineWeight: 0.9,
+			pineWeight: 0.7,
 			cypressWeight: 0.35,
 			ornamentalWeight: 0.3,
+			spruceWeight: 0.75,
+			birchWeight: 0.45,
+			scotsPineWeight: 0.4,
+			willowWeight: 0.15,
+			standScale: 150,
+			standStrength: 0.9,
 			coniferRegionScale: 700,
 			coniferStartHeight: 18,
 			coniferFullHeight: 55
@@ -199,7 +219,8 @@ export function createDefaultVegetationSettings(): VegetationSettings {
 			windEnabled: true,
 			windStrength: 1,
 			castShadows: true,
-			prototypesPerSpecies: 0
+			prototypesPerSpecies: 0,
+			foliageCards: true
 		},
 
 		loading: {

@@ -271,7 +271,11 @@ describe('TreeSpeciesSelector', () => {
 			oakWeight: 0,
 			pineWeight: 0,
 			cypressWeight: 0,
-			ornamentalWeight: 0
+			ornamentalWeight: 0,
+			spruceWeight: 0,
+			birchWeight: 0,
+			scotsPineWeight: 0,
+			willowWeight: 0
 		});
 		selector.setSeed('x');
 		expect(selector.pick(site(), 0.5)).toBe('oak');
@@ -280,6 +284,10 @@ describe('TreeSpeciesSelector', () => {
 			oakWeight: 0,
 			cypressWeight: 0,
 			ornamentalWeight: 0,
+			spruceWeight: 0,
+			birchWeight: 0,
+			scotsPineWeight: 0,
+			willowWeight: 0,
 			coniferStartHeight: -100,
 			coniferFullHeight: -50
 		});

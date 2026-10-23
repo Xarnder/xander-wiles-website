@@ -11,11 +11,25 @@
  * Nothing here is per placed tree except `TreeInstanceDefinition`, which is a handful of numbers.
  */
 
-export type TreeFamily = 'broadleaf' | 'pine' | 'cypress' | 'ornamental';
+export type TreeFamily = 'broadleaf' | 'pine' | 'cypress' | 'ornamental' | 'spruce' | 'weeping';
 
-export type TreeSpeciesId = 'oak' | 'pine' | 'cypress' | 'ornamental';
+export type TreeSpeciesId =
+	'oak' | 'pine' | 'cypress' | 'ornamental' | 'spruce' | 'birch' | 'scotsPine' | 'willow';
 
-export const TREE_SPECIES_IDS: readonly TreeSpeciesId[] = ['oak', 'pine', 'cypress', 'ornamental'];
+/**
+ * Index order is part of the runtime data (`TreeChunk` stores species as an index) and of the
+ * placement roll (`TreeSpeciesSelector` weights are index-aligned) — append, never reorder.
+ */
+export const TREE_SPECIES_IDS: readonly TreeSpeciesId[] = [
+	'oak',
+	'pine',
+	'cypress',
+	'ornamental',
+	'spruce',
+	'birch',
+	'scotsPine',
+	'willow'
+];
 
 /** Level of detail: 0 near … 3 very far (cheap silhouette). */
 export type TreeLod = 0 | 1 | 2 | 3;
@@ -56,6 +70,11 @@ export interface BlobCanopyRules {
 	verticalOffset: Range;
 	/** Lumpiness of cluster surfaces, as a fraction of cluster radius. */
 	lumpiness: number;
+	/**
+	 * How far ring clusters spread DOWN from the canopy centre, as a fraction of canopy height
+	 * (default 0.14: one rounded mass). Larger values stack clusters into a tall crown.
+	 */
+	spread?: number;
 }
 
 /** Stacked conical tiers (pine). */
@@ -72,6 +91,8 @@ export interface TieredCanopyRules {
 	droop: Range;
 	/** Jagged rim: inner points sit at this fraction of the tier radius. */
 	rimNotch: number;
+	/** Tier radius taper exponent up the tree (higher = narrower spire). Default 0.85. */
+	taper?: number;
 }
 
 /** A narrow lathed spindle with vertical lumps (cypress). */
@@ -106,7 +127,7 @@ export interface TreeStyle {
 }
 
 /** Procedural bark, drawn per pixel by the tree shader along each trunk/branch axis. */
-export type TreeBarkKind = 'furrowed' | 'plated' | 'fibrous' | 'smooth';
+export type TreeBarkKind = 'furrowed' | 'plated' | 'fibrous' | 'smooth' | 'papery';
 /** Procedural foliage surface: leaf clusters, needle tufts or scale-like sprays. */
 export type TreeFoliageKind = 'broadleaf' | 'small-leaf' | 'needles' | 'scales';
 
@@ -117,18 +138,62 @@ export interface TreeSurfaceStyle {
 
 /**
  * Surface kind codes stored in the `treeSurface` vertex attribute (x) — the shader branches on
- * them. Bark kinds are < 4, foliage kinds ≥ 4.
+ * them. Bark kinds are < `TREE_FOLIAGE_CODE_BASE`, foliage kinds ≥ it.
  */
+export const TREE_FOLIAGE_CODE_BASE = 8;
+
 export const TREE_SURFACE_CODES: Readonly<Record<TreeBarkKind | TreeFoliageKind, number>> = {
 	furrowed: 0,
 	plated: 1,
 	fibrous: 2,
 	smooth: 3,
-	broadleaf: 4,
-	'small-leaf': 5,
-	needles: 6,
-	scales: 7
+	papery: 4,
+	broadleaf: 8,
+	'small-leaf': 9,
+	needles: 10,
+	scales: 11
 };
+
+/**
+ * Foliage card textures — tiles of the one procedural card atlas (`treeCardAtlas.ts`). Each is a
+ * whole spray (a twig with its leaves or needles), so one card implies dozens of leaves.
+ */
+export type TreeCardTile =
+	'broadleaf' | 'oak' | 'small-leaf' | 'birch' | 'needles' | 'spruce' | 'scales' | 'willow';
+
+export const TREE_CARD_TILES: readonly TreeCardTile[] = [
+	'broadleaf',
+	'oak',
+	'small-leaf',
+	'birch',
+	'needles',
+	'spruce',
+	'scales',
+	'willow'
+];
+
+/**
+ * How one layer of foliage cards is laid out on a crown:
+ * - `surface`: sprays growing out of blob clusters or a spindle, pointing outward (± `lift`);
+ * - `rim`: sprays at conifer tier tips, following each tier's droop, plus a sparser inner ring;
+ * - `hang`: long curtains hanging straight down from the crown's outer edge (weeping crowns).
+ */
+export interface TreeCardLayer {
+	layout: 'surface' | 'rim' | 'hang';
+	tile: TreeCardTile;
+	/** Cards at LOD0 (`rim`: per tier, at the bottom tier — scaled by tier radius). LOD1 keeps half. */
+	count: number;
+	/** Card length along the spray, metres. */
+	length: Range;
+	/** Width as a fraction of length. */
+	aspect: number;
+	/** Spray direction tilt: + toward up, − toward down (added to the outward direction). */
+	lift: number;
+	/** Fraction of the card's length that starts inside the crown (so sprays grow out of it). */
+	inset: number;
+	/** Bends along the length (wind can curve a long strand); default 1. */
+	segments?: number;
+}
 
 /** Approximate triangle budget per LOD — enforced by tests, used to pick tessellation. */
 export type TriangleBudget = readonly [lod0: number, lod1: number, lod2: number, lod3: number];
@@ -148,6 +213,16 @@ export interface TreeSpeciesDefinition {
 	instanceWidthScale: Range;
 	/** Per-instance overall scale range (multiplies the placement scale). */
 	instanceScale: Range;
+	/**
+	 * Skews the overall-scale roll: the scale is `min + roll^sizeSkew × (max − min)`, so > 1 makes
+	 * the top of the range rare (a few giants among ordinary trees). Default 1.
+	 */
+	sizeSkew?: number;
+	/** Fraction of trees planted young (scaled by `youngScale`): saplings and half-grown trees. */
+	youngFraction?: number;
+	youngScale?: Range;
+	/** Foliage cards (alpha-tested sprays) on LOD0/LOD1 — the crown's fine silhouette. */
+	cards: readonly TreeCardLayer[];
 	/** Wind sway amplitude multiplier (0 = rigid). */
 	windResponse: number;
 	triangleBudget: TriangleBudget;
@@ -200,6 +275,26 @@ export interface TreeMeshData {
 	max: [number, number, number];
 }
 
-export function triangleCount(mesh: TreeMeshData): number {
+export function triangleCount(mesh: { indices: ArrayLike<number> }): number {
 	return mesh.indices.length / 3;
+}
+
+/**
+ * Plain-array foliage-card mesh for one prototype LOD — drawn by the card material (alpha-tested,
+ * double-sided, no shadow casting) from the same instance buffers as the prototype.
+ */
+export interface TreeCardMeshData {
+	positions: Float32Array;
+	/** Crown-volume normals, so cards shade as part of the crown rather than as flat planes. */
+	normals: Float32Array;
+	colors: Float32Array;
+	/** Atlas UVs. */
+	uvs: Float32Array;
+	wind: Float32Array;
+	/** Per vertex: the card's anchor (where it grows from — the distance fade shrinks toward it) and 0 base … 1 tip. */
+	anchors: Float32Array;
+	indices: Uint32Array;
+	cards: number;
+	min: [number, number, number];
+	max: [number, number, number];
 }

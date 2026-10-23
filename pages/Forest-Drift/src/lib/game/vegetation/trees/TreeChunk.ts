@@ -8,7 +8,7 @@ import {
 	type TreeLodDistances
 } from './treeLod';
 import { TreePrototypeCache, type TreeShadowRange } from './TreePrototypeCache';
-import { getTreeSpecies } from './treeSpecies';
+import { getTreeSpecies, nominalTreeHeight } from './treeSpecies';
 import { TREE_SPECIES_IDS, type TreeInstanceDefinition, type TreeLod } from './TreeSpeciesTypes';
 
 /** A placed tree plus the ground height and slope it was planted with (sampled once, at generation). */
@@ -25,8 +25,20 @@ export interface TreeShadowPolicy {
 	maxShadowLod: number;
 }
 
-/** Height above the base at which LOD distance is measured (roughly mid-canopy). */
-const LOD_PROBE_HEIGHT = 4;
+/** Foliage cards for near batches: the card material and the farthest LOD that shows them. */
+export interface TreeCardPolicy {
+	material: THREE.Material;
+	/** LODs ≤ this draw their cards (−1 = no cards). Cards only exist for LOD0/1. */
+	maxLod: number;
+}
+
+/**
+ * Height above the base at which LOD distance is measured: roughly the lower canopy, at least
+ * 4 m (so tall spruces measure to their crown, not their roots).
+ */
+function lodProbeHeight(speciesHeight: number): number {
+	return Math.max(4, speciesHeight * 0.35);
+}
 
 const scratchMatrix = new THREE.Matrix4();
 const scratchPosition = new THREE.Vector3();
@@ -62,6 +74,13 @@ export class TreeChunk {
 	private readonly boundsMin = new THREE.Vector3(Infinity, Infinity, Infinity);
 	private readonly boundsMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
 	private readonly batches = new Map<string, THREE.InstancedMesh>();
+	/**
+	 * Foliage cards per near batch: same key, same instance buffers (shared attribute objects —
+	 * no per-tree data is duplicated), drawn with the card material. Kept in `cardGroup` so the
+	 * pipeline can leave them out of the AO pre-pass.
+	 */
+	private readonly cardBatches = new Map<string, THREE.InstancedMesh>();
+	readonly cardGroup = new THREE.Group();
 	/** Trees per (species, variant) — the capacity any LOD batch of that prototype can ever need. */
 	private readonly prototypeCounts = new Map<string, number>();
 
@@ -77,6 +96,7 @@ export class TreeChunk {
 		this.chunkZ = chunkZ;
 		this.count = planted.length;
 		this.group.name = `trees:${chunkX},${chunkZ}`;
+		this.cardGroup.name = `tree-cards:${chunkX},${chunkZ}`;
 		this.speciesIndex = new Uint8Array(this.count);
 		this.variant = new Uint8Array(this.count);
 		this.lod = new Int8Array(this.count).fill(-1);
@@ -102,11 +122,14 @@ export class TreeChunk {
 			scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
 			scratchMatrix.toArray(this.matrices, i * 16);
 
+			const height = nominalTreeHeight(species);
 			this.probes[i * 3] = tree.worldX;
-			this.probes[i * 3 + 1] = groundY + LOD_PROBE_HEIGHT * tree.scale;
+			this.probes[i * 3 + 1] = groundY + lodProbeHeight(height) * tree.scale;
 			this.probes[i * 3 + 2] = tree.worldZ;
 			this.boundsMin.min(new THREE.Vector3(tree.worldX, groundY - TRUNK_SINK, tree.worldZ));
-			this.boundsMax.max(new THREE.Vector3(tree.worldX, groundY + 12 * tree.scale, tree.worldZ));
+			this.boundsMax.max(
+				new THREE.Vector3(tree.worldX, groundY + Math.max(12, height) * tree.scale, tree.worldZ)
+			);
 
 			// Subtle per-tree tint: brightness and a slight warm/cool shift within the species' limits.
 			const k = (tree.tint - 0.5) * 2 * species.style.tintVariation;
@@ -168,7 +191,8 @@ export class TreeChunk {
 	rebuildBatches(
 		cache: TreePrototypeCache,
 		material: THREE.Material,
-		shadows: TreeShadowPolicy
+		shadows: TreeShadowPolicy,
+		cards: TreeCardPolicy | null = null
 	): void {
 		this.needsBuild = false;
 		const groups = new Map<string, number[]>();
@@ -187,6 +211,7 @@ export class TreeChunk {
 				this.batches.delete(key);
 			}
 		}
+		for (const key of this.cardBatches.keys()) if (!groups.has(key)) this.removeCards(key);
 
 		for (const [key, members] of groups) {
 			const [speciesIndexText, variantText, lodText] = key.split(':');
@@ -229,8 +254,67 @@ export class TreeChunk {
 			(mesh.instanceColor as THREE.InstancedBufferAttribute).needsUpdate = true;
 			mesh.computeBoundingSphere();
 			mesh.computeBoundingBox();
+			this.syncCards(key, mesh, cache, speciesIndex, variant, lod, cards);
 		}
 		this.applyShadowPolicy(shadows);
+	}
+
+	/** Creates, updates or drops the card mesh riding on one batch. */
+	private syncCards(
+		key: string,
+		batch: THREE.InstancedMesh,
+		cache: TreePrototypeCache,
+		speciesIndex: number,
+		variant: number,
+		lod: TreeLod,
+		cards: TreeCardPolicy | null
+	): void {
+		const geometry =
+			cards && lod <= cards.maxLod
+				? cache.getCardGeometry(TREE_SPECIES_IDS[speciesIndex], variant, lod)
+				: null;
+		let mesh = this.cardBatches.get(key);
+		if (
+			mesh &&
+			(!geometry ||
+				mesh.geometry !== geometry ||
+				mesh.material !== cards?.material ||
+				mesh.instanceMatrix !== batch.instanceMatrix)
+		) {
+			this.removeCards(key);
+			mesh = undefined;
+		}
+		if (!geometry || !cards) return;
+		if (!mesh) {
+			mesh = new THREE.InstancedMesh(geometry, cards.material, 1);
+			// Share the batch's buffers: same trees, same transforms and tints, uploaded once.
+			mesh.instanceMatrix = batch.instanceMatrix;
+			mesh.instanceColor = batch.instanceColor;
+			mesh.name = `tree-cards:${this.chunkX},${this.chunkZ}:${key}`;
+			mesh.castShadow = false;
+			mesh.receiveShadow = lodReceivesShadow(lod);
+			this.cardBatches.set(key, mesh);
+			this.cardGroup.add(mesh);
+		}
+		mesh.count = batch.count;
+		mesh.computeBoundingSphere();
+	}
+
+	/**
+	 * Drops a card mesh without `dispose()`: its instance buffers belong to the batch (disposing
+	 * would free the batch's GPU buffers), and it owns no other GPU resources.
+	 */
+	private removeCards(key: string): void {
+		this.cardBatches.get(key)?.removeFromParent();
+		this.cardBatches.delete(key);
+	}
+
+	getCardBatches(): IterableIterator<THREE.InstancedMesh> {
+		return this.cardBatches.values();
+	}
+
+	get cardBatchCount(): number {
+		return this.cardBatches.size;
 	}
 
 	applyShadowPolicy(shadows: TreeShadowPolicy): void {
@@ -270,10 +354,12 @@ export class TreeChunk {
 	}
 
 	dispose(): void {
+		for (const key of [...this.cardBatches.keys()]) this.removeCards(key);
 		for (const mesh of this.batches.values()) mesh.dispose();
 		this.batches.clear();
 		this.group.removeFromParent();
 		this.group.clear();
+		this.cardGroup.removeFromParent();
 	}
 }
 

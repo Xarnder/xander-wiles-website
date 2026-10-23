@@ -2,11 +2,20 @@ import * as THREE from 'three';
 import { TreePlacementGenerator, type CellEvaluation } from './TreePlacementGenerator';
 import { VegetationRegionSampler } from './VegetationRegionSampler';
 import type { VegetationSettings } from './VegetationTypes';
-import { TreeChunk, type PlantedTree, type TreeShadowPolicy } from './trees/TreeChunk';
+import {
+	TreeChunk,
+	type PlantedTree,
+	type TreeCardPolicy,
+	type TreeShadowPolicy
+} from './trees/TreeChunk';
+import { generateTreeCardAtlas } from './trees/treeCardAtlas';
 import type { TreeLodDistances } from './trees/treeLod';
 import {
+	createTreeCardAtlasTexture,
+	createTreeCardMaterial,
 	createTreeMaterial,
 	setTreeSurfaceDetail,
+	type TreeCardUniforms,
 	type TreeSurfaceDetail,
 	type TreeWindUniforms
 } from './trees/treeMaterial';
@@ -47,6 +56,8 @@ export interface TreeQualityProfile {
 	wind: boolean;
 	/** Procedural bark/leaf detail level on near trees. */
 	surfaceDetail: TreeSurfaceDetail;
+	/** Foliage cards on LODs ≤ this (−1 = none, 0 = nearest trees only, 1 = LOD0 and LOD1). */
+	cardMaxLod: number;
 }
 
 const DEFAULT_QUALITY: TreeQualityProfile = {
@@ -54,7 +65,8 @@ const DEFAULT_QUALITY: TreeQualityProfile = {
 	densityScale: 1,
 	maxShadowLod: 0,
 	wind: true,
-	surfaceDetail: 2
+	surfaceDetail: 2,
+	cardMaxLod: 1
 };
 
 export interface TreeTrunkHit {
@@ -89,6 +101,11 @@ export interface TreeRenderStats {
 	/** Batches in the camera frustum = tree draw calls in the main pass. */
 	visibleBatches: number;
 	activeBatches: number;
+	/** Foliage-card batches in the frustum (extra main-pass draw calls; cards cast no shadows). */
+	visibleCardBatches: number;
+	activeCardBatches: number;
+	/** Prototype card geometry triangles (compiled once, shared). */
+	prototypeCardTriangles: number;
 	activeChunks: number;
 	prototypeGeometries: number;
 	prototypeTriangles: number;
@@ -146,6 +163,12 @@ export class TreeManager {
 	private readonly prototypes: TreePrototypeCache;
 	private readonly material: THREE.MeshLambertMaterial;
 	private readonly wind: TreeWindUniforms;
+	/** Foliage cards: one atlas, one material, every card batch in the world. */
+	private readonly cardAtlas: THREE.DataTexture;
+	private readonly cardMaterial: THREE.MeshLambertMaterial;
+	private readonly cardUniforms: TreeCardUniforms;
+	/** Every chunk's card batches — a child of `group`, separate so AO can skip it. */
+	readonly cardGroup = new THREE.Group();
 	/** Weather wind (strength multiplier, direction, lean) — see `setWeatherWind`. */
 	private readonly weatherWind = { strengthScale: 1, dirX: 0, dirZ: 1, lean: 0 };
 	private quality: TreeQualityProfile = { ...DEFAULT_QUALITY };
@@ -196,7 +219,13 @@ export class TreeManager {
 		const { material, wind } = createTreeMaterial(this.quality.surfaceDetail);
 		this.material = material;
 		this.wind = wind;
+		this.cardAtlas = createTreeCardAtlasTexture(generateTreeCardAtlas());
+		const cards = createTreeCardMaterial(this.cardAtlas, wind);
+		this.cardMaterial = cards.material;
+		this.cardUniforms = cards.uniforms;
 		this.group.name = 'trees';
+		this.cardGroup.name = 'tree-cards';
+		this.group.add(this.cardGroup);
 	}
 
 	getVegetationRegionSampler(): VegetationRegionSampler {
@@ -309,15 +338,20 @@ export class TreeManager {
 		return this.overrideRevision;
 	}
 
-	/** Every tree in the world uses this ONE material — register it with the shadow pipeline once. */
+	/**
+	 * Every tree in the world uses these two materials (crowns and trunks; foliage cards) —
+	 * register them with the shadow pipeline once.
+	 */
 	getSharedMaterials(): THREE.Material[] {
-		return [this.material];
+		return [this.material, this.cardMaterial];
 	}
 
 	/** Applies a graphics preset's tree profile. Density changes regenerate; everything else is live. */
 	setQualityProfile(profile: TreeQualityProfile): void {
 		const densityChanged = profile.densityScale !== this.quality.densityScale;
+		const cardsChanged = profile.cardMaxLod !== this.quality.cardMaxLod;
 		this.quality = { ...profile };
+		if (cardsChanged) this.rebatchAll();
 		this.applySurfaceDetail();
 		this.invalidateLods();
 		this.applyShadowPolicy();
@@ -346,10 +380,17 @@ export class TreeManager {
 		setTreeSurfaceDetail(this.material, this.wind, detail);
 	}
 
-	/** Rendering settings changed (LOD distances, shadows, wind, prototype count). */
+	/** Rendering settings changed (LOD distances, shadows, wind, prototype count, foliage cards). */
 	notifyRenderingChanged(): void {
 		this.invalidateLods();
 		this.applyShadowPolicy();
+		// Turning cards on/off changes no LOD, so batches must be rebuilt explicitly.
+		this.rebatchAll();
+	}
+
+	/** Rebuilds every loaded chunk's batches on the next view update (no regeneration). */
+	private rebatchAll(): void {
+		for (const record of this.active.values()) if (record.trees) record.trees.needsBuild = true;
 	}
 
 	update(playerWorldX: number, playerWorldZ: number): void {
@@ -394,6 +435,10 @@ export class TreeManager {
 
 		this.camera.copy(cameraPosition);
 		const distances = this.lodDistances();
+		// Cards are gone by the time a tree reaches LOD2 (it has none): no pop, nothing drawn.
+		const fade = this.cardUniforms.uTreeCardFade.value;
+		fade.z = distances.lod2 * 0.72;
+		fade.w = distances.lod2 * 0.96;
 		const threshold = Math.max(0.5, rendering.lodUpdateDistance);
 		const candidates: { chunk: TreeChunk; distance: number }[] = [];
 		for (const record of this.active.values()) {
@@ -417,7 +462,12 @@ export class TreeManager {
 			if (rebuilt >= budget && !chunk.needsBuild) break;
 			const changed = chunk.assignLods(cameraPosition, distances);
 			if (changed || chunk.needsBuild) {
-				chunk.rebuildBatches(this.prototypes, this.material, this.shadowPolicy());
+				chunk.rebuildBatches(
+					this.prototypes,
+					this.material,
+					this.shadowPolicy(),
+					this.cardPolicy()
+				);
 				rebuilt++;
 			}
 		}
@@ -482,6 +532,8 @@ export class TreeManager {
 		const visibleTreesByLod: [number, number, number, number] = [0, 0, 0, 0];
 		const loadedTreesByLod: [number, number, number, number] = [0, 0, 0, 0];
 		let visibleBatches = 0;
+		let visibleCardBatches = 0;
+		let activeCardBatches = 0;
 		let activeBatches = 0;
 		let activeChunks = 0;
 		let memoryBytes = 0;
@@ -500,6 +552,13 @@ export class TreeManager {
 				visibleBatches++;
 				visibleTreesByLod[mesh.userData.treeLod as number] += mesh.count;
 			}
+			for (const mesh of chunk.getCardBatches()) {
+				activeCardBatches++;
+				if (!mesh.boundingSphere) continue;
+				sphere.copy(mesh.boundingSphere).applyMatrix4(mesh.matrixWorld);
+				if (frustum && !frustum.intersectsSphere(sphere)) continue;
+				visibleCardBatches++;
+			}
 		}
 		const prototypeStats = this.prototypes.getStats();
 		return {
@@ -507,6 +566,9 @@ export class TreeManager {
 			visibleTrees: visibleTreesByLod.reduce((a, b) => a + b, 0),
 			visibleBatches,
 			activeBatches,
+			visibleCardBatches,
+			activeCardBatches,
+			prototypeCardTriangles: prototypeStats.cardTriangles,
 			activeChunks,
 			prototypeGeometries: prototypeStats.geometries,
 			prototypeTriangles: prototypeStats.triangles,
@@ -522,6 +584,8 @@ export class TreeManager {
 		this.queue.clear();
 		this.prototypes.dispose();
 		this.material.dispose();
+		this.cardMaterial.dispose();
+		this.cardAtlas.dispose();
 		this.group.clear();
 	}
 
@@ -541,6 +605,11 @@ export class TreeManager {
 			castShadows: this.settings.rendering.castShadows,
 			maxShadowLod: this.quality.maxShadowLod
 		};
+	}
+
+	private cardPolicy(): TreeCardPolicy | null {
+		if (!this.settings.rendering.foliageCards || this.quality.cardMaxLod < 0) return null;
+		return { material: this.cardMaterial, maxLod: this.quality.cardMaxLod };
 	}
 
 	private invalidateLods(): void {
@@ -682,10 +751,11 @@ export class TreeManager {
 		const chunk = new TreeChunk(job.chunkX, job.chunkZ, planted);
 		record.trees = chunk;
 		this.group.add(chunk.group);
+		this.cardGroup.add(chunk.cardGroup);
 		// Build immediately when we know where the camera is, so a chunk never appears late.
 		if (Number.isFinite(this.camera.x) && chunk.count > 0) {
 			chunk.assignLods(this.camera, this.lodDistances());
-			chunk.rebuildBatches(this.prototypes, this.material, this.shadowPolicy());
+			chunk.rebuildBatches(this.prototypes, this.material, this.shadowPolicy(), this.cardPolicy());
 		}
 
 		this.updateChunkDebugVisuals(record, debugEvaluations);

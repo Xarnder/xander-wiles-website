@@ -18,10 +18,13 @@ import type {
 	Range,
 	SpindleCanopyRules,
 	TieredCanopyRules,
+	TreeCardLayer,
+	TreeCardMeshData,
 	TreeLod,
 	TreeMeshData,
 	TreeSpeciesDefinition
 } from './TreeSpeciesTypes';
+import { cardTileRect } from './treeCardAtlas';
 import { TREE_SURFACE_CODES } from './TreeSpeciesTypes';
 
 /** How far trunks extend below y = 0, so a tree on a slope never shows a floating base. */
@@ -169,7 +172,7 @@ function designBlobs(design: TreeDesign, rules: BlobCanopyRules, random: () => n
 			const ring = width * (0.22 + random() * 0.1);
 			center = [
 				Math.cos(angle) * ring,
-				centerY - height * (0.02 + random() * 0.14),
+				centerY - height * (0.02 + random() * (rules.spread ?? 0.14)),
 				Math.sin(angle) * ring
 			];
 		}
@@ -203,7 +206,8 @@ function designTiers(design: TreeDesign, rules: TieredCanopyRules, random: () =>
 	const step = height / count;
 	for (let i = 0; i < count; i++) {
 		const t = i / count;
-		const radius = baseRadius * Math.pow(1 - t, 0.85) * (0.92 + random() * 0.16) + 0.15;
+		const radius =
+			baseRadius * Math.pow(1 - t, rules.taper ?? 0.85) * (0.92 + random() * 0.16) + 0.15;
 		const baseY = base + i * step;
 		const apexY = Math.min(base + height, baseY + step * (1 + rules.overlap) + radius * 0.35);
 		design.tiers.push({
@@ -275,7 +279,9 @@ interface LodTessellation {
 	tierRings: readonly { fraction: number; height: number }[];
 	tierUnderRing: boolean;
 	tierJitter: number;
+	/** Tiers kept: at least `maxTiers`, or `tierKeep` of the design's tiers (tall spruces keep more). */
 	maxTiers: number;
+	tierKeep: number;
 	latheSides: number;
 	latheRings: number;
 	/** Scales crown clusters and clumps about their centres (shadow proxies sit just inside). */
@@ -308,6 +314,7 @@ const TESSELLATION: Readonly<Record<TreeLod, LodTessellation>> = {
 		tierUnderRing: true,
 		tierJitter: 0.14,
 		maxTiers: 99,
+		tierKeep: 1,
 		latheSides: 16,
 		latheRings: 24,
 		crownScale: 1
@@ -328,6 +335,7 @@ const TESSELLATION: Readonly<Record<TreeLod, LodTessellation>> = {
 		tierUnderRing: false,
 		tierJitter: 0.12,
 		maxTiers: 6,
+		tierKeep: 0.6,
 		latheSides: 11,
 		latheRings: 12,
 		crownScale: 1
@@ -348,6 +356,7 @@ const TESSELLATION: Readonly<Record<TreeLod, LodTessellation>> = {
 		tierUnderRing: false,
 		tierJitter: 0.1,
 		maxTiers: 5,
+		tierKeep: 0.4,
 		latheSides: 8,
 		latheRings: 6,
 		crownScale: 1
@@ -368,11 +377,35 @@ const TESSELLATION: Readonly<Record<TreeLod, LodTessellation>> = {
 		tierUnderRing: false,
 		tierJitter: 0,
 		maxTiers: 4,
+		tierKeep: 0.25,
 		latheSides: 6,
 		latheRings: 4,
 		crownScale: 1
 	}
 };
+
+/**
+ * The tiers a LOD draws: fewer at lower LODs, merged evenly across the same height span (each
+ * group spans its first tier's rim to its last tier's apex). Cards use the same groups, so their
+ * sprays always sit on a rim that LOD actually shows.
+ */
+function tierGroups(
+	design: TreeDesign,
+	tess: LodTessellation
+): { start: TreeDesign['tiers'][number]; end: TreeDesign['tiers'][number]; startIndex: number }[] {
+	const tiers = design.tiers;
+	const count = Math.min(
+		tiers.length,
+		Math.max(tess.maxTiers, Math.ceil(tiers.length * tess.tierKeep))
+	);
+	const groups = [];
+	for (let i = 0; i < count; i++) {
+		const startIndex = Math.floor((i * tiers.length) / count);
+		const endIndex = Math.floor(((i + 1) * tiers.length) / count) - 1;
+		groups.push({ start: tiers[startIndex], end: tiers[endIndex], startIndex });
+	}
+	return groups;
+}
 
 /**
  * Builds one LOD of a prototype as a single merged mesh: trunk + branches + foliage, with baked
@@ -678,7 +711,6 @@ function buildTierCanopy(
 	windResponse: number,
 	leafCode: number
 ): void {
-	const tiers = design.tiers;
 	const offset: [number, number] = [design.trunkTop[0] * 0.5, design.trunkTop[2] * 0.5];
 	const shade = (position: Vec3, outward: number, underside: boolean) =>
 		foliageShade(
@@ -691,13 +723,7 @@ function buildTierCanopy(
 			leafCode,
 			underside
 		);
-	// Fewer tiers at lower LODs: merge evenly across the same height span.
-	const count = Math.min(tess.maxTiers, tiers.length);
-	for (let i = 0; i < count; i++) {
-		const startIndex = Math.floor((i * tiers.length) / count);
-		const endIndex = Math.floor(((i + 1) * tiers.length) / count) - 1;
-		const start = tiers[startIndex];
-		const end = tiers[endIndex];
+	for (const { start, end, startIndex } of tierGroups(design, tess)) {
 		addTier(builder, {
 			baseY: start.baseY,
 			apexY: end.apexY,
@@ -756,4 +782,447 @@ function buildSpindleCanopy(
 			);
 		}
 	});
+}
+
+// ------------------------------------------------------------------------------- foliage cards
+
+/** LODs that carry foliage cards; farther LODs are the crown alone (cards fade out before LOD2). */
+export function lodHasCards(lod: TreeLod): boolean {
+	return lod <= 1;
+}
+
+/** One spray: where it grows from, which way it points, its width direction and size. */
+interface CardSpec {
+	base: Vec3;
+	axis: Vec3;
+	side: Vec3;
+	length: number;
+	width: number;
+	layer: TreeCardLayer;
+	/** Crown normal at the spray (shading). */
+	normal: Vec3;
+	/** Outward bow along the length (hanging strands), metres per metre. */
+	bow: Vec3 | null;
+	/** Fold depth of the V along the spine, as a fraction of the half width (± picks the side). */
+	fold: number;
+}
+
+const UP: Vec3 = [0, 1, 0];
+
+function add3(a: Vec3, b: Vec3, k = 1): Vec3 {
+	return [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+}
+
+function norm3(v: Vec3): Vec3 {
+	const length = Math.hypot(v[0], v[1], v[2]) || 1;
+	return [v[0] / length, v[1] / length, v[2] / length];
+}
+
+function cross3(a: Vec3, b: Vec3): Vec3 {
+	return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+function randomUnit(random: () => number): Vec3 {
+	const y = random() * 2 - 1;
+	const a = random() * Math.PI * 2;
+	const r = Math.sqrt(1 - y * y);
+	return [Math.cos(a) * r, y, Math.sin(a) * r];
+}
+
+/** A width direction perpendicular to `axis`: `reference` rotated about the axis by `roll`. */
+function sideFor(axis: Vec3, reference: Vec3, roll: number): Vec3 {
+	let t = cross3(axis, reference);
+	if (Math.hypot(t[0], t[1], t[2]) < 1e-3) t = cross3(axis, [1, 0, 0]);
+	t = norm3(t);
+	const b = cross3(axis, t);
+	return norm3([
+		t[0] * Math.cos(roll) + b[0] * Math.sin(roll),
+		t[1] * Math.cos(roll) + b[1] * Math.sin(roll),
+		t[2] * Math.cos(roll) + b[2] * Math.sin(roll)
+	]);
+}
+
+function insideOtherCluster(design: TreeDesign, p: Vec3, own: number, margin: number): boolean {
+	return design.clusters.some((c, i) => {
+		if (i === own) return false;
+		const dx = (p[0] - c.center[0]) / c.radii[0];
+		const dy = (p[1] - c.center[1]) / c.radii[1];
+		const dz = (p[2] - c.center[2]) / c.radii[2];
+		return dx * dx + dy * dy + dz * dz < margin;
+	});
+}
+
+/** Canopy-volume normal at a point (the soft shading every crown primitive shares). */
+function canopyNormal(design: TreeDesign, p: Vec3): Vec3 {
+	const c = design.canopyCenter;
+	const r = design.canopyRadii;
+	return norm3([
+		(p[0] - c[0]) / (r[0] * r[0]),
+		(p[1] - c[1]) / (r[1] * r[1]),
+		(p[2] - c[2]) / (r[2] * r[2])
+	]);
+}
+
+function pickWeighted(random: () => number, weights: number[], total: number): number {
+	let target = random() * total;
+	for (let i = 0; i < weights.length; i++) {
+		target -= weights[i];
+		if (target < 0) return i;
+	}
+	return weights.length - 1;
+}
+
+/** Sprays growing out of blob clusters (broadleaf crowns, Scots pine tufts). */
+function blobSurfaceCards(
+	design: TreeDesign,
+	layer: TreeCardLayer,
+	random: () => number
+): CardSpec[] {
+	const clusters = design.clusters;
+	if (clusters.length === 0) return [];
+	const weights = clusters.map(
+		(c) => c.radii[0] * c.radii[1] + c.radii[1] * c.radii[2] + c.radii[0] * c.radii[2]
+	);
+	const total = weights.reduce((a, b) => a + b, 0);
+	const cards: CardSpec[] = [];
+	for (let i = 0; i < layer.count; i++) {
+		let p: Vec3 | null = null;
+		let own: Vec3 = UP;
+		for (let attempt = 0; attempt < 8 && !p; attempt++) {
+			const index = pickWeighted(random, weights, total);
+			const cluster = clusters[index];
+			const dir = randomUnit(random);
+			// Few sprays underneath: hanging from the crown's belly they read as dark bunches, and
+			// they would only add overdraw.
+			if (dir[1] < -0.2 && random() < 0.8) continue;
+			const candidate: Vec3 = [
+				cluster.center[0] + dir[0] * cluster.radii[0] * 0.96,
+				cluster.center[1] + dir[1] * cluster.radii[1] * 0.96,
+				cluster.center[2] + dir[2] * cluster.radii[2] * 0.96
+			];
+			if (insideOtherCluster(design, candidate, index, 0.82)) continue;
+			p = candidate;
+			own = norm3([
+				dir[0] / cluster.radii[0],
+				dir[1] / cluster.radii[1],
+				dir[2] / cluster.radii[2]
+			]);
+		}
+		if (!p) continue;
+		const crown = canopyNormal(design, p);
+		const normal = norm3(add3(own, crown));
+		// Sprays low on the crown reach outward rather than down.
+		const flat = normal[1] < 0 ? norm3([normal[0], normal[1] * 0.35, normal[2]]) : normal;
+		const axis = norm3(add3(add3(flat, UP, layer.lift), randomUnit(random), 0.35));
+		const length = pick(random, layer.length);
+		cards.push({
+			base: add3(p, axis, -length * layer.inset),
+			axis,
+			side: sideFor(axis, randomUnit(random), 0),
+			length,
+			width: length * layer.aspect * (0.9 + random() * 0.2),
+			layer,
+			normal: crown,
+			bow: null,
+			fold: (random() < 0.5 ? -1 : 1) * (0.25 + random() * 0.2)
+		});
+	}
+	return cards;
+}
+
+/** Sprays on a spindle (cypress), pointing up and out. */
+function spindleSurfaceCards(
+	design: TreeDesign,
+	layer: TreeCardLayer,
+	random: () => number
+): CardSpec[] {
+	const spindle = design.spindle;
+	if (!spindle) return [];
+	const profile = spindle.profile;
+	const offset: Vec3 = [design.trunkTop[0] * 0.5, 0, design.trunkTop[2] * 0.5];
+	const weights = profile.map((p) => p.radius);
+	const total = weights.reduce((a, b) => a + b, 0);
+	const cards: CardSpec[] = [];
+	for (let i = 0; i < layer.count; i++) {
+		let target = random() * total;
+		let k = 0;
+		while (k < profile.length - 1 && (target -= weights[k]) >= 0) k++;
+		const point = profile[Math.min(k, profile.length - 2)];
+		const angle = random() * Math.PI * 2;
+		const out: Vec3 = [Math.cos(angle), 0, Math.sin(angle)];
+		const p: Vec3 = [
+			offset[0] + out[0] * point.radius * 0.95,
+			point.y,
+			offset[2] + out[2] * point.radius * 0.95
+		];
+		const normal = norm3([out[0], 0.3, out[2]]);
+		const axis = norm3(add3(add3(out, UP, layer.lift), randomUnit(random), 0.3));
+		const length = pick(random, layer.length) * Math.min(1, 0.55 + point.radius * 0.45);
+		cards.push({
+			base: add3(p, axis, -length * layer.inset),
+			axis,
+			side: sideFor(axis, out, (random() - 0.5) * 1.6),
+			length,
+			width: length * layer.aspect * (0.9 + random() * 0.2),
+			layer,
+			normal,
+			bow: null,
+			fold: (random() < 0.5 ? -1 : 1) * (0.25 + random() * 0.2)
+		});
+	}
+	return cards;
+}
+
+/**
+ * Sprays at the tips of conifer tiers, following each tier's droop (outer ring), plus a sparser
+ * inner ring that breaks up the cone surface. Uses the LOD's own tier groups.
+ */
+function tierRimCards(
+	design: TreeDesign,
+	layer: TreeCardLayer,
+	tess: LodTessellation,
+	density: number,
+	random: () => number
+): CardSpec[] {
+	const groups = tierGroups(design, tess);
+	if (groups.length === 0) return [];
+	const offset: Vec3 = [design.trunkTop[0] * 0.5, 0, design.trunkTop[2] * 0.5];
+	const bottom = design.tiers[0].radius;
+	const cards: CardSpec[] = [];
+	for (const { start, end } of groups) {
+		const radius = start.radius;
+		const relative = radius / bottom;
+		const rimY = start.baseY - start.droop;
+		const apexY = end.apexY;
+		for (const ring of [
+			{ fraction: 0.94, share: 1, lift: layer.lift, scale: 1 },
+			{ fraction: 0.55, share: 0.4, lift: layer.lift + 0.55, scale: 0.75 }
+		]) {
+			if (ring.share < 1 && radius < 0.8) continue;
+			const n = Math.max(
+				3,
+				Math.round(layer.count * ring.share * density * Math.pow(relative, 0.8))
+			);
+			for (let k = 0; k < n; k++) {
+				const angle = start.rotation + ((k + 0.5 + (random() - 0.5) * 0.5) / n) * Math.PI * 2;
+				const out: Vec3 = [Math.cos(angle), 0, Math.sin(angle)];
+				const fraction = ring.fraction + (random() - 0.5) * 0.08;
+				const p: Vec3 = [
+					offset[0] + out[0] * radius * fraction,
+					apexY + (rimY - apexY) * fraction,
+					offset[2] + out[2] * radius * fraction
+				];
+				// Down the tier surface, then the layer's extra droop (or lift for the inner ring).
+				const slope = norm3([out[0] * radius, -(apexY - rimY), out[2] * radius]);
+				const axis = norm3(add3(add3(slope, UP, ring.lift), randomUnit(random), 0.16));
+				const length =
+					pick(random, layer.length) *
+					ring.scale *
+					Math.min(1.1, Math.max(0.5, 0.45 + relative * 0.65));
+				const tangent: Vec3 = [-out[2], 0, out[0]];
+				// Roll between lying along the tier (a flat frond) and hanging on edge (side silhouette).
+				const roll = (random() < 0.5 ? -1 : 1) * (0.3 + random() * 0.9);
+				cards.push({
+					base: add3(p, axis, -length * layer.inset),
+					axis,
+					side: sideFor(axis, cross3(tangent, axis), roll),
+					length,
+					width: length * layer.aspect * (0.9 + random() * 0.2),
+					layer,
+					normal: norm3([out[0], 0.55, out[2]]),
+					bow: null,
+					fold: (random() < 0.5 ? -1 : 1) * (0.2 + random() * 0.2)
+				});
+			}
+		}
+	}
+	return cards;
+}
+
+/** Long curtains hanging from the outer, lower crown (weeping willow). */
+function hangingCards(design: TreeDesign, layer: TreeCardLayer, random: () => number): CardSpec[] {
+	const clusters = design.clusters;
+	if (clusters.length === 0) return [];
+	const c = design.canopyCenter;
+	const cards: CardSpec[] = [];
+	for (let i = 0; i < layer.count; i++) {
+		let found: { p: Vec3; out: Vec3 } | null = null;
+		for (let attempt = 0; attempt < 10 && !found; attempt++) {
+			const index = Math.floor(random() * clusters.length);
+			const cluster = clusters[index];
+			const angle = random() * Math.PI * 2;
+			const y = -0.65 + random() * 0.95;
+			const r = Math.sqrt(1 - y * y);
+			const dir: Vec3 = [Math.cos(angle) * r, y, Math.sin(angle) * r];
+			const p: Vec3 = [
+				cluster.center[0] + dir[0] * cluster.radii[0] * 0.95,
+				cluster.center[1] + dir[1] * cluster.radii[1] * 0.95,
+				cluster.center[2] + dir[2] * cluster.radii[2] * 0.95
+			];
+			const out = norm3([p[0] - c[0], 0, p[2] - c[2]]);
+			// Only the crown's outer skirt hangs curtains; inner ones would be hidden.
+			if (out[0] * dir[0] + out[2] * dir[2] < 0.1) continue;
+			if (insideOtherCluster(design, p, index, 0.85)) continue;
+			found = { p, out };
+		}
+		if (!found) continue;
+		const { p, out } = found;
+		const length = Math.min(pick(random, layer.length), Math.max(0.6, p[1] - 0.7));
+		const axis = norm3(add3(add3([0, -1, 0], out, 0.1), randomUnit(random), 0.06));
+		cards.push({
+			base: add3(p, axis, -length * layer.inset),
+			axis,
+			side: sideFor(axis, out, (random() - 0.5) * 0.7),
+			length,
+			width: length * layer.aspect * (0.85 + random() * 0.3),
+			layer,
+			normal: norm3([out[0], 0.25, out[2]]),
+			bow: [out[0] * 0.1, 0, out[2] * 0.1],
+			fold: (random() < 0.5 ? -1 : 1) * (0.15 + random() * 0.15)
+		});
+	}
+	return cards;
+}
+
+/**
+ * Every LOD0 spray of a prototype, layer by layer — derived from the design's seed alone (no
+ * design draws), so it never changes the crown it sits on.
+ */
+function cardSpecs(species: TreeSpeciesDefinition, design: TreeDesign, lod: TreeLod): CardSpec[] {
+	const tess = TESSELLATION[lod];
+	const specs: CardSpec[] = [];
+	species.cards.forEach((layer, layerIndex) => {
+		const random = createMulberry32((design.seed ^ (0x51ed27 + layerIndex * 0x9e3779b9)) >>> 0);
+		let cards: CardSpec[];
+		if (layer.layout === 'rim') {
+			// Rim sprays follow the LOD's own tiers, so LOD1 regenerates them on its merged tiers.
+			cards = tierRimCards(design, layer, tess, lod === 0 ? 1 : 0.5, random);
+			if (lod > 0) for (const card of cards) scaleCard(card, 1.2);
+			specs.push(...cards);
+			return;
+		}
+		cards =
+			layer.layout === 'hang'
+				? hangingCards(design, layer, random)
+				: species.canopy.kind === 'spindle'
+					? spindleSurfaceCards(design, layer, random)
+					: blobSurfaceCards(design, layer, random);
+		// LOD1 keeps every other spray, a little larger, so its crown still reads as foliage.
+		if (lod > 0) cards = cards.filter((_, i) => i % 2 === 0).map((card) => scaleCard(card, 1.25));
+		specs.push(...cards);
+	});
+	return specs;
+}
+
+function scaleCard(card: CardSpec, k: number): CardSpec {
+	// Grow about the point where the spray leaves the crown, so it never pulls inward.
+	const exit = add3(card.base, card.axis, card.length * card.layer.inset);
+	card.length *= k;
+	card.width *= k;
+	card.base = add3(exit, card.axis, -card.length * card.layer.inset);
+	return card;
+}
+
+/**
+ * Foliage cards for one prototype LOD (null for LODs without them): each spray is a V-folded
+ * quad strip — three columns (edge, spine, edge) × `segments` + 1 rows — so it keeps some volume
+ * edge-on and long strands can bend in the wind. Vertex colours come from the crown's own
+ * foliage shading at each vertex (darker where a spray leaves the crown, lighter at its tip);
+ * normals are the crown's, so cards light as part of it rather than as flat planes.
+ */
+export function buildTreeCards(
+	species: TreeSpeciesDefinition,
+	design: TreeDesign,
+	lod: TreeLod
+): TreeCardMeshData | null {
+	if (!lodHasCards(lod) || species.cards.length === 0) return null;
+	const specs = cardSpecs(species, design, lod);
+	if (specs.length === 0) return null;
+	const positions: number[] = [];
+	const normals: number[] = [];
+	const colors: number[] = [];
+	const uvs: number[] = [];
+	const wind: number[] = [];
+	const anchors: number[] = [];
+	const indices: number[] = [];
+	const total = design.totalHeight;
+	const leafCode = TREE_SURFACE_CODES[species.surface.foliage];
+	const c = design.canopyCenter;
+	const r = design.canopyRadii;
+	for (const card of specs) {
+		const [u0, v0, u1, v1] = cardTileRect(card.layer.tile);
+		const segments = Math.max(1, card.layer.segments ?? 1);
+		const face = cross3(card.side, card.axis);
+		// The fold bends both edges toward the same side of the spine.
+		const foldOffset = card.width * 0.5 * card.fold;
+		// Mostly the crown's normal, tipped a little toward whichever card face looks outward.
+		const facing =
+			face[0] * card.normal[0] + face[1] * card.normal[1] + face[2] * card.normal[2] >= 0 ? 1 : -1;
+		const normal = norm3(add3(card.normal, face, 0.18 * facing));
+		const first = positions.length / 3;
+		for (let row = 0; row <= segments; row++) {
+			const f = row / segments;
+			let spine = add3(card.base, card.axis, card.length * f);
+			if (card.bow) spine = add3(spine, card.bow, card.length * Math.sin(Math.PI * f));
+			for (let col = 0; col < 3; col++) {
+				const across = col - 1;
+				const position = add3(
+					add3(spine, card.side, across * card.width * 0.5),
+					face,
+					across === 0 ? 0 : foldOffset
+				);
+				// Crown-volume shading, sampled part way back toward where the spray leaves the crown,
+				// so cards share the crown's tone instead of capping it with a lighter layer.
+				const sample = add3(position, card.axis, -card.length * f * 0.55);
+				const dx = (sample[0] - c[0]) / r[0];
+				const dy = (sample[1] - c[1]) / r[1];
+				const dz = (sample[2] - c[2]) / r[2];
+				const outward = Math.min(1, 0.35 + 0.65 * Math.sqrt(dx * dx + dy * dy + dz * dz));
+				const shade = foliageShade(
+					design.palette,
+					sample,
+					outward,
+					design,
+					total,
+					species.windResponse,
+					leafCode
+				);
+				positions.push(position[0], position[1], position[2]);
+				normals.push(normal[0], normal[1], normal[2]);
+				colors.push(shade.color[0], shade.color[1], shade.color[2]);
+				uvs.push(u0 + ((across + 1) / 2) * (u1 - u0), v0 + f * (v1 - v0));
+				wind.push(Math.min(1.5, shade.wind * (1 + 0.3 * f)));
+				anchors.push(card.base[0], card.base[1], card.base[2], f);
+			}
+		}
+		for (let row = 0; row < segments; row++) {
+			for (let col = 0; col < 2; col++) {
+				const a = first + row * 3 + col;
+				const b = a + 1;
+				const d = a + 3;
+				const e = a + 4;
+				indices.push(a, b, d, b, e, d);
+			}
+		}
+	}
+	const min: [number, number, number] = [Infinity, Infinity, Infinity];
+	const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+	for (let i = 0; i < positions.length; i += 3) {
+		for (let k = 0; k < 3; k++) {
+			min[k] = Math.min(min[k], positions[i + k]);
+			max[k] = Math.max(max[k], positions[i + k]);
+		}
+	}
+	return {
+		positions: new Float32Array(positions),
+		normals: new Float32Array(normals),
+		colors: new Float32Array(colors),
+		uvs: new Float32Array(uvs),
+		wind: new Float32Array(wind),
+		anchors: new Float32Array(anchors),
+		indices: new Uint32Array(indices),
+		cards: specs.length,
+		min,
+		max
+	};
 }

@@ -19,14 +19,19 @@ export interface SpeciesSite {
 /**
  * Decides which species grows at a site — the placement-layer half of the tree system (it never
  * touches geometry or rendering). Deterministic: a low-frequency, seed-named conifer/broadleaf map
- * plus elevation decide the forest TYPE (broadleaf woods, pine forest, mixed woodland between),
- * and density decides where small ornamentals appear (open, sparse ground — forest edges and
- * clearings, not deep forest). The caller supplies the random roll, so the same cell always picks
- * the same species.
+ * plus elevation decide the forest TYPE (broadleaf woods, conifer forest, mixed woodland between),
+ * and density decides the character within it: tall spruces crowd dense and higher conifer
+ * forest, Scots pines stand on open conifer ground, birches fill mixed woodland and forest edges,
+ * and small ornamentals and weeping willows grow on open, gentle lowland (clearings and edges,
+ * never deep forest). On top of that, each species has its own low-frequency STAND map, so trees
+ * of a kind group into groves (a spruce stand, a birch copse) instead of an even mix — more
+ * natural, and cheaper: a chunk holds fewer species, so it needs fewer prototype batches (draw
+ * calls). The caller supplies the random roll, so the same cell always picks the same species.
  */
 export class TreeSpeciesSelector {
 	private readonly settings: TreeSpeciesMixSettings;
 	private regionNoise: Noise2D | null = null;
+	private standNoise: Noise2D | null = null;
 	private seed = '';
 	private readonly weights = new Float64Array(TREE_SPECIES_IDS.length);
 
@@ -38,6 +43,22 @@ export class TreeSpeciesSelector {
 		if (seed === this.seed && this.regionNoise) return;
 		this.seed = seed;
 		this.regionNoise = createNoise2D(createNamedRandom(seed, 'treeSpeciesRegion'));
+		this.standNoise = createNoise2D(createNamedRandom(seed, 'treeSpeciesStands'));
+	}
+
+	/**
+	 * How strongly species `index` holds this spot (1 − standStrength … 1): one noise channel per
+	 * species (offset far apart), so stands of different species overlap only at their edges.
+	 */
+	private stand(index: number, site: SpeciesSite): number {
+		const s = this.settings;
+		if (!this.standNoise || s.standStrength <= 0) return 1;
+		const freq = 1 / Math.max(1, s.standScale);
+		const n =
+			this.standNoise(site.worldX * freq + index * 37.17, site.worldZ * freq - index * 53.71) *
+				0.5 +
+			0.5;
+		return 1 - s.standStrength + s.standStrength * smoothstep(0.38, 0.72, n);
 	}
 
 	/** 0 = broadleaf country … 1 = conifer country, at a site. */
@@ -65,6 +86,14 @@ export class TreeSpeciesSelector {
 		this.weights[1] = s.pineWeight * conifer;
 		this.weights[2] = s.cypressWeight * (0.3 + 0.7 * conifer) * (0.5 + 0.5 * open);
 		this.weights[3] = s.ornamentalWeight * open * open * gentle * lowland * (1 - conifer * 0.7);
+		const dense = Math.min(1, Math.max(0, site.density));
+		this.weights[4] =
+			s.spruceWeight * conifer * (0.35 + 0.65 * dense) * (0.55 + 0.45 * (1 - lowland));
+		this.weights[5] =
+			s.birchWeight * (1 - conifer * 0.6) * (0.45 + 0.55 * open) * (0.5 + 0.5 * gentle);
+		this.weights[6] = s.scotsPineWeight * conifer * (0.3 + 0.7 * open) * (0.6 + 0.4 * gentle);
+		this.weights[7] = s.willowWeight * open * open * gentle * lowland * (1 - conifer);
+		for (let i = 0; i < this.weights.length; i++) this.weights[i] *= this.stand(i, site);
 		return this.weights;
 	}
 

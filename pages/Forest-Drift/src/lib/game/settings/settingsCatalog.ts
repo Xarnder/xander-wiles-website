@@ -2430,6 +2430,66 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						actions.vegetationSettings
 					),
 					numberField(
+						'vegetation.species.spruce',
+						'Tall spruce weight',
+						vegetation.species,
+						'spruceWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.birch',
+						'Birch weight',
+						vegetation.species,
+						'birchWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.scotsPine',
+						'Scots pine weight',
+						vegetation.species,
+						'scotsPineWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.willow',
+						'Willow weight',
+						vegetation.species,
+						'willowWeight',
+						0,
+						3,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.standScale',
+						'Species stand size (m)',
+						vegetation.species,
+						'standScale',
+						20,
+						1000,
+						5,
+						actions.vegetationSettings
+					),
+					numberField(
+						'vegetation.species.standStrength',
+						'Species stand strength',
+						vegetation.species,
+						'standStrength',
+						0,
+						1,
+						0.05,
+						actions.vegetationSettings
+					),
+					numberField(
 						'vegetation.species.regionScale',
 						'Conifer region scale',
 						vegetation.species,
@@ -2543,6 +2603,13 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'Tree shadows',
 						vegetation.rendering,
 						'castShadows',
+						actions.vegetationRendering
+					),
+					boolField(
+						'vegetation.render.cards',
+						'Foliage cards (leaf and needle sprays)',
+						vegetation.rendering,
+						'foliageCards',
 						actions.vegetationRendering
 					),
 					numberField(

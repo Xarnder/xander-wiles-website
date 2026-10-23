@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { setOwnShaderHook } from '../../materials/shader/shaderHooks';
+import { TREE_CARD_ALPHA_CUTOFF, type TreeCardAtlas } from './treeCardAtlas';
+import { TREE_FOLIAGE_CODE_BASE } from './TreeSpeciesTypes';
 
 /** Shared tree uniforms — one object for every tree; updating them is the entire per-frame cost. */
 export interface TreeWindUniforms {
@@ -151,6 +153,7 @@ void treeCellsNearest(vec3 x, out vec3 cellId, out vec3 toPoint) {
 }
 
 // Bark colour multiplier. axis = trunk/branch direction.
+// Foliage codes start at ${TREE_FOLIAGE_CODE_BASE} (TREE_SURFACE_CODES); leaf kinds below are relative to it.
 vec3 treeBark(int kind, vec3 p, vec3 axis) {
 	float along = dot(p, axis);
 	vec3 across = p - axis * along;
@@ -179,6 +182,14 @@ vec3 treeBark(int kind, vec3 p, vec3 axis) {
 		// Fibrous (cypress): long stringy strands.
 		vec3 q = across * 14.0 + axis * along * 0.35;
 		m = vec3(0.72 + 0.36 * treeNoise(q) + 0.16 * (treeNoise(q * 2.7 + 3.3) - 0.5));
+	} else if (kind == 4) {
+		// Papery (birch): pale bark with dark horizontal lenticel dashes and blackened fissured
+		// patches that thicken toward the base.
+		float dash = smoothstep(0.7, 0.8, treeNoise(across * 3.0 + axis * along * 30.0));
+		float scar = smoothstep(0.62, 0.72, treeNoise(across * 1.6 + axis * along * 3.2 + 11.0));
+		float base = 1.0 - smoothstep(0.3, 1.6, p.y);
+		float black = max(scar * 0.85, base * smoothstep(0.35, 0.6, treeNoise(across * 6.0 + axis * along * 1.4)));
+		m = vec3((0.96 + 0.08 * treeNoise(p * 5.0)) * (1.0 - 0.6 * dash)) * mix(vec3(1.0), vec3(0.16, 0.15, 0.15), black);
 	} else {
 		// Smooth (ornamental): soft mottling with horizontal lenticel dashes.
 		float lenticel = smoothstep(0.74, 0.82, treeNoise(across * 2.2 + axis * along * 26.0));
@@ -194,6 +205,7 @@ vec3 treeBark(int kind, vec3 p, vec3 axis) {
 // Foliage colour multiplier and a world-space normal tilt. grain = needle/spray direction.
 vec3 treeLeaves(int kind, vec3 p, vec3 grain, out vec3 tilt) {
 	tilt = vec3(0.0);
+	kind -= ${TREE_FOLIAGE_CODE_BASE - 4};
 #if TREE_DETAIL == 1
 	float size = kind == 5 ? 0.075 : kind >= 6 ? 0.09 : 0.11;
 	return vec3(0.8 + 0.42 * treeNoise(p / size));
@@ -258,7 +270,7 @@ const SURFACE_COLOR_FRAGMENT = /* glsl */ `
 		if (treeFade > 0.0) {
 			int treeKind = int(vTreeSurface.x + 0.5);
 			vec3 treeMult;
-			if (treeKind < 4) {
+			if (treeKind < ${TREE_FOLIAGE_CODE_BASE}) {
 				treeMult = treeBark(treeKind, vTreeLocal, normalize(vTreeSurface.yzw + vec3(0.0, 1e-4, 0.0)));
 			} else {
 				treeMult = treeLeaves(treeKind, vTreeLocal, vTreeSurface.yzw, treeTilt);
@@ -347,4 +359,128 @@ export function setTreeSurfaceDetail(
 	const [near, far] = TREE_DETAIL_RANGES[detail];
 	uniforms.uTreeDetailRange.value.set(near, far);
 	installTreeShader(material, uniforms, detail);
+}
+
+// ------------------------------------------------------------------------------- foliage cards
+
+/** Card-only uniforms; the card material also shares the tree wind uniforms. */
+export interface TreeCardUniforms {
+	uTreeCardAtlas: { value: THREE.Texture | null };
+	/**
+	 * Cards shrink to nothing far away — between z and w metres, gone before LOD2 — and right in
+	 * front of the camera, below x … y metres (walking into a crown never fills the view with
+	 * sprays).
+	 */
+	uTreeCardFade: { value: THREE.Vector4 };
+}
+
+const CARD_VERTEX_PARS = /* glsl */ `
+#define TREE_DETAIL 0
+attribute float treeWind;
+attribute vec4 treeCard;
+uniform float uTreeTime;
+uniform float uTreeWindStrength;
+uniform vec2 uTreeWindDir;
+uniform float uTreeWindLean;
+uniform vec4 uTreeCardFade;
+varying vec2 vTreeCardUv;
+`;
+
+/**
+ * Distance fade first (each card shrinks toward the point it grows from, so there is no pop and
+ * nothing rasterises once it is gone — far away, and within a couple of metres of the camera),
+ * then the trees' own wind, so cards move with their crown.
+ */
+const CARD_VERTEX = /* glsl */ `
+	{
+#ifdef USE_INSTANCING
+		vec3 treeCardWorld = (modelMatrix * instanceMatrix * vec4(treeCard.xyz, 1.0)).xyz;
+#else
+		vec3 treeCardWorld = (modelMatrix * vec4(treeCard.xyz, 1.0)).xyz;
+#endif
+		float treeCardDistance = distance(cameraPosition, treeCardWorld);
+		float treeCardFade = smoothstep(uTreeCardFade.x, uTreeCardFade.y, treeCardDistance) * (1.0 - smoothstep(uTreeCardFade.z, uTreeCardFade.w, treeCardDistance));
+		transformed = treeCard.xyz + (transformed - treeCard.xyz) * treeCardFade;
+	}
+	vTreeCardUv = uv;
+${WIND_VERTEX}
+	// Sprays flutter a little more toward their tips.
+	transformed += objectNormal * sin(uTreeTime * 5.3 + treeCard.w * 3.0 + treePhase * 2.1) * treeWeight * treeCard.w * 0.035;
+`;
+
+const CARD_FRAGMENT_PARS = /* glsl */ `
+uniform sampler2D uTreeCardAtlas;
+varying vec2 vTreeCardUv;
+`;
+
+/**
+ * Atlas masks: R shade (×1.8 — sprays average a touch under the crown's own tone, so they read as
+ * foliage on it, not bright tufts stuck on top), G new growth (lighter, warmer), B per-leaf hue.
+ */
+const CARD_FRAGMENT = /* glsl */ `
+	vec4 treeCardTexel = texture2D(uTreeCardAtlas, vTreeCardUv);
+	vec3 treeCardHue = vec3(1.0 + (treeCardTexel.b - 0.5) * 0.18, 1.0, 1.0 - (treeCardTexel.b - 0.5) * 0.26);
+	diffuseColor.rgb *= treeCardTexel.r * 1.8 * treeCardHue * mix(vec3(1.0), vec3(1.1, 1.08, 0.92), treeCardTexel.g);
+	diffuseColor.a *= treeCardTexel.a;
+`;
+
+/**
+ * The ONE foliage-card material: alpha-tested, double-sided Lambert over the procedural card
+ * atlas, coloured by the crown's baked vertex colours × instance tint. Cards keep the crown's
+ * normal on both faces (a back face is the same spray seen from behind, not an inside). They
+ * never cast shadows (the crown under them does) and are kept out of the AO pre-pass, which
+ * would draw them as solid quads.
+ */
+export function createTreeCardMaterial(
+	atlas: THREE.Texture,
+	wind: TreeWindUniforms
+): { material: THREE.MeshLambertMaterial; uniforms: TreeCardUniforms } {
+	const material = new THREE.MeshLambertMaterial({
+		vertexColors: true,
+		side: THREE.DoubleSide,
+		alphaTest: TREE_CARD_ALPHA_CUTOFF
+	});
+	material.name = 'stylised-tree-cards';
+	const uniforms: TreeCardUniforms = {
+		uTreeCardAtlas: { value: atlas },
+		uTreeCardFade: { value: new THREE.Vector4(0.8, 2.2, 70, 90) }
+	};
+	const all = { ...wind, ...uniforms };
+	setOwnShaderHook(
+		material,
+		(shader) => {
+			Object.assign(shader.uniforms, all);
+			shader.vertexShader = shader.vertexShader
+				.replace('#include <common>', `#include <common>\n${CARD_VERTEX_PARS}`)
+				.replace('#include <begin_vertex>', `#include <begin_vertex>\n${CARD_VERTEX}`);
+			shader.fragmentShader = shader.fragmentShader
+				.replace('#include <common>', `#include <common>\n${CARD_FRAGMENT_PARS}`)
+				.replace('#include <map_fragment>', `#include <map_fragment>\n${CARD_FRAGMENT}`)
+				.replace(
+					'#include <normal_fragment_begin>',
+					'#include <normal_fragment_begin>\n\tnormal = normalize( vNormal );'
+				);
+		},
+		'stylised-tree-cards:1',
+		all
+	);
+	return { material, uniforms };
+}
+
+/** The card atlas as one texture with its coverage-preserving mip chain (masks: no colour space). */
+export function createTreeCardAtlasTexture(atlas: TreeCardAtlas): THREE.DataTexture {
+	const base = atlas.levels[0];
+	const texture = new THREE.DataTexture(base.data, base.width, base.height, THREE.RGBAFormat);
+	texture.mipmaps = atlas.levels.map((level) => ({
+		data: level.data,
+		width: level.width,
+		height: level.height
+	})) as unknown as THREE.DataTexture['mipmaps'];
+	texture.generateMipmaps = false;
+	texture.magFilter = THREE.LinearFilter;
+	texture.minFilter = THREE.LinearMipmapLinearFilter;
+	texture.colorSpace = THREE.NoColorSpace;
+	texture.name = 'tree-card-atlas';
+	texture.needsUpdate = true;
+	return texture;
 }

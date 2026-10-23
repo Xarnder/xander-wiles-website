@@ -60,6 +60,8 @@ export interface GraphicsPreset {
 	readonly treeWind: boolean;
 	/** Procedural bark/leaf detail on near trees (see `TreeSurfaceDetail`: 1 cheap, 2 full, 3 full + further). */
 	readonly treeSurfaceDetail: 1 | 2 | 3;
+	/** Foliage cards on tree LODs ≤ this (−1 none, 0 nearest trees, 1 LOD0 + LOD1). */
+	readonly treeCardMaxLod: -1 | 0 | 1;
 
 	/** Procedural grass: density, render-distance scale, near crossed cards, shadow receiving, wind, tuft cap (see `GrassQualityProfile`). */
 	readonly grassDensityScale: number;
@@ -116,6 +118,7 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: -1,
 		treeWind: false,
 		treeSurfaceDetail: 1,
+		treeCardMaxLod: 0,
 		grassDensityScale: 0.55,
 		grassDistanceScale: 0.6,
 		grassCrossedCards: false,
@@ -157,6 +160,7 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 0,
 		treeWind: true,
 		treeSurfaceDetail: 2,
+		treeCardMaxLod: 1,
 		grassDensityScale: 0.8,
 		grassDistanceScale: 0.8,
 		grassCrossedCards: false,
@@ -198,6 +202,7 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 0,
 		treeWind: true,
 		treeSurfaceDetail: 2,
+		treeCardMaxLod: 1,
 		grassDensityScale: 1,
 		grassDistanceScale: 1,
 		grassCrossedCards: true,
@@ -242,6 +247,7 @@ export const GRAPHICS_PRESETS: Readonly<Record<GraphicsQuality, GraphicsPreset>>
 		treeShadowMaxLod: 1,
 		treeWind: true,
 		treeSurfaceDetail: 3,
+		treeCardMaxLod: 1,
 		grassDensityScale: 1.1,
 		grassDistanceScale: 1.25,
 		grassCrossedCards: true,

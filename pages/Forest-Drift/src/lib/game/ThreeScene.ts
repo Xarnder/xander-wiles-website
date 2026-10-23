@@ -361,7 +361,8 @@ function treeQualityFor(quality: GraphicsQuality): TreeQualityProfile {
 		densityScale: preset.treeDensityScale,
 		maxShadowLod: preset.treeShadowMaxLod,
 		wind: preset.treeWind,
-		surfaceDetail: preset.treeSurfaceDetail
+		surfaceDetail: preset.treeSurfaceDetail,
+		cardMaxLod: preset.treeCardMaxLod
 	};
 }
 
@@ -1079,6 +1080,8 @@ export class ThreeScene implements WorldRuntime {
 			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z)
 		});
 		this.scene.add(this.treeManager.group);
+		// Alpha-tested foliage cards would draw as solid quads in the AO pre-pass (dark halos).
+		this.graphicsPipeline.excludeFromAo(this.treeManager.cardGroup);
 		this.treeManager.setQualityProfile(treeQualityFor(this.graphicsSettings.quality));
 		this.treeManager.setProceduralSurfaces(this.graphicsSettings.proceduralMaterials);
 		this.terrainManager.setVegetationRegionSampler(this.treeManager.getVegetationRegionSampler());

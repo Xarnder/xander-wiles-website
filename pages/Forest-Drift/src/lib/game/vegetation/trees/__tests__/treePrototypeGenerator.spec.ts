@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { addBlob, TreeMeshBuilder } from '../treeMeshKit';
-import { buildTreeMesh, buildTreeShadowProxy, designTree } from '../treePrototypeGenerator';
-import { TREE_SPECIES } from '../treeSpecies';
 import {
+	buildTreeCards,
+	buildTreeMesh,
+	buildTreeShadowProxy,
+	designTree,
+	lodHasCards
+} from '../treePrototypeGenerator';
+import { TREE_SPECIES } from '../treeSpecies';
+import { cardTileRect, generateTreeCardAtlas, TREE_CARD_ALPHA_CUTOFF } from '../treeCardAtlas';
+import {
+	TREE_CARD_TILES,
+	TREE_FOLIAGE_CODE_BASE,
 	TREE_LODS,
 	TREE_SPECIES_IDS,
 	TREE_SURFACE_CODES,
@@ -64,11 +73,11 @@ describe('tree prototype generation', () => {
 			for (const c of mesh.colors) if (!(c >= 0 && c <= 1)) throw new Error('colour out of range');
 			for (const w of mesh.wind)
 				if (!(w >= 0 && w <= 1.5)) throw new Error('wind weight out of range');
-			// Trees stand on the ground, 3–20 m tall, a few metres wide.
+			// Trees stand on the ground, 3–30 m tall (spruces are the tall ones), a few metres wide.
 			expect(mesh.min[1]).toBeLessThanOrEqual(0);
 			expect(mesh.max[1]).toBeGreaterThan(3);
-			expect(mesh.max[1]).toBeLessThan(20);
-			expect(mesh.max[0] - mesh.min[0]).toBeLessThan(8);
+			expect(mesh.max[1]).toBeLessThan(30);
+			expect(mesh.max[0] - mesh.min[0]).toBeLessThan(10);
 		}
 	});
 
@@ -94,9 +103,9 @@ describe('tree prototype generation', () => {
 			}
 			expect(codes.has(foliage), `${speciesId} LOD${lod} foliage`).toBe(true);
 			for (const code of codes) expect([bark, foliage]).toContain(code);
-			// Bark codes are < 4 and foliage ≥ 4: the shader branches on that.
-			expect(bark).toBeLessThan(4);
-			expect(foliage).toBeGreaterThanOrEqual(4);
+			// Bark codes are below the foliage base and foliage at or above it: the shader branches on that.
+			expect(bark).toBeLessThan(TREE_FOLIAGE_CODE_BASE);
+			expect(foliage).toBeGreaterThanOrEqual(TREE_FOLIAGE_CODE_BASE);
 		}
 	});
 
@@ -263,5 +272,128 @@ describe('tree prototype generation', () => {
 				expect(Math.abs(w - w0) / w0, `${speciesId} LOD${lod} width`).toBeLessThan(0.3);
 			}
 		}
+	});
+});
+
+describe('foliage cards', () => {
+	const designs = TREE_SPECIES_IDS.flatMap((speciesId) => {
+		const species = TREE_SPECIES[speciesId];
+		return Array.from({ length: species.prototypeCount }, (_, variant) => ({
+			speciesId,
+			variant,
+			species,
+			design: designTree(species, variant, 'card-world')
+		}));
+	});
+
+	it('gives every species cards on LOD0 and LOD1 only, fewer on LOD1', () => {
+		for (const { speciesId, species, design } of designs) {
+			const lod0 = buildTreeCards(species, design, 0);
+			const lod1 = buildTreeCards(species, design, 1);
+			expect(lod0, speciesId).not.toBeNull();
+			expect(lod1, speciesId).not.toBeNull();
+			expect(lod1!.cards, speciesId).toBeLessThan(lod0!.cards);
+			expect(lod1!.cards, speciesId).toBeGreaterThan(lod0!.cards * 0.3);
+			for (const lod of [2, 3] as const) {
+				expect(lodHasCards(lod)).toBe(false);
+				expect(buildTreeCards(species, design, lod)).toBeNull();
+			}
+			// A few hundred cards at most: geometry is never the cost, overdraw is.
+			expect(lod0!.cards, speciesId).toBeLessThanOrEqual(240);
+			expect(triangleCount(lod0!), speciesId).toBeLessThanOrEqual(1200);
+		}
+	});
+
+	it('produces valid card geometry: finite, unit normals, UVs inside the layer tile, anchors on the card', () => {
+		for (const { speciesId, species, design } of designs) {
+			for (const lod of [0, 1] as const) {
+				const cards = buildTreeCards(species, design, lod)!;
+				const vertexCount = cards.positions.length / 3;
+				expect(cards.uvs.length).toBe(vertexCount * 2);
+				expect(cards.anchors.length).toBe(vertexCount * 4);
+				for (const value of cards.positions)
+					if (!Number.isFinite(value)) throw new Error(`NaN card position ${speciesId}`);
+				for (const index of cards.indices)
+					if (index >= vertexCount) throw new Error('card index out of range');
+				for (let i = 0; i < cards.normals.length; i += 3) {
+					const len = Math.hypot(cards.normals[i], cards.normals[i + 1], cards.normals[i + 2]);
+					if (Math.abs(len - 1) > 1e-3) throw new Error(`non-unit card normal ${speciesId}`);
+				}
+				for (const c of cards.colors)
+					if (!(c >= 0 && c <= 1)) throw new Error('card colour out of range');
+				for (const w of cards.wind)
+					if (!(w >= 0 && w <= 1.5)) throw new Error('card wind out of range');
+				const rects = species.cards.map((layer) => cardTileRect(layer.tile));
+				for (let v = 0; v < vertexCount; v++) {
+					const u = cards.uvs[v * 2];
+					const t = cards.uvs[v * 2 + 1];
+					const inTile = rects.some(
+						([u0, v0, u1, v1]) =>
+							u >= u0 - 1e-6 && u <= u1 + 1e-6 && t >= v0 - 1e-6 && t <= v1 + 1e-6
+					);
+					if (!inTile) throw new Error(`${speciesId} card UV outside its tiles`);
+					const along = cards.anchors[v * 4 + 3];
+					expect(along).toBeGreaterThanOrEqual(0);
+					expect(along).toBeLessThanOrEqual(1);
+				}
+				// Cards sit on their crown: never far outside the prototype, never below the ground.
+				const mesh = buildTreeMesh(species, design, lod);
+				expect(cards.min[1], `${speciesId} LOD${lod}`).toBeGreaterThan(-0.4);
+				expect(cards.max[1], `${speciesId} LOD${lod}`).toBeLessThan(mesh.max[1] + 2);
+				expect(cards.max[0] - cards.min[0]).toBeLessThan(mesh.max[0] - mesh.min[0] + 4);
+			}
+		}
+	});
+
+	it('is deterministic per design and differs between variants', () => {
+		const oak = TREE_SPECIES.oak;
+		const a = buildTreeCards(oak, designTree(oak, 0, 'card-world'), 0)!;
+		const b = buildTreeCards(oak, designTree(oak, 0, 'card-world'), 0)!;
+		const c = buildTreeCards(oak, designTree(oak, 1, 'card-world'), 0)!;
+		expect(Array.from(b.positions)).toEqual(Array.from(a.positions));
+		expect(Array.from(c.positions)).not.toEqual(Array.from(a.positions));
+	});
+
+	it('leaves the crown design untouched (cards draw from their own seed)', () => {
+		for (const { species, variant } of designs.slice(0, 6)) {
+			const design = designTree(species, variant, 'card-world');
+			const before = Array.from(buildTreeMesh(species, design, 0).positions);
+			buildTreeCards(species, design, 0);
+			expect(Array.from(buildTreeMesh(species, design, 0).positions)).toEqual(before);
+		}
+	});
+});
+
+describe('tree card atlas', () => {
+	const atlas = generateTreeCardAtlas(64);
+
+	it('paints one sprayed tile per card kind with real coverage', () => {
+		expect(atlas.coverage).toHaveLength(TREE_CARD_TILES.length);
+		for (const [i, coverage] of atlas.coverage.entries()) {
+			expect(coverage, TREE_CARD_TILES[i]).toBeGreaterThan(0.08);
+			// Sprays, not solid squares: plenty of gaps between leaves.
+			expect(coverage, TREE_CARD_TILES[i]).toBeLessThan(0.6);
+		}
+	});
+
+	it("builds a full mip chain that keeps each tile's coverage", () => {
+		const base = atlas.levels[0];
+		expect(base.width).toBe(64 * 4);
+		expect(base.height).toBe(64 * 2);
+		expect(atlas.levels.length).toBeGreaterThanOrEqual(4);
+		// Coverage of the whole atlas above the cutoff, per level, stays close to level 0.
+		const passing = (data: Uint8Array) => {
+			let n = 0;
+			for (let i = 3; i < data.length; i += 4) if (data[i] / 255 > TREE_CARD_ALPHA_CUTOFF) n++;
+			return n / (data.length / 4);
+		};
+		const level0 = passing(base.data);
+		for (const level of atlas.levels.slice(1, -1))
+			expect(Math.abs(passing(level.data) - level0)).toBeLessThan(0.08);
+	});
+
+	it('is deterministic', () => {
+		const again = generateTreeCardAtlas(64);
+		expect(Array.from(again.levels[0].data)).toEqual(Array.from(atlas.levels[0].data));
 	});
 });

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { TreeManager } from '../TreeManager';
 import { createDefaultVegetationSettings } from '../VegetationTypes';
+import { TREE_SPECIES } from '../trees/treeSpecies';
 import { FoundationManager } from '../../building/FoundationManager';
 import type { FoundationDefinition } from '../../building/FoundationTypes';
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
@@ -103,14 +104,16 @@ describe('tree streaming and batching', () => {
 		const trees = m.getStats().treeInstances;
 		expect(loaded.loadedTreesByLod.reduce((a, b) => a + b, 0)).toBe(trees);
 		expect(loaded.activeBatches).toBeLessThan(trees / 4);
+		// Near batches carry foliage cards: one more instanced mesh each, sharing the batch's buffers.
+		expect(loaded.activeCardBatches).toBeGreaterThan(0);
 		const meshesBefore = countMeshes(m.group);
-		expect(meshesBefore).toBe(loaded.activeBatches);
+		expect(meshesBefore).toBe(loaded.activeBatches + loaded.activeCardBatches);
 
 		// Walk far away: the old chunk unloads and its batches leave the scene graph.
 		m.update(5000, 5000);
 		const after = m.getRenderStats(null);
 		expect(after.activeChunks).toBe(1);
-		expect(countMeshes(m.group)).toBe(after.activeBatches);
+		expect(countMeshes(m.group)).toBe(after.activeBatches + after.activeCardBatches);
 		m.dispose();
 		expect(countMeshes(m.group)).toBe(0);
 	});
@@ -123,7 +126,8 @@ describe('tree streaming and batching', () => {
 					densityScale: 1,
 					maxShadowLod: 1,
 					wind: true,
-					surfaceDetail: 3
+					surfaceDetail: 3,
+					cardMaxLod: 1
 				}),
 			(m: TreeManager) => m.notifyRenderingChanged()
 		]) {
@@ -150,7 +154,9 @@ describe('tree streaming and batching', () => {
 			m.updateView(camera, 0.016);
 		}
 		// At most species × variants × 3 LODs + one silhouette per species.
-		const maxPrototypeGeometries = 4 * 4 * 3 + 4;
+		const species = Object.values(TREE_SPECIES);
+		const maxPrototypeGeometries =
+			species.reduce((sum, s) => sum + s.prototypeCount, 0) * 3 + species.length;
 		expect(m.getRenderStats(null).prototypeGeometries).toBeLessThanOrEqual(maxPrototypeGeometries);
 		m.dispose();
 	});
@@ -217,7 +223,8 @@ describe('trunk removal', () => {
 		m.updateView(new THREE.Vector3(10, 5, 10), 0.016);
 		const batches = m.group.children.filter((o) => o.name.startsWith('trees:'));
 		expect(batches.length).toBeGreaterThan(1);
-		const batch = m.group.getObjectByProperty('isInstancedMesh', true) as THREE.InstancedMesh;
+		// A tree batch (not a foliage-card mesh riding on one, which lives in the card group).
+		const batch = batches[0].getObjectByProperty('isInstancedMesh', true) as THREE.InstancedMesh;
 		const owner = batch.parent;
 		const matrix = new THREE.Matrix4();
 		batch.getMatrixAt(0, matrix);

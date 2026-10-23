@@ -16,8 +16,8 @@
 				"rivers": 38
 			},
 			"trees": {
-				"exact": "8d19580b",
-				"coarse": "2a4c41cb",
+				"exact": "7c52bfe2",
+				"coarse": "94c5cdbc",
 				"count": 571
 			}
 		},
@@ -36,8 +36,8 @@
 				"rivers": 23
 			},
 			"trees": {
-				"exact": "f851004d",
-				"coarse": "4023dc7b",
+				"exact": "7b9d202e",
+				"coarse": "47ac3ded",
 				"count": 613
 			}
 		},
@@ -56,8 +56,8 @@
 				"rivers": 32
 			},
 			"trees": {
-				"exact": "d1e61b53",
-				"coarse": "45b62f36",
+				"exact": "158cfbd1",
+				"coarse": "84487fd7",
 				"count": 555
 			}
 		}

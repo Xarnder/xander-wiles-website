@@ -116,43 +116,53 @@ export function finishTile(tile: AtlasTile): AtlasTile {
 function dilate(rgb: Float32Array, alpha: Float32Array, size: number): void {
 	const known = new Uint8Array(size * size);
 	for (let i = 0; i < known.length; i++) known[i] = alpha[i] > 0.004 ? 1 : 0;
-	for (let pass = 0; pass < 12; pass++) {
-		const next = known.slice();
-		let changed = false;
-		for (let y = 0; y < size; y++) {
-			for (let x = 0; x < size; x++) {
-				const index = y * size + x;
-				if (known[index]) continue;
-				let r = 0;
-				let g = 0;
-				let b = 0;
-				let n = 0;
-				for (const [ox, oy] of [
-					[1, 0],
-					[-1, 0],
-					[0, 1],
-					[0, -1]
-				]) {
-					const nx = x + ox;
-					const ny = y + oy;
-					if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-					const neighbour = ny * size + nx;
-					if (!known[neighbour]) continue;
-					r += rgb[neighbour * 3];
-					g += rgb[neighbour * 3 + 1];
-					b += rgb[neighbour * 3 + 2];
-					n++;
-				}
-				if (n === 0) continue;
-				rgb[index * 3] = r / n;
-				rgb[index * 3 + 1] = g / n;
-				rgb[index * 3 + 2] = b / n;
-				next[index] = 1;
-				changed = true;
+	// Each pass fills every unknown texel that touches a texel known before the pass, with the
+	// mean of those neighbours. Walk only that frontier (not the whole tile): a 256² tile with a
+	// sparse spray would otherwise be scanned twelve times.
+	const queued = new Uint8Array(size * size);
+	let frontier: number[] = [];
+	const enqueueNeighbours = (index: number, into: number[]) => {
+		const x = index % size;
+		const y = (index - x) / size;
+		if (x + 1 < size) push(index + 1, into);
+		if (x > 0) push(index - 1, into);
+		if (y + 1 < size) push(index + size, into);
+		if (y > 0) push(index - size, into);
+	};
+	const push = (index: number, into: number[]) => {
+		if (known[index] || queued[index]) return;
+		queued[index] = 1;
+		into.push(index);
+	};
+	for (let i = 0; i < known.length; i++) if (known[i]) enqueueNeighbours(i, frontier);
+	for (let pass = 0; pass < 12 && frontier.length > 0; pass++) {
+		for (const index of frontier) {
+			const x = index % size;
+			const y = (index - x) / size;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let n = 0;
+			// Right, left, up, down — the order the sums have always used (bit-identical atlases).
+			for (let k = 0; k < 4; k++) {
+				const nx = k === 0 ? x + 1 : k === 1 ? x - 1 : x;
+				const ny = k === 2 ? y + 1 : k === 3 ? y - 1 : y;
+				if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+				const neighbour = ny * size + nx;
+				if (!known[neighbour]) continue;
+				r += rgb[neighbour * 3];
+				g += rgb[neighbour * 3 + 1];
+				b += rgb[neighbour * 3 + 2];
+				n++;
 			}
+			rgb[index * 3] = r / n;
+			rgb[index * 3 + 1] = g / n;
+			rgb[index * 3 + 2] = b / n;
 		}
-		known.set(next);
-		if (!changed) break;
+		for (const index of frontier) known[index] = 1;
+		const next: number[] = [];
+		for (const index of frontier) enqueueNeighbours(index, next);
+		frontier = next;
 	}
 	// Whatever is still unreached gets the tile's mean blade colour.
 	let r = 0;
@@ -195,13 +205,8 @@ function downsample(tile: AtlasTile): AtlasTile {
 			let fr = 0;
 			let fg = 0;
 			let fb = 0;
-			for (const [ox, oy] of [
-				[0, 0],
-				[1, 0],
-				[0, 1],
-				[1, 1]
-			]) {
-				const src = (y * 2 + oy) * tile.size + x * 2 + ox;
+			for (let k = 0; k < 4; k++) {
+				const src = (y * 2 + (k >> 1)) * tile.size + x * 2 + (k & 1);
 				const w = tile.alpha[src];
 				r += tile.rgb[src * 3] * w;
 				g += tile.rgb[src * 3 + 1] * w;
@@ -229,11 +234,24 @@ function downsample(tile: AtlasTile): AtlasTile {
 
 /** The alpha scale that makes this level pass the cutoff over the same fraction as level 0. */
 function coverageScale(alpha: Float32Array, cutoff: number, target: number): number {
+	// Same counts as `coverageAbove` (same products, same comparison), but from one sorted copy:
+	// `alpha × scale > cutoff` is monotonic in alpha, so each count is a binary search.
+	const sorted = Float32Array.from(alpha).sort();
+	const above = (scale: number) => {
+		let lo = 0;
+		let hi = sorted.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (sorted[mid] * scale > cutoff) hi = mid;
+			else lo = mid + 1;
+		}
+		return (sorted.length - lo) / sorted.length;
+	};
 	let lo = 0.5;
 	let hi = 6;
 	for (let i = 0; i < 18; i++) {
 		const mid = (lo + hi) / 2;
-		if (coverageAbove(alpha, cutoff, mid) < target) lo = mid;
+		if (above(mid) < target) lo = mid;
 		else hi = mid;
 	}
 	return (lo + hi) / 2;

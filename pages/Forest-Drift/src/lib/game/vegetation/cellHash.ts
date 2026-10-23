@@ -35,5 +35,7 @@ export const CellHashChannel = {
 	Variant: 5,
 	Species: 6,
 	Width: 7,
-	Tint: 8
+	Tint: 8,
+	/** Young-tree roll (saplings and half-grown trees among the mature ones). */
+	Age: 9
 } as const;
