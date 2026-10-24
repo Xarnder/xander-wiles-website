@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { migrateTreeGenerator } from './generatorMigration';
 import {
 	CAPABILITY_TTL_MS,
 	sha256Hex,
@@ -586,8 +587,10 @@ export class WorldRoom extends DurableObject<Env> {
 	/** Creates the room on first use (or after hibernation), restoring connected players from their attachments. */
 	private startRoom(): RoomCore | null {
 		if (this.core) return this.core;
-		const manifest = this.readJson<WorldManifest>('manifest');
-		if (!manifest) return null;
+		const savedManifest = this.readJson<WorldManifest>('manifest');
+		if (!savedManifest) return null;
+		const manifest = migrateTreeGenerator(savedManifest);
+		if (manifest !== savedManifest) this.writeMeta('manifest', JSON.stringify(manifest));
 		this.core = new RoomCore({
 			world: {
 				worldId: manifest.worldId,

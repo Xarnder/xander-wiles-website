@@ -272,6 +272,34 @@ test('Owner tab publishes to the real server and manages invites, offline copies
 	await returningRestore.getByTestId('restore-confirm').click();
 	expect((await returningRestored).ok()).toBe(true);
 	await expect(returningRestore).toHaveCount(0);
+	// Known older generators keep their world content and invite access on the new server.
+	const exported = await fetch(`${MP_URL}/w/${worldId}/export`, { headers: auth });
+	const legacyWorld = await exported.json();
+	for (const generatorVersion of [1, 2]) {
+		const published = await fetch(`${MP_URL}/w`, {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${ADMIN_KEY}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ world: legacyWorld, generatorVersion })
+		});
+		expect(published.status).toBe(201);
+		const legacy = (await published.json()) as {
+			worldId: string;
+			invites: { owner: string; viewer: string };
+		};
+		const snapshot = await fetch(`${MP_URL}/w/${legacy.worldId}/snapshot`, {
+			headers: { Authorization: `Bearer ${legacy.invites.viewer}` }
+		});
+		expect(snapshot.ok).toBe(true);
+		const upgraded = (await snapshot.json()) as {
+			manifest: { generatorVersion: number };
+			rows: unknown[];
+		};
+		expect(upgraded.manifest.generatorVersion).toBe(3);
+		const roundTrip = await fetch(`${MP_URL}/w/${legacy.worldId}/export`, {
+			headers: { Authorization: `Bearer ${legacy.invites.owner}` }
+		});
+		expect(await roundTrip.json()).toEqual(legacyWorld);
+	}
 	await card.getByRole('button', { name: 'Forget', exact: true }).click();
 	await expect(card).toHaveCount(0);
 	// Forget removes a browser bookmark; the online world remains intact on the backend.

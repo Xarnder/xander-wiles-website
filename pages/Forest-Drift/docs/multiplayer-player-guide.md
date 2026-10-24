@@ -120,3 +120,7 @@ links, **Save a copy** downloads the live server state into My Worlds, and **Res
 server’s earlier versions. Guest invites cannot export or restore online worlds. **Forget** only
 removes a browser bookmark; it does not delete the world on the server. If clipboard access is
 blocked, click an invite field to select its full link and copy it manually.
+
+The October 24 release upgrades the known tree-only generator versions 1 and 2 to version 3 on
+room startup. Existing world URLs, invite tokens, authored content, save sequence and restore history
+stay intact. Older open clients should refresh to load the matching frontend.
