@@ -55,14 +55,19 @@
 			</div>
 		</div>
 	{:else}
-		<form data-ui-surface="panel" class="modal" data-testid="publish-world-dialog" onsubmit={submit}>
+		<form
+			data-ui-surface="panel"
+			class="modal"
+			data-testid="publish-world-dialog"
+			onsubmit={submit}
+		>
 			<h3>Publish &ldquo;{worldName}&rdquo; online</h3>
 			<p class="modal-hint">
 				Creates a separate online copy that friends can join with a link. Your local world stays as
 				it is.
 			</p>
 			<label>
-				Admin key
+				Owner password
 				<!-- svelte-ignore a11y_autofocus -->
 				<input
 					type="password"
@@ -70,12 +75,12 @@
 					data-testid="publish-admin-key"
 					autofocus
 					bind:value={adminKey}
-					placeholder="The key set on the multiplayer server"
+					placeholder="Your private owner password"
 				/>
 			</label>
 			<label class="checkbox">
 				<input type="checkbox" bind:checked={remember} />
-				Remember the key on this device
+				Remember the owner password on this device
 			</label>
 			{#if error}
 				<p class="modal-error" role="alert">{error}</p>

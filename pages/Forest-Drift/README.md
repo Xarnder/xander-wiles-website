@@ -39,14 +39,14 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
   segment, window, door, or staircase, and `X` / right click / `Esc` exits back to whichever tool
   was selected before
 - `P`, or the paint icon beside the hotbar — toggle Paint Mode, another global overlay, mutually
-  exclusive with Remove Mode (see "Paint Tool"); while active, `C` opens the colour palette and left
+  exclusive with Remove Mode (see "Paint Tool"); while active, `B` opens the colour palette and left
   click paints the highlighted wall, wall segment, slab, or foundation with the selected colour;
   `P` / right click / `Esc` exits back to whichever tool was selected before
-- `C` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
+- `B` — cycle the draw-snap mode (Off → Axis → Axis + Inline → Wall Corners) on Wall, Continuous
   Wall, Ceiling, Floor and Roof — see "Draw-snap: axis, inline and wall-corner alignment" below
-  (while Paint Mode is active, `C` instead opens the colour palette — see "Paint Tool")
+  (while Paint Mode is active, `B` instead opens the colour palette — see "Paint Tool")
 - `8` — Place Object (Mini Builds and lights). `E` opens the Object Library (My Builds, Default
-  Designs, Lights, `+ Create New`); `R` rotates 90°; `↑`/`↓` cycle recent objects; `C` copies the
+  Designs, Lights, `+ Create New`); `R` rotates 90°; `↑`/`↓` cycle recent objects; `B` copies the
   looked-at Mini Build; `F` edits it (shared design or Make Unique) — see "Mini Builds"
 - `2` then `↑`/`↓` — Fence / Railing (Poly Wall → Wall → Fence / Rail): draw like a Continuous Wall,
   on a building or on open ground; `E` customises it, `R` applies the current settings to the
@@ -430,8 +430,11 @@ never terrain or foundations; roofs because openings also go into gable ends, se
 in gable ends" under Roofs — and share one implementation (`OpeningToolBase`) parameterized by opening
 type, width, and vertical extent; `WindowTool`/`DoorTool` are thin wrappers so the hotbar/tool
 identity stays distinct. A hit is converted into that wall's local `(U, Y)` via
-`worldToWallLocal(transform, ...)`, the horizontal centre snaps to `openingGridSize` (default 0.1m,
-deliberately separate from `buildingGridSize`), and the vertical extent comes straight from settings
+`worldToWallLocal(transform, ...)`. Windows, doors and beams default to 12 internal snap lines
+(13 equal wall segments) every time the tool is selected. The first `B` press turns snapping Off
+(free along-wall placement); subsequent presses cycle metre-grid snapping and the other wall
+divisions. Metre-grid snapping uses `openingGridSize` (default 0.1m, separate from
+`buildingGridSize`). The vertical extent comes straight from settings
 — a fixed `windowSillHeight`/`windowHeight` for windows, `minY=0`/`doorHeight` for doors — the
 "preferred first version" the spec calls for, rather than trying to derive height from where you're
 looking vertically. Before showing a valid preview, the candidate is checked against the _same_
@@ -733,13 +736,13 @@ it through the real `buildWallPath()`, so what you see while drawing is exactly 
 Placing points freehand rarely lands exactly on a straight line — `polygonDrawSnap.ts` is a small,
 framework-free module shared by every point-drawing tool (`WallTool`, `PolygonWallTool`, and the
 Ceiling/Floor/Flat Roof tools via `SlabToolBase`) that fixes this without touching any tool's own
-raycasting or rendering. Pressing `C` cycles
+raycasting or rendering. Pressing `B` cycles
 `SnapMode = 'off' | 'axis' | 'axis-inline' | 'wall-corners'`:
 
 - **`'axis'`** forces the segment from the last confirmed point to be perfectly horizontal or
   vertical — whichever the raw drag direction is closer to — instead of an arbitrary diagonal.
 - **`'axis-inline'`** (only reachable once 3+ points are already confirmed — `Wall Tool` never
-  accumulates enough points to reach it, so `C` only toggles `'axis'` there) keeps the same axis
+  accumulates enough points to reach it, so `B` only toggles `'axis'` there) keeps the same axis
   constraint, but if the point's other, still-free coordinate is close to matching an EARLIER
   confirmed point's corresponding coordinate (`INLINE_SNAP_TOLERANCE_CELLS`, a small fixed grid-cell
   radius — deliberately tight, so it only fires for a clearly-intended alignment), it snaps exactly
@@ -762,16 +765,11 @@ raycasting or rendering. Pressing `C` cycles
 
 ### Defaults on entry, not "off"
 
-Every point-drawing tool used to start each activation at `'off'`, requiring a `C` press before
-snapping did anything. `WallTool` now defaults to `'axis-inline'` and the three `SlabToolBase` tools
-(Ceiling/Floor/Roof) default to `'wall-corners'` every time the tool is activated (see each one's
-`activate()`) — axis-locked placement and tracing a room's own wall corners are what a player wants
-almost all the time for these tools, not an opt-in. `C` still cycles exactly as before, so a single
-press turns the default off (`'axis-inline' -> 'off'` for Wall Tool, `'wall-corners' -> 'off'` for
-the slab tools — see `cycleSnapMode`), and re-selecting the tool later resets back to the default
-rather than remembering whatever the player last chose. `PolygonWallTool` is unchanged and still
-starts at `'off'` — a freehand continuous wall is the one drawing tool where an unconstrained first
-attempt is the more common case.
+`WallTool` defaults to `'axis-inline'`. Ceiling and Floor (`SlabToolBase`) default to `'axis'`
+every time they are selected, promoting to `'axis-inline'` after the third confirmed point when
+Axis remains selected, just like Polygon Wall. `B` cycles the available snap modes, including wall-corner snapping
+when walls are available and Off. Re-selecting the tool restores its default rather than remembering
+the last choice. `PolygonWallTool` starts at `'off'`.
 
 `snapDrawingPoint(points, raw, mode)` is the one pure function every tool calls from inside its own
 `update()`, right after the shared raycast/grid-snap resolves a raw hover point and before that
@@ -780,13 +778,13 @@ point are always the SAME (possibly snapped) value, never out of sync with each 
 `'wall-corners'` straight through unchanged, since resolving actual wall data is a tool-side concern
 `snapDrawingPoint` deliberately doesn't have — `SlabToolBase.update()` calls `snapToNearestCorner`
 itself instead when that mode is active. Each tool's HUD shows the current mode (`Snap: Axis` /
-`Snap: Axis + Inline` / `Snap: Wall Corners`) and a `C: Cycle snap` hint whenever relevant.
+`Snap: Axis + Inline` / `Snap: Wall Corners`) and a `B: Cycle snap` hint whenever relevant.
 
 Because the small HUD text line was easy to miss mid-build, the current mode is additionally
 plumbed all the way to `BuildUiState.snapMode` (`FoundationTypes.ts`) and rendered in
 `+page.svelte` as a standalone, high-contrast pill directly under the crosshair (`AXIS SNAP` in
 blue, `AXIS + INLINE SNAP` in green, `WALL CORNER SNAP` in orange) — it's present only while a mode
-is active and disappears the instant `C` cycles back to `'off'`, so it reads at a glance without
+is active and disappears the instant `B` cycles back to `'off'`, so it reads at a glance without
 competing with the rest of the build HUD.
 
 ### Serialization
@@ -825,7 +823,7 @@ match outside the tolerance, and preferring the closest qualifying candidate; an
 several, passing an out-of-tolerance or empty corner list through unchanged, and an exact
 tolerance-boundary match still snapping.
 `tests/game.e2e.ts` confirms the hotbar's slot 5 (Polygon/Continuous Wall) is selectable with the 5
-key, and that pressing `C` on the Wall/Polygon Wall/Ceiling tools cycles snap mode with no console
+key, and that pressing `B` on the Wall/Polygon Wall/Ceiling tools cycles snap mode with no console
 errors.
 
 ## Fences and railings: one path, one style, derived posts and balusters (`BarrierTypes.ts`, `barrierLayout.ts`, `barrierProfiles.ts`, `BarrierGeometryCompiler.ts`, `BarrierManager.ts`, `BarrierTool.ts`)
@@ -1113,13 +1111,21 @@ fallback and regression coverage.
 the "Roofs" section below for the pitched-roof system that replaced it on the hotbar); all three are
 exactly the same underlying
 `SlabDefinition` (a foundation-local polygon, a top-surface `localY`, and a `thickness`); `type`
-only ever affects material and HUD text, never geometry. This is also what lets **one physical slab
+affects material, HUD text and decorative overhang framing; the solid slab body stays the same. This is what lets **one physical slab
 serve as both a room's ceiling and the floor above it**: Ceiling Tool and Floor Tool both default a
 new slab's `localY` to `level.baseY + level.wallHeight` (the top of the level's walls), and
 `SlabManager.findOverlappingSlabAtLevel` rejects a second slab with an overlapping footprint at that
 _same_ `localY` on the same foundation as a duplicate — there's no separate "usages" flag, the
 ordinary overlap rule alone prevents two coplanar objects. Slabs at _different_ `localY` values are
 free to overlap in X/Z (that's just stacked floors).
+
+**Automatic overhang framing.** Floor and ceiling rims receive a timber beam only where no wall
+reaches the slab underside. Wall thickness and partial coverage are checked along each polygon edge,
+including continuous-wall segments; shared edges between adjoining slabs at the same height stay
+unframed. The beam projects 3.5cm beyond the rim and 4cm below the underside, with mitred corners.
+Framing updates when walls or neighbouring slabs change and is regenerated on local load and online
+foundation updates. It uses the existing timber material and is decorative, so slab collision,
+stair holes and saved world definitions stay unchanged. Legacy flat-roof slabs retain their look.
 
 **Targeting: looking up at the slab's own plane, not down at the ground.** Unlike Wall/Polygon
 Wall/Stairs (which start at the current level's _floor_), a slab always sits at the top of the
@@ -1344,7 +1350,7 @@ placing something on an upper floor harder to judge against the room below it), 
 (currently a plain settings field with no rendering wired to it yet — see "Not implemented yet").
 **Building > Slabs**: `floorThickness`, `roofThickness`, `showSlabBounds`, `showSlabPolygonPoints`,
 `slabPreviewOpacity`. (A `snapToWallCorners` GUI toggle used to sit here — removed once wall-corner
-snapping actually shipped as the `C`-cycled `'wall-corners'` mode below; the toggle's own doc comment
+snapping actually shipped as the `B`-cycled `'wall-corners'` mode below; the toggle's own doc comment
 described exactly that behavior but nothing had ever implemented it.)
 
 ### Tests
@@ -1940,7 +1946,7 @@ butterfly, M-shaped, a dutch gable's small cap) and a shed's sloped sides and ta
 mansard and flat roofs have none. Every type has at most one vertical face per outward direction,
 so an opening is stored on the roof itself — `RoofDefinition.openings`, each tagged `face: '+x' |
 '-x' | '+z' | '-z'` — in that face's own (U, Y) frame. U runs along the face from the footprint
-corner (so `C`-snap "half" lands on the same centre line as the wall below); **Y is foundation-local
+corner (so `B`-snap "half" lands on the same centre line as the wall below); **Y is foundation-local
 height**, not relative to the roof, because a gable belongs to no single storey.
 
 - **Height comes from the selected floor.** A door starts at the level picked with `[`/`]`; a window
@@ -2347,8 +2353,8 @@ new `FoundationDefinition` object — `topY`/`bottomY`/the grid footprint are ne
 
 ### Palette UX (`MaterialPalette.svelte`)
 
-`C` opens the colour palette while Paint Mode is active (PaintTool owns this key itself, exactly like
-`WallTool`/`SlabToolBase` own their own snap-mode `C` handling) and calls
+`B` opens the colour palette while Paint Mode is active (PaintTool owns this key itself, exactly like
+`WallTool`/`SlabToolBase` own their own snap-mode `B` handling) and calls
 `document.exitPointerLock()` so the OS cursor reappears — the same direct browser API call
 `FirstPersonController`'s own Escape handling already uses. `PaintTool.onPrimaryAction()` refuses to
 paint while the palette is open, and the palette panel's own root `stopPropagation`s its clicks so
@@ -2399,7 +2405,7 @@ serialize → paint → serialize → reload round trip retains every painted co
 indices, distinct cached materials per segment) plus the `getSegmentAsWallView` regression above.
 `game.e2e.ts` confirms `P` shows a `PAINT` HUD and toggles the hotbar paint icon, restores the
 previous tool and its own HUD on exit, that Remove Mode and Paint Mode are mutually exclusive
-(pressing one while the other is active switches straight over), that `C` opens the palette without
+(pressing one while the other is active switches straight over), that `B` opens the palette without
 exiting Paint Mode, and that picking a swatch updates the HUD's colour indicator.
 
 ### Not implemented yet
@@ -3021,12 +3027,17 @@ between), then by local density and slope: tall spruces crowd dense and higher c
 Scots pines take open conifer ground, birches fill mixed woodland and forest edges, and
 ornamentals and weeping willows grow on open, gentle, low ground (density², so never deep forest).
 Each species also has its own low-frequency **stand** map (`standScale` 150 m, `standStrength`
-0.9), so trees of a kind gather into groves — a spruce stand, a birch copse — which looks natural
-and keeps the number of species (and so prototype batches) per chunk down.
+0.9). The strongest local stand selects the species directly, rather than rolling a separate
+weighted choice for each tree. Nearby trees therefore form clear groves with natural boundaries,
+while ecology still decides which species suit each area. Tree size, rotation, tint and prototype
+variation stay independent, so a grove does not look cloned. Setting stand strength to zero restores
+the optional per-tree mix. The fields use world coordinates, so grove boundaries cross chunk edges
+without seams and do not depend on chunk loading order.
 Trees standing in water are rejected by placement (`TREE_WATER_CLEARANCE`).
 
 Adding species changed which species (and size) each cell rolls, so `GENERATOR_VERSION` went to 2
 and the determinism golden was regenerated (tree positions and counts are unchanged).
+Coherent stand selection bumps it to 3, with regenerated fingerprints and unchanged placement counts.
 
 ### Performance
 

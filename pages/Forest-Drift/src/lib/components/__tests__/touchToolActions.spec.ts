@@ -52,7 +52,7 @@ describe('touchToolActions', () => {
 			ids([
 				'R    Rotate (Shift: back)',
 				'T    Snap angle (Shift: coarser)',
-				'C    Copy Bench',
+				'B    Copy Bench',
 				'F    Edit Bench',
 				'↑/↓  Recent objects'
 			])
@@ -62,10 +62,10 @@ describe('touchToolActions', () => {
 		).toEqual(['pitch-down', 'pitch-up', 'vol-down', 'vol-up', 'len-down', 'len-up', 'play']);
 	});
 
-	it('sends C for opening snap and path mode, and B otherwise', () => {
-		expect(snapKeyForHints(['C cycle snap'])).toBe('KeyC');
-		expect(snapKeyForHints(['C path mode'])).toBe('KeyC');
-		expect(snapLabelForHints(['C path mode'])).toBe('Mode');
+	it('sends B for opening snap, path mode, and other build tools', () => {
+		expect(snapKeyForHints(['B cycle snap'])).toBe('KeyB');
+		expect(snapKeyForHints(['B path mode'])).toBe('KeyB');
+		expect(snapLabelForHints(['B path mode'])).toBe('Mode');
 		expect(snapKeyForHints(['B: Cycle snap'])).toBe('KeyB');
 		expect(snapLabelForHints(['B: Cycle snap'])).toBe('Snap');
 	});

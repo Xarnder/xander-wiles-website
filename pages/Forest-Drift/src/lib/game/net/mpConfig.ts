@@ -106,7 +106,7 @@ function inviteFromHash(hash: string): string | null {
 	return value && isTokenShaped(value) ? value : null;
 }
 
-/** An online world this browser has joined or published, with what it needs to get back in. */
+/** An online world saved, joined or published in this browser, with what it needs to get in. */
 export interface OnlineWorldEntry {
 	worldId: string;
 	name: string;
@@ -121,6 +121,11 @@ export interface OnlineWorldEntry {
 	lastJoinedAt?: string;
 	/** The room server the world lives on; missing for worlds remembered before this was recorded. */
 	serverUrl?: string;
+}
+
+/** Reuse a publisher's owner token or the private link of a returning, confirmed owner. */
+export function ownerInviteFor(entry: OnlineWorldEntry | null): string | null {
+	return entry?.invites?.owner ?? (entry?.role === 'owner' ? entry.invite : null);
 }
 
 export function loadOnlineWorlds(): OnlineWorldEntry[] {
@@ -148,8 +153,29 @@ export function rememberOnlineWorld(
 	merged.role ??= null;
 	if (!isOnlineWorldEntry(merged)) return null;
 	const rest = worlds.filter((entry) => entry.worldId !== update.worldId);
-	safeSet(STORAGE_KEYS.worlds, JSON.stringify([merged, ...rest].slice(0, 30)));
-	return merged;
+	return safeSet(STORAGE_KEYS.worlds, JSON.stringify([merged, ...rest].slice(0, 30)))
+		? merged
+		: null;
+}
+
+/** Save an invite for later without connecting to the room or requiring a player identity. */
+export function rememberOnlineInvite(
+	reference: WorldReference,
+	name: string,
+	serverUrl: string
+): OnlineWorldEntry | null {
+	if (!reference.invite) return null;
+	const existing = findOnlineWorld(reference.worldId);
+	const sameServer = !existing?.serverUrl || existing.serverUrl === serverUrl;
+	const sameAccess = existing?.invite === reference.invite && sameServer;
+	return rememberOnlineWorld({
+		worldId: reference.worldId,
+		invite: reference.invite,
+		name: name.trim().slice(0, 80) || existing?.name || 'Online world',
+		serverUrl,
+		...(sameAccess ? {} : { role: null, capability: null }),
+		...(sameServer ? {} : { invites: undefined, lastJoinedAt: undefined })
+	});
 }
 
 export function forgetOnlineWorld(worldId: string): void {
@@ -250,10 +276,12 @@ function safeGet(key: string): string | null {
 	}
 }
 
-function safeSet(key: string, value: string): void {
+function safeSet(key: string, value: string): boolean {
 	try {
 		localStorage.setItem(key, value);
+		return true;
 	} catch {
-		// Private mode or storage blocked: identity just won't be remembered.
+		// Private mode or storage blocked: let explicit saves report the failure.
+		return false;
 	}
 }

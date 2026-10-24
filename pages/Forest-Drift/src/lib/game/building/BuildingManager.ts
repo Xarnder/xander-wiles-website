@@ -263,6 +263,16 @@ export class BuildingManager {
 		this.getVertexSpacing = options.getVertexSpacing;
 		this.getBuildingGridSize = options.getBuildingGridSize;
 		this.getCornerOpeningMargin = options.getCornerOpeningMargin;
+		this.slabManager.setSupportingWallsProvider((foundationId) => [
+			...this.wallManager.getWallsForFoundation(foundationId),
+			...this.wallPathManager
+				.getPathsForFoundation(foundationId)
+				.flatMap((path) =>
+					path.segments
+						.map((segment) => this.wallPathManager.getSegmentAsWallView(segment.id))
+						.filter((wall): wall is WallDefinition => !!wall)
+				)
+		]);
 	}
 
 	/** Monotonic change counter — see the `revision` field's doc comment. */
@@ -319,12 +329,16 @@ export class BuildingManager {
 		};
 
 		this.wallManager.addWall(wall);
+		this.slabManager.rebuildOverhangFramesForFoundation(wall.foundationId);
 		return { valid: true, value: wall };
 	}
 
 	removeWall(wallId: string): boolean {
 		this.revision++;
-		return this.wallManager.removeWall(wallId);
+		const wall = this.wallManager.getWall(wallId);
+		const removed = this.wallManager.removeWall(wallId);
+		if (removed && wall) this.slabManager.rebuildOverhangFramesForFoundation(wall.foundationId);
+		return removed;
 	}
 
 	/**
@@ -570,6 +584,7 @@ export class BuildingManager {
 	private rebuildSkirtingForFoundation(foundationId: string): void {
 		this.wallManager.rebuildWallsForFoundation(foundationId);
 		this.wallPathManager.rebuildPathsForFoundation(foundationId);
+		this.slabManager.rebuildOverhangFramesForFoundation(foundationId);
 	}
 
 	/**

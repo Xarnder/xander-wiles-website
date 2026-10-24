@@ -12,7 +12,7 @@ Current live setup · 18 October 2026
 
 No Forest Drift, Cloudflare, or Vercel account is needed to join. Both devices need an internet connection, but they do not need to use the same Wi-Fi. Your Mac does not need to stay on: Cloudflare hosts the world.
 
-You can also open [Forest Drift](https://www.xanderwiles.com/pages/Forest-Drift/), select **Join Online**, and paste the complete invite link.
+You can also open [Forest Drift](https://www.xanderwiles.com/pages/Forest-Drift/), select **Online**, and paste the complete invite link. To keep it for later without joining, add an optional saved link name and select **Save invite link**. It appears under **Saved worlds** whenever you open Online on this device. Select a saved world to join, or use its × button to forget it. Saved links are stored in this browser; clearing browser data removes them.
 
 **Do not copy just the address currently visible in the browser.** The game removes the secret invite portion from the address after reading it. The URL ending in `?mp=b2c19e1b-3992-47df-bdc6-af40307a8988` identifies the world but does not grant a new device access. A complete invite also contains `#invite=…`.
 
@@ -94,3 +94,29 @@ Online persistence is not a substitute for backups. A validated manual backup is
 That backup is a snapshot from 18 October, not a continuously updated copy. Scheduled R2 backups are not enabled. The planned four-hour load test and real iPad test remain outstanding; a short 20-player transport test completed without disconnects.
 
 This guide intentionally contains no secret invite tokens and can be shared. The private invite sheet and secrets files should remain private.
+
+
+## Online help and owner invites
+
+On the landing screen, select **Online**. **Join** accepts invite links and remembers links on this
+browser; **How it works** explains shared saving, joining, saved links and all three roles. Guests
+only need their invite, name and colour.
+
+Only the server’s owner password can publish worlds and mint invite links. In **Owner**, choose a
+local world, enter the password and choose **Visitor** (explore only) or **Builder** (explore and
+build), then select **Create online world & invite links**. Each publication creates a separate
+online copy; the local world stays unchanged. Copy the selected role’s link for guests.
+
+The private **Owner** link also controls shared sky, weather and time; keep it for yourself. Switching
+the invite-permissions selector shows the other role’s existing link, and does not change permissions
+on links already shared. Owner passwords are checked on the server, never included in frontend
+source. The new Owner form clears its password after publishing and does not save it in browser
+storage.
+
+From the Owner tab, **Create / manage local worlds** opens the existing world browser, where New
+World, rename, duplicate, import, export and delete use local saved worlds. After publishing,
+**Manage this online world** opens its remembered entry: **Invite links** reopens the saved role
+links, **Save a copy** downloads the live server state into My Worlds, and **Restore…** lists the
+server’s earlier versions. Guest invites cannot export or restore online worlds. **Forget** only
+removes a browser bookmark; it does not delete the world on the server. If clipboard access is
+blocked, click an invite field to select its full link and copy it manually.

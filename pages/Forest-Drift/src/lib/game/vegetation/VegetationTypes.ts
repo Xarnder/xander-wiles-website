@@ -84,7 +84,7 @@ export interface TreeSpeciesMixSettings {
 	willowWeight: number;
 	/** World-unit scale of the per-species stand maps (groves of one kind). */
 	standScale: number;
-	/** 0 = an even mix everywhere … 1 = species only inside their own stands. */
+	/** 0 = a per-tree weighted mix; above zero, local stand dominance selects coherent groves. */
 	standStrength: number;
 	/** World-unit scale of the conifer-vs-broadleaf region map. */
 	coniferRegionScale: number;

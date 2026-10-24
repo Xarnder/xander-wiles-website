@@ -1,13 +1,14 @@
 /**
- * Window/Door/Beam placement snap along a wall's own length — press `C` to cycle. Framework-free, same
+ * Window/Door/Beam placement snap along a wall's own length — press `B` to cycle. Framework-free, same
  * rule as polygonDrawSnap.ts, so the choice of centre-U is unit-testable without a renderer.
  *
- * `'grid'` keeps today's `openingGridSize` snap. Every other mode snaps the opening's centre to the
+ * `'off'` leaves the along-wall position unsnapped. `'grid'` keeps today's `openingGridSize` snap. Division modes snap the opening's centre to the
  * nearest even split of that wall's length (half through sixteenths) so a door or window can sit
  * exactly in the middle, at the quarters, and so on, instead of only on a fixed metre grid.
  */
 
 export type OpeningDivisionSnapMode =
+	| 'off'
 	| 'grid'
 	| 'half'
 	| 'thirds'
@@ -25,7 +26,12 @@ export type OpeningDivisionSnapMode =
 	| 'fifteenths'
 	| 'sixteenths';
 
+// Twelve internal guide lines split the wall into thirteen equal segments.
+export const DEFAULT_OPENING_SNAP_MODE: OpeningDivisionSnapMode = 'thirteenths';
+
+// Put the default immediately before Off so the first B press disables snapping.
 export const OPENING_DIVISION_CYCLE: readonly OpeningDivisionSnapMode[] = [
+	'off',
 	'grid',
 	'half',
 	'thirds',
@@ -38,13 +44,13 @@ export const OPENING_DIVISION_CYCLE: readonly OpeningDivisionSnapMode[] = [
 	'tenths',
 	'elevenths',
 	'twelfths',
-	'thirteenths',
 	'fourteenths',
 	'fifteenths',
-	'sixteenths'
+	'sixteenths',
+	'thirteenths'
 ];
 
-const DIVISION_COUNTS: Record<Exclude<OpeningDivisionSnapMode, 'grid'>, number> = {
+const DIVISION_COUNTS: Record<Exclude<OpeningDivisionSnapMode, 'grid' | 'off'>, number> = {
 	half: 2,
 	thirds: 3,
 	quarters: 4,
@@ -62,7 +68,7 @@ const DIVISION_COUNTS: Record<Exclude<OpeningDivisionSnapMode, 'grid'>, number> 
 	sixteenths: 16
 };
 
-const DIVISION_BADGES: Record<Exclude<OpeningDivisionSnapMode, 'grid'>, string> = {
+const DIVISION_BADGES: Record<Exclude<OpeningDivisionSnapMode, 'grid' | 'off'>, string> = {
 	half: 'HALF SNAP',
 	thirds: 'THIRDS SNAP',
 	quarters: 'QUARTER SNAP',
@@ -74,7 +80,7 @@ const DIVISION_BADGES: Record<Exclude<OpeningDivisionSnapMode, 'grid'>, string> 
 	tenths: 'TENTHS SNAP',
 	elevenths: 'ELEVENTHS SNAP',
 	twelfths: 'TWELFTHS SNAP',
-	thirteenths: 'THIRTEENTHS SNAP',
+	thirteenths: '12 LINE SNAP',
 	fourteenths: 'FOURTEENTHS SNAP',
 	fifteenths: 'FIFTEENTHS SNAP',
 	sixteenths: 'SIXTEENTHS SNAP'
@@ -88,9 +94,9 @@ export function cycleOpeningDivisionSnap(
 	return OPENING_DIVISION_CYCLE[(from + 1) % OPENING_DIVISION_CYCLE.length];
 }
 
-/** How many equal spans the wall is split into, or `null` for metre-grid snap. */
+/** How many equal spans the wall is split into, or `null` for metre-grid snap or no snap. */
 export function openingDivisionCount(mode: OpeningDivisionSnapMode): number | null {
-	if (mode === 'grid') return null;
+	if (mode === 'grid' || mode === 'off') return null;
 	return DIVISION_COUNTS[mode];
 }
 
@@ -115,6 +121,7 @@ export function snapOpeningCenterU(
 	mode: OpeningDivisionSnapMode,
 	gridSize: number
 ): number {
+	if (mode === 'off') return rawU;
 	if (mode === 'grid') {
 		return snapOpeningCoord(rawU, gridSize);
 	}
@@ -134,6 +141,7 @@ export function snapOpeningCenterU(
 
 /** Crosshair badge copy — `null` for grid snap so the existing metre-grid behaviour stays visually quiet. */
 export function openingDivisionSnapBadge(mode: OpeningDivisionSnapMode): string | null {
+	if (mode === 'off') return 'SNAP OFF';
 	if (mode === 'grid') return null;
 	return DIVISION_BADGES[mode];
 }

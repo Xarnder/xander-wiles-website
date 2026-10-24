@@ -7,6 +7,7 @@
 
 	interface Props {
 		worldName: string;
+		onOpenPeople?: () => void;
 		status: NetStatus;
 		detail: string | null;
 		players: PlayerInfo[];
@@ -18,8 +19,17 @@
 		diagnostics: () => NetDiagnosticsReport | null;
 	}
 
-	const { worldName, status, detail, players, selfSlot, role, links, diagnostics }: Props =
-		$props();
+	const {
+		worldName,
+		status,
+		detail,
+		players,
+		selfSlot,
+		role,
+		links,
+		diagnostics,
+		onOpenPeople
+	}: Props = $props();
 
 	const ROLE_LABEL: Record<PlayerRole, string> = {
 		owner: 'owner',
@@ -79,6 +89,15 @@
 	{/if}
 	{#if expanded}
 		<div class="panel" role="region" aria-label="Players online">
+			{#if onOpenPeople}<button
+					class="people-action"
+					type="button"
+					onclick={() => {
+						expanded = false;
+						onOpenPeople?.();
+					}}
+					data-testid="find-people">Find people <span aria-hidden="true">→</span></button
+				>{/if}
 			<ul class="players" data-testid="online-player-list">
 				{#each players as player (player.playerId)}
 					<li
@@ -145,6 +164,25 @@
 </div>
 
 <style>
+	.people-action {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		min-height: 44px;
+		padding: 0.5rem 0.65rem;
+		margin-bottom: 0.5rem;
+		border: 1px solid #d6b57080;
+		border-radius: 7px;
+		background: #243d30;
+		color: #f2e5bc;
+		font: 600 0.8rem system-ui;
+		cursor: pointer;
+	}
+	.people-action:focus-visible {
+		outline: 2px solid #edcf85;
+		outline-offset: 3px;
+	}
 	.online-status {
 		position: fixed;
 		top: 0.75rem;

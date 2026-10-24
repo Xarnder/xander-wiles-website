@@ -1,14 +1,15 @@
 {
 	"compilerOptions": {
 		"target": "ES2022",
-		"module": "ES2022",
+		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"lib": ["ES2022"],
+		"lib": ["ES2022", "DOM"],
 		"types": ["@cloudflare/workers-types"],
+		// Shared game types use browser declarations and the application’s indexed-access rules.
 		"strict": true,
+		"noUncheckedIndexedAccess": false,
 		"noEmit": true,
 		"skipLibCheck": true,
-		"noUncheckedIndexedAccess": true,
 		"allowImportingTsExtensions": false,
 		"isolatedModules": true
 	},

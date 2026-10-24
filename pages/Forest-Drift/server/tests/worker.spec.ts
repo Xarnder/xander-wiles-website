@@ -35,6 +35,38 @@ describe('multiplayer HTTP routes', () => {
 		expect(response.status).toBe(401);
 	});
 
+	it('requires the owner password to mint all role-specific invite tokens', async () => {
+		const publish = vi.fn().mockResolvedValue(undefined);
+		const config = {
+			...env,
+			WORLD_ROOM: { idFromName: (id: string) => id, get: () => ({ publish }) }
+		} as unknown as Env;
+		const request = (password: string) =>
+			new Request('https://room.test/w', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${password}` },
+				body: JSON.stringify({
+					world: { name: 'Shared world', seed: 'test', schemaVersion: 1, environment: {} },
+					generatorVersion: 3
+				})
+			});
+		const denied = await worker.fetch(request('wrong-password'), config);
+		expect(denied.status).toBe(401);
+		expect(publish).not.toHaveBeenCalled();
+		const accepted = await worker.fetch(request('test-admin'), config);
+		expect(accepted.status).toBe(201);
+		const payload = (await accepted.json()) as { invites: Record<string, string> };
+		expect(Object.keys(payload.invites).sort()).toEqual(['editor', 'owner', 'viewer']);
+		expect(new Set(Object.values(payload.invites)).size).toBe(3);
+		const hashes = publish.mock.calls[0][2];
+		expect(hashes.owner).not.toBe(payload.invites.owner);
+		for (const role of ['editor', 'viewer']) {
+			const guest = await worker.fetch(request(payload.invites[role]), config);
+			expect(guest.status).toBe(401);
+		}
+		expect(publish).toHaveBeenCalledTimes(1);
+	});
+
 	it('allows the game origin and refuses an unrelated website', async () => {
 		const allowed = await worker.fetch(
 			new Request('https://room.test/health', {

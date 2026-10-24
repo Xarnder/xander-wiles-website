@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import CountrysideBackground from './CountrysideBackground.svelte';
-	import type { OnlineWorldEntry } from '$lib/game/net/mpConfig';
+	import { ownerInviteFor, type OnlineWorldEntry } from '$lib/game/net/mpConfig';
 	import { generateWorldSeed } from '$lib/game/world/seedGenerator';
 	import { relativeTime } from '$lib/ui/relativeTime';
 	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
@@ -368,12 +368,12 @@
 							{/if}
 						</div>
 						<div class="online-actions">
-							{#if online.invites && onShowInvites}
+							{#if ownerInviteFor(online) && onShowInvites}
 								<button type="button" onclick={() => onShowInvites(online.worldId)} disabled={busy}>
 									Invite links
 								</button>
 							{/if}
-							{#if online.invites && onSaveOnlineCopy}
+							{#if ownerInviteFor(online) && onSaveOnlineCopy}
 								<button
 									type="button"
 									title="Save the online world as it is now into My Worlds"
@@ -384,7 +384,7 @@
 									Save a copy
 								</button>
 							{/if}
-							{#if online.invites && onRestoreOnline}
+							{#if ownerInviteFor(online) && onRestoreOnline}
 								<button
 									type="button"
 									data-testid="online-world-restore"

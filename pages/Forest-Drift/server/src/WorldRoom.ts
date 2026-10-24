@@ -12,6 +12,7 @@ import {
 	type GraceEntry,
 	type PlayerAttachment,
 	type RoomClockRecord,
+	type RoomSessionState,
 	type RoomConnection
 } from '../../src/lib/game/net/RoomCore';
 import { WorldStore, publishedRows, type StoredRow } from '../../src/lib/game/net/WorldStore';
@@ -249,6 +250,7 @@ export class WorldRoom extends DurableObject<Env> {
 			sql.exec('DELETE FROM ops');
 			sql.exec('DELETE FROM batches');
 			this.writeMeta('store', JSON.stringify({ seq: store.seq, epoch } satisfies StoreMeta));
+			this.core?.clearSessionState();
 		});
 		for (const ws of this.ctx.getWebSockets()) {
 			try {
@@ -597,6 +599,7 @@ export class WorldRoom extends DurableObject<Env> {
 			authorize: (hello) => this.authorize(manifest.worldId, hello),
 			persistence: {
 				saveGrace: (entries) => this.writeMeta('grace', JSON.stringify(entries)),
+				saveSessionState: (state) => this.writeMeta('session', JSON.stringify(state)),
 				saveClock: (clock) => this.writeMeta('clock', JSON.stringify(clock)),
 				saveEnv: (envJson) => this.writeMeta('env', envJson),
 				saveCommit: (record) => {
@@ -625,7 +628,8 @@ export class WorldRoom extends DurableObject<Env> {
 			restored: {
 				grace: this.readJson<GraceEntry[]>('grace') ?? [],
 				clock: this.readJson<RoomClockRecord>('clock'),
-				envJson: this.readMeta('env')
+				envJson: this.readMeta('env'),
+				session: this.readJson<RoomSessionState>('session')
 			}
 		});
 		this.core.restore(

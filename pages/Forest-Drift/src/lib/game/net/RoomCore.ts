@@ -95,7 +95,14 @@ export type AuthResult =
 	| { ok: false };
 
 /** Where the room keeps what must outlive memory. The Durable Object writes these to SQLite. */
+export interface RoomSessionState {
+	doors: string[];
+	interactions: (OccupiedMiniBuildInteraction & { signature: string })[];
+}
+
 export interface RoomPersistence {
+	/** Ephemeral room state, saved only when it changes, never on pose updates. */
+	saveSessionState?(state: RoomSessionState): void;
 	saveGrace(entries: GraceEntry[]): void;
 	saveClock(clock: RoomClockRecord): void;
 	saveEnv(envJson: string): void;
@@ -138,7 +145,12 @@ export interface RoomCoreOptions {
 	 */
 	maxSpeed?: number;
 	persistence?: RoomPersistence;
-	restored?: { grace?: GraceEntry[]; clock?: RoomClockRecord | null; envJson?: string | null };
+	restored?: {
+		grace?: GraceEntry[];
+		clock?: RoomClockRecord | null;
+		envJson?: string | null;
+		session?: RoomSessionState | null;
+	};
 	/**
 	 * The shared world's rows and rules (Phase 3), or a function that loads them on first use. The
 	 * Durable Object passes a loader: reading every row on each wake from hibernation would burn the
@@ -257,6 +269,7 @@ export class RoomCore {
 	private readonly storeVersion: (() => { epoch: number; seq: number }) | null;
 	/** Doors open right now (Q13-A); cleared when the world empties. */
 	private readonly openDoors = new Set<string>();
+	private savedSessionJson = '{"doors":[],"interactions":[]}';
 	/** Everyone in the world, connected or in their grace period, by player id. */
 	private readonly players = new Map<string, PlayerState>();
 	private readonly byConn = new Map<RoomConnection, PlayerState>();
@@ -293,6 +306,12 @@ export class RoomCore {
 			} catch {
 				this.env = null;
 			}
+		}
+		const session = options.restored?.session;
+		if (session) {
+			for (const id of session.doors) this.openDoors.add(id);
+			for (const entry of session.interactions) this.interactions.set(entry.playerId, { ...entry });
+			this.savedSessionJson = JSON.stringify(session);
 		}
 		for (const entry of options.restored?.grace ?? []) {
 			if (this.players.has(entry.playerId)) continue;
@@ -358,6 +377,15 @@ export class RoomCore {
 			// Restarted with nobody here: give them a grace period to come back before stopping.
 			this.restartHoldUntil = now + GRACE_PERIOD_MS;
 		}
+		// Only still-connected players may keep a seat. Validate anchors once on wake.
+		const occupiedBefore = this.interactions.size;
+		for (const [id, entry] of this.interactions) {
+			const resolved = this.players.get(id)?.conn ? this.resolveInteraction(entry) : null;
+			if (!resolved || JSON.stringify(resolved) !== entry.signature) this.interactions.delete(id);
+		}
+		if (this.players.size === 0 && this.restartHoldUntil === null) this.clearSessionState();
+		if (this.interactions.size !== occupiedBefore) this.broadcastInteractions();
+		else this.persistSessionState();
 		this.saveGrace();
 	}
 
@@ -419,6 +447,7 @@ export class RoomCore {
 			if (this.players.size === 0 && this.clock.runningSince !== null) {
 				// Nobody came back: the world was last known occupied at the checkpoint.
 				this.stopClock(this.clock.checkpointAt);
+				this.clearSessionState();
 			}
 		}
 		if (this.clock.runningSince !== null && now - this.clock.checkpointAt >= CLOCK_CHECKPOINT_MS) {
@@ -533,6 +562,7 @@ export class RoomCore {
 			if (!player) return;
 			if (message.open) this.openDoors.add(message.id);
 			else this.openDoors.delete(message.id);
+			this.persistSessionState();
 			this.broadcast(
 				{ t: 'door', id: message.id, open: message.open, by: player.info.slot },
 				player.conn ?? undefined
@@ -571,6 +601,7 @@ export class RoomCore {
 		}));
 	}
 	private broadcastInteractions(replyTo?: string): void {
+		this.persistSessionState();
 		this.broadcast({
 			t: 'interactions',
 			locations: this.interactionList(),
@@ -922,7 +953,7 @@ export class RoomCore {
 		if (this.players.size === 0) {
 			this.stopClock(this.now());
 			// Q13-A: doors reset each session.
-			this.openDoors.clear();
+			this.clearSessionState();
 		}
 	}
 
@@ -941,6 +972,24 @@ export class RoomCore {
 			checkpointAt: at
 		};
 		this.persistence?.saveClock({ ...this.clock });
+	}
+
+	/** A new session or restored world must not inherit the old session’s doors and seats. */
+	clearSessionState(): void {
+		this.openDoors.clear();
+		this.interactions.clear();
+		this.persistSessionState();
+	}
+
+	private persistSessionState(): void {
+		const state: RoomSessionState = {
+			doors: [...this.openDoors],
+			interactions: [...this.interactions.values()].map((entry) => ({ ...entry }))
+		};
+		const json = JSON.stringify(state);
+		if (json === this.savedSessionJson) return;
+		this.persistence?.saveSessionState?.(state);
+		this.savedSessionJson = json;
 	}
 
 	private saveGrace(): void {

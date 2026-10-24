@@ -95,7 +95,7 @@ export interface FloorDetailToolOptions {
 
 /**
  * Two-click floor detailing: a rectangle (carpet / planks / tiles) or a path on the current
- * level's construction plane. Path C cycles axis snap, free heading, a free Bezier (start, end,
+ * level's construction plane. Path B cycles axis snap, free heading, a free Bezier (start, end,
  * then the bend), then two Bezier modes drawn start → corner → end. Those keep both arms the same
  * length, and the last snaps the corner to 30° so a right angle is easy to hit.
  * Sits above the floor with no collision.
@@ -162,7 +162,7 @@ export class FloorDetailTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyB') {
 			if (this.kind !== 'path') return;
 			this.pathDrawMode = cycleFloorPathDrawMode(this.pathDrawMode);
 			if (this.state === 'bending') {
@@ -781,7 +781,7 @@ export class FloorDetailTool implements BuildTool {
 		if (this.kind === 'planks') lines.push('R plank direction');
 		else if (this.kind === 'tiles') lines.push('R tile pattern');
 		else if (this.kind === 'path') {
-			lines.push('C path mode');
+			lines.push('B path mode');
 			lines.push('R path framing');
 		}
 		return lines;

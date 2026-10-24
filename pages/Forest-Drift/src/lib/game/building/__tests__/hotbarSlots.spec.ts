@@ -15,10 +15,10 @@ describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 2).toolId).toBe('beam');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[3], 0).toolId).toBe('ceiling');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[4], 0).toolId).toBe('stairs');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 0).toolId).toBe('floor-carpet');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 1).toolId).toBe('floor-path');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 2).toolId).toBe('floor-planks');
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 3).toolId).toBe('floor-tiles');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 0).toolId).toBe('floor-planks');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 1).toolId).toBe('floor-tiles');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 2).toolId).toBe('floor-carpet');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[5], 3).toolId).toBe('floor-path');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[7], 0).toolId).toBe('place-object');
 	});
 

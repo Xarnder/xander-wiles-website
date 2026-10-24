@@ -10,6 +10,7 @@ import {
 } from './protocol';
 import {
 	PARENT_KIND,
+	canonical,
 	cascadeOf,
 	entityKey,
 	formatChecksum,
@@ -67,7 +68,8 @@ const EPSILON = 1e-6;
  *     additions with it must list them in `confirm` (F2-B);
  *   - additions must have their parent (a window its wall), else `gone`;
  *   - where edits meet, fit is re-checked: two windows in the same spot, two foundations on the
- *     same ground, two records for the same storey — the later one is refused (`fit`);
+ *     same ground, conflicting heights for the same storey — the later one is refused (`fit`);
+ *     identical storeys are shared so concurrent first walls both survive;
  *   - the same field changed by two people: the later change wins, and the earlier person is told.
  *
  * A batch is all or nothing. Pure logic: the host persists what `applyBatch` returns.
@@ -186,6 +188,36 @@ export class WorldStore {
 		for (const op of ops) {
 			const key = opKey(op);
 			if (op.op === 'add') {
+				// Two builders can independently initialize the same storey while drawing their
+				// first walls. Keep the existing level identity without rejecting either wall.
+				if (op.kind === 'buildingLevel' && !rows.has(key)) {
+					const existing = [...rows.values()].find(
+						(row) =>
+							row.kind === 'buildingLevel' &&
+							row.data.foundationId === op.data.foundationId &&
+							row.data.index === op.data.index
+					);
+					const withoutId = (data: Record<string, unknown>) => {
+						const copy = { ...data };
+						delete copy.id;
+						return copy;
+					};
+					if (existing && canonical(withoutId(existing.data)) === canonical(withoutId(op.data))) {
+						const existingKey = rowKey(existing);
+						rows.set(existingKey, { ...existing, rev: seq });
+						touched.add(existingKey);
+						// An explicit no-op patch acknowledges even a batch containing only the
+						// duplicate level, preserving creator and field revision metadata.
+						committed.push({
+							op: 'patch',
+							kind: 'buildingLevel',
+							id: existing.id,
+							set: {},
+							rev: seq
+						});
+						continue;
+					}
+				}
 				if (rows.has(key)) {
 					return { ok: false, reason: 'invalid', message: 'That already exists.' };
 				}

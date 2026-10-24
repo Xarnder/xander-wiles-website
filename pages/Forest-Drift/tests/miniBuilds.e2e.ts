@@ -160,7 +160,7 @@ test('builds a Mini Build, places copies, saves, reloads and makes one copy uniq
 			)
 		)
 		.toBe(first.id);
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 	await expect
 		.poll(() =>
 			page.evaluate(

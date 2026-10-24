@@ -15,7 +15,8 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright install && playwright test",
-		"build:character": "node scripts/build-character.mjs"
+		"build:character": "node scripts/build-character.mjs",
+		"check:server": "tsc --project server/tsconfig.json"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

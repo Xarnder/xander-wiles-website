@@ -1,7 +1,8 @@
 <script lang="ts">
+	import MultiplayerRoster from './MultiplayerRoster.svelte';
 	import MultiplayerUsage from './MultiplayerUsage.svelte';
 	import type { UsageAccess } from '$lib/game/net/CloudflareUsage';
-	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
+	import type { PlayerInfo } from '$lib/game/net/protocol';
 	interface Props {
 		debugOpen: boolean;
 		usageAccess: UsageAccess | null;
@@ -9,6 +10,8 @@
 		exampleMovement: boolean;
 		players: PlayerInfo[];
 		selfSlot: number | null;
+		trackedPlayerId: string | null;
+		onTrack: (id: string | null) => void;
 		online: boolean;
 		status: string;
 		onCloseDebug: () => void;
@@ -21,6 +24,8 @@
 		exampleMovement = $bindable(false),
 		players,
 		selfSlot,
+		trackedPlayerId,
+		onTrack,
 		online,
 		status,
 		onCloseDebug,
@@ -35,19 +40,6 @@
 	$effect(() => {
 		if (debugOpen) closeDebugButton?.focus();
 	});
-	const permissions: Record<PlayerRole, string> = {
-		owner:
-			'Explore, add and edit builds, delete anyone’s objects, and change sky, weather and time.',
-		editor:
-			'Explore, add and edit anyone’s builds. Delete own objects only; shared deletions may need confirmation.',
-		viewer:
-			'Explore and watch shared changes. Cannot build, delete objects or change the environment.'
-	};
-	const roles: Record<PlayerRole, string> = {
-		owner: 'Owner',
-		editor: 'Editor / Builder',
-		viewer: 'Viewer / Visitor'
-	};
 </script>
 
 {#if debugOpen}
@@ -116,29 +108,9 @@
 	</header>
 	{#if online}
 		<p>{status} · {players.length} / 20 players</p>
+		<MultiplayerRoster {players} {selfSlot} {trackedPlayerId} {onTrack} />
+		<p class="hint">Tracking is just for you. Stop from the compass or press U while playing.</p>
 		{#if multiplayerOpen}<MultiplayerUsage access={usageAccess} />{/if}
-		<ul>
-			{#each players as player (player.playerId)}
-				<li data-testid="multiplayer-member">
-					<h3>
-						<span class="dot" style:background={player.colour}></span>{player.name}{player.slot ===
-						selfSlot
-							? ' (you)'
-							: ''}
-					</h3>
-					<strong>{roles[player.role]}</strong> · {player.offline
-						? 'Reconnecting'
-						: player.away
-							? 'Away'
-							: 'Online'}
-					<p>{permissions[player.role]}</p>
-				</li>
-			{/each}
-		</ul>
-		<p class="hint">
-			Roles come from invite links. This list updates as people join or leave; it does not grant or
-			change permissions.
-		</p>
 	{:else}
 		<p>
 			You are playing a local world. To see other players, return to Worlds and use Join Online with
@@ -177,10 +149,6 @@
 	h2 {
 		margin: 0;
 		font-size: 1.15rem;
-	}
-	h3 {
-		margin: 0 0 0.3rem;
-		font-size: 1rem;
 	}
 	button {
 		border: 1px solid #709383;
@@ -224,24 +192,6 @@
 	}
 	dialog::backdrop {
 		background: #020a08b8;
-	}
-	ul {
-		padding: 0;
-		list-style: none;
-	}
-	li {
-		padding: 1rem 0;
-		border-bottom: 1px solid #3c594e;
-	}
-	li p {
-		margin-bottom: 0;
-	}
-	.dot {
-		display: inline-block;
-		width: 0.7rem;
-		height: 0.7rem;
-		border-radius: 50%;
-		margin-right: 0.5rem;
 	}
 	dl {
 		display: grid;

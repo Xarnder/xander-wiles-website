@@ -41,6 +41,7 @@
 	}
 	import { onDestroy, onMount, tick } from 'svelte';
 	import WorldLoadingScreen from '$lib/components/WorldLoadingScreen.svelte';
+	import ToolHint from '$lib/components/ToolHint.svelte';
 	import titleMark from '$lib/assets/forest-drift-title.svg';
 	import LandingMenu from '$lib/components/LandingMenu.svelte';
 	let showWorldLibrary = $state(false);
@@ -87,7 +88,9 @@
 		loadOnlineWorlds,
 		multiplayerServerUrl,
 		onlineWorldsOn,
+		ownerInviteFor,
 		rememberOnlineWorld,
+		rememberOnlineInvite,
 		saveAdminKey,
 		saveIdentity,
 		worldReferenceFromLocation,
@@ -103,7 +106,8 @@
 		listRestorePoints,
 		publishWorld,
 		restoreOnlineWorld,
-		type RestorePoint
+		type RestorePoint,
+		type TransferResult
 	} from '$lib/game/net/worldTransfer';
 	import type { BuildUiState, HotbarSlot, HotbarUiState } from '$lib/game/building/FoundationTypes';
 	import { species } from '$lib/game/music/MusicModel';
@@ -231,6 +235,10 @@
 	let mpDetail = $state<string | null>(null);
 	let mpPlayers = $state<PlayerInfo[]>([]);
 	let mpSelfSlot = $state<number | null>(null);
+	let trackedPlayerId = $state<string | null>(null);
+	const trackedPlayerName = $derived(
+		mpPlayers.find((player) => player.playerId === trackedPlayerId)?.name ?? null
+	);
 	/** Our role in the open online world, once the room has confirmed it. */
 	let mpRole = $state<PlayerRole | null>(null);
 	let multiplayerSession = $state.raw<MultiplayerSession | null>(null);
@@ -462,6 +470,7 @@
 	function openPause() {
 		closeDebugControls();
 		if (paused) return;
+
 		lastPauseToggleTime = performance.now();
 		session?.scene.setTouchMovement(0, 0);
 		session?.scene.closePlacementCustomize();
@@ -548,6 +557,17 @@
 			return;
 		}
 		if (paused) return;
+		if (
+			event.code === 'KeyU' &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			!event.altKey &&
+			trackedPlayerId
+		) {
+			event.preventDefault();
+			multiplayerSession?.trackPlayer(null);
+			return;
+		}
 
 		if (event.code === 'Backslash') {
 			event.preventDefault();
@@ -821,6 +841,15 @@
 		joinDialog = { target, busy: false, error: null };
 	}
 
+	function saveInviteForLater(reference: WorldReference, name: string): string | null {
+		if (!mpServer) return 'Online worlds are unavailable right now.';
+		if (!rememberOnlineInvite(reference, name, mpServer)) {
+			return 'Unable to save this invite link. Check that browser storage is enabled.';
+		}
+		onlineWorlds = loadOnlineWorlds();
+		return null;
+	}
+
 	function cancelJoin() {
 		joinDialog = null;
 		setLocationWorld(null);
@@ -915,6 +944,7 @@
 				return fresh.ok ? fresh.value.sync : null;
 			},
 			onNotice: (message) => showSaveToast(message),
+			onTrackingChanged: (id) => (trackedPlayerId = id),
 			onConfirmDeletion: (items) =>
 				new Promise<boolean>((resolve) => {
 					document.exitPointerLock?.();
@@ -972,10 +1002,11 @@
 
 	async function saveOnlineCopy(worldId: string) {
 		const entry = findOnlineWorld(worldId);
-		if (!entry?.invites || !mpServer || !worldManager) return;
+		const ownerInvite = ownerInviteFor(entry);
+		if (!entry || !ownerInvite || !mpServer || !worldManager) return;
 		const server = mpServer;
 		await withBusy(async () => {
-			const exported = await exportOnlineWorld(server, worldId, entry.invites!.owner);
+			const exported = await exportOnlineWorld(server, worldId, ownerInvite);
 			if (!exported.ok) {
 				worldsError = exported.error;
 				return;
@@ -992,9 +1023,10 @@
 
 	async function openRestore(worldId: string) {
 		const entry = findOnlineWorld(worldId);
-		if (!entry?.invites || !mpServer) return;
+		const ownerInvite = ownerInviteFor(entry);
+		if (!entry || !ownerInvite || !mpServer) return;
 		restoreDialog = { entry, points: null, busy: false, error: null };
-		const listed = await listRestorePoints(mpServer, worldId, entry.invites.owner);
+		const listed = await listRestorePoints(mpServer, worldId, ownerInvite);
 		if (restoreDialog?.entry.worldId !== worldId) return;
 		restoreDialog = listed.ok
 			? { ...restoreDialog, points: listed.value }
@@ -1003,14 +1035,10 @@
 
 	async function restoreTo(pointId: number) {
 		const dialog = restoreDialog;
-		if (!dialog?.entry.invites || !mpServer) return;
+		const ownerInvite = ownerInviteFor(dialog?.entry ?? null);
+		if (!dialog || !ownerInvite || !mpServer) return;
 		restoreDialog = { ...dialog, busy: true, error: null };
-		const result = await restoreOnlineWorld(
-			mpServer,
-			dialog.entry.worldId,
-			dialog.entry.invites.owner,
-			pointId
-		);
+		const result = await restoreOnlineWorld(mpServer, dialog.entry.worldId, ownerInvite, pointId);
 		if (!result.ok) {
 			restoreDialog = { ...dialog, busy: false, error: result.error };
 			return;
@@ -1036,32 +1064,41 @@
 		};
 	}
 
-	async function submitPublish(adminKey: string, remember: boolean) {
-		const dialog = publishDialog;
-		if (!dialog || !worldManager || !mpServer) return;
-		publishDialog = { ...dialog, busy: true, error: null };
-		const exported = await worldManager.exportWorld(dialog.worldId);
-		if (!exported.ok) {
-			publishDialog = { ...dialog, busy: false, error: exported.error };
-			return;
-		}
-		const result = await publishWorld(mpServer, adminKey, exported.value.world);
-		if (!result.ok) {
-			publishDialog = { ...dialog, busy: false, error: result.error };
-			return;
-		}
-		saveAdminKey(remember ? adminKey : '');
-		const { worldId, name, invites } = result.value;
-		const published = rememberOnlineWorld({
-			worldId,
+	async function createOnlineInvites(
+		worldId: string,
+		password: string
+	): Promise<TransferResult<OnlineWorldEntry>> {
+		if (!worldManager || !mpServer)
+			return { ok: false, error: 'Online worlds are unavailable right now.' };
+		const exported = await worldManager.exportWorld(worldId);
+		if (!exported.ok) return exported;
+		const result = await publishWorld(mpServer, password, exported.value.world);
+		if (!result.ok) return result;
+		const { worldId: onlineId, name, invites } = result.value;
+		const entry: OnlineWorldEntry = {
+			worldId: onlineId,
 			name,
 			invite: invites.owner,
 			role: 'owner',
 			invites,
 			serverUrl: mpServer
-		});
+		};
+		rememberOnlineWorld(entry);
 		onlineWorlds = loadOnlineWorlds();
-		publishDialog = { ...dialog, busy: false, error: null, published };
+		return { ok: true, value: entry };
+	}
+
+	async function submitPublish(adminKey: string, remember: boolean) {
+		const dialog = publishDialog;
+		if (!dialog) return;
+		publishDialog = { ...dialog, busy: true, error: null };
+		const result = await createOnlineInvites(dialog.worldId, adminKey);
+		if (!result.ok) {
+			publishDialog = { ...dialog, busy: false, error: result.error };
+			return;
+		}
+		saveAdminKey(remember ? adminKey : '');
+		publishDialog = { ...dialog, busy: false, error: null, published: result.value };
 	}
 
 	function joinPublished() {
@@ -1333,6 +1370,17 @@
 			recentWorlds={onlineWorldsOn(onlineWorlds, mpServer)}
 			onJoin={(reference, name, colour) => void joinOnline(reference, name, colour)}
 			onForget={forgetRememberedWorld}
+			onSave={saveInviteForLater}
+			localWorlds={[
+				...(defaultWorld ? [defaultWorld] : []),
+				...worlds.filter((world) => world.id !== defaultWorld?.id)
+			]}
+			onCreateInvites={createOnlineInvites}
+			onManageWorlds={() => {
+				cancelJoin();
+				showWorldLibrary = true;
+			}}
+			onChooseWorld={(reference) => openJoinDialog(reference)}
 			onCancel={cancelJoin}
 		/>
 	{/if}
@@ -2034,7 +2082,7 @@
 						{#if line === ''}
 							<div class="build-hud-spacer"></div>
 						{:else}
-							<div>{line}</div>
+							<ToolHint {line} />
 						{/if}
 					{/each}
 				</div>
@@ -2342,7 +2390,11 @@
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
 				{#if onlineWorld}
-					<LocatorBar bind:element={locatorElement} />
+					<LocatorBar
+						bind:element={locatorElement}
+						trackingName={trackedPlayerName}
+						onStopTracking={() => multiplayerSession?.trackPlayer(null)}
+					/>
 					<OnlineStatus
 						worldName={onlineWorld.name}
 						status={mpStatus}
@@ -2354,6 +2406,11 @@
 							onlineWorlds.find((w) => w.worldId === onlineWorld?.worldId) ?? null
 						)}
 						diagnostics={() => multiplayerSession?.diagnostics() ?? null}
+						onOpenPeople={() => {
+							multiplayerMenuOpen = true;
+							paused = false;
+							document.exitPointerLock?.();
+						}}
 					/>
 					<div class="save-indicator" data-testid="save-indicator" data-status="online">
 						<span
@@ -2611,6 +2668,8 @@
 		bind:exampleMovement
 		players={mpPlayers}
 		selfSlot={mpSelfSlot}
+		{trackedPlayerId}
+		onTrack={(id) => multiplayerSession?.trackPlayer(id)}
 		online={!!onlineWorld}
 		status={mpStatus}
 		onCloseDebug={() => {
@@ -3206,20 +3265,20 @@
 		position: absolute;
 		bottom: 3.25rem;
 		left: 0.75rem;
-		padding: 0.6rem 0.85rem;
-		background: rgba(10, 20, 15, 0.5);
+		padding: 0.45rem 0.6rem;
+		background: rgba(10, 20, 15, 0.78);
 		color: #eaf6ff;
 		font-family:
 			system-ui,
 			-apple-system,
 			sans-serif;
-		font-size: 0.8rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1.5;
 		border-radius: 8px;
 		pointer-events: none;
 		backdrop-filter: blur(2px);
-		min-width: 11rem;
+		max-width: min(24rem, calc(100vw - 1.5rem));
 		text-align: left;
 		z-index: 40;
 		transition: bottom 0.2s ease;
@@ -3244,7 +3303,7 @@
 	}
 
 	.build-hud-spacer {
-		height: 0.35rem;
+		height: 0.2rem;
 	}
 
 	.build-hud-action {

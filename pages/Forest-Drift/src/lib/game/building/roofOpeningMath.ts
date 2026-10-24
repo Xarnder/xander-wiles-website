@@ -264,7 +264,7 @@ export function roofTopRange(
 }
 
 /**
- * The stretch of U that `C`-snap divisions span: the face's own part of the footprint edge. For a
+ * The stretch of U that `B`-snap divisions span: the face's own part of the footprint edge. For a
  * gable that's the whole wall below ([0, length]), so "half" lands on the same centre line as that
  * wall's own openings; a dutch gable's inset cap divides only its own width.
  */

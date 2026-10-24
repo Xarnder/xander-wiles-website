@@ -11,7 +11,7 @@
 				],
 				['Shift', 'Hold to run while walking.'],
 				['Space', 'Jump.'],
-				['C (hold)', 'Zoom in when the current tool is not using C for its own action.'],
+				['C (hold)', 'Zoom in. C is reserved for zoom across all build tools.'],
 				[
 					'F',
 					'Toggle flight where available. W/S fly where you look, A/D strafe, Space rises, Shift descends, and the mouse wheel changes speed. With Place Object selected, F edits the aimed object instead.'
@@ -91,17 +91,17 @@
 				],
 				['Stairs: ← / →', 'Change the stair direction; Enter or left click confirms.'],
 				[
-					'Openings: C',
-					'Cycle wall-division snapping to position doors, windows or beams at even intervals.'
+					'Openings: B',
+					'Doors, windows and beams start with 12 internal snap lines (13 equal segments). Press B once to turn snapping off, then press again to cycle other modes.'
 				],
 				['Beam: R', 'Switch the next beam between vertical and horizontal.'],
 				['Fence: Q / R', 'Copy the aimed fence’s style / apply your current settings to it.'],
 				['Skirting: O', 'Switch between automatic and manual offset from the wall.'],
 				['Floor detail: R', 'Change plank direction, cycle tile patterns or toggle path framing.'],
-				['Path: C', 'Cycle Axis, Free and Bezier drawing modes.'],
+				['Path: B', 'Cycle Axis, Free and Bezier drawing modes.'],
 				['8, then E', 'Open the Object Library to choose a design or create a Mini Build.'],
 				[
-					'Place Object: R / C / F',
+					'Place Object: R / B / F',
 					'Rotate 90° / copy the aimed object’s design / edit the aimed object.'
 				]
 			]
@@ -115,7 +115,7 @@
 					'Rotate the held object / edit its properties. Right click or Esc cancels the move.'
 				],
 				['P', 'Toggle Paint Mode. Left click paints the highlighted surface.'],
-				['Paint: C', 'Open the colour palette. P, right click or Esc exits Paint Mode.'],
+				['Paint: B', 'Open the colour palette. P, right click or Esc exits Paint Mode.'],
 				[
 					'X',
 					'Toggle Remove Mode. Left click removes the highlighted building piece or music plant.'

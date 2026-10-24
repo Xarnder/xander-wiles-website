@@ -73,6 +73,7 @@ function rng(seed: number) {
 class FakeScene implements SharedWorldPort {
 	content: AuthoredContent;
 	revision = 0;
+	transactionOpen = false;
 	constructor(content: AuthoredContent) {
 		this.content = structuredClone(content);
 	}
@@ -83,7 +84,7 @@ class FakeScene implements SharedWorldPort {
 		return this.revision;
 	}
 	isTransactionOpen(): boolean {
-		return false;
+		return this.transactionOpen;
 	}
 	applyContent(target: AuthoredContent): void {
 		this.content = structuredClone(target);
@@ -267,6 +268,106 @@ describe('WorldOpFeed', () => {
 		await Promise.resolve();
 		expect(walls(alex.scene.content)[0]!.openings).toHaveLength(1);
 		expect(alex.notices.at(-1)).toBe('Only player-0 or the owner can remove that.');
+	});
+
+	it('keeps queued commits in order when a move ends before the next frame', () => {
+		const { clients, step, deliverToRoom, deliverToClient, store } = setup(['editor', 'editor']);
+		const [sam, alex] = clients as [Client, Client];
+		alex.scene.transactionOpen = true;
+		sam.scene.edit((content) => {
+			walls(content)[0]!.height = 4;
+		});
+		step();
+		deliverToRoom();
+		deliverToClient(alex);
+		sam.scene.edit((content) => {
+			walls(content)[1]!.height = 5;
+		});
+		step();
+		deliverToRoom();
+		alex.scene.transactionOpen = false;
+		// No intervening tick: the second socket message must not jump the queue.
+		deliverToClient(alex);
+		expect(alex.feed.replica.seq).toBe(store.seq);
+		expect(
+			walls(alex.scene.content)
+				.slice(0, 2)
+				.map((w) => w.height)
+		).toEqual([4, 5]);
+	});
+
+	it('removes an acknowledged optimistic overlay after a reconnect snapshot', () => {
+		const { clients, step, deliverToRoom, store } = setup(['editor', 'editor']);
+		const [sam, alex] = clients as [Client, Client];
+		sam.scene.edit((content) => {
+			walls(content)[0]!.height = 4;
+		});
+		step();
+		const batchId = sam.feed.replica.pendingBatches[0]!.batchId;
+		deliverToRoom();
+		alex.scene.edit((content) => {
+			walls(content)[0]!.height = 5;
+		});
+		step();
+		deliverToRoom();
+		// Sam missed both commits; the snapshot includes his edit and Alex's later edit.
+		sam.feed.onResync({ rows: store.allRows(), seq: store.seq, epoch: store.epoch });
+		sam.scene.transactionOpen = true;
+		sam.feed.onAck(batchId);
+		expect(sam.feed.replica.pendingBatches).toHaveLength(1);
+		sam.scene.transactionOpen = false;
+		sam.feed.tick();
+		expect(sam.feed.replica.pendingBatches).toHaveLength(0);
+		expect(walls(sam.scene.content)[0]!.height).toBe(5);
+	});
+
+	it('does not roll back newer commits when an older snapshot finishes downloading', () => {
+		const { clients, step, deliverToRoom, deliverToClient, store } = setup(['editor']);
+		const sam = clients[0]!;
+		const snapshot = { rows: structuredClone(store.allRows()), seq: store.seq, epoch: store.epoch };
+		sam.scene.edit((content) => {
+			walls(content)[0]!.height = 4;
+		});
+		step();
+		deliverToRoom();
+		deliverToClient(sam);
+		sam.feed.onResync(snapshot);
+		expect(sam.feed.replica.seq).toBe(store.seq);
+		expect(walls(sam.scene.content)[0]!.height).toBe(4);
+	});
+
+	it('keeps both walls when builders initialize the same storey concurrently', () => {
+		const { clients, step, deliverToRoom, deliverToClient, store } = setup(['editor', 'editor']);
+		for (const [index, client] of clients.entries()) {
+			client.scene.edit((content) => {
+				content.buildingLevels.push({
+					id: `level-${index}`,
+					foundationId: 'f1',
+					index: 1,
+					baseY: 3,
+					wallHeight: 3
+				});
+				content.buildings[0]!.walls.push({
+					...structuredClone(walls(content)[0]!),
+					id: `new-wall-${index}`,
+					baseY: 3,
+					startGridZ: index + 1,
+					endGridZ: index + 1
+				});
+			});
+		}
+		step();
+		deliverToRoom();
+		for (const client of clients) {
+			deliverToClient(client);
+			expect(client.notices).toEqual([]);
+			expect(client.feed.replica.pendingBatches).toHaveLength(0);
+			expect(client.scene.content.buildingLevels).toHaveLength(1);
+			expect(walls(client.scene.content).filter((w) => w.id.startsWith('new-wall-'))).toHaveLength(
+				2
+			);
+			expect(client.feed.replica.checksum).toBe(store.checksum);
+		}
 	});
 
 	it('three people editing at random end up with identical worlds (convergence)', async () => {

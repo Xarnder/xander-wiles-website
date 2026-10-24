@@ -25,7 +25,7 @@ describe('cycleFloorPathDrawMode', () => {
 });
 
 describe('floorPathDrawMode labels', () => {
-	it('uses a crosshair badge for every mode so C is visible', () => {
+	it('uses a crosshair badge for every mode so B is visible', () => {
 		expect(floorPathDrawModeBadge('axis')).toBe('AXIS SNAP');
 		expect(floorPathDrawModeBadge('free')).toBe('FREE PATH');
 		expect(floorPathDrawModeBadge('bezier')).toBe('BEZIER PATH');

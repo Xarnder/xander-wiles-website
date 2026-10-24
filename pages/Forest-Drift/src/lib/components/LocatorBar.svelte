@@ -2,9 +2,11 @@
 	interface Props {
 		/** The bar's element, for `LocatorBar` (game/hud) to place markers in. */
 		element?: HTMLDivElement | null;
+		trackingName?: string | null;
+		onStopTracking?: () => void;
 	}
 
-	let { element = $bindable(null) }: Props = $props();
+	let { element = $bindable(null), trackingName = null, onStopTracking }: Props = $props();
 </script>
 
 <!--
@@ -16,7 +18,68 @@
 	<span class="centre-tick"></span>
 </div>
 
+{#if trackingName}
+	<button
+		class="tracking-control"
+		onclick={onStopTracking}
+		aria-label={`Stop tracking ${trackingName}`}
+		data-testid="stop-tracking"
+	>
+		<span role="status">Tracking {trackingName}</span><span class="stop">Stop <kbd>U</kbd></span>
+	</button>
+{/if}
+
 <style>
+	.tracking-control {
+		position: fixed;
+		top: 5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 41;
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		max-width: 85vw;
+		min-height: 30px;
+		padding: 0.2rem 0.6rem;
+		border: 1px solid #d6b57088;
+		border-radius: 7px;
+		background: #12251ee8;
+		color: #f0e3c2;
+		font: 500 11px/1.3 system-ui;
+		cursor: pointer;
+	}
+	.tracking-control > span:first-child {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.stop {
+		white-space: nowrap;
+		color: #c2cfc4;
+	}
+	kbd {
+		margin-left: 3px;
+		padding: 0 3px;
+		border: 1px solid #ffffff40;
+		border-radius: 3px;
+		font: inherit;
+	}
+	.tracking-control:focus-visible {
+		outline: 2px solid #edcf85;
+		outline-offset: 3px;
+	}
+	@media (max-width: 46rem) {
+		.tracking-control {
+			top: 9.5rem;
+			min-height: 36px;
+		}
+	}
+	.locator-bar :global(.locator-marker.tracked .locator-dot) {
+		border-radius: 3px;
+		transform: rotate(45deg);
+	}
+
 	.locator-bar {
 		position: fixed;
 		top: 2.85rem;

@@ -6,7 +6,7 @@ export type SlabType = 'ceiling' | 'floor' | 'flat-roof';
 /**
  * A horizontal, filled polygon slab — the shared representation behind ceilings, upper floors, and
  * flat roofs (see SlabGeometryBuilder.ts; all three use exactly the same triangulation/extrusion).
- * `type` only affects material and HUD text, never geometry — see the README's "Ceiling/floor
+ * `type` affects material, HUD text and decorative overhang framing, while solid geometry stays the same — see the README's "Ceiling/floor
  * sharing" section for why a single physical slab can legitimately serve as both a room's ceiling
  * and the floor above it, without needing a separate "usages" flag: creating a ceiling and a floor
  * at the same `localY` over an overlapping polygon is simply rejected by the same-level overlap

@@ -4,6 +4,7 @@ import { BuildingLevelManager } from '../BuildingLevelManager';
 import { BuildingManager } from '../BuildingManager';
 import { BuildUndoManager } from '../BuildUndoManager';
 import { DoorTool } from '../DoorTool';
+import { BeamTool } from '../BeamTool';
 import { FloorDetailManager } from '../FloorDetailManager';
 import { FoundationManager } from '../FoundationManager';
 import {
@@ -143,6 +144,31 @@ function aimAtGable(ctx: ReturnType<typeof setup>) {
 }
 
 describe('Window/Door tools on roof faces', () => {
+	it.each([WindowTool, DoorTool, BeamTool])('uses B for snap and ignores C in %s', (Tool) => {
+		const ctx = setup();
+		const tool = new Tool(ctx.options);
+		tool.activate();
+		tool.update();
+		const before = ctx.hud()?.snapBadge;
+		expect(before).toBe('12 LINE SNAP');
+		expect(ctx.hud()?.hintLines).toContain('B cycle snap');
+		fakeWindow.press('KeyC');
+		expect(ctx.hud()?.snapBadge).toBe(before);
+		fakeWindow.press('KeyB');
+		expect(ctx.hud()?.snapBadge).toBe('SNAP OFF');
+		const after = ctx.hud()?.snapBadge;
+		fakeWindow.press('KeyC');
+		expect(ctx.hud()?.snapBadge).toBe(after);
+		fakeWindow.press('KeyB');
+		expect(ctx.hud()?.snapBadge).toBeUndefined(); // Metre grid follows Off.
+		fakeWindow.press('KeyB');
+		expect(ctx.hud()?.snapBadge).toBe('HALF SNAP');
+		tool.deactivate();
+		tool.activate();
+		expect(ctx.hud()?.snapBadge).toBe('12 LINE SNAP');
+		tool.dispose();
+	});
+
 	it('sizes the opening from the selected floor, and ] fixes it straight away', () => {
 		const ctx = setup();
 		ctx.settings.windowWidth = 0.6;
@@ -167,7 +193,7 @@ describe('Window/Door tools on roof faces', () => {
 		expect(opening).toMatchObject({ type: 'window', face: '+x' });
 		expect(opening.minY).toBeCloseTo(3 + ctx.settings.windowSillHeight);
 		expect(opening.maxY).toBeCloseTo(3 + ctx.settings.windowSillHeight + ctx.settings.windowHeight);
-		expect((opening.minU + opening.maxU) / 2).toBeCloseTo(3);
+		expect((opening.minU + opening.maxU) / 2).toBeCloseTo((6 * 6) / 13);
 
 		// The window is a real hole: aimed straight through it, the crosshair finds the far gable.
 		tool.update();

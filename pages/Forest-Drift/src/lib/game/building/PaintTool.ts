@@ -27,7 +27,7 @@ export interface PaintToolOptions {
 	/** Fences and railings: painting recolours the whole barrier's wood (the grain stays). */
 	barriers?: BarrierManager;
 	onHudChange?: (hud: BuildUiState | null) => void;
-	/** Fired whenever the colour palette opens/closes (`C`) — see the class doc comment on pointer lock. */
+	/** Fired whenever the colour palette opens/closes (`B`) — see the class doc comment on pointer lock. */
 	onPaintPaletteChange?: (open: boolean) => void;
 	/** Fired whenever the selected colour or saved-presets list changes, so the Svelte palette can mirror it. */
 	onPaintStateChange?: (state: PaintUiState) => void;
@@ -52,7 +52,7 @@ export interface PaintToolOptions {
  *
  * Owns its own `MaterialPresetStore` (localStorage-backed saved colours + last-selected colour —
  * UI preference data, deliberately never part of the authoritative building-state serialization
- * BuildingManager/ThreeScene handle) and its own `C`-key listener (opening the colour palette),
+ * BuildingManager/ThreeScene handle) and its own `B`-key listener (opening the colour palette),
  * exactly like every other build tool owns its own snap-mode/direction key handling. Opening the
  * palette releases pointer lock (`document.exitPointerLock()`) so the OS cursor reappears for the
  * Svelte `MaterialPalette` overlay to be clickable, and `onPrimaryAction` refuses to paint while the
@@ -109,7 +109,7 @@ export class PaintTool implements BuildTool {
 	}
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || event.code !== 'KeyC') return;
+		if (!this.active || event.code !== 'KeyB') return;
 		this.togglePalette();
 	};
 
@@ -440,7 +440,7 @@ export class PaintTool implements BuildTool {
 				'No paintable surface',
 				'',
 				'Left Click: Paint',
-				'C: Colours',
+				'B: Colours',
 				'P: Exit'
 			]
 		};

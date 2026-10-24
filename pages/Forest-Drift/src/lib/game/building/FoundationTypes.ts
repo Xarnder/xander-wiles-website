@@ -146,10 +146,10 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 	{
 		slot: 6,
 		variants: [
-			{ toolId: 'floor-carpet', label: 'Carpet' },
-			{ toolId: 'floor-path', label: 'Path' },
 			{ toolId: 'floor-planks', label: 'Planks' },
-			{ toolId: 'floor-tiles', label: 'Tiles' }
+			{ toolId: 'floor-tiles', label: 'Tiles' },
+			{ toolId: 'floor-carpet', label: 'Carpet' },
+			{ toolId: 'floor-path', label: 'Path' }
 		]
 	},
 	{ slot: 7, variants: [{ toolId: 'shovel', label: 'Shovel' }] },

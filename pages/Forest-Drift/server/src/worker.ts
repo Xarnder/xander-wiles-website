@@ -72,7 +72,7 @@ async function publish(
 	}
 	const supplied = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
 	if (!(await secretsMatch(supplied, env.ADMIN_SECRET))) {
-		return json({ error: 'That admin key is not right.' }, 401, cors);
+		return json({ error: 'That owner password is not correct.' }, 401, cors);
 	}
 
 	const text = await readLimitedBody(request, MAX_WORLD_JSON_BYTES + 1024);

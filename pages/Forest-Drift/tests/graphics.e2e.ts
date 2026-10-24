@@ -133,7 +133,7 @@ test('L does not change graphics quality while typing into the paint palette col
 	});
 
 	await page.keyboard.press('p'); // Paint Mode
-	await page.keyboard.press('c'); // open the colour palette
+	await page.keyboard.press('b'); // open the colour palette
 	await expect(page.getByTestId('material-palette')).toBeVisible();
 
 	const colorPicker = page.getByLabel('Custom colour picker');

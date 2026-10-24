@@ -535,7 +535,7 @@
 			<button
 				type="button"
 				class="touch-pill-btn primary"
-				use:touchButton={() => scene?.simulateKey('KeyC')}
+				use:touchButton={() => scene?.simulateKey('KeyB')}
 				data-testid="touch-paint-palette"
 				aria-label="Open paint and colour selector"
 			>

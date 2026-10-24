@@ -26,7 +26,8 @@ export interface SpeciesSite {
  * never deep forest). On top of that, each species has its own low-frequency STAND map, so trees
  * of a kind group into groves (a spruce stand, a birch copse) instead of an even mix — more
  * natural, and cheaper: a chunk holds fewer species, so it needs fewer prototype batches (draw
- * calls). The caller supplies the random roll, so the same cell always picks the same species.
+ * calls). Each location uses the strongest local stand, so neighbouring trees share a species.
+ * The caller’s roll is only used when stand strength is zero (the optional mixed-forest mode).
  */
 export class TreeSpeciesSelector {
 	private readonly settings: TreeSpeciesMixSettings;
@@ -97,9 +98,22 @@ export class TreeSpeciesSelector {
 		return this.weights;
 	}
 
-	/** Picks a species with a roll in [0, 1). Falls back to oak if every weight is zero. */
+	/** Picks the local grove’s species, or uses the roll in mixed mode. Zero weights fall back to oak. */
 	pick(site: SpeciesSite, roll: number): TreeSpeciesId {
 		const weights = this.weightsAt(site);
+		if (this.settings.standStrength > 0) {
+			// Pick one dominant stand from continuous world-space fields. Rolling again per tree
+			// scatters minority species throughout otherwise coherent groves.
+			let best = -1;
+			let strongest = 0;
+			for (let i = 0; i < weights.length; i++) {
+				if (weights[i] > strongest) {
+					strongest = weights[i];
+					best = i;
+				}
+			}
+			return best < 0 ? 'oak' : TREE_SPECIES_IDS[best];
+		}
 		let total = 0;
 		for (const w of weights) total += Math.max(0, w);
 		if (total <= 0) return 'oak';

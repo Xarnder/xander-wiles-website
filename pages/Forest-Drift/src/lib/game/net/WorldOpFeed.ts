@@ -202,13 +202,25 @@ export class WorldOpFeed {
 	}
 
 	onAck(batchId: string): void {
-		this.options.replica.acknowledge(batchId);
+		this.whenReady(() => {
+			this.options.replica.acknowledge(batchId);
+			this.showDisplay();
+		});
 	}
 
 	/** A fresh snapshot after a gap the room's log couldn't fill (or a restore). */
 	onResync(snapshot: ReplicaSnapshot): void {
 		this.whenReady(() => {
-			this.options.replica.reset(snapshot);
+			// A snapshot request can finish after newer socket commits have arrived.
+			const replica = this.options.replica;
+			if (
+				snapshot.epoch < replica.epoch ||
+				(snapshot.epoch === replica.epoch && snapshot.seq < replica.seq)
+			) {
+				this.resendPending();
+				return;
+			}
+			replica.reset(snapshot);
 			this.showDisplay();
 			this.resendPending();
 		});
@@ -242,7 +254,9 @@ export class WorldOpFeed {
 			this.queued.push(action);
 			return;
 		}
-		action();
+		// A tool may have closed since the last tick. Preserve socket arrival order.
+		this.queued.push(action);
+		this.drainQueue();
 	}
 
 	private drainQueue(): void {

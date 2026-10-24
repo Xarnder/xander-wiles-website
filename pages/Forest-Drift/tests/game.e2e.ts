@@ -106,13 +106,13 @@ test('groups walls, openings and slabs on slots 2–4, with ↑/↓ cycling the 
 	await expect(page.getByTestId('hotbar-slot-stairs')).toHaveClass(/active/);
 
 	await page.keyboard.press('6');
-	await expect(page.getByTestId('hotbar-slot-floor-carpet')).toHaveClass(/active/);
-	await page.keyboard.press('ArrowDown');
-	await expect(page.getByTestId('hotbar-slot-floor-path')).toHaveClass(/active/);
-	await page.keyboard.press('ArrowDown');
 	await expect(page.getByTestId('hotbar-slot-floor-planks')).toHaveClass(/active/);
 	await page.keyboard.press('ArrowDown');
 	await expect(page.getByTestId('hotbar-slot-floor-tiles')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor-carpet')).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-floor-path')).toHaveClass(/active/);
 
 	await page.keyboard.press('8');
 	await expect(page.getByTestId('hotbar-slot-place-object')).toHaveClass(/active/);
@@ -683,7 +683,7 @@ test('Remove Mode and Paint Mode are mutually exclusive — pressing one while t
 	expect(pageErrors).toEqual([]);
 });
 
-test('C opens the colour palette in Paint Mode, and it can be closed without exiting Paint Mode', async ({
+test('B opens the colour palette in Paint Mode, and it can be closed without exiting Paint Mode', async ({
 	page
 }) => {
 	const pageErrors: string[] = [];
@@ -702,6 +702,8 @@ test('C opens the colour palette in Paint Mode, and it can be closed without exi
 	await expect(palette).not.toBeVisible();
 
 	await page.keyboard.press('c');
+	await expect(palette).not.toBeVisible();
+	await page.keyboard.press('b');
 	await expect(palette).toBeVisible();
 	await expect(palette).toContainText('Neutrals');
 	await expect(palette).toContainText('Saved Colours');
@@ -723,7 +725,7 @@ test('selecting a colour swatch in the palette updates the HUD colour swatch', a
 	await expect(page.getByTestId('hotbar-paint-toggle')).toBeVisible();
 
 	await page.keyboard.press('p');
-	await page.keyboard.press('c');
+	await page.keyboard.press('b');
 
 	const palette = page.getByTestId('material-palette');
 	await expect(palette).toBeVisible();

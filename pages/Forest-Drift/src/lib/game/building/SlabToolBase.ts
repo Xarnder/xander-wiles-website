@@ -14,6 +14,7 @@ import type { BuildingSettings, BuildUiState, SlabToolState, ToolId } from './Fo
 import { raycastSlabConstructionPlane } from './foundationTopTargeting';
 import { vertexSpacingFor } from './foundationMath';
 import {
+	autoPromotePolygonWallSnap,
 	cycleSnapMode,
 	snapDrawingPoint,
 	snapModeLabel,
@@ -103,6 +104,7 @@ export class SlabToolBase implements BuildTool {
 
 	private readonly pointMarkers: THREE.Mesh[] = [];
 	private readonly hoverMarker = makeMarker(VALID_COLOR);
+	private readonly firstPointLabel = makeFirstPointLabel();
 
 	private readonly previewMaterial = new THREE.MeshBasicMaterial({
 		color: VALID_COLOR,
@@ -126,15 +128,8 @@ export class SlabToolBase implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/**
-	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Defaults to `'wall-corners'` every time the
-	 * tool is activated (see `activate()`) rather than persisting the player's last choice — tracing
-	 * a ceiling/floor/roof polygon exactly over the room's own walls below is the common case for
-	 * these three tools, per the README's "Draw-snap" section. Harmless even before any wall exists
-	 * on the current level: `snapToNearestCorner` simply passes the raw point through when there's
-	 * nothing to snap to.
-	 */
-	private snapMode: SnapMode = 'wall-corners';
+	/** Axis snap is restored on selection and promotes to Axis + Inline after three points; B cycles modes. */
+	private snapMode: SnapMode = 'axis';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
@@ -234,6 +229,7 @@ export class SlabToolBase implements BuildTool {
 			this.gridPoints,
 			this.boundary,
 			this.hoverMarker,
+			this.firstPointLabel,
 			this.previewMesh,
 			...this.pointMarkers
 		);
@@ -243,7 +239,7 @@ export class SlabToolBase implements BuildTool {
 		return vertexSpacingFor(this.terrainSettings.chunkSize, this.terrainSettings.chunkResolution);
 	}
 
-	/** The default slab elevation for a foundation at the current level — wall-top unless C set a custom height. */
+	/** The default slab elevation for a foundation at the current level — wall-top unless E set a custom height. */
 	private defaultLocalY(foundationId: string): number {
 		const level = this.levelManager.getOrCreateLevel(
 			foundationId,
@@ -271,7 +267,7 @@ export class SlabToolBase implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
-		this.snapMode = 'wall-corners';
+		this.snapMode = 'axis';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.refreshVisuals();
@@ -384,6 +380,7 @@ export class SlabToolBase implements BuildTool {
 		}
 
 		this.points = [...this.points, this.hoverTarget.point];
+		this.snapMode = autoPromotePolygonWallSnap(this.snapMode, this.points.length);
 		this.refreshVisuals();
 	}
 
@@ -547,6 +544,7 @@ export class SlabToolBase implements BuildTool {
 	}
 
 	private updatePointMarkers(): void {
+		this.firstPointLabel.visible = false;
 		if (!this.activeFoundationId) {
 			for (const marker of this.pointMarkers) marker.visible = false;
 			return;
@@ -573,6 +571,10 @@ export class SlabToolBase implements BuildTool {
 				index === 0 ? FIRST_POINT_COLOR : CONFIRMED_POINT_COLOR
 			);
 			marker.visible = true;
+			if (index === 0) {
+				this.firstPointLabel.position.copy(marker.position);
+				this.firstPointLabel.visible = true;
+			}
 		});
 		for (let i = this.points.length; i < MAX_POINT_MARKERS; i++)
 			this.pointMarkers[i].visible = false;
@@ -682,6 +684,7 @@ export class SlabToolBase implements BuildTool {
 	}
 
 	private hideAllVisuals(): void {
+		this.firstPointLabel.visible = false;
 		this.gridPoints.visible = false;
 		this.boundary.visible = false;
 		this.hoverMarker.visible = false;
@@ -818,7 +821,56 @@ export class SlabToolBase implements BuildTool {
 		for (const marker of this.pointMarkers) (marker.material as THREE.Material).dispose();
 		this.previewGeometry?.dispose();
 		this.previewMaterial.dispose();
+		this.firstPointLabel.material.map?.dispose();
+		this.firstPointLabel.material.dispose();
 	}
+}
+
+/** A screen-sized, camera-facing label: readable above, below, and through the slab preview. */
+function makeFirstPointLabel(): THREE.Sprite {
+	const canvas = document.createElement('canvas');
+	canvas.width = 256;
+	canvas.height = 128;
+	const context = canvas.getContext('2d')!;
+	context.fillStyle = '#17121e';
+	context.fillRect(4, 4, 248, 120);
+	context.strokeStyle = '#ffd65c';
+	context.lineWidth = 8;
+	context.strokeRect(4, 4, 248, 120);
+	context.fillStyle = '#ffe38a';
+	context.font = 'bold 80px system-ui, sans-serif';
+	context.textAlign = 'center';
+	context.textBaseline = 'middle';
+	context.fillText('1st', 128, 66);
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.generateMipmaps = false;
+	texture.minFilter = THREE.LinearFilter;
+	const sprite = new THREE.Sprite(
+		new THREE.SpriteMaterial({
+			map: texture,
+			transparent: true,
+			depthTest: false,
+			depthWrite: false,
+			sizeAttenuation: false,
+			toneMapped: false,
+			fog: false
+		})
+	);
+	sprite.name = 'slab-first-point-label';
+	sprite.center.set(-0.15, -0.25);
+	sprite.renderOrder = 20;
+	sprite.frustumCulled = false;
+	sprite.visible = false;
+	const viewport = new THREE.Vector4();
+	sprite.onBeforeRender = (renderer, _scene, camera) => {
+		renderer.getViewport(viewport);
+		const height =
+			(32 * 2) / Math.max(1, viewport.w * Math.abs(camera.projectionMatrix.elements[5]));
+		sprite.scale.set(height * 2, height, 1);
+		sprite.updateMatrixWorld();
+	};
+	return sprite;
 }
 
 /** Live per-point validity feedback while still drawing (before the loop is closed) — checks only what's meaningful for an open chain (duplicate/zero-length edges, self-intersection so far); full closed-polygon validation (area, closing edge) happens once via BuildingManager.addSlab at confirm time. */

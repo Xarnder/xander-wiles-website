@@ -34,7 +34,7 @@ export const PROTOCOL_VERSION = 4;
  * must generate the same terrain from the same seed, so a world pins the generator version it was
  * published with and refuses clients built with a different one.
  */
-export const GENERATOR_VERSION = 2;
+export const GENERATOR_VERSION = 3;
 
 /** Locked decision Q19: 20 players per world at launch. */
 export const MAX_PLAYERS_PER_WORLD = 20;

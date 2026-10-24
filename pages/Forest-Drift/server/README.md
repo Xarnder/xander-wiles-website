@@ -29,7 +29,9 @@ server on the same host at port 8787. Elsewhere it uses `VITE_FOREST_DRIFT_MP_UR
 `?mpServer=<url>` in the address bar, which is remembered. When no server is configured, the online
 buttons stay hidden.
 
-- **Publish:** Worlds → a world's menu → _Publish Online…_. Enter the `ADMIN_SECRET`. You get three
+- **Publish:** Landing screen → Online → Owner (or Worlds → a world's menu → _Publish Online…_).
+  Enter the owner password (`ADMIN_SECRET`, stored as a server secret). Choose Visitor or Builder
+  permissions in the Owner tab, then create the online copy. You get three
   invite links (`?mp=<worldId>#invite=<token>`): builder, visitor and owner. The local world is
   unchanged, and the links stay in the browser under _Online Worlds_.
 - **Join:** open an invite link, or use _Join Online_ and paste it. The token in `#invite=` decides
@@ -84,3 +86,11 @@ forest-drift-mp → Logs in the dashboard.
 - Unit: `npx vitest --run src/lib/game/net` (in `pages/Forest-Drift`).
 - End to end: `npx playwright test tests/multiplayer.e2e.ts` runs its own `wrangler dev` on port
   8791, with a throwaway key and state, in Chromium, WebKit and Firefox.
+
+### Type checking
+
+Run `npm run check` and `npm run check:server` from the Forest Drift project folder. The server
+configuration retains strict TypeScript checking and aligns indexed-access checking with the app,
+since room validation imports the same game types and geometry helpers. ESNext modules support
+the shared JSON import attributes, and DOM declarations describe browser types reached through
+those shared imports; they do not add browser code to the Worker bundle.

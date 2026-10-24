@@ -1,8 +1,20 @@
 # Forest Drift — Multiplayer social and co-operation features plan
 
 Date: 22 October 2026<br>
-Status: **Proposal only.** This document doesn't authorise any implementation. Each phase starts after you approve it in chat.<br>
+Status: **Implementation in progress.** Authorised in chat on 24 October 2026, with incremental delivery at the implementer's discretion.<br>
 Related: [`multiplayer-research.plan.md`](../../../multiplayer-research.plan.md) (architecture, rev. 3) · [`01-questions-and-decisions.md`](../../10-15/Multiplayer/feature-plan/01-questions-and-decisions.md) (locked decisions) · [`multiplayer-player-guide.md`](../../../multiplayer-player-guide.md) · [`Forest-Drift-gameplay-research-and-implementation-plan.md`](../../10-20/Forest-Drift-gameplay-research-and-implementation-plan.md) (items 18–24 and §17 villages)
+
+---
+
+## Implementation checkpoint — 24 October 2026
+
+The first installment implements M0 and the Track action from M2. The remainder of this document describes the longer-term proposal, not completed functionality.
+
+- **M0:** doors and occupied Mini Build locations are stored in one compact SQLite metadata row, written only on changes. Hibernation restores occupied seats only for connected players with unchanged, valid anchors. Disconnections release seats; an empty room or world restore clears session state. Reconnecting clients also close doors absent from the server's current state.
+- **M2, partial:** a redesigned Multiplayer roster has player colours, presence, expandable permissions and a Track toggle, available to visitors as well as builders. Tracking keeps the chosen player labelled and pinned at the locator edge, with a distinct diamond marker. Stop with **U**, the locator's touch-friendly Stop control, or the roster toggle. The online badge also offers **Find people**. Tracking is local, follows the existing player identity through a brief disconnect, and clears when that player leaves. Explicit tracking temporarily shows the locator even if its graphics toggle is off.
+- **Still pending:** all of M1 (pings, waypoints, landmarks and beacons), and M2's Locate beacon, Watch and consented travel. No new social messages are introduced here, so this installment retains protocol 4.
+- **Validation:** room-restoration and locator regression tests, browser coverage for tracking/stop and phone-width layout, and a real local room-server restart with a late joiner. A real two-device/iPad session remains a manual follow-up.
+- **Performance direction:** no 60fps target or fixed per-frame budget for this implementation, per the current user instruction. Preserve change-driven storage, bounded room state, and the existing locator's write-on-change behaviour.
 
 ---
 

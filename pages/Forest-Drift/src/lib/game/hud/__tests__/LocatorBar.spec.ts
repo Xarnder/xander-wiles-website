@@ -196,6 +196,37 @@ describe('LocatorBar', () => {
 		expect(element.style.visibility).toBe('hidden');
 	});
 
+	it('pins a selected player instead of the nearest, and returns to automatic selection on stop', () => {
+		const { bar, camera, marker } = setup();
+		const players: [string, number, number][] = [
+			['near', 0, -2],
+			['sam', -40, 40]
+		];
+		bar.setTrackedPlayer('sam');
+		frame(bar, camera, players);
+		expect(bar.closest).toBe('near');
+		expect(marker(1).shown).toBe(true);
+		expect(marker(1).classes.has('tracked')).toBe(true);
+		expect(marker(1).classes.has('edge-left')).toBe(true);
+		expect(marker(1).labelText).toContain('sam');
+		expect(marker(0).classes.has('closest')).toBe(false);
+		writes = 0;
+		frame(bar, camera, players);
+		expect(writes).toBe(0);
+		bar.setTrackedPlayer(null);
+		frame(bar, camera, players);
+		expect(marker(1).shown).toBe(false);
+		expect(marker(1).classes.has('tracked')).toBe(false);
+		expect(marker(0).classes.has('closest')).toBe(true);
+	});
+
+	it('falls back to the nearest when a tracked player has no position', () => {
+		const { bar, camera, marker } = setup();
+		bar.setTrackedPlayer('missing');
+		frame(bar, camera, [['sam', 5, 5]]);
+		expect(marker(0).shown).toBe(true);
+		expect(marker(0).classes.has('closest')).toBe(true);
+	});
 	it('picks readable text for each colour', () => {
 		expect(inkFor('#ffe119')).toBe('#04121f');
 		expect(inkFor('#ffffff')).toBe('#04121f');

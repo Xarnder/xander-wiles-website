@@ -13,7 +13,8 @@ import {
 	type PlayerAttachment,
 	type RoomClockRecord,
 	type RoomConnection,
-	type RoomPersistence
+	type RoomPersistence,
+	type RoomSessionState
 } from '../RoomCore';
 import {
 	CLIENT_LEAVE_CODE,
@@ -90,6 +91,12 @@ async function fakeAuthorize(hello: HelloMessage): Promise<AuthResult> {
 }
 
 class MemoryPersistence implements RoomPersistence {
+	session: RoomSessionState | null = null;
+	sessionWrites = 0;
+	saveSessionState(state: RoomSessionState): void {
+		this.session = structuredClone(state);
+		this.sessionWrites++;
+	}
 	grace: GraceEntry[] = [];
 	clock: RoomClockRecord | null = null;
 	env: string | null = null;
@@ -817,6 +824,70 @@ describe('RoomCore shared building (Phase 3)', () => {
 		expect(tooFar.all('commit')).toHaveLength(0);
 	});
 
+	it('preserves doors across hibernation, writes only on change, and resets when empty', async () => {
+		const { room, persistence, now } = setup();
+		const a = new FakeConnection();
+		await hello(room, a, 'player-aaaa');
+		const open = JSON.stringify({ t: 'door', id: 'door-1', open: true });
+		room.onMessage(a, open);
+		room.onMessage(a, open);
+		expect(persistence.sessionWrites).toBe(1);
+		const awake = new RoomCore({
+			world: WORLD,
+			now,
+			authorize: fakeAuthorize,
+			persistence,
+			restored: { clock: persistence.clock, session: persistence.session }
+		});
+		awake.restore([{ conn: a, attachment: a.attachment }]);
+		const b = new FakeConnection();
+		await hello(awake, b, 'player-bbbb');
+		expect(b.last('welcome')?.doors).toEqual(['door-1']);
+		pose(awake, a, 1, 0);
+		awake.tick();
+		expect(persistence.sessionWrites).toBe(1);
+		awake.onClose(a, CLIENT_LEAVE_CODE);
+		awake.onClose(b, CLIENT_LEAVE_CODE);
+		expect(persistence.session).toEqual({ doors: [], interactions: [] });
+	});
+
+	it('releases persisted seats whose occupants did not survive a restart', () => {
+		const { persistence, now } = setup();
+		const room = new RoomCore({
+			world: WORLD,
+			now,
+			authorize: fakeAuthorize,
+			persistence,
+			restored: {
+				clock: { accumulatedMs: 0, runningSince: now(), checkpointAt: now() },
+				session: {
+					doors: ['door-1'],
+					interactions: [
+						{ playerId: 'player-gone', instanceId: 'seat', locationId: 'sit', signature: '{}' }
+					]
+				}
+			}
+		});
+		room.restore([]);
+		expect(persistence.session).toEqual({ doors: ['door-1'], interactions: [] });
+	});
+	it('clears persisted doors when a restart grace period expires without a reconnect', () => {
+		const { persistence, now, advance } = setup();
+		const room = new RoomCore({
+			world: WORLD,
+			now,
+			authorize: fakeAuthorize,
+			persistence,
+			restored: {
+				clock: { accumulatedMs: 0, runningSince: now(), checkpointAt: now() },
+				session: { doors: ['old-door'], interactions: [] }
+			}
+		});
+		room.restore([]);
+		advance(GRACE_PERIOD_MS + 1);
+		room.onAlarm();
+		expect(persistence.session).toEqual({ doors: [], interactions: [] });
+	});
 	it('shares doors live and closes them all when the world empties (Q13-A)', async () => {
 		const { room } = buildRoom();
 		const a = new FakeConnection();
@@ -870,11 +941,12 @@ describe('Mini Build interaction occupancy', () => {
 			seq: 1,
 			epoch: 1
 		});
-		const room = new RoomCore({
+		const persistence = new MemoryPersistence();
+		let room = new RoomCore({
 			world: WORLD,
 			now: () => 1_000_000,
 			authorize: fakeAuthorize,
-			persistence: new MemoryPersistence(),
+			persistence,
 			store
 		});
 		const a = new FakeConnection(),
@@ -886,6 +958,24 @@ describe('Mini Build interaction occupancy', () => {
 		const request = { t: 'interaction', location: { instanceId: 'seat', locationId: location.id } };
 		await room.onMessage(a, JSON.stringify(request));
 		expect(a.last('interactions')?.locations).toEqual([
+			{ ...request.location, playerId: 'player-aaaa' }
+		]);
+		room = new RoomCore({
+			world: WORLD,
+			now: () => 1_000_000,
+			authorize: fakeAuthorize,
+			persistence,
+			store,
+			restored: { clock: persistence.clock, session: persistence.session }
+		});
+		room.restore([
+			{ conn: a, attachment: a.attachment },
+			{ conn: b, attachment: b.attachment }
+		]);
+		pose(room, b, 1, 1); // Connected clients resend poses after waking.
+		const c = new FakeConnection();
+		await hello(room, c, 'player-cccc');
+		expect(c.last('welcome')?.interactions).toEqual([
 			{ ...request.location, playerId: 'player-aaaa' }
 		]);
 		await room.onMessage(b, JSON.stringify(request));
@@ -902,5 +992,6 @@ describe('Mini Build interaction occupancy', () => {
 		expect(b.last('interactions')?.locations[0].playerId).toBe('player-bbbb');
 		await room.onMessage(b, JSON.stringify({ t: 'interaction', location: null }));
 		expect(b.last('interactions')?.locations).toEqual([]);
+		expect(persistence.session?.interactions).toEqual([]);
 	});
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	cycleOpeningDivisionSnap,
+	DEFAULT_OPENING_SNAP_MODE,
 	openingDivisionPoints,
 	openingDivisionSnapBadge,
 	snapOpeningCenterU,
@@ -8,7 +9,7 @@ import {
 } from '../openingDivisionSnap';
 
 describe('cycleOpeningDivisionSnap', () => {
-	it('walks grid through sixteenths, then back to grid', () => {
+	it('cycles default to off, then grid and the remaining division modes', () => {
 		expect(cycleOpeningDivisionSnap('grid')).toBe('half');
 		expect(cycleOpeningDivisionSnap('half')).toBe('thirds');
 		expect(cycleOpeningDivisionSnap('thirds')).toBe('quarters');
@@ -20,15 +21,24 @@ describe('cycleOpeningDivisionSnap', () => {
 		expect(cycleOpeningDivisionSnap('ninths')).toBe('tenths');
 		expect(cycleOpeningDivisionSnap('tenths')).toBe('elevenths');
 		expect(cycleOpeningDivisionSnap('elevenths')).toBe('twelfths');
-		expect(cycleOpeningDivisionSnap('twelfths')).toBe('thirteenths');
-		expect(cycleOpeningDivisionSnap('thirteenths')).toBe('fourteenths');
+		expect(cycleOpeningDivisionSnap('twelfths')).toBe('fourteenths');
+		expect(cycleOpeningDivisionSnap(DEFAULT_OPENING_SNAP_MODE)).toBe('off');
 		expect(cycleOpeningDivisionSnap('fourteenths')).toBe('fifteenths');
 		expect(cycleOpeningDivisionSnap('fifteenths')).toBe('sixteenths');
-		expect(cycleOpeningDivisionSnap('sixteenths')).toBe('grid');
+		expect(cycleOpeningDivisionSnap('sixteenths')).toBe(DEFAULT_OPENING_SNAP_MODE);
+		expect(cycleOpeningDivisionSnap('off')).toBe('grid');
 	});
 });
 
 describe('openingDivisionPoints', () => {
+	it('defaults to twelve internal lines dividing a wall into thirteen equal segments', () => {
+		expect(openingDivisionPoints(13, DEFAULT_OPENING_SNAP_MODE)).toEqual([
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+		]);
+		expect(openingDivisionSnapBadge(DEFAULT_OPENING_SNAP_MODE)).toBe('12 LINE SNAP');
+		expect(openingDivisionPoints(13, 'off')).toEqual([]);
+	});
+
 	it('half is the wall midpoint, quarters are 1/4 1/2 3/4', () => {
 		expect(openingDivisionPoints(4, 'half')).toEqual([2]);
 		expect(openingDivisionPoints(4, 'quarters')).toEqual([1, 2, 3]);
@@ -54,6 +64,11 @@ describe('snapOpeningCoord', () => {
 });
 
 describe('snapOpeningCenterU', () => {
+	it('leaves the along-wall position unsnapped when off', () => {
+		expect(snapOpeningCenterU(1.234, 13, 'off', 0.1)).toBe(1.234);
+		expect(openingDivisionSnapBadge('off')).toBe('SNAP OFF');
+	});
+
 	it('grid snap rounds to openingGridSize', () => {
 		expect(snapOpeningCenterU(1.24, 4, 'grid', 0.1)).toBeCloseTo(1.2);
 		expect(snapOpeningCenterU(1.26, 4, 'grid', 0.1)).toBeCloseTo(1.3);

@@ -243,7 +243,7 @@ describe('WorldStore', () => {
 		expect(world.checksum).toBe(formatChecksum(expected));
 	});
 
-	it('refuses two foundations on the same ground, and two records of one storey', () => {
+	it('refuses overlapping foundations and conflicting storey heights, but merges identical storeys', () => {
 		const world = store();
 		expect(
 			world.applyBatch(SAM, [
@@ -263,14 +263,21 @@ describe('WorldStore', () => {
 				}
 			])
 		).toMatchObject({ ok: false, reason: 'fit' });
-		const level = (id: string): WorldOp => ({
+		const level = (id: string, wallHeight = 3): WorldOp => ({
 			op: 'add',
 			kind: 'buildingLevel',
 			id,
-			data: { id, foundationId: 'f1', index: 1, baseY: 3, wallHeight: 3 }
+			data: { id, foundationId: 'f1', index: 1, baseY: 3, wallHeight }
 		});
 		expect(world.applyBatch(SAM, [level('l-sam')]).ok).toBe(true);
-		expect(world.applyBatch(ALEX, [level('l-alex')])).toMatchObject({ ok: false, reason: 'fit' });
+		expect(world.applyBatch(ALEX, [level('l-alex', 4)])).toMatchObject({
+			ok: false,
+			reason: 'fit'
+		});
+		expect(world.applyBatch(ALEX, [level('l-alex')]).ok).toBe(true);
+		expect(world.allRows().filter((row) => row.kind === 'buildingLevel')).toMatchObject([
+			{ id: 'l-sam', createdBy: SAM.playerId, data: { wallHeight: 3 } }
+		]);
 	});
 
 	it('refuses malformed ops', () => {

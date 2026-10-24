@@ -49,7 +49,7 @@ export interface PlaceObjectToolOptions {
  *
  * Controls: `E` Object Library (handled by BuildToolManager) · `R` / `Shift+R` rotate one snap step
  * either way · `T` / `Shift+T` finer / coarser snap step (shared with the Mini Build editor) ·
- * `↑/↓` recent objects · `C` copy the looked-at object · `F` edit the looked-at object · click place ·
+ * `↑/↓` recent objects · `B` copy the looked-at object · `F` edit the looked-at object · click place ·
  * right click / Esc cancel.
  */
 export class PlaceObjectTool implements BuildTool {
@@ -92,7 +92,7 @@ export class PlaceObjectTool implements BuildTool {
 					this.onNotice?.(`Rotation snap ${formatAngle(step)}`);
 				}
 				break;
-			case 'KeyC':
+			case 'KeyB':
 				this.copyTarget();
 				break;
 			case 'KeyF':
@@ -384,7 +384,7 @@ export class PlaceObjectTool implements BuildTool {
 			'T    Snap angle (Shift: coarser)',
 			'↑/↓  Recent objects'
 		];
-		if (targetName) lines.push(`C    Copy ${targetName}`, `F    Edit ${targetName}`);
+		if (targetName) lines.push(`B    Copy ${targetName}`, `F    Edit ${targetName}`);
 		const readout = this.getPlacementReadout();
 		if (readout) lines.push('', formatAreaDetail(readout));
 		lines.push(placeLine.split('\n')[0], 'X: Remove');

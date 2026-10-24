@@ -36,6 +36,7 @@ interface Marker {
 	appliedColour: string;
 	appliedDim: boolean;
 	appliedClosest: boolean;
+	appliedTracked: boolean;
 	appliedEdge: '' | 'left' | 'right';
 	arrowText: string;
 	labelText: string;
@@ -68,6 +69,7 @@ export class LocatorBar {
 	private enabled = true;
 	private barVisible: boolean | null = null;
 	private closestId: string | null = null;
+	private trackedId: string | null = null;
 
 	/** The bar's element (from the HUD); null detaches. Markers are created inside it. */
 	attach(element: HTMLElement | null): void {
@@ -93,6 +95,11 @@ export class LocatorBar {
 	/** Settings → Graphics → Show locator bar. */
 	setEnabled(enabled: boolean): void {
 		this.enabled = enabled;
+	}
+
+	/** A chosen player takes priority over the automatic nearest-player highlight. */
+	setTrackedPlayer(playerId: string | null): void {
+		this.trackedId = playerId;
 	}
 
 	beginFrame(camera: THREE.PerspectiveCamera, localFeetY: number): void {
@@ -156,7 +163,10 @@ export class LocatorBar {
 		if (!current || current.distance > nearestDistance + CLOSEST_HYSTERESIS_METRES) {
 			this.closestId = nearest;
 		}
-		for (const [id, marker] of this.markers) this.draw(marker, id === this.closestId);
+		const highlighted =
+			this.trackedId && this.markers.has(this.trackedId) ? this.trackedId : this.closestId;
+		for (const [id, marker] of this.markers)
+			this.draw(marker, id === highlighted, id === this.trackedId);
 		this.setBarVisible(this.markers.size > 0);
 	}
 
@@ -176,7 +186,11 @@ export class LocatorBar {
 		this.attach(null);
 	}
 
-	private draw(marker: Marker, closest: boolean): void {
+	private draw(marker: Marker, closest: boolean, tracked: boolean): void {
+		if (tracked !== marker.appliedTracked) {
+			marker.appliedTracked = tracked;
+			marker.root.classList.toggle('tracked', tracked);
+		}
 		let position = marker.position;
 		let edge: '' | 'left' | 'right' = '';
 		// The closest player never disappears: out of view, they wait at the end of the bar on the
@@ -274,6 +288,7 @@ export class LocatorBar {
 			appliedColour: '',
 			appliedDim: false,
 			appliedClosest: false,
+			appliedTracked: false,
 			appliedEdge: '',
 			arrowText: '',
 			labelText: ''

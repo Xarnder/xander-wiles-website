@@ -1,5 +1,8 @@
 import { shutterSideFacingPlayer, type WindowShutters } from './windowShutterMath';
 import * as THREE from 'three';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { BuildingLevelManager } from './BuildingLevelManager';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
 import { levelDisplayName } from './BuildingLevelTypes';
@@ -15,6 +18,7 @@ import {
 import { colorMaterialFromHex } from './MaterialTypes';
 import {
 	cycleOpeningDivisionSnap,
+	DEFAULT_OPENING_SNAP_MODE,
 	openingDivisionPoints,
 	openingDivisionSnapBadge,
 	snapOpeningCenterU,
@@ -91,7 +95,7 @@ interface DivisionTick {
  * Shared implementation behind WindowTool/DoorTool/BeamTool: raycast against wall meshes (and, for
  * windows and doors, roof meshes — never terrain/foundation), convert the hit into that wall's local
  * (U, Y) coordinates, snap
- * horizontally (`openingGridSize` by default, or even splits of this wall's length via `C` — see
+ * horizontally (`openingGridSize` by default, or even splits of this wall's length via `B` — see
  * openingDivisionSnap.ts), validate against the SAME bounds/overlap rules
  * BuildingManager.addOpening / addBeam enforces authoritatively, and preview/confirm. Stays in a single
  * "idle" state re-evaluated every frame, per the spec — there's no two-click sequence for openings.
@@ -138,30 +142,33 @@ export class OpeningToolBase implements BuildTool {
 	private highlightGeometry: THREE.BufferGeometry | null = null;
 	private readonly highlightMesh: THREE.LineSegments;
 
-	private readonly ticksMaterial = new THREE.LineBasicMaterial({
-		color: 0x7ad4c6,
-		transparent: true,
-		opacity: 0.9,
-		depthTest: false
+	// Screen-space wide lines stay legible on pale walls and at different viewing distances.
+	private readonly ticksMaterial = new LineMaterial({
+		color: 0xb000ff,
+		linewidth: 4,
+		worldUnits: false,
+		toneMapped: false,
+		depthTest: false,
+		depthWrite: false
 	});
-	private ticksGeometry: THREE.BufferGeometry | null = null;
-	private readonly ticksMesh: THREE.LineSegments;
+	private ticksGeometry: LineSegmentsGeometry | null = null;
+	private readonly ticksMesh: LineSegments2;
 
 	private active = false;
 	/** `wall:<id>` or `roof:<id>:<side>` — what the highlight currently outlines. */
 	private hoveredKey: string | null = null;
 	private target: Target | null = null;
 	/**
-	 * Cycled by pressing `C` — see openingDivisionSnap.ts. Persists across deactivate/reactivate so
-	 * switching away from Window/Door and back doesn't dump you back to metre-grid snap.
+	 * Cycled by pressing `B` — see openingDivisionSnap.ts. Each activation starts with twelve
+	 * internal snap lines (thirteen equal wall segments).
 	 */
-	private snapMode: OpeningDivisionSnapMode = 'grid';
+	private snapMode: OpeningDivisionSnapMode = DEFAULT_OPENING_SNAP_MODE;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.repeat) return;
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (isTypingTarget(event.target)) return;
-		if (event.code === 'KeyC') {
+		if (event.code === 'KeyB') {
 			this.snapMode = cycleOpeningDivisionSnap(this.snapMode);
 			this.update();
 			return;
@@ -205,7 +212,8 @@ export class OpeningToolBase implements BuildTool {
 		this.highlightMesh = new THREE.LineSegments(new THREE.BufferGeometry(), this.highlightMaterial);
 		this.highlightMesh.visible = false;
 
-		this.ticksMesh = new THREE.LineSegments(new THREE.BufferGeometry(), this.ticksMaterial);
+		this.ticksGeometry = new LineSegmentsGeometry();
+		this.ticksMesh = new LineSegments2(this.ticksGeometry, this.ticksMaterial);
 		this.ticksMesh.renderOrder = 7;
 		this.ticksMesh.visible = false;
 
@@ -217,6 +225,7 @@ export class OpeningToolBase implements BuildTool {
 	}
 
 	activate(): void {
+		this.snapMode = DEFAULT_OPENING_SNAP_MODE;
 		this.active = true;
 		this.hoveredKey = null;
 		this.target = null;
@@ -733,7 +742,7 @@ export class OpeningToolBase implements BuildTool {
 		return snapBadge ? { snapBadge } : {};
 	}
 
-	/** Vertical marks at each `C`-snap division, from `minY` to `maxY` in the transform's own (U, Y) frame. */
+	/** Vertical marks at each `B`-snap division, from `minY` to `maxY` in the transform's own (U, Y) frame. */
 	private updateDivisionTicks(transform: WallTransform, ticks: readonly DivisionTick[]): void {
 		if (ticks.length === 0) {
 			this.clearDivisionTicks();
@@ -752,8 +761,8 @@ export class OpeningToolBase implements BuildTool {
 			positions[offset + 5] = top.worldZ;
 		}
 		this.ticksGeometry?.dispose();
-		this.ticksGeometry = new THREE.BufferGeometry();
-		this.ticksGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		this.ticksGeometry = new LineSegmentsGeometry();
+		this.ticksGeometry.setPositions(positions);
 		this.ticksMesh.geometry = this.ticksGeometry;
 		this.ticksMesh.visible = true;
 	}
@@ -775,7 +784,7 @@ export class OpeningToolBase implements BuildTool {
 				this.config.dimensionsHint(this.buildingSettings),
 				'',
 				lookAt,
-				'C cycle snap',
+				'B cycle snap',
 				...(this.config.toolId === 'beam' ? ['R rotate'] : []),
 				'E customise'
 			],
@@ -795,7 +804,7 @@ export class OpeningToolBase implements BuildTool {
 				this.config.dimensionsHint(this.buildingSettings),
 				'',
 				placeLine,
-				'C cycle snap',
+				'B cycle snap',
 				...(this.config.toolId === 'beam' ? ['R rotate'] : []),
 				'E customise'
 			],

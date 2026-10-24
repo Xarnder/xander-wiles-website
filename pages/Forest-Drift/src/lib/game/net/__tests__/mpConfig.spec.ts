@@ -3,7 +3,9 @@ import {
 	findOnlineWorld,
 	forgetOnlineWorld,
 	loadOnlineWorlds,
+	ownerInviteFor,
 	onlineWorldsOn,
+	rememberOnlineInvite,
 	rememberOnlineWorld
 } from '../mpConfig';
 
@@ -29,6 +31,20 @@ describe('remembered online worlds', () => {
 	beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()));
 	afterEach(() => vi.unstubAllGlobals());
 
+	it('lets returning owners manage with their private link without treating guest links as owner access', () => {
+		const entry = {
+			worldId: 'world-aaaa-1111',
+			name: 'World',
+			invite: INVITE,
+			role: 'owner' as const
+		};
+		expect(ownerInviteFor(entry)).toBe(INVITE);
+		expect(ownerInviteFor({ ...entry, role: 'editor' })).toBeNull();
+		expect(ownerInviteFor({ ...entry, role: 'viewer' })).toBeNull();
+		expect(ownerInviteFor({ ...entry, role: null })).toBeNull();
+		expect(ownerInviteFor(null)).toBeNull();
+	});
+
 	it('keeps the invite and server so a world can be joined again later', () => {
 		rememberOnlineWorld({
 			worldId: 'world-aaaa-1111',
@@ -43,6 +59,64 @@ describe('remembered online worlds', () => {
 			role: null,
 			serverUrl: LIVE
 		});
+	});
+
+	it('saves a named invite without joining or requiring an identity', () => {
+		expect(
+			rememberOnlineInvite({ worldId: 'world-aaaa-1111', invite: INVITE }, '  Lakeside  ', LIVE)
+		).toMatchObject({
+			name: 'Lakeside',
+			invite: INVITE,
+			role: null,
+			serverUrl: LIVE
+		});
+		expect(loadOnlineWorlds()).toHaveLength(1);
+		expect(loadOnlineWorlds()[0].lastJoinedAt).toBeUndefined();
+		expect(localStorage.getItem('forest-drift-mp-name')).toBeNull();
+	});
+
+	it('updates a saved invite without duplicating it or losing access for the same link', () => {
+		rememberOnlineWorld({
+			worldId: 'world-aaaa-1111',
+			name: 'Lakeside',
+			invite: INVITE,
+			role: 'editor',
+			capability: 'signed-capability',
+			serverUrl: LIVE
+		});
+		rememberOnlineInvite({ worldId: 'world-aaaa-1111', invite: INVITE }, '', LIVE);
+		expect(loadOnlineWorlds()).toHaveLength(1);
+		expect(findOnlineWorld('world-aaaa-1111')).toMatchObject({
+			name: 'Lakeside',
+			role: 'editor',
+			capability: 'signed-capability'
+		});
+		rememberOnlineInvite(
+			{ worldId: 'world-aaaa-1111', invite: 'different-invite-0123456789' },
+			'New name',
+			LIVE
+		);
+		expect(loadOnlineWorlds()).toHaveLength(1);
+		expect(findOnlineWorld('world-aaaa-1111')).toMatchObject({
+			name: 'New name',
+			role: null,
+			capability: null
+		});
+	});
+
+	it('rejects incomplete invites and reports storage failures', () => {
+		expect(rememberOnlineInvite({ worldId: 'world-aaaa-1111', invite: null }, '', LIVE)).toBeNull();
+		expect(
+			rememberOnlineInvite({ worldId: 'world-aaaa-1111', invite: 'short' }, '', LIVE)
+		).toBeNull();
+		expect(loadOnlineWorlds()).toEqual([]);
+		vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+			throw new Error('Storage blocked');
+		});
+		expect(
+			rememberOnlineInvite({ worldId: 'world-aaaa-1111', invite: INVITE }, '', LIVE)
+		).toBeNull();
+		expect(loadOnlineWorlds()).toEqual([]);
 	});
 
 	it('lists the most recently joined world first', () => {

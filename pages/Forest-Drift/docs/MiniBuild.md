@@ -176,7 +176,7 @@ stats, benchmark), `RemoveTool.ts`, `MoveTool.ts`, `BuildUndoManager.ts`, world 
 | Place Object | `R` / `Shift+R`, `T` / `Shift+T`             | Rotate one snap step either way; finer / coarser snap step    |
 | Place Object | `↑` `↓`                                      | Cycle recently used objects                                   |
 | Move         | `R` / `Shift+R`, `T` / `Shift+T`             | Same, for a held or looked-at Mini Build                      |
-| Place Object | `C` / `F`                                    | Copy / Edit the looked-at Mini Build                          |
+| Place Object | `B` / `F`                                    | Copy / Edit the looked-at Mini Build                          |
 | Place Object | Click / Right click / `-`                    | Place / cancel preview / undo placement                       |
 | World        | `X` / `M`                                    | Remove one copy / move a copy (budget-checked)                |
 | Settings     | Mini Builds → Chunks & detail budget         | Toggle chunk boundary grid + labels, and the chunk counter    |
@@ -253,7 +253,7 @@ why the chunk budget counts source cuboids rather than rendered meshes.
   conversion step can map them to default designs once dimension loss is acceptable.
 - **Material overrides** are in the schema, validation, batching (material signature) and Copy, but
   there is no UI yet to set them (e.g. Paint Mode on a Mini Build).
-- **Touch controls** can open the Object Library and place; Copy (`C`) and Edit (`F`) have no touch
+- **Touch controls** can open the Object Library and place; Copy (`B`) and Edit (`F`) have no touch
   buttons yet, and the editor is designed for mouse + keyboard.
 - **No stacking**: Mini Builds place on terrain, foundations, slabs and roofs, not on top of other
   Mini Builds.

@@ -21,7 +21,7 @@ export function beamAlongWallSize(
 
 /**
  * Beam centre-Y follows the look point, snapped to `openingGridSize`, then clamped so the timber
- * stays on the wall face. Horizontal snap is the same C-cycled wall-division used by Window/Door
+ * stays on the wall face. Horizontal snap is the same B-cycled wall-division used by Window/Door
  * (`snapOpeningCenterU`); this is only the extra vertical freedom a horizontal beam has over a
  * fixed sill. Vertical beams span the wall instead.
  */

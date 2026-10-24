@@ -289,7 +289,7 @@ function intersectFoundationPlane(
 /**
  * Targeting for the Ceiling/Floor/Roof tools. Intersects the look ray with the analytic plane at
  * the slab/eave height that will actually be placed (`foundation.topY + resolveSlabPlacementLocalY`),
- * so the crosshair, building grid, and preview sit on the same plane — including when C has lowered
+ * so the crosshair, building grid, and preview sit on the same plane — including when placement height has lowered
  * that plane below eye height and the player is looking down at it.
  *
  * Foundation resolution prefers "which foundation am I standing in" (XZ-only) over a mesh hit,

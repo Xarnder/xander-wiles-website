@@ -85,13 +85,13 @@ export function touchToolActions(
 			code: 'KeyT'
 		});
 	}
-	if (has(hintLines, 'C    Copy')) {
+	if (has(hintLines, 'B    Copy')) {
 		add({
 			id: 'copy-object',
 			label: 'Copy',
 			aria: 'Copy looked-at object',
 			testId: 'touch-copy-object',
-			code: 'KeyC'
+			code: 'KeyB'
 		});
 	}
 	if (has(hintLines, 'F    Edit')) {
@@ -202,15 +202,15 @@ export function touchToolActions(
 	return actions;
 }
 
-/** Openings and floor paths cycle with `C`. Every other draw tool uses `B`. */
-export function snapKeyForHints(hintLines: readonly string[]): 'KeyC' | 'KeyB' {
-	return has(hintLines, 'C cycle snap') || has(hintLines, 'C path mode') ? 'KeyC' : 'KeyB';
+/** All build tools use B, leaving C reserved for the game’s hold-to-zoom control. */
+export function snapKeyForHints(_hintLines: readonly string[]): 'KeyB' {
+	return 'KeyB';
 }
 
 export function snapLabelForHints(hintLines: readonly string[]): string {
 	return has(hintLines, 'B: Polygon mode')
 		? 'Polygon'
-		: has(hintLines, 'C path mode')
+		: has(hintLines, 'B path mode')
 			? 'Mode'
 			: 'Snap';
 }

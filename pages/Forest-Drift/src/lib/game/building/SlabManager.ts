@@ -12,8 +12,11 @@ import {
 	slabOpeningLocalPolygon
 } from './SlabGeometryBuilder';
 import { buildSlabOpeningFrame, disposeSlabOpeningFrame } from './SlabOpeningFrameBuilder';
+import { buildSlabOverhangFrame } from './SlabOverhangFrameBuilder';
+import { exposedSlabEdges, type SlabEdgeSupport } from './slabOverhangFrameMath';
 import type { SlabDefinition, SlabOpeningDefinition } from './SlabTypes';
 import { slabBottomY, slabOpeningFrameEnabledOf } from './SlabTypes';
+import type { WallDefinition } from './WallTypes';
 import type { Point2D } from './wallPathMath';
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xffa64d });
@@ -29,6 +32,7 @@ interface SlabEntry {
 	boundsHelper: THREE.LineSegments | null;
 	/** Sibling groups on the foundation root — one timber trim per opening, never part of slab collision. */
 	openingFrames: THREE.Group[];
+	overhangFrame: THREE.Group | null;
 	/** World-space X/Z polygon + world Y extents, cached alongside the mesh so point queries never re-derive them per call. */
 	worldPolygon: Point2D[];
 	/** World-space hole polygons (openings) — a point inside one of these is NOT covered by the slab, even though it's inside `worldPolygon`. */
@@ -65,6 +69,7 @@ export class SlabManager {
 
 	private readonly slabs = new Map<string, SlabEntry>();
 	private showBounds = false;
+	private getSupportingWalls: (foundationId: string) => readonly WallDefinition[] = () => [];
 
 	constructor(options: SlabManagerOptions) {
 		this.getFoundation = options.getFoundation;
@@ -155,6 +160,7 @@ export class SlabManager {
 			mesh,
 			boundsHelper: existing?.boundsHelper ?? null,
 			openingFrames,
+			overhangFrame: existing?.overhangFrame ?? null,
 			worldPolygon,
 			worldHoles,
 			topWorldY: frame.originWorldY + definition.localY,
@@ -174,7 +180,53 @@ export class SlabManager {
 
 	addSlab(definition: SlabDefinition): void {
 		const entry = this.buildEntry(definition);
-		if (entry) this.slabs.set(definition.id, entry);
+		if (entry) {
+			this.slabs.set(definition.id, entry);
+			this.rebuildOverhangFramesForFoundation(definition.foundationId);
+		}
+	}
+
+	/** Wired by BuildingManager once the wall and path managers are available. */
+	setSupportingWallsProvider(provider: (foundationId: string) => readonly WallDefinition[]): void {
+		this.getSupportingWalls = provider;
+		for (const id of new Set(this.getAllSlabs().map((slab) => slab.foundationId))) {
+			this.rebuildOverhangFramesForFoundation(id);
+		}
+	}
+
+	/** Derived decoration only: saved definitions and collision remain the original slab polygon. */
+	rebuildOverhangFramesForFoundation(foundationId: string): void {
+		const grid = this.getBuildingGridSize();
+		const walls = this.getSupportingWalls(foundationId);
+		const slabs = this.getSlabsForFoundation(foundationId);
+		for (const slab of slabs) {
+			const entry = this.slabs.get(slab.id)!;
+			if (entry.overhangFrame) disposeSlabOpeningFrame(entry.overhangFrame);
+			entry.overhangFrame = null;
+			if (slab.type === 'flat-roof') continue;
+			const bottom = slabBottomY(slab);
+			const supports: SlabEdgeSupport[] = walls
+				.filter((wall) => wall.baseY < bottom + 1e-6 && wall.baseY + wall.height >= bottom - 0.01)
+				.map((wall) => ({
+					start: { x: wall.startGridX * grid, z: wall.startGridZ * grid },
+					end: { x: wall.endGridX * grid, z: wall.endGridZ * grid },
+					halfWidth: wall.thickness / 2
+				}));
+			for (const neighbour of slabs) {
+				if (neighbour.id === slab.id || Math.abs(neighbour.localY - slab.localY) > 1e-6) continue;
+				const points = slabLocalPolygon(neighbour, grid);
+				for (let i = 0; i < points.length; i++) {
+					supports.push({ start: points[i], end: points[(i + 1) % points.length], halfWidth: 0 });
+				}
+			}
+			const edges = exposedSlabEdges(slabLocalPolygon(slab, grid), supports);
+			const frame = buildSlabOverhangFrame(edges, slab.localY, bottom, this.materialManager);
+			if (frame) {
+				frame.userData.slabId = slab.id;
+				this.roots.getOrCreate(foundationId)?.add(frame);
+				entry.overhangFrame = frame;
+			}
+		}
 	}
 
 	/**
@@ -238,7 +290,9 @@ export class SlabManager {
 		entry.mesh.removeFromParent();
 		entry.boundsHelper?.geometry.dispose();
 		for (const group of entry.openingFrames) disposeSlabOpeningFrame(group);
+		if (entry.overhangFrame) disposeSlabOpeningFrame(entry.overhangFrame);
 		this.slabs.delete(id);
+		this.rebuildOverhangFramesForFoundation(entry.definition.foundationId);
 		return true;
 	}
 

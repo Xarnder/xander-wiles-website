@@ -1,5 +1,5 @@
 /**
- * Path-tool draw modes, cycled with C: axis snap, free heading, a free quadratic Bezier (start,
+ * Path-tool draw modes, cycled with B: axis snap, free heading, a free quadratic Bezier (start,
  * end, then the bend), then two Bezier modes drawn start → corner → end. Those keep both arms the
  * same length, and the last also snaps the corner to 30° steps so a right angle is one stop.
  * Tool-local — not persisted on BuildingSettings. Framework-free so the cycle is unit-testable.

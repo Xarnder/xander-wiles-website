@@ -50,7 +50,7 @@ export function cycleSnapMode(
 }
 
 /**
- * Polygon Wall Tool starts on `'axis'` each time it is selected. `'axis-inline'` only differs once
+ * Polygon Wall, Ceiling and Floor start on `'axis'` each time they are selected. `'axis-inline'` differs once
  * 3 points exist, so if the player left the default on, step them up automatically at that count.
  * Any other mode (they pressed `B`) is left alone.
  */

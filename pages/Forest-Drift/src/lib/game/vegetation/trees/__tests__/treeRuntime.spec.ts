@@ -252,6 +252,38 @@ describe('TreeSpeciesSelector', () => {
 		}
 	});
 
+	it('keeps neighbouring trees in coherent groves instead of rolling a fresh species per tree', () => {
+		const selector = new TreeSpeciesSelector(settings);
+		selector.setSeed('species-world');
+		const species = new Set<string>();
+		let same = 0;
+		let total = 0;
+		for (let x = -600; x < 600; x += 12) {
+			for (let z = -600; z < 600; z += 12) {
+				const position = site({ worldX: x, worldZ: z, density: 0.7 });
+				const a = selector.pick(position, 0.13);
+				const b = selector.pick({ ...position, worldX: x + 3, worldZ: z + 3 }, 0.91);
+				species.add(a);
+				if (a === b) same++;
+				total++;
+			}
+		}
+		expect(same / total).toBeGreaterThan(0.9);
+		expect(species.size).toBeGreaterThanOrEqual(4);
+	});
+
+	it('uses the same local species regardless of a tree’s random roll, with mixed mode still available', () => {
+		const groves = new TreeSpeciesSelector(settings);
+		groves.setSeed('species-world');
+		const selections = new Set(Array.from({ length: 100 }, (_, i) => groves.pick(site(), i / 100)));
+		expect(selections.size).toBe(1);
+		const mixed = new TreeSpeciesSelector({ ...settings, standStrength: 0 });
+		mixed.setSeed('species-world');
+		expect(
+			new Set(Array.from({ length: 100 }, (_, i) => mixed.pick(site(), i / 100))).size
+		).toBeGreaterThan(1);
+	});
+
 	it('turns to conifers at elevation and keeps ornamentals out of dense forest', () => {
 		const selector = new TreeSpeciesSelector(settings);
 		selector.setSeed('species-world');

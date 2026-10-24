@@ -18,7 +18,7 @@ export interface BeamToolOptions {
 }
 
 /**
- * Places a decorative wood beam on an existing wall — same targeting, C-cycled U snap, and
+ * Places a decorative wood beam on an existing wall — same targeting, B-cycled U snap, and
  * edge-margin rules as Window/Door. Defaults to a vertical post (floor to top); `R` flips to a
  * horizontal board whose Y follows the look point. The wall is never cut.
  */

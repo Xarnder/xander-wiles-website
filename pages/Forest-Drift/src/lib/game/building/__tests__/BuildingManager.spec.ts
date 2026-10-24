@@ -2897,3 +2897,143 @@ describe('editing existing window shutters', () => {
 		expect(opening.shutters).toEqual({ mode: 'auto' });
 	});
 });
+
+describe('automatic floor and ceiling overhang timber', () => {
+	const points = (x = 0) => [
+		pathPoint(x, 0),
+		pathPoint(x + 10, 0),
+		pathPoint(x + 10, 10),
+		pathPoint(x, 10)
+	];
+	function addFloor(
+		ctx: ReturnType<typeof setup>,
+		type: 'floor' | 'ceiling' | 'flat-roof' = 'floor',
+		x = 0
+	) {
+		return ctx.buildingManager.addSlab({
+			points: points(x),
+			type,
+			localY: 3,
+			thickness: 0.2,
+			levelIndex: 1
+		}).value!;
+	}
+	function beamCount(manager: SlabManager, id: string): number {
+		let count = 0;
+		manager.group.traverse((child) => {
+			if (child.name === 'slab-overhang-frame' && child.userData.slabId === id) {
+				const mesh = child.children[0] as THREE.Mesh;
+				count +=
+					(mesh.geometry.getIndex()?.count ?? mesh.geometry.getAttribute('position').count) / 36;
+			}
+		});
+		return count;
+	}
+
+	it.each(['floor', 'ceiling'] as const)(
+		'frames exposed %s edges and updates when a wall is added or removed',
+		(type) => {
+			const ctx = setup();
+			ctx.foundationManager.addFoundation(makeFoundation());
+			const slab = addFloor(ctx, type);
+			expect(beamCount(ctx.slabManager, slab.id)).toBe(4);
+			const wall = ctx.buildingManager.addWall({
+				start: pathPoint(0, 0),
+				end: pathPoint(10, 0),
+				...DEFAULT_WALL_PARAMS
+			}).value!;
+			expect(beamCount(ctx.slabManager, slab.id)).toBe(3);
+			ctx.buildingManager.removeWall(wall.id);
+			expect(beamCount(ctx.slabManager, slab.id)).toBe(4);
+			ctx.buildingManager.addWall({
+				start: pathPoint(2, 0),
+				end: pathPoint(8, 0),
+				...DEFAULT_WALL_PARAMS
+			});
+			expect(beamCount(ctx.slabManager, slab.id)).toBe(5);
+		}
+	);
+
+	it('recognises closed wall paths and restores timber when a supporting segment is removed', () => {
+		const ctx = setup();
+		ctx.foundationManager.addFoundation(makeFoundation());
+		const path = ctx.buildingManager.addWallPath({
+			points: points(),
+			closed: true,
+			...DEFAULT_PATH_PARAMS
+		}).value!;
+		const slab = addFloor(ctx);
+		expect(beamCount(ctx.slabManager, slab.id)).toBe(0);
+		ctx.buildingManager.removeWallSegment(path.id, path.segments[0].id);
+		expect(beamCount(ctx.slabManager, slab.id)).toBe(1);
+	});
+
+	it('does not mistake an upper-storey wall or a wall too short to reach the slab for support', () => {
+		const ctx = setup();
+		ctx.foundationManager.addFoundation(makeFoundation());
+		const slab = addFloor(ctx);
+		ctx.buildingManager.addWall({
+			start: pathPoint(0, 0),
+			end: pathPoint(10, 0),
+			...DEFAULT_WALL_PARAMS,
+			baseY: 3
+		});
+		ctx.buildingManager.addWall({
+			start: pathPoint(0, 10),
+			end: pathPoint(10, 10),
+			...DEFAULT_WALL_PARAMS,
+			height: 2.5
+		});
+		expect(beamCount(ctx.slabManager, slab.id)).toBe(4);
+	});
+
+	it('omits internal seams between adjoining slabs and restores the edge if the neighbour is deleted', () => {
+		const ctx = setup();
+		ctx.foundationManager.addFoundation(makeFoundation());
+		const a = addFloor(ctx);
+		const b = addFloor(ctx, 'ceiling', 10);
+		expect(beamCount(ctx.slabManager, a.id)).toBe(3);
+		expect(beamCount(ctx.slabManager, b.id)).toBe(3);
+		ctx.buildingManager.removeSlab(b.id);
+		expect(beamCount(ctx.slabManager, a.id)).toBe(4);
+	});
+
+	it('recreates derived timber on load and online foundation replacement, without changing collision or saved state', () => {
+		const ctx = setup();
+		ctx.foundationManager.addFoundation(makeFoundation());
+		const slab = addFloor(ctx);
+		ctx.buildingManager.addWall({
+			start: pathPoint(0, 0),
+			end: pathPoint(10, 0),
+			...DEFAULT_WALL_PARAMS
+		});
+		const saved = ctx.buildingManager.serialize();
+		const restored = setup();
+		restored.foundationManager.addFoundation(makeFoundation());
+		restored.buildingManager.load(saved);
+		expect(beamCount(restored.slabManager, slab.id)).toBe(3);
+		expect(restored.buildingManager.serialize()).toEqual(saved);
+		expect(restored.slabManager.getTopSurfacesAt(-0.02, 2)).toEqual([]);
+		expect(restored.slabManager.getTopSurfacesAt(2, 2)).toEqual([20.4]);
+		restored.buildingManager.replaceFoundationBuilding('foundation-a', { ...saved[0], walls: [] });
+		expect(beamCount(restored.slabManager, slab.id)).toBe(4);
+	});
+
+	it('keeps flat roofs unchanged and projects floor timber slightly past the slab rim', () => {
+		const ctx = setup();
+		ctx.foundationManager.addFoundation(makeFoundation());
+		const roof = addFloor(ctx, 'flat-roof');
+		expect(beamCount(ctx.slabManager, roof.id)).toBe(0);
+		ctx.buildingManager.removeSlab(roof.id);
+		const slab = addFloor(ctx);
+		let frame: THREE.Object3D | undefined;
+		ctx.slabManager.group.traverse((child) => {
+			if (child.name === 'slab-overhang-frame' && child.userData.slabId === slab.id) frame = child;
+		});
+		ctx.slabManager.group.updateMatrixWorld(true);
+		const box = new THREE.Box3().setFromObject(frame!);
+		expect(box.min.x).toBeCloseTo(-0.035);
+		expect(box.max.x).toBeCloseTo(5.035);
+		expect(box.min.y).toBeCloseTo(17.4 + 2.8 - 0.04);
+	});
+});

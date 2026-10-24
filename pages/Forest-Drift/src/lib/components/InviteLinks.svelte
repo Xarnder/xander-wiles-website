@@ -18,8 +18,10 @@
 	};
 
 	let copiedRole = $state<PlayerRole | null>(null);
+	let copyErrorRole = $state<PlayerRole | null>(null);
 
 	async function copy(role: PlayerRole, url: string) {
+		copyErrorRole = null;
 		try {
 			await navigator.clipboard.writeText(url);
 			copiedRole = role;
@@ -28,6 +30,7 @@
 			}, 2000);
 		} catch {
 			copiedRole = null;
+			copyErrorRole = role;
 		}
 	}
 </script>
@@ -40,7 +43,12 @@
 				{#if !compact}<span class="hint">{ROLE_TEXT[link.role].hint}</span>{/if}
 			</div>
 			<div class="row">
-				<input readonly value={link.url} aria-label={ROLE_TEXT[link.role].title} />
+				<input
+					readonly
+					value={link.url}
+					aria-label={ROLE_TEXT[link.role].title}
+					onclick={(event) => event.currentTarget.select()}
+				/>
 				<button
 					type="button"
 					onclick={() => void copy(link.role, link.url)}
@@ -49,6 +57,9 @@
 					{copiedRole === link.role ? 'Copied' : 'Copy'}
 				</button>
 			</div>
+			{#if copyErrorRole === link.role}<span class="hint" role="status"
+					>Select the link above and copy it manually; clipboard access is unavailable.</span
+				>{/if}
 		</li>
 	{/each}
 </ul>

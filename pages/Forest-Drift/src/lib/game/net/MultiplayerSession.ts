@@ -119,6 +119,7 @@ export interface MultiplayerSessionOptions {
 	onVersion?: (version: { epoch: number; seq: number }) => void;
 	/** Whether this player's changes are still on their way to the room. */
 	onSaving?: (saving: boolean) => void;
+	onTrackingChanged?: (playerId: string | null) => void;
 }
 
 /** The owner's slider drags are coalesced into at most this many sends a second. */
@@ -139,6 +140,9 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private envTimer: ReturnType<typeof setTimeout> | null = null;
 	private lastEnvSentAt = Number.NEGATIVE_INFINITY;
 	private playerCount = 0;
+	private roster: readonly PlayerInfo[] = [];
+	private trackedId: string | null = null;
+	private readonly sharedDoors = new Set<string>();
 	private status: NetStatus = 'connecting';
 	private disconnectedSince: number | null = null;
 	private lock: BuildLock = 'joining';
@@ -175,6 +179,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			},
 			onPlayers: (players, selfSlot) => {
 				this.playerCount = players.length;
+				this.roster = players;
+				if (
+					this.trackedId &&
+					!players.some((p) => p.playerId === this.trackedId) &&
+					this.status === 'connected'
+				) {
+					this.trackPlayer(null);
+				}
 				for (const player of players) this.names[player.playerId] = player.name;
 				options.onPlayers?.(players, selfSlot);
 			},
@@ -191,7 +203,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 				onReject: (reject) => this.feed?.onReject(reject),
 				onAck: (batchId) => this.feed?.onAck(batchId),
 				onSynced: () => this.feed?.resendPending(),
-				onDoor: (id, open) => this.context?.setDoorOpen(id, open),
+				onDoor: (id, open) => {
+					if (open) this.sharedDoors.add(id);
+					else this.sharedDoors.delete(id);
+					this.context?.setDoorOpen(id, open);
+				},
 				onInteractions: (locations, replyTo) => {
 					const self = this.options.identity.playerId;
 					const authoritative =
@@ -213,6 +229,25 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			players: this.playerCount,
 			build: options.build
 		}));
+	}
+
+	/** Local navigation only: no extra messages or position history. */
+	trackPlayer(playerId: string | null): boolean {
+		if (
+			playerId !== null &&
+			(playerId === this.options.identity.playerId ||
+				!this.roster.some((player) => player.playerId === playerId && !player.offline))
+		)
+			return false;
+		if (this.trackedId === playerId) return true;
+		this.trackedId = playerId;
+		this.locator.setTrackedPlayer(playerId);
+		this.options.onTrackingChanged?.(playerId);
+		return true;
+	}
+
+	get trackedPlayerId(): string | null {
+		return this.trackedId;
 	}
 
 	get role(): PlayerRole | null {
@@ -322,7 +357,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.avatars.update(views, deltaSeconds, this.context.camera);
 		const camera = this.context.camera;
 		if (camera instanceof THREE.PerspectiveCamera) {
-			this.locator.setEnabled(this.context.showLocatorBar());
+			this.locator.setEnabled(this.context.showLocatorBar() || this.trackedId !== null);
 			this.locator.beginFrame(camera, this.localFeetY);
 			for (const { info, frame } of views) {
 				const dim =
@@ -351,6 +386,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	}
 
 	doorToggled(openingId: string, open: boolean): void {
+		if (open) this.sharedDoors.add(openingId);
+		else this.sharedDoors.delete(openingId);
 		this.net.sendDoor(openingId, open);
 	}
 
@@ -360,6 +397,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		// Anything the room hasn't confirmed yet is flushed first: a quit straight after an edit
 		// still sends it (the socket closes right after, deliberately).
 		this.feed?.flushLocal();
+		this.trackPlayer(null);
 		this.net.dispose();
 		this.locator.dispose();
 		this.avatars?.dispose();
@@ -378,7 +416,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		if (welcome.env) this.applyEnvironment(welcome.env);
 		this.interactions = welcome.interactions ?? [];
 		this.context?.setInteractions?.(this.interactions, this.options.identity.playerId, true);
-		for (const id of welcome.doors) this.context.setDoorOpen(id, true);
+		for (const id of this.sharedDoors) {
+			if (!welcome.doors.includes(id)) this.context.setDoorOpen(id, false);
+		}
+		this.sharedDoors.clear();
+		for (const id of welcome.doors) {
+			this.sharedDoors.add(id);
+			this.context.setDoorOpen(id, true);
+		}
 		if (welcome.first && welcome.bookmark) this.context.restorePlayer(welcome.bookmark);
 		if (welcome.resync) void this.resync();
 		this.updateLock();
