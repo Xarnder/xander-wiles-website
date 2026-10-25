@@ -1,3 +1,5 @@
+import { trackViewportDock } from '../lib/viewportDock';
+import { isPasteSplitEnabled, subscribePasteSplit, splitPastedEntry } from '../lib/pasteSplit';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -28,6 +30,8 @@ import CrossIcon from './CrossIcon';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import { playProgressSound, playSaveSound, unlockJournalAudio } from '../lib/journalAudio';
 import {
+    isStickyAdvancedEntryEnabled,
+    subscribeStickyAdvancedEntry,
     isStickyWritingHeaderEnabled,
     isStickySaveButtonEnabled,
     subscribeStickyWritingHeader,
@@ -85,9 +89,10 @@ function normalizeMood(value) {
         : null;
 }
 
-function AdvancedEntrySection({ open, onToggle, children, className = '' }) {
+function AdvancedEntrySection({ open, onToggle, children, action, className = '' }) {
     return (
         <div className={`mb-4 sm:mb-6 rounded-xl border border-white/10 bg-white/5 overflow-hidden ${className}`}>
+            <div className="flex items-center gap-2 pr-3">
             <button
                 type="button"
                 onClick={onToggle}
@@ -100,6 +105,8 @@ function AdvancedEntrySection({ open, onToggle, children, className = '' }) {
                 </span>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
             </button>
+            {action}
+            </div>
             <div className={open ? 'space-y-4 border-t border-white/10 px-3 py-3 sm:px-4 sm:py-4' : 'hidden'}>
                 {children}
             </div>
@@ -291,7 +298,32 @@ export default function EntryEditor() {
     const [zoomLevel, setZoomLevel] = useState(1);
     const [entryImageColumns, setEntryImageColumns] = useState(2);
     const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
+    const [stickyAdvancedEntry, setStickyAdvancedEntry] = useState(isStickyAdvancedEntryEnabled);
+    const advancedEntryRef = useRef(null);
+    const stickyDockRef = useRef(null);
+    const dockAdvancedEntry = isEditing && stickyAdvancedEntry && !showAdvancedEntry;
     const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
+    const [pasteSplitEnabled, setPasteSplitEnabled] = useState(isPasteSplitEnabled);
+    const [pasteSplitPending, setPasteSplitPending] = useState(false);
+    const pasteSplitPendingRef = useRef(false);
+    const markCombinedPaste = (text) => {
+        if (!pasteSplitEnabled || !text.includes('-')) return;
+        pasteSplitPendingRef.current = true;
+        setPasteSplitPending(true);
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+    const splitCombinedPaste = () => {
+        const parts = splitPastedEntry(content);
+        if (!parts) {
+            toastError('Use Title - Main Entry, with text on both sides of the first hyphen.');
+            return;
+        }
+        stopClipboardTyping();
+        setTitle(parts.title);
+        setContent(parts.content);
+        pasteSplitPendingRef.current = false;
+        setPasteSplitPending(false);
+    };
     const [autoTitleEnabled, setAutoTitleEnabled] = useState(isAutoTitleEnabled);
     const [missingTitleReminderEnabled, setMissingTitleReminderEnabled] = useState(isMissingTitleReminderEnabled);
     const [showMissingTitleConfirm, setShowMissingTitleConfirm] = useState(false);
@@ -308,6 +340,12 @@ export default function EntryEditor() {
     const [currentPrompt, setCurrentPrompt] = useState('');
     const autoSaveTimerRef = useRef(null);
     const lastSavedSignature = useRef('');
+    // Autosaves are recoverable until the user explicitly saves this session.
+    const savedEntryBeforeEditing = useRef(null);
+    const removedImagesDuringEditing = useRef([]);
+    const quitPendingRef = useRef(false);
+    const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+
     const isFirstLoad = useRef(true);
     const isEditingRef = useRef(false);
     isEditingRef.current = isEditing;
@@ -518,7 +556,14 @@ export default function EntryEditor() {
     }, [isEditing, setIsEditingEntry]);
 
     useEffect(() => subscribeStickyWritingHeader(setStickyWritingHeader), []);
+    useLayoutEffect(() => {
+        if (!isEditing || (!stickySaveButton && !dockAdvancedEntry) || lightboxImage) return;
+        return trackViewportDock(stickyDockRef.current);
+    }, [isEditing, stickySaveButton, dockAdvancedEntry, lightboxImage]);
+
+    useEffect(() => subscribeStickyAdvancedEntry(setStickyAdvancedEntry), []);
     useEffect(() => subscribeStickySaveButton(setStickySaveButton), []);
+    useEffect(() => subscribePasteSplit(setPasteSplitEnabled), []);
     useEffect(() => subscribeAutoTitle(setAutoTitleEnabled), []);
     useEffect(() => subscribeMissingTitleReminder(setMissingTitleReminderEnabled), []);
 
@@ -548,6 +593,14 @@ export default function EntryEditor() {
     }, [content, isEditing, useNativeEditor, mdeInstance]);
 
     // Keyboard Shortcuts
+    const requestQuitEditing = useCallback(() => {
+        if (saving || uploading || quitPendingRef.current) return;
+        stopClipboardTyping();
+        quitPendingRef.current = true;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        setShowQuitConfirm(true);
+    }, [saving, uploading, stopClipboardTyping]);
+
     useEffect(() => {
         const handleKeyDown = (e) => {
             // Save: Cmd+S or Ctrl+S
@@ -556,6 +609,7 @@ export default function EntryEditor() {
                 stopClipboardTyping();
                 if (isEditing) handleSave();
             }
+            if (quitPendingRef.current) return;
             // Cancel: Esc
             if (e.key === 'Escape') {
                 if (clipboardAnimationRef.current) {
@@ -572,7 +626,7 @@ export default function EntryEditor() {
                 } else if (showDuplicateConfirm) {
                     setShowDuplicateConfirm(false);
                 } else if (isEditing) {
-                    setIsEditing(false);
+                    requestQuitEditing();
                 }
                 return;
             }
@@ -597,10 +651,11 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, showMissingTitleConfirm, stopClipboardTyping]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, showMissingTitleConfirm, stopClipboardTyping, requestQuitEditing]);
 
     // Auto-save logic
     useEffect(() => {
+        if (quitPendingRef.current || saving) return;
         if (!isEditing || isFirstLoad.current) {
             if (isEditing) isFirstLoad.current = false;
             return;
@@ -618,10 +673,10 @@ export default function EntryEditor() {
         return () => {
             if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
-    }, [content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing, autoTitleEnabled]);
+    }, [content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing, autoTitleEnabled, pasteSplitPending, showQuitConfirm, saving]);
 
     async function handleAutoSave() {
-        if (!currentUser || !isEditing) return;
+        if (!currentUser || !isEditingRef.current || quitPendingRef.current || pasteSplitPendingRef.current) return;
         
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
@@ -860,6 +915,8 @@ export default function EntryEditor() {
         };
 
         const applySnapshot = (docSnap) => {
+            savedEntryBeforeEditing.current = docSnap.exists() ? docSnap.data() : null;
+            removedImagesDuringEditing.current = [];
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const normalizedContent = normalizeEntryText(data.content);
@@ -1033,7 +1090,7 @@ export default function EntryEditor() {
 
     // Parse title logic
     useEffect(() => {
-        if (!autoTitleEnabled || !content) return;
+        if (!autoTitleEnabled || !content || pasteSplitPendingRef.current) return;
         const match = content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
         if (match && match[1]) {
             const parts = match[1].split(' - ');
@@ -1195,6 +1252,8 @@ export default function EntryEditor() {
                 return;
             }
 
+            markCombinedPaste(clipboardText);
+
             if (nativeTextarea) {
                 const selectionStart = nativeTextarea.selectionStart ?? content.length;
                 const selectionEnd = nativeTextarea.selectionEnd ?? selectionStart;
@@ -1337,6 +1396,57 @@ export default function EntryEditor() {
         await uploadImageFiles(files);
     };
 
+    const cleanupRemovedImage = async (image) => {
+        try {
+            const path = image?.path || (image?.url && decodeURIComponent(image.url.split('/o/')[1].split('?')[0]));
+            if (path) await deleteObject(ref(getStorage(), path));
+        } catch (error) {
+            console.warn('Image storage cleanup failed:', error);
+        }
+    };
+
+
+    function closeQuitConfirm() {
+        quitPendingRef.current = false;
+        setShowQuitConfirm(false);
+    }
+
+    async function discardEditingChanges() {
+        if (!currentUser) return;
+        setSaving(true);
+        try {
+            const previous = savedEntryBeforeEditing.current;
+            const entryRef = doc(db, 'users', currentUser.uid, 'entries', date);
+            // Firestore queues this after any already-issued autosaves. Timers
+            // and all new saves stay paused until the rollback has completed.
+            if (previous) await setDoc(entryRef, previous);
+            else await deleteDoc(entryRef);
+
+            const data = previous || {};
+            setContent(normalizeEntryText(data.content));
+            setTitle(normalizeEntryText(data.title));
+            setSelectedTags(Array.isArray(data.tags) ? data.tags : []);
+            setMood(normalizeMood(data.mood));
+            setIsSpecial(Boolean(data.isSpecial));
+            setSubEntries(normalizeEntryRecord(data.subEntries));
+            setNumericEntries(normalizeEntryRecord(data.numericEntries));
+            setImages(normalizeImages(data));
+            setLocalAiSummaryRecord(data.aiSummary?.local || null);
+            removedImagesDuringEditing.current = [];
+            pasteSplitPendingRef.current = false;
+            setPasteSplitPending(false);
+            isFirstLoad.current = true;
+            isEditingRef.current = false;
+            setIsEditing(false);
+            success('Changes discarded');
+        } catch (error) {
+            console.error('Failed to discard entry changes:', error);
+            toastError('Could not discard changes. Your text is still here; please try again.');
+        } finally {
+            setSaving(false);
+        }
+    }
+
     const handleRemoveImage = (index) => {
         setImageToDelete(index);
         setShowDeleteConfirm(true);
@@ -1362,18 +1472,10 @@ export default function EntryEditor() {
             }, { merge: true });
             setImages(newImages);
 
-            try {
-                if (image?.path) {
-                    const storage = getStorage();
-                    const storageRef = ref(storage, image.path);
-                    await deleteObject(storageRef);
-                } else if (image?.url) {
-                    const storage = getStorage();
-                    const path = decodeURIComponent(image.url.split('/o/')[1].split('?')[0]);
-                    await deleteObject(ref(storage, path));
-                }
-            } catch (cleanupError) {
-                console.warn('Image metadata was removed, but storage cleanup failed:', cleanupError);
+            if (isEditingRef.current) {
+                removedImagesDuringEditing.current.push(image);
+            } else {
+                await cleanupRemovedImage(image);
             }
 
             setImageToDelete(null);
@@ -1411,6 +1513,11 @@ export default function EntryEditor() {
     };
 
     async function handleSave(skipDuplicateCheck = false, skipMissingTitleCheck = false) {
+        if (quitPendingRef.current || saving) return;
+        if (pasteSplitPendingRef.current) {
+            toastError('Split the pasted title and entry before saving.');
+            return;
+        }
         if (!currentUser) return;
 
         const trimmedTitle = title.trim();
@@ -1455,7 +1562,13 @@ export default function EntryEditor() {
     }
 
     async function performSave() {
+        if (quitPendingRef.current || saving) return;
+        if (pasteSplitPendingRef.current) {
+            toastError('Split the pasted title and entry before saving.');
+            return;
+        }
         if (!currentUser) return;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         setSaving(true);
         playSaveSound();
         try {
@@ -1479,6 +1592,7 @@ export default function EntryEditor() {
 
             if (!hasDataToSave) {
                 await deleteDoc(docRef);
+                savedEntryBeforeEditing.current = null;
             } else {
                 const textSize = new Blob([
                     content,
@@ -1489,7 +1603,7 @@ export default function EntryEditor() {
                 const savedImages = imagesForSave(images);
                 const mainImage = savedImages.length > 0 ? savedImages[0] : null;
 
-                await setDoc(docRef, {
+                const savedData = {
                     date: parseISO(date),
                     title: trimmedTitle || inferredTitle,
                     content: content,
@@ -1506,7 +1620,9 @@ export default function EntryEditor() {
                     imagePath: mainImage ? mainImage.path : null,
 
                     textSize: textSize
-                }, { merge: true });
+                };
+                await setDoc(docRef, savedData, { merge: true });
+                savedEntryBeforeEditing.current = { ...savedEntryBeforeEditing.current, ...savedData };
             }
 
             lastSavedSignature.current = createEntrySignature({
@@ -1521,7 +1637,11 @@ export default function EntryEditor() {
                 numericFields,
                 entrySettingsLoaded
             });
+            isEditingRef.current = false;
             setIsEditing(false);
+            const discardedImages = removedImagesDuringEditing.current;
+            removedImagesDuringEditing.current = [];
+            discardedImages.forEach(image => cleanupRemovedImage(image));
             setShowDuplicateConfirm(false);
             setSaveConfettiActive(true);
             scrollSavedEntryIntoView();
@@ -1737,7 +1857,7 @@ export default function EntryEditor() {
         : null;
 
     return (
-        <div className={`flex flex-col relative text-text ${isEditing && stickySaveButton ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : isEditing ? '' : 'h-full'}`}>
+        <div className={`flex flex-col relative text-text ${dockAdvancedEntry ? (stickySaveButton ? 'pb-[calc(6rem+env(safe-area-inset-bottom))] max-md:pb-[calc(10rem+env(safe-area-inset-bottom))]' : 'pb-[calc(6rem+env(safe-area-inset-bottom))]') : isEditing && stickySaveButton ? 'max-md:pb-[calc(5.25rem+env(safe-area-inset-bottom))]' : isEditing ? '' : 'h-full'}`}>
             {timeTravelState && !isTimeTravelBannerDismissed && (
                 <div
                     role="status"
@@ -1871,11 +1991,11 @@ export default function EntryEditor() {
                             {isEditing ? (
                                 <>
                                     <button
-                                        onClick={() => setIsEditing(false)}
+                                        onClick={requestQuitEditing}
                                         className="glass-button p-2 text-text-muted hover:text-white shrink-0"
-                                        disabled={saving}
-                                        title="Cancel"
-                                        aria-label="Cancel"
+                                        disabled={saving || uploading}
+                                        title="Quit editing"
+                                        aria-label="Quit editing"
                                     >
                                         <CrossIcon className="h-5 w-5" />
                                     </button>
@@ -2246,7 +2366,7 @@ export default function EntryEditor() {
                                 ref={clipboardFocusRef}
                                 className="scroll-mt-20 sm:scroll-mt-24"
                             >
-                            <div className="mb-3" onPointerDown={unlockJournalAudio}>
+                            <div className="mb-3" onPointerDown={unlockJournalAudio} onPasteCapture={(event) => markCombinedPaste(event.clipboardData.getData('text/plain'))}>
                                 {useNativeEditor ? (
                                     <textarea
                                         ref={nativeTextareaRef}
@@ -2285,7 +2405,20 @@ export default function EntryEditor() {
                             </div>
                             </div>
 
+                            {pasteSplitPending && (
+                                <p role="status" className="mb-2 text-sm text-text-muted">
+                                    Saving paused: split the pasted title and entry first{!pasteSplitEnabled ? ' (enable Split pasted title and entry in Settings)' : ''}.
+                                </p>
+                            )}
+                            <div ref={advancedEntryRef} className="scroll-mt-48" />
                             <AdvancedEntrySection
+                                className={dockAdvancedEntry ? 'hidden' : ''}
+                                action={pasteSplitEnabled ? (
+                                    <button type="button" onClick={splitCombinedPaste}
+                                        className="shrink-0 rounded-lg bg-primary/20 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/30">
+                                        Split title &amp; entry
+                                    </button>
+                                ) : null}
                                 open={showAdvancedEntry}
                                 onToggle={() => setShowAdvancedEntry((current) => !current)}
                             >
@@ -2717,11 +2850,22 @@ export default function EntryEditor() {
             </div>
 
             <ConfirmModal
+                isOpen={showQuitConfirm}
+                onClose={closeQuitConfirm}
+                onConfirm={discardEditingChanges}
+                title="Quit without saving?"
+                message="Are you sure you want to quit? Changes from this editing session will be discarded, including automatic saves. Your previously saved entry will be restored."
+                confirmText="Yes, quit"
+                cancelText="Go back"
+                isDangerous={true}
+            />
+
+            <ConfirmModal
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}
                 onConfirm={confirmRemoveImage}
                 title="Remove Image"
-                message="Are you sure you want to remove this image? This action cannot be undone."
+                message={isEditing ? "Remove this image from the entry? Save to keep the change, or quit without saving to restore it." : "Are you sure you want to remove this image? This action cannot be undone."}
                 confirmText="Remove"
                 isDangerous={true}
             />
@@ -2942,15 +3086,32 @@ export default function EntryEditor() {
                 document.body
             )}
 
-            {isEditing && stickySaveButton && !lightboxImage && createPortal(
-                <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+            {isEditing && (stickySaveButton || dockAdvancedEntry) && !lightboxImage && createPortal(
+                <div ref={stickyDockRef} className={`pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto max-w-3xl space-y-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] ${dockAdvancedEntry ? '' : 'md:hidden'}`}>
+                    {dockAdvancedEntry && (
+                        <AdvancedEntrySection
+                            className="pointer-events-auto !mb-0 !bg-bg shadow-lg"
+                            open={false}
+                            onToggle={() => {
+                                setShowAdvancedEntry(true);
+                                requestAnimationFrame(() => advancedEntryRef.current?.scrollIntoView({ block: 'start' }));
+                            }}
+                            action={pasteSplitEnabled ? (
+                                <button type="button" onClick={splitCombinedPaste}
+                                    className="shrink-0 rounded-lg bg-primary/20 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/30">
+                                    Split title &amp; entry
+                                </button>
+                            ) : null}
+                        />
+                    )}
+                    {stickySaveButton && (
                     <button
                         type="button"
                         onClick={() => {
                             unlockJournalAudio();
                             handleSave();
                         }}
-                        className="save-glint-button pointer-events-auto relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-secondary px-4 py-3.5 text-white shadow-lg shadow-primary/30 transition-opacity duration-200 disabled:opacity-70"
+                        className="save-glint-button pointer-events-auto relative flex md:hidden w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-secondary px-4 py-3.5 text-white shadow-lg shadow-primary/30 transition-opacity duration-200 disabled:opacity-70"
                         disabled={saving}
                         title={saving ? 'Saving' : 'Save'}
                         aria-label={saving ? 'Saving' : 'Save'}
@@ -2959,6 +3120,7 @@ export default function EntryEditor() {
                         {saving ? <Loader className="relative w-5 h-5 animate-spin" /> : <Save className="relative w-5 h-5" />}
                         <span className="relative text-base font-semibold">{saving ? 'Saving' : 'Save'}</span>
                     </button>
+                    )}
                 </div>,
                 document.body
             )}

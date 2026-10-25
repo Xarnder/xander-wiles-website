@@ -1,3 +1,4 @@
+import { isPasteSplitEnabled, setPasteSplitEnabled as savePasteSplitPreference } from '../lib/pasteSplit';
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Image as ImageIcon, Lock, Loader2, Moon, PanelTop, PenTool, Plus, Save, Settings, Sun, Tag, Trash2, Type, Volume2, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
@@ -25,6 +26,8 @@ import { areJournalSoundsEnabled, setJournalSoundsEnabled, unlockJournalAudio } 
 import { areCalendarImageCountsEnabled, setCalendarImageCountsEnabled, areCalendarTagDotsEnabled, setCalendarTagDotsEnabled } from '../lib/calendarDisplay';
 import { isQuickWriteFillOldestEmptyEnabled, setQuickWriteFillOldestEmptyEnabled } from '../lib/quickWrite';
 import {
+    isStickyAdvancedEntryEnabled,
+    setStickyAdvancedEntryEnabled,
     isStickyWritingHeaderEnabled,
     setStickyWritingHeaderEnabled,
     isStickySaveButtonEnabled,
@@ -96,7 +99,9 @@ export default function SettingsView() {
     const [showCalendarTagDots, setShowCalendarTagDots] = useState(areCalendarTagDotsEnabled);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
     const [stickyWritingHeader, setStickyWritingHeader] = useState(isStickyWritingHeaderEnabled);
+    const [stickyAdvancedEntry, setStickyAdvancedEntry] = useState(isStickyAdvancedEntryEnabled);
     const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
+    const [pasteSplitEnabled, setPasteSplitEnabled] = useState(isPasteSplitEnabled);
     const [autoTitleEnabled, setAutoTitleEnabled] = useState(isAutoTitleEnabled);
     const [missingTitleReminderEnabled, setMissingTitleReminderEnabled] = useState(isMissingTitleReminderEnabled);
     const [entrySections, setEntrySections] = useState([]);
@@ -828,12 +833,38 @@ export default function SettingsView() {
                             <span className="min-w-0">
                                 <span className="block text-sm font-bold text-white">Sticky save button</span>
                                 <span className="mt-1 block text-xs leading-snug text-text-muted">
-                                    Keep Save pinned at the bottom while editing. Off by default so it does not cover the keyboard.
+                                    Keep Save pinned at the bottom while editing and above the on-screen keyboard. Off by default.
                                 </span>
                             </span>
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={stickySaveButton}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${stickySaveButton ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !stickyAdvancedEntry;
+                            setStickyAdvancedEntry(nextEnabled);
+                            setStickyAdvancedEntryEnabled(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={stickyAdvancedEntry}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stickyAdvancedEntry ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Save className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Sticky Advanced entry bar</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Keep the collapsed Advanced entry bar and enabled split button pinned at the bottom while editing. Stays above the on-screen keyboard, on its own or above Sticky save. Expanding returns the section to the page. Off by default.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={stickyAdvancedEntry}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${stickyAdvancedEntry ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                     <button
@@ -860,6 +891,32 @@ export default function SettingsView() {
                         </span>
                         <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={autoTitleEnabled}>
                             <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${autoTitleEnabled ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const nextEnabled = !pasteSplitEnabled;
+                            setPasteSplitEnabled(nextEnabled);
+                            savePasteSplitPreference(nextEnabled);
+                        }}
+                        className="mt-3 flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={pasteSplitEnabled}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${pasteSplitEnabled ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Type className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Split pasted title and entry</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Paste Title - Main Entry into the main entry, then press Split title &amp; entry beside Advanced entry. Uses the first hyphen and replaces both inputs. Saving pauses until you split the paste. Off by default.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={pasteSplitEnabled}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${pasteSplitEnabled ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
                         </span>
                     </button>
                     <button

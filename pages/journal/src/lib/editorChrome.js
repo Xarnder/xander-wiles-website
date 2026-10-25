@@ -50,3 +50,18 @@ export function setStickySaveButtonEnabled(enabled) {
 export function subscribeStickySaveButton(callback) {
     return subscribeEnabledFlag(STICKY_SAVE_CHANGE_EVENT, callback);
 }
+
+const STICKY_ADVANCED_KEY = 'journal-sticky-advanced-entry';
+const STICKY_ADVANCED_CHANGE_EVENT = 'journal-sticky-advanced-entry-changed';
+
+export function isStickyAdvancedEntryEnabled() {
+    return readEnabledFlag(STICKY_ADVANCED_KEY);
+}
+
+export function setStickyAdvancedEntryEnabled(enabled) {
+    writeEnabledFlag(STICKY_ADVANCED_KEY, STICKY_ADVANCED_CHANGE_EVENT, enabled);
+}
+
+export function subscribeStickyAdvancedEntry(callback) {
+    return subscribeEnabledFlag(STICKY_ADVANCED_CHANGE_EVENT, callback);
+}
