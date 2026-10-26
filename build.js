@@ -69,6 +69,8 @@ const excludeList = [
     'package-lock.json',
     'build.js',
     '.gitignore',
+    // Serverless functions run from root /api in Vercel; do not copy into static output
+    'api',
     // Keep project-root vercel.json for the build; do not ship it inside outputDirectory
     // (avoids nested outputDirectory/buildCommand confusion on Vercel).
     'vercel.json',

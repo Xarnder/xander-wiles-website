@@ -1,6 +1,6 @@
 /**
  * Basic CSV detection, parsing, and writing.
- * No formulas — cells are plain text.
+ * Preserves raw cell text, including formulas evaluated by csv-formulas.js.
  */
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -207,4 +207,31 @@ export function serializeCsv(rows, delimiter = ',', options = {}) {
     if (options.trailingNewline) text += '\n';
     if (options.bom) text = `\uFEFF${text}`;
     return text;
+}
+
+/** Convert a purchase checklist to cells on paste; ignore prose and existing totals. */
+export function purchaseMarkdownRows(text, startRow = 0, startCol = 0) {
+    const items = [];
+    for (const line of String(text).split(/\r?\n/)) {
+        const bullet = /^\s*[-*+]\s+(?:\[[ xX]\]\s*)?(.+)$/.exec(line);
+        if (!bullet) continue;
+        const date = /\{\{?date:(\d{4}-\d{2}-\d{2})\}\}?/.exec(bullet[1]);
+        const clean = bullet[1].replace(/\{\{?date:[^}]+\}\}?/g, '').trim();
+        const price = /\s+-\s*([$£€])\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*$/.exec(clean);
+        if (!price) return null; // Do not silently drop unrecognised list items.
+        items.push([clean.slice(0, price.index).trim(), date?.[1] ?? '', price[1], price[2].replaceAll(',', '')]);
+    }
+    if (!items.length) return null;
+    const currencies = [...new Set(items.map(item => item[2]))];
+    const result = [['Item', 'Date', ...currencies.map(c => ({ '$': 'USD', '£': 'GBP', '€': 'EUR' })[c])],
+        ...items.map(([name, date, currency, cost]) => [name, date, ...currencies.map(c => c === currency ? cost : '')])];
+    const label = index => {
+        let value = ''; for (index++; index; index = Math.floor((index - 1) / 26)) value = String.fromCharCode(65 + (index - 1) % 26) + value;
+        return value;
+    };
+    result.push(['Total', '', ...currencies.map((_, c) => {
+        const col = label(startCol + c + 2);
+        return `=SUM(${col}${startRow + 2}:${col}${startRow + items.length + 1})`;
+    })]);
+    return result;
 }

@@ -1,8 +1,9 @@
 /**
- * Plain CSV grid: edit cells, add or remove rows and columns. No formulas.
+ * CSV grid with live arithmetic and SUM formulas.
  */
 
-import { parseCsv, pasteIntoRows, serializeCsv } from './csv.js';
+import { calculateSheet, adjustDeletedReferences } from './csv-formulas.js';
+import { parseCsv, pasteIntoRows, serializeCsv, purchaseMarkdownRows } from './csv.js';
 
 const EDIT_MAX_ROWS = 80;
 const EDIT_MAX_COLS = 16;
@@ -130,7 +131,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
 
     const syncFromDom = () => {
         for (const input of gridEl.querySelectorAll('.csv-input')) {
-            if (!(input instanceof HTMLInputElement)) continue;
+            if (!(input instanceof HTMLInputElement) || input !== document.activeElement) continue;
             const r = Number(input.dataset.row);
             const c = Number(input.dataset.col);
             if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) continue;
@@ -141,9 +142,22 @@ export function renderCsvGrid(gridEl, text, onChange) {
         }
     };
 
+    const refreshResults = () => {
+        const values = calculateSheet(rows);
+        for (const input of gridEl.querySelectorAll('.csv-input')) {
+            const r = Number(input.dataset.row), c = Number(input.dataset.col);
+            const raw = rows[r]?.[c] ?? '';
+            const result = values[r]?.[c] ?? '';
+            input.title = raw.trimStart().startsWith('=') ? `${raw} → ${result}` : '';
+            input.classList.toggle('csv-error', raw.trimStart().startsWith('=') && result.startsWith('#'));
+            if (input !== document.activeElement) input.value = result;
+        }
+    };
+
     const emit = (fromDom = true) => {
         if (!editable) return;
         if (fromDom) syncFromDom();
+        refreshResults();
         onChange(serializeCsv(rows, delimiter, writeOptions));
     };
 
@@ -152,7 +166,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
             if (!editable) return null;
             let changed = false;
             for (const input of gridEl.querySelectorAll('.csv-input')) {
-                if (!(input instanceof HTMLInputElement)) continue;
+                if (!(input instanceof HTMLInputElement) || input !== document.activeElement) continue;
                 const r = Number(input.dataset.row);
                 const c = Number(input.dataset.col);
                 if ((rows[r]?.[c] ?? '') !== input.value) changed = true;
@@ -167,6 +181,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
     let setActive = () => {};
 
     const paint = () => {
+        const values = calculateSheet(rows);
         const focus = pendingFocus;
         pendingFocus = null;
         const colsNow = columnCount(rows);
@@ -230,7 +245,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.className = 'csv-input';
-                    input.value = value;
+                    input.value = values[r]?.[c] ?? value;
                     input.dataset.row = String(r);
                     input.dataset.col = String(c);
                     input.spellcheck = false;
@@ -245,16 +260,23 @@ export function renderCsvGrid(gridEl, text, onChange) {
                         setActive(r, c);
                         emit();
                     });
+                    input.addEventListener('blur', () => {
+                        rows[r][c] = input.value;
+                        refreshResults();
+                        input.value = calculateSheet(rows)[r][c];
+                    });
                     input.addEventListener('focus', () => {
+                        input.value = rows[r]?.[c] ?? '';
                         setActive(r, c);
                         revealInput(gridEl, input);
                     });
                     input.addEventListener('paste', (event) => {
                         const pasted = event.clipboardData?.getData('text/plain') ?? '';
-                        if (!pasted.includes('\n') && !pasted.includes('\t') && !pasted.includes('\r')) return;
+                        const purchases = purchaseMarkdownRows(pasted, r, c);
+                        if (!purchases && !pasted.includes('\n') && !pasted.includes('\t') && !pasted.includes('\r')) return;
                         event.preventDefault();
                         syncFromDom();
-                        const result = pasteIntoRows(rows, r, c, pasted);
+                        const result = pasteIntoRows(rows, r, c, purchases ? serializeCsv(purchases, '\t') : pasted);
                         let next = result.rows;
                         let truncated = false;
                         if (next.length > EDIT_MAX_ROWS) {
@@ -310,7 +332,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
                 } else {
                     const cell = document.createElement('div');
                     cell.className = 'csv-read';
-                    cell.textContent = value;
+                    cell.textContent = values[r]?.[c] ?? value;
                     td.appendChild(cell);
                 }
                 tr.appendChild(td);
@@ -372,6 +394,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
                 const r = active.r;
                 const c = active.c;
                 rows.splice(r, 1);
+                rows.splice(0, rows.length, ...adjustDeletedReferences(rows, 'row', r));
                 pendingFocus = {
                     r: Math.min(r, rows.length - 1),
                     c: Math.min(c, columnCount(rows) - 1),
@@ -393,6 +416,7 @@ export function renderCsvGrid(gridEl, text, onChange) {
                 for (const row of rows) {
                     if (c < row.length) row.splice(c, 1);
                 }
+                rows.splice(0, rows.length, ...adjustDeletedReferences(rows, 'column', c));
                 pendingFocus = {
                     r: Math.min(r, rows.length - 1),
                     c: Math.min(c, columnCount(rows) - 1),
@@ -401,6 +425,16 @@ export function renderCsvGrid(gridEl, text, onChange) {
                 paint();
             });
 
+            const help = document.createElement('details');
+            help.className = 'csv-help';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Formula help';
+            const examples = document.createElement('p');
+            examples.textContent = 'Paste a Markdown purchase list to create item, date and currency columns with totals. Start with = : =B2+C2, =B2-C2, =B2*C2, =B2/C2 or =SUM(B2:B30). Use parentheses to group calculations. Tap a result to edit its formula. Currency values are numbers; keep different currencies in separate columns. Deleted references show #REF!; circular references show #CYCLE!.';
+            help.append(summary, examples);
+            gridEl.appendChild(help);
+            addRow.disabled = rows.length >= EDIT_MAX_ROWS;
+            addCol.disabled = colsNow >= EDIT_MAX_COLS;
             bar.append(label, addRow, addCol, deleteRow, deleteCol);
             gridEl.appendChild(bar);
 
@@ -435,4 +469,5 @@ export function renderCsvGrid(gridEl, text, onChange) {
 
     bindKeyboardInset(gridEl);
     paint();
+    refreshResults();
 }

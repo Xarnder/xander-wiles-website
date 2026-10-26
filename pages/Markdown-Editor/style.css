@@ -8158,3 +8158,8 @@ html[data-theme="light"] .new-file-option--csv img {
     font-size: 0.85rem;
     color: var(--text-muted);
 }
+
+.csv-help { flex: 0 0 auto; font-size: 0.85rem; overflow-wrap: anywhere; }
+.csv-help summary { min-height: 44px; padding: 12px 8px; box-sizing: border-box; cursor: pointer; }
+.csv-help p { margin: 0; padding: 0 8px 8px; max-height: 7rem; overflow: auto; }
+.csv-input.csv-error { color: var(--danger, #d94040); }

@@ -433,37 +433,54 @@ export function applyAiProposal(input) {
         if (original.indexOf(selection, at + selection.length) !== -1) {
             return { ok: false, error: 'That passage appears more than once. Paste a longer piece.' };
         }
-        const outside = original.slice(0, at) + original.slice(at + selection.length);
-        const fences = outside.match(/```mdlist[\s\S]*?```/g) || [];
-        for (const fence of fences) {
-            if (fence.length > 20 && proposal.includes(fence)) {
-                return { ok: false, error: 'Expand returned more than the passage.' };
+        const prefix = original.slice(0, at);
+        const suffix = original.slice(at + selection.length);
+
+        let next;
+        // If the model returned the full note rather than only the expansion
+        const trimmedProposal = proposal.trim();
+        const trimmedPrefix = prefix.trimStart();
+        const trimmedSuffix = suffix.trimEnd();
+        if (trimmedPrefix && trimmedProposal.startsWith(trimmedPrefix) && trimmedSuffix && trimmedProposal.endsWith(trimmedSuffix)) {
+            next = original.endsWith('\n') ? `${trimmedProposal}\n` : trimmedProposal;
+        } else {
+            const outside = prefix + suffix;
+            const fences = outside.match(/```mdlist[\s\S]*?```/g) || [];
+            for (const fence of fences) {
+                if (fence.length > 20 && proposal.includes(fence)) {
+                    return { ok: false, error: 'Expand returned more than the passage.' };
+                }
             }
+            next = prefix + proposal + suffix;
         }
-        const next = original.slice(0, at) + proposal + original.slice(at + selection.length);
         const fenceError = fenceSafetyError(original, next);
         if (fenceError) return { ok: false, error: fenceError };
         return { ok: true, markdown: next };
     }
 
     if (task === 'header') {
-        if (proposal.includes('```') || proposal.length > 2000) {
+        if (proposal.includes('```') || proposal.length > 4000) {
             return { ok: false, error: 'The header should be a short title block, without code fences.' };
         }
+        const headerBlock = splitOpeningHeader(proposal).header.trim() || proposal.trim();
         const { rest } = splitOpeningHeader(original);
-        const next = `${proposal.trim()}\n\n${rest.replace(/^\s+/, '')}`.replace(/\n{3,}/g, '\n\n');
+        const next = `${headerBlock}\n\n${rest.replace(/^\s+/, '')}`.replace(/\n{3,}/g, '\n\n');
         const fenceError = fenceSafetyError(original, next);
         if (fenceError) return { ok: false, error: fenceError };
         return { ok: true, markdown: next.endsWith('\n') ? next : `${next}\n` };
     }
 
     if (task === 'summarize') {
-        if (proposal.includes('```') || proposal.length > 4000) {
+        let section = proposal.trim();
+        const match = section.match(/(^|\n)(## Summary[\s\S]*?)(\n## |\n```|$)/i);
+        if (match) {
+            section = match[2].trim();
+        } else if (!section.startsWith('## ')) {
+            section = `## Summary\n\n${section}`;
+        }
+        if (section.includes('```') || section.length > 4000) {
             return { ok: false, error: 'The summary should stay a short section, without code fences.' };
         }
-        const section = proposal.trim().startsWith('## ')
-            ? proposal.trim()
-            : `## Summary\n\n${proposal.trim()}`;
         const next = insertSummary(original, section);
         const fenceError = fenceSafetyError(original, next);
         if (fenceError) return { ok: false, error: fenceError };

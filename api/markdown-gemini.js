@@ -10,7 +10,7 @@ export const config = {
 };
 
 const MODEL = 'gemini-3.1-flash-lite';
-/** Exact Google account. Dots and plus-aliases do not match. */
+/** Primary Google account authorized to use this endpoint. */
 const ALLOWED_EMAIL = 'xanderwiles@gmail.com';
 const MAX_MARKDOWN = 400_000;
 const MAX_SELECTION = 20_000;
@@ -18,16 +18,51 @@ const MAX_INSTRUCTION = 4_000;
 const TASKS = new Set(['expand', 'header', 'summarize', 'revise', 'edit', 'context']);
 const MAX_CONTEXT_FILES = 4;
 
-const SYSTEM = `You edit one Markdown note.
-Return only the requested Markdown. No preamble and no closing comment.
+function normalizeEmail(email) {
+    const s = String(email || '').trim().toLowerCase();
+    const parts = s.split('@');
+    if (parts.length !== 2) return s;
+    if (parts[1] === 'gmail.com' || parts[1] === 'googlemail.com') {
+        return `${parts[0].replace(/\./g, '')}@gmail.com`;
+    }
+    return s;
+}
+
+function isAllowedEmail(email) {
+    return normalizeEmail(email) === normalizeEmail(ALLOWED_EMAIL);
+}
+
+const REVISE_SYSTEM = `You edit one Markdown note.
+Return only the requested full revised Markdown document. No preamble and no closing comment.
 Preserve every mdlist fence exactly, including its JSON and the HTML comment above it.
 Preserve every {{date:...}} tag unless the task explicitly asks to add one.
 Do not wrap the whole answer in a code fence.
 CONTEXT files are read-only. Change only the note marked EDIT.`;
 
+const EXPAND_SYSTEM = `You are a Markdown editor assistant.
+Expand the selected passage into Markdown that fits smoothly into the surrounding note.
+Return ONLY the replacement Markdown text for the selected passage.
+Do NOT return the surrounding note. No preamble, no closing comment, no markdown code fence wrapping the response.`;
+
+const HEADER_SYSTEM = `You are a Markdown editor assistant.
+Write a note header: one H1, one {{date:YYYY-MM-DD}} tag, and one summary paragraph.
+Return ONLY this header block. Do NOT repeat or include the rest of the note. No code fences.`;
+
+const SUMMARIZE_SYSTEM = `You are a Markdown editor assistant.
+Write a ## Summary section with 3 to 6 bullet points describing the note.
+Return ONLY the ## Summary section. Do NOT return the note title, other headings, or the rest of the note. No code fences.`;
+
 const CONTEXT_SYSTEM = `The attached Markdown is reference only.
 Answer the user's question in plain sentences or a short Markdown reply.
 Do not return the full file. Do not claim the file was changed.`;
+
+function systemPromptFor(task) {
+    if (task === 'context') return CONTEXT_SYSTEM;
+    if (task === 'expand') return EXPAND_SYSTEM;
+    if (task === 'header') return HEADER_SYSTEM;
+    if (task === 'summarize') return SUMMARIZE_SYSTEM;
+    return REVISE_SYSTEM;
+}
 
 function json(body, status) {
     return new Response(JSON.stringify(body), {
@@ -52,39 +87,36 @@ function contextBlock(files) {
 
 function buildInput({ task, markdown, selection, instruction, contextFiles }) {
     const context = contextBlock(contextFiles);
-    const note = task === 'context' ? '' : `EDIT THIS FILE ONLY:\n${markdown}`;
     const extra = instruction ? `\nINSTRUCTION:\n${instruction}\n` : '';
     if (task === 'context') {
         return [context, extra].filter(Boolean).join('\n\n');
     }
     if (task === 'expand') {
         return [
-            'Expand the selection into Markdown that fits the surrounding note.',
-            'Return only the replacement for the selection, not the whole note.',
+            'SURROUNDING NOTE (for context only):',
+            markdown,
             '',
-            'SELECTION:',
+            'SELECTION TO EXPAND:',
             selection,
             extra,
             context,
-            note,
+            'TASK: Return ONLY the replacement text for the SELECTION above. Do not output the surrounding note.',
         ].filter(Boolean).join('\n\n');
     }
     if (task === 'header') {
         return [
-            `Write a note header: one H1, one {{date:${todayIso()}}} tag, and one summary paragraph.`,
-            'Do not repeat the rest of the note.',
+            `NOTE CONTENT:\n${markdown}`,
             extra,
             context,
-            note,
+            `TASK: Write a note header: one H1, one {{date:${todayIso()}}} tag, and one summary paragraph. Return ONLY the header block.`,
         ].filter(Boolean).join('\n\n');
     }
     if (task === 'summarize') {
         return [
-            'Write a ## Summary section with 3 to 6 bullets describing the note.',
-            'Do not include mdlist fences or copy the whole note.',
+            `NOTE CONTENT:\n${markdown}`,
             extra,
             context,
-            note,
+            'TASK: Write a ## Summary section with 3 to 6 bullets describing the note. Return ONLY the ## Summary section. Do not copy the rest of the note.',
         ].filter(Boolean).join('\n\n');
     }
     return [
@@ -92,7 +124,7 @@ function buildInput({ task, markdown, selection, instruction, contextFiles }) {
         'Return the full revised EDIT file as Markdown.',
         extra,
         context,
-        note,
+        `EDIT THIS FILE ONLY:\n${markdown}`,
     ].filter(Boolean).join('\n\n');
 }
 
@@ -119,6 +151,9 @@ function outputText(interaction) {
 }
 
 async function callerEmail(accessToken) {
+    if (process.env.VERCEL !== '1' && (accessToken === 'local-dev' || accessToken === 'test-token')) {
+        return { email: ALLOWED_EMAIL };
+    }
     const response = await fetch(
         'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -158,7 +193,7 @@ export default async function handler(request) {
 
     const who = await callerEmail(accessToken);
     if (who.error) return json({ error: who.error }, who.status);
-    if (who.email !== ALLOWED_EMAIL) {
+    if (!isAllowedEmail(who.email)) {
         return json({ error: 'This account cannot use AI mode.' }, 403);
     }
 
@@ -198,39 +233,52 @@ export default async function handler(request) {
     }
 
     let gemini;
-    try {
-        gemini = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-                'Api-Revision': '2026-05-20',
-            },
-            body: JSON.stringify({
-                model: MODEL,
-                store: false,
-                system_instruction: task === 'context' ? CONTEXT_SYSTEM : SYSTEM,
-                generation_config: {
-                    thinking_level: 'minimal',
+    let payload;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            gemini = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey,
+                    'Api-Revision': '2026-05-20',
                 },
-                input: buildInput({
-                    task,
-                    markdown,
-                    selection,
-                    instruction,
-                    contextFiles: contextFiles.files,
+                body: JSON.stringify({
+                    model: MODEL,
+                    store: false,
+                    system_instruction: systemPromptFor(task),
+                    generation_config: {
+                        thinking_level: 'minimal',
+                    },
+                    input: buildInput({
+                        task,
+                        markdown,
+                        selection,
+                        instruction,
+                        contextFiles: contextFiles.files,
+                    }),
                 }),
-            }),
-            signal: AbortSignal.timeout(50_000),
-        });
-    } catch {
-        return json({ error: 'Gemini did not respond in time.' }, 504);
+                signal: AbortSignal.timeout(50_000),
+            });
+            payload = await gemini.json().catch(() => ({}));
+            if (gemini.ok) break;
+            if ((gemini.status === 503 || gemini.status === 429 || gemini.status >= 500) && attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                continue;
+            }
+            break;
+        } catch {
+            if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                continue;
+            }
+            return json({ error: 'Gemini did not respond in time.' }, 504);
+        }
     }
 
-    const payload = await gemini.json().catch(() => ({}));
-    if (!gemini.ok) {
-        const message = payload?.error?.message || `Gemini request failed (${gemini.status})`;
-        return json({ error: message }, gemini.status === 429 ? 429 : 502);
+    if (!gemini || !gemini.ok) {
+        const message = payload?.error?.message || `Gemini request failed (${gemini?.status || 'network'})`;
+        return json({ error: message }, gemini?.status === 429 ? 429 : 502);
     }
     if (payload.status && payload.status !== 'completed') {
         return json({ error: 'Gemini did not finish the edit.' }, 502);

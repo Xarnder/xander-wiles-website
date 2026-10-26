@@ -82,6 +82,33 @@ test('summarize inserts a section without rewriting the list', () => {
     assert.match(result.markdown, /"id": "i1"/);
 });
 
+test('summarize extracts section if model returned whole document', () => {
+    const fullProposal = `# Ideas\n\n## Summary\n* Key decision\n\nShip the editor.\n\n${LIST}\n`;
+    const result = applyAiProposal({
+        task: 'summarize',
+        original: NOTE,
+        proposal: fullProposal,
+    });
+    assert.equal(result.ok, true);
+    assert.match(result.markdown, /## Summary\s*\* Key decision/);
+    assert.equal(result.markdown.match(/## Summary/g)?.length, 1);
+});
+
+test('expand handles full-note proposal without duplicating prefix or suffix', () => {
+    const original = '# Title\n\nFirst paragraph.\n\nTarget passage.\n\nLast paragraph.\n';
+    const fullProposal = '# Title\n\nFirst paragraph.\n\nExpanded target passage with extra detail.\n\nLast paragraph.\n';
+    const result = applyAiProposal({
+        task: 'expand',
+        original,
+        selection: 'Target passage.',
+        proposal: fullProposal,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.markdown, fullProposal);
+    assert.equal(result.markdown.match(/First paragraph\./g)?.length, 1);
+    assert.equal(result.markdown.match(/Last paragraph\./g)?.length, 1);
+});
+
 test('diffLines marks an inserted and a removed line', () => {
     const ops = diffLines('alpha\nbeta\ngamma\n', 'alpha\nBETA\ngamma\nextra\n');
     assert.deepEqual(

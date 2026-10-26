@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v177';
+const CACHE_NAME = 'md-editor-shell-v178';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -39,6 +39,7 @@ const ASSETS = [
     './pdf-edit.js',
     './pdf-view.js',
     './csv.js',
+    './csv-formulas.js',
     './csv-view.js',
     './image-files.js',
     './image-preview.js',

@@ -4,7 +4,8 @@ if (typeof process === 'undefined') {
 }
 
 export const GOOGLE_CLIENT_ID =
-    process.env.PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID || '';
+    process.env.PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID ||
+    '612823513285-gmu8cbi8atisicv1ommjc11rbnijo9g0.apps.googleusercontent.com';
 
 /** Full Drive scope — enables in-app folder browsing of existing files (Option 2C). */
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';

@@ -605,7 +605,7 @@ async function runProposal() {
                 markdown: asking ? '' : source.content,
                 selection: sentTask === 'expand' ? selection : '',
                 instruction,
-                contextFiles: (asking ? contexts : contexts).map((file) => ({
+                contextFiles: contexts.map((file) => ({
                     name: file.name,
                     markdown: file.content,
                 })),
@@ -622,7 +622,7 @@ async function runProposal() {
     if (!response.ok) {
         if (response.status === 404) {
             throw new Error(
-                'AI service is not running on this server. Add GEMINI_API_KEY on Vercel, or run vercel dev locally.'
+                'AI service is not running on this server. Add GEMINI_API_KEY on Vercel, or run npm run dev locally.'
             );
         }
         throw new Error(payload.error || `AI request failed (${response.status})`);
