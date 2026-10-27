@@ -1,3 +1,4 @@
+import { getTutorialPreferences, setTutorialPreferences } from '../tutorials/TutorialPreferences';
 import type { SettingsCategory, SettingsField } from './GameSettingsHost';
 import { getAudioPreferences, setAudioPreferences } from '../audio/AudioPreferences';
 import { GraphicsSettingsStore } from '../graphics/GraphicsSettingsStore';
@@ -8,7 +9,10 @@ import {
 } from '../graphics/GraphicsTypes';
 
 export function audioSettingsCategory(): SettingsCategory {
-	const volume = (key: 'master' | 'music' | 'ambience', label: string): SettingsField => ({
+	const volume = (
+		key: 'master' | 'music' | 'ambience' | 'narration',
+		label: string
+	): SettingsField => ({
 		kind: 'number',
 		id: `audio.${key}`,
 		label: `${label} (%)`,
@@ -37,7 +41,45 @@ export function audioSettingsCategory(): SettingsCategory {
 					},
 					volume('master', 'Master volume'),
 					volume('music', 'Music volume'),
-					volume('ambience', 'Ambience & weather volume')
+					volume('ambience', 'Ambience & weather volume'),
+					volume('narration', 'Narration volume')
+				]
+			}
+		]
+	};
+}
+
+export function tutorialSettingsCategory(): SettingsCategory {
+	const toggle = (key: 'enabled' | 'narration' | 'subtitles', label: string): SettingsField => ({
+		kind: 'boolean',
+		id: `tutorials.${key}`,
+		label,
+		get: () => getTutorialPreferences()[key],
+		set: (value) => setTutorialPreferences({ [key]: value })
+	});
+	return {
+		id: 'tutorials',
+		title: 'Tutorials & subtitles',
+		description:
+			'Personal guidance preferences. Open Speech options (F6) in a world to prepare or replay the narrator.',
+		groups: [
+			{
+				id: 'tutorial-guidance',
+				title: 'Guidance',
+				fields: [
+					toggle('enabled', 'Enable tutorials'),
+					toggle('narration', 'Speak tutorial instructions'),
+					toggle('subtitles', 'Keep instructions visible after speech'),
+					{
+						kind: 'number',
+						id: 'tutorials.size',
+						label: 'Subtitle size (px)',
+						min: 16,
+						max: 24,
+						step: 1,
+						get: () => getTutorialPreferences().size,
+						set: (size) => setTutorialPreferences({ size })
+					}
 				]
 			}
 		]
@@ -103,6 +145,7 @@ export function personalSettingsCatalog(): SettingsCategory[] {
 				}
 			]
 		},
-		audioSettingsCategory()
+		audioSettingsCategory(),
+		tutorialSettingsCategory()
 	];
 }

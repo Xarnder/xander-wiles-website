@@ -584,6 +584,8 @@ export class ThreeScene implements WorldRuntime {
 	/** Mini Build editor / Object Library overlays: world input is blocked, and the editor also pauses world rendering. */
 	miniBuildUiOpen = false;
 	miniBuildEditorOpen = false;
+	/** Explicit preparation lease: no neural inference while this is false. */
+	speechPreparationOpen = false;
 	readonly music: MusicPlantPlacementTool;
 	readonly creatures: CreatureRuntimeManager;
 	readonly sustainSettings: SustainSettings;
@@ -985,6 +987,7 @@ export class ThreeScene implements WorldRuntime {
 				!this.simulationPaused &&
 				!this.devPanelOpen &&
 				!this.miniBuildEditorOpen &&
+				!this.speechPreparationOpen &&
 				!this.miniBuildUiOpen &&
 				!this.buildToolManager?.isLocked(),
 			removeBarrier: (id) => this.barrierManager.remove(id),
@@ -1237,6 +1240,7 @@ export class ThreeScene implements WorldRuntime {
 				!this.simulationPaused &&
 				!this.devPanelOpen &&
 				!this.debugControlsOpen &&
+				!this.speechPreparationOpen &&
 				!this.miniBuildUiOpen &&
 				!this.miniBuildEditorOpen &&
 				!this.foundationDeletePromptOpen &&
@@ -1638,6 +1642,7 @@ export class ThreeScene implements WorldRuntime {
 				this.devPanelOpen ||
 				this.debugControlsOpen ||
 				this.foundationDeletePromptOpen ||
+				this.speechPreparationOpen ||
 				this.miniBuildUiOpen ||
 				this.miniBuildEditorOpen ||
 				this.music.importPanelOpen ||
@@ -1673,6 +1678,7 @@ export class ThreeScene implements WorldRuntime {
 				!this.simulationPaused &&
 				!this.devPanelOpen &&
 				!this.debugControlsOpen &&
+				!this.speechPreparationOpen &&
 				!this.miniBuildUiOpen &&
 				!this.miniBuildEditorOpen &&
 				!this.buildToolManager.isEditingWorld(),
@@ -2455,7 +2461,10 @@ export class ThreeScene implements WorldRuntime {
 			this.miniBuildEditorOpen = state.editorOpen;
 			if (!state.editorOpen) this.lastFrameTimeMs = 0;
 		}
-		if ((this.miniBuildUiOpen || this.miniBuildEditorOpen) && typeof document !== 'undefined') {
+		if (
+			(this.speechPreparationOpen || this.miniBuildUiOpen || this.miniBuildEditorOpen) &&
+			typeof document !== 'undefined'
+		) {
 			document.exitPointerLock?.();
 		}
 	}
@@ -3109,6 +3118,10 @@ export class ThreeScene implements WorldRuntime {
 		return this.levelManager.serialize();
 	}
 
+	getTutorialPosition(): { x: number; z: number } {
+		return { x: this.controller.worldPosition.x, z: this.controller.worldPosition.z };
+	}
+
 	getPlayerState(): SavedPlayerState {
 		const state = this.miniBuildInteraction.controller.state;
 		const position = state.type === 'mini-build' ? state.entry : this.controller.worldPosition;
@@ -3756,7 +3769,7 @@ export class ThreeScene implements WorldRuntime {
 			this.lastFrameTimeMs === 0 ? 0 : Math.min((nowMs - this.lastFrameTimeMs) / 1000, 0.1);
 		this.lastFrameTimeMs = nowMs;
 
-		if (this.devPanelOpen || this.miniBuildEditorOpen) return;
+		if (this.devPanelOpen || this.miniBuildEditorOpen || this.speechPreparationOpen) return;
 		const frameCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		const weatherLookChanged = this.updateWeather(deltaSeconds);
 		const skyApplied = this.updateDayCycle(deltaSeconds);

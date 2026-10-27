@@ -9,7 +9,13 @@ it('restores preferences, clamps values, and persists changes', async () => {
 		'{"master":2,"music":-1,"ambience":0.4,"muted":true}'
 	);
 	const audio = await import('./AudioPreferences');
-	expect(audio.getAudioPreferences()).toEqual({ master: 1, music: 0, ambience: 0.4, muted: true });
+	expect(audio.getAudioPreferences()).toEqual({
+		master: 1,
+		music: 0,
+		ambience: 0.4,
+		narration: 1,
+		muted: true
+	});
 	audio.setAudioPreferences({ muted: false, master: 0.5 });
 	expect(audio.audioLevel('ambience')).toBe(0.2);
 	expect(localStorage.setItem).toHaveBeenCalled();

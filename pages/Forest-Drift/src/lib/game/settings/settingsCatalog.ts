@@ -1,4 +1,4 @@
-import { audioSettingsCategory } from './personalSettingsCatalog';
+import { audioSettingsCategory, tutorialSettingsCategory } from './personalSettingsCatalog';
 import { HDRI_PRESETS, resolveHdriPreset } from '../sky/hdriPresets';
 import { ensureDayCycleSettings, formatDayClock } from '../sky/dayNightMath';
 import type {
@@ -747,6 +747,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 
 	return [
 		audioSettingsCategory(),
+		tutorialSettingsCategory(),
 		{
 			id: 'world',
 			title: 'World',

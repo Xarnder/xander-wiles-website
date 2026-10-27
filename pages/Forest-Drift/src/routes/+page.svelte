@@ -48,6 +48,8 @@
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
+	import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+	let speechPreparation = $state(false);
 	import { preventTouchPageZoom } from '$lib/components/preventTouchPageZoom';
 	import { touchButton } from '$lib/components/touchButton';
 	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
@@ -281,6 +283,7 @@
 	function clockBlocked(): boolean {
 		return (
 			loadingVisible ||
+			speechPreparation ||
 			paused ||
 			multiplayerMenuOpen ||
 			settingsOpen ||
@@ -1391,6 +1394,22 @@
 {/if}
 
 {#if screen === 'game'}
+	{#if session && !loadingVisible}
+		{#key session}
+			<TutorialOverlay
+				scene={session.scene}
+				touch={showTouchControls}
+				playing={pointerLocked}
+				blocked={clockBlocked() || showHelp || debugControlsOpen}
+				build={hotbar?.buildModeActive ?? false}
+				slot={hotbar?.activeSlot ?? 0}
+				help={showHelp}
+				onPreparation={(value) => {
+					speechPreparation = value;
+				}}
+			/>
+		{/key}
+	{/if}
 	<!-- The renderer only exists while a world is open: quitting to the Worlds screen unmounts
 	     this entirely, so no WebGL context, render loop or canvas is kept alive in the background. -->
 	<div
@@ -1579,6 +1598,13 @@
 							<button class="help-close" onclick={() => (showHelp = false)}>Done</button>
 						</header>
 
+						<button
+							onclick={() => {
+								showHelp = false;
+								paused = false;
+								window.dispatchEvent(new Event('forest:tutorial'));
+							}}>Open narrated tutorial</button
+						>
 						<h3>Touch / iPad Controls</h3>
 						<dl>
 							<dt>Virtual Joystick</dt>

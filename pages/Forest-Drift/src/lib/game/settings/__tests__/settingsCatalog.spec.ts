@@ -94,6 +94,7 @@ describe('buildSettingsCatalog', () => {
 		const catalog = buildSettingsCatalog(testHost());
 		expect(catalog.map((category) => category.id)).toEqual([
 			'audio',
+			'tutorials',
 			'world',
 			'terrain',
 			'player',
@@ -410,7 +411,8 @@ it('keeps personal audio preferences editable for online members', () => {
 		'audio.muted',
 		'audio.master',
 		'audio.music',
-		'audio.ambience'
+		'audio.ambience',
+		'audio.narration'
 	]);
 	expect(audio.groups.flatMap((group) => group.fields).every((field) => !field.disabled)).toBe(
 		true

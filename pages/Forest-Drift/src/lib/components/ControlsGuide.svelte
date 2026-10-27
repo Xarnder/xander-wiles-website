@@ -162,6 +162,13 @@
 				['L', 'Cycle Low, Medium, High and Ultra graphics quality. The preference is remembered.'],
 				['F3', 'Show or hide render statistics.'],
 				[
+					'F7',
+					'Replay the previous tutorial instruction. Press again after a short pause to go back further.'
+				],
+				['F6', 'Open speech options and narrator settings.'],
+				['F8', 'Automatically prepare and start the narrated tutorial.'],
+				['F9', 'Advance to the next tutorial instruction, stopping the current speech.'],
+				[
 					'Backslash (\\)',
 					'Capture a best-quality PNG: temporarily use Ultra, wait for loading, save the image and restore your graphics preference.'
 				]

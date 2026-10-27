@@ -4,6 +4,7 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
+	worker: { format: 'es' },
 	// Bundled panoramas live outside src/static; allow this asset directory in dev too.
 	server: { fs: { allow: [fileURLToPath(new URL('./assets/HDRI', import.meta.url))] } },
 	plugins: [
