@@ -316,17 +316,71 @@ test('F8 auto prepares from cold and starts speaking without the options dialog'
 		timeout: 210_000
 	});
 	await expect(page.getByTestId('tutorial-preparation-status')).toBeHidden();
-	// No movement or Continue press: finishing the speech must advance auto mode.
+	// The default pause holds the completed instruction before auto advancement.
+	await expect(page.getByTestId('tutorial-auto-pause')).toBeVisible({ timeout: 30_000 });
+	const pauseStarted = Date.now();
+	await page.waitForTimeout(2000);
+	await expect(page.getByRole('navigation', { name: 'Tutorial controls' })).toContainText('1 / 28');
+	// No movement or Continue press: finishing the speech and pause must advance auto mode.
 	await expect(page.getByTestId('tutorial-subtitle')).toContainText('Use W', { timeout: 45_000 });
+	expect(Date.now() - pauseStarted).toBeGreaterThanOrEqual(4500);
 	await page.keyboard.press('F7');
 	await expect(page.getByTestId('tutorial-subtitle')).toContainText('Click the world', {
 		timeout: 15_000
 	});
+	await expect(page.getByTestId('tutorial-auto-pause')).toBeVisible({ timeout: 30_000 });
+	await page.keyboard.press('F9');
+	await expect(page.getByTestId('tutorial-auto-pause')).toBeHidden();
 	await expect(page.getByTestId('tutorial-subtitle')).toContainText('Use W', { timeout: 30_000 });
 	await page.keyboard.press('F9');
 	await expect(page.getByRole('navigation', { name: 'Tutorial controls' })).toContainText('3 / 28');
 	await page.keyboard.press('F6');
 	await expect(page.getByTestId('tutorial-menu')).toBeVisible();
 	await page.getByRole('button', { name: 'Close tutorial setup' }).click();
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
+});
+
+test('auto mode explains blocked sound in the subtitle area', async ({ page }) => {
+	await page.goto('/');
+	await createAndEnterWorld(page);
+	await page.evaluate(() => {
+		Object.defineProperty(window, 'AudioContext', {
+			configurable: true,
+			value: class {
+				constructor() {
+					throw new DOMException('Blocked', 'NotAllowedError');
+				}
+			}
+		});
+	});
+	await page.keyboard.press('F8');
+	await expect(page.getByTestId('tutorial-preparation-status')).toContainText('sound permissions');
+	await expect(page.getByTestId('tutorial-menu')).toBeHidden();
+	await page.keyboard.press('F6');
+	await expect(page.getByTestId('tutorial-menu')).toBeVisible();
+});
+
+test('auto mode politely explains failed preparation and offers the instruction as text', async ({
+	page
+}) => {
+	await page.goto('/');
+	await createAndEnterWorld(page);
+	await page.evaluate(() => {
+		const OriginalWorker = window.Worker;
+		window.Worker = class extends OriginalWorker {
+			constructor(url: string | URL, options?: WorkerOptions) {
+				if (String(url).includes('synthesis.worker'))
+					throw new Error('Network fetch failed https://private.example/model');
+				super(url, options);
+			}
+		};
+	});
+	await page.keyboard.press('F8');
+	const status = page.getByTestId('tutorial-preparation-status');
+	await expect(status).toContainText('download was interrupted', { timeout: 20_000 });
+	await expect(status).not.toContainText('private.example');
+	await expect(page.getByRole('navigation', { name: 'Tutorial controls' })).toContainText('1 / 28');
+	await page.getByRole('button', { name: 'Read instruction', exact: true }).click();
+	await expect(page.getByTestId('tutorial-subtitle')).toContainText('Click the world');
 	await page.getByRole('button', { name: 'Close', exact: true }).click();
 });

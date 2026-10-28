@@ -31,9 +31,9 @@ export const NARRATOR: Speaker = {
 	name: 'Narrator',
 	profile: {
 		id: 'narrator-en',
-		version: 1,
-		voice: 'af_heart',
-		language: 'en-US',
+		version: 2,
+		voice: 'bm_george',
+		language: 'en-GB',
 		speed: 1
 	}
 };

@@ -72,6 +72,16 @@ export function tutorialSettingsCategory(): SettingsCategory {
 					toggle('subtitles', 'Keep instructions visible after speech'),
 					{
 						kind: 'number',
+						id: 'tutorials.autoPauseSeconds',
+						label: 'Auto pause between instructions (seconds)',
+						min: 0,
+						max: 30,
+						step: 1,
+						get: () => getTutorialPreferences().autoPauseSeconds,
+						set: (autoPauseSeconds) => setTutorialPreferences({ autoPauseSeconds })
+					},
+					{
+						kind: 'number',
 						id: 'tutorials.size',
 						label: 'Subtitle size (px)',
 						min: 16,

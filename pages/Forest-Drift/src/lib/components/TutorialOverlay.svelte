@@ -2,6 +2,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import type { ThreeScene } from '$lib/game/ThreeScene';
 	import { formatBytes, formatDuration, type SpeechProgress } from '$lib/game/speech/progress';
+	import { speechErrorMessage } from '$lib/game/speech/errorMessage';
 	import { SpeechWindow } from '$lib/game/speech/SpeechWindow';
 	import { SpeechService } from '$lib/game/speech/SpeechService';
 	import { observeSubtitleLayout } from '$lib/game/tutorials/subtitleLayout';
@@ -63,6 +64,13 @@
 	let buffering = $state(false);
 	let autoStarting = $state(false);
 	let autoAdvance = $state(false);
+	let autoPausing = $state(false);
+	let advanceTimer: ReturnType<typeof setTimeout> | undefined;
+	function cancelAutoPause() {
+		clearTimeout(advanceTimer);
+		advanceTimer = undefined;
+		autoPausing = false;
+	}
 	let autoNotice = $state('');
 	let backgroundMessage = $state('');
 	let backgroundAfter = 0;
@@ -72,6 +80,14 @@
 			service,
 			() => mounted && running && !frozen && performance.now() >= backgroundAfter,
 			(value, detail) => {
+				if (
+					!detail &&
+					!/^(Next instructions ready|Background preparation paused|Speech preparation interrupted)/.test(
+						value
+					)
+				) {
+					value = speechErrorMessage(value, { offline: !navigator.onLine });
+				}
 				backgroundMessage =
 					value +
 					(detail?.loaded !== undefined
@@ -171,6 +187,7 @@
 		return { ...scene.getTutorialPosition(), build, slot, help };
 	}
 	function stop() {
+		cancelAutoPause();
 		autoAdvance = false;
 		autoStarting = false;
 		autoNotice = '';
@@ -187,6 +204,7 @@
 		caption = null;
 	}
 	function open() {
+		cancelAutoPause();
 		autoStarting = false;
 		run++;
 		testing = false;
@@ -196,12 +214,12 @@
 		document.exitPointerLock?.();
 	}
 	async function autoStart() {
-		if (autoStarting || clearing || (running && autoAdvance && !menu)) return;
+		if (autoStarting || clearing || (running && autoAdvance && !menu && !autoNotice)) return;
 		if (preparing) cancelPreparation();
 		stop();
 		menu = false;
 		if (!soundEnabled) {
-			autoNotice = 'Narration is muted. Press F6 and enable narrator sound, then press F8.';
+			autoNotice = speechErrorMessage(null, { muted: true });
 			return;
 		}
 		const epoch = ++startEpoch;
@@ -220,14 +238,16 @@
 			autoStarting = false;
 			autoAdvance = true;
 			running = true;
-		} catch {
+		} catch (error) {
 			if (epoch === startEpoch) {
 				autoStarting = false;
-				autoNotice = 'Sound could not start. Press F8 to retry or F6 for speech options.';
+				autoNotice = speechErrorMessage(error);
 			}
 		}
 	}
 	async function narrate() {
+		cancelAutoPause();
+		autoNotice = '';
 		const epoch = ++run;
 		const lesson = catalogue[index];
 		waiting = false;
@@ -268,13 +288,14 @@
 				preferences.deviceVoice
 			);
 			if (epoch !== run || result === 'cancelled') return;
-			if (autoAdvance && result === 'ended' && running && !frozen) {
-				// Hearing a lesson is not proof that its gameplay action was performed.
-				next(lesson.action !== 'continue');
-				return;
-			}
+
 			waiting = true;
 			textDelivery = result === 'text';
+			if (autoAdvance && result === 'text')
+				autoNotice = speechErrorMessage(new Error('playback'), {
+					muted: !soundEnabled,
+					offline: !navigator.onLine
+				});
 			// Retain the action prompt after narration, without a second transcript or timing loop.
 			caption = {
 				requestId: lesson.id,
@@ -282,8 +303,24 @@
 				label: '',
 				text: lesson.text
 			};
-		} catch {
+			if (autoAdvance && result === 'ended' && running && !frozen) {
+				const advance = () => {
+					if (epoch !== run || !running || frozen || !autoAdvance) return;
+					next(lesson.action !== 'continue');
+				};
+				if (index === catalogue.length - 1 || preferences.autoPauseSeconds === 0) advance();
+				else {
+					autoPausing = true;
+					advanceTimer = setTimeout(advance, preferences.autoPauseSeconds * 1000);
+				}
+			}
+		} catch (error) {
 			if (epoch === run) {
+				if (autoAdvance)
+					autoNotice = speechErrorMessage(error, {
+						offline: !navigator.onLine,
+						muted: !soundEnabled
+					});
 				buffering = false;
 				waiting = true;
 				textDelivery = true;
@@ -304,6 +341,7 @@
 		const now = performance.now();
 		if (now - previousAt < 400) return;
 		previousAt = now;
+		cancelAutoPause();
 		run++;
 		service.cancel();
 		index = Math.max(0, index - 1);
@@ -314,6 +352,7 @@
 	}
 	function next(skipped = false) {
 		if (!running) return;
+		cancelAutoPause();
 		run++;
 		waiting = false;
 		reviewing = false;
@@ -424,6 +463,7 @@
 	$effect(() => {
 		if (!running) return;
 		if (frozen) {
+			cancelAutoPause();
 			run++;
 			service?.cancel();
 		} else {
@@ -498,6 +538,7 @@
 		document.addEventListener('visibilitychange', visibility);
 		return () => {
 			mounted = false;
+			cancelAutoPause();
 			startEpoch++;
 			clearInterval(timer);
 			unsubscribe();
@@ -521,7 +562,7 @@
 		<button data-testid="tutorial-open" onclick={open}>Speech options <span>(F6)</span></button>
 	</div>
 {/if}
-{#if !frozen && (buffering || autoStarting || autoNotice) && !caption}
+{#if !frozen && (buffering || autoStarting || autoNotice) && (!caption || autoNotice)}
 	<p
 		class="subtitle preparation-caption"
 		data-testid="tutorial-preparation-status"
@@ -539,7 +580,7 @@
 	</p>
 {/if}
 {#if running && !frozen}
-	{#if caption && (!waiting || preferences.subtitles || !preferences.narration || textDelivery)}
+	{#if caption && !autoNotice && (!waiting || preferences.subtitles || !preferences.narration || textDelivery)}
 		<div
 			class="subtitle"
 			data-testid="tutorial-subtitle"
@@ -555,7 +596,8 @@
 	{/if}
 	<nav class="tutorial-controls" data-ui-surface="hud" aria-label="Tutorial controls">
 		<span>{index + 1} / {catalogue.length}{autoAdvance ? ' · Auto' : ''}</span>
-		{#if !buffering && backgroundMessage && textDelivery && preferences.narration && !preferences.deviceVoice}<span
+		{#if autoPausing}<span data-testid="tutorial-auto-pause">Pause · F9 to continue now</span>{/if}
+		{#if !buffering && !autoNotice && backgroundMessage && textDelivery && preferences.narration && !preferences.deviceVoice}<span
 				role="status"
 				class="buffer-status">{backgroundMessage}</span
 			>{/if}
@@ -568,6 +610,8 @@
 			>{/if}
 		<button aria-keyshortcuts="F7" onclick={previous}>Previous (F7)</button>
 		<button onclick={() => void narrate()}>Replay</button>
+		{#if autoNotice && caption}<button onclick={() => (autoNotice = '')}>Read instruction</button
+			>{/if}
 		<button aria-keyshortcuts="F9" onclick={() => next(catalogue[index].action !== 'continue')}
 			>Next (F9)</button
 		>
@@ -830,6 +874,24 @@
 							checked={preferences.subtitles}
 							onchange={(e) => setTutorialPreferences({ subtitles: e.currentTarget.checked })}
 						/> Keep instructions visible after speech</label
+					>
+					<label
+						>Auto pause between instructions
+						<input
+							aria-label="Auto pause between instructions (seconds)"
+							type="range"
+							min="0"
+							max="30"
+							step="1"
+							value={preferences.autoPauseSeconds}
+							oninput={(event) =>
+								setTutorialPreferences({ autoPauseSeconds: +event.currentTarget.value })}
+						/>
+						<span>{preferences.autoPauseSeconds}s</span>
+					</label>
+					<small
+						>Auto mode waits after each instruction finishes speaking. Default: 5 seconds. Set to 0
+						for no pause. F7/F9 interrupt the pause.</small
 					>
 					<label
 						>Subtitle size <input

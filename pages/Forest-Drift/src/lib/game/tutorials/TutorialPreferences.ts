@@ -4,7 +4,13 @@ export interface TutorialPreferences {
 	deviceVoice: boolean;
 	subtitles: boolean;
 	size: number;
+	autoPauseSeconds: number;
 	finished: string[];
+}
+export function normalizeAutoPause(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value)
+		? Math.min(30, Math.max(0, Math.round(value)))
+		: 5;
 }
 const KEY = 'forest-drift.tutorials.v1';
 const defaults: TutorialPreferences = {
@@ -13,6 +19,7 @@ const defaults: TutorialPreferences = {
 	deviceVoice: false,
 	subtitles: true,
 	size: 20,
+	autoPauseSeconds: 5,
 	finished: []
 };
 let current: TutorialPreferences | undefined;
@@ -34,6 +41,7 @@ export function getTutorialPreferences(): TutorialPreferences {
 				typeof saved.size === 'number' && Number.isFinite(saved.size)
 					? Math.min(24, Math.max(16, saved.size))
 					: defaults.size,
+			autoPauseSeconds: normalizeAutoPause(saved.autoPauseSeconds),
 			finished: Array.isArray(saved.finished)
 				? saved.finished.filter((s): s is string => typeof s === 'string').slice(0, 100)
 				: []
@@ -42,7 +50,12 @@ export function getTutorialPreferences(): TutorialPreferences {
 	return { ...current, finished: [...current.finished] };
 }
 export function setTutorialPreferences(patch: Partial<TutorialPreferences>) {
-	current = { ...getTutorialPreferences(), ...patch };
+	const previous = getTutorialPreferences();
+	current = {
+		...previous,
+		...patch,
+		autoPauseSeconds: normalizeAutoPause(patch.autoPauseSeconds ?? previous.autoPauseSeconds)
+	};
 	try {
 		localStorage.setItem(KEY, JSON.stringify(current));
 	} catch {

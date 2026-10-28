@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Layers for Step 4 (Masking)
         maskCanvas: null,
         maskCtx: null,
+        maskView: 'full', // Display only; mask layers always use full-image coordinates.
         userPaintLayer: null,
         tempStrokeLayer: null,
 
@@ -1384,6 +1385,43 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const responsiveCanvases = document.querySelectorAll(
+        '#crop-canvas, #paint-editor-canvas, #original-preview-canvas, #cropped-preview-canvas'
+    );
+    const syncCanvasAspect = canvas => {
+        canvas.style.setProperty('--canvas-aspect', canvas.width / Math.max(1, canvas.height));
+    };
+    const canvasSizeObserver = new MutationObserver(records => {
+        new Set(records.map(record => record.target)).forEach(syncCanvasAspect);
+    });
+    responsiveCanvases.forEach(canvas => {
+        syncCanvasAspect(canvas);
+        canvasSizeObserver.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
+    });
+
+    const compactMaskLayout = window.matchMedia('(max-width: 768px)');
+    const syncMaskLayout = () => {
+        document.getElementById('mask-controls-panel').open = !compactMaskLayout.matches;
+        document.getElementById('paint-controls-panel').open = !compactMaskLayout.matches;
+        requestAnimationFrame(updateCursorSize);
+    };
+    syncMaskLayout();
+    compactMaskLayout.addEventListener('change', syncMaskLayout);
+
+    document.querySelectorAll('[data-mask-view]').forEach(button => {
+        button.addEventListener('click', () => {
+            if (state.isDrawing) state.maskCanvas.onmouseup();
+            state.maskView = button.dataset.maskView;
+            document.querySelectorAll('[data-mask-view]').forEach(option => {
+                const selected = option.dataset.maskView === state.maskView;
+                option.classList.toggle('active', selected);
+                option.setAttribute('aria-pressed', String(selected));
+            });
+            composeMaskAndDraw();
+            updateCursorSize();
+        });
+    });
+
     brushBtn.addEventListener('click', () => setMaskTool('brush'));
     eraserBtn.addEventListener('click', () => setMaskTool('eraser'));
 
@@ -1966,6 +2004,30 @@ document.addEventListener('DOMContentLoaded', () => {
         handleImageExport(finalExportCanvas, `${baseName}-mask.png`);
     }
 
+    // Safari/iOS does not enable Canvas 2D filters by default. Draw only an
+    // offset shadow there: shadowBlur is supported and uses half its value as
+    // the Gaussian sigma, so 2 * blurAmount matches filter: blur(blurAmount).
+    // Both preview and commit must use this path to preserve identical edges.
+    function drawSoftStroke(ctx, layer, blurAmount, color = '#ffffff') {
+        ctx.save();
+        if (blurAmount <= 0) {
+            ctx.drawImage(layer, 0, 0);
+        } else if (typeof ctx.filter === 'string') {
+            ctx.filter = `blur(${blurAmount}px)`;
+            ctx.drawImage(layer, 0, 0);
+        } else {
+            const offset = layer.width + Math.ceil(blurAmount * 6) + 1;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = blurAmount * 2;
+            ctx.shadowOffsetX = offset;
+            ctx.shadowOffsetY = 0;
+            // Keep the hard source entirely outside the canvas; only its soft
+            // shadow is composited (also works with destination-out erasing).
+            ctx.drawImage(layer, -offset, 0);
+        }
+        ctx.restore();
+    }
+
     function getFinalMaskCanvas() {
         const width = state.workWidth;
         const height = state.workHeight;
@@ -1980,14 +2042,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isDrawing && state.tempStrokeLayer) {
             maskCtxLocal.save();
             const blurAmount = (state.brushSize * (state.workScale || 1) * (state.brushSoftness / 100)) / 2;
-            if (blurAmount > 0) maskCtxLocal.filter = `blur(${blurAmount}px)`;
 
             if (state.currentTool === 'brush') {
                 maskCtxLocal.globalCompositeOperation = 'source-over';
             } else {
                 maskCtxLocal.globalCompositeOperation = 'destination-out';
             }
-            maskCtxLocal.drawImage(state.tempStrokeLayer, 0, 0);
+            drawSoftStroke(maskCtxLocal, state.tempStrokeLayer, blurAmount);
             maskCtxLocal.restore();
         }
 
@@ -2046,8 +2107,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const getPos = (e) => {
             const rect = cropCanvas.getBoundingClientRect();
-            const cx = e.clientX || e.touches[0].clientX;
-            const cy = e.clientY || e.touches[0].clientY;
+            const cx = e.clientX ?? e.touches[0].clientX;
+            const cy = e.clientY ?? e.touches[0].clientY;
             return {
                 x: (cx - rect.left) * (cropCanvas.width / rect.width),
                 y: (cy - rect.top) * (cropCanvas.height / rect.height)
@@ -2233,14 +2294,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isDrawing && state.tempStrokeLayer) {
             pCtx.save();
             const blurAmount = (state.peBrushSize * (state.paintWorkScale || 1) * (state.peBrushSoftness / 100)) / 2;
-            if (blurAmount > 0) pCtx.filter = `blur(${blurAmount}px)`;
 
             if (state.peTool === 'brush') {
                 pCtx.globalCompositeOperation = 'source-over';
             } else {
                 pCtx.globalCompositeOperation = 'destination-out';
             }
-            pCtx.drawImage(state.tempStrokeLayer, 0, 0);
+            drawSoftStroke(pCtx, state.tempStrokeLayer, blurAmount, state.peTool === 'brush' ? state.peColor : '#ffffff');
             pCtx.restore();
         }
 
@@ -2253,8 +2313,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const cx = e.clientX || e.touches[0].clientX;
-            const cy = e.clientY || e.touches[0].clientY;
+            const cx = e.clientX ?? e.touches[0].clientX;
+            const cy = e.clientY ?? e.touches[0].clientY;
             return {
                 x: (cx - rect.left) * (canvas.width / rect.width),
                 y: (cy - rect.top) * (canvas.height / rect.height)
@@ -2314,14 +2374,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const blurAmount = (state.peBrushSize * (state.paintWorkScale || 1) * (state.peBrushSoftness / 100)) / 2;
 
             ctx.save();
-            if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
 
             if (state.peTool === 'brush') {
                 ctx.globalCompositeOperation = 'source-over';
             } else {
                 ctx.globalCompositeOperation = 'destination-out';
             }
-            ctx.drawImage(state.tempStrokeLayer, 0, 0);
+            drawSoftStroke(ctx, state.tempStrokeLayer, blurAmount, state.peTool === 'brush' ? state.peColor : '#ffffff');
             ctx.restore();
 
             // Clear temp
@@ -2637,11 +2696,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvas = state.maskCanvas;
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const cx = e.clientX || e.touches[0].clientX;
-            const cy = e.clientY || e.touches[0].clientY;
+            const point = e.touches ? e.touches[0] : e;
+            const view = getMaskViewport();
             return {
-                x: (cx - rect.left) * (canvas.width / rect.width),
-                y: (cy - rect.top) * (canvas.height / rect.height)
+                x: view.x + (point.clientX - rect.left) * (view.width / rect.width),
+                y: view.y + (point.clientY - rect.top) * (view.height / rect.height)
             };
         };
 
@@ -2697,14 +2756,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const blurAmount = (state.brushSize * (state.workScale || 1) * (state.brushSoftness / 100)) / 2;
 
             ctx.save();
-            if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
 
             if (state.currentTool === 'brush') {
                 ctx.globalCompositeOperation = 'source-over';
             } else {
                 ctx.globalCompositeOperation = 'destination-out';
             }
-            ctx.drawImage(state.tempStrokeLayer, 0, 0);
+            drawSoftStroke(ctx, state.tempStrokeLayer, blurAmount);
             ctx.restore();
 
             state.tempStrokeLayer.getContext('2d').clearRect(0, 0, state.tempStrokeLayer.width, state.tempStrokeLayer.height);
@@ -2718,10 +2776,45 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.ontouchstart = startPaint;
         canvas.ontouchmove = doPaint;
         canvas.ontouchend = stopPaint;
+        canvas.ontouchcancel = stopPaint;
+    }
+
+    function getMaskViewport() {
+        const width = state.workWidth;
+        const height = state.workHeight;
+        if (state.maskView !== 'region' || !state.cropRect) {
+            return { x: 0, y: 0, width, height };
+        }
+        const crop = state.cropRect;
+        const scale = state.workScale;
+        // Include a little context so the crop boundary is easy to blend.
+        const padding = Math.max(1, Math.round(Math.max(crop.width, crop.height) * scale * 0.08));
+        const x = Math.max(0, Math.round(crop.x * scale) - padding);
+        const y = Math.max(0, Math.round(crop.y * scale) - padding);
+        const right = Math.min(width, Math.round(crop.x * scale) + Math.round(crop.width * scale) + padding);
+        const bottom = Math.min(height, Math.round(crop.y * scale) + Math.round(crop.height * scale) + padding);
+        return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
     }
 
     function composeMaskAndDraw() {
-        composeAtResolution('work', state.maskCanvas);
+        if (!state.maskCanvas || !state.originalImage || !state.editedImage) return;
+        const view = getMaskViewport();
+        // Compose the complete image first. Zoom changes only the displayed
+        // window, never the paint layers, crop constraint, thumbnail or export.
+        const composite = state._maskViewComposite = ensureCanvasSize(
+            state._maskViewComposite, state.workWidth, state.workHeight
+        );
+        composeAtResolution('work', composite);
+        const canvas = state.maskCanvas;
+        if (canvas.width !== view.width || canvas.height !== view.height) {
+            canvas.width = view.width;
+            canvas.height = view.height;
+        }
+        canvas.style.setProperty('--mask-view-aspect', view.width / view.height);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(composite, view.x, view.y, view.width, view.height,
+            0, 0, canvas.width, canvas.height);
     }
 
     function updateMaskPreview(maskSource) {

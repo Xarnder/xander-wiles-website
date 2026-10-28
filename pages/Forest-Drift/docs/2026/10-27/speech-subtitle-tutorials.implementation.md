@@ -201,3 +201,26 @@ on navigation/disposal. Network/download and cross-tab contention failures retry
 at most twice with a short yield-based delay; permanent failures remain explicit.
 Tests cover stale errors, hung reads, disposal, bounded retry exhaustion and
 current-first readiness in addition to rapid playback replacement.
+
+### Auto-mode error guidance
+
+Auto mode displays polite, actionable errors in the subtitle area, independently
+of the keep-instructions preference. Messages cover permissions, muted audio,
+offline/download failures, storage, timeouts, cross-tab contention, memory,
+unsupported local playback and interruptions. Technical messages/URLs are mapped
+to player-facing guidance. Errors pause automatic advancement; Replay retries,
+Read instruction exposes the text, and F6 provides alternative voice/text options.
+Browser checks exercise blocked audio and failed worker/download preparation.
+
+Narrator profile v2 uses Kokoro's British male George voice (`bm_george`, en-GB).
+Profile-aware cache keys regenerate changed narration without clearing unrelated
+clips or downloading the base model again. Installed-device voice remains a separate
+browser-dependent option.
+
+Auto mode now waits five seconds between spoken instructions by default. The saved
+`autoPauseSeconds` preference is adjustable from 0–30 seconds in F6 Speech Options
+and Tutorials & subtitles settings; older preferences default to five seconds.
+The delay begins after audible completion, with no delay after the last lesson.
+F7, F9, Replay, options, hiding the tab and stopping cancel the pending timer;
+stale callbacks cannot advance a replacement lesson. Background buffering continues
+during the pause, and zero seconds restores immediate advancement.

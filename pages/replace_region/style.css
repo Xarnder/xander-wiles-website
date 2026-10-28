@@ -972,3 +972,363 @@ progress::-moz-progress-bar {
     background: var(--gradient-primary);
     border-radius: 5px;
 }
+/* Keep painting view controls beside the preview on desktop and mobile. */
+.mask-view-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.mask-view-controls .tool-btn {
+    flex: 1 1 auto;
+}
+
+/* Desktop keeps the ordinary expanded sidebar, with no disclosure UI. */
+#mask-controls-panel,
+.mask-controls-content {
+    display: contents;
+}
+
+#mask-controls-panel > summary {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    #mask-controls-panel {
+        display: block;
+        width: 100%;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+    }
+
+    #mask-controls-panel > summary {
+        display: list-item;
+        padding: 0.85rem 1rem;
+        min-height: 48px;
+        cursor: pointer;
+        font-weight: 600;
+        list-style-position: inside;
+    }
+
+    #mask-controls-panel > summary:focus-visible {
+        outline: 2px solid var(--accent-cyan);
+        outline-offset: -3px;
+    }
+
+    #mask-controls-panel > .mask-controls-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: 0.5rem;
+    }
+
+    #mask-controls-panel:not([open]) > .mask-controls-content {
+        display: none;
+    }
+}
+
+@media (max-width: 1100px) {
+    #mask-step {
+        padding: 0.5rem;
+    }
+
+    #mask-step .editor-layout {
+        gap: 0.75rem;
+        align-items: stretch;
+    }
+
+    #mask-step .editor-workspace {
+        flex: none;
+        width: 100%;
+    }
+
+    #mask-step .canvas-container {
+        display: flex;
+        justify-content: center;
+        margin: 0.5rem 0 0;
+        border-radius: 8px;
+    }
+
+    #mask-canvas {
+        /* Preserve the actual canvas aspect ratio: no letterboxing inside
+           its pointer target, so touch-to-mask coordinate mapping stays exact. */
+        width: min(100%, calc(65svh * var(--mask-view-aspect, 1)));
+        height: auto;
+        align-self: flex-start;
+    }
+
+    #mask-step .editor-sidebar {
+        padding: 0;
+        gap: 0.65rem;
+    }
+
+    #mask-step .mask-controls-content > h2,
+    #mask-step .mask-controls-content > p {
+        display: none;
+    }
+
+    #mask-step .mask-brush-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.5rem 1rem;
+        padding: 0.75rem;
+    }
+
+    #mask-step .mask-brush-controls .tool-select {
+        grid-column: 1 / -1;
+    }
+
+    #mask-step .control-group {
+        width: 100%;
+        min-width: 0;
+        align-items: stretch;
+    }
+
+    #mask-step .control-group input[type="range"] {
+        width: 100%;
+        min-height: 32px;
+    }
+
+    #mask-step .label-row {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    #mask-step .tool-btn,
+    #mask-step .action-btn,
+    #mask-step .adj-tab-btn {
+        min-height: 44px;
+        white-space: normal;
+    }
+
+    #mask-step .final-export,
+    #mask-step .final-export .btn-group {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    #mask-step .final-export .action-btn {
+        width: 100%;
+    }
+}
+
+/* The shared navigation stylesheet adds main-container padding. Keep the
+   final painting workspace close to the screen edges on slim phones. */
+@media (max-width: 768px) {
+    main.app-container:has(#mask-step:not(.hidden)) {
+        padding-inline: 4px;
+    }
+}
+
+/* Fluid layout for every stage, scoped against the shared site stylesheet. */
+.replace-region-app .app-container > .glass-card,
+.replace-region-app .preview-box,
+.replace-region-app .scale-calc-col,
+.replace-region-app .control-group {
+    min-width: 0;
+}
+
+.replace-region-app .preview-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.replace-region-app .base-choice-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+
+.replace-region-app .scale-calc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.replace-region-app .action-btn,
+.replace-region-app .base-choice-card,
+.replace-region-app .status-message,
+.replace-region-app .base-upload-summary,
+.replace-region-app .scale-formula {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.replace-region-app .modal-card {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.replace-region-app .modal-card input[type="file"] {
+    width: 100%;
+    min-width: 0;
+}
+
+.mobile-editor-panel,
+.editor-controls-content {
+    display: contents;
+}
+
+.mobile-editor-panel > summary {
+    display: none;
+}
+
+@media (max-width: 1100px) {
+    .replace-region-app .editor-workspace {
+        width: 100%;
+        flex: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .replace-region-app main.app-container {
+        padding-inline: 4px;
+        gap: 0.75rem;
+    }
+
+    .replace-region-app .app-container > .glass-card {
+        padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
+    .replace-region-app > .site-header:not([data-site-header]) {
+        padding-inline: 0.5rem;
+    }
+
+    .replace-region-app .glass-card h2 {
+        font-size: clamp(1.15rem, 5vw, 1.5rem);
+        overflow-wrap: anywhere;
+    }
+
+    .replace-region-app .glass-card h3 {
+        font-size: clamp(1rem, 4vw, 1.2rem);
+    }
+
+    .replace-region-app .controls-bar {
+        padding: 0.75rem;
+        gap: 0.75rem;
+        align-items: stretch;
+    }
+
+    .replace-region-app .btn-group,
+    .replace-region-app .btn-group-vertical,
+    .replace-region-app .modal-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .replace-region-app .action-btn,
+    .replace-region-app select,
+    .replace-region-app .tool-btn {
+        min-height: 44px;
+    }
+
+    .replace-region-app .btn-group > .action-btn,
+    .replace-region-app .btn-group-vertical > .action-btn,
+    .replace-region-app .control-group,
+    .replace-region-app .control-group select,
+    .replace-region-app .editor-sidebar .control-group input[type="range"] {
+        width: 100%;
+    }
+
+    .replace-region-app .action-btn:hover {
+        transform: none;
+    }
+
+    .replace-region-app .preview-container {
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .replace-region-app .preview-box .action-btn {
+        margin-top: 0;
+    }
+
+    .replace-region-app .scale-calc-card,
+    .replace-region-app .dual-base-summary,
+    .replace-region-app .modal-card {
+        padding: clamp(0.75rem, 3vw, 1.25rem);
+    }
+
+    .replace-region-app .scale-res-row {
+        flex-wrap: wrap;
+        gap: 0.25rem 0.75rem;
+    }
+
+    .replace-region-app .scale-res-value {
+        margin-left: auto;
+    }
+
+    .replace-region-app .scale-formula {
+        padding: 0.5rem;
+    }
+
+    .replace-region-app :is(#crop-step, #re-upload-step, #paint-editor-step) .canvas-container {
+        display: flex;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    .replace-region-app :is(#crop-canvas, #paint-editor-canvas) {
+        width: min(100%, calc(65svh * var(--canvas-aspect, 1)));
+        height: auto;
+        align-self: flex-start;
+    }
+
+    .replace-region-app :is(#original-preview-canvas, #cropped-preview-canvas) {
+        width: min(100%, calc(42svh * var(--canvas-aspect, 1)));
+        height: auto;
+        align-self: flex-start;
+    }
+
+    .replace-region-app #paint-editor-step .editor-layout {
+        gap: 0.75rem;
+        align-items: stretch;
+    }
+
+    .replace-region-app #paint-editor-step .editor-sidebar {
+        padding: 0;
+    }
+
+    .mobile-editor-panel {
+        display: block;
+        width: 100%;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+    }
+
+    .mobile-editor-panel > summary {
+        display: list-item;
+        list-style-position: inside;
+        padding: 0.85rem 1rem;
+        min-height: 48px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .mobile-editor-panel > summary:focus-visible {
+        outline: 2px solid var(--accent-cyan);
+        outline-offset: -3px;
+    }
+
+    .mobile-editor-panel > .editor-controls-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.5rem;
+    }
+
+    .mobile-editor-panel:not([open]) > .editor-controls-content {
+        display: none;
+    }
+
+    #paint-editor-step .final-export {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #paint-editor-step .final-export .action-btn {
+        width: 100%;
+    }
+}

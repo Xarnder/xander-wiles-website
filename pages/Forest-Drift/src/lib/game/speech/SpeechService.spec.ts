@@ -31,10 +31,10 @@ describe('speech identities and caption contracts', () => {
 	it('isolates synthesis settings while permitting different speakers to reuse identical audio', () => {
 		const text = 'Hello.';
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
-			clipKey(text, { ...NARRATOR.profile, voice: 'bm_george' })
+			clipKey(text, { ...NARRATOR.profile, voice: 'bm_lewis' })
 		);
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
-			clipKey(text, { ...NARRATOR.profile, version: 2 })
+			clipKey(text, { ...NARRATOR.profile, version: NARRATOR.profile.version + 1 })
 		);
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
 			clipKey(text, { ...NARRATOR.profile, speed: 0.9 })
