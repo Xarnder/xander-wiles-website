@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
@@ -197,36 +197,37 @@ export default function ImageView() {
     const ITEMS_PER_PAGE = 50;
 
     const [currentPage, setCurrentPage] = useState(1);
+    const restoredScrollId = useRef(null);
+    const scrolledToId = useRef(null);
 
     // Calculate pagination
     const totalPages = Math.ceil(entries.length / ITEMS_PER_PAGE);
+    const scrollToId = location.state?.scrollToId;
+
+    // Jump to the photo the user just came back from, once. Later page
+    // changes must not rerun this, or Next/Previous snap back to that photo.
+    useEffect(() => {
+        if (loading || entries.length === 0 || !scrollToId) return;
+        if (restoredScrollId.current === scrollToId) return;
+
+        const entryIndex = entries.findIndex((entry) => entry.id === scrollToId);
+        if (entryIndex === -1) return;
+
+        restoredScrollId.current = scrollToId;
+        const targetPage = Math.floor(entryIndex / ITEMS_PER_PAGE) + 1;
+        setCurrentPage(targetPage);
+    }, [loading, entries, scrollToId]);
 
     useEffect(() => {
-        if (!loading && entries.length > 0 && location.state?.scrollToId) {
-            const targetId = location.state.scrollToId;
-            const entryIndex = entries.findIndex(e => e.id === targetId);
+        if (loading || entries.length === 0 || !scrollToId) return;
+        if (scrolledToId.current === scrollToId || restoredScrollId.current !== scrollToId) return;
 
-            if (entryIndex !== -1) {
-                const targetPage = Math.floor(entryIndex / ITEMS_PER_PAGE) + 1;
+        const element = document.getElementById(`gallery-item-${scrollToId}`);
+        if (!element) return;
 
-                if (currentPage !== targetPage) {
-                    setCurrentPage(targetPage);
-                } else {
-                    // Try immediately first
-                    const element = document.getElementById(`gallery-item-${targetId}`);
-                    if (element) {
-                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-
-                    // Fallback using timeout to wait for render if page just changed or images loading
-                    setTimeout(() => {
-                        const el = document.getElementById(`gallery-item-${targetId}`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 500);
-                }
-            }
-        }
-    }, [loading, entries, location.state, currentPage]);
+        scrolledToId.current = scrollToId;
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [loading, entries, currentPage, scrollToId, galleryMode]);
 
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const paginatedEntries = entries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -243,10 +244,15 @@ export default function ImageView() {
     }, {});
 
     const handlePageChange = (newPage) => {
-        if (newPage >= 1 && newPage <= totalPages) {
-            setCurrentPage(newPage);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+
+        if (scrollToId) {
+            restoredScrollId.current = scrollToId;
+            scrolledToId.current = scrollToId;
         }
+
+        setCurrentPage(newPage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
@@ -435,8 +441,9 @@ export default function ImageView() {
 
                     {/* Pagination Controls */}
                     {totalPages > 1 && (
-                        <div className="flex justify-center items-center space-x-4 pt-6 pb-8">
+                        <div className="flex justify-center items-center space-x-4 pt-6 pb-28">
                             <button
+                                type="button"
                                 onClick={() => handlePageChange(currentPage - 1)}
                                 disabled={currentPage === 1}
                                 className="glass-button px-4 py-2 text-text hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
@@ -447,6 +454,7 @@ export default function ImageView() {
                                 Page {currentPage} of {totalPages}
                             </span>
                             <button
+                                type="button"
                                 onClick={() => handlePageChange(currentPage + 1)}
                                 disabled={currentPage === totalPages}
                                 className="glass-button px-4 py-2 text-text hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"

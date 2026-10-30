@@ -305,24 +305,44 @@ export default function EntryEditor() {
     const [stickySaveButton, setStickySaveButton] = useState(isStickySaveButtonEnabled);
     const [pasteSplitEnabled, setPasteSplitEnabled] = useState(isPasteSplitEnabled);
     const [pasteSplitPending, setPasteSplitPending] = useState(false);
+    const [showPasteSplitConfirm, setShowPasteSplitConfirm] = useState(false);
     const pasteSplitPendingRef = useRef(false);
+    const pendingPasteTextRef = useRef('');
+    const suppressPasteSplitMarkRef = useRef(false);
+    const pasteSplitSaveRef = useRef(null);
+    const clearPasteSplitPending = () => {
+        pasteSplitPendingRef.current = false;
+        pendingPasteTextRef.current = '';
+        setPasteSplitPending(false);
+    };
     const markCombinedPaste = (text) => {
-        if (!pasteSplitEnabled || !text.includes('-')) return;
+        if (suppressPasteSplitMarkRef.current || !pasteSplitEnabled || !text?.includes('-')) return;
+        const normalized = text.replace(/\r\n?/g, '\n');
+        const parts = splitPastedEntry(normalized);
+        if (!parts) return;
+        // The editor can echo the entry body after a split. That is not a new combined paste.
+        if (title.trim() && title.trim() === parts.title) return;
+        pendingPasteTextRef.current = normalized;
         pasteSplitPendingRef.current = true;
         setPasteSplitPending(true);
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
     const splitCombinedPaste = () => {
-        const parts = splitPastedEntry(content);
+        const parts = splitPastedEntry(readLiveMainEntry());
         if (!parts) {
             toastError('Use Title - Main Entry, with text on both sides of the first hyphen.');
-            return;
+            return null;
         }
+        suppressPasteSplitMarkRef.current = true;
+        window.setTimeout(() => {
+            suppressPasteSplitMarkRef.current = false;
+        }, 700);
         stopClipboardTyping();
         setTitle(parts.title);
         setContent(parts.content);
-        pasteSplitPendingRef.current = false;
-        setPasteSplitPending(false);
+        clearPasteSplitPending();
+        setShowPasteSplitConfirm(false);
+        return parts;
     };
     const [autoTitleEnabled, setAutoTitleEnabled] = useState(isAutoTitleEnabled);
     const [missingTitleReminderEnabled, setMissingTitleReminderEnabled] = useState(isMissingTitleReminderEnabled);
@@ -623,6 +643,8 @@ export default function EntryEditor() {
                     setShowDeleteConfirm(false);
                 } else if (showMissingTitleConfirm) {
                     setShowMissingTitleConfirm(false);
+                } else if (showPasteSplitConfirm) {
+                    setShowPasteSplitConfirm(false);
                 } else if (showDuplicateConfirm) {
                     setShowDuplicateConfirm(false);
                 } else if (isEditing) {
@@ -637,7 +659,7 @@ export default function EntryEditor() {
                 target.isContentEditable ||
                 target.closest('.CodeMirror')
             );
-            if (isTyping || lightboxImage || editingCaptionIndex !== null || showDeleteConfirm || showDuplicateConfirm || showMissingTitleConfirm) return;
+            if (isTyping || lightboxImage || editingCaptionIndex !== null || showDeleteConfirm || showDuplicateConfirm || showMissingTitleConfirm || showPasteSplitConfirm) return;
 
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
@@ -651,7 +673,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, showMissingTitleConfirm, stopClipboardTyping, requestQuitEditing]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, showMissingTitleConfirm, showPasteSplitConfirm, stopClipboardTyping, requestQuitEditing]);
 
     // Auto-save logic
     useEffect(() => {
@@ -1433,8 +1455,7 @@ export default function EntryEditor() {
             setImages(normalizeImages(data));
             setLocalAiSummaryRecord(data.aiSummary?.local || null);
             removedImagesDuringEditing.current = [];
-            pasteSplitPendingRef.current = false;
-            setPasteSplitPending(false);
+            clearPasteSplitPending();
             isFirstLoad.current = true;
             isEditingRef.current = false;
             setIsEditing(false);
@@ -1512,19 +1533,64 @@ export default function EntryEditor() {
         handleSave(false, true);
     };
 
-    async function handleSave(skipDuplicateCheck = false, skipMissingTitleCheck = false) {
+    const dismissPasteSplitConfirm = () => {
+        setShowPasteSplitConfirm(false);
+    };
+
+    const handleSaveWithoutPasteSplit = () => {
+        clearPasteSplitPending();
+        setShowPasteSplitConfirm(false);
+        handleSave();
+    };
+
+    const handleSplitAndSave = () => {
+        const parts = splitCombinedPaste();
+        if (!parts) return;
+        handleSave(false, false, parts);
+    };
+
+    function readLiveMainEntry() {
+        if (useNativeEditor) return nativeTextareaRef.current?.value ?? content;
+        if (mdeInstance?.getValue) return mdeInstance.getValue();
+        return content;
+    }
+
+    function readLiveTitle() {
+        return titleTextareaRef.current?.value ?? title;
+    }
+
+    function shouldAskToSplit(entryContent, entryTitle) {
+        if (!pasteSplitPendingRef.current) return false;
+        const source = (pendingPasteTextRef.current || entryContent || '').replace(/\r\n?/g, '\n');
+        const parts = splitPastedEntry(source);
+        if (!parts) return false;
+        const heading = entryTitle.trim();
+        const body = entryContent.trim();
+        if (heading === parts.title) return false;
+        if (heading && body === parts.content) return false;
+        return true;
+    }
+
+    async function handleSave(skipDuplicateCheck = false, skipMissingTitleCheck = false, draft = null) {
         if (quitPendingRef.current || saving) return;
-        if (pasteSplitPendingRef.current) {
-            toastError('Split the pasted title and entry before saving.');
+        const liveContent = draft?.content ?? readLiveMainEntry();
+        const liveTitle = draft?.title ?? readLiveTitle();
+        if (!draft && shouldAskToSplit(liveContent, liveTitle)) {
+            setShowPasteSplitConfirm(true);
             return;
         }
+        if (pasteSplitPendingRef.current) clearPasteSplitPending();
         if (!currentUser) return;
 
-        const trimmedTitle = title.trim();
+        const saveContent = liveContent;
+        const saveTitle = liveTitle;
+        if (saveContent !== content) setContent(saveContent);
+        if (saveTitle !== title) setTitle(saveTitle);
+        const trimmedTitle = saveTitle.trim();
         const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
         const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
         const hasDataToSave = Boolean(
-            content.trim() ||
+            saveContent.trim() ||
             trimmedTitle ||
             images.length > 0 ||
             hasSubEntryContent(cleanedSubEntries) ||
@@ -1534,7 +1600,7 @@ export default function EntryEditor() {
             isSpecial
         );
 
-        const willHaveNoTitle = !trimmedTitle && (!autoTitleEnabled || !content.trim());
+        const willHaveNoTitle = !trimmedTitle && (!autoTitleEnabled || !saveContent.trim());
 
         if (!skipMissingTitleCheck && willHaveNoTitle && hasDataToSave && missingTitleReminderEnabled) {
             setDontShowMissingTitleAgain(false);
@@ -1543,7 +1609,7 @@ export default function EntryEditor() {
         }
 
         // Duplicate sentence check
-        const duplicateCheckText = [content, subEntriesToPlainText(subEntries)].filter(Boolean).join('. ');
+        const duplicateCheckText = [saveContent, subEntriesToPlainText(subEntries)].filter(Boolean).join('. ');
 
         if (!skipDuplicateCheck && duplicateCheckText) {
             const sentences = duplicateCheckText.split('.')
@@ -1558,24 +1624,27 @@ export default function EntryEditor() {
             }
         }
 
-        await performSave();
+        await performSave({ content: saveContent, title: saveTitle });
     }
 
-    async function performSave() {
+    async function performSave(draft = null) {
         if (quitPendingRef.current || saving) return;
-        if (pasteSplitPendingRef.current) {
-            toastError('Split the pasted title and entry before saving.');
+        const saveContent = draft?.content ?? readLiveMainEntry();
+        const saveTitle = draft?.title ?? readLiveTitle();
+        if (!draft && shouldAskToSplit(saveContent, saveTitle)) {
+            setShowPasteSplitConfirm(true);
             return;
         }
+        if (pasteSplitPendingRef.current) clearPasteSplitPending();
         if (!currentUser) return;
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         setSaving(true);
         playSaveSound();
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
-            const trimmedContent = content.trim();
-            const trimmedTitle = title.trim();
-            const inferredTitle = autoTitleEnabled ? content.split('\n')[0].replace('#', '').trim() : '';
+            const trimmedContent = saveContent.trim();
+            const trimmedTitle = saveTitle.trim();
+            const inferredTitle = autoTitleEnabled ? saveContent.split('\n')[0].replace('#', '').trim() : '';
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
 
@@ -1595,7 +1664,7 @@ export default function EntryEditor() {
                 savedEntryBeforeEditing.current = null;
             } else {
                 const textSize = new Blob([
-                    content,
+                    saveContent,
                     subEntriesToPlainText(cleanedSubEntries),
                     numericEntriesToPlainText(cleanedNumericEntries, numericFields)
                 ]).size;
@@ -1606,7 +1675,7 @@ export default function EntryEditor() {
                 const savedData = {
                     date: parseISO(date),
                     title: trimmedTitle || inferredTitle,
-                    content: content,
+                    content: saveContent,
                     updatedAt: serverTimestamp(),
                     images: savedImages,
                     tags: selectedTags, // Array of tag IDs
@@ -1626,8 +1695,8 @@ export default function EntryEditor() {
             }
 
             lastSavedSignature.current = createEntrySignature({
-                content,
-                title,
+                content: saveContent,
+                title: saveTitle,
                 selectedTags,
                 mood,
                 isSpecial,
@@ -1637,6 +1706,7 @@ export default function EntryEditor() {
                 numericFields,
                 entrySettingsLoaded
             });
+            setShowPasteSplitConfirm(false);
             isEditingRef.current = false;
             setIsEditing(false);
             const discardedImages = removedImagesDuringEditing.current;
@@ -2405,9 +2475,9 @@ export default function EntryEditor() {
                             </div>
                             </div>
 
-                            {pasteSplitPending && (
+                            {pasteSplitPending && shouldAskToSplit(content, title) && (
                                 <p role="status" className="mb-2 text-sm text-text-muted">
-                                    Saving paused: split the pasted title and entry first{!pasteSplitEnabled ? ' (enable Split pasted title and entry in Settings)' : ''}.
+                                    Title and entry are still together. Saving will ask you to split them or keep them combined.
                                 </p>
                             )}
                             <div ref={advancedEntryRef} className="scroll-mt-48" />
@@ -2930,6 +3000,55 @@ export default function EntryEditor() {
                         className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-secondary text-white text-xs sm:text-sm font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] transition-all flex items-center justify-center min-h-[44px]"
                     >
                         Save
+                    </button>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={showPasteSplitConfirm}
+                onClose={dismissPasteSplitConfirm}
+                labelledBy="paste-split-modal-heading"
+                initialFocusRef={pasteSplitSaveRef}
+                containerClassName="items-center justify-center p-3 sm:p-4"
+                backdropClassName="bg-black/80"
+                className="glass-card w-full max-w-[420px] sm:max-w-lg p-4 sm:p-6 bg-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            >
+                <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 text-primary mt-0.5">
+                        <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <h3 id="paste-split-modal-heading" className="text-base sm:text-lg font-bold text-white leading-tight">
+                            Split before saving?
+                        </h3>
+                        <p className="text-xs sm:text-sm text-text-muted mt-1.5 leading-relaxed">
+                            This paste still has the title and entry together. You can split them and save, save without splitting, or go back and keep editing.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+                    <button
+                        type="button"
+                        onClick={dismissPasteSplitConfirm}
+                        className="min-h-[44px] rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-[11px] font-medium leading-tight text-white transition-colors hover:bg-white/10 sm:text-xs"
+                    >
+                        Go back without saving
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSaveWithoutPasteSplit}
+                        className="min-h-[44px] rounded-lg border border-white/15 bg-white/10 px-2 py-2 text-[11px] font-medium leading-tight text-white transition-colors hover:bg-white/20 sm:text-xs"
+                    >
+                        Save without splitting
+                    </button>
+                    <button
+                        ref={pasteSplitSaveRef}
+                        type="button"
+                        onClick={handleSplitAndSave}
+                        className="min-h-[44px] rounded-lg bg-gradient-to-r from-primary to-secondary px-2 py-2 text-[11px] font-bold leading-tight text-white shadow-lg shadow-primary/20 transition-all hover:shadow-primary/40 active:scale-[0.98] sm:text-xs"
+                    >
+                        Split and save
                     </button>
                 </div>
             </Modal>

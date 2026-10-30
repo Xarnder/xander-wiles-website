@@ -911,7 +911,7 @@ export default function SettingsView() {
                             <span className="min-w-0">
                                 <span className="block text-sm font-bold text-white">Split pasted title and entry</span>
                                 <span className="mt-1 block text-xs leading-snug text-text-muted">
-                                    Paste Title - Main Entry into the main entry, then press Split title &amp; entry beside Advanced entry. Uses the first hyphen and replaces both inputs. Saving pauses until you split the paste. Off by default.
+                                    Paste Title - Main Entry into the main entry, then press Split title &amp; entry beside Advanced entry. Uses the first hyphen and replaces both inputs. If you save before splitting, you can split and save, save without splitting, or go back. Off by default.
                                 </span>
                             </span>
                         </span>
