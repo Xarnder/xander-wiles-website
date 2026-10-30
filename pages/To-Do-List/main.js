@@ -3994,11 +3994,17 @@ function scheduleComposerAutoAdd() {
 
 function syncComposerAddState() {
     const addBtn = document.getElementById('add-task-composer-add');
+    const nextBtn = document.getElementById('add-task-composer-add-next');
     const field = document.getElementById('add-task-composer-input');
     if (!addBtn || !field) return;
     const empty = !field.value.trim();
-    addBtn.classList.toggle('is-empty', empty || composerSubmitting);
+    const inactive = empty || composerSubmitting;
+    addBtn.classList.toggle('is-empty', inactive);
     addBtn.setAttribute('aria-disabled', empty ? 'true' : 'false');
+    if (nextBtn) {
+        nextBtn.classList.toggle('is-empty', inactive);
+        nextBtn.setAttribute('aria-disabled', empty ? 'true' : 'false');
+    }
     syncComposerSubtaskButton();
 }
 
@@ -4138,12 +4144,14 @@ function bindComposerOnce() {
     const exitBtn = document.getElementById('add-task-composer-exit');
     const subtaskBtn = document.getElementById('add-task-composer-subtask');
     const addBtn = document.getElementById('add-task-composer-add');
-    if (!root || !field || !exitBtn || !subtaskBtn || !addBtn) return;
+    const nextBtn = document.getElementById('add-task-composer-add-next');
+    if (!root || !field || !exitBtn || !subtaskBtn || !addBtn || !nextBtn) return;
     composerBound = true;
 
     bindComposerAction(exitBtn, () => closeAddTaskComposer({ restore: true }));
     bindComposerAction(subtaskBtn, () => beginComposerSubtask());
     bindComposerAction(addBtn, () => submitAddTaskComposer());
+    bindComposerAction(nextBtn, () => submitAddTaskComposer({ stay: true }));
     const fontDown = document.getElementById('add-task-composer-font-down');
     const fontUp = document.getElementById('add-task-composer-font-up');
     const advanceBtn = document.getElementById('add-task-composer-advance');
@@ -4186,7 +4194,7 @@ function bindComposerOnce() {
     root.addEventListener('keydown', (e) => {
         if (e.key !== 'Tab') return;
         const advanceBtn = document.getElementById('add-task-composer-advance');
-        const items = [fontDown, fontUp, advanceBtn, field, exitBtn, subtaskBtn, addBtn]
+        const items = [fontDown, fontUp, advanceBtn, field, exitBtn, subtaskBtn, nextBtn, addBtn]
             .filter((el) => el && !el.hidden);
         const first = items[0];
         const last = items[items.length - 1];
@@ -4269,12 +4277,17 @@ function syncComposerEditChrome() {
     const editing = !!(composerSession && composerSession.taskId);
     const advance = document.getElementById('add-task-composer-advance');
     const addBtn = document.getElementById('add-task-composer-add');
+    const nextBtn = document.getElementById('add-task-composer-add-next');
     const root = document.getElementById('add-task-composer');
     const title = document.getElementById('add-task-composer-title');
     if (advance) advance.hidden = !editing;
     if (addBtn) {
         addBtn.textContent = editing ? 'Save' : 'Add';
-        addBtn.title = editing ? 'Save task' : 'Add task';
+        addBtn.title = editing ? 'Save and return' : 'Add and return';
+    }
+    if (nextBtn) {
+        nextBtn.textContent = editing ? 'Save & new' : 'Add & new';
+        nextBtn.title = editing ? 'Save and write another task' : 'Add and write another task';
     }
     if (root) root.classList.toggle('is-editing-task', editing);
     if (title) title.textContent = editing ? 'Edit task' : 'Add task';
@@ -4295,9 +4308,10 @@ function openAdvancedTaskEditor() {
     }
 }
 
-function saveEditedTaskFromComposer() {
+function saveEditedTaskFromComposer({ stay = false } = {}) {
     if (!composerSession || !composerSession.taskId || composerSubmitting) return;
     const taskId = composerSession.taskId;
+    const listId = composerSession.listId;
     const field = composerParentField();
     const text = field ? field.value : '';
     if (!text.trim()) {
@@ -4321,8 +4335,10 @@ function saveEditedTaskFromComposer() {
     Object.assign(task, updateData);
     updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData).then(() => {
         composerSubmitting = false;
-        closeAddTaskComposer({ restore: false });
+        if (stay && isAddTaskComposerOpen()) resetComposerForNextTask(listId);
+        else closeAddTaskComposer({ restore: false });
         UI.renderBoard();
+        if (stay && isAddTaskComposerOpen()) focusComposerField(composerParentField(), null, true);
     }, (e) => {
         composerSubmitting = false;
         syncComposerAddState();
@@ -4609,10 +4625,37 @@ function closeAddTaskComposer({ restore = false } = {}) {
     if (field && !restore) field.value = '';
 }
 
-function submitAddTaskComposer({ auto = false } = {}) {
+function resetComposerForNextTask(listId) {
+    addTaskDrafts.delete(listId);
+    addTaskSubtaskDrafts.delete(listId);
+    resetTimerForList(listId);
+    const source = findAddTaskInput(listId);
+    if (source) {
+        source.value = '';
+        syncAddTaskInputHeight(source);
+    }
+    clearComposerSubtasks();
+    syncComposerOutlineSpacer();
+    const field = composerParentField();
+    if (field) {
+        field.value = '';
+        field.placeholder = 'Type an idea to add';
+        field.setAttribute('aria-label', 'New task');
+        resizeComposerField(field);
+    }
+    composerSession = { listId };
+    UI.setComposerEditTask(null);
+    resetComposerAutoAdd();
+    syncComposerEditChrome();
+    syncComposerAddState();
+    UI.renderComposerTagBar();
+    focusComposerField(field, null, true);
+}
+
+function submitAddTaskComposer({ auto = false, stay = false } = {}) {
     if (!composerSession || composerSubmitting) return;
     if (composerSession.taskId) {
-        saveEditedTaskFromComposer();
+        saveEditedTaskFromComposer({ stay });
         return;
     }
     resetComposerAutoAdd();
@@ -4640,6 +4683,10 @@ function submitAddTaskComposer({ auto = false } = {}) {
         if (auto) {
             const term = Utils.getTerm(true, true);
             Utils.showToast(`${term} automatically added`, "success");
+        }
+        if (stay && isAddTaskComposerOpen()) {
+            resetComposerForNextTask(listId);
+            return;
         }
         addTaskDrafts.delete(listId);
         addTaskSubtaskDrafts.delete(listId);

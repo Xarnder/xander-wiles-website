@@ -3051,7 +3051,8 @@ html.add-task-composer-open body {
 
 .add-task-composer-exit,
 .add-task-composer-subtask,
-.add-task-composer-add {
+.add-task-composer-add,
+.add-task-composer-add-next {
     flex: 1 1 0;
     min-width: 0;
     height: 52px;
@@ -3088,7 +3089,13 @@ html.add-task-composer-open body {
     color: var(--on-accent, white);
 }
 
-.add-task-composer-add.is-empty {
+.add-task-composer-add-next {
+    background: oklch(0.58 0.14 155);
+    color: white;
+}
+
+.add-task-composer-add.is-empty,
+.add-task-composer-add-next.is-empty {
     opacity: 0.45;
 }
 
@@ -3406,6 +3413,7 @@ html.add-task-composer-open body {
 }
 
 .add-task-composer.tags-packed .add-task-composer-add,
+.add-task-composer.tags-packed .add-task-composer-add-next,
 .add-task-composer.tags-packed .add-task-composer-exit,
 .add-task-composer.tags-packed .add-task-composer-subtask {
     grid-column: auto;
@@ -10040,6 +10048,7 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
     }
 
     .add-task-composer.tags-packed .add-task-composer-add,
+    .add-task-composer.tags-packed .add-task-composer-add-next,
     .add-task-composer.tags-packed .add-task-composer-exit,
     .add-task-composer.tags-packed .add-task-composer-subtask {
         grid-column: auto;
@@ -10054,9 +10063,11 @@ body.masonry-focus-mode .normal-tasks-container > .empty-list-msg {
     .add-task-composer-exit,
     .add-task-composer-subtask,
     .add-task-composer-add,
+    .add-task-composer-add-next,
     .add-task-composer.tags-packed .add-task-composer-exit,
     .add-task-composer.tags-packed .add-task-composer-subtask,
-    .add-task-composer.tags-packed .add-task-composer-add {
+    .add-task-composer.tags-packed .add-task-composer-add,
+    .add-task-composer.tags-packed .add-task-composer-add-next {
         height: 76px;
         min-height: 76px;
         padding: 0 8px;
