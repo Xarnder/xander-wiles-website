@@ -19,6 +19,8 @@ export const REGEN_DELAY_MS = 8000;
 export const REGEN_INTERVAL_MS = 3000;
 /** No damage from any source this long after loading, joining or respawning. */
 export const HEALTH_GRACE_MS = 2000;
+/** A knocked-out player lies on the floor this long before they can respawn. */
+export const RESPAWN_DELAY_MS = 3000;
 
 /** Everything that can hurt a player. `by` is the slot of the player who threw the punch. */
 export type DamageSource = { kind: 'fall'; distance: number } | { kind: 'player'; by: number };
@@ -84,6 +86,11 @@ export function damageHealth(
 		state: { base: after, lastDamageAt: now, graceUntil: state.graceUntil, dead: after === 0 },
 		applied: before - after
 	};
+}
+
+/** Dead for at least the respawn delay (the hit that knocked them out set `lastDamageAt`). */
+export function canRespawn(state: HealthState, now: number, slackMs = 0): boolean {
+	return state.dead && now >= state.lastDamageAt + RESPAWN_DELAY_MS - slackMs;
 }
 
 /** Back to full after death, with a fresh grace period. */

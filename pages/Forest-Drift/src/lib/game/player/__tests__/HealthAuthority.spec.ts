@@ -48,7 +48,12 @@ describe('LocalHealthAuthority', () => {
 		expect(log.deaths).toEqual([{ kind: 'fall', distance: 30 }]);
 		expect(authority.snapshot().dead).toBe(true);
 
-		authority.requestRespawn();
+		// Lying on the floor for the 3 s respawn delay first.
+		clock.now = 4999;
+		expect(authority.requestRespawn()).toBe(false);
+		expect(authority.snapshot().dead).toBe(true);
+		clock.now = 5000;
+		expect(authority.requestRespawn()).toBe(true);
 		expect(authority.snapshot()).toMatchObject({ current: 36, dead: false });
 		authority.reportFall(30);
 		expect(authority.snapshot().current).toBe(36);

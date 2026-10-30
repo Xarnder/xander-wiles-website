@@ -20,6 +20,19 @@ describe('PoseSender', () => {
 		expect(sender.sample(at(0, { building: false }), 64, 64)!.flags & POSE_FLAGS.building).toBe(0);
 	});
 
+	it('flags a short deliberate jump (spawn, respawn) as a teleport, sent at once', () => {
+		const sender = new PoseSender();
+		sender.sample(at(0, { teleports: 1 }), 0, 0);
+		sender.sample(at(1, { teleports: 1 }), 50, 50);
+		// 30 m in one frame, well under the 50 m "obvious teleport" distance, and not yet due.
+		const jump = sender.sample(at(31, { teleports: 2 }), 66, 66)!;
+		expect(jump.flags & POSE_FLAGS.teleport).toBeTruthy();
+		expect(jump.x).toBe(31);
+		// Ordinary movement afterwards is not a teleport.
+		const next = sender.sample(at(31.1, { teleports: 2 }), 170, 170)!;
+		expect(next.flags & POSE_FLAGS.teleport).toBe(0);
+	});
+
 	it('sends every 100 ms (every 6th frame at 60 fps) while moving', () => {
 		const sender = new PoseSender();
 		const sendTimes: number[] = [];

@@ -12,6 +12,12 @@ export interface LocalPose {
 	grounded?: boolean;
 	running?: boolean;
 	building?: boolean;
+	/**
+	 * Bumped by every deliberate jump (spawn, respawn, a restored position). A change means the next
+	 * pose is a teleport even when it is short: the room's speed check would otherwise reject, say, a
+	 * respawn 30 m from where the player fell.
+	 */
+	teleports?: number;
 }
 
 /**
@@ -57,6 +63,7 @@ export class PoseSender {
 	private forced = false;
 	private interval = POSE_SEND_INTERVAL_MS;
 	private away = false;
+	private lastTeleports: number | undefined;
 
 	/** One pose a second while nobody else is in the world. */
 	setAlone(alone: boolean): void {
@@ -86,8 +93,12 @@ export class PoseSender {
 		if (!Number.isFinite(serverNow)) return null;
 
 		const changing = !previous || poseChanged(previous, pose);
+		const jumped = this.lastTeleports !== undefined && pose.teleports !== this.lastTeleports;
+		this.lastTeleports = pose.teleports;
 		const teleported =
-			previous !== null && Math.hypot(pose.x - previous.x, pose.z - previous.z) > TELEPORT_DISTANCE;
+			jumped ||
+			(previous !== null &&
+				Math.hypot(pose.x - previous.x, pose.z - previous.z) > TELEPORT_DISTANCE);
 		let flags = poseFlags(pose);
 		if (this.away) {
 			if ((this.lastSentFlags & POSE_FLAGS.away) !== 0 && !teleported) return null;

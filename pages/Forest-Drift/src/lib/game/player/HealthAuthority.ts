@@ -1,5 +1,6 @@
 import { fallDamageSegments } from './fallDamage';
 import {
+	canRespawn,
 	damageHealth,
 	healthAt,
 	healthSnapshot,
@@ -28,8 +29,8 @@ export interface HealthAuthority {
 	snapshot(): HealthSnapshot;
 	/** A non-immune landing the scene has already checked against water and the world's rule. */
 	reportFall(distance: number): void;
-	/** Only does anything while dead. */
-	requestRespawn(): void;
+	/** Only while dead and past the respawn delay. Returns whether the player is coming back. */
+	requestRespawn(): boolean;
 	/** Called every frame; emits `change` only when the snapshot differs. */
 	poll(): void;
 	/** Whole points to write into the local world file, or undefined when this authority doesn't save there. */
@@ -87,10 +88,11 @@ export class LocalHealthAuthority implements HealthAuthority {
 		this.poll();
 	}
 
-	requestRespawn(): void {
-		if (!this.state.dead) return;
+	requestRespawn(): boolean {
+		if (!canRespawn(this.state, this.now())) return false;
 		this.state = reviveHealth(this.now());
 		this.poll();
+		return true;
 	}
 
 	poll(): void {

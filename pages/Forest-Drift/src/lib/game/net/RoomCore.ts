@@ -3,6 +3,7 @@ import { FALL_REPORT_MAX_DISTANCE, fallDamageSegments } from '../player/fallDama
 import { PUNCH_COOLDOWN_MS, PUNCH_DAMAGE, punchPlausible } from '../player/punch';
 import {
 	HEALTH_MAX,
+	canRespawn,
 	createHealthState,
 	damageHealth,
 	healthAt,
@@ -78,6 +79,15 @@ export interface PlayerAttachment {
 	colour: string;
 	role: PlayerRole;
 	away: boolean;
+	/** Knocked out (see PlayerInfo.down), so it survives the room sleeping. */
+	down?: boolean;
+	/**
+	 * Where the player last came to rest. A sleeping Durable Object forgets every pose, and a player
+	 * standing still sends none, so without this the room would not know where idle players are
+	 * after waking (punches at them would always miss). Saved only when a player stops, never per
+	 * step, and the attachment survives hibernation with the socket.
+	 */
+	pose?: StoredPose;
 }
 
 /** A dropped player whose slot is being held (Q21). Persisted so hibernation or a restart keeps it. */
@@ -201,7 +211,7 @@ export interface RoomStats {
 	punchesRejected: number;
 }
 
-interface StoredPose {
+export interface StoredPose {
 	flags: number;
 	x: number;
 	y: number;
@@ -413,6 +423,7 @@ export class RoomCore {
 			if (existing) {
 				// Was in its grace period, but this socket is still open after all.
 				existing.conn = conn;
+				existing.pose ??= attachment.pose ? { ...attachment.pose } : null;
 				existing.graceExpiresAt = null;
 				existing.info.offline = false;
 				this.byConn.set(conn, existing);
@@ -423,6 +434,7 @@ export class RoomCore {
 				continue;
 			}
 			const player = this.createPlayerState(conn, toInfo(attachment, false));
+			player.pose = attachment.pose ? { ...attachment.pose } : null;
 			this.players.set(attachment.playerId, player);
 			this.byConn.set(conn, player);
 		}
@@ -766,6 +778,7 @@ export class RoomCore {
 			player = existing;
 			player.conn = conn;
 			player.info = info;
+			if (player.health?.dead) player.info.down = true;
 			player.graceExpiresAt = null;
 			player.lastSent.clear();
 		} else {
@@ -773,7 +786,7 @@ export class RoomCore {
 			this.players.set(info.playerId, player);
 		}
 		this.byConn.set(conn, player);
-		conn.setAttachment(toAttachment(info));
+		conn.setAttachment(toAttachment(info, player.pose));
 		if (wasEmpty) this.startClock(now);
 		this.restartHoldUntil = null;
 		this.saveGrace();
@@ -996,11 +1009,13 @@ export class RoomCore {
 		this.stats.posesAccepted++;
 
 		const away = (pose.flags & POSE_FLAGS.away) !== 0;
-		if (away !== player.info.away) {
-			player.info.away = away;
-			conn.setAttachment(toAttachment(player.info));
-			this.broadcastPresence(player);
+		const awayChanged = away !== player.info.away;
+		player.info.away = away;
+		// A pose without `moving` is where the player came to rest (or an away/teleport pose).
+		if (awayChanged || (pose.flags & POSE_FLAGS.moving) === 0) {
+			conn.setAttachment(toAttachment(player.info, player.pose));
 		}
+		if (awayChanged) this.broadcastPresence(player);
 	}
 
 	private removePlayer(player: PlayerState): void {
@@ -1116,7 +1131,8 @@ export class RoomCore {
 				t: 'presence',
 				slot: player.info.slot,
 				away: player.info.away,
-				offline: player.info.offline
+				offline: player.info.offline,
+				...(player.info.down ? { down: true } : {})
 			},
 			player.conn ?? undefined
 		);
@@ -1195,7 +1211,12 @@ export class RoomCore {
 	private healthOf(player: PlayerState, now: number): HealthState {
 		if (player.health) return player.health;
 		const stored = this.persistence?.loadPlayerHealth?.(player.info.playerId) ?? null;
-		player.health = stored && !stored.dead ? { ...stored, graceUntil: 0 } : createHealthState(now);
+		// No grace here: waking up must not make anyone briefly immune. Only joining and respawning
+		// grant it (healthOnJoin, reviveHealth).
+		player.health =
+			stored && !stored.dead
+				? { ...stored, graceUntil: 0 }
+				: { ...createHealthState(now), graceUntil: 0 };
 		return player.health;
 	}
 
@@ -1213,6 +1234,12 @@ export class RoomCore {
 		source?: DamageSource
 	): void {
 		player.health = health;
+		// Everyone else draws a knocked-out player lying down (presence, never the health itself).
+		if ((player.info.down === true) !== health.dead) {
+			player.info.down = health.dead;
+			if (player.conn) player.conn.setAttachment(toAttachment(player.info, player.pose));
+			this.broadcastPresence(player);
+		}
 		this.persistence?.savePlayerHealth?.(player.info.playerId, {
 			base: health.base,
 			lastDamageAt: health.lastDamageAt,
@@ -1346,7 +1373,8 @@ export class RoomCore {
 
 	private handleRespawn(player: PlayerState): void {
 		const now = this.now();
-		if (!this.healthOf(player, now).dead) {
+		// Half a second of slack for the two clocks; the browser enforces the delay too.
+		if (!canRespawn(this.healthOf(player, now), now, 500)) {
 			this.sendHealth(player);
 			return;
 		}
@@ -1399,14 +1427,16 @@ export class RoomCore {
 	}
 }
 
-function toAttachment(info: PlayerInfo): PlayerAttachment {
+function toAttachment(info: PlayerInfo, pose?: StoredPose | null): PlayerAttachment {
 	return {
 		playerId: info.playerId,
 		slot: info.slot,
 		name: info.name,
 		colour: info.colour,
 		role: info.role,
-		away: info.away
+		away: info.away,
+		...(info.down ? { down: true } : {}),
+		...(pose ? { pose: { ...pose } } : {})
 	};
 }
 
@@ -1418,7 +1448,8 @@ function toInfo(attachment: PlayerAttachment, offline: boolean): PlayerInfo {
 		colour: attachment.colour,
 		role: attachment.role ?? 'viewer',
 		away: attachment.away ?? false,
-		offline
+		offline,
+		...(attachment.down ? { down: true } : {})
 	};
 }
 

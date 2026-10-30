@@ -1,5 +1,8 @@
 import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
-import type { PlayerInteractionPose } from '../player/PlayerInteractionPoseResolver';
+import {
+	resolvePlayerInteractionPose,
+	type PlayerInteractionPose
+} from '../player/PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import { LocatorBar } from '../hud/LocatorBar';
 import { createId, type PlayerIdentity } from './mpConfig';
@@ -76,6 +79,8 @@ export interface LocalPlayerFrame {
 	running?: boolean;
 	building?: boolean;
 	eyeHeight: number;
+	/** FirstPersonController.teleports: a change marks the next pose as a teleport. */
+	teleports?: number;
 }
 
 /**
@@ -320,7 +325,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			context.characterSurface,
 			(playerId) => {
 				const ref = this.interactions.find((l) => l.playerId === playerId);
-				return ref ? (context.resolveInteractionPose?.(ref) ?? null) : null;
+				if (ref) return context.resolveInteractionPose?.(ref) ?? null;
+				return this.knockedOutPose(playerId);
 			}
 		);
 		context.scene.add(this.avatars.group);
@@ -361,7 +367,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			flying: local.flying,
 			grounded: local.grounded,
 			running: local.running,
-			building: local.building
+			building: local.building,
+			teleports: local.teleports
 		});
 	}
 
@@ -416,6 +423,15 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		const target = findPunchTarget(aim, aim.yaw, aim.pitch, candidates);
 		if (target === null) return null;
 		return this.net.sendPunch(this.nextPunchId++, target) ? target : null;
+	}
+
+	/** A knocked-out player lies where they stood, in the beds' lying pose (presence `down`). */
+	private knockedOutPose(playerId: string): PlayerInteractionPose | null {
+		if (!this.roster.some((player) => player.playerId === playerId && player.down)) return null;
+		const view = this.lastViews.find((v) => v.info.playerId === playerId);
+		if (!view) return null;
+		const { x, y, z, yaw } = view.frame;
+		return resolvePlayerInteractionPose('lie', { x, y, z }, yaw);
 	}
 
 	createHealthAuthority(events: HealthEvents): HealthAuthority {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	RoomCore,
 	type AuthResult,
+	type PlayerAttachment,
 	type GraceEntry,
 	type RoomConnection,
 	type RoomPersistence,
@@ -30,7 +31,10 @@ class FakeConnection implements RoomConnection {
 	close(code: number, reason: string): void {
 		this.closed = { code, reason };
 	}
-	setAttachment(): void {}
+	attachment: PlayerAttachment | null = null;
+	setAttachment(attachment: PlayerAttachment | null): void {
+		this.attachment = attachment;
+	}
 	last<T extends ServerJsonMessage['t']>(t: T): Extract<ServerJsonMessage, { t: T }> | undefined {
 		return [...this.json].reverse().find((m) => m.t === t) as
 			Extract<ServerJsonMessage, { t: T }> | undefined;
@@ -231,9 +235,34 @@ describe('RoomCore — player health', () => {
 		advance(300);
 		fall(room, a, 3, 40, now());
 		expect(a.last('health')!.state.dead).toBe(true);
+		// Too early: the respawn delay is 3 s from the knockout (half a second of clock slack).
+		advance(2000);
+		room.onMessage(a, JSON.stringify({ t: 'respawn' }));
+		expect(a.last('health')!.state.dead).toBe(true);
+		advance(1000);
 		room.onMessage(a, JSON.stringify({ t: 'respawn' }));
 		expect(a.last('health')!.state.dead).toBe(false);
 		expect(points(a, now())).toBe(36);
+	});
+
+	it('tells everyone else a knocked-out player is down, and when they are back up', async () => {
+		const { room, advance, now } = setup();
+		const a = await join(room, 'player-aaaa');
+		const b = await join(room, 'player-bbbb');
+		advance(2500);
+		fall(room, a, 1, 40, now());
+		expect(b.last('presence')).toMatchObject({ slot: 0, down: true });
+		// Never to the player themselves (they know from their own health).
+		expect(a.all('presence')).toHaveLength(0);
+		advance(3000);
+		room.onMessage(a, JSON.stringify({ t: 'respawn' }));
+		expect(b.last('presence')).toEqual({ t: 'presence', slot: 0, away: false, offline: false });
+		// A late joiner sees who is down in its welcome.
+		fall(room, a, 2, 0, now());
+		advance(2500);
+		fall(room, a, 3, 40, now());
+		const c = await join(room, 'player-cccc');
+		expect(c.last('welcome')!.players.find((p) => p.slot === 0)?.down).toBe(true);
 	});
 
 	it('keeps health across leaving and rejoining, without healing while away', async () => {
@@ -424,6 +453,65 @@ describe('RoomCore — punching', () => {
 		expect(last.source).toEqual({ kind: 'player', by: 0 });
 		punch(room, a, 19, 1);
 		expect(a.last('punchResult')!.hit).toBe(false);
+	});
+
+	it('still lands after the room slept while both players stood still', async () => {
+		// The live failure: a sleeping Durable Object forgets every pose, and players standing still
+		// send none, so the room used to refuse every punch until someone moved.
+		const persistence = new MemoryPersistence();
+		const first = setup({ persistence });
+		const a = await join(first.room, 'player-aaaa');
+		const b = await join(first.room, 'player-bbbb');
+		first.advance(2500);
+		const t = first.now();
+		const still = (conn: FakeConnection, z: number) =>
+			first.room.onMessage(
+				conn,
+				encodePose({
+					flags: POSE_FLAGS.grounded,
+					seq: 0,
+					sampleTime: t,
+					x: 0,
+					y: 0,
+					z,
+					yaw: 0,
+					pitch: 0
+				})
+			);
+		still(a, 0);
+		still(b, -1.5);
+		expect(a.attachment?.pose).toMatchObject({ x: 0, z: 0 });
+		expect(b.attachment?.pose).toMatchObject({ x: 0, z: -1.5 });
+
+		// Wake a fresh room from the sockets' attachments alone.
+		const woken = setup({ persistence });
+		woken.advance(first.now() + 10_000 - woken.now());
+		woken.room.restore([
+			{ conn: a, attachment: a.attachment },
+			{ conn: b, attachment: b.attachment }
+		]);
+		punch(woken.room, a, 1, 1);
+		expect(a.last('punchResult')!.hit).toBe(true);
+		expect(healthAt(b.last('health')!.state, woken.now())).toBe(34);
+	});
+
+	it('only saves the resting pose, not every step', async () => {
+		const { room, a, now } = await face(1.5);
+		const saved = a.attachment?.pose;
+		room.onMessage(
+			a,
+			encodePose({
+				flags: POSE_FLAGS.grounded | POSE_FLAGS.moving,
+				seq: 1,
+				sampleTime: now() + 100,
+				x: 0.5,
+				y: 0,
+				z: 0,
+				yaw: 0,
+				pitch: 0
+			})
+		);
+		expect(a.attachment?.pose).toEqual(saved);
 	});
 
 	it("follows the owner's player-damage rule", async () => {

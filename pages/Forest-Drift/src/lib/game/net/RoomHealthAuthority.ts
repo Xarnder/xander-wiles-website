@@ -1,6 +1,7 @@
 import { fallDamageSegments } from '../player/fallDamage';
 import { HealthNotifier, type HealthAuthority, type HealthEvents } from '../player/HealthAuthority';
 import {
+	canRespawn,
 	createHealthState,
 	damageHealth,
 	healthAt,
@@ -78,12 +79,13 @@ export class RoomHealthAuthority implements HealthAuthority {
 		this.poll();
 	}
 
-	requestRespawn(): void {
-		if (!this.state.dead) return;
+	requestRespawn(): boolean {
+		if (!canRespawn(this.state, this.now())) return false;
 		this.port.sendRespawn();
 		// Close the death card straight away; the room's reply confirms it.
 		this.state = reviveHealth(this.now());
 		this.poll();
+		return true;
 	}
 
 	poll(): void {

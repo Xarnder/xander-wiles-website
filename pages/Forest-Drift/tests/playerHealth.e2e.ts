@@ -13,6 +13,10 @@ type TestWindow = Window & {
 			debugDropPlayer(metres: number): void;
 			getHealth(): { current: number; dead: boolean };
 			toggleBuildMode(): void;
+			controller: {
+				interactionPose: { action: string } | null;
+				interactionThirdPerson: boolean;
+			};
 		};
 		saveNow(trigger: string): Promise<unknown>;
 	} | null;
@@ -106,10 +110,26 @@ test.describe('Player health', () => {
 		const card = page.getByTestId('death-card');
 		await expect(card).toBeVisible({ timeout: 10_000 });
 		await expect(card).toContainText('You fell too far');
-		await expect(page.getByTestId('death-respawn')).toBeFocused();
+		// Lying on the floor (the beds' lying pose), seen from third person.
+		const pose = () =>
+			page.evaluate(() => {
+				const c = (window as TestWindow).__forestSession!.scene.controller;
+				return { action: c.interactionPose?.action ?? null, third: c.interactionThirdPerson };
+			});
+		expect(await pose()).toEqual({ action: 'lie', third: true });
+		// Respawn waits 3 s: the button counts down, and Enter does nothing until then.
+		const respawn = page.getByTestId('death-respawn');
+		await expect(respawn).toBeDisabled();
+		await expect(respawn).toHaveText(/Respawn in [1-3]/);
+		await page.keyboard.press('Enter');
+		await expect(card).toBeVisible();
+		await expect(respawn).toBeEnabled({ timeout: 5_000 });
+		await expect(respawn).toHaveText('Respawn');
+		await expect(respawn).toBeFocused();
 		await page.keyboard.press('Enter');
 		await expect(card).toBeHidden();
 		await expect(health(page)).toHaveAttribute('aria-valuenow', '36');
+		expect((await pose()).action).toBeNull();
 	});
 
 	test('worlds from before fall damage keep it off', async ({ page }) => {

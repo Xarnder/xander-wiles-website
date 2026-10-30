@@ -1092,8 +1092,20 @@ test('punching: a punch in normal mode costs the other player health, privately'
 		page.evaluateHandle(
 			() => (window as unknown as { __forestSession: { scene: Scene } }).__forestSession.scene
 		);
+	/** The value on screen must always match the game's own health (it once showed 33 for 34). */
+	const expectHealth = async (page: Page, value: number) => {
+		await expect(page.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', String(value), {
+			timeout: 10_000
+		});
+		await expect(page.getByTestId('health-count')).toHaveText(`${value}/36`);
+		expect(await (await scene(page)).evaluate((s) => s.getHealth().current)).toBe(value);
+	};
 
-	// Stand 1.5 m apart, the puncher facing the target (yaw 0 faces −Z), past the join grace period.
+	// Stand 1.5 m apart, the puncher facing the target (yaw 0 faces −Z), then stand still long
+	// enough for the room to fall asleep: punches must still land on players who aren't moving.
+	// Settle first: the room's speed check treats a jump of tens of metres within a second of the
+	// last pose as impossible running and keeps the old position (real players walk there).
+	await owner.waitForTimeout(3000);
 	await (await scene(target)).evaluate((s) => s.controller.spawn(6, 4.5));
 	await (
 		await scene(owner)
@@ -1101,24 +1113,81 @@ test('punching: a punch in normal mode costs the other player health, privately'
 		s.controller.spawn(6, 6);
 		s.controller.yaw = 0;
 	});
-	await owner.waitForTimeout(3000);
+	await owner.waitForTimeout(5000);
 
 	// Building: a click builds, it doesn't punch.
 	expect(await (await scene(owner)).evaluate((s) => s.canPunch())).toBe(false);
 	await (await scene(owner)).evaluate((s) => s.toggleBuildMode());
 	await expect.poll(async () => (await scene(owner)).evaluate((s) => s.canPunch())).toBe(true);
 
-	await (await scene(owner)).evaluate((s) => s.punch());
-	await expect(target.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '34', {
-		timeout: 10_000
-	});
-	await expect(target.getByTestId('health-count')).toHaveText('34/36');
-	// The puncher sees the hit, but not the target's health.
+	// Two punches back to back: the cooldown lets only the first through.
+	const thrown = await (await scene(owner)).evaluate((s) => [s.punch(), s.punch()]);
+	expect(thrown).toEqual([true, false]);
+	await expectHealth(target, 34);
+	// The puncher sees the hit, and its own health is untouched.
 	await expect(owner.getByTestId('punch-hit-marker')).toBeAttached();
-	await expect(owner.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '36');
+	await expectHealth(owner, 36);
 
-	// The room enforces a cooldown: an immediate second punch does nothing.
+	// After the cooldown, the next punch lands: exactly 2 points off what the target's health was
+	// worth at that moment on the room clock (regeneration may have given one back by then, and the
+	// room can count it a moment before this browser's clock does).
+	type Stored = { base: number; lastDamageAt: number; dead: boolean };
+	const stored = () =>
+		target.evaluate(
+			() =>
+				({
+					...(window as unknown as { __forestMultiplayer: { health: { state: Stored } } })
+						.__forestMultiplayer.health.state
+				}) as Stored
+		);
+	await owner.waitForTimeout(600);
+	const before = await stored();
 	await (await scene(owner)).evaluate((s) => s.punch());
-	await target.waitForTimeout(1000);
-	await expect(target.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '34');
+	await expect.poll(async () => (await stored()).lastDamageAt).not.toBe(before.lastDamageAt);
+	const after = await stored();
+	const regained = Math.max(
+		0,
+		Math.floor((after.lastDamageAt - before.lastDamageAt - 8000) / 3000)
+	);
+	expect(after.base).toBe(Math.min(36, before.base + regained) - 2);
+	// …and the screen shows what the game holds.
+	const shown = await (await scene(target)).evaluate((s) => s.getHealth().current);
+	await expectHealth(target, shown);
+
+	// Knock them out: they lie on the floor for everyone, and can respawn after 3 s.
+	for (
+		let i = 0;
+		i < 25 && !(await (await scene(target)).evaluate((s) => s.getHealth().dead));
+		i++
+	) {
+		await (await scene(owner)).evaluate((s) => s.punch());
+		await owner.waitForTimeout(550);
+	}
+	await expect(target.getByTestId('death-card')).toBeVisible();
+	await expect(target.getByTestId('death-card')).toContainText('You were knocked out');
+	await expect(target.getByTestId('death-card')).toContainText('by Puncher');
+	const targetDown = () =>
+		owner.evaluate(() => {
+			const mp = (
+				window as unknown as {
+					__forestMultiplayer: {
+						roster: { slot: number; down?: boolean; playerId: string }[];
+						knockedOutPose(id: string): { action: string } | null;
+					};
+				}
+			).__forestMultiplayer;
+			const player = mp.roster.find((p) => p.slot === 1)!;
+			return {
+				down: player.down === true,
+				pose: mp.knockedOutPose(player.playerId)?.action ?? null
+			};
+		});
+	await expect.poll(targetDown, { timeout: 10_000 }).toEqual({ down: true, pose: 'lie' });
+	const respawn = target.getByTestId('death-respawn');
+	await expect(respawn).toBeDisabled();
+	await expect(respawn).toBeEnabled({ timeout: 5_000 });
+	await respawn.click();
+	await expect(target.getByTestId('death-card')).toBeHidden();
+	await expectHealth(target, 36);
+	await expect.poll(targetDown, { timeout: 10_000 }).toEqual({ down: false, pose: null });
 });

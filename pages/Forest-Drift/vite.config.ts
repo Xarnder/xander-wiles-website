@@ -5,8 +5,15 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	worker: { format: 'es' },
-	// Bundled panoramas live outside src/static; allow this asset directory in dev too.
-	server: { fs: { allow: [fileURLToPath(new URL('./assets/HDRI', import.meta.url))] } },
+	// Bundled panoramas and sounds live outside src/static; allow these asset directories in dev too.
+	server: {
+		fs: {
+			allow: [
+				fileURLToPath(new URL('./assets/HDRI', import.meta.url)),
+				fileURLToPath(new URL('./assets/Audio', import.meta.url))
+			]
+		}
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {

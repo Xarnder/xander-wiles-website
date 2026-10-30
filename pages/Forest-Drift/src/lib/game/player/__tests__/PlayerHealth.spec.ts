@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	HEALTH_GRACE_MS,
 	HEALTH_MAX,
+	canRespawn,
 	createHealthState,
 	damageHealth,
 	healthAt,
@@ -62,6 +63,14 @@ describe('PlayerHealth', () => {
 		expect(healthAt(second.state, 20_000)).toBe(29);
 		expect(healthAt(second.state, 30_999)).toBe(29);
 		expect(healthAt(second.state, 31_000)).toBe(30);
+	});
+
+	it('only allows respawning 3 s after the knockout', () => {
+		const dead = damageHealth(settled(), 36, 1000).state;
+		expect(canRespawn(dead, 3999)).toBe(false);
+		expect(canRespawn(dead, 4000)).toBe(true);
+		expect(canRespawn(dead, 3600, 500)).toBe(true);
+		expect(canRespawn(settled(), 10_000)).toBe(false);
 	});
 
 	it('revives to full with a fresh grace period', () => {

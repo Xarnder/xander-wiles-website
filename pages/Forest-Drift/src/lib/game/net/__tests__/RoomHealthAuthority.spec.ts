@@ -80,7 +80,11 @@ describe('RoomHealthAuthority', () => {
 		authority.reportFall(40);
 		expect(authority.snapshot().dead).toBe(true);
 		expect(deaths).toHaveLength(1);
-		authority.requestRespawn();
+		// Not before the 3 s respawn delay (on the room clock).
+		expect(authority.requestRespawn()).toBe(false);
+		expect(net.respawns).toBe(0);
+		net.now = 13_000;
+		expect(authority.requestRespawn()).toBe(true);
 		expect(net.respawns).toBe(1);
 		expect(authority.snapshot()).toMatchObject({ current: 36, dead: false });
 	});

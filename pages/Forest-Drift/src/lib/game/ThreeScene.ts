@@ -3248,11 +3248,37 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	/** Back to full health at the world spawn after dying (the death card's Respawn button). */
-	respawnAfterDeath(): void {
-		if (!this.health.snapshot().dead) return;
-		this.health.requestRespawn();
+	/** The death card's Respawn button: only once the respawn delay has passed. */
+	respawnAfterDeath(): boolean {
+		if (!this.health.snapshot().dead || !this.health.requestRespawn()) return false;
+		this.standUp();
 		this.respawn();
 		this.applyInputBlock();
+		return true;
+	}
+
+	/** Where the player was standing when knocked out (eye position); null while not down. */
+	private knockedOutAt: { x: number; y: number; z: number } | null = null;
+
+	/**
+	 * Knocked out: lie on the floor where they fell, in the same lying pose beds use, and look at it
+	 * from third person. Others see the same pose through the room's `down` presence.
+	 */
+	private lieDown(): void {
+		this.miniBuildInteraction.controller.exit();
+		const { x, y, z } = this.controller.worldPosition;
+		this.knockedOutAt = { x, y, z };
+		const feetY = y - this.settings.player.eyeHeight;
+		this.controller.beginInteraction(
+			resolvePlayerInteractionPose('lie', { x, y: feetY, z }, this.controller.getYaw())
+		);
+		this.controller.interactionThirdPerson = true;
+	}
+
+	private standUp(): void {
+		if (!this.knockedOutAt) return;
+		this.controller.endInteraction(this.knockedOutAt);
+		this.knockedOutAt = null;
 	}
 
 	/**
@@ -3353,6 +3379,7 @@ export class ThreeScene implements WorldRuntime {
 		change: (snapshot: HealthSnapshot) => this.onHealthChange?.(snapshot),
 		damaged: (amount: number, source: DamageSource) => this.onPlayerDamaged?.({ amount, source }),
 		death: (source: DamageSource | null) => {
+			this.lieDown();
 			this.applyInputBlock();
 			this.onPlayerDeath?.({ source });
 		}
@@ -4012,8 +4039,11 @@ export class ThreeScene implements WorldRuntime {
 		);
 		if (this.multiplayer) {
 			const interaction = this.miniBuildInteraction.controller.state;
+			// Seated or knocked out, others are told where the player stood, not the lowered eye.
 			const position =
-				interaction.type === 'mini-build' ? interaction.entry : this.controller.worldPosition;
+				interaction.type === 'mini-build'
+					? interaction.entry
+					: (this.knockedOutAt ?? this.controller.worldPosition);
 			this.multiplayer.afterControllerUpdate({
 				x: position.x,
 				eyeY: position.y,
@@ -4027,6 +4057,7 @@ export class ThreeScene implements WorldRuntime {
 				building:
 					this.buildToolManager.isConstructionGestureActive() ||
 					performance.now() < this.punchSwingUntil,
+				teleports: this.controller.teleports,
 				eyeHeight: this.settings.player.eyeHeight
 			});
 		}

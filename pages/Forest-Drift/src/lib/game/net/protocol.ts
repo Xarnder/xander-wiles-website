@@ -342,6 +342,8 @@ export interface PlayerInfo {
 	away: boolean;
 	/** Connection dropped; the slot is held for `GRACE_PERIOD_MS` (Q21). */
 	offline: boolean;
+	/** Knocked out: others draw the player lying on the floor until they respawn. */
+	down?: boolean;
 }
 
 /**
@@ -609,6 +611,7 @@ export interface PresenceMessage {
 	slot: number;
 	away: boolean;
 	offline: boolean;
+	down?: boolean;
 }
 
 export interface ServerEnvMessage {

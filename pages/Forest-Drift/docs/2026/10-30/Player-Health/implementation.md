@@ -37,6 +37,16 @@ The browser only says *who* it aimed at (`punch` message: id plus target slot). 
 
 Protocol stays at **v5** (it hasn't shipped yet), with `punch`, `punchResult`, `health.source` and `rules.playerDamage` added.
 
+## Fixes after going live (2026-10-30)
+
+The "punched player's bar sometimes doesn't drop" report came from three separate causes, found by logging both browsers' WebSocket traffic and the room's view during repeated two-browser runs:
+
+1. **The room forgot where idle players were.** A Durable Object loses its memory when it sleeps, and that happens after a few quiet seconds even with players connected. Players standing still send no poses, so after a sleep the room had no position for them and refused every punch until someone moved. Each player's *resting* pose (the final pose without the `moving` flag) is now kept in the socket's attachment, which survives sleep, and is restored on wake. There are no extra messages or storage writes, and nothing is stored while walking.
+2. **Waking the room made everyone briefly immune.** Rebuilding a player's health on wake gave them the 2 s join grace period. Grace now only comes from joining or respawning.
+3. **Short deliberate moves were rejected by the speed check.** A respawn within 50 m of where the player died looked like impossible running, so the room kept the old position for a while. `FirstPersonController.teleports` now counts spawns and restores, and the next pose is flagged `teleport`, which the room already accepts.
+
+The other "bug" (seeing 33 where 32 was expected) was regeneration giving a point back about 11 s after the first hit. That's correct behaviour. The test now checks each punch against the room's own health record.
+
 ## Where the build differs from plan revision 2
 
 1. **Health is written to storage on every change, not only on leave.** A Durable Object loses its memory when it hibernates, and an idle room can hibernate with players still connected. Each hit or respawn writes one row to a new `player_health` table (a separate table, so the existing `players` table is unchanged). Leaving writes the value at that moment, with regeneration restarting on the next join, so time away doesn't heal. Leaving while dead clears both the health row and the bookmark, so the player rejoins full at the world spawn.

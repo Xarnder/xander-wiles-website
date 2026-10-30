@@ -1,3 +1,4 @@
+import rainUrl from '../../../../assets/Audio/rain.mp3?url';
 import { audioOutput } from '../audio/AudioPreferences';
 import { audioContext } from '../music/InstrumentLibrary';
 import type {
@@ -7,8 +8,11 @@ import type {
 } from './ThunderAudioController';
 
 /**
- * Weather sound, synthesised with Web Audio — no audio files exist yet. Hooks:
- *   rain ambience  looped noise, high-passed; level follows rainfall; muffled under a roof
+ * Weather sound with Web Audio. Hooks:
+ *   rain ambience  the recorded rain loop (`assets/Audio/rain.mp3`), streamed through an <audio>
+ *                  element rather than decoded (3½ minutes would be ~80 MB of samples), fetched
+ *                  only once it first rains; level follows rainfall; muffled under a roof. Falls
+ *                  back to high-passed noise if the recording can't play.
  *   wind ambience  looped brown noise, low-passed, with slow gusts; level follows wind strength
  *   thunder        a `ThunderVoiceBackend` for ThunderAudioController: a crack for near strikes
  *                  and a filtered, wobbling rumble whose length and brightness follow distance
@@ -22,6 +26,11 @@ export class WeatherAudio implements ThunderVoiceBackend {
 	private master: GainNode | null = null;
 	private rainGain: GainNode | null = null;
 	private rainMuffle: BiquadFilterNode | null = null;
+	/** The streamed recording, created the first time it rains. */
+	private rainElement: HTMLAudioElement | null = null;
+	private rainPlaying = false;
+	/** Seconds the rain has been silent, to pause the stream (and its decoding) when it's over. */
+	private rainQuietFor = 0;
 	private windGain: GainNode | null = null;
 	private thunderBus: GainNode | null = null;
 	private whiteNoise: AudioBuffer | null = null;
@@ -42,7 +51,13 @@ export class WeatherAudio implements ThunderVoiceBackend {
 	 * Per frame: rain 0..1, wind m/s, `sheltered` muffles the rain, `volume` 0..1. Cheap — a few
 	 * parameter glides, nothing allocated.
 	 */
-	update(deltaSeconds: number, rain: number, wind: number, sheltered: boolean, volume: number): void {
+	update(
+		deltaSeconds: number,
+		rain: number,
+		wind: number,
+		sheltered: boolean,
+		volume: number
+	): void {
 		if (this.disposed) return;
 		const wanted = rain > 0.01 || wind > 5;
 		if (!this.context) {
@@ -60,7 +75,8 @@ export class WeatherAudio implements ThunderVoiceBackend {
 			0.12 * Math.sin(this.gustPhase * 1.7);
 		const windLevel = smoothstep(2, 16, wind) * gust;
 		this.master!.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), t, 0.2);
-		this.rainGain!.gain.setTargetAtTime(Math.pow(Math.max(0, rain), 0.8) * 0.32, t, 0.6);
+		this.updateRainStream(deltaSeconds, rain);
+		this.rainGain!.gain.setTargetAtTime(Math.pow(Math.max(0, rain), 0.8) * this.rainLevel, t, 0.6);
 		this.rainMuffle!.frequency.setTargetAtTime(sheltered ? 900 : 9000, t, 0.35);
 		this.windGain!.gain.setTargetAtTime(windLevel * 0.28, t, 0.8);
 	}
@@ -140,7 +156,80 @@ export class WeatherAudio implements ThunderVoiceBackend {
 	dispose(): void {
 		this.disposed = true;
 		this.master?.disconnect();
+		if (this.rainElement) {
+			this.rainElement.pause();
+			this.rainElement.removeAttribute('src');
+			this.rainElement.load();
+			this.rainElement = null;
+		}
 		this.context = null;
+	}
+
+	/**
+	 * Full-rain level. The recording averages about −18 dB, so 0.8 matches the old synthesised rain
+	 * at full rainfall; the noise fallback keeps its own level.
+	 */
+	private rainLevel = 0.8;
+
+	/** Starts the recording when it rains, and pauses it after a while of silence. */
+	private updateRainStream(deltaSeconds: number, rain: number): void {
+		if (!this.context || !this.rainMuffle) return;
+		if (rain > 0.01) {
+			this.rainQuietFor = 0;
+			if (!this.rainElement) this.connectRainRecording();
+			if (this.rainElement && !this.rainPlaying) {
+				this.rainPlaying = true;
+				void this.rainElement.play().catch(() => {
+					this.rainPlaying = false;
+				});
+			}
+			return;
+		}
+		this.rainQuietFor += deltaSeconds;
+		// Past the 0.6 s fade-out (several time constants), stop streaming until it rains again.
+		if (this.rainPlaying && this.rainQuietFor > 5) {
+			this.rainPlaying = false;
+			this.rainElement?.pause();
+		}
+	}
+
+	private connectRainRecording(): void {
+		const context = this.context!;
+		const element = new Audio();
+		element.src = rainUrl;
+		element.loop = true;
+		element.preload = 'auto';
+		this.rainElement = element;
+		let source: MediaElementAudioSourceNode;
+		try {
+			source = context.createMediaElementSource(element);
+		} catch {
+			this.connectRainNoise();
+			return;
+		}
+		source.connect(this.rainMuffle!);
+		// If the file can't load or play, rain falls back to the noise it used to be.
+		element.addEventListener(
+			'error',
+			() => {
+				source.disconnect();
+				this.connectRainNoise();
+			},
+			{ once: true }
+		);
+	}
+
+	private connectRainNoise(): void {
+		if (!this.context || !this.whiteNoise || !this.rainMuffle) return;
+		this.rainLevel = 0.32;
+		const rain = this.context.createBufferSource();
+		rain.buffer = this.whiteNoise;
+		rain.loop = true;
+		const rainHigh = this.context.createBiquadFilter();
+		rainHigh.type = 'highpass';
+		rainHigh.frequency.value = 700;
+		rain.connect(rainHigh).connect(this.rainMuffle);
+		rain.start();
 	}
 
 	private canStart(): boolean {
@@ -165,20 +254,13 @@ export class WeatherAudio implements ThunderVoiceBackend {
 		this.master.gain.value = 0;
 		this.master.connect(audioOutput(context, 'ambience'));
 
-		// Rain: white noise, high-passed (patter, not hiss), then a low-pass that drops when sheltered.
-		const rain = context.createBufferSource();
-		rain.buffer = this.whiteNoise;
-		rain.loop = true;
-		const rainHigh = context.createBiquadFilter();
-		rainHigh.type = 'highpass';
-		rainHigh.frequency.value = 700;
+		// Rain: the recording (connected when it first rains), then a low-pass that drops when sheltered.
 		this.rainMuffle = context.createBiquadFilter();
 		this.rainMuffle.type = 'lowpass';
 		this.rainMuffle.frequency.value = 9000;
 		this.rainGain = context.createGain();
 		this.rainGain.gain.value = 0;
-		rain.connect(rainHigh).connect(this.rainMuffle).connect(this.rainGain).connect(this.master);
-		rain.start();
+		this.rainMuffle.connect(this.rainGain).connect(this.master);
 
 		// Wind: brown noise, low-passed.
 		const wind = context.createBufferSource();

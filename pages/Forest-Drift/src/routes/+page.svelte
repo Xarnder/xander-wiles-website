@@ -57,6 +57,7 @@
 		type HealthSnapshot
 	} from '$lib/game/player/PlayerHealth';
 	import { playLandingThud } from '$lib/game/audio/landingThud';
+	import { playSoundEffect, preloadSoundEffects } from '$lib/game/audio/soundEffects';
 	import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
 	let speechPreparation = $state(false);
 	import { preventTouchPageZoom } from '$lib/components/preventTouchPageZoom';
@@ -228,13 +229,15 @@
 		announceHealth(
 			`${deathCause.title}${deathCause.detail ? ` ${deathCause.detail}` : ''}. Health 0.`
 		);
+		playSoundEffect('knockedOut');
 		session?.scene.setTouchMovement(0, 0);
 		session?.scene.setTouchActive(false);
 		document.exitPointerLock?.();
 	}
 
 	function respawnAfterDeath() {
-		session?.scene.respawnAfterDeath();
+		// Refused (and the card stays) until the respawn delay has passed.
+		if (!session?.scene.respawnAfterDeath()) return;
 		deathCause = null;
 		if (showTouchControls) startTouchGameplay();
 	}
@@ -818,6 +821,7 @@
 			saveError = null;
 			paused = false;
 
+			preloadSoundEffects();
 			session = new WorldSession({
 				container,
 				world,
@@ -869,10 +873,11 @@
 				onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
 				onMiniBuildNotice: (message) => showSaveToast(message),
 				onHealthChange: handleHealthChange,
-				onPlayerDamaged: ({ amount }) => {
+				onPlayerDamaged: ({ amount, source }) => {
 					damageAmount = amount;
 					damageHit++;
-					playLandingThud(amount);
+					if (source.kind === 'player') playSoundEffect('punchHit');
+					else playLandingThud(amount);
 				},
 				onPlayerDeath: ({ source }) => handlePlayerDeath(source)
 			});
@@ -1041,7 +1046,7 @@
 			onPunchResult: (hit) => {
 				if (!hit) return;
 				punchHit++;
-				playLandingThud(0);
+				playSoundEffect('punchHit');
 			},
 			access: {
 				invite,

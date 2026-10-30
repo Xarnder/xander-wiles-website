@@ -496,7 +496,12 @@ export class NetSession {
 			case 'presence': {
 				const player = this.players.get(message.slot);
 				if (!player) break;
-				this.players.set(message.slot, { ...player, away: message.away, offline: message.offline });
+				this.players.set(message.slot, {
+					...player,
+					away: message.away,
+					offline: message.offline,
+					down: message.down === true
+				});
 				this.emitPlayers();
 				break;
 			}

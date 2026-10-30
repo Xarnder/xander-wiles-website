@@ -119,6 +119,15 @@ export interface FirstPersonControllerOptions {
  */
 export class FirstPersonController {
 	readonly worldPosition = new THREE.Vector3();
+	/**
+	 * Counts deliberate jumps (spawn, respawn, restored positions) of more than a metre, so poses can
+	 * flag teleports. Turning or settling in place is not a jump: others keep easing to it.
+	 */
+	teleports = 0;
+	private countTeleport(x: number, y: number, z: number): void {
+		const p = this.worldPosition;
+		if (Math.hypot(x - p.x, y - p.y, z - p.z) > 1) this.teleports++;
+	}
 	interactionPose: PlayerInteractionPose | null = null;
 	onInteractionExit: (() => void) | null = null;
 	interactionThirdPerson = false;
@@ -389,6 +398,7 @@ export class FirstPersonController {
 	spawn(worldX: number, worldZ: number): void {
 		this.onInteractionExit?.();
 		const groundHeight = this.getSupportingSurfaceY(worldX, worldZ, Infinity);
+		this.countTeleport(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		if (this.resolveHorizontalCollision) {
 			const feetY = this.worldPosition.y - this.settings.eyeHeight;
@@ -518,6 +528,7 @@ export class FirstPersonController {
 	 */
 	restoreState(position: { x: number; y: number; z: number }, yaw: number, pitch: number): void {
 		if (![position.x, position.y, position.z, yaw, pitch].every(Number.isFinite)) return;
+		this.countTeleport(position.x, position.y, position.z);
 		this.interactionPose = null;
 		this.interactionThirdPerson = false;
 		this.worldPosition.set(position.x, position.y, position.z);
@@ -537,8 +548,9 @@ export class FirstPersonController {
 		if (this.interactionPose) {
 			const pose = this.interactionPose;
 			const wasBlending = this.interactionAge < 0.3;
-			if (!this.movementLocked && !this.manualInputBlocked)
-				this.interactionAge += Math.max(0, deltaSeconds);
+			// Blocked input (knocked out, debug controls) still finishes the blend into the pose;
+			// only the screenshot lock freezes it.
+			if (!this.movementLocked) this.interactionAge += Math.max(0, deltaSeconds);
 			const t = this.interactionBlend;
 			this.worldPosition.set(
 				this.interactionStart.x + (pose.eye.x - this.interactionStart.x) * t,
