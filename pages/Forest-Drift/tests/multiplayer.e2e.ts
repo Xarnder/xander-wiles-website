@@ -1164,6 +1164,11 @@ test('punching: a punch in normal mode costs the other player health, privately'
 		await owner.waitForTimeout(550);
 	}
 	await expect(target.getByTestId('death-card')).toBeVisible();
+	// Respawn waits 3 s on the room clock. Two software-rendered browsers can take that long just to
+	// notice the knockout, so only require the button to be off while it still shows a countdown (the
+	// delay itself is covered by the unit tests and playerHealth.e2e.ts).
+	const respawn = target.getByTestId('death-respawn');
+	if (/Respawn in/.test((await respawn.textContent()) ?? '')) await expect(respawn).toBeDisabled();
 	await expect(target.getByTestId('death-card')).toContainText('You were knocked out');
 	await expect(target.getByTestId('death-card')).toContainText('by Puncher');
 	const targetDown = () =>
@@ -1183,8 +1188,6 @@ test('punching: a punch in normal mode costs the other player health, privately'
 			};
 		});
 	await expect.poll(targetDown, { timeout: 10_000 }).toEqual({ down: true, pose: 'lie' });
-	const respawn = target.getByTestId('death-respawn');
-	await expect(respawn).toBeDisabled();
 	await expect(respawn).toBeEnabled({ timeout: 5_000 });
 	await respawn.click();
 	await expect(target.getByTestId('death-card')).toBeHidden();

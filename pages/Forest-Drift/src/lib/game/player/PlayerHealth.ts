@@ -93,6 +93,11 @@ export function canRespawn(state: HealthState, now: number, slackMs = 0): boolea
 	return state.dead && now >= state.lastDamageAt + RESPAWN_DELAY_MS - slackMs;
 }
 
+/** Milliseconds until a knocked-out player may respawn (0 once they can, or when alive). */
+export function respawnWaitMs(state: HealthState, now: number): number {
+	return state.dead ? Math.max(0, state.lastDamageAt + RESPAWN_DELAY_MS - now) : 0;
+}
+
 /** Back to full after death, with a fresh grace period. */
 export function reviveHealth(now: number): HealthState {
 	return createHealthState(now);

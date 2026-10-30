@@ -8,9 +8,15 @@
 		/** How far, or who did it, when known. */
 		detail: string | null;
 		onRespawn: () => void;
+		/**
+		 * Milliseconds before respawning works, asked of the game rather than timed here: single
+		 * player runs on the game's clock (slower at low frame rates, stopped while paused) and
+		 * online on the room's.
+		 */
+		respawnWaitMs: () => number;
 	}
 
-	let { title, detail, onRespawn }: Props = $props();
+	let { title, detail, onRespawn, respawnWaitMs }: Props = $props();
 	let card: HTMLDivElement;
 	let button = $state<HTMLButtonElement>();
 	/** Whole seconds left before Respawn works; the player lies on the floor meanwhile. */
@@ -18,9 +24,8 @@
 
 	onMount(() => {
 		card.focus();
-		const readyAt = performance.now() + RESPAWN_DELAY_MS;
 		const timer = setInterval(() => {
-			secondsLeft = Math.max(0, Math.ceil((readyAt - performance.now()) / 1000));
+			secondsLeft = Math.max(0, Math.ceil(respawnWaitMs() / 1000));
 			if (secondsLeft === 0) {
 				clearInterval(timer);
 				// Enter or Space now respawns: the button takes focus the moment it works.
@@ -69,14 +74,17 @@
 </div>
 
 <style>
-	/* Light enough to see yourself lying on the floor behind it (third-person view). */
+	/*
+	 * Light enough to see yourself lying on the floor: the knocked-out camera centres on the body, so
+	 * the card sits near the top of the screen, clear of it.
+	 */
 	.death-backdrop {
 		position: fixed;
 		inset: 0;
 		z-index: 60;
 		display: grid;
-		place-items: end center;
-		padding-bottom: max(14vh, 6rem);
+		place-items: start center;
+		padding-top: max(10vh, 4.5rem);
 		background: radial-gradient(ellipse at center, transparent 45%, #0c0302b3 100%);
 		animation: fade-in 0.6s ease-out;
 	}

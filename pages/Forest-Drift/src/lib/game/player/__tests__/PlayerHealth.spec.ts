@@ -8,6 +8,7 @@ import {
 	healthAt,
 	healthSnapshot,
 	restoreHealth,
+	respawnWaitMs,
 	reviveHealth,
 	savedHealthValue
 } from '../PlayerHealth';
@@ -71,6 +72,10 @@ describe('PlayerHealth', () => {
 		expect(canRespawn(dead, 4000)).toBe(true);
 		expect(canRespawn(dead, 3600, 500)).toBe(true);
 		expect(canRespawn(settled(), 10_000)).toBe(false);
+		expect(respawnWaitMs(dead, 1000)).toBe(3000);
+		expect(respawnWaitMs(dead, 3500)).toBe(500);
+		expect(respawnWaitMs(dead, 9000)).toBe(0);
+		expect(respawnWaitMs(settled(), 0)).toBe(0);
 	});
 
 	it('revives to full with a fresh grace period', () => {

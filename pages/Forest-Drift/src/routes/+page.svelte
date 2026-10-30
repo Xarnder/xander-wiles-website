@@ -2524,6 +2524,7 @@
 					title={deathCause?.title ?? 'You fell too far'}
 					detail={deathCause?.detail ?? null}
 					onRespawn={respawnAfterDeath}
+					respawnWaitMs={() => session?.scene.respawnWaitMs() ?? 0}
 				/>
 			{/if}
 

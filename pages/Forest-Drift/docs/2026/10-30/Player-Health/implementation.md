@@ -47,6 +47,21 @@ The "punched player's bar sometimes doesn't drop" report came from three separat
 
 The other "bug" (seeing 33 where 32 was expected) was regeneration giving a point back about 11 s after the first hit. That's correct behaviour. The test now checks each punch against the room's own health record.
 
+## Knocked out, respawn delay and sounds (2026-10-30)
+
+- **Lying down.**
+  - At zero health the player lies where they fell, in the beds' `lie` pose (`resolvePlayerInteractionPose`), seen in third person.
+  - The camera looks down at the body (`KNOCKED_OUT_CAMERA_PITCH`), and the death card sits near the top of the screen.
+  - Others see it through a room-sent `down` flag in presence (sent only when true, and kept in the socket attachment), drawn with the same pose by `MultiplayerSession.knockedOutPose`.
+  - While down, poses report where the player stood, not the lowered eye.
+  - Fix found along the way: blocked input used to freeze the blend into any interaction pose. Now only the screenshot lock does.
+- **3 s respawn delay** (`RESPAWN_DELAY_MS`). The card counts down using `respawnWaitMs()` from the health authority: the game clock in single player, the room clock online. The room refuses earlier respawns, with 0.5 s of clock slack.
+- **Sounds.**
+  - `assets/Audio/punch-hit-sound.mp3` plays for both players when a punch lands.
+  - `knocked-out.mp3` plays at zero health from a punch or a fall.
+  - Both are decoded once and preloaded when a world opens (`src/lib/game/audio/soundEffects.ts`).
+  - Rain is now `rain.mp3`, streamed through an `<audio>` element into the existing muffle and level chain, fetched only once it first rains, with the old noise as a fallback.
+
 ## Where the build differs from plan revision 2
 
 1. **Health is written to storage on every change, not only on leave.** A Durable Object loses its memory when it hibernates, and an idle room can hibernate with players still connected. Each hit or respawn writes one row to a new `player_health` table (a separate table, so the existing `players` table is unchanged). Leaving writes the value at that moment, with regeneration restarting on the next join, so time away doesn't heal. Leaving while dead clears both the health row and the bookmark, so the player rejoins full at the world spawn.

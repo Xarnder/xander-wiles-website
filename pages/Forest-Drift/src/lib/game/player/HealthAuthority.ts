@@ -4,6 +4,7 @@ import {
 	damageHealth,
 	healthAt,
 	healthSnapshot,
+	respawnWaitMs,
 	restoreHealth,
 	reviveHealth,
 	sameHealthSnapshot,
@@ -31,6 +32,8 @@ export interface HealthAuthority {
 	reportFall(distance: number): void;
 	/** Only while dead and past the respawn delay. Returns whether the player is coming back. */
 	requestRespawn(): boolean;
+	/** Milliseconds left before `requestRespawn` will work, on this authority's own clock. */
+	respawnWaitMs(): number;
 	/** Called every frame; emits `change` only when the snapshot differs. */
 	poll(): void;
 	/** Whole points to write into the local world file, or undefined when this authority doesn't save there. */
@@ -86,6 +89,10 @@ export class LocalHealthAuthority implements HealthAuthority {
 		this.state = result.state;
 		if (result.applied > 0) this.notifier.damaged(result.applied, source);
 		this.poll();
+	}
+
+	respawnWaitMs(): number {
+		return respawnWaitMs(this.state, this.now());
 	}
 
 	requestRespawn(): boolean {

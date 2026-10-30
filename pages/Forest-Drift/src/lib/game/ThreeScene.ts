@@ -487,6 +487,9 @@ export interface ThreeSceneOptions {
  * generation must keep using true logical world coordinates so it stays deterministic and
  * multiplayer-compatible. That rebasing step is intentionally not implemented yet.
  */
+/** Knocked out: the third-person camera looks down at the player lying on the floor. */
+const KNOCKED_OUT_CAMERA_PITCH = -0.8;
+
 /** A floor dropping further than a stair riser under the player counts as removed (Q21). */
 const SUPPORT_LOSS_TOLERANCE = 0.3;
 
@@ -3248,6 +3251,11 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	/** Back to full health at the world spawn after dying (the death card's Respawn button). */
+	/** Milliseconds before the death card's Respawn button works (the game's clock, not the wall's). */
+	respawnWaitMs(): number {
+		return this.health.respawnWaitMs();
+	}
+
 	/** The death card's Respawn button: only once the respawn delay has passed. */
 	respawnAfterDeath(): boolean {
 		if (!this.health.snapshot().dead || !this.health.requestRespawn()) return false;
@@ -3269,9 +3277,9 @@ export class ThreeScene implements WorldRuntime {
 		const { x, y, z } = this.controller.worldPosition;
 		this.knockedOutAt = { x, y, z };
 		const feetY = y - this.settings.player.eyeHeight;
-		this.controller.beginInteraction(
-			resolvePlayerInteractionPose('lie', { x, y: feetY, z }, this.controller.getYaw())
-		);
+		const pose = resolvePlayerInteractionPose('lie', { x, y: feetY, z }, this.controller.getYaw());
+		// Beds look up at the sky; knocked out, the third-person camera looks down at the body.
+		this.controller.beginInteraction({ ...pose, pitch: KNOCKED_OUT_CAMERA_PITCH });
 		this.controller.interactionThirdPerson = true;
 	}
 

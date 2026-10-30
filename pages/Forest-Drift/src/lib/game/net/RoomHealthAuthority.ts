@@ -6,6 +6,7 @@ import {
 	damageHealth,
 	healthAt,
 	healthSnapshot,
+	respawnWaitMs,
 	reviveHealth,
 	type DamageSource,
 	type HealthSnapshot,
@@ -77,6 +78,10 @@ export class RoomHealthAuthority implements HealthAuthority {
 		const source: DamageSource = { kind: 'fall', distance };
 		this.notifier.damaged(result.applied, source);
 		this.poll();
+	}
+
+	respawnWaitMs(): number {
+		return respawnWaitMs(this.state, this.now());
 	}
 
 	requestRespawn(): boolean {
