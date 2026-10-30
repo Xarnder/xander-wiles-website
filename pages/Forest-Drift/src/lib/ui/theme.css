@@ -13,6 +13,14 @@
 	--fd-wood-image: none;
 	--fd-wood-face: linear-gradient(180deg, #100e0b50, #15120f99), var(--fd-wood-image);
 	--fd-panel-face: linear-gradient(180deg, #14120fdf, #12110ff5), var(--fd-wood-image);
+	/* Health bar (HUD). Filled vs empty segments stay above 3:1 against the backing strip. */
+	--fd-health: #e0574c;
+	--fd-health-top: #ffa08c;
+	--fd-health-low: #ff7a52;
+	--fd-health-ghost: #f3dccd;
+	--fd-health-empty: #ffffff12;
+	--fd-health-empty-edge: #ffffff2b;
+	--fd-health-backing: #08100cc7;
 }
 html {
 	color-scheme: dark;

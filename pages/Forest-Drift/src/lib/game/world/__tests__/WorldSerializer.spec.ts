@@ -7,7 +7,7 @@ import {
 	createWorldDefinition,
 	sanitizePlayerState
 } from '../WorldSerializer';
-import { CURRENT_WORLD_SCHEMA_VERSION } from '../WorldTypes';
+import { CURRENT_WORLD_SCHEMA_VERSION, resolveWorldRules } from '../WorldTypes';
 import { validateWorldDefinition } from '../WorldValidation';
 import { defaultEnvironment, richWorld, runtimeFromWorld } from './worldFixtures';
 
@@ -123,6 +123,23 @@ describe('player state', () => {
 		expect(sanitized.position).toEqual({ x: 0, y: 0, z: 5 });
 		expect(sanitized.yaw).toBe(0);
 		expect(sanitized.pitch).toBe(0.5);
+	});
+
+	it('keeps whole-point health and normalises bad or fatal values', () => {
+		const base = { position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0 };
+		expect(sanitizePlayerState({ ...base, health: 20 }).health).toBe(20);
+		expect(sanitizePlayerState({ ...base, health: 20.6 }).health).toBe(21);
+		expect(sanitizePlayerState({ ...base, health: 0 }).health).toBe(36);
+		expect(sanitizePlayerState({ ...base, health: 500 }).health).toBe(36);
+		expect(sanitizePlayerState({ ...base, health: Number.NaN })).not.toHaveProperty('health');
+		expect(sanitizePlayerState(base)).not.toHaveProperty('health');
+	});
+
+	it('round-trips health through capture and apply', () => {
+		const world = richWorld();
+		world.player.health = 17;
+		const content = captureWorldContent(runtimeFromWorld(world));
+		expect(applyContentToWorld(world, content).player.health).toBe(17);
 	});
 
 	it('rejects an absurdly distant position that would strand the player', () => {
@@ -267,6 +284,18 @@ describe('createWorldDefinition', () => {
 		});
 		const result = validateWorldDefinition(world);
 		expect(result.ok).toBe(true);
+	});
+
+	it('turns fall damage on for new worlds but leaves older worlds without it', () => {
+		const world = createWorldDefinition({
+			id: 'new-world',
+			name: 'New World',
+			seed: 'gentle-glade-777',
+			environment: defaultEnvironment()
+		});
+		expect(world.rules).toEqual({ fallDamage: true });
+		expect(resolveWorldRules(undefined)).toEqual({ fallDamage: false });
+		expect(resolveWorldRules({})).toEqual({ fallDamage: false });
 	});
 
 	it('makes the world seed authoritative over the terrain settings copy', () => {

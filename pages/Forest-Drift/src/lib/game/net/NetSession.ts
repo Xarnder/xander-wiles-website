@@ -22,6 +22,8 @@ import {
 	type PoseSample,
 	type RejectMessage,
 	type RoomClockState,
+	type ServerHealthMessage,
+	type ServerPunchResultMessage,
 	type ServerJsonMessage,
 	type SharedEnvironment,
 	type WelcomeMessage
@@ -55,6 +57,8 @@ export interface WelcomeInfo {
 	doors: string[];
 	interactions?: OccupiedMiniBuildInteraction[];
 	names: Record<string, string>;
+	/** This player's own health, as the room holds it. */
+	health?: WelcomeMessage['health'];
 	/** True only for the first welcome of this session (not reconnects). */
 	first: boolean;
 }
@@ -94,6 +98,10 @@ export interface NetSessionOptions {
 	onEnvironment?: (env: SharedEnvironment) => void;
 	/** A fresh capability to remember for next time. */
 	onCapability?: (capability: string) => void;
+	/** The room sent this player's own health. */
+	onHealth?: (message: ServerHealthMessage) => void;
+	/** Whether this player's punch landed. */
+	onPunchResult?: (message: ServerPunchResultMessage) => void;
 	world?: WorldTraffic;
 	/** Injected in tests. */
 	createSocket?: (url: string) => WebSocket;
@@ -326,6 +334,23 @@ export class NetSession {
 		this.sendText({ t: 'door', id, open });
 	}
 
+	sendFall(id: number, d: number, at: number): boolean {
+		return this.sendText({ t: 'fall', id, d, at });
+	}
+
+	sendRespawn(): boolean {
+		return this.sendText({ t: 'respawn' });
+	}
+
+	sendPunch(id: number, target: number): boolean {
+		return this.sendText({ t: 'punch', id, target });
+	}
+
+	/** The room clock estimate, ms; NaN until the first welcome. */
+	serverNow(): number {
+		return this.clock.serverNow();
+	}
+
 	/** Test hook: drops the socket as a dead network would, without telling the room. */
 	simulateNetworkDrop(): void {
 		this.abandonSocket('Simulated network drop');
@@ -444,6 +469,7 @@ export class NetSession {
 					doors: message.doors ?? [],
 					interactions: message.interactions ?? [],
 					names: message.names ?? {},
+					health: message.health,
 					first
 				});
 				this.emitPlayers();
@@ -497,6 +523,12 @@ export class NetSession {
 				break;
 			case 'door':
 				this.options.world?.onDoor(message.id, message.open);
+				break;
+			case 'health':
+				this.options.onHealth?.(message);
+				break;
+			case 'punchResult':
+				this.options.onPunchResult?.(message);
 				break;
 			case 'error':
 				this.lastError = message.message;

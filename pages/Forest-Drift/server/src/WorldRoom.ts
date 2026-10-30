@@ -14,8 +14,10 @@ import {
 	type PlayerAttachment,
 	type RoomClockRecord,
 	type RoomSessionState,
-	type RoomConnection
+	type RoomConnection,
+	type StoredHealth
 } from '../../src/lib/game/net/RoomCore';
+import { HEALTH_MAX } from '../../src/lib/game/player/PlayerHealth';
 import { WorldStore, publishedRows, type StoredRow } from '../../src/lib/game/net/WorldStore';
 import {
 	flattenWorld,
@@ -48,6 +50,8 @@ export interface WorldManifest {
 	byteLength: number;
 	/** Horizontal speed check for poses, m/s (from the world's run speed; flight is off online). */
 	maxSpeed?: number;
+	/** Whether long falls hurt, until the owner changes the rule. Absent in older publishes: off. */
+	fallDamage?: boolean;
 }
 
 /** SHA-256 (hex) of each role's invite token. The tokens themselves are never stored. */
@@ -486,6 +490,43 @@ export class WorldRoom extends DurableObject<Env> {
 		};
 	}
 
+	private savePlayerHealth(playerId: string, health: StoredHealth | null): void {
+		if (health === null) {
+			this.ctx.storage.sql.exec('DELETE FROM player_health WHERE player_id = ?', playerId);
+			return;
+		}
+		this.ctx.storage.sql.exec(
+			'INSERT OR REPLACE INTO player_health (player_id, health) VALUES (?, ?)',
+			playerId,
+			JSON.stringify(health)
+		);
+	}
+
+	/** Anything malformed reads as no record, which means full health. */
+	private loadPlayerHealth(playerId: string): StoredHealth | null {
+		const row = this.ctx.storage.sql
+			.exec<{ health: string }>('SELECT health FROM player_health WHERE player_id = ?', playerId)
+			.toArray()[0];
+		if (!row) return null;
+		try {
+			const value = JSON.parse(row.health) as Partial<StoredHealth>;
+			if (
+				typeof value.base !== 'number' ||
+				!Number.isFinite(value.base) ||
+				typeof value.lastDamageAt !== 'number' ||
+				!Number.isFinite(value.lastDamageAt)
+			)
+				return null;
+			return {
+				base: Math.max(0, Math.min(HEALTH_MAX, Math.round(value.base))),
+				lastDamageAt: value.lastDamageAt,
+				dead: value.dead === true
+			};
+		} catch {
+			return null;
+		}
+	}
+
 	private playerNames(): Record<string, string> {
 		const names: Record<string, string> = {};
 		for (const row of this.ctx.storage.sql
@@ -548,6 +589,10 @@ export class WorldRoom extends DurableObject<Env> {
 				player_id TEXT PRIMARY KEY, name TEXT NOT NULL, bookmark TEXT, last_seen INTEGER NOT NULL
 			)`
 		);
+		// Each player's health, kept apart from their bookmark so it can be written on every hit.
+		sql.exec(
+			'CREATE TABLE IF NOT EXISTS player_health (player_id TEXT PRIMARY KEY, health TEXT NOT NULL)'
+		);
 		sql.exec(
 			`CREATE TABLE IF NOT EXISTS restore_points (
 				id INTEGER PRIMARY KEY AUTOINCREMENT, seq INTEGER NOT NULL, epoch INTEGER NOT NULL,
@@ -599,6 +644,7 @@ export class WorldRoom extends DurableObject<Env> {
 				generatorVersion: manifest.generatorVersion
 			},
 			maxSpeed: manifest.maxSpeed,
+			fallDamage: manifest.fallDamage === true,
 			authorize: (hello) => this.authorize(manifest.worldId, hello),
 			persistence: {
 				saveGrace: (entries) => this.writeMeta('grace', JSON.stringify(entries)),
@@ -620,7 +666,9 @@ export class WorldRoom extends DurableObject<Env> {
 						.toArray()[0]?.seq ?? null,
 				savePlayer: (playerId, name, bookmark) => this.savePlayer(playerId, name, bookmark),
 				loadPlayer: (playerId) => this.loadPlayer(playerId),
-				playerNames: () => this.playerNames()
+				playerNames: () => this.playerNames(),
+				savePlayerHealth: (playerId, health) => this.savePlayerHealth(playerId, health),
+				loadPlayerHealth: (playerId) => this.loadPlayerHealth(playerId)
 			},
 			// Rows load on first use only (see RoomCoreOptions.store).
 			store: () => {

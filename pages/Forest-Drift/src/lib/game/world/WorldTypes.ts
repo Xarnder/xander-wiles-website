@@ -65,6 +65,24 @@ export interface SavedPlayerState {
 	activeFoundationId?: string;
 	/** Per-foundation "which storey am I building on", keyed by foundation id. */
 	currentLevelIndexByFoundation?: Record<string, number>;
+	/** Whole health points (1–36; see PlayerHealth). Absent means full. Never 0: a death saves as full at the spawn. */
+	health?: number;
+}
+
+/** Gameplay rules chosen per world. Absent in worlds saved before rules existed. */
+export interface WorldRules {
+	/** Long falls cost health. Off for worlds created before fall damage existed. */
+	fallDamage?: boolean;
+}
+
+/** Fully-resolved rules: anything a world doesn't say takes its pre-rules behaviour. */
+export function resolveWorldRules(rules: WorldRules | undefined): Required<WorldRules> {
+	return { fallDamage: rules?.fallDamage === true };
+}
+
+/** Rules for a brand-new world. */
+export function createDefaultWorldRules(): Required<WorldRules> {
+	return { fallDamage: true };
 }
 
 /**
@@ -137,6 +155,9 @@ export interface WorldDefinition {
 	proceduralOverrides: ProceduralWorldOverrides;
 
 	player: SavedPlayerState;
+
+	/** Gameplay rules. Absent means the defaults from before rules existed (see resolveWorldRules). */
+	rules?: WorldRules;
 }
 
 /**

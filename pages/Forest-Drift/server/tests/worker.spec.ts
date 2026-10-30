@@ -67,6 +67,30 @@ describe('multiplayer HTTP routes', () => {
 		expect(publish).toHaveBeenCalledTimes(1);
 	});
 
+	it('publishes the world fall-damage rule, off for worlds saved before rules existed', async () => {
+		const publish = vi.fn().mockResolvedValue(undefined);
+		const config = {
+			...env,
+			WORLD_ROOM: { idFromName: (id: string) => id, get: () => ({ publish }) }
+		} as unknown as Env;
+		const send = (rules: unknown) =>
+			worker.fetch(
+				new Request('https://room.test/w', {
+					method: 'POST',
+					headers: { Authorization: 'Bearer test-admin' },
+					body: JSON.stringify({
+						world: { name: 'W', seed: 'test', schemaVersion: 1, environment: {}, rules },
+						generatorVersion: 3
+					})
+				}),
+				config
+			);
+		await send({ fallDamage: true });
+		await send(undefined);
+		await send({ fallDamage: 'yes' });
+		expect(publish.mock.calls.map((call) => call[0].fallDamage)).toEqual([true, false, false]);
+	});
+
 	it('allows the game origin and refuses an unrelated website', async () => {
 		const allowed = await worker.fetch(
 			new Request('https://room.test/health', {

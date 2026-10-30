@@ -45,6 +45,24 @@ export function flySpeedAfterWheel(speed: number, deltaY: number): number {
 	return Math.min(FLY_SPEED_MAX, Math.max(FLY_SPEED_MIN, next));
 }
 
+/**
+ * One airborne spell ending. `distance` is from the highest feet height reached to where the feet
+ * landed; `immune` marks landings that must never hurt (after flight, a load or teleport, an
+ * interaction, tutorial movement, gravity changes, or the floor being removed underneath).
+ */
+export interface LandingEvent {
+	distance: number;
+	/** Downward speed at touchdown, m/s. */
+	speed: number;
+	immune: boolean;
+	x: number;
+	z: number;
+	feetY: number;
+}
+
+/** How long after `markSupportRemoved` a drop off the edge still counts as caused by the removal. */
+const SUPPORT_REMOVED_WINDOW = 0.5;
+
 export interface FirstPersonControllerOptions {
 	getCameraObstacles?: () => CameraObstacles;
 	domElement: HTMLElement;
@@ -86,6 +104,8 @@ export interface FirstPersonControllerOptions {
 	isMoveBlocked?: (worldX: number, worldZ: number) => boolean;
 	/** Flying toggled, or its speed changed (scroll wheel). */
 	onFlightChange?: (state: FlightState) => void;
+	/** Every time the player lands after being airborne (see LandingEvent). */
+	onLanded?: (event: LandingEvent) => void;
 }
 
 /**
@@ -153,6 +173,7 @@ export class FirstPersonController {
 		this.keys.clear();
 		this.verticalVelocity = 0;
 		this.walkBob = createWalkBobState();
+		this.resetFallTracking(true);
 	}
 	endInteraction(position: { x: number; y: number; z: number }): void {
 		this.interactionPose = null;
@@ -183,6 +204,14 @@ export class FirstPersonController {
 	) => { x: number; z: number };
 	private readonly isMoveBlocked?: (worldX: number, worldZ: number) => boolean;
 	private readonly onFlightChange?: (state: FlightState) => void;
+	private readonly onLanded?: (event: LandingEvent) => void;
+
+	/** Feet height at the top of the current airborne spell; null while grounded or flying. */
+	private fallPeakFeetY: number | null = null;
+	/** The current or next airborne spell lands without damage (cleared by that landing). */
+	private fallImmune = true;
+	/** Seconds left in which walking off the edge counts as the support having been removed. */
+	private supportRemovedFor = 0;
 
 	private flying = false;
 	/** Chosen fly speed; `null` until the wheel is used — then the default (2 × run) applies. */
@@ -212,6 +241,8 @@ export class FirstPersonController {
 			? { x: this.worldPosition.x, z: this.worldPosition.z, time: 0, nextJump: 3 }
 			: null;
 		if (enabled) this.setFlying(false);
+		// While the tutorial walks the player every landing is immune; this covers stopping mid-jump.
+		this.resetFallTracking(!this.grounded);
 	}
 
 	/** Mouse/touch look scale — below 1 while zoomed in (C held), so aiming stays steady. */
@@ -339,6 +370,7 @@ export class FirstPersonController {
 		this.resolveHorizontalCollision = options.resolveHorizontalCollision;
 		this.isMoveBlocked = options.isMoveBlocked;
 		this.onFlightChange = options.onFlightChange;
+		this.onLanded = options.onLanded;
 
 		document.addEventListener('pointerlockchange', this.handlePointerLockChange);
 		window.addEventListener('wheel', this.handleWheel, { passive: false });
@@ -368,6 +400,7 @@ export class FirstPersonController {
 		this.grounded = true;
 		this.verticalVelocity = 0;
 		this.walkBob = createWalkBobState();
+		this.resetFallTracking(false);
 		this.syncCamera();
 	}
 
@@ -388,7 +421,32 @@ export class FirstPersonController {
 	 */
 	setMovementLocked(locked: boolean): void {
 		this.movementLocked = locked;
-		if (locked) this.keys.clear();
+		if (locked) {
+			this.keys.clear();
+			if (!this.grounded) this.resetFallTracking(true);
+		}
+	}
+
+	/**
+	 * Something under the player was just removed (a floor deleted, an undo, another player's
+	 * edit). If they drop within the next moment without jumping, that fall cannot hurt.
+	 */
+	markSupportRemoved(): void {
+		this.supportRemovedFor = SUPPORT_REMOVED_WINDOW;
+	}
+
+	/** Test helper: starts a damaging fall from wherever the player is now (see ThreeScene.debugDropPlayer). */
+	armFallFromCurrentHeight(): void {
+		this.grounded = false;
+		this.verticalVelocity = 0;
+		this.fallPeakFeetY = this.worldPosition.y - this.settings.eyeHeight;
+		this.fallImmune = false;
+		this.syncCamera();
+	}
+
+	private resetFallTracking(immune: boolean): void {
+		this.fallPeakFeetY = null;
+		this.fallImmune = immune;
 	}
 
 	isMovementLocked(): boolean {
@@ -422,14 +480,16 @@ export class FirstPersonController {
 	}
 
 	/**
-	 * Starts or stops flying. Leaving flight mid-air simply lets gravity take over (no fall damage).
-	 * The chosen fly speed is kept for the session.
+	 * Starts or stops flying. Leaving flight mid-air simply lets gravity take over, and that drop is
+	 * immune to fall damage until the player next touches the ground. The chosen fly speed is kept
+	 * for the session.
 	 */
 	setFlying(flying: boolean): void {
 		if (this.flying === flying) return;
 		this.flying = flying;
 		this.verticalVelocity = 0;
 		this.grounded = false;
+		this.resetFallTracking(true);
 		this.walkBob = createWalkBobState();
 		this.onFlightChange?.({ flying, speed: this.getFlySpeed() });
 	}
@@ -467,6 +527,7 @@ export class FirstPersonController {
 		this.grounded = false;
 		this.walkBob = createWalkBobState();
 		this.keys.clear();
+		this.resetFallTracking(true);
 		this.syncCamera();
 	}
 
@@ -589,11 +650,15 @@ export class FirstPersonController {
 				preStepFeetY
 			) + this.settings.eyeHeight;
 
+		const wasGrounded = this.grounded;
+		const supportRemoved = this.supportRemovedFor > 0;
+		this.supportRemovedFor = Math.max(0, this.supportRemovedFor - deltaSeconds);
 		let worldY: number;
 		if (!this.settings.gravityEnabled) {
 			worldY = groundHeight;
 			this.grounded = true;
 			this.verticalVelocity = 0;
+			this.resetFallTracking(false);
 		} else {
 			if (this.grounded && jumpPressed) {
 				this.verticalVelocity = this.settings.jumpSpeed;
@@ -601,6 +666,7 @@ export class FirstPersonController {
 			}
 
 			this.verticalVelocity -= GRAVITY * deltaSeconds;
+			const landingSpeed = Math.max(0, -this.verticalVelocity);
 			let proposedY = this.worldPosition.y + this.verticalVelocity * deltaSeconds;
 
 			if (this.getCeilingBlockY) {
@@ -630,6 +696,16 @@ export class FirstPersonController {
 				worldY = proposedY;
 				this.grounded = false;
 			}
+			this.trackFall(
+				wasGrounded,
+				jumpPressed,
+				supportRemoved,
+				preStepFeetY,
+				worldX,
+				worldY,
+				worldZ,
+				landingSpeed
+			);
 		}
 
 		this.worldPosition.set(worldX, worldY, worldZ);
@@ -641,6 +717,36 @@ export class FirstPersonController {
 			running
 		);
 		this.syncCamera(running);
+	}
+
+	/** Follows the peak of each airborne spell and reports the landing (see LandingEvent). */
+	private trackFall(
+		wasGrounded: boolean,
+		jumped: boolean,
+		supportRemoved: boolean,
+		preStepFeetY: number,
+		x: number,
+		eyeY: number,
+		z: number,
+		landingSpeed: number
+	): void {
+		const feetY = eyeY - this.settings.eyeHeight;
+		if (!this.grounded) {
+			if (wasGrounded && supportRemoved && !jumped) this.fallImmune = true;
+			this.fallPeakFeetY = Math.max(this.fallPeakFeetY ?? preStepFeetY, feetY);
+			return;
+		}
+		if (wasGrounded) return;
+		const event: LandingEvent = {
+			distance: Math.max(0, (this.fallPeakFeetY ?? preStepFeetY) - feetY),
+			speed: landingSpeed,
+			immune: this.fallImmune || this.exampleMovement !== null,
+			x,
+			z,
+			feetY
+		};
+		this.resetFallTracking(false);
+		this.onLanded?.(event);
 	}
 
 	/**

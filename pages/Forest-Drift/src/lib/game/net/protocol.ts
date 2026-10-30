@@ -19,6 +19,7 @@
  */
 
 import type { EntityKind, WorldOp } from './worldEntities';
+import type { DamageSource, HealthState } from '../player/PlayerHealth';
 
 /**
  * Bump on any incompatible change to the messages below; the room refuses mismatched clients, which
@@ -27,7 +28,8 @@ import type { EntityKind, WorldOp } from './worldEntities';
  * 3: shared building (ops, commits, catch-up), doors, bookmarks.
  */
 // 4: pose grounded/running flags are now required for character animation.
-export const PROTOCOL_VERSION = 4;
+// 5: player health owned by the room (fall, punch, respawn, health; shared damage rules).
+export const PROTOCOL_VERSION = 5;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world
@@ -353,6 +355,8 @@ export interface SharedEnvironment {
 	sky: Record<string, unknown>;
 	/** The shared subset of the weather settings (see `SHARED_WEATHER_KEYS`). */
 	weather: Record<string, unknown>;
+	/** The owner's gameplay rules (Q22). Absent until the owner first changes one. */
+	rules?: { fallDamage?: boolean; playerDamage?: boolean };
 }
 
 /** The room clock: accumulated time the world has been occupied (Q11-A), at `serverTime`. */
@@ -417,6 +421,52 @@ export interface ClientInteractionMessage {
 	t: 'interaction';
 	location: MiniBuildInteractionRef | null;
 }
+
+/**
+ * A damaging landing, reported by the player who fell (it can only lower their own health). `id`
+ * rises per connection; `at` is the landing time on the server clock, `d` the drop in metres.
+ */
+export interface ClientFallMessage {
+	t: 'fall';
+	id: number;
+	d: number;
+	at: number;
+}
+
+/** Back to full health at the world spawn. The room accepts it only while the player is dead. */
+export interface ClientRespawnMessage {
+	t: 'respawn';
+}
+
+/**
+ * A punch at the player in `target` (a slot). The room checks it against both players' last poses
+ * and decides the damage itself; the client never says how much. `id` rises per connection.
+ */
+export interface ClientPunchMessage {
+	t: 'punch';
+	id: number;
+	target: number;
+}
+
+/** Whether the sender's punch landed (never how hurt the target is: health stays private). */
+export interface ServerPunchResultMessage {
+	t: 'punchResult';
+	id: number;
+	hit: boolean;
+}
+
+/**
+ * The player's own health, sent only to that player (Q20: health is private). Times are on the
+ * server clock; the client derives regeneration from them exactly as the room does.
+ */
+export interface ServerHealthMessage {
+	t: 'health';
+	state: HealthState;
+	/** The `fall` id this answers, if any. */
+	ack?: number;
+	/** What just hurt the player, when this message is a hit from someone else. */
+	source?: DamageSource;
+}
 export interface ServerInteractionsMessage {
 	t: 'interactions';
 	locations: OccupiedMiniBuildInteraction[];
@@ -429,7 +479,10 @@ export type ClientJsonMessage =
 	| ClientEnvMessage
 	| OpsMessage
 	| ClientDoorMessage
-	| ClientInteractionMessage;
+	| ClientInteractionMessage
+	| ClientFallMessage
+	| ClientRespawnMessage
+	| ClientPunchMessage;
 
 export interface WelcomeMessage {
 	t: 'welcome';
@@ -445,7 +498,8 @@ export interface WelcomeMessage {
 	clock: RoomClockState;
 	/** Null until the owner first changes the sky or weather: use the published world's. */
 	env: SharedEnvironment | null;
-	rules: { maxSpeed: number; flight: boolean };
+	/** `fallDamage` is the world's initial rule; a shared `env.rules` overrides it. */
+	rules: { maxSpeed: number; flight: boolean; fallDamage?: boolean };
 	/** The world's version now. */
 	epoch: number;
 	seq: number;
@@ -457,6 +511,8 @@ export interface WelcomeMessage {
 	resync: boolean;
 	/** Where this player last left the world (Q18), feet position. Null for first-timers. */
 	bookmark: PlayerBookmark | null;
+	/** This player's own health (never anyone else's). */
+	health?: HealthState;
 	/** Doors open right now (Q13-A). */
 	doors: string[];
 	interactions?: OccupiedMiniBuildInteraction[];
@@ -589,7 +645,9 @@ export type ServerJsonMessage =
 	| AckMessage
 	| SyncedMessage
 	| ServerDoorMessage
-	| ServerInteractionsMessage;
+	| ServerInteractionsMessage
+	| ServerHealthMessage
+	| ServerPunchResultMessage;
 
 const NAME_MAX = 20;
 const NAME_MIN = 2;
@@ -651,7 +709,17 @@ export function parseSharedEnvironment(raw: unknown): SharedEnvironment | null {
 	) {
 		return null;
 	}
-	return { anchor: { roomSeconds, timeOfDay, weatherTime }, sky: raw.sky, weather: raw.weather };
+	const rules: SharedEnvironment['rules'] = {};
+	if (isRecord(raw.rules)) {
+		if (typeof raw.rules.fallDamage === 'boolean') rules.fallDamage = raw.rules.fallDamage;
+		if (typeof raw.rules.playerDamage === 'boolean') rules.playerDamage = raw.rules.playerDamage;
+	}
+	return {
+		anchor: { roomSeconds, timeOfDay, weatherTime },
+		sky: raw.sky,
+		weather: raw.weather,
+		...(Object.keys(rules).length > 0 ? { rules } : {})
+	};
 }
 
 /** Parses a JSON message from the client; returns null for anything unexpected. */
@@ -717,6 +785,21 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		if (typeof message.id !== 'string' || message.id.length > 200) return null;
 		return { t: 'door', id: message.id, open: message.open === true };
 	}
+	if (message.t === 'fall') {
+		const { id, d, at } = message;
+		if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 0) return null;
+		if (typeof d !== 'number' || !Number.isFinite(d) || d < 0) return null;
+		if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+		return { t: 'fall', id, d, at };
+	}
+	if (message.t === 'respawn') return { t: 'respawn' };
+	if (message.t === 'punch') {
+		const { id, target } = message;
+		if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 0) return null;
+		if (typeof target !== 'number' || !Number.isInteger(target) || target < 0 || target > 255)
+			return null;
+		return { t: 'punch', id, target };
+	}
 	return null;
 }
 
@@ -742,7 +825,9 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'ack' ||
 		t === 'synced' ||
 		t === 'door' ||
-		t === 'interactions'
+		t === 'interactions' ||
+		t === 'health' ||
+		t === 'punchResult'
 		? (value as ServerJsonMessage)
 		: null;
 }

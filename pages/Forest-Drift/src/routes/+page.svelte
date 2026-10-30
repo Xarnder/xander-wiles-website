@@ -48,6 +48,15 @@
 	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
 	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '$lib/components/Hotbar.svelte';
+	import HealthBar from '$lib/components/HealthBar.svelte';
+	import DamageVignette from '$lib/components/DamageVignette.svelte';
+	import DeathCard from '$lib/components/DeathCard.svelte';
+	import {
+		PLAYER_HEALTH_ENABLED,
+		type DamageSource,
+		type HealthSnapshot
+	} from '$lib/game/player/PlayerHealth';
+	import { playLandingThud } from '$lib/game/audio/landingThud';
 	import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
 	let speechPreparation = $state(false);
 	import { preventTouchPageZoom } from '$lib/components/preventTouchPageZoom';
@@ -128,7 +137,7 @@
 	} from '$lib/game/building/FoundationTypes';
 	import type { PaintUiState } from '$lib/game/building/PaintTool';
 	import { graphicsQualityLabel, type GraphicsQuality } from '$lib/game/graphics/GraphicsTypes';
-	import { fade } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import type { SceneStats } from '$lib/game/ThreeScene';
 	import { formatDayClock } from '$lib/game/sky/dayNightMath';
 	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
@@ -162,6 +171,73 @@
 	let stats = $state<SceneStats | null>(null);
 	/** Free flight (B): shown as a badge while on; speed follows the scroll wheel. */
 	let flight = $state<{ flying: boolean; speed: number }>({ flying: false, speed: 0 });
+	/** The player's health as last reported by the scene (only on change, never per frame). */
+	let health = $state.raw<HealthSnapshot | null>(null);
+	/** Bumped per hit so the vignette replays. */
+	let damageHit = $state(0);
+	let damageAmount = $state(0);
+	/** What the death card says: the cause, and a detail line (how far, or who). */
+	let deathCause = $state<{ title: string; detail: string | null } | null>(null);
+	/** Bumped each time this player's punch lands, to flash the hit marker. */
+	let punchHit = $state(0);
+	let showHealthBar = $derived(PLAYER_HEALTH_ENABLED && health !== null);
+	/**
+	 * The health row spans the hotbar's full width. With no hotbar showing it keeps the last width,
+	 * so pressing G doesn't resize it.
+	 */
+	let measuredHotbarWidth = $state(0);
+	let healthRowWidth = $state<number | undefined>(undefined);
+	$effect(() => {
+		if (measuredHotbarWidth > 0) healthRowWidth = measuredHotbarWidth;
+	});
+	let healthAnnouncement = $state('');
+	let lastHealthAnnouncementAt = 0;
+	let pendingHealthAnnouncement: ReturnType<typeof setTimeout> | undefined;
+	const reducedMotion =
+		typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	/** Polite screen-reader updates, at most one every 1.5 s (the latest wins). */
+	function announceHealth(text: string) {
+		clearTimeout(pendingHealthAnnouncement);
+		const wait = Math.max(0, lastHealthAnnouncementAt + 1500 - performance.now());
+		pendingHealthAnnouncement = setTimeout(() => {
+			lastHealthAnnouncementAt = performance.now();
+			healthAnnouncement = text;
+		}, wait);
+	}
+
+	function handleHealthChange(next: HealthSnapshot) {
+		const previous = health;
+		health = next;
+		if (!previous || next.dead) return;
+		if (next.current < previous.current) announceHealth(`Health ${next.current} of ${next.max}`);
+		else if (next.current === next.max && previous.current < next.max)
+			announceHealth('Health full');
+	}
+
+	function handlePlayerDeath(source: DamageSource | null) {
+		if (source?.kind === 'player') {
+			const name = mpPlayers.find((player) => player.slot === source.by)?.name;
+			deathCause = { title: 'You were knocked out', detail: name ? `by ${name}` : null };
+		} else {
+			deathCause = {
+				title: 'You fell too far',
+				detail: source ? `from ${Math.round(source.distance)} m` : null
+			};
+		}
+		announceHealth(
+			`${deathCause.title}${deathCause.detail ? ` ${deathCause.detail}` : ''}. Health 0.`
+		);
+		session?.scene.setTouchMovement(0, 0);
+		session?.scene.setTouchActive(false);
+		document.exitPointerLock?.();
+	}
+
+	function respawnAfterDeath() {
+		session?.scene.respawnAfterDeath();
+		deathCause = null;
+		if (showTouchControls) startTouchGameplay();
+	}
 	/** Best-quality screenshot (\\) in progress: movement is locked and the badge says what is happening. */
 	let captureStage = $state<'loading' | 'capturing' | null>(null);
 	let hotbar = $state<HotbarUiState | null>(null);
@@ -764,7 +840,7 @@
 					if (wasLocked && !locked) {
 						if (showHelp) {
 							showHelp = false;
-						} else if (!paused && !clockBlocked() && !debugControlsOpen) {
+						} else if (!paused && !clockBlocked() && !debugControlsOpen && !health?.dead) {
 							// Escape while pointer-locked is consumed natively by the browser to exit lock.
 							// Catching that transition here brings up the pause menu on the very first Escape press.
 							if (performance.now() - lastPauseToggleTime > 150) {
@@ -791,7 +867,14 @@
 				},
 				onRequestFoundationDelete: (foundationId) => openFoundationDelete(foundationId),
 				onMiniBuildEditRequest: (instanceId) => requestMiniBuildEdit(instanceId),
-				onMiniBuildNotice: (message) => showSaveToast(message)
+				onMiniBuildNotice: (message) => showSaveToast(message),
+				onHealthChange: handleHealthChange,
+				onPlayerDamaged: ({ amount }) => {
+					damageAmount = amount;
+					damageHit++;
+					playLandingThud(amount);
+				},
+				onPlayerDeath: ({ source }) => handlePlayerDeath(source)
 			});
 			if (typeof window !== 'undefined') {
 				const testWindow = window as ForestTestWindow;
@@ -955,6 +1038,11 @@
 				}),
 			onBuildLock: (lock) => (mpBuildLock = lock),
 			onSaving: (saving) => (mpSaving = saving),
+			onPunchResult: (hit) => {
+				if (!hit) return;
+				punchHit++;
+				playLandingThud(0);
+			},
 			access: {
 				invite,
 				capability: remembered?.invite === invite ? (remembered.capability ?? null) : null
@@ -1135,6 +1223,8 @@
 			}
 			lookedAtDoorId = null;
 			lookedAtOpening = null;
+			health = null;
+			deathCause = null;
 			if (onlineWorld) {
 				onlineWorld = null;
 				multiplayerSession = null;
@@ -1439,6 +1529,11 @@
 				class:valid={buildHud?.crosshair === 'valid'}
 				class:invalid={buildHud?.crosshair === 'invalid'}
 			></div>
+			{#key punchHit}
+				{#if punchHit > 0}
+					<div class="hit-marker" aria-hidden="true" data-testid="punch-hit-marker"></div>
+				{/if}
+			{/key}
 
 			{#if buildHud?.level}
 				<div
@@ -1532,10 +1627,14 @@
 					{heightToolId}
 					onOpenPause={openPause}
 					onOpenHelp={() => (showHelp = true)}
+					punchAvailable={!!onlineWorld &&
+						!hotbar?.buildModeActive &&
+						(hotbar?.globalMode ?? 'none') === 'none' &&
+						!health?.dead}
 				/>
 			{/if}
 
-			{#if !pointerLocked && !clockBlocked() && !showHelp && !debugControlsOpen}
+			{#if !pointerLocked && !clockBlocked() && !showHelp && !debugControlsOpen && !health?.dead}
 				<div class="instructions" class:fading={pointerLocked}>
 					<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
 					{#if showTouchControls}
@@ -1668,6 +1767,8 @@
 							<dd>Run</dd>
 							<dt>Space</dt>
 							<dd>Jump</dd>
+							<dt>Left click (online, not building)</dt>
+							<dd>Punch the player in front of you</dd>
 							<dt>\</dt>
 							<dd>
 								Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
@@ -2352,33 +2453,72 @@
 				</div>
 			{/if}
 
-			{#if hotbar?.globalMode === 'music'}
-				<Hotbar
-					slots={musicHotbarSlots}
-					activeSlot={hotbar.musicActiveSlot}
-					showGlobalModes={false}
-					onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
-				/>
-			{:else if hotbar?.locked && onlineWorld}
-				<div class="view-only-badge" data-testid="view-only-badge" data-lock={mpBuildLock}>
-					{mpBuildLock === 'viewer'
-						? 'Viewing only — this link can look around but not build'
-						: mpBuildLock === 'offline'
-							? 'Reconnecting… building is paused until the connection is back'
-							: 'Joining…'}
+			<!-- Bottom HUD stack: the health bar sits just above whichever hotbar (or badge) is showing,
+			     and drops into the hotbar's place when none is (Q2). -->
+			<div
+				class="bottom-hud"
+				class:with-health={showHealthBar}
+				style:--hud-above-hotbar={showHealthBar ? '18px' : '0px'}
+				data-testid="bottom-hud"
+			>
+				{#if showHealthBar && health}
+					<HealthBar
+						current={health.current}
+						max={health.max}
+						low={health.low}
+						width={healthRowWidth}
+					/>
+				{/if}
+				{#if hotbar?.globalMode === 'music' || (hotbar?.locked && onlineWorld) || hotbar?.buildModeActive}
+					<div class="bottom-hud-slot" transition:slide={{ duration: reducedMotion ? 0 : 160 }}>
+						<div class="hotbar-measure" bind:clientWidth={measuredHotbarWidth}>
+							{#if hotbar?.globalMode === 'music'}
+								<Hotbar
+									embedded
+									slots={musicHotbarSlots}
+									activeSlot={hotbar.musicActiveSlot}
+									showGlobalModes={false}
+									onSelectSlot={(slot) => session?.scene.selectMusicSpecies(slot - 1)}
+								/>
+							{:else if hotbar?.locked && onlineWorld}
+								<div class="view-only-badge" data-testid="view-only-badge" data-lock={mpBuildLock}>
+									{mpBuildLock === 'viewer'
+										? 'Viewing only — this link can look around but not build'
+										: mpBuildLock === 'offline'
+											? 'Reconnecting… building is paused until the connection is back'
+											: 'Joining…'}
+								</div>
+							{:else if hotbar?.buildModeActive}
+								<Hotbar
+									embedded
+									slots={hotbar.slots}
+									activeSlot={hotbar.activeSlot}
+									removeModeActive={hotbar.globalMode === 'remove'}
+									paintModeActive={hotbar.globalMode === 'paint'}
+									moveModeActive={hotbar.globalMode === 'move'}
+									onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
+									onCycleVariant={(direction) => session?.scene.cycleSlotVariant(direction)}
+									onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
+									onTogglePaintMode={() => session?.scene.togglePaintMode()}
+									onToggleMoveMode={() => session?.scene.toggleMoveMode()}
+								/>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			{#if PLAYER_HEALTH_ENABLED}
+				<DamageVignette hit={damageHit} amount={damageAmount} />
+				<div class="sr-only" aria-live="polite" data-testid="health-announcement">
+					{healthAnnouncement}
 				</div>
-			{:else if hotbar?.buildModeActive}
-				<Hotbar
-					slots={hotbar.slots}
-					activeSlot={hotbar.activeSlot}
-					removeModeActive={hotbar.globalMode === 'remove'}
-					paintModeActive={hotbar.globalMode === 'paint'}
-					moveModeActive={hotbar.globalMode === 'move'}
-					onSelectSlot={(slot) => session?.scene.selectHotbarSlot(slot)}
-					onCycleVariant={(direction) => session?.scene.cycleSlotVariant(direction)}
-					onToggleRemoveMode={() => session?.scene.toggleRemoveMode()}
-					onTogglePaintMode={() => session?.scene.togglePaintMode()}
-					onToggleMoveMode={() => session?.scene.toggleMoveMode()}
+			{/if}
+			{#if health?.dead && !clockBlocked() && !showHelp && !debugControlsOpen}
+				<DeathCard
+					title={deathCause?.title ?? 'You fell too far'}
+					detail={deathCause?.detail ?? null}
+					onRespawn={respawnAfterDeath}
 				/>
 			{/if}
 
@@ -3090,6 +3230,35 @@
 		filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85));
 	}
 
+	/* A punch landed: a brief X around the crosshair. */
+	.hit-marker {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 22px;
+		height: 22px;
+		transform: translate(-50%, -50%) rotate(45deg);
+		pointer-events: none;
+		background:
+			linear-gradient(#fff, #fff) center top / 2px 6px no-repeat,
+			linear-gradient(#fff, #fff) center bottom / 2px 6px no-repeat,
+			linear-gradient(#fff, #fff) left center / 6px 2px no-repeat,
+			linear-gradient(#fff, #fff) right center / 6px 2px no-repeat;
+		filter: drop-shadow(0 0 2px #000a);
+		opacity: 0;
+		animation: hit-marker 0.3s ease-out;
+	}
+	@keyframes hit-marker {
+		from {
+			opacity: 1;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.hit-marker {
+			animation: hit-marker 0.3s steps(1, end);
+		}
+	}
+
 	.crosshair.valid {
 		--crosshair-color: #39d353;
 	}
@@ -3267,11 +3436,35 @@
 		top: calc(var(--touch-top-height, 3.4rem) + 3.1rem);
 	}
 
-	.view-only-badge {
+	.bottom-hud {
 		position: fixed;
+		bottom: max(8px, env(safe-area-inset-bottom));
 		left: 50%;
-		bottom: 1.1rem;
 		transform: translateX(-50%);
+		z-index: 35;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		max-width: calc(100vw - 1.5rem);
+		pointer-events: none;
+	}
+	.hotbar-measure {
+		max-width: 100%;
+	}
+	.bottom-hud-slot {
+		pointer-events: auto;
+		display: flex;
+		justify-content: center;
+		max-width: 100%;
+	}
+	@media (max-height: 500px) and (orientation: landscape) {
+		.bottom-hud {
+			bottom: max(6px, env(safe-area-inset-bottom));
+		}
+	}
+
+	.view-only-badge {
 		z-index: 12;
 		padding: 0.45rem 0.9rem;
 		border-radius: 999px;
@@ -3693,7 +3886,7 @@
 		z-index: 40;
 	}
 
-	.touch-mode :global(.hotbar) {
+	.touch-mode .bottom-hud {
 		bottom: max(8px, env(safe-area-inset-bottom));
 		max-width: calc(100vw - 1rem);
 	}
@@ -3702,6 +3895,15 @@
 	.touch-mode:has(:global(.hotbar)) :global(.touch-movement-cluster),
 	.touch-mode:has(:global(.hotbar)) :global(.touch-actions-cluster) {
 		bottom: calc(76px + env(safe-area-inset-bottom));
+	}
+	/* …and above the health bar's row too (bar 10 px + 6 px gap). */
+	.touch-mode:has(:global(.health-bar)) :global(.touch-movement-cluster),
+	.touch-mode:has(:global(.health-bar)) :global(.touch-actions-cluster) {
+		bottom: calc(26px + env(safe-area-inset-bottom));
+	}
+	.touch-mode:has(:global(.hotbar)):has(:global(.health-bar)) :global(.touch-movement-cluster),
+	.touch-mode:has(:global(.hotbar)):has(:global(.health-bar)) :global(.touch-actions-cluster) {
+		bottom: calc(92px + env(safe-area-inset-bottom));
 	}
 
 	.help-toggle {
@@ -3796,11 +3998,15 @@
 			bottom: calc(var(--touch-dock-height, 8.5rem) + 13rem);
 		}
 
-		.touch-mode :global(.hotbar) {
+		.touch-mode .bottom-hud {
 			width: calc(100vw - 16px);
 			max-width: calc(100vw - 16px);
-			left: 50%;
-			transform: translateX(-50%);
+		}
+		.touch-mode .bottom-hud-slot,
+		.touch-mode .hotbar-measure,
+		.touch-mode .bottom-hud :global(.hotbar) {
+			width: 100%;
+			max-width: 100%;
 		}
 
 		.touch-mode .utility-buttons {

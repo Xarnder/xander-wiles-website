@@ -37,6 +37,8 @@
 		heightToolId: ToolId | undefined;
 		onOpenPause: () => void;
 		onOpenHelp: () => void;
+		/** Online, walking around (not building): show the Punch button. */
+		punchAvailable?: boolean;
 	}
 
 	const {
@@ -48,7 +50,8 @@
 		customizeToolId,
 		heightToolId,
 		onOpenPause,
-		onOpenHelp
+		onOpenHelp,
+		punchAvailable = false
 	}: Props = $props();
 
 	// --- Virtual Joystick Movement State ---
@@ -684,6 +687,17 @@
 				<span>Run</span>
 			</button>
 
+			{#if punchAvailable}
+				<button
+					type="button"
+					class="touch-action-btn punch-btn"
+					use:touchButton={() => scene?.punch()}
+					data-testid="touch-punch-btn"
+					aria-label="Punch"
+				>
+					<span>Punch</span>
+				</button>
+			{/if}
 			<button
 				type="button"
 				class="touch-action-btn jump-btn"

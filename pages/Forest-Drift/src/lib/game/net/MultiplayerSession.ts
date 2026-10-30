@@ -19,6 +19,10 @@ import {
 import { RemoteAvatarRenderer } from './RemoteAvatarRenderer';
 import { WorldOpFeed, type DeletionItem, type SharedWorldPort } from './WorldOpFeed';
 import { WorldReplica } from './WorldReplica';
+import { RoomHealthAuthority } from './RoomHealthAuthority';
+import type { HealthAuthority, HealthEvents } from '../player/HealthAuthority';
+import { findPunchTarget } from '../player/punch';
+import type { RemotePlayerView } from './NetSession';
 import type { OnlineWorldSync } from './worldTransfer';
 
 /** How the scene reads and applies the owner's shared sky, weather and time. */
@@ -53,6 +57,8 @@ export interface SceneMultiplayerContext {
 	restorePlayer: (bookmark: PlayerBookmark) => void;
 	/** Building on/off for this player (visitor, not yet joined, or offline too long). */
 	setBuildingLocked: (locked: boolean) => void;
+	/** The room's fall-damage rule as this world was published (the owner's `env.rules` overrides it). */
+	setPublishedFallDamage?: (enabled: boolean) => void;
 	/** Settings → Graphics → Show locator bar. */
 	showLocatorBar: () => boolean;
 }
@@ -89,6 +95,13 @@ export interface SceneMultiplayerHooks {
 
 	doorToggled(openingId: string, open: boolean): void;
 	interactionChanged?(location: MiniBuildInteractionRef | null): void;
+	/** Online the room owns the player's health (Q20); call before `attach`. */
+	createHealthAuthority?(events: HealthEvents): HealthAuthority;
+	/**
+	 * Punches whoever the local aim connects with (eye position, yaw and pitch). Returns the target's
+	 * slot when a punch was sent, null when it hit nobody.
+	 */
+	punch?(aim: { x: number; y: number; z: number; yaw: number; pitch: number }): number | null;
 	detach(): void;
 }
 
@@ -119,6 +132,8 @@ export interface MultiplayerSessionOptions {
 	onVersion?: (version: { epoch: number; seq: number }) => void;
 	/** Whether this player's changes are still on their way to the room. */
 	onSaving?: (saving: boolean) => void;
+	/** This player's punch landed (`hit`) or was refused by the room. */
+	onPunchResult?: (hit: boolean) => void;
 	onTrackingChanged?: (playerId: string | null) => void;
 }
 
@@ -151,6 +166,10 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private readonly locator = new LocatorBar();
 	private localFeetY = 0;
 	private interactions: OccupiedMiniBuildInteraction[] = [];
+	private health: RoomHealthAuthority | null = null;
+	/** The remote players as last drawn, for aiming punches at what the player can see. */
+	private lastViews: RemotePlayerView[] = [];
+	private nextPunchId = 1;
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
@@ -193,6 +212,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			onWelcome: (welcome) => this.handleWelcome(welcome),
 			onEnvironment: (env) => this.applyEnvironment(env),
 			onCapability: options.onCapability,
+			onHealth: (message) => this.health?.applyServer(message.state, message.source),
+			onPunchResult: (message) => options.onPunchResult?.(message.hit),
 			world: {
 				version: () => ({ epoch: this.replica.epoch, seq: this.replica.seq }),
 				onCommit: (commit) => {
@@ -354,6 +375,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		}
 		if (!this.avatars || !this.context) return;
 		const views = this.net.remoteFrames(deltaSeconds * 1000);
+		this.lastViews = views;
 		this.avatars.update(views, deltaSeconds, this.context.camera);
 		const camera = this.context.camera;
 		if (camera instanceof THREE.PerspectiveCamera) {
@@ -385,6 +407,30 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.net.sendInteraction(location);
 	}
 
+	punch(aim: { x: number; y: number; z: number; yaw: number; pitch: number }): number | null {
+		if (this.status !== 'connected') return null;
+		const candidates = this.lastViews
+			// Not `frame.stale`: a player standing still sends no poses and is "stale", yet punchable.
+			.filter(({ info }) => !info.offline)
+			.map(({ info, frame }) => ({ slot: info.slot, x: frame.x, y: frame.y, z: frame.z }));
+		const target = findPunchTarget(aim, aim.yaw, aim.pitch, candidates);
+		if (target === null) return null;
+		return this.net.sendPunch(this.nextPunchId++, target) ? target : null;
+	}
+
+	createHealthAuthority(events: HealthEvents): HealthAuthority {
+		this.health = new RoomHealthAuthority(
+			{
+				connected: () => this.status === 'connected',
+				serverNow: () => this.net.serverNow(),
+				sendFall: (id, distance, at) => this.net.sendFall(id, distance, at),
+				sendRespawn: () => this.net.sendRespawn()
+			},
+			events
+		);
+		return this.health;
+	}
+
 	doorToggled(openingId: string, open: boolean): void {
 		if (open) this.sharedDoors.add(openingId);
 		else this.sharedDoors.delete(openingId);
@@ -413,7 +459,9 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		}
 		Object.assign(this.names, welcome.names);
 		this.options.onRole?.(welcome.role);
+		this.context.setPublishedFallDamage?.(welcome.rules.fallDamage === true);
 		if (welcome.env) this.applyEnvironment(welcome.env);
+		if (welcome.health) this.health?.applyServer(welcome.health);
 		this.interactions = welcome.interactions ?? [];
 		this.context?.setInteractions?.(this.interactions, this.options.identity.playerId, true);
 		for (const id of this.sharedDoors) {

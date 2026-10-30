@@ -148,7 +148,19 @@ import {
 	ZOOM_MAGNIFICATION,
 	zoomedFieldOfView
 } from './graphics/GraphicsTypes';
-import { FirstPersonController, type FlightState } from './player/FirstPersonController';
+import {
+	FirstPersonController,
+	type FlightState,
+	type LandingEvent
+} from './player/FirstPersonController';
+import { FALL_WATER_CANCEL_DEPTH, fallDamageSegments } from './player/fallDamage';
+import { PUNCH_COOLDOWN_MS, PUNCH_SWING_MS } from './player/punch';
+import { LocalHealthAuthority, type HealthAuthority } from './player/HealthAuthority';
+import {
+	PLAYER_HEALTH_ENABLED,
+	type DamageSource,
+	type HealthSnapshot
+} from './player/PlayerHealth';
 import { resolveFogColor } from './sky/atmosphereMath';
 import {
 	advanceTimeOfDay,
@@ -216,10 +228,12 @@ import type { WorldRevisionCounters, WorldRuntime } from './world/WorldSerialize
 import { sanitizePlayerState } from './world/WorldSerializer';
 import {
 	createEmptyProceduralOverrides,
+	resolveWorldRules,
 	type ProceduralWorldOverrides,
 	type SavedPlayerState,
 	type WorldDefinition,
-	type WorldEnvironmentDefinition
+	type WorldEnvironmentDefinition,
+	type WorldRules
 } from './world/WorldTypes';
 
 /** Sun light offset distance (world units) from the camera — see updateSunLightPosition(). */
@@ -421,6 +435,12 @@ export interface ThreeSceneOptions {
 	onPointerLockChange?: (locked: boolean) => void;
 	/** Flying toggled (F) or its speed changed (scroll wheel while flying). */
 	onFlightChange?: (state: FlightState) => void;
+	/** The player's displayed health changed (never sent every frame). */
+	onHealthChange?: (snapshot: HealthSnapshot) => void;
+	/** Points were taken, for the vignette and landing sound. */
+	onPlayerDamaged?: (event: { amount: number; source: DamageSource }) => void;
+	/** Health reached zero; the scene has already blocked movement until `respawnAfterDeath`. */
+	onPlayerDeath?: (event: { source: DamageSource | null }) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -467,14 +487,22 @@ export interface ThreeSceneOptions {
  * generation must keep using true logical world coordinates so it stays deterministic and
  * multiplayer-compatible. That rebasing step is intentionally not implemented yet.
  */
+/** A floor dropping further than a stair riser under the player counts as removed (Q21). */
+const SUPPORT_LOSS_TOLERANCE = 0.3;
+
 export class ThreeScene implements WorldRuntime {
 	devPanelOpen = false;
 	/** Debug sidebar keeps rendering and networking alive, while blocking manual game input. */
 	debugControlsOpen = false;
 	setDebugControls(open: boolean, exampleMovement: boolean, blockManual = open): void {
 		this.debugControlsOpen = open;
-		this.controller.setManualInputBlocked(blockManual);
+		this.debugInputBlocked = blockManual;
+		this.applyInputBlock();
 		this.controller.setExampleMovement(open && exampleMovement);
+	}
+	private debugInputBlocked = false;
+	private applyInputBlock(): void {
+		this.controller.setManualInputBlocked(this.debugInputBlocked || this.health.snapshot().dead);
 	}
 
 	/** Typed foundation-deletion prompt is open — blocks building keys the same way other modals do. */
@@ -491,6 +519,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly skySettings: SkySettings;
 	private readonly onStatsUpdate?: (stats: SceneStats) => void;
 	private readonly onMiniBuildNotice?: (message: string) => void;
+	private readonly onHealthChange?: ThreeSceneOptions['onHealthChange'];
+	private readonly onPlayerDamaged?: ThreeSceneOptions['onPlayerDamaged'];
+	private readonly onPlayerDeath?: ThreeSceneOptions['onPlayerDeath'];
 
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
@@ -544,6 +575,11 @@ export class ThreeScene implements WorldRuntime {
 	private readonly removalManager: BuildingRemovalManager;
 	private readonly worldSurfaceSampler: WorldSurfaceSampler;
 	private readonly controller: FirstPersonController;
+	/** Local in single player; replaced by the room's authority while online. */
+	private health: HealthAuthority;
+	/** Simulation clock for local health (ms). Stops whenever `animate` skips the simulation. */
+	private healthClockMs = 0;
+	private worldRules = resolveWorldRules(undefined);
 	private multiplayer: SceneMultiplayerHooks | null = null;
 	/**
 	 * Online worlds: the room clock (seconds) when the sky, weather or time last changed, and the time
@@ -654,6 +690,9 @@ export class ThreeScene implements WorldRuntime {
 		this.skySettings = options.skySettings;
 		this.onStatsUpdate = options.onStatsUpdate;
 		this.onMiniBuildNotice = options.onMiniBuildNotice;
+		this.onHealthChange = options.onHealthChange;
+		this.onPlayerDamaged = options.onPlayerDamaged;
+		this.onPlayerDeath = options.onPlayerDeath;
 		this.baseTerrainViewDistance = options.settings.viewDistance;
 		this.baseTreeViewDistanceChunks = options.vegetationSettings.loading.treeViewDistanceChunks;
 
@@ -1190,6 +1229,7 @@ export class ThreeScene implements WorldRuntime {
 			settings: this.settings.player,
 			onPointerLockChange: options.onPointerLockChange,
 			onFlightChange: options.onFlightChange,
+			onLanded: (event) => this.handleLanding(event),
 			isMoveBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
 			resolveHorizontalCollision: (x, z, feetY, headY) => {
 				const creaturePosition = this.creatures?.resolvePlayer(x, z, feetY, headY) ?? { x, z };
@@ -1211,6 +1251,9 @@ export class ThreeScene implements WorldRuntime {
 				);
 			}
 		});
+
+		this.health = this.createLocalHealth(undefined);
+		this.renderer.domElement.addEventListener('mousedown', this.handlePunchMouseDown);
 
 		const origin = this.dryGroundNear(0, 0);
 		this.controller.spawn(origin.x, origin.z);
@@ -1740,6 +1783,7 @@ export class ThreeScene implements WorldRuntime {
 			musicVisual: this.musicVisual,
 			miniBuildDisplay: this.miniBuildPreferences.display,
 			worldAccess: 'local',
+			rules: this.rulesSettingsPort(),
 			actions: {
 				miniBuildDisplay: () => {
 					this.miniBuildChunkBoundaries.setEnabled(
@@ -1977,6 +2021,10 @@ export class ThreeScene implements WorldRuntime {
 				weatherTime: this.weather.controller.weatherTime
 			};
 			this.multiplayer = options.multiplayer;
+			if (options.multiplayer.createHealthAuthority) {
+				this.health.dispose();
+				this.health = options.multiplayer.createHealthAuthority(this.healthEvents);
+			}
 			this.multiplayer.attach({
 				resolveInteractionPose: (ref) => {
 					const location = this.miniBuildInteraction.resolve(ref.instanceId, ref.locationId);
@@ -2013,6 +2061,7 @@ export class ThreeScene implements WorldRuntime {
 				setDoorOpen: (id, active) => this.doorInteraction.setActiveState(id, active),
 				restorePlayer: (bookmark) => this.restoreBookmark(bookmark),
 				setBuildingLocked: (locked) => this.setBuildingLocked(locked),
+				setPublishedFallDamage: (enabled) => (this.sharedFallDamage = enabled),
 				showLocatorBar: () => this.graphicsSettings.showLocatorBar
 			});
 		}
@@ -2061,7 +2110,10 @@ export class ThreeScene implements WorldRuntime {
 
 		this.treeManager.setRemovedTreeIds(world.proceduralOverrides?.removedTreeIds ?? []);
 
+		this.worldRules = resolveWorldRules(world.rules);
 		const player = sanitizePlayerState(world.player);
+		this.health.dispose();
+		this.health = this.createLocalHealth(player.health);
 		if (world.saveRevision > 1 || player.position.y !== 0) {
 			this.controller.restoreState(player.position, player.yaw, player.pitch);
 		} else {
@@ -2315,12 +2367,15 @@ export class ThreeScene implements WorldRuntime {
 		return {
 			anchor: { ...this.currentSharedAnchor() },
 			sky: omitKeys(this.skySettings, LOCAL_SKY_KEYS),
-			weather: pickKeys(this.weather.debug, SHARED_WEATHER_KEYS)
+			weather: pickKeys(this.weather.debug, SHARED_WEATHER_KEYS),
+			rules: { fallDamage: this.sharedFallDamage, playerDamage: this.sharedPlayerDamage }
 		};
 	}
 
 	/** Applies the owner's shared sky, weather and time (welcome, or a live change). */
 	private applySharedEnvironment(env: SharedEnvironment): void {
+		if (env.rules?.fallDamage !== undefined) this.sharedFallDamage = env.rules.fallDamage;
+		if (env.rules?.playerDamage !== undefined) this.sharedPlayerDamage = env.rules.playerDamage;
 		applyKnownFields(this.skySettings, env.sky, LOCAL_SKY_KEYS);
 		ensureDayCycleSettings(this.skySettings);
 		const weather = { ...env.weather };
@@ -3124,15 +3179,184 @@ export class ThreeScene implements WorldRuntime {
 
 	getPlayerState(): SavedPlayerState {
 		const state = this.miniBuildInteraction.controller.state;
-		const position = state.type === 'mini-build' ? state.entry : this.controller.worldPosition;
+		let position: { x: number; y: number; z: number } =
+			state.type === 'mini-build' ? state.entry : this.controller.worldPosition;
+		if (this.health.snapshot().dead) {
+			// A save taken while dead reopens at the spawn with full health (see savedValue).
+			const spot = this.dryGroundNear(0, 0);
+			const ground = this.worldSurfaceSampler.getSupportingSurfaceY(spot.x, spot.z, Infinity);
+			position = { x: spot.x, y: ground + this.settings.player.eyeHeight, z: spot.z };
+		}
+		const health = this.health.savedValue();
 		return {
 			position: { x: position.x, y: position.y, z: position.z },
 			yaw: this.controller.getYaw(),
 			pitch: this.controller.getPitch(),
 			activeFoundationId: this.levelManager.getActiveFoundationId() ?? undefined,
-			currentLevelIndexByFoundation: this.levelManager.getCurrentLevelIndexes()
+			currentLevelIndexByFoundation: this.levelManager.getCurrentLevelIndexes(),
+			...(health !== undefined ? { health } : {})
 		};
 	}
+
+	getRules(): WorldRules {
+		return { ...this.worldRules };
+	}
+
+	/** The "Fall damage" rule in force: this world's, or online the owner's shared one. */
+	getFallDamageRule(): boolean {
+		return this.fallDamageEnabled();
+	}
+
+	/** Settings toggle. Online only the owner can reach it, and it is shared with everyone. */
+	setFallDamageRule(enabled: boolean): void {
+		if (this.multiplayer) {
+			if (this.sharedFallDamage === enabled) return;
+			this.sharedFallDamage = enabled;
+			this.sharedEnvironmentEdited();
+			return;
+		}
+		if (this.worldRules.fallDamage === enabled) return;
+		this.worldRules = { ...this.worldRules, fallDamage: enabled };
+		this.environmentRevision++;
+	}
+
+	/** Settings fields read and assign `fallDamage`; this routes both to the rule above. */
+	private rulesSettingsPort(): { fallDamage: boolean; playerDamage: boolean } {
+		return Object.defineProperties({} as { fallDamage: boolean; playerDamage: boolean }, {
+			fallDamage: {
+				enumerable: true,
+				get: () => this.getFallDamageRule(),
+				set: (enabled: boolean) => this.setFallDamageRule(enabled)
+			},
+			playerDamage: {
+				enumerable: true,
+				get: () => this.sharedPlayerDamage,
+				set: (enabled: boolean) => this.setPlayerDamageRule(enabled)
+			}
+		});
+	}
+
+	/** Online only (the owner): whether punches hurt. Shared with everyone through the room. */
+	setPlayerDamageRule(enabled: boolean): void {
+		if (!this.multiplayer || this.sharedPlayerDamage === enabled) return;
+		this.sharedPlayerDamage = enabled;
+		this.sharedEnvironmentEdited();
+	}
+
+	getHealth(): HealthSnapshot {
+		return this.health.snapshot();
+	}
+
+	/** Back to full health at the world spawn after dying (the death card's Respawn button). */
+	respawnAfterDeath(): void {
+		if (!this.health.snapshot().dead) return;
+		this.health.requestRespawn();
+		this.respawn();
+		this.applyInputBlock();
+	}
+
+	/**
+	 * Test helper: lifts the player `metres` above the ground under them with fall tracking armed,
+	 * so the landing goes through exactly the same path as a real fall.
+	 */
+	debugDropPlayer(metres: number): void {
+		const { x, z } = this.controller.worldPosition;
+		const ground = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity);
+		this.controller.setFlying(false);
+		this.controller.spawn(x, z);
+		this.controller.worldPosition.y = ground + metres + this.settings.player.eyeHeight;
+		this.controller.armFallFromCurrentHeight();
+	}
+
+	private lastStructuralRevision = -1;
+
+	/**
+	 * Q21: when an edit (yours, an undo, or another player's) takes away the floor you are standing
+	 * on, the drop that follows cannot hurt. Only runs when the authored world actually changed.
+	 */
+	private noticeRemovedSupport(): void {
+		const revision = this.getRevisionCounters().structural;
+		if (revision === this.lastStructuralRevision) return;
+		this.lastStructuralRevision = revision;
+		if (!this.controller.isGrounded() || this.controller.isFlying()) return;
+		const { x, y, z } = this.controller.worldPosition;
+		const feetY = y - this.settings.player.eyeHeight;
+		const support = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, feetY);
+		if (support < feetY - SUPPORT_LOSS_TOLERANCE) this.controller.markSupportRemoved();
+	}
+
+	private fallDamageEnabled(): boolean {
+		return this.multiplayer ? this.sharedFallDamage : this.worldRules.fallDamage;
+	}
+
+	/** Online worlds: the owner's fall-damage rule, from the shared environment. */
+	private sharedFallDamage = false;
+
+	/** Online worlds: the owner's player-damage rule (punching), on unless they turn it off. */
+	private sharedPlayerDamage = true;
+	private punchSwingUntil = 0;
+	private nextPunchAt = 0;
+
+	/** Punching is for walking around online: not while building, in a global mode, seated or dead. */
+	canPunch(): boolean {
+		return (
+			PLAYER_HEALTH_ENABLED &&
+			!!this.multiplayer?.punch &&
+			this.sharedPlayerDamage &&
+			this.buildToolManager.isNormalMode() &&
+			this.miniBuildInteraction.controller.state.type === 'none' &&
+			!this.controller.interactionPose &&
+			!this.controller.isFlying() &&
+			!this.debugControlsOpen &&
+			!this.health.snapshot().dead
+		);
+	}
+
+	/** Left click (or the touch Punch button) in normal mode. Returns whether a punch was thrown. */
+	punch(): boolean {
+		const now = performance.now();
+		if (now < this.nextPunchAt || !this.canPunch()) return false;
+		this.nextPunchAt = now + PUNCH_COOLDOWN_MS;
+		this.punchSwingUntil = now + PUNCH_SWING_MS;
+		const { x, y, z } = this.controller.worldPosition;
+		this.multiplayer?.punch?.({
+			x,
+			y,
+			z,
+			yaw: this.controller.getYaw(),
+			pitch: this.controller.getPitch()
+		});
+		return true;
+	}
+
+	private readonly handlePunchMouseDown = (event: MouseEvent): void => {
+		if (event.button !== 0 || !this.controller.isPointerLocked()) return;
+		this.punch();
+	};
+
+	private handleLanding(event: LandingEvent): void {
+		if (!PLAYER_HEALTH_ENABLED || event.immune || !this.fallDamageEnabled()) return;
+		if (fallDamageSegments(event.distance) === 0) return;
+		if (
+			this.hydrology.settings.enabled &&
+			this.hydrology.waterColumnDepth(event.x, event.z) >= FALL_WATER_CANCEL_DEPTH
+		)
+			return;
+		this.health.reportFall(event.distance);
+	}
+
+	private createLocalHealth(saved: unknown): LocalHealthAuthority {
+		return new LocalHealthAuthority(() => this.healthClockMs, this.healthEvents, saved);
+	}
+
+	private readonly healthEvents = {
+		change: (snapshot: HealthSnapshot) => this.onHealthChange?.(snapshot),
+		damaged: (amount: number, source: DamageSource) => this.onPlayerDamaged?.({ amount, source }),
+		death: (source: DamageSource | null) => {
+			this.applyInputBlock();
+			this.onPlayerDeath?.({ source });
+		}
+	};
 
 	private sampleTerrainWithoutShovel = (x: number, z: number): number =>
 		this.foundationManager.sampleEarthHeight(
@@ -3778,7 +4002,10 @@ export class ThreeScene implements WorldRuntime {
 
 		this.doorInteraction.update(deltaSeconds);
 		this.miniBuildInteraction.update(deltaSeconds);
+		this.healthClockMs += deltaSeconds * 1000;
+		this.noticeRemovedSupport();
 		this.controller.update(deltaSeconds);
+		this.health.poll();
 		this.miniBuildInteraction.afterPlayerUpdate(
 			deltaSeconds,
 			this.buildToolManager.isConstructionGestureActive()
@@ -3796,7 +4023,10 @@ export class ThreeScene implements WorldRuntime {
 				flying: this.controller.isFlying(),
 				grounded: this.controller.isGrounded(),
 				running: this.controller.isRunning(),
-				building: this.buildToolManager.isConstructionGestureActive(),
+				// A punch shows to others as the same arm reach the build tools use.
+				building:
+					this.buildToolManager.isConstructionGestureActive() ||
+					performance.now() < this.punchSwingUntil,
 				eyeHeight: this.settings.player.eyeHeight
 			});
 		}
@@ -4030,6 +4260,8 @@ export class ThreeScene implements WorldRuntime {
 
 	dispose(): void {
 		this.disposed = true;
+		this.renderer.domElement.removeEventListener('mousedown', this.handlePunchMouseDown);
+		this.health.dispose();
 		this.multiplayer?.detach();
 		this.multiplayer = null;
 		window.clearTimeout(this.hydrologyRebuildTimer);

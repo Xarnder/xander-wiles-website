@@ -12,13 +12,16 @@ import type { FoundationDefinition } from '../building/FoundationTypes';
 import type { FoundationBuildingDefinition } from '../building/WallTypes';
 import {
 	createDefaultPlayerState,
+	createDefaultWorldRules,
 	createEmptyProceduralOverrides,
 	CURRENT_WORLD_SCHEMA_VERSION,
 	type ProceduralWorldOverrides,
 	type SavedPlayerState,
 	type WorldDefinition,
-	type WorldEnvironmentDefinition
+	type WorldEnvironmentDefinition,
+	type WorldRules
 } from './WorldTypes';
+import { savedHealthValue } from '../player/PlayerHealth';
 
 /**
  * Counters the autosave manager polls to decide whether anything actually changed, without
@@ -53,6 +56,7 @@ export interface WorldRuntime {
 	getBuildings(): FoundationBuildingDefinition[];
 	getBuildingLevels(): BuildingLevelDefinition[];
 	getPlayerState(): SavedPlayerState;
+	getRules?(): WorldRules;
 	getProceduralOverrides(): ProceduralWorldOverrides;
 	getRevisionCounters(): WorldRevisionCounters;
 }
@@ -71,6 +75,7 @@ export interface WorldContentSnapshot {
 	buildingLevels: BuildingLevelDefinition[];
 	proceduralOverrides: ProceduralWorldOverrides;
 	player: SavedPlayerState;
+	rules?: WorldRules;
 }
 
 /**
@@ -99,7 +104,8 @@ export function captureWorldContent(runtime: WorldRuntime): WorldContentSnapshot
 		buildings: runtime.getBuildings(),
 		buildingLevels: runtime.getBuildingLevels(),
 		proceduralOverrides: runtime.getProceduralOverrides(),
-		player: sanitizePlayerState(runtime.getPlayerState())
+		player: sanitizePlayerState(runtime.getPlayerState()),
+		...(runtime.getRules ? { rules: runtime.getRules() } : {})
 	});
 }
 
@@ -123,6 +129,7 @@ export function applyContentToWorld(
 		buildingLevels: content.buildingLevels,
 		proceduralOverrides: content.proceduralOverrides,
 		player: content.player,
+		...(content.rules ? { rules: content.rules } : {}),
 		// The world's seed is authoritative over the terrain settings copy, so a world can never end
 		// up generating from a different seed than the one the Worlds screen shows.
 		seed: world.seed,
@@ -174,7 +181,8 @@ export function createWorldDefinition({
 		buildings: [],
 		buildingLevels: [],
 		proceduralOverrides: createEmptyProceduralOverrides(),
-		player: createDefaultPlayerState()
+		player: createDefaultPlayerState(),
+		rules: createDefaultWorldRules()
 	};
 }
 
@@ -197,7 +205,10 @@ export function sanitizePlayerState(player: SavedPlayerState): SavedPlayerState 
 		yaw: safeAngle(player.yaw ?? 0),
 		pitch: safeAngle(player.pitch ?? 0),
 		activeFoundationId: player.activeFoundationId,
-		currentLevelIndexByFoundation: player.currentLevelIndexByFoundation ?? {}
+		currentLevelIndexByFoundation: player.currentLevelIndexByFoundation ?? {},
+		...(savedHealthValue(player.health) !== undefined
+			? { health: savedHealthValue(player.health) }
+			: {})
 	};
 }
 

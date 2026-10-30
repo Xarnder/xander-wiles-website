@@ -155,6 +155,8 @@ export interface GameSettingsHost {
 	 * everyone else is a `member`. See `lockOnlineSettings`.
 	 */
 	worldAccess?: 'local' | 'owner' | 'member';
+	/** This world's gameplay rules; online, the owner's (assigning applies them). */
+	rules?: { fallDamage: boolean; playerDamage: boolean };
 	actions: GameSettingsActions;
 }
 

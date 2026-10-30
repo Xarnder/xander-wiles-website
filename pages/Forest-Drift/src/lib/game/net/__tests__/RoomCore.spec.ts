@@ -181,7 +181,11 @@ describe('RoomCore handshake', () => {
 		expect(b.last('welcome')!.slot).toBe(1);
 		expect(b.last('welcome')!.role).toBe('viewer');
 		expect(b.last('welcome')!.capability).toBe('cap.player-bbbb.viewer');
-		expect(b.last('welcome')!.rules).toEqual({ maxSpeed: maxSpeedForRunSpeed(12), flight: false });
+		expect(b.last('welcome')!.rules).toEqual({
+			maxSpeed: maxSpeedForRunSpeed(12),
+			flight: false,
+			fallDamage: false
+		});
 		expect(b.last('welcome')!.players.map((p) => [p.name, p.role])).toEqual([
 			['Alex', 'owner'],
 			['Bea', 'viewer']

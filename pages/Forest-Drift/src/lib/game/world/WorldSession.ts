@@ -8,7 +8,7 @@ import type { GraphicsQuality } from '../graphics/GraphicsTypes';
 import type { SceneMultiplayerHooks } from '../net/MultiplayerSession';
 import { createDefaultSkySettings } from '../sky/SkyTypes';
 import { createDefaultTerrainSettings } from '../terrain/TerrainSettings';
-import { ThreeScene, type SceneStats } from '../ThreeScene';
+import { ThreeScene, type SceneStats, type ThreeSceneOptions } from '../ThreeScene';
 import { createDefaultVegetationSettings } from '../vegetation/VegetationTypes';
 import { WorldAutosaveManager, type SaveTrigger } from './WorldAutosaveManager';
 import type { WorldManager } from './WorldManager';
@@ -38,6 +38,9 @@ export interface WorldSessionOptions {
 	onRequestFoundationDelete?: (foundationId: string) => void;
 	onMiniBuildEditRequest?: (instanceId: string) => void;
 	onMiniBuildNotice?: (message: string) => void;
+	onHealthChange?: ThreeSceneOptions['onHealthChange'];
+	onPlayerDamaged?: ThreeSceneOptions['onPlayerDamaged'];
+	onPlayerDeath?: ThreeSceneOptions['onPlayerDeath'];
 	/** An online world's connection to its room (see `MultiplayerSession`). */
 	multiplayer?: SceneMultiplayerHooks;
 	/**
@@ -96,6 +99,9 @@ export class WorldSession {
 			onRequestFoundationDelete: options.onRequestFoundationDelete,
 			onMiniBuildEditRequest: options.onMiniBuildEditRequest,
 			onMiniBuildNotice: options.onMiniBuildNotice,
+			onHealthChange: options.onHealthChange,
+			onPlayerDamaged: options.onPlayerDamaged,
+			onPlayerDeath: options.onPlayerDeath,
 			multiplayer: options.multiplayer
 		});
 

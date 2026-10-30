@@ -656,8 +656,8 @@ export function buildSettingsCatalog(host: GameSettingsHost): SettingsCategory[]
 
 /** Categories that shape the land itself: identical for everyone, so locked once a world is online. */
 const LAND_CATEGORY_IDS = new Set(['world', 'terrain', 'vegetation', 'player']);
-/** The owner's in an online world (Q14-A): sky and time of day. */
-const OWNER_CATEGORY_IDS = new Set(['sky']);
+/** The owner's in an online world (Q14-A): sky and time of day, and the gameplay rules (Q22). */
+const OWNER_CATEGORY_IDS = new Set(['sky', 'rules']);
 /** Weather groups everyone shares; the owner changes them. */
 const OWNER_WEATHER_GROUP_IDS = new Set(['weather-manual', 'weather-current']);
 const OWNER_WEATHER_FIELD_IDS = new Set(['weather.allowSnow']);
@@ -1131,6 +1131,31 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 				])
 			]
 		},
+		...(host.rules
+			? [
+					{
+						id: 'rules',
+						title: 'Rules',
+						description: 'Gameplay rules for this world.',
+						groups: [
+							group('rules-health', 'Health', [
+								boolField('rules.fallDamage', 'Fall damage', host.rules, 'fallDamage'),
+								// Punching only exists in online worlds.
+								...(host.worldAccess && host.worldAccess !== 'local'
+									? [
+											boolField(
+												'rules.playerDamage',
+												'Player damage (punching)',
+												host.rules,
+												'playerDamage'
+											)
+										]
+									: [])
+							])
+						]
+					}
+				]
+			: []),
 		...weatherCategories(host),
 		...creatureCategories(host),
 		{

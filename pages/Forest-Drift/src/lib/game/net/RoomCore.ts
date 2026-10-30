@@ -1,4 +1,15 @@
 import { obbsOverlap } from '../miniBuild/miniBuildGrid';
+import { FALL_REPORT_MAX_DISTANCE, fallDamageSegments } from '../player/fallDamage';
+import { PUNCH_COOLDOWN_MS, PUNCH_DAMAGE, punchPlausible } from '../player/punch';
+import {
+	HEALTH_MAX,
+	createHealthState,
+	damageHealth,
+	healthAt,
+	reviveHealth,
+	type DamageSource,
+	type HealthState
+} from '../player/PlayerHealth';
 import { entityKey } from './worldEntities';
 import {
 	validateMiniBuildDefinition,
@@ -120,7 +131,16 @@ export interface RoomPersistence {
 	loadPlayer?(playerId: string): { name: string; bookmark: PlayerBookmark | null } | null;
 	/** Everyone who has been in this world, for "Sam added this" notices. */
 	playerNames?(): Record<string, string>;
+	/**
+	 * A player's health, written whenever it changes (rare: a hit or a respawn) so it survives the
+	 * Durable Object hibernating with the player still here. Null clears it (full health).
+	 */
+	savePlayerHealth?(playerId: string, health: StoredHealth | null): void;
+	loadPlayerHealth?(playerId: string): StoredHealth | null;
 }
+
+/** Health as stored per player: the shared rules' state without the transient grace period. */
+export type StoredHealth = Omit<HealthState, 'graceUntil'>;
 
 export interface CommitRecord {
 	commit: CommitMessage;
@@ -144,6 +164,8 @@ export interface RoomCoreOptions {
 	 * (F3-C), so this is the published run speed plus a margin (see `maxSpeedForRunSpeed`).
 	 */
 	maxSpeed?: number;
+	/** Whether long falls hurt, until the owner shares a rule of their own (Q1, Q22). */
+	fallDamage?: boolean;
 	persistence?: RoomPersistence;
 	restored?: {
 		grace?: GraceEntry[];
@@ -169,6 +191,14 @@ export interface RoomStats {
 	jsonMessagesIn: number;
 	messagesDropped: number;
 	helloRejected: number;
+	/** Fall reports that cost health. */
+	fallsApplied: number;
+	/** Fall reports longer than the drop the room saw in that player's poses (capped, not rejected). */
+	fallMismatches: number;
+	/** Punches that cost the target health. */
+	punchesLanded: number;
+	/** Punches the room refused because the two players' poses were too far apart or misaligned. */
+	punchesRejected: number;
 }
 
 interface StoredPose {
@@ -199,7 +229,24 @@ interface PlayerState {
 	speedRejectSince: number | null;
 	opsWindowStart: number;
 	opsInWindow: number;
+	/** Loaded on first use (see `healthOf`). */
+	health: HealthState | null;
+	/** The airborne spell the poses show right now: its highest feet height. */
+	air: { peakY: number } | null;
+	/** Recent landings seen in the poses, newest last, to check fall reports against. */
+	landings: { drop: number; at: number }[];
+	lastFallId: number;
+	lastFallAt: number;
+	lastPunchId: number;
+	lastPunchAt: number;
 }
+
+/** At most four fall reports a second per player. */
+const FALL_MIN_INTERVAL_MS = 250;
+/** How far apart a reported landing and one seen in the poses may be, ms. */
+const FALL_MATCH_WINDOW_MS = 1500;
+/** Pose sampling can miss the top of a jump; reports this much over the observed drop are fine. */
+const FALL_SLACK_METRES = 1.5;
 
 /** Room keeps ticking this long after the last pose, then goes quiet so the Durable Object can hibernate. */
 const IDLE_AFTER_MS = 2000;
@@ -250,7 +297,11 @@ export class RoomCore {
 		snapshotBytesSent: 0,
 		jsonMessagesIn: 0,
 		messagesDropped: 0,
-		helloRejected: 0
+		helloRejected: 0,
+		fallsApplied: 0,
+		fallMismatches: 0,
+		punchesLanded: 0,
+		punchesRejected: 0
 	};
 
 	private readonly world: RoomWorldInfo;
@@ -263,6 +314,7 @@ export class RoomCore {
 	private readonly now: () => number;
 	private readonly maxPlayers: number;
 	private readonly maxSpeed: number;
+	private readonly fallDamage: boolean;
 	private readonly persistence: RoomPersistence | null;
 	private storeValue: WorldStore | null;
 	private readonly storeLoader: (() => WorldStore) | null;
@@ -291,6 +343,7 @@ export class RoomCore {
 		this.now = options.now ?? (() => Date.now());
 		this.maxPlayers = Math.max(1, Math.min(255, options.maxPlayers ?? MAX_PLAYERS_PER_WORLD));
 		this.maxSpeed = options.maxSpeed ?? DEFAULT_MAX_SPEED;
+		this.fallDamage = options.fallDamage ?? false;
 		this.persistence = options.persistence ?? null;
 		const store = options.store ?? null;
 		this.storeValue = typeof store === 'function' ? null : store;
@@ -558,6 +611,18 @@ export class RoomCore {
 			this.broadcastInteractions(id);
 			return;
 		}
+		if (message.t === 'fall') {
+			if (player) this.handleFall(player, message);
+			return;
+		}
+		if (message.t === 'respawn') {
+			if (player) this.handleRespawn(player);
+			return;
+		}
+		if (message.t === 'punch') {
+			if (player) this.handlePunch(player, message);
+			return;
+		}
 		if (message.t === 'door') {
 			if (!player) return;
 			if (message.open) this.openDoors.add(message.id);
@@ -714,6 +779,7 @@ export class RoomCore {
 		this.saveGrace();
 		const saved = this.persistence?.loadPlayer?.(info.playerId) ?? null;
 		this.persistence?.savePlayer?.(info.playerId, info.name, saved?.bookmark ?? null);
+		if (!existing) player.health = this.healthOnJoin(info.playerId, now);
 		const catchUp = this.catchUpFor(hello);
 
 		send(conn, {
@@ -727,11 +793,12 @@ export class RoomCore {
 			world: { worldId: this.world.worldId, name: this.world.name },
 			clock: this.clockState(now),
 			env: this.env,
-			rules: { maxSpeed: this.maxSpeed, flight: false },
+			rules: { maxSpeed: this.maxSpeed, flight: false, fallDamage: this.fallDamage },
 			epoch: this.version()?.epoch ?? 0,
 			seq: this.version()?.seq ?? 0,
 			resync: catchUp === null,
 			bookmark: saved?.bookmark ?? null,
+			health: this.healthOf(player, now),
 			doors: [...this.openDoors],
 			interactions: this.interactionList(),
 			names: this.playerNames()
@@ -913,6 +980,7 @@ export class RoomCore {
 			}
 		}
 		player.speedRejectSince = null;
+		this.trackAir(player, pose.flags, pose.y, sampleTime);
 
 		player.pose = {
 			flags: pose.flags,
@@ -941,14 +1009,25 @@ export class RoomCore {
 		if (player.conn) this.byConn.delete(player.conn);
 		this.broadcast({ t: 'left', slot: player.info.slot, playerId: player.info.playerId });
 		this.saveGrace();
-		// Q18: next time, they start where they left.
+		// Q18: next time, they start where they left. F2: with the health they left with — except
+		// after dying, when they come back at the world spawn with full health.
 		const pose = player.pose;
+		const now = this.now();
+		const health = this.healthOf(player, now);
 		this.persistence?.savePlayer?.(
 			player.info.playerId,
 			player.info.name,
-			pose
-				? { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, pitch: pose.pitch }
-				: (this.persistence?.loadPlayer?.(player.info.playerId)?.bookmark ?? null)
+			health.dead
+				? null
+				: pose
+					? { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, pitch: pose.pitch }
+					: (this.persistence?.loadPlayer?.(player.info.playerId)?.bookmark ?? null)
+		);
+		// Stored as of leaving, so time away never heals (regeneration restarts on the next join).
+		const points = healthAt(health, now);
+		this.persistence?.savePlayerHealth?.(
+			player.info.playerId,
+			health.dead || points >= HEALTH_MAX ? null : { base: points, lastDamageAt: now, dead: false }
 		);
 		if (this.players.size === 0) {
 			this.stopClock(this.now());
@@ -1093,8 +1172,187 @@ export class RoomCore {
 			graceExpiresAt: null,
 			speedRejectSince: null,
 			opsWindowStart: this.now(),
-			opsInWindow: 0
+			opsInWindow: 0,
+			health: null,
+			air: null,
+			landings: [],
+			lastFallId: -1,
+			lastFallAt: Number.NEGATIVE_INFINITY,
+			lastPunchId: -1,
+			lastPunchAt: Number.NEGATIVE_INFINITY
 		};
+	}
+
+	/** The fall-damage rule in force: the owner's shared one, else the published world's. */
+	private fallDamageEnabled(): boolean {
+		return this.env?.rules?.fallDamage ?? this.fallDamage;
+	}
+
+	/**
+	 * This player's health, loading it on first use. After hibernation the stored record still
+	 * holds the exact last-hit time, so regeneration carries on as if nothing happened.
+	 */
+	private healthOf(player: PlayerState, now: number): HealthState {
+		if (player.health) return player.health;
+		const stored = this.persistence?.loadPlayerHealth?.(player.info.playerId) ?? null;
+		player.health = stored && !stored.dead ? { ...stored, graceUntil: 0 } : createHealthState(now);
+		return player.health;
+	}
+
+	/** A fresh join: the health they left with, regeneration restarting now, plus the grace period. */
+	private healthOnJoin(playerId: string, now: number): HealthState {
+		const stored = this.persistence?.loadPlayerHealth?.(playerId) ?? null;
+		if (!stored || stored.dead) return createHealthState(now);
+		return createHealthState(now, healthAt({ ...stored, graceUntil: 0 }, stored.lastDamageAt));
+	}
+
+	private setHealth(
+		player: PlayerState,
+		health: HealthState,
+		ack?: number,
+		source?: DamageSource
+	): void {
+		player.health = health;
+		this.persistence?.savePlayerHealth?.(player.info.playerId, {
+			base: health.base,
+			lastDamageAt: health.lastDamageAt,
+			dead: health.dead
+		});
+		this.sendHealth(player, ack, source);
+	}
+
+	private sendHealth(player: PlayerState, ack?: number, source?: DamageSource): void {
+		if (!player.conn || !player.health) return;
+		send(player.conn, {
+			t: 'health',
+			state: { ...player.health },
+			...(ack !== undefined ? { ack } : {}),
+			...(source ? { source } : {})
+		});
+	}
+
+	/** The owner's player-damage rule; on unless they turn it off. */
+	private playerDamageEnabled(): boolean {
+		return this.env?.rules?.playerDamage ?? true;
+	}
+
+	/**
+	 * A punch (online only). The room decides everything: whether it may land (rule, role, cooldown,
+	 * both alive, the attacker not seated, both poses close and facing) and the damage. Only the
+	 * attacker hears whether it landed, and only the target hears its new health.
+	 */
+	private handlePunch(player: PlayerState, message: { id: number; target: number }): void {
+		if (message.id <= player.lastPunchId) return;
+		player.lastPunchId = message.id;
+		const reply = (hit: boolean) => {
+			if (player.conn) send(player.conn, { t: 'punchResult', id: message.id, hit });
+		};
+		const now = this.now();
+		if (
+			!this.playerDamageEnabled() ||
+			player.info.role === 'viewer' ||
+			now - player.lastPunchAt < PUNCH_COOLDOWN_MS
+		) {
+			reply(false);
+			return;
+		}
+		player.lastPunchAt = now;
+		const target = this.findBySlot(message.target);
+		if (
+			!target ||
+			target === player ||
+			!target.conn ||
+			!player.pose ||
+			!target.pose ||
+			this.healthOf(player, now).dead ||
+			this.interactions.has(player.info.playerId)
+		) {
+			reply(false);
+			return;
+		}
+		if (!punchPlausible(player.pose, target.pose)) {
+			this.stats.punchesRejected++;
+			reply(false);
+			return;
+		}
+		const result = damageHealth(this.healthOf(target, now), PUNCH_DAMAGE, now);
+		if (result.applied === 0) {
+			reply(false);
+			return;
+		}
+		this.stats.punchesLanded++;
+		this.setHealth(target, result.state, undefined, { kind: 'player', by: player.info.slot });
+		reply(true);
+	}
+
+	/**
+	 * Follows each airborne spell in the poses (feet height) so fall reports can be checked against
+	 * what the room actually saw. Flight and teleports end a spell without a landing.
+	 */
+	private trackAir(player: PlayerState, flags: number, y: number, at: number): void {
+		if (flags & (POSE_FLAGS.flying | POSE_FLAGS.teleport)) {
+			player.air = null;
+			return;
+		}
+		if (flags & POSE_FLAGS.grounded) {
+			if (!player.air) return;
+			player.landings.push({ drop: Math.max(0, player.air.peakY - y), at });
+			if (player.landings.length > 3) player.landings.shift();
+			player.air = null;
+			return;
+		}
+		const start = player.pose && !(player.pose.flags & POSE_FLAGS.flying) ? player.pose.y : y;
+		player.air = { peakY: Math.max(player.air?.peakY ?? start, y) };
+	}
+
+	/**
+	 * A fall report can only lower the sender's own health, so it is trusted up to what the poses
+	 * showed: a report longer than an observed drop (plus sampling slack) is capped and counted, and
+	 * a report with no observed landing (poses dropped or not yet arrived) is taken as sent.
+	 */
+	private handleFall(player: PlayerState, message: { id: number; d: number; at: number }): void {
+		if (message.id <= player.lastFallId) return;
+		player.lastFallId = message.id;
+		const now = this.now();
+		const health = this.healthOf(player, now);
+		if (
+			!this.fallDamageEnabled() ||
+			message.d > FALL_REPORT_MAX_DISTANCE ||
+			now - player.lastFallAt < FALL_MIN_INTERVAL_MS
+		) {
+			this.sendHealth(player, message.id);
+			return;
+		}
+		player.lastFallAt = now;
+		let distance = message.d;
+		const observed = player.landings.filter(
+			(landing) => Math.abs(landing.at - message.at) <= FALL_MATCH_WINDOW_MS
+		);
+		if (observed.length > 0) {
+			const drop = Math.max(...observed.map((landing) => landing.drop));
+			if (distance > drop + FALL_SLACK_METRES) {
+				this.stats.fallMismatches++;
+				distance = drop + FALL_SLACK_METRES;
+			}
+		}
+		const result = damageHealth(health, fallDamageSegments(distance), now);
+		if (result.applied === 0) {
+			this.sendHealth(player, message.id);
+			return;
+		}
+		this.stats.fallsApplied++;
+		this.setHealth(player, result.state, message.id);
+	}
+
+	private handleRespawn(player: PlayerState): void {
+		const now = this.now();
+		if (!this.healthOf(player, now).dead) {
+			this.sendHealth(player);
+			return;
+		}
+		player.air = null;
+		player.landings = [];
+		this.setHealth(player, reviveHealth(now));
 	}
 
 	private findBySlot(slot: number): PlayerState | undefined {

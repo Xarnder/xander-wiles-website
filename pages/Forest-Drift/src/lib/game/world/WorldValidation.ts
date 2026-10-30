@@ -699,6 +699,15 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	if (!isFiniteNumber(value.player.yaw) || !isFiniteNumber(value.player.pitch)) {
 		return fail('Player yaw/pitch must be finite numbers');
 	}
+	if (value.player.health !== undefined && !isFiniteNumber(value.player.health)) {
+		return fail('Player health must be a finite number');
+	}
+	if (value.rules !== undefined) {
+		if (!isRecord(value.rules)) return fail('World rules must be an object');
+		if (value.rules.fallDamage !== undefined && typeof value.rules.fallDamage !== 'boolean') {
+			return fail('rules.fallDamage must be true or false');
+		}
+	}
 
 	const referenceError = validateReferences(
 		foundationIds,

@@ -264,6 +264,7 @@ function playerSignature(player: SavedPlayerState): string {
 		round(player.position.z),
 		round(player.yaw),
 		round(player.pitch),
-		player.activeFoundationId ?? ''
+		player.activeFoundationId ?? '',
+		player.health ?? ''
 	].join('|');
 }

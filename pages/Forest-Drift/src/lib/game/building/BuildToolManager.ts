@@ -394,6 +394,11 @@ export class BuildToolManager {
 		this.setBuildMode(!this.buildModeActive);
 	}
 
+	/** Neither building nor in a global mode (music, remove, paint, move): plain walking around. */
+	isNormalMode(): boolean {
+		return !this.buildModeActive && this.globalMode === 'none';
+	}
+
 	/** Hold the reach throughout placement; brief follow-through after single-click actions. */
 	isConstructionGestureActive(): boolean {
 		const tool =

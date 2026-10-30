@@ -38,6 +38,17 @@ describe('numeric safety', () => {
 		expectRejected(world, /finite/i);
 	});
 
+	it('accepts saved health and rules, and rejects malformed ones', () => {
+		const world = richWorld();
+		world.player.health = 12;
+		world.rules = { fallDamage: true };
+		expect(validateWorldDefinition(world).ok).toBe(true);
+		expectRejected({ ...world, player: { ...world.player, health: Number.NaN } }, /health/i);
+		expectRejected({ ...world, player: { ...world.player, health: '12' } }, /health/i);
+		expectRejected({ ...world, rules: { fallDamage: 'yes' } }, /fallDamage/);
+		expectRejected({ ...world, rules: 'on' }, /rules/i);
+	});
+
 	it('rejects a zero or negative terrain chunk size', () => {
 		const world = richWorld();
 		world.environment.terrain.chunkSize = 0;

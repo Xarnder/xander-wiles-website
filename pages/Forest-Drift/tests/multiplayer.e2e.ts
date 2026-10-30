@@ -1062,3 +1062,63 @@ test('open doors persist through a real room-server restart and reach a late joi
 	});
 	await expect.poll(() => hasDoor(visitor)).toBe(false);
 });
+
+test('punching: a punch in normal mode costs the other player health, privately', async ({
+	browser
+}) => {
+	test.setTimeout(600_000);
+	const owner = await newPlayer(browser);
+	await openOwnerTab(owner);
+	await owner.getByTestId('owner-password').fill(ADMIN_KEY);
+	await owner.getByTestId('owner-create-invites').click();
+	await expect(owner.getByTestId('owner-publish-success')).toBeVisible({ timeout: 30_000 });
+	const { editorLink } = await ownerLinks(owner);
+	await owner.getByRole('button', { name: 'Join as owner', exact: true }).click();
+	await joinWorld(owner, 'Puncher');
+
+	const target = await newPlayer(browser);
+	await target.goto(editorLink);
+	await joinWorld(target, 'Target');
+	await expect.poll(() => playerCount(owner), { timeout: 15_000 }).toBe('2 players');
+
+	type Scene = {
+		controller: { spawn(x: number, z: number): void; yaw: number };
+		toggleBuildMode(): void;
+		canPunch(): boolean;
+		punch(): boolean;
+		getHealth(): { current: number; dead: boolean };
+	};
+	const scene = (page: Page) =>
+		page.evaluateHandle(
+			() => (window as unknown as { __forestSession: { scene: Scene } }).__forestSession.scene
+		);
+
+	// Stand 1.5 m apart, the puncher facing the target (yaw 0 faces −Z), past the join grace period.
+	await (await scene(target)).evaluate((s) => s.controller.spawn(6, 4.5));
+	await (
+		await scene(owner)
+	).evaluate((s) => {
+		s.controller.spawn(6, 6);
+		s.controller.yaw = 0;
+	});
+	await owner.waitForTimeout(3000);
+
+	// Building: a click builds, it doesn't punch.
+	expect(await (await scene(owner)).evaluate((s) => s.canPunch())).toBe(false);
+	await (await scene(owner)).evaluate((s) => s.toggleBuildMode());
+	await expect.poll(async () => (await scene(owner)).evaluate((s) => s.canPunch())).toBe(true);
+
+	await (await scene(owner)).evaluate((s) => s.punch());
+	await expect(target.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '34', {
+		timeout: 10_000
+	});
+	await expect(target.getByTestId('health-count')).toHaveText('34/36');
+	// The puncher sees the hit, but not the target's health.
+	await expect(owner.getByTestId('punch-hit-marker')).toBeAttached();
+	await expect(owner.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '36');
+
+	// The room enforces a cooldown: an immediate second punch does nothing.
+	await (await scene(owner)).evaluate((s) => s.punch());
+	await target.waitForTimeout(1000);
+	await expect(target.getByTestId('health-bar')).toHaveAttribute('aria-valuenow', '34');
+});

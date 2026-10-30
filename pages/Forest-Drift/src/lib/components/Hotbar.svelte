@@ -11,6 +11,8 @@
 		moveModeActive?: boolean;
 		musicModeActive?: boolean;
 		showGlobalModes?: boolean;
+		/** Placed by a parent stack (with the health bar) instead of fixing itself to the screen. */
+		embedded?: boolean;
 		onCycleVariant?: (direction: -1 | 1) => void;
 		onSelectSlot?: (slot: number) => void;
 		onToggleRemoveMode?: () => void;
@@ -26,6 +28,7 @@
 		moveModeActive = false,
 		musicModeActive = false,
 		showGlobalModes = true,
+		embedded = false,
 		onCycleVariant,
 		onSelectSlot,
 		onToggleRemoveMode,
@@ -84,7 +87,7 @@
 	);
 </script>
 
-<div class="hotbar" class:build={showGlobalModes} data-testid="hotbar">
+<div class="hotbar" class:build={showGlobalModes} class:embedded data-testid="hotbar">
 	<div class="tool-tray" bind:this={tray}>
 		{#each slots as slot (slot.slot)}
 			<button
@@ -195,6 +198,12 @@
 		max-width: calc(100vw - 1.5rem);
 		font-family: system-ui, sans-serif;
 		color: #edf5e9;
+	}
+	.hotbar.embedded {
+		position: relative;
+		bottom: auto;
+		left: auto;
+		transform: none;
 	}
 	.tool-tray {
 		display: flex;
@@ -389,7 +398,8 @@
 	}
 	.subtool-panel.above {
 		left: 50%;
-		bottom: calc(100% + 10px);
+		/* Clears whatever the parent stack puts above the tray (the health bar). */
+		bottom: calc(100% + 10px + var(--hud-above-hotbar, 0px));
 		transform: translateX(-50%);
 		text-align: center;
 	}

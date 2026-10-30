@@ -115,7 +115,9 @@ async function publish(
 		generatorVersion: body.generatorVersion,
 		publishedAt: new Date().toISOString(),
 		byteLength,
-		maxSpeed: maxSpeedForRunSpeed(Number(player?.runSpeed))
+		maxSpeed: maxSpeedForRunSpeed(Number(player?.runSpeed)),
+		// The world's own rule as published (absent before rules existed: off, per Q1).
+		fallDamage: isRecord(world.rules) && world.rules.fallDamage === true
 	};
 	// One link per role (Q3-A). Only the tokens' hashes are stored; the tokens go back to the
 	// publisher once, in this response, and live on only in the links they share.
