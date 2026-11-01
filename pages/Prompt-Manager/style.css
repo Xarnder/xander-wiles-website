@@ -232,9 +232,23 @@ textarea {
     margin-bottom: 16px;
     font-family: inherit;
     font-size: 1rem;
-    transition: border-color 0.3s, box-shadow 0.3s, height 0.1s ease;
+    /* Do not animate height. iOS Safari will try to interpolate a jump of
+       thousands of pixels after a large paste and can wedge the tab. */
+    transition: border-color 0.3s, box-shadow 0.3s;
     resize: none;
     overflow-y: hidden;
+}
+
+#prompt-title,
+#prompt-category {
+    max-height: 120px;
+}
+
+#prompt-content,
+#prompt-code,
+#add-prompt-modal textarea.dynamic-content {
+    max-height: min(320px, 42dvh);
+    overscroll-behavior: contain;
 }
 
 input[type="text"]:focus,
@@ -727,13 +741,22 @@ input[type="range"]::-webkit-slider-thumb {
     width: 95%;
     max-width: 900px;
     max-height: 95vh;
+    max-height: 95dvh;
     overflow-y: auto;
+    overscroll-behavior: contain;
     margin-bottom: 0;
     /* Reset margin from glass-card */
     transform: scale(0.9);
     animation: scaleUp 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
     padding: 0 50px 50px;
     padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+}
+
+/* The card hover lift turns the open editor into a transformed layer.
+   On iPhone that repaint, plus the keyboard, is enough to freeze Safari. */
+.modal-content.glass-card:hover {
+    transform: scale(1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 .slim-modal {
@@ -878,6 +901,29 @@ mark.search-highlight {
 
 .ios-pwa .modal-content {
     padding-top: calc(var(--pwa-gap) - 20px + env(safe-area-inset-top, 0px)) !important;
+}
+
+/* iPhone Safari wedges when several backdrop-filters are composited over a
+   tall text layer while the keyboard is opening. Keep the editor opaque there. */
+@media (hover: none) and (pointer: coarse) {
+    #add-prompt-modal {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: rgba(8, 4, 16, 0.94);
+    }
+
+    #add-prompt-modal .modal-content,
+    #add-prompt-modal .modal-header,
+    #add-prompt-modal .modal-footer-actions {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: #140e22;
+    }
+
+    body:has(#add-prompt-modal:not(.hidden)) .bg-orb {
+        animation: none;
+        visibility: hidden;
+    }
 }
 
 .modal-content::-webkit-scrollbar {
@@ -1236,9 +1282,76 @@ mark.search-highlight {
     flex-wrap: wrap;
 }
 
-.filter-row:nth-child(2) {
+.filter-row + .filter-row {
     margin-top: 12px;
     /* Added padding/margin above filters and sort */
+}
+
+.search-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.search-progress-track {
+    height: 6px;
+    width: 100%;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.search-progress-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #7b2cbf, #4cc9f0);
+    box-shadow: 0 0 12px rgba(76, 201, 240, 0.45);
+    transition: width 0.18s ease;
+}
+
+.search-progress-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    min-height: 1em;
+}
+
+.search-hit {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.search-hit-label {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #c4b5fd;
+}
+
+.search-score {
+    margin-top: 6px;
+    height: 4px;
+    width: 100%;
+    max-width: 180px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.search-score span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #7209b7, #4cc9f0);
 }
 
 .sort-group {

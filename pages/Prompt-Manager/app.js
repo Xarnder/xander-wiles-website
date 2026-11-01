@@ -321,13 +321,13 @@ function handleModeChange() {
     // Update labels
     if (currentMode === 'command') {
         openModalBtn.textContent = '+ New Command';
-        searchInput.placeholder = 'Search commands...';
+        searchInput.placeholder = 'Search titles, commands, and notes...';
     } else if (currentMode === 'link') {
         openModalBtn.textContent = '+ New Link';
-        searchInput.placeholder = 'Search links...';
+        searchInput.placeholder = 'Search names and links...';
     } else {
         openModalBtn.textContent = '+ New Prompt';
-        searchInput.placeholder = 'Search prompts (Ctrl+K)...';
+        searchInput.placeholder = 'Search titles and prompt text (Ctrl+K)...';
     }
     
     // Reset filters and search
@@ -339,20 +339,183 @@ function handleModeChange() {
     applyFilters();
 }
 
-// Textarea Auto-Resize Logic
-const autoResizeTextarea = (el) => {
+// Textarea auto-resize.
+// A large paste used to set the field to its full scroll height (often tens of
+// thousands of pixels) inside a fixed, blurred modal. Focusing the title then
+// opened the iOS keyboard and WebKit tried to scroll that giant layer into
+// view, which froze the PWA until it was force-quit. Cap the box and let the
+// field scroll internally. Skip layout measurement once the text is obviously
+// taller than the cap — reading scrollHeight on a huge value is itself enough
+// to hang iOS Safari.
+const textareaResizeState = new WeakMap();
+let textareaResizeFrame = 0;
+let textareaResizePending = new Set();
+
+function textareaHeightCap(el) {
+    const id = el && el.id;
+    if (id === 'prompt-title' || id === 'prompt-category') return 120;
+    const viewport = window.visualViewport?.height || window.innerHeight || 800;
+    return Math.max(140, Math.min(320, Math.round(viewport * 0.42)));
+}
+
+function minTextareaHeight(el) {
+    const rows = Number(el.getAttribute('rows')) || 2;
+    return rows * 24 + 32;
+}
+
+function estimateContentHeight(el) {
+    const value = el.value;
+    const width = el.clientWidth || 280;
+    // Slightly narrow so a paste that will overflow the cap never pays for a
+    // full iOS text layout just to discover that.
+    const wrapAt = Math.max(20, Math.floor((width - 28) / 8));
+    let lines = 1;
+    let column = 0;
+    for (let i = 0; i < value.length; i++) {
+        if (value.charCodeAt(i) === 10) {
+            lines++;
+            column = 0;
+        } else if (++column >= wrapAt) {
+            lines++;
+            column = 0;
+        }
+    }
+    return lines * 24 + 32;
+}
+
+function applyTextareaHeight(el) {
+    // Skip while the field or the modal is display:none. Measuring then caches
+    // a bogus height, and iOS will reuse it after the keyboard opens.
+    if (!el || !el.isConnected || el.closest('.hidden')) return;
+    const cap = textareaHeightCap(el);
+    const length = el.value.length;
+    const cached = textareaResizeState.get(el);
+    if (cached && cached.length === length) {
+        const needed = cached.tallerThanCap ? Infinity : cached.needed;
+        const next = Math.min(needed, cap);
+        const overflow = needed > cap + 2 ? 'auto' : 'hidden';
+        if (el.style.height !== `${next}px`) el.style.height = `${next}px`;
+        if (el.style.overflowY !== overflow) el.style.overflowY = overflow;
+        return;
+    }
+
+    if (length > 0 && estimateContentHeight(el) > cap) {
+        el.style.height = `${cap}px`;
+        el.style.overflowY = 'auto';
+        textareaResizeState.set(el, { length, tallerThanCap: true });
+        return;
+    }
+
+    const minimum = minTextareaHeight(el);
+    // Reset before reading scrollHeight. `auto` (not 0) so a focused field
+    // does not collapse under the iOS caret while we measure.
+    el.style.overflowY = 'hidden';
     el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-};
+    const needed = Math.max(el.scrollHeight, minimum);
+    const next = Math.min(needed, cap);
+    const overflow = needed > cap + 2 ? 'auto' : 'hidden';
+    el.style.height = `${next}px`;
+    el.style.overflowY = overflow;
+    textareaResizeState.set(el, { length, tallerThanCap: false, needed });
+}
+
+function autoResizeTextarea(el) {
+    if (!el) return;
+    textareaResizePending.add(el);
+    if (textareaResizeFrame) return;
+    textareaResizeFrame = requestAnimationFrame(() => {
+        textareaResizeFrame = 0;
+        const batch = textareaResizePending;
+        textareaResizePending = new Set();
+        batch.forEach(applyTextareaHeight);
+    });
+}
+
+function resizeOpenModalTextareas() {
+    autoResizeTextarea(document.getElementById('prompt-title'));
+    autoResizeTextarea(document.getElementById('prompt-category'));
+    autoResizeTextarea(promptContentArea);
+    autoResizeTextarea(promptCodeArea);
+    dynamicBlocksContainer.querySelectorAll('textarea').forEach(autoResizeTextarea);
+}
+
+// iOS spellcheck / writing tools run over the whole paste when the field
+// blurs (for example, when the title is focused) and can deadlock WebContent.
+function relaxLargeTextField(el) {
+    if (!el) return;
+    el.spellcheck = false;
+    el.autocapitalize = 'off';
+    el.autocomplete = 'off';
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('spellcheck', 'false');
+    el.setAttribute('writingsuggestions', 'false');
+}
+
+relaxLargeTextField(promptContentArea);
+relaxLargeTextField(promptCodeArea);
 
 [
     document.getElementById('prompt-title'),
     document.getElementById('prompt-category'),
-    document.getElementById('prompt-content'),
-    document.getElementById('prompt-code')
+    promptContentArea,
+    promptCodeArea
 ].forEach(el => {
     el.addEventListener('input', () => autoResizeTextarea(el));
 });
+
+let addModalViewportFrame = 0;
+let lastModalViewportKey = '';
+
+function syncAddModalViewport() {
+    if (!addPromptModal || addPromptModal.classList.contains('hidden')) return;
+    const content = addPromptModal.querySelector('.modal-content');
+    const vv = window.visualViewport;
+    if (!vv || !content) return;
+    if (!window.matchMedia('(hover: none) and (pointer: coarse)').matches) return;
+    const top = Math.round(vv.offsetTop);
+    const height = Math.max(220, Math.round(vv.height));
+    const key = `${top}x${height}`;
+    if (key === lastModalViewportKey) return;
+    lastModalViewportKey = key;
+    addPromptModal.style.top = `${top}px`;
+    addPromptModal.style.height = `${height}px`;
+    content.style.maxHeight = `${height - 12}px`;
+    resizeOpenModalTextareas();
+}
+
+function requestAddModalViewportSync() {
+    if (addPromptModal.classList.contains('hidden') || addModalViewportFrame) return;
+    addModalViewportFrame = requestAnimationFrame(() => {
+        addModalViewportFrame = 0;
+        syncAddModalViewport();
+    });
+}
+
+function watchAddModalViewport() {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    lastModalViewportKey = '';
+    requestAddModalViewportSync();
+}
+
+function releaseAddModalViewport() {
+    if (addModalViewportFrame) {
+        cancelAnimationFrame(addModalViewportFrame);
+        addModalViewportFrame = 0;
+    }
+    lastModalViewportKey = '';
+    addPromptModal.style.top = '';
+    addPromptModal.style.height = '';
+    const content = addPromptModal.querySelector('.modal-content');
+    if (content) content.style.maxHeight = '';
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+}
+
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', requestAddModalViewportSync);
+    window.visualViewport.addEventListener('scroll', requestAddModalViewportSync);
+}
 
 // Central function to adjust modal fields based on mode
 function updateModalUI(mode, isEdit = false) {
@@ -396,6 +559,7 @@ openModalBtn.addEventListener('click', () => {
     updateModalUI(currentMode, false);
 
     addPromptModal.classList.remove('hidden');
+    watchAddModalViewport();
     
     // Reset Auto-Archive
     if (autoArchiveSelect) autoArchiveSelect.value = 'none';
@@ -454,12 +618,13 @@ const addDynamicBlock = (type, content = '', title = '') => {
             <button type="button" class="remove-block-btn" data-id="${blockId}">Remove</button>
         </div>
         ${titleField}
-        <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${placeholder}" rows="${type === 'code' ? 3 : 2}">${escapeHTML(content)}</textarea>
+        <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${placeholder}" rows="${type === 'code' ? 3 : 2}" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" writingsuggestions="false">${escapeHTML(content)}</textarea>
     `;
 
     dynamicBlocksContainer.appendChild(blockDiv);
     
     const textarea = blockDiv.querySelector('textarea');
+    relaxLargeTextField(textarea);
     textarea.addEventListener('input', () => autoResizeTextarea(textarea));
     autoResizeTextarea(textarea);
 
@@ -497,9 +662,15 @@ addNegativePromptBtn.addEventListener('click', () => {
     if (!isEditing) saveDraft();
 });
 
-closeModalBtn.addEventListener('click', () => {
+function closeAddPromptModal() {
+    flushDraftSave();
     addPromptModal.classList.add('hidden');
-    // We don't clear draft here, only on successful save or explicit discard
+    releaseAddModalViewport();
+}
+
+closeModalBtn.addEventListener('click', () => {
+    // Keep the draft. It is only cleared after a successful save.
+    closeAddPromptModal();
 });
 
 
@@ -605,8 +776,12 @@ saveReorderBtn.addEventListener('click', async () => {
 
 // Search & Filter Events
 searchInput.addEventListener('input', () => {
-    applyFilters();
     clearSearchBtn.classList.toggle('hidden', !searchInput.value);
+    if (!searchInput.value.trim()) {
+        applyFilters();
+        return;
+    }
+    startPromptSearch({ immediate: false });
 });
 
 clearSearchBtn.addEventListener('click', () => {
@@ -707,6 +882,7 @@ toggleNewCategoryBtn.addEventListener('click', () => {
     manualCategoryInputs.classList.toggle('hidden');
     if (!manualCategoryInputs.classList.contains('hidden')) {
         promptCategory.focus();
+        autoResizeTextarea(promptCategory);
     } else {
         // If hidden, clear errors and restore button
         categoryError.classList.add('hidden');
@@ -754,7 +930,7 @@ window.addEventListener('keydown', (e) => {
     
     // Esc to close modals
     if (e.key === 'Escape') {
-        addPromptModal.classList.add('hidden');
+        if (!addPromptModal.classList.contains('hidden')) closeAddPromptModal();
         deleteConfirmModal.classList.add('hidden');
     }
     
@@ -1052,7 +1228,8 @@ addPromptForm.addEventListener('submit', async (e) => {
         }
         addPromptForm.reset(); // Clear the form
         addPromptModal.classList.add('hidden'); // Close the modal
-        clearDraft(); // Clear draft on successful save
+        releaseAddModalViewport();
+        clearDraft(); // Clear draft on successful save. Cancels any pending write.
     } catch (error) {
         console.error("❌ Error adding/updating document: ", error);
 
@@ -1205,37 +1382,348 @@ function updateModalCategoryDropdown() {
     }
 }
 
-// Apply local search and filter
-function applyFilters() {
-    const searchTerm = searchInput.value.toLowerCase();
-    // selectedCategory is now managed as a global variable
+function modeNoun(plural = true) {
+    if (currentMode === 'command') return plural ? 'commands' : 'command';
+    if (currentMode === 'link') return plural ? 'links' : 'link';
+    return plural ? 'prompts' : 'prompt';
+}
 
-    const filtered = allPromptsData.filter(item => {
-        const itemMode = item.data.mode || 'prompt';
-        if (itemMode !== currentMode) return false;
-        
-        const matchesSearch = item.data.title.toLowerCase().includes(searchTerm);
-        const matchesCategory = selectedCategory === 'all' || item.data.category === selectedCategory;
-        return matchesSearch && matchesCategory;
+function promptsInMode() {
+    return allPromptsData.filter(item => (item.data.mode || 'prompt') === currentMode);
+}
+
+function promptsInView() {
+    return promptsInMode().filter(item => selectedCategory === 'all' || item.data.category === selectedCategory);
+}
+
+function updatePromptCount(shown, total, searching) {
+    if (!promptCountDisplay) return;
+    const label = modeNoun(true);
+    if (searching) {
+        const where = selectedCategory !== 'all' ? ` in "${selectedCategory}"` : '';
+        promptCountDisplay.textContent = `Found ${shown} of ${total} ${label}${where}`;
+        return;
+    }
+    if (selectedCategory !== 'all') {
+        promptCountDisplay.textContent = `Showing ${shown} of ${total} ${label} in "${selectedCategory}"`;
+        return;
+    }
+    promptCountDisplay.textContent = `Total ${label.charAt(0).toUpperCase() + label.slice(1)}: ${total}`;
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseSearchQuery(raw) {
+    const trimmed = String(raw || '').trim().toLowerCase().replace(/[’‘]/g, "'").replace(/[“”]/g, '"');
+    if (!trimmed) return [];
+    const terms = [];
+    const re = /"([^"]+)"|(\S+)/g;
+    let match;
+    while ((match = re.exec(trimmed))) {
+        const term = (match[1] || match[2] || '').trim();
+        if (term) terms.push(term);
+    }
+    // A pasted sentence is an excerpt, not a bag of unrelated words.
+    if (terms.length > 8) return [trimmed.replace(/\s+/g, ' ')];
+    return terms;
+}
+
+function findTerm(haystack, term) {
+    if (!haystack || !term) return null;
+    const direct = haystack.indexOf(term);
+    if (direct >= 0) return { index: direct, length: term.length };
+    if (!/\s/.test(term)) return null;
+    const pattern = term.trim().split(/\s+/).map(escapeRegExp).join('\\s+');
+    const found = new RegExp(pattern).exec(haystack);
+    if (!found) return null;
+    return { index: found.index, length: found[0].length };
+}
+
+function collectSearchFields(data) {
+    const fields = [];
+    if (data.content) {
+        const label = data.mode === 'command' ? 'Notes' : (data.mode === 'link' ? 'Link' : 'Prompt');
+        fields.push({ label, text: String(data.content) });
+    }
+    if (data.codeSnippetTitle) fields.push({ label: 'Code title', text: String(data.codeSnippetTitle) });
+    if (data.codeSnippet) fields.push({ label: data.mode === 'command' ? 'Command' : 'Code', text: String(data.codeSnippet) });
+    const blocks = Array.isArray(data.additionalBlocks) ? data.additionalBlocks : [];
+    blocks.forEach(block => {
+        if (!block) return;
+        const label = block.title || (block.type === 'remember' ? 'Notes' : block.type === 'code' ? 'Code' : 'Text');
+        if (block.content) fields.push({ label, text: String(block.content) });
+        else if (block.title) fields.push({ label: 'Block title', text: String(block.title) });
     });
+    if (data.category) fields.push({ label: 'Category', text: String(data.category) });
+    return fields;
+}
 
-    // Update prompt count display
-    if (promptCountDisplay) {
-        const totalInMode = allPromptsData.filter(item => (item.data.mode || 'prompt') === currentMode).length;
-        const filteredCount = filtered.length;
-        const label = currentMode === 'command' ? 'commands' : (currentMode === 'link' ? 'links' : 'prompts');
-        
-        if (selectedCategory !== 'all') {
-            promptCountDisplay.textContent = `Showing ${filteredCount} of ${totalInMode} ${label} in "${selectedCategory}"`;
-        } else if (searchTerm) {
-            promptCountDisplay.textContent = `Found ${filteredCount} of ${totalInMode} ${label}`;
-        } else {
-            promptCountDisplay.textContent = `Total ${label.charAt(0).toUpperCase() + label.slice(1)}: ${totalInMode}`;
+function searchIndexStamp(data) {
+    const blocks = Array.isArray(data.additionalBlocks) ? data.additionalBlocks : [];
+    const content = String(data.content || '');
+    const code = String(data.codeSnippet || '');
+    let blockSize = 0;
+    blocks.forEach(block => {
+        blockSize += String(block?.title || '').length + String(block?.content || '').length;
+    });
+    return [
+        data.title || '',
+        data.category || '',
+        data.codeSnippetTitle || '',
+        content.length,
+        content.slice(0, 32),
+        content.slice(-32),
+        code.length,
+        blocks.length,
+        blockSize
+    ].join('\0');
+}
+
+function ensureSearchIndex(item) {
+    const data = item.data || {};
+    const stamp = searchIndexStamp(data);
+    if (item._searchIndex && item._searchIndex.stamp === stamp) return item._searchIndex;
+    const fields = collectSearchFields(data);
+    item._searchIndex = {
+        stamp,
+        title: String(data.title || '').toLowerCase().replace(/[’‘]/g, "'"),
+        category: String(data.category || '').toLowerCase(),
+        body: fields.map(field => field.text).join('\n').toLowerCase().replace(/[’‘]/g, "'")
+    };
+    return item._searchIndex;
+}
+
+function scoreSearch(index, terms) {
+    let score = 0;
+    for (const term of terms) {
+        const titleHit = findTerm(index.title, term);
+        const categoryHit = findTerm(index.category, term);
+        const bodyHit = findTerm(index.body, term);
+        if (!titleHit && !categoryHit && !bodyHit) return null;
+        if (titleHit) score += 120 - Math.min(titleHit.index, 80);
+        else if (categoryHit) score += 36;
+        if (bodyHit) score += titleHit ? 10 : 22;
+        if (titleHit && titleHit.index === 0) score += 24;
+    }
+    return score;
+}
+
+function excerptAt(text, index, length) {
+    const radius = 72;
+    const start = Math.max(0, index - radius);
+    const end = Math.min(text.length, index + length + radius);
+    let slice = text.slice(start, end).replace(/\s+/g, ' ').trim();
+    if (start > 0) slice = `…${slice}`;
+    if (end < text.length) slice = `${slice}…`;
+    return slice;
+}
+
+function buildSearchSnippet(data, terms) {
+    const title = String(data.title || '').toLowerCase();
+    const needed = terms.filter(term => !findTerm(title, term));
+    const needles = needed.length ? needed : [];
+    if (!needles.length) return null;
+    const fields = collectSearchFields(data);
+    for (const term of needles) {
+        for (const field of fields) {
+            const hit = findTerm(field.text.toLowerCase().replace(/[’‘]/g, "'"), term);
+            if (!hit) continue;
+            return { label: field.label, text: excerptAt(field.text, hit.index, hit.length) };
         }
     }
+    return null;
+}
 
-    const sortedData = sortData(filtered);
-    renderPrompts(sortedData, searchTerm);
+let promptSearchGeneration = 0;
+let promptSearchTimer = 0;
+let lastSearchProgress = 0;
+
+function setSearchProgress(percent, label) {
+    const wrap = document.getElementById('search-progress');
+    const bar = document.getElementById('search-progress-bar');
+    const text = document.getElementById('search-progress-label');
+    const track = wrap?.querySelector('.search-progress-track');
+    if (!wrap || !bar) return;
+    wrap.classList.remove('hidden');
+    wrap.setAttribute('aria-hidden', 'false');
+    const clamped = Math.max(0, Math.min(100, percent));
+    if (clamped < lastSearchProgress) {
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+        bar.getBoundingClientRect();
+        bar.style.transition = '';
+    }
+    lastSearchProgress = clamped;
+    bar.style.width = `${clamped}%`;
+    if (track) track.setAttribute('aria-valuenow', String(Math.round(clamped)));
+    if (text && label != null) text.textContent = label;
+}
+
+function hideSearchProgress() {
+    lastSearchProgress = 0;
+    const wrap = document.getElementById('search-progress');
+    const bar = document.getElementById('search-progress-bar');
+    const text = document.getElementById('search-progress-label');
+    if (bar) bar.style.width = '0%';
+    if (text) text.textContent = '';
+    wrap?.classList.add('hidden');
+    wrap?.setAttribute('aria-hidden', 'true');
+}
+
+function cancelPromptSearch() {
+    clearTimeout(promptSearchTimer);
+    promptSearchGeneration += 1;
+    hideSearchProgress();
+}
+
+function startPromptSearch({ immediate = false } = {}) {
+    clearTimeout(promptSearchTimer);
+    const generation = ++promptSearchGeneration;
+    const run = () => executePromptSearch(generation);
+    if (immediate) {
+        run();
+        return;
+    }
+    setSearchProgress(6, 'Searching titles and prompt text…');
+    promptSearchTimer = setTimeout(run, 160);
+}
+
+function renderLibrary() {
+    const pool = promptsInView();
+    updatePromptCount(pool.length, promptsInMode().length, false);
+    renderPrompts(sortData(pool), '');
+}
+
+function renderSearchMatches(items, searchTerm, generation) {
+    if (generation !== promptSearchGeneration) return;
+    promptsFeed.innerHTML = '';
+    if (!items.length) {
+        const noun = modeNoun(true);
+        promptsFeed.innerHTML = `<div class="glass-card text-center"><p style="color: var(--text-muted);">No ${noun} found in titles, categories, or text.</p></div>`;
+        setSearchProgress(100, 'No matches');
+        return;
+    }
+
+    const active = [];
+    const archived = [];
+    items.forEach(item => (isPromptArchived(item) ? archived : active).push(item));
+    const ordered = active.concat(archived);
+    let cursor = 0;
+    let showedActive = false;
+    let showedArchived = false;
+    const batchSize = 4;
+
+    const draw = () => {
+        if (generation !== promptSearchGeneration) return;
+        const slice = ordered.slice(cursor, cursor + batchSize);
+        slice.forEach(item => {
+            const archivedItem = isPromptArchived(item);
+            if (!archivedItem && !showedActive && archived.length) {
+                addSectionHeader('Search results');
+                showedActive = true;
+            }
+            if (archivedItem && !showedArchived) {
+                addSectionHeader('Archived');
+                showedArchived = true;
+            }
+            createPromptCard(item, searchTerm);
+        });
+        cursor += slice.length;
+        const pct = 78 + Math.round((cursor / ordered.length) * 22);
+        setSearchProgress(pct, `Showing ${cursor} of ${ordered.length}`);
+        if (cursor < ordered.length) {
+            setTimeout(draw, 0);
+            return;
+        }
+        setSearchProgress(100, `${ordered.length} match${ordered.length === 1 ? '' : 'es'}`);
+    };
+    draw();
+}
+
+// Scan in slices so a large library can update the progress bar instead of
+// freezing the page on every keystroke. Each prompt is indexed once.
+function executePromptSearch(generation) {
+    const searchTerm = searchInput.value;
+    const terms = parseSearchQuery(searchTerm);
+    if (generation !== promptSearchGeneration) return;
+    if (!terms.length) {
+        hideSearchProgress();
+        renderLibrary();
+        return;
+    }
+
+    const pool = promptsInView();
+    const total = pool.length;
+    const matches = [];
+    let index = 0;
+    const scanChunk = 30;
+    if (promptCountDisplay) promptCountDisplay.textContent = 'Searching…';
+    setSearchProgress(8, total ? `Searching 0 of ${total}` : 'Searching…');
+
+    const scan = () => {
+        if (generation !== promptSearchGeneration) return;
+        const end = Math.min(index + scanChunk, total);
+        for (; index < end; index++) {
+            const item = pool[index];
+            const indexed = ensureSearchIndex(item);
+            const score = scoreSearch(indexed, terms);
+            if (score == null) continue;
+            const pinnedBoost = item.data.isPinned ? 12 : 0;
+            matches.push({
+                item,
+                score: score + pinnedBoost,
+                snippet: buildSearchSnippet(item.data || {}, terms)
+            });
+        }
+        const scanPct = total ? 8 + Math.round((index / total) * 68) : 76;
+        setSearchProgress(scanPct, total ? `Searching ${index} of ${total}` : 'Searching…');
+        if (index < total) {
+            setTimeout(scan, 0);
+            return;
+        }
+
+        const useRelevance = currentSort === 'custom';
+        let finalItems;
+        if (useRelevance) {
+            matches.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return String(a.item.data.title || '').localeCompare(String(b.item.data.title || ''));
+            });
+            finalItems = matches.map(match => match.item);
+        } else {
+            finalItems = sortData(matches.map(match => match.item));
+        }
+        const best = matches.reduce((max, match) => Math.max(max, match.score), 1);
+        const byId = new Map(matches.map(match => [match.item.id, match]));
+        const matchedIds = new Set();
+        finalItems.forEach(item => {
+            const match = byId.get(item.id);
+            matchedIds.add(item.id);
+            item._match = {
+                snippet: match?.snippet || null,
+                pct: Math.max(8, Math.round(((match?.score || 0) / best) * 100))
+            };
+        });
+        pool.forEach(item => {
+            if (!matchedIds.has(item.id)) delete item._match;
+        });
+        updatePromptCount(finalItems.length, pool.length, true);
+        renderSearchMatches(finalItems, searchTerm, generation);
+    };
+    // Yield so the progress bar can paint before the next slice of a large library.
+    setTimeout(scan, 0);
+}
+
+// Apply category and sort. A typed query searches titles and the full text.
+function applyFilters() {
+    if (searchInput.value.trim()) {
+        startPromptSearch({ immediate: true });
+        return;
+    }
+    cancelPromptSearch();
+    renderLibrary();
 }
 
 // Sorting Helper Function
@@ -1461,7 +1949,16 @@ function createPromptCard(item, searchTerm = '') {
     // If it was the old single-color format, we use it as 33% opacity background
     let finalBg = (data.categoryColor && !data.categoryBgColor) ? `${bg}33` : bg;
     
-    let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '';
+    let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${highlightSearch(escapeHTML(data.category), searchTerm, 1)}</span>` : '';
+
+    const searchHit = searchTerm && item._match;
+    let searchHitHTML = '';
+    if (searchHit) {
+        const snippet = searchHit.snippet?.text
+            ? `<p class="search-hit"><span class="search-hit-label">${escapeHTML(searchHit.snippet.label || 'Text')}</span> <span class="search-hit-text">${highlightSearch(escapeHTML(searchHit.snippet.text), searchTerm, 1)}</span></p>`
+            : '';
+        searchHitHTML = `${snippet}<div class="search-score" title="Match strength ${searchHit.pct || 0}%"><span style="width:${searchHit.pct || 0}%"></span></div>`;
+    }
 
     const isCommand = (data.mode === 'command');
     const isLink = (data.mode === 'link');
@@ -1502,7 +1999,8 @@ function createPromptCard(item, searchTerm = '') {
         ${variableIconHTML}
         <div class="card-header-main">
             <div class="card-title-wrapper">
-                <h3>${highlightSearch(escapeHTML(data.title), searchTerm)}</h3>
+                <h3>${highlightSearch(escapeHTML(data.title || ''), searchTerm, 1)}</h3>
+                ${searchHitHTML}
                 <div class="card-tag-container">
                     ${tagHTML}
                     ${timeMetaHTML}
@@ -1904,6 +2402,7 @@ function createPromptCard(item, searchTerm = '') {
             updateCounters();
             updateCategoryTagPreview();
             addPromptModal.classList.remove('hidden');
+            watchAddModalViewport();
             
             setTimeout(() => {
                 const titleEl = document.getElementById('prompt-title');
@@ -1936,7 +2435,7 @@ function createPromptCard(item, searchTerm = '') {
         if (targetRadio) targetRadio.checked = true;
 
         openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : (currentMode === 'link' ? '+ New Link' : '+ New Prompt');
-        searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : (currentMode === 'link' ? 'Search links...' : 'Search prompts (Ctrl+K)...');
+        searchInput.placeholder = currentMode === 'command' ? 'Search titles, commands, and notes...' : (currentMode === 'link' ? 'Search names and links...' : 'Search titles and prompt text (Ctrl+K)...');
 
         document.getElementById('prompt-title').value = data.title;
         
@@ -2023,6 +2522,7 @@ function createPromptCard(item, searchTerm = '') {
         lastUsedText.innerHTML = `Last Used: <span>${data.lastUsed ? timeAgo(data.lastUsed.toDate()) : 'Never'}</span>`;
 
         addPromptModal.classList.remove('hidden');
+        watchAddModalViewport();
         setTimeout(() => {
             const titleEl = document.getElementById('prompt-title');
             titleEl.focus();
@@ -2147,10 +2647,13 @@ function escapeHTML(str) {
 }
 
 // Helper to highlight search terms
-function highlightSearch(text, searchTerm) {
-    if (!searchTerm || searchTerm.trim() === '') return text;
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+function highlightSearch(text, searchTerm, minLength = 2) {
+    const terms = parseSearchQuery(searchTerm)
+        .filter(term => term.length >= minLength)
+        .sort((a, b) => b.length - a.length);
+    if (!text || !terms.length) return text;
+    const pattern = terms.map(escapeRegExp).join('|');
+    return text.replace(new RegExp(pattern, 'gi'), '<mark class="search-highlight">$&</mark>');
 }
 
 // --- Category Colors Modal Logic ---
@@ -2256,45 +2759,35 @@ function resolveVariablePlaceholder(p1) {
     return p1.trim();
 }
 
-// Function to turn ___ or {{Name}} into interactive inputs
-function renderContentWithInputs(content, searchTerm = '') {
-    // Escape HTML first
-    let escaped = escapeHTML(content);
-    
-    // Highlight search term in the escaped text BEFORE turning markers into spans
-    if (searchTerm) {
-        escaped = highlightSearch(escaped, searchTerm);
+function variableMarkup(token) {
+    if (/^_{3,}$/.test(token)) {
+        return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
     }
+    const named = token.match(/^{{(.*)}}$/);
+    if (!named) return null;
+    const p1 = named[1];
+    if (p1.includes('||')) {
+        const options = p1.split('||').map(opt => opt.trim());
+        const placeholder = options[0];
+        const optionsHtml = options.map(opt => `<span class="suggestion-item">${opt}</span>`).join('');
+        return `<span class="prompt-variable-wrapper" contenteditable="false">` +
+            `<span contenteditable="plaintext-only" class="prompt-input has-suggestions" data-placeholder="${placeholder}"></span>` +
+            `<span class="suggestions-toggle" contenteditable="false" title="Show suggestions">▾</span>` +
+            `<span class="suggestions-menu hidden" contenteditable="false">${optionsHtml}</span></span>`;
+    }
+    return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="${p1}"></span>`;
+}
 
-    // Replace markers with interactive spans
-    // Support both ___ and {{...}}
-    const html = escaped.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
-        if (!p1) {
-            return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
-        }
-
-        if (p1.includes('||')) {
-            const options = p1.split('||').map(opt => opt.trim());
-            const placeholder = options[0]; // Already escaped by the earlier escapeHTML
-            
-            let optionsHtml = '';
-            options.forEach(opt => {
-                optionsHtml += `<span class="suggestion-item">${opt}</span>`;
-            });
-
-            return `<span class="prompt-variable-wrapper" contenteditable="false">` +
-                   `<span contenteditable="plaintext-only" class="prompt-input has-suggestions" data-placeholder="${placeholder}"></span>` +
-                   `<span class="suggestions-toggle" contenteditable="false" title="Show suggestions">▾</span>` +
-                   `<span class="suggestions-menu hidden" contenteditable="false">` +
-                   `${optionsHtml}` +
-                   `</span></span>`;
-        }
-
-        const placeholder = p1;
-        return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="${placeholder}"></span>`;
-    });
-
-    return html;
+// Turn ___ or {{Name}} into inputs. Highlight only the plain text so a search
+// hit inside a variable name cannot break the placeholder markup.
+function renderContentWithInputs(content, searchTerm = '') {
+    const escaped = escapeHTML(content || '');
+    return escaped.split(/(\_{3,}|{{.*?}})/g).map(part => {
+        if (!part) return '';
+        const variable = variableMarkup(part);
+        if (variable) return variable;
+        return highlightSearch(part, searchTerm);
+    }).join('');
 }
 
 function variableMirrorLabel(input, occurrence, total) {
@@ -2564,9 +3057,15 @@ if (historyDeleteModal) {
 }
 
 // --- Draft System ---
+let draftTimer = 0;
+let lastDraftJSON = '';
+let lastDraftKey = '';
+
 function saveDraft() {
     if (isEditing) return; // Don't auto-save while editing existing entries to avoid mess
-    
+    clearTimeout(draftTimer);
+    draftTimer = 0;
+
     const draftData = {
         title: document.getElementById('prompt-title').value,
         category: document.getElementById('prompt-category').value,
@@ -2577,8 +3076,38 @@ function saveDraft() {
         codeTitle: promptCodeTitleInput ? promptCodeTitleInput.value : '',
         blocks: collectAdditionalBlocks()
     };
-    
-    localStorage.setItem(`prompt_draft_${currentMode}`, JSON.stringify(draftData));
+
+    const key = `prompt_draft_${currentMode}`;
+    let payload;
+    try {
+        payload = JSON.stringify(draftData);
+    } catch (err) {
+        console.warn('Could not serialize prompt draft', err);
+        return;
+    }
+    if (payload === lastDraftJSON && key === lastDraftKey) return;
+
+    try {
+        // Synchronous, and slow on iOS once the prompt is large. Callers debounce
+        // this so typing the title does not rewrite the whole paste on every key.
+        localStorage.setItem(key, payload);
+        lastDraftJSON = payload;
+        lastDraftKey = key;
+    } catch (err) {
+        console.warn('Could not store prompt draft', err);
+    }
+}
+
+function scheduleDraftSave() {
+    if (isEditing) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, 600);
+}
+
+function flushDraftSave() {
+    if (!draftTimer) return;
+    clearTimeout(draftTimer);
+    saveDraft();
 }
 
 function checkAndRestoreDraft() {
@@ -2586,8 +3115,19 @@ function checkAndRestoreDraft() {
     
     const draft = localStorage.getItem(`prompt_draft_${currentMode}`);
     if (!draft) return;
-    
-    const data = JSON.parse(draft);
+
+    let data;
+    try {
+        data = JSON.parse(draft);
+    } catch (err) {
+        console.warn('Ignoring unreadable prompt draft', err);
+        clearDraft();
+        return;
+    }
+    if (!data || typeof data !== 'object') {
+        clearDraft();
+        return;
+    }
     // Simple check if draft is empty
     if (!data.title && !data.content && !data.code && !data.codeTitle && (!data.blocks || data.blocks.length === 0)) return;
     
@@ -2625,21 +3165,35 @@ function checkAndRestoreDraft() {
 }
 
 function clearDraft() {
-    localStorage.removeItem(`prompt_draft_${currentMode}`);
+    clearTimeout(draftTimer);
+    draftTimer = 0;
+    lastDraftJSON = '';
+    lastDraftKey = '';
+    try {
+        localStorage.removeItem(`prompt_draft_${currentMode}`);
+    } catch (err) {
+        console.warn('Could not clear prompt draft', err);
+    }
 }
 
-// Listen for inputs to save draft
+// Listen for inputs to save draft. Debounced so a large paste is not written
+// again on every character of the title.
 [
     'prompt-title', 'prompt-category', 'prompt-content', 'prompt-code', 'prompt-code-title'
 ].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
-        if (!isEditing) saveDraft();
+        scheduleDraftSave();
     });
 });
 
 // Dynamic blocks also need to trigger draft save
 dynamicBlocksContainer.addEventListener('input', () => {
-    if (!isEditing) saveDraft();
+    scheduleDraftSave();
+});
+
+window.addEventListener('pagehide', flushDraftSave);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushDraftSave();
 });
 
 // --- Scroll to Top FAB ---
@@ -2681,6 +3235,13 @@ shortcutModal.innerHTML = `
             <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> <span>Save Modal</span></div>
             <div class="shortcut-item"><kbd>Esc</kbd> <span>Close Modal</span></div>
             <div class="shortcut-item"><kbd>?</kbd> <span>Open this Help menu</span></div>
+        </div>
+
+        <div class="help-section">
+            <h4>Search</h4>
+            <p class="help-description">
+                Search looks through the title, category, prompt, code, and notes. Several words narrow the list. Quotes match an exact phrase. The bar shows how far the scan has got, and each result includes an excerpt when the words are in the text.
+            </p>
         </div>
 
         <div class="help-section">

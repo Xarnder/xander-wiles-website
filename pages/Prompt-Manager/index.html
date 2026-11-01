@@ -35,7 +35,7 @@
 
     <link rel="stylesheet" href="/assets/css/style.css?v=1.1">
 
-    <link rel="stylesheet" href="/pages/Prompt-Manager/style.css?v=1.7">
+    <link rel="stylesheet" href="/pages/Prompt-Manager/style.css?v=1.9">
 
     <!-- SortableJS for Touch-Friendly Drag and Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
@@ -177,7 +177,7 @@
                             </div>
                         </div>
                         <div id="main-content-group">
-                            <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..."></textarea>
+                            <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" writingsuggestions="false"></textarea>
                         </div>
                         <div id="prompt-code-container" class="hidden dynamic-block-item">
                             <div class="dynamic-block-header">
@@ -185,7 +185,7 @@
                                 <button type="button" id="remove-primary-code-btn" class="remove-block-btn">Remove</button>
                             </div>
                             <input type="text" id="prompt-code-title" class="block-title-input" placeholder="Optional title (not copied)" autocomplete="off">
-                            <textarea id="prompt-code" class="code-textarea" rows="3" placeholder="Optional Code Snippets..." style="margin-bottom: 0;"></textarea>
+                            <textarea id="prompt-code" class="code-textarea" rows="3" placeholder="Optional Code Snippets..." style="margin-bottom: 0;" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" writingsuggestions="false"></textarea>
                         </div>
 
                         <!-- Dynamic Additional Blocks Container -->
@@ -421,11 +421,18 @@
                             </svg>
                         </button>
                         <div class="search-wrapper mobile-hidden" id="search-wrapper">
-                            <input type="text" id="search-prompts" placeholder="Search prompts (Ctrl+K)...">
+                            <input type="text" id="search-prompts" placeholder="Search titles and prompt text (Ctrl+K)..." autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
                             <button id="clear-search-btn" class="hidden">&times;</button>
                         </div>
                     </div>
                     <div id="prompt-count-display" class="prompt-count-text"></div>
+                </div>
+
+                <div id="search-progress" class="search-progress hidden" aria-hidden="true">
+                    <div class="search-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Search progress">
+                        <div id="search-progress-bar" class="search-progress-bar"></div>
+                    </div>
+                    <span id="search-progress-label" class="search-progress-label" role="status"></span>
                 </div>
 
                 <!-- Bottom Row: Filters and Sort -->
@@ -478,7 +485,7 @@
         </div>
     </main>
 
-    <script type="module" src="/pages/Prompt-Manager/app.js?v=1.7"></script>
+    <script type="module" src="/pages/Prompt-Manager/app.js?v=1.9"></script>
     <div id="toast-container" class="toast-container"></div>
 </body>
 
