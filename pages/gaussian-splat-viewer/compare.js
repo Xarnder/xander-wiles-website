@@ -1,6 +1,7 @@
+import { chooseImageExport, isExportDialogOpen, renderExportImage, saveExportImage } from './export-image.js';
 /**
- * Compare two Gaussian splats from one shared camera.
- * Dual: both splats are on the GPU, drawn in two viewports with the same pose.
+ * Compare up to four Gaussian splats from one shared camera.
+ * Dual: all selected splats are on the GPU, drawn in two viewports with the same pose.
  * Single: only the visible splat is uploaded and drawn. Switching reloads the
  * other splat and puts the camera back on the exact same position and target.
  *
@@ -35,16 +36,14 @@ const state = {
     poseOpen: false
 };
 
-const slots = {
-    a: makeSlot('a'),
-    b: makeSlot('b')
-};
+const SLOT_IDS = ['a', 'b', 'c', 'd'];
+const slots = Object.fromEntries(SLOT_IDS.map(id => [id, makeSlot(id)]));
+const scenes = {};
+const selectedIds = () => SLOT_IDS.filter(id => slots[id].file && slots[id].status === 'ready');
 
 let renderer = null;
 let camera = null;
 let controls = null;
-let sceneA = null;
-let sceneB = null;
 let resizeObserver = null;
 let captureSize = null;
 const drawSize = new THREE.Vector2();
@@ -87,6 +86,7 @@ export function initSplatCompare(options) {
 function cacheDom() {
     dom.root = document.getElementById('compare-root');
     dom.stage = document.getElementById('compare-stage');
+    dom.bar = dom.root?.querySelector('.compare-bar');
     dom.setup = document.getElementById('compare-setup');
     dom.setupCard = document.getElementById('compare-setup-card');
     dom.uploadBoth = document.getElementById('compare-upload-both');
@@ -115,7 +115,7 @@ function cacheDom() {
     dom.snapshotBtn = document.getElementById('compare-snapshot-btn');
     dom.exitBtn = document.getElementById('compare-exit-btn');
     dom.changeBtn = document.getElementById('compare-change-btn');
-    ['a', 'b'].forEach((id) => {
+    SLOT_IDS.forEach((id) => {
         dom[`card${id}`] = document.getElementById(`compare-slot-${id}`);
         dom[`name${id}`] = document.getElementById(`compare-slot-name-${id}`);
         dom[`meta${id}`] = document.getElementById(`compare-slot-meta-${id}`);
@@ -144,12 +144,18 @@ function bindUi() {
     });
     dom.modeDualBtn?.addEventListener('click', () => setMode('dual'));
     dom.modeSingleBtn?.addEventListener('click', () => setMode('single'));
-    dom.showABtn?.addEventListener('click', () => showSlot('a'));
-    dom.showBBtn?.addEventListener('click', () => showSlot('b'));
+    SLOT_IDS.forEach(id => {
+        document.getElementById(`compare-show-${id}-btn`)?.addEventListener('click', () => showSlot(id));
+        document.getElementById(`compare-remove-${id}`)?.addEventListener('click', () => {
+            if (state.busy) return;
+            Object.assign(slots[id], { file: null, name: '', status: 'empty', bounds: null, buffer: null, splatCount: 0 });
+            syncSlotCards();
+        });
+    });
     dom.recenterBtn?.addEventListener('click', () => {
         if (!state.session || state.busy) return;
         frameCamera();
-        deps.showToast('Framed both splats with the shared camera', 'info');
+        deps.showToast('Framed all selected splats with the shared camera', 'info');
     });
     dom.poseBtn?.addEventListener('click', () => {
         if (!state.session || state.busy) return;
@@ -219,7 +225,7 @@ function bindUi() {
         });
     }
 
-    ['a', 'b'].forEach((id) => {
+    SLOT_IDS.forEach((id) => {
         dom[`upload${id}`]?.addEventListener('click', () => dom[`file${id}`]?.click());
         dom[`file${id}`]?.addEventListener('change', (event) => {
             const file = event.target.files && event.target.files[0];
@@ -252,6 +258,7 @@ function bindUi() {
 }
 
 function onKeyDown(event) {
+    if (isExportDialogOpen()) return;
     if (!state.session && !state.setupOpen) return;
     const tag = event.target && event.target.tagName;
     if (event.code === 'Escape') {
@@ -268,15 +275,14 @@ function onKeyDown(event) {
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
     if (!state.session || state.busy || state.setupOpen || state.mode !== 'single') return;
 
-    if (event.code === 'Digit1') {
+    const ids = selectedIds();
+    const id = SLOT_IDS[Number(event.code.replace('Digit', '')) - 1];
+    if (ids.includes(id)) {
         event.preventDefault();
-        showSlot('a');
-    } else if (event.code === 'Digit2') {
-        event.preventDefault();
-        showSlot('b');
+        showSlot(id);
     } else if (event.code === 'Space') {
         event.preventDefault();
-        showSlot(state.activeSlot === 'a' ? 'b' : 'a');
+        showSlot(ids[(ids.indexOf(state.activeSlot) + 1) % ids.length]);
     }
 }
 
@@ -307,7 +313,7 @@ function closeSetup() {
 
 function refreshSourceSelects() {
     const current = deps.getCurrentSplatSource ? deps.getCurrentSplatSource() : null;
-    ['a', 'b'].forEach((id) => {
+    SLOT_IDS.forEach((id) => {
         const select = dom[`source${id}`];
         if (!select) return;
         const option = select.querySelector('option[value="__current__"]');
@@ -373,14 +379,11 @@ function assignFilePair(files) {
         return;
     }
     if (files.length === 1) {
-        const target = slots.a.status === 'ready' && slots.b.status !== 'ready' ? 'b' : 'a';
-        loadSlotFromFile(target, files[0]);
+        loadSlotFromFile(SLOT_IDS.find(id => !slots[id].file) || 'a', files[0]);
         return;
     }
-    loadSlotFromFile('a', files[0], { silent: true });
-    loadSlotFromFile('b', files[1], { silent: true });
-    const extra = files.length > 2 ? ' Using the first two.' : '';
-    deps.showToast(`Selected ${files[0].name} and ${files[1].name}.${extra}`, 'success');
+    files.slice(0, 4).forEach((file, i) => loadSlotFromFile(SLOT_IDS[i], file, { silent: true }));
+    deps.showToast(`Selected ${Math.min(4, files.length)} files.${files.length > 4 ? ' Using the first four.' : ''}`, 'success');
 }
 
 function fileKey(slot) {
@@ -442,8 +445,7 @@ async function swapSlots() {
     try {
         if (state.session) {
             deps.showLoading('Swapping splats…', 'Camera stays locked');
-            await destroyViewer(slots.a);
-            await destroyViewer(slots.b);
+            for (const slot of Object.values(slots)) await destroyViewer(slot);
             if (!stillRunning(opId)) return;
             await loadActiveViewers(opId);
             if (!stillRunning(opId)) return;
@@ -463,8 +465,8 @@ async function swapSlots() {
 }
 
 async function startCompare() {
-    if (slots.a.status !== 'ready' || !slots.a.file) throw new Error('Choose splat A before starting');
-    if (slots.b.status !== 'ready' || !slots.b.file) throw new Error('Choose splat B before starting');
+    if (selectedIds().length < 2) throw new Error('Choose at least two splats before starting');
+    if (!selectedIds().includes(state.activeSlot)) state.activeSlot = selectedIds()[0];
     if (state.busy) return;
 
     const selected = document.querySelector('input[name="compare-mode"]:checked');
@@ -477,8 +479,8 @@ async function startCompare() {
     setSetupError('');
     closeSetup();
     deps.showLoading(
-        state.mode === 'dual' ? 'Loading both splats…' : `Loading splat ${state.activeSlot.toUpperCase()}…`,
-        'One shared camera for both'
+        state.mode === 'dual' ? 'Loading all selected splats…' : `Loading splat ${state.activeSlot.toUpperCase()}…`,
+        'One shared camera for all views'
     );
 
     try {
@@ -501,8 +503,7 @@ async function startCompare() {
             if (state.mode !== 'dual' || !stillRunning(opId)) throw err;
             console.warn(err);
             fellBack = true;
-            await destroyViewer(slots.a);
-            await destroyViewer(slots.b);
+            for (const slot of Object.values(slots)) await destroyViewer(slot);
             if (!stillRunning(opId)) return;
             state.mode = 'single';
             selectModeRadio('single');
@@ -512,15 +513,15 @@ async function startCompare() {
         if (pose) applyPose(pose);
         else if (!state.framed) frameCamera();
         syncSession();
-        const count = (slots.a.splatCount || 0) + (slots.b.splatCount || 0);
+        const count = selectedIds().reduce((sum, id) => sum + slots[id].splatCount, 0);
         if (fellBack) {
-            deps.showToast('Both splats did not fit on the GPU. Showing one at a time with the same camera.', 'error');
+            deps.showToast('The selected splats did not fit on the GPU. Showing one at a time with the same camera.', 'error');
         } else if (state.mode === 'dual' && count > DUAL_SPLAT_WARN) {
-            deps.showToast('Large splats. Dual keeps both on the GPU — switch to Single if it stalls.', 'info');
+            deps.showToast('Large splats. Grid keeps all selected splats on the GPU — switch to Single if it stalls.', 'info');
         } else {
             deps.showToast(
                 state.mode === 'dual'
-                    ? 'Both windows are locked to the same camera'
+                    ? 'All windows are locked to the same camera'
                     : 'Single view. Only one splat is loaded. The camera stays put when you switch.',
                 'success'
             );
@@ -550,17 +551,13 @@ async function setMode(mode) {
     state.busy = true;
     syncSession();
     deps.showLoading(
-        mode === 'dual' ? 'Loading both splats…' : 'Unloading the hidden splat…',
+        mode === 'dual' ? 'Loading all selected splats…' : 'Unloading the hidden splat…',
         'Camera stays locked'
     );
     let fellBack = false;
     try {
         if (mode === 'single') {
-            const hideId = state.activeSlot === 'a' ? 'b' : 'a';
-            await destroyViewer(slots[hideId]);
-            if (!stillRunning(opId)) return;
-            releaseCpuBuffer(slots[hideId]);
-            await ensureViewer(slots[state.activeSlot], state.activeSlot === 'b' ? sceneB : sceneA, opId);
+            await loadActiveViewers(opId);
         } else {
             try {
                 await loadActiveViewers(opId);
@@ -568,8 +565,7 @@ async function setMode(mode) {
                 if (!stillRunning(opId)) throw err;
                 console.warn(err);
                 fellBack = true;
-                await destroyViewer(slots.a);
-                await destroyViewer(slots.b);
+                for (const slot of Object.values(slots)) await destroyViewer(slot);
                 if (!stillRunning(opId)) return;
                 state.mode = 'single';
                 selectModeRadio('single');
@@ -579,11 +575,11 @@ async function setMode(mode) {
         if (!stillRunning(opId)) return;
         applyPose(pose);
         if (fellBack) {
-            deps.showToast('Both splats did not fit on the GPU. Showing one at a time with the same camera.', 'error');
+            deps.showToast('The selected splats did not fit on the GPU. Showing one at a time with the same camera.', 'error');
         } else {
             deps.showToast(
                 state.mode === 'dual'
-                    ? 'Dual windows — same camera on both'
+                    ? 'Grid — same camera in every pane'
                     : 'Single view — only one splat is on the GPU',
                 'info'
             );
@@ -600,7 +596,7 @@ async function setMode(mode) {
 }
 
 async function showSlot(id) {
-    if (!state.session || state.busy || state.mode !== 'single') return;
+    if (!state.session || state.busy || state.mode !== 'single' || !selectedIds().includes(id)) return;
     if (state.activeSlot === id && slots[id].viewer) return;
 
     const pose = freezePose();
@@ -614,7 +610,7 @@ async function showSlot(id) {
     try {
         await destroyViewer(slots[previous]);
         if (!stillRunning(opId)) return;
-        await ensureViewer(slots[id], id === 'b' ? sceneB : sceneA, opId);
+        await ensureViewer(slots[id], scenes[id], opId);
         if (!stillRunning(opId)) return;
         applyPose(pose);
         deps.showToast(`Showing ${slots[id].name}. Camera unchanged.`, 'info');
@@ -624,7 +620,7 @@ async function showSlot(id) {
         if (stillRunning(opId) && previous !== id && slots[previous].file) {
             try {
                 state.activeSlot = previous;
-                await ensureViewer(slots[previous], previous === 'b' ? sceneB : sceneA, opId);
+                await ensureViewer(slots[previous], scenes[previous], opId);
                 applyPose(pose);
             } catch (restoreErr) {
                 console.warn(restoreErr);
@@ -640,21 +636,19 @@ async function showSlot(id) {
 }
 
 async function loadActiveViewers(opId) {
-    if (state.mode === 'dual') {
-        await ensureViewer(slots.a, sceneA, opId);
-        if (!stillRunning(opId)) return;
-        await yieldToBrowser();
-        await ensureViewer(slots.b, sceneB, opId);
-        return;
+    const ids = selectedIds();
+    for (const id of SLOT_IDS) {
+        if (!ids.includes(id) || (state.mode === 'single' && id !== state.activeSlot)) {
+            await destroyViewer(slots[id]);
+            if (!stillRunning(opId)) return;
+        }
     }
-    const hideId = state.activeSlot === 'a' ? 'b' : 'a';
-    await destroyViewer(slots[hideId]);
-    if (!stillRunning(opId)) return;
-    await ensureBounds(slots[hideId], opId);
-    releaseCpuBuffer(slots[hideId]);
-    await yieldToBrowser();
-    if (!stillRunning(opId)) return;
-    await ensureViewer(slots[state.activeSlot], state.activeSlot === 'b' ? sceneB : sceneA, opId);
+    for (const id of ids) {
+        if (!stillRunning(opId)) return;
+        if (state.mode === 'dual' || id === state.activeSlot) await ensureViewer(slots[id], scenes[id], opId);
+        else { await ensureBounds(slots[id], opId); releaseCpuBuffer(slots[id]); }
+        await yieldToBrowser();
+    }
 }
 
 export async function exitCompare(options = {}) {
@@ -672,14 +666,12 @@ export async function exitCompare(options = {}) {
     if (dom.root) dom.root.classList.remove('pose-open');
     if (dom.setup) dom.setup.classList.remove('active');
 
-    await destroyViewer(slots.a);
-    await destroyViewer(slots.b);
-    releaseCpuBuffer(slots.a);
-    releaseCpuBuffer(slots.b);
-    disposeScene(sceneA);
-    disposeScene(sceneB);
-    sceneA = null;
-    sceneB = null;
+    for (const id of SLOT_IDS) {
+        await destroyViewer(slots[id]);
+        releaseCpuBuffer(slots[id]);
+        disposeScene(scenes[id]);
+        delete scenes[id];
+    }
     if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;
@@ -708,8 +700,7 @@ export async function exitCompare(options = {}) {
 
 function ensureStage() {
     if (renderer) return;
-    sceneA = createScene();
-    sceneB = createScene();
+    SLOT_IDS.forEach(id => { scenes[id] = createScene(); });
     renderer = new THREE.WebGLRenderer({
         antialias: false,
         alpha: false,
@@ -741,6 +732,8 @@ function ensureStage() {
         resize();
     });
     resizeObserver.observe(dom.stage);
+    if (dom.bar) resizeObserver.observe(dom.bar);
+    if (dom.posePanel) resizeObserver.observe(dom.posePanel);
     if (!state.frameId) state.frameId = requestAnimationFrame(renderLoop);
 }
 
@@ -803,7 +796,7 @@ async function bufferForUpload(slot) {
         slot.buffer = null;
     }
     if (!slot.file) throw new Error(`Choose a file for splat ${slot.id.toUpperCase()}`);
-    deps.showLoading(`Reading ${slot.name || slot.id.toUpperCase()}…`, 'One shared camera for both');
+    deps.showLoading(`Reading ${slot.name || slot.id.toUpperCase()}…`, 'One shared camera for all views');
     const parsed = await parseSplatFile(slot.file);
     slot.buffer = parsed.buffer;
     slot.bounds = parsed.bounds;
@@ -885,13 +878,33 @@ async function destroyViewer(slot) {
 
 function resize() {
     if (!renderer || !dom.stage) return;
-    state.stacked = window.matchMedia('(max-width: 860px)').matches;
+    state.stacked = selectedIds().length === 2 && window.matchMedia('(max-width: 860px)').matches;
     const width = Math.max(1, dom.stage.clientWidth || window.innerWidth);
     const height = Math.max(1, dom.stage.clientHeight || window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap()));
     renderer.setSize(width, height, false);
     applyAspect();
     if (dom.root) dom.root.classList.toggle('is-stacked', state.stacked);
+    positionCompareLabels();
+}
+
+function positionCompareLabels() {
+    if (!dom.root || !dom.bar) return;
+    const rootTop = dom.root.getBoundingClientRect().top;
+    const toolbarBottom = dom.bar.getBoundingClientRect().bottom - rootTop;
+    dom.root.style.setProperty('--compare-toolbar-bottom', `${toolbarBottom}px`);
+    const panelBottom = state.poseOpen && dom.posePanel && !dom.posePanel.hidden
+        ? dom.posePanel.getBoundingClientRect().bottom - rootTop : 0;
+    const safeTop = Math.max(toolbarBottom, panelBottom) + 12;
+    const ids = selectedIds();
+    SLOT_IDS.forEach(id => {
+        const label = document.getElementById(`compare-label-${id}`);
+        if (!label) return;
+        const index = ids.indexOf(id);
+        const lowerRow = state.mode !== 'single' && index >= (state.stacked ? 1 : 2);
+        label.style.left = state.mode === 'single' || state.stacked ? '16px' : `calc(${(index % 2) * 50}% + 16px)`;
+        label.style.top = lowerRow ? `max(${safeTop}px, calc(50% + 16px))` : `${safeTop}px`;
+    });
 }
 
 function rendererCssSize() {
@@ -906,6 +919,7 @@ function paneDrawSize() {
     if (captureSize) return captureSize;
     const size = rendererCssSize();
     if (state.mode !== 'dual') return { x: size.width, y: size.height };
+    if (selectedIds().length > 2) return { x: Math.max(1, Math.floor(size.width / 2)), y: Math.max(1, Math.floor(size.height / 2)) };
     if (state.stacked) return { x: size.width, y: Math.max(1, Math.floor(size.height / 2)) };
     return { x: Math.max(1, Math.floor(size.width / 2)), y: size.height };
 }
@@ -921,30 +935,14 @@ function applyAspect() {
 }
 
 function paneRects() {
-    const size = rendererCssSize();
-    const width = size.width;
-    const height = size.height;
-    if (state.mode !== 'dual') {
-        return [{
-            x: 0,
-            y: 0,
-            w: width,
-            h: height,
-            scene: state.activeSlot === 'b' ? sceneB : sceneA
-        }];
-    }
-    if (state.stacked) {
-        const half = Math.max(1, Math.floor(height / 2));
-        return [
-            { x: 0, y: half, w: width, h: height - half, scene: sceneA },
-            { x: 0, y: 0, w: width, h: half, scene: sceneB }
-        ];
-    }
-    const half = Math.max(1, Math.floor(width / 2));
-    return [
-        { x: 0, y: 0, w: half, h: height, scene: sceneA },
-        { x: half, y: 0, w: width - half, h: height, scene: sceneB }
-    ];
+    const { width, height } = rendererCssSize();
+    if (state.mode !== 'dual') return [{ x: 0, y: 0, w: width, h: height, scene: scenes[state.activeSlot] }];
+    const ids = selectedIds();
+    const cols = state.stacked ? 1 : 2;
+    const rows = Math.ceil(ids.length / cols);
+    const w = Math.max(1, Math.floor(width / cols));
+    const h = Math.max(1, Math.floor(height / rows));
+    return ids.map((id, i) => ({ x: (i % cols) * w, y: height - (Math.floor(i / cols) + 1) * h, w, h, scene: scenes[id] }));
 }
 
 function renderLoop() {
@@ -957,6 +955,8 @@ function renderLoop() {
     const panes = paneRects();
     renderer.setClearColor(0x111115, 1);
     renderer.autoClear = false;
+    renderer.setScissorTest(false);
+    renderer.clear(true, true, true);
     renderer.setScissorTest(state.mode === 'dual');
     panes.forEach((pane) => {
         if (!pane.scene) return;
@@ -1060,7 +1060,9 @@ function downloadText(text, filename, type) {
 function frameCamera() {
     const { center, size } = unionBounds();
     const radius = Math.max(size.length() * 0.5, 0.4);
-    const fov = THREE.MathUtils.degToRad(camera.fov);
+    applyAspect();
+    const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+    const fov = Math.min(verticalFov, 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect));
     const dist = radius / Math.max(0.2, Math.sin(fov * 0.5));
     flushControlInertia();
     camera.near = Math.max(0.01, radius / 500);
@@ -1075,218 +1077,95 @@ function frameCamera() {
 }
 
 async function exportSnapshots() {
-    if (!state.session || state.busy || !camera || !renderer) return;
-    if (slots.a.status !== 'ready' || slots.b.status !== 'ready') {
-        deps.showToast('Both splats need to be ready before saving a snapshot', 'error');
-        return;
-    }
-
+    if (!state.session || state.busy || state.setupOpen || !camera || !renderer) return;
+    const options = await chooseImageExport(camera.aspect, paneDrawSize().x);
+    if (!options || !state.session || state.busy) return;
+    const ids = selectedIds();
     const pose = freezePose();
     const mode = state.mode;
     const activeSlot = state.activeSlot;
     const opId = ++state.opId;
+    const images = [];
+    let combined = null;
     state.busy = true;
     state.capturing = true;
-    if (controls) controls.enabled = false;
+    controls.enabled = false;
     syncSession();
-    deps.showLoading('Saving both views…', 'The camera stays on this pose');
-
-    let imageA = null;
-    let imageB = null;
-    let sideBySide = null;
-
+    deps.showLoading('Saving all views…', 'Every image uses the same camera pose');
     try {
-        if (mode === 'dual') {
-            imageA = await captureSlotImage('a', pose, opId, true);
+        for (const id of ids) {
+            if (mode === 'single') {
+                for (const other of SLOT_IDS) if (other !== id) await destroyViewer(slots[other]);
+            }
             if (!stillRunning(opId)) return;
-            imageB = await captureSlotImage('b', pose, opId, true);
-        } else {
-            const first = activeSlot;
-            const second = activeSlot === 'a' ? 'b' : 'a';
-            const firstImage = await captureSlotImage(first, pose, opId, false);
+            await ensureViewer(slots[id], scenes[id], opId);
             if (!stillRunning(opId)) return;
-            const secondImage = await captureSlotImage(second, pose, opId, false);
-            imageA = first === 'a' ? firstImage : secondImage;
-            imageB = first === 'b' ? firstImage : secondImage;
+            images.push(await captureSceneFrame(scenes[id], pose, options, slots[id].viewer.viewer));
         }
-        if (!stillRunning(opId) || !imageA || !imageB) return;
-
-        await restoreAfterCapture(mode, activeSlot, pose, opId);
         if (!stillRunning(opId)) return;
-        applyPose(pose);
-        captureSize = null;
-        state.capturing = false;
-        deps.hideLoading();
-
-        sideBySide = composeSideBySide(imageA, imageB, slots.a.name, slots.b.name);
+        combined = composeGrid(images, ids, options);
         const stamp = fileStamp();
         flashCapture();
-        await downloadCanvas(sideBySide, `splat-compare-${stamp}.png`);
-        releaseCanvas(sideBySide);
-        sideBySide = null;
-        await delay(160);
-        await downloadCanvas(imageA, `splat-compare-${stamp}-A-${safeFileStem(slots.a.name)}.png`);
-        releaseCanvas(imageA);
-        imageA = null;
-        await delay(160);
-        await downloadCanvas(imageB, `splat-compare-${stamp}-B-${safeFileStem(slots.b.name)}.png`);
-        releaseCanvas(imageB);
-        imageB = null;
-        if (stillRunning(opId)) {
-            deps.showToast('Saved both splats from this camera, plus a side-by-side image', 'success');
+        await saveExportImage(combined, `splat-compare-${stamp}`, options.format);
+        for (let i = 0; i < ids.length; i++) {
+            await delay(160);
+            await saveExportImage(images[i], `splat-compare-${stamp}-${ids[i].toUpperCase()}-${safeFileStem(slots[ids[i]].name)}`, options.format);
         }
-    } catch (err) {
-        console.error(err);
-        if (stillRunning(opId)) {
-            try {
-                await restoreAfterCapture(mode, activeSlot, pose, opId);
-                applyPose(pose);
-            } catch (restoreErr) {
-                console.warn(restoreErr);
-            }
-        }
-        deps.showToast(err.message || 'Could not save snapshots', 'error');
+        deps.showToast(`Saved ${ids.length} splats from the same camera, plus a comparison grid`, 'success');
     } finally {
+        images.forEach(releaseCanvas);
+        releaseCanvas(combined);
         captureSize = null;
-        if (state.opId === opId && state.session) {
+        if (stillRunning(opId)) {
             try {
-                await restoreAfterCapture(mode, activeSlot, pose, opId);
+                state.mode = mode;
+                state.activeSlot = activeSlot;
+                await loadActiveViewers(opId);
                 applyPose(pose);
-            } catch (restoreErr) {
-                console.warn(restoreErr);
+            } finally {
+                state.capturing = false;
+                state.busy = false;
+                deps.hideLoading();
+                syncSession();
             }
         }
-        releaseCanvas(imageA);
-        releaseCanvas(imageB);
-        releaseCanvas(sideBySide);
-        if (state.opId === opId) {
-            state.capturing = false;
-            state.busy = false;
-            deps.hideLoading();
-            if (state.session) syncSession();
-        }
     }
 }
 
-async function captureSlotImage(id, pose, opId, keepOtherLoaded) {
-    const otherId = id === 'a' ? 'b' : 'a';
-    if (!keepOtherLoaded) await destroyViewer(slots[otherId]);
-    if (!stillRunning(opId)) return null;
-    await ensureViewer(slots[id], id === 'b' ? sceneB : sceneA, opId);
-    if (!stillRunning(opId)) return null;
-    if (slots[otherId].viewer) slots[otherId].viewer.visible = false;
-    if (slots[id].viewer) slots[id].viewer.visible = true;
-    return captureSceneFrame(id === 'b' ? sceneB : sceneA, pose);
-}
-
-async function restoreAfterCapture(mode, activeSlot, pose, opId) {
-    if (mode === 'single') {
-        const hideId = activeSlot === 'a' ? 'b' : 'a';
-        await destroyViewer(slots[hideId]);
-        if (!stillRunning(opId)) return;
-        await ensureViewer(slots[activeSlot], activeSlot === 'b' ? sceneB : sceneA, opId);
-    } else {
-        await ensureViewer(slots.a, sceneA, opId);
-        if (!stillRunning(opId)) return;
-        await ensureViewer(slots.b, sceneB, opId);
-        if (slots.a.viewer) slots.a.viewer.visible = true;
-        if (slots.b.viewer) slots.b.viewer.visible = true;
-    }
+async function captureSceneFrame(scene, pose, options, splatViewer) {
     applyPose(pose);
-}
-
-async function captureSceneFrame(scene, pose) {
-    applyPose(pose);
-    const view = fitViewport(pose.aspect || camera.aspect);
-    captureSize = { x: view.w, y: view.h };
-    camera.aspect = view.w / view.h;
-    camera.updateProjectionMatrix();
+    // Let the newly loaded splat sort from the frozen camera before capture.
+    const view = rendererCssSize();
     for (let i = 0; i < 3; i++) {
-        drawScene(scene, view);
+        renderer.setScissorTest(false);
+        renderer.setViewport(0, 0, view.width, view.height);
+        renderer.clear(true, true, true);
+        renderer.render(scene, camera);
         await waitFrames(1);
     }
-    drawScene(scene, view);
-    return copyViewport(view);
+    return renderExportImage(renderer, [splatViewer], options, () => renderer.render(scene, camera));
 }
 
-function fitViewport(aspect) {
-    const size = rendererCssSize();
-    const fullW = size.width;
-    const fullH = size.height;
-    const safeAspect = Math.max(0.05, aspect || (fullW / fullH));
-    let w = fullW;
-    let h = Math.max(1, Math.round(w / safeAspect));
-    if (h > fullH) {
-        h = fullH;
-        w = Math.max(1, Math.round(h * safeAspect));
-    }
-    return {
-        x: Math.floor((fullW - w) / 2),
-        y: Math.floor((fullH - h) / 2),
-        w,
-        h,
-        fullW,
-        fullH
-    };
-}
-
-function drawScene(scene, view) {
-    renderer.setClearColor(0x111115, 1);
-    renderer.autoClear = false;
-    renderer.setScissorTest(false);
-    renderer.setViewport(0, 0, view.fullW, view.fullH);
-    renderer.clear(true, true, true);
-    renderer.setScissorTest(true);
-    renderer.setViewport(view.x, view.y, view.w, view.h);
-    renderer.setScissor(view.x, view.y, view.w, view.h);
-    renderer.clear(true, true, true);
-    renderer.render(scene, camera);
-    renderer.setScissorTest(false);
-    renderer.setViewport(0, 0, view.fullW, view.fullH);
-}
-
-function copyViewport(view) {
-    const maxEdge = 2000;
-    const scale = Math.min(1, maxEdge / Math.max(view.w, view.h));
-    const outW = Math.max(1, Math.round(view.w * scale));
-    const outH = Math.max(1, Math.round(view.h * scale));
+function composeGrid(images, ids, options) {
+    const { width, height } = images[0];
+    const pad = 16, header = 40, cols = 2, rows = Math.ceil(images.length / cols);
     const out = document.createElement('canvas');
-    out.width = outW;
-    out.height = outH;
-    const ctx = out.getContext('2d', { alpha: false });
-    const ratio = renderer.getPixelRatio();
-    const srcX = Math.round(view.x * ratio);
-    const srcY = Math.round(view.y * ratio);
-    const srcW = Math.max(1, Math.round(view.w * ratio));
-    const srcH = Math.max(1, Math.round(view.h * ratio));
-    const top = renderer.domElement.height - (srcY + srcH);
-    ctx.drawImage(renderer.domElement, srcX, top, srcW, srcH, 0, 0, outW, outH);
-    return out;
-}
-
-function composeSideBySide(canvasA, canvasB, nameA, nameB) {
-    const pad = Math.max(12, Math.round(canvasA.height * 0.02));
-    const header = Math.max(36, Math.round(Math.max(canvasA.height, canvasB.height) * 0.06));
-    const gap = Math.max(4, Math.round(Math.min(canvasA.width, canvasB.width) * 0.008));
-    const out = document.createElement('canvas');
-    out.width = canvasA.width + canvasB.width + gap + pad * 2;
-    out.height = header + Math.max(canvasA.height, canvasB.height) + pad;
+    out.width = cols * (width + pad) + pad;
+    out.height = rows * (height + header + pad) + pad;
     const ctx = out.getContext('2d');
-    ctx.fillStyle = '#111115';
-    ctx.fillRect(0, 0, out.width, out.height);
-    ctx.drawImage(canvasA, pad, header);
-    ctx.drawImage(canvasB, pad + canvasA.width + gap, header);
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
-    ctx.fillRect(pad + canvasA.width, header, gap, Math.max(canvasA.height, canvasB.height));
-
-    const fontSize = Math.max(14, Math.round(header * 0.38));
-    ctx.font = `600 ${fontSize}px sans-serif`;
+    if (options.background !== 'alpha') {
+        ctx.fillStyle = options.background === 'white' ? '#ffffff' : '#000000';
+        ctx.fillRect(0, 0, out.width, out.height);
+    }
+    ctx.font = '600 16px sans-serif';
     ctx.textBaseline = 'middle';
-    const labelY = header * 0.48;
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText(fitLabel(ctx, `A  ${nameA || 'Splat A'}`, canvasA.width - 8), pad, labelY);
-    ctx.fillStyle = '#c084fc';
-    ctx.fillText(fitLabel(ctx, `B  ${nameB || 'Splat B'}`, canvasB.width - 8), pad + canvasA.width + gap, labelY);
+    images.forEach((image, i) => {
+        const x = pad + (i % cols) * (width + pad);
+        const y = pad + Math.floor(i / cols) * (height + header + pad);
+        ctx.fillStyle = options.background === 'white' ? '#18181b' : ['#38bdf8', '#c084fc', '#34d399', '#fbbf24'][i];
+        ctx.fillText(fitLabel(ctx, `${ids[i].toUpperCase()}  ${slots[ids[i]].name}`, width), x, y + header / 2);
+        ctx.drawImage(image, x, y + header);
+    });
     return out;
 }
 
@@ -1297,27 +1176,6 @@ function fitLabel(ctx, text, maxWidth) {
         trimmed = trimmed.slice(0, -1);
     }
     return `${trimmed}…`;
-}
-
-function downloadCanvas(canvas, filename) {
-    return new Promise((resolve, reject) => {
-        canvas.toBlob((blob) => {
-            if (!blob) {
-                reject(new Error('Could not encode PNG'));
-                return;
-            }
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.rel = 'noopener';
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 4000);
-            resolve();
-        }, 'image/png');
-    });
 }
 
 function releaseCanvas(canvas) {
@@ -1365,7 +1223,7 @@ function unionBounds() {
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
     const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
     let any = false;
-    ['a', 'b'].forEach((id) => {
+    SLOT_IDS.forEach((id) => {
         const bounds = slots[id].bounds;
         if (!bounds) return;
         min.min(bounds.min);
@@ -1411,7 +1269,7 @@ function measureBounds(splatBuffer) {
 }
 
 function syncSlotCards() {
-    ['a', 'b'].forEach((id) => {
+    SLOT_IDS.forEach((id) => {
         const slot = slots[id];
         const nameEl = dom[`name${id}`];
         const metaEl = dom[`meta${id}`];
@@ -1432,7 +1290,7 @@ function syncSlotCards() {
         if (card) card.dataset.state = slot.status;
     });
     if (dom.startBtn) {
-        dom.startBtn.disabled = !(slots.a.status === 'ready' && slots.b.status === 'ready') || state.busy;
+        dom.startBtn.disabled = selectedIds().length < 2 || state.busy;
     }
     if (dom.swapBtn) dom.swapBtn.disabled = state.busy;
 }
@@ -1444,13 +1302,24 @@ function syncSession() {
     dom.root.classList.toggle('is-stacked', state.stacked);
     dom.root.dataset.active = state.activeSlot;
 
-    if (dom.labelA) dom.labelA.innerHTML = labelHtml('A', slots.a);
-    if (dom.labelB) dom.labelB.innerHTML = labelHtml('B', slots.b);
+    const ids = selectedIds();
+    resize();
+    dom.root.classList.toggle('is-grid', ids.length > 2);
+    SLOT_IDS.forEach(id => {
+        const label = document.getElementById(`compare-label-${id}`);
+        const index = ids.indexOf(id);
+        label.innerHTML = labelHtml(id.toUpperCase(), slots[id]);
+        label.hidden = index < 0 || (state.mode === 'single' && state.activeSlot !== id);
+        const button = document.getElementById(`compare-show-${id}-btn`);
+        button.hidden = index < 0;
+        button.disabled = state.busy || state.mode === 'dual';
+        button.classList.toggle('active', state.activeSlot === id);
+    });
     if (dom.hint) {
-        if (state.capturing) dom.hint.textContent = 'Saving both splats from this camera…';
+        if (state.capturing) dom.hint.textContent = 'Saving all selected splats from this camera…';
         else if (state.busy) dom.hint.textContent = 'Loading splat onto the GPU. The camera is frozen.';
-        else if (state.mode === 'dual') dom.hint.textContent = 'Orbit anywhere. Snapshot saves both splats from this camera.';
-        else dom.hint.textContent = `Showing ${state.activeSlot.toUpperCase()} only. 1, 2, or Space switches without moving the camera. Snapshot saves both.`;
+        else if (state.mode === 'dual') dom.hint.textContent = 'Orbit anywhere. Snapshot saves all selected splats from this camera.';
+        else dom.hint.textContent = `Showing ${state.activeSlot.toUpperCase()} only. 1–4 or Space switches without moving the camera. Snapshot saves all.`;
     }
 
     const locked = state.busy;
@@ -1480,6 +1349,7 @@ function syncSession() {
     if (dom.snapshotBtn) dom.snapshotBtn.disabled = locked;
     if (dom.changeBtn) dom.changeBtn.disabled = locked;
     if (dom.exitBtn) dom.exitBtn.disabled = false;
+    positionCompareLabels();
 }
 
 function labelHtml(letter, slot) {

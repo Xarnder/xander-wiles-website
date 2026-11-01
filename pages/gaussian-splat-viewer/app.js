@@ -1,3 +1,4 @@
+import { chooseImageExport, isExportDialogOpen, renderExportImage, saveExportImage } from './export-image.js';
 /**
  * app.js — Gaussian Splat 3D Viewer Application
  * Features:
@@ -861,7 +862,7 @@ function setupUIEventListeners() {
 
 function setupKeyboardListeners() {
     window.addEventListener('keydown', (e) => {
-        if (isCompareActive() || isCompareSetupOpen()) return;
+        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
         if (keys.hasOwnProperty(e.code)) {
@@ -1410,7 +1411,7 @@ function applySceneTransform() {
 function setupDragAndDrop() {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        if (isCompareActive() || isCompareSetupOpen()) return;
+        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         dragCounter++;
         dom.dropOverlay.classList.add('active');
     });
@@ -1433,7 +1434,7 @@ function setupDragAndDrop() {
         dragCounter = 0;
         dom.dropOverlay.classList.remove('active');
 
-        if (isCompareActive() || isCompareSetupOpen()) return;
+        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
             loadSplatFile(file);
@@ -1641,7 +1642,7 @@ function renderLoop(now) {
     lastFrameTime = now;
 
     // Update walk controls
-    if (state.mode === 'walk' && !isCompareActive() && !isCompareSetupOpen() && delta < 0.25) {
+    if (state.mode === 'walk' && !isExportDialogOpen() && !isCompareActive() && !isCompareSetupOpen() && delta < 0.25) {
         updateWalkMovement(delta);
     }
 
@@ -1655,31 +1656,20 @@ function renderLoop(now) {
     }
 }
 
-function captureScreenshot() {
-    if (!viewer.renderer) return;
-
-    // Flash visual feedback
-    const flash = document.createElement('div');
-    flash.style.cssText = 'position:fixed;inset:0;background:white;z-index:99999;opacity:0.8;transition:opacity 0.3s;pointer-events:none;';
-    document.body.appendChild(flash);
-    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 300); }, 50);
-
-    // Render immediately so the WebGL front buffer contains active scene pixels
-    if (typeof viewer.update === 'function') {
-        viewer.update();
+async function captureScreenshot() {
+    if (!viewer?.renderer || isCompareActive()) return;
+    const options = await chooseImageExport(viewer.camera.aspect, viewer.renderer.domElement.width);
+    if (!options || isCompareActive()) return;
+    let canvas;
+    try {
+        canvas = renderExportImage(viewer.renderer, [viewer], options, () => viewer.render());
+        await saveExportImage(canvas, `splat-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}`, options.format);
+        showToast('Screenshot saved!', 'success');
+    } catch (error) {
+        showToast(error.message || 'Could not export image', 'error');
+    } finally {
+        if (canvas) { canvas.width = 0; canvas.height = 0; }
     }
-    if (typeof viewer.render === 'function') {
-        viewer.render();
-    }
-
-    const canvas = viewer.renderer.domElement;
-    const dataUrl = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    link.download = `splat-${timestamp}.png`;
-    link.href = dataUrl;
-    link.click();
-    showToast('Screenshot saved!', 'success');
 }
 
 /* =========================================================
