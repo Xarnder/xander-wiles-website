@@ -1,3 +1,6 @@
+import { createBatchSplatRenderer } from './batch-splat-renderer.js';
+import { openVideoRecorder, isVideoActive } from './video-export.js';
+import { captureCamera, applyCamera, sortVideoFrame } from './camera-path.js';
 import { chooseImageExport, isExportDialogOpen, renderExportImage, saveExportImage } from './export-image.js';
 /**
  * app.js — Gaussian Splat 3D Viewer Application
@@ -840,6 +843,7 @@ function setupUIEventListeners() {
 
     // HUD Actions
     dom.hudSnapshotBtn.addEventListener('click', captureScreenshot);
+    document.getElementById('hud-video-btn').addEventListener('click', recordViewerVideo);
 
     dom.hudFullscreenBtn.addEventListener('click', () => {
         if (!document.fullscreenElement) {
@@ -862,7 +866,7 @@ function setupUIEventListeners() {
 
 function setupKeyboardListeners() {
     window.addEventListener('keydown', (e) => {
-        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
+        if (isVideoActive() || isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
         if (keys.hasOwnProperty(e.code)) {
@@ -1411,7 +1415,7 @@ function applySceneTransform() {
 function setupDragAndDrop() {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
+        if (isVideoActive() || isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         dragCounter++;
         dom.dropOverlay.classList.add('active');
     });
@@ -1434,7 +1438,7 @@ function setupDragAndDrop() {
         dragCounter = 0;
         dom.dropOverlay.classList.remove('active');
 
-        if (isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
+        if (isVideoActive() || isExportDialogOpen() || isCompareActive() || isCompareSetupOpen()) return;
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
             loadSplatFile(file);
@@ -1642,7 +1646,7 @@ function renderLoop(now) {
     lastFrameTime = now;
 
     // Update walk controls
-    if (state.mode === 'walk' && !isExportDialogOpen() && !isCompareActive() && !isCompareSetupOpen() && delta < 0.25) {
+    if (state.mode === 'walk' && !isVideoActive() && !isExportDialogOpen() && !isCompareActive() && !isCompareSetupOpen() && delta < 0.25) {
         updateWalkMovement(delta);
     }
 
@@ -1704,4 +1708,77 @@ function hideLoading() {
         dom.loadingOverlay.classList.remove('active');
         dom.loadingOverlay.style.display = 'none';
     }
+}
+
+
+function recordViewerVideo() {
+    if (!viewer?.splatRenderReady || isCompareActive() || isVideoActive()) return;
+    const wasRunning = viewer.selfDrivenModeRunning;
+    let batchRenderer = null;
+    let restoreMainSplat = false;
+    const navigationMode = state.mode;
+    const gizmoEnabled = transformControls?.enabled;
+    const gizmoHelper = transformControls?.getHelper();
+    const gizmoVisible = gizmoHelper?.visible;
+    if (transformControls) transformControls.enabled = false;
+    if (gizmoHelper) gizmoHelper.visible = false;
+    if (navigationMode === 'walk') setNavigationMode('orbit');
+    openVideoRecorder({
+        camera: () => viewer.camera,
+        save: () => ({ pose: captureCamera(viewer.camera), target: viewer.controls.target.clone() }),
+        restore(saved) {
+            const controls = viewer.controls;
+            const damping = controls.enableDamping;
+            controls.enableDamping = false;
+            controls.update();
+            controls.target.copy(saved.target);
+            applyCamera(viewer.camera, saved.pose);
+            controls.enableDamping = damping;
+        },
+        setDriven(value) {
+            viewer.controls.enabled = !value;
+            if (value) viewer.stop();
+            else if (wasRunning && !viewer.selfDrivenModeRunning) viewer.start();
+        },
+        preview() {
+            viewer.runSplatSort();
+            viewer.updateSplatMesh();
+            viewer.render();
+        },
+        entries: () => [{ id: 'main', name: lastSplatSource?.name || 'splat' }],
+        toast: showToast,
+        async beginExport(options = {}) {
+            viewer.stop();
+            if (options.batch) {
+                batchRenderer = createBatchSplatRenderer(viewer.renderer, viewer.camera);
+                const count = viewer.getSceneCount();
+                if (count) {
+                    restoreMainSplat = true;
+                    await viewer.removeSplatScenes(Array.from({ length: count }, (_, i) => i), false);
+                }
+            }
+        },
+        async unload() { if (batchRenderer) await batchRenderer.unload(); },
+        async load(entry, signal) { if (batchRenderer) await batchRenderer.load(entry, signal); },
+        async frame(entry, options, signal) {
+            if (batchRenderer) return batchRenderer.frame(entry, options, signal);
+            await sortVideoFrame(viewer, signal);
+            return renderExportImage(viewer.renderer, [viewer], options, () => viewer.render());
+        },
+        async endExport() {
+            if (batchRenderer) await batchRenderer.unload();
+            batchRenderer = null;
+            if (restoreMainSplat && lastSplatSource?.file) {
+                restoreMainSplat = false;
+                const buffer = await parseSplatFile(lastSplatSource.file);
+                await viewer.addSplatBuffers([buffer], [{ splatAlphaRemovalThreshold: state.alphaThreshold }], true, false, false, true, true);
+                applySceneTransform();
+                updateSplatStats();
+            }
+        }
+    }).catch(error => showToast(error.message, 'error')).finally(() => {
+        if (transformControls) transformControls.enabled = gizmoEnabled;
+        if (gizmoHelper) gizmoHelper.visible = gizmoVisible;
+        if (navigationMode === 'walk') setNavigationMode('walk');
+    });
 }

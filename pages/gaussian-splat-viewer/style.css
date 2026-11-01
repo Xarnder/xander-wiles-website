@@ -2326,3 +2326,30 @@ body.compare-setup-open #drop-overlay {
 .image-export-dialog input { padding: 10px; background: var(--input-bg, #27272a); color: inherit; border: 1px solid var(--panel-border); border-radius: 8px; }
 .export-note { font-size: 0.8rem; color: var(--text-secondary); }
 .export-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+.video-dialog > * + * { margin-top: 14px; }
+.video-dialog label { display: grid; gap: 6px; }
+.video-record-status {
+  position: fixed; z-index: 10080; bottom: 24px; left: 50%; transform: translateX(-50%);
+  max-width: calc(100vw - 24px); display: flex; align-items: center; gap: 16px;
+  padding: 12px 18px; border: 1px solid #38bdf8; border-radius: 14px;
+  background: #18181bf2; color: white; box-shadow: 0 8px 40px #0008;
+}
+.video-record-status[hidden] { display: none; }
+.video-workflow .compare-bar, .video-workflow .compare-pose-panel,
+.video-workflow .controls-panel, .video-workflow .floating-hud,
+.video-workflow .toggle-panel-btn, .video-workflow .mobile-gizmo-bar {
+  pointer-events: none; opacity: 0.45;
+}
+.video-workflow .compare-hint { display: none; }
+.video-downloads { display: grid; gap: 10px; }
+.video-download-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px; border: 1px solid var(--panel-border); border-radius: 10px;
+}
+.video-download-name { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
+.video-download-row a { flex: 0 0 auto; text-decoration: none; }
+#video-error { color: var(--accent-pink, #fb7185); }
+
+.video-path-import { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--panel-border); }
+.video-dialog [role="alert"] { color: var(--accent-pink, #fb7185); }

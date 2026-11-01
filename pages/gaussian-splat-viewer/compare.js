@@ -1,3 +1,6 @@
+import { createBatchSplatRenderer } from './batch-splat-renderer.js';
+import { openVideoRecorder, isVideoActive, isVideoCameraDriven } from './video-export.js';
+import { sortVideoFrame, abortCheck } from './camera-path.js';
 import { chooseImageExport, isExportDialogOpen, renderExportImage, saveExportImage } from './export-image.js';
 /**
  * Compare up to four Gaussian splats from one shared camera.
@@ -113,6 +116,7 @@ function cacheDom() {
     dom.poseApply = document.getElementById('compare-pose-apply');
     dom.poseFile = document.getElementById('compare-pose-file');
     dom.snapshotBtn = document.getElementById('compare-snapshot-btn');
+    document.getElementById('compare-video-btn')?.addEventListener('click', recordCompareVideo);
     dom.exitBtn = document.getElementById('compare-exit-btn');
     dom.changeBtn = document.getElementById('compare-change-btn');
     SLOT_IDS.forEach((id) => {
@@ -258,7 +262,7 @@ function bindUi() {
 }
 
 function onKeyDown(event) {
-    if (isExportDialogOpen()) return;
+    if (isVideoActive() || isExportDialogOpen()) return;
     if (!state.session && !state.setupOpen) return;
     const tag = event.target && event.target.tagName;
     if (event.code === 'Escape') {
@@ -883,7 +887,7 @@ function resize() {
     const height = Math.max(1, dom.stage.clientHeight || window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap()));
     renderer.setSize(width, height, false);
-    applyAspect();
+    if (!isVideoCameraDriven()) applyAspect();
     if (dom.root) dom.root.classList.toggle('is-stacked', state.stacked);
     positionCompareLabels();
 }
@@ -948,9 +952,9 @@ function paneRects() {
 function renderLoop() {
     state.frameId = requestAnimationFrame(renderLoop);
     if (!state.session || !renderer || !camera || state.capturing || document.hidden) return;
-    if (controls) controls.enabled = !state.busy;
-    if (controls && !state.busy) controls.update();
-    applyAspect();
+    if (controls) controls.enabled = !state.busy && !isVideoCameraDriven();
+    if (controls && !state.busy && !isVideoCameraDriven()) controls.update();
+    if (!isVideoCameraDriven()) applyAspect();
 
     const panes = paneRects();
     renderer.setClearColor(0x111115, 1);
@@ -1401,4 +1405,66 @@ function escapeHtml(value) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+
+function recordCompareVideo() {
+    if (!state.session || state.busy || state.setupOpen || selectedIds().length < 2) return;
+    const ids = selectedIds();
+    const mode = state.mode;
+    const activeSlot = state.activeSlot;
+    let opId;
+    let batchRenderer = null;
+    openVideoRecorder({
+        camera: () => camera,
+        save: () => freezePose(),
+        restore: pose => { if (camera) applyPose(pose); },
+        setDriven: value => { if (controls) controls.enabled = !value; },
+        preview: () => {}, // The comparison loop renders the driven camera.
+        entries: () => ids.map(id => ({ id, name: slots[id].name })),
+        toast: deps.showToast,
+        async beginExport(options = {}) {
+            if (options.batch) batchRenderer = createBatchSplatRenderer(renderer, camera);
+            opId = ++state.opId;
+            state.busy = true;
+            state.capturing = true;
+            for (const slot of Object.values(slots)) await destroyViewer(slot);
+        },
+        async unload() { if (batchRenderer) await batchRenderer.unload(); },
+        async load(entry, signal) {
+            if (batchRenderer) return batchRenderer.load(entry, signal);
+            for (const slot of Object.values(slots)) await destroyViewer(slot);
+            abortCheck(signal);
+            await ensureViewer(slots[entry.id], scenes[entry.id], opId);
+            deps.hideLoading();
+        },
+        async frame(entry, options, signal) {
+            if (batchRenderer) return batchRenderer.frame(entry, options, signal);
+            const group = slots[entry.id].viewer;
+            if (!group || !camera || !renderer) throw new Error('The comparison session ended');
+            await sortVideoFrame(group.viewer, signal);
+            // Sorting has already finished; the DropIn callback must not start
+            // another asynchronous sort while this exact frame is captured.
+            const update = group.viewer.update;
+            group.viewer.update = () => {};
+            try {
+                return renderExportImage(renderer, [group.viewer], options, () => renderer.render(scenes[entry.id], camera));
+            } finally { group.viewer.update = update; }
+        },
+        async endExport() {
+            try {
+                if (batchRenderer) await batchRenderer.unload();
+                batchRenderer = null;
+                if (!stillRunning(opId)) return;
+                state.mode = mode;
+                state.activeSlot = activeSlot;
+                await loadActiveViewers(opId);
+            } finally {
+                state.capturing = false;
+                state.busy = false;
+                deps.hideLoading();
+                if (state.session) syncSession();
+            }
+        }
+    }).catch(error => deps.showToast(error.message, 'error'));
 }
