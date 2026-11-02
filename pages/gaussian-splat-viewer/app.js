@@ -88,6 +88,9 @@ let mainViewerSuspended = false;
 let lastSplatSource = null;
 let parkedMainRenderer = null;
 
+// Touch devices start with camera-only dragging, regardless of viewport width.
+const touchCameraOnlyDefault = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
+
 // Mobile Drawer State ('collapsed' | 'half' | 'full')
 let mobileDrawerState = 'half';
 let selectedMobileAxis = 'all';
@@ -305,6 +308,11 @@ function cacheDomElements() {
 
     // 3D Gizmo Controls
     dom.gizmoToggle = document.getElementById('gizmo-toggle');
+    if (touchCameraOnlyDefault) {
+        document.getElementById('gizmo-toggle-label').textContent = 'Enable model dragging';
+        document.getElementById('touch-model-drag-hint').hidden = false;
+        dom.gizmoToggle.checked = false;
+    }
     dom.gizmoModeBtns = document.querySelectorAll('.gizmo-btn');
 
     // Ground Height & Nudges
@@ -439,6 +447,8 @@ function setupTransformControls() {
     transformControls.size = isTouchOrMobile ? 1.35 : 0.85;
     transformControls.space = 'local';
     transformControls.attach(transformProxy);
+    // Hiding the helper alone does not disable its invisible raycast handles.
+    if (touchCameraOnlyDefault) transformControls.enabled = false;
 
     const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
     viewer.threeScene.add(helper);
@@ -462,7 +472,7 @@ function setupTransformControls() {
     // Touch / Pointer Down Capture on canvas:
     // Prevent camera OrbitControls from stealing the touch if touching a gizmo handle
     viewer.renderer.domElement.addEventListener('pointerdown', (e) => {
-        if (!state.showGizmo || !transformControls || !helper.visible) return;
+        if (!state.showGizmo || !transformControls || !transformControls.enabled || !helper.visible) return;
 
         const rect = viewer.renderer.domElement.getBoundingClientRect();
         const pointer = new THREE.Vector2(
@@ -486,7 +496,7 @@ function setupTransformControls() {
 
     viewer.renderer.domElement.addEventListener('pointerup', () => {
         setTimeout(() => {
-            if (!transformControls.dragging && state.navMode === 'orbit' && viewer.controls) {
+            if (!transformControls.dragging && state.mode === 'orbit' && !isVideoActive() && viewer.controls) {
                 viewer.controls.enabled = true;
             }
         }, 50);
@@ -629,6 +639,10 @@ function setupUIEventListeners() {
     dom.gizmoToggle.addEventListener('change', (e) => {
         state.showGizmo = e.target.checked;
         if (transformControls) {
+            if (touchCameraOnlyDefault) {
+                transformControls.enabled = state.showGizmo;
+                if (!state.showGizmo && viewer.controls && state.mode === 'orbit') viewer.controls.enabled = true;
+            }
             const helper = transformControls.getHelper ? transformControls.getHelper() : transformControls;
             helper.visible = state.showGizmo;
             viewer.forceRenderNextFrame();
@@ -636,11 +650,17 @@ function setupUIEventListeners() {
         if (dom.mobileGizmoBar) {
             dom.mobileGizmoBar.classList.toggle('active', state.showGizmo && window.innerWidth <= 768);
         }
-        showToast(`3D Gizmo ${state.showGizmo ? 'Enabled' : 'Disabled'}`, 'info');
+        showToast(touchCameraOnlyDefault
+            ? (state.showGizmo ? 'Model dragging enabled. Turn it off to drag the camera freely.' : 'Camera-only dragging enabled')
+            : `3D Gizmo ${state.showGizmo ? 'Enabled' : 'Disabled'}`, 'info');
     });
 
     dom.gizmoModeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+            if (touchCameraOnlyDefault && !state.showGizmo) {
+                showToast('Turn on Enable model dragging to use the 3D handles', 'info');
+                return;
+            }
             dom.gizmoModeBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             state.gizmoMode = btn.dataset.mode;

@@ -267,12 +267,13 @@
                     <span class="section-label">Interactive 3D Handles</span>
                     <div class="gizmo-toolbar">
                         <div class="toggle-row">
-                            <span style="font-size: 0.82rem; font-weight: 600;">Show 3D Gizmo (G)</span>
+                            <span id="gizmo-toggle-label" style="font-size: 0.82rem; font-weight: 600;">Show 3D Gizmo (G)</span>
                             <label class="switch">
-                                <input type="checkbox" id="gizmo-toggle">
+                                <input type="checkbox" id="gizmo-toggle" aria-labelledby="gizmo-toggle-label" aria-describedby="touch-model-drag-hint">
                                 <span class="switch-slider"></span>
                             </label>
                         </div>
+                        <p id="touch-model-drag-hint" class="export-note" hidden>Off by default on touch screens: drag to orbit the camera. Turn on to move, rotate or scale the model with the 3D handles.</p>
                         <div id="gizmo-modes" class="gizmo-mode-group">
                             <button id="gizmo-mode-translate" class="gizmo-btn active" data-mode="translate">Move (Pos)</button>
                             <button id="gizmo-mode-rotate" class="gizmo-btn" data-mode="rotate">Tilt (Rot)</button>
