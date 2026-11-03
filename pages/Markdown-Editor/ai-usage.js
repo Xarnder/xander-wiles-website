@@ -1,9 +1,9 @@
 /**
- * Local history of Markdown Editor Gemini calls.
- * Costs are estimates from token counts and the 3.1 Flash-Lite prices.
+ * Local history of Markdown Editor AI calls.
+ * Costs are estimates from token counts and model prices.
  */
 
-import { formatGeminiUsd, geminiCostUsd } from './ai.js';
+import { formatAiUsd, aiCostUsd } from './ai.js';
 
 const STORAGE_KEY = 'md-editor:ai-usage';
 const MAX_CALLS = 400;
@@ -58,12 +58,14 @@ function normalize(entry) {
     const usd = Number(entry?.usd);
     return {
         at: Number.isFinite(at) ? at : Date.now(),
+        provider: entry?.provider === 'openai' ? 'openai' : 'gemini',
+        cachedInputTokens: Number(entry?.cachedInputTokens) || 0,
         task: String(entry?.task || 'revise'),
         fileName: String(entry?.fileName || 'note.md').slice(0, 180),
         inputTokens: Math.max(0, Number(entry?.inputTokens) || 0),
         outputTokens: Math.max(0, Number(entry?.outputTokens) || 0),
         thoughtTokens: Math.max(0, Number(entry?.thoughtTokens) || 0),
-        usd: Number.isFinite(usd) && usd >= 0 ? usd : null,
+        usd: entry?.usd != null && Number.isFinite(usd) && usd >= 0 ? usd : null,
     };
 }
 
@@ -78,7 +80,7 @@ export function readAiCalls() {
  * @param {{ at?: number, task?: string, fileName?: string, inputTokens?: number, outputTokens?: number, thoughtTokens?: number, usd?: number | null }} entry
  */
 export function recordAiCall(entry) {
-    const usageUsd = geminiCostUsd(entry);
+    const usageUsd = aiCostUsd(entry);
     const next = [
         normalize({ ...entry, usd: entry?.usd == null ? usageUsd : entry.usd }),
         ...readAiCalls(),
@@ -128,7 +130,7 @@ function formatWhen(time) {
 
 function money(usd) {
     if (usd == null) return 'No token count';
-    return formatGeminiUsd(usd) || '$0.0000';
+    return formatAiUsd(usd) || '$0.0000';
 }
 
 let pane = 'general';
@@ -166,6 +168,14 @@ export function renderAiUsage() {
     week.textContent = money(totals.week);
     month.textContent = money(totals.month);
 
+    for (const provider of ['gemini', 'openai']) {
+        const subtotal = summarizeAiCosts(entries.filter(entry => entry.provider === provider));
+        for (const period of ['today', 'week', 'month']) {
+            const cell = document.getElementById(`ai-usage-${provider}-${period}`);
+            if (cell) cell.textContent = money(subtotal[period]);
+        }
+    }
+
     list.replaceChildren();
     for (const entry of entries) {
         const item = document.createElement('li');
@@ -177,7 +187,7 @@ export function renderAiUsage() {
 
         const meta = document.createElement('p');
         meta.className = 'ai-usage-meta';
-        meta.textContent = `${aiTaskLabel(entry.task)} · ${formatWhen(entry.at)}`;
+        meta.textContent = `${entry.provider === 'openai' ? 'OpenAI' : 'Gemini'} · ${aiTaskLabel(entry.task)} · ${formatWhen(entry.at)}`;
 
         const cost = document.createElement('p');
         cost.className = 'ai-usage-cost';

@@ -177,14 +177,6 @@ export default async function handler(request) {
         return json({ error: 'Method not allowed' }, 405);
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        return json(
-            { error: 'GEMINI_API_KEY is not set on the server.' },
-            500
-        );
-    }
-
     const header = request.headers.get('authorization') || '';
     const accessToken = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     if (!accessToken) {
@@ -232,6 +224,47 @@ export default async function handler(request) {
         return json({ error: 'Describe what should change.' }, 400);
     }
 
+    const provider = body?.provider ?? 'gemini';
+    if (provider !== 'gemini' && provider !== 'openai') {
+        return json({ error: 'Unknown AI provider.' }, 400);
+    }
+    const openai = provider === 'openai';
+    const apiKey = openai ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        const name = openai ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY';
+        return json({ error: `${name} is not set on the server.` }, 500);
+    }
+    const input = buildInput({ task, markdown, selection, instruction, contextFiles: contextFiles.files });
+    if (openai) {
+        let response;
+        let data;
+        try {
+            response = await fetch('https://api.openai.com/v1/responses', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'gpt-4.1-mini', instructions: systemPromptFor(task), input, store: false }),
+                signal: AbortSignal.timeout(50_000),
+            });
+            data = await response.json();
+        } catch {
+            return json({ error: 'Could not get a response from OpenAI.' }, 502);
+        }
+        if (!response.ok) {
+            return json({ error: data?.error?.message || 'OpenAI request failed.' }, response.status === 429 ? 429 : 502);
+        }
+        if (data?.status !== 'completed') return json({ error: 'OpenAI did not finish the response.' }, 502);
+        const result = (data.output || []).filter(item => item.type === 'message')
+            .flatMap(item => item.content || []).filter(part => part.type === 'output_text')
+            .map(part => part.text).join('').trim();
+        if (!result) return json({ error: 'OpenAI returned no text.' }, 502);
+        const usage = data.usage && {
+            inputTokens: data.usage.input_tokens,
+            cachedInputTokens: data.usage.input_tokens_details?.cached_tokens ?? 0,
+            outputTokens: data.usage.output_tokens,
+        };
+        return json(task === 'context' ? { reply: result, usage } : { markdown: result, usage }, 200);
+    }
+
     let gemini;
     let payload;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -250,13 +283,7 @@ export default async function handler(request) {
                     generation_config: {
                         thinking_level: 'minimal',
                     },
-                    input: buildInput({
-                        task,
-                        markdown,
-                        selection,
-                        instruction,
-                        contextFiles: contextFiles.files,
-                    }),
+                    input,
                 }),
                 signal: AbortSignal.timeout(50_000),
             });

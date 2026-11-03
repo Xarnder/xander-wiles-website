@@ -20,7 +20,7 @@ function formatUsd(usd) {
 }
 
 /** @param {number} usd */
-export function formatGeminiUsd(usd) {
+export function formatAiUsd(usd) {
     const amount = Number(usd);
     if (!Number.isFinite(amount) || amount < 0) return '';
     return formatUsd(amount);
@@ -31,12 +31,18 @@ export function formatGeminiUsd(usd) {
  * @param {{ inputTokens?: number, outputTokens?: number, thoughtTokens?: number } | null | undefined} usage
  * @returns {number | null}
  */
-export function geminiCostUsd(usage) {
+export function aiCostUsd(usage) {
     const inputTokens = Number(usage?.inputTokens);
     const outputTokens = Number(usage?.outputTokens);
     const thoughtTokens = Number(usage?.thoughtTokens) || 0;
     if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return null;
     if (inputTokens < 0 || outputTokens < 0 || thoughtTokens < 0) return null;
+    if (usage.inputTokens == null || usage.outputTokens == null) return null;
+    if (usage.provider === 'openai') {
+        // GPT-4.1 mini standard USD rates per million tokens.
+        const cached = Math.min(inputTokens, Math.max(0, Number(usage.cachedInputTokens) || 0));
+        return ((inputTokens - cached) * 0.40 + cached * 0.10 + outputTokens * 1.60) / 1_000_000;
+    }
     return costUsd(inputTokens, outputTokens, thoughtTokens);
 }
 
@@ -51,11 +57,11 @@ function costUsd(inputTokens, outputTokens, thoughtTokens = 0) {
  * @param {{ inputTokens?: number, outputTokens?: number, thoughtTokens?: number } | null | undefined} usage
  * @returns {string}
  */
-export function formatGeminiCost(usage) {
+export function formatAiCost(usage) {
     const inputTokens = Number(usage?.inputTokens);
     const outputTokens = Number(usage?.outputTokens);
     const thoughtTokens = Number(usage?.thoughtTokens) || 0;
-    const usd = geminiCostUsd(usage);
+    const usd = aiCostUsd(usage);
     if (usd == null) return '';
     const amount = formatUsd(usd);
     const thinking =
@@ -69,7 +75,7 @@ export function formatGeminiCost(usage) {
  * @param {{ task?: string, markdown?: string, selection?: string, instruction?: string, contextFiles?: Array<{ name?: string, markdown?: string }> }} input
  * @returns {string}
  */
-export function previewGeminiCost(input) {
+export function previewAiCost(input) {
     const task = input?.task === 'edit' ? 'revise' : String(input?.task || '');
     const note = String(input?.markdown || '');
     const passage = String(input?.selection || '');
@@ -101,7 +107,7 @@ export function previewGeminiCost(input) {
 
     const inputTokens = Math.ceil(inputChars / CHARS_PER_TOKEN);
     const outputTokens = Math.ceil(outputChars / CHARS_PER_TOKEN);
-    const amount = formatUsd(costUsd(inputTokens, outputTokens, PREVIEW_THOUGHT_TOKENS));
+    const amount = formatUsd(aiCostUsd({ provider: input.provider, inputTokens, outputTokens, thoughtTokens: PREVIEW_THOUGHT_TOKENS }));
     return `About ${amount} before sending.`;
 }
 

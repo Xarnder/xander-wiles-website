@@ -9,8 +9,8 @@ import {
     applyAiProposal,
     diffLines,
     formatDiffCounts,
-    formatGeminiCost,
-    previewGeminiCost,
+    formatAiCost,
+    previewAiCost,
     stripWrappingFence,
 } from './ai.js';
 
@@ -172,22 +172,22 @@ test('annotateDiff line numbers diverge after an insertion', () => {
     assert.equal(summary.addedSections, 1);
 });
 
-test('formatGeminiCost bills thinking tokens at the output rate', () => {
+test('formatAiCost bills thinking tokens at the output rate', () => {
     assert.equal(
-        formatGeminiCost({ inputTokens: 3000, outputTokens: 3000, thoughtTokens: 0 }),
+        formatAiCost({ inputTokens: 3000, outputTokens: 3000, thoughtTokens: 0 }),
         'This reply $0.0053 (3,000 in, 3,000 out).'
     );
     assert.equal(
-        formatGeminiCost({ inputTokens: 1000, outputTokens: 100, thoughtTokens: 400 }),
+        formatAiCost({ inputTokens: 1000, outputTokens: 100, thoughtTokens: 400 }),
         'This reply $0.0010 (1,000 in, 100 out, 400 thinking).'
     );
-    assert.equal(formatGeminiCost(null), '');
+    assert.equal(formatAiCost(null), '');
 });
 
-test('previewGeminiCost is higher for a full rewrite than a question', () => {
+test('previewAiCost is higher for a full rewrite than a question', () => {
     const note = '# Ideas\n\n'.padEnd(4000, 'Ship the editor. ');
-    const rewrite = previewGeminiCost({ task: 'revise', markdown: note, instruction: 'Tighten it.' });
-    const question = previewGeminiCost({
+    const rewrite = previewAiCost({ task: 'revise', markdown: note, instruction: 'Tighten it.' });
+    const question = previewAiCost({
         task: 'context',
         instruction: 'What is this about?',
         contextFiles: [{ name: 'Ideas.md', markdown: note }],
@@ -197,7 +197,7 @@ test('previewGeminiCost is higher for a full rewrite than a question', () => {
     assert.match(question, /before sending\.$/);
     const amount = (text) => Number(text.match(/\$(\d+(?:\.\d+)?)/)[1]);
     assert.ok(amount(rewrite) > amount(question));
-    assert.equal(previewGeminiCost({ task: 'revise' }), '');
+    assert.equal(previewAiCost({ task: 'revise' }), '');
 });
 
 test('revise refuses a dropped custom list', () => {
@@ -207,4 +207,11 @@ test('revise refuses a dropped custom list', () => {
         proposal: '# Ideas\n\nNo list here.\n',
     });
     assert.equal(result.ok, false);
+});
+
+test('OpenAI prices cached input separately and bills reported output once', () => {
+    assert.equal(formatAiCost({
+        provider: 'openai', inputTokens: 1000000, cachedInputTokens: 500000, outputTokens: 1000000,
+    }), 'This reply $1.85 (1,000,000 in, 1,000,000 out).');
+    assert.equal(formatAiCost({ provider: 'openai' }), '');
 });

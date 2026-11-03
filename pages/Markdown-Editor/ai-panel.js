@@ -3,7 +3,7 @@
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
  */
 
-import { annotateDiff, applyAiProposal, formatDiffCounts, formatGeminiCost, previewGeminiCost } from './ai.js';
+import { annotateDiff, applyAiProposal, formatDiffCounts, formatAiCost, previewAiCost } from './ai.js';
 import { recordAiCall, renderAiUsage } from './ai-usage.js';
 import { displayNoteTitle } from './ui.js';
 
@@ -57,6 +57,7 @@ let task = 'revise';
 
 function readEls() {
     return {
+        provider: document.getElementById('ai-provider'),
         empty: document.getElementById('ai-empty'),
         active: document.getElementById('ai-active'),
         title: document.getElementById('ai-file-title'),
@@ -130,9 +131,9 @@ function hideCost() {
 
 function showCost(usage) {
     if (!nodes?.cost) return;
-    const text = formatGeminiCost(usage);
+    const text = formatAiCost(usage);
     nodes.cost.hidden = !text;
-    nodes.cost.textContent = text;
+    nodes.cost.textContent = text ? `${usage.provider === 'openai' ? 'OpenAI' : 'Gemini'} · ${text}` : '';
 }
 
 function refreshCostPreview() {
@@ -142,7 +143,8 @@ function refreshCostPreview() {
     const contexts = attachments.filter((file) => file.role === 'context');
     const asking = contexts.length > 0 && !editing;
     const source = asking ? null : editing || (doc?.fileId ? doc : null);
-    const text = previewGeminiCost({
+    const text = previewAiCost({
+        provider: nodes.provider?.value,
         task: asking ? 'context' : task,
         markdown: source?.content || '',
         selection: nodes.selection?.value || '',
@@ -483,6 +485,10 @@ export function initAiPanel(options) {
         return;
     }
     nodes.run.dataset.bound = '1';
+    nodes.provider?.addEventListener('change', () => {
+        hideCost();
+        refreshCostPreview();
+    });
     paintTask();
 
     for (const btn of nodes.tasks) {
@@ -592,6 +598,7 @@ async function runProposal() {
     syncAiPanel();
     appendTurn(instruction || TASK_COPY[task]?.instructionLabel || 'Edit', 'user');
 
+    const provider = nodes.provider?.value || 'gemini';
     let response;
     try {
         response = await fetch('/api/markdown-gemini', {
@@ -601,6 +608,7 @@ async function runProposal() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+                provider,
                 task: sentTask,
                 markdown: asking ? '' : source.content,
                 selection: sentTask === 'expand' ? selection : '',
@@ -622,25 +630,24 @@ async function runProposal() {
     if (!response.ok) {
         if (response.status === 404) {
             throw new Error(
-                'AI service is not running on this server. Add GEMINI_API_KEY on Vercel, or run npm run dev locally.'
+                'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
             );
         }
         throw new Error(payload.error || `AI request failed (${response.status})`);
     }
 
+    const usage = { ...payload.usage, provider };
     recordAiCall({
+        ...usage,
         at: Date.now(),
         task: sentTask,
         fileName: source.name,
-        inputTokens: payload.usage?.inputTokens,
-        outputTokens: payload.usage?.outputTokens,
-        thoughtTokens: payload.usage?.thoughtTokens,
     });
     renderAiUsage();
 
     if (sentTask === 'context') {
         const reply = String(payload.reply || '').trim();
-        if (!reply) throw new Error('Gemini returned an empty answer.');
+        if (!reply) throw new Error('The AI provider returned an empty answer.');
         if (nodes.reply) {
             nodes.reply.hidden = false;
             nodes.reply.textContent = reply;
@@ -659,7 +666,7 @@ async function runProposal() {
         };
         appendTurn(reply, 'assistant');
         setStatus('Answered from the attached note. The file was not changed.', 'ok');
-        showCost(payload.usage);
+        showCost(usage);
         syncAiPanel();
         return;
     }
@@ -667,7 +674,7 @@ async function runProposal() {
     const live = targetFile();
     if (!live || live.id !== source.id || live.content !== source.content) {
         setStatus('That note changed. Send again.', 'error');
-        showCost(payload.usage);
+        showCost(usage);
         syncAiPanel();
         return;
     }
@@ -680,7 +687,7 @@ async function runProposal() {
     });
     if (!applied.ok) {
         setStatus(applied.error, 'error');
-        showCost(payload.usage);
+        showCost(usage);
         syncAiPanel();
         return;
     }
@@ -688,7 +695,7 @@ async function runProposal() {
     const hasChanges = renderDiff(source.content, applied.markdown);
     if (!hasChanges) {
         setStatus('The model returned the same text.', 'ok');
-        showCost(payload.usage);
+        showCost(usage);
         syncAiPanel();
         return;
     }
@@ -705,7 +712,7 @@ async function runProposal() {
         markdown: applied.markdown,
     };
     setStatus('Removed lines are struck through. Added lines are highlighted. Accept writes this note.', 'ok');
-    showCost(payload.usage);
+    showCost(usage);
     syncAiPanel();
 }
 

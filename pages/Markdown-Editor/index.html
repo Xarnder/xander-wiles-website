@@ -341,6 +341,12 @@
                 <div id="ai-active" class="ai-active" hidden>
                     <h2 id="ai-file-title" class="editor-file-title"></h2>
                     <p class="ai-lede">Context answers a question and leaves the file alone. Edit rewrites that one note and shows the previous text beside the proposal.</p>
+                    <label class="ai-field">AI provider
+                        <select id="ai-provider">
+                            <option value="gemini">Google Gemini</option>
+                            <option value="openai">OpenAI (ChatGPT)</option>
+                        </select>
+                    </label>
                     <div class="ai-tasks" role="radiogroup" aria-label="AI task">
                         <button type="button" class="ai-task is-active" data-ai-task="expand" role="radio" aria-checked="true">Expand</button>
                         <button type="button" class="ai-task" data-ai-task="header" role="radio" aria-checked="false">Header</button>
@@ -534,19 +540,25 @@
                     <div id="settings-panel-ai" hidden>
                         <div class="settings-prefs">
                             <h3 class="settings-subheading">AI usage</h3>
-                            <p class="settings-prefs-lede">Each Gemini call on this device, with an estimated cost from the token counts. Today, this week (from Monday), and this month add those estimates up.</p>
+                            <p class="settings-prefs-lede">Estimated USD costs from token counts reported on this device. Totals include Gemini and OpenAI. The week starts on Monday.</p>
                             <div class="ai-usage-totals">
                                 <div class="ai-usage-total">
                                     <span>Today</span>
                                     <strong id="ai-usage-today">$0.0000</strong>
+                                    <small>Gemini <span id="ai-usage-gemini-today">$0.0000</span></small>
+                                    <small>OpenAI <span id="ai-usage-openai-today">$0.0000</span></small>
                                 </div>
                                 <div class="ai-usage-total">
                                     <span>This week</span>
                                     <strong id="ai-usage-week">$0.0000</strong>
+                                    <small>Gemini <span id="ai-usage-gemini-week">$0.0000</span></small>
+                                    <small>OpenAI <span id="ai-usage-openai-week">$0.0000</span></small>
                                 </div>
                                 <div class="ai-usage-total">
                                     <span>This month</span>
                                     <strong id="ai-usage-month">$0.0000</strong>
+                                    <small>Gemini <span id="ai-usage-gemini-month">$0.0000</span></small>
+                                    <small>OpenAI <span id="ai-usage-openai-month">$0.0000</span></small>
                                 </div>
                             </div>
                             <p id="ai-usage-empty" class="settings-prefs-lede">No AI calls yet.</p>
