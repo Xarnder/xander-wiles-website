@@ -172,6 +172,11 @@ function setMobileDrawerState(newState) {
     if (dom.drawerModeText) {
         dom.drawerModeText.textContent = (newState === 'full') ? 'Half' : 'Full';
     }
+    if (dom.drawerModeBtn) {
+        const label = newState === 'full' ? 'Reduce panel height' : 'Expand panel height';
+        dom.drawerModeBtn.setAttribute('aria-label', label);
+        dom.drawerModeBtn.title = label;
+    }
 
     if ('vibrate' in navigator) {
         try { navigator.vibrate(8); } catch (_) {}
@@ -1782,7 +1787,7 @@ function recordViewerVideo() {
         async load(entry, signal) { if (batchRenderer) await batchRenderer.load(entry, signal); },
         async frame(entry, options, signal) {
             if (batchRenderer) return batchRenderer.frame(entry, options, signal);
-            await sortVideoFrame(viewer, signal);
+            await sortVideoFrame(viewer, signal, options);
             return renderExportImage(viewer.renderer, [viewer], options, () => viewer.render());
         },
         async endExport() {

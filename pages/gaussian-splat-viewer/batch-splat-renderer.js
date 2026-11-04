@@ -56,7 +56,7 @@ export function createBatchSplatRenderer(renderer, camera) {
                 error.batchFatal = true;
                 throw error;
             }
-            await sortVideoFrame(group.viewer, signal);
+            await sortVideoFrame(group.viewer, signal, options);
             const update = group.viewer.update;
             group.viewer.update = () => {};
             try { return renderExportImage(renderer, [group.viewer], options, () => renderer.render(scene, camera)); }

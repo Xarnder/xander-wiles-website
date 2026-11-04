@@ -12,21 +12,22 @@ for (const fail of [false, true]) test(`RGBA export restores renderer and splat 
     const renderer = {
         autoClear: true, target: null, alpha: 1, color: 'original',
         getContext: () => ({ MAX_TEXTURE_SIZE: 1, MAX_RENDERBUFFER_SIZE: 2, getParameter: () => 8192 }),
-        getRenderTarget() { return this.target; }, setRenderTarget(v) { this.target = v; },
+        getRenderTarget() { return this.target; }, setRenderTarget(v) { this.target = v; this.pixelViewport = v ? [v.width, v.height] : [200, 100]; },
         getClearColor() { return { clone: () => 'original' }; }, getClearAlpha() { return this.alpha; },
         setClearColor(c, a) { this.color = c; this.alpha = a; },
         getViewport: () => ({}), getScissor: () => ({}), getScissorTest: () => false,
-        setViewport() {}, setScissor() {}, setScissorTest() {}, clear() {},
+        setViewport(x, y, width, height) { if (typeof x === "number") this.pixelViewport = [width * 2, height * 2]; }, setScissor() {}, setScissorTest() {}, clear() {},
         readRenderTargetPixels(t, x, y, w, h, out) { out.set([64, 0, 0, 128, 0, 255, 0, 255]); }
     };
     const context = vm.createContext({
-        THREE: { WebGLRenderTarget: class { texture = {}; dispose() { disposed = true; } }, Color: class {}, Vector4: class {}, SRGBColorSpace: 'srgb' },
+        THREE: { WebGLRenderTarget: class { constructor(width, height) { this.width = width; this.height = height; } texture = {}; dispose() { disposed = true; } }, Color: class {}, Vector4: class {}, SRGBColorSpace: 'srgb' },
         document: { createElement: () => ({ getContext: () => ({ createImageData: () => ({ data: new Uint8ClampedArray(8) }), putImageData(v) { image = v; } }) }) },
         renderer, viewer, fail, assert
     });
     vm.runInContext(source + `
         const capture = () => renderExportImage(renderer, [viewer], { width: 1, height: 2, background: 'alpha' }, () => {
             assert.equal(renderer.alpha, 0);
+            assert.equal(renderer.pixelViewport.join(","), "1,2", "export viewport must stay in physical pixels on a 2x display");
             assert.equal(viewer.devicePixelRatio, 1);
             if (fail) throw new Error('render failed');
         });

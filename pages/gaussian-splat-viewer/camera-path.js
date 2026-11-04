@@ -17,6 +17,44 @@ export function applyCamera(camera, pose) {
     camera.updateMatrixWorld(true);
 }
 
+// A shared world-space orbit keeps aligned models framed identically in a batch.
+function orbitSampler(pose, target, radius, height) {
+    if (!Number.isFinite(radius) || radius <= 0) throw new Error('Orbit radius must be greater than zero');
+    if (!Number.isFinite(height)) throw new Error('Orbit height must be a finite number');
+    const center = new THREE.Vector3().fromArray(target);
+    const up = new THREE.Vector3().fromArray(pose.up).normalize();
+    const radial = new THREE.Vector3().fromArray(pose.position).sub(center);
+    radial.addScaledVector(up, -radial.dot(up));
+    if (radial.lengthSq() < 1e-12) {
+        radial.set(Math.abs(up.x) < 0.9 ? 1 : 0, Math.abs(up.x) < 0.9 ? 0 : 1, 0);
+        radial.addScaledVector(up, -radial.dot(up));
+    }
+    radial.normalize().multiplyScalar(radius);
+    const camera = new THREE.PerspectiveCamera();
+    applyCamera(camera, pose);
+    camera.up.copy(up);
+    return angle => {
+        camera.position.copy(radial).applyAxisAngle(up, angle).add(center).addScaledVector(up, height);
+        camera.lookAt(center);
+        return captureCamera(camera);
+    };
+}
+
+export function orbitStartPose(pose, target, radius, height) {
+    return orbitSampler(pose, target, radius, height)(0);
+}
+
+export function createOrbitPath(pose, target, radius, height, duration) {
+    if (!Number.isInteger(duration) || duration < 5 || duration > 20) throw new Error('Video duration must be a whole number from 5 to 20 seconds');
+    const sample = orbitSampler(pose, target, radius, height);
+    // 120 Hz includes exact sample times for every supported export frame rate.
+    const steps = duration * 120;
+    const samples = Array.from({ length: steps + 1 }, (_, i) => ({
+        time: i / 120, pose: sample(i === steps ? 0 : i / steps * Math.PI * 2)
+    }));
+    return { duration, samples };
+}
+
 // Time-based interpolation means every output uses identical poses even if the
 // interactive recording or offline rendering runs at an uneven frame rate.
 export function samplePath(samples, time) {
@@ -60,22 +98,28 @@ export function waitFor(promise, signal, timeout = 120000) {
     });
 }
 
-export async function sortVideoFrame(viewer, signal) {
-    // Drain an earlier sort, then force a full sort for this precise camera pose.
-    if (viewer.sortRunning && viewer.sortPromise) await waitFor(viewer.sortPromise, signal);
-    abortCheck(signal);
-    viewer.camera.updateMatrixWorld(true);
-    viewer.splatMesh.updateMatrixWorld(true);
-    viewer.updateSplatMesh();
-    // Interactive rendering may have queued partial sorts. Drain those until
-    // the library reports a full sort, rather than exporting a partial result.
-    for (let attempt = 0; attempt < 8; attempt++) {
-        await waitFor(viewer.runSplatSort(true, true), signal);
-        if (viewer.sortPromise) await waitFor(viewer.sortPromise, signal);
+export async function sortVideoFrame(viewer, signal, dimensions) {
+    const getDimensions = viewer.getRenderDimensions;
+    // The library uses these dimensions to cull splats before sorting. Keep
+    // them fixed across asynchronous sorting, including window resize events.
+    if (dimensions) viewer.getRenderDimensions = out => { out.x = dimensions.width; out.y = dimensions.height; };
+    try {
+        // Drain an earlier sort, then force a full sort for this precise camera pose.
+        if (viewer.sortRunning && viewer.sortPromise) await waitFor(viewer.sortPromise, signal);
         abortCheck(signal);
-        if (!(viewer.splatSortCount < viewer.splatRenderCount)) return;
-    }
-    throw new Error('Could not finish a full depth sort for this video frame');
+        viewer.camera.updateMatrixWorld(true);
+        viewer.splatMesh.updateMatrixWorld(true);
+        viewer.updateSplatMesh();
+        // Interactive rendering may have queued partial sorts. Drain those until
+        // the library reports a full sort, rather than exporting a partial result.
+        for (let attempt = 0; attempt < 8; attempt++) {
+            await waitFor(viewer.runSplatSort(true, true), signal);
+            if (viewer.sortPromise) await waitFor(viewer.sortPromise, signal);
+            abortCheck(signal);
+            if (!(viewer.splatSortCount < viewer.splatRenderCount)) return;
+        }
+        throw new Error('Could not finish a full depth sort for this video frame');
+    } finally { viewer.getRenderDimensions = getDimensions; }
 }
 
 // Versioned, scene-independent camera animation. No splat data is embedded.

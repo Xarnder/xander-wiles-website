@@ -10,10 +10,14 @@ export function chooseImageExport(aspect, nativeWidth) {
     pending = true;
     if (!dialog) {
         dialog = document.createElement('dialog');
-        dialog.className = 'image-export-dialog';
+        dialog.className = 'image-export-dialog image-export-panel';
         dialog.setAttribute('aria-labelledby', 'image-export-title');
         dialog.innerHTML = `<form method="dialog">
-            <h2 id="image-export-title">Export image</h2>
+            <div class="panel-header">
+                <div class="panel-brand"><span class="brand-dot" aria-hidden="true"></span><h2 id="image-export-title" class="panel-title">Export image</h2></div>
+                <button value="cancel" formnovalidate class="panel-collapse-btn" aria-label="Close image export" title="Close image export">&times;</button>
+            </div>
+            <div class="image-export-body">
             <label>Background<select name="background" class="custom-select">
                 <option value="black">Black</option><option value="white">White</option><option value="alpha">Transparent (alpha)</option>
             </select></label>
@@ -29,6 +33,7 @@ export function chooseImageExport(aspect, nativeWidth) {
             <label class="export-custom" hidden>Width (pixels)<input name="width" type="number" min="64" max="8192" step="1" value="1920"></label>
             <p class="export-dimensions" aria-live="polite"></p>
             <p class="export-note">Aspect ratio is preserved. In compare mode, resolution applies to each image; the combined grid is larger.</p>
+            </div>
             <div class="export-actions"><button value="cancel" formnovalidate class="btn-action">Cancel</button><button value="export" class="btn-action primary">Export</button></div>
         </form>`;
         document.body.appendChild(dialog);
@@ -82,8 +87,10 @@ export function renderExportImage(renderer, viewers, options, draw) {
             if (viewer.splatMesh) viewer.splatMesh.devicePixelRatio = 1;
             viewer.updateSplatMesh();
         });
+        // setRenderTarget uses the target's pixel-sized viewport. setViewport
+        // would multiply these dimensions by the display pixel ratio again,
+        // cropping exports on Retina/high-DPI screens.
         renderer.setRenderTarget(target);
-        renderer.setViewport(0, 0, width, height);
         renderer.setScissorTest(false);
         renderer.setClearColor(background === 'white' ? 0xffffff : 0x000000, background === 'alpha' ? 0 : 1);
         renderer.autoClear = false;

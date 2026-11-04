@@ -1,5 +1,5 @@
 import { batchEntries, batchVideoName, processBatch, batchOutput, writeBatchJSON } from './batch-video.js';
-import { captureCamera, applyCamera, samplePath, videoDimensions, frameSchedule, abortCheck, waitFor, parseCameraPath, cameraPathJSON } from './camera-path.js';
+import { captureCamera, applyCamera, createOrbitPath, orbitStartPose, samplePath, videoDimensions, frameSchedule, abortCheck, waitFor, parseCameraPath, cameraPathJSON } from './camera-path.js';
 
 let active = false;
 let driven = false;
@@ -17,6 +17,7 @@ export async function openVideoRecorder(adapter) {
     const controller = new AbortController();
     const { signal } = controller;
     const initial = adapter.save();
+    const initialCamera = captureCamera(adapter.camera());
     const dialog = document.createElement('dialog');
     dialog.className = 'image-export-dialog video-dialog';
     dialog.setAttribute('aria-label', 'Camera path video');
@@ -27,18 +28,18 @@ export async function openVideoRecorder(adapter) {
     let phase = 'setup';
     let samples = [];
     let duration = 10;
+    let orbit = false;
     let exporting = false;
     let batch = null;
     let batchFinished = false;
     document.body.append(dialog, overlay);
     const abort = () => controller.abort();
     const hidden = () => { if (document.hidden && ['countdown', 'recording', 'preview'].includes(phase)) abort(); };
-    const resized = () => { if (['countdown', 'recording'].includes(phase)) abort(); };
+    // Browser resizing must not cancel or change the recorded world-space path.
     const key = event => {
         if (event.code === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); abort(); }
     };
     document.addEventListener('visibilitychange', hidden);
-    window.addEventListener('resize', resized);
     window.addEventListener('keydown', key, true);
     dialog.addEventListener('cancel', event => { event.preventDefault(); abort(); });
 
@@ -85,10 +86,48 @@ export async function openVideoRecorder(adapter) {
         }), signal, (seconds + 30) * 1000);
     }
     try {
+        async function configureOrbit() {
+            setDriven(true);
+            dialog.classList.add('orbit-live-dialog');
+            const choice = choose(`<h2>360° orbit</h2>
+                <p>Make one full circle around the current orbit target, always looking at its center. Pan the viewer before opening Video to change that target.</p><p class="export-note">Live framing: changing radius or height updates the view immediately. Create the orbit to preview the full circle.</p>
+                <label>Radius (scene units)<input id="orbit-radius" type="number" min="0.001" step="any" value="${orbit?.radius ?? 3}"></label>
+                <label>Height above target (scene units)<input id="orbit-height" type="number" step="any" value="${orbit?.height ?? 0}"></label>
+                <label>Duration (5–20 seconds)<input id="orbit-duration" type="number" min="5" max="20" step="1" value="${duration}"></label>
+                <p class="export-note">Height follows the camera’s up axis; negative values move below the target. The same orbit is used for all loaded splats and all files in batch mode. Keep batch models aligned in the same coordinates.</p>
+                <p role="alert"></p><div class="export-actions"><button class="btn-action" data-action="cancel">Cancel</button><button class="btn-action primary" data-action="generate">Create orbit</button></div>`, () => {
+                    const inputs = ['radius', 'height', 'duration'].map(key => dialog.querySelector(`#orbit-${key}`));
+                    if (inputs.some(input => !input.value.trim())) throw new Error('Enter a radius, height and duration');
+                    const [radius, height, seconds] = inputs.map(input => Number(input.value));
+                    const path = createOrbitPath(initialCamera, initial.target.toArray(), radius, height, seconds);
+                    orbit = { radius, height };
+                    samples = path.samples;
+                    duration = path.duration;
+                    return true;
+                });
+            const updateFraming = () => {
+                const radiusText = dialog.querySelector('#orbit-radius').value;
+                const heightText = dialog.querySelector('#orbit-height').value;
+                const radius = Number(radiusText), height = Number(heightText);
+                // Keep the last valid framing while a number is temporarily empty or incomplete.
+                if (!radiusText.trim() || !heightText.trim() || !Number.isFinite(radius) || radius <= 0 || !Number.isFinite(height)) return;
+                applyCamera(adapter.camera(), orbitStartPose(initialCamera, initial.target.toArray(), radius, height));
+                adapter.preview();
+            };
+            dialog.oninput = updateFraming;
+            try {
+                updateFraming();
+                return await choice !== 'cancel';
+            } finally {
+                dialog.oninput = null;
+                dialog.classList.remove('orbit-live-dialog');
+            }
+        }
         const setup = await choose(`<h2>Camera movement</h2>
-            <p>Orbit, pan and zoom as usual. After a 3-second countdown, your camera movement will be recorded for every loaded splat.</p>
+            <p>Record your own camera path, create a 360° orbit, or load a saved path. Each option works for loaded splats and batch processing.</p>
             <label>Duration (5–20 seconds)<input id="video-duration" type="number" min="5" max="20" step="1" value="10"></label>
-            <p class="export-note">Keep this tab visible and the window size unchanged while recording. You can preview and redo before exporting.</p>
+            <p class="export-note">For a custom path, orbit, pan and zoom after a 3-second countdown. Keep this tab visible while recording. Output framing is set separately from the browser window.</p>
+            <button class="btn-action" data-action="orbit">Create 360° orbit</button>
             <div class="video-path-import"><label>Or reuse a saved camera movement<input id="video-path-file" type="file" accept=".json,application/json"></label>
             <button class="btn-action" data-action="import">Load camera path JSON</button></div>
             <p class="export-note">Saved paths contain camera movement only. Load your splats separately; keep their coordinates and alignment consistent.</p>
@@ -105,23 +144,29 @@ export async function openVideoRecorder(adapter) {
                 return true;
             });
         if (setup === 'cancel') return;
+        if (setup === 'orbit' && !await configureOrbit()) return;
         if (setup === 'record') duration = Math.max(5, Math.min(20, Math.round(Number(dialog.querySelector('#video-duration').value) || 10)));
         else {
             setDriven(true);
             applyCamera(adapter.camera(), samples[0].pose);
             adapter.preview();
         }
-        let action = setup === 'import' ? 'review' : 'redo';
+        let action = setup === 'record' ? 'redo' : 'review';
         while (true) {
+            if (action === 'edit-orbit') {
+                if (!await configureOrbit()) return;
+                applyCamera(adapter.camera(), samples[0].pose);
+                adapter.preview();
+            }
             if (action === 'redo') {
                 adapter.restore(initial);
                 setDriven(false);
                 phase = 'countdown';
                 await animate(3, time => status(`Get ready… ${Math.max(1, Math.ceil(3 - time))}`));
                 phase = 'recording';
-                samples = [{ time: 0, pose: captureCamera(adapter.camera()) }];
+                samples = [{ time: 0, pose: { ...captureCamera(adapter.camera()), aspect: initialCamera.aspect } }];
                 await animate(duration, time => {
-                    samples.push({ time, pose: captureCamera(adapter.camera()) });
+                    samples.push({ time, pose: { ...captureCamera(adapter.camera()), aspect: initialCamera.aspect } });
                     status(`Recording ${time.toFixed(1)} / ${duration}s — orbit, pan and zoom`);
                 });
                 setDriven(true);
@@ -136,7 +181,7 @@ export async function openVideoRecorder(adapter) {
             }
             phase = 'review';
             action = await choose(`<h2>Happy with the movement?</h2><p>${duration} seconds of camera movement. Preview replays the camera path in the viewer.</p>
-                <div class="export-actions"><button class="btn-action" data-action="preview">Preview</button><button class="btn-action" data-action="redo">Redo</button></div>
+                <div class="export-actions"><button class="btn-action" data-action="preview">Preview</button><button class="btn-action" data-action="${orbit ? 'edit-orbit' : 'redo'}">${orbit ? 'Edit orbit' : 'Redo'}</button></div>
                 <button class="btn-action" data-action="save-path">Download camera path JSON</button>
                 <p class="export-note">Save this movement to reuse it in a new session, without recording again. The original timing and framing are included.</p>
                 <p id="video-path-saved" aria-live="polite"></p><p role="alert"></p>
@@ -192,17 +237,23 @@ export async function openVideoRecorder(adapter) {
             dialog.onchange = null;
         }
         phase = 'settings';
-        const aspect = samples[0].pose.aspect;
+        const recordedAspect = samples[0].pose.aspect;
         let settings;
         // Load the encoder only when needed; ordinary viewing stays lightweight.
         const media = await import('./vendor/mediabunny.mjs');
+        const outputDimensions = () => {
+            const shape = dialog.querySelector('#video-aspect').value;
+            return videoDimensions(Number(dialog.querySelector('#video-width').value), shape === 'recorded' ? recordedAspect : Number(shape));
+        };
         const choicePromise = choose(`<h2>Export MP4 videos</h2>
+                <label>Video shape<select id="video-aspect" class="custom-select"><option value="1.7777777777777777">Landscape (16:9)</option><option value="0.5625">Portrait (9:16)</option><option value="1">Square (1:1)</option><option value="recorded">Original camera path</option></select></label>
+                <p class="export-note">Video shape is independent of your window size. Camera position, direction and vertical field of view are preserved.</p>
                 <label>Resolution (width)<select id="video-width" class="custom-select"><option value="1280">1280 px</option><option value="1920" selected>1920 px</option><option value="2560">2560 px</option><option value="3840">3840 px</option></select></label>
                 <label>Frame rate<select id="video-fps" class="custom-select"><option value="24">24 fps</option><option value="30" selected>30 fps</option><option value="60">60 fps</option></select></label>
                 <label>Background<select id="video-background" class="custom-select"><option value="black">Black</option><option value="white">White</option></select></label>
                 <p id="video-size" aria-live="polite"></p><p class="export-note">One silent MP4 per splat, with matching camera movement and timing. Rendering may take longer than the video duration.</p>
                 <p id="video-error" role="alert"></p><div class="export-actions"><button class="btn-action" data-action="cancel">Cancel</button><button class="btn-action primary" data-action="start">Render videos</button></div>`, async () => {
-            const dimensions = videoDimensions(Number(dialog.querySelector('#video-width').value), aspect);
+            const dimensions = outputDimensions();
             const fps = Number(dialog.querySelector('#video-fps').value);
             const quality = new media.Quality({ bitrate: Math.min(60000000, Math.max(4000000, dimensions.width * dimensions.height * fps * 0.16)) });
             const encoding = { codec: 'avc', quality, latencyMode: 'quality' };
@@ -212,7 +263,7 @@ export async function openVideoRecorder(adapter) {
             return true;
         });
         const updateSize = () => {
-            const size = videoDimensions(Number(dialog.querySelector('#video-width').value), aspect);
+            const size = outputDimensions();
             dialog.querySelector('#video-size').textContent = `${size.width} × ${size.height} pixels · ${duration * Number(dialog.querySelector('#video-fps').value)} frames per video`;
         };
         dialog.oninput = updateSize; updateSize();
@@ -252,7 +303,7 @@ export async function openVideoRecorder(adapter) {
                 await output.start();
                 for (let i = 0; i < schedule.length; i++) {
                     abortCheck(signal);
-                    applyCamera(adapter.camera(), samplePath(samples, schedule[i].time));
+                    applyCamera(adapter.camera(), { ...samplePath(samples, schedule[i].time), aspect: settings.width / settings.height });
                     const frame = await adapter.frame(entry, settings, signal);
                     try { ctx.drawImage(frame, 0, 0); }
                     finally { frame.width = 0; frame.height = 0; }
@@ -352,7 +403,6 @@ export async function openVideoRecorder(adapter) {
         document.body.classList.remove('video-workflow');
         panels.forEach((panel, i) => { panel.inert = inertStates[i]; });
         document.removeEventListener('visibilitychange', hidden);
-        window.removeEventListener('resize', resized);
         window.removeEventListener('keydown', key, true);
         active = false;
     }

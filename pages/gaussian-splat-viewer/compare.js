@@ -1442,7 +1442,7 @@ function recordCompareVideo() {
             if (batchRenderer) return batchRenderer.frame(entry, options, signal);
             const group = slots[entry.id].viewer;
             if (!group || !camera || !renderer) throw new Error('The comparison session ended');
-            await sortVideoFrame(group.viewer, signal);
+            await sortVideoFrame(group.viewer, signal, options);
             // Sorting has already finished; the DropIn callback must not start
             // another asynchronous sort while this exact frame is captured.
             const update = group.viewer.update;
