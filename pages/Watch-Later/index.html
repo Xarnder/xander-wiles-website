@@ -130,19 +130,16 @@
                         <option value="rewatch">Rewatch</option>
                         <option value="new-episodes">New Episodes Coming</option>
                     </select>
-                    <div class="genre-combobox" style="max-width: 140px; flex: 1;">
-                        <input type="text" id="genre-input" placeholder="Genre..." autocomplete="off"
-                            autocapitalize="sentences" spellcheck="false" role="combobox"
-                            aria-autocomplete="list" aria-expanded="false" aria-controls="genre-input-list">
-                        <button type="button" class="genre-combobox-toggle" aria-label="Show genres"
-                            tabindex="-1">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </button>
-                        <ul id="genre-input-list" class="genre-combobox-list hidden" role="listbox"></ul>
-                    </div>
+                    <details class="genre-selector">
+                        <summary>Genre: <span class="genre-selection">None selected</span></summary>
+                        <div class="genre-selector-content">
+                            <div class="genre-options" role="group" aria-label="Choose a genre"></div>
+                            <label for="genre-input">Or enter a new genre</label>
+                            <input type="text" id="genre-input" placeholder="Genre..." autocomplete="off"
+                                autocapitalize="sentences" spellcheck="false">
+                            <button type="button" class="genre-clear secondary-btn">Clear genre</button>
+                        </div>
+                    </details>
                 </div>
                 <div id="batch-input-row" class="input-row hidden">
                     <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..."
@@ -487,19 +484,16 @@
                     <option value="rewatch">Rewatch</option>
                     <option value="new-episodes">New Episodes Coming</option>
                 </select>
-                <div class="genre-combobox" style="max-width: 140px; flex: 1;">
-                    <input type="text" id="edit-genre-input" placeholder="Genre..." autocomplete="off"
-                        autocapitalize="sentences" spellcheck="false" role="combobox"
-                        aria-autocomplete="list" aria-expanded="false" aria-controls="edit-genre-input-list">
-                    <button type="button" class="genre-combobox-toggle" aria-label="Show genres"
-                        tabindex="-1">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                    </button>
-                    <ul id="edit-genre-input-list" class="genre-combobox-list hidden" role="listbox"></ul>
-                </div>
+                <details class="genre-selector">
+                    <summary>Genre: <span class="genre-selection">None selected</span></summary>
+                    <div class="genre-selector-content">
+                        <div class="genre-options" role="group" aria-label="Choose a genre"></div>
+                        <label for="edit-genre-input">Or enter a new genre</label>
+                        <input type="text" id="edit-genre-input" placeholder="Genre..." autocomplete="off"
+                            autocapitalize="sentences" spellcheck="false">
+                        <button type="button" class="genre-clear secondary-btn">Clear genre</button>
+                    </div>
+                </details>
             </div>
             <div class="input-row">
                 <input type="text" id="edit-imdb-score" placeholder="IMDb Score (e.g., 8.8)">

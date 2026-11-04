@@ -556,119 +556,74 @@ select:focus {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
-/* --- Genre Combobox (iOS-safe replacement for datalist) --- */
-.genre-combobox {
-    position: relative;
-    display: flex;
-    align-items: stretch;
-    min-width: 0;
-    flex: 1;
-}
-
-.genre-combobox input[type="text"] {
+/* Inline genre section: no overlay, height limit, or nested scrolling. */
+.genre-selector {
+    flex: 1 0 100%;
     width: 100%;
-    padding-right: 36px;
-    flex: 1;
     min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.genre-combobox-toggle {
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    padding: 0;
-    margin: 0;
-    border: none !important;
-    border-radius: 10px;
-    background: transparent !important;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.input-row:has(> .genre-selector) {
+    flex-wrap: wrap;
+}
+
+.genre-selector summary {
+    min-height: 48px;
+    padding: 12px 16px;
+    box-sizing: border-box;
     cursor: pointer;
-    z-index: 2;
-    -webkit-tap-highlight-color: transparent;
-    box-shadow: none !important;
-    overflow: visible;
-    text-transform: none;
-    letter-spacing: normal;
-    font-size: inherit;
-}
-
-.genre-combobox-toggle:hover,
-.genre-combobox-toggle:focus-visible {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.08);
-    border: none;
-    box-shadow: none;
-}
-
-.genre-combobox-toggle:active {
-    filter: none;
-    background: rgba(255, 255, 255, 0.12);
-}
-
-.genre-combobox-toggle svg {
-    width: 14px;
-    height: 14px;
-    pointer-events: none;
-    transition: transform 0.2s ease;
-}
-
-.genre-combobox.open .genre-combobox-toggle svg {
-    transform: rotate(180deg);
-}
-
-.genre-combobox-list {
-    position: fixed;
-    z-index: 10050;
-    margin: 0;
-    padding: 6px;
-    list-style: none;
-    max-height: min(220px, 40vh);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    background: rgba(12, 12, 18, 0.98);
-    border: 1px solid var(--border-bright);
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-}
-
-.genre-combobox-list.hidden {
-    display: none !important;
-}
-
-.genre-combobox-option {
-    padding: 12px 14px;
-    border-radius: 8px;
-    color: var(--text);
-    font-family: 'Outfit', sans-serif;
-    font-size: 14px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    -webkit-user-select: none;
+    overflow-wrap: anywhere;
     touch-action: manipulation;
 }
 
-.genre-combobox-option:hover,
-.genre-combobox-option[aria-selected="true"] {
-    background: rgba(59, 130, 246, 0.25);
-    color: #fff;
+.genre-selection { color: var(--text-dim); }
+
+.genre-selector-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 16px 16px;
 }
 
-.genre-combobox-empty {
-    padding: 12px 14px;
-    color: var(--text-dim);
-    font-size: 13px;
-    pointer-events: none;
+.genre-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.genre-options .genre-option,
+.genre-selector .genre-clear {
+    min-height: 48px;
+    min-width: 48px;
+    max-width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    touch-action: manipulation;
+}
+
+.genre-options .genre-option[aria-pressed="true"] {
+    background: var(--accent);
+    color: white;
+    outline: 2px solid currentColor;
+    outline-offset: -4px;
+}
+
+.genre-selector summary:focus-visible,
+.genre-option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.genre-selector input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 16px;
 }
 
 /* --- Slider Styling --- */
@@ -784,7 +739,7 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 }
 
 #input-section:not(.collapsed) .collapsible-content {
-    max-height: 1000px;
+    max-height: none;
     margin-top: 16px;
     opacity: 1;
 }
