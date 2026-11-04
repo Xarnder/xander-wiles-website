@@ -359,3 +359,9 @@ export async function findClosestEntry(db, userId, targetDateStr) {
         altDiffDays
     };
 }
+
+// Derive match metadata from the date actually opened, including alternatives.
+export function getTravelMatch(entryDateKey, targetDateKey) {
+    const diffDays = differenceInCalendarDays(parseISO(entryDateKey), parseISO(targetDateKey));
+    return { diffDays, exactMatch: diffDays === 0 };
+}

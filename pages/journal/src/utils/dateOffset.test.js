@@ -5,7 +5,8 @@ import {
     calculateTargetDate,
     parseOffsetString,
     formatOffsetDescription,
-    formatDateDiscrepancy
+    formatDateDiscrepancy,
+    getTravelMatch
 } from './dateOffset.js';
 
 test('calculateTargetDate correctly subtracts years, months, weeks, and days', () => {
@@ -135,4 +136,22 @@ test('formatDateDiscrepancy formats exact match and day discrepancies correctly'
     assert.equal(oneDayEarlier.diffDays, -1);
     assert.equal(oneDayEarlier.badgeLabel, 'Off by -1 day');
     assert.match(oneDayEarlier.summary, /1 day earlier/);
+});
+
+test('screenshot travel uses January as its base, not today', () => {
+    const target = calculateTargetDate(new Date(2026, 0, 8), { months: 6, weeks: 2 });
+    assert.equal(format(target, 'yyyy-MM-dd'), '2025-06-24');
+    assert.equal(format(calculateTargetDate(new Date(2026, 10, 4), { months: 6, weeks: 2 }), 'yyyy-MM-dd'), '2026-04-20');
+});
+
+test('travel clamps month ends and leap years and crosses DST by calendar days', () => {
+    assert.equal(format(calculateTargetDate(new Date(2024, 2, 31), { months: 1 }), 'yyyy-MM-dd'), '2024-02-29');
+    assert.equal(format(calculateTargetDate(new Date(2024, 1, 29), { years: 1 }, 'forward'), 'yyyy-MM-dd'), '2025-02-28');
+    assert.equal(format(calculateTargetDate(new Date(2026, 2, 28), { days: 2 }, 'forward'), 'yyyy-MM-dd'), '2026-03-30');
+});
+
+test('match metadata uses the opened alternative or exact target date', () => {
+    assert.deepEqual(getTravelMatch('2025-06-24', '2025-06-24'), { diffDays: 0, exactMatch: true });
+    assert.deepEqual(getTravelMatch('2025-06-22', '2025-06-24'), { diffDays: -2, exactMatch: false });
+    assert.deepEqual(getTravelMatch('2025-06-27', '2025-06-24'), { diffDays: 3, exactMatch: false });
 });

@@ -1,8 +1,9 @@
+import { useToday } from '../lib/useToday';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import {
     Clock,
     Calendar,
@@ -21,7 +22,8 @@ import {
     calculateTargetDate,
     formatOffsetDescription,
     parseOffsetString,
-    findClosestEntry
+    findClosestEntry,
+    getTravelMatch
 } from '../utils/dateOffset';
 
 export default function DateOffsetTool({ onClose, autoFocus = true }) {
@@ -29,16 +31,12 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Check if user is currently viewing an entry
-    const currentEntryDateMatch = location.pathname.match(/\/entry\/(\d{4}-\d{2}-\d{2})/);
-    const currentEntryDateStr = currentEntryDateMatch ? currentEntryDateMatch[1] : null;
+    const todayKey = useToday();
 
     // States
-    const [direction, setDirection] = useState('forward'); // 'backward' | 'forward'
-    const [baseMode, setBaseMode] = useState('custom'); // 'today' | 'currentEntry' | 'custom'
-    const [customDateStr, setCustomDateStr] = useState('2026-01-08'); // default to user's example 8 Jan 2026
+    const [direction, setDirection] = useState('backward'); // 'backward' | 'forward'
     const [offset, setOffset] = useState({ years: 0, months: 4, weeks: 2, days: 0 }); // 4 months and 2 weeks
-    const [textQuery, setTextQuery] = useState('4 months and 2 weeks forward');
+    const [textQuery, setTextQuery] = useState('4 months and 2 weeks ago');
     const [searchResult, setSearchResult] = useState({
         loading: true,
         targetDateStr: '',
@@ -55,33 +53,9 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     const searchRequestIdRef = useRef(0);
     const textInputRef = useRef(null);
 
-    // Compute base date
-    const baseDate = useMemo(() => {
-        if (baseMode === 'custom' && customDateStr) {
-            try {
-                const parsed = parseISO(customDateStr);
-                if (isValid(parsed)) return parsed;
-            } catch {
-                // fallback
-            }
-        } else if (baseMode === 'currentEntry' && currentEntryDateStr) {
-            try {
-                const parsed = parseISO(currentEntryDateStr);
-                if (isValid(parsed)) return parsed;
-            } catch {
-                // fallback
-            }
-        }
-        return new Date();
-    }, [baseMode, customDateStr, currentEntryDateStr]);
-
-    const baseDateFormatted = useMemo(() => {
-        try {
-            return format(baseDate, 'd MMMM yyyy');
-        } catch {
-            return customDateStr;
-        }
-    }, [baseDate, customDateStr]);
+    // Always use the live local date, regardless of the entry currently open.
+    const baseDate = useMemo(() => parseISO(todayKey), [todayKey]);
+    const baseDateFormatted = format(baseDate, 'd MMMM yyyy');
 
     // Calculate target date
     const targetDate = useMemo(() => {
@@ -97,8 +71,8 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     }, [targetDate]);
 
     const offsetDescription = useMemo(() => {
-        return formatOffsetDescription(offset, direction, baseMode === 'today' ? '' : baseDateFormatted);
-    }, [offset, direction, baseMode, baseDateFormatted]);
+        return formatOffsetDescription(offset, direction, baseDateFormatted);
+    }, [offset, direction, baseDateFormatted]);
 
     // Presets based on direction
     const presets = useMemo(() => {
@@ -177,7 +151,10 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
             executeSearch(targetDateStr);
         }, 150);
 
-        return () => window.clearTimeout(timer);
+        return () => {
+            window.clearTimeout(timer);
+            searchRequestIdRef.current += 1;
+        };
     }, [targetDateStr, executeSearch]);
 
     // Stepper updates
@@ -226,15 +203,17 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
         setTextQuery(formatOffsetDescription(preset.offset, direction));
     };
 
-    const navigateToEntry = (dateId, isExact) => {
+    const searchPending = searchResult.loading || searchResult.targetDateStr !== targetDateStr;
+
+    const navigateToEntry = (dateId) => {
+        if (searchPending) return;
         navigate(`/entry/${dateId}`, {
             state: {
                 timeTravel: {
                     requestedTarget: targetDateStr,
-                    targetFormatted: searchResult.targetFormatted || format(targetDate, 'EEEE, d MMMM yyyy'),
+                    targetFormatted: format(targetDate, 'EEEE, d MMMM yyyy'),
                     offsetText: offsetDescription,
-                    diffDays: searchResult.diffDays,
-                    exactMatch: isExact,
+                    ...getTravelMatch(dateId, targetDateStr),
                     direction,
                     baseDateText: baseDateFormatted
                 },
@@ -248,9 +227,9 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (searchResult.closestEntry) {
-                navigateToEntry(searchResult.closestEntry.id, searchResult.diffDays === 0);
+                navigateToEntry(searchResult.closestEntry.id);
             } else if (targetDateStr) {
-                navigateToEntry(targetDateStr, false);
+                navigateToEntry(targetDateStr);
             }
         }
     };
@@ -292,71 +271,9 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                     </div>
                 </div>
 
-                {/* Base Date Selector */}
-                <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                            Calculate from
-                        </span>
-                        <div className="inline-flex rounded-lg border border-white/10 bg-black/20 p-0.5">
-                            <button
-                                type="button"
-                                onClick={() => setBaseMode('today')}
-                                className={`px-2 py-1 rounded-md text-[11px] sm:text-xs transition-all font-medium ${
-                                    baseMode === 'today' ? 'bg-white/20 text-white shadow-sm font-bold' : 'text-text-muted hover:text-white'
-                                }`}
-                            >
-                                Today
-                            </button>
-                            {currentEntryDateStr && (
-                                <button
-                                    type="button"
-                                    onClick={() => setBaseMode('currentEntry')}
-                                    className={`px-2 py-1 rounded-md text-[11px] sm:text-xs transition-all font-medium ${
-                                        baseMode === 'currentEntry' ? 'bg-white/20 text-white shadow-sm font-bold' : 'text-text-muted hover:text-white'
-                                    }`}
-                                >
-                                    This Entry
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => setBaseMode('custom')}
-                                className={`px-2 py-1 rounded-md text-[11px] sm:text-xs transition-all font-medium ${
-                                    baseMode === 'custom' ? 'bg-white/20 text-white shadow-sm font-bold' : 'text-text-muted hover:text-white'
-                                }`}
-                            >
-                                Pick Date
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Interactive Custom Date Picker Row */}
-                    {baseMode === 'custom' ? (
-                        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/10">
-                            <Calendar className="w-4 h-4 text-primary shrink-0 ml-1" />
-                            <input
-                                type="date"
-                                value={customDateStr}
-                                onChange={(e) => e.target.value && setCustomDateStr(e.target.value)}
-                                style={{ colorScheme: 'dark' }}
-                                className="glass-input py-1.5 px-2.5 text-base sm:text-sm font-semibold flex-1 bg-black/50 text-white rounded-lg border-white/20 focus:border-primary/50"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setCustomDateStr('2026-01-08')}
-                                className="text-[10px] sm:text-xs text-secondary hover:text-white px-2 py-1 rounded bg-secondary/15 hover:bg-secondary/25 transition-colors shrink-0 whitespace-nowrap font-medium border border-secondary/20"
-                                title="Set to 8 January 2026"
-                            >
-                                8 Jan 2026
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="text-xs text-text-muted px-1 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-text-muted" />
-                            <span>Starting date: <strong className="text-white">{baseDateFormatted}</strong></span>
-                        </div>
-                    )}
+                <div className="text-xs text-text-muted px-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-text-muted" />
+                    <span>Always calculated from today: <strong className="text-white">{baseDateFormatted}</strong></span>
                 </div>
 
                 {/* Natural text search input */}
@@ -474,7 +391,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                 </div>
 
                 {/* Match Status & Discrepancy */}
-                {searchResult.loading ? (
+                {searchPending ? (
                     <div className="flex items-center justify-center py-5 gap-2 text-text-muted text-xs sm:text-sm animate-pulse">
                         <RotateCcw className="w-4 h-4 animate-spin text-primary" />
                         <span>Searching for exact or closest entry...</span>
@@ -516,7 +433,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
 
                         <button
                             type="button"
-                            onClick={() => navigateToEntry(searchResult.exactMatch.id, true)}
+                            onClick={() => navigateToEntry(searchResult.exactMatch.id)}
                             className="w-full flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 rounded-lg bg-gradient-to-r from-emerald-600 to-primary text-white text-xs sm:text-sm font-semibold shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer"
                         >
                             <span>Open Exact Entry ({format(targetDate, 'MMM d, yyyy')})</span>
@@ -572,7 +489,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                                 </span>
                                 <button
                                     type="button"
-                                    onClick={() => navigateToEntry(searchResult.alternativeEntry.id, false)}
+                                    onClick={() => navigateToEntry(searchResult.alternativeEntry.id)}
                                     className="text-primary hover:underline font-medium ml-2 shrink-0"
                                 >
                                     View
@@ -584,7 +501,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                         <div className="flex flex-col sm:flex-row gap-2 pt-1">
                             <button
                                 type="button"
-                                onClick={() => navigateToEntry(searchResult.closestEntry.id, false)}
+                                onClick={() => navigateToEntry(searchResult.closestEntry.id)}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-semibold shadow-lg hover:shadow-primary/25 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer text-xs sm:text-sm"
                             >
                                 <span>Go to Closest Entry ({searchResult.discrepancy?.badgeLabel})</span>
@@ -593,7 +510,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
 
                             <button
                                 type="button"
-                                onClick={() => navigateToEntry(targetDateStr, false)}
+                                onClick={() => navigateToEntry(targetDateStr)}
                                 className="glass-button py-2.5 px-3 text-xs text-text-secondary hover:text-white flex items-center justify-center gap-1.5 shrink-0"
                                 title="Open the exact target date to view or write an entry"
                             >
@@ -610,7 +527,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                         </p>
                         <button
                             type="button"
-                            onClick={() => navigateToEntry(targetDateStr, false)}
+                            onClick={() => navigateToEntry(targetDateStr)}
                             className="inline-flex items-center gap-2 py-2 px-3.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-variant transition-colors"
                         >
                             <span>Open {format(targetDate, 'MMMM d, yyyy')} to write</span>

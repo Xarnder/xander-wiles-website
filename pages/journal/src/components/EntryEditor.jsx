@@ -1,3 +1,5 @@
+import { useToday } from '../lib/useToday';
+import { formatEntryAge } from '../utils/entryAge';
 import { trackViewportDock } from '../lib/viewportDock';
 import { isPasteSplitEnabled, subscribePasteSplit, splitPastedEntry } from '../lib/pasteSplit';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
@@ -11,7 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import EasyMDE from 'easymde';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
-import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
 import { useEntryUi } from '../context/EntryUiContext';
 import { AlertCircle, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
@@ -886,37 +888,11 @@ export default function EntryEditor() {
         ? (wordMilestoneFlash ? 0 : wordCycleGoal)
         : wordCycleGoal - wordsInCycle;
 
-    const timeSinceEntry = useMemo(() => {
-        if (!date) return "";
-        try {
-            const entryDate = parseISO(date);
-            const today = new Date();
-
-            entryDate.setHours(0, 0, 0, 0);
-            today.setHours(0, 0, 0, 0);
-
-            if (today < entryDate) return "";
-            if (today.getTime() === entryDate.getTime()) return "Time Since Entry: Today";
-
-            const months = differenceInMonths(today, entryDate);
-            const dateAfterMonths = addMonths(entryDate, months);
-
-            const weeks = differenceInWeeks(today, dateAfterMonths);
-            const dateAfterWeeks = addWeeks(dateAfterMonths, weeks);
-
-            const days = differenceInDays(today, dateAfterWeeks);
-
-            const parts = [];
-            if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
-            if (weeks > 0) parts.push(`${weeks} week${weeks !== 1 ? 's' : ''}`);
-            if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
-
-            if (parts.length === 0) return "Time Since Entry: Today";
-            return `Time Since Entry: ${parts.join(', ')}`;
-        } catch {
-            return "";
-        }
-    }, [date]);
+    const todayKey = useToday();
+    const entryAge = formatEntryAge(date, todayKey);
+    const timeSinceEntry = entryAge
+        ? `Time Since Entry (as of ${format(parseISO(todayKey), 'd MMMM yyyy')}): ${entryAge}`
+        : '';
 
     const isInferredTitle = useMemo(() => {
         if (!autoTitleEnabled || !content) return false;
