@@ -58,6 +58,8 @@ export type BatchResult =
 	| { ok: false; reason: RejectReason; message: string; conflicts?: RejectConflict[] };
 
 const MAX_ID_LENGTH = 128;
+/** Same cap as a world file's placed creatures (`validateCreatureWorldState`). */
+const MAX_PLACED_CREATURES = 1000;
 const EPSILON = 1e-6;
 
 /**
@@ -509,6 +511,33 @@ function fitConflict(
 	row: StoredRow
 ): Extract<BatchResult, { ok: false }> | null {
 	const key = rowKey(row);
+	if (row.kind === 'creature') {
+		// Placed creatures (ranged weapons F2): a recipe and a finite spot, like the world file's.
+		const d = row.data;
+		const p = d.position as Record<string, unknown> | undefined;
+		const finite = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+		if (
+			!d.species ||
+			typeof d.species !== 'object' ||
+			!d.individual ||
+			typeof d.individual !== 'object' ||
+			!p ||
+			!finite(p.x) ||
+			!finite(p.y) ||
+			!finite(p.z) ||
+			!finite(d.heading)
+		)
+			return { ok: false, reason: 'invalid', message: 'Invalid creature.' };
+		let count = 0;
+		for (const other of rows.values()) if (other.kind === 'creature') count++;
+		if (count > MAX_PLACED_CREATURES)
+			return {
+				ok: false,
+				reason: 'fit',
+				message: 'This world has as many creatures as it can hold.'
+			};
+		return null;
+	}
 	if (row.kind === 'terrainTile') {
 		if (!validTerrainEditData(row.data) || row.data.points.length > 256)
 			return { ok: false, reason: 'invalid', message: 'Invalid terrain tile.' };

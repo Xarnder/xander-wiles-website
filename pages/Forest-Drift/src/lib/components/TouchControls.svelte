@@ -39,6 +39,10 @@
 		onOpenHelp: () => void;
 		/** Online, walking around (not building): show the Punch button. */
 		punchAvailable?: boolean;
+		/** Ranged weapons: a creature to pick up, or "Put down" while carrying. */
+		carryPrompt?: { label: string; carrying: boolean } | null;
+		/** Carrying a creature: Fire replaces Punch. */
+		carrying?: boolean;
 	}
 
 	const {
@@ -51,8 +55,21 @@
 		heightToolId,
 		onOpenPause,
 		onOpenHelp,
-		punchAvailable = false
+		punchAvailable = false,
+		carryPrompt = null,
+		carrying = false
 	}: Props = $props();
+
+	/** Fire is press-and-hold: a pellet whenever a charge is ready while the finger stays down. */
+	function fireDown(event: PointerEvent) {
+		event.stopPropagation();
+		(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+		scene?.setCarryTrigger(true);
+	}
+	function fireUp(event: PointerEvent) {
+		event.stopPropagation();
+		scene?.setCarryTrigger(false);
+	}
 
 	// --- Virtual Joystick Movement State ---
 	let joystickActive = $state(false);
@@ -470,6 +487,21 @@
 		</div>
 	{/if}
 
+	{#if carryPrompt && !lookedAtDoorId}
+		<div class="touch-door-bar touch-carry-bar">
+			<button
+				type="button"
+				class="touch-door-btn"
+				use:touchButton={() => scene?.toggleCarry()}
+				onpointerdown={(e) => e.stopPropagation()}
+				data-testid="touch-carry-button"
+				aria-label={carryPrompt.label}
+			>
+				<span>{carryPrompt.carrying ? 'Put down' : 'Pick up'}</span>
+			</button>
+		</div>
+	{/if}
+
 	<!-- Bottom Left: Virtual Joystick -->
 	<div class="touch-movement-cluster" bind:this={movementEl}>
 		<div
@@ -687,7 +719,20 @@
 				<span>Run</span>
 			</button>
 
-			{#if punchAvailable}
+			{#if carrying}
+				<button
+					type="button"
+					class="touch-action-btn punch-btn fire-btn"
+					onpointerdown={fireDown}
+					onpointerup={fireUp}
+					onpointercancel={fireUp}
+					onlostpointercapture={fireUp}
+					data-testid="touch-fire-btn"
+					aria-label="Fire"
+				>
+					<span>Fire</span>
+				</button>
+			{:else if punchAvailable}
 				<button
 					type="button"
 					class="touch-action-btn punch-btn"

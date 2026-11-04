@@ -24,6 +24,12 @@ import {
 	type RoomClockState,
 	type ServerHealthMessage,
 	type ServerPunchResultMessage,
+	type ServerCarryResultMessage,
+	type ServerCarriedMessage,
+	type ServerShotMessage,
+	type ServerShotResultMessage,
+	type Vec3Tuple,
+	type CarryPlacement,
 	type ServerJsonMessage,
 	type SharedEnvironment,
 	type WelcomeMessage
@@ -59,6 +65,8 @@ export interface WelcomeInfo {
 	names: Record<string, string>;
 	/** This player's own health, as the room holds it. */
 	health?: WelcomeMessage['health'];
+	/** Creatures being carried right now, by slot (ranged weapons). */
+	carries: { slot: number; creature: string }[];
 	/** True only for the first welcome of this session (not reconnects). */
 	first: boolean;
 }
@@ -102,6 +110,14 @@ export interface NetSessionOptions {
 	onHealth?: (message: ServerHealthMessage) => void;
 	/** Whether this player's punch landed. */
 	onPunchResult?: (message: ServerPunchResultMessage) => void;
+	/** Ranged weapons: the room's answer to this player's pick-up. */
+	onCarryResult?: (message: ServerCarryResultMessage) => void;
+	/** Ranged weapons: someone (possibly this player) picked up or put down a creature. */
+	onCarried?: (message: ServerCarriedMessage) => void;
+	/** Ranged weapons: someone else fired a pellet. */
+	onShot?: (message: ServerShotMessage) => void;
+	/** Ranged weapons: whether this player's pellet was refused, or hurt someone. */
+	onShotResult?: (message: ServerShotResultMessage) => void;
 	world?: WorldTraffic;
 	/** Injected in tests. */
 	createSocket?: (url: string) => WebSocket;
@@ -346,6 +362,22 @@ export class NetSession {
 		return this.sendText({ t: 'punch', id, target });
 	}
 
+	sendCarry(id: number, creature: string): boolean {
+		return this.sendText({ t: 'carry', id, creature });
+	}
+
+	sendDrop(id: number, at: CarryPlacement): boolean {
+		return this.sendText({ t: 'drop', id, at });
+	}
+
+	sendShoot(shot: number, origin: Vec3Tuple, dir: Vec3Tuple, at: number): boolean {
+		return this.sendText({ t: 'shoot', shot, origin, dir, at });
+	}
+
+	sendShotHit(shot: number, target: number, at: number, point: Vec3Tuple): boolean {
+		return this.sendText({ t: 'shotHit', shot, target, at, point });
+	}
+
 	/** The room clock estimate, ms; NaN until the first welcome. */
 	serverNow(): number {
 		return this.clock.serverNow();
@@ -470,6 +502,7 @@ export class NetSession {
 					interactions: message.interactions ?? [],
 					names: message.names ?? {},
 					health: message.health,
+					carries: message.carries ?? [],
 					first
 				});
 				this.emitPlayers();
@@ -534,6 +567,18 @@ export class NetSession {
 				break;
 			case 'punchResult':
 				this.options.onPunchResult?.(message);
+				break;
+			case 'carryResult':
+				this.options.onCarryResult?.(message);
+				break;
+			case 'carried':
+				this.options.onCarried?.(message);
+				break;
+			case 'shot':
+				this.options.onShot?.(message);
+				break;
+			case 'shotResult':
+				this.options.onShotResult?.(message);
 				break;
 			case 'error':
 				this.lastError = message.message;

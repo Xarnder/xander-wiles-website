@@ -161,11 +161,17 @@ export class WorldRoom extends DurableObject<Env> {
 		const sql = this.ctx.storage.sql;
 		const base: Record<string, unknown> = { ...world };
 		for (const key of AUTHORED_KEYS) delete base[key];
+		// Placed creatures are shared content (ranged weapons F2): rows, not part of the base.
+		const creatures = world.creatures as { individuals?: unknown[] } | undefined;
+		const placedCreatures = Array.isArray(creatures?.individuals) ? creatures.individuals : [];
+		if (creatures) base.creatures = { ...creatures, individuals: [] };
 		this.writeChunks(JSON.stringify(base));
 		sql.exec('DELETE FROM entities');
 		sql.exec('DELETE FROM ops');
 		sql.exec('DELETE FROM batches');
-		for (const row of publishedRows(flattenWorld(world as unknown as AuthoredContent))) {
+		for (const row of publishedRows(
+			flattenWorld({ ...(world as unknown as AuthoredContent), placedCreatures })
+		)) {
 			this.writeRow(row);
 		}
 		this.writeMeta('store', JSON.stringify({ seq: 1, epoch: 1 } satisfies StoreMeta));
@@ -676,6 +682,15 @@ export class WorldRoom extends DurableObject<Env> {
 				return new WorldStore({ rows: this.readRows(), seq: version.seq, epoch: version.epoch });
 			},
 			storeVersion: () => this.readJson<StoreMeta>('store') ?? { seq: 1, epoch: 1 },
+			// Ranged weapons: creature ids are built from the seed. Read once, on the first pick-up.
+			worldSeed: () => {
+				try {
+					const base = JSON.parse(this.readChunks()) as { seed?: unknown };
+					return typeof base.seed === 'string' ? base.seed : null;
+				} catch {
+					return null;
+				}
+			},
 			restored: {
 				grace: this.readJson<GraceEntry[]>('grace') ?? [],
 				clock: this.readJson<RoomClockRecord>('clock'),

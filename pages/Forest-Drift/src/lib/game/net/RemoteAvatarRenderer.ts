@@ -4,6 +4,8 @@ import type { RemotePlayerView } from './NetSession';
 import { POSE_FLAGS } from './protocol';
 import { CharacterAssetCache } from '../characters/CharacterAssetCache';
 import { CharacterInstance, type CharacterSurface } from '../characters/CharacterInstance';
+import { HeldCreatureView } from '../creatures/HeldCreatureView';
+import type { CreatureDefinition } from '../creatures/CreatureTypes';
 
 /** Stride length of the walk cycle, m: one full bob cycle covers two steps. */
 const STRIDE = 1.5;
@@ -30,6 +32,15 @@ interface Avatar {
 	colour: string;
 	walkPhase: number;
 	seenThisFrame: boolean;
+	/** Ranged weapons: the creature under this player's arm, drawn from its recipe. */
+	held: HeldCreatureView | null;
+	heldId: string | null;
+}
+
+/** Ranged weapons: what a remote player is carrying (the recipe may not be known yet). */
+export interface RemoteCarry {
+	id: string;
+	definition: CreatureDefinition | null;
 }
 
 /** Network adapter: owns identity labels, a shared asset cache and independent character rigs.
@@ -57,7 +68,8 @@ export class RemoteAvatarRenderer {
 		private readonly registerMaterial: (material: THREE.Material) => void,
 		private readonly excludeFromAo: (object: THREE.Object3D) => () => void,
 		private readonly surface?: CharacterSurface,
-		private readonly interactionPose?: (playerId: string) => PlayerInteractionPose | null
+		private readonly interactionPose?: (playerId: string) => PlayerInteractionPose | null,
+		private readonly carriedBy?: (playerId: string) => RemoteCarry | null
 	) {
 		this.group.name = 'remote-players';
 		this.registerMaterial(this.visorMaterial);
@@ -101,6 +113,7 @@ export class RemoteAvatarRenderer {
 			}
 
 			const interaction = this.interactionPose?.(info.playerId);
+			const carry = this.carriedBy?.(info.playerId) ?? null;
 
 			const away = (frame.flags & POSE_FLAGS.away) !== 0;
 			const walking = Math.min(1, frame.speed / 4);
@@ -132,10 +145,12 @@ export class RemoteAvatarRenderer {
 					} else {
 						avatar.character.object.position.set(0, 0, 0);
 						avatar.character.object.rotation.x = 0;
+						avatar.character.carrying = !!carry?.definition;
 						avatar.character.update(frame, deltaSeconds, distance, this.surface);
 					}
 				}
 			}
+			this.updateHeld(avatar, carry, detailed && !interaction, deltaSeconds);
 			avatar.root.visible =
 				avatar.root.position.distanceToSquared(this.cameraPosition) < DRAW_DISTANCE * DRAW_DISTANCE;
 		}
@@ -146,6 +161,34 @@ export class RemoteAvatarRenderer {
 			this.avatars.delete(playerId);
 		}
 	}
+
+	/** Draws (or hides) the creature under a remote player's arm. */
+	private updateHeld(
+		avatar: Avatar,
+		carry: RemoteCarry | null,
+		visible: boolean,
+		deltaSeconds: number
+	): void {
+		if (!carry?.definition) {
+			if (avatar.held && avatar.heldId !== null) avatar.held.detach();
+			avatar.heldId = null;
+			return;
+		}
+		avatar.held ??= new HeldCreatureView(this.group, this.registerMaterial);
+		if (avatar.heldId !== carry.id) {
+			avatar.held.attach(carry.definition);
+			avatar.heldId = carry.id;
+		}
+		const anchored =
+			visible && avatar.root.visible && avatar.character?.carryAnchor(this.carryAnchor);
+		avatar.held.update(
+			anchored ? { kind: 'third-person', anchor: this.carryAnchor } : { kind: 'hidden' },
+			deltaSeconds,
+			performance.now(),
+			reducedMotion()
+		);
+	}
+	private readonly carryAnchor = new THREE.Matrix4();
 
 	dispose(): void {
 		this.disposed = true;
@@ -222,7 +265,9 @@ export class RemoteAvatarRenderer {
 			name: '',
 			colour: '',
 			walkPhase: 0,
-			seenThisFrame: true
+			seenThisFrame: true,
+			held: null,
+			heldId: null
 		};
 		this.applyIdentity(avatar, name, colour);
 		return avatar;
@@ -267,6 +312,7 @@ export class RemoteAvatarRenderer {
 	}
 
 	private disposeAvatar(avatar: Avatar): void {
+		avatar.held?.dispose();
 		avatar.character?.dispose();
 		avatar.releaseLabelAo();
 		avatar.root.removeFromParent();
@@ -275,6 +321,10 @@ export class RemoteAvatarRenderer {
 		avatar.labelMaterial.dispose();
 		avatar.labelTexture.dispose();
 	}
+}
+
+function reducedMotion(): boolean {
+	return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function roundRect(

@@ -1,4 +1,10 @@
-import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
+import type {
+	CarryPlacement,
+	Vec3Tuple,
+	MiniBuildInteractionRef,
+	OccupiedMiniBuildInteraction
+} from './protocol';
+import type { CreatureDefinition } from '../creatures/CreatureTypes';
 import {
 	resolvePlayerInteractionPose,
 	type PlayerInteractionPose
@@ -8,7 +14,13 @@ import { LocatorBar } from '../hud/LocatorBar';
 import { createId, type PlayerIdentity } from './mpConfig';
 import { webSocketUrl } from './mpConfig';
 import { NetDiagnostics, type NetDiagnosticsReport } from './NetDiagnostics';
-import { NetSession, type NetStats, type NetStatus, type WelcomeInfo } from './NetSession';
+import {
+	NetSession,
+	type NetSessionOptions,
+	type NetStats,
+	type NetStatus,
+	type WelcomeInfo
+} from './NetSession';
 import {
 	MAX_ENV_JSON_BYTES,
 	POSE_FLAGS,
@@ -64,6 +76,29 @@ export interface SceneMultiplayerContext {
 	setPublishedFallDamage?: (enabled: boolean) => void;
 	/** Settings → Graphics → Show locator bar. */
 	showLocatorBar: () => boolean;
+	/**
+	 * Ranged weapons: `slot` picked up `creature` (or put it down at `at` when null). `self` is
+	 * true for this player's own carry, which the room may end on its own (knocked out, seated,
+	 * rule switched off).
+	 */
+	setCarried?: (
+		slot: number,
+		creature: string | null,
+		previous: string | null,
+		at: CarryPlacement | null,
+		self: boolean
+	) => void;
+	/** Ranged weapons: a creature's recipe from its id, to draw it under another player's arm. */
+	resolveCreature?: (id: string) => CreatureDefinition | null;
+	/** Ranged weapons: someone else's pellet, `ageMs` after it was fired. */
+	remoteShot?: (origin: Vec3Tuple, dir: Vec3Tuple, colour: string, ageMs: number) => void;
+	/** Ranged weapons: the room's verdict on this player's pellet `shot`. */
+	shotResult?: (result: {
+		shot: number;
+		hit: boolean;
+		refused: boolean;
+		charges: number | null;
+	}) => void;
 }
 
 /** The local player's state after `FirstPersonController.update`, each rendered frame. */
@@ -107,6 +142,18 @@ export interface SceneMultiplayerHooks {
 	 * slot when a punch was sent, null when it hit nobody.
 	 */
 	punch?(aim: { x: number; y: number; z: number; yaw: number; pitch: number }): number | null;
+	/** Ranged weapons: asks the room for a creature; resolves with its answer (or a timeout). */
+	claimCarry?(creature: string): Promise<{ ok: boolean; reason?: string }>;
+	/** Ranged weapons: this player put their creature down at `at`. */
+	dropCarry?(at: CarryPlacement): void;
+	/** Ranged weapons: tells the room about a pellet; returns its shot id (null when offline). */
+	fireShot?(origin: Vec3Tuple, dir: Vec3Tuple): number | null;
+	/** Ranged weapons: this player's pellet `shot` met the player in `target`, `flightMs` in. */
+	reportShotHit?(shot: number, target: number, point: Vec3Tuple, flightMs: number): void;
+	/** Ranged weapons: other players' feet positions as drawn, for pellets to hit. */
+	shotTargets?(): { slot: number; x: number; y: number; z: number }[];
+	/** Whether the room connection is up (firing offline would only fool the shooter). */
+	connected?(): boolean;
 	detach(): void;
 }
 
@@ -140,7 +187,13 @@ export interface MultiplayerSessionOptions {
 	/** This player's punch landed (`hit`) or was refused by the room. */
 	onPunchResult?: (hit: boolean) => void;
 	onTrackingChanged?: (playerId: string | null) => void;
+	/** Injected in tests (passed to NetSession). */
+	createSocket?: NetSessionOptions['createSocket'];
+	environment?: NetSessionOptions['environment'];
 }
+
+/** A pick-up with no answer from the room by then is given up. */
+const CARRY_CLAIM_TIMEOUT_MS = 2000;
 
 /** The owner's slider drags are coalesced into at most this many sends a second. */
 const ENV_SEND_INTERVAL_MS = 250;
@@ -175,6 +228,17 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	/** The remote players as last drawn, for aiming punches at what the player can see. */
 	private lastViews: RemotePlayerView[] = [];
 	private nextPunchId = 1;
+	/** Ranged weapons: slot → creature id under that player's arm (this player's own included). */
+	private readonly carries = new Map<number, string>();
+	private readonly pendingClaims = new Map<
+		number,
+		{
+			resolve: (result: { ok: boolean; reason?: string }) => void;
+			timer: ReturnType<typeof setTimeout>;
+		}
+	>();
+	private nextCarryId = 1;
+	private selfSlot: number | null = null;
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
@@ -190,6 +254,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			schemaVersion: options.schemaVersion,
 			build: options.build,
 			access: options.access,
+			createSocket: options.createSocket,
+			environment: options.environment,
 			onStatus: (status, detail) => {
 				this.status = status;
 				if (status === 'connected') this.disconnectedSince = null;
@@ -197,11 +263,13 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 					this.disconnectedSince ??= Date.now();
 					this.interactions = [];
 					this.context?.setInteractions?.([], this.options.identity.playerId, true);
+					this.settleClaims({ ok: false, reason: 'offline' });
 				}
 				this.updateLock();
 				options.onStatus?.(status, detail);
 			},
 			onPlayers: (players, selfSlot) => {
+				this.selfSlot = selfSlot;
 				this.playerCount = players.length;
 				this.roster = players;
 				if (
@@ -219,6 +287,44 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			onCapability: options.onCapability,
 			onHealth: (message) => this.health?.applyServer(message.state, message.source),
 			onPunchResult: (message) => options.onPunchResult?.(message.hit),
+			onCarryResult: (message) => {
+				const pending = this.pendingClaims.get(message.id);
+				if (!pending) {
+					// Granted after we gave up waiting (a slow room): the room now thinks this player
+					// holds it, so hand it straight back where they stand.
+					if (message.ok && this.lastLocal) {
+						const { x, feetY, z, yaw } = this.lastLocal;
+						this.net.sendDrop(this.nextCarryId++, [x, feetY, z, yaw]);
+					}
+					return;
+				}
+				this.pendingClaims.delete(message.id);
+				clearTimeout(pending.timer);
+				pending.resolve({ ok: message.ok, reason: message.reason });
+				// Granted: this player now holds it (the room tells everyone else with `carried`).
+				if (message.ok && this.selfSlot !== null && this.claimedCreature.has(message.id))
+					this.carries.set(this.selfSlot, this.claimedCreature.get(message.id)!);
+				this.claimedCreature.delete(message.id);
+			},
+			onCarried: (message) => this.applyCarried(message.slot, message.creature, message.at ?? null),
+			onShot: (message) => {
+				const age = this.net.serverNow() - message.at;
+				this.context?.remoteShot?.(
+					message.origin,
+					message.dir,
+					message.colour,
+					Number.isFinite(age) ? Math.max(0, age) : 0
+				);
+			},
+			onShotResult: (message) => {
+				this.firedAt.delete(message.shot);
+				this.context?.shotResult?.({
+					shot: message.shot,
+					hit: message.hit,
+					refused: message.refused === true,
+					charges: typeof message.charges === 'number' ? message.charges : null
+				});
+			},
 			world: {
 				version: () => ({ epoch: this.replica.epoch, seq: this.replica.seq }),
 				onCommit: (commit) => {
@@ -327,6 +433,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 				const ref = this.interactions.find((l) => l.playerId === playerId);
 				if (ref) return context.resolveInteractionPose?.(ref) ?? null;
 				return this.knockedOutPose(playerId);
+			},
+			(playerId) => {
+				const slot = this.roster.find((p) => p.playerId === playerId)?.slot;
+				const id = slot === undefined ? undefined : this.carries.get(slot);
+				return id ? { id, definition: context.resolveCreature?.(id) ?? null } : null;
 			}
 		);
 		context.scene.add(this.avatars.group);
@@ -358,6 +469,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 
 	afterControllerUpdate(local: LocalPlayerFrame): void {
 		this.localFeetY = local.eyeY - local.eyeHeight;
+		this.lastLocal = { x: local.x, feetY: this.localFeetY, z: local.z, yaw: local.yaw };
 		this.net.samplePose({
 			x: local.x,
 			feetY: local.eyeY - local.eyeHeight,
@@ -425,6 +537,86 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		return this.net.sendPunch(this.nextPunchId++, target) ? target : null;
 	}
 
+	private readonly claimedCreature = new Map<number, string>();
+	/** Where this player last stood, for handing back a creature granted too late. */
+	private lastLocal: { x: number; feetY: number; z: number; yaw: number } | null = null;
+
+	connected(): boolean {
+		return this.status === 'connected';
+	}
+
+	claimCarry(creature: string): Promise<{ ok: boolean; reason?: string }> {
+		if (this.status !== 'connected') return Promise.resolve({ ok: false, reason: 'offline' });
+		const id = this.nextCarryId++;
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.pendingClaims.delete(id);
+				this.claimedCreature.delete(id);
+				resolve({ ok: false, reason: 'timeout' });
+			}, CARRY_CLAIM_TIMEOUT_MS);
+			this.pendingClaims.set(id, { resolve, timer });
+			this.claimedCreature.set(id, creature);
+			if (!this.net.sendCarry(id, creature)) {
+				clearTimeout(timer);
+				this.pendingClaims.delete(id);
+				this.claimedCreature.delete(id);
+				resolve({ ok: false, reason: 'offline' });
+			}
+		});
+	}
+
+	/** Room-clock time each of this player's recent shots was fired (for hit reports). */
+	private readonly firedAt = new Map<number, number>();
+	private nextShotId = 1;
+
+	fireShot(origin: Vec3Tuple, dir: Vec3Tuple): number | null {
+		if (this.status !== 'connected') return null;
+		const at = this.net.serverNow();
+		if (!Number.isFinite(at)) return null;
+		const shot = this.nextShotId++;
+		if (!this.net.sendShoot(shot, origin, dir, at)) return null;
+		this.firedAt.set(shot, at);
+		if (this.firedAt.size > 32) this.firedAt.delete(this.firedAt.keys().next().value!);
+		return shot;
+	}
+
+	reportShotHit(shot: number, target: number, point: Vec3Tuple, flightMs: number): void {
+		const firedAt = this.firedAt.get(shot);
+		if (firedAt === undefined) return;
+		this.net.sendShotHit(shot, target, firedAt + flightMs, point);
+	}
+
+	shotTargets(): { slot: number; x: number; y: number; z: number }[] {
+		return this.lastViews
+			.filter(({ info }) => !info.offline && !info.down)
+			.map(({ info, frame }) => ({ slot: info.slot, x: frame.x, y: frame.y, z: frame.z }));
+	}
+
+	dropCarry(at: CarryPlacement): void {
+		if (this.selfSlot !== null) this.carries.delete(this.selfSlot);
+		this.net.sendDrop(this.nextCarryId++, at);
+	}
+
+	private settleClaims(result: { ok: boolean; reason?: string }): void {
+		for (const [id, pending] of this.pendingClaims) {
+			clearTimeout(pending.timer);
+			pending.resolve(result);
+			this.claimedCreature.delete(id);
+		}
+		this.pendingClaims.clear();
+	}
+
+	/** Someone picked up or put down a creature (the room's `carried`, or a welcome). */
+	private applyCarried(slot: number, creature: string | null, at: CarryPlacement | null): void {
+		const previous = this.carries.get(slot) ?? null;
+		const self = slot === this.selfSlot;
+		if (creature === null) this.carries.delete(slot);
+		else this.carries.set(slot, creature);
+		// This player's own put-down comes back too; it was already put down locally.
+		if (self && creature === null && previous === null) return;
+		this.context?.setCarried?.(slot, creature, previous, at, self);
+	}
+
 	/** A knocked-out player lies where they stood, in the beds' lying pose (presence `down`). */
 	private knockedOutPose(playerId: string): PlayerInteractionPose | null {
 		if (!this.roster.some((player) => player.playerId === playerId && player.down)) return null;
@@ -454,6 +646,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	}
 
 	detach(): void {
+		this.settleClaims({ ok: false, reason: 'offline' });
 		if (this.envTimer !== null) clearTimeout(this.envTimer);
 		this.envTimer = null;
 		// Anything the room hasn't confirmed yet is flushed first: a quit straight after an edit
@@ -480,6 +673,19 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		if (welcome.health) this.health?.applyServer(welcome.health);
 		this.interactions = welcome.interactions ?? [];
 		this.context?.setInteractions?.(this.interactions, this.options.identity.playerId, true);
+		// Ranged weapons: who carries what now. Anything we thought was carried and isn't any more
+		// (missed while disconnected) goes back into the herd where it is.
+		const now = new Map(welcome.carries.map((c) => [c.slot, c.creature]));
+		for (const [slot, creature] of [...this.carries]) {
+			if (now.get(slot) === creature) continue;
+			this.carries.delete(slot);
+			this.context.setCarried?.(slot, null, creature, null, slot === this.selfSlot);
+		}
+		for (const [slot, creature] of now) {
+			if (this.carries.get(slot) === creature) continue;
+			this.carries.set(slot, creature);
+			this.context.setCarried?.(slot, creature, null, null, slot === this.selfSlot);
+		}
 		for (const id of this.sharedDoors) {
 			if (!welcome.doors.includes(id)) this.context.setDoorOpen(id, false);
 		}

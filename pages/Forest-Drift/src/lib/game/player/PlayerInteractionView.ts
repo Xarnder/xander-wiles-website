@@ -19,6 +19,10 @@ export class PlayerInteractionView {
 	) {
 		rootName(this.root);
 	}
+	/** The local character, once loaded (drawn in third person and during interactions). */
+	get localCharacter(): CharacterInstance | null {
+		return this.character;
+	}
 	update(player: FirstPersonController, dt = 1 / 60, building = false): void {
 		const pose = player.interactionPose;
 		// Hide the avatar as the camera reaches the head in cramped rooms.

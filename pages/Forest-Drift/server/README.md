@@ -63,7 +63,9 @@ Requests are accepted from localhost, private LAN addresses and `ALLOWED_ORIGINS
 npm run bots -- --world <worldId> --invite <builder token> --count 19 --seconds 30
 ```
 
-Each bot walks a circle and sends 10 poses/s. The script reports the snapshot rate, bytes per
+Each bot walks a circle and sends 10 poses/s. Add `--carry` to have each bot pick up a small creature
+near the centre, or `--fire` to also fire a seed pellet whenever the room's gap allows (ranged
+weapons); the report then adds carries granted, refusals, and shot traffic. The script reports the snapshot rate, bytes per
 player, round-trip times and entry ages. Results from the Phase 1 spike are in
 `docs/multiplayer-performance.json`.
 

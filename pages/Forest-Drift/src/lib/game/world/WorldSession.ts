@@ -41,6 +41,9 @@ export interface WorldSessionOptions {
 	onHealthChange?: ThreeSceneOptions['onHealthChange'];
 	onPlayerDamaged?: ThreeSceneOptions['onPlayerDamaged'];
 	onPlayerDeath?: ThreeSceneOptions['onPlayerDeath'];
+	onCarryChange?: ThreeSceneOptions['onCarryChange'];
+	onCarryPrompt?: ThreeSceneOptions['onCarryPrompt'];
+	onCarryEvent?: ThreeSceneOptions['onCarryEvent'];
 	/** An online world's connection to its room (see `MultiplayerSession`). */
 	multiplayer?: SceneMultiplayerHooks;
 	/**
@@ -102,6 +105,9 @@ export class WorldSession {
 			onHealthChange: options.onHealthChange,
 			onPlayerDamaged: options.onPlayerDamaged,
 			onPlayerDeath: options.onPlayerDeath,
+			onCarryChange: options.onCarryChange,
+			onCarryPrompt: options.onCarryPrompt,
+			onCarryEvent: options.onCarryEvent,
 			multiplayer: options.multiplayer
 		});
 

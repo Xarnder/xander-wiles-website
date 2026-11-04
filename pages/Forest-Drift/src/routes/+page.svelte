@@ -49,6 +49,9 @@
 	import downArrowIcon from '#lib/assets/icons/Down-ArrowIcons.svg';
 	import Hotbar from '#lib/components/Hotbar.svelte';
 	import HealthBar from '#lib/components/HealthBar.svelte';
+	import CarryHud from '#lib/components/CarryHud.svelte';
+	import { playCreatureSound } from '#lib/game/audio/creatureSounds';
+	import type { CarryPrompt, CarryState } from '#lib/game/player/CarryController';
 	import DamageVignette from '#lib/components/DamageVignette.svelte';
 	import DeathCard from '#lib/components/DeathCard.svelte';
 	import {
@@ -192,6 +195,21 @@
 		if (measuredHotbarWidth > 0) healthRowWidth = measuredHotbarWidth;
 	});
 	let healthAnnouncement = $state('');
+	/** Ranged weapons: the carried creature (HUD), the pick-up prompt and screen-reader text. */
+	let carryState = $state<CarryState | null>(null);
+	let carryPrompt = $state<CarryPrompt | null>(null);
+	let carryAnnouncement = $state('');
+	/** Online pick-ups the room refused (ranged weapons), in the player's words. */
+	const CARRY_REFUSALS: Record<string, string> = {
+		taken: 'Someone else picked it up.',
+		far: "You're too far away from that creature.",
+		ineligible: "That creature can't be carried.",
+		rule: 'Carrying creatures is off in this world.',
+		role: "You can't pick that up here.",
+		state: "You can't pick that up right now.",
+		timeout: 'No answer from the world. Try again.',
+		offline: "You're offline. Try again when you're back."
+	};
 	let lastHealthAnnouncementAt = 0;
 	let pendingHealthAnnouncement: ReturnType<typeof setTimeout> | undefined;
 	const reducedMotion =
@@ -220,6 +238,13 @@
 		if (source?.kind === 'player') {
 			const name = mpPlayers.find((player) => player.slot === source.by)?.name;
 			deathCause = { title: 'You were knocked out', detail: name ? `by ${name}` : null };
+		} else if (source?.kind === 'projectile') {
+			// Ranged weapons (Q25): "by Sam's Moon Ribbon".
+			const name = mpPlayers.find((player) => player.slot === source.by)?.name;
+			deathCause = {
+				title: 'You were knocked out',
+				detail: name ? `by ${name}'s ${source.species}` : `by a ${source.species}`
+			};
 		} else {
 			deathCause = {
 				title: 'You fell too far',
@@ -876,10 +901,29 @@
 				onPlayerDamaged: ({ amount, source }) => {
 					damageAmount = amount;
 					damageHit++;
-					if (source.kind === 'player') playSoundEffect('punchHit');
+					if (source.kind === 'player' || source.kind === 'projectile') playSoundEffect('punchHit');
 					else playLandingThud(amount);
 				},
-				onPlayerDeath: ({ source }) => handlePlayerDeath(source)
+				onPlayerDeath: ({ source }) => handlePlayerDeath(source),
+				onCarryChange: (state) => (carryState = state.carrying ? state : null),
+				onCarryPrompt: (prompt) => (carryPrompt = prompt),
+				onCarryEvent: (event) => {
+					if (event.type === 'refused') {
+						const message = CARRY_REFUSALS[event.reason] ?? "You can't pick that up right now.";
+						showSaveToast(message);
+						carryAnnouncement = message;
+						return;
+					}
+					if (event.type === 'hit') {
+						// Same marker and sound as a punch that lands.
+						punchHit++;
+						playSoundEffect('punchHit');
+						return;
+					}
+					playCreatureSound(event.type);
+					if (event.type === 'pickUp') carryAnnouncement = `Picked up ${event.species}`;
+					else if (event.type === 'putDown') carryAnnouncement = `Put down ${event.species}`;
+				}
 			});
 			if (typeof window !== 'undefined') {
 				const testWindow = window as ForestTestWindow;
@@ -1632,6 +1676,8 @@
 					{heightToolId}
 					onOpenPause={openPause}
 					onOpenHelp={() => (showHelp = true)}
+					{carryPrompt}
+					carrying={!!carryState?.carrying}
 					punchAvailable={!!onlineWorld &&
 						!hotbar?.buildModeActive &&
 						(hotbar?.globalMode ?? 'none') === 'none' &&
@@ -1774,6 +1820,12 @@
 							<dd>Jump</dd>
 							<dt>Left click (online, not building)</dt>
 							<dd>Punch the player in front of you</dd>
+							<dt>K on a small creature</dt>
+							<dd>Pick it up under your arm; K again puts it down</dd>
+							<dt>Left click (carrying a creature)</dt>
+							<dd>
+								Fire a seed pellet from its mouth; hold to keep firing (5 shots, 1 back every 1.5 s)
+							</dd>
 							<dt>\</dt>
 							<dd>
 								Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
@@ -2466,6 +2518,20 @@
 				style:--hud-above-hotbar={showHealthBar ? '18px' : '0px'}
 				data-testid="bottom-hud"
 			>
+				{#if carryState?.carrying}
+					<div
+						class="carry-hud-row"
+						style:width={healthRowWidth ? `${healthRowWidth}px` : undefined}
+					>
+						<CarryHud
+							species={carryState.species ?? 'creature'}
+							colour={carryState.colour ?? '#f6e7a8'}
+							charges={carryState.charges}
+							max={carryState.maxCharges}
+							stowed={carryState.stowed}
+						/>
+					</div>
+				{/if}
 				{#if showHealthBar && health}
 					<HealthBar
 						current={health.current}
@@ -2513,6 +2579,9 @@
 				{/if}
 			</div>
 
+			<div class="sr-only" aria-live="polite" data-testid="carry-announcement">
+				{carryAnnouncement}
+			</div>
 			{#if PLAYER_HEALTH_ENABLED}
 				<DamageVignette hit={damageHit} amount={damageAmount} />
 				<div class="sr-only" aria-live="polite" data-testid="health-announcement">
@@ -2627,6 +2696,16 @@
 						class="door-toast mini-interaction-toast interaction-view"
 						onclick={() => session?.scene.miniBuildInteraction.toggleView()}>Change view</button
 					>{/if}
+			{/if}
+
+			{#if carryPrompt && !miniBuildInteractionPrompt && !lookedAtDoorId && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
+				<button
+					class="door-toast carry-toast"
+					data-testid="carry-prompt"
+					onclick={() => session?.scene.toggleCarry()}
+				>
+					[K] {carryPrompt.label}{carryPrompt.carrying ? ' · Left click to fire' : ''}
+				</button>
 			{/if}
 
 			{#if !miniBuildInteractionPrompt && lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
@@ -3442,6 +3521,11 @@
 		top: calc(var(--touch-top-height, 3.4rem) + 3.1rem);
 	}
 
+	.carry-hud-row {
+		display: flex;
+		justify-content: flex-end;
+		max-width: 100%;
+	}
 	.bottom-hud {
 		position: fixed;
 		bottom: max(8px, env(safe-area-inset-bottom));

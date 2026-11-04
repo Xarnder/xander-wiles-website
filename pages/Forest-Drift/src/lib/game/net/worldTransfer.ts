@@ -4,7 +4,7 @@ import type { WorldDefinition } from '../world/WorldTypes';
 import { CURRENT_WORLD_SCHEMA_VERSION } from '../world/WorldTypes';
 import { GENERATOR_VERSION, MAX_WORLD_JSON_BYTES } from './protocol';
 import type { ReplicaRow } from './WorldReplica';
-import { unflattenWorld } from './worldEntities';
+import { mergePlacedCreatures, unflattenWorld } from './worldEntities';
 
 export type TransferResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -148,7 +148,7 @@ export async function fetchOnlineWorld(
 		return { ok: false, error: 'The server sent an unreadable world.' };
 	}
 	// The world is the published base plus its rows, rebuilt into the shapes the game loads.
-	const checked = checkWorld({ ...payload.base, ...unflattenWorld(payload.rows) });
+	const checked = checkWorld(mergePlacedCreatures(payload.base, unflattenWorld(payload.rows)));
 	if (!checked.ok) return checked;
 	return {
 		ok: true,

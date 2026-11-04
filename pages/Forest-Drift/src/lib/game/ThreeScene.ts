@@ -8,7 +8,14 @@ import { PLAYER_BODY } from './player/PlayerBodyDimensions';
 import { PillarTool } from './building/PillarTool';
 import { skyBackgroundBlend } from './sky/skyBackgroundBlend';
 import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
-import type { CreatureDefinition } from './creatures/CreatureTypes';
+import { HeldCreatureView } from './creatures/HeldCreatureView';
+import { RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
+import { CarryController, type CarryPrompt, type CarryState } from './player/CarryController';
+import { ProjectileSystem } from './particles/ProjectileSystem';
+import type { Vec3Like } from './player/creatureProjectile';
+import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
+import type { CarryPlacement } from './net/protocol';
+import type { CreatureDefinition, PersistentCreatureDefinition } from './creatures/CreatureTypes';
 import type { SceneMultiplayerHooks } from './net/MultiplayerSession';
 import type { PlayerBookmark, SharedEnvironment } from './net/protocol';
 import type { AffectedContent, SharedWorldPort } from './net/WorldOpFeed';
@@ -425,6 +432,15 @@ export interface MiniBuildTargetDebug {
 	batchKey: string;
 }
 
+/** Ranged-weapons feedback the page turns into sounds and announcements. */
+export type CarryFeedbackEvent =
+	| { type: 'pickUp' | 'putDown'; species: string }
+	| { type: 'fire' | 'dryFire' | 'impact' }
+	/** Online: this player's pellet hurt someone (hit marker). */
+	| { type: 'hit' }
+	/** Online: the room said no to a pick-up. */
+	| { type: 'refused'; reason: string };
+
 export interface ThreeSceneOptions {
 	container: HTMLElement;
 	settings: TerrainSettings;
@@ -441,6 +457,12 @@ export interface ThreeSceneOptions {
 	onPlayerDamaged?: (event: { amount: number; source: DamageSource }) => void;
 	/** Health reached zero; the scene has already blocked movement until `respawnAfterDeath`. */
 	onPlayerDeath?: (event: { source: DamageSource | null }) => void;
+	/** Ranged weapons: what the carry HUD shows. */
+	onCarryChange?: (state: CarryState) => void;
+	/** Ranged weapons: the "[K] Pick up …" / "Put down" prompt, or null. */
+	onCarryPrompt?: (prompt: CarryPrompt | null) => void;
+	/** Ranged weapons: moments the page gives sound and screen-reader feedback for. */
+	onCarryEvent?: (event: CarryFeedbackEvent) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -627,6 +649,10 @@ export class ThreeScene implements WorldRuntime {
 	speechPreparationOpen = false;
 	readonly music: MusicPlantPlacementTool;
 	readonly creatures: CreatureRuntimeManager;
+	/** Ranged weapons (plan: docs/2026/11-04/range-weapons). */
+	readonly carry: CarryController;
+	readonly heldCreature: HeldCreatureView;
+	readonly projectiles: ProjectileSystem;
 	readonly sustainSettings: SustainSettings;
 	readonly musicVisual = createDefaultMusicVisualSettings();
 	readonly settingsHost: GameSettingsHost;
@@ -1727,7 +1753,9 @@ export class ThreeScene implements WorldRuntime {
 				!this.speechPreparationOpen &&
 				!this.miniBuildUiOpen &&
 				!this.miniBuildEditorOpen &&
-				!this.buildToolManager.isEditingWorld(),
+				!this.buildToolManager.isEditingWorld() &&
+				// While carrying a creature, K puts it down instead of offering seats.
+				!this.carry?.carrying,
 			waterBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
 			eyeHeight: () => this.settings.player.eyeHeight,
 			onPrompt: (prompt) => options.onMiniBuildInteractionChange?.(prompt),
@@ -1736,6 +1764,48 @@ export class ThreeScene implements WorldRuntime {
 
 		this.miniBuildInteraction.controller.onStateChange = (location) =>
 			this.multiplayer?.interactionChanged?.(location);
+
+		this.heldCreature = new HeldCreatureView(this.scene, (m) =>
+			this.graphicsPipeline.registerMaterial(m)
+		);
+		this.projectiles = new ProjectileSystem(
+			{ collide: (from, to) => this.projectileCollision(from, to) },
+			this.particles,
+			(m) => this.graphicsPipeline.registerMaterial(m)
+		);
+		this.projectiles.onImpact = (impact) => {
+			if (impact.kind === 'world') options.onCarryEvent?.({ type: 'impact' });
+			if (impact.kind === 'player') {
+				options.onCarryEvent?.({ type: 'impact' });
+				const { x, y, z } = impact.point;
+				this.multiplayer?.reportShotHit?.(impact.shot, impact.slot, [x, y, z], impact.flightMs);
+			}
+		};
+		// Online, this player's pellets can hit the other players as drawn here.
+		this.projectiles.targets = () => this.multiplayer?.shotTargets?.() ?? [];
+		// Other players' pellets stop where they meet anyone, this player included (visual only).
+		this.projectiles.bodies = () => {
+			if (!this.multiplayer) return [];
+			const self = this.controller.worldPosition;
+			return [
+				...(this.multiplayer.shotTargets?.() ?? []),
+				{ slot: -1, x: self.x, y: self.y - this.settings.player.eyeHeight, z: self.z }
+			];
+		};
+		this.carryFeedback = options.onCarryEvent;
+		this.scene.add(this.projectiles.group);
+		this.carry = new CarryController(this.carryHost(options), {
+			change: (state) => options.onCarryChange?.(state),
+			prompt: (prompt) => options.onCarryPrompt?.(prompt),
+			pickedUp: (species) => options.onCarryEvent?.({ type: 'pickUp', species }),
+			putDown: (species) => options.onCarryEvent?.({ type: 'putDown', species }),
+			refused: (reason) => options.onCarryEvent?.({ type: 'refused', reason })
+		});
+		// Registered after the seat runtime's capture listener (which yields K when no seat is
+		// targeted) and before the door controller's bubbling one.
+		window.addEventListener('keydown', this.handleCarryKey, true);
+		window.addEventListener('mouseup', this.handleCarryMouseUp);
+		window.addEventListener('blur', this.handleCarryBlur);
 		this.miniBuildInteraction.showDebug =
 			this.miniBuildPreferences.display.showInteractionLocations;
 		this.music.onSpeciesChange = () => this.buildToolManager.refreshHotbar();
@@ -2065,6 +2135,24 @@ export class ThreeScene implements WorldRuntime {
 				restorePlayer: (bookmark) => this.restoreBookmark(bookmark),
 				setBuildingLocked: (locked) => this.setBuildingLocked(locked),
 				setPublishedFallDamage: (enabled) => (this.sharedFallDamage = enabled),
+				setCarried: (slot, creature, previous, at, self) =>
+					this.applyRoomCarry(slot, creature, previous, at, self),
+				resolveCreature: (id) => this.resolveCreature(id),
+				remoteShot: (origin, dir, colour, ageMs) =>
+					this.projectiles.spawn(
+						{ x: origin[0], y: origin[1], z: origin[2] },
+						{ x: dir[0], y: dir[1], z: dir[2] },
+						colour,
+						performance.now() - ageMs
+					),
+				shotResult: ({ shot, hit, refused, charges }) => {
+					if (hit) this.carryFeedback?.({ type: 'hit' });
+					if (refused) {
+						// Nobody else will see it, and it can't hurt anyone: don't let it fly on here.
+						this.projectiles.cancelShot(shot);
+						if (charges !== null) this.carry.resyncCharges(charges);
+					}
+				},
 				showLocatorBar: () => this.graphicsSettings.showLocatorBar
 			});
 		}
@@ -2225,8 +2313,10 @@ export class ThreeScene implements WorldRuntime {
 	private sharedWorldPort(): SharedWorldPort {
 		return {
 			captureContent: () => this.captureAuthoredContent(),
-			// Creatures are local (Q9-A) and bump their counter every few seconds: left out.
+			// Ambient creatures are local (Q9-A); placed ones count only when added, moved or removed
+			// (`placedRevision`), never while they wander.
 			contentRevision: () =>
+				this.creatures.placedRevision +
 				this.music.revision +
 				this.buildingManager.getRevision() +
 				this.foundationManager.getRevision() +
@@ -2251,7 +2341,8 @@ export class ThreeScene implements WorldRuntime {
 			miniBuilds: this.getMiniBuilds(),
 			musicTrees: this.getMusicTrees(),
 			musicPlants: this.getMusicPlants(),
-			proceduralOverrides: this.getProceduralOverrides()
+			proceduralOverrides: this.getProceduralOverrides(),
+			placedCreatures: this.creatures.sharedPlacedCreatures()
 		});
 	}
 
@@ -2352,6 +2443,11 @@ export class ThreeScene implements WorldRuntime {
 		if (affected.removedTrees) {
 			this.treeManager.setRemovedTreeIds(target.proceduralOverrides.removedTreeIds);
 		}
+		if (affected.creatures?.size)
+			this.creatures.applyPlaced(
+				(target.placedCreatures ?? []) as PersistentCreatureDefinition[],
+				affected.creatures
+			);
 		for (const id of removedFoundations) this.foundationManager.removeFoundation(id);
 	}
 
@@ -2371,7 +2467,11 @@ export class ThreeScene implements WorldRuntime {
 			anchor: { ...this.currentSharedAnchor() },
 			sky: omitKeys(this.skySettings, LOCAL_SKY_KEYS),
 			weather: pickKeys(this.weather.debug, SHARED_WEATHER_KEYS),
-			rules: { fallDamage: this.sharedFallDamage, playerDamage: this.sharedPlayerDamage }
+			rules: {
+				fallDamage: this.sharedFallDamage,
+				playerDamage: this.sharedPlayerDamage,
+				creatureProjectiles: this.sharedCreatureProjectiles
+			}
 		};
 	}
 
@@ -2379,6 +2479,8 @@ export class ThreeScene implements WorldRuntime {
 	private applySharedEnvironment(env: SharedEnvironment): void {
 		if (env.rules?.fallDamage !== undefined) this.sharedFallDamage = env.rules.fallDamage;
 		if (env.rules?.playerDamage !== undefined) this.sharedPlayerDamage = env.rules.playerDamage;
+		if (env.rules?.creatureProjectiles !== undefined)
+			this.sharedCreatureProjectiles = env.rules.creatureProjectiles;
 		applyKnownFields(this.skySettings, env.sky, LOCAL_SKY_KEYS);
 		ensureDayCycleSettings(this.skySettings);
 		const weather = { ...env.weather };
@@ -3224,19 +3326,38 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	/** Settings fields read and assign `fallDamage`; this routes both to the rule above. */
-	private rulesSettingsPort(): { fallDamage: boolean; playerDamage: boolean } {
-		return Object.defineProperties({} as { fallDamage: boolean; playerDamage: boolean }, {
-			fallDamage: {
-				enumerable: true,
-				get: () => this.getFallDamageRule(),
-				set: (enabled: boolean) => this.setFallDamageRule(enabled)
-			},
-			playerDamage: {
-				enumerable: true,
-				get: () => this.sharedPlayerDamage,
-				set: (enabled: boolean) => this.setPlayerDamageRule(enabled)
+	private rulesSettingsPort(): {
+		fallDamage: boolean;
+		playerDamage: boolean;
+		creatureProjectiles: boolean;
+	} {
+		return Object.defineProperties(
+			{} as { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean },
+			{
+				creatureProjectiles: {
+					enumerable: true,
+					get: () => this.sharedCreatureProjectiles,
+					set: (enabled: boolean) => this.setCreatureProjectilesRule(enabled)
+				},
+				fallDamage: {
+					enumerable: true,
+					get: () => this.getFallDamageRule(),
+					set: (enabled: boolean) => this.setFallDamageRule(enabled)
+				},
+				playerDamage: {
+					enumerable: true,
+					get: () => this.sharedPlayerDamage,
+					set: (enabled: boolean) => this.setPlayerDamageRule(enabled)
+				}
 			}
-		});
+		);
+	}
+
+	/** Online only (the owner): whether creatures can be carried and fired (ranged weapons Q15). */
+	setCreatureProjectilesRule(enabled: boolean): void {
+		if (!this.multiplayer || this.sharedCreatureProjectiles === enabled) return;
+		this.sharedCreatureProjectiles = enabled;
+		this.sharedEnvironmentEdited();
 	}
 
 	/** Online only (the owner): whether punches hurt. Shared with everyone through the room. */
@@ -3328,6 +3449,8 @@ export class ThreeScene implements WorldRuntime {
 
 	/** Online worlds: the owner's player-damage rule (punching), on unless they turn it off. */
 	private sharedPlayerDamage = true;
+	/** Online worlds: the owner's creature-projectiles rule (Q15), on unless they turn it off. */
+	private sharedCreatureProjectiles = true;
 	private punchSwingUntil = 0;
 	private nextPunchAt = 0;
 
@@ -3365,8 +3488,281 @@ export class ThreeScene implements WorldRuntime {
 
 	private readonly handlePunchMouseDown = (event: MouseEvent): void => {
 		if (event.button !== 0 || !this.controller.isPointerLocked()) return;
+		// Carrying a creature: left click fires it instead of punching (ranged weapons Q8).
+		if (this.carry.wantsClick) {
+			this.carry.setTrigger(true);
+			return;
+		}
 		this.punch();
 	};
+
+	// ------------------------------------------------------------------ ranged weapons (carrying)
+
+	private readonly handleCarryKey = (event: KeyboardEvent): void => {
+		if (event.code !== 'KeyK' || event.repeat || event.ctrlKey || event.altKey || event.metaKey)
+			return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
+		if (this.carry.toggle()) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		}
+	};
+
+	private readonly handleCarryMouseUp = (event: MouseEvent): void => {
+		if (event.button === 0) this.carry.setTrigger(false);
+	};
+
+	private readonly handleCarryBlur = (): void => this.carry.setTrigger(false);
+
+	/** `K` or the touch Pick up / Put down button. Returns whether something happened. */
+	toggleCarry(): boolean {
+		return this.carry.toggle();
+	}
+
+	/** Fire button (touch) or tests: press and hold fires whenever a charge is ready. */
+	setCarryTrigger(held: boolean): void {
+		this.carry.setTrigger(held);
+	}
+
+	getCarryState(): CarryState {
+		return this.carry.state();
+	}
+
+	private lookDirection(): Vec3Like {
+		const yaw = this.controller.getYaw(),
+			pitch = this.controller.getPitch();
+		return {
+			x: -Math.sin(yaw) * Math.cos(pitch),
+			y: Math.sin(pitch),
+			z: -Math.cos(yaw) * Math.cos(pitch)
+		};
+	}
+
+	/** Whether the camera is under water (pellets can't be fired there; Q19). */
+	private headUnderwater(): boolean {
+		return this.hydrology.cameraUnderwater(
+			this.camera.position.x,
+			this.camera.position.y,
+			this.camera.position.z
+		);
+	}
+
+	private carryHost(options: ThreeSceneOptions) {
+		const muzzle = new THREE.Vector3();
+		// eslint-disable-next-line @typescript-eslint/no-this-alias
+		const scene = this;
+		return {
+			now: () => performance.now(),
+			eye: () => {
+				const { x, y, z } = this.controller.worldPosition;
+				return { x, y, z };
+			},
+			aim: () => this.lookDirection(),
+			feet: () => {
+				// A step in front, so the creature isn't put down inside the player.
+				const { x, y, z } = this.controller.worldPosition;
+				const yaw = this.controller.getYaw();
+				return {
+					x: x - Math.sin(yaw) * 0.8,
+					y: y - this.settings.player.eyeHeight,
+					z: z - Math.cos(yaw) * 0.8
+				};
+			},
+			yaw: () => this.controller.getYaw(),
+			inputAllowed: () =>
+				RANGED_WEAPONS_ENABLED &&
+				// Online, the owner can switch carrying off (Q15).
+				(!this.multiplayer || this.sharedCreatureProjectiles) &&
+				this.controller.isPointerLocked() &&
+				!this.simulationPaused &&
+				!this.devPanelOpen &&
+				!this.debugControlsOpen &&
+				!this.speechPreparationOpen &&
+				!this.miniBuildUiOpen &&
+				!this.miniBuildEditorOpen &&
+				!this.health.snapshot().dead,
+			stowed: () =>
+				// Online but disconnected: a pellet nobody else sees would only fool the shooter.
+				(!!this.multiplayer && this.multiplayer.connected?.() === false) ||
+				!this.buildToolManager.isNormalMode() ||
+				this.controller.isFlying() ||
+				this.headUnderwater(),
+			mustRelease: () =>
+				!!this.controller.interactionPose ||
+				this.miniBuildInteraction.controller.state.type !== 'none' ||
+				this.health.snapshot().dead,
+			otherInteractionTargeted: () =>
+				!!this.miniBuildInteraction.controller.target || !!this.doorInteraction?.getLookedAtDoor(),
+			pick: (eye: Vec3Like, dir: Vec3Like, reach: number) =>
+				this.creatures.pickCarryable(eye, dir, reach),
+			// Online, the room decides who gets a creature (Phase 2). A getter, because the session
+			// can attach after the scene is built.
+			get claim() {
+				const multiplayer = scene.multiplayer;
+				return multiplayer?.claimCarry ? (id: string) => multiplayer.claimCarry!(id) : undefined;
+			},
+			carry: (id: string, fallback?: CreatureDefinition) => this.creatures.carry(id, fallback),
+			release: (id: string, at: Vec3Like, heading: number) => {
+				this.creatures.release(id, at, heading);
+				this.multiplayer?.dropCarry?.([at.x, at.y, at.z, heading]);
+			},
+			isCarried: (id: string) => this.creatures.isCarried(id),
+			attach: (definition: Parameters<HeldCreatureView['attach']>[0]) =>
+				this.heldCreature.attach(definition),
+			detach: () => this.heldCreature.detach(),
+			muzzle: () => {
+				const point = this.heldCreature.muzzleWorld(muzzle);
+				return point ? { x: point.x, y: point.y, z: point.z } : null;
+			},
+			launch: (from: Vec3Like, towards: Vec3Like, colour: string) => {
+				const now = performance.now();
+				// Standing against a wall, the muzzle can poke through it: then the pellet leaves from
+				// the eye along the crosshair instead (and meets the wall straight away).
+				const { x, y, z } = this.controller.worldPosition;
+				const blocked = this.projectileCollision({ x, y, z }, from) !== null;
+				const origin = blocked ? { x, y, z } : from;
+				const dir = blocked ? this.lookDirection() : towards;
+				// Online: the room hears about it (and tells everyone else to draw it).
+				const shot =
+					this.multiplayer?.fireShot?.([origin.x, origin.y, origin.z], [dir.x, dir.y, dir.z]) ??
+					null;
+				this.projectiles.spawn(origin, dir, colour, now, shot);
+				this.heldCreature.recoil(now);
+				options.onCarryEvent?.({ type: 'fire' });
+			},
+			dryFire: () => options.onCarryEvent?.({ type: 'dryFire' })
+		};
+	}
+
+	private readonly creatureRecipes = new Map<string, CreatureDefinition | null>();
+	private carryFeedback: ThreeSceneOptions['onCarryEvent'];
+
+	/** A carried creature's recipe from its id: ambient ids from the seed, placed ones from the world. */
+	private resolveCreature(id: string): CreatureDefinition | null {
+		if (id.startsWith('placed_')) {
+			const placed = this.creatures.state.individuals.find((p) => p.id === id);
+			return placed ? { species: placed.species, individual: placed.individual } : null;
+		}
+		if (!this.creatureRecipes.has(id)) {
+			if (this.creatureRecipes.size > 256) this.creatureRecipes.clear();
+			this.creatureRecipes.set(id, resolveAmbientCreature(this.settings.seed, id));
+		}
+		return this.creatureRecipes.get(id) ?? null;
+	}
+
+	/**
+	 * The room says `slot` picked up `creature`, or put `previous` down at `at` (ranged weapons
+	 * Phase 2). Keeps this client's herd consistent with who holds what.
+	 */
+	private applyRoomCarry(
+		slot: number,
+		creature: string | null,
+		previous: string | null,
+		at: CarryPlacement | null,
+		self: boolean
+	): void {
+		if (self) {
+			if (creature === null && previous !== null)
+				this.carry.forceRelease(
+					previous,
+					at ? { x: at[0], y: at[1], z: at[2] } : null,
+					at ? at[3] : null
+				);
+			// The room thinks we hold something we don't (we reloaded): hand it back.
+			else if (creature !== null && this.carry.carriedId !== creature)
+				this.multiplayer?.dropCarry?.(
+					at ?? [
+						this.controller.worldPosition.x,
+						this.controller.worldPosition.y - this.settings.player.eyeHeight,
+						this.controller.worldPosition.z,
+						this.controller.getYaw()
+					]
+				);
+			return;
+		}
+		if (previous !== null && this.creatures.carrierOf(previous) === slot) {
+			if (at)
+				this.creatures.release(previous, { x: at[0], y: at[1], z: at[2] }, at[3], {
+					save: false
+				});
+			else this.creatures.forget(previous);
+		}
+		if (creature !== null) {
+			const definition = this.resolveCreature(creature);
+			if (definition) this.creatures.holdRemote(creature, slot, definition);
+		}
+	}
+
+	/** Solid things a pellet stops at: walls, furniture and fences, then terrain, floors and roofs. */
+	private projectileRects(): readonly WallCollisionRect[] {
+		return [
+			...this.wallManager.getAllCollisionRects(),
+			...this.wallPathManager.getAllCollisionRects(),
+			...this.stairManager.getAllCollisionRects(),
+			...(this.doorInteraction?.getCollisionRects() ?? []),
+			...this.furnitureManager.getCollisionRects(),
+			...this.barrierManager.getCollisionRects(),
+			...this.miniBuilds.instances.getNearbyCollisionRects()
+		];
+	}
+
+	/** First solid point on the segment `from`→`to` (sampled every 20 cm), or null. */
+	private projectileCollision(from: Vec3Like, to: Vec3Like): Vec3Like | null {
+		const dx = to.x - from.x,
+			dy = to.y - from.y,
+			dz = to.z - from.z;
+		const length = Math.hypot(dx, dy, dz);
+		const steps = Math.max(1, Math.ceil(length / 0.2));
+		const minX = Math.min(from.x, to.x) - 1,
+			maxX = Math.max(from.x, to.x) + 1,
+			minZ = Math.min(from.z, to.z) - 1,
+			maxZ = Math.max(from.z, to.z) + 1;
+		const rects = this.projectileRects().filter(
+			(r) =>
+				r.centerX + r.halfLength + r.halfThickness >= minX &&
+				r.centerX - r.halfLength - r.halfThickness <= maxX &&
+				r.centerZ + r.halfLength + r.halfThickness >= minZ &&
+				r.centerZ - r.halfLength - r.halfThickness <= maxZ
+		);
+		for (let i = 1; i <= steps; i++) {
+			const k = i / steps;
+			const x = from.x + dx * k,
+				y = from.y + dy * k,
+				z = from.z + dz * k;
+			if (this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y + 0.05) > y)
+				return { x, y: this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y + 0.05), z };
+			if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y - 0.06, y + 0.06) !== null)
+				return { x, y, z };
+			for (const r of rects) {
+				if (y < r.minWorldY || y > r.maxWorldY) continue;
+				const ox = x - r.centerX,
+					oz = z - r.centerZ;
+				const u = ox * r.dirX + oz * r.dirZ;
+				const v = -ox * r.dirZ + oz * r.dirX;
+				if (Math.abs(u) <= r.halfLength + 0.06 && Math.abs(v) <= r.halfThickness + 0.06)
+					return { x, y, z };
+			}
+		}
+		return null;
+	}
+
+	/** Draws the carried creature where the player can see it this frame. */
+	private updateHeldCreature(deltaSeconds: number): void {
+		if (!this.carry.carrying) return;
+		const character = this.miniBuildInteraction.localCharacter;
+		const anchor = this.carryAnchorScratch;
+		const reducedMotion =
+			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const mode =
+			this.controller.thirdPerson && !this.controller.interactionPose
+				? character && this.controller.localAvatarVisible && character.carryAnchor(anchor)
+					? ({ kind: 'third-person', anchor } as const)
+					: ({ kind: 'hidden' } as const)
+				: ({ kind: 'first-person', camera: this.camera } as const);
+		this.heldCreature.update(mode, deltaSeconds, performance.now(), reducedMotion);
+	}
+	private readonly carryAnchorScratch = new THREE.Matrix4();
 
 	private handleLanding(event: LandingEvent): void {
 		if (!PLAYER_HEALTH_ENABLED || event.immune || !this.fallDamageEnabled()) return;
@@ -4041,6 +4437,9 @@ export class ThreeScene implements WorldRuntime {
 		this.noticeRemovedSupport();
 		this.controller.update(deltaSeconds);
 		this.health.poll();
+		this.carry.update(deltaSeconds);
+		const localCharacter = this.miniBuildInteraction.localCharacter;
+		if (localCharacter) localCharacter.carrying = this.carry.carrying;
 		this.miniBuildInteraction.afterPlayerUpdate(
 			deltaSeconds,
 			this.buildToolManager.isConstructionGestureActive()
@@ -4157,6 +4556,8 @@ export class ThreeScene implements WorldRuntime {
 		this.graphicsPipeline.update(deltaSeconds);
 		// Gives meshes built since last frame their real-world UVs before they are drawn again.
 		this.surfaceBinder.flush();
+		this.updateHeldCreature(deltaSeconds);
+		this.projectiles.update(performance.now());
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
 		this.fulfilCaptureRequest();
@@ -4300,6 +4701,9 @@ export class ThreeScene implements WorldRuntime {
 	dispose(): void {
 		this.disposed = true;
 		this.renderer.domElement.removeEventListener('mousedown', this.handlePunchMouseDown);
+		window.removeEventListener('keydown', this.handleCarryKey, true);
+		window.removeEventListener('mouseup', this.handleCarryMouseUp);
+		window.removeEventListener('blur', this.handleCarryBlur);
 		this.health.dispose();
 		this.multiplayer?.detach();
 		this.multiplayer = null;
@@ -4341,6 +4745,8 @@ export class ThreeScene implements WorldRuntime {
 		this.miniBuilds.dispose();
 		this.removeTool.dispose();
 		this.music.dispose();
+		this.heldCreature.dispose();
+		this.projectiles.dispose();
 		this.creatures.dispose();
 		this.paintTool.dispose();
 		this.moveTool.dispose();

@@ -1,6 +1,7 @@
 import { createNamedRandom, hashStringToUint32 } from '../terrain/seededRandom';
 import { generateSpecies } from './SpeciesGenerator';
 import { generateIndividual } from './IndividualGenerator';
+import { creatureDimensions } from './creatureDimensions';
 import type {
 	BodyPlanId,
 	CreatureSpawnDefinition,
@@ -15,13 +16,7 @@ export const creatureCellAt = (x: number, z: number) => ({
 	x: Math.floor(x / CREATURE_CELL_SIZE),
 	z: Math.floor(z / CREATURE_CELL_SIZE)
 });
-export function creatureDimensions(species: SpeciesGenome, size = 1) {
-	const p = species.proportions;
-	return {
-		radius: Math.max(p.bodyLength * 0.5, p.bodyWidth, p.stanceWidth) * size,
-		height: (p.legLength + p.bodyDepth + p.neckLength + p.headSize) * size
-	};
-}
+export { creatureDimensions };
 /** Four support samples keep roots off water/void, steep ledges and building footprints. */
 export function creatureSurface(
 	access: CreatureWorldAccess,
@@ -58,6 +53,12 @@ const REGION_HEIGHT_BANDS: readonly (readonly [number, number])[] = [
 	[8.5, 12],
 	[16, 26]
 ];
+/**
+ * Every region's smallest species is a quadruped, so there's always one small enough to carry
+ * (ranged weapons, docs/2026/11-04/range-weapons Q3). Changed on purpose for existing worlds too
+ * (decision F1); only this band is affected.
+ */
+const SMALLEST_BAND_PLAN: BodyPlanId = 'quadruped';
 /** Candidate groups per 64m cell. Each one draws a different regional species. */
 const POPULATION_SLOTS = 4;
 /**
@@ -165,7 +166,9 @@ export function regionSpecies(
 	const plans: BodyPlanId[] = ['quadruped', 'quadruped', 'hexapod', 'biped', 'serpentine'];
 	const speciesList = Array.from({ length: REGION_HEIGHT_BANDS.length }, (_, index) => {
 		const seed = hashStringToUint32(`${worldSeed}:fauna-v1:${regionX}:${regionZ}:${index}`);
-		const species = generateSpecies(seed, plans[Math.floor(rng() * plans.length)]);
+		// The draw is always taken, so every later draw (sizes, other bands) is unchanged.
+		const drawnPlan = plans[Math.floor(rng() * plans.length)];
+		const species = generateSpecies(seed, index === 0 ? SMALLEST_BAND_PLAN : drawnPlan);
 		const [minHeight, maxHeight] = REGION_HEIGHT_BANDS[index];
 		const sized = stature(species, minHeight + rng() * (maxHeight - minHeight));
 		// Small species travel in herds; the largest are landmarks and spawn alone.
@@ -215,6 +218,40 @@ export function selectVisibleCreatures<T extends { distance: number; height: num
 	return picked;
 }
 
+/** Group slots per population cell (also the largest valid `slot` in an ambient id, exclusive). */
+export const CREATURE_CELL_SLOTS = POPULATION_SLOTS;
+
+/** The group key ambient creature ids are built from. */
+export function creatureGroupId(
+	worldSeed: string | number,
+	cellX: number,
+	cellZ: number,
+	slot: number
+): string {
+	return `group:${worldSeed}:${cellX}:${cellZ}:${slot}`;
+}
+
+/**
+ * Which regional species each slot of a cell uses (`tiers[slot]` indexes `regionSpecies`), plus the
+ * cell's random stream positioned just after the shuffle. Shuffled so the groups in one cell are
+ * different species: big size and colour gaps between them, while each group stays one species.
+ * Pure: needs only the world seed, no terrain.
+ */
+export function cellSpeciesOrder(worldSeed: string | number, cellX: number, cellZ: number) {
+	const rng = createNamedRandom(String(worldSeed), `fauna-cell-v1:${cellX}:${cellZ}`);
+	const tiers = REGION_HEIGHT_BANDS.map((_, index) => index);
+	for (let i = tiers.length - 1; i > 0; i--) {
+		const j = Math.floor(rng() * (i + 1));
+		[tiers[i], tiers[j]] = [tiers[j], tiers[i]];
+	}
+	return { rng, tiers };
+}
+
+/** Members in a group of `species` at regional band `index` (the largest bands spawn alone). */
+export function creatureGroupSize(species: SpeciesGenome, index: number): number {
+	return index >= 4 ? 1 : species.behaviour.preferredGroupSize;
+}
+
 export function generatePopulationCell(
 	worldSeed: string | number,
 	cellX: number,
@@ -229,16 +266,9 @@ export function generatePopulationCell(
 		density <= 0
 	)
 		return [];
-	const rng = createNamedRandom(String(worldSeed), `fauna-cell-v1:${cellX}:${cellZ}`);
+	const { rng, tiers } = cellSpeciesOrder(worldSeed, cellX, cellZ);
 	const speciesList = regionSpecies(worldSeed, Math.floor(cellX / 8), Math.floor(cellZ / 8));
 	const result: CreatureSpawnDefinition[] = [];
-	// Shuffle so the groups in one cell are different species: big size and colour gaps between
-	// them, while each group itself stays one species.
-	const tiers = speciesList.map((_, index) => index);
-	for (let i = tiers.length - 1; i > 0; i--) {
-		const j = Math.floor(rng() * (i + 1));
-		[tiers[i], tiers[j]] = [tiers[j], tiers[i]];
-	}
 	const presenceLimit = Math.min(0.92, density * POPULATION_PRESENCE);
 	for (let slot = 0; slot < POPULATION_SLOTS; slot++) {
 		const presence = rng(),
@@ -250,9 +280,9 @@ export function generatePopulationCell(
 		const dimensions = creatureDimensions(species, 1.1);
 		const y = creatureSurface(access, cx, cz, dimensions.radius, dimensions.height);
 		if (y === undefined) continue;
-		const groupId = `group:${worldSeed}:${cellX}:${cellZ}:${slot}`;
+		const groupId = creatureGroupId(worldSeed, cellX, cellZ, slot);
 		const groupCentre = { x: cx, y, z: cz };
-		const count = index >= 4 ? 1 : species.behaviour.preferredGroupSize;
+		const count = creatureGroupSize(species, index);
 		for (let member = 0; member < count; member++) {
 			const seed = hashStringToUint32(`${groupId}:${member}`);
 			const local = createNamedRandom(String(seed), 'placement');

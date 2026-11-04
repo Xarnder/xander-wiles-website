@@ -9,8 +9,9 @@ import type { TerrainEditData } from '../terrain/TerrainEdits';
  * Pure data, no Three.js or DOM: the room (Cloudflare) and every browser run exactly this code, so a
  * world flattens and rebuilds identically everywhere.
  *
- * Rows only ever describe *authored content*. The environment (terrain, sky, weather), creatures
- * (local in v1, Q9-A) and the player's position (a per-player bookmark) travel separately.
+ * Rows only ever describe *authored content*. The environment (terrain, sky, weather), ambient
+ * creatures (local, Q9-A) and the player's position (a per-player bookmark) travel separately.
+ * Creatures placed with the Creature Lab are authored content (`creature` rows, ranged weapons F2).
  */
 
 export type TopEntityKind =
@@ -30,7 +31,8 @@ export type TopEntityKind =
 	| 'musicTree'
 	| 'musicPlant'
 	| 'removedTree'
-	| 'terrainTile';
+	| 'terrainTile'
+	| 'creature';
 
 export type SubEntityKind =
 	| 'wallOpening'
@@ -60,7 +62,8 @@ export const TOP_ENTITY_KINDS: readonly TopEntityKind[] = [
 	'musicTree',
 	'musicPlant',
 	'removedTree',
-	'terrainTile'
+	'terrainTile',
+	'creature'
 ];
 
 /** Which array of a parent holds which kind of sub-entity. */
@@ -181,6 +184,11 @@ export interface AuthoredContent {
 	musicTrees: Loose[];
 	musicPlants: Loose[];
 	proceduralOverrides: { removedTreeIds: string[]; terrainEdits?: TerrainEditData };
+	/**
+	 * Creatures placed with the Creature Lab (`PersistentCreatureDefinition`s at their saved spot).
+	 * Not the world's `creatures` field (that also holds settings); see `mergePlacedCreatures`.
+	 */
+	placedCreatures?: Loose[];
 }
 
 /** Splits authored content into rows. */
@@ -204,6 +212,7 @@ export function flattenWorld(content: AuthoredContent): EntityRow[] {
 	for (const instance of content.miniBuilds?.instances ?? []) top('miniBuildInstance', instance);
 	for (const tree of content.musicTrees ?? []) top('musicTree', tree);
 	for (const plant of content.musicPlants ?? []) top('musicPlant', plant);
+	for (const creature of content.placedCreatures ?? []) top('creature', creature);
 	for (const id of content.proceduralOverrides?.removedTreeIds ?? []) {
 		rows.push({ kind: 'removedTree', id, data: {} });
 	}
@@ -336,6 +345,7 @@ export function unflattenWorld(rows: Iterable<EntityRow>): AuthoredContent {
 		miniBuilds: { definitions: all('miniBuildDefinition'), instances: all('miniBuildInstance') },
 		musicTrees: all('musicTree'),
 		musicPlants: all('musicPlant'),
+		placedCreatures: all('creature'),
 		proceduralOverrides: {
 			removedTreeIds: [...(byKind.get('removedTree') ?? [])].map((row) => row.id).sort(),
 			...(byKind.get('terrainTile')?.length
@@ -351,6 +361,33 @@ export function unflattenWorld(rows: Iterable<EntityRow>): AuthoredContent {
 				: {})
 		}
 	} as unknown as AuthoredContent;
+}
+
+/**
+ * A world rebuilt from its published base plus rows: placed creatures from rows join (and, by id,
+ * replace) the base's own (ranged weapons F2). Worlds published before creatures had rows keep
+ * theirs in the base, where they stay as they were published.
+ */
+export function mergePlacedCreatures(
+	base: Record<string, unknown>,
+	authored: AuthoredContent
+): Record<string, unknown> {
+	const { placedCreatures = [], ...rest } = authored;
+	const world: Record<string, unknown> = { ...base, ...rest };
+	if (placedCreatures.length === 0) return world;
+	const creatures = (base.creatures ?? {}) as {
+		settings?: unknown;
+		individuals?: { id: string }[];
+	};
+	const fromRows = new Set(placedCreatures.map((c: { id: string }) => c.id));
+	world.creatures = {
+		...creatures,
+		individuals: [
+			...(creatures.individuals ?? []).filter((c) => !fromRows.has(c.id)),
+			...placedCreatures
+		]
+	};
+	return world;
 }
 
 function compareIds(a: EntityRow, b: EntityRow): number {

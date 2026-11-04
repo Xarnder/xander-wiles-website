@@ -156,7 +156,7 @@ export interface GameSettingsHost {
 	 */
 	worldAccess?: 'local' | 'owner' | 'member';
 	/** This world's gameplay rules; online, the owner's (assigning applies them). */
-	rules?: { fallDamage: boolean; playerDamage: boolean };
+	rules?: { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean };
 	actions: GameSettingsActions;
 }
 

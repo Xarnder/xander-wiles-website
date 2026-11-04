@@ -197,6 +197,10 @@ export class MiniBuildInteractionRuntime {
 		if (this.o.inputAllowed() && this.o.player.interactionPose)
 			this.o.player.interactionThirdPerson = !this.o.player.interactionThirdPerson;
 	}
+	/** The local character drawn in third person, once loaded. */
+	get localCharacter() {
+		return this.view.localCharacter;
+	}
 	afterPlayerUpdate(dt = 1 / 60, building = false): void {
 		this.view.update(this.o.player, dt, building);
 	}

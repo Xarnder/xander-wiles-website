@@ -1,0 +1,298 @@
+{
+	"description": "Ranged weapons performance checks (plan \u00a711). Frame pacing: scripts/profile-carry.mjs, headless Chromium on the GPU (Metal) against the production preview, Medium preset, 1280x800; frame callback intervals in ms. Soak: server/tools/bots.mjs, 20 Node bots for 60 s against a local wrangler dev room (same machine, so RTTs are local); the firing run has each bot carry a creature and send a shot every 360 ms.",
+	"framePacing": {
+		"run1": {
+			"measuredAt": "2026-11-04T16:03:56.872Z",
+			"quality": "medium",
+			"viewport": "1280x800",
+			"pelletsLaunched": 65,
+			"pelletsHitWorld": 47,
+			"browserErrors": [],
+			"phases": [
+				{
+					"name": "idle",
+					"frames": 469,
+					"fps": 58.5,
+					"meanMs": 17.09,
+					"p95": 18.5,
+					"p99": 19.4,
+					"max": 133.1,
+					"over25": 2,
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.004,
+						"creatures": 0.536,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "walk",
+					"frames": 896,
+					"fps": 59.7,
+					"meanMs": 16.76,
+					"p95": 18.7,
+					"p99": 21.1,
+					"max": 92.5,
+					"over25": 4,
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.003,
+						"creatures": 0.65,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "carry-idle",
+					"frames": 481,
+					"fps": 60.1,
+					"meanMs": 16.65,
+					"p95": 18.3,
+					"p99": 18.9,
+					"max": 19.3,
+					"over25": 0,
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.007,
+						"creatures": 0.735,
+						"heldCreature": 0.029,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "carry-fire",
+					"frames": 899,
+					"fps": 59.9,
+					"meanMs": 16.7,
+					"p95": 18.3,
+					"p99": 19.2,
+					"max": 70.7,
+					"over25": 1,
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.047,
+						"creatures": 0.791,
+						"heldCreature": 0.027,
+						"projectiles": 0.024
+					}
+				},
+				{
+					"name": "carry-fire-walk",
+					"frames": 900,
+					"fps": 60,
+					"meanMs": 16.67,
+					"p95": 18.6,
+					"p99": 19.9,
+					"max": 22.2,
+					"over25": 0,
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.05,
+						"creatures": 0.966,
+						"heldCreature": 0.029,
+						"projectiles": 0.02
+					}
+				},
+				{
+					"name": "four-carriers-fire",
+					"frames": 901,
+					"fps": 60,
+					"meanMs": 16.66,
+					"p95": 18.4,
+					"p99": 19.3,
+					"max": 20.8,
+					"over25": 0,
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.051,
+						"creatures": 1.299,
+						"heldCreature": 0.027,
+						"projectiles": 0.032
+					}
+				}
+			]
+		},
+		"run2": {
+			"measuredAt": "2026-11-04T16:05:43.818Z",
+			"quality": "medium",
+			"viewport": "1280x800",
+			"pelletsLaunched": 65,
+			"pelletsHitWorld": 48,
+			"browserErrors": [],
+			"phases": [
+				{
+					"name": "idle",
+					"frames": 481,
+					"fps": 60,
+					"meanMs": 16.66,
+					"p95": 18.3,
+					"p99": 19.1,
+					"max": 20,
+					"over25": 0,
+					"slowFrames": [],
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.004,
+						"creatures": 0.702,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "walk",
+					"frames": 901,
+					"fps": 60,
+					"meanMs": 16.66,
+					"p95": 18.6,
+					"p99": 20,
+					"max": 25.3,
+					"over25": 1,
+					"slowFrames": [
+						{
+							"ms": 25.3,
+							"at": 11539,
+							"costs": {
+								"carry": 0,
+								"creatures": 3.5,
+								"projectiles": 0
+							},
+							"launched": 0
+						}
+					],
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.003,
+						"creatures": 0.671,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "carry-idle",
+					"frames": 481,
+					"fps": 60.1,
+					"meanMs": 16.65,
+					"p95": 18.5,
+					"p99": 19.1,
+					"max": 19.4,
+					"over25": 0,
+					"slowFrames": [],
+					"pelletsInFlightAtEnd": 0,
+					"costMsPerFrame": {
+						"carry": 0.007,
+						"creatures": 0.733,
+						"heldCreature": 0.027,
+						"projectiles": 0.001
+					}
+				},
+				{
+					"name": "carry-fire",
+					"frames": 901,
+					"fps": 60,
+					"meanMs": 16.66,
+					"p95": 18.4,
+					"p99": 19.1,
+					"max": 19.9,
+					"over25": 0,
+					"slowFrames": [],
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.047,
+						"creatures": 0.799,
+						"heldCreature": 0.029,
+						"projectiles": 0.022
+					}
+				},
+				{
+					"name": "carry-fire-walk",
+					"frames": 900,
+					"fps": 60,
+					"meanMs": 16.67,
+					"p95": 18.5,
+					"p99": 20,
+					"max": 24.2,
+					"over25": 0,
+					"slowFrames": [],
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.043,
+						"creatures": 0.93,
+						"heldCreature": 0.031,
+						"projectiles": 0.017
+					}
+				},
+				{
+					"name": "four-carriers-fire",
+					"frames": 901,
+					"fps": 60,
+					"meanMs": 16.66,
+					"p95": 18.3,
+					"p99": 19.2,
+					"max": 20.7,
+					"over25": 0,
+					"slowFrames": [],
+					"pelletsInFlightAtEnd": 1,
+					"costMsPerFrame": {
+						"carry": 0.043,
+						"creatures": 1.284,
+						"heldCreature": 0.026,
+						"projectiles": 0.03
+					}
+				}
+			]
+		}
+	},
+	"soak": {
+		"server": "wrangler dev, 127.0.0.1:8793",
+		"baseline": {
+			"world": "Ranged soak",
+			"bots": 20,
+			"seconds": 60,
+			"posesSentPerBot": 9.9,
+			"snapshotsPerSecondPerBot": 12.6,
+			"entriesPerSecondPerBot": 187.8,
+			"downloadBytesPerSecondPerBot": 3914,
+			"uploadBytesPerSecondPerBot": 255,
+			"rttMs": {
+				"p50": 0.9,
+				"p90": 2.8,
+				"p99": 3.9,
+				"max": 6
+			},
+			"entryAgeMs": {
+				"p50": 29,
+				"p90": 51,
+				"p99": 57,
+				"max": 62
+			},
+			"disconnects": 0
+		},
+		"carryingAndFiring": {
+			"world": "Ranged soak",
+			"bots": 20,
+			"seconds": 60,
+			"posesSentPerBot": 9.9,
+			"snapshotsPerSecondPerBot": 12.3,
+			"entriesPerSecondPerBot": 188.1,
+			"downloadBytesPerSecondPerBot": 5948,
+			"uploadBytesPerSecondPerBot": 569,
+			"rttMs": {
+				"p50": 0.6,
+				"p90": 1.9,
+				"p99": 3.8,
+				"max": 5.9
+			},
+			"entryAgeMs": {
+				"p50": 29,
+				"p90": 50,
+				"p99": 56,
+				"max": 57
+			},
+			"disconnects": 0,
+			"carriesGranted": 16,
+			"carryRefusals": {
+				"taken": 4
+			},
+			"shotsSentPerSecondPerBot": 2.19,
+			"shotsRefusedPerBot": 96,
+			"shotMessagesReceivedPerSecondPerBot": 11.1
+		}
+	}
+}

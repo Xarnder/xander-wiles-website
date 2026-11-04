@@ -28,6 +28,8 @@ export interface AffectedContent {
 	music: boolean;
 	removedTrees: boolean;
 	terrain?: boolean;
+	/** Placed (Creature Lab) creatures that were added, moved or removed. */
+	creatures: Set<string>;
 }
 
 /** What the game scene offers the feed. `ThreeScene` implements it; tests use a plain object. */
@@ -93,6 +95,7 @@ const KIND_NOUNS: Partial<Record<EntityKind, string>> = {
 	barrier: 'a fence',
 	furniture: 'something',
 	miniBuildInstance: 'something',
+	creature: 'a creature',
 	wallOpening: 'a window or door',
 	pathOpening: 'a window or door',
 	roofOpening: 'a roof window',
@@ -404,7 +407,8 @@ export function emptyAffected(): AffectedContent {
 		miniBuildDefinitions: new Set(),
 		miniBuildInstances: new Set(),
 		music: false,
-		removedTrees: false
+		removedTrees: false,
+		creatures: new Set()
 	};
 }
 
@@ -419,7 +423,8 @@ export function isEmpty(affected: AffectedContent): boolean {
 		affected.miniBuildInstances.size === 0 &&
 		!affected.music &&
 		!affected.removedTrees &&
-		!affected.terrain
+		!affected.terrain &&
+		affected.creatures.size === 0
 	);
 }
 
@@ -462,6 +467,9 @@ export function affectedBetween(
 				break;
 			case 'removedTree':
 				affected.removedTrees = true;
+				break;
+			case 'creature':
+				affected.creatures.add(id);
 				break;
 			default:
 				if (BUILDING_PART_KINDS.has(kind)) {

@@ -63,7 +63,8 @@ export class RoomHealthAuthority implements HealthAuthority {
 		const before = healthAt(this.state, now);
 		this.state = { ...state };
 		const after = healthAt(this.state, now);
-		if (source?.kind === 'player' && after < before) this.notifier.damaged(before - after, source);
+		if (source && source.kind !== 'fall' && after < before)
+			this.notifier.damaged(before - after, source);
 		this.poll();
 	}
 

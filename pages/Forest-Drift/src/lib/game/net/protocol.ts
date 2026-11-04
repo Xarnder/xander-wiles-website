@@ -29,7 +29,9 @@ import type { DamageSource, HealthState } from '../player/PlayerHealth';
  */
 // 4: pose grounded/running flags are now required for character animation.
 // 5: player health owned by the room (fall, punch, respawn, health; shared damage rules).
-export const PROTOCOL_VERSION = 5;
+// 6: carrying creatures (carry, drop, carried, welcome.carries) and creature pellets (shoot, shot,
+//    shotHit, shotResult; rules.creatureProjectiles). The room also enforces the Q3 fauna change.
+export const PROTOCOL_VERSION = 6;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world
@@ -358,7 +360,7 @@ export interface SharedEnvironment {
 	/** The shared subset of the weather settings (see `SHARED_WEATHER_KEYS`). */
 	weather: Record<string, unknown>;
 	/** The owner's gameplay rules (Q22). Absent until the owner first changes one. */
-	rules?: { fallDamage?: boolean; playerDamage?: boolean };
+	rules?: { fallDamage?: boolean; playerDamage?: boolean; creatureProjectiles?: boolean };
 }
 
 /** The room clock: accumulated time the world has been occupied (Q11-A), at `serverTime`. */
@@ -475,6 +477,88 @@ export interface ServerInteractionsMessage {
 	replyTo?: string;
 }
 
+/** Ranged weapons: a world position plus facing, `[x, y, z, heading]`. */
+export type CarryPlacement = [number, number, number, number];
+export type Vec3Tuple = [number, number, number];
+
+/**
+ * Picks up the creature with id `creature` (an ambient `group:…` id). The room checks it's free,
+ * carryable and plausibly near, then answers with `carryResult`; everyone else hears `carried`.
+ */
+export interface ClientCarryMessage {
+	t: 'carry';
+	id: number;
+	creature: string;
+}
+
+/** Puts the carried creature down at `at` (clamped by the room to near the player). */
+export interface ClientDropMessage {
+	t: 'drop';
+	id: number;
+	at: CarryPlacement;
+}
+
+/** Fires a pellet (Phase 3). `shot` rises per connection; `at` is the room-clock time. */
+export interface ClientShootMessage {
+	t: 'shoot';
+	shot: number;
+	origin: Vec3Tuple;
+	dir: Vec3Tuple;
+	at: number;
+}
+
+/** The sender's own pellet met another player's body (Phase 3). */
+export interface ClientShotHitMessage {
+	t: 'shotHit';
+	shot: number;
+	target: number;
+	at: number;
+	point: Vec3Tuple;
+}
+
+export type CarryRefusal = 'taken' | 'far' | 'ineligible' | 'rule' | 'role' | 'state';
+
+/** The room's answer to the sender's `carry`. */
+export interface ServerCarryResultMessage {
+	t: 'carryResult';
+	id: number;
+	ok: boolean;
+	reason?: CarryRefusal;
+}
+
+/**
+ * Who carries what: `creature` is the id now under `slot`'s arm, or null when it was put down
+ * (`at`: where, so everyone puts it back in their own herd at the same spot).
+ */
+export interface ServerCarriedMessage {
+	t: 'carried';
+	slot: number;
+	creature: string | null;
+	at?: CarryPlacement;
+}
+
+/** Someone else's pellet, so everyone draws it (Phase 3). */
+export interface ServerShotMessage {
+	t: 'shot';
+	slot: number;
+	shot: number;
+	origin: Vec3Tuple;
+	dir: Vec3Tuple;
+	at: number;
+	/** `#rrggbb`, the creature's accent colour. */
+	colour: string;
+}
+
+/** Whether the sender's pellet was accepted and whether it hurt anyone (Phase 3). */
+export interface ServerShotResultMessage {
+	t: 'shotResult';
+	shot: number;
+	hit: boolean;
+	refused?: boolean;
+	/** The room's count of the shooter's charges, so the HUD can resync. */
+	charges?: number;
+}
+
 export type ClientJsonMessage =
 	| HelloMessage
 	| PingMessage
@@ -484,7 +568,11 @@ export type ClientJsonMessage =
 	| ClientInteractionMessage
 	| ClientFallMessage
 	| ClientRespawnMessage
-	| ClientPunchMessage;
+	| ClientPunchMessage
+	| ClientCarryMessage
+	| ClientDropMessage
+	| ClientShootMessage
+	| ClientShotHitMessage;
 
 export interface WelcomeMessage {
 	t: 'welcome';
@@ -518,6 +606,8 @@ export interface WelcomeMessage {
 	/** Doors open right now (Q13-A). */
 	doors: string[];
 	interactions?: OccupiedMiniBuildInteraction[];
+	/** Creatures being carried right now, by slot (ranged weapons). */
+	carries?: { slot: number; creature: string }[];
 	/** Names of everyone who has ever built here, for "Sam added this" notices. */
 	names: Record<string, string>;
 }
@@ -650,7 +740,11 @@ export type ServerJsonMessage =
 	| ServerDoorMessage
 	| ServerInteractionsMessage
 	| ServerHealthMessage
-	| ServerPunchResultMessage;
+	| ServerPunchResultMessage
+	| ServerCarryResultMessage
+	| ServerCarriedMessage
+	| ServerShotMessage
+	| ServerShotResultMessage;
 
 const NAME_MAX = 20;
 const NAME_MIN = 2;
@@ -716,6 +810,8 @@ export function parseSharedEnvironment(raw: unknown): SharedEnvironment | null {
 	if (isRecord(raw.rules)) {
 		if (typeof raw.rules.fallDamage === 'boolean') rules.fallDamage = raw.rules.fallDamage;
 		if (typeof raw.rules.playerDamage === 'boolean') rules.playerDamage = raw.rules.playerDamage;
+		if (typeof raw.rules.creatureProjectiles === 'boolean')
+			rules.creatureProjectiles = raw.rules.creatureProjectiles;
 	}
 	return {
 		anchor: { roomSeconds, timeOfDay, weatherTime },
@@ -796,6 +892,36 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		return { t: 'fall', id, d, at };
 	}
 	if (message.t === 'respawn') return { t: 'respawn' };
+	if (message.t === 'carry') {
+		const { id, creature } = message;
+		if (!isMessageId(id)) return null;
+		if (typeof creature !== 'string' || creature.length === 0 || creature.length > 160) return null;
+		return { t: 'carry', id, creature };
+	}
+	if (message.t === 'drop') {
+		const at = finiteTuple(message.at, 4);
+		if (!isMessageId(message.id) || !at) return null;
+		return { t: 'drop', id: message.id, at: at as CarryPlacement };
+	}
+	if (message.t === 'shoot') {
+		const origin = finiteTuple(message.origin, 3);
+		const dir = finiteTuple(message.dir, 3);
+		const { shot, at } = message;
+		if (!isMessageId(shot) || !origin || !dir) return null;
+		if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+		const length = Math.hypot(dir[0], dir[1], dir[2]);
+		if (length < 0.98 || length > 1.02) return null;
+		return { t: 'shoot', shot, origin: origin as Vec3Tuple, dir: dir as Vec3Tuple, at };
+	}
+	if (message.t === 'shotHit') {
+		const point = finiteTuple(message.point, 3);
+		const { shot, target, at } = message;
+		if (!isMessageId(shot) || !point) return null;
+		if (typeof target !== 'number' || !Number.isInteger(target) || target < 0 || target > 255)
+			return null;
+		if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+		return { t: 'shotHit', shot, target, at, point: point as Vec3Tuple };
+	}
 	if (message.t === 'punch') {
 		const { id, target } = message;
 		if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 0) return null;
@@ -830,9 +956,25 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'door' ||
 		t === 'interactions' ||
 		t === 'health' ||
-		t === 'punchResult'
+		t === 'punchResult' ||
+		t === 'carryResult' ||
+		t === 'carried' ||
+		t === 'shot' ||
+		t === 'shotResult'
 		? (value as ServerJsonMessage)
 		: null;
+}
+
+function isMessageId(value: unknown): value is number {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** A tuple of `length` finite numbers within world limits, or null. */
+function finiteTuple(value: unknown, length: number): number[] | null {
+	if (!Array.isArray(value) || value.length !== length) return null;
+	for (const n of value)
+		if (typeof n !== 'number' || !Number.isFinite(n) || Math.abs(n) > 1e7) return null;
+	return value as number[];
 }
 
 function nonNegativeInteger(value: unknown): number | null {

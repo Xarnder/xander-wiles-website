@@ -12,6 +12,22 @@ import {
 	type HealthState
 } from '../player/PlayerHealth';
 import { entityKey } from './worldEntities';
+import { parseAmbientCreatureId, resolveAmbientCreature } from '../creatures/carryableCreatureRef';
+import { abilityFor } from '../creatures/creatureAbilities';
+import type { CreatureDefinition } from '../creatures/CreatureTypes';
+import {
+	PROJECTILE_DAMAGE,
+	ROOM_HIT_REWIND_MS,
+	ROOM_SHOT_CLOCK_SLACK_MS,
+	ROOM_SHOT_TIMING_SLACK_MS,
+	chargesAt,
+	createChargeState,
+	shotHitPlausible,
+	shotOriginPlausible,
+	spendCharge,
+	type ChargeState
+} from '../player/creatureProjectile';
+import { CREATURE_CELL_SIZE } from '../creatures/CreaturePopulationSystem';
 import {
 	validateMiniBuildDefinition,
 	validateMiniBuildInstance
@@ -20,7 +36,12 @@ import {
 	resolveMiniBuildInteraction,
 	MINI_BUILD_INTERACTION_RANGE
 } from '../miniBuild/MiniBuildInteractions';
-import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
+import type {
+	CarryPlacement,
+	CarryRefusal,
+	MiniBuildInteractionRef,
+	OccupiedMiniBuildInteraction
+} from './protocol';
 import {
 	CLIENT_LEAVE_CODE,
 	CLOSE_CODES,
@@ -119,6 +140,8 @@ export type AuthResult =
 export interface RoomSessionState {
 	doors: string[];
 	interactions: (OccupiedMiniBuildInteraction & { signature: string })[];
+	/** Creatures being carried (ranged weapons), by player id. Optional: older rooms lack it. */
+	carries?: { playerId: string; creature: string }[];
 }
 
 export interface RoomPersistence {
@@ -191,6 +214,11 @@ export interface RoomCoreOptions {
 	store?: WorldStore | (() => WorldStore);
 	/** The world's current version, cheaply (without loading the rows). Defaults to the store's. */
 	storeVersion?: () => { epoch: number; seq: number };
+	/**
+	 * The world's seed, which ambient creature ids are built from (ranged weapons), or a loader the
+	 * room calls the first time someone picks a creature up. Without it, carrying is refused.
+	 */
+	worldSeed?: string | (() => string | null);
 }
 
 export interface RoomStats {
@@ -209,6 +237,15 @@ export interface RoomStats {
 	punchesLanded: number;
 	/** Punches the room refused because the two players' poses were too far apart or misaligned. */
 	punchesRejected: number;
+	/** Creatures picked up, and pick-ups refused (taken, far, not carryable, rule, state). */
+	carriesGranted: number;
+	carriesRefused: number;
+	/** Pellets accepted and broadcast, and refused (no carry, no charge, implausible origin…). */
+	shotsFired: number;
+	shotsRefused: number;
+	/** Pellet hits that cost health, and hit reports the room didn't believe. */
+	shotHitsAccepted: number;
+	shotHitsRejected: number;
 }
 
 export interface StoredPose {
@@ -249,6 +286,58 @@ interface PlayerState {
 	lastFallAt: number;
 	lastPunchId: number;
 	lastPunchAt: number;
+	lastCarryId: number;
+	/** Ranged weapons: the carried creature's firing state, made on first shot after a grant. */
+	firing: CarryFiring | null;
+	lastShotId: number;
+	/** Recent accepted poses, oldest first, for checking hits as the shooter saw them. */
+	recentPoses: StoredPose[];
+	/**
+	 * Recent shots by id, for checking hit reports. Kept on the player, not the carry, so a pellet
+	 * still in the air when its creature is put down can still land (plan §12 case 6).
+	 */
+	shots: Map<number, TrackedShot>;
+}
+
+interface TrackedShot {
+	origin: Vec;
+	dir: Vec;
+	firedAt: number;
+	species: string;
+	resolved: boolean;
+}
+
+interface CarryFiring {
+	creature: string;
+	species: string;
+	colour: string;
+	charges: ChargeState;
+}
+type Vec = { x: number; y: number; z: number };
+const MAX_TRACKED_SHOTS = 16;
+/** Poses kept per player for lag-compensated hit checks (about 2.4 s at 10 poses a second). */
+const MAX_RECENT_POSES = 24;
+
+/**
+ * How far from the player an ambient creature's home cell centre (or where it was last put down)
+ * may be for a pick-up to be believed, metres. Creatures are simulated by each client, so the room
+ * only knows where they live: half a cell's diagonal, plus wandering, plus pose lag.
+ */
+const CARRY_CLAIM_RADIUS = 80;
+/** Lab-placed creatures wander near their saved spot; a pick-up must be within this of it. */
+const PLACED_CLAIM_RADIUS = 20;
+/** A put-down spot further than this from the player's feet is moved to their feet. */
+const CARRY_DROP_RADIUS = 3;
+/** Put-down spots remembered for re-pick-ups far from home (oldest forgotten first). */
+const MAX_RELEASED_SPOTS = 256;
+
+/** `abilityFor` on recipes from rows, which only passed the store's shape check. */
+function safeAbility(definition: CreatureDefinition): boolean {
+	try {
+		return abilityFor(definition) !== null;
+	} catch {
+		return false;
+	}
 }
 
 /** At most four fall reports a second per player. */
@@ -311,7 +400,13 @@ export class RoomCore {
 		fallsApplied: 0,
 		fallMismatches: 0,
 		punchesLanded: 0,
-		punchesRejected: 0
+		punchesRejected: 0,
+		carriesGranted: 0,
+		carriesRefused: 0,
+		shotsFired: 0,
+		shotsRefused: 0,
+		shotHitsAccepted: 0,
+		shotHitsRejected: 0
 	};
 
 	private readonly world: RoomWorldInfo;
@@ -331,6 +426,12 @@ export class RoomCore {
 	private readonly storeVersion: (() => { epoch: number; seq: number }) | null;
 	/** Doors open right now (Q13-A); cleared when the world empties. */
 	private readonly openDoors = new Set<string>();
+	/** Ranged weapons: player id → the creature under their arm. */
+	private readonly carries = new Map<string, string>();
+	/** Where carried creatures were last put down this session, so they can be picked up there. */
+	private readonly releasedAt = new Map<string, { x: number; z: number }>();
+	private readonly worldSeedSource: RoomCoreOptions['worldSeed'];
+	private worldSeedValue: string | null | undefined;
 	private savedSessionJson = '{"doors":[],"interactions":[]}';
 	/** Everyone in the world, connected or in their grace period, by player id. */
 	private readonly players = new Map<string, PlayerState>();
@@ -359,6 +460,7 @@ export class RoomCore {
 		this.storeValue = typeof store === 'function' ? null : store;
 		this.storeLoader = typeof store === 'function' ? store : null;
 		this.storeVersion = options.storeVersion ?? null;
+		this.worldSeedSource = options.worldSeed;
 		const now = this.now();
 		this.clock = options.restored?.clock
 			? { ...options.restored.clock }
@@ -374,6 +476,7 @@ export class RoomCore {
 		if (session) {
 			for (const id of session.doors) this.openDoors.add(id);
 			for (const entry of session.interactions) this.interactions.set(entry.playerId, { ...entry });
+			for (const entry of session.carries ?? []) this.carries.set(entry.playerId, entry.creature);
 			this.savedSessionJson = JSON.stringify(session);
 		}
 		for (const entry of options.restored?.grace ?? []) {
@@ -448,6 +551,8 @@ export class RoomCore {
 			const resolved = this.players.get(id)?.conn ? this.resolveInteraction(entry) : null;
 			if (!resolved || JSON.stringify(resolved) !== entry.signature) this.interactions.delete(id);
 		}
+		for (const playerId of [...this.carries.keys()])
+			if (!this.players.has(playerId)) this.carries.delete(playerId);
 		if (this.players.size === 0 && this.restartHoldUntil === null) this.clearSessionState();
 		if (this.interactions.size !== occupiedBefore) this.broadcastInteractions();
 		else this.persistSessionState();
@@ -619,6 +724,8 @@ export class RoomCore {
 						playerId: id,
 						signature: JSON.stringify(resolved)
 					});
+				// Sitting or lying down puts a carried creature down (Q19).
+				if (this.interactions.has(id)) this.releaseCarry(player);
 			}
 			this.broadcastInteractions(id);
 			return;
@@ -633,6 +740,25 @@ export class RoomCore {
 		}
 		if (message.t === 'punch') {
 			if (player) this.handlePunch(player, message);
+			return;
+		}
+		if (message.t === 'carry') {
+			if (player) this.handleCarry(player, message);
+			return;
+		}
+		if (message.t === 'drop') {
+			if (player && message.id > player.lastCarryId) {
+				player.lastCarryId = message.id;
+				this.releaseCarry(player, message.at);
+			}
+			return;
+		}
+		if (message.t === 'shoot') {
+			if (player) this.handleShoot(player, message);
+			return;
+		}
+		if (message.t === 'shotHit') {
+			if (player) this.handleShotHit(player, message);
 			return;
 		}
 		if (message.t === 'door') {
@@ -778,6 +904,13 @@ export class RoomCore {
 			player = existing;
 			player.conn = conn;
 			player.info = info;
+			// A new connection numbers its messages from the start again (a reloaded page does).
+			// Without this, a reload inside the grace period had every shot, pick-up, punch and fall
+			// report ignored until the new ids overtook the old ones.
+			player.lastFallId = -1;
+			player.lastPunchId = -1;
+			player.lastCarryId = -1;
+			player.lastShotId = -1;
 			if (player.health?.dead) player.info.down = true;
 			player.graceExpiresAt = null;
 			player.lastSent.clear();
@@ -814,6 +947,7 @@ export class RoomCore {
 			health: this.healthOf(player, now),
 			doors: [...this.openDoors],
 			interactions: this.interactionList(),
+			carries: this.carryList(),
 			names: this.playerNames()
 		});
 		this.broadcast({ t: 'joined', player: { ...info } }, conn);
@@ -932,6 +1066,11 @@ export class RoomCore {
 		});
 		// The broadcast doubles as the sender's acknowledgement.
 		this.broadcast(commit);
+		// A placed creature someone is carrying was removed from the world: it's gone from their arm.
+		for (const op of message.ops)
+			if (op.op === 'del' && op.kind === 'creature')
+				for (const carrier of this.players.values())
+					if (this.carries.get(carrier.info.playerId) === op.id) this.releaseCarry(carrier);
 	}
 
 	private handleEnv(player: PlayerState, raw: unknown, bytes: number): void {
@@ -953,6 +1092,8 @@ export class RoomCore {
 		this.env = env;
 		this.persistence?.saveEnv(JSON.stringify(env));
 		this.broadcast({ t: 'env', env, by: player.info.slot }, player.conn ?? undefined);
+		if (!this.creatureProjectilesEnabled())
+			for (const carrier of this.players.values()) this.releaseCarry(carrier);
 	}
 
 	private handlePose(conn: RoomConnection, data: ArrayBuffer): void {
@@ -1005,6 +1146,10 @@ export class RoomCore {
 			sampleTime
 		};
 		player.poseVersion++;
+		// A teleport makes earlier positions meaningless for hit checks.
+		if (pose.flags & POSE_FLAGS.teleport) player.recentPoses.length = 0;
+		player.recentPoses.push(player.pose);
+		if (player.recentPoses.length > MAX_RECENT_POSES) player.recentPoses.shift();
 		this.lastPoseAt = now;
 		this.stats.posesAccepted++;
 
@@ -1020,6 +1165,8 @@ export class RoomCore {
 
 	private removePlayer(player: PlayerState): void {
 		if (this.players.get(player.info.playerId) !== player) return;
+		// Left for good (or the grace period ran out): the creature goes back where they stood.
+		this.releaseCarry(player);
 		this.players.delete(player.info.playerId);
 		if (player.conn) this.byConn.delete(player.conn);
 		this.broadcast({ t: 'left', slot: player.info.slot, playerId: player.info.playerId });
@@ -1072,13 +1219,19 @@ export class RoomCore {
 	clearSessionState(): void {
 		this.openDoors.clear();
 		this.interactions.clear();
+		this.carries.clear();
+		this.releasedAt.clear();
 		this.persistSessionState();
 	}
 
 	private persistSessionState(): void {
 		const state: RoomSessionState = {
 			doors: [...this.openDoors],
-			interactions: [...this.interactions.values()].map((entry) => ({ ...entry }))
+			interactions: [...this.interactions.values()].map((entry) => ({ ...entry })),
+			// Only when someone is carrying, so rooms without creatures keep their old record.
+			...(this.carries.size
+				? { carries: [...this.carries].map(([playerId, creature]) => ({ playerId, creature })) }
+				: {})
 		};
 		const json = JSON.stringify(state);
 		if (json === this.savedSessionJson) return;
@@ -1195,7 +1348,12 @@ export class RoomCore {
 			lastFallId: -1,
 			lastFallAt: Number.NEGATIVE_INFINITY,
 			lastPunchId: -1,
-			lastPunchAt: Number.NEGATIVE_INFINITY
+			lastPunchAt: Number.NEGATIVE_INFINITY,
+			lastCarryId: -1,
+			firing: null,
+			lastShotId: -1,
+			recentPoses: [],
+			shots: new Map()
 		};
 	}
 
@@ -1234,6 +1392,8 @@ export class RoomCore {
 		source?: DamageSource
 	): void {
 		player.health = health;
+		// Knocked out: the creature is put down where they fell (Q19).
+		if (health.dead) this.releaseCarry(player);
 		// Everyone else draws a knocked-out player lying down (presence, never the health itself).
 		if ((player.info.down === true) !== health.dead) {
 			player.info.down = health.dead;
@@ -1310,6 +1470,271 @@ export class RoomCore {
 		this.stats.punchesLanded++;
 		this.setHealth(target, result.state, undefined, { kind: 'player', by: player.info.slot });
 		reply(true);
+	}
+
+	// --------------------------------------------------------------- ranged weapons: carrying
+
+	/** The owner's creature-projectiles rule (Q15); on unless they turn it off. */
+	private creatureProjectilesEnabled(): boolean {
+		return this.env?.rules?.creatureProjectiles ?? true;
+	}
+
+	private worldSeed(): string | null {
+		if (this.worldSeedValue === undefined) {
+			const source = this.worldSeedSource;
+			try {
+				this.worldSeedValue = typeof source === 'function' ? source() : (source ?? null);
+			} catch {
+				this.worldSeedValue = null;
+			}
+		}
+		return this.worldSeedValue;
+	}
+
+	private carryList(): { slot: number; creature: string }[] {
+		const list: { slot: number; creature: string }[] = [];
+		for (const [playerId, creature] of this.carries) {
+			const player = this.players.get(playerId);
+			if (player) list.push({ slot: player.info.slot, creature });
+		}
+		return list;
+	}
+
+	/**
+	 * A pick-up (ranged weapons Phase 2). The room can't see creatures (each client simulates its
+	 * own herd), so it checks what it can: the rule, the player's state, that the id is a real,
+	 * carryable creature of this world, that nobody holds it, and that the player is plausibly near
+	 * where it lives or was last put down.
+	 */
+	private handleCarry(player: PlayerState, message: { id: number; creature: string }): void {
+		if (message.id <= player.lastCarryId) return;
+		player.lastCarryId = message.id;
+		const refuse = (reason: CarryRefusal) => {
+			this.stats.carriesRefused++;
+			if (player.conn) send(player.conn, { t: 'carryResult', id: message.id, ok: false, reason });
+		};
+		const id = player.info.playerId;
+		const now = this.now();
+		if (!this.creatureProjectilesEnabled()) return refuse('rule');
+		if (
+			this.carries.has(id) ||
+			this.interactions.has(id) ||
+			this.healthOf(player, now).dead ||
+			!player.pose
+		)
+			return refuse('state');
+		const creature = message.creature;
+		const found = this.carryableHere(creature);
+		if (!found || !safeAbility(found.definition)) return refuse('ineligible');
+		// Moving a Lab-placed creature edits the world, so it needs edit rights (F2); anyone may
+		// carry an ambient one (Q16).
+		if (found.placed && player.info.role === 'viewer') return refuse('role');
+		for (const held of this.carries.values()) if (held === creature) return refuse('taken');
+		const near = (spot: { x: number; z: number }, radius: number) =>
+			Math.hypot(spot.x - player.pose!.x, spot.z - player.pose!.z) <= radius;
+		const released = this.releasedAt.get(creature);
+		const home = found.home;
+		const radius = found.placed ? PLACED_CLAIM_RADIUS : CARRY_CLAIM_RADIUS;
+		if (!near(home, radius) && !(released && near(released, radius))) return refuse('far');
+		this.carries.set(id, creature);
+		// A fresh carry: full charges (Q10).
+		player.firing = this.firingFor(creature, now);
+		this.stats.carriesGranted++;
+		this.persistSessionState();
+		if (player.conn) send(player.conn, { t: 'carryResult', id: message.id, ok: true });
+		this.broadcast({ t: 'carried', slot: player.info.slot, creature }, player.conn ?? undefined);
+	}
+
+	/** Firing state for a carried creature (rebuilt from the id after the room slept). */
+	/**
+	 * A creature this room would let someone carry, with where it lives: an ambient one rebuilt from
+	 * its id (its home cell's centre), or a Lab-placed one from the world's rows (its saved spot).
+	 */
+	private carryableHere(
+		creature: string
+	): { definition: CreatureDefinition; placed: boolean; home: { x: number; z: number } } | null {
+		if (creature.startsWith('placed_')) {
+			const row = this.store?.get(entityKey('creature', creature));
+			const position = row?.data.position as { x?: unknown; z?: unknown } | undefined;
+			if (!row || typeof position?.x !== 'number' || typeof position.z !== 'number') return null;
+			return {
+				definition: {
+					species: row.data.species as CreatureDefinition['species'],
+					individual: row.data.individual as CreatureDefinition['individual']
+				},
+				placed: true,
+				home: { x: position.x, z: position.z }
+			};
+		}
+		const ref = parseAmbientCreatureId(creature);
+		const seed = this.worldSeed();
+		const definition = ref && seed !== null ? resolveAmbientCreature(seed, creature) : null;
+		if (!ref || !definition) return null;
+		return {
+			definition,
+			placed: false,
+			home: { x: (ref.cellX + 0.5) * CREATURE_CELL_SIZE, z: (ref.cellZ + 0.5) * CREATURE_CELL_SIZE }
+		};
+	}
+
+	private firingFor(creature: string, now: number): CarryFiring | null {
+		const definition = this.carryableHere(creature)?.definition;
+		if (!definition || !safeAbility(definition)) return null;
+		return {
+			creature,
+			species: definition.species.name,
+			colour: definition.species.appearance.palette.accent,
+			charges: createChargeState(now)
+		};
+	}
+
+	/**
+	 * A pellet (ranged weapons Phase 3). The room checks the shooter may fire (rule, carrying, alive,
+	 * not seated, not flying or under water), that `at` is near the room clock, that the pellet left
+	 * from near the shooter, and spends a charge on the shooter's own clock (`at`), so network jitter
+	 * between two quick shots can't refuse the second. Everyone else is told to draw it.
+	 */
+	private handleShoot(
+		player: PlayerState,
+		message: { shot: number; origin: number[]; dir: number[]; at: number }
+	): void {
+		if (message.shot <= player.lastShotId) return;
+		player.lastShotId = message.shot;
+		const now = this.now();
+		const id = player.info.playerId;
+		const creature = this.carries.get(id);
+		if (creature !== undefined && player.firing?.creature !== creature)
+			player.firing = this.firingFor(creature, now);
+		const firing = player.firing;
+		const refuse = () => {
+			this.stats.shotsRefused++;
+			if (player.conn)
+				send(player.conn, {
+					t: 'shotResult',
+					shot: message.shot,
+					hit: false,
+					refused: true,
+					...(firing ? { charges: chargesAt(firing.charges, now) } : {})
+				});
+		};
+		const pose = player.pose;
+		if (
+			!firing ||
+			creature === undefined ||
+			!this.creatureProjectilesEnabled() ||
+			!pose ||
+			pose.flags & (POSE_FLAGS.flying | POSE_FLAGS.underwater) ||
+			this.interactions.has(id) ||
+			this.healthOf(player, now).dead ||
+			Math.abs(message.at - now) > ROOM_SHOT_CLOCK_SLACK_MS
+		)
+			return refuse();
+		const [ox, oy, oz] = message.origin;
+		const [dx, dy, dz] = message.dir;
+		const origin = { x: ox, y: oy, z: oz };
+		if (!shotOriginPlausible(pose, origin)) return refuse();
+		const spent = spendCharge(firing.charges, message.at, ROOM_SHOT_TIMING_SLACK_MS);
+		if (!spent) return refuse();
+		firing.charges = spent;
+		player.shots.set(message.shot, {
+			origin,
+			dir: { x: dx, y: dy, z: dz },
+			firedAt: message.at,
+			species: firing.species,
+			resolved: false
+		});
+		if (player.shots.size > MAX_TRACKED_SHOTS)
+			player.shots.delete(player.shots.keys().next().value!);
+		this.stats.shotsFired++;
+		this.broadcast(
+			{
+				t: 'shot',
+				slot: player.info.slot,
+				shot: message.shot,
+				origin: [ox, oy, oz],
+				dir: [dx, dy, dz],
+				at: message.at,
+				colour: firing.colour
+			},
+			player.conn ?? undefined
+		);
+	}
+
+	/**
+	 * The shooter's pellet met someone (Phase 3). The shooter's browser saw the hit; the room checks
+	 * it's the shooter's own unresolved shot, that the target can be hurt, and that the pellet's path
+	 * and the target's last pose were close at that moment (Q13). Walls aren't checked (Q14).
+	 */
+	private handleShotHit(
+		player: PlayerState,
+		message: { shot: number; target: number; at: number }
+	): void {
+		const shot = player.shots.get(message.shot);
+		const reply = (hit: boolean) => {
+			if (player.conn) send(player.conn, { t: 'shotResult', shot: message.shot, hit });
+		};
+		if (!shot || shot.resolved) return;
+		shot.resolved = true;
+		const now = this.now();
+		const target = this.findBySlot(message.target);
+		if (
+			!target ||
+			target === player ||
+			!target.conn ||
+			!target.pose ||
+			!this.creatureProjectilesEnabled()
+		)
+			return reply(false);
+		// Lag compensation: the shooter saw the target where it was a little earlier, so any pose of
+		// theirs from the rewind window (or the latest) may have been where the pellet met them.
+		const seen = [
+			target.pose,
+			...target.recentPoses.filter(
+				(p) => p.sampleTime >= message.at - ROOM_HIT_REWIND_MS && p.sampleTime <= message.at + 200
+			)
+		];
+		if (!seen.some((pose) => shotHitPlausible(shot, pose, message.at))) {
+			this.stats.shotHitsRejected++;
+			return reply(false);
+		}
+		const result = damageHealth(this.healthOf(target, now), PROJECTILE_DAMAGE, now);
+		if (result.applied === 0) return reply(false);
+		this.stats.shotHitsAccepted++;
+		this.setHealth(target, result.state, undefined, {
+			kind: 'projectile',
+			by: player.info.slot,
+			species: shot.species
+		});
+		reply(true);
+	}
+
+	/**
+	 * Puts the player's creature down (if any): at `at` when that's near their feet, otherwise where
+	 * they last stood. Everyone, the carrier included, hears where it went.
+	 */
+	private releaseCarry(player: PlayerState, at?: CarryPlacement): void {
+		const id = player.info.playerId;
+		const creature = this.carries.get(id);
+		if (creature === undefined) return;
+		this.carries.delete(id);
+		player.firing = null;
+		const pose = player.pose;
+		let spot: CarryPlacement | undefined;
+		if (at && pose && Math.hypot(at[0] - pose.x, at[2] - pose.z) <= CARRY_DROP_RADIUS) spot = at;
+		else if (pose) spot = [pose.x, pose.y, pose.z, pose.yaw];
+		if (spot) {
+			this.releasedAt.delete(creature);
+			this.releasedAt.set(creature, { x: spot[0], z: spot[2] });
+			if (this.releasedAt.size > MAX_RELEASED_SPOTS)
+				this.releasedAt.delete(this.releasedAt.keys().next().value!);
+		}
+		this.persistSessionState();
+		this.broadcast({
+			t: 'carried',
+			slot: player.info.slot,
+			creature: null,
+			...(spot ? { at: spot } : {})
+		});
 	}
 
 	/**

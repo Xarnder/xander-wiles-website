@@ -21,6 +21,14 @@
 					'Open or close the door under the crosshair. Outside Build Mode, sit or lie at an authored Mini Build location; press again to stand up.'
 				],
 				[
+					'K on a small creature',
+					'Pick up a small four-legged creature and tuck it under your arm; press K again to put it down. A door or seat under the crosshair comes first.'
+				],
+				[
+					'Left click while carrying',
+					"Fire a seed pellet from the creature's mouth. Hold to keep firing: 5 shots, one comes back every 1.5 s. Not while building, flying or under water."
+				],
+				[
 					'WASD / Space while resting',
 					'Leave the seat or bed at a nearby clear standing position.'
 				],

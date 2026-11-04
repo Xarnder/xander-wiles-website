@@ -1148,6 +1148,12 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 												'Player damage (punching)',
 												host.rules,
 												'playerDamage'
+											),
+											boolField(
+												'rules.creatureProjectiles',
+												'Creature projectiles (carrying and firing)',
+												host.rules,
+												'creatureProjectiles'
 											)
 										]
 									: [])

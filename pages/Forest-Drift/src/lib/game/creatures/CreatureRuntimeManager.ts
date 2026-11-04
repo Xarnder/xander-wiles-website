@@ -28,9 +28,11 @@ import type {
 	CreatureSpawnDefinition,
 	CreatureWorldAccess,
 	CreatureWorldState,
+	PersistentCreatureDefinition,
 	Vec3
 } from './CreatureTypes';
 import { CREATURE_GRAPHICS_BUDGETS, type GraphicsQuality } from '../graphics/GraphicsTypes';
+import { abilityFor } from './creatureAbilities';
 
 interface LiveCreature {
 	compiled: CompiledCreature;
@@ -41,6 +43,25 @@ interface LiveCreature {
 	label?: THREE.Sprite;
 	targetLine?: THREE.Line;
 }
+/** A creature taken out of the herd and held by a player: this one, or (online) another's slot. */
+export interface CarriedCreature {
+	by: 'local' | number;
+	runtime: CreatureRuntimeDefinition;
+	/**
+	 * Built from the id because this client never had the creature in its herd (someone else picked
+	 * it up out of sight). Its herd's home is unknown, so it adopts wherever it is put down.
+	 */
+	synthetic?: boolean;
+}
+
+/** What `pickCarryable` found under the crosshair. */
+export interface CarryCandidate {
+	id: string;
+	definition: CreatureDefinition;
+	/** Distance along the look ray, metres. */
+	distance: number;
+}
+
 /** Bounded runtime window over an infinite deterministic ecology. Ambient state is never serialized. */
 export class CreatureRuntimeManager {
 	readonly group = new THREE.Group();
@@ -50,8 +71,19 @@ export class CreatureRuntimeManager {
 	readonly live = new Map<string, LiveCreature>();
 	/** Terrain conformation state per live creature; survives LOD recompiles (same skeleton). */
 	readonly grounding = new Map<string, CreatureGroundingController>();
+	/**
+	 * Creatures out of the herd because a player is carrying them. They are not in `logical`, so
+	 * behaviour, grounding, culling, collision and cell unloading all skip them, and a reloading
+	 * cell never spawns a second copy.
+	 */
+	readonly carried = new Map<string, CarriedCreature>();
 	state: CreatureWorldState;
 	revision = 0;
+	/**
+	 * Bumps only when placed creatures are added, moved (put down) or removed: what online worlds
+	 * share (ranged weapons F2). `revision` also ticks while they wander, for single-player saves.
+	 */
+	placedRevision = 0;
 	private cells = new Map<string, CreatureSpawnDefinition[]>();
 	private scanAt = -1;
 	private scanCell = '';
@@ -101,6 +133,7 @@ export class CreatureRuntimeManager {
 	}
 	private restorePersistent() {
 		for (const p of this.state.individuals) {
+			if (this.carried.has(p.id)) continue;
 			const spawn: CreatureSpawnDefinition = {
 				id: p.id,
 				species: p.species,
@@ -131,6 +164,8 @@ export class CreatureRuntimeManager {
 		for (const id of [...this.live.keys()]) this.unload(id);
 		this.grounding.clear();
 		this.logical.clear();
+		// A new seed or new creature settings: whatever was carried no longer belongs to this world.
+		this.carried.clear();
 		this.cells.clear();
 		this.scanAt = -1;
 		this.restorePersistent();
@@ -179,7 +214,8 @@ export class CreatureRuntimeManager {
 						this.cells.set(key, spawns);
 					}
 					for (const spawn of spawns)
-						if (!this.logical.has(spawn.id)) this.logical.set(spawn.id, createCreatureState(spawn));
+						if (!this.logical.has(spawn.id) && !this.carried.has(spawn.id))
+							this.logical.set(spawn.id, createCreatureState(spawn));
 				}
 		for (const [key] of this.cells) if (!keep.has(key)) this.cells.delete(key);
 		for (const [id, r] of this.logical)
@@ -193,6 +229,7 @@ export class CreatureRuntimeManager {
 		this.time += frameDt;
 		if (!this.state.settings.enabled) {
 			for (const id of [...this.live.keys()]) this.unload(id);
+			this.carried.clear();
 			return;
 		}
 		const budget = CREATURE_GRAPHICS_BUDGETS[quality];
@@ -444,6 +481,212 @@ export class CreatureRuntimeManager {
 		}
 	}
 
+	/**
+	 * The nearest carryable creature the look ray passes through, within `reach` metres of `eye`
+	 * (ray against each live creature's coarse collision cylinder). `dir` must be unit length.
+	 */
+	pickCarryable(eye: Vec3, dir: Vec3, reach: number): CarryCandidate | null {
+		let best: CarryCandidate | null = null;
+		for (const [id, live] of this.live) {
+			const r = this.logical.get(id);
+			if (!r) continue;
+			const p = live.compiled.object.position;
+			const radius = live.compiled.compilation.collision.radius + 0.1;
+			const height = live.compiled.compilation.collision.height;
+			// Cheap reject: the cylinder's closest point is beyond reach.
+			if (Math.hypot(p.x - eye.x, p.z - eye.z) - radius > reach) continue;
+			const definition = { species: r.spawn.species, individual: r.spawn.individual };
+			for (let t = 0; t <= reach; t += 0.05) {
+				const x = eye.x + dir.x * t,
+					y = eye.y + dir.y * t,
+					z = eye.z + dir.z * t;
+				if (y < p.y - 0.05 || y > p.y + height + 0.05) continue;
+				if (Math.hypot(x - p.x, z - p.z) > radius) continue;
+				if ((!best || t < best.distance) && abilityFor(definition))
+					best = { id, definition, distance: t };
+				break;
+			}
+		}
+		return best;
+	}
+
+	isCarried(id: string): boolean {
+		return this.carried.has(id);
+	}
+
+	/**
+	 * Takes a creature out of the herd to be carried. Returns its recipe, or null when it isn't
+	 * here or can't be carried.
+	 */
+	carry(id: string, fallback?: CreatureDefinition): CreatureDefinition | null {
+		if (this.carried.get(id)?.by === 'local') return null;
+		const r = this.logical.get(id);
+		const definition = r ? { species: r.spawn.species, individual: r.spawn.individual } : fallback;
+		if (!definition || !abilityFor(definition)) return null;
+		// Online, the room may have granted a creature this herd no longer has (it wandered out of
+		// range, or someone else held it a moment ago): carry it from its recipe.
+		this.takeFromHerd(id, 'local', definition);
+		return definition;
+	}
+
+	/**
+	 * Online: another player (`slot`) is carrying this creature. It leaves this client's herd (or is
+	 * kept out of it when its cell loads), so nobody sees it in two places.
+	 */
+	holdRemote(id: string, slot: number, definition: CreatureDefinition): void {
+		this.takeFromHerd(id, slot, definition);
+	}
+
+	/**
+	 * Lets go of a creature without putting it anywhere (its carrier left and nobody knows where):
+	 * it reappears with its herd the next time its cell is scanned.
+	 */
+	forget(id: string): void {
+		this.carried.delete(id);
+		this.scanAt = -1;
+	}
+
+	/** Who holds `id`: 'local', a remote slot, or null. */
+	carrierOf(id: string): 'local' | number | null {
+		return this.carried.get(id)?.by ?? null;
+	}
+
+	private takeFromHerd(id: string, by: 'local' | number, definition: CreatureDefinition): void {
+		const existing = this.carried.get(id);
+		const r = this.logical.get(id) ?? existing?.runtime;
+		if (r) {
+			this.unload(id);
+			this.grounding.delete(id);
+			this.logical.delete(id);
+			this.carried.set(id, { by, runtime: r, synthetic: existing?.synthetic });
+			return;
+		}
+		const spawn: CreatureSpawnDefinition = {
+			id,
+			species: definition.species,
+			individual: definition.individual,
+			position: { x: 0, y: 0, z: 0 },
+			heading: 0,
+			groupId: id.replace(/:\d+$/, ''),
+			groupCentre: { x: 0, y: 0, z: 0 },
+			cellX: 0,
+			cellZ: 0,
+			persistent: false
+		};
+		this.carried.set(id, { by, runtime: createCreatureState(spawn), synthetic: true });
+	}
+
+	/**
+	 * Puts a carried creature down at `position` facing `heading`, standing still. An ambient
+	 * creature now belongs to the cell it was put down in (so it isn't unloaded at once when that's
+	 * far from home); its herd's home is unchanged, so it can wander back. A placed creature's saved
+	 * position moves there too (ranged weapons Q4).
+	 */
+	release(id: string, position: Vec3, heading: number, options: { save?: boolean } = {}): boolean {
+		const carried = this.carried.get(id);
+		if (!carried) return false;
+		this.carried.delete(id);
+		const r = carried.runtime;
+		const ground = this.access.surface(position.x, position.z);
+		const at = {
+			x: position.x,
+			y: Number.isFinite(ground) ? ground : position.y,
+			z: position.z
+		};
+		r.position = { ...at };
+		r.heading = heading;
+		r.state = 'IDLE';
+		r.intent = {
+			velocity: { x: 0, y: 0, z: 0 },
+			heading,
+			angularVelocity: 0,
+			gait: 'idle'
+		};
+		r.target = { ...at };
+		r.nextDecision = this.time + 1;
+		if (carried.synthetic) r.spawn = { ...r.spawn, groupCentre: { ...at } };
+		// Online, only the carrier saves a placed creature's new spot (as a world edit); everyone else
+		// just shows it there until that edit arrives.
+		if (r.spawn.persistent && options.save !== false) {
+			this.state = {
+				...this.state,
+				individuals: this.state.individuals.map((p) =>
+					p.id === id ? { ...p, position: { ...at }, heading, state: 'IDLE' } : p
+				)
+			};
+			this.revision++;
+			this.placedRevision++;
+		} else if (!r.spawn.persistent) {
+			r.spawn = {
+				...r.spawn,
+				cellX: Math.floor(at.x / CREATURE_CELL_SIZE),
+				cellZ: Math.floor(at.z / CREATURE_CELL_SIZE)
+			};
+		}
+		if (this.state.settings.enabled) this.logical.set(id, r);
+		this.scanAt = -1;
+		return true;
+	}
+
+	/** Placed creatures as shared online: their recipes at their saved spots (not mid-wander). */
+	sharedPlacedCreatures(): PersistentCreatureDefinition[] {
+		return structuredClone(this.state.individuals);
+	}
+
+	/**
+	 * Online: other players added, moved or removed placed creatures (`ids`; `list` is the new set).
+	 * A creature being carried keeps being carried; its new spot applies when it's put down.
+	 */
+	applyPlaced(list: readonly PersistentCreatureDefinition[], ids: ReadonlySet<string>): void {
+		if (ids.size === 0) return;
+		const next = new Map(list.map((p) => [p.id, p] as const));
+		const individuals = this.state.individuals.filter((p) => !ids.has(p.id) || next.has(p.id));
+		for (const id of ids) {
+			const definition = next.get(id);
+			if (!definition) continue;
+			const index = individuals.findIndex((p) => p.id === id);
+			if (index >= 0) individuals[index] = structuredClone(definition);
+			else individuals.push(structuredClone(definition));
+		}
+		this.state = { ...this.state, individuals };
+		for (const id of ids) {
+			const definition = next.get(id);
+			if (!definition) {
+				this.unload(id);
+				this.grounding.delete(id);
+				this.logical.delete(id);
+				this.carried.delete(id);
+				continue;
+			}
+			if (this.carried.has(id)) continue;
+			const existing = this.logical.get(id);
+			if (existing) {
+				existing.position = { ...definition.position };
+				existing.target = { ...definition.position };
+				existing.heading = definition.heading;
+				existing.spawn = { ...existing.spawn, groupCentre: { ...definition.position } };
+			} else {
+				const r = createCreatureState({
+					id,
+					species: definition.species,
+					individual: definition.individual,
+					position: { ...definition.position },
+					heading: definition.heading,
+					groupId: id,
+					groupCentre: { ...definition.position },
+					cellX: Math.floor(definition.position.x / CREATURE_CELL_SIZE),
+					cellZ: Math.floor(definition.position.z / CREATURE_CELL_SIZE),
+					persistent: true
+				});
+				r.state = definition.state;
+				if (this.state.settings.enabled) this.logical.set(id, r);
+			}
+		}
+		this.placedRevision++;
+		this.revision++;
+		this.scanAt = -1;
+	}
+
 	serialize(): CreatureWorldState {
 		return {
 			settings: { ...this.state.settings },
@@ -491,6 +734,7 @@ export class CreatureRuntimeManager {
 		this.state = next;
 		this.restorePersistent();
 		this.revision++;
+		this.placedRevision++;
 		this.scanAt = -1;
 		return id;
 	}

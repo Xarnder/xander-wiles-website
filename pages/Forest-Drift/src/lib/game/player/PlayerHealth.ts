@@ -22,8 +22,14 @@ export const HEALTH_GRACE_MS = 2000;
 /** A knocked-out player lies on the floor this long before they can respawn. */
 export const RESPAWN_DELAY_MS = 3000;
 
-/** Everything that can hurt a player. `by` is the slot of the player who threw the punch. */
-export type DamageSource = { kind: 'fall'; distance: number } | { kind: 'player'; by: number };
+/**
+ * Everything that can hurt a player. `by` is the slot of the player who threw the punch or fired
+ * the pellet; `species` names the creature that fired it (ranged weapons).
+ */
+export type DamageSource =
+	| { kind: 'fall'; distance: number }
+	| { kind: 'player'; by: number }
+	| { kind: 'projectile'; by: number; species: string };
 export type DamageKind = DamageSource['kind'];
 
 export interface HealthState {

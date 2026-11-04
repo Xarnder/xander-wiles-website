@@ -31,6 +31,8 @@ interface Leg {
 const UP = new THREE.Vector3(0, 1, 0);
 const X = new THREE.Vector3(1, 0, 0);
 const TAU = Math.PI * 2;
+/** How far a carried creature's head turns out from straight ahead, radians. */
+const CARRY_OUTWARD = 0.6;
 
 /** Cosmetic animation only. Network root and player collisions are never modified by IK. */
 export class CharacterInstance {
@@ -64,6 +66,18 @@ export class CharacterInstance {
 	private readonly armTarget = new THREE.Vector3();
 	private readonly armCurrent = new THREE.Vector3();
 	private disposed = false;
+	/**
+	 * Holding a creature under the left arm (ranged weapons). Set by the owner each frame; the pose
+	 * blends in and out, and `carryAnchor` says where the creature sits.
+	 */
+	carrying = false;
+	private carry = 0;
+	private readonly carryMatrix = new THREE.Matrix4();
+	private carryValid = false;
+	private readonly carryLeft = new THREE.Vector3();
+	private readonly carryForward = new THREE.Vector3();
+	private readonly carryRight = new THREE.Vector3();
+	private readonly carryPoint = new THREE.Vector3();
 
 	constructor(
 		template: THREE.Object3D,
@@ -129,6 +143,57 @@ export class CharacterInstance {
 		});
 		this.setColour(colour);
 	}
+	/**
+	 * World transform for a creature held under the left arm: beside the left hip, facing the way
+	 * the body faces (+Z of the result is forward, +Y up). False until the pose has run once.
+	 */
+	carryAnchor(out: THREE.Matrix4): boolean {
+		if (!this.carryValid) return false;
+		out.copy(this.carryMatrix);
+		return true;
+	}
+
+	/** Body axes from the bones, so the rig's own axis conventions never matter. */
+	private updateCarry(): void {
+		const hips = this.bone('Hips');
+		const leftArm = this.bone('LeftArm');
+		this.bone('RightArm').getWorldPosition(this.carryRight);
+		leftArm.getWorldPosition(this.carryLeft);
+		this.carryLeft.sub(this.carryRight).setY(0);
+		if (this.carryLeft.lengthSq() < 1e-8) return;
+		this.carryLeft.normalize();
+		// left × up = forward
+		this.carryForward.crossVectors(this.carryLeft, UP).normalize();
+		this.carryRight.crossVectors(UP, this.carryForward).normalize();
+		hips.getWorldPosition(this.carryPoint);
+		this.carryPoint
+			.addScaledVector(this.carryLeft, 0.38)
+			.addScaledVector(UP, 0.1)
+			.addScaledVector(this.carryForward, 0.12);
+		// Head angled a little outward so the creature reads from the usual camera behind the player.
+		this.armCurrent
+			.copy(this.carryForward)
+			.multiplyScalar(Math.cos(CARRY_OUTWARD))
+			.addScaledVector(this.carryLeft, Math.sin(CARRY_OUTWARD));
+		this.armTarget.crossVectors(UP, this.armCurrent).normalize();
+		this.carryMatrix.makeBasis(this.armTarget, UP, this.armCurrent);
+		this.carryMatrix.setPosition(this.carryPoint);
+		this.carryValid = true;
+		if (this.carry < 0.001) return;
+		// The left hand rests on the creature's back, the elbow bent out to the side.
+		const arm = leftArm,
+			elbow = this.bone('LeftForeArm'),
+			hand = this.bone('LeftHand');
+		this.armTarget
+			.copy(this.carryPoint)
+			.addScaledVector(UP, 0.1)
+			.addScaledVector(this.carryForward, 0.05);
+		hand.getWorldPosition(this.armCurrent);
+		this.armTarget.lerpVectors(this.armCurrent, this.armTarget, this.carry);
+		this.pole.copy(this.carryLeft).addScaledVector(UP, -0.4).sub(this.carryForward);
+		this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
+	}
+
 	private bone(name: string): THREE.Bone {
 		const bone = this.bones.get(`mixamorig${name}`);
 		if (!bone) throw new Error(`Character rig missing ${name}`);
@@ -230,7 +295,8 @@ export class CharacterInstance {
 		this.object.updateWorldMatrix(true, true);
 		const swing = Math.sin(this.phase) * this.blend * 0.65 * (this.animation.backpedaling ? -1 : 1);
 		this.aimAxis.copy(X).applyQuaternion(this.rootRotation);
-		this.offsetWorld('LeftArm', this.aimAxis, swing + (flying ? -0.25 : 0));
+		this.carry += ((this.carrying ? 1 : 0) - this.carry) * (1 - Math.exp(-dt * 10));
+		this.offsetWorld('LeftArm', this.aimAxis, (swing + (flying ? -0.25 : 0)) * (1 - this.carry));
 		this.offsetWorld(
 			'RightArm',
 			this.aimAxis,
@@ -267,6 +333,7 @@ export class CharacterInstance {
 			this.pole.set(1, -0.7, 0).applyQuaternion(this.rootRotation);
 			this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
 		}
+		this.updateCarry();
 		const probe = this.probeTime >= (distance < 15 ? 1 / 30 : 1 / 15);
 		if (probe) this.probeTime = 0;
 		this.pole.set(0, 0, -1).applyQuaternion(this.rootRotation);
