@@ -2,12 +2,12 @@
 	import { dev } from '$app/environment';
 	import { onDestroy } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import { PlantLab } from '$lib/game/vegetation/plants/PlantLab';
-	import { generatePlantSpecies } from '$lib/game/vegetation/plants/plantSpecies';
-	import { PlantEcology } from '$lib/game/vegetation/plants/plantEcology';
-	import type { PlantKind, PlantSpeciesDefinition } from '$lib/game/vegetation/plants/PlantTypes';
-	import type { RgbColor } from '$lib/game/materials/ProceduralMaterialTypes';
-	import { buildPlantPrototype } from '$lib/game/vegetation/plants/plantPrototype';
+	import { PlantLab } from '#lib/game/vegetation/plants/PlantLab';
+	import { generatePlantSpecies } from '#lib/game/vegetation/plants/plantSpecies';
+	import { PlantEcology } from '#lib/game/vegetation/plants/plantEcology';
+	import type { PlantKind, PlantSpeciesDefinition } from '#lib/game/vegetation/plants/PlantTypes';
+	import type { RgbColor } from '#lib/game/materials/ProceduralMaterialTypes';
+	import { buildPlantPrototype } from '#lib/game/vegetation/plants/plantPrototype';
 
 	// Development tool: the Plant Lab — generated species, their prototype banks and far cards.
 	// Under `vite dev`, or with `?dev`. `?seed=N` fixes the first seed; `?inspect` hides the panel.

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
-	import AntiTilingTest from '$lib/components/AntiTilingTest.svelte';
+	import AntiTilingTest from '#lib/components/AntiTilingTest.svelte';
 
 	const enabled = dev || new URLSearchParams(location.search).has('dev');
 </script>

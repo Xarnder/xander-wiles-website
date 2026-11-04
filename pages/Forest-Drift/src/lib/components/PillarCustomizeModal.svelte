@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { BuildingSettings } from '$lib/game/building/FoundationTypes';
+	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
 	import {
 		createDefaultPillarSettings,
 		normalizePillarSettings,
 		type PillarSettings
-	} from '$lib/game/building/PillarTypes';
+	} from '#lib/game/building/PillarTypes';
 	import PlacementPreviewPane from './PlacementPreviewPane.svelte';
 	let { settings, onClose }: { settings: BuildingSettings; onClose: () => void } = $props();
 	let revision = $state(0);

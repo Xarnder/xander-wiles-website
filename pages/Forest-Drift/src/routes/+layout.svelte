@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import '$lib/ui/theme.css';
-	import { initializeUiWood } from '$lib/ui/woodTexture';
+	import '#lib/ui/theme.css';
+	import { initializeUiWood } from '#lib/ui/woodTexture';
 	onMount(() => {
 		void initializeUiWood();
 	});

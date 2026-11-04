@@ -1,6 +1,6 @@
 <script lang="ts">
-	import titleMark from '$lib/assets/forest-drift-title.svg';
-	import type { SaveStatus } from '$lib/game/world/WorldTypes';
+	import titleMark from '#lib/assets/forest-drift-title.svg';
+	import type { SaveStatus } from '#lib/game/world/WorldTypes';
 
 	interface Props {
 		worldName: string;

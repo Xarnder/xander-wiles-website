@@ -2,9 +2,9 @@
 	import { onMount } from 'svelte';
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-	import { CharacterAssetCache } from '$lib/game/characters/CharacterAssetCache';
-	import { CharacterInstance } from '$lib/game/characters/CharacterInstance';
-	import { PLAYER_COLOURS, POSE_FLAGS } from '$lib/game/net/protocol';
+	import { CharacterAssetCache } from '#lib/game/characters/CharacterAssetCache';
+	import { CharacterInstance } from '#lib/game/characters/CharacterInstance';
+	import { PLAYER_COLOURS, POSE_FLAGS } from '#lib/game/net/protocol';
 	let canvas: HTMLCanvasElement;
 	let mode = $state('idle');
 	let count = $state(1);

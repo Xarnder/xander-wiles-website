@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import CountrysideBackground from './CountrysideBackground.svelte';
-	import { ownerInviteFor, type OnlineWorldEntry } from '$lib/game/net/mpConfig';
-	import { generateWorldSeed } from '$lib/game/world/seedGenerator';
-	import { relativeTime } from '$lib/ui/relativeTime';
-	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
+	import { ownerInviteFor, type OnlineWorldEntry } from '#lib/game/net/mpConfig';
+	import { generateWorldSeed } from '#lib/game/world/seedGenerator';
+	import { relativeTime } from '#lib/ui/relativeTime';
+	import type { WorldMetadata } from '#lib/game/world/WorldTypes';
 
 	interface Props {
 		onBack?: () => void;

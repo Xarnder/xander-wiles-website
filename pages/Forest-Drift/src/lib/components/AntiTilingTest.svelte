@@ -4,11 +4,11 @@
 		ANTI_TILING_VIEWS,
 		AntiTilingTestScene,
 		type AntiTilingView
-	} from '$lib/game/materials/gallery/AntiTilingTestScene';
+	} from '#lib/game/materials/gallery/AntiTilingTestScene';
 	import {
 		MATERIAL_QUALITIES,
 		type MaterialQuality
-	} from '$lib/game/materials/ProceduralMaterialTypes';
+	} from '#lib/game/materials/ProceduralMaterialTypes';
 
 	/**
 	 * Fixed-camera comparison of repeated texture tiles vs world-scale non-repeating surfaces on a long

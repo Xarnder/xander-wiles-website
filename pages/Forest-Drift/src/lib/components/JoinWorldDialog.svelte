@@ -1,16 +1,16 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import OnlineOwnerPanel from './OnlineOwnerPanel.svelte';
-	import type { TransferResult } from '$lib/game/net/worldTransfer';
-	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
+	import type { TransferResult } from '#lib/game/net/worldTransfer';
+	import type { WorldMetadata } from '#lib/game/world/WorldTypes';
 	import {
 		AVATAR_COLOURS,
 		parseWorldReference,
 		type OnlineWorldEntry,
 		type WorldReference
-	} from '$lib/game/net/mpConfig';
-	import { sanitizeDisplayName } from '$lib/game/net/protocol';
-	import { relativeTime } from '$lib/ui/relativeTime';
+	} from '#lib/game/net/mpConfig';
+	import { sanitizeDisplayName } from '#lib/game/net/protocol';
+	import { relativeTime } from '#lib/ui/relativeTime';
 
 	interface Props {
 		/** Known from the invite link; null asks for the link. */

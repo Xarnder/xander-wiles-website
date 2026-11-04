@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
-	import type { BuildingSettings } from '$lib/game/building/FoundationTypes';
-	import { FurniturePreviewRenderer } from '$lib/game/building/FurniturePreviewRenderer';
+	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
+	import { FurniturePreviewRenderer } from '#lib/game/building/FurniturePreviewRenderer';
 
 	let {
 		settings,

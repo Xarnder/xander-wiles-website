@@ -1,29 +1,29 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import type { ThreeScene } from '$lib/game/ThreeScene';
-	import { formatBytes, formatDuration, type SpeechProgress } from '$lib/game/speech/progress';
-	import { speechErrorMessage } from '$lib/game/speech/errorMessage';
-	import { SpeechWindow } from '$lib/game/speech/SpeechWindow';
-	import { SpeechService } from '$lib/game/speech/SpeechService';
-	import { observeSubtitleLayout } from '$lib/game/tutorials/subtitleLayout';
-	import { phrases, type Caption } from '$lib/game/speech/types';
+	import type { ThreeScene } from '#lib/game/ThreeScene';
+	import { formatBytes, formatDuration, type SpeechProgress } from '#lib/game/speech/progress';
+	import { speechErrorMessage } from '#lib/game/speech/errorMessage';
+	import { SpeechWindow } from '#lib/game/speech/SpeechWindow';
+	import { SpeechService } from '#lib/game/speech/SpeechService';
+	import { observeSubtitleLayout } from '#lib/game/tutorials/subtitleLayout';
+	import { phrases, type Caption } from '#lib/game/speech/types';
 	import {
 		getAudioPreferences,
 		setAudioPreferences,
 		subscribeAudioPreferences
-	} from '$lib/game/audio/AudioPreferences';
+	} from '#lib/game/audio/AudioPreferences';
 	import {
 		lessons,
 		lessonRequest,
 		completed,
 		TUTORIAL_VERSION,
 		type TutorialSnapshot
-	} from '$lib/game/tutorials/tutorials';
+	} from '#lib/game/tutorials/tutorials';
 	import {
 		getTutorialPreferences,
 		setTutorialPreferences,
 		subscribeTutorialPreferences
-	} from '$lib/game/tutorials/TutorialPreferences';
+	} from '#lib/game/tutorials/TutorialPreferences';
 	let {
 		scene,
 		touch,

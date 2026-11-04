@@ -4,10 +4,10 @@
 		MaterialGalleryScene,
 		type GalleryMaps,
 		type GallerySample
-	} from '$lib/game/materials/gallery/MaterialGalleryScene';
-	import { createMaterialMapSource } from '$lib/game/materials/MaterialMapSource';
-	import { MATERIAL_PALETTES } from '$lib/game/materials/materialPalettes';
-	import { MATERIAL_PRESETS, resolveMaterialRecipe } from '$lib/game/materials/materialPresets';
+	} from '#lib/game/materials/gallery/MaterialGalleryScene';
+	import { createMaterialMapSource } from '#lib/game/materials/MaterialMapSource';
+	import { MATERIAL_PALETTES } from '#lib/game/materials/materialPalettes';
+	import { MATERIAL_PRESETS, resolveMaterialRecipe } from '#lib/game/materials/materialPresets';
 	import {
 		MATERIAL_QUALITIES,
 		PROCEDURAL_MATERIAL_TYPES,
@@ -15,7 +15,7 @@
 		type MaterialPaletteId,
 		type MaterialQuality,
 		type ProceduralMaterialType
-	} from '$lib/game/materials/ProceduralMaterialTypes';
+	} from '#lib/game/materials/ProceduralMaterialTypes';
 
 	/**
 	 * Development material gallery: inspect every procedural material on its own, on real-world-sized

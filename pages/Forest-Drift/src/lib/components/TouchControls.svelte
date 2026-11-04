@@ -1,31 +1,31 @@
 <script lang="ts">
-	import type { OpeningInteractionState } from '$lib/game/building/DoorInteractionController';
+	import type { OpeningInteractionState } from '#lib/game/building/DoorInteractionController';
 	import { onMount } from 'svelte';
-	import { touchButton } from '$lib/components/touchButton';
-	import type { ThreeScene } from '$lib/game/ThreeScene';
-	import type { BuildUiState, HotbarUiState, ToolId } from '$lib/game/building/FoundationTypes';
+	import { touchButton } from '#lib/components/touchButton';
+	import type { ThreeScene } from '#lib/game/ThreeScene';
+	import type { BuildUiState, HotbarUiState, ToolId } from '#lib/game/building/FoundationTypes';
 	import {
 		snapKeyForHints,
 		snapLabelForHints,
 		touchToolActions,
 		variantControl
-	} from '$lib/components/touchToolActions';
+	} from '#lib/components/touchToolActions';
 
 	// Bundled SVG icons from assets/SVGs
-	import jumpIcon from '$lib/assets/icons/jump.svg';
-	import runIcon from '$lib/assets/icons/run.svg';
-	import hexPlaceIcon from '$lib/assets/icons/hex-place.svg';
-	import breakIcon from '$lib/assets/icons/break.svg';
-	import paintIcon from '$lib/assets/icons/paint.svg';
-	import magnetIcon from '$lib/assets/icons/magnet.svg';
-	import spannerIcon from '$lib/assets/icons/spanner.svg';
-	import editIcon from '$lib/assets/icons/edit.svg';
-	import crossIcon from '$lib/assets/icons/cross.svg';
-	import rotateHIcon from '$lib/assets/icons/rotate-horiznontal.svg';
-	import handPointIcon from '$lib/assets/icons/hand-point.svg';
-	import pauseIcon from '$lib/assets/icons/pause.svg';
-	import openDoorIcon from '$lib/assets/icons/open.svg';
-	import musicIcon from '$lib/assets/icons/music.svg';
+	import jumpIcon from '#lib/assets/icons/jump.svg';
+	import runIcon from '#lib/assets/icons/run.svg';
+	import hexPlaceIcon from '#lib/assets/icons/hex-place.svg';
+	import breakIcon from '#lib/assets/icons/break.svg';
+	import paintIcon from '#lib/assets/icons/paint.svg';
+	import magnetIcon from '#lib/assets/icons/magnet.svg';
+	import spannerIcon from '#lib/assets/icons/spanner.svg';
+	import editIcon from '#lib/assets/icons/edit.svg';
+	import crossIcon from '#lib/assets/icons/cross.svg';
+	import rotateHIcon from '#lib/assets/icons/rotate-horiznontal.svg';
+	import handPointIcon from '#lib/assets/icons/hand-point.svg';
+	import pauseIcon from '#lib/assets/icons/pause.svg';
+	import openDoorIcon from '#lib/assets/icons/open.svg';
+	import musicIcon from '#lib/assets/icons/music.svg';
 
 	interface Props {
 		scene: ThreeScene | undefined;

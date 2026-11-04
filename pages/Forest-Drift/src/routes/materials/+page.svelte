@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
-	import MaterialGallery from '$lib/components/MaterialGallery.svelte';
+	import MaterialGallery from '#lib/components/MaterialGallery.svelte';
 
 	// Development tool: available under `vite dev`, or in a build with `?dev` (used by e2e tests).
 	const enabled = dev || new URLSearchParams(location.search).has('dev');

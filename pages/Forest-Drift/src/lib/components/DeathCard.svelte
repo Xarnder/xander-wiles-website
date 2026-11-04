@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { RESPAWN_DELAY_MS } from '$lib/game/player/PlayerHealth';
+	import { RESPAWN_DELAY_MS } from '#lib/game/player/PlayerHealth';
 
 	interface Props {
 		/** What happened: "You fell too far", "You were knocked out". */

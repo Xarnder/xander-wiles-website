@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { touchButton } from '$lib/components/touchButton';
-	import type { HotbarSlot } from '$lib/game/building/FoundationTypes';
+	import { touchButton } from '#lib/components/touchButton';
+	import type { HotbarSlot } from '#lib/game/building/FoundationTypes';
 
 	interface Props {
 		slots: readonly HotbarSlot[];

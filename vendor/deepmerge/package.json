@@ -1,0 +1,12 @@
+{
+  "name": "@xander/deepmerge",
+  "version": "4.3.1+security.1",
+  "private": true,
+  "description": "deepmerge 4.3.1 with the CVE-2026-93753 key guard backport",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test.cjs"
+  }
+}

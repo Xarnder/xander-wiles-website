@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import type { PlayerRole } from '$lib/game/net/protocol';
+	import type { PlayerRole } from '#lib/game/net/protocol';
 	import InviteLinks from './InviteLinks.svelte';
 
 	interface Props {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import type { ShovelSettings } from '$lib/game/terrain/ShovelTool';
+	import type { ShovelSettings } from '#lib/game/terrain/ShovelTool';
 	let { settings, onClose }: { settings: ShovelSettings; onClose: () => void } = $props();
 	let radius = $state(untrack(() => settings.radius));
 	let strength = $state(untrack(() => settings.strength));

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DeletionItem } from '$lib/game/net/WorldOpFeed';
+	import type { DeletionItem } from '#lib/game/net/WorldOpFeed';
 
 	interface Props {
 		items: DeletionItem[];

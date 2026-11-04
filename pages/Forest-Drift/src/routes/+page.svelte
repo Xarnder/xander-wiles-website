@@ -1,12 +1,12 @@
 <script lang="ts">
-	import ShovelSettings from '$lib/components/ShovelSettings.svelte';
-	import { IMPORT_LIMITS } from '$lib/game/world/WorldValidation';
-	import { captureWorldContent } from '$lib/game/world/WorldSerializer';
-	import type { InteractionPrompt } from '$lib/game/player/PlayerInteractionController';
+	import ShovelSettings from '#lib/components/ShovelSettings.svelte';
+	import { IMPORT_LIMITS } from '#lib/game/world/WorldValidation';
+	import { captureWorldContent } from '#lib/game/world/WorldSerializer';
+	import type { InteractionPrompt } from '#lib/game/player/PlayerInteractionController';
 	let miniBuildInteractionPrompt = $state<InteractionPrompt | null>(null);
-	import type { OpeningInteractionState } from '$lib/game/building/DoorInteractionController';
-	import ConfirmDeleteFoundationDialog from '$lib/components/ConfirmDeleteFoundationDialog.svelte';
-	import CreatureLabModal from '$lib/components/CreatureLabModal.svelte';
+	import type { OpeningInteractionState } from '#lib/game/building/DoorInteractionController';
+	import ConfirmDeleteFoundationDialog from '#lib/components/ConfirmDeleteFoundationDialog.svelte';
+	import CreatureLabModal from '#lib/components/CreatureLabModal.svelte';
 	let creatureLabOpen = $state(false);
 	function openCreatureLab() {
 		session?.scene.closePlacementCustomize();
@@ -25,7 +25,7 @@
 		return () => window.removeEventListener('forest:creature-lab', openCreatureLab);
 	});
 
-	import MidiImportModal from '$lib/components/MidiImportModal.svelte';
+	import MidiImportModal from '#lib/components/MidiImportModal.svelte';
 	let midiOpen = $state(false);
 	function openMidi() {
 		if (!session) return;
@@ -40,57 +40,57 @@
 		if (session) session.scene.music.importPanelOpen = false;
 	}
 	import { onDestroy, onMount, tick } from 'svelte';
-	import WorldLoadingScreen from '$lib/components/WorldLoadingScreen.svelte';
-	import ToolHint from '$lib/components/ToolHint.svelte';
-	import titleMark from '$lib/assets/forest-drift-title.svg';
-	import LandingMenu from '$lib/components/LandingMenu.svelte';
+	import WorldLoadingScreen from '#lib/components/WorldLoadingScreen.svelte';
+	import ToolHint from '#lib/components/ToolHint.svelte';
+	import titleMark from '#lib/assets/forest-drift-title.svg';
+	import LandingMenu from '#lib/components/LandingMenu.svelte';
 	let showWorldLibrary = $state(false);
-	import upArrowIcon from '$lib/assets/icons/Up-ArrowIcons.svg';
-	import downArrowIcon from '$lib/assets/icons/Down-ArrowIcons.svg';
-	import Hotbar from '$lib/components/Hotbar.svelte';
-	import HealthBar from '$lib/components/HealthBar.svelte';
-	import DamageVignette from '$lib/components/DamageVignette.svelte';
-	import DeathCard from '$lib/components/DeathCard.svelte';
+	import upArrowIcon from '#lib/assets/icons/Up-ArrowIcons.svg';
+	import downArrowIcon from '#lib/assets/icons/Down-ArrowIcons.svg';
+	import Hotbar from '#lib/components/Hotbar.svelte';
+	import HealthBar from '#lib/components/HealthBar.svelte';
+	import DamageVignette from '#lib/components/DamageVignette.svelte';
+	import DeathCard from '#lib/components/DeathCard.svelte';
 	import {
 		PLAYER_HEALTH_ENABLED,
 		type DamageSource,
 		type HealthSnapshot
-	} from '$lib/game/player/PlayerHealth';
-	import { playLandingThud } from '$lib/game/audio/landingThud';
-	import { playSoundEffect, preloadSoundEffects } from '$lib/game/audio/soundEffects';
-	import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+	} from '#lib/game/player/PlayerHealth';
+	import { playLandingThud } from '#lib/game/audio/landingThud';
+	import { playSoundEffect, preloadSoundEffects } from '#lib/game/audio/soundEffects';
+	import TutorialOverlay from '#lib/components/TutorialOverlay.svelte';
 	let speechPreparation = $state(false);
-	import { preventTouchPageZoom } from '$lib/components/preventTouchPageZoom';
-	import { touchButton } from '$lib/components/touchButton';
-	import MaterialPalette from '$lib/components/MaterialPalette.svelte';
-	import SessionPanels from '$lib/components/SessionPanels.svelte';
-	import PauseMenu from '$lib/components/PauseMenu.svelte';
-	import FurnitureCatalogueModal from '$lib/components/FurnitureCatalogueModal.svelte';
-	import MiniBuildChoiceDialog from '$lib/components/MiniBuildChoiceDialog.svelte';
+	import { preventTouchPageZoom } from '#lib/components/preventTouchPageZoom';
+	import { touchButton } from '#lib/components/touchButton';
+	import MaterialPalette from '#lib/components/MaterialPalette.svelte';
+	import SessionPanels from '#lib/components/SessionPanels.svelte';
+	import PauseMenu from '#lib/components/PauseMenu.svelte';
+	import FurnitureCatalogueModal from '#lib/components/FurnitureCatalogueModal.svelte';
+	import MiniBuildChoiceDialog from '#lib/components/MiniBuildChoiceDialog.svelte';
 	import MiniBuildEditor, {
 		type MiniBuildEditorLaunch
-	} from '$lib/components/MiniBuildEditor.svelte';
-	import ObjectLibraryModal from '$lib/components/ObjectLibraryModal.svelte';
-	import PlacementCustomizeModal from '$lib/components/PlacementCustomizeModal.svelte';
-	import FoundationCustomizeModal from '$lib/components/FoundationCustomizeModal.svelte';
-	import PillarCustomizeModal from '$lib/components/PillarCustomizeModal.svelte';
-	import BarrierCustomizeModal from '$lib/components/BarrierCustomizeModal.svelte';
-	import SkirtingCustomizeModal from '$lib/components/SkirtingCustomizeModal.svelte';
-	import PlacementHeightModal from '$lib/components/PlacementHeightModal.svelte';
-	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
-	import TouchControls from '$lib/components/TouchControls.svelte';
-	import WorldsScreen from '$lib/components/WorldsScreen.svelte';
+	} from '#lib/components/MiniBuildEditor.svelte';
+	import ObjectLibraryModal from '#lib/components/ObjectLibraryModal.svelte';
+	import PlacementCustomizeModal from '#lib/components/PlacementCustomizeModal.svelte';
+	import FoundationCustomizeModal from '#lib/components/FoundationCustomizeModal.svelte';
+	import PillarCustomizeModal from '#lib/components/PillarCustomizeModal.svelte';
+	import BarrierCustomizeModal from '#lib/components/BarrierCustomizeModal.svelte';
+	import SkirtingCustomizeModal from '#lib/components/SkirtingCustomizeModal.svelte';
+	import PlacementHeightModal from '#lib/components/PlacementHeightModal.svelte';
+	import SettingsMenu from '#lib/components/SettingsMenu.svelte';
+	import TouchControls from '#lib/components/TouchControls.svelte';
+	import WorldsScreen from '#lib/components/WorldsScreen.svelte';
 	import { version as appVersion } from '$app/environment';
-	import ConfirmRemoveOthersDialog from '$lib/components/ConfirmRemoveOthersDialog.svelte';
-	import InviteLinksDialog from '$lib/components/InviteLinksDialog.svelte';
-	import LocatorBar from '$lib/components/LocatorBar.svelte';
-	import RestorePointsDialog from '$lib/components/RestorePointsDialog.svelte';
-	import JoinWorldDialog from '$lib/components/JoinWorldDialog.svelte';
-	import OnlineStatus from '$lib/components/OnlineStatus.svelte';
-	import PublishWorldDialog from '$lib/components/PublishWorldDialog.svelte';
+	import ConfirmRemoveOthersDialog from '#lib/components/ConfirmRemoveOthersDialog.svelte';
+	import InviteLinksDialog from '#lib/components/InviteLinksDialog.svelte';
+	import LocatorBar from '#lib/components/LocatorBar.svelte';
+	import RestorePointsDialog from '#lib/components/RestorePointsDialog.svelte';
+	import JoinWorldDialog from '#lib/components/JoinWorldDialog.svelte';
+	import OnlineStatus from '#lib/components/OnlineStatus.svelte';
+	import PublishWorldDialog from '#lib/components/PublishWorldDialog.svelte';
 	// Type-only: the multiplayer code itself loads on demand, the first time someone goes online.
-	import type { BuildLock, MultiplayerSession } from '$lib/game/net/MultiplayerSession';
-	import type { DeletionItem } from '$lib/game/net/WorldOpFeed';
+	import type { BuildLock, MultiplayerSession } from '#lib/game/net/MultiplayerSession';
+	import type { DeletionItem } from '#lib/game/net/WorldOpFeed';
 	import {
 		findOnlineWorld,
 		forgetOnlineWorld,
@@ -109,9 +109,9 @@
 		type OnlineWorldEntry,
 		type PlayerIdentity,
 		type WorldReference
-	} from '$lib/game/net/mpConfig';
-	import type { NetStatus } from '$lib/game/net/NetSession';
-	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
+	} from '#lib/game/net/mpConfig';
+	import type { NetStatus } from '#lib/game/net/NetSession';
+	import type { PlayerInfo, PlayerRole } from '#lib/game/net/protocol';
 	import {
 		exportOnlineWorld,
 		fetchOnlineWorld,
@@ -120,9 +120,9 @@
 		restoreOnlineWorld,
 		type RestorePoint,
 		type TransferResult
-	} from '$lib/game/net/worldTransfer';
-	import type { BuildUiState, HotbarSlot, HotbarUiState } from '$lib/game/building/FoundationTypes';
-	import { species } from '$lib/game/music/MusicModel';
+	} from '#lib/game/net/worldTransfer';
+	import type { BuildUiState, HotbarSlot, HotbarUiState } from '#lib/game/building/FoundationTypes';
+	import { species } from '#lib/game/music/MusicModel';
 
 	const musicHotbarSlots: HotbarSlot[] = species.map((sp, index) => ({
 		slot: index + 1,
@@ -135,31 +135,31 @@
 	import {
 		isCustomizablePlacementTool,
 		isSlabHeightTool
-	} from '$lib/game/building/FoundationTypes';
-	import type { PaintUiState } from '$lib/game/building/PaintTool';
-	import { graphicsQualityLabel, type GraphicsQuality } from '$lib/game/graphics/GraphicsTypes';
+	} from '#lib/game/building/FoundationTypes';
+	import type { PaintUiState } from '#lib/game/building/PaintTool';
+	import { graphicsQualityLabel, type GraphicsQuality } from '#lib/game/graphics/GraphicsTypes';
 	import { fade, slide } from 'svelte/transition';
-	import type { SceneStats } from '$lib/game/ThreeScene';
-	import { formatDayClock } from '$lib/game/sky/dayNightMath';
-	import { createDefaultSkySettings } from '$lib/game/sky/SkyTypes';
-	import { createDefaultHydrologySettings } from '$lib/game/hydrology/HydrologyTypes';
-	import { createDefaultTerrainSettings } from '$lib/game/terrain/TerrainSettings';
-	import { createDefaultVegetationSettings } from '$lib/game/vegetation/VegetationTypes';
+	import type { SceneStats } from '#lib/game/ThreeScene';
+	import { formatDayClock } from '#lib/game/sky/dayNightMath';
+	import { createDefaultSkySettings } from '#lib/game/sky/SkyTypes';
+	import { createDefaultHydrologySettings } from '#lib/game/hydrology/HydrologyTypes';
+	import { createDefaultTerrainSettings } from '#lib/game/terrain/TerrainSettings';
+	import { createDefaultVegetationSettings } from '#lib/game/vegetation/VegetationTypes';
 	import {
 		IndexedDbWorldRepository,
 		isIndexedDbAvailable,
 		requestPersistentStorage
-	} from '$lib/game/world/IndexedDbWorldRepository';
-	import { DEFAULT_WORLD_ID, DEFAULT_WORLD_THUMBNAIL_DATA_URL } from '$lib/game/world/DefaultWorld';
+	} from '#lib/game/world/IndexedDbWorldRepository';
+	import { DEFAULT_WORLD_ID, DEFAULT_WORLD_THUMBNAIL_DATA_URL } from '#lib/game/world/DefaultWorld';
 	import {
 		createWorldPackage,
 		downloadWorldPackage,
 		worldFileName
-	} from '$lib/game/world/WorldImportExport';
-	import { WorldManager } from '$lib/game/world/WorldManager';
-	import { InMemoryWorldRepository } from '$lib/game/world/WorldRepository';
-	import { WorldSession } from '$lib/game/world/WorldSession';
-	import type { SaveStatus, WorldDefinition, WorldMetadata } from '$lib/game/world/WorldTypes';
+	} from '#lib/game/world/WorldImportExport';
+	import { WorldManager } from '#lib/game/world/WorldManager';
+	import { InMemoryWorldRepository } from '#lib/game/world/WorldRepository';
+	import { WorldSession } from '#lib/game/world/WorldSession';
+	import type { SaveStatus, WorldDefinition, WorldMetadata } from '#lib/game/world/WorldTypes';
 
 	type ForestTestWindow = Window & {
 		__forestSession?: WorldSession | null;
@@ -996,7 +996,7 @@
 
 		const [fetched, { MultiplayerSession }] = await Promise.all([
 			fetchOnlineWorld(mpServer, worldId, invite),
-			import('$lib/game/net/MultiplayerSession')
+			import('#lib/game/net/MultiplayerSession')
 		]);
 		if (!fetched.ok) {
 			joinDialog = { target, busy: false, error: fetched.error };

@@ -12,8 +12,8 @@
 		getBarrierPreset,
 		type BarrierBaseModeSetting,
 		type BarrierPresetId
-	} from '$lib/game/building/BarrierTypes';
-	import type { BuildingSettings } from '$lib/game/building/FoundationTypes';
+	} from '#lib/game/building/BarrierTypes';
+	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
 	import PlacementPreviewPane from './PlacementPreviewPane.svelte';
 
 	let { settings, onClose }: { settings: BuildingSettings; onClose: () => void } = $props();

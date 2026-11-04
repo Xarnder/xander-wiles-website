@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
+	import type { PlayerInfo, PlayerRole } from '#lib/game/net/protocol';
 	let {
 		players,
 		selfSlot,

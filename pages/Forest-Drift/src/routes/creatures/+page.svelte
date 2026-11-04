@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
 	import { onMount } from 'svelte';
-	import CreatureLabModal from '$lib/components/CreatureLabModal.svelte';
+	import CreatureLabModal from '#lib/components/CreatureLabModal.svelte';
 
 	// Development tool: the Creature Lab without a world. Available under `vite dev`, or with `?dev`.
 	// `?inspect` hides the Lab chrome so the viewport fills the window (screenshots, art review).

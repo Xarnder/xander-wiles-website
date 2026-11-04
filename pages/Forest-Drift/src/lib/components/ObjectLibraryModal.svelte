@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { DEFAULT_MINI_BUILDS } from '$lib/game/miniBuild/defaultMiniBuilds';
-	import { contentHash, gridToMeters } from '$lib/game/miniBuild/miniBuildGrid';
-	import { selectionKey, type LibrarySort } from '$lib/game/miniBuild/MiniBuildPreferences';
+	import { DEFAULT_MINI_BUILDS } from '#lib/game/miniBuild/defaultMiniBuilds';
+	import { contentHash, gridToMeters } from '#lib/game/miniBuild/miniBuildGrid';
+	import { selectionKey, type LibrarySort } from '#lib/game/miniBuild/MiniBuildPreferences';
 	import type {
 		MiniBuildDefinition,
 		PlaceObjectSelection
-	} from '$lib/game/miniBuild/MiniBuildTypes';
-	import type { ThreeScene } from '$lib/game/ThreeScene';
+	} from '#lib/game/miniBuild/MiniBuildTypes';
+	import type { ThreeScene } from '#lib/game/ThreeScene';
 	import type { MiniBuildEditorLaunch } from './MiniBuildEditor.svelte';
 	import MiniBuildChoiceDialog, { type ChoiceOption } from './MiniBuildChoiceDialog.svelte';
 

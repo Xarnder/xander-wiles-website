@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import preview from '$lib/assets/menu/countryside-preview.webp';
-	import fullImage from '$lib/assets/menu/countryside.png';
+	import preview from '#lib/assets/menu/countryside-preview.webp';
+	import fullImage from '#lib/assets/menu/countryside.png';
 	let ready = $state(false);
 	let started = false;
 	let disposed = false;

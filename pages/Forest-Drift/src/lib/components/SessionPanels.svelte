@@ -1,8 +1,8 @@
 <script lang="ts">
 	import MultiplayerRoster from './MultiplayerRoster.svelte';
 	import MultiplayerUsage from './MultiplayerUsage.svelte';
-	import type { UsageAccess } from '$lib/game/net/CloudflareUsage';
-	import type { PlayerInfo } from '$lib/game/net/protocol';
+	import type { UsageAccess } from '#lib/game/net/CloudflareUsage';
+	import type { PlayerInfo } from '#lib/game/net/protocol';
 	interface Props {
 		debugOpen: boolean;
 		usageAccess: UsageAccess | null;

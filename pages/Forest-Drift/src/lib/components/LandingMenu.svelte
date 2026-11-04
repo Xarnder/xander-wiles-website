@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import preview from '$lib/assets/menu/countryside-preview.webp';
-	import fullImage from '$lib/assets/menu/countryside.png';
+	import preview from '#lib/assets/menu/countryside-preview.webp';
+	import fullImage from '#lib/assets/menu/countryside.png';
 	import SettingsMenu from './SettingsMenu.svelte';
 	import HelpCredits from './HelpCredits.svelte';
 	let helpOpen = $state(false);
-	import { personalSettingsCatalog } from '$lib/game/settings/personalSettingsCatalog';
+	import { personalSettingsCatalog } from '#lib/game/settings/personalSettingsCatalog';
 
 	let {
 		onPlay,

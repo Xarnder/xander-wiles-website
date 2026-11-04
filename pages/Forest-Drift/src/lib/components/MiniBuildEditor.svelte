@@ -1,5 +1,5 @@
 <script module lang="ts">
-	import type { MiniBuildDefinition as LaunchDefinition } from '$lib/game/miniBuild/MiniBuildTypes';
+	import type { MiniBuildDefinition as LaunchDefinition } from '#lib/game/miniBuild/MiniBuildTypes';
 
 	export type MiniBuildEditorLaunch =
 		| { kind: 'new' }
@@ -8,15 +8,15 @@
 </script>
 
 <script lang="ts">
-	import { shapeCount, shapeLimit } from '$lib/game/miniBuild/miniBuildShapes';
-	import { metersToGrid, snapAngle, computeBounds } from '$lib/game/miniBuild/miniBuildGrid';
+	import { shapeCount, shapeLimit } from '#lib/game/miniBuild/miniBuildShapes';
+	import { metersToGrid, snapAngle, computeBounds } from '#lib/game/miniBuild/miniBuildGrid';
 	import type { Attachment } from 'svelte/attachments';
 	import { onDestroy, onMount } from 'svelte';
 	import {
 		MiniBuildEditorState,
 		type EditorResult
-	} from '$lib/game/miniBuild/MiniBuildEditorState';
-	import { MiniBuildEditorViewport } from '$lib/game/miniBuild/MiniBuildEditorViewport';
+	} from '#lib/game/miniBuild/MiniBuildEditorState';
+	import { MiniBuildEditorViewport } from '#lib/game/miniBuild/MiniBuildEditorViewport';
 	import {
 		blockBox,
 		effectiveSize,
@@ -26,14 +26,14 @@
 		isPlaneBlock,
 		isRotationSnapStep,
 		type Axis
-	} from '$lib/game/miniBuild/miniBuildGrid';
+	} from '#lib/game/miniBuild/miniBuildGrid';
 	import {
 		cycleRotationSnapStep,
 		formatAngle,
 		getRotationSnapStep,
 		onRotationSnapStepChange,
 		setRotationSnapStep
-	} from '$lib/game/miniBuild/MiniBuildRotationSnap';
+	} from '#lib/game/miniBuild/MiniBuildRotationSnap';
 	import {
 		MINI_BUILD_FINISHES,
 		MINI_BUILD_FINISH_LABELS,
@@ -45,13 +45,13 @@
 		type MiniBuildFinish,
 		type MiniBuildSemanticType,
 		type MiniBuildTextureId
-	} from '$lib/game/miniBuild/MiniBuildTypes';
+	} from '#lib/game/miniBuild/MiniBuildTypes';
 	import {
 		MINI_BUILD_AUTO_TEXTURE,
 		miniBuildTextureGroups,
 		miniBuildTextureLabel
-	} from '$lib/game/miniBuild/miniBuildTextures';
-	import type { ThreeScene } from '$lib/game/ThreeScene';
+	} from '#lib/game/miniBuild/miniBuildTextures';
+	import type { ThreeScene } from '#lib/game/ThreeScene';
 
 	let {
 		scene,

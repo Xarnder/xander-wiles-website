@@ -1,6 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
+// macOS 27 protects Firefox's shared app-data directory even when -profile points elsewhere.
+// Keep test app-data separate: https://github.com/microsoft/playwright/issues/42768
+const firefoxHome =
+	process.platform === 'darwin' ? mkdtempSync(join(tmpdir(), 'forest-drift-firefox-')) : undefined;
 
 export default defineConfig({
 	testDir: './tests',
@@ -47,7 +54,21 @@ export default defineConfig({
 		{
 			name: 'firefox-online',
 			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
-			use: { ...devices['Desktop Firefox'] }
+			use: {
+				...devices['Desktop Firefox'],
+				launchOptions: firefoxHome
+					? {
+							env: {
+								...Object.fromEntries(
+									Object.entries(process.env).filter(
+										(entry): entry is [string, string] => entry[1] !== undefined
+									)
+								),
+								CFFIXED_USER_HOME: firefoxHome
+							}
+						}
+					: undefined
+			}
 		}
 	],
 	webServer: {

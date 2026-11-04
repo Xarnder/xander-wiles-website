@@ -5,7 +5,7 @@
 		computeDeterminismReport,
 		DETERMINISM_SEEDS,
 		type DeterminismReport
-	} from '$lib/game/world/determinismReport';
+	} from '#lib/game/world/determinismReport';
 
 	// Test page for multiplayer determinism (plan §8.7): generates the same fingerprints as the Vitest
 	// golden, but in whichever browser engine opens it. Under `vite dev`, or with `?dev`.

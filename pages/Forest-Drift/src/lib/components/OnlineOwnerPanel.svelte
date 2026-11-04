@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { OnlineWorldEntry } from '$lib/game/net/mpConfig';
-	import { inviteLink } from '$lib/game/net/mpConfig';
-	import type { TransferResult } from '$lib/game/net/worldTransfer';
-	import type { WorldMetadata } from '$lib/game/world/WorldTypes';
+	import type { OnlineWorldEntry } from '#lib/game/net/mpConfig';
+	import { inviteLink } from '#lib/game/net/mpConfig';
+	import type { TransferResult } from '#lib/game/net/worldTransfer';
+	import type { WorldMetadata } from '#lib/game/world/WorldTypes';
 	import InviteLinks from './InviteLinks.svelte';
 
 	let {

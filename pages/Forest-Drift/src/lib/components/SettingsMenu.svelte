@@ -4,14 +4,14 @@
 		GameSettingsHost,
 		SettingsGroup,
 		SettingsCategory
-	} from '$lib/game/settings/GameSettingsHost';
+	} from '#lib/game/settings/GameSettingsHost';
 	import {
 		buildSettingsCatalog,
 		categoryMatchesQuery,
 		fieldMatchesQuery,
 		firstMatchingCategoryId,
 		groupMatchesQuery
-	} from '$lib/game/settings/settingsCatalog';
+	} from '#lib/game/settings/settingsCatalog';
 	import SettingsField from './SettingsField.svelte';
 
 	interface Props {

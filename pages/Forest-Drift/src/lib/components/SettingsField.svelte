@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { SettingsField } from '$lib/game/settings/GameSettingsHost';
-	import { formatSettingsNumber, snapSettingsNumber } from '$lib/game/settings/settingsFieldFormat';
+	import type { SettingsField } from '#lib/game/settings/GameSettingsHost';
+	import { formatSettingsNumber, snapSettingsNumber } from '#lib/game/settings/settingsFieldFormat';
 
 	interface Props {
 		field: SettingsField;

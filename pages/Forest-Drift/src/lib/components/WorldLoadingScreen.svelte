@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import preview from '$lib/assets/menu/countryside-preview.webp';
-	import fullImage from '$lib/assets/menu/countryside.png';
+	import preview from '#lib/assets/menu/countryside-preview.webp';
+	import fullImage from '#lib/assets/menu/countryside.png';
 	let { progress = 0, label = 'Opening your world…' }: { progress: number; label: string } =
 		$props();
 	let fullReady = $state(false);

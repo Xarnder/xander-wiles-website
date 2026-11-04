@@ -48,7 +48,7 @@ exports[`creature golden fingerprints > biped 3 1`] = `
     "hands": 2,
     "nose": 1,
   },
-  "fingerprint": "v1-24-1975-3680-7df060f8",
+  "geometry": "9580445891b5113c472bdc5711d4bb9d5ebaa24c5da83fb643e9c0a2ee8359b9",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -142,7 +142,7 @@ exports[`creature golden fingerprints > biped 42 1`] = `
     "hands": 2,
     "horns": 2,
   },
-  "fingerprint": "v1-24-1652-3092-898a812b",
+  "geometry": "c273c6586fd8e5f61e0a41d4f0debad52ba68af3fb4a7c53b310f4c712919c2c",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -250,7 +250,7 @@ exports[`creature golden fingerprints > hexapod 11 1`] = `
     "nose": 1,
     "plates": 3,
   },
-  "fingerprint": "v1-30-2368-4446-3893ad26",
+  "geometry": "cb26d812b056b4d7adb9bc70f9fc1d3c981ae5bfce2d1d694cc238e50649f0b2",
   "joints": 30,
   "keyJoints": {
     "chest": [
@@ -358,7 +358,7 @@ exports[`creature golden fingerprints > hexapod 42 1`] = `
     "nose": 1,
     "plates": 3,
   },
-  "fingerprint": "v1-30-1966-3654-1434d8f5",
+  "geometry": "4593ebaedf50cf9ddc5c121e7fc18dc26b0809a92bb65bdc0c27b277a79dc442",
   "joints": 30,
   "keyJoints": {
     "chest": [
@@ -452,7 +452,7 @@ exports[`creature golden fingerprints > quadruped 7 1`] = `
     "nose": 1,
     "spikes": 6,
   },
-  "fingerprint": "v1-24-1902-3578-c01fc322",
+  "geometry": "8a6d81c921822e2131fe469fa67aa64b5d71f36217bd9183761efc070901799a",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -547,7 +547,7 @@ exports[`creature golden fingerprints > quadruped 42 1`] = `
     "feet": 4,
     "nose": 1,
   },
-  "fingerprint": "v1-24-1712-3190-c3c5b775",
+  "geometry": "785d6a09b9597861751d5dc6912bd39f9c0c0f817e533c4624bc99fc571271d4",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -611,7 +611,7 @@ exports[`creature golden fingerprints > serpentine 5 1`] = `
     "fins": 6,
     "plates": 8,
   },
-  "fingerprint": "v1-18-1523-2876-371aa999",
+  "geometry": "9ba720fca1c6463fcb514bcbaf557b4c30bf9613250ebc145571a8dd3617fac9",
   "joints": 18,
   "keyJoints": {
     "head": [
@@ -664,7 +664,7 @@ exports[`creature golden fingerprints > serpentine 42 1`] = `
     "fins": 6,
     "frills": 5,
   },
-  "fingerprint": "v1-16-1334-2522-24816ad8",
+  "geometry": "5f5c3ea18d7ddf52c3343d94686c4ed6a199c86fbcfd101e754f5a529ed056a9",
   "joints": 16,
   "keyJoints": {
     "head": [

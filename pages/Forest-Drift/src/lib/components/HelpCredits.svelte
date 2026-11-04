@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import ControlsGuide from './ControlsGuide.svelte';
-	import portrait from '$lib/assets/menu/xanderwiles.jpg';
+	import portrait from '#lib/assets/menu/xanderwiles.jpg';
 	let { onClose }: { onClose: () => void } = $props();
 	let dialog: HTMLDialogElement;
 	let selected = $state<'help' | 'credits'>('help');

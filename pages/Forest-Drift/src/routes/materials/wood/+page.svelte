@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
-	import WoodTest from '$lib/components/WoodTest.svelte';
+	import WoodTest from '#lib/components/WoodTest.svelte';
 
 	const enabled = dev || new URLSearchParams(location.search).has('dev');
 </script>

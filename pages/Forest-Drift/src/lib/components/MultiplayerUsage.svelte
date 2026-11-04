@@ -5,7 +5,7 @@
 		type CloudflareUsage,
 		type UsageAccess,
 		type UsageMetric
-	} from '$lib/game/net/CloudflareUsage';
+	} from '#lib/game/net/CloudflareUsage';
 	let { access }: { access: UsageAccess | null } = $props();
 	let usage = $state<CloudflareUsage | null>(null);
 	let loading = $state(false);

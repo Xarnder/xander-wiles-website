@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import type { BuildingSettings } from '$lib/game/building/FoundationTypes';
+	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
 	let { settings, onClose }: { settings: BuildingSettings; onClose: () => void } = $props();
 	let selected = $state(untrack(() => settings.foundationStyle ?? 'stone'));
 	function choose(style: 'stone' | 'earth') {

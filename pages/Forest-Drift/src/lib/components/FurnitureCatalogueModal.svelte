@@ -2,15 +2,15 @@
 	import {
 		createDefaultBuildingSettings,
 		type BuildingSettings
-	} from '$lib/game/building/FoundationTypes';
-	import { FurniturePresetStore } from '$lib/game/building/FurniturePresetStore';
-	import type { FurnitureKind } from '$lib/game/building/FurnitureTypes';
+	} from '#lib/game/building/FoundationTypes';
+	import { FurniturePresetStore } from '#lib/game/building/FurniturePresetStore';
+	import type { FurnitureKind } from '#lib/game/building/FurnitureTypes';
 	import {
 		clampFurnitureToRules,
 		FURNITURE_CATALOGUE,
 		furnitureEntriesByCategory,
 		getFurnitureCatalogueEntry
-	} from '$lib/game/building/furnitureCatalogue';
+	} from '#lib/game/building/furnitureCatalogue';
 	import FurniturePreviewPane from './FurniturePreviewPane.svelte';
 
 	let {

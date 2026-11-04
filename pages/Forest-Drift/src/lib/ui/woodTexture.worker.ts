@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
-import { paintTimber } from '$lib/game/materials/generators/timber';
-import { resolveMaterialRecipe } from '$lib/game/materials/materialPresets';
-import { SurfaceCanvas } from '$lib/game/materials/SurfaceCanvas';
+import { paintTimber } from '#lib/game/materials/generators/timber';
+import { resolveMaterialRecipe } from '#lib/game/materials/materialPresets';
+import { SurfaceCanvas } from '#lib/game/materials/SurfaceCanvas';
 
 // Reuse the game's timber grain, knots and checks. UI only needs colour: no normal/ORM
 // maps, Three.js renderer, WebGL context, or ongoing shader work.

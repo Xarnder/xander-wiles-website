@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { HEALTH_MAX } from '$lib/game/player/PlayerHealth';
+	import { HEALTH_MAX } from '#lib/game/player/PlayerHealth';
 
 	interface Props {
 		current: number;

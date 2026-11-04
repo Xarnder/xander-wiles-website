@@ -2,18 +2,18 @@
 	import { dev } from '$app/environment';
 	import { onDestroy } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import { TreeLab, type TreeLabView } from '$lib/game/vegetation/trees/TreeLab';
-	import { nominalTreeHeight, TREE_SPECIES } from '$lib/game/vegetation/trees/treeSpecies';
+	import { TreeLab, type TreeLabView } from '#lib/game/vegetation/trees/TreeLab';
+	import { nominalTreeHeight, TREE_SPECIES } from '#lib/game/vegetation/trees/treeSpecies';
 	import {
 		buildTreeCards,
 		buildTreeMesh,
 		designTree
-	} from '$lib/game/vegetation/trees/treePrototypeGenerator';
+	} from '#lib/game/vegetation/trees/treePrototypeGenerator';
 	import {
 		TREE_SPECIES_IDS,
 		triangleCount,
 		type TreeSpeciesId
-	} from '$lib/game/vegetation/trees/TreeSpeciesTypes';
+	} from '#lib/game/vegetation/trees/TreeSpeciesTypes';
 
 	// Development tool: the Tree Lab — every species' prototypes, or one prototype at every LOD,
 	// with and without foliage cards. Under `vite dev`, or with `?dev`. `?seed=` sets the world

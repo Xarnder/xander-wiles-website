@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { DEFAULT_MATERIAL_PALETTE, normalizeColorHex } from '$lib/game/building/MaterialTypes';
+	import { DEFAULT_MATERIAL_PALETTE, normalizeColorHex } from '#lib/game/building/MaterialTypes';
 	import type {
 		BuildingMaterialDefinition,
 		MaterialPreset
-	} from '$lib/game/building/MaterialTypes';
+	} from '#lib/game/building/MaterialTypes';
 
 	interface Props {
 		selected: BuildingMaterialDefinition | undefined;

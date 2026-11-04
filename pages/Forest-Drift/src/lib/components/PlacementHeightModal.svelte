@@ -1,13 +1,13 @@
 <script lang="ts">
-	import type { BuildingLevelUiState } from '$lib/game/building/BuildingLevelTypes';
-	import type { BuildingSettings, SlabHeightToolId } from '$lib/game/building/FoundationTypes';
+	import type { BuildingLevelUiState } from '#lib/game/building/BuildingLevelTypes';
+	import type { BuildingSettings, SlabHeightToolId } from '#lib/game/building/FoundationTypes';
 	import {
 		clampSlabPlacementHeight,
 		resolveSlabPlacementHeightAboveFloor,
 		SLAB_PLACEMENT_HEIGHT_MAX,
 		SLAB_PLACEMENT_HEIGHT_MIN,
 		SLAB_PLACEMENT_HEIGHT_STEP
-	} from '$lib/game/building/slabPlacementMath';
+	} from '#lib/game/building/slabPlacementMath';
 
 	let {
 		toolId,

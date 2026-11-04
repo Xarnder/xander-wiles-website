@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import type { NetDiagnosticsReport } from '$lib/game/net/NetDiagnostics';
-	import type { NetStatus } from '$lib/game/net/NetSession';
-	import type { PlayerInfo, PlayerRole } from '$lib/game/net/protocol';
+	import type { NetDiagnosticsReport } from '#lib/game/net/NetDiagnostics';
+	import type { NetStatus } from '#lib/game/net/NetSession';
+	import type { PlayerInfo, PlayerRole } from '#lib/game/net/protocol';
 	import InviteLinks from './InviteLinks.svelte';
 
 	interface Props {

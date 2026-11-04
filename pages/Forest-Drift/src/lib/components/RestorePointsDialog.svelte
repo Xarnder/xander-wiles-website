@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { RestorePoint } from '$lib/game/net/worldTransfer';
+	import type { RestorePoint } from '#lib/game/net/worldTransfer';
 
 	interface Props {
 		worldName: string;

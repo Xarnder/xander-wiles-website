@@ -4,11 +4,11 @@
 		WOOD_TEST_VIEWS,
 		WoodTestScene,
 		type WoodTestView
-	} from '$lib/game/materials/gallery/WoodTestScene';
+	} from '#lib/game/materials/gallery/WoodTestScene';
 	import {
 		MATERIAL_QUALITIES,
 		type MaterialQuality
-	} from '$lib/game/materials/ProceduralMaterialTypes';
+	} from '#lib/game/materials/ProceduralMaterialTypes';
 
 	/**
 	 * Solid procedural wood test page: the three.js TSL wood example recreated with our GLSL port

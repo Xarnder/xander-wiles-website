@@ -21,9 +21,9 @@
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.60.0",
-		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.63.0",
-		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@sveltejs/adapter-static": "^4.0.1",
+		"@sveltejs/kit": "^3.1.1",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@types/node": "^24",
 		"@types/three": "^0.185.4",
 		"eslint": "^10.4.1",
@@ -33,12 +33,13 @@
 		"globals": "^17.6.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
-		"svelte": "^5.56.1",
+		"svelte": "^5.57.1",
 		"svelte-check": "^4.6.0",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
-		"vite": "^8.0.16",
-		"vitest": "^4.1.8"
+		"vite": "^8.3.0",
+		"vitest": "^4.1.8",
+		"deepmerge": "file:../../vendor/deepmerge"
 	},
 	"dependencies": {
 		"@huggingface/transformers": "3.8.1",
@@ -48,5 +49,14 @@
 		"midi-file": "^1.2.4",
 		"simplex-noise": "^4.0.3",
 		"three": "^0.185.1"
+	},
+	"overrides": {
+		"deepmerge": "$deepmerge",
+		"minimatch": "^11.0.4",
+		"sharp": "^0.35.5"
+	},
+	"imports": {
+		"#lib": "./src/lib/index.js",
+		"#lib/*": "./src/lib/*"
 	}
 }

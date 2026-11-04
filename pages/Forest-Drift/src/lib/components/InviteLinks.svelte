@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { PlayerRole } from '$lib/game/net/protocol';
+	import type { PlayerRole } from '#lib/game/net/protocol';
 
 	interface Props {
 		links: { role: PlayerRole; url: string }[];

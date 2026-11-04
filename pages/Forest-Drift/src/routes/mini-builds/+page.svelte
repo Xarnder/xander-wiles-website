@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
 	import { onMount } from 'svelte';
-	import { DEFAULT_MINI_BUILDS } from '$lib/game/miniBuild/defaultMiniBuilds';
-	import { MiniBuildLabScene, type MiniBuildLabView } from '$lib/game/miniBuild/MiniBuildLabScene';
-	import { shapeCount } from '$lib/game/miniBuild/miniBuildShapes';
+	import { DEFAULT_MINI_BUILDS } from '#lib/game/miniBuild/defaultMiniBuilds';
+	import { MiniBuildLabScene, type MiniBuildLabView } from '#lib/game/miniBuild/MiniBuildLabScene';
+	import { shapeCount } from '#lib/game/miniBuild/miniBuildShapes';
 	import {
 		effectiveMiniBuildTexture,
 		miniBuildTextureLabel
-	} from '$lib/game/miniBuild/miniBuildTextures';
+	} from '#lib/game/miniBuild/miniBuildTextures';
 
 	// Development tool: every stock Mini Build under game materials. Available under `vite dev`, or
 	// with `?dev`. `?focus=<id>&view=front` frames one design; `?inspect` hides the panel.

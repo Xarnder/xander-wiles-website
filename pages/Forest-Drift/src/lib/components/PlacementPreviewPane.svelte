@@ -3,8 +3,8 @@
 	import type {
 		BuildingSettings,
 		CustomizablePlacementToolId
-	} from '$lib/game/building/FoundationTypes';
-	import { PlacementPreviewRenderer } from '$lib/game/building/PlacementPreviewRenderer';
+	} from '#lib/game/building/FoundationTypes';
+	import { PlacementPreviewRenderer } from '#lib/game/building/PlacementPreviewRenderer';
 
 	let {
 		toolId,

@@ -3,7 +3,7 @@
 	import {
 		FOUNDATION_DELETE_CONFIRMATION,
 		isFoundationDeleteConfirmed
-	} from '$lib/game/building/foundationDeletion';
+	} from '#lib/game/building/foundationDeletion';
 
 	let {
 		onCancel,

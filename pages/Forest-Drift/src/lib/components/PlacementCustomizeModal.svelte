@@ -5,11 +5,11 @@
 		PLACEMENT_CUSTOMIZE_LIMITS,
 		type BuildingSettings,
 		type CustomizablePlacementToolId
-	} from '$lib/game/building/FoundationTypes';
+	} from '#lib/game/building/FoundationTypes';
 	import {
 		defaultFloorDetailColors,
 		type FloorDetailKind
-	} from '$lib/game/building/FloorDetailTypes';
+	} from '#lib/game/building/FloorDetailTypes';
 	import PlacementPreviewPane from './PlacementPreviewPane.svelte';
 
 	let {

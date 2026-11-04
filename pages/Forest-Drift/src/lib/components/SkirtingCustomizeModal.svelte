@@ -1,9 +1,9 @@
 <script lang="ts">
-	import type { BuildingSettings } from '$lib/game/building/FoundationTypes';
+	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
 	import {
 		createDefaultSkirtingDraftSettings,
 		SKIRTING_LIMITS
-	} from '$lib/game/building/skirtingRunMath';
+	} from '#lib/game/building/skirtingRunMath';
 	import PlacementPreviewPane from './PlacementPreviewPane.svelte';
 
 	let { settings, onClose }: { settings: BuildingSettings; onClose: () => void } = $props();
