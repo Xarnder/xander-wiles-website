@@ -1,4 +1,4 @@
-import { batchEntries, batchVideoName, processBatch, batchOutput, writeBatchJSON } from './batch-video.js';
+import { batchEntries, batchVideoName, scanBatchDirectory, sourceVideoName, processBatch, batchOutput, writeBatchJSON } from './batch-video.js';
 import { captureCamera, applyCamera, createOrbitPath, orbitStartPose, samplePath, videoDimensions, frameSchedule, abortCheck, waitFor, parseCameraPath, cameraPathJSON } from './camera-path.js';
 
 let active = false;
@@ -207,15 +207,36 @@ export async function openVideoRecorder(adapter) {
         if (action === 'batch') {
             phase = 'batch-setup';
             let destination = null;
+            let sourceRoot = null;
+            let sourceEntries = [];
             const selection = choose(`<h2>Batch processing</h2>
                 <p>Choose a folder of splats. Files in subfolders are included. Each model is loaded, rendered, saved and unloaded before the next begins. There is no four-file or 100-file limit.</p>
-                <label>Splat folder<input id="batch-files" type="file" webkitdirectory multiple></label>
-                <p id="batch-count" aria-live="polite">No folder selected.</p>
+                <label>Save videos<select id="batch-layout" class="custom-select"><option value="separate">In a separate output folder</option><option value="source">Beside each original splat</option></select></label>
+                <div id="batch-separate"><label>Splat folder<input id="batch-files" type="file" webkitdirectory multiple></label>
                 <button class="btn-action" data-action="destination">Choose output folder</button>
-                <p id="batch-destination" aria-live="polite">No output folder selected.</p>
-                <p class="export-note">MP4s save automatically into a new subfolder. Files stay on your computer. Splats keep their original coordinates; no automatic centering or alignment is applied.</p>
+                <p id="batch-destination" aria-live="polite">No output folder selected.</p></div>
+                <div id="batch-source" hidden><button class="btn-action" data-action="source">Choose source folder</button>
+                <p class="export-note">Includes all subfolders. Each video keeps its source name: room/model.ply → room/model.mp4. Existing MP4s are skipped, never overwritten.</p></div>
+                <label>Filename prefix (optional)<input id="batch-prefix" type="text" maxlength="64" placeholder="e.g. orbit_" autocomplete="off"></label>
+                <label>Filename suffix (optional)<input id="batch-suffix" type="text" maxlength="64" placeholder="e.g. _360" autocomplete="off"></label>
+                <p id="batch-name-preview" class="export-note" aria-live="polite"></p>
+                <p id="batch-count" aria-live="polite">No source folder selected.</p>
+                <p class="export-note">Separate-folder mode saves MP4s into a new subfolder. Beside-source mode saves them alongside the originals. Files stay on your computer. Splats keep their original coordinates; no automatic centering or alignment is applied.</p>
                 <p class="export-note">Automatic folder saving requires a browser with folder-write support, such as desktop Chrome or Edge. Keep this page open until the batch finishes.</p>
                 <p role="alert"></p><div class="export-actions"><button class="btn-action" data-action="cancel">Cancel</button><button class="btn-action primary" data-action="continue">Continue</button></div>`, async action => {
+                    if (action === 'source') {
+                        if (!window.showDirectoryPicker) throw new Error('Saving beside source files requires desktop Chrome or Edge.');
+                        let root;
+                        try { root = await window.showDirectoryPicker({ mode: 'readwrite', id: 'splat-video-source' }); }
+                        catch (error) { if (error.name === 'AbortError') return false; throw error; }
+                        dialog.querySelector('#batch-count').textContent = 'Scanning subfolders…';
+                        const entries = await scanBatchDirectory(root, signal);
+                        sourceRoot = root;
+                        sourceEntries = entries;
+                        updateNamePreview();
+                        dialog.querySelector('#batch-count').textContent = `${entries.length} splats found in ${root.name} and its subfolders.`;
+                        return false;
+                    }
                     if (action === 'destination') {
                         if (!window.showDirectoryPicker) throw new Error('This browser cannot save automatically to a folder. Open this viewer in desktop Chrome or Edge for batch processing.');
                         try { destination = await window.showDirectoryPicker({ mode: 'readwrite', id: 'splat-video-output' }); }
@@ -223,18 +244,41 @@ export async function openVideoRecorder(adapter) {
                         dialog.querySelector('#batch-destination').textContent = `Output folder: ${destination.name}`;
                         return false;
                     }
-                    const entries = batchEntries(dialog.querySelector('#batch-files').files);
+                    const besideSource = dialog.querySelector('#batch-layout').value === 'source';
+                    const entries = besideSource ? sourceEntries : batchEntries(dialog.querySelector('#batch-files').files);
                     if (!entries.length) throw new Error('Choose a folder containing .ply, .splat, .ksplat or .spz files');
-                    if (!destination) throw new Error('Choose an output folder first');
-                    batch = { entries, destination, directory: null, results: [] };
+                    if (!(besideSource ? sourceRoot : destination)) throw new Error('Choose an output folder first');
+                    const naming = readNaming();
+                    sourceVideoName(entries[0], naming); // Validate before starting the batch.
+                    batch = { naming, entries, destination: besideSource ? sourceRoot : destination, besideSource, directory: null, results: [] };
                     return true;
                 });
+            const readNaming = () => ({ prefix: dialog.querySelector('#batch-prefix').value, suffix: dialog.querySelector('#batch-suffix').value });
+            function updateNamePreview() {
+                const besideSource = dialog.querySelector('#batch-layout').value === 'source';
+                const entry = (besideSource ? sourceEntries : batchEntries(dialog.querySelector('#batch-files').files))[0] || { name: 'model.ply' };
+                try {
+                    const name = besideSource ? sourceVideoName(entry, readNaming()) : batchVideoName(entry, 0, readNaming());
+                    dialog.querySelector('#batch-name-preview').textContent = `${entry.name} → ${name}`;
+                    dialog.querySelector('[role=alert]').textContent = '';
+                } catch (error) {
+                    dialog.querySelector('#batch-name-preview').textContent = '';
+                    dialog.querySelector('[role=alert]').textContent = error.message;
+                }
+            }
+            dialog.oninput = updateNamePreview;
+            updateNamePreview();
             dialog.onchange = () => {
-                const count = batchEntries(dialog.querySelector('#batch-files').files).length;
+                const besideSource = dialog.querySelector('#batch-layout').value === 'source';
+                dialog.querySelector('#batch-separate').hidden = besideSource;
+                dialog.querySelector('#batch-source').hidden = !besideSource;
+                updateNamePreview();
+                const count = besideSource ? sourceEntries.length : batchEntries(dialog.querySelector('#batch-files').files).length;
                 dialog.querySelector('#batch-count').textContent = `${count} supported splat files queued, processed one at a time.`;
             };
             if (await selection === 'cancel') return;
             dialog.onchange = null;
+            dialog.oninput = null;
         }
         phase = 'settings';
         const recordedAspect = samples[0].pose.aspect;
@@ -289,11 +333,11 @@ export async function openVideoRecorder(adapter) {
             canvas.width = settings.width; canvas.height = settings.height;
             const ctx = canvas.getContext('2d', { alpha: false });
             const stem = entry.name.replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '-').slice(0, 60) || 'splat';
-            const filename = batch ? batchVideoName(entry, s) : `splat-${stamp}-${s + 1}-${stem}.mp4`;
+            const filename = batch ? (batch.besideSource ? sourceVideoName(entry, batch.naming) : batchVideoName(entry, s, batch.naming)) : `splat-${stamp}-${s + 1}-${stem}.mp4`;
             let output, fileOutput;
             let complete = false;
             try {
-                if (batch) fileOutput = await batchOutput(media, batch.directory, filename);
+                if (batch) fileOutput = await batchOutput(media, batch.besideSource ? entry.directory : batch.directory, filename, batch.besideSource);
                 output = new media.Output({
                     format: new media.Mp4OutputFormat(batch ? { fastStart: false } : {}),
                     target: fileOutput ? fileOutput.target : new media.BufferTarget()
@@ -320,7 +364,7 @@ export async function openVideoRecorder(adapter) {
                     urls.push({ url, name: filename });
                 }
                 complete = true;
-                return filename;
+                return batch?.besideSource ? entry.path.replace(/[^/]+$/, () => filename) : filename;
             } finally {
                 if (!complete) {
                     if (output) await output.cancel().catch(() => {});
@@ -360,8 +404,10 @@ export async function openVideoRecorder(adapter) {
         if (batch) {
             const saved = batch.results.filter(result => result.status === 'saved').length;
             await writeBatchJSON(batch.directory, 'batch-report.json', { status: 'complete', total: entries.length, resolution: [settings.width, settings.height], fps: settings.fps, results: batch.results });
-            const done = choose(`<h2>Batch processing complete</h2><p>${saved} videos saved automatically. ${batch.results.length - saved} files failed.</p><p id="batch-saved-location"></p><p class="export-note">No download clicks are needed. The output folder also contains your camera path and a batch report listing saved files and errors.</p><button class="btn-action" data-action="done">Close</button>`);
-            dialog.querySelector('#batch-saved-location').textContent = `Saved in ${batch.destination.name} / ${batch.folderName}`;
+            const skipped = batch.results.filter(result => result.status === 'skipped').length;
+            const failed = batch.results.filter(result => result.status === 'failed').length;
+            const done = choose(`<h2>Batch processing complete</h2><p>${saved} videos saved automatically. ${skipped} existing videos skipped. ${failed} files failed.</p><p id="batch-saved-location"></p><p class="export-note">No download clicks are needed. The output folder also contains your camera path and a batch report listing saved files and errors.</p><button class="btn-action" data-action="done">Close</button>`);
+            dialog.querySelector('#batch-saved-location').textContent = batch.besideSource ? `Videos saved beside their source splats in ${batch.destination.name}. Camera path and report: ${batch.folderName}` : `Saved in ${batch.destination.name} / ${batch.folderName}`;
             await done;
             return;
         }
@@ -390,7 +436,7 @@ export async function openVideoRecorder(adapter) {
         if (batch?.directory && !batchFinished) {
             try {
                 await writeBatchJSON(batch.directory, 'batch-report.json', { status: 'stopped', total: batch.entries.length, results: batch.results });
-                adapter.toast(`${batch.results.filter(result => result.status === 'saved').length} completed videos remain saved in ${batch.folderName}`, 'info');
+                adapter.toast(`${batch.results.filter(result => result.status === 'saved').length} completed videos remain saved ${batch.besideSource ? 'beside their source splats' : 'in ' + batch.folderName}`, 'info');
             } catch (error) { adapter.toast(`Could not update the batch report: ${error.message}`, 'error'); }
         }
         if (exporting) { try { await adapter.endExport(); } catch (error) { adapter.toast(error.message, 'error'); } }

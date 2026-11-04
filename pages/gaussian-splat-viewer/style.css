@@ -2470,6 +2470,8 @@ body.compare-setup-open #drop-overlay {
 
 .video-dialog > * + * { margin-top: 14px; }
 .video-dialog label { display: grid; gap: 6px; }
+.video-dialog :is(#batch-separate, #batch-source):not([hidden]) { display: grid; gap: 12px; }
+.video-dialog #batch-name-preview { margin-top: 14px; overflow-wrap: anywhere; }
 .orbit-live-dialog { background: #18181bf2; }
 .orbit-live-dialog::backdrop { background: transparent; }
 @media (max-width: 768px) {

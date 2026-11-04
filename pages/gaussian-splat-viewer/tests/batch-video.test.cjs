@@ -73,3 +73,52 @@ test('output-folder permission or disk errors stop the batch instead of skipping
     const directory = { async getFileHandle() { throw new Error('Permission denied'); } };
     await assert.rejects(vm.runInContext(source + `batchOutput(media,directory,'a.mp4')`,context({media,directory})), error => error.batchFatal === true);
 });
+
+test('50 nested sources retain parent handles and exact names, with no flattened collisions', async () => {
+    const parents = [];
+    for (let i = 0; i < 50; i++) parents.push({
+        kind:'directory', name:'room'+i,
+        async *values() {
+            yield {kind:'file',name:'模型 original.PLY',getFile:async()=>({name:'模型 original.PLY'})};
+            yield {kind:'file',name:'notes.txt',getFile:async()=>assert.fail('unrelated files must not be loaded')};
+        }
+    });
+    const root = {async *values() { yield {kind:'directory',name:'nested',async *values() {yield* parents;}}; }};
+    const entries = await vm.runInContext(source + 'scanBatchDirectory(root, new AbortController().signal)', context({root}));
+    assert.equal(entries.length,50);
+    assert.equal(entries[2].path,'nested/room2/模型 original.PLY');
+    const names = new Set();
+    for (const entry of entries) {
+        assert.ok(parents.includes(entry.directory));
+        const name = vm.runInContext(source + 'sourceVideoName(entry)', context({entry}));
+        assert.equal(name,'模型 original.mp4');
+        names.add(entry.path.replace(/[^/]+$/,name));
+    }
+    assert.equal(names.size,50);
+});
+
+test('existing sibling videos are skipped without opening a write stream or deleting them', async () => {
+    const directory = {async getFileHandle() {return {createWritable(){assert.fail('must preserve existing MP4');}};},removeEntry(){assert.fail('must not delete');}};
+    await assert.rejects(vm.runInContext(source + "batchOutput({},directory,'model.mp4',true)",context({directory})), error => error.batchSkipped === true);
+});
+
+test('source-folder scanning can be cancelled', async () => {
+    const controller = new AbortController(); controller.abort();
+    const root = {async *values(){yield {kind:'file',name:'a.ply'};}};
+    await assert.rejects(vm.runInContext(source + 'scanBatchDirectory(root, controller.signal)',context({root,controller})),{name:'AbortError'});
+});
+
+test('prefix and suffix wrap the filename in both batch modes and preserve empty defaults', () => {
+    vm.runInContext(source + `
+        const entry = {name:'My.model.PLY'};
+        assert.equal(sourceVideoName(entry), 'My.model.mp4');
+        assert.equal(sourceVideoName(entry, {prefix:'orbit_',suffix:'_360'}), 'orbit_My.model_360.mp4');
+        assert.equal(batchVideoName(entry, 0, {prefix:'orbit_',suffix:'_360'}), 'orbit_0001-My.model_360.mp4');
+        assert.equal(sourceVideoName(entry, {prefix:'日本語 ',suffix:' $&'}), '日本語 My.model $&.mp4');
+        assert.equal(sourceVideoName(entry, {prefix:'',suffix:'_v2'}), 'My.model_v2.mp4');
+        for (const value of ['../', 'folder/', 'bad:name', 'bad*name', String.fromCharCode(92), String.fromCharCode(0)]) {
+            assert.throws(() => sourceVideoName(entry, {prefix:value}), /cannot contain/);
+            assert.throws(() => batchVideoName(entry, 0, {suffix:value}), /cannot contain/);
+        }
+    `, context());
+});

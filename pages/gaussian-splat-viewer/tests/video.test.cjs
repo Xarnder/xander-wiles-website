@@ -50,15 +50,17 @@ test('waiting for a stalled GPU sort can be cancelled', async () => {
     await assert.rejects(waiting, { name: 'AbortError' });
 });
 
-for (const [count, cancelExport, imported, batching, orbit] of [[1, false, false], [4, false, false], [4, true, false], [4, false, true], [3, false, true, true], [1, false, false, false, true], [3, false, false, true, true]]) test(`${orbit ? 'generated orbit' : imported ? 'imported path without recording' : 'countdown, preview and redo'} and ${count} video exports${cancelExport ? ' cancelled' : ''}${batching ? ' to a batch folder' : ''}`, async () => {
+for (const [count, cancelExport, imported, batching, orbit, besideSource] of [[1, false, false], [4, false, false], [4, true, false], [4, false, true], [3, false, true, true], [1, false, false, false, true], [3, false, false, true, true], [50, false, true, true, false, true]]) test(`${orbit ? 'generated orbit' : imported ? 'imported path without recording' : 'countdown, preview and redo'} and ${count} video exports${cancelExport ? ' cancelled' : ''}${batching ? ' to a batch folder' : ''}`, async () => {
     let now = 0, restores = 0, previews = 0, finalized = 0, released = 0, ended = 0;
-    const actions = orbit ? ['orbit', 'preview', 'edit-orbit', 'preview', batching ? 'batch' : 'export', ...(batching ? ['destination', 'continue'] : []), 'start', 'done'] : batching ? ['import', 'preview', 'batch', 'destination', 'continue', 'start', 'done'] : imported ? ['import', 'preview', 'export', 'start', 'done'] : ['record', 'preview', 'redo', 'export', 'start', 'done'];
+    const actions = orbit ? ['orbit', 'preview', 'edit-orbit', 'preview', batching ? 'batch' : 'export', ...(batching ? [besideSource ? 'source' : 'destination', 'continue'] : []), 'start', 'done'] : batching ? ['import', 'preview', 'batch', besideSource ? 'source' : 'destination', 'continue', 'start', 'done'] : imported ? ['import', 'preview', 'export', 'start', 'done'] : ['record', 'preview', 'redo', 'export', 'start', 'done'];
     const savedPose = x => ({ position:[x,0,0], quaternion:[0,0,0,1], up:[0,1,0], fov:65, zoom:1, near:.1, far:100, aspect:16/9 });
     const savedPath = JSON.stringify({ type:'gaussian-splat-camera-path', version:1, duration:5, samples:[{time:0,pose:savedPose(100)},{time:5,pose:savedPose(150)}] });
     const timing = [], recordings = [];
     let currentTiming;
     const elements = {
         '#orbit-radius': { value: '4' }, '#orbit-height': { value: '-2' }, '#orbit-duration': { value: '5' },
+        '#batch-prefix': {value: besideSource ? 'orbit_$&_' : ''}, '#batch-suffix': {value: besideSource ? '_360' : ''}, '#batch-name-preview': {},
+        '#batch-layout': { value: besideSource ? 'source' : 'separate' }, '#batch-count': {},
         '#batch-files': { files: Array.from({length:count}, (_,i)=>({name:'model'+i+'.splat'})) },
         '#batch-destination': {}, '#batch-saved-location': {},
         '#video-path-file': { files: [{ size: savedPath.length, text: async () => savedPath }] },
@@ -87,7 +89,7 @@ for (const [count, cancelExport, imported, batching, orbit] of [[1, false, false
                     this.oninput();
                 }
                 await this.onclick({ target: { closest: () => ({ dataset: { action }, disabled: false }) } });
-                if (action === 'destination') {
+                if (action === 'destination' || action === 'source') {
                     const next = actions.shift();
                     await this.onclick({ target: { closest: () => ({ dataset: { action: next }, disabled: false }) } });
                 }
@@ -124,14 +126,21 @@ for (const [count, cancelExport, imported, batching, orbit] of [[1, false, false
     };
     const committed = [], reports = [];
     const directory = {
-        async getFileHandle(name) {
+        async getFileHandle(name, options) {
+            if (!options?.create) throw new DOMException('Missing', 'NotFoundError');
             return { async createWritable() { return {
                 async write(data) { if (name.endsWith('.json')) reports.push({name, data:JSON.parse(data)}); },
                 async close() { if (name.endsWith('.mp4')) committed.push(name); }, async abort() {}
             }; } };
         }, async removeEntry() {}
     };
-    const destination = {name:'output', async getDirectoryHandle() {return directory;} };
+    const destination = {name:'output', async getDirectoryHandle() {return directory;},
+        async *values() {
+            for (let i = 0; i < count; i++) yield { kind: 'directory', name: 'room'+i, ...directory,
+                async *values() { yield {kind:'file', name:'Original Model.PLY', getFile:async()=>({name:'Original Model.PLY'})}; }
+            };
+        }
+    };
     const context = contextFor({
         WritableStream, crypto:{ randomUUID: () => '12345678-1234-1234-1234-123456789012' },
         adapter, media, VideoEncoder: class {}, VideoFrame: class {}, Blob,
@@ -152,6 +161,10 @@ for (const [count, cancelExport, imported, batching, orbit] of [[1, false, false
     assert.equal(finalized, count);
     assert.equal(released, batching ? 0 : count);
     if (batching) { assert.equal(committed.length, count); assert.equal(reports.at(-1).data.status, 'complete'); assert.equal(reports.at(-1).data.results.length, count); }
+    if (besideSource) {
+        assert.deepEqual(committed, Array(count).fill('orbit_$&_Original Model_360.mp4'));
+        assert.deepEqual(Array.from(reports.at(-1).data.results, r=>r.output), Array.from({length:count},(_,i)=>`room${i}/orbit_$&_Original Model_360.mp4`));
+    }
     assert.ok(previews > 0);
     assert.ok(restores >= (imported || orbit ? 1 : 3));
     if (orbit) { assert.equal(now, 10000); assert.deepEqual(recordings[0][0], [5,0,3]); }
