@@ -19,7 +19,7 @@ This repo is a **static site** plus a handful of **separate apps** under `pages/
 | **SvelteKit app** | Fighter-Jet, Forest-Drift, Z-Image Turbo, Tax-Helper, Silence Cutter | `cd pages/<app>` → `npm run dev` (Silence Cutter: see [section 7](#7-silence-cutter-sveltekit-local-ai-video-editor)) |
 | **Full site** (nav + built apps) | Homepage → Journal link, etc. | `npm run build` → `npm run preview` |
 
-Root `npm run dev` is **`npx serve .`** — it only serves files on disk. It does **not** compile TypeScript/JSX or run Vite. Opening a Vite app’s source `index.html` that way will look **blank** (browser tries to load `/src/main.tsx` and fails).
+Root `npm run dev` runs **`node dev-server.mjs`** — it serves source files on disk and the supported local `/api/*` routes, loading root `.env` and `.env.local`. It does **not** compile TypeScript/JSX or run Vite. Opening a Vite app’s source `index.html` that way will look **blank** (browser tries to load `/src/main.tsx` and fails).
 
 Bundled apps are **built in `build.js`** and copied into `deploy_out/pages/...`. Until you run a full build, those folders in the live tree are either missing or stale source, not production bundles.
 
@@ -29,10 +29,10 @@ Bundled apps are **built in `build.js`** and copied into `deploy_out/pages/...`.
 
 Copy-paste the **From repo root** command while your shell is in the website repo.
 
-- **Static pages** (Homepage, To-Do, Time Pass, Markdown-Editor, Full site): stay at the repo root. Do **not** `cd` into `pages/...` — those folders have no `package.json`.
+- **Static pages** (Homepage, To-Do, Time Pass, Markdown-Editor, Full site): stay at the repo root. Do **not** `cd` into `pages/...` — these pages are served as static files by the root server.
 - **Vite / SvelteKit apps:** the one-liner **does** `cd` into the app first, then install and run. After you stop the server you will be left in that app folder; `cd ../..` (or `cd -`) to get back to the repo root.
 
-`npm install` is a no-op when dependencies are already present.
+Use `npm ci` for a clean install from a committed lockfile. `npm install` may update dependency resolutions and lockfiles.
 
 | App | Folder | URL | From repo root |
 |-----|--------|-----|----------------|
@@ -66,7 +66,7 @@ npm install
 npm run dev
 ```
 
-Run these from the **repository root** (`npx serve .`). There is no `npm run dev` inside `pages/Markdown-Editor/` — that folder has no `package.json`.
+Run these from the **repository root** (`node dev-server.mjs`). There is no `npm run dev` inside `pages/Markdown-Editor/` — that folder has no `package.json`.
 
 - Homepage: `http://localhost:3000/`
 - To-Do List: `http://localhost:3000/pages/To-Do-List/`
@@ -85,7 +85,7 @@ Many pages load shared assets from `/assets/` and the nav from `/nav.html` — t
 
 ## 2. Markdown Editor (Google Drive sign-in)
 
-The Markdown Editor is a **static** page (`pages/Markdown-Editor/`). Google sign-in uses a **Web OAuth Client ID** injected by `build.js` from `.env.local`. Root `npm run dev` (`npx serve .`) serves the source files **without** that injection, so Sign in with Google fails (typically “Client ID not configured”).
+The Markdown Editor is a **static** page (`pages/Markdown-Editor/`). Google sign-in uses a **Web OAuth Client ID** injected by `build.js` from `.env.local`. Root `npm run dev` (`node dev-server.mjs`) serves the source files **without** that injection, so Sign in with Google fails (typically “Client ID not configured”).
 
 Do **not** `cd pages/Markdown-Editor` and run `npm run dev` — that folder has no npm scripts. Always run from the **repository root**.
 
@@ -317,7 +317,7 @@ Results are written as JSON to `bench-results/`. `fixtures/local/` and `bench-re
 
 ### Inside the full site
 
-The root `npm run build` (section 8) builds Silence Cutter and serves it at **`http://localhost:3000/pages/Silence-Cutter/`**. Root `npm run dev` (`npx serve .`) does **not** work for it — that serves the source folder, not the built app. To include CrisperWhisper in a full-site build: `CRISPERWHISPER=enabled npm run build`.
+The root `npm run build` (section 8) builds Silence Cutter and serves it at **`http://localhost:3000/pages/Silence-Cutter/`**. Root `npm run dev` (`node dev-server.mjs`) does **not** work for it — that serves the source folder, not the built app. To include CrisperWhisper in a full-site build: `CRISPERWHISPER=enabled npm run build`.
 
 ---
 
