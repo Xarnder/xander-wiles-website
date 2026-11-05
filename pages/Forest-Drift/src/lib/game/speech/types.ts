@@ -1,8 +1,25 @@
 /** Versioned identities are deliberately independent of character/gameplay code. */
-export const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-export const REVISION = '1939ad2a8e416c0acfeecc08a694d14ef25f2231';
+export const MODEL = 'gradium/phonon-31m-en';
+export const REVISION = '8c64b55ec301728e2d1695bfea87a08a267d0c2d';
 export const ASSET_CACHE = `forest-drift.speech.assets.${REVISION}`;
-export const VOICE_CACHE = `forest-drift.speech.voices.${REVISION}`;
+export const MODEL_BASE_URL = `https://huggingface.co/${MODEL}/resolve/${REVISION}/`;
+export const MODEL_FILES = [
+	'model.q8.gguf',
+	'tokenizer.json',
+	'config.json',
+	'default-voice.safetensors'
+] as const;
+export const SYNTHESIS = { temperature: 0.3, seed: '4242424242424242' } as const;
+const CLIP_IDENTITY = [
+	1,
+	'segments-2',
+	'phonon-tts-0.6.0',
+	MODEL,
+	REVISION,
+	'q8-wasm-simd-cpu',
+	SYNTHESIS
+];
+export const CLIP_KEY_PREFIX = JSON.stringify(CLIP_IDENTITY).slice(0, -1) + ',';
 export const LIMITS = {
 	clipSeconds: 18,
 	phraseCharacters: 48,
@@ -18,7 +35,8 @@ export interface VoiceProfile {
 	version: number;
 	voice: string;
 	language: string;
-	speed: number;
+	/** Phonon's duration conditioner; zero uses the model's natural pace. */
+	durationDelta: number;
 }
 export interface Speaker {
 	id: string;
@@ -31,10 +49,10 @@ export const NARRATOR: Speaker = {
 	name: 'Narrator',
 	profile: {
 		id: 'narrator-en',
-		version: 2,
-		voice: 'bm_george',
-		language: 'en-GB',
-		speed: 1
+		version: 3,
+		voice: 'default',
+		language: 'en',
+		durationDelta: 0
 	}
 };
 interface RequestBase {
@@ -87,16 +105,7 @@ export function phrases(text: string): string[] {
 }
 export function clipKey(text: string, profile: VoiceProfile): string {
 	// Complete canonical identity, including segmentation and runtime revisions; no hash collision risk.
-	return JSON.stringify([
-		1,
-		'segments-2',
-		'kokoro-js-1.2.1',
-		'transformers-3.8.1',
-		REVISION,
-		'q8-wasm',
-		profile,
-		text
-	]);
+	return JSON.stringify([...CLIP_IDENTITY, profile, text]);
 }
 export function validClip(value: unknown, key: string): value is Clip {
 	const c = value as Clip | null;

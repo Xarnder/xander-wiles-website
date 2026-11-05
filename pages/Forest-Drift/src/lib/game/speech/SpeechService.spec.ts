@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpeechService } from './SpeechService';
+import * as assets from './SpeechAssets';
 import { NARRATOR, clipKey, phrases, validClip, type Clip, type SpeechRequest } from './types';
 import { lessons, lessonRequest, completed } from '../tutorials/tutorials';
 const request = (): SpeechRequest => lessonRequest(lessons(false)[0], 'session-a', false);
@@ -31,13 +32,13 @@ describe('speech identities and caption contracts', () => {
 	it('isolates synthesis settings while permitting different speakers to reuse identical audio', () => {
 		const text = 'Hello.';
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
-			clipKey(text, { ...NARRATOR.profile, voice: 'bm_lewis' })
+			clipKey(text, { ...NARRATOR.profile, voice: 'another-voice' })
 		);
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
 			clipKey(text, { ...NARRATOR.profile, version: NARRATOR.profile.version + 1 })
 		);
 		expect(clipKey(text, NARRATOR.profile)).not.toBe(
-			clipKey(text, { ...NARRATOR.profile, speed: 0.9 })
+			clipKey(text, { ...NARRATOR.profile, durationDelta: 0.3 })
 		);
 	});
 	it('rejects corrupted duration, truncated payloads and oversized cached clips', () => {
@@ -193,4 +194,71 @@ it('keeps active downloads alive but times out a silent worker', async () => {
 		service.dispose();
 		vi.useRealTimers();
 	}
+});
+
+it('persists model files on the page and waits for pending writes before clearing', async () => {
+	vi.stubGlobal('navigator', {
+		locks: {
+			request: (_: string, options: unknown, callback?: (lock: object) => Promise<void>) =>
+				callback ? callback({}) : (options as () => Promise<void>)()
+		}
+	});
+	vi.stubGlobal('document', { hidden: false });
+	const instances: FakeWorker[] = [];
+	class FakeWorker {
+		onmessage?: (event: { data: object }) => Promise<void>;
+		onerror?: () => void;
+		id = 0;
+		terminate = vi.fn();
+		constructor() {
+			instances.push(this);
+		}
+		postMessage(data: { id: number }) {
+			this.id = data.id;
+		}
+	}
+	vi.stubGlobal('Worker', FakeWorker);
+	let finishWrite!: () => void;
+	const put = vi.spyOn(assets, 'writeSpeechAsset').mockImplementation(
+		() =>
+			new Promise<void>((resolve) => {
+				finishWrite = resolve;
+			})
+	);
+	vi.spyOn(assets, 'clearSpeechAssets').mockResolvedValue();
+	const { ASSET_CACHE } = await import('./types');
+	const remove = vi.fn();
+	vi.stubGlobal('caches', {
+		open: vi.fn(async () => ({ put })),
+		keys: vi.fn(async () => [ASSET_CACHE, 'forest-drift.speech.voices.legacy', 'other-app']),
+		delete: remove
+	});
+	const service = new SpeechService(vi.fn(), () => true);
+	vi.spyOn(service.cache, 'get').mockResolvedValue(undefined);
+	vi.spyOn(service.cache, 'clear').mockResolvedValue();
+	const preparing = service.prepare([request()], vi.fn()).catch((error: Error) => error);
+	await vi.waitFor(() => expect(instances[0]).toBeDefined());
+	expect(remove).toHaveBeenCalledWith('forest-drift.speech.voices.legacy');
+	expect(remove).not.toHaveBeenCalledWith(ASSET_CACHE);
+	remove.mockClear();
+	const instance = instances[0];
+	await instance.onmessage!({
+		data: {
+			id: instance.id,
+			asset: { file: 'model.q8.gguf', bytes: new Uint8Array([1, 2]) }
+		}
+	});
+	await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
+	expect(put).toHaveBeenCalledWith('model.q8.gguf', new Uint8Array([1, 2]));
+	const clearing = service.clear();
+	await Promise.resolve();
+	expect(remove).not.toHaveBeenCalled();
+	finishWrite();
+	await clearing;
+	expect(await preparing).toEqual(expect.objectContaining({ message: 'Preparation cancelled.' }));
+	expect(remove.mock.calls.map(([name]) => name)).toEqual([
+		ASSET_CACHE,
+		'forest-drift.speech.voices.legacy'
+	]);
+	service.dispose();
 });

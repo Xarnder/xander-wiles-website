@@ -3,10 +3,13 @@ import { audioOutput, releaseAudioOutputs } from '../audio/AudioPreferences';
 import { audibleTime } from './playbackClock';
 import { LocalVoice } from './LocalVoice';
 import { SpeechCache } from './SpeechCache';
+import { clearSpeechAssets, pruneSpeechAssets, writeSpeechAsset } from './SpeechAssets';
 import {
 	clipKey,
 	phrases,
 	LIMITS,
+	ASSET_CACHE,
+	MODEL_FILES,
 	type Caption,
 	type Clip,
 	type SpeechRequest,
@@ -22,6 +25,8 @@ export class SpeechService {
 	private request = 0;
 	private playback = 0;
 	private pending?: (error: Error) => void;
+	private assetWrites: Promise<void> = Promise.resolve();
+	private cleanedRetiredSpeech = false;
 	private source?: AudioBufferSourceNode;
 	private context?: AudioContext;
 	private stopPlayback?: () => void;
@@ -31,6 +36,9 @@ export class SpeechService {
 		private readonly preparationSafe: () => boolean = () => false,
 		private readonly backgroundSafe: () => boolean = () => false
 	) {}
+	get audioRunning() {
+		return !this.disposed && this.context?.state === 'running';
+	}
 	unlock() {
 		if (this.disposed) return Promise.reject(new Error('Speech service is closed.'));
 		this.context ??= new AudioContext();
@@ -81,8 +89,27 @@ export class SpeechService {
 			};
 			this.pending = fail;
 			worker.onerror = () => fail(new Error('Local speech could not start on this device.'));
-			worker.onmessage = ({ data }) => {
-				if (data.id !== id) return;
+			worker.onmessage = async ({ data }) => {
+				if (data.id !== id || this.worker !== worker) return;
+				if (data.asset) {
+					const { file, bytes } = data.asset;
+					if (
+						!MODEL_FILES.includes(file) ||
+						!(bytes instanceof Uint8Array) ||
+						!(bytes.buffer instanceof ArrayBuffer)
+					) {
+						fail(new Error('Invalid speech model asset.'));
+						return;
+					}
+					this.assetWrites = this.assetWrites.then(async () => {
+						try {
+							await writeSpeechAsset(file, bytes);
+						} catch {
+							/* Storage is optional; clips can still be prepared and played. */
+						}
+					});
+					return;
+				}
 				if (data.progress) {
 					armTimeout();
 					progress(data.progress, data.detail);
@@ -92,6 +119,8 @@ export class SpeechService {
 					fail(new Error(data.error));
 					return;
 				}
+				await this.assetWrites;
+				if (this.worker !== worker) return;
 				clearTimeout(timeout);
 				this.pending = undefined;
 				resolve({
@@ -130,6 +159,25 @@ export class SpeechService {
 			{ ifAvailable: true },
 			async (lock) => {
 				if (!lock) throw new Error('Voice preparation is already running in another tab.');
+				if (!this.cleanedRetiredSpeech) {
+					try {
+						await this.cache.pruneObsolete();
+						await pruneSpeechAssets().catch(() => {});
+						if (typeof caches !== 'undefined')
+							await Promise.all(
+								(await caches.keys())
+									.filter(
+										(name) =>
+											(name.startsWith('forest-drift.speech.assets.') && name !== ASSET_CACHE) ||
+											name.startsWith('forest-drift.speech.voices.')
+									)
+									.map((name) => caches.delete(name))
+							);
+						this.cleanedRetiredSpeech = true;
+					} catch {
+						/* Retry optional cache maintenance on the next preparation. */
+					}
+				}
 				let reused = 0;
 				try {
 					for (let i = 0; i < tasks.length; i++) {
@@ -318,6 +366,8 @@ export class SpeechService {
 		this.stopPreparation();
 		const clear = async () => {
 			await this.cache.clear();
+			await this.assetWrites;
+			await clearSpeechAssets();
 			if (typeof caches !== 'undefined')
 				await Promise.all(
 					(await caches.keys())

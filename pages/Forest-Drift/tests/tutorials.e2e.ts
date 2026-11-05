@@ -4,8 +4,7 @@ test('text tutorial stays local, follows gameplay, and survives reopening', asyn
 	test.setTimeout(120_000);
 	const speechRequests: string[] = [];
 	page.on('request', (r) => {
-		if (/huggingface|synthesis.worker|onnxruntime|kokoro/i.test(r.url()))
-			speechRequests.push(r.url());
+		if (/huggingface|synthesis.worker|phonon/i.test(r.url())) speechRequests.push(r.url());
 	});
 	await page.goto('/');
 	await createAndEnterWorld(page);
@@ -130,6 +129,66 @@ test('real model preparation creates reusable paired clips', async ({ page }, te
 		timeout: 15_000
 	});
 	expect(modelRequests).toEqual([]);
+
+	// Drop generated clips and the live worker, keeping only downloaded model assets.
+	// New preparation must synthesize audible PCM from those assets without Hub access.
+	await page.reload();
+	await page.evaluate(
+		() =>
+			new Promise<void>((resolve, reject) => {
+				const opening = indexedDB.open('forest-drift-speech-v1', 2);
+				opening.onerror = () => reject(opening.error);
+				opening.onsuccess = () => {
+					const db = opening.result;
+					const tx = db.transaction('clips', 'readwrite');
+					tx.objectStore('clips').clear();
+					tx.oncomplete = () => {
+						db.close();
+						resolve();
+					};
+					tx.onerror = () => {
+						db.close();
+						reject(tx.error);
+					};
+				};
+			})
+	);
+	modelRequests.length = 0;
+	await page.route('https://huggingface.co/**', (route) => route.abort());
+	await createAndEnterWorld(page, { name: 'Offline voice' });
+	await page.getByTestId('tutorial-open').click();
+	await page.getByTestId('tutorial-prepare').click();
+	await expect(page.getByRole('status').filter({ hasText: 'Voice ready.' })).toBeVisible({
+		timeout: 60_000
+	});
+	expect(modelRequests.filter((url) => url.includes('huggingface'))).toEqual([]);
+	const audible = await page.evaluate(
+		() =>
+			new Promise<boolean>((resolve, reject) => {
+				const opening = indexedDB.open('forest-drift-speech-v1', 2);
+				opening.onerror = () => reject(opening.error);
+				opening.onsuccess = () => {
+					const db = opening.result;
+					const read = db.transaction('clips').objectStore('clips').getAll();
+					read.onsuccess = () => {
+						db.close();
+						resolve(
+							read.result.length > 0 &&
+								read.result.every(
+									(clip) =>
+										clip.sampleRate === 24000 &&
+										clip.pcm.some((sample: number) => Math.abs(sample) > 0.001)
+								)
+						);
+					};
+					read.onerror = () => {
+						db.close();
+						reject(read.error);
+					};
+				};
+			})
+	);
+	expect(audible).toBe(true);
 });
 
 test('records baseline versus active tutorial frame pacing', async ({ page }, testInfo) => {
@@ -222,7 +281,7 @@ test('records cached PCM playback frame pacing without inference', async ({ page
 		}));
 	const modelRequests: string[] = [];
 	page.on('request', (request) => {
-		if (/huggingface|synthesis.worker|onnxruntime|kokoro/i.test(request.url()))
+		if (/huggingface|synthesis.worker|phonon/i.test(request.url()))
 			modelRequests.push(request.url());
 	});
 	await page.goto('/');

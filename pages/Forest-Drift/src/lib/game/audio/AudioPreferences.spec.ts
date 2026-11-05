@@ -20,7 +20,7 @@ it('restores preferences, clamps values, and persists changes', async () => {
 	expect(audio.audioLevel('ambience')).toBe(0.2);
 	expect(localStorage.setItem).toHaveBeenCalled();
 });
-it('updates both live output buses and restores their levels after unmuting', async () => {
+it('updates all live output buses and restores their levels after unmuting', async () => {
 	const audio = await import('./AudioPreferences');
 	const context = {
 		state: 'running',
@@ -30,14 +30,21 @@ it('updates both live output buses and restores their levels after unmuting', as
 	};
 	const music = audio.audioOutput(context as unknown as AudioContext, 'music');
 	const weather = audio.audioOutput(context as unknown as AudioContext, 'ambience');
+	const narration = audio.audioOutput(context as unknown as AudioContext, 'narration');
 	expect(audio.audioOutput(context as unknown as AudioContext, 'music')).toBe(music);
-	audio.setAudioPreferences({ master: 0.5, music: 0.8, ambience: 0.2 });
+	audio.setAudioPreferences({ master: 0.5, music: 0.8, ambience: 0.2, narration: 0.6 });
 	expect(music.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.4, 12, 0.03);
 	expect(weather.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.1, 12, 0.03);
+	expect(narration.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.3, 12, 0.03);
 	audio.setAudioPreferences({ muted: true });
 	expect(music.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 12, 0.03);
 	expect(weather.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 12, 0.03);
+	expect(narration.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 12, 0.03);
 	audio.setAudioPreferences({ muted: false });
+	expect(weather.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.1, 12, 0.03);
+	expect(narration.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.3, 12, 0.03);
+	audio.setAudioPreferences({ narration: 0 });
+	expect(narration.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 12, 0.03);
 	expect(weather.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.1, 12, 0.03);
 });
 it('continues working when storage is unavailable', async () => {

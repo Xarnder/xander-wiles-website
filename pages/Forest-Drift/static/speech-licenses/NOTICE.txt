@@ -1,21 +1,17 @@
-Forest Drift optional local speech dependencies
+Forest Drift local speech dependencies
 
-Kokoro JavaScript 1.2.1: Apache-2.0
-https://github.com/hexgrad/kokoro/tree/main/kokoro.js
-Kokoro model/voice assets: Apache-2.0
-https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/tree/1939ad2a8e416c0acfeecc08a694d14ef25f2231
+Phonon browser runtime (phonon-tts 0.6.0): MIT OR Apache-2.0
+https://github.com/gradium-ai/xn-ptts/tree/v0.6.0/ptts-wasm
+Licence texts: Phonon-MIT.txt and Phonon-Apache-2.0.txt
+The WebAssembly runtime's Rust dependencies and their notices are reproduced
+in Phonon-Third-Party-Licenses.md.
 
-Transformers.js 3.8.1: Apache-2.0
-https://github.com/huggingface/transformers.js/tree/3.8.1
-ONNX Runtime: MIT (exact runtime version recorded in package-lock.json)
-https://github.com/microsoft/onnxruntime
+Phonon 31m English model and default voice: Apache-2.0
+https://huggingface.co/gradium/phonon-31m-en/tree/8c64b55ec301728e2d1695bfea87a08a267d0c2d
+The model, tokenizer, configuration and default voice are downloaded once from
+this pinned revision. Speech is generated locally in a browser worker.
+No text or audio is sent to a speech service.
 
-Phonemizer.js 1.2.1 wrapper: Apache-2.0
-https://github.com/xenova/phonemizer.js
-Its eSpeak NG speech/phonemization engine is GPL-licensed, separately from the wrapper:
-https://github.com/espeak-ng/espeak-ng
-https://github.com/espeak-ng/espeak-ng/blob/master/COPYING
-Source and build resources for the WebAssembly phonemizer:
-https://github.com/xenova/phonemizer.js/tree/main
-
-Installed browser/OS voices are provided by the player's operating system and are not redistributed by this application.
+Installed browser/OS voices are provided by the player's operating system and
+are not redistributed by this application. Only local device voices are used
+when the player explicitly selects the device-voice alternative.

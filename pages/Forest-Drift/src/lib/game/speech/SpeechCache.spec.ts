@@ -30,6 +30,31 @@ it('persists paired scripted audio/cues but not dynamic session clips', async ()
 	expect(await b.get(dynamic.key)).toBeUndefined();
 	b.release();
 });
+it('never plays a saved Kokoro clip as the new Phonon narrator', async () => {
+	const cache = new SpeechCache();
+	const clip = makeClip('Hello.');
+	const oldKey = JSON.stringify([
+		1,
+		'segments-2',
+		'kokoro-js-1.2.1',
+		'transformers-3.8.1',
+		'1939ad2a8e416c0acfeecc08a694d14ef25f2231',
+		'q8-wasm',
+		{ id: 'narrator-en', version: 2, voice: 'bm_george', language: 'en-GB', speed: 1 },
+		clip.text
+	]);
+	await cache.put({ ...clip, key: oldKey }, true);
+	expect(await cache.get(clip.key)).toBeUndefined();
+	await cache.put(clip, true);
+	await cache.pruneObsolete();
+	expect(await cache.get(oldKey)).toBeUndefined();
+	expect(await cache.get(clip.key)).toMatchObject({ text: clip.text });
+	cache.release();
+	const reopened = new SpeechCache();
+	expect(await reopened.get(oldKey)).toBeUndefined();
+	expect(await reopened.get(clip.key)).toBeDefined();
+	reopened.release();
+});
 it('rejects corrupt stored cues and clears without repopulating pending writes', async () => {
 	const a = new SpeechCache(),
 		clip = makeClip('Hello.');

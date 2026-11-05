@@ -11,17 +11,12 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler",
-		"types": [
-			"$app/types",
-			"node"
-		]
+		"paths": {
+			"#lib": ["./src/lib/index.ts"],
+			"#lib/*": ["./src/lib/*"]
+		},
+		"types": ["$app/types", "node"]
 	},
-	"include": [
-		"src",
-		"tests",
-		"*"
-	],
-	"exclude": [
-		"src/service-worker"
-	]
+	"include": ["src", "tests", "*"],
+	"exclude": ["src/service-worker"]
 }

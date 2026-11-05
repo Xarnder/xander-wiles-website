@@ -1,3 +1,6 @@
+> Historical record: the speech engine described here was replaced on 2026-11-05.
+> See [the current speech implementation](../../../src/lib/game/tutorials/README.md) for Phonon.
+
 # Spoken tutorials: implementation and validation
 
 Implemented 27 October 2026 against `speech-subtitle-tutorials.plan.md`.

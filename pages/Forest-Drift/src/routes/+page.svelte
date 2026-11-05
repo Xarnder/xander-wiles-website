@@ -63,6 +63,7 @@
 	import { playSoundEffect, preloadSoundEffects } from '#lib/game/audio/soundEffects';
 	import TutorialOverlay from '#lib/components/TutorialOverlay.svelte';
 	let speechPreparation = $state(false);
+	let speechOptionsOpen = $state(false);
 	import { preventTouchPageZoom } from '#lib/components/preventTouchPageZoom';
 	import { touchButton } from '#lib/components/touchButton';
 	import MaterialPalette from '#lib/components/MaterialPalette.svelte';
@@ -600,6 +601,9 @@
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
+		// A modal can temporarily lose button focus while its sound sample plays.
+		// Escape still belongs to speech options, even when the event targets the body.
+		if (speechOptionsOpen) return;
 		const typing = isTypingTarget(event.target);
 
 		// Cmd/Ctrl+S is the desktop-editor convention for "save now", and must beat the browser's own
@@ -869,7 +873,13 @@
 					if (wasLocked && !locked) {
 						if (showHelp) {
 							showHelp = false;
-						} else if (!paused && !clockBlocked() && !debugControlsOpen && !health?.dead) {
+						} else if (
+							!paused &&
+							!clockBlocked() &&
+							!debugControlsOpen &&
+							!speechOptionsOpen &&
+							!health?.dead
+						) {
 							// Escape while pointer-locked is consumed natively by the browser to exit lock.
 							// Catching that transition here brings up the pause menu on the very first Escape press.
 							if (performance.now() - lastPauseToggleTime > 150) {
@@ -1546,6 +1556,7 @@
 				onPreparation={(value) => {
 					speechPreparation = value;
 				}}
+				onOptions={(value) => (speechOptionsOpen = value)}
 			/>
 		{/key}
 	{/if}

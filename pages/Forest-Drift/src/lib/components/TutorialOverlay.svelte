@@ -32,7 +32,8 @@
 		build,
 		slot,
 		help,
-		onPreparation
+		onPreparation,
+		onOptions
 	}: {
 		scene: ThreeScene;
 		touch: boolean;
@@ -42,6 +43,7 @@
 		slot: number;
 		help: boolean;
 		onPreparation: (value: boolean) => void;
+		onOptions: (value: boolean) => void;
 	} = $props();
 	let preferences = $state(getTutorialPreferences());
 	let menu = $state(false),
@@ -78,7 +80,9 @@
 		if (speechWindow) return;
 		speechWindow = new SpeechWindow(
 			service,
-			() => mounted && running && !frozen && performance.now() >= backgroundAfter,
+			// The instruction being awaited must not starve on a consistently slow renderer.
+			// Only speculative lookahead yields to the gameplay frame budget.
+			() => mounted && running && !frozen && (buffering || performance.now() >= backgroundAfter),
 			(value, detail) => {
 				if (
 					!detail &&
@@ -211,6 +215,7 @@
 		startEpoch++;
 		service?.cancel();
 		menu = true;
+		onOptions(true);
 		document.exitPointerLock?.();
 	}
 	async function autoStart() {
@@ -335,6 +340,25 @@
 				};
 			}
 		}
+	}
+	async function withNarratorSound(action: () => void) {
+		if (!running || frozen) return;
+		const epoch = run;
+		if (
+			preferences.narration &&
+			!preferences.deviceVoice &&
+			soundEnabled &&
+			!service.audioRunning
+		) {
+			try {
+				// Resume on the key/button gesture: mobile browsers may suspend audio in the background.
+				await service.unlock();
+			} catch (error) {
+				if (epoch === run) autoNotice = speechErrorMessage(error);
+				return;
+			}
+		}
+		if (mounted && running && !frozen && epoch === run) action();
 	}
 	function previous() {
 		if (!running || frozen) return;
@@ -476,6 +500,7 @@
 	$effect(() => {
 		if (menu && dialog && !dialog.open) dialog.showModal();
 	});
+	$effect(() => onOptions(menu));
 	$effect(() => {
 		if (mounted && (running || autoStarting || autoNotice) && !frozen)
 			return observeSubtitleLayout((value) => (bottom = value));
@@ -510,8 +535,8 @@
 				if (!running || frozen || event.defaultPrevented) return;
 				event.preventDefault();
 				// Advancing an unfinished action is a skip, not evidence it was completed.
-				if (event.code === 'F7') previous();
-				else next(catalogue[index].action !== 'continue');
+				if (event.code === 'F7') void withNarratorSound(previous);
+				else void withNarratorSound(() => next(catalogue[index].action !== 'continue'));
 				return;
 			}
 			if (blocked && !menu) return;
@@ -550,6 +575,7 @@
 			speechWindow?.dispose();
 			service.dispose();
 			preparationState(false);
+			onOptions(false);
 		};
 	});
 </script>
@@ -605,14 +631,19 @@
 				onclick={() => (textPage = (textPage + 1) % captionPages.length)}
 				>Next line ({textPage + 1}/{captionPages.length})</button
 			>{/if}
-		{#if catalogue[index].action === 'continue'}<button onclick={() => next()} disabled={!waiting}
-				>Continue</button
+		{#if catalogue[index].action === 'continue'}<button
+				onclick={() => void withNarratorSound(() => next())}
+				disabled={!waiting}>Continue</button
 			>{/if}
-		<button aria-keyshortcuts="F7" onclick={previous}>Previous (F7)</button>
-		<button onclick={() => void narrate()}>Replay</button>
+		<button aria-keyshortcuts="F7" onclick={() => void withNarratorSound(previous)}
+			>Previous (F7)</button
+		>
+		<button onclick={() => void withNarratorSound(() => void narrate())}>Replay</button>
 		{#if autoNotice && caption}<button onclick={() => (autoNotice = '')}>Read instruction</button
 			>{/if}
-		<button aria-keyshortcuts="F9" onclick={() => next(catalogue[index].action !== 'continue')}
+		<button
+			aria-keyshortcuts="F9"
+			onclick={() => void withNarratorSound(() => next(catalogue[index].action !== 'continue'))}
 			>Next (F9)</button
 		>
 		<button onclick={open}>Options (F6)</button>
@@ -812,7 +843,7 @@
 							Continue when shown, or press F9 to stop the current speech and advance to the next
 							instruction. Press F7 to replay the previous instruction; press again after a short
 							pause to go back further. Revisited instructions stay open until you advance. Open
-							Tutorial (F8) to return here.
+							Speech options (F6) to return here.
 						</p>
 						<button
 							class="primary"
@@ -917,7 +948,7 @@
 					</div>
 				{/if}
 				<small
-					>Generated locally with Kokoro. No recording or speech API subscription. Missing clips use
+					>Generated locally with Phonon. No recording or speech API subscription. Missing clips use
 					text.</small
 				>
 			</div>

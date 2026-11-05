@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import { LIMITS, validClip, type Clip } from './types';
+import { CLIP_KEY_PREFIX, LIMITS, validClip, type Clip } from './types';
 /** One IndexedDB record atomically owns both audio and its one-phrase cue. No world data here. */
 export class SpeechCache {
 	private memory = new Map<string, Clip>();
@@ -127,6 +127,22 @@ export class SpeechCache {
 				await tx.done;
 			});
 		await this.writes.catch(() => {});
+	}
+	/** Discard retired engines without deserializing their audio or losing current Phonon clips. */
+	async pruneObsolete() {
+		for (const key of this.memory.keys())
+			if (!key.startsWith(CLIP_KEY_PREFIX)) this.memory.delete(key);
+		await this.writes;
+		const db = await this.database();
+		if (!db) return;
+		const tx = db.transaction('clips', 'readwrite');
+		let cursor = await tx.store.openKeyCursor();
+		while (cursor) {
+			if (!String(cursor.primaryKey).startsWith(CLIP_KEY_PREFIX))
+				await tx.store.delete(cursor.primaryKey);
+			cursor = await cursor.continue();
+		}
+		await tx.done;
 	}
 	async clear() {
 		this.epoch++;

@@ -1,3 +1,6 @@
+> Historical record: the speech engine described here was replaced on 2026-11-05.
+> See [the current speech implementation](../../../src/lib/game/tutorials/README.md) for Phonon.
+
 > Updated implementation decision: initial setup prepares three instructions, then
 > an explicitly gated single-worker producer maintains the current instruction plus
 > two ahead during gameplay. This supersedes earlier restrictions in this plan on

@@ -40,6 +40,30 @@ export default defineConfig({
 			}
 		},
 		{
+			name: 'webkit-speech',
+			testMatch: /(phonon|speechAutoStart)\.e2e\.ts$/,
+			use: { ...devices['Desktop Safari'] }
+		},
+		{
+			name: 'firefox-speech',
+			testMatch: /(phonon|speechAutoStart)\.e2e\.ts$/,
+			use: {
+				...devices['Desktop Firefox'],
+				launchOptions: firefoxHome
+					? {
+							env: {
+								...Object.fromEntries(
+									Object.entries(process.env).filter(
+										(entry): entry is [string, string] => entry[1] !== undefined
+									)
+								),
+								CFFIXED_USER_HOME: firefoxHome
+							}
+						}
+					: undefined
+			}
+		},
+		{
 			name: 'webkit-worlds',
 			testMatch: /worldPortability\.e2e\.ts$/,
 			use: { ...devices['Desktop Safari'] }
