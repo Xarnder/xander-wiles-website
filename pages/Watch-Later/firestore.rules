@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'xanderwiles@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    // Private collections remain scoped to each signed-in user's UID.
+    match /{privateCollection}/{id} {
+      allow read, delete: if privateCollection in ['watches', 'tiers', 'people']
+        && request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if privateCollection in ['watches', 'tiers', 'people']
+        && request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update: if privateCollection in ['watches', 'tiers', 'people']
+        && request.auth != null && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid;
+    }
+
+    function validRecommendation(data) {
+      return data.keys().hasAll(['title', 'type', 'tier', 'note', 'genre', 'year', 'rank', 'imageUrl', 'trailerUrl', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'type', 'tier', 'note', 'genre', 'year', 'rank', 'imageUrl', 'trailerUrl', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 160
+        && data.type in ['movie', 'tv']
+        && data.tier in ['S', 'A', 'B', 'C', 'D']
+        && data.note is string && data.note.size() <= 1000
+        && data.genre is string && data.genre.size() <= 80
+        && data.year is string && data.year.matches('^([0-9]{4})?$')
+        && data.rank is int && data.rank >= 0 && data.rank <= 9999
+        && data.imageUrl is string && data.imageUrl.size() <= 2048
+        && (data.imageUrl == '' || data.imageUrl.matches('^https://[^/]+/.*$'))
+        && data.trailerUrl is string
+        && (data.trailerUrl == '' || data.trailerUrl.matches('^https://www[.]youtube[.]com/watch[?]v=[A-Za-z0-9_-]{11}$'))
+        && data.createdAt is timestamp && data.updatedAt == request.time;
+    }
+
+    match /publicRecommendations/{id} {
+      allow read: if true;
+      allow create: if isOwner() && validRecommendation(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner() && validRecommendation(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner();
+    }
+    // Everything else is denied by default. No broad authenticated-user fallback.
+  }
+}

@@ -2,15 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
-const firebaseConfig = {
-    apiKey: "AIzaSyA9mjlqKO2q6-QBDL6qAXlpk7880geVwP8",
-    authDomain: "xanders-watch-later.firebaseapp.com",
-    projectId: "xanders-watch-later",
-    storageBucket: "xanders-watch-later.firebasestorage.app",
-    messagingSenderId: "673091397060",
-    appId: "1:673091397060:web:b8ce34424a245bad4cb091"
-};
+import { firebaseConfig } from './firebase-config.js';
 
 
 const app = initializeApp(firebaseConfig);
@@ -272,6 +264,8 @@ function logDebug(message, isError = false) {
     debugLog.prepend(entry);
 }
 let currentUser = null;
+let privateSubscriptions = [];
+let authRevision = 0;
 let isBatchMode = false;
 let userTiers = []; // Store current tiers
 let userPeople = []; // Store current people
@@ -1037,7 +1031,7 @@ window.deleteEntry = async (id) => {
 window.deleteTier = async (tierId) => {
     showConfirm("Delete Tier?", "This will remove the tier and move its items to the fallback tier. Continue?", async () => {
         try {
-            const itemsToMigrate = query(collection(db, "watches"), where("tier", "==", tierId));
+            const itemsToMigrate = query(collection(db, "watches"), where("uid", "==", currentUser.uid), where("tier", "==", tierId));
             const snapshot = await getDocs(itemsToMigrate);
 
             // Find a fallback tier (first one that isn't this one)
@@ -1172,6 +1166,28 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
 logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
+    const revision = ++authRevision;
+    privateSubscriptions.forEach(unsubscribe => unsubscribe());
+    privateSubscriptions = [];
+    cachedWatches = [];
+    userTiers = [];
+    userPeople = [];
+    selectedPeople.clear();
+    selectedCardIds.clear();
+    editingItemPeople.clear();
+    peopleFilters.clear();
+    genreFilters.clear();
+    editingItemId = null;
+    quickSortItems = [];
+    isQuickSortMode = false;
+    isTitleFixMode = false;
+    if (currentRenderId !== null) cancelAnimationFrame(currentRenderId);
+    currentRenderId = null;
+    tierContainer.replaceChildren();
+    document.querySelectorAll('.modal-overlay').forEach(modal => modal.classList.add('hidden'));
+    updateGenreDatalist();
+    renderPeopleToggles();
+    renderFilterPeople();
     try {
         console.log(`[Auth] State change: ${user ? 'Logged In' : 'Logged Out'}`);
         if (user) {
@@ -1194,8 +1210,10 @@ onAuthStateChanged(auth, async (user) => {
             console.log("[Auth] UI transition complete, loading data...");
 
             // Data Initialization (in background to avoid blocking UI)
-            await initializeTiers().catch(e => console.error("[Auth] Tiers Init Error:", e));
-            await initializePeople().catch(e => console.error("[Auth] People Init Error:", e));
+            await initializeTiers(user.uid).catch(e => console.error("[Auth] Tiers Init Error:", e));
+            if (revision !== authRevision) return;
+            await initializePeople(user.uid).catch(e => console.error("[Auth] People Init Error:", e));
+            if (revision !== authRevision) return;
             loadData();
         } else {
             currentUser = null;
@@ -1756,7 +1774,7 @@ function loadData() {
 
     // Sync Tiers
     const tiersQ = query(collection(db, "tiers"), where("uid", "==", currentUser.uid));
-    onSnapshot(tiersQ, (snapshot) => {
+    privateSubscriptions.push(onSnapshot(tiersQ, (snapshot) => {
         userTiers = [];
         snapshot.forEach(doc => userTiers.push({ id: doc.id, ...doc.data() }));
         userTiers.sort((a, b) => a.order - b.order);
@@ -1767,11 +1785,11 @@ function loadData() {
         renderAllCards(); // RE-RENDER CARDS when tiers change (fix for disappearing cards on rename)
     }, (err) => {
         console.error("[Firestore] Tiers listener error:", err);
-    });
+    }));
 
     // Sync People
     const peopleQ = query(collection(db, "people"), where("uid", "==", currentUser.uid));
-    onSnapshot(peopleQ, (snapshot) => {
+    privateSubscriptions.push(onSnapshot(peopleQ, (snapshot) => {
         userPeople = [];
         snapshot.forEach(doc => userPeople.push({ id: doc.id, ...doc.data() }));
         userPeople.sort((a, b) => a.name.localeCompare(b.name));
@@ -1781,11 +1799,11 @@ function loadData() {
         renderFilterPeople();
     }, (err) => {
         console.error("[Firestore] People listener error:", err);
-    });
+    }));
 
     // Sync Watches
     const watchesQ = query(collection(db, "watches"), where("uid", "==", currentUser.uid));
-    onSnapshot(watchesQ, (watchSnapshot) => {
+    privateSubscriptions.push(onSnapshot(watchesQ, (watchSnapshot) => {
         cachedWatches = [];
         watchSnapshot.forEach((doc) => {
             cachedWatches.push({ id: doc.id, ...doc.data() });
@@ -1794,7 +1812,7 @@ function loadData() {
         renderAllCards();
     }, (err) => {
         console.error("[Firestore] Watches listener error:", err);
-    });
+    }));
 }
 
 let currentRenderId = null;
@@ -2043,8 +2061,8 @@ function renderPeopleToggles() {
     }
 }
 
-async function initializeTiers() {
-    const q = query(collection(db, "tiers"), where("uid", "==", currentUser.uid));
+async function initializeTiers(uid) {
+    const q = query(collection(db, "tiers"), where("uid", "==", uid));
     const snap = await getDocs(q);
 
     if (snap.empty) {
@@ -2056,20 +2074,22 @@ async function initializeTiers() {
             { name: 'C', color: '#7fff7f', order: 3 }
         ];
         for (const t of defaults) {
-            await addDoc(collection(db, "tiers"), { ...t, uid: currentUser.uid });
+            if (currentUser?.uid !== uid) return;
+            await addDoc(collection(db, "tiers"), { ...t, uid });
         }
     }
 }
 
-async function initializePeople() {
-    const q = query(collection(db, "people"), where("uid", "==", currentUser.uid));
+async function initializePeople(uid) {
+    const q = query(collection(db, "people"), where("uid", "==", uid));
     const snap = await getDocs(q);
 
     if (snap.empty) {
         console.log("[Init] Initializing default people...");
         const defaults = ["Sarah", "Dad", "Mom"];
         for (const name of defaults) {
-            await addDoc(collection(db, "people"), { name, uid: currentUser.uid });
+            if (currentUser?.uid !== uid) return;
+            await addDoc(collection(db, "people"), { name, uid });
         }
     }
 }

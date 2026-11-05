@@ -1,3 +1,10 @@
+.watch-later-sections { display: flex; flex-wrap: wrap; gap: 12px; margin: -20px 0 24px; }
+.watch-later-sections a, .public-collection-link { color: #b8cafa; font-size: 14px; text-decoration: none; padding: 12px 16px; border: 1px solid #ffffff24; border-radius: 12px; }
+.watch-later-sections a[aria-current] { color: white; background: #ffffff0d; }
+.watch-later-sections a:hover, .public-collection-link:hover { border-color: #b8cafa; }
+#login-overlay .public-collection-link { display: block; margin: 24px 16px 0; text-align: center; }
+.private-list-note { color: #c0c2d4; margin: 0 0 24px; }
+
 /* 
     Futuristic Antigravity Glassmorphism Design System
     Created for: Watch Later Web App

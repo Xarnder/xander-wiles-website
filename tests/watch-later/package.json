@@ -1,0 +1,14 @@
+{
+  "name": "watch-later-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules --test model.test.mjs ui.test.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-watch-later --config ../../pages/Watch-Later/firebase.json 'node --test rules.test.mjs'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0",
+    "jsdom": "^26.1.0"
+  }
+}

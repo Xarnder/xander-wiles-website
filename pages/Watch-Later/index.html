@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watch Later">
-    <title>Watch Later</title>
+    <title>Private watch list · Watch Later</title>
 
     <!-- Favicon Links -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -50,11 +50,13 @@
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
         <h1>Watch Later</h1>
+        <p class="private-list-note">Your private watch list</p>
         <button id="google-login-btn">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24"
                 alt="G">
             Login with Google
         </button>
+        <a class="public-collection-link" href="recommendations.html">Explore Xander’s public recommendations ↗</a>
 
 
 
@@ -93,6 +95,11 @@
                 </div>
             </div>
         </header>
+
+        <nav class="watch-later-sections" aria-label="Watch Later sections">
+            <a href="./" aria-current="page">Private watch list</a>
+            <a href="recommendations.html">Public recommendations ↗</a>
+        </nav>
 
         <div class="mode-container hidden" id="mode-selector">
             <div class="mode-toggle">
@@ -614,7 +621,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=7"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=8"></script>
 </body>
 
 </html>
