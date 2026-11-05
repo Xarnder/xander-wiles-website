@@ -1,3 +1,4 @@
+import { wallCornersForPlacement } from './wallCornerSnap';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -227,7 +228,7 @@ export class RoofTool implements BuildTool {
 		if (event.code === 'KeyB') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
-				? this.wallCornersOnCurrentLevel(foundationId).length > 0
+				? this.wallCornersForPlacement(foundationId).length > 0
 				: false;
 			this.snapMode = cycleSnapMode(this.snapMode, this.points.length, wallCornersAvailable);
 			this.refreshVisuals();
@@ -237,24 +238,14 @@ export class RoofTool implements BuildTool {
 		if (event.code === 'Backspace') this.undoLastPoint();
 	};
 
-	/** Every wall-endpoint/wall-path-point on `foundationId`, on the SAME level this roof is being drawn on — mirrors SlabToolBase's identical method (see its doc comment). */
-	private wallCornersOnCurrentLevel(foundationId: string): BuildingGridPoint[] {
-		const levelBaseY = this.levelManager.getOrCreateLevel(
+	/** Corners of the wall storey directly beneath the placement plane. */
+	private wallCornersForPlacement(foundationId: string): BuildingGridPoint[] {
+		return wallCornersForPlacement(
+			this.buildingManager,
+			this.levelManager,
 			foundationId,
-			this.levelManager.getCurrentLevelIndex(foundationId)
-		).baseY;
-		const building = this.buildingManager.getBuildingForFoundation(foundationId);
-		const corners: BuildingGridPoint[] = [];
-		for (const wall of building.walls) {
-			if (wall.baseY !== levelBaseY) continue;
-			corners.push({ gridX: wall.startGridX, gridZ: wall.startGridZ });
-			corners.push({ gridX: wall.endGridX, gridZ: wall.endGridZ });
-		}
-		for (const path of building.wallPaths) {
-			if (path.baseY !== levelBaseY) continue;
-			for (const point of path.points) corners.push({ gridX: point.gridX, gridZ: point.gridZ });
-		}
-		return corners;
+			this.defaultBaseY(foundationId)
+		);
 	}
 
 	constructor(options: RoofToolOptions) {
@@ -406,7 +397,12 @@ export class RoofTool implements BuildTool {
 		if (this.snapMode === 'wall-corners') {
 			gridPoint = snapToNearestCorner(
 				hit.gridPoint,
-				this.wallCornersOnCurrentLevel(hit.foundationId)
+				this.wallCornersForPlacement(hit.foundationId),
+				this.footprintMode === 'polygon' &&
+					this.state === 'drawing' &&
+					hit.foundationId === this.activeFoundationId
+					? this.points
+					: []
 			);
 		} else if (
 			this.footprintMode === 'polygon' &&

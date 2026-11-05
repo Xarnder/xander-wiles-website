@@ -1,3 +1,5 @@
+import { wallCornersForPlacement } from './wallCornerSnap';
+import { snapToNearestCorner } from './polygonDrawSnap';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -126,18 +128,13 @@ export class PolygonWallTool implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/**
-	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Reset to `'axis'` every time the tool is
-	 * selected (`activate()`). After three confirmed points, `'axis'` is auto-promoted to
-	 * `'axis-inline'` so later corners can flush with earlier ones; a `B` press to any other mode
-	 * is left alone.
-	 */
-	private snapMode: SnapMode = 'axis';
+	/** Wall corner snap is restored whenever the tool is selected; B cycles modes. */
+	private snapMode: SnapMode = 'wall-corners';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
 		if (event.code === 'KeyB') {
-			this.snapMode = cycleSnapMode(this.snapMode, this.points.length);
+			this.snapMode = cycleSnapMode(this.snapMode, this.points.length, true);
 			this.refreshVisuals();
 			return;
 		}
@@ -223,7 +220,7 @@ export class PolygonWallTool implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
-		this.snapMode = 'axis';
+		this.snapMode = 'wall-corners';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.refreshVisuals();
@@ -269,9 +266,17 @@ export class PolygonWallTool implements BuildTool {
 		// Only snap against the in-progress path's own points, on its own foundation — a hover on a
 		// different foundation (rejected on confirm anyway) has no meaningful "last point" to lock to.
 		const gridPoint =
-			this.state === 'drawing' && hit.foundationId === this.activeFoundationId
-				? snapDrawingPoint(this.points, hit.gridPoint, this.snapMode)
-				: hit.gridPoint;
+			this.snapMode === 'wall-corners'
+				? snapToNearestCorner(
+						hit.gridPoint,
+						wallCornersForPlacement(this.buildingManager, this.levelManager, hit.foundationId),
+						this.state === 'drawing' && hit.foundationId === this.activeFoundationId
+							? this.points
+							: []
+					)
+				: this.state === 'drawing' && hit.foundationId === this.activeFoundationId
+					? snapDrawingPoint(this.points, hit.gridPoint, this.snapMode)
+					: hit.gridPoint;
 
 		if (
 			this.hoverTarget &&

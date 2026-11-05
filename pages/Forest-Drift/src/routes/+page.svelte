@@ -481,7 +481,7 @@
 	const SNAP_MODE_TEXT: Record<'axis' | 'axis-inline' | 'wall-corners', string> = {
 		axis: 'AXIS SNAP',
 		'axis-inline': 'AXIS + INLINE SNAP',
-		'wall-corners': 'WALL CORNER SNAP'
+		'wall-corners': 'WALL CORNER + AXIS SNAP'
 	};
 
 	/** Game shortcuts must not fire while the player is typing — into a world-name field, the paint palette's colour input, or anything else focusable. */
@@ -1906,8 +1906,8 @@
 							<dt>B</dt>
 							<dd>
 								Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
-								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (Ceiling/Floor/Roof only)
-								snaps to the room's wall corners below.
+								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (default)
+								snaps walls to existing corners and ceilings/floors/roofs to wall corners below.
 							</dd>
 							<dt>E</dt>
 							<dd>

@@ -1,3 +1,5 @@
+import { wallCornersForPlacement } from './wallCornerSnap';
+import { snapToNearestCorner } from './polygonDrawSnap';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -112,19 +114,12 @@ export class WallTool implements BuildTool {
 	private firstPoint: HoverTarget | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/**
-	 * Cycled by pressing `B` — see polygonDrawSnap.ts. Defaults to `'axis-inline'` every time the
-	 * tool is activated (see `activate()`) rather than persisting the player's last choice, per the
-	 * README's "Draw-snap" section; a straight wall never accumulates the 3+ points `'axis-inline'`
-	 * needs to differ from plain `'axis'`, so in practice this just starts the player on axis-locked
-	 * placement, one `B` press away from `'off'` (`cycleSnapMode('axis-inline', ...)` goes straight
-	 * to `'off'` since `wallCornersAvailable` is never passed here).
-	 */
-	private snapMode: SnapMode = 'axis-inline';
+	/** Wall corner snap is restored whenever the tool is selected; B cycles modes. */
+	private snapMode: SnapMode = 'wall-corners';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.code !== 'KeyB') return;
-		this.snapMode = cycleSnapMode(this.snapMode, this.firstPoint ? 1 : 0);
+		this.snapMode = cycleSnapMode(this.snapMode, this.firstPoint ? 1 : 0, true);
 		this.refreshVisuals();
 	};
 
@@ -189,7 +184,7 @@ export class WallTool implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
-		this.snapMode = 'axis-inline';
+		this.snapMode = 'wall-corners';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.refreshVisuals();
@@ -225,11 +220,19 @@ export class WallTool implements BuildTool {
 
 		const { foundationId } = hit;
 		const gridPoint =
-			this.state === 'first-point-selected' &&
-			this.firstPoint &&
-			foundationId === this.firstPoint.foundationId
-				? snapDrawingPoint([this.firstPoint.point], hit.gridPoint, this.snapMode)
-				: hit.gridPoint;
+			this.snapMode === 'wall-corners'
+				? snapToNearestCorner(
+						hit.gridPoint,
+						wallCornersForPlacement(this.buildingManager, this.levelManager, hit.foundationId),
+						this.firstPoint && hit.foundationId === this.firstPoint.foundationId
+							? [this.firstPoint.point]
+							: []
+					)
+				: this.state === 'first-point-selected' &&
+					  this.firstPoint &&
+					  foundationId === this.firstPoint.foundationId
+					? snapDrawingPoint([this.firstPoint.point], hit.gridPoint, this.snapMode)
+					: hit.gridPoint;
 
 		if (
 			this.target &&

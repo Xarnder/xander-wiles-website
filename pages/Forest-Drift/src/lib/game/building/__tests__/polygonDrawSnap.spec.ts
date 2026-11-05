@@ -165,7 +165,7 @@ describe('snapModeLabel', () => {
 		expect(snapModeLabel('off')).toBeNull();
 		expect(snapModeLabel('axis')).toBe('Snap: Axis');
 		expect(snapModeLabel('axis-inline')).toBe('Snap: Axis + Inline');
-		expect(snapModeLabel('wall-corners')).toBe('Snap: Wall Corners');
+		expect(snapModeLabel('wall-corners')).toBe('Snap: Wall Corners + Axis');
 	});
 });
 
@@ -202,5 +202,33 @@ describe('snapToNearestCorner', () => {
 	it('snaps exactly at the tolerance boundary (inclusive)', () => {
 		// Tolerance is 10 cells; a corner exactly 10 away along one axis should still snap.
 		expect(snapToNearestCorner(gp(0, 0), [gp(10, 0)])).toEqual(gp(10, 0));
+	});
+});
+
+describe('wall corner and axis snapping together', () => {
+	it('axis locks when no wall corner is nearby', () => {
+		expect(snapToNearestCorner(gp(30, 4), [gp(100, 100)], [gp(0, 0)])).toEqual(gp(30, 0));
+	});
+	it('lands exactly on nearby wall corners ahead of the axis constraint', () => {
+		expect(snapToNearestCorner(gp(30, 4), [gp(30, 5)], [gp(0, 0)])).toEqual(gp(30, 5));
+	});
+	it('keeps the first point free when there are no nearby corners', () => {
+		expect(snapToNearestCorner(gp(30, 4), [], [])).toEqual(gp(30, 4));
+	});
+});
+
+describe('combined corner snap after the third confirmed point', () => {
+	const points = [gp(0, 0), gp(30, 0), gp(30, 30)];
+	it('aligns the fourth point with an earlier X while retaining the last point axis', () => {
+		expect(snapToNearestCorner(gp(3, 28), [], points)).toEqual(gp(0, 30));
+	});
+	it('aligns with an earlier Z when the segment runs vertically', () => {
+		expect(snapToNearestCorner(gp(28, 3), [], points)).toEqual(gp(30, 0));
+	});
+	it('keeps axis-only behavior before three points are confirmed', () => {
+		expect(snapToNearestCorner(gp(3, 28), [], [gp(0, 0), gp(30, 30)])).toEqual(gp(3, 30));
+	});
+	it('still prioritizes nearby wall corners over inline and axis alignment', () => {
+		expect(snapToNearestCorner(gp(3, 28), [gp(4, 29)], points)).toEqual(gp(4, 29));
 	});
 });

@@ -749,27 +749,22 @@ raycasting or rendering. Pressing `B` cycles
   to that value instead of the raw one. This is what lets the last wall of a room close flush with
   the very first corner, or a new segment line up with one built several points earlier, without
   needing pixel-perfect aiming.
-- **`'wall-corners'`** — slab tools (Ceiling/Floor/Roof) only, and only offered when at least one
-  wall corner exists to snap to (`cycleSnapMode`'s `wallCornersAvailable` parameter — Wall/Polygon
-  Wall Tool never pass it, since a wall has no "wall below itself"). Snaps the hovered point to the
-  nearest corner of a standalone wall or wall-path on the SAME level (`SlabToolBase.wallCornersOnCurrentLevel`,
-  comparing each wall's frozen `baseY` against the current level's own `baseY`), via
-  `snapToNearestCorner`'s plain nearest-point search (`WALL_CORNER_SNAP_TOLERANCE_CELLS`, a bit more
-  generous than the inline tolerance — aiming at an invisible plane above a room is naturally less
-  precise than aiming at the ground below). Unlike the other two modes, this applies even to the
-  very FIRST point of a polygon, not just once a "last point" exists to lock an axis against — since
-  tracing a room's ceiling should be able to start exactly on that room's own corner. This exists
-  because drawing a slab now targets the plane at the room's actual ceiling height rather than the
-  ground (see "Targeting elevated building levels" below), so lining a slab's corners up with the
-  walls it sits above is otherwise hard to eyeball precisely.
+- **`'wall-corners'`** — snaps to the nearest standalone-wall endpoint or continuous-wall
+  vertex within `WALL_CORNER_SNAP_TOLERANCE_CELLS`, including the first placement point.
+  Away from wall corners, it also locks drawn segments to an axis from the last confirmed point.
+  After three confirmed points, it additionally aligns inline with earlier vertices.
+  Nearby wall corners take priority. Roof rectangle diagonals remain free to define an area.
+  Walls use corners on their current storey. Ceiling, Floor and Roof use the storey directly
+  beneath their actual placement plane, including when a custom height puts the plane at the
+  base of the selected storey. `wallCornersForPlacement` scopes the lookup to the targeted
+  foundation; an empty storey does not fall back to unrelated walls further below.
 
-### Defaults on entry, not "off"
+### Defaults on entry
 
-`WallTool` defaults to `'axis-inline'`. Ceiling and Floor (`SlabToolBase`) default to `'axis'`
-every time they are selected, promoting to `'axis-inline'` after the third confirmed point when
-Axis remains selected, just like Polygon Wall. `B` cycles the available snap modes, including wall-corner snapping
-when walls are available and Off. Re-selecting the tool restores its default rather than remembering
-the last choice. `PolygonWallTool` starts at `'off'`.
+Wall, Continuous Wall, Ceiling, Floor and Roof start in `'wall-corners'` every time they are
+selected. `B` cycles the available snap modes, including Off. In the roof tool, `B` first switches
+rectangle drawing to polygon drawing. Re-selecting a tool restores its default. Choosing Axis
+in a polygon tool still promotes to Axis + Inline after the third confirmed point.
 
 `snapDrawingPoint(points, raw, mode)` is the one pure function every tool calls from inside its own
 `update()`, right after the shared raycast/grid-snap resolves a raw hover point and before that

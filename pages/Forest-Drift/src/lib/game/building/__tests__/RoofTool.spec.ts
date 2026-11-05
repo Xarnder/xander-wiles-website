@@ -39,6 +39,8 @@ function harness(type = createDefaultBuildingSettings().defaultRoofType) {
 	const levelManager = new BuildingLevelManager(settings);
 	const addRoof = vi.fn().mockReturnValue({ valid: true, value: { id: 'roof1' } });
 	const record = vi.fn();
+	const building = { walls: [], wallPaths: [] };
+	const getBuildingForFoundation = vi.fn().mockReturnValue(building);
 	let hud: BuildUiState | null = null;
 	const tool = new RoofTool({
 		scene: new THREE.Scene(),
@@ -49,7 +51,7 @@ function harness(type = createDefaultBuildingSettings().defaultRoofType) {
 		terrainSettings: createDefaultTerrainSettings(),
 		buildingManager: {
 			addRoof,
-			getBuildingForFoundation: () => ({ walls: [], wallPaths: [] })
+			getBuildingForFoundation
 		} as unknown as BuildingManager,
 		undoManager: { record } as unknown as BuildUndoManager,
 		onHudChange: (next) => {
@@ -72,10 +74,51 @@ function harness(type = createDefaultBuildingSettings().defaultRoofType) {
 	const key = (code: string, shiftKey = false) => {
 		window.dispatchEvent(Object.assign(new Event('keydown'), { code, shiftKey }));
 	};
-	return { tool, settings, addRoof, record, hover, click, key, hud: () => hud! };
+	return {
+		tool,
+		settings,
+		addRoof,
+		record,
+		hover,
+		click,
+		key,
+		levelManager,
+		getBuildingForFoundation,
+		hud: () => hud!
+	};
 }
 
 describe('RoofTool footprint placement', () => {
+	it('defaults to wall corners and snaps to the storey below a custom roof plane', () => {
+		const h = harness();
+		h.levelManager.setCurrentLevelIndex('f1', 1);
+		const upper = h.levelManager.getOrCreateLevel('f1', 1);
+		h.settings.slabPlacementFollowWalls = false;
+		h.settings.slabPlacementHeight = 0;
+		h.getBuildingForFoundation.mockReturnValue({
+			walls: [
+				{ baseY: 0, startGridX: 2, startGridZ: 3, endGridX: 18, endGridZ: 23 },
+				{ baseY: upper.baseY, startGridX: 3, startGridZ: 4, endGridX: 19, endGridZ: 24 }
+			],
+			wallPaths: []
+		});
+		expect(h.hud().snapMode).toBe('wall-corners');
+		h.click(3, 4);
+		h.click(19, 24);
+		h.tool.onPrimaryAction();
+		expect(h.addRoof).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseY: upper.baseY,
+				points: [
+					{ gridX: 2, gridZ: 3, foundationId: 'f1' },
+					{ gridX: 18, gridZ: 3, foundationId: 'f1' },
+					{ gridX: 18, gridZ: 23, foundationId: 'f1' },
+					{ gridX: 2, gridZ: 23, foundationId: 'f1' }
+				]
+			})
+		);
+	});
+
 	it.each(ROOF_TYPE_ORDER)(
 		'places a %s roof from two opposite corners, then adjusts and confirms',
 		(type) => {
@@ -145,6 +188,7 @@ describe('RoofTool footprint placement', () => {
 			const h = harness('flat');
 			h.click(2, 3);
 			h.key(switchKey);
+			h.key('KeyB'); // Free drawing for this deliberately diagonal polygon.
 			h.click(18, 3);
 			h.click(10, 23);
 			expect(h.hud().hintLines).not.toContain('Click: Place roof');

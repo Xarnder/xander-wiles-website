@@ -1,3 +1,4 @@
+import { wallCornersForPlacement } from './wallCornerSnap';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -128,15 +129,15 @@ export class SlabToolBase implements BuildTool {
 	private lastFoundationId: string | null = null;
 	private readonly activeLevelWatch = createActiveLevelWatch();
 
-	/** Axis snap is restored on selection and promotes to Axis + Inline after three points; B cycles modes. */
-	private snapMode: SnapMode = 'axis';
+	/** Wall corner snap is restored on selection; B cycles modes. */
+	private snapMode: SnapMode = 'wall-corners';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
 		if (event.code === 'KeyB') {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
-				? this.wallCornersOnCurrentLevel(foundationId).length > 0
+				? this.wallCornersForPlacement(foundationId).length > 0
 				: false;
 			this.snapMode = cycleSnapMode(this.snapMode, this.points.length, wallCornersAvailable);
 			this.refreshVisuals();
@@ -146,29 +147,14 @@ export class SlabToolBase implements BuildTool {
 		if (event.code === 'Backspace') this.undoLastPoint();
 	};
 
-	/**
-	 * Every wall-endpoint/wall-path-point on `foundationId`, on the SAME level this slab is being
-	 * drawn on — i.e. the corners of the room this ceiling/floor/roof sits above. A wall's `baseY`
-	 * is frozen from `level.baseY` at the moment it's built (see WallTool/PolygonWallTool), so
-	 * comparing against the current level's own `baseY` is an exact match, not a tolerance check.
-	 */
-	private wallCornersOnCurrentLevel(foundationId: string): BuildingGridPoint[] {
-		const levelBaseY = this.levelManager.getOrCreateLevel(
+	/** Corners of the wall storey directly beneath the placement plane. */
+	private wallCornersForPlacement(foundationId: string): BuildingGridPoint[] {
+		return wallCornersForPlacement(
+			this.buildingManager,
+			this.levelManager,
 			foundationId,
-			this.levelManager.getCurrentLevelIndex(foundationId)
-		).baseY;
-		const building = this.buildingManager.getBuildingForFoundation(foundationId);
-		const corners: BuildingGridPoint[] = [];
-		for (const wall of building.walls) {
-			if (wall.baseY !== levelBaseY) continue;
-			corners.push({ gridX: wall.startGridX, gridZ: wall.startGridZ });
-			corners.push({ gridX: wall.endGridX, gridZ: wall.endGridZ });
-		}
-		for (const path of building.wallPaths) {
-			if (path.baseY !== levelBaseY) continue;
-			for (const point of path.points) corners.push({ gridX: point.gridX, gridZ: point.gridZ });
-		}
-		return corners;
+			this.defaultLocalY(foundationId)
+		);
 	}
 
 	constructor(
@@ -267,7 +253,7 @@ export class SlabToolBase implements BuildTool {
 		this.lastGridX = null;
 		this.lastGridZ = null;
 		this.lastFoundationId = null;
-		this.snapMode = 'axis';
+		this.snapMode = 'wall-corners';
 		this.scene.add(this.overlayGroup);
 		window.addEventListener('keydown', this.handleKeyDown);
 		this.refreshVisuals();
@@ -327,7 +313,8 @@ export class SlabToolBase implements BuildTool {
 		if (this.snapMode === 'wall-corners') {
 			gridPoint = snapToNearestCorner(
 				hit.gridPoint,
-				this.wallCornersOnCurrentLevel(hit.foundationId)
+				this.wallCornersForPlacement(hit.foundationId),
+				this.state === 'drawing' && hit.foundationId === this.activeFoundationId ? this.points : []
 			);
 		} else if (this.state === 'drawing' && hit.foundationId === this.activeFoundationId) {
 			gridPoint = snapDrawingPoint(this.points, hit.gridPoint, this.snapMode);

@@ -18,12 +18,9 @@ import type { BuildingGridPoint } from './FoundationLocalMath';
  *   one built several segments ago. Only meaningfully different from `'axis'` once at least 3
  *   points have already been confirmed (an "earlier point" to align with has to exist at all,
  *   distinct from the immediately-previous point the axis constraint already locks against).
- * - `'wall-corners'` — snaps to the nearest corner of a wall/wall-path on the SAME level, so a
- *   Ceiling/Floor/Roof polygon can be traced exactly over the room it covers instead of eyeballing
- *   where a wall corner sits on an otherwise-invisible plane above it (see
- *   `snapToNearestCorner` below). Only meaningful for the slab tools — Wall/Polygon Wall Tool never
- *   offer it (see `cycleSnapMode`'s `wallCornersAvailable` parameter) since a wall has no "wall
- *   below itself" to align with.
+ * - `'wall-corners'` — snaps to existing wall endpoints and wall-path vertices. Walls use their
+ *   own storey; slabs and roofs use the storey directly beneath their placement plane.
+ *   See `snapToNearestCorner` and `wallCornersForPlacement`.
  */
 export type SnapMode = 'off' | 'axis' | 'axis-inline' | 'wall-corners';
 
@@ -128,14 +125,14 @@ function closestMatchingCoordinate(
 }
 
 /**
- * The corner in `corners` closest to `raw` (Euclidean distance in grid cells), or `raw` unchanged
- * if none fall within `WALL_CORNER_SNAP_TOLERANCE_CELLS` — used by the slab tools' `'wall-corners'`
- * mode. Kept as a plain nearest-point search (no axis constraint) since a wall corner is a specific
- * point to land on exactly, not a direction to align with.
+ * Snaps to the nearest wall corner within tolerance, preserving its exact position.
+ * Otherwise applies axis snapping, adding inline alignment with earlier vertices after
+ * three confirmed points. With no confirmed points the raw position stays unchanged.
  */
 export function snapToNearestCorner(
 	raw: BuildingGridPoint,
-	corners: readonly BuildingGridPoint[]
+	corners: readonly BuildingGridPoint[],
+	points: readonly BuildingGridPoint[] = []
 ): BuildingGridPoint {
 	let best: BuildingGridPoint | null = null;
 	let bestDistanceSquared = WALL_CORNER_SNAP_TOLERANCE_CELLS * WALL_CORNER_SNAP_TOLERANCE_CELLS;
@@ -148,7 +145,7 @@ export function snapToNearestCorner(
 			bestDistanceSquared = distanceSquared;
 		}
 	}
-	return best ?? raw;
+	return best ?? snapDrawingPoint(points, raw, points.length >= 3 ? 'axis-inline' : 'axis');
 }
 
 /** Short label for the current mode, for the build-tool HUD. */
@@ -161,6 +158,6 @@ export function snapModeLabel(mode: SnapMode): string | null {
 		case 'axis-inline':
 			return 'Snap: Axis + Inline';
 		case 'wall-corners':
-			return 'Snap: Wall Corners';
+			return 'Snap: Wall Corners + Axis';
 	}
 }
