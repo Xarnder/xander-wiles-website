@@ -24,10 +24,16 @@ describe('speech identities and caption contracts', () => {
 			for (const lesson of lessons(touch)) {
 				const parts = phrases(lesson.text);
 				expect(parts.join(' ')).toBe(lesson.text);
-				expect(parts.every((p) => p.length <= 48)).toBe(true);
+				expect(parts.every((p) => p.length <= 600)).toBe(true);
 			}
 		expect(() => phrases('x'.repeat(1201))).toThrow();
 		expect(() => phrases('')).toThrow();
+		expect(
+			phrases('Click the world and move your mouse to look around. Aim with the centre crosshair.')
+		).toEqual([
+			'Click the world and move your mouse to look around.',
+			'Aim with the centre crosshair.'
+		]);
 	});
 	it('isolates synthesis settings while permitting different speakers to reuse identical audio', () => {
 		const text = 'Hello.';

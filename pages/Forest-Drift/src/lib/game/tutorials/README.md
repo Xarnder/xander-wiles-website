@@ -24,7 +24,7 @@ while preserving current Phonon clips. Existing users prepare the new voice once
 - `touch` selects mobile instructions. `select`, `place`, `customise`, and `variant`
   supply the correct wording for each input method. Numbers are spelled out for
   the voice; the corresponding digit key selects that hotbar slot.
-- Keep sentences short. The speech system divides text into synchronized phrase
+- Keep sentences short. The speech system sends complete sentences to Phonon and synchronizes their
   clips automatically; do not write a separate subtitle track or record audio.
 - After editing, use F8 for automatic preparation and playback, or open Speech
   options with F6 and use Prepare voice. Auto mode starts after the first
@@ -52,7 +52,7 @@ FOREST_SPEECH_POINTERLOCK=1 FOREST_DRIFT_GPU=1 npx playwright test tests/speechP
 FOREST_SPEECH_FULL=1 FOREST_DRIFT_GPU=1 npx playwright test tests/speechAutoStart.e2e.ts --project=chromium --grep 'entire tutorial'
 ```
 
-The model tests generate all 218 distinct phrases from both the desktop and touch
+The model tests generate all 187 distinct sentences from both the desktop and touch
 scripts using the production worker in Chromium, WebKit and Firefox. They check
 finite, non-silent 24 kHz audio within the clip budget, then reload with external
 network requests blocked and check deterministic regeneration from saved assets.

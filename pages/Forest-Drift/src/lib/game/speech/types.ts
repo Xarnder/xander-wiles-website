@@ -12,7 +12,7 @@ export const MODEL_FILES = [
 export const SYNTHESIS = { temperature: 0.3, seed: '4242424242424242' } as const;
 const CLIP_IDENTITY = [
 	1,
-	'segments-2',
+	'sentences-3',
 	'phonon-tts-0.6.0',
 	MODEL,
 	REVISION,
@@ -21,8 +21,8 @@ const CLIP_IDENTITY = [
 ];
 export const CLIP_KEY_PREFIX = JSON.stringify(CLIP_IDENTITY).slice(0, -1) + ',';
 export const LIMITS = {
-	clipSeconds: 18,
-	phraseCharacters: 48,
+	clipSeconds: 45,
+	phraseCharacters: 600,
 	requestCharacters: 1200,
 	memoryBytes: 4 * 1024 * 1024,
 	memoryClips: 64,
@@ -87,19 +87,10 @@ export function phrases(text: string): string[] {
 	const normalized = text.replace(/\s+/g, ' ').trim();
 	if (!normalized || normalized.length > LIMITS.requestCharacters)
 		throw new Error('Speech text is empty or too long.');
-	const result: string[] = [];
-	for (const sentence of normalized.match(/[^.!?]+[.!?]*/g) ?? []) {
-		let phrase = '';
-		for (const word of sentence.trim().split(' ')) {
-			if (word.length > LIMITS.phraseCharacters) throw new Error('Speech word is too long.');
-			if ((phrase + ' ' + word).trim().length > LIMITS.phraseCharacters) {
-				result.push(phrase);
-				phrase = '';
-			}
-			phrase = phrase ? `${phrase} ${word}` : word;
-		}
-		if (phrase) result.push(phrase);
-	}
+	// Keep sentence endings with their words; never cut narration at a character boundary.
+	const result = (normalized.match(/[^.!?]+[.!?]*/g) ?? []).map((sentence) => sentence.trim());
+	if (result.some((sentence) => sentence.length > LIMITS.phraseCharacters))
+		throw new Error('Speech sentence is too long.');
 	if (!result.length) throw new Error('Speech text contains no words.');
 	return result;
 }

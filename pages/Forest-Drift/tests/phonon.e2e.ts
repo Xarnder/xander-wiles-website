@@ -116,7 +116,7 @@ test('Phonon generates every desktop and touch phrase locally, including after a
 		expect(clip.peak, clip.text).toBeGreaterThan(0.001);
 		expect(clip.rms, clip.text).toBeGreaterThan(0.0001);
 		expect(clip.seconds, clip.text).toBeGreaterThan(0.1);
-		expect(clip.seconds, clip.text).toBeLessThanOrEqual(18);
+		expect(clip.seconds, clip.text).toBeLessThanOrEqual(45);
 	}
 	expect(external.length).toBeGreaterThan(0);
 	// All external traffic is a model-file GET, never text/audio sent for remote synthesis.
