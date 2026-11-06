@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	import CountrysideBackground from './CountrysideBackground.svelte';
 	import { ownerInviteFor, type OnlineWorldEntry } from '#lib/game/net/mpConfig';
 	import { generateWorldSeed } from '#lib/game/world/seedGenerator';
@@ -172,9 +173,7 @@
 		</div>
 		<header class="worlds-header">
 			<div class="start-brand">
-				<div class="worlds-logo" aria-label="Forest Drift">
-					<span>Forest</span><span>Drift</span>
-				</div>
+				<div class="worlds-logo"><ForestDriftLogo eager /></div>
 				<p class="start-tagline">Explore. Build. Make it yours.</p>
 			</div>
 			<div class="start-welcome">

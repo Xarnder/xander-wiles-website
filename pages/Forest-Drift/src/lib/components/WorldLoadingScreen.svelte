@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import preview from '#lib/assets/menu/countryside-preview.webp';
 	import fullImage from '#lib/assets/menu/countryside.png';
+	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	let { progress = 0, label = 'Opening your world…' }: { progress: number; label: string } =
 		$props();
 	let fullReady = $state(false);
@@ -43,33 +44,7 @@
 	</div>
 	<div class="shade" aria-hidden="true"></div>
 	<header class="brand">
-		<svg class="sprig" viewBox="0 0 90 55" aria-hidden="true"
-			><path
-				d="M43 53Q45 23 69 3Q78 29 43 53M43 48Q13 41 15 14Q42 18 43 48"
-				fill="#85943d"
-				stroke="#d0bf67"
-			/><path d="M43 52L68 6M43 48L18 18" fill="none" stroke="#daca7a" /></svg
-		>
-		<h1 aria-label="Forest Drift"><span>Forest</span><span>Drift</span></h1>
-		<svg class="crest" viewBox="0 0 300 100" aria-hidden="true"
-			><path
-				d="M30 82L100 25 125 48 160 5 225 75 245 52 280 84Z"
-				fill="#b9a17b"
-				stroke="#f6e3ac"
-			/><path
-				d="M100 25L87 64 110 49 125 76 160 5 151 45 168 33 194 67 179 24 225 75"
-				fill="#f4e5c3"
-			/>{#each [30, 55, 80, 118, 205, 235, 265] as x, i (x)}<path
-					d="M0 0L-10 17H-5L-15 30H-8L-20 44H-3V50H3V44H20L8 30H15L5 17H10Z"
-					transform={`translate(${x} ${42 + (i % 3) * 6}) scale(.65)`}
-					fill="#ddc89d"
-				/>{/each}<path
-				d="M5 91H135L150 98 165 91H295"
-				fill="none"
-				stroke="#e5b955"
-				stroke-width="2"
-			/></svg
-		>
+		<h1><ForestDriftLogo eager /></h1>
 	</header>
 	<section class="loading-status" aria-label="World loading">
 		<div class="bar-frame">
@@ -140,45 +115,12 @@
 		top: clamp(22px, 5vh, 70px);
 		left: 50%;
 		transform: translateX(-50%);
-		width: min(430px, 60vw);
-		text-align: center;
-		filter: drop-shadow(0 5px 5px #101c22aa);
-	}
-	.sprig {
-		width: 68px;
-		height: 42px;
-		margin-bottom: -18px;
-		transform: translateX(38px);
+		/* The woodland emblem; short screens shrink it so the loading bar keeps its room. */
+		width: min(520px, 60vw, 63vh);
 	}
 	h1 {
 		margin: 0;
-		font-weight: 700;
-		text-transform: uppercase;
-		line-height: 0.82;
-		letter-spacing: -0.045em;
-		text-shadow:
-			0 2px #876435,
-			0 4px #513b23,
-			0 7px 14px #14212c;
-	}
-	h1 span {
-		display: block;
-		font-size: clamp(48px, 7.8vw, 108px);
-	}
-	h1 span + span {
-		font-size: clamp(44px, 7vw, 96px);
-		color: #f9c653;
-		margin-top: 10px;
-		text-shadow:
-			0 2px #b47a21,
-			0 4px #684115,
-			0 7px 14px #14212c;
-	}
-	.crest {
-		display: block;
-		width: 67%;
-		height: auto;
-		margin: 20px auto 0;
+		line-height: 0;
 	}
 	.loading-status {
 		position: absolute;
@@ -312,13 +254,7 @@
 	@media (max-width: 600px) {
 		.brand {
 			top: 8vh;
-			width: 80vw;
-		}
-		.brand h1 span {
-			font-size: clamp(48px, 15vw, 84px);
-		}
-		.brand h1 span + span {
-			font-size: clamp(44px, 13vw, 76px);
+			width: min(86vw, 420px);
 		}
 		.loading-status {
 			width: 80vw;
@@ -326,9 +262,6 @@
 		}
 		.landscape img {
 			object-position: 56% center;
-		}
-		.crest {
-			margin-top: 18px;
 		}
 		.leaf {
 			font-size: 48px;
@@ -343,22 +276,7 @@
 	@media (max-height: 500px) {
 		.brand {
 			top: 14px;
-			width: 230px;
-		}
-		.sprig {
-			height: 25px;
-			margin-bottom: -12px;
-		}
-		.brand h1 span {
-			font-size: 52px;
-		}
-		.brand h1 span + span {
-			font-size: 46px;
-			margin-top: 5px;
-		}
-		.crest {
-			width: 50%;
-			margin-top: 10px;
+			width: 260px;
 		}
 		.loading-status {
 			bottom: 16px;

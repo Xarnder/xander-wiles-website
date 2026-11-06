@@ -1,5 +1,5 @@
 <script lang="ts">
-	import titleMark from '#lib/assets/forest-drift-title.svg';
+	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	import type { SaveStatus } from '#lib/game/world/WorldTypes';
 	import type { WaypointView, WaypointVisibility } from '#lib/game/waypoints/WaypointSystem';
 	import { MAX_PERSONAL_WAYPOINTS, MAX_WAYPOINT_NAME } from '#lib/game/waypoints/WaypointSystem';
@@ -173,7 +173,7 @@
 <div data-ui-backdrop data-pause-backdrop class="pause-overlay" data-testid="pause-menu">
 	<div data-ui-surface="panel" data-pause-panel class="pause-panel">
 		{#if panel === 'root'}
-			<img class="pause-logo" src={titleMark} alt="Forest Drift" width="625" height="362" />
+			<div class="pause-logo"><ForestDriftLogo /></div>
 			<p class="pause-eyebrow">TAKE A BREATHER</p>
 			<h2>Paused</h2>
 			<p class="world-line" data-testid="pause-world-name">{worldName}</p>
@@ -459,8 +459,8 @@
 
 <style>
 	.pause-logo {
-		width: 132px;
-		height: auto;
+		width: 230px;
+		max-width: 100%;
 		margin: 0 auto;
 	}
 	.pause-eyebrow {

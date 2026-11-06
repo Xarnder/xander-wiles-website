@@ -4,6 +4,7 @@
 	import fullImage from '#lib/assets/menu/countryside.png';
 	import SettingsMenu from './SettingsMenu.svelte';
 	import HelpCredits from './HelpCredits.svelte';
+	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	let helpOpen = $state(false);
 	import { personalSettingsCatalog } from '#lib/game/settings/personalSettingsCatalog';
 
@@ -82,31 +83,7 @@
 		<div class="frame" aria-hidden="true"></div>
 		<div class="panel-content">
 			<header class="brand">
-				<svg class="sprig" viewBox="0 0 90 55" aria-hidden="true"
-					><path
-						d="M43 53Q45 23 69 3Q78 29 43 53M43 48Q13 41 15 14Q42 18 43 48"
-						fill="#6e7e32"
-						stroke="#a3a451"
-					/><path d="M43 52L68 6M43 48L18 18" fill="none" stroke="#cfbf73" /></svg
-				>
-				<h1><span>Forest</span><span>Drift</span></h1>
-				<svg class="crest" viewBox="0 0 300 100" aria-hidden="true">
-					<path
-						d="M43 82L102 27 125 48 160 5 219 70 240 50 271 84Z"
-						fill="#67543b"
-						stroke="#ac8650"
-					/>
-					<path
-						d="M102 27L89 66 109 51 125 76 160 5 152 45 168 33 192 66 179 24 219 70"
-						fill="#30281d"
-					/>
-					{#each [30, 52, 76, 115, 142, 202, 230, 259] as x, i}<path
-							d="M0 0L-9 17H-5L-14 29H-8L-19 43H-3V49H3V43H19L8 29H14L5 17H9Z"
-							transform={`translate(${x} ${38 + (i % 3) * 8}) scale(${0.65 + (i % 3) * 0.17})`}
-							fill={i % 2 ? '#30291b' : '#8b7042'}
-						/>{/each}
-					<path d="M6 92Q80 84 145 94Q220 83 294 90" fill="none" stroke="#a67a37" />
-				</svg>
+				<h1><ForestDriftLogo eager /></h1>
 			</header>
 			<nav aria-label="Main menu">
 				<button class="menu-button play" onclick={onPlay} disabled={busy}
@@ -282,42 +259,12 @@
 		text-align: center;
 		margin-bottom: 2.5vh;
 	}
-	.sprig {
-		width: 62px;
-		height: 42px;
-		margin-bottom: -14px;
-		position: relative;
-		margin-left: 25px;
-	}
+	/* The woodland emblem, as wide as the panel allows. */
 	h1 {
-		margin: 0;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: -4px;
-		line-height: 0.86;
-		text-shadow:
-			0 3px 1px #080603,
-			2px 0 #624321,
-			0 7px 9px #0009;
-	}
-	h1 span {
-		display: block;
-		font-size: clamp(58px, 5.1vw, 88px);
-	}
-	h1 span:first-child::first-letter {
-		font-size: 1.23em;
-	}
-	h1 span:last-child {
-		color: #f1bc52;
-		font-size: clamp(65px, 5.5vw, 96px);
-		margin-top: 5px;
-	}
-	.crest {
-		display: block;
-		width: 86%;
-		height: clamp(62px, 10vh, 105px);
-		margin: 10px auto 0;
-		filter: drop-shadow(0 3px 2px #0007);
+		margin: 0 auto;
+		width: 100%;
+		max-width: 380px;
+		line-height: 0;
 	}
 	nav {
 		display: grid;
@@ -610,26 +557,8 @@
 		.vignette {
 			background: linear-gradient(0deg, #101c1480, transparent 75%);
 		}
-		.sprig {
-			width: 42px;
-			height: 27px;
-			margin-top: -8px;
-			margin-bottom: -9px;
-		}
 		h1 {
-			letter-spacing: -0.045em;
-		}
-		h1 span {
-			font-size: clamp(32px, 19cqi, 58px);
-		}
-		h1 span:last-child {
-			font-size: clamp(36px, 21cqi, 64px);
-			margin-top: 3px;
-		}
-		.crest {
-			height: clamp(28px, 5svh, 42px);
-			width: 65%;
-			margin-top: 6px;
+			max-width: min(82cqi, 280px);
 		}
 		.brand {
 			margin-bottom: clamp(12px, 2svh, 18px);
@@ -698,18 +627,8 @@
 			width: 300px;
 			padding-top: 15px;
 		}
-		.sprig {
-			height: 28px;
-		}
-		h1 span {
-			font-size: 49px;
-		}
-		h1 span:last-child {
-			font-size: 55px;
-		}
-		.crest {
-			height: 50px;
-			margin-top: 6px;
+		h1 {
+			max-width: 250px;
 		}
 		.brand {
 			margin-bottom: 12px;
@@ -737,16 +656,11 @@
 			padding-top: 16px;
 			padding-bottom: 14px;
 		}
-		.sprig,
-		.crest,
 		.footer {
 			display: none;
 		}
-		h1 span {
-			font-size: 37px;
-		}
-		h1 span:last-child {
-			font-size: 40px;
+		h1 {
+			max-width: 180px;
 		}
 		.brand {
 			margin-bottom: 14px;

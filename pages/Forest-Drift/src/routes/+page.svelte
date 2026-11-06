@@ -42,7 +42,7 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import WorldLoadingScreen from '#lib/components/WorldLoadingScreen.svelte';
 	import ToolHint from '#lib/components/ToolHint.svelte';
-	import titleMark from '#lib/assets/forest-drift-title.svg';
+	import ForestDriftLogo from '#lib/components/ForestDriftLogo.svelte';
 	import LandingMenu from '#lib/components/LandingMenu.svelte';
 	let showWorldLibrary = $state(false);
 	import upArrowIcon from '#lib/assets/icons/Up-ArrowIcons.svg';
@@ -1723,7 +1723,7 @@
 
 			{#if !pointerLocked && !clockBlocked() && !showHelp && !debugControlsOpen && !health?.dead}
 				<div class="instructions" class:fading={pointerLocked}>
-					<img class="title-mark" src={titleMark} alt="Forest Drift" width="614" height="350" />
+					<div class="title-mark"><ForestDriftLogo eager /></div>
 					{#if showTouchControls}
 						<p class="headline">Tap to explore</p>
 						<p>Virtual joystick &amp; buttons to move, run, jump, look, and build</p>
@@ -3440,11 +3440,8 @@
 
 	.title-mark {
 		display: block;
-		width: min(22rem, 72vw);
-		height: auto;
+		width: min(24rem, 72vw);
 		margin: 0 auto 0.85rem;
-		filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
-			drop-shadow(0 4px 16px rgba(0, 0, 0, 0.55));
 		pointer-events: none;
 	}
 

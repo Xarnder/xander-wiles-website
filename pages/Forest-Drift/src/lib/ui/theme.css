@@ -735,23 +735,8 @@ html .worlds-screen[data-ui-surface='start'] .worlds-header {
 	margin-bottom: 34px;
 }
 .worlds-logo {
-	font:
-		bold 58px/0.86 Georgia,
-		serif;
-	letter-spacing: -3px;
-	text-transform: uppercase;
-	color: #f5e4bb;
-	text-shadow:
-		0 3px 1px #080603,
-		0 6px 8px #0008;
-}
-.worlds-logo span {
-	display: block;
-}
-.worlds-logo span:last-child {
-	color: #efbd57;
-	font-size: 65px;
-	margin-top: 5px;
+	width: 100%;
+	max-width: 240px;
 }
 html .worlds-screen[data-ui-surface='start'] h1 {
 	font-size: clamp(30px, 4vw, 48px);
@@ -938,10 +923,7 @@ html .worlds-screen[data-ui-surface='start'] .modal {
 		margin-bottom: 28px;
 	}
 	.worlds-logo {
-		font-size: 44px;
-	}
-	.worlds-logo span:last-child {
-		font-size: 50px;
+		max-width: 220px;
 	}
 	html .worlds-screen[data-ui-surface='start'] .start-tagline {
 		margin-top: 12px;
@@ -1050,7 +1032,7 @@ html .pause-panel[data-pause-panel] {
 	gap: 14px;
 }
 html .pause-panel .pause-logo {
-	width: 160px;
+	width: 230px;
 }
 html .pause-panel .section {
 	gap: 8px;
@@ -1072,7 +1054,8 @@ html .pause-panel button.primary {
 html .pause-panel .tool-grid {
 	grid-template-columns: 1fr 1fr;
 }
-html .pause-panel .tool-grid button:last-child {
+/* A last button alone in its row spans it; an even number of buttons stays two by two. */
+html .pause-panel .tool-grid button:last-child:nth-child(odd) {
 	grid-column: 1 / -1;
 }
 html .pause-panel .world-line {
@@ -1191,7 +1174,7 @@ html .debug-panel[data-pause-panel] .status {
 		border-radius: 0 16px 16px 0;
 	}
 	html .pause-panel .pause-logo {
-		width: 120px;
+		width: 180px;
 	}
 	html .pause-panel .tool-grid {
 		grid-template-columns: 1fr;
