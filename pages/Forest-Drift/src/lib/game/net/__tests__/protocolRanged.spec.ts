@@ -10,8 +10,8 @@ import {
 const parse = (value: unknown) => parseClientMessage(JSON.stringify(value));
 
 describe('protocol v6 — carrying and pellets', () => {
-	it('is version 6', () => {
-		expect(PROTOCOL_VERSION).toBe(6);
+	it('is version 6 or later (7 adds public waypoints)', () => {
+		expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(6);
 	});
 
 	it('parses carry and drop, rejecting bad ids, creatures and positions', () => {

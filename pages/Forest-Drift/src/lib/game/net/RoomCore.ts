@@ -12,6 +12,7 @@ import {
 	type HealthState
 } from '../player/PlayerHealth';
 import { entityKey } from './worldEntities';
+import { WaypointBoard, type ClientWaypointMessage } from './sharedWaypoints';
 import { parseAmbientCreatureId, resolveAmbientCreature } from '../creatures/carryableCreatureRef';
 import { abilityFor } from '../creatures/creatureAbilities';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
@@ -170,6 +171,8 @@ export interface RoomPersistence {
 	 */
 	savePlayerHealth?(playerId: string, health: StoredHealth | null): void;
 	loadPlayerHealth?(playerId: string): StoredHealth | null;
+	/** The world's public waypoints as one JSON string, written whenever they change. */
+	saveWaypoints?(json: string): void;
 }
 
 /** Health as stored per player: the shared rules' state without the transient grace period. */
@@ -205,6 +208,8 @@ export interface RoomCoreOptions {
 		clock?: RoomClockRecord | null;
 		envJson?: string | null;
 		session?: RoomSessionState | null;
+		/** The public waypoints as last saved (`saveWaypoints`). */
+		waypointsJson?: string | null;
 	};
 	/**
 	 * The shared world's rows and rules (Phase 3), or a function that loads them on first use. The
@@ -246,6 +251,8 @@ export interface RoomStats {
 	/** Pellet hits that cost health, and hit reports the room didn't believe. */
 	shotHitsAccepted: number;
 	shotHitsRejected: number;
+	waypointChanges: number;
+	waypointsRefused: number;
 }
 
 export interface StoredPose {
@@ -406,7 +413,9 @@ export class RoomCore {
 		shotsFired: 0,
 		shotsRefused: 0,
 		shotHitsAccepted: 0,
-		shotHitsRejected: 0
+		shotHitsRejected: 0,
+		waypointChanges: 0,
+		waypointsRefused: 0
 	};
 
 	private readonly world: RoomWorldInfo;
@@ -426,6 +435,11 @@ export class RoomCore {
 	private readonly storeVersion: (() => { epoch: number; seq: number }) | null;
 	/** Doors open right now (Q13-A); cleared when the world empties. */
 	private readonly openDoors = new Set<string>();
+	/**
+	 * Public waypoints. Unlike doors they are kept with the world: they outlive the session, the
+	 * room sleeping and a world restore (they're places to meet, not building).
+	 */
+	private readonly waypoints: WaypointBoard;
 	/** Ranged weapons: player id → the creature under their arm. */
 	private readonly carries = new Map<string, string>();
 	/** Where carried creatures were last put down this session, so they can be picked up there. */
@@ -472,6 +486,7 @@ export class RoomCore {
 				this.env = null;
 			}
 		}
+		this.waypoints = new WaypointBoard(options.restored?.waypointsJson ?? null);
 		const session = options.restored?.session;
 		if (session) {
 			for (const id of session.doors) this.openDoors.add(id);
@@ -761,6 +776,10 @@ export class RoomCore {
 			if (player) this.handleShotHit(player, message);
 			return;
 		}
+		if (message.t === 'waypoint') {
+			if (player) this.handleWaypoint(player, message);
+			return;
+		}
 		if (message.t === 'door') {
 			if (!player) return;
 			if (message.open) this.openDoors.add(message.id);
@@ -948,6 +967,7 @@ export class RoomCore {
 			doors: [...this.openDoors],
 			interactions: this.interactionList(),
 			carries: this.carryList(),
+			waypoints: this.waypoints.list(),
 			names: this.playerNames()
 		});
 		this.broadcast({ t: 'joined', player: { ...info } }, conn);
@@ -1288,6 +1308,38 @@ export class RoomCore {
 				...(player.info.down ? { down: true } : {})
 			},
 			player.conn ?? undefined
+		);
+	}
+
+	/**
+	 * Public waypoints: changes go to everyone (the sender included, with the room's stamped copy);
+	 * a refusal goes back to the sender alone with the waypoint as it really is.
+	 */
+	private handleWaypoint(player: PlayerState, message: ClientWaypointMessage): void {
+		const pose = player.pose;
+		const outcome = this.waypoints.apply(message, {
+			playerId: player.info.playerId,
+			name: player.info.name,
+			role: player.info.role,
+			position: pose ? { x: pose.x, y: pose.y, z: pose.z } : null
+		});
+		if ('unchanged' in outcome) return;
+		if ('refused' in outcome) {
+			this.stats.waypointsRefused++;
+			if (player.conn)
+				send(player.conn, {
+					t: 'waypoints',
+					...(outcome.current ? { put: [outcome.current] } : { remove: [outcome.id] }),
+					refused: { id: outcome.id, reason: outcome.refused }
+				});
+			return;
+		}
+		this.stats.waypointChanges++;
+		this.persistence?.saveWaypoints?.(this.waypoints.toJson());
+		this.broadcast(
+			'put' in outcome
+				? { t: 'waypoints', put: [outcome.put] }
+				: { t: 'waypoints', remove: [outcome.remove] }
 		);
 	}
 

@@ -105,7 +105,17 @@ test.describe('waypoints', () => {
 		await page.getByTestId('waypoint-name-input').fill('Camp');
 		await page.getByTestId('waypoint-add').click();
 		await expect(page.getByTestId('waypoint-row')).toHaveCount(2);
-		await expect(page.getByTestId('waypoint-row').nth(1)).toContainText('Camp');
+		const campRow = page.getByTestId('waypoint-row').nth(1);
+		await expect(campRow).toContainText('Camp');
+		// Single player: the Public switch is there, off and unavailable, and says why.
+		await expect(campRow.getByTestId('waypoint-visibility')).toBeDisabled();
+		await expect(campRow.getByTestId('waypoint-visibility')).toHaveAttribute(
+			'aria-checked',
+			'false'
+		);
+		await expect(campRow.getByTestId('waypoint-sharing')).toHaveText(
+			'Only you can see it · public waypoints are for online worlds'
+		);
 		if (SHOTS) await page.screenshot({ path: `${SHOTS}/pause-waypoints.png` });
 
 		// Resume: two beacons, and the locator bar (single player!) shows two waypoint pins.

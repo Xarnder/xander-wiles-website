@@ -458,10 +458,12 @@
 	/** Waypoints (pause menu): refreshed while paused so distances stay current. */
 	let waypointRows = $state<WaypointView[]>([]);
 	let carryHintsOn = $state(true);
+	let waypointNotice = $state<string | null>(null);
 	function refreshWaypoints() {
 		if (!session) return;
 		waypointRows = session.scene.getWaypoints();
 		carryHintsOn = session.scene.waypoints.carryHints;
+		waypointNotice = session.scene.waypointNotice;
 	}
 	$effect(() => {
 		if (!paused || !session) return;
@@ -2934,6 +2936,20 @@
 				}}
 				onRemoveWaypoint={(id) => {
 					session?.scene.removeWaypoint(id);
+					refreshWaypoints();
+				}}
+				waypointsOnline={!!onlineWorld}
+				{waypointNotice}
+				onRenameWaypoint={(id, name) => {
+					session?.scene.renameWaypoint(id, name);
+					refreshWaypoints();
+				}}
+				onSetWaypointVisibility={(id, visibility) => {
+					session?.scene.setWaypointVisibility(id, visibility);
+					refreshWaypoints();
+				}}
+				onSetWaypointControl={(id, allowed) => {
+					session?.scene.setWaypointOthersCanControl(id, allowed);
 					refreshWaypoints();
 				}}
 				onToggleCarryHints={(on) => {

@@ -126,7 +126,8 @@ interface EntityRecord {
  *   - `entities`: the authored content as rows (plan §7.2), changed only by committed batches;
  *   - `ops` / `batches`: the recent commit log for catch-up, and batch ids for dedupe;
  *   - `players`: names and last positions (Q18 bookmarks);
- *   - `meta`: manifest, invite hashes, version (`store`), clock, grace periods, shared sky.
+ *   - `meta`: manifest, invite hashes, version (`store`), clock, grace periods, shared sky,
+ *     public waypoints.
  */
 export class WorldRoom extends DurableObject<Env> {
 	private core: RoomCore | null = null;
@@ -674,7 +675,8 @@ export class WorldRoom extends DurableObject<Env> {
 				loadPlayer: (playerId) => this.loadPlayer(playerId),
 				playerNames: () => this.playerNames(),
 				savePlayerHealth: (playerId, health) => this.savePlayerHealth(playerId, health),
-				loadPlayerHealth: (playerId) => this.loadPlayerHealth(playerId)
+				loadPlayerHealth: (playerId) => this.loadPlayerHealth(playerId),
+				saveWaypoints: (json) => this.writeMeta('waypoints', json)
 			},
 			// Rows load on first use only (see RoomCoreOptions.store).
 			store: () => {
@@ -695,7 +697,8 @@ export class WorldRoom extends DurableObject<Env> {
 				grace: this.readJson<GraceEntry[]>('grace') ?? [],
 				clock: this.readJson<RoomClockRecord>('clock'),
 				envJson: this.readMeta('env'),
-				session: this.readJson<RoomSessionState>('session')
+				session: this.readJson<RoomSessionState>('session'),
+				waypointsJson: this.readMeta('waypoints')
 			}
 		});
 		this.core.restore(

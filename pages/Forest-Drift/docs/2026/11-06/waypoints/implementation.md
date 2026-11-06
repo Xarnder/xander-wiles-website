@@ -32,17 +32,17 @@ _2026-11-06. Follows the ranged-weapons work in `docs/2026/11-04/range-weapons/`
 
 ## Where it lives
 
-| Piece | File |
-| --- | --- |
-| Waypoint model, retargeting, persistence | `src/lib/game/waypoints/WaypointSystem.ts` |
-| Beams and pins in the world | `src/lib/game/waypoints/WaypointBeacons.ts` |
-| Paw badges | `src/lib/game/creatures/CarryHints.ts` |
-| Nearest carryable / creature position / carryable cache | `CreatureRuntimeManager.nearestCarryable`, `creaturePosition`, `isCarryable` |
-| Crosshair candidate id for the badge | `CarryController.targetId` |
-| Locator markers (`kind: 'waypoint'`, icon, label rows) | `src/lib/game/hud/LocatorBar.ts`, `src/lib/components/LocatorBar.svelte` |
-| Online: player markers + scene's waypoint markers on one bar | `MultiplayerSession` (`locatorExtrasActive`, `placeLocatorExtras`) |
-| Wiring, per-frame update, public API for the UI | `ThreeScene` (`updateWaypoints`, `getWaypoints`, `setWaypointEnabled`, `addWaypointHere`, `removeWaypoint`, `setCarryHints`, `setWaypointWorld`, `setLocatorElement`) |
-| Pause panel | `src/lib/components/PauseMenu.svelte`, wired in `src/routes/+page.svelte` |
+| Piece                                                        | File                                                                                                                                                                  |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Waypoint model, retargeting, persistence                     | `src/lib/game/waypoints/WaypointSystem.ts`                                                                                                                            |
+| Beams and pins in the world                                  | `src/lib/game/waypoints/WaypointBeacons.ts`                                                                                                                           |
+| Paw badges                                                   | `src/lib/game/creatures/CarryHints.ts`                                                                                                                                |
+| Nearest carryable / creature position / carryable cache      | `CreatureRuntimeManager.nearestCarryable`, `creaturePosition`, `isCarryable`                                                                                          |
+| Crosshair candidate id for the badge                         | `CarryController.targetId`                                                                                                                                            |
+| Locator markers (`kind: 'waypoint'`, icon, label rows)       | `src/lib/game/hud/LocatorBar.ts`, `src/lib/components/LocatorBar.svelte`                                                                                              |
+| Online: player markers + scene's waypoint markers on one bar | `MultiplayerSession` (`locatorExtrasActive`, `placeLocatorExtras`)                                                                                                    |
+| Wiring, per-frame update, public API for the UI              | `ThreeScene` (`updateWaypoints`, `getWaypoints`, `setWaypointEnabled`, `addWaypointHere`, `removeWaypoint`, `setCarryHints`, `setWaypointWorld`, `setLocatorElement`) |
+| Pause panel                                                  | `src/lib/components/PauseMenu.svelte`, wired in `src/routes/+page.svelte`                                                                                             |
 
 ### Locator bar ownership
 
@@ -60,11 +60,56 @@ _2026-11-06. Follows the ranged-weapons work in `docs/2026/11-04/range-weapons/`
 - The badge preference is global: `forest-drift.carry-hints.v1`.
 - Every read and write is wrapped, so a blocked or corrupt store just means waypoints aren't kept.
 
+## Public waypoints in online worlds (added later the same day)
+
+Each of your waypoints is **Private** or **Public**, and a public one has a separate
+**Others can control** switch. Seeing a waypoint and controlling it are different things:
+
+|                             | Sees it (list, beacon, locator bar)                                 | Turns it on/off for everyone, renames it | Private/public, others' control, remove |
+| --------------------------- | ------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
+| Private                     | Only you                                                            | You                                      | You                                     |
+| Public                      | Everyone in the world, including visitors and people who join later | You (and the world's owner)              | You (the world's owner can remove it)   |
+| Public + Others can control | Everyone                                                            | Everyone                                 | You (the world's owner can remove it)   |
+
+- Every waypoint starts private. Switching **Public** on sends it to the room; switching it off
+  takes it out of the room (it disappears for everyone else) and keeps it in your browser.
+- The creature waypoint is always private (creatures wander differently for each player). In
+  single-player worlds the **Public** switch is still shown, off and greyed out, with "public
+  waypoints are for online worlds".
+- Someone else's public waypoint shows whose it is ("Olive's · only they can change it"), and who
+  last changed it ("changed by Vince"). Without control, its switch is disabled.
+- Changes show straight away and are confirmed by the room; if the room refuses (a limit, no
+  rights, removed meanwhile) your copy snaps back and the panel says why. Offline, changes to public
+  waypoints are not made and the panel says so.
+- Limits: 20 public waypoints per player and 60 per world (and 20 private per world, as before).
+  A new public waypoint must be within 2 km of where the room last saw its creator.
+- Public waypoints are **saved with the world** in the room (meta key `waypoints`): they stay when
+  everyone leaves, when the room sleeps or restarts, and across a world restore (they're places to
+  meet, not building). They aren't part of world exports or _Save a copy_.
+
+**Protocol 7** (`src/lib/game/net/sharedWaypoints.ts`, shared by the room and the browser):
+
+- C→S `{t:'waypoint', op:'put', waypoint}` — publish, or the creator's (or world owner's) full
+  change; `{op:'set', id, on?, name?}` — on/off and rename, for anyone who may control it;
+  `{op:'remove', id}`.
+- S→C `{t:'waypoints', put?, remove?}` to everyone (the sender included, with the room's stamped
+  copy: owner, owner's name, who changed it); a refusal goes to the sender alone with
+  `refused: {id, reason}` and the waypoint as the room holds it. `welcome.waypoints` on joining.
+- Rules and validation live in `WaypointBoard` (pure): names cleaned to 1–24 characters, `#rrggbb`
+  colours, finite coordinates, ids `[A-Za-z0-9-]{4,48}`; on top of the room's 20 JSON messages per
+  second per player.
+
+**Pause → Waypoints** rows now have the **Show** switch (padded inside its wooden frame; "Show for
+all" on a public waypoint), and below it, on each of your own waypoints, a labelled **Public**
+switch with a line saying who can see and change it, then rename (✎) and remove (×). Once public, a
+second switch, **Others can control**, appears. Other players' public waypoints show whose they are
+instead.
+
 ## Deliberately not done (yet)
 
-- **Shared waypoints** (plan §3, message M1) — waypoints are personal ("just me"). Other players
-  don't see yours. The creature waypoint is per client anyway, because creatures are local per
-  client (ranged-weapons decision Q9-A).
+- Sharing with chosen players only, groups, expiry and arrival notices (plan §3.1, §3.7).
+- Moving a waypoint after it's made, and choosing its icon or colour.
+- Hiding someone else's public waypoint on your own screen without controlling it.
 - Pings and landmarks from the same plan section.
 - The creature waypoint only considers creatures in the loaded herd (the runtime's logical set),
   not ones in unloaded regions.
@@ -88,3 +133,10 @@ _2026-11-06. Follows the ranged-weapons work in `docs/2026/11-04/range-weapons/`
   `screenshots/`.
 - Regression: `multiplayer.e2e.ts`, `rangedWeapons.e2e.ts`, `rangedWeaponsMultiplayer.e2e.ts`
   (locator ownership changed in `MultiplayerSession`).
+- Public waypoints: `sharedWaypoints.spec.ts` (the rules: who may see, control and manage; limits;
+  distance; saved JSON; parsing), `RoomCoreWaypoints.spec.ts` (shared now and with late joiners,
+  refusals to the sender only, kept after everyone leaves and after a restart, the world owner
+  removing), `WaypointSystem.spec.ts` "public waypoints online" (8), and
+  `tests/waypointsMultiplayer.e2e.ts` (two browsers and a real room: private by default, public
+  for a visitor with beacon and locator pin, no control until allowed, then the visitor turns it
+  off for everyone and renames it, private again removes it from the visitor).

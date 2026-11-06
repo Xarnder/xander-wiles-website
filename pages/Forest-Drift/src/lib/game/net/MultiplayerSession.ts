@@ -38,6 +38,8 @@ import { RoomHealthAuthority } from './RoomHealthAuthority';
 import type { HealthAuthority, HealthEvents } from '../player/HealthAuthority';
 import { findPunchTarget } from '../player/punch';
 import type { RemotePlayerView } from './NetSession';
+import type { ServerWaypointsMessage, SharedWaypoint } from './sharedWaypoints';
+import type { WaypointLink } from '../waypoints/WaypointSystem';
 import type { OnlineWorldSync } from './worldTransfer';
 
 /** How the scene reads and applies the owner's shared sky, weather and time. */
@@ -80,6 +82,10 @@ export interface SceneMultiplayerContext {
 	locatorExtrasActive?: () => boolean;
 	/** Waypoints: places this frame's waypoint markers on the bar (between begin and end). */
 	placeLocatorExtras?: (locator: LocatorBar) => void;
+	/** Public waypoints: the room to send changes to, and its list (on joining and every rejoin). */
+	setSharedWaypoints?: (waypoints: SharedWaypoint[], link: WaypointLink) => void;
+	/** Public waypoints: someone changed them, or the room refused this player's change. */
+	applySharedWaypoints?: (message: ServerWaypointsMessage) => void;
 	/**
 	 * Ranged weapons: `slot` picked up `creature` (or put it down at `at` when null). `self` is
 	 * true for this player's own carry, which the room may end on its own (knocked out, seated,
@@ -243,9 +249,19 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	>();
 	private nextCarryId = 1;
 	private selfSlot: number | null = null;
+	/** Public waypoints go through here: only while connected, with this player's current role. */
+	private readonly waypointLink: WaypointLink;
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
+		const session = () => this.net;
+		this.waypointLink = {
+			playerId: options.identity.playerId,
+			get role(): PlayerRole {
+				return session().currentRole ?? 'viewer';
+			},
+			send: (message) => this.status === 'connected' && this.net.sendWaypoint(message)
+		};
 		this.names = { ...options.sync.names };
 		this.replica = new WorldReplica({
 			rows: options.sync.rows,
@@ -311,6 +327,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 				this.claimedCreature.delete(message.id);
 			},
 			onCarried: (message) => this.applyCarried(message.slot, message.creature, message.at ?? null),
+			onWaypoints: (message) => this.context?.applySharedWaypoints?.(message),
 			onShot: (message) => {
 				const age = this.net.serverNow() - message.at;
 				this.context?.remoteShot?.(
@@ -696,6 +713,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			this.carries.set(slot, creature);
 			this.context.setCarried?.(slot, creature, null, null, slot === this.selfSlot);
 		}
+		this.context.setSharedWaypoints?.(welcome.waypoints, this.waypointLink);
 		for (const id of this.sharedDoors) {
 			if (!welcome.doors.includes(id)) this.context.setDoorOpen(id, false);
 		}

@@ -19,6 +19,12 @@
  */
 
 import type { EntityKind, WorldOp } from './worldEntities';
+import {
+	parseWaypointMessage,
+	type ClientWaypointMessage,
+	type ServerWaypointsMessage,
+	type SharedWaypoint
+} from './sharedWaypoints';
 import type { DamageSource, HealthState } from '../player/PlayerHealth';
 
 /**
@@ -31,7 +37,8 @@ import type { DamageSource, HealthState } from '../player/PlayerHealth';
 // 5: player health owned by the room (fall, punch, respawn, health; shared damage rules).
 // 6: carrying creatures (carry, drop, carried, welcome.carries) and creature pellets (shoot, shot,
 //    shotHit, shotResult; rules.creatureProjectiles). The room also enforces the Q3 fauna change.
-export const PROTOCOL_VERSION = 6;
+// 7: public waypoints (waypoint, waypoints, welcome.waypoints): see `sharedWaypoints.ts`.
+export const PROTOCOL_VERSION = 7;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world
@@ -572,7 +579,8 @@ export type ClientJsonMessage =
 	| ClientCarryMessage
 	| ClientDropMessage
 	| ClientShootMessage
-	| ClientShotHitMessage;
+	| ClientShotHitMessage
+	| ClientWaypointMessage;
 
 export interface WelcomeMessage {
 	t: 'welcome';
@@ -608,6 +616,8 @@ export interface WelcomeMessage {
 	interactions?: OccupiedMiniBuildInteraction[];
 	/** Creatures being carried right now, by slot (ranged weapons). */
 	carries?: { slot: number; creature: string }[];
+	/** The world's public waypoints (private ones never leave their creator's browser). */
+	waypoints?: SharedWaypoint[];
 	/** Names of everyone who has ever built here, for "Sam added this" notices. */
 	names: Record<string, string>;
 }
@@ -738,6 +748,7 @@ export type ServerJsonMessage =
 	| AckMessage
 	| SyncedMessage
 	| ServerDoorMessage
+	| ServerWaypointsMessage
 	| ServerInteractionsMessage
 	| ServerHealthMessage
 	| ServerPunchResultMessage
@@ -922,6 +933,7 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		if (typeof at !== 'number' || !Number.isFinite(at)) return null;
 		return { t: 'shotHit', shot, target, at, point: point as Vec3Tuple };
 	}
+	if (message.t === 'waypoint') return parseWaypointMessage(message);
 	if (message.t === 'punch') {
 		const { id, target } = message;
 		if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 0) return null;
@@ -960,7 +972,8 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'carryResult' ||
 		t === 'carried' ||
 		t === 'shot' ||
-		t === 'shotResult'
+		t === 'shotResult' ||
+		t === 'waypoints'
 		? (value as ServerJsonMessage)
 		: null;
 }

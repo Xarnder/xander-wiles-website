@@ -5,9 +5,11 @@ import {
 	WaypointSystem,
 	cleanWaypointName,
 	type WaypointHost,
+	type WaypointLink,
 	type WaypointStorage,
 	type WaypointTarget
 } from '../WaypointSystem';
+import type { ClientWaypointMessage, SharedWaypoint } from '../../net/sharedWaypoints';
 
 class MemoryStorage implements WaypointStorage {
 	readonly data = new Map<string, string>();
@@ -230,5 +232,190 @@ describe('cleanWaypointName', () => {
 		expect(cleanWaypointName('a\u0000b\tc   d', 'x')).toBe('ab c d');
 		expect(cleanWaypointName('   ', 'Fallback')).toBe('Fallback');
 		expect(cleanWaypointName('x'.repeat(40), 'f')).toHaveLength(24);
+	});
+});
+
+describe('WaypointSystem: public waypoints online', () => {
+	function online(playerId = 'sam', role: WaypointLink['role'] = 'editor') {
+		const w = world();
+		const sent: ClientWaypointMessage[] = [];
+		let connected = true;
+		const link: WaypointLink = {
+			playerId,
+			role,
+			send: (m) => {
+				if (!connected) return false;
+				sent.push(m);
+				return true;
+			}
+		};
+		w.waypoints.setLink(link);
+		w.waypoints.setShared([]);
+		return { ...w, sent, setConnected: (c: boolean) => (connected = c) };
+	}
+	const row = (w: WaypointSystem, id: string) => w.list().find((r) => r.id === id)!;
+	const shared = (over: Partial<SharedWaypoint> = {}): SharedWaypoint => ({
+		id: 'wp-alex',
+		name: 'Meet here',
+		colour: '#ff7aa8',
+		x: 30,
+		y: 0,
+		z: 0,
+		on: true,
+		othersCanControl: false,
+		owner: 'alex',
+		ownerName: 'Alex',
+		...over
+	});
+
+	it('everything starts private, and only online can a waypoint be shared', () => {
+		const { waypoints } = world();
+		const id = waypoints.addHere('Camp')!;
+		expect(row(waypoints, id)).toMatchObject({ visibility: 'private', canShare: false });
+		expect(waypoints.setVisibility(id, 'public')).toBe(false);
+		const net = online();
+		const id2 = net.waypoints.addHere('Camp')!;
+		expect(row(net.waypoints, id2)).toMatchObject({
+			visibility: 'private',
+			mine: true,
+			canShare: true,
+			canSetControl: false
+		});
+		// The creature waypoint never leaves this player's screen.
+		expect(row(net.waypoints, NEAREST_CARRYABLE_ID).canShare).toBe(false);
+	});
+
+	it('making one public sends it to the room and takes it out of this browser', () => {
+		const { waypoints, sent, storage, state } = online();
+		state.player = { x: 4, y: 1, z: 2 };
+		const id = waypoints.addHere('Camp')!;
+		expect(waypoints.setVisibility(id, 'public')).toBe(true);
+		expect(sent).toEqual([
+			{
+				t: 'waypoint',
+				op: 'put',
+				waypoint: {
+					id,
+					name: 'Camp',
+					colour: '#4fb3ff',
+					x: 4,
+					y: 1,
+					z: 2,
+					on: true,
+					othersCanControl: false
+				}
+			}
+		]);
+		expect(row(waypoints, id)).toMatchObject({ visibility: 'public', pending: true, mine: true });
+		const saved = JSON.parse(storage.data.get('forest-drift.waypoints.v1:world-a')!);
+		expect(saved.personal).toEqual([]);
+		// The room confirms: no longer pending, and others' control can now be chosen.
+		waypoints.applyShared({
+			t: 'waypoints',
+			put: [
+				{
+					...(sent[0] as unknown as { waypoint: SharedWaypoint }).waypoint,
+					owner: 'sam',
+					ownerName: 'Sam'
+				}
+			]
+		});
+		expect(row(waypoints, id)).toMatchObject({
+			pending: false,
+			canSetControl: true,
+			canRemove: true
+		});
+		expect(active(waypoints).map((a) => a.id)).toContain(id);
+	});
+
+	it('stays private when the room refuses, and says why', () => {
+		const { waypoints } = online();
+		const id = waypoints.addHere('Camp')!;
+		waypoints.setVisibility(id, 'public');
+		waypoints.applyShared({ t: 'waypoints', remove: [id], refused: { id, reason: 'limit' } });
+		expect(row(waypoints, id)).toMatchObject({ visibility: 'private', pending: false });
+		expect(waypoints.notice).toMatch(/Couldn.t make “Camp” public/);
+	});
+
+	it("shows other players' public waypoints, which they control unless they allow others", () => {
+		const { waypoints, sent } = online();
+		waypoints.setShared([shared()]);
+		expect(row(waypoints, 'wp-alex')).toMatchObject({
+			mine: false,
+			ownerName: 'Alex',
+			visibility: 'public',
+			canToggle: false,
+			canRename: false,
+			canRemove: false,
+			canShare: false,
+			canSetControl: false
+		});
+		expect(active(waypoints).map((a) => a.id)).toEqual(['wp-alex']);
+		waypoints.setEnabled('wp-alex', false);
+		expect(waypoints.rename('wp-alex', 'Mine now')).toBe(false);
+		expect(sent).toEqual([]);
+		// Alex lets others control it: Sam can turn it off for everyone and rename it, not remove it.
+		waypoints.applyShared({ t: 'waypoints', put: [shared({ othersCanControl: true })] });
+		expect(row(waypoints, 'wp-alex')).toMatchObject({
+			canToggle: true,
+			canRename: true,
+			canRemove: false
+		});
+		waypoints.setEnabled('wp-alex', false);
+		expect(waypoints.rename('wp-alex', '  Old  oak ')).toBe(true);
+		expect(waypoints.remove('wp-alex')).toBe(false);
+		expect(sent).toEqual([
+			{ t: 'waypoint', op: 'set', id: 'wp-alex', on: false },
+			{ t: 'waypoint', op: 'set', id: 'wp-alex', name: 'Old oak' }
+		]);
+		expect(active(waypoints)).toEqual([]);
+	});
+
+	it("lets the world's owner remove anyone's public waypoint, but not take it private", () => {
+		const { waypoints, sent } = online('olive', 'owner');
+		waypoints.setShared([shared()]);
+		expect(row(waypoints, 'wp-alex')).toMatchObject({
+			canRemove: true,
+			canShare: false,
+			canToggle: true
+		});
+		expect(waypoints.setVisibility('wp-alex', 'private')).toBe(false);
+		expect(waypoints.remove('wp-alex')).toBe(true);
+		expect(sent).toEqual([{ t: 'waypoint', op: 'remove', id: 'wp-alex' }]);
+		expect(waypoints.list().some((r) => r.id === 'wp-alex')).toBe(false);
+	});
+
+	it('taking one private again removes it from the room and keeps it in this browser', () => {
+		const { waypoints, sent, storage } = online();
+		waypoints.setShared([shared({ id: 'wp-mine', owner: 'sam', ownerName: 'Sam', on: false })]);
+		expect(waypoints.setVisibility('wp-mine', 'private')).toBe(true);
+		expect(sent).toEqual([{ t: 'waypoint', op: 'remove', id: 'wp-mine' }]);
+		expect(row(waypoints, 'wp-mine')).toMatchObject({ visibility: 'private', enabled: false });
+		const saved = JSON.parse(storage.data.get('forest-drift.waypoints.v1:world-a')!);
+		expect(saved.personal.map((p: { id: string }) => p.id)).toEqual(['wp-mine']);
+	});
+
+	it('changes nothing while offline, and says so', () => {
+		const { waypoints, sent, setConnected } = online();
+		waypoints.setShared([shared({ id: 'wp-mine', owner: 'sam', ownerName: 'Sam' })]);
+		setConnected(false);
+		waypoints.setEnabled('wp-mine', false);
+		expect(row(waypoints, 'wp-mine').enabled).toBe(true);
+		const id = waypoints.addHere('Camp')!;
+		expect(waypoints.setVisibility(id, 'public')).toBe(false);
+		expect(row(waypoints, id).visibility).toBe('private');
+		expect(waypoints.notice).toMatch(/Not connected/);
+		expect(sent).toEqual([]);
+	});
+
+	it('publishes again after a reconnect if the room never got it', () => {
+		const { waypoints, sent } = online();
+		const id = waypoints.addHere('Camp')!;
+		waypoints.setVisibility(id, 'public');
+		// Reconnected; the room's list doesn't have it.
+		waypoints.setShared([shared()]);
+		expect(sent.filter((m) => m.op === 'put')).toHaveLength(2);
+		expect(row(waypoints, id)).toMatchObject({ visibility: 'public', pending: true });
+		expect(waypoints.list().map((r) => r.id)).toEqual([NEAREST_CARRYABLE_ID, id, 'wp-alex']);
 	});
 });

@@ -1,3 +1,8 @@
+import type {
+	ClientWaypointMessage,
+	ServerWaypointsMessage,
+	SharedWaypoint
+} from './sharedWaypoints';
 import type { MiniBuildInteractionRef, OccupiedMiniBuildInteraction } from './protocol';
 import { ClockSync } from './ClockSync';
 import type { PlayerIdentity } from './mpConfig';
@@ -67,6 +72,8 @@ export interface WelcomeInfo {
 	health?: WelcomeMessage['health'];
 	/** Creatures being carried right now, by slot (ranged weapons). */
 	carries: { slot: number; creature: string }[];
+	/** The world's public waypoints. */
+	waypoints: SharedWaypoint[];
 	/** True only for the first welcome of this session (not reconnects). */
 	first: boolean;
 }
@@ -118,6 +125,8 @@ export interface NetSessionOptions {
 	onShot?: (message: ServerShotMessage) => void;
 	/** Ranged weapons: whether this player's pellet was refused, or hurt someone. */
 	onShotResult?: (message: ServerShotResultMessage) => void;
+	/** Public waypoints changed (or the room refused this player's change). */
+	onWaypoints?: (message: ServerWaypointsMessage) => void;
 	world?: WorldTraffic;
 	/** Injected in tests. */
 	createSocket?: (url: string) => WebSocket;
@@ -378,6 +387,11 @@ export class NetSession {
 		return this.sendText({ t: 'shotHit', shot, target, at, point });
 	}
 
+	/** Publishes, changes or removes a public waypoint (see `sharedWaypoints.ts`). */
+	sendWaypoint(message: ClientWaypointMessage): boolean {
+		return this.sendText(message);
+	}
+
 	/** The room clock estimate, ms; NaN until the first welcome. */
 	serverNow(): number {
 		return this.clock.serverNow();
@@ -503,6 +517,7 @@ export class NetSession {
 					names: message.names ?? {},
 					health: message.health,
 					carries: message.carries ?? [],
+					waypoints: message.waypoints ?? [],
 					first
 				});
 				this.emitPlayers();
@@ -579,6 +594,9 @@ export class NetSession {
 				break;
 			case 'shotResult':
 				this.options.onShotResult?.(message);
+				break;
+			case 'waypoints':
+				this.options.onWaypoints?.(message);
 				break;
 			case 'error':
 				this.lastError = message.message;

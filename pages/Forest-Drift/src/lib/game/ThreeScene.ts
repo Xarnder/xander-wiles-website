@@ -13,7 +13,11 @@ import { RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
 import { CarryController, type CarryPrompt, type CarryState } from './player/CarryController';
 import { ProjectileSystem } from './particles/ProjectileSystem';
 import { CarryHints } from './creatures/CarryHints';
-import { WaypointSystem, type WaypointView } from './waypoints/WaypointSystem';
+import {
+	WaypointSystem,
+	type WaypointView,
+	type WaypointVisibility
+} from './waypoints/WaypointSystem';
 import { WaypointBeacons } from './waypoints/WaypointBeacons';
 import { LocatorBar } from './hud/LocatorBar';
 import type { Vec3Like } from './player/creatureProjectile';
@@ -2169,6 +2173,11 @@ export class ThreeScene implements WorldRuntime {
 				resolveCreature: (id) => this.resolveCreature(id),
 				locatorExtrasActive: () => this.waypoints.anyActive,
 				placeLocatorExtras: (locator) => this.placeWaypointMarkers(locator),
+				setSharedWaypoints: (list, link) => {
+					this.waypoints.setLink(link);
+					this.waypoints.setShared(list);
+				},
+				applySharedWaypoints: (message) => this.waypoints.applyShared(message),
 				remoteShot: (origin, dir, colour, ageMs) =>
 					this.projectiles.spawn(
 						{ x: origin[0], y: origin[1], z: origin[2] },
@@ -3864,6 +3873,25 @@ export class ThreeScene implements WorldRuntime {
 
 	removeWaypoint(id: string): boolean {
 		return this.waypoints.remove(id);
+	}
+
+	renameWaypoint(id: string, name: string): boolean {
+		return this.waypoints.rename(id, name);
+	}
+
+	/** Online: private (only this player) or public (everyone in the world). */
+	setWaypointVisibility(id: string, visibility: WaypointVisibility): boolean {
+		return this.waypoints.setVisibility(id, visibility);
+	}
+
+	/** Online: whether other players may turn a public waypoint on/off and rename it. */
+	setWaypointOthersCanControl(id: string, allowed: boolean): boolean {
+		return this.waypoints.setOthersCanControl(id, allowed);
+	}
+
+	/** The last waypoint change that didn't work, for the pause menu (null if none). */
+	get waypointNotice(): string | null {
+		return this.waypoints.notice;
 	}
 
 	setCarryHints(on: boolean): void {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import titleMark from '#lib/assets/forest-drift-title.svg';
 	import type { SaveStatus } from '#lib/game/world/WorldTypes';
-	import type { WaypointView } from '#lib/game/waypoints/WaypointSystem';
+	import type { WaypointView, WaypointVisibility } from '#lib/game/waypoints/WaypointSystem';
 	import { MAX_PERSONAL_WAYPOINTS, MAX_WAYPOINT_NAME } from '#lib/game/waypoints/WaypointSystem';
 
 	interface Props {
@@ -30,6 +30,13 @@
 		onAddWaypoint?: (name: string) => void;
 		onRemoveWaypoint?: (id: string) => void;
 		onToggleCarryHints?: (on: boolean) => void;
+		/** An online world: waypoints can be made public. */
+		waypointsOnline?: boolean;
+		/** The last waypoint change that didn't work, or null. */
+		waypointNotice?: string | null;
+		onRenameWaypoint?: (id: string, name: string) => void;
+		onSetWaypointVisibility?: (id: string, visibility: WaypointVisibility) => void;
+		onSetWaypointControl?: (id: string, allowed: boolean) => void;
 	}
 
 	const {
@@ -55,12 +62,48 @@
 		onToggleWaypoint,
 		onAddWaypoint,
 		onRemoveWaypoint,
-		onToggleCarryHints
+		onToggleCarryHints,
+		waypointsOnline = false,
+		waypointNotice = null,
+		onRenameWaypoint,
+		onSetWaypointVisibility,
+		onSetWaypointControl
 	}: Props = $props();
 
 	type Panel = 'root' | 'world' | 'rename' | 'waypoints';
 	let newWaypointName = $state('');
-	const personalCount = $derived(waypoints.filter((w) => !w.dynamic).length);
+	const personalCount = $derived(
+		waypoints.filter((w) => !w.dynamic && w.visibility === 'private').length
+	);
+	/** The waypoint being renamed, and the name typed so far. */
+	let renaming = $state<string | null>(null);
+	let renameDraft = $state('');
+
+	function startRename(w: WaypointView) {
+		renaming = w.id;
+		renameDraft = w.name;
+	}
+
+	function submitWaypointRename(event: SubmitEvent, id: string) {
+		event.preventDefault();
+		onRenameWaypoint?.(id, renameDraft);
+		renaming = null;
+	}
+
+	/** Who can see and change a waypoint, in a few words. */
+	function sharingText(w: WaypointView): string {
+		if (w.visibility === 'private')
+			return waypointsOnline
+				? 'Only you can see it'
+				: 'Only you can see it · public waypoints are for online worlds';
+		if (w.mine)
+			return w.othersCanControl
+				? 'Everyone in this world sees it and can change it'
+				: 'Everyone in this world sees it; only you can change it';
+		return w.othersCanControl
+			? `${w.ownerName}'s · anyone can change it`
+			: `${w.ownerName}'s · only they can change it`;
+	}
 
 	function metres(distance: number | null): string {
 		return distance === null ? '' : `${Math.max(1, Math.round(distance))} m`;
@@ -74,7 +117,9 @@
 			if (w.status === 'none') return 'None nearby: explore and it will find one';
 			return `${w.detail ?? 'Creature'} · ${metres(w.distance)}`;
 		}
-		return `${metres(w.distance)} away${w.enabled ? '' : ' · hidden'}`;
+		const off = w.enabled ? '' : w.visibility === 'public' ? ' · off for everyone' : ' · hidden';
+		const changed = w.changedBy ? ` · changed by ${w.changedBy}` : '';
+		return `${metres(w.distance)} away${off}${changed}`;
 	}
 
 	function submitWaypoint(event: SubmitEvent) {
@@ -101,6 +146,29 @@
 		panel = 'world';
 	}
 </script>
+
+<!-- An on/off switch: a pill track with a knob, padded inside the panel's wooden button frame. -->
+{#snippet toggle(
+	checked: boolean,
+	label: string,
+	testid: string,
+	disabled: boolean,
+	onclick: () => void,
+	small = false
+)}
+	<button
+		class="switch"
+		class:small
+		role="switch"
+		aria-checked={checked}
+		aria-label={label}
+		data-testid={testid}
+		{disabled}
+		{onclick}
+	>
+		<span class="track"><span class="knob"></span></span>
+	</button>
+{/snippet}
 
 <div data-ui-backdrop data-pause-backdrop class="pause-overlay" data-testid="pause-menu">
 	<div data-ui-surface="panel" data-pause-panel class="pause-panel">
@@ -190,34 +258,148 @@
 			<p class="panel-note">
 				Turn a waypoint on to show a beacon in the world and a marker on the locator bar at the top
 				of the screen. The creature waypoint moves with the creature.
+				{#if waypointsOnline}
+					Switch <strong>Public</strong> on to let everyone in this world see a waypoint;
+					<strong>Others can control</strong> lets them turn it on or off and rename it too.
+				{:else}
+					In an online world, switch <strong>Public</strong> on to let everyone there see a waypoint.
+				{/if}
 			</p>
+			{#if waypointNotice}
+				<p class="waypoint-notice" role="status" data-testid="waypoint-notice">{waypointNotice}</p>
+			{/if}
 			<ul class="waypoint-list">
 				{#each waypoints as w (w.id)}
-					<li class="waypoint-row" data-testid="waypoint-row" data-id={w.id} data-status={w.status}>
-						<span class="waypoint-icon" style:--waypoint-colour={w.colour} aria-hidden="true"
-							>{w.icon}</span
-						>
-						<span class="waypoint-text">
-							<span class="waypoint-name">{w.name}</span>
-							<span class="waypoint-detail" data-testid="waypoint-detail">{detailText(w)}</span>
-						</span>
-						<button
-							class="switch"
-							role="switch"
-							aria-checked={w.enabled}
-							aria-label={w.name}
-							data-testid="waypoint-toggle"
-							onclick={() => onToggleWaypoint?.(w.id, !w.enabled)}
-						>
-							<span class="knob"></span>
-						</button>
-						{#if !w.dynamic}
-							<button
-								class="remove"
-								aria-label={`Remove ${w.name}`}
-								data-testid="waypoint-remove"
-								onclick={() => onRemoveWaypoint?.(w.id)}>×</button
+					<li
+						class="waypoint-row"
+						data-testid="waypoint-row"
+						data-id={w.id}
+						data-status={w.status}
+						data-visibility={w.visibility}
+						data-mine={w.mine}
+					>
+						<div class="waypoint-main">
+							<span class="waypoint-icon" style:--waypoint-colour={w.colour} aria-hidden="true"
+								>{w.icon}</span
 							>
+							{#if renaming === w.id}
+								<form
+									class="waypoint-rename"
+									onsubmit={(event) => submitWaypointRename(event, w.id)}
+								>
+									<!-- svelte-ignore a11y_autofocus -->
+									<input
+										aria-label={`New name for ${w.name}`}
+										maxlength={MAX_WAYPOINT_NAME}
+										bind:value={renameDraft}
+										autofocus
+										data-testid="waypoint-rename-input"
+										onkeydown={(event) => {
+											if (event.key === 'Escape') {
+												event.stopPropagation();
+												renaming = null;
+											}
+										}}
+									/>
+									<button type="submit" data-testid="waypoint-rename-save">Save</button>
+								</form>
+							{:else}
+								<span class="waypoint-text">
+									<span class="waypoint-name">{w.name}</span>
+									<span class="waypoint-detail" data-testid="waypoint-detail">{detailText(w)}</span>
+								</span>
+							{/if}
+							<span class="show-switch">
+								<span class="switch-caption" aria-hidden="true"
+									>{w.visibility === 'public' ? 'Show for all' : 'Show'}</span
+								>
+								{@render toggle(
+									w.enabled,
+									w.canToggle
+										? `Show ${w.name}${w.visibility === 'public' ? ' for everyone' : ''}`
+										: `${w.name}: only ${w.ownerName} can show or hide it`,
+									'waypoint-toggle',
+									!w.canToggle || w.pending,
+									() => onToggleWaypoint?.(w.id, !w.enabled)
+								)}
+							</span>
+						</div>
+						{#if w.dynamic}
+							{#if waypointsOnline}
+								<p class="waypoint-options-note">
+									Always private: creatures wander differently for each player.
+								</p>
+							{/if}
+						{:else}
+							<div class="waypoint-options">
+								<div class="option-line">
+									{#if w.mine}
+										<!-- Who can see it: a switch on every one of this player's own waypoints. -->
+										<label class="option" class:unavailable={!w.canShare}>
+											{@render toggle(
+												w.visibility === 'public',
+												`Public: everyone in this world can see ${w.name}`,
+												'waypoint-visibility',
+												!w.canShare || w.pending,
+												() =>
+													onSetWaypointVisibility?.(
+														w.id,
+														w.visibility === 'public' ? 'private' : 'public'
+													),
+												true
+											)}
+											<span class="option-text">
+												<span class="option-title">Public</span>
+												<span class="option-hint" data-testid="waypoint-sharing"
+													>{sharingText(w)}</span
+												>
+											</span>
+										</label>
+									{:else}
+										<p class="option-hint other-owner" data-testid="waypoint-sharing">
+											{sharingText(w)}
+										</p>
+									{/if}
+									<span class="option-actions">
+										{#if w.canRename && renaming !== w.id}
+											<button
+												class="icon-button"
+												aria-label={`Rename ${w.name}`}
+												data-testid="waypoint-rename"
+												disabled={w.pending}
+												onclick={() => startRename(w)}>✎</button
+											>
+										{/if}
+										{#if w.canRemove}
+											<button
+												class="icon-button"
+												aria-label={`Remove ${w.name}`}
+												data-testid="waypoint-remove"
+												disabled={w.pending}
+												onclick={() => onRemoveWaypoint?.(w.id)}>×</button
+											>
+										{/if}
+									</span>
+								</div>
+								{#if w.canSetControl}
+									<div class="option-line">
+										<label class="option">
+											{@render toggle(
+												w.othersCanControl,
+												`Others can show, hide and rename ${w.name}`,
+												'waypoint-control',
+												w.pending,
+												() => onSetWaypointControl?.(w.id, !w.othersCanControl),
+												true
+											)}
+											<span class="option-text">
+												<span class="option-title">Others can control</span>
+												<span class="option-hint">Show or hide it for everyone, and rename it</span>
+											</span>
+										</label>
+									</div>
+								{/if}
+							</div>
 						{/if}
 					</li>
 				{/each}
@@ -487,10 +669,7 @@
 	}
 
 	.waypoint-row {
-		display: flex;
-		align-items: center;
-		gap: 0.55rem;
-		padding: 0.45rem 0.5rem;
+		padding: 0.6rem 0.7rem;
 		border-radius: 9px;
 		background: rgba(0, 0, 0, 0.25);
 		border: 1px solid rgba(234, 246, 255, 0.12);
@@ -530,68 +709,192 @@
 		opacity: 0.7;
 	}
 
+	/*
+	 * The switch sits in the panel's wooden button frame; the padding keeps the track clear of the
+	 * frame on every side.
+	 */
 	button.switch {
 		flex: none;
-		position: relative;
-		width: 2.6rem;
-		height: 1.5rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		min-height: 44px;
-		padding: 0;
-		border: none;
-		background: transparent;
+		padding: 0.45rem 0.7rem;
 	}
 
-	button.switch::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: 50%;
-		height: 1.5rem;
-		transform: translateY(-50%);
+	button.switch .track {
+		position: relative;
+		display: block;
+		width: 2.6rem;
+		height: 1.45rem;
 		border-radius: 999px;
-		background: rgba(234, 246, 255, 0.18);
-		border: 1px solid rgba(234, 246, 255, 0.3);
+		background: rgba(234, 246, 255, 0.14);
+		border: 1px solid rgba(234, 246, 255, 0.4);
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+		transition: background-color 0.15s ease;
 	}
 
-	button.switch[aria-checked='true']::before {
-		background: rgba(57, 211, 83, 0.85);
-		border-color: rgba(57, 211, 83, 0.95);
+	button.switch[aria-checked='true'] .track {
+		background: rgba(57, 211, 83, 0.9);
+		border-color: #6ee787;
 	}
 
 	button.switch .knob {
 		position: absolute;
 		top: 50%;
-		left: 0.2rem;
+		left: 0.17rem;
 		width: 1.1rem;
 		height: 1.1rem;
 		transform: translateY(-50%);
 		border-radius: 50%;
-		background: #eaf6ff;
+		background: #f4fbff;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 		transition: left 0.15s ease;
 	}
 
 	button.switch[aria-checked='true'] .knob {
-		left: 1.3rem;
+		left: calc(100% - 1.27rem);
 	}
 
-	button.switch:hover:not(:disabled) {
-		background: transparent;
+	button.switch.small {
+		min-height: 40px;
+		padding: 0.35rem 0.55rem;
+	}
+
+	button.switch.small .track {
+		width: 2.15rem;
+		height: 1.2rem;
+	}
+
+	button.switch.small .knob {
+		width: 0.9rem;
+		height: 0.9rem;
+	}
+
+	button.switch.small[aria-checked='true'] .knob {
+		left: calc(100% - 1.07rem);
 	}
 
 	button.switch:focus-visible {
 		outline: 2px solid #edcf85;
 		outline-offset: 2px;
-		border-radius: 999px;
 	}
 
-	button.remove {
+	.waypoint-main {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+	}
+
+	.waypoint-options {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid rgba(234, 246, 255, 0.1);
+	}
+
+	.option-line {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+
+	.option {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		cursor: pointer;
+	}
+
+	.option.unavailable {
+		cursor: default;
+	}
+
+	.option-text {
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.option-title {
+		font-size: 0.82rem;
+		font-weight: 700;
+	}
+
+	.option-hint {
+		font-size: 0.7rem;
+		opacity: 0.75;
+	}
+
+	.option-hint.other-owner {
+		flex: 1 1 auto;
+		margin: 0;
+	}
+
+	.show-switch {
 		flex: none;
-		width: 2rem;
-		min-height: 44px;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
+	.switch-caption {
+		font-size: 0.72rem;
+		font-weight: 650;
+		opacity: 0.8;
+		white-space: nowrap;
+	}
+
+	.waypoint-options-note {
+		flex-basis: 100%;
+		margin: 0;
+		font-size: 0.7rem;
+		opacity: 0.7;
+	}
+
+	.waypoint-row > .waypoint-options-note {
+		margin-top: 0.4rem;
+		padding-left: 2.25rem;
+	}
+
+	.option-actions {
+		flex: none;
+		display: inline-flex;
+		gap: 0.35rem;
+		margin-left: auto;
+	}
+
+	button.icon-button {
+		width: 2.6rem;
+		min-height: 40px;
 		padding: 0;
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1;
+	}
+
+	.waypoint-rename {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	.waypoint-rename input {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.waypoint-notice {
+		margin: 0;
+		padding: 0.5rem 0.7rem;
+		border-radius: 8px;
+		background: rgba(255, 179, 92, 0.16);
+		border: 1px solid rgba(255, 179, 92, 0.45);
+		font-size: 0.78rem;
 	}
 
 	.add-waypoint {
@@ -619,7 +922,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		button.switch .knob {
+		button.switch .knob,
+		button.switch .track {
 			transition: none;
 		}
 	}
