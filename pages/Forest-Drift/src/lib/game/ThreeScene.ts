@@ -4545,7 +4545,10 @@ export class ThreeScene implements WorldRuntime {
 		this.health.poll();
 		this.carry.update(deltaSeconds);
 		const localCharacter = this.miniBuildInteraction.localCharacter;
-		if (localCharacter) localCharacter.carrying = this.carry.carrying;
+		if (localCharacter) {
+			localCharacter.carrying = this.carry.carrying;
+			localCharacter.carryBody.copy(this.heldCreature.bodyHalfSize);
+		}
 		this.miniBuildInteraction.afterPlayerUpdate(
 			deltaSeconds,
 			this.buildToolManager.isConstructionGestureActive()

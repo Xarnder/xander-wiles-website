@@ -32,7 +32,69 @@ const UP = new THREE.Vector3(0, 1, 0);
 const X = new THREE.Vector3(1, 0, 0);
 const TAU = Math.PI * 2;
 /** How far a carried creature's head turns out from straight ahead, radians. */
-const CARRY_OUTWARD = 0.6;
+const CARRY_OUTWARD = 0.08;
+/** The ribs' half-width as a fraction of half the shoulder span: the creature presses against them. */
+const CARRY_RIBS = 0.78;
+/** How far below the shoulder joint the creature's back sits (under the armpit), metres. */
+const CARRY_ARMPIT = 0.1;
+/** How far forward of the shoulders the creature's body centre sits, metres. */
+const CARRY_FORWARD = 0.05;
+/** Gap between the creature's far side and the palm, metres (the hand's own thickness). */
+const CARRY_HAND_CLEARANCE = 0.035;
+/** Small creatures sit lower, until the arm is this much of its full reach (not folded up). */
+const CARRY_COMFORT = 0.8;
+/** …but never more than this much lower than just under the armpit, metres. */
+const CARRY_MAX_EXTRA_DROP = 0.18;
+/** Hand under the far flank: this far down from the middle, as a fraction of the half-height. */
+const CARRY_HAND_BELOW = 0.35;
+
+/** Where a carried body sits and the hand goes, from the carrying shoulder (see `carryHold`). */
+export interface CarryHold {
+	/** How far the body's centre is below the shoulder joint. */
+	drop: number;
+	/** The hand target: out from the shoulder (away from the body), up, and forward. */
+	handOut: number;
+	handUp: number;
+	handForward: number;
+}
+
+/**
+ * Where a creature's body sits under the arm and where the hand goes, measured from the shoulder
+ * joint in the carrying side's axes. The body's back sits just under the armpit (small ones a
+ * little lower, so the arm hangs rather than folds), and the hand reaches over and down the far
+ * side to just under its middle — or as far down that side as the arm reaches, for wide ones.
+ * `centreOut`: the body centre's distance out from the shoulder; `half`: the body's half-size
+ * (across, up, along); `reach`: upper arm + forearm. Writes `out`; allocation-free.
+ */
+export function carryHold(
+	centreOut: number,
+	forward: number,
+	half: { x: number; y: number; z: number },
+	reach: number,
+	out: CarryHold
+): CarryHold {
+	const across = half.x + CARRY_HAND_CLEARANCE;
+	const upDown = half.y + CARRY_HAND_CLEARANCE;
+	const handForward = forward + Math.min(half.z * 0.3, 0.08);
+	const lowest = -CARRY_HAND_BELOW;
+	const farOut = centreOut + across * Math.sqrt(1 - lowest * lowest);
+	const comfortable = reach * CARRY_COMFORT;
+	const spare = comfortable * comfortable - farOut * farOut - handForward * handForward;
+	const handDrop = spare > 0 ? Math.sqrt(spare) : 0;
+	const armpit = CARRY_ARMPIT + half.y;
+	out.drop = Math.min(armpit + CARRY_MAX_EXTRA_DROP, Math.max(armpit, handDrop + upDown * lowest));
+	out.handForward = handForward;
+	const limit = reach * 0.97;
+	// Up the far side from under the middle toward the top, until the hand can reach.
+	for (let step = 0; step <= 8; step++) {
+		const sin = lowest + (1 - lowest) * (step / 8);
+		out.handOut = centreOut + across * Math.sqrt(Math.max(0, 1 - sin * sin));
+		out.handUp = -out.drop + upDown * sin;
+		const distanceSq = out.handOut ** 2 + out.handUp ** 2 + handForward ** 2;
+		if (distanceSq <= limit * limit) break;
+	}
+	return out;
+}
 
 /** Cosmetic animation only. Network root and player collisions are never modified by IK. */
 export class CharacterInstance {
@@ -71,13 +133,23 @@ export class CharacterInstance {
 	 * blends in and out, and `carryAnchor` says where the creature sits.
 	 */
 	carrying = false;
+	/**
+	 * Half the size of the carried creature's body, metres (across, up, along), from
+	 * `HeldCreatureView.bodyHalfSize`. Set by the owner; the creature keeps its real size, so where
+	 * it sits and how far the arm reaches round it depend on this.
+	 */
+	readonly carryBody = new THREE.Vector3(0.1, 0.08, 0.2);
 	private carry = 0;
 	private readonly carryMatrix = new THREE.Matrix4();
 	private carryValid = false;
 	private readonly carryLeft = new THREE.Vector3();
 	private readonly carryForward = new THREE.Vector3();
-	private readonly carryRight = new THREE.Vector3();
+	private readonly carryShoulder = new THREE.Vector3();
+	private readonly carryOther = new THREE.Vector3();
 	private readonly carryPoint = new THREE.Vector3();
+	private readonly hold: CarryHold = { drop: 0, handOut: 0, handUp: 0, handForward: 0 };
+	/** Upper arm + forearm, measured from the rig once. */
+	private armReach = 0;
 
 	constructor(
 		template: THREE.Object3D,
@@ -144,8 +216,9 @@ export class CharacterInstance {
 		this.setColour(colour);
 	}
 	/**
-	 * World transform for a creature held under the left arm: beside the left hip, facing the way
-	 * the body faces (+Z of the result is forward, +Y up). False until the pose has run once.
+	 * World transform for the centre of a creature's body held under the left arm: pressed against
+	 * the ribs just below the armpit, facing the way the body faces (+Z of the result is forward,
+	 * +Y up). False until the pose has run once.
 	 */
 	carryAnchor(out: THREE.Matrix4): boolean {
 		if (!this.carryValid) return false;
@@ -153,24 +226,39 @@ export class CharacterInstance {
 		return true;
 	}
 
-	/** Body axes from the bones, so the rig's own axis conventions never matter. */
+	/**
+	 * Body axes from the bones, so the rig's own axis conventions never matter. The upper arm lies
+	 * over the creature's back and the forearm wraps down its far side, the hand under its flank.
+	 */
 	private updateCarry(): void {
-		const hips = this.bone('Hips');
-		const leftArm = this.bone('LeftArm');
-		this.bone('RightArm').getWorldPosition(this.carryRight);
-		leftArm.getWorldPosition(this.carryLeft);
-		this.carryLeft.sub(this.carryRight).setY(0);
-		if (this.carryLeft.lengthSq() < 1e-8) return;
-		this.carryLeft.normalize();
+		const leftArm = this.bone('LeftArm'),
+			elbow = this.bone('LeftForeArm'),
+			hand = this.bone('LeftHand');
+		if (this.armReach === 0) {
+			leftArm.getWorldPosition(this.carryShoulder);
+			elbow.getWorldPosition(this.carryOther);
+			hand.getWorldPosition(this.carryPoint);
+			this.armReach =
+				this.carryShoulder.distanceTo(this.carryOther) +
+				this.carryOther.distanceTo(this.carryPoint);
+		}
+		leftArm.getWorldPosition(this.carryShoulder);
+		this.bone('RightArm').getWorldPosition(this.carryOther);
+		this.carryLeft.subVectors(this.carryShoulder, this.carryOther).setY(0);
+		const shoulderSpan = this.carryLeft.length();
+		if (shoulderSpan < 1e-4) return;
+		this.carryLeft.divideScalar(shoulderSpan);
 		// left × up = forward
 		this.carryForward.crossVectors(this.carryLeft, UP).normalize();
-		this.carryRight.crossVectors(UP, this.carryForward).normalize();
-		hips.getWorldPosition(this.carryPoint);
+		// Pressed against the ribs: in from the shoulder joint, then out by half the creature's width.
+		const centreOut = (shoulderSpan / 2) * (CARRY_RIBS - 1) + this.carryBody.x;
+		const hold = carryHold(centreOut, CARRY_FORWARD, this.carryBody, this.armReach, this.hold);
 		this.carryPoint
-			.addScaledVector(this.carryLeft, 0.38)
-			.addScaledVector(UP, 0.1)
-			.addScaledVector(this.carryForward, 0.12);
-		// Head angled a little outward so the creature reads from the usual camera behind the player.
+			.copy(this.carryShoulder)
+			.addScaledVector(this.carryLeft, centreOut)
+			.addScaledVector(this.carryForward, CARRY_FORWARD);
+		this.carryPoint.y = this.carryShoulder.y - hold.drop;
+		// Head turned out just a touch, so it reads from the usual camera behind the player.
 		this.armCurrent
 			.copy(this.carryForward)
 			.multiplyScalar(Math.cos(CARRY_OUTWARD))
@@ -180,18 +268,16 @@ export class CharacterInstance {
 		this.carryMatrix.setPosition(this.carryPoint);
 		this.carryValid = true;
 		if (this.carry < 0.001) return;
-		// The left hand rests on the creature's back, the elbow bent out to the side.
-		const arm = leftArm,
-			elbow = this.bone('LeftForeArm'),
-			hand = this.bone('LeftHand');
 		this.armTarget
-			.copy(this.carryPoint)
-			.addScaledVector(UP, 0.1)
-			.addScaledVector(this.carryForward, 0.05);
+			.copy(this.carryShoulder)
+			.addScaledVector(this.carryLeft, hold.handOut)
+			.addScaledVector(UP, hold.handUp)
+			.addScaledVector(this.carryForward, hold.handForward);
 		hand.getWorldPosition(this.armCurrent);
 		this.armTarget.lerpVectors(this.armCurrent, this.armTarget, this.carry);
-		this.pole.copy(this.carryLeft).addScaledVector(UP, -0.4).sub(this.carryForward);
-		this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
+		// Elbow up and out, so the arm arches over the creature's back rather than through it.
+		this.pole.copy(this.carryLeft).addScaledVector(UP, 0.9);
+		this.solver.solve(leftArm, elbow, hand, this.armTarget, this.pole);
 	}
 
 	private bone(name: string): THREE.Bone {

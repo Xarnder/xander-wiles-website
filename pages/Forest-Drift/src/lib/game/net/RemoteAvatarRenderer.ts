@@ -146,6 +146,7 @@ export class RemoteAvatarRenderer {
 						avatar.character.object.position.set(0, 0, 0);
 						avatar.character.object.rotation.x = 0;
 						avatar.character.carrying = !!carry?.definition;
+						if (avatar.held) avatar.character.carryBody.copy(avatar.held.bodyHalfSize);
 						avatar.character.update(frame, deltaSeconds, distance, this.surface);
 					}
 				}
@@ -178,6 +179,8 @@ export class RemoteAvatarRenderer {
 		if (avatar.heldId !== carry.id) {
 			avatar.held.attach(carry.definition);
 			avatar.heldId = carry.id;
+			// The pose ran before this creature was known: size the hold for it from the next frame.
+			avatar.character?.carryBody.copy(avatar.held.bodyHalfSize);
 		}
 		const anchored =
 			visible && avatar.root.visible && avatar.character?.carryAnchor(this.carryAnchor);

@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CharacterInstance } from '../CharacterInstance';
+import { CharacterInstance, carryHold, type CarryHold } from '../CharacterInstance';
 import { TwoBoneIK } from '../twoBoneIK';
 import { POSE_FLAGS } from '../../net/protocol';
 import type { MotionFrame } from '../../net/RemoteMotion';
@@ -370,4 +370,62 @@ it('continues alternating leg motion during a running jump without airborne runn
 	for (let i = 0; i < 60; i++) c.update(frame(c.object.position.z), 1 / 60, 4, () => 0);
 	expect(c.object.userData.animation).toBe('idle');
 	c.dispose();
+});
+
+describe('carrying a creature under the left arm', () => {
+	// Body half-sizes (across, up, along) spanning the real carryable creatures: a tiny stilt,
+	// a medium crownling, a long ribbon and a wide, round pebbleback.
+	const bodies = [
+		new THREE.Vector3(0.027, 0.048, 0.132),
+		new THREE.Vector3(0.1, 0.08, 0.2),
+		new THREE.Vector3(0.167, 0.148, 0.517),
+		new THREE.Vector3(0.209, 0.25, 0.25)
+	];
+
+	it.each(bodies.map((b) => [b.toArray().join(', '), b] as const))(
+		'tucks a %s m body against the ribs with the arm over its back and down its far side',
+		(_, body) => {
+			const c = new CharacterInstance(template, '#ffffff', () => {});
+			c.carrying = true;
+			c.carryBody.copy(body);
+			for (let i = 0; i < 90; i++) c.update(frame(), 1 / 60, 4, () => 0);
+			const anchor = new THREE.Matrix4();
+			expect(c.carryAnchor(anchor)).toBe(true);
+			const centre = new THREE.Vector3().setFromMatrixPosition(anchor);
+			const at = (name: string) => bone(c, name).getWorldPosition(new THREE.Vector3());
+			const shoulder = at('LeftArm');
+			const left = shoulder.clone().sub(at('RightArm')).setY(0).normalize();
+			const out = (p: THREE.Vector3) => p.clone().sub(shoulder).dot(left);
+			const ribs = at('Spine2').sub(shoulder).dot(left);
+			// Its real size: the anchor carries no scale.
+			expect(new THREE.Vector3().setFromMatrixScale(anchor).toArray()).toEqual([1, 1, 1]);
+			// Beside the body, its inner side at the ribs, its back below the shoulder.
+			expect(out(centre) - body.x).toBeGreaterThan(ribs);
+			expect(shoulder.y - centre.y).toBeGreaterThanOrEqual(body.y + 0.099);
+			// The elbow arches above its back and out past its middle.
+			expect(at('LeftForeArm').y - centre.y).toBeGreaterThan(body.y * 0.6);
+			expect(out(at('LeftForeArm'))).toBeGreaterThan(out(centre));
+			// The hand is on the far side.
+			expect(out(at('LeftHand'))).toBeGreaterThan(out(centre) + body.x * 0.6);
+			// Facing forward with the player (−Z), turned out only slightly.
+			const forward = new THREE.Vector3(0, 0, 1).transformDirection(anchor);
+			expect(forward.z).toBeLessThan(-0.99);
+			c.dispose();
+		}
+	);
+
+	it('lowers small bodies so the arm hangs, and moves the hand up the side of wide ones', () => {
+		const hold: CarryHold = { drop: 0, handOut: 0, handUp: 0, handForward: 0 };
+		const reach = 0.41;
+		const tiny = { ...carryHold(-0.02, 0.05, { x: 0.03, y: 0.05, z: 0.13 }, reach, hold) };
+		expect(tiny.drop).toBeGreaterThan(0.1 + 0.05 + 0.05);
+		expect(Math.hypot(tiny.handOut, tiny.handUp, tiny.handForward)).toBeCloseTo(reach * 0.8, 2);
+		const wide = { ...carryHold(0.16, 0.05, { x: 0.21, y: 0.25, z: 0.25 }, reach, hold) };
+		expect(wide.drop).toBeCloseTo(0.1 + 0.25, 5);
+		// Above the middle of its far side, within reach.
+		expect(wide.handUp).toBeGreaterThan(-wide.drop);
+		expect(Math.hypot(wide.handOut, wide.handUp, wide.handForward)).toBeLessThanOrEqual(
+			reach * 0.97 + 1e-9
+		);
+	});
 });

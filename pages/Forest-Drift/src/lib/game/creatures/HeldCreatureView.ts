@@ -1,41 +1,50 @@
 import * as THREE from 'three';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
 import { animateCreature } from './CreatureAnimationSystem';
-import type { CreatureDefinition } from './CreatureTypes';
+import { jointWorldPositions } from './SkeletonGenerator';
+import type {
+	CreatureBounds,
+	CreatureDefinition,
+	ProceduralSkeletonDefinition
+} from './CreatureTypes';
 
 /** How the carried creature is shown this frame. */
 export type HeldCreatureMode =
 	| { kind: 'hidden' }
-	/** Lower-left of the first-person view (ranged weapons Q22). */
+	/** First person: just its head and neck, large, in the lower-left corner of the view. */
 	| { kind: 'first-person'; camera: THREE.Camera }
-	/** Under the character's left arm: `anchor` is the world transform from CharacterInstance. */
+	/**
+	 * Under the character's left arm, at its real size: `anchor` is the world transform for the
+	 * centre of its body, from `CharacterInstance.carryAnchor`.
+	 */
 	| { kind: 'third-person'; anchor: THREE.Matrix4 };
 
-/** Longest body dimension in first person, metres (scaled down so it never fills the view). */
-const VIEW_LENGTH = 0.42;
-/** Longest body dimension under the arm, metres. */
-const ARM_LENGTH = 0.75;
-/** Distance in front of the camera, metres. */
-const VIEW_DEPTH = 0.62;
+/** First person: the head's height as a fraction of the view's height (it's held up close). */
+const VIEW_HEAD_FRACTION = 0.3;
+/** Nearest and furthest the head is held from the camera, metres. */
+const VIEW_DEPTH_MIN = 0.2;
+const VIEW_DEPTH_MAX = 0.7;
 /**
- * Where the creature's centre sits, as a fraction of the visible half-width/half-height at that
- * depth (lower left), so phones in portrait see it as well as wide screens.
+ * Where the head sits, as a fraction of the visible half-width/half-height at its depth (lower
+ * left). The neck and body run back and down out of the corner of the view.
  */
-const VIEW_FRACTION_X = -0.5;
-const VIEW_FRACTION_Y = -0.62;
-/** Turned in toward the crosshair, and tipped so its back faces the viewer a little. */
-const VIEW_YAW = Math.PI - 0.5;
-const VIEW_PITCH = 0.12;
+const VIEW_FRACTION_X = -0.56;
+const VIEW_FRACTION_Y = -0.5;
+/** Turned in toward the crosshair, and lifted a little so the neck rises out of the corner. */
+const VIEW_YAW = Math.PI - 0.42;
+const VIEW_PITCH = -0.2;
 const RECOIL_MS = 80;
 
 const scratchMatrix = new THREE.Matrix4();
 const scratchQuat = new THREE.Quaternion();
 const scratchEuler = new THREE.Euler();
 const scratchVec = new THREE.Vector3();
+const ONE = new THREE.Vector3(1, 1, 1);
 
 /**
- * The creature a player is carrying, drawn in front of the camera (first person) or under the arm
- * (third person). It is its own compiled copy: the herd's copy is unloaded while it's carried.
+ * The creature a player is carrying, always at its real size: tucked under the character's arm
+ * (third person, and how everyone else sees it), or as its head and neck in the corner of a
+ * first-person view. It is its own compiled copy: the herd's copy is unloaded while it's carried.
  * Visual only; the projectile's origin comes from `muzzleWorld`.
  */
 export class HeldCreatureView {
@@ -45,6 +54,14 @@ export class HeldCreatureView {
 	private definition: CreatureDefinition | null = null;
 	/** Muzzle tip in the compiled creature's model space. */
 	private readonly muzzleModel = new THREE.Vector3();
+	/**
+	 * Half the size of the body (torso), metres: across, up and along. The holder's origin is the
+	 * body's centre, so `CharacterInstance` can press it against the ribs and wrap the arm over it.
+	 */
+	readonly bodyHalfSize = new THREE.Vector3(0.1, 0.08, 0.2);
+	/** The head's centre relative to the body's centre, and its radius (first person). */
+	private readonly headOffset = new THREE.Vector3();
+	private headRadius = 0.06;
 	private time = 0;
 	private recoilUntil = 0;
 	private recoilStart = 0;
@@ -76,27 +93,24 @@ export class HeldCreatureView {
 			mesh.frustumCulled = false;
 		}
 		const { bounds, skeleton } = compiled.compilation;
-		const length = Math.max(
-			bounds.max.x - bounds.min.x,
-			bounds.max.y - bounds.min.y,
-			bounds.max.z - bounds.min.z,
-			1e-3
-		);
-		// Centre the body on the holder; the root is at the creature's feet.
-		this.inner.userData.length = length;
-		compiled.object.position.set(
-			-(bounds.min.x + bounds.max.x) / 2,
-			-(bounds.min.y + bounds.max.y) / 2,
-			-(bounds.min.z + bounds.max.z) / 2
-		);
+		const body = carriedBody(skeleton, bounds);
+		this.bodyHalfSize.copy(body.half);
+		// The holder's origin is the body's centre; the model's root is at its feet.
+		compiled.object.position.copy(body.centre).negate();
 		const face = skeleton.face;
-		if (face)
+		if (face) {
+			this.headOffset.set(face.centre.x, face.centre.y, face.centre.z).sub(body.centre);
+			this.headRadius = Math.max(face.radii.x, face.radii.y, face.radii.z, 0.02);
 			this.muzzleModel.set(
 				face.centre.x + face.forward.x * face.radii.z * 1.1,
 				face.centre.y + face.forward.y * face.radii.z * 1.1,
 				face.centre.z + face.forward.z * face.radii.z * 1.1
 			);
-		else this.muzzleModel.set(0, (bounds.min.y + bounds.max.y) / 2, bounds.max.z);
+		} else {
+			this.muzzleModel.set(0, (bounds.min.y + bounds.max.y) / 2, bounds.max.z);
+			this.headOffset.copy(this.muzzleModel).sub(body.centre);
+			this.headRadius = Math.max(0.03, body.half.y * 0.6);
+		}
 		this.inner.add(compiled.object);
 		this.creature = compiled;
 		this.definition = definition;
@@ -125,25 +139,31 @@ export class HeldCreatureView {
 			return;
 		}
 		this.time += Math.min(dt, 0.1);
-		const length = this.inner.userData.length as number;
 		if (mode.kind === 'first-person') {
 			mode.camera.updateMatrixWorld();
+			const camera = mode.camera as THREE.PerspectiveCamera;
+			const tanHalf = Math.tan(THREE.MathUtils.degToRad((camera.fov ?? 70) / 2));
+			const aspect = camera.aspect ?? 16 / 9;
+			// Narrow (portrait) views hold it a little further away so it stays beside the crosshair.
+			const fit = Math.min(1, Math.max(0.6, aspect / 1.4));
+			const depth = THREE.MathUtils.clamp(
+				this.headRadius / (VIEW_HEAD_FRACTION * fit * tanHalf),
+				VIEW_DEPTH_MIN,
+				VIEW_DEPTH_MAX
+			);
+			const halfHeight = tanHalf * depth;
 			scratchEuler.set(VIEW_PITCH, VIEW_YAW, 0, 'YXZ');
 			scratchQuat.setFromEuler(scratchEuler);
-			const camera = mode.camera as THREE.PerspectiveCamera;
-			const halfHeight = Math.tan(THREE.MathUtils.degToRad((camera.fov ?? 70) / 2)) * VIEW_DEPTH;
-			const aspect = camera.aspect ?? 16 / 9;
-			const halfWidth = halfHeight * aspect;
-			scratchVec.set(halfWidth * VIEW_FRACTION_X, halfHeight * VIEW_FRACTION_Y, -VIEW_DEPTH);
+			// Put the head at the corner point; the body follows wherever that leaves it.
+			scratchVec.copy(this.headOffset).applyQuaternion(scratchQuat).negate();
+			scratchVec.x += halfHeight * aspect * VIEW_FRACTION_X;
+			scratchVec.y += halfHeight * VIEW_FRACTION_Y;
+			scratchVec.z -= depth;
 			if (!reducedMotion) scratchVec.y += Math.sin(this.time * 1.9) * 0.004;
-			scratchMatrix.compose(scratchVec, scratchQuat, new THREE.Vector3(1, 1, 1));
+			scratchMatrix.compose(scratchVec, scratchQuat, ONE);
 			this.holder.matrix.multiplyMatrices(mode.camera.matrixWorld, scratchMatrix);
-			// Narrow (portrait) views get a smaller creature so it still fits beside the crosshair.
-			const fit = Math.min(1, Math.max(0.55, aspect / 1.4));
-			this.inner.scale.setScalar(Math.min(1, VIEW_LENGTH / length) * fit);
 		} else {
 			this.holder.matrix.copy(mode.anchor);
-			this.inner.scale.setScalar(Math.min(1, ARM_LENGTH / length));
 		}
 		this.holder.matrix.decompose(this.holder.position, this.holder.quaternion, this.holder.scale);
 		// Recoil: back along the creature's own axis, then settle.
@@ -183,4 +203,56 @@ export class HeldCreatureView {
 		this.detach();
 		this.holder.removeFromParent();
 	}
+}
+
+/**
+ * The body's (torso's) centre and half-size in model space, from the torso volume's path and
+ * cross-sections; the whole bounds when a plan has no torso volume.
+ */
+export function carriedBody(
+	skeleton: ProceduralSkeletonDefinition,
+	bounds: CreatureBounds
+): { centre: THREE.Vector3; half: THREE.Vector3 } {
+	const torso = skeleton.volumes.find((v) => v.part === 'torso');
+	const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+	const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+	if (torso) {
+		const joints = jointWorldPositions(skeleton);
+		let across = 0;
+		let up = 0;
+		let down = 0;
+		for (const section of torso.sections) {
+			across = Math.max(across, section.radiusX);
+			up = Math.max(up, section.radiusY + (section.offsetY ?? 0));
+			down = Math.max(down, (section.radiusYLower ?? section.radiusY) - (section.offsetY ?? 0));
+		}
+		torso.jointIds.forEach((id, n) => {
+			const p = joints.get(id);
+			if (!p) return;
+			const o = torso.pointOffsets?.[n];
+			scratchVec.set(p.x + (o?.x ?? 0), p.y + (o?.y ?? 0), p.z + (o?.z ?? 0));
+			min.min(scratchVec);
+			max.max(scratchVec);
+		});
+		if (Number.isFinite(min.x) && across > 0) {
+			min.x -= across;
+			max.x += across;
+			min.y -= down;
+			max.y += up;
+			// The domed ends reach a little past the first and last path points.
+			min.z -= Math.max(up, down) * 0.5;
+			max.z += Math.max(up, down) * 0.5;
+		} else min.set(Infinity, Infinity, Infinity);
+	}
+	if (!Number.isFinite(min.x)) {
+		min.set(bounds.min.x, bounds.min.y, bounds.min.z);
+		max.set(bounds.max.x, bounds.max.y, bounds.max.z);
+	}
+	return {
+		centre: new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5),
+		half: new THREE.Vector3()
+			.subVectors(max, min)
+			.multiplyScalar(0.5)
+			.max(new THREE.Vector3(0.02, 0.02, 0.02))
+	};
 }

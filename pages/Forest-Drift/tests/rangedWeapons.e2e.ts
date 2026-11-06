@@ -52,6 +52,42 @@ interface SceneLike {
 }
 type TestWindow = { forestScene: SceneLike };
 
+/** Just the Three.js shapes the pose test reads (no Three.js import in the page). */
+interface V3 {
+	x: number;
+	y: number;
+	z: number;
+	clone(): V3;
+	copy(v: V3): V3;
+	set(x: number, y: number, z: number): V3;
+	sub(v: V3): V3;
+	setY(y: number): V3;
+	normalize(): V3;
+	addScaledVector(v: V3, s: number): V3;
+	project(camera: unknown): V3;
+	applyMatrix4(m: unknown): V3;
+}
+interface Obj3 {
+	position: V3;
+	scale: V3;
+	getObjectByName(name: string): Obj3 | undefined;
+	getWorldPosition(out: V3): V3;
+	getWorldScale(out: V3): V3;
+	children: Obj3[];
+}
+interface PoseScene extends SceneLike {
+	scene: Obj3;
+	camera: {
+		position: V3;
+		matrixWorldInverse: unknown;
+		lookAt(x: number, y: number, z: number): void;
+		updateMatrixWorld(): void;
+	};
+	renderer: { render(scene: unknown, camera: unknown): void };
+	heldCreature: { attached: unknown; bodyHalfSize: V3; muzzleWorld(out: V3): V3 | null };
+	miniBuildInteraction: { localCharacter: { object: Obj3 } | null };
+}
+
 async function lowGraphics(page: Page) {
 	await page.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
 }
@@ -239,6 +275,131 @@ test.describe('ranged weapons: carrying a small creature (single player)', () =>
 		}, carriedId);
 		expect(back).not.toBeNull();
 		expect(back!).toBeLessThan(2);
+	});
+
+	test('held at its real size: head and neck in first person, tucked under the arm in third', async ({
+		page
+	}) => {
+		await pickUp(page);
+		await page.waitForTimeout(300);
+
+		// First person: nothing between the scene and the creature is scaled, and its head is in the
+		// lower-left of the view, large.
+		const firstPerson = await page.evaluate(() => {
+			const s = (window as unknown as { forestScene: PoseScene }).forestScene;
+			const held = s.scene.getObjectByName('held-creature')!;
+			const v = held.position.clone();
+			// Holder → recoil group → the compiled creature.
+			const inner = held.children[0]!;
+			const scale = inner.scale.x * inner.children[0]!.scale.x;
+			const mouth = s.heldCreature.muzzleWorld(v.clone())!.project(s.camera);
+			const body = held.getWorldPosition(v.clone()).project(s.camera);
+			// Camera space: −Z is ahead, so a body centre past the near plane is behind the view.
+			const bodyView = held.getWorldPosition(v.clone()).applyMatrix4(s.camera.matrixWorldInverse);
+			return {
+				scale,
+				holderScale: held.getWorldScale(v.clone()).x,
+				mouth: { x: mouth.x, y: mouth.y },
+				body: { x: body.x, y: body.y, behind: bodyView.z > -0.1 }
+			};
+		});
+		expect(firstPerson.scale).toBeCloseTo(1, 3);
+		expect(firstPerson.holderScale).toBeCloseTo(1, 3);
+		expect(firstPerson.mouth.x).toBeGreaterThan(-1);
+		expect(firstPerson.mouth.x).toBeLessThan(-0.15);
+		expect(firstPerson.mouth.y).toBeGreaterThan(-1);
+		expect(firstPerson.mouth.y).toBeLessThan(-0.1);
+		// The body runs back out of the corner: below and left of the head, or off screen.
+		expect(firstPerson.body.behind || firstPerson.body.y < firstPerson.mouth.y).toBe(true);
+		if (SHOTS) await page.screenshot({ path: `${SHOTS}/carry-pose-first-person.png` });
+
+		// Third person: under the left arm, pressed to the side, the arm over its back and the hand
+		// down its far side.
+		await page.evaluate(() => {
+			const s = (window as unknown as { forestScene: PoseScene }).forestScene;
+			s.controller.restoreState(s.controller.worldPosition, 0.6, -0.15);
+			s.toggleThirdPerson();
+		});
+		await page.waitForTimeout(2500);
+		const pose = await page.evaluate(() => {
+			const s = (window as unknown as { forestScene: PoseScene }).forestScene;
+			const character = s.miniBuildInteraction.localCharacter!.object;
+			const held = s.scene.getObjectByName('held-creature')!;
+			const at = (name: string) =>
+				character.getObjectByName(`mixamorig${name}`)!.getWorldPosition(held.position.clone());
+			const centre = held.getWorldPosition(held.position.clone());
+			const shoulder = at('LeftArm');
+			const left = shoulder.clone().sub(at('RightArm')).setY(0).normalize();
+			const out = (p: { x: number; y: number; z: number }) =>
+				(p.x - shoulder.x) * left.x + (p.z - shoulder.z) * left.z;
+			const half = s.heldCreature.bodyHalfSize;
+			return {
+				half: { x: half.x, y: half.y },
+				holderScale: held.getWorldScale(held.position.clone()).x,
+				centreOut: out(centre),
+				centreBelowShoulder: shoulder.y - centre.y,
+				elbowAboveCentre: at('LeftForeArm').y - centre.y,
+				elbowOut: out(at('LeftForeArm')),
+				handOut: out(at('LeftHand'))
+			};
+		});
+		expect(pose.holderScale).toBeCloseTo(1, 3);
+		expect(pose.centreBelowShoulder).toBeGreaterThan(pose.half.y);
+		// The elbow arches above its back and past its middle; the hand reaches its far side.
+		expect(pose.elbowAboveCentre).toBeGreaterThan(pose.half.y * 0.6);
+		expect(pose.elbowOut).toBeGreaterThan(pose.centreOut);
+		expect(pose.handOut).toBeGreaterThan(pose.centreOut + pose.half.x * 0.6);
+		if (SHOTS) {
+			await page.screenshot({ path: `${SHOTS}/carry-pose-behind.png` });
+			// Look at the hold from the side and the front: the render camera is moved just before each
+			// draw, so the game itself (and the pose) is untouched.
+			for (const [name, out, forward] of [
+				['side', 1.7, 0.2],
+				['front', 0.9, 1.5]
+			] as const) {
+				await page.evaluate(
+					({ out, forward }) => {
+						const s = (window as unknown as { forestScene: PoseScene }).forestScene;
+						const camera = s.camera;
+						const renderer = s.renderer as PoseScene['renderer'] & {
+							originalRender?: PoseScene['renderer']['render'];
+						};
+						renderer.originalRender ??= renderer.render;
+						renderer.render = (scene, view) => {
+							if (view === camera) {
+								const character = s.miniBuildInteraction.localCharacter!.object;
+								const held = s.scene.getObjectByName('held-creature')!;
+								const centre = held.getWorldPosition(held.position.clone());
+								const at = (name: string) =>
+									character
+										.getObjectByName(`mixamorig${name}`)!
+										.getWorldPosition(held.position.clone());
+								const left = at('LeftArm').sub(at('RightArm')).setY(0).normalize();
+								const ahead = held.position.clone().set(-left.z, 0, left.x);
+								camera.position
+									.copy(centre)
+									.addScaledVector(left, out)
+									.addScaledVector(ahead, forward);
+								camera.position.y += 0.25;
+								camera.lookAt(centre.x, centre.y + 0.1, centre.z);
+								camera.updateMatrixWorld();
+							}
+							return renderer.originalRender!.call(renderer, scene, view);
+						};
+					},
+					{ out, forward }
+				);
+				await page.waitForTimeout(400);
+				await page.screenshot({ path: `${SHOTS}/carry-pose-${name}.png` });
+			}
+			await page.evaluate(() => {
+				const s = (window as unknown as { forestScene: PoseScene }).forestScene;
+				const renderer = s.renderer as PoseScene['renderer'] & {
+					originalRender?: PoseScene['renderer']['render'];
+				};
+				if (renderer.originalRender) renderer.render = renderer.originalRender;
+			});
+		}
 	});
 
 	test("a big creature can't be picked up", async ({ page }) => {
