@@ -76,6 +76,10 @@ export interface SceneMultiplayerContext {
 	setPublishedFallDamage?: (enabled: boolean) => void;
 	/** Settings → Graphics → Show locator bar. */
 	showLocatorBar: () => boolean;
+	/** Waypoints: whether any are on (they show on the bar even with players hidden). */
+	locatorExtrasActive?: () => boolean;
+	/** Waypoints: places this frame's waypoint markers on the bar (between begin and end). */
+	placeLocatorExtras?: (locator: LocatorBar) => void;
 	/**
 	 * Ranged weapons: `slot` picked up `creature` (or put it down at `at` when null). `self` is
 	 * true for this player's own carry, which the room may end on its own (knocked out, seated,
@@ -498,13 +502,19 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.avatars.update(views, deltaSeconds, this.context.camera);
 		const camera = this.context.camera;
 		if (camera instanceof THREE.PerspectiveCamera) {
-			this.locator.setEnabled(this.context.showLocatorBar() || this.trackedId !== null);
+			const showPlayers = this.context.showLocatorBar();
+			this.locator.setEnabled(
+				showPlayers || this.trackedId !== null || this.context.locatorExtrasActive?.() === true
+			);
 			this.locator.beginFrame(camera, this.localFeetY);
 			for (const { info, frame } of views) {
+				// With the bar's player markers switched off, only a tracked player is shown.
+				if (!showPlayers && info.playerId !== this.trackedId) continue;
 				const dim =
 					info.away || info.offline || frame.stale || (frame.flags & POSE_FLAGS.away) !== 0;
 				this.locator.place(info.playerId, frame.x, frame.y, frame.z, info.colour, info.name, dim);
 			}
+			this.context.placeLocatorExtras?.(this.locator);
 			this.locator.endFrame();
 		}
 	}

@@ -52,6 +52,7 @@
 	import CarryHud from '#lib/components/CarryHud.svelte';
 	import { playCreatureSound } from '#lib/game/audio/creatureSounds';
 	import type { CarryPrompt, CarryState } from '#lib/game/player/CarryController';
+	import type { WaypointView } from '#lib/game/waypoints/WaypointSystem';
 	import DamageVignette from '#lib/components/DamageVignette.svelte';
 	import DeathCard from '#lib/components/DeathCard.svelte';
 	import {
@@ -450,6 +451,23 @@
 
 	$effect(() => {
 		multiplayerSession?.setLocatorElement(locatorElement);
+		// Single player: the scene draws waypoints on the bar itself.
+		session?.scene.setLocatorElement(locatorElement);
+	});
+
+	/** Waypoints (pause menu): refreshed while paused so distances stay current. */
+	let waypointRows = $state<WaypointView[]>([]);
+	let carryHintsOn = $state(true);
+	function refreshWaypoints() {
+		if (!session) return;
+		waypointRows = session.scene.getWaypoints();
+		carryHintsOn = session.scene.waypoints.carryHints;
+	}
+	$effect(() => {
+		if (!paused || !session) return;
+		refreshWaypoints();
+		const timer = setInterval(refreshWaypoints, 500);
+		return () => clearInterval(timer);
 	});
 
 	// Q12: in an online world, the pause menu (and any other overlay) shows us as away to others while
@@ -944,6 +962,11 @@
 				};
 			}
 			const activeSession = session;
+			// Waypoints are kept per world in this browser.
+			activeSession.scene.setWaypointWorld(
+				multiplayer && onlineWorld ? `online:${onlineWorld.worldId}` : world.id
+			);
+			activeSession.scene.setLocatorElement(locatorElement);
 
 			await activeSession.scene.whenInitialWorldReady((progress) => {
 				loadingProgress = Math.max(loadingProgress, 0.2 + progress * 0.7);
@@ -1906,8 +1929,8 @@
 							<dt>B</dt>
 							<dd>
 								Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
-								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (default)
-								snaps walls to existing corners and ceilings/floors/roofs to wall corners below.
+								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (default) snaps walls to
+								existing corners and ceilings/floors/roofs to wall corners below.
 							</dd>
 							<dt>E</dt>
 							<dd>
@@ -2641,12 +2664,13 @@
 				<!-- Small, always-present save state. Deliberately understated: autosave is meant to be
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
+				<!-- Players online, and waypoints anywhere. -->
+				<LocatorBar
+					bind:element={locatorElement}
+					trackingName={trackedPlayerName}
+					onStopTracking={() => multiplayerSession?.trackPlayer(null)}
+				/>
 				{#if onlineWorld}
-					<LocatorBar
-						bind:element={locatorElement}
-						trackingName={trackedPlayerName}
-						onStopTracking={() => multiplayerSession?.trackPlayer(null)}
-					/>
 					<OnlineStatus
 						worldName={onlineWorld.name}
 						status={mpStatus}
@@ -2898,6 +2922,24 @@
 					if (id) void duplicateWorld(id);
 				}}
 				onQuit={() => void quitToWorlds()}
+				waypoints={waypointRows}
+				carryHints={carryHintsOn}
+				onToggleWaypoint={(id, on) => {
+					session?.scene.setWaypointEnabled(id, on);
+					refreshWaypoints();
+				}}
+				onAddWaypoint={(name) => {
+					session?.scene.addWaypointHere(name);
+					refreshWaypoints();
+				}}
+				onRemoveWaypoint={(id) => {
+					session?.scene.removeWaypoint(id);
+					refreshWaypoints();
+				}}
+				onToggleCarryHints={(on) => {
+					session?.scene.setCarryHints(on);
+					refreshWaypoints();
+				}}
 				onOpenSettings={openSettings}
 				onOpenControls={() => (showHelp = true)}
 				onOpenCreatureLab={openCreatureLab}

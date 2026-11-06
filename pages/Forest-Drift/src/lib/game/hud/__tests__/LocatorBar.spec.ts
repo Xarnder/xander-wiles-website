@@ -234,3 +234,71 @@ describe('LocatorBar', () => {
 		expect(inkFor('#4363d8')).toBe('#ffffff');
 	});
 });
+
+describe('LocatorBar waypoints', () => {
+	beforeEach(() => {
+		writes = 0;
+		vi.stubGlobal('document', { createElement: () => new FakeElement() });
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('draws a waypoint as a pin with its icon, labelled with name and distance', () => {
+		const { bar, camera, marker } = setup();
+		bar.beginFrame(camera, 0);
+		bar.place('waypoint:oak', 0, 0, -30, '#4fb3ff', 'Old oak', false, 'waypoint', '⚑');
+		bar.endFrame();
+		expect(marker(0).classes.has('waypoint')).toBe(true);
+		// The glyph lives inside the dot (the shape), the label says where and how far.
+		expect(marker(0).children[1]!.children[0]!.textContent).toBe('⚑');
+		expect(marker(0).labelText).toBe('Old oak · 30 m');
+	});
+
+	it('pins a waypoint behind you to the end of the bar, pointing the way', () => {
+		const { bar, camera, marker } = setup();
+		bar.beginFrame(camera, 0);
+		bar.place('waypoint:camp', -5, 0, 20, '#4fb3ff', 'Camp', false, 'waypoint', '⚑');
+		bar.endFrame();
+		expect(marker(0).shown).toBe(true);
+		expect(marker(0).x).toBe(0);
+		expect(marker(0).labelText).toBe('◀ Camp · 21 m');
+	});
+
+	it('never takes the closest-player highlight from a person', () => {
+		const { bar, camera, marker } = setup();
+		bar.beginFrame(camera, 0);
+		bar.place('sam', 0, 0, -40, '#e6194b', 'sam', false);
+		bar.place('waypoint:near', 2, 0, -5, '#f2c14e', 'Moon Ribbon', false, 'waypoint', '🐾');
+		bar.endFrame();
+		expect(bar.closest).toBe('sam');
+		expect(marker(0).classes.has('closest')).toBe(true);
+		expect(marker(1).classes.has('waypoint')).toBe(true);
+	});
+
+	it('drops a label to the row below when it would overlap another, and back when clear', () => {
+		const { bar, camera, marker } = setup();
+		const place = (campX: number) => {
+			bar.beginFrame(camera, 0);
+			bar.place('waypoint:creature', -2, 0, -40, '#f2c14e', 'Moon Ribbon', false, 'waypoint', '🐾');
+			bar.place('waypoint:camp', campX, 0, -57, '#4fb3ff', 'Camp', false, 'waypoint', '⚑');
+			bar.endFrame();
+		};
+		place(0);
+		expect([bar.labelRow('waypoint:creature'), bar.labelRow('waypoint:camp')]).toEqual([0, 1]);
+		expect(marker(1).vars.get('--locator-row')).toBe('1');
+		// Far apart: both on the top row again.
+		place(45);
+		expect([bar.labelRow('waypoint:creature'), bar.labelRow('waypoint:camp')]).toEqual([0, 0]);
+		expect(marker(1).vars.get('--locator-row')).toBe('0');
+	});
+
+	it('shows the bar for waypoints alone, and hides it when they are turned off', () => {
+		const { bar, camera, element } = setup();
+		bar.beginFrame(camera, 0);
+		bar.place('waypoint:oak', 0, 0, -30, '#4fb3ff', 'Old oak', false, 'waypoint', '⚑');
+		bar.endFrame();
+		expect(element.style.visibility).toBe('visible');
+		bar.beginFrame(camera, 0);
+		bar.endFrame();
+		expect(element.style.visibility).toBe('hidden');
+	});
+});

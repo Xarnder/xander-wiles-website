@@ -13,11 +13,25 @@ const SHRINK_DISTANCE = 250;
  * the same distance don't make the highlight flicker between them.
  */
 const CLOSEST_HYSTERESIS_METRES = 1.5;
+/**
+ * Labels that would overlap drop to the row below (up to `LABEL_ROWS`), e.g. two waypoints in
+ * nearly the same direction. Widths are estimated from the text so the DOM is never measured.
+ */
+const LABEL_ROWS = 3;
+const LABEL_GAP_PX = 6;
+const LABEL_CHAR_PX = 6.4;
+const LABEL_PADDING_PX = 16;
+
+/** What a marker on the bar stands for. Shape carries the meaning, not colour alone. */
+export type LocatorMarkerKind = 'player' | 'waypoint';
 
 interface Marker {
 	root: HTMLDivElement;
 	arrow: HTMLSpanElement;
 	label: HTMLSpanElement;
+	glyph: HTMLSpanElement;
+	kind: LocatorMarkerKind;
+	icon: string;
 
 	// This frame's numbers, gathered by `place` and drawn by `endFrame`.
 	seen: boolean;
@@ -38,9 +52,17 @@ interface Marker {
 	appliedClosest: boolean;
 	appliedTracked: boolean;
 	appliedEdge: '' | 'left' | 'right';
+	appliedKind: LocatorMarkerKind | '';
+	appliedIcon: string;
 	arrowText: string;
 	labelText: string;
+	// Label stacking: this frame's estimated extent, and the row the DOM shows.
+	labelLeft: number;
+	labelRight: number;
+	appliedRow: number;
 }
+
+const byLabelLeft = (a: Marker, b: Marker) => a.labelLeft - b.labelLeft;
 
 /**
  * The locator bar: a strip across the top of the screen with a dot, in each player's own colour,
@@ -70,6 +92,8 @@ export class LocatorBar {
 	private barVisible: boolean | null = null;
 	private closestId: string | null = null;
 	private trackedId: string | null = null;
+	private readonly labelled: Marker[] = [];
+	private readonly rowEnds = new Float64Array(LABEL_ROWS);
 
 	/** The bar's element (from the HUD); null detaches. Markers are created inside it. */
 	attach(element: HTMLElement | null): void {
@@ -115,7 +139,11 @@ export class LocatorBar {
 		for (const marker of this.markers.values()) marker.seen = false;
 	}
 
-	/** One player this frame: their feet position, colour and name. No DOM work happens here. */
+	/**
+	 * One marker this frame: a player (feet position, colour, name) or a waypoint (`kind`
+	 * 'waypoint' with a one-character `icon`). Waypoints a player turned on are always shown: out of
+	 * view they wait at the end of the bar with an arrow, like the closest player. No DOM work here.
+	 */
 	place(
 		id: string,
 		x: number,
@@ -123,7 +151,9 @@ export class LocatorBar {
 		z: number,
 		colour: string,
 		name: string,
-		dim: boolean
+		dim: boolean,
+		kind: LocatorMarkerKind = 'player',
+		icon = ''
 	): void {
 		if (!this.active) return;
 		let marker = this.markers.get(id);
@@ -141,6 +171,13 @@ export class LocatorBar {
 		marker.colour = colour;
 		marker.name = name;
 		marker.dim = dim;
+		marker.kind = kind;
+		marker.icon = icon;
+	}
+
+	/** Whether the bar is drawing this frame (attached, enabled and laid out). */
+	get isActive(): boolean {
+		return this.active;
 	}
 
 	/** Picks the closest player, then updates every marker's DOM in one go. */
@@ -154,7 +191,8 @@ export class LocatorBar {
 				this.markers.delete(id);
 				continue;
 			}
-			if (marker.distance < nearestDistance) {
+			// "Closest" is about people; waypoints are always pinned anyway.
+			if (marker.kind === 'player' && marker.distance < nearestDistance) {
 				nearest = id;
 				nearestDistance = marker.distance;
 			}
@@ -166,7 +204,8 @@ export class LocatorBar {
 		const highlighted =
 			this.trackedId && this.markers.has(this.trackedId) ? this.trackedId : this.closestId;
 		for (const [id, marker] of this.markers)
-			this.draw(marker, id === highlighted, id === this.trackedId);
+			this.draw(marker, id === highlighted || marker.kind === 'waypoint', id === this.trackedId);
+		this.stackLabels();
 		this.setBarVisible(this.markers.size > 0);
 	}
 
@@ -187,6 +226,14 @@ export class LocatorBar {
 	}
 
 	private draw(marker: Marker, closest: boolean, tracked: boolean): void {
+		if (marker.kind !== marker.appliedKind) {
+			marker.appliedKind = marker.kind;
+			marker.root.classList.toggle('waypoint', marker.kind === 'waypoint');
+		}
+		if (marker.icon !== marker.appliedIcon) {
+			marker.appliedIcon = marker.icon;
+			marker.glyph.textContent = marker.icon;
+		}
 		if (tracked !== marker.appliedTracked) {
 			marker.appliedTracked = tracked;
 			marker.root.classList.toggle('tracked', tracked);
@@ -258,12 +305,63 @@ export class LocatorBar {
 		}
 	}
 
+	/**
+	 * Left to right, each label takes the first row where it clears the label before it; if every
+	 * row is taken it goes on the one that frees up soonest.
+	 */
+	private stackLabels(): void {
+		const labelled = this.labelled;
+		labelled.length = 0;
+		for (const marker of this.markers.values()) {
+			if (!marker.shown || marker.labelText === '') {
+				this.setRow(marker, 0);
+				continue;
+			}
+			const width = (marker.labelText.length * LABEL_CHAR_PX + LABEL_PADDING_PX) * marker.scale;
+			marker.labelLeft =
+				marker.appliedEdge === 'left'
+					? marker.x - 6
+					: marker.appliedEdge === 'right'
+						? marker.x + 6 - width
+						: marker.x - width / 2;
+			marker.labelRight = marker.labelLeft + width;
+			labelled.push(marker);
+		}
+		if (labelled.length > 1) labelled.sort(byLabelLeft);
+		this.rowEnds.fill(Number.NEGATIVE_INFINITY);
+		for (const marker of labelled) {
+			let row = 0;
+			let soonest = 0;
+			for (; row < LABEL_ROWS; row++) {
+				if (marker.labelLeft >= this.rowEnds[row]! + LABEL_GAP_PX) break;
+				if (this.rowEnds[row]! < this.rowEnds[soonest]!) soonest = row;
+			}
+			if (row === LABEL_ROWS) row = soonest;
+			this.rowEnds[row] = Math.max(this.rowEnds[row]!, marker.labelRight);
+			this.setRow(marker, row);
+		}
+	}
+
+	private setRow(marker: Marker, row: number): void {
+		if (row === marker.appliedRow) return;
+		marker.appliedRow = row;
+		marker.root.style.setProperty('--locator-row', String(row));
+	}
+
+	/** The row each marker's label is on, by id (for tests). */
+	labelRow(id: string): number {
+		return this.markers.get(id)?.appliedRow ?? 0;
+	}
+
 	private createMarker(): Marker {
 		const root = document.createElement('div');
 		root.className = 'locator-marker';
 		root.style.display = 'none';
 		const dot = document.createElement('span');
 		dot.className = 'locator-dot';
+		const glyph = document.createElement('span');
+		glyph.className = 'locator-glyph';
+		dot.append(glyph);
 		const arrow = document.createElement('span');
 		arrow.className = 'locator-arrow';
 		const label = document.createElement('span');
@@ -274,6 +372,9 @@ export class LocatorBar {
 			root,
 			arrow,
 			label,
+			glyph,
+			kind: 'player',
+			icon: '',
 			seen: true,
 			angle: Number.NaN,
 			position: null,
@@ -290,8 +391,13 @@ export class LocatorBar {
 			appliedClosest: false,
 			appliedTracked: false,
 			appliedEdge: '',
+			appliedKind: '',
+			appliedIcon: '',
 			arrowText: '',
-			labelText: ''
+			labelText: '',
+			labelLeft: 0,
+			labelRight: 0,
+			appliedRow: 0
 		};
 	}
 

@@ -22,7 +22,7 @@
 				],
 				[
 					'K on a small creature',
-					'Pick up a small four-legged creature and tuck it under your arm; press K again to put it down. A door or seat under the crosshair comes first.'
+					'Pick up a small four-legged creature (the ones with a gold paw badge) and tuck it under your arm; press K again to put it down. A door or seat under the crosshair comes first. Pause → Waypoints can point you to the nearest one.'
 				],
 				[
 					'Left click while carrying',

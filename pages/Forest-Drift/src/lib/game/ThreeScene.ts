@@ -12,6 +12,10 @@ import { HeldCreatureView } from './creatures/HeldCreatureView';
 import { RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
 import { CarryController, type CarryPrompt, type CarryState } from './player/CarryController';
 import { ProjectileSystem } from './particles/ProjectileSystem';
+import { CarryHints } from './creatures/CarryHints';
+import { WaypointSystem, type WaypointView } from './waypoints/WaypointSystem';
+import { WaypointBeacons } from './waypoints/WaypointBeacons';
+import { LocatorBar } from './hud/LocatorBar';
 import type { Vec3Like } from './player/creatureProjectile';
 import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
 import type { CarryPlacement } from './net/protocol';
@@ -653,6 +657,13 @@ export class ThreeScene implements WorldRuntime {
 	readonly carry: CarryController;
 	readonly heldCreature: HeldCreatureView;
 	readonly projectiles: ProjectileSystem;
+	/** Waypoints (pause menu): beacons and locator markers for places and moving targets. */
+	readonly waypoints: WaypointSystem;
+	private readonly waypointBeacons: WaypointBeacons;
+	/** Badges over creatures that can be picked up. */
+	readonly carryHints: CarryHints;
+	/** The locator bar in single player (online, the multiplayer session draws it). */
+	private readonly locator = new LocatorBar();
 	readonly sustainSettings: SustainSettings;
 	readonly musicVisual = createDefaultMusicVisualSettings();
 	readonly settingsHost: GameSettingsHost;
@@ -1801,6 +1812,24 @@ export class ThreeScene implements WorldRuntime {
 			putDown: (species) => options.onCarryEvent?.({ type: 'putDown', species }),
 			refused: (reason) => options.onCarryEvent?.({ type: 'refused', reason })
 		});
+		this.waypoints = new WaypointSystem(
+			{
+				player: () => {
+					const { x, y, z } = this.controller.worldPosition;
+					return { x, y: y - this.settings.player.eyeHeight, z };
+				},
+				nearestCarryable: (from) => this.creatures.nearestCarryable(from),
+				creaturePosition: (id) => this.creatures.creaturePosition(id),
+				carrying: () => this.carry.carrying
+			},
+			browserStorage()
+		);
+		this.waypointBeacons = new WaypointBeacons();
+		this.carryHints = new CarryHints();
+		this.scene.add(this.waypointBeacons.group, this.carryHints.group);
+		// Unlit overlays: keep them out of the ambient-occlusion pass, like the name tags.
+		this.graphicsPipeline.excludeFromAo(this.waypointBeacons.group);
+		this.graphicsPipeline.excludeFromAo(this.carryHints.group);
 		// Registered after the seat runtime's capture listener (which yields K when no seat is
 		// targeted) and before the door controller's bubbling one.
 		window.addEventListener('keydown', this.handleCarryKey, true);
@@ -2138,6 +2167,8 @@ export class ThreeScene implements WorldRuntime {
 				setCarried: (slot, creature, previous, at, self) =>
 					this.applyRoomCarry(slot, creature, previous, at, self),
 				resolveCreature: (id) => this.resolveCreature(id),
+				locatorExtrasActive: () => this.waypoints.anyActive,
+				placeLocatorExtras: (locator) => this.placeWaypointMarkers(locator),
 				remoteShot: (origin, dir, colour, ageMs) =>
 					this.projectiles.spawn(
 						{ x: origin[0], y: origin[1], z: origin[2] },
@@ -3752,8 +3783,7 @@ export class ThreeScene implements WorldRuntime {
 		if (!this.carry.carrying) return;
 		const character = this.miniBuildInteraction.localCharacter;
 		const anchor = this.carryAnchorScratch;
-		const reducedMotion =
-			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const reducedMotion = this.reducedMotion;
 		const mode =
 			this.controller.thirdPerson && !this.controller.interactionPose
 				? character && this.controller.localAvatarVisible && character.carryAnchor(anchor)
@@ -3763,6 +3793,82 @@ export class ThreeScene implements WorldRuntime {
 		this.heldCreature.update(mode, deltaSeconds, performance.now(), reducedMotion);
 	}
 	private readonly carryAnchorScratch = new THREE.Matrix4();
+	/** One media query, read each frame (creating one per frame would allocate). */
+	private readonly reducedMotionQuery =
+		typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+	private get reducedMotion(): boolean {
+		return this.reducedMotionQuery?.matches ?? false;
+	}
+
+	// ------------------------------------------------------------------------------ waypoints
+
+	/** Moves dynamic waypoints, draws beacons and carry badges, and (single player) the locator. */
+	private updateWaypoints(deltaSeconds: number): void {
+		const now = performance.now();
+		const reducedMotion = this.reducedMotion;
+		this.waypoints.update(now);
+		this.waypointBeacons.update(this.waypoints, this.camera, deltaSeconds, reducedMotion);
+		const hintsVisible =
+			RANGED_WEAPONS_ENABLED &&
+			this.waypoints.carryHints &&
+			!this.carry.carrying &&
+			this.buildToolManager.isNormalMode() &&
+			(!this.multiplayer || this.sharedCreatureProjectiles);
+		this.carryHints.update(
+			this.creatures,
+			this.camera,
+			deltaSeconds,
+			hintsVisible,
+			this.carry.targetId,
+			this.waypoints.followedCreature,
+			reducedMotion
+		);
+		// Online, the multiplayer session draws the bar and asks for these markers itself.
+		if (this.multiplayer) return;
+		this.locator.setEnabled(this.waypoints.anyActive);
+		this.locator.beginFrame(
+			this.camera,
+			this.controller.worldPosition.y - this.settings.player.eyeHeight
+		);
+		this.placeWaypointMarkers(this.locator);
+		this.locator.endFrame();
+	}
+
+	private placeWaypointMarkers(locator: LocatorBar): void {
+		this.waypoints.forEachActive((w) =>
+			locator.place(`waypoint:${w.id}`, w.x, w.y, w.z, w.colour, w.label, false, 'waypoint', w.icon)
+		);
+	}
+
+	/** The HUD's locator bar element. Online, the multiplayer session owns the bar instead. */
+	setLocatorElement(element: HTMLElement | null): void {
+		this.locator.attach(this.multiplayer ? null : element);
+	}
+
+	/** Which world's waypoints to show: a local world id, `online:<id>`, or null. */
+	setWaypointWorld(key: string | null): void {
+		this.waypoints.setWorld(key);
+	}
+
+	getWaypoints(): WaypointView[] {
+		return this.waypoints.list();
+	}
+
+	setWaypointEnabled(id: string, enabled: boolean): void {
+		this.waypoints.setEnabled(id, enabled);
+	}
+
+	addWaypointHere(name: string): string | null {
+		return this.waypoints.addHere(name);
+	}
+
+	removeWaypoint(id: string): boolean {
+		return this.waypoints.remove(id);
+	}
+
+	setCarryHints(on: boolean): void {
+		this.waypoints.setCarryHints(on);
+	}
 
 	private handleLanding(event: LandingEvent): void {
 		if (!PLAYER_HEALTH_ENABLED || event.immune || !this.fallDamageEnabled()) return;
@@ -4557,6 +4663,7 @@ export class ThreeScene implements WorldRuntime {
 		// Gives meshes built since last frame their real-world UVs before they are drawn again.
 		this.surfaceBinder.flush();
 		this.updateHeldCreature(deltaSeconds);
+		this.updateWaypoints(deltaSeconds);
 		this.projectiles.update(performance.now());
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
@@ -4747,6 +4854,9 @@ export class ThreeScene implements WorldRuntime {
 		this.music.dispose();
 		this.heldCreature.dispose();
 		this.projectiles.dispose();
+		this.waypointBeacons.dispose();
+		this.carryHints.dispose();
+		this.locator.dispose();
 		this.creatures.dispose();
 		this.paintTool.dispose();
 		this.moveTool.dispose();
@@ -4779,5 +4889,14 @@ export class ThreeScene implements WorldRuntime {
 		if (this.renderer.domElement.parentElement === this.container) {
 			this.container.removeChild(this.renderer.domElement);
 		}
+	}
+}
+
+/** `localStorage`, or null where it's blocked (private windows, previews). */
+function browserStorage(): Storage | null {
+	try {
+		return typeof localStorage === 'undefined' ? null : localStorage;
+	} catch {
+		return null;
 	}
 }

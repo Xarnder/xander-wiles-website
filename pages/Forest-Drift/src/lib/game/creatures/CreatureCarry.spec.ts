@@ -224,3 +224,27 @@ describe('placed creatures shared online (F2)', () => {
 		expect(c.placedRevision).toBe(revision);
 	});
 });
+
+describe('finding carryable creatures (waypoints and badges)', () => {
+	it('finds the nearest carryable creature in the herd, and nothing past the limit', () => {
+		const c = world();
+		const { id } = target(c);
+		const at = c.creaturePosition(id)!;
+		const found = c.nearestCarryable({ x: at.x + 0.5, y: 0, z: at.z })!;
+		expect(found.id).toBe(id);
+		expect(c.isCarryable(found.id)).toBe(true);
+		expect(found.name).toBe(c.logical.get(id)!.spawn.species.name);
+		expect(c.nearestCarryable({ x: 100_000, y: 0, z: 100_000 }, 50)).toBeNull();
+	});
+
+	it('skips creatures that are too big, and ones being carried', () => {
+		const c = world();
+		const { id } = target(c);
+		const big = [...c.logical.keys()].find((k) => !c.isCarryable(k))!;
+		expect(c.isCarryable(big)).toBe(false);
+		const at = c.creaturePosition(id)!;
+		c.carry(id);
+		expect(c.creaturePosition(id)).toBeNull();
+		expect(c.nearestCarryable({ x: at.x, y: 0, z: at.z })?.id).not.toBe(id);
+	});
+});

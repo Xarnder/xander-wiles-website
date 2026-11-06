@@ -510,6 +510,52 @@ export class CreatureRuntimeManager {
 		return best;
 	}
 
+	/** Whether a creature in the herd can be picked up (cached per spawn: recipes never change). */
+	isCarryable(id: string): boolean {
+		const r = this.logical.get(id);
+		if (!r) return false;
+		let carryable = this.carryableCache.get(r.spawn);
+		if (carryable === undefined) {
+			carryable = abilityFor({ species: r.spawn.species, individual: r.spawn.individual }) !== null;
+			this.carryableCache.set(r.spawn, carryable);
+		}
+		return carryable;
+	}
+	private readonly carryableCache = new WeakMap<CreatureSpawnDefinition, boolean>();
+
+	/**
+	 * The nearest creature in the herd that can be picked up (not carried by anyone), within
+	 * `maxDistance` metres horizontally of `from`, or null. Its position is where it's drawn when it
+	 * has a mesh, so a waypoint sits on the animal rather than a step behind it.
+	 */
+	nearestCarryable(
+		from: Vec3,
+		maxDistance = Number.POSITIVE_INFINITY
+	): { id: string; name: string; x: number; y: number; z: number } | null {
+		let best: CreatureRuntimeDefinition | null = null;
+		let bestDistance = maxDistance;
+		for (const [id, r] of this.logical) {
+			const d = Math.hypot(r.position.x - from.x, r.position.z - from.z);
+			if (d >= bestDistance || !this.isCarryable(id)) continue;
+			best = r;
+			bestDistance = d;
+		}
+		if (!best) return null;
+		const at = this.creaturePosition(best.spawn.id)!;
+		return { id: best.spawn.id, name: best.spawn.species.name, ...at };
+	}
+
+	/** Where a creature in the herd is now (its mesh when drawn), or null when it isn't in the herd. */
+	creaturePosition(id: string): { x: number; y: number; z: number } | null {
+		const live = this.live.get(id);
+		if (live) {
+			const p = live.compiled.object.position;
+			return { x: p.x, y: p.y, z: p.z };
+		}
+		const r = this.logical.get(id);
+		return r ? { x: r.position.x, y: r.position.y, z: r.position.z } : null;
+	}
+
 	isCarried(id: string): boolean {
 		return this.carried.has(id);
 	}

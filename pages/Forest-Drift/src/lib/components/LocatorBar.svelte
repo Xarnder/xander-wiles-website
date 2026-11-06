@@ -149,6 +149,29 @@
 			0 0 6px rgba(0, 0, 0, 0.5);
 	}
 
+	/*
+	 * Waypoints: a rounded "pin head" with an icon, never a round dot, so they read as places rather
+	 * than people even without colour. The glyph's ink is chosen for contrast with the fill.
+	 */
+	.locator-bar :global(.locator-glyph) {
+		display: none;
+	}
+	.locator-bar :global(.locator-marker.waypoint .locator-dot) {
+		display: grid;
+		place-items: center;
+		width: 1rem;
+		height: 1rem;
+		margin-top: -0.5rem;
+		border-radius: 0.3rem 0.3rem 0.3rem 0;
+		transform: rotate(-45deg);
+	}
+	.locator-bar :global(.locator-marker.waypoint .locator-glyph) {
+		display: block;
+		transform: rotate(45deg);
+		font-size: 0.6rem;
+		line-height: 1;
+		color: var(--locator-ink, #04121f);
+	}
 	.locator-bar :global(.locator-arrow) {
 		position: absolute;
 		bottom: 0.42rem;
@@ -159,8 +182,9 @@
 		white-space: nowrap;
 	}
 
+	/* Labels that would overlap another drop a row (`--locator-row`, set by LocatorBar.ts). */
 	.locator-bar :global(.locator-label) {
-		margin-top: 0.3rem;
+		margin-top: calc(0.3rem + var(--locator-row, 0) * 1.3rem);
 		font-size: 0.68rem;
 		font-weight: 600;
 		color: #eaf6ff;
@@ -184,7 +208,7 @@
 	}
 
 	.locator-bar :global(.locator-marker.closest .locator-label) {
-		margin-top: 0.32rem;
+		margin-top: calc(0.32rem + var(--locator-row, 0) * 1.3rem);
 		padding: 0.1rem 0.45rem;
 		border-radius: 999px;
 		background: var(--locator-colour, #eaf6ff);

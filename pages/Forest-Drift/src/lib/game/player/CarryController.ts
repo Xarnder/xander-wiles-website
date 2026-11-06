@@ -128,6 +128,11 @@ export class CarryController {
 		return this.carried?.id ?? null;
 	}
 
+	/** The creature under the crosshair that K would pick up (refreshed ten times a second). */
+	get targetId(): string | null {
+		return this.candidate?.id ?? null;
+	}
+
 	state(): CarryState {
 		const carried = this.carried;
 		if (!carried) return EMPTY;

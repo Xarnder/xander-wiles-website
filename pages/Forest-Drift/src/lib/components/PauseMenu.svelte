@@ -1,6 +1,8 @@
 <script lang="ts">
 	import titleMark from '#lib/assets/forest-drift-title.svg';
 	import type { SaveStatus } from '#lib/game/world/WorldTypes';
+	import type { WaypointView } from '#lib/game/waypoints/WaypointSystem';
+	import { MAX_PERSONAL_WAYPOINTS, MAX_WAYPOINT_NAME } from '#lib/game/waypoints/WaypointSystem';
 
 	interface Props {
 		worldName: string;
@@ -20,6 +22,14 @@
 		onOpenCreatureLab: () => void;
 		onOpenDebug: () => void;
 		onOpenMultiplayer: () => void;
+		/** Waypoints: the creature waypoint first, then the player's own. */
+		waypoints?: WaypointView[];
+		/** Paw badges over creatures that can be carried. */
+		carryHints?: boolean;
+		onToggleWaypoint?: (id: string, on: boolean) => void;
+		onAddWaypoint?: (name: string) => void;
+		onRemoveWaypoint?: (id: string) => void;
+		onToggleCarryHints?: (on: boolean) => void;
 	}
 
 	const {
@@ -39,10 +49,39 @@
 		onOpenControls,
 		onOpenCreatureLab,
 		onOpenDebug,
-		onOpenMultiplayer
+		onOpenMultiplayer,
+		waypoints = [],
+		carryHints = true,
+		onToggleWaypoint,
+		onAddWaypoint,
+		onRemoveWaypoint,
+		onToggleCarryHints
 	}: Props = $props();
 
-	type Panel = 'root' | 'world' | 'rename';
+	type Panel = 'root' | 'world' | 'rename' | 'waypoints';
+	let newWaypointName = $state('');
+	const personalCount = $derived(waypoints.filter((w) => !w.dynamic).length);
+
+	function metres(distance: number | null): string {
+		return distance === null ? '' : `${Math.max(1, Math.round(distance))} m`;
+	}
+
+	/** The second line of a waypoint row: what it points at and how far. */
+	function detailText(w: WaypointView): string {
+		if (w.dynamic) {
+			if (w.status === 'off') return 'Follows the closest small creature you can pick up';
+			if (w.status === 'carrying') return "You're carrying one: put it down to look for another";
+			if (w.status === 'none') return 'None nearby: explore and it will find one';
+			return `${w.detail ?? 'Creature'} · ${metres(w.distance)}`;
+		}
+		return `${metres(w.distance)} away${w.enabled ? '' : ' · hidden'}`;
+	}
+
+	function submitWaypoint(event: SubmitEvent) {
+		event.preventDefault();
+		onAddWaypoint?.(newWaypointName);
+		newWaypointName = '';
+	}
 	let panel = $state<Panel>('root');
 	/** Seeded from `worldName` when the rename panel opens, not at construction, so it always reflects the world's current name. */
 	let renameValue = $state('');
@@ -94,6 +133,9 @@
 					<button data-testid="pause-settings" onclick={onOpenSettings}>Settings</button>
 					<button data-testid="pause-controls" onclick={onOpenControls}>Help</button>
 					<button data-testid="pause-creature-lab" onclick={onOpenCreatureLab}>Creature Lab</button>
+					<button data-testid="pause-waypoints" onclick={() => (panel = 'waypoints')}>
+						Waypoints
+					</button>
 				</div>
 			</div>
 
@@ -143,6 +185,69 @@
 				</button>
 				<button onclick={() => (panel = 'root')}>Back</button>
 			</div>
+		{:else if panel === 'waypoints'}
+			<h2 data-testid="pause-waypoints-panel">Waypoints</h2>
+			<p class="panel-note">
+				Turn a waypoint on to show a beacon in the world and a marker on the locator bar at the top
+				of the screen. The creature waypoint moves with the creature.
+			</p>
+			<ul class="waypoint-list">
+				{#each waypoints as w (w.id)}
+					<li class="waypoint-row" data-testid="waypoint-row" data-id={w.id} data-status={w.status}>
+						<span class="waypoint-icon" style:--waypoint-colour={w.colour} aria-hidden="true"
+							>{w.icon}</span
+						>
+						<span class="waypoint-text">
+							<span class="waypoint-name">{w.name}</span>
+							<span class="waypoint-detail" data-testid="waypoint-detail">{detailText(w)}</span>
+						</span>
+						<button
+							class="switch"
+							role="switch"
+							aria-checked={w.enabled}
+							aria-label={w.name}
+							data-testid="waypoint-toggle"
+							onclick={() => onToggleWaypoint?.(w.id, !w.enabled)}
+						>
+							<span class="knob"></span>
+						</button>
+						{#if !w.dynamic}
+							<button
+								class="remove"
+								aria-label={`Remove ${w.name}`}
+								data-testid="waypoint-remove"
+								onclick={() => onRemoveWaypoint?.(w.id)}>×</button
+							>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+			<form class="add-waypoint" onsubmit={submitWaypoint}>
+				<input
+					aria-label="New waypoint name"
+					placeholder="Name (optional)"
+					maxlength={MAX_WAYPOINT_NAME}
+					bind:value={newWaypointName}
+					data-testid="waypoint-name-input"
+				/>
+				<button
+					type="submit"
+					data-testid="waypoint-add"
+					disabled={personalCount >= MAX_PERSONAL_WAYPOINTS}
+				>
+					Add here
+				</button>
+			</form>
+			<label class="hint-toggle">
+				<input
+					type="checkbox"
+					checked={carryHints}
+					data-testid="carry-hints-toggle"
+					onchange={(event) => onToggleCarryHints?.(event.currentTarget.checked)}
+				/>
+				Show a paw badge over creatures you can pick up
+			</label>
+			<button data-testid="pause-waypoints-back" onclick={() => (panel = 'root')}>Back</button>
 		{:else}
 			<h2>Rename World</h2>
 			<form onsubmit={submitRename}>
@@ -287,7 +392,7 @@
 
 	.tool-grid {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 0.4rem;
 	}
 
@@ -362,6 +467,161 @@
 		background: rgba(57, 211, 83, 0.85);
 		border-color: rgba(57, 211, 83, 0.9);
 		color: #04121f;
+	}
+
+	.panel-note {
+		margin: 0;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		opacity: 0.75;
+		text-align: center;
+	}
+
+	.waypoint-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.waypoint-row {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		padding: 0.45rem 0.5rem;
+		border-radius: 9px;
+		background: rgba(0, 0, 0, 0.25);
+		border: 1px solid rgba(234, 246, 255, 0.12);
+	}
+
+	/* The same pin-head shape as on the locator bar, in the waypoint's colour. */
+	.waypoint-icon {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: 0.45rem 0.45rem 0.45rem 0.1rem;
+		background: var(--waypoint-colour);
+		border: 1.5px solid rgba(4, 18, 31, 0.75);
+		color: #04121f;
+		font-size: 0.85rem;
+	}
+
+	.waypoint-text {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.waypoint-name {
+		font-size: 0.85rem;
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.waypoint-detail {
+		font-size: 0.7rem;
+		opacity: 0.7;
+	}
+
+	button.switch {
+		flex: none;
+		position: relative;
+		width: 2.6rem;
+		height: 1.5rem;
+		min-height: 44px;
+		padding: 0;
+		border: none;
+		background: transparent;
+	}
+
+	button.switch::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 50%;
+		height: 1.5rem;
+		transform: translateY(-50%);
+		border-radius: 999px;
+		background: rgba(234, 246, 255, 0.18);
+		border: 1px solid rgba(234, 246, 255, 0.3);
+	}
+
+	button.switch[aria-checked='true']::before {
+		background: rgba(57, 211, 83, 0.85);
+		border-color: rgba(57, 211, 83, 0.95);
+	}
+
+	button.switch .knob {
+		position: absolute;
+		top: 50%;
+		left: 0.2rem;
+		width: 1.1rem;
+		height: 1.1rem;
+		transform: translateY(-50%);
+		border-radius: 50%;
+		background: #eaf6ff;
+		transition: left 0.15s ease;
+	}
+
+	button.switch[aria-checked='true'] .knob {
+		left: 1.3rem;
+	}
+
+	button.switch:hover:not(:disabled) {
+		background: transparent;
+	}
+
+	button.switch:focus-visible {
+		outline: 2px solid #edcf85;
+		outline-offset: 2px;
+		border-radius: 999px;
+	}
+
+	button.remove {
+		flex: none;
+		width: 2rem;
+		min-height: 44px;
+		padding: 0;
+		font-size: 1.1rem;
+		line-height: 1;
+	}
+
+	.add-waypoint {
+		flex-direction: row;
+	}
+
+	.add-waypoint input {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.hint-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+
+	.hint-toggle input {
+		width: 1.1rem;
+		height: 1.1rem;
+		padding: 0;
+		accent-color: #39d353;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		button.switch .knob {
+			transition: none;
+		}
 	}
 
 	button.danger {
