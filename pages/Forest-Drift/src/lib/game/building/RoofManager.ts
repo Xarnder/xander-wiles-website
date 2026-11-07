@@ -451,6 +451,21 @@ export class RoofManager {
 		return results;
 	}
 
+	/** Every placed roof's solid span (underside to top, world Y) at (worldX, worldZ), like `SlabManager.getSpansAt`. */
+	getSpansAt(worldX: number, worldZ: number): { bottom: number; top: number }[] {
+		const results: { bottom: number; top: number }[] = [];
+		for (const entry of this.roofs.values()) {
+			if (!pointInPolygon2D({ x: worldX, z: worldZ }, entry.worldFootprint)) continue;
+			if (entry.topWorldY !== null && entry.bottomWorldY !== null) {
+				results.push({ bottom: entry.bottomWorldY, top: entry.topWorldY });
+				continue;
+			}
+			const y = evaluateFacesAt(entry.worldFaces!, worldX, worldZ);
+			if (y !== null) results.push({ bottom: y - entry.definition.thickness, top: y });
+		}
+		return results;
+	}
+
 	/** The underside counterpart to `getTopSurfacesAt` — used to block upward movement into a sloped roof from below, exactly like `SlabManager.getUndersidesAt`. */
 	getUndersidesAt(worldX: number, worldZ: number): number[] {
 		const results: number[] = [];

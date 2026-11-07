@@ -80,6 +80,18 @@ export class WorldSurfaceSampler {
 	}
 
 	/**
+	 * Whether world Y `y` at (worldX, worldZ) is inside a floor, ceiling or roof slab (strictly between
+	 * its underside and top). Lets a projectile flying sideways into a slab's edge stop there.
+	 */
+	isInsideSlab(worldX: number, worldZ: number, y: number): boolean {
+		for (const span of this.slabManager.getSpansAt(worldX, worldZ))
+			if (y > span.bottom && y < span.top) return true;
+		for (const span of this.roofManager.getSpansAt(worldX, worldZ))
+			if (y > span.bottom && y < span.top) return true;
+		return false;
+	}
+
+	/**
 	 * The lowest slab underside at (worldX, worldZ) that would block an upward move from `fromY` to
 	 * `toY` (i.e. lies strictly between them), or `null` if nothing blocks it. Used to stop the player
 	 * jumping/rising up through a ceiling or floor from below.

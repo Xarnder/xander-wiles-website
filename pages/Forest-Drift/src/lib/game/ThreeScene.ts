@@ -22,6 +22,7 @@ import {
 	type CreaturePrompt
 } from './player/creatureKeyRouting';
 import { chooseDismountSpot } from './player/rideDismount';
+import { projectileWorldHit, type ProjectileWorld } from './player/projectileWorld';
 import { CREATURE_RIDING_ENABLED, type RideSeatKind } from './creatures/creatureRiding';
 import type { MountSeat } from './player/FirstPersonController';
 import type { CameraBody } from './player/ThirdPersonCamera';
@@ -4077,45 +4078,23 @@ export class ThreeScene implements WorldRuntime {
 		];
 	}
 
-	/** First solid point on the segment `from`→`to` (sampled every 20 cm), or null. */
+	/**
+	 * First solid point on the segment `from`→`to`, or null: walls and other collision rectangles,
+	 * terrain, foundations, floors, ceilings and roofs (`projectileWorld.ts`).
+	 */
 	private projectileCollision(from: Vec3Like, to: Vec3Like): Vec3Like | null {
-		const dx = to.x - from.x,
-			dy = to.y - from.y,
-			dz = to.z - from.z;
-		const length = Math.hypot(dx, dy, dz);
-		const steps = Math.max(1, Math.ceil(length / 0.2));
-		const minX = Math.min(from.x, to.x) - 1,
-			maxX = Math.max(from.x, to.x) + 1,
-			minZ = Math.min(from.z, to.z) - 1,
-			maxZ = Math.max(from.z, to.z) + 1;
-		const rects = this.projectileRects().filter(
-			(r) =>
-				r.centerX + r.halfLength + r.halfThickness >= minX &&
-				r.centerX - r.halfLength - r.halfThickness <= maxX &&
-				r.centerZ + r.halfLength + r.halfThickness >= minZ &&
-				r.centerZ - r.halfLength - r.halfThickness <= maxZ
-		);
-		for (let i = 1; i <= steps; i++) {
-			const k = i / steps;
-			const x = from.x + dx * k,
-				y = from.y + dy * k,
-				z = from.z + dz * k;
-			if (this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y + 0.05) > y)
-				return { x, y: this.worldSurfaceSampler.getSupportingSurfaceY(x, z, y + 0.05), z };
-			if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y - 0.06, y + 0.06) !== null)
-				return { x, y, z };
-			for (const r of rects) {
-				if (y < r.minWorldY || y > r.maxWorldY) continue;
-				const ox = x - r.centerX,
-					oz = z - r.centerZ;
-				const u = ox * r.dirX + oz * r.dirZ;
-				const v = -ox * r.dirZ + oz * r.dirX;
-				if (Math.abs(u) <= r.halfLength + 0.06 && Math.abs(v) <= r.halfThickness + 0.06)
-					return { x, y, z };
-			}
-		}
-		return null;
+		return projectileWorldHit(from, to, this.projectileWorld);
 	}
+
+	/** What a pellet collides with: the collision data the player already walks against. */
+	private readonly projectileWorld: ProjectileWorld = {
+		supportingSurfaceY: (x, z, referenceY) =>
+			this.worldSurfaceSampler.getSupportingSurfaceY(x, z, referenceY),
+		ceilingBlockY: (x, z, fromY, toY) =>
+			this.worldSurfaceSampler.getCeilingBlockY(x, z, fromY, toY),
+		insideSlab: (x, z, y) => this.worldSurfaceSampler.isInsideSlab(x, z, y),
+		rects: () => this.projectileRects()
+	};
 
 	/** Draws the carried creature where the player can see it this frame. */
 	private updateHeldCreature(deltaSeconds: number): void {

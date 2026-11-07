@@ -356,6 +356,17 @@ export class SlabManager {
 		return tops;
 	}
 
+	/** Every placed slab's solid span (underside to top, world Y) at (worldX, worldZ). Excludes any slab whose opening covers this point. Used to stop projectiles entering a floor through its edge. */
+	getSpansAt(worldX: number, worldZ: number): { bottom: number; top: number }[] {
+		const point = { x: worldX, z: worldZ };
+		const spans: { bottom: number; top: number }[] = [];
+		for (const entry of this.slabs.values()) {
+			if (this.isCoveredBy(entry, point))
+				spans.push({ bottom: entry.bottomWorldY, top: entry.topWorldY });
+		}
+		return spans;
+	}
+
 	/** Every placed slab's underside world Y at (worldX, worldZ) — used to block upward movement into a ceiling from below. Excludes any slab whose opening covers this point. */
 	getUndersidesAt(worldX: number, worldZ: number): number[] {
 		const point = { x: worldX, z: worldZ };

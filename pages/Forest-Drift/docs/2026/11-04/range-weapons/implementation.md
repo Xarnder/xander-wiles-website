@@ -308,3 +308,15 @@ Known limits that remain:
 Verification: 219 unit files, 2,618 tests passing, and TypeScript (app and server), ESLint and Prettier clean on touched files. E2E results below.
 
 - E2E, Chromium: `rangedWeaponsMultiplayer.e2e.ts` (2, including a pellet hit and placed creatures across two browsers), `multiplayer.e2e.ts` (5, including punching after the id-reset change) and `rangedWeapons.e2e.ts` (4): **11 of 11 passing** (10.8 min).
+
+## Cover: pellets stop at floors and ceilings at any angle (2026-11-07)
+
+Pellets already stopped at walls, doors, stairs, furniture, fences, Mini Builds, terrain and foundations, using the collision rectangles and surface heights the player walks against. Floors and ceilings were only checked at single points every 20 cm, though, so a pellet shot down through a floor (at 30° or 80°, for example) or into a floor's edge passed straight through.
+
+`player/projectileWorld.ts` (pure, unit-tested) now tests each 20 cm step as a segment:
+
+- Down through terrain, a foundation, a floor or a roof (the surface under where the step started is now above the pellet).
+- Up through a ceiling or roof underside.
+- Sideways into a floor or roof's edge. This uses the new `SlabManager` / `RoofManager.getSpansAt` and `WorldSurfaceSampler.isInsideSlab`, which read the slabs' and roofs' existing bottom and top.
+
+No geometry was added. `ThreeScene.projectileCollision` delegates to it, so both your own and other players' pellets use it. In a test building: a wall stopped pellets at its face, pellets over it flew on, shots down through a floor at 30–89° stopped at its top, shots up at 30–89° stopped at the ceiling underside, and a shot into the floor's edge stopped at the edge. The room still doesn't check walls (Q14 A): it's the shooter's browser that decides, so normal players can hide behind walls, floors and ceilings.
