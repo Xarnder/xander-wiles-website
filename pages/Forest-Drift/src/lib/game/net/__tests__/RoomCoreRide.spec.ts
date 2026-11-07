@@ -192,19 +192,18 @@ describe('RoomCore — riding creatures', () => {
 		expect(ride(room, a, bipeds[1].id)).toMatchObject({ ok: false, reason: 'state' });
 	});
 
-	it('refuses creatures that are far away, not bipeds, or malformed; viewers ride ambient ones', async () => {
+	it('refuses creatures that are not bipeds or malformed; viewers ride ambient ones, from anywhere', async () => {
 		const { room, now } = setup();
 		const { bipeds, small } = creatures();
 		const v = await join(room, 'player-vvvv', 'viewer-token-00000');
 		expect(ride(room, v, bipeds[0].id)).toMatchObject({ ok: false, reason: 'state' });
-		pose(room, v, bipeds[0].x + 2000, bipeds[0].z, now(), true);
-		expect(ride(room, v, bipeds[0].id)).toMatchObject({ ok: false, reason: 'far' });
-		pose(room, v, small[0].x, small[0].z, now() + 1, true);
+		pose(room, v, small[0].x, small[0].z, now(), true);
 		expect(ride(room, v, small[0].id)).toMatchObject({ ok: false, reason: 'ineligible' });
 		expect(ride(room, v, 'group:forest:nonsense')).toMatchObject({ reason: 'ineligible' });
-		pose(room, v, bipeds[0].x, bipeds[0].z, now() + 2, true);
+		// Far from its herd's home is fine: each browser simulates its own herd.
+		pose(room, v, bipeds[0].x + 2000, bipeds[0].z, now() + 1, true);
 		expect(ride(room, v, bipeds[0].id)?.ok).toBe(true);
-		expect(room.stats.ridesRefused).toBe(4);
+		expect(room.stats.ridesRefused).toBe(3);
 	});
 
 	it('lets a rider carry, and a carrier climb on (Q12 C), but never punch (Q13 A)', async () => {

@@ -394,6 +394,12 @@ export class BuildToolManager {
 		this.setBuildMode(!this.buildModeActive);
 	}
 
+	/** Leaves Build Mode and any global mode (music, remove, paint, move) for plain walking around. */
+	enterNormalMode(): void {
+		this.setGlobalMode('none');
+		this.setBuildMode(false);
+	}
+
 	/** Neither building nor in a global mode (music, remove, paint, move): plain walking around. */
 	isNormalMode(): boolean {
 		return !this.buildModeActive && this.globalMode === 'none';

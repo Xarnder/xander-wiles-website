@@ -14,9 +14,9 @@ import {
 import { entityKey } from './worldEntities';
 import { WaypointBoard, type ClientWaypointMessage } from './sharedWaypoints';
 import { ScoreBoard, type ScoreEntry } from './playerScores';
-import { parseAmbientCreatureId, resolveAmbientCreature } from '../creatures/carryableCreatureRef';
+import { resolveAmbientCreature } from '../creatures/carryableCreatureRef';
 import { abilityFor } from '../creatures/creatureAbilities';
-import { rideClaimRadius, rideFor } from '../creatures/creatureRiding';
+import { rideFor } from '../creatures/creatureRiding';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
 import {
 	PROJECTILE_DAMAGE,
@@ -31,7 +31,6 @@ import {
 	spendCharge,
 	type ChargeState
 } from '../player/creatureProjectile';
-import { CREATURE_CELL_SIZE } from '../creatures/CreaturePopulationSystem';
 import {
 	validateMiniBuildDefinition,
 	validateMiniBuildInstance
@@ -342,14 +341,6 @@ const MAX_TRACKED_SHOTS = 16;
 /** Poses kept per player for lag-compensated hit checks (about 2.4 s at 10 poses a second). */
 const MAX_RECENT_POSES = 24;
 
-/**
- * How far from the player an ambient creature's home cell centre (or where it was last put down)
- * may be for a pick-up to be believed, metres. Creatures are simulated by each client, so the room
- * only knows where they live: half a cell's diagonal, plus wandering, plus pose lag.
- */
-const CARRY_CLAIM_RADIUS = 80;
-/** Lab-placed creatures wander near their saved spot; a pick-up must be within this of it. */
-const PLACED_CLAIM_RADIUS = 20;
 /** A put-down spot further than this from the player's feet is moved to their feet. */
 const CARRY_DROP_RADIUS = 3;
 /**
@@ -357,8 +348,6 @@ const CARRY_DROP_RADIUS = 3;
  * rider (a giant's shoulder is several metres off its centre) is moved to the rider.
  */
 const RIDE_DROP_RADIUS = 12;
-/** Put-down spots remembered for re-pick-ups far from home (oldest forgotten first). */
-const MAX_RELEASED_SPOTS = 256;
 
 /** `abilityFor` on recipes from rows, which only passed the store's shape check. */
 function safeAbility(definition: CreatureDefinition): boolean {
@@ -479,8 +468,6 @@ export class RoomCore {
 	private readonly scores: ScoreBoard;
 	/** Ranged weapons: player id → the creature under their arm. */
 	private readonly carries = new Map<string, string>();
-	/** Where carried creatures were last put down this session, so they can be picked up there. */
-	private readonly releasedAt = new Map<string, { x: number; z: number }>();
 	/** Riding: player id → the creature they ride. A creature is never both carried and ridden. */
 	private readonly rides = new Map<string, string>();
 	private readonly worldSeedSource: RoomCoreOptions['worldSeed'];
@@ -1312,7 +1299,6 @@ export class RoomCore {
 		this.interactions.clear();
 		this.carries.clear();
 		this.rides.clear();
-		this.releasedAt.clear();
 		this.persistSessionState();
 	}
 
@@ -1658,9 +1644,10 @@ export class RoomCore {
 	/**
 	 * Climbing onto a biped (riding). Like a pick-up, the room can't see creatures, so it checks
 	 * what it can: the player's state (carrying is fine, Q12 C), that the id is a real rideable
-	 * creature of this world, that nobody carries or rides it, edit rights for a Lab-placed one
-	 * (getting off saves its new spot), and that the player is plausibly near where it lives or
-	 * was last left. There's no owner rule for riding (Q15 B).
+	 * creature of this world, that nobody carries or rides it, and edit rights for a Lab-placed one
+	 * (getting off saves its new spot). There's no owner rule for riding (Q15 B). Where the player
+	 * stands isn't checked: each browser simulates its own herd, a creature may have been left far
+	 * from home, and claiming one far away gains nothing (each creature still has one holder).
 	 */
 	private handleRide(player: PlayerState, message: { id: number; creature: string }): void {
 		if (message.id <= player.lastRideId) return;
@@ -1682,13 +1669,6 @@ export class RoomCore {
 		if (!found || !safeRideable(found.definition)) return refuse('ineligible');
 		if (found.placed && player.info.role === 'viewer') return refuse('role');
 		if (this.isHeld(creature)) return refuse('taken');
-		const radius = found.placed
-			? Math.max(PLACED_CLAIM_RADIUS, found.definition.species.behaviour.wanderRadius * 1.05 + 10)
-			: rideClaimRadius(found.definition, CREATURE_CELL_SIZE);
-		const near = (spot: { x: number; z: number }) =>
-			Math.hypot(spot.x - player.pose!.x, spot.z - player.pose!.z) <= radius;
-		const released = this.releasedAt.get(creature);
-		if (!near(found.home) && !(released && near(released))) return refuse('far');
 		this.rides.set(id, creature);
 		this.stats.ridesGranted++;
 		this.persistSessionState();
@@ -1711,7 +1691,6 @@ export class RoomCore {
 		let spot: CarryPlacement | undefined;
 		if (at && pose && Math.hypot(at[0] - pose.x, at[2] - pose.z) <= RIDE_DROP_RADIUS) spot = at;
 		else if (pose) spot = [pose.x, pose.y, pose.z, pose.yaw];
-		if (spot) this.rememberRelease(creature, spot);
 		this.persistSessionState();
 		this.broadcast({
 			t: 'ridden',
@@ -1721,19 +1700,12 @@ export class RoomCore {
 		});
 	}
 
-	/** Where a creature was last put down or left (for claims far from its home). */
-	private rememberRelease(creature: string, spot: CarryPlacement): void {
-		this.releasedAt.delete(creature);
-		this.releasedAt.set(creature, { x: spot[0], z: spot[2] });
-		if (this.releasedAt.size > MAX_RELEASED_SPOTS)
-			this.releasedAt.delete(this.releasedAt.keys().next().value!);
-	}
-
 	/**
 	 * A pick-up (ranged weapons Phase 2). The room can't see creatures (each client simulates its
 	 * own herd), so it checks what it can: the rule, the player's state, that the id is a real,
-	 * carryable creature of this world, that nobody holds it, and that the player is plausibly near
-	 * where it lives or was last put down.
+	 * carryable creature of this world, and that nobody holds it. Every player may carry, viewers
+	 * included, Lab-placed creatures too (a viewer's put-down just isn't saved: they can't edit the
+	 * world). Where the player stands isn't checked, as for riding.
 	 */
 	private handleCarry(player: PlayerState, message: { id: number; creature: string }): void {
 		if (message.id <= player.lastCarryId) return;
@@ -1755,16 +1727,7 @@ export class RoomCore {
 		const creature = message.creature;
 		const found = this.creatureHere(creature);
 		if (!found || !safeAbility(found.definition)) return refuse('ineligible');
-		// Moving a Lab-placed creature edits the world, so it needs edit rights (F2); anyone may
-		// carry an ambient one (Q16).
-		if (found.placed && player.info.role === 'viewer') return refuse('role');
 		if (this.isHeld(creature)) return refuse('taken');
-		const near = (spot: { x: number; z: number }, radius: number) =>
-			Math.hypot(spot.x - player.pose!.x, spot.z - player.pose!.z) <= radius;
-		const released = this.releasedAt.get(creature);
-		const home = found.home;
-		const radius = found.placed ? PLACED_CLAIM_RADIUS : CARRY_CLAIM_RADIUS;
-		if (!near(home, radius) && !(released && near(released, radius))) return refuse('far');
 		this.carries.set(id, creature);
 		// A fresh carry: full charges (Q10).
 		player.firing = this.firingFor(creature, now);
@@ -1775,35 +1738,26 @@ export class RoomCore {
 	}
 
 	/**
-	 * A creature of this world, with where it lives: an ambient one rebuilt from its id (its home
-	 * cell's centre), or a Lab-placed one from the world's rows (its saved spot). Callers check
-	 * whether it can be carried or ridden.
+	 * A creature of this world: an ambient one rebuilt from its id, or a Lab-placed one from the
+	 * world's rows. Callers check whether it can be carried or ridden.
 	 */
 	private creatureHere(
 		creature: string
-	): { definition: CreatureDefinition; placed: boolean; home: { x: number; z: number } } | null {
+	): { definition: CreatureDefinition; placed: boolean } | null {
 		if (creature.startsWith('placed_')) {
 			const row = this.store?.get(entityKey('creature', creature));
-			const position = row?.data.position as { x?: unknown; z?: unknown } | undefined;
-			if (!row || typeof position?.x !== 'number' || typeof position.z !== 'number') return null;
+			if (!row) return null;
 			return {
 				definition: {
 					species: row.data.species as CreatureDefinition['species'],
 					individual: row.data.individual as CreatureDefinition['individual']
 				},
-				placed: true,
-				home: { x: position.x, z: position.z }
+				placed: true
 			};
 		}
-		const ref = parseAmbientCreatureId(creature);
 		const seed = this.worldSeed();
-		const definition = ref && seed !== null ? resolveAmbientCreature(seed, creature) : null;
-		if (!ref || !definition) return null;
-		return {
-			definition,
-			placed: false,
-			home: { x: (ref.cellX + 0.5) * CREATURE_CELL_SIZE, z: (ref.cellZ + 0.5) * CREATURE_CELL_SIZE }
-		};
+		const definition = seed !== null ? resolveAmbientCreature(seed, creature) : null;
+		return definition ? { definition, placed: false } : null;
 	}
 
 	/** Firing state for a carried creature (rebuilt from the id after the room slept). */
@@ -1962,7 +1916,6 @@ export class RoomCore {
 		let spot: CarryPlacement | undefined;
 		if (at && pose && Math.hypot(at[0] - pose.x, at[2] - pose.z) <= CARRY_DROP_RADIUS) spot = at;
 		else if (pose) spot = [pose.x, pose.y, pose.z, pose.yaw];
-		if (spot) this.rememberRelease(creature, spot);
 		this.persistSessionState();
 		this.broadcast({
 			t: 'carried',

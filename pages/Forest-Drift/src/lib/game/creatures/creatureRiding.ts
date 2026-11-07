@@ -95,13 +95,3 @@ export function rideTopSpeed(profile: RideProfile, runSpeed: number, sprint: boo
 	const run = Number.isFinite(runSpeed) && runSpeed > 0 ? runSpeed : 0;
 	return Math.max(RIDE_MIN_SPEED, run * (sprint ? profile.sprint : profile.cruise));
 }
-
-/**
- * How far (horizontally) a player may plausibly be from where an ambient creature's herd lives and
- * still be climbing onto it: from the herd's cell centre, the cell's half-diagonal, plus how far the
- * herd wanders, plus reach and slack. The multiplayer room checks ride claims against this.
- */
-export function rideClaimRadius(definition: CreatureDefinition, cellSize: number): number {
-	const wander = Math.max(6, definition.species.behaviour.wanderRadius);
-	return (cellSize * Math.SQRT2) / 2 + wander * 1.05 + RIDE_REACH + 10;
-}

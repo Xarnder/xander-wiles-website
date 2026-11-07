@@ -1852,7 +1852,12 @@ export class ThreeScene implements WorldRuntime {
 		this.scene.add(this.projectiles.group);
 		this.carry = new CarryController(this.carryHost(options), {
 			change: (state) => options.onCarryChange?.(state),
-			pickedUp: (species) => options.onCarryEvent?.({ type: 'pickUp', species }),
+			pickedUp: (species) => {
+				// Picking up a creature means getting ready to shoot: leave Build Mode (or Remove, Paint,
+				// Move), where left click builds, so it fires instead.
+				if (!this.buildToolManager.isNormalMode()) this.buildToolManager.enterNormalMode();
+				options.onCarryEvent?.({ type: 'pickUp', species });
+			},
 			putDown: (species) => options.onCarryEvent?.({ type: 'putDown', species }),
 			refused: (reason) => options.onCarryEvent?.({ type: 'refused', reason })
 		});
@@ -3975,7 +3980,9 @@ export class ThreeScene implements WorldRuntime {
 			},
 			carry: (id: string, fallback?: CreatureDefinition) => this.creatures.carry(id, fallback),
 			release: (id: string, at: Vec3Like, heading: number) => {
-				this.creatures.release(id, at, heading);
+				// A viewer can carry a Lab-placed creature, but can't edit the world: where they put it
+				// down isn't saved (everyone sees it there until the world reloads).
+				this.creatures.release(id, at, heading, { save: !this.buildToolManager.isLocked() });
 				this.multiplayer?.dropCarry?.([at.x, at.y, at.z, heading]);
 			},
 			isCarried: (id: string) => this.creatures.isCarried(id),

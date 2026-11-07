@@ -30,7 +30,7 @@ export interface RideCandidate {
 
 export interface RideClaimResult {
 	ok: boolean;
-	/** Why the room said no ('taken', 'far', 'ineligible', 'role', 'state', 'timeout'). */
+	/** Why the room said no ('taken', 'ineligible', 'role', 'state', 'timeout'). */
 	reason?: string;
 }
 

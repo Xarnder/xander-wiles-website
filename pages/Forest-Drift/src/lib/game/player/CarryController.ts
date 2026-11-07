@@ -67,7 +67,7 @@ export interface CarryHost {
 
 export interface CarryClaimResult {
 	ok: boolean;
-	/** Why the room said no ('taken', 'far', 'ineligible', 'rule', 'role', 'state', 'timeout'). */
+	/** Why the room said no ('taken', 'ineligible', 'rule', 'state', 'timeout'). */
 	reason?: string;
 }
 
@@ -324,8 +324,9 @@ export class CarryController {
 		this.publish(false);
 	}
 
+	/** The creature `K` would pick up. Stowed (building, say) still allows it: only firing waits. */
 	private findTarget(): CarryCandidateLike | null {
-		if (this.host.stowed() || this.host.mustRelease()) return null;
+		if (this.host.mustRelease()) return null;
 		return this.host.pick(this.host.eye(), this.host.aim(), CARRY_REACH);
 	}
 

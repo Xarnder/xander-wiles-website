@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { maxSpeedForRunSpeed } from '../net/RoomCore';
-import { CREATURE_CELL_SIZE, creatureDimensions, regionSpecies } from './CreaturePopulationSystem';
+import { creatureDimensions, regionSpecies } from './CreaturePopulationSystem';
 import { generateIndividual } from './IndividualGenerator';
 import {
 	RIDE_CRUISE_FRACTION,
@@ -8,7 +8,6 @@ import {
 	RIDE_SHOULDER_HEIGHT,
 	RIDE_SPRINT_MAX,
 	RIDE_SPRINT_MIN,
-	rideClaimRadius,
 	rideFor,
 	rideSeatFor,
 	rideSprintMultiplier,
@@ -112,18 +111,5 @@ describe('ride speed: bigger is faster (Q3 B)', () => {
 	it('turns sharply when small and in wide arcs when large', () => {
 		expect(rideTurnRate(1.2)).toBeGreaterThan(rideTurnRate(5));
 		expect(rideTurnRate(5)).toBeGreaterThan(rideTurnRate(26));
-	});
-});
-
-describe('ride claims (online)', () => {
-	it('allow for the whole of a herd’s wander area around its cell', () => {
-		for (const definition of regionalCreatures()) {
-			if (!rideFor(definition)) continue;
-			const radius = rideClaimRadius(definition, CREATURE_CELL_SIZE);
-			expect(radius).toBeGreaterThan(
-				definition.species.behaviour.wanderRadius + CREATURE_CELL_SIZE / 2
-			);
-			expect(Number.isFinite(radius)).toBe(true);
-		}
 	});
 });

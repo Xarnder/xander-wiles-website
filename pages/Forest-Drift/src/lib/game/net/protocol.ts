@@ -545,9 +545,9 @@ export interface ClientShotHitMessage {
 	point: Vec3Tuple;
 }
 
-export type CarryRefusal = 'taken' | 'far' | 'ineligible' | 'rule' | 'role' | 'state';
+export type CarryRefusal = 'taken' | 'ineligible' | 'rule' | 'state';
 
-export type RideRefusal = 'taken' | 'far' | 'ineligible' | 'role' | 'state';
+export type RideRefusal = 'taken' | 'ineligible' | 'role' | 'state';
 
 /** The room's answer to the sender's `ride`. */
 export interface ServerRideResultMessage {

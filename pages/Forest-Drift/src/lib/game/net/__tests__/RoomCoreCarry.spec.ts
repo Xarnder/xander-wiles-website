@@ -198,12 +198,10 @@ describe('RoomCore — carrying creatures', () => {
 		expect(carry(room, b, small[0].id)).toMatchObject({ ok: false, reason: 'taken' });
 	});
 
-	it('refuses creatures that are far away, too big, malformed or from another world', async () => {
+	it('refuses creatures that are too big, malformed or from another world', async () => {
 		const { room, now } = setup();
 		const { small, big } = creatures();
 		const a = await join(room, 'player-aaaa');
-		standAt(room, a, small[0].x + 500, small[0].z, now());
-		expect(carry(room, a, small[0].id)).toMatchObject({ ok: false, reason: 'far' });
 		standAt(room, a, big[0].x, big[0].z, now());
 		expect(carry(room, a, big[0].id)).toMatchObject({ ok: false, reason: 'ineligible' });
 		expect(carry(room, a, 'group:forest:nonsense')).toMatchObject({ reason: 'ineligible' });
@@ -212,7 +210,15 @@ describe('RoomCore — carrying creatures', () => {
 		});
 		// Lab-placed creatures arrive with Phase 2b.
 		expect(carry(room, a, 'placed_x_1')).toMatchObject({ reason: 'ineligible' });
-		expect(room.stats.carriesRefused).toBe(5);
+		expect(room.stats.carriesRefused).toBe(4);
+	});
+
+	it('lets a player carry wherever they are: herds differ between browsers, and the room sleeps', async () => {
+		const { room, now } = setup();
+		const { small } = creatures();
+		const a = await join(room, 'player-aaaa');
+		standAt(room, a, small[0].x + 500, small[0].z, now());
+		expect(carry(room, a, small[0].id)?.ok).toBe(true);
 	});
 
 	it('refuses everything when the room has no world seed', async () => {
@@ -513,14 +519,11 @@ describe('RoomCore — carrying Lab-placed creatures (F2)', () => {
 		expect(carry(room, a, placed.id)).toMatchObject({ ok: true });
 	});
 
-	it('refuses viewers (moving it edits the world) and players far from it', async () => {
+	it('lets viewers carry it too (their put-down just isn’t saved)', async () => {
 		const { room, now } = world();
 		const v = await join(room, 'player-vvvv', 'viewer-token-00000');
 		standAt(room, v, 12, 10, now());
-		expect(carry(room, v, placed.id)).toMatchObject({ ok: false, reason: 'role' });
-		const a = await join(room, 'player-aaaa');
-		standAt(room, a, 60, 10, now());
-		expect(carry(room, a, placed.id)).toMatchObject({ ok: false, reason: 'far' });
+		expect(carry(room, v, placed.id)?.ok).toBe(true);
 	});
 
 	it('takes it from the carrier when someone removes it from the world', async () => {

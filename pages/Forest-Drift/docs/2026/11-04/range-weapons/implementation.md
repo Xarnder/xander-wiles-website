@@ -320,3 +320,13 @@ Pellets already stopped at walls, doors, stairs, furniture, fences, Mini Builds,
 - Sideways into a floor or roof's edge. This uses the new `SlabManager` / `RoofManager.getSpansAt` and `WorldSurfaceSampler.isInsideSlab`, which read the slabs' and roofs' existing bottom and top.
 
 No geometry was added. `ThreeScene.projectileCollision` delegates to it, so both your own and other players' pellets use it. In a test building: a wall stopped pellets at its face, pellets over it flew on, shots down through a floor at 30–89° stopped at its top, shots up at 30–89° stopped at the ceiling underside, and a shot into the floor's edge stopped at the edge. The room still doesn't check walls (Q14 A): it's the shooter's browser that decides, so normal players can hide behind walls, floors and ceilings.
+
+## Every player can pick up and shoot (2026-11-07)
+
+Some players were told they couldn't pick up a small creature, or found that `K` did nothing. There were three causes:
+
+1. **Build Mode stowed the carry.** World owners, editors and single-player worlds open in Build Mode, where carrying is stowed. While stowed, no creature was offered as a target, so `K` did nothing. Now a creature can be picked up from any mode. Picking it up leaves Build Mode and any global mode (`BuildToolManager.enterNormalMode`), so firing works straight away. Flying and underwater still stow it, and firing still waits.
+2. **Viewers got `role` for Lab-placed creatures.** Anyone may carry any creature now. A viewer's put-down isn't saved to the world (`release(..., { save: !locked })`), so the creature goes back to its saved spot for everyone else.
+3. **The `far` check refused valid pick-ups.** The room checked distance from the creature's home cell, or from a put-down it remembered. Those remembered put-downs were lost when the room slept, so a creature carried away and dropped became "too far" for everyone. The check is gone for carrying and riding. The room still checks the state (alive, not seated, not already carrying), that the creature is eligible (small enough, rideable), that the rule is on, and that the creature isn't taken. The removed code: `CARRY_CLAIM_RADIUS`, `PLACED_CLAIM_RADIUS`, the released-spot memory and `rideClaimRadius`. `CarryRefusal` is now `taken | ineligible | rule | state`, and `RideRefusal` is `taken | ineligible | role | state`. Riding a Lab-placed creature still needs edit rights.
+
+Verified with 2,784 unit tests and the carrying, online carrying and riding e2e suites (9 tests). In the browser, from Build Mode: the creature under the crosshair was offered, `K` picked it up and switched to normal mode, and a pellet fired.

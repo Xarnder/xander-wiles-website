@@ -211,7 +211,6 @@
 	/** Online climb-ons the room refused (riding), in the player's words. */
 	const RIDE_REFUSALS: Record<string, string> = {
 		taken: 'Someone else is riding it.',
-		far: 'Too far away.',
 		ineligible: "That creature can't be ridden.",
 		role: "You can't ride that one here.",
 		state: "You can't climb on right now.",
@@ -221,10 +220,8 @@
 	/** Online pick-ups the room refused (ranged weapons), in the player's words. */
 	const CARRY_REFUSALS: Record<string, string> = {
 		taken: 'Someone else picked it up.',
-		far: "You're too far away from that creature.",
 		ineligible: "That creature can't be carried.",
 		rule: 'Carrying creatures is off in this world.',
-		role: "You can't pick that up here.",
 		state: "You can't pick that up right now.",
 		timeout: 'No answer from the world. Try again.',
 		offline: "You're offline. Try again when you're back."

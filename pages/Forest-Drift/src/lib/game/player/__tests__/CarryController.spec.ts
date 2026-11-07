@@ -100,13 +100,20 @@ describe('CarryController', () => {
 		expect(controller.carrying).toBe(false);
 	});
 
-	it('does nothing without input (menus, no pointer lock) or while stowed', () => {
+	it('does nothing without input (menus, no pointer lock)', () => {
 		const { world, controller } = setup();
 		world.input = false;
 		expect(controller.toggle()).toBe(false);
-		world.input = true;
+	});
+
+	it('picks up while stowed (building, say), but only fires once it isn’t', () => {
+		const { world, controller } = setup();
 		world.stowed = true;
-		expect(controller.toggle()).toBe(false);
+		expect(controller.toggle()).toBe(true);
+		expect(controller.carrying).toBe(true);
+		expect(controller.fire()).toBe(false);
+		world.stowed = false;
+		expect(controller.fire()).toBe(true);
 	});
 
 	it('fires toward the crosshair until the charges run out, then dry-fires', () => {

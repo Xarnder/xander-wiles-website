@@ -21,7 +21,7 @@ You can carry a small creature while riding, and fire from the seat (Q12 C). `K`
 
 | Piece | File | Notes |
 | --- | --- | --- |
-| Rules | `creatures/creatureRiding.ts` | Pure, shared with the room: `rideFor`, seat kind, speeds, turn rate, cadence cap, `rideClaimRadius`, and the `CREATURE_RIDING_ENABLED` kill switch. |
+| Rules | `creatures/creatureRiding.ts` | Pure, shared with the room: `rideFor`, seat kind, speeds, turn rate, cadence cap, and the `CREATURE_RIDING_ENABLED` kill switch. |
 | Motion | `creatures/CreatureRideMotion.ts` | Pure. Camera-relative steering, turn-rate arcs, acceleration and braking, slowing through sharp turns, and substeps. Obeys `creatureSurface` (slope, buildings) and `standable` (deep water), and slides round creatures at least 25% of its own height (smaller ones are stepped over). No herd leash. |
 | Seat | `creatures/RideSeat.ts` | Pure, run once at mount. Reads the skin points: the column above the seat must be clear for the rider, the walk never steps off the skin or slides more than 12% of the height down, and the fallback is on top of the head. `rideSeatAnchors` pins the seat and hand holds to the bones that carry them. |
 | Bone anchors | `creatures/boneAnchors.ts` | Bone-space points to world space. The rider rides the chest's bob and sway (the rider was fixed over the feet before). |
@@ -34,7 +34,7 @@ You can carry a small creature while riding, and fire from the seat (Q12 C). `K`
 | Camera | `player/ThirdPersonCamera.ts` | New `bodies` obstacle: the mount's skin points, tested in its own space, so the boom stops at a giant's head instead of entering it. |
 | Hints | `creatures/CarryHints.ts`, `waypoints/WaypointSystem.ts` | Teal saddle-square badges, and a "Nearest rideable creature" waypoint (the creature waypoints are now a small list of followers). |
 | UI | `RideHud.svelte`, `+page.svelte`, `TouchControls.svelte`, `PauseMenu.svelte`, `ControlsGuide.svelte` | Ride chip, prompt, announcements, sounds (`creatureSounds.ts`), touch button, Jump hidden while riding, help text. |
-| Online | `net/protocol.ts` (v8), `net/RoomCore.ts`, `net/CreatureClaims.ts`, `net/NetSession.ts`, `net/MultiplayerSession.ts`, `net/RemoteAvatarRenderer.ts`, `creatures/RiddenCreatureView.ts` | `ride` / `dismount` / `rideResult` / `ridden` / `welcome.rides`. The room arbitrates (state, rideable, role for placed creatures, taken, claim radius), persists rides with the session, and releases on knock-out, leaving, sitting or removal. Riders can't punch, and their pellets are checked against the pose carried forward along their velocity (`riderPoseAt`). Other players draw the mount under the rider from its recipe, facing the way it travels. |
+| Online | `net/protocol.ts` (v8), `net/RoomCore.ts`, `net/CreatureClaims.ts`, `net/NetSession.ts`, `net/MultiplayerSession.ts`, `net/RemoteAvatarRenderer.ts`, `creatures/RiddenCreatureView.ts` | `ride` / `dismount` / `rideResult` / `ridden` / `welcome.rides`. The room arbitrates (state, rideable, role for placed creatures, taken), persists rides with the session, and releases on knock-out, leaving, sitting or removal. Riders can't punch, and their pellets are checked against the pose carried forward along their velocity (`riderPoseAt`). Other players draw the mount under the rider from its recipe, facing the way it travels. |
 
 ## Decisions applied
 
