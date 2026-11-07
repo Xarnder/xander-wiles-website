@@ -1,5 +1,5 @@
 import type { FoundationBuildingDefinition } from '../src/lib/game/building/WallTypes';
-import { openWorldsScreen } from './worldHelpers';
+import { openPauseMenu, openWorldsScreen } from './worldHelpers';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 const MP_PORT = 8791;
 const MP_URL = `http://127.0.0.1:${MP_PORT}`;
 const ADMIN_KEY = 'e2e-throwaway-admin-key';
+const STATS_SHOTS = process.env.STATS_SHOTS_DIR;
 const SERVER_DIR = fileURLToPath(new URL('../server/', import.meta.url));
 
 let server: ChildProcess | null = null;
@@ -1193,4 +1194,36 @@ test('punching: a punch in normal mode costs the other player health, privately'
 	await expect(target.getByTestId('death-card')).toBeHidden();
 	await expectHealth(target, 36);
 	await expect.poll(targetDown, { timeout: 10_000 }).toEqual({ down: false, pose: null });
+
+	// Multiplayer stats: both players see the puncher's hits and knockout, and the target's
+	// knockout, in Pause → Multiplayer stats.
+	const statsRow = (page: Page, name: string) =>
+		page.locator('[data-testid="stats-row"]').filter({ hasText: name });
+	for (const page of [owner, target]) {
+		await openPauseMenu(page);
+		await page.getByTestId('pause-multiplayer-stats').click();
+		await expect(page.getByTestId('pause-stats-panel')).toBeVisible();
+		const puncher = statsRow(page, 'Puncher');
+		await expect(puncher.getByTestId('stats-knockouts')).toHaveText('1');
+		expect(Number(await puncher.getByTestId('stats-hits').textContent())).toBeGreaterThanOrEqual(
+			18
+		);
+		await expect(puncher.getByTestId('stats-knocked-out')).toHaveText('0');
+		const knockedOut = statsRow(page, 'Target');
+		await expect(knockedOut.getByTestId('stats-hits')).toHaveText('0');
+		await expect(knockedOut.getByTestId('stats-knocked-out')).toHaveText('1');
+		// The top row is the puncher, and your own row says so.
+		await expect(page.getByTestId('stats-row').first()).toContainText('Puncher');
+	}
+	await expect(statsRow(owner, 'Puncher')).toContainText('(you)');
+	await expect(statsRow(target, 'Target')).toContainText('(you)');
+	if (STATS_SHOTS) await owner.screenshot({ path: `${STATS_SHOTS}/multiplayer-stats.png` });
+
+	// Only the world's owner can reset them, after confirming; everyone's table empties.
+	await expect(target.getByTestId('stats-reset')).toHaveCount(0);
+	await owner.getByTestId('stats-reset').click();
+	await owner.getByTestId('stats-reset-confirm').click();
+	for (const page of [owner, target])
+		await expect(statsRow(page, 'Puncher').getByTestId('stats-hits')).toHaveText('0');
+	await expect(statsRow(target, 'Target').getByTestId('stats-knocked-out')).toHaveText('0');
 });

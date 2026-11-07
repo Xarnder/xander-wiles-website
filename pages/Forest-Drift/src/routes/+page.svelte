@@ -43,6 +43,7 @@
 	import WorldLoadingScreen from '#lib/components/WorldLoadingScreen.svelte';
 	import ToolHint from '#lib/components/ToolHint.svelte';
 	import ForestDriftLogo from '#lib/components/ForestDriftLogo.svelte';
+	import { scoreRows, type ScoreEntry } from '#lib/game/net/playerScores';
 	import LandingMenu from '#lib/components/LandingMenu.svelte';
 	let showWorldLibrary = $state(false);
 	import upArrowIcon from '#lib/assets/icons/Up-ArrowIcons.svg';
@@ -343,6 +344,17 @@
 	let mpDetail = $state<string | null>(null);
 	let mpPlayers = $state<PlayerInfo[]>([]);
 	let mpSelfSlot = $state<number | null>(null);
+	/** Multiplayer stats, as the room last sent them; the pause menu's table adds who's online. */
+	let mpScores = $state<ScoreEntry[]>([]);
+	const statsRows = $derived(
+		onlineWorld
+			? scoreRows(
+					mpScores,
+					mpPlayers,
+					mpPlayers.find((player) => player.slot === mpSelfSlot)?.playerId ?? null
+				)
+			: null
+	);
 	let trackedPlayerId = $state<string | null>(null);
 	const trackedPlayerName = $derived(
 		mpPlayers.find((player) => player.playerId === trackedPlayerId)?.name ?? null
@@ -1101,6 +1113,7 @@
 		mpDetail = null;
 		mpPlayers = [];
 		mpSelfSlot = null;
+		mpScores = [];
 		mpRole = null;
 		const multiplayer = new MultiplayerSession({
 			serverUrl: mpServer,
@@ -1127,6 +1140,7 @@
 				punchHit++;
 				playSoundEffect('punchHit');
 			},
+			onScores: (entries) => (mpScores = entries),
 			access: {
 				invite,
 				capability: remembered?.invite === invite ? (remembered.capability ?? null) : null
@@ -1316,6 +1330,7 @@
 				if (removeOthersPrompt) answerRemoveOthers(false);
 				mpPlayers = [];
 				mpSelfSlot = null;
+				mpScores = [];
 				mpRole = null;
 				setLocationWorld(null);
 			}
@@ -2939,6 +2954,9 @@
 					refreshWaypoints();
 				}}
 				waypointsOnline={!!onlineWorld}
+				stats={statsRows}
+				canResetStats={mpRole === 'owner'}
+				onResetStats={() => multiplayerSession?.resetScores()}
 				{waypointNotice}
 				onRenameWaypoint={(id, name) => {
 					session?.scene.renameWaypoint(id, name);

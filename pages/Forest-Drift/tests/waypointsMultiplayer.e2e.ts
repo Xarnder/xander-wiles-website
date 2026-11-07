@@ -161,6 +161,14 @@ test('public waypoints: seen by everyone, controlled only when allowed', async (
 
 	// The owner adds a waypoint: private, so the visitor knows nothing about it.
 	await openPauseMenu(owner);
+	// Online, Multiplayer stats sits beside Multiplayer, the same size.
+	const [mpBox, statsBox] = await Promise.all([
+		owner.getByTestId('pause-multiplayer').boundingBox(),
+		owner.getByTestId('pause-multiplayer-stats').boundingBox()
+	]);
+	expect(Math.abs(mpBox!.y - statsBox!.y)).toBeLessThan(2);
+	expect(Math.abs(mpBox!.width - statsBox!.width)).toBeLessThan(2);
+	if (SHOTS) await owner.screenshot({ path: `${SHOTS}/pause-online.png` });
 	await owner.getByTestId('pause-waypoints').click();
 	await owner.getByTestId('waypoint-name-input').fill('Camp');
 	await owner.getByTestId('waypoint-add').click();

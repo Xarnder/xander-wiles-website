@@ -127,7 +127,7 @@ interface EntityRecord {
  *   - `ops` / `batches`: the recent commit log for catch-up, and batch ids for dedupe;
  *   - `players`: names and last positions (Q18 bookmarks);
  *   - `meta`: manifest, invite hashes, version (`store`), clock, grace periods, shared sky,
- *     public waypoints.
+ *     public waypoints, multiplayer stats.
  */
 export class WorldRoom extends DurableObject<Env> {
 	private core: RoomCore | null = null;
@@ -676,7 +676,8 @@ export class WorldRoom extends DurableObject<Env> {
 				playerNames: () => this.playerNames(),
 				savePlayerHealth: (playerId, health) => this.savePlayerHealth(playerId, health),
 				loadPlayerHealth: (playerId) => this.loadPlayerHealth(playerId),
-				saveWaypoints: (json) => this.writeMeta('waypoints', json)
+				saveWaypoints: (json) => this.writeMeta('waypoints', json),
+				saveScores: (json) => this.writeMeta('scores', json)
 			},
 			// Rows load on first use only (see RoomCoreOptions.store).
 			store: () => {
@@ -698,7 +699,8 @@ export class WorldRoom extends DurableObject<Env> {
 				clock: this.readJson<RoomClockRecord>('clock'),
 				envJson: this.readMeta('env'),
 				session: this.readJson<RoomSessionState>('session'),
-				waypointsJson: this.readMeta('waypoints')
+				waypointsJson: this.readMeta('waypoints'),
+				scoresJson: this.readMeta('scores')
 			}
 		});
 		this.core.restore(

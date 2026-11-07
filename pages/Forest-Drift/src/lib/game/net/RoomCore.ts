@@ -13,6 +13,7 @@ import {
 } from '../player/PlayerHealth';
 import { entityKey } from './worldEntities';
 import { WaypointBoard, type ClientWaypointMessage } from './sharedWaypoints';
+import { ScoreBoard, type ScoreEntry } from './playerScores';
 import { parseAmbientCreatureId, resolveAmbientCreature } from '../creatures/carryableCreatureRef';
 import { abilityFor } from '../creatures/creatureAbilities';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
@@ -173,6 +174,8 @@ export interface RoomPersistence {
 	loadPlayerHealth?(playerId: string): StoredHealth | null;
 	/** The world's public waypoints as one JSON string, written whenever they change. */
 	saveWaypoints?(json: string): void;
+	/** Multiplayer stats as one JSON string, written whenever they change (a hit, a knockout). */
+	saveScores?(json: string): void;
 }
 
 /** Health as stored per player: the shared rules' state without the transient grace period. */
@@ -210,6 +213,8 @@ export interface RoomCoreOptions {
 		session?: RoomSessionState | null;
 		/** The public waypoints as last saved (`saveWaypoints`). */
 		waypointsJson?: string | null;
+		/** Multiplayer stats as last saved (`saveScores`). */
+		scoresJson?: string | null;
 	};
 	/**
 	 * The shared world's rows and rules (Phase 3), or a function that loads them on first use. The
@@ -440,6 +445,8 @@ export class RoomCore {
 	 * room sleeping and a world restore (they're places to meet, not building).
 	 */
 	private readonly waypoints: WaypointBoard;
+	/** Multiplayer stats: hits and knockouts per player, kept with the world until the owner resets. */
+	private readonly scores: ScoreBoard;
 	/** Ranged weapons: player id → the creature under their arm. */
 	private readonly carries = new Map<string, string>();
 	/** Where carried creatures were last put down this session, so they can be picked up there. */
@@ -487,6 +494,7 @@ export class RoomCore {
 			}
 		}
 		this.waypoints = new WaypointBoard(options.restored?.waypointsJson ?? null);
+		this.scores = new ScoreBoard(options.restored?.scoresJson ?? null);
 		const session = options.restored?.session;
 		if (session) {
 			for (const id of session.doors) this.openDoors.add(id);
@@ -780,6 +788,14 @@ export class RoomCore {
 			if (player) this.handleWaypoint(player, message);
 			return;
 		}
+		if (message.t === 'resetScores') {
+			// Only the world's owner may wipe everyone's stats.
+			if (player?.info.role !== 'owner' || this.scores.size === 0) return;
+			this.scores.reset();
+			this.persistence?.saveScores?.(this.scores.toJson());
+			this.broadcast({ t: 'scores', entries: [], replace: true });
+			return;
+		}
 		if (message.t === 'door') {
 			if (!player) return;
 			if (message.open) this.openDoors.add(message.id);
@@ -968,6 +984,7 @@ export class RoomCore {
 			interactions: this.interactionList(),
 			carries: this.carryList(),
 			waypoints: this.waypoints.list(),
+			scores: this.scores.list(),
 			names: this.playerNames()
 		});
 		this.broadcast({ t: 'joined', player: { ...info } }, conn);
@@ -1343,6 +1360,12 @@ export class RoomCore {
 		);
 	}
 
+	/** Multiplayer stats changed: saved with the world, and everyone's table updated. */
+	private scoreChanged(entries: ScoreEntry[]): void {
+		this.persistence?.saveScores?.(this.scores.toJson());
+		this.broadcast({ t: 'scores', entries });
+	}
+
 	private broadcast(message: ServerJsonMessage, except?: RoomConnection): void {
 		const text = JSON.stringify(message);
 		for (const conn of this.byConn.keys()) {
@@ -1521,6 +1544,7 @@ export class RoomCore {
 		}
 		this.stats.punchesLanded++;
 		this.setHealth(target, result.state, undefined, { kind: 'player', by: player.info.slot });
+		this.scoreChanged(this.scores.hit(player.info, target.info, result.state.dead));
 		reply(true);
 	}
 
@@ -1757,6 +1781,7 @@ export class RoomCore {
 			by: player.info.slot,
 			species: shot.species
 		});
+		this.scoreChanged(this.scores.hit(player.info, target.info, result.state.dead));
 		reply(true);
 	}
 
@@ -1846,6 +1871,7 @@ export class RoomCore {
 		}
 		this.stats.fallsApplied++;
 		this.setHealth(player, result.state, message.id);
+		if (result.state.dead) this.scoreChanged(this.scores.knockedOut(player.info));
 	}
 
 	private handleRespawn(player: PlayerState): void {

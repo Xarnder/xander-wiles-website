@@ -3,6 +3,7 @@
 	import type { SaveStatus } from '#lib/game/world/WorldTypes';
 	import type { WaypointView, WaypointVisibility } from '#lib/game/waypoints/WaypointSystem';
 	import { MAX_PERSONAL_WAYPOINTS, MAX_WAYPOINT_NAME } from '#lib/game/waypoints/WaypointSystem';
+	import type { ScoreRow } from '#lib/game/net/playerScores';
 
 	interface Props {
 		worldName: string;
@@ -37,6 +38,11 @@
 		onRenameWaypoint?: (id: string, name: string) => void;
 		onSetWaypointVisibility?: (id: string, visibility: WaypointVisibility) => void;
 		onSetWaypointControl?: (id: string, allowed: boolean) => void;
+		/** Multiplayer stats for an online world (null in single player: no button). */
+		stats?: ScoreRow[] | null;
+		/** The world's owner may reset everyone's stats. */
+		canResetStats?: boolean;
+		onResetStats?: () => void;
 	}
 
 	const {
@@ -67,10 +73,15 @@
 		waypointNotice = null,
 		onRenameWaypoint,
 		onSetWaypointVisibility,
-		onSetWaypointControl
+		onSetWaypointControl,
+		stats = null,
+		canResetStats = false,
+		onResetStats
 	}: Props = $props();
 
-	type Panel = 'root' | 'world' | 'rename' | 'waypoints';
+	type Panel = 'root' | 'world' | 'rename' | 'waypoints' | 'stats';
+	/** Asking the owner to confirm before everyone's stats are wiped. */
+	let confirmStatsReset = $state(false);
 	let newWaypointName = $state('');
 	const personalCount = $derived(
 		waypoints.filter((w) => !w.dynamic && w.visibility === 'private').length
@@ -210,6 +221,15 @@
 			<div class="section">
 				<p class="section-label">Session</p>
 				<button data-testid="pause-multiplayer" onclick={onOpenMultiplayer}>Multiplayer</button>
+				{#if stats}
+					<button
+						data-testid="pause-multiplayer-stats"
+						onclick={() => {
+							confirmStatsReset = false;
+							panel = 'stats';
+						}}>Multiplayer stats</button
+					>
+				{/if}
 				<button data-testid="pause-debug" onclick={onOpenDebug}>Dev &amp; Debug controls</button>
 				<p class="section-label">World</p>
 				<button
@@ -253,6 +273,74 @@
 				</button>
 				<button onclick={() => (panel = 'root')}>Back</button>
 			</div>
+		{:else if panel === 'stats'}
+			<h2 data-testid="pause-stats-panel">Multiplayer stats</h2>
+			<p class="panel-note">
+				<strong>Hits</strong>: punches and creature pellets that hurt another player.
+				<strong>Knockouts</strong>: hits that knocked them out. <strong>Knocked out</strong>: times
+				they were knocked out themselves. Kept with this world.
+			</p>
+			{#if stats && stats.length > 0}
+				<table class="stats-table" data-testid="stats-table">
+					<thead>
+						<tr>
+							<th scope="col" class="stats-player">Player</th>
+							<th scope="col">Hits</th>
+							<th scope="col">Knockouts</th>
+							<th scope="col">Knocked out</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each stats as row, index (row.playerId)}
+							<tr
+								class:self={row.self}
+								data-testid="stats-row"
+								data-player={row.playerId}
+								data-online={row.online}
+							>
+								<th scope="row" class="stats-player">
+									<span class="stats-rank">{index + 1}</span>
+									<span
+										class="stats-dot"
+										class:away={!row.online}
+										style:--player-colour={row.colour ?? 'transparent'}
+										title={row.online ? 'Online now' : 'Not online'}
+									></span>
+									<span class="stats-name">{row.name}{row.self ? ' (you)' : ''}</span>
+								</th>
+								<td data-testid="stats-hits">{row.hits}</td>
+								<td data-testid="stats-knockouts">{row.knockouts}</td>
+								<td data-testid="stats-knocked-out">{row.knockedOut}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{:else}
+				<p class="panel-note">No stats yet: they appear once someone is hurt.</p>
+			{/if}
+			{#if canResetStats && stats && stats.some((row) => row.hits || row.knockedOut)}
+				{#if confirmStatsReset}
+					<p class="stats-confirm">Reset everyone's stats in this world?</p>
+					<div class="error-actions">
+						<button
+							class="danger"
+							data-testid="stats-reset-confirm"
+							onclick={() => {
+								onResetStats?.();
+								confirmStatsReset = false;
+							}}>Reset stats</button
+						>
+						<button onclick={() => (confirmStatsReset = false)}>Cancel</button>
+					</div>
+				{:else}
+					<button
+						class="danger"
+						data-testid="stats-reset"
+						onclick={() => (confirmStatsReset = true)}>Reset stats…</button
+					>
+				{/if}
+			{/if}
+			<button data-testid="pause-stats-back" onclick={() => (panel = 'root')}>Back</button>
 		{:else if panel === 'waypoints'}
 			<h2 data-testid="pause-waypoints-panel">Waypoints</h2>
 			<p class="panel-note">
@@ -657,6 +745,98 @@
 		line-height: 1.4;
 		opacity: 0.75;
 		text-align: center;
+	}
+
+	.stats-table {
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 0 0.25rem;
+		font-size: 0.8rem;
+	}
+
+	.stats-table th,
+	.stats-table td {
+		padding: 0.45rem 0.4rem;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.stats-table thead th {
+		padding-top: 0;
+		padding-bottom: 0.15rem;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: #9fd8b8;
+	}
+
+	.stats-table tbody tr {
+		background: rgba(0, 0, 0, 0.25);
+	}
+
+	.stats-table tbody tr > :first-child {
+		border-radius: 8px 0 0 8px;
+	}
+
+	.stats-table tbody tr > :last-child {
+		border-radius: 0 8px 8px 0;
+	}
+
+	.stats-table tbody tr.self {
+		background: rgba(237, 207, 133, 0.18);
+		box-shadow: inset 0 0 0 1px rgba(237, 207, 133, 0.45);
+	}
+
+	.stats-table td {
+		font-size: 0.95rem;
+		font-weight: 700;
+	}
+
+	.stats-table .stats-player {
+		text-align: left;
+	}
+
+	.stats-table tbody .stats-player {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-weight: 600;
+		min-width: 0;
+	}
+
+	.stats-rank {
+		flex: none;
+		width: 1.2rem;
+		text-align: right;
+		opacity: 0.6;
+	}
+
+	/* Player colour while online; an empty ring when they aren't. */
+	.stats-dot {
+		flex: none;
+		width: 0.65rem;
+		height: 0.65rem;
+		border-radius: 50%;
+		background: var(--player-colour);
+		border: 1.5px solid rgba(234, 246, 255, 0.7);
+	}
+
+	.stats-dot.away {
+		background: transparent;
+		border-color: rgba(234, 246, 255, 0.35);
+	}
+
+	.stats-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.stats-confirm {
+		margin: 0;
+		text-align: center;
+		font-size: 0.8rem;
 	}
 
 	.waypoint-list {

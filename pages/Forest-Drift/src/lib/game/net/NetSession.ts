@@ -1,3 +1,4 @@
+import type { ScoreEntry, ServerScoresMessage } from './playerScores';
 import type {
 	ClientWaypointMessage,
 	ServerWaypointsMessage,
@@ -74,6 +75,8 @@ export interface WelcomeInfo {
 	carries: { slot: number; creature: string }[];
 	/** The world's public waypoints. */
 	waypoints: SharedWaypoint[];
+	/** Multiplayer stats, per player. */
+	scores: ScoreEntry[];
 	/** True only for the first welcome of this session (not reconnects). */
 	first: boolean;
 }
@@ -127,6 +130,8 @@ export interface NetSessionOptions {
 	onShotResult?: (message: ServerShotResultMessage) => void;
 	/** Public waypoints changed (or the room refused this player's change). */
 	onWaypoints?: (message: ServerWaypointsMessage) => void;
+	/** Multiplayer stats changed (someone scored, or the owner reset them). */
+	onScores?: (message: ServerScoresMessage) => void;
 	world?: WorldTraffic;
 	/** Injected in tests. */
 	createSocket?: (url: string) => WebSocket;
@@ -392,6 +397,11 @@ export class NetSession {
 		return this.sendText(message);
 	}
 
+	/** The world's owner clears everyone's multiplayer stats. */
+	sendResetScores(): boolean {
+		return this.sendText({ t: 'resetScores' });
+	}
+
 	/** The room clock estimate, ms; NaN until the first welcome. */
 	serverNow(): number {
 		return this.clock.serverNow();
@@ -518,6 +528,7 @@ export class NetSession {
 					health: message.health,
 					carries: message.carries ?? [],
 					waypoints: message.waypoints ?? [],
+					scores: message.scores ?? [],
 					first
 				});
 				this.emitPlayers();
@@ -597,6 +608,9 @@ export class NetSession {
 				break;
 			case 'waypoints':
 				this.options.onWaypoints?.(message);
+				break;
+			case 'scores':
+				this.options.onScores?.(message);
 				break;
 			case 'error':
 				this.lastError = message.message;

@@ -39,6 +39,7 @@ import type { HealthAuthority, HealthEvents } from '../player/HealthAuthority';
 import { findPunchTarget } from '../player/punch';
 import type { RemotePlayerView } from './NetSession';
 import type { ServerWaypointsMessage, SharedWaypoint } from './sharedWaypoints';
+import type { ScoreEntry, ServerScoresMessage } from './playerScores';
 import type { WaypointLink } from '../waypoints/WaypointSystem';
 import type { OnlineWorldSync } from './worldTransfer';
 
@@ -197,6 +198,8 @@ export interface MultiplayerSessionOptions {
 	/** This player's punch landed (`hit`) or was refused by the room. */
 	onPunchResult?: (hit: boolean) => void;
 	onTrackingChanged?: (playerId: string | null) => void;
+	/** Multiplayer stats: every player's record, whenever any changes. */
+	onScores?: (entries: ScoreEntry[]) => void;
 	/** Injected in tests (passed to NetSession). */
 	createSocket?: NetSessionOptions['createSocket'];
 	environment?: NetSessionOptions['environment'];
@@ -251,6 +254,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private selfSlot: number | null = null;
 	/** Public waypoints go through here: only while connected, with this player's current role. */
 	private readonly waypointLink: WaypointLink;
+	/** Multiplayer stats as the room last said, by player id. */
+	private readonly scores = new Map<string, ScoreEntry>();
 
 	constructor(options: MultiplayerSessionOptions) {
 		this.options = options;
@@ -328,6 +333,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			},
 			onCarried: (message) => this.applyCarried(message.slot, message.creature, message.at ?? null),
 			onWaypoints: (message) => this.context?.applySharedWaypoints?.(message),
+			onScores: (message) => this.applyScores(message),
 			onShot: (message) => {
 				const age = this.net.serverNow() - message.at;
 				this.context?.remoteShot?.(
@@ -385,6 +391,23 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	}
 
 	/** Local navigation only: no extra messages or position history. */
+	/** Multiplayer stats as the room last said (a copy). */
+	getScores(): ScoreEntry[] {
+		return [...this.scores.values()].map((entry) => ({ ...entry }));
+	}
+
+	/** The world's owner clears everyone's multiplayer stats; false when offline or not the owner. */
+	resetScores(): boolean {
+		if (this.status !== 'connected' || this.net.currentRole !== 'owner') return false;
+		return this.net.sendResetScores();
+	}
+
+	private applyScores(message: ServerScoresMessage): void {
+		if (message.replace) this.scores.clear();
+		for (const entry of message.entries) this.scores.set(entry.playerId, { ...entry });
+		this.options.onScores?.(this.getScores());
+	}
+
 	trackPlayer(playerId: string | null): boolean {
 		if (
 			playerId !== null &&
@@ -714,6 +737,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			this.context.setCarried?.(slot, creature, null, null, slot === this.selfSlot);
 		}
 		this.context.setSharedWaypoints?.(welcome.waypoints, this.waypointLink);
+		this.applyScores({ t: 'scores', entries: welcome.scores, replace: true });
 		for (const id of this.sharedDoors) {
 			if (!welcome.doors.includes(id)) this.context.setDoorOpen(id, false);
 		}

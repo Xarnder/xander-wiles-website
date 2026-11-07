@@ -531,6 +531,13 @@ html [data-ui-surface].pause-panel .section:has(> [data-testid='pause-multiplaye
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 }
+/* Online: Multiplayer and Multiplayer stats side by side, Dev & Debug across the row below. */
+html
+	[data-ui-surface].pause-panel
+	.section:has(> [data-testid='pause-multiplayer-stats'])
+	> [data-testid='pause-debug'] {
+	grid-column: 1 / -1;
+}
 html
 	[data-ui-surface].pause-panel
 	.section:has(> [data-testid='pause-multiplayer'])
