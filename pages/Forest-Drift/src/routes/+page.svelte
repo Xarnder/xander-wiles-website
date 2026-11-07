@@ -959,8 +959,9 @@
 				onPlayerDamaged: ({ amount, source }) => {
 					damageAmount = amount;
 					damageHit++;
-					if (source.kind === 'player' || source.kind === 'projectile') playSoundEffect('punchHit');
-					else playLandingThud(amount);
+					// A pellet hitting you only shows the vignette: the hit sound is the shooter's.
+					if (source.kind === 'player') playSoundEffect('punchHit');
+					else if (source.kind !== 'projectile') playLandingThud(amount);
 				},
 				onPlayerDeath: ({ source }) => handlePlayerDeath(source),
 				onCarryChange: (state) => (carryState = state.carrying ? state : null),
@@ -992,12 +993,13 @@
 						return;
 					}
 					if (event.type === 'hit') {
-						// Same marker and sound as a punch that lands.
+						// Same marker as a punch that lands; the pellet's own hit sound (shooter only).
 						punchHit++;
-						playSoundEffect('punchHit');
+						playSoundEffect('projectileHit');
 						return;
 					}
-					playCreatureSound(event.type);
+					if (event.type === 'fire') playSoundEffect('projectileFire');
+					else playCreatureSound(event.type);
 					if (event.type === 'pickUp') creatureAnnouncement = `Picked up ${event.species}`;
 					else if (event.type === 'putDown') creatureAnnouncement = `Put down ${event.species}`;
 				}

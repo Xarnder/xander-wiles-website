@@ -2,12 +2,12 @@ import { audioContext } from '../music/InstrumentLibrary';
 import { audioOutput } from './AudioPreferences';
 
 /**
- * Small synthesised cues for carrying a creature and firing seed pellets (ranged weapons Q24 C), and
- * for climbing on and off a ridden one. No assets to download; they follow the player's ambience
- * volume. Player hits reuse the punch sound (`soundEffects.ts`).
+ * Small synthesised cues for carrying a creature (ranged weapons Q24 C) and for climbing on and off
+ * a ridden one. No assets to download; they follow the player's ambience volume. Firing a pellet
+ * and a pellet hitting a player are recorded sounds (`soundEffects.ts`).
  */
 export type CreatureSound =
-	'fire' | 'dryFire' | 'impact' | 'pickUp' | 'putDown' | 'mount' | 'dismount' | 'rideBlocked';
+	'dryFire' | 'impact' | 'pickUp' | 'putDown' | 'mount' | 'dismount' | 'rideBlocked';
 
 function context(): AudioContext | null {
 	try {
@@ -68,9 +68,6 @@ export function playCreatureSound(sound: CreatureSound): void {
 	const ctx = context();
 	if (!ctx) return;
 	switch (sound) {
-		case 'fire':
-			puff(ctx, 1800, 0.35, 0.12);
-			break;
 		case 'dryFire':
 			chirp(ctx, 520, 380, 0.08, 0.08);
 			break;
