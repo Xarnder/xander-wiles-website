@@ -1,7 +1,10 @@
 import { TerrainEdits, type TerrainStroke } from './terrain/TerrainEdits';
 import { ShovelTool } from './terrain/ShovelTool';
 import type { WallCollisionRect } from './building/wallCollision';
-import { resolvePlayerInteractionPose } from './player/PlayerInteractionPoseResolver';
+import {
+	resolvePlayerInteractionPose,
+	SEATED_EYE_ABOVE_SUPPORT
+} from './player/PlayerInteractionPoseResolver';
 import { MiniBuildInteractionRuntime } from './miniBuild/MiniBuildInteractionRuntime';
 import type { InteractionPrompt } from './player/PlayerInteractionController';
 import { PLAYER_BODY } from './player/PlayerBodyDimensions';
@@ -10,7 +13,19 @@ import { skyBackgroundBlend } from './sky/skyBackgroundBlend';
 import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
 import { HeldCreatureView } from './creatures/HeldCreatureView';
 import { RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
-import { CarryController, type CarryPrompt, type CarryState } from './player/CarryController';
+import { CarryController, type CarryState } from './player/CarryController';
+import { RideController, type RideHost, type RideState } from './player/RideController';
+import {
+	creatureKeyPrompt,
+	routeCreatureKey,
+	type CreatureKeyState,
+	type CreaturePrompt
+} from './player/creatureKeyRouting';
+import { chooseDismountSpot } from './player/rideDismount';
+import { CREATURE_RIDING_ENABLED, type RideSeatKind } from './creatures/creatureRiding';
+import type { MountSeat } from './player/FirstPersonController';
+import type { CameraBody } from './player/ThirdPersonCamera';
+import type { LocalRidePose } from './player/PlayerInteractionView';
 import { ProjectileSystem } from './particles/ProjectileSystem';
 import { CarryHints } from './creatures/CarryHints';
 import {
@@ -449,6 +464,14 @@ export type CarryFeedbackEvent =
 	/** Online: the room said no to a pick-up. */
 	| { type: 'refused'; reason: string };
 
+/** Riding feedback the page turns into sounds and announcements (riding plan §11). */
+export type RideFeedbackEvent =
+	| { type: 'mount' | 'dismount'; species: string }
+	/** Steered into something the mount can't cross (at most every few seconds). */
+	| { type: 'blocked' }
+	/** Online: the room said no to climbing on. */
+	| { type: 'refused'; reason: string };
+
 export interface ThreeSceneOptions {
 	container: HTMLElement;
 	settings: TerrainSettings;
@@ -467,10 +490,14 @@ export interface ThreeSceneOptions {
 	onPlayerDeath?: (event: { source: DamageSource | null }) => void;
 	/** Ranged weapons: what the carry HUD shows. */
 	onCarryChange?: (state: CarryState) => void;
-	/** Ranged weapons: the "[K] Pick up …" / "Put down" prompt, or null. */
-	onCarryPrompt?: (prompt: CarryPrompt | null) => void;
+	/** The creature key's prompt ("[K] Pick up …", "Ride …", "Get off", "Put down"), or null. */
+	onCreaturePrompt?: (prompt: CreaturePrompt | null) => void;
 	/** Ranged weapons: moments the page gives sound and screen-reader feedback for. */
 	onCarryEvent?: (event: CarryFeedbackEvent) => void;
+	/** Riding: what the ride HUD shows. */
+	onRideChange?: (state: RideState) => void;
+	/** Riding: moments the page gives sound and screen-reader feedback for. */
+	onRideEvent?: (event: RideFeedbackEvent) => void;
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -519,6 +546,13 @@ export interface ThreeSceneOptions {
  */
 /** Knocked out: the third-person camera looks down at the player lying on the floor. */
 const KNOCKED_OUT_CAMERA_PITCH = -0.8;
+
+/** Riding: the first-person eye stays this far above a small mount's head, metres. */
+const RIDE_HEAD_CLEARANCE = 0.2;
+/** Riding: how long climbing off takes, seconds. */
+const RIDE_DISMOUNT_SECONDS = 0.4;
+/** Riding: a landing spot further than this above or below the mount's feet is a ledge, metres. */
+const RIDE_DISMOUNT_MAX_DROP = 1.5;
 
 /** A floor dropping further than a stair riser under the player counts as removed (Q21). */
 const SUPPORT_LOSS_TOLERANCE = 0.3;
@@ -659,6 +693,8 @@ export class ThreeScene implements WorldRuntime {
 	readonly creatures: CreatureRuntimeManager;
 	/** Ranged weapons (plan: docs/2026/11-04/range-weapons). */
 	readonly carry: CarryController;
+	/** Riding bipeds (plan: docs/2026/11-07/bipedal-speed-creature). */
+	readonly ride: RideController;
 	readonly heldCreature: HeldCreatureView;
 	readonly projectiles: ProjectileSystem;
 	/** Waypoints (pause menu): beacons and locator markers for places and moving targets. */
@@ -1262,7 +1298,8 @@ export class ThreeScene implements WorldRuntime {
 					...this.slabManager.getMeshesForRaycast(),
 					...this.roofManager.getMeshesForRaycast()
 				],
-				terrain: (x, z) => this.terrainManager.getHeightSampler().sample(x, z)
+				terrain: (x, z) => this.terrainManager.getHeightSampler().sample(x, z),
+				bodies: this.rideCameraBodies()
 			}),
 			domElement: this.renderer.domElement,
 			camera: this.camera,
@@ -1617,6 +1654,7 @@ export class ThreeScene implements WorldRuntime {
 					y + height > box.min.y
 			);
 		};
+		this.naturalGroundBlocked = naturalGroundBlocked;
 		this.music = new MusicPlantPlacementTool({
 			prepareSurfaces: (points, cancelled) => this.hydrology.preparePoints(points, cancelled),
 			scene: this.scene,
@@ -1769,8 +1807,10 @@ export class ThreeScene implements WorldRuntime {
 				!this.miniBuildUiOpen &&
 				!this.miniBuildEditorOpen &&
 				!this.buildToolManager.isEditingWorld() &&
-				// While carrying a creature, K puts it down instead of offering seats.
-				!this.carry?.carrying,
+				// While carrying a creature, K puts it down instead of offering seats; while riding, K
+				// gets off.
+				!this.carry?.carrying &&
+				!this.controller.mountActive,
 			waterBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
 			eyeHeight: () => this.settings.player.eyeHeight,
 			onPrompt: (prompt) => options.onMiniBuildInteractionChange?.(prompt),
@@ -1811,11 +1851,18 @@ export class ThreeScene implements WorldRuntime {
 		this.scene.add(this.projectiles.group);
 		this.carry = new CarryController(this.carryHost(options), {
 			change: (state) => options.onCarryChange?.(state),
-			prompt: (prompt) => options.onCarryPrompt?.(prompt),
 			pickedUp: (species) => options.onCarryEvent?.({ type: 'pickUp', species }),
 			putDown: (species) => options.onCarryEvent?.({ type: 'putDown', species }),
 			refused: (reason) => options.onCarryEvent?.({ type: 'refused', reason })
 		});
+		this.ride = new RideController(this.rideHost(), {
+			change: (state) => options.onRideChange?.(state),
+			mounted: (species) => options.onRideEvent?.({ type: 'mount', species }),
+			dismounted: (species) => options.onRideEvent?.({ type: 'dismount', species }),
+			refused: (reason) => options.onRideEvent?.({ type: 'refused', reason }),
+			blocked: () => options.onRideEvent?.({ type: 'blocked' })
+		});
+		this.onCreaturePrompt = options.onCreaturePrompt;
 		this.waypoints = new WaypointSystem(
 			{
 				player: () => {
@@ -1823,8 +1870,11 @@ export class ThreeScene implements WorldRuntime {
 					return { x, y: y - this.settings.player.eyeHeight, z };
 				},
 				nearestCarryable: (from) => this.creatures.nearestCarryable(from),
+				nearestRideable: (from) =>
+					CREATURE_RIDING_ENABLED ? this.creatures.nearestRideable(from) : null,
 				creaturePosition: (id) => this.creatures.creaturePosition(id),
-				carrying: () => this.carry.carrying
+				carrying: () => this.carry.carrying,
+				riding: () => this.controller.mountActive
 			},
 			browserStorage()
 		);
@@ -1836,7 +1886,7 @@ export class ThreeScene implements WorldRuntime {
 		this.graphicsPipeline.excludeFromAo(this.carryHints.group);
 		// Registered after the seat runtime's capture listener (which yields K when no seat is
 		// targeted) and before the door controller's bubbling one.
-		window.addEventListener('keydown', this.handleCarryKey, true);
+		window.addEventListener('keydown', this.handleCreatureKey, true);
 		window.addEventListener('mouseup', this.handleCarryMouseUp);
 		window.addEventListener('blur', this.handleCarryBlur);
 		this.miniBuildInteraction.showDebug =
@@ -2171,6 +2221,8 @@ export class ThreeScene implements WorldRuntime {
 				setCarried: (slot, creature, previous, at, self) =>
 					this.applyRoomCarry(slot, creature, previous, at, self),
 				resolveCreature: (id) => this.resolveCreature(id),
+				setRidden: (slot, creature, previous, at, self) =>
+					this.applyRoomRide(slot, creature, previous, at, self),
 				locatorExtrasActive: () => this.waypoints.anyActive,
 				placeLocatorExtras: (locator) => this.placeWaypointMarkers(locator),
 				setSharedWaypoints: (list, link) => {
@@ -3326,6 +3378,11 @@ export class ThreeScene implements WorldRuntime {
 		const state = this.miniBuildInteraction.controller.state;
 		let position: { x: number; y: number; z: number } =
 			state.type === 'mini-build' ? state.entry : this.controller.worldPosition;
+		if (this.ride.riding) {
+			// A ride isn't restored: reopen on the ground beside the mount, never up on it (Q25).
+			const ground = this.dismountGround();
+			position = { x: ground.x, y: ground.y + this.settings.player.eyeHeight, z: ground.z };
+		}
 		if (this.health.snapshot().dead) {
 			// A save taken while dead reopens at the spawn with full health (see savedValue).
 			const spot = this.dryGroundNear(0, 0);
@@ -3503,6 +3560,8 @@ export class ThreeScene implements WorldRuntime {
 			this.buildToolManager.isNormalMode() &&
 			this.miniBuildInteraction.controller.state.type === 'none' &&
 			!this.controller.interactionPose &&
+			// No punching from a mount (riding Q13 A).
+			!this.controller.mountActive &&
 			!this.controller.isFlying() &&
 			!this.debugControlsOpen &&
 			!this.health.snapshot().dead
@@ -3538,12 +3597,12 @@ export class ThreeScene implements WorldRuntime {
 
 	// ------------------------------------------------------------------ ranged weapons (carrying)
 
-	private readonly handleCarryKey = (event: KeyboardEvent): void => {
+	private readonly handleCreatureKey = (event: KeyboardEvent): void => {
 		if (event.code !== 'KeyK' || event.repeat || event.ctrlKey || event.altKey || event.metaKey)
 			return;
 		const target = event.target as HTMLElement | null;
 		if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
-		if (this.carry.toggle()) {
+		if (this.useCreatureKey()) {
 			event.preventDefault();
 			event.stopImmediatePropagation();
 		}
@@ -3555,9 +3614,280 @@ export class ThreeScene implements WorldRuntime {
 
 	private readonly handleCarryBlur = (): void => this.carry.setTrigger(false);
 
-	/** `K` or the touch Pick up / Put down button. Returns whether something happened. */
-	toggleCarry(): boolean {
-		return this.carry.toggle();
+	/**
+	 * `K` or the touch creature button: pick up, put down, climb on or get off, whichever applies
+	 * (`creatureKeyRouting.ts`). Returns whether something happened.
+	 */
+	useCreatureKey(): boolean {
+		// Waiting for the room: swallow repeated presses.
+		if (this.ride.pending || this.carry.pending) return true;
+		switch (routeCreatureKey(this.creatureKeyState())) {
+			case 'pickUp':
+				return this.carry.toggle();
+			case 'putDown':
+				this.carry.putDown();
+				return true;
+			case 'mount':
+				return this.ride.mount();
+			case 'dismount':
+				if (!this.playInputAllowed()) return false;
+				this.ride.dismount();
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	private creatureKeyState(): CreatureKeyState {
+		const carryTarget = this.carry.target;
+		return {
+			riding: this.ride.riding,
+			carrying: this.carry.carrying,
+			seatOrDoorTargeted:
+				!!this.miniBuildInteraction.controller.target || !!this.doorInteraction?.getLookedAtDoor(),
+			rideTarget: this.ride.target?.distance ?? null,
+			carryTarget: carryTarget ? (carryTarget.distance ?? 0) : null
+		};
+	}
+
+	private onCreaturePrompt: ThreeSceneOptions['onCreaturePrompt'];
+	private lastCreaturePrompt = '';
+
+	/** Tells the page what the creature key does now (only when that changes). */
+	private updateCreaturePrompt(): void {
+		const state = this.creatureKeyState();
+		const prompt = this.playInputAllowed()
+			? creatureKeyPrompt(routeCreatureKey(state), state, {
+					carryTarget: this.carry.target?.definition.species.name ?? null,
+					rideTarget: this.ride.target?.definition.species.name ?? null,
+					carryPending: this.carry.pendingSpecies,
+					ridePending: this.ride.pendingSpecies
+				})
+			: null;
+		const key = prompt ? `${prompt.action}:${prompt.label}:${prompt.carrying}` : '';
+		if (key === this.lastCreaturePrompt) return;
+		this.lastCreaturePrompt = key;
+		this.onCreaturePrompt?.(prompt);
+	}
+
+	/** The player is playing: pointer locked (or touch), nothing open over the game, not knocked out. */
+	private playInputAllowed(): boolean {
+		return (
+			this.controller.isPointerLocked() &&
+			!this.simulationPaused &&
+			!this.devPanelOpen &&
+			!this.debugControlsOpen &&
+			!this.speechPreparationOpen &&
+			!this.miniBuildUiOpen &&
+			!this.miniBuildEditorOpen &&
+			!this.health.snapshot().dead
+		);
+	}
+
+	getRideState(): RideState {
+		return this.ride.state();
+	}
+
+	// ----------------------------------------------------------------------------- riding
+
+	private readonly naturalGroundBlocked: (
+		x: number,
+		z: number,
+		radius?: number,
+		height?: number
+	) => boolean;
+	/** Where the player stood before climbing on: always a safe place to get off. */
+	private readonly rideStart = new THREE.Vector3();
+	/** The last seat drawn, so the body keeps its pose while climbing off. */
+	private lastRideSeat: { kind: RideSeatKind; heading: number } = { kind: 'neck', heading: 0 };
+
+	private rideHost(): RideHost {
+		// eslint-disable-next-line @typescript-eslint/no-this-alias
+		const scene = this;
+		return {
+			eye: () => {
+				const { x, y, z } = this.controller.worldPosition;
+				return { x, y, z };
+			},
+			aim: () => this.lookDirection(),
+			inputAllowed: () => CREATURE_RIDING_ENABLED && this.playInputAllowed(),
+			cannotMount: () =>
+				this.controller.isFlying() ||
+				this.controller.mountActive ||
+				!!this.controller.interactionPose ||
+				this.miniBuildInteraction.controller.state.type !== 'none',
+			pick: (eye, dir, reach) => this.creatures.pickRideable(eye, dir, reach),
+			// Online, the room decides who rides what. A getter: the session can attach later.
+			get claim() {
+				const multiplayer = scene.multiplayer;
+				return multiplayer?.claimRide ? (id: string) => multiplayer.claimRide!(id) : undefined;
+			},
+			mount: (id) => this.beginRide(id),
+			seated: () => this.controller.mountActive,
+			isRidden: (id) => this.creatures.isRidden(id),
+			input: () => this.controller.rideInput(),
+			steer: (input, dt) => {
+				const eye = this.controller.worldPosition;
+				const aim = this.lookDirection();
+				const look = { x: eye.x + aim.x * 20, y: eye.y + aim.y * 20, z: eye.z + aim.z * 20 };
+				const yaw = this.controller.getYaw();
+				return this.creatures.steerRide(input, yaw, this.settings.player.runSpeed, dt, look);
+			},
+			dismount: (_id, instant) => this.endRide(instant),
+			abandon: () => this.abandonRide()
+		};
+	}
+
+	/** The mount, for the third-person camera to keep out of (none while on foot). */
+	private rideCameraBodies(): CameraBody[] {
+		const body = this.creatures?.rideCameraBody();
+		return body ? [body] : [];
+	}
+
+	/** Half-width room a creature carried under the left arm needs beside a mount's neck (Q12 C). */
+	private rideCarryClearance(): number {
+		return this.carry.carrying ? this.heldCreature.bodyHalfSize.x * 2 + 0.05 : 0;
+	}
+
+	private beginRide(id: string) {
+		const mount = this.creatures.mountRide(id, this.rideCarryClearance());
+		if (!mount) return null;
+		this.rideStart.copy(this.controller.worldPosition);
+		// A giant's shoulder is a long way up: take a little longer getting there.
+		this.controller.beginMount(this.mountSeat, mount.profile.height >= 8.5 ? 0.6 : 0.4);
+		return mount.profile;
+	}
+
+	/** The eye the controller follows while riding (riding plan §4.5). */
+	private readonly mountSeat: MountSeat = {
+		readEye: (out) => {
+			const frame = this.creatures.rideFrame();
+			if (!frame) return false;
+			this.lastRideSeat = { kind: frame.kind, heading: frame.heading };
+			out.copy(frame.anchor);
+			out.y += SEATED_EYE_ABOVE_SUPPORT;
+			return true;
+		},
+		cameraOffset: () => {
+			const frame = this.creatures.rideFrame();
+			if (!frame) return 0;
+			const eyeY = frame.anchor.y + SEATED_EYE_ABOVE_SUPPORT;
+			// Astride a small creature's neck, look over its head rather than through it.
+			const overHead =
+				frame.kind === 'neck' ? Math.max(0, frame.headTop + RIDE_HEAD_CLEARANCE - eyeY) : 0;
+			// The rider rides the body's bob and sway; with reduced motion the camera holds the
+			// steady height instead, while the body (seen in third person) still moves with it.
+			const steady = this.reducedMotion ? frame.steadyY - frame.anchor.y : 0;
+			return overHead + steady;
+		}
+	};
+
+	/** Safe ground beside the mount for the rider's feet (Q9 A). */
+	private dismountGround(): { x: number; y: number; z: number } {
+		const footprint = this.creatures.rideFootprint();
+		const fallback = { x: this.rideStart.x, z: this.rideStart.z };
+		const spot = footprint
+			? chooseDismountSpot({ ...footprint, fallback }, (x, z) =>
+					this.dismountSafe(x, z, footprint.y)
+				)
+			: fallback;
+		const reference = (footprint?.y ?? this.rideStart.y - this.settings.player.eyeHeight) + 1;
+		const y = this.worldSurfaceSampler.getSupportingSurfaceY(spot.x, spot.z, reference);
+		return { x: spot.x, y, z: spot.z };
+	}
+
+	private dismountSafe(x: number, z: number, feetY: number): boolean {
+		if (this.hydrology.walkBlockedByWater(x, z)) return false;
+		if (this.naturalGroundBlocked(x, z, PLAYER_BODY.collisionRadius, PLAYER_BODY.standingHeight))
+			return false;
+		const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, feetY + 1);
+		if (!Number.isFinite(y) || Math.abs(y - feetY) > RIDE_DISMOUNT_MAX_DROP) return false;
+		const pushed = this.creatures.resolvePlayer(x, z, y, y + PLAYER_BODY.standingHeight);
+		return pushed.x === x && pushed.z === z;
+	}
+
+	/** Climbs off onto safe ground, and the mount goes back to its own life (Q9 A, Q19 A). */
+	private endRide(instant: boolean): void {
+		const ground = this.dismountGround();
+		this.releaseMount();
+		const eye = { x: ground.x, y: ground.y + this.settings.player.eyeHeight, z: ground.z };
+		this.controller.endMount(eye, instant ? 0 : RIDE_DISMOUNT_SECONDS);
+	}
+
+	/** The ride ended without climbing off (teleported, world replaced): let go of the mount. */
+	private abandonRide(): void {
+		if (this.controller.mountActive) {
+			const ground = this.dismountGround();
+			this.controller.endMount(
+				{ x: ground.x, y: ground.y + this.settings.player.eyeHeight, z: ground.z },
+				0
+			);
+		}
+		this.releaseMount();
+	}
+
+	/** Lets the mount go where it stands, and (online) tells the room where that is. */
+	private releaseMount(): void {
+		const footprint = this.creatures.rideFootprint();
+		this.creatures.dismountRide();
+		const at = footprint ?? {
+			x: this.controller.worldPosition.x,
+			y: this.controller.worldPosition.y - this.settings.player.eyeHeight,
+			z: this.controller.worldPosition.z,
+			heading: this.controller.getYaw() + Math.PI
+		};
+		this.multiplayer?.dropRide?.([at.x, at.y, at.z, at.heading]);
+	}
+
+	/**
+	 * The room says `slot` climbed onto `creature`, or got off `previous` leaving it at `at`
+	 * (riding, Phase 3). Keeps this client's herd consistent with who rides what.
+	 */
+	private applyRoomRide(
+		slot: number,
+		creature: string | null,
+		previous: string | null,
+		at: CarryPlacement | null,
+		self: boolean
+	): void {
+		if (self) {
+			// The room ended this player's ride (knocked out, sat down, the creature was removed).
+			if (creature === null && previous !== null) this.ride.forceDismount(previous);
+			// The room thinks we ride something we don't (we reloaded): let it go where we are.
+			else if (creature !== null && this.ride.riddenId !== creature) {
+				const { x, y, z } = this.controller.worldPosition;
+				this.multiplayer?.dropRide?.([
+					x,
+					y - this.settings.player.eyeHeight,
+					z,
+					this.controller.getYaw() + Math.PI
+				]);
+			}
+			return;
+		}
+		if (previous !== null && this.creatures.carrierOf(previous) === slot) {
+			if (at)
+				this.creatures.release(previous, { x: at[0], y: at[1], z: at[2] }, at[3], { save: false });
+			else this.creatures.forget(previous);
+		}
+		if (creature !== null) {
+			const definition = this.resolveCreature(creature);
+			if (definition) this.creatures.holdRemote(creature, slot, definition);
+		}
+	}
+
+	/** The local body's pose while on (or climbing on or off) a mount. */
+	private localRidePose(): LocalRidePose | null {
+		if (!this.controller.mountActive) return null;
+		const frame = this.controller.mounted ? this.creatures.rideFrame() : null;
+		const seat = frame ? { kind: frame.kind, heading: frame.heading } : this.lastRideSeat;
+		return {
+			kind: seat.kind,
+			hands: frame?.hands ?? { left: null, right: null },
+			// The mesh faces -Z: the player's yaw convention is the creature's heading turned round.
+			yaw: seat.heading + Math.PI,
+			blend: this.controller.mountBlend
+		};
 	}
 
 	/** Fire button (touch) or tests: press and hold fires whenever a charge is ready. */
@@ -3817,19 +4147,23 @@ export class ThreeScene implements WorldRuntime {
 		const reducedMotion = this.reducedMotion;
 		this.waypoints.update(now);
 		this.waypointBeacons.update(this.waypoints, this.camera, deltaSeconds, reducedMotion);
-		const hintsVisible =
-			RANGED_WEAPONS_ENABLED &&
-			this.waypoints.carryHints &&
-			!this.carry.carrying &&
-			this.buildToolManager.isNormalMode() &&
-			(!this.multiplayer || this.sharedCreatureProjectiles);
+		const hintsOn = this.waypoints.carryHints && this.buildToolManager.isNormalMode();
 		this.carryHints.update(
 			this.creatures,
 			this.camera,
 			deltaSeconds,
-			hintsVisible,
-			this.carry.targetId,
-			this.waypoints.followedCreature,
+			{
+				carry:
+					hintsOn &&
+					RANGED_WEAPONS_ENABLED &&
+					!this.carry.carrying &&
+					(!this.multiplayer || this.sharedCreatureProjectiles),
+				// Nothing else to climb onto while riding.
+				ride: hintsOn && CREATURE_RIDING_ENABLED && !this.controller.mountActive,
+				riddenId: this.creatures.riddenId
+			},
+			this.carry.targetId ?? this.ride.target?.id ?? null,
+			this.waypoints.followedCreatures,
 			reducedMotion
 		);
 		// Online, the multiplayer session draws the bar and asks for these markers itself.
@@ -3917,6 +4251,8 @@ export class ThreeScene implements WorldRuntime {
 		change: (snapshot: HealthSnapshot) => this.onHealthChange?.(snapshot),
 		damaged: (amount: number, source: DamageSource) => this.onPlayerDamaged?.({ amount, source }),
 		death: (source: DamageSource | null) => {
+			// Off the mount first, straight onto the ground: the lying pose starts there.
+			this.ride.dismount(true);
 			this.lieDown();
 			this.applyInputBlock();
 			this.onPlayerDeath?.({ source });
@@ -4569,9 +4905,13 @@ export class ThreeScene implements WorldRuntime {
 		this.miniBuildInteraction.update(deltaSeconds);
 		this.healthClockMs += deltaSeconds * 1000;
 		this.noticeRemovedSupport();
+		// The mount moves first, so the eye the controller follows is this frame's seat.
+		this.ride.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
 		this.health.poll();
 		this.carry.update(deltaSeconds);
+		this.creatures.setRideCarryClearance(this.rideCarryClearance());
+		this.updateCreaturePrompt();
 		const localCharacter = this.miniBuildInteraction.localCharacter;
 		if (localCharacter) {
 			localCharacter.carrying = this.carry.carrying;
@@ -4579,7 +4919,8 @@ export class ThreeScene implements WorldRuntime {
 		}
 		this.miniBuildInteraction.afterPlayerUpdate(
 			deltaSeconds,
-			this.buildToolManager.isConstructionGestureActive()
+			this.buildToolManager.isConstructionGestureActive(),
+			this.localRidePose()
 		);
 		if (this.multiplayer) {
 			const interaction = this.miniBuildInteraction.controller.state;
@@ -4839,7 +5180,7 @@ export class ThreeScene implements WorldRuntime {
 	dispose(): void {
 		this.disposed = true;
 		this.renderer.domElement.removeEventListener('mousedown', this.handlePunchMouseDown);
-		window.removeEventListener('keydown', this.handleCarryKey, true);
+		window.removeEventListener('keydown', this.handleCreatureKey, true);
 		window.removeEventListener('mouseup', this.handleCarryMouseUp);
 		window.removeEventListener('blur', this.handleCarryBlur);
 		this.health.dispose();

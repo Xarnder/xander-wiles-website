@@ -5,7 +5,13 @@ import { POSE_FLAGS } from './protocol';
 import { CharacterAssetCache } from '../characters/CharacterAssetCache';
 import { CharacterInstance, type CharacterSurface } from '../characters/CharacterInstance';
 import { HeldCreatureView } from '../creatures/HeldCreatureView';
+import { RiddenCreatureView, type RiddenSeat } from '../creatures/RiddenCreatureView';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
+import { PLAYER_BODY } from '../player/PlayerBodyDimensions';
+import {
+	SEATED_EYE_ABOVE_SUPPORT,
+	SEATED_PELVIS_SUPPORT
+} from '../player/PlayerInteractionPoseResolver';
 
 /** Stride length of the walk cycle, m: one full bob cycle covers two steps. */
 const STRIDE = 1.5;
@@ -35,9 +41,12 @@ interface Avatar {
 	/** Ranged weapons: the creature under this player's arm, drawn from its recipe. */
 	held: HeldCreatureView | null;
 	heldId: string | null;
+	/** Riding: the creature this player rides, drawn under them from its recipe. */
+	mount: RiddenCreatureView | null;
+	mountId: string | null;
 }
 
-/** Ranged weapons: what a remote player is carrying (the recipe may not be known yet). */
+/** A creature a remote player carries or rides (the recipe may not be known yet). */
 export interface RemoteCarry {
 	id: string;
 	definition: CreatureDefinition | null;
@@ -69,7 +78,8 @@ export class RemoteAvatarRenderer {
 		private readonly excludeFromAo: (object: THREE.Object3D) => () => void,
 		private readonly surface?: CharacterSurface,
 		private readonly interactionPose?: (playerId: string) => PlayerInteractionPose | null,
-		private readonly carriedBy?: (playerId: string) => RemoteCarry | null
+		private readonly carriedBy?: (playerId: string) => RemoteCarry | null,
+		private readonly riddenBy?: (playerId: string) => RemoteCarry | null
 	) {
 		this.group.name = 'remote-players';
 		this.registerMaterial(this.visorMaterial);
@@ -114,6 +124,7 @@ export class RemoteAvatarRenderer {
 
 			const interaction = this.interactionPose?.(info.playerId);
 			const carry = this.carriedBy?.(info.playerId) ?? null;
+			const ride = interaction ? null : (this.riddenBy?.(info.playerId) ?? null);
 
 			const away = (frame.flags & POSE_FLAGS.away) !== 0;
 			const walking = Math.min(1, frame.speed / 4);
@@ -131,10 +142,31 @@ export class RemoteAvatarRenderer {
 			const detailed = !!avatar.character && distance < (avatar.detailed ? 110 : 90);
 			avatar.detailed = detailed;
 			avatar.body.visible = !detailed;
+			// The mount is drawn as far away as the avatar is (giants are seen from far away).
+			const seat = this.updateMount(avatar, ride, frame, deltaSeconds, distance < DRAW_DISTANCE);
+			if (seat) {
+				// Seated on the mount as drawn here (the simple stand-in too, far away).
+				avatar.root.position.copy(seat.anchor);
+				// The mesh faces -Z: the player's yaw convention is the creature's heading turned round.
+				avatar.root.rotation.y = seat.heading + Math.PI;
+				avatar.body.rotation.x = 0;
+			}
 			if (avatar.character) {
 				avatar.character.object.visible = detailed;
 				if (detailed) {
-					if (interaction) {
+					if (seat) {
+						avatar.character.carrying = !!carry?.definition;
+						if (avatar.held) avatar.character.carryBody.copy(avatar.held.bodyHalfSize);
+						avatar.character.poseRide(
+							{
+								kind: seat.kind,
+								hands: seat.hands,
+								blend: 1,
+								pelvisSupportOffset: SEATED_PELVIS_SUPPORT
+							},
+							deltaSeconds
+						);
+					} else if (interaction) {
 						avatar.root.position.set(
 							interaction.anchor.x,
 							interaction.anchor.y,
@@ -162,6 +194,44 @@ export class RemoteAvatarRenderer {
 			this.avatars.delete(playerId);
 		}
 	}
+
+	/** Draws (or lets go of) a remote rider's mount; returns where they sit on it this frame. */
+	private updateMount(
+		avatar: Avatar,
+		ride: RemoteCarry | null,
+		frame: RemotePlayerView['frame'],
+		deltaSeconds: number,
+		visible: boolean
+	): RiddenSeat | null {
+		if (!ride?.definition) {
+			if (avatar.mount && avatar.mountId !== null) avatar.mount.detach();
+			avatar.mountId = null;
+			return null;
+		}
+		avatar.mount ??= new RiddenCreatureView(this.group, this.registerMaterial);
+		if (avatar.mountId !== ride.id) {
+			avatar.mountId = avatar.mount.attach(ride.definition) ? ride.id : null;
+			if (avatar.mountId === null) return null;
+		}
+		// The pose is the rider's feet (eye minus eye height); a seated eye is a fixed height above
+		// the seat's support point.
+		const anchor = this.mountAnchor.set(
+			frame.x,
+			frame.y + PLAYER_BODY.eyeHeight - SEATED_EYE_ABOVE_SUPPORT,
+			frame.z
+		);
+		const surface = this.surface;
+		return avatar.mount.update(
+			anchor,
+			// The player's yaw convention faces -Z: turned round, it's a creature heading.
+			frame.yaw + Math.PI,
+			frame.speed,
+			deltaSeconds,
+			visible,
+			(x, z) => (surface ? surface(x, z, anchor.y) : Number.NaN)
+		);
+	}
+	private readonly mountAnchor = new THREE.Vector3();
 
 	/** Draws (or hides) the creature under a remote player's arm. */
 	private updateHeld(
@@ -270,7 +340,9 @@ export class RemoteAvatarRenderer {
 			walkPhase: 0,
 			seenThisFrame: true,
 			held: null,
-			heldId: null
+			heldId: null,
+			mount: null,
+			mountId: null
 		};
 		this.applyIdentity(avatar, name, colour);
 		return avatar;
@@ -316,6 +388,7 @@ export class RemoteAvatarRenderer {
 
 	private disposeAvatar(avatar: Avatar): void {
 		avatar.held?.dispose();
+		avatar.mount?.dispose();
 		avatar.character?.dispose();
 		avatar.releaseLabelAo();
 		avatar.root.removeFromParent();

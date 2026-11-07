@@ -2,8 +2,20 @@ import { POSE_FLAGS } from '../net/protocol';
 import { PLAYER_BODY } from './PlayerBodyDimensions';
 import * as THREE from 'three';
 import { CharacterAssetCache } from '../characters/CharacterAssetCache';
-import { CharacterInstance } from '../characters/CharacterInstance';
+import { CharacterInstance, type CharacterRidePose } from '../characters/CharacterInstance';
 import type { FirstPersonController } from './FirstPersonController';
+import { SEATED_EYE_ABOVE_SUPPORT, SEATED_PELVIS_SUPPORT } from './PlayerInteractionPoseResolver';
+
+/** The local player riding a creature: how they sit (the support point follows the eye). */
+export interface LocalRidePose {
+	kind: CharacterRidePose['kind'];
+	hands: CharacterRidePose['hands'];
+	/** Facing, in the player's yaw convention (the mesh faces -Z). */
+	yaw: number;
+	/** 0 standing … 1 seated. */
+	blend: number;
+}
+
 /** The existing character asset and skeleton, attached only while a pose is in use. */
 export class PlayerInteractionView {
 	private readonly cache = new CharacterAssetCache();
@@ -23,7 +35,12 @@ export class PlayerInteractionView {
 	get localCharacter(): CharacterInstance | null {
 		return this.character;
 	}
-	update(player: FirstPersonController, dt = 1 / 60, building = false): void {
+	update(
+		player: FirstPersonController,
+		dt = 1 / 60,
+		building = false,
+		ride: LocalRidePose | null = null
+	): void {
 		const pose = player.interactionPose;
 		// Hide the avatar as the camera reaches the head in cramped rooms.
 		this.root.visible = player.localAvatarVisible;
@@ -34,19 +51,23 @@ export class PlayerInteractionView {
 			this.entry.y -= PLAYER_BODY.eyeHeight - PLAYER_BODY.pelvisHeight;
 			this.wasActive = true;
 		}
-		if (!this.character && !this.loading) {
-			this.loading = true;
-			void this.cache
-				.load()
-				.then((template) => {
-					if (this.disposed) return;
-					this.character = new CharacterInstance(template, '#5b8e68', this.register);
-					this.root.add(this.character.object);
-					this.scene.add(this.root);
-				})
-				.catch((error) => {
-					if (!this.disposed) console.warn('Interaction avatar unavailable', error);
-				});
+		this.ensureCharacter();
+		if (ride) {
+			// The seat's support point is a fixed height under the eye, at every blend: standing (blend
+			// 0) that puts the feet on the ground, seated it puts the pelvis on the creature.
+			this.root.position.copy(player.worldPosition);
+			this.root.position.y -= SEATED_EYE_ABOVE_SUPPORT;
+			this.root.rotation.y = ride.yaw;
+			this.character?.poseRide(
+				{
+					kind: ride.kind,
+					hands: ride.hands,
+					blend: ride.blend,
+					pelvisSupportOffset: SEATED_PELVIS_SUPPORT
+				},
+				dt
+			);
+			return;
 		}
 		if (!pose) {
 			this.root.position.copy(player.worldPosition);
@@ -84,6 +105,21 @@ export class PlayerInteractionView {
 			);
 		this.root.rotation.y = pose.yaw;
 		this.character?.poseInteraction(pose, player.interactionBlend);
+	}
+	private ensureCharacter(): void {
+		if (this.character || this.loading) return;
+		this.loading = true;
+		void this.cache
+			.load()
+			.then((template) => {
+				if (this.disposed) return;
+				this.character = new CharacterInstance(template, '#5b8e68', this.register);
+				this.root.add(this.character.object);
+				this.scene.add(this.root);
+			})
+			.catch((error) => {
+				if (!this.disposed) console.warn('Interaction avatar unavailable', error);
+			});
 	}
 	dispose(): void {
 		this.disposed = true;

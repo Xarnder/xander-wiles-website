@@ -15,7 +15,7 @@ interface SceneLike {
 	setTouchActive(active: boolean): void;
 	toggleBuildMode(): void;
 	toggleThirdPerson(): void;
-	toggleCarry(): boolean;
+	useCreatureKey(): boolean;
 	setCarryTrigger(held: boolean): void;
 	getCarryState(): CarryState;
 	buildToolManager: { isNormalMode(): boolean };

@@ -102,6 +102,8 @@ export interface AnimateOptions {
 	standable?: (x: number, z: number) => boolean;
 	/** The caller already ran `grounding.update` this frame (benchmarks time it separately). */
 	skipGroundingUpdate?: boolean;
+	/** Fastest footfall cycle, Hz: a ridden creature at speed strides out rather than blurring. */
+	maxCadence?: number;
 }
 
 /** Semantic direct posing: no clips, mixers, global randomness, or persistent renderer state. */
@@ -137,7 +139,8 @@ export function animateCreature(
 					velocityZ: intent.velocity.z,
 					gait: intent.gait,
 					dt: delta,
-					lod
+					lod,
+					maxCadence: options.maxCadence
 				},
 				surface ?? (() => 0),
 				options.standable

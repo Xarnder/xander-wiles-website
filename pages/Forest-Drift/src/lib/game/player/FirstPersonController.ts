@@ -2,7 +2,31 @@ import { ThirdPersonCamera, type CameraObstacles } from './ThirdPersonCamera';
 import type { PlayerInteractionPose } from './PlayerInteractionPoseResolver';
 import * as THREE from 'three';
 import type { PlayerSettings } from '../terrain/TerrainSettings';
+import type { RideInput } from '../creatures/CreatureRideMotion';
 import { createWalkBobState, stepWalkBob, walkBobOffset } from './walkBob';
+
+/**
+ * A seat on a moving creature that the eye follows while riding (docs/2026/11-07/
+ * bipedal-speed-creature §4.5). The scene moves the creature before the controller reads it.
+ */
+export interface MountSeat {
+	/** Writes the rider's eye for this frame into `out`; false while there's no seat to read. */
+	readEye(out: THREE.Vector3): boolean;
+	/** Extra first-person camera height this frame: looking over a mount's head, plus a tiny bob. */
+	cameraOffset(): number;
+}
+
+interface MountState {
+	seat: MountSeat;
+	phase: 'mounting' | 'riding' | 'dismounting';
+	age: number;
+	duration: number;
+	/** Blend start (eye), and for dismounting its end (the ground eye). */
+	from: THREE.Vector3;
+	to: THREE.Vector3;
+}
+
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
 
 const GRAVITY = 18;
 const MOUSE_SENSITIVITY = 0.0022;
@@ -147,7 +171,7 @@ export class FirstPersonController {
 	/** Keep the crosshair clear when looking steeply down through the local body. */
 	get localAvatarVisible(): boolean {
 		if (!this.usesThirdPerson || this.thirdPersonDistance <= 0.85) return false;
-		if (this.interactionPose) return true;
+		if (this.interactionPose || this.mount) return true;
 		const dx = this.worldPosition.x - this.camera.position.x;
 		const dz = this.worldPosition.z - this.camera.position.z;
 		const fx = -Math.sin(this.yaw) * Math.cos(this.pitch);
@@ -188,6 +212,111 @@ export class FirstPersonController {
 		this.interactionPose = null;
 		this.interactionThirdPerson = false;
 		this.restoreState(position, this.yaw, 0);
+	}
+
+	// ------------------------------------------------------------------ riding a creature
+
+	private mount: MountState | null = null;
+	private readonly mountEye = new THREE.Vector3();
+	/** 0 on the ground … 1 seated: blends in while climbing on and out while climbing off. */
+	private mountWeight = 0;
+
+	get mountBlend(): number {
+		return this.mountWeight;
+	}
+
+	/** Riding (or climbing on), not yet climbing off. */
+	get mounted(): boolean {
+		return this.mount !== null && this.mount.phase !== 'dismounting';
+	}
+
+	/** Any part of a ride, including the climb on and the climb off. */
+	get mountActive(): boolean {
+		return this.mount !== null;
+	}
+
+	/**
+	 * Climbs onto `seat`: the eye blends there over `duration` seconds, then follows it. Mouse look
+	 * stays free (world-relative, Q11 A); movement keys go to `rideInput` instead of the feet, and
+	 * gravity and fall tracking pause.
+	 */
+	beginMount(seat: MountSeat, duration: number): void {
+		this.setFlying(false);
+		this.mount = {
+			seat,
+			phase: 'mounting',
+			age: 0,
+			duration: Math.max(0.01, duration),
+			from: this.worldPosition.clone(),
+			to: new THREE.Vector3()
+		};
+		this.verticalVelocity = 0;
+		this.grounded = true;
+		this.walkBob = createWalkBobState();
+		this.resetFallTracking(true);
+	}
+
+	/**
+	 * Climbs off: the eye blends down to `groundEye` over `duration` seconds and lands safely. A
+	 * duration of 0 is immediate (knocked out: the lying pose has to start on the ground).
+	 */
+	endMount(groundEye: { x: number; y: number; z: number }, duration: number): void {
+		if (!this.mount) return;
+		if (duration <= 0) {
+			this.mount = null;
+			this.mountWeight = 0;
+			this.worldPosition.set(groundEye.x, groundEye.y, groundEye.z);
+			this.grounded = true;
+			this.verticalVelocity = 0;
+			this.resetFallTracking(true);
+			this.syncCamera();
+			return;
+		}
+		this.mount.phase = 'dismounting';
+		this.mount.age = 0;
+		this.mount.duration = Math.max(0.01, duration);
+		this.mount.from.copy(this.worldPosition);
+		this.mount.to.set(groundEye.x, groundEye.y, groundEye.z);
+	}
+
+	/** Camera-relative steering for the mount: WASD or the joystick, Shift or the run toggle. */
+	rideInput(): RideInput {
+		if (this.manualInputBlocked || this.exampleMovement || !this.mounted)
+			return { x: 0, z: 0, sprint: false };
+		const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+		return {
+			x: clamp((this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0) + this.touchMoveX),
+			z: clamp((this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0) + this.touchMoveZ),
+			sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning
+		};
+	}
+
+	private updateMount(deltaSeconds: number): void {
+		const mount = this.mount!;
+		if (!this.movementLocked) mount.age += Math.max(0, deltaSeconds);
+		const t = smoothstep(Math.min(1, mount.age / mount.duration));
+		const seated = mount.seat.readEye(this.mountEye);
+		if (mount.phase === 'dismounting') {
+			this.worldPosition.lerpVectors(mount.from, mount.to, t);
+			this.mountWeight = 1 - t;
+		} else if (seated) {
+			if (mount.phase === 'mounting') this.worldPosition.lerpVectors(mount.from, this.mountEye, t);
+			else this.worldPosition.copy(this.mountEye);
+			this.mountWeight = mount.phase === 'mounting' ? t : 1;
+			if (mount.phase === 'mounting' && t >= 1) mount.phase = 'riding';
+		}
+		const input = this.rideInput();
+		this.running = input.sprint && Math.hypot(input.x, input.z) > 0.05;
+		this.grounded = true;
+		this.verticalVelocity = 0;
+		this.touchJump = false;
+		if (mount.phase === 'dismounting' && t >= 1) {
+			this.mount = null;
+			this.mountWeight = 0;
+			this.running = false;
+			this.resetFallTracking(true);
+		}
+		this.syncCamera();
 	}
 
 	private readonly domElement: HTMLElement;
@@ -397,6 +526,7 @@ export class FirstPersonController {
 	 */
 	spawn(worldX: number, worldZ: number): void {
 		this.onInteractionExit?.();
+		this.mount = null;
 		const groundHeight = this.getSupportingSurfaceY(worldX, worldZ, Infinity);
 		this.countTeleport(worldX, groundHeight + this.settings.eyeHeight, worldZ);
 		this.worldPosition.set(worldX, groundHeight + this.settings.eyeHeight, worldZ);
@@ -495,7 +625,8 @@ export class FirstPersonController {
 	 * for the session.
 	 */
 	setFlying(flying: boolean): void {
-		if (this.flying === flying) return;
+		// No flying off a mount: get off first.
+		if (this.flying === flying || (flying && this.mount)) return;
 		this.flying = flying;
 		this.verticalVelocity = 0;
 		this.grounded = false;
@@ -531,6 +662,7 @@ export class FirstPersonController {
 		this.countTeleport(position.x, position.y, position.z);
 		this.interactionPose = null;
 		this.interactionThirdPerson = false;
+		this.mount = null;
 		this.worldPosition.set(position.x, position.y, position.z);
 		this.yaw = yaw;
 		this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
@@ -545,6 +677,10 @@ export class FirstPersonController {
 	update(deltaSeconds: number): void {
 		this.cameraDt = deltaSeconds;
 		this.running = false;
+		if (this.mount) {
+			this.updateMount(deltaSeconds);
+			return;
+		}
 		if (this.interactionPose) {
 			const pose = this.interactionPose;
 			const wasBlending = this.interactionAge < 0.3;
@@ -859,6 +995,8 @@ export class FirstPersonController {
 		this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
 		this.camera.position.copy(this.worldPosition);
 		if (bob.y !== 0 && !this.interactionPose) this.camera.translateY(bob.y);
+		if (this.mount && !this.usesThirdPerson)
+			this.camera.position.y += this.mount.seat.cameraOffset() * this.mountWeight;
 		if (this.usesThirdPerson) {
 			this.thirdPersonDistance = this.thirdPersonCamera.update(
 				this.camera,

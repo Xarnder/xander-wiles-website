@@ -16,6 +16,7 @@ import { WaypointBoard, type ClientWaypointMessage } from './sharedWaypoints';
 import { ScoreBoard, type ScoreEntry } from './playerScores';
 import { parseAmbientCreatureId, resolveAmbientCreature } from '../creatures/carryableCreatureRef';
 import { abilityFor } from '../creatures/creatureAbilities';
+import { rideClaimRadius, rideFor } from '../creatures/creatureRiding';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
 import {
 	PROJECTILE_DAMAGE,
@@ -24,6 +25,7 @@ import {
 	ROOM_SHOT_TIMING_SLACK_MS,
 	chargesAt,
 	createChargeState,
+	riderPoseAt,
 	shotHitPlausible,
 	shotOriginPlausible,
 	spendCharge,
@@ -42,6 +44,7 @@ import type {
 	CarryPlacement,
 	CarryRefusal,
 	MiniBuildInteractionRef,
+	RideRefusal,
 	OccupiedMiniBuildInteraction
 } from './protocol';
 import {
@@ -144,6 +147,8 @@ export interface RoomSessionState {
 	interactions: (OccupiedMiniBuildInteraction & { signature: string })[];
 	/** Creatures being carried (ranged weapons), by player id. Optional: older rooms lack it. */
 	carries?: { playerId: string; creature: string }[];
+	/** Creatures being ridden (riding), by player id. Optional: older rooms lack it. */
+	rides?: { playerId: string; creature: string }[];
 }
 
 export interface RoomPersistence {
@@ -250,6 +255,12 @@ export interface RoomStats {
 	/** Creatures picked up, and pick-ups refused (taken, far, not carryable, rule, state). */
 	carriesGranted: number;
 	carriesRefused: number;
+	/** Creatures climbed onto, climb-ons refused, and rides that ended. */
+	ridesGranted: number;
+	ridesRefused: number;
+	ridesReleased: number;
+	/** Pellets accepted from players riding a creature (checked against the extrapolated pose). */
+	mountedShots: number;
 	/** Pellets accepted and broadcast, and refused (no carry, no charge, implausible origin…). */
 	shotsFired: number;
 	shotsRefused: number;
@@ -299,6 +310,7 @@ interface PlayerState {
 	lastPunchId: number;
 	lastPunchAt: number;
 	lastCarryId: number;
+	lastRideId: number;
 	/** Ranged weapons: the carried creature's firing state, made on first shot after a grant. */
 	firing: CarryFiring | null;
 	lastShotId: number;
@@ -340,6 +352,11 @@ const CARRY_CLAIM_RADIUS = 80;
 const PLACED_CLAIM_RADIUS = 20;
 /** A put-down spot further than this from the player's feet is moved to their feet. */
 const CARRY_DROP_RADIUS = 3;
+/**
+ * A ridden creature is left standing under its rider: a reported spot further than this from the
+ * rider (a giant's shoulder is several metres off its centre) is moved to the rider.
+ */
+const RIDE_DROP_RADIUS = 12;
 /** Put-down spots remembered for re-pick-ups far from home (oldest forgotten first). */
 const MAX_RELEASED_SPOTS = 256;
 
@@ -347,6 +364,15 @@ const MAX_RELEASED_SPOTS = 256;
 function safeAbility(definition: CreatureDefinition): boolean {
 	try {
 		return abilityFor(definition) !== null;
+	} catch {
+		return false;
+	}
+}
+
+/** `rideFor` on recipes from rows, which only passed the store's shape check. */
+function safeRideable(definition: CreatureDefinition): boolean {
+	try {
+		return rideFor(definition) !== null;
 	} catch {
 		return false;
 	}
@@ -415,6 +441,10 @@ export class RoomCore {
 		punchesRejected: 0,
 		carriesGranted: 0,
 		carriesRefused: 0,
+		ridesGranted: 0,
+		ridesRefused: 0,
+		ridesReleased: 0,
+		mountedShots: 0,
 		shotsFired: 0,
 		shotsRefused: 0,
 		shotHitsAccepted: 0,
@@ -451,6 +481,8 @@ export class RoomCore {
 	private readonly carries = new Map<string, string>();
 	/** Where carried creatures were last put down this session, so they can be picked up there. */
 	private readonly releasedAt = new Map<string, { x: number; z: number }>();
+	/** Riding: player id → the creature they ride. A creature is never both carried and ridden. */
+	private readonly rides = new Map<string, string>();
 	private readonly worldSeedSource: RoomCoreOptions['worldSeed'];
 	private worldSeedValue: string | null | undefined;
 	private savedSessionJson = '{"doors":[],"interactions":[]}';
@@ -500,6 +532,7 @@ export class RoomCore {
 			for (const id of session.doors) this.openDoors.add(id);
 			for (const entry of session.interactions) this.interactions.set(entry.playerId, { ...entry });
 			for (const entry of session.carries ?? []) this.carries.set(entry.playerId, entry.creature);
+			for (const entry of session.rides ?? []) this.rides.set(entry.playerId, entry.creature);
 			this.savedSessionJson = JSON.stringify(session);
 		}
 		for (const entry of options.restored?.grace ?? []) {
@@ -576,6 +609,8 @@ export class RoomCore {
 		}
 		for (const playerId of [...this.carries.keys()])
 			if (!this.players.has(playerId)) this.carries.delete(playerId);
+		for (const playerId of [...this.rides.keys()])
+			if (!this.players.has(playerId)) this.rides.delete(playerId);
 		if (this.players.size === 0 && this.restartHoldUntil === null) this.clearSessionState();
 		if (this.interactions.size !== occupiedBefore) this.broadcastInteractions();
 		else this.persistSessionState();
@@ -747,8 +782,11 @@ export class RoomCore {
 						playerId: id,
 						signature: JSON.stringify(resolved)
 					});
-				// Sitting or lying down puts a carried creature down (Q19).
-				if (this.interactions.has(id)) this.releaseCarry(player);
+				// Sitting or lying down puts a carried creature down (Q19), and ends a ride.
+				if (this.interactions.has(id)) {
+					this.releaseCarry(player);
+					this.releaseRide(player);
+				}
 			}
 			this.broadcastInteractions(id);
 			return;
@@ -773,6 +811,17 @@ export class RoomCore {
 			if (player && message.id > player.lastCarryId) {
 				player.lastCarryId = message.id;
 				this.releaseCarry(player, message.at);
+			}
+			return;
+		}
+		if (message.t === 'ride') {
+			if (player) this.handleRide(player, message);
+			return;
+		}
+		if (message.t === 'dismount') {
+			if (player && message.id > player.lastRideId) {
+				player.lastRideId = message.id;
+				this.releaseRide(player, message.at);
 			}
 			return;
 		}
@@ -945,6 +994,7 @@ export class RoomCore {
 			player.lastFallId = -1;
 			player.lastPunchId = -1;
 			player.lastCarryId = -1;
+			player.lastRideId = -1;
 			player.lastShotId = -1;
 			if (player.health?.dead) player.info.down = true;
 			player.graceExpiresAt = null;
@@ -983,6 +1033,7 @@ export class RoomCore {
 			doors: [...this.openDoors],
 			interactions: this.interactionList(),
 			carries: this.carryList(),
+			rides: this.rideList(),
 			waypoints: this.waypoints.list(),
 			scores: this.scores.list(),
 			names: this.playerNames()
@@ -1103,11 +1154,13 @@ export class RoomCore {
 		});
 		// The broadcast doubles as the sender's acknowledgement.
 		this.broadcast(commit);
-		// A placed creature someone is carrying was removed from the world: it's gone from their arm.
+		// A placed creature someone is carrying or riding was removed from the world: it's gone.
 		for (const op of message.ops)
 			if (op.op === 'del' && op.kind === 'creature')
-				for (const carrier of this.players.values())
-					if (this.carries.get(carrier.info.playerId) === op.id) this.releaseCarry(carrier);
+				for (const holder of this.players.values()) {
+					if (this.carries.get(holder.info.playerId) === op.id) this.releaseCarry(holder);
+					if (this.rides.get(holder.info.playerId) === op.id) this.releaseRide(holder);
+				}
 	}
 
 	private handleEnv(player: PlayerState, raw: unknown, bytes: number): void {
@@ -1202,8 +1255,9 @@ export class RoomCore {
 
 	private removePlayer(player: PlayerState): void {
 		if (this.players.get(player.info.playerId) !== player) return;
-		// Left for good (or the grace period ran out): the creature goes back where they stood.
+		// Left for good (or the grace period ran out): the creatures go back where they stood.
 		this.releaseCarry(player);
+		this.releaseRide(player);
 		this.players.delete(player.info.playerId);
 		if (player.conn) this.byConn.delete(player.conn);
 		this.broadcast({ t: 'left', slot: player.info.slot, playerId: player.info.playerId });
@@ -1257,6 +1311,7 @@ export class RoomCore {
 		this.openDoors.clear();
 		this.interactions.clear();
 		this.carries.clear();
+		this.rides.clear();
 		this.releasedAt.clear();
 		this.persistSessionState();
 	}
@@ -1268,6 +1323,9 @@ export class RoomCore {
 			// Only when someone is carrying, so rooms without creatures keep their old record.
 			...(this.carries.size
 				? { carries: [...this.carries].map(([playerId, creature]) => ({ playerId, creature })) }
+				: {}),
+			...(this.rides.size
+				? { rides: [...this.rides].map(([playerId, creature]) => ({ playerId, creature })) }
 				: {})
 		};
 		const json = JSON.stringify(state);
@@ -1425,6 +1483,7 @@ export class RoomCore {
 			lastPunchId: -1,
 			lastPunchAt: Number.NEGATIVE_INFINITY,
 			lastCarryId: -1,
+			lastRideId: -1,
 			firing: null,
 			lastShotId: -1,
 			recentPoses: [],
@@ -1467,8 +1526,11 @@ export class RoomCore {
 		source?: DamageSource
 	): void {
 		player.health = health;
-		// Knocked out: the creature is put down where they fell (Q19).
-		if (health.dead) this.releaseCarry(player);
+		// Knocked out: the creature is put down where they fell (Q19), and off any mount (riding Q13).
+		if (health.dead) {
+			this.releaseCarry(player);
+			this.releaseRide(player);
+		}
 		// Everyone else draws a knocked-out player lying down (presence, never the health itself).
 		if ((player.info.down === true) !== health.dead) {
 			player.info.down = health.dead;
@@ -1527,7 +1589,9 @@ export class RoomCore {
 			!player.pose ||
 			!target.pose ||
 			this.healthOf(player, now).dead ||
-			this.interactions.has(player.info.playerId)
+			this.interactions.has(player.info.playerId) ||
+			// No punching from a mount (riding Q13 A).
+			this.rides.has(player.info.playerId)
 		) {
 			reply(false);
 			return;
@@ -1568,12 +1632,101 @@ export class RoomCore {
 	}
 
 	private carryList(): { slot: number; creature: string }[] {
+		return this.holderList(this.carries);
+	}
+
+	private rideList(): { slot: number; creature: string }[] {
+		return this.holderList(this.rides);
+	}
+
+	private holderList(holders: Map<string, string>): { slot: number; creature: string }[] {
 		const list: { slot: number; creature: string }[] = [];
-		for (const [playerId, creature] of this.carries) {
+		for (const [playerId, creature] of holders) {
 			const player = this.players.get(playerId);
 			if (player) list.push({ slot: player.info.slot, creature });
 		}
 		return list;
+	}
+
+	/** Whether anyone carries or rides `creature`. */
+	private isHeld(creature: string): boolean {
+		for (const held of this.carries.values()) if (held === creature) return true;
+		for (const held of this.rides.values()) if (held === creature) return true;
+		return false;
+	}
+
+	/**
+	 * Climbing onto a biped (riding). Like a pick-up, the room can't see creatures, so it checks
+	 * what it can: the player's state (carrying is fine, Q12 C), that the id is a real rideable
+	 * creature of this world, that nobody carries or rides it, edit rights for a Lab-placed one
+	 * (getting off saves its new spot), and that the player is plausibly near where it lives or
+	 * was last left. There's no owner rule for riding (Q15 B).
+	 */
+	private handleRide(player: PlayerState, message: { id: number; creature: string }): void {
+		if (message.id <= player.lastRideId) return;
+		player.lastRideId = message.id;
+		const refuse = (reason: RideRefusal) => {
+			this.stats.ridesRefused++;
+			if (player.conn) send(player.conn, { t: 'rideResult', id: message.id, ok: false, reason });
+		};
+		const id = player.info.playerId;
+		if (
+			this.rides.has(id) ||
+			this.interactions.has(id) ||
+			this.healthOf(player, this.now()).dead ||
+			!player.pose
+		)
+			return refuse('state');
+		const creature = message.creature;
+		const found = this.creatureHere(creature);
+		if (!found || !safeRideable(found.definition)) return refuse('ineligible');
+		if (found.placed && player.info.role === 'viewer') return refuse('role');
+		if (this.isHeld(creature)) return refuse('taken');
+		const radius = found.placed
+			? Math.max(PLACED_CLAIM_RADIUS, found.definition.species.behaviour.wanderRadius * 1.05 + 10)
+			: rideClaimRadius(found.definition, CREATURE_CELL_SIZE);
+		const near = (spot: { x: number; z: number }) =>
+			Math.hypot(spot.x - player.pose!.x, spot.z - player.pose!.z) <= radius;
+		const released = this.releasedAt.get(creature);
+		if (!near(found.home) && !(released && near(released))) return refuse('far');
+		this.rides.set(id, creature);
+		this.stats.ridesGranted++;
+		this.persistSessionState();
+		if (player.conn) send(player.conn, { t: 'rideResult', id: message.id, ok: true });
+		this.broadcast({ t: 'ridden', slot: player.info.slot, creature }, player.conn ?? undefined);
+	}
+
+	/**
+	 * The ride ended: the rider got off (`at`: where the creature was left), or the room ended it
+	 * (knocked out, left, sat down, the creature was removed). Everyone, the rider included, hears
+	 * where the creature now stands.
+	 */
+	private releaseRide(player: PlayerState, at?: CarryPlacement): void {
+		const id = player.info.playerId;
+		const creature = this.rides.get(id);
+		if (creature === undefined) return;
+		this.rides.delete(id);
+		this.stats.ridesReleased++;
+		const pose = player.pose;
+		let spot: CarryPlacement | undefined;
+		if (at && pose && Math.hypot(at[0] - pose.x, at[2] - pose.z) <= RIDE_DROP_RADIUS) spot = at;
+		else if (pose) spot = [pose.x, pose.y, pose.z, pose.yaw];
+		if (spot) this.rememberRelease(creature, spot);
+		this.persistSessionState();
+		this.broadcast({
+			t: 'ridden',
+			slot: player.info.slot,
+			creature: null,
+			...(spot ? { at: spot } : {})
+		});
+	}
+
+	/** Where a creature was last put down or left (for claims far from its home). */
+	private rememberRelease(creature: string, spot: CarryPlacement): void {
+		this.releasedAt.delete(creature);
+		this.releasedAt.set(creature, { x: spot[0], z: spot[2] });
+		if (this.releasedAt.size > MAX_RELEASED_SPOTS)
+			this.releasedAt.delete(this.releasedAt.keys().next().value!);
 	}
 
 	/**
@@ -1600,12 +1753,12 @@ export class RoomCore {
 		)
 			return refuse('state');
 		const creature = message.creature;
-		const found = this.carryableHere(creature);
+		const found = this.creatureHere(creature);
 		if (!found || !safeAbility(found.definition)) return refuse('ineligible');
 		// Moving a Lab-placed creature edits the world, so it needs edit rights (F2); anyone may
 		// carry an ambient one (Q16).
 		if (found.placed && player.info.role === 'viewer') return refuse('role');
-		for (const held of this.carries.values()) if (held === creature) return refuse('taken');
+		if (this.isHeld(creature)) return refuse('taken');
 		const near = (spot: { x: number; z: number }, radius: number) =>
 			Math.hypot(spot.x - player.pose!.x, spot.z - player.pose!.z) <= radius;
 		const released = this.releasedAt.get(creature);
@@ -1621,12 +1774,12 @@ export class RoomCore {
 		this.broadcast({ t: 'carried', slot: player.info.slot, creature }, player.conn ?? undefined);
 	}
 
-	/** Firing state for a carried creature (rebuilt from the id after the room slept). */
 	/**
-	 * A creature this room would let someone carry, with where it lives: an ambient one rebuilt from
-	 * its id (its home cell's centre), or a Lab-placed one from the world's rows (its saved spot).
+	 * A creature of this world, with where it lives: an ambient one rebuilt from its id (its home
+	 * cell's centre), or a Lab-placed one from the world's rows (its saved spot). Callers check
+	 * whether it can be carried or ridden.
 	 */
-	private carryableHere(
+	private creatureHere(
 		creature: string
 	): { definition: CreatureDefinition; placed: boolean; home: { x: number; z: number } } | null {
 		if (creature.startsWith('placed_')) {
@@ -1653,8 +1806,9 @@ export class RoomCore {
 		};
 	}
 
+	/** Firing state for a carried creature (rebuilt from the id after the room slept). */
 	private firingFor(creature: string, now: number): CarryFiring | null {
-		const definition = this.carryableHere(creature)?.definition;
+		const definition = this.creatureHere(creature)?.definition;
 		if (!definition || !safeAbility(definition)) return null;
 		return {
 			creature,
@@ -1708,7 +1862,15 @@ export class RoomCore {
 		const [ox, oy, oz] = message.origin;
 		const [dx, dy, dz] = message.dir;
 		const origin = { x: ox, y: oy, z: oz };
-		if (!shotOriginPlausible(pose, origin)) return refuse();
+		// A rider moves fast between poses: check the origin against where they most likely were.
+		const riding = this.rides.has(id);
+		const from = riding
+			? {
+					...riderPoseAt(player.recentPoses.at(-2) ?? null, pose, message.at, this.maxSpeed),
+					y: pose.y
+				}
+			: pose;
+		if (!shotOriginPlausible(from, origin)) return refuse();
 		const spent = spendCharge(firing.charges, message.at, ROOM_SHOT_TIMING_SLACK_MS);
 		if (!spent) return refuse();
 		firing.charges = spent;
@@ -1722,6 +1884,7 @@ export class RoomCore {
 		if (player.shots.size > MAX_TRACKED_SHOTS)
 			player.shots.delete(player.shots.keys().next().value!);
 		this.stats.shotsFired++;
+		if (riding) this.stats.mountedShots++;
 		this.broadcast(
 			{
 				t: 'shot',
@@ -1799,12 +1962,7 @@ export class RoomCore {
 		let spot: CarryPlacement | undefined;
 		if (at && pose && Math.hypot(at[0] - pose.x, at[2] - pose.z) <= CARRY_DROP_RADIUS) spot = at;
 		else if (pose) spot = [pose.x, pose.y, pose.z, pose.yaw];
-		if (spot) {
-			this.releasedAt.delete(creature);
-			this.releasedAt.set(creature, { x: spot[0], z: spot[2] });
-			if (this.releasedAt.size > MAX_RELEASED_SPOTS)
-				this.releasedAt.delete(this.releasedAt.keys().next().value!);
-		}
+		if (spot) this.rememberRelease(creature, spot);
 		this.persistSessionState();
 		this.broadcast({
 			t: 'carried',

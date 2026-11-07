@@ -97,7 +97,7 @@ type Vec = { x: number; y: number; z: number };
 interface SceneHandle {
 	setTouchActive(active: boolean): void;
 	toggleBuildMode(): void;
-	toggleCarry(): boolean;
+	useCreatureKey(): boolean;
 	setCreatureProjectilesRule(enabled: boolean): void;
 	setCarryTrigger(held: boolean): void;
 	getHealth(): { current: number };

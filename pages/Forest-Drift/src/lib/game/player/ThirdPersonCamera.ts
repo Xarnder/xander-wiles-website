@@ -6,6 +6,21 @@ export interface CameraObstacles {
 	/** Conservative solid bounds for foundations, slabs and roof volumes. */
 	meshes: readonly THREE.Object3D[];
 	terrain: (x: number, z: number) => number;
+	/** Bodies the camera stays out of though the player is touching them (a ridden creature). */
+	bodies?: readonly CameraBody[];
+}
+
+/**
+ * A body as a cloud of skin points, each a small sphere: the boom stops where it would enter one.
+ * Points already round the boom's start are ignored, so a rider sitting on the skin isn't blocked.
+ */
+export interface CameraBody {
+	/** Skin points in the body's own space, xyz triples. */
+	points: ArrayLike<number>;
+	/** World → body space. */
+	worldToLocal: THREE.Matrix4;
+	/** Radius round each point, metres (about the spacing between them). */
+	radius: number;
 }
 
 /** Bounded camera boom; collision contracts are shared with player/building geometry. */
@@ -98,6 +113,8 @@ export class ThirdPersonCamera {
 				.expandByScalar(radius);
 			limit = Math.min(limit, this.boxDistance(origin, direction, limit));
 		}
+		for (const body of o.bodies ?? [])
+			limit = Math.min(limit, this.bodyDistance(origin, direction, limit, radius, body));
 		// A maximum of 33 samples for the short boom; same height field as walking.
 		const steps = Math.max(1, Math.ceil(limit / 0.1));
 		for (let i = 0; i <= steps; i++) {
@@ -110,6 +127,35 @@ export class ThirdPersonCamera {
 				)
 					return Math.max(0, (limit * (i - 1)) / steps - 0.03);
 			}
+		}
+		return limit;
+	}
+	/** How far along the boom it can go before entering `body`'s skin. */
+	private bodyDistance(
+		origin: THREE.Vector3,
+		direction: THREE.Vector3,
+		max: number,
+		cameraRadius: number,
+		body: CameraBody
+	): number {
+		const o = this.localOrigin.copy(origin).applyMatrix4(body.worldToLocal);
+		const d = this.localDirection.copy(direction).transformDirection(body.worldToLocal);
+		const r = body.radius + cameraRadius;
+		const r2 = r * r;
+		const p = body.points;
+		let limit = max;
+		for (let i = 0; i < p.length; i += 3) {
+			const px = p[i] - o.x,
+				py = p[i + 1] - o.y,
+				pz = p[i + 2] - o.z;
+			const along = px * d.x + py * d.y + pz * d.z;
+			if (along <= 0 || along - r >= limit) continue;
+			const lengthSq = px * px + py * py + pz * pz;
+			// Starting inside this point's sphere: it's the skin the player sits on, not in the way.
+			if (lengthSq <= r2) continue;
+			const across = lengthSq - along * along;
+			if (across >= r2) continue;
+			limit = Math.min(limit, Math.max(0, along - Math.sqrt(r2 - across) - 0.03));
 		}
 		return limit;
 	}

@@ -2,7 +2,11 @@
 	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	import type { SaveStatus } from '#lib/game/world/WorldTypes';
 	import type { WaypointView, WaypointVisibility } from '#lib/game/waypoints/WaypointSystem';
-	import { MAX_PERSONAL_WAYPOINTS, MAX_WAYPOINT_NAME } from '#lib/game/waypoints/WaypointSystem';
+	import {
+		MAX_PERSONAL_WAYPOINTS,
+		MAX_WAYPOINT_NAME,
+		NEAREST_RIDEABLE_ID
+	} from '#lib/game/waypoints/WaypointSystem';
 	import type { ScoreRow } from '#lib/game/net/playerScores';
 
 	interface Props {
@@ -123,8 +127,12 @@
 	/** The second line of a waypoint row: what it points at and how far. */
 	function detailText(w: WaypointView): string {
 		if (w.dynamic) {
-			if (w.status === 'off') return 'Follows the closest small creature you can pick up';
+			if (w.status === 'off')
+				return w.id === NEAREST_RIDEABLE_ID
+					? 'Follows the closest two-legged creature you can ride'
+					: 'Follows the closest small creature you can pick up';
 			if (w.status === 'carrying') return "You're carrying one: put it down to look for another";
+			if (w.status === 'riding') return "You're riding one: get off to look for another";
 			if (w.status === 'none') return 'None nearby: explore and it will find one';
 			return `${w.detail ?? 'Creature'} · ${metres(w.distance)}`;
 		}
@@ -515,7 +523,7 @@
 					data-testid="carry-hints-toggle"
 					onchange={(event) => onToggleCarryHints?.(event.currentTarget.checked)}
 				/>
-				Show a paw badge over creatures you can pick up
+				Show badges over creatures you can pick up (paw) or ride (saddle)
 			</label>
 			<button data-testid="pause-waypoints-back" onclick={() => (panel = 'root')}>Back</button>
 		{:else}

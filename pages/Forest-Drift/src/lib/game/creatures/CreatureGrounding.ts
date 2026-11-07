@@ -296,6 +296,8 @@ export interface GroundingInput {
 	dt: number;
 	/** 0 near: full planting/IK/foot alignment; 1 medium: no mid-swing retarget or foot alignment; 2 far: body alignment only. */
 	lod: CreatureLod;
+	/** Caps the footfall cycle (Hz); a faster body then lengthens its stride instead. */
+	maxCadence?: number;
 }
 interface ClearanceSample {
 	jointId: string;
@@ -653,7 +655,8 @@ export class CreatureGroundingController {
 		// Cadence rises when the stride the body demands would exceed what the legs can reach.
 		const base = running ? gait.runFrequency : gait.walkFrequency;
 		const maxStride = this.legLength * 0.7;
-		const frequency = Math.max(base, (speed * duty) / Math.max(1e-4, maxStride));
+		const demanded = Math.max(base, (speed * duty) / Math.max(1e-4, maxStride));
+		const frequency = Math.min(demanded, Math.max(base, input.maxCadence ?? Infinity));
 		this.cycleFrequency = moving ? frequency : 0;
 		if (moving) this.phase += frequency * dt;
 

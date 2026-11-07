@@ -51,10 +51,14 @@ export interface WaypointHost {
 	player(): WaypointPoint;
 	/** The nearest small creature that can be carried, or null when none is around. */
 	nearestCarryable(from: WaypointPoint): WaypointTarget | null;
+	/** The nearest two-legged creature that can be ridden (riding Q20 B), or null. */
+	nearestRideable(from: WaypointPoint): WaypointTarget | null;
 	/** Where a creature is now, or null when it's gone (unloaded, picked up). */
 	creaturePosition(id: string): WaypointPoint | null;
 	/** Whether this player is already carrying a creature. */
 	carrying(): boolean;
+	/** Whether this player is already riding a creature. */
+	riding(): boolean;
 }
 
 /** Key/value storage (localStorage in the browser). Every access may throw. */
@@ -73,6 +77,7 @@ export interface WaypointLink {
 }
 
 export const NEAREST_CARRYABLE_ID = 'nearest-carryable';
+export const NEAREST_RIDEABLE_ID = 'nearest-rideable';
 /** Most private waypoints per world. */
 export const MAX_PERSONAL_WAYPOINTS = 20;
 /** Waypoint names are trimmed to this many characters (the plan's limit). */
@@ -87,9 +92,11 @@ const HINTS_KEY = 'forest-drift.carry-hints.v1';
 /** Fills for waypoints, in order of creation (each is legible with dark or white ink). */
 const PERSONAL_COLOURS = ['#4fb3ff', '#ff7aa8', '#7ddc6f', '#c792ff', '#ffb35c', '#5ce1d6'];
 const NEAREST_CARRYABLE_COLOUR = '#f2c14e';
+const NEAREST_RIDEABLE_COLOUR = '#5fd0c2';
 /** Icons: one character each, drawn on the locator bar and the beacon. */
 const PERSONAL_ICON = '⚑';
 const CREATURE_ICON = '🐾';
+const RIDEABLE_ICON = '🦖';
 
 export type WaypointStatus =
 	/** On, and it has somewhere to point. */
@@ -98,8 +105,10 @@ export type WaypointStatus =
 	| 'off'
 	/** Dynamic, on, but nothing to follow right now. */
 	| 'none'
-	/** The creature waypoint while this player already carries one. */
-	| 'carrying';
+	/** The carryable-creature waypoint while this player already carries one. */
+	| 'carrying'
+	/** The rideable-creature waypoint while this player already rides one. */
+	| 'riding';
 
 export type WaypointVisibility = 'private' | 'public';
 
@@ -167,6 +176,8 @@ interface WaypointRecord extends ActiveWaypoint {
 interface Saved {
 	version: 1;
 	nearestCarryable: boolean;
+	/** Added with riding; absent in older saves (off). */
+	nearestRideable?: boolean;
 	personal: {
 		id: string;
 		name: string;
@@ -218,17 +229,45 @@ function publicRecord(w: SharedWaypoint): WaypointRecord {
 	};
 }
 
+/** A dynamic waypoint that follows the nearest creature of one kind. */
+interface CreatureFollower {
+	record: WaypointRecord;
+	find(from: WaypointPoint): WaypointTarget | null;
+	/** The player already has one (carrying, riding): nothing to look for. */
+	busy(): boolean;
+	busyStatus: WaypointStatus;
+	/** Next time (ms) it looks for a nearer creature. */
+	retargetAt: number;
+}
+
+function creatureRecord(
+	id: string,
+	name: string,
+	label: string,
+	colour: string,
+	icon: string
+): WaypointRecord {
+	return {
+		...fixedRecord({ id, name, colour, x: 0, y: 0, z: 0, enabled: false }),
+		label,
+		icon,
+		dynamic: true,
+		located: false
+	};
+}
+
 export class WaypointSystem {
-	/** The creature waypoint, then this player's private waypoints. */
+	/** The creature waypoints, then this player's private waypoints. */
 	private readonly records: WaypointRecord[] = [];
 	/** Public waypoints, as the room holds them (with this player's changes on their way). */
 	private readonly shared: WaypointRecord[] = [];
 	/** Private waypoints being made public: kept to put back if the room says no. */
 	private readonly publishing = new Map<string, WaypointRecord>();
-	private readonly nearest: WaypointRecord;
+	/** Nearest carryable, then nearest rideable: always the first records. */
+	private readonly followers: CreatureFollower[];
+	private readonly followed: string[] = [];
 	private link: WaypointLink | null = null;
 	private storageKey: string | null = null;
-	private retargetAt = Number.NEGATIVE_INFINITY;
 	private hints = true;
 	/** Bumps whenever something the menu shows changes (not distances). */
 	revision = 0;
@@ -239,22 +278,35 @@ export class WaypointSystem {
 		private readonly host: WaypointHost,
 		private readonly storage: WaypointStorage | null = null
 	) {
-		this.nearest = {
-			...fixedRecord({
-				id: NEAREST_CARRYABLE_ID,
-				name: 'Nearest carryable creature',
-				colour: NEAREST_CARRYABLE_COLOUR,
-				x: 0,
-				y: 0,
-				z: 0,
-				enabled: false
-			}),
-			label: 'Carryable creature',
-			icon: CREATURE_ICON,
-			dynamic: true,
-			located: false
-		};
-		this.records.push(this.nearest);
+		this.followers = [
+			{
+				record: creatureRecord(
+					NEAREST_CARRYABLE_ID,
+					'Nearest carryable creature',
+					'Carryable creature',
+					NEAREST_CARRYABLE_COLOUR,
+					CREATURE_ICON
+				),
+				find: (from) => host.nearestCarryable(from),
+				busy: () => host.carrying(),
+				busyStatus: 'carrying',
+				retargetAt: Number.NEGATIVE_INFINITY
+			},
+			{
+				record: creatureRecord(
+					NEAREST_RIDEABLE_ID,
+					'Nearest rideable creature',
+					'Rideable creature',
+					NEAREST_RIDEABLE_COLOUR,
+					RIDEABLE_ICON
+				),
+				find: (from) => host.nearestRideable(from),
+				busy: () => host.riding(),
+				busyStatus: 'riding',
+				retargetAt: Number.NEGATIVE_INFINITY
+			}
+		];
+		for (const follower of this.followers) this.records.push(follower.record);
 		try {
 			const raw = storage?.getItem(HINTS_KEY);
 			if (raw === 'off') this.hints = false;
@@ -270,15 +322,18 @@ export class WaypointSystem {
 	setWorld(key: string | null): void {
 		if (key === this.storageKey) return;
 		this.storageKey = key;
-		this.records.length = 1;
+		this.records.length = this.followers.length;
 		this.shared.length = 0;
 		this.publishing.clear();
 		this.notice = null;
-		this.nearest.enabled = false;
-		this.clearTarget();
+		for (const follower of this.followers) {
+			follower.record.enabled = false;
+			this.clearTarget(follower);
+		}
 		const saved = this.read();
 		if (saved) {
-			this.nearest.enabled = saved.nearestCarryable === true;
+			this.followers[0].record.enabled = saved.nearestCarryable === true;
+			this.followers[1].record.enabled = saved.nearestRideable === true;
 			for (const p of saved.personal.slice(0, MAX_PERSONAL_WAYPOINTS)) {
 				if (typeof p?.id !== 'string' || !finite(p.x, p.y, p.z)) continue;
 				const name = cleanWaypointName(String(p.name ?? ''), 'Waypoint');
@@ -295,7 +350,6 @@ export class WaypointSystem {
 				);
 			}
 		}
-		this.retargetAt = Number.NEGATIVE_INFINITY;
 		this.revision++;
 	}
 
@@ -374,10 +428,8 @@ export class WaypointSystem {
 		const record = this.records.find((r) => r.id === id);
 		if (!record || record.enabled === on) return;
 		record.enabled = on;
-		if (record.dynamic) {
-			this.clearTarget();
-			this.retargetAt = Number.NEGATIVE_INFINITY;
-		}
+		const follower = this.followers.find((f) => f.record === record);
+		if (follower) this.clearTarget(follower);
 		this.save();
 		this.revision++;
 	}
@@ -424,7 +476,7 @@ export class WaypointSystem {
 		}
 		const shared = this.findShared(id);
 		if (!shared || shared.owner !== link.playerId) return false;
-		if (this.records.length - 1 >= MAX_PERSONAL_WAYPOINTS) {
+		if (this.personalCount >= MAX_PERSONAL_WAYPOINTS) {
 			this.notice = `You already have ${MAX_PERSONAL_WAYPOINTS} private waypoints here.`;
 			this.revision++;
 			return false;
@@ -464,7 +516,7 @@ export class WaypointSystem {
 
 	/** Adds a private waypoint where the player stands (turned on). Returns its id, or null when full. */
 	addHere(name: string): string | null {
-		const count = this.records.length - 1;
+		const count = this.personalCount;
 		if (count >= MAX_PERSONAL_WAYPOINTS) return null;
 		const at = this.host.player();
 		if (!finite(at.x, at.y, at.z)) return null;
@@ -504,11 +556,20 @@ export class WaypointSystem {
 		return true;
 	}
 
+	/** This player's private waypoints (everything after the creature waypoints). */
+	private get personalCount(): number {
+		return this.records.length - this.followers.length;
+	}
+
 	/** Moves dynamic waypoints to what they follow. Call every frame; retargeting is throttled. */
 	update(nowMs: number): void {
-		const record = this.nearest;
-		if (!record.enabled || this.host.carrying()) {
-			if (record.located) this.clearTarget();
+		for (const follower of this.followers) this.follow(follower, nowMs);
+	}
+
+	private follow(follower: CreatureFollower, nowMs: number): void {
+		const record = follower.record;
+		if (!record.enabled || follower.busy()) {
+			if (record.located) this.clearTarget(follower);
 			return;
 		}
 		// Follow the current creature as it moves.
@@ -518,17 +579,14 @@ export class WaypointSystem {
 				record.x = at.x;
 				record.y = at.y;
 				record.z = at.z;
-			} else {
-				this.clearTarget();
-				this.retargetAt = Number.NEGATIVE_INFINITY;
-			}
+			} else this.clearTarget(follower);
 		}
-		if (nowMs < this.retargetAt) return;
-		this.retargetAt = nowMs + RETARGET_MS;
+		if (nowMs < follower.retargetAt) return;
+		follower.retargetAt = nowMs + RETARGET_MS;
 		const player = this.host.player();
-		const found = this.host.nearestCarryable(player);
+		const found = follower.find(player);
 		if (!found) {
-			if (record.located) this.clearTarget();
+			if (record.located) this.clearTarget(follower);
 			return;
 		}
 		if (record.targetId && record.targetId !== found.id) {
@@ -559,9 +617,12 @@ export class WaypointSystem {
 		for (const r of this.shared) if (r.enabled) fn(r);
 	}
 
-	/** The id of the creature the dynamic waypoint follows (for the carry badge), or null. */
-	get followedCreature(): string | null {
-		return this.nearest.enabled ? this.nearest.targetId : null;
+	/** The creatures the dynamic waypoints follow (their badges are drawn larger). Reused array. */
+	get followedCreatures(): readonly string[] {
+		this.followed.length = 0;
+		for (const { record } of this.followers)
+			if (record.enabled && record.targetId) this.followed.push(record.targetId);
+		return this.followed;
 	}
 
 	/**
@@ -570,15 +631,15 @@ export class WaypointSystem {
 	 */
 	list(): WaypointView[] {
 		const player = this.host.player();
-		const carrying = this.host.carrying();
 		const me = this.link?.playerId ?? null;
 		const own = this.shared.filter((r) => r.owner === me);
 		const others = this.shared.filter((r) => r.owner !== me);
 		return [...this.records, ...own, ...others].map((r) => {
+			const follower = r.dynamic ? this.followers.find((f) => f.record === r) : undefined;
 			const status: WaypointStatus = !r.enabled
 				? 'off'
-				: r.dynamic && carrying
-					? 'carrying'
+				: follower?.busy()
+					? follower.busyStatus
 					: r.located
 						? 'active'
 						: 'none';
@@ -705,10 +766,12 @@ export class WaypointSystem {
 						: `Couldn't share “${name}” from here.`;
 	}
 
-	private clearTarget(): void {
-		this.nearest.targetId = null;
-		this.nearest.targetName = null;
-		this.nearest.located = false;
+	/** Forgets what a creature waypoint follows; it looks again straight away. */
+	private clearTarget(follower: CreatureFollower): void {
+		follower.record.targetId = null;
+		follower.record.targetName = null;
+		follower.record.located = false;
+		follower.retargetAt = Number.NEGATIVE_INFINITY;
 	}
 
 	private read(): Saved | null {
@@ -728,7 +791,8 @@ export class WaypointSystem {
 		if (!this.storageKey || !this.storage) return;
 		const saved: Saved = {
 			version: 1,
-			nearestCarryable: this.nearest.enabled,
+			nearestCarryable: this.followers[0].record.enabled,
+			nearestRideable: this.followers[1].record.enabled,
 			personal: this.records
 				.filter((r) => !r.dynamic)
 				.map((r) => ({

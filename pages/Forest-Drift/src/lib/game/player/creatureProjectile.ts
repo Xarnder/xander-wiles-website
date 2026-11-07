@@ -139,6 +139,35 @@ export function shotOriginPlausible(pose: Vec3Like, origin: Vec3Like): boolean {
 	);
 }
 
+/** The furthest ahead (ms) a rider's pose is carried forward to a shot's time. */
+const RIDER_LEAD_MAX_MS = 300;
+
+/**
+ * Where a rider most likely was at `at` (room clock): the last pose carried forward along the
+ * velocity between the last two, at most `RIDER_LEAD_MAX_MS` ahead and never faster than
+ * `maxSpeed`. A mount covers about 1.8 m between poses at full sprint, more than the origin slack
+ * allows for lag (riding Q12 C); a walking shooter is never extrapolated. Horizontal only.
+ */
+export function riderPoseAt(
+	previous: (Vec3Like & { sampleTime: number }) | null,
+	latest: Vec3Like & { sampleTime: number },
+	at: number,
+	maxSpeed: number
+): Vec3Like {
+	if (!previous) return latest;
+	const span = (latest.sampleTime - previous.sampleTime) / 1000;
+	const lead = Math.max(0, Math.min(RIDER_LEAD_MAX_MS, at - latest.sampleTime)) / 1000;
+	if (!(span > 0) || lead === 0) return latest;
+	let vx = (latest.x - previous.x) / span,
+		vz = (latest.z - previous.z) / span;
+	const speed = Math.hypot(vx, vz);
+	if (speed > maxSpeed) {
+		vx *= maxSpeed / speed;
+		vz *= maxSpeed / speed;
+	}
+	return { x: latest.x + vx * lead, y: latest.y, z: latest.z + vz * lead };
+}
+
 /**
  * Could the pellet fired from `origin` along `dir` at `firedAt` have met a player standing at
  * `target` (feet, last accepted pose) at `hitAt`? The room has no walls, so this only checks that

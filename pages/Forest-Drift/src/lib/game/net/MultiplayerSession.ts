@@ -32,6 +32,7 @@ import {
 	type SharedEnvironment
 } from './protocol';
 import { RemoteAvatarRenderer } from './RemoteAvatarRenderer';
+import { CreatureClaims, type ClaimResult } from './CreatureClaims';
 import { WorldOpFeed, type DeletionItem, type SharedWorldPort } from './WorldOpFeed';
 import { WorldReplica } from './WorldReplica';
 import { RoomHealthAuthority } from './RoomHealthAuthority';
@@ -101,6 +102,17 @@ export interface SceneMultiplayerContext {
 	) => void;
 	/** Ranged weapons: a creature's recipe from its id, to draw it under another player's arm. */
 	resolveCreature?: (id: string) => CreatureDefinition | null;
+	/**
+	 * Riding: `slot` climbed onto `creature` (or got off, leaving it at `at`, when null). `self` is
+	 * true for this player's own ride, which the room may end on its own (knocked out, seated).
+	 */
+	setRidden?: (
+		slot: number,
+		creature: string | null,
+		previous: string | null,
+		at: CarryPlacement | null,
+		self: boolean
+	) => void;
 	/** Ranged weapons: someone else's pellet, `ageMs` after it was fired. */
 	remoteShot?: (origin: Vec3Tuple, dir: Vec3Tuple, colour: string, ageMs: number) => void;
 	/** Ranged weapons: the room's verdict on this player's pellet `shot`. */
@@ -157,6 +169,10 @@ export interface SceneMultiplayerHooks {
 	claimCarry?(creature: string): Promise<{ ok: boolean; reason?: string }>;
 	/** Ranged weapons: this player put their creature down at `at`. */
 	dropCarry?(at: CarryPlacement): void;
+	/** Riding: asks the room for a creature to climb onto; resolves with its answer (or a timeout). */
+	claimRide?(creature: string): Promise<ClaimResult>;
+	/** Riding: this player got off, leaving the creature at `at`. */
+	dropRide?(at: CarryPlacement): void;
 	/** Ranged weapons: tells the room about a pellet; returns its shot id (null when offline). */
 	fireShot?(origin: Vec3Tuple, dir: Vec3Tuple): number | null;
 	/** Ranged weapons: this player's pellet `shot` met the player in `target`, `flightMs` in. */
@@ -205,7 +221,7 @@ export interface MultiplayerSessionOptions {
 	environment?: NetSessionOptions['environment'];
 }
 
-/** A pick-up with no answer from the room by then is given up. */
+/** A pick-up (or climb-on) with no answer from the room by then is given up. */
 const CARRY_CLAIM_TIMEOUT_MS = 2000;
 
 /** The owner's slider drags are coalesced into at most this many sends a second. */
@@ -251,6 +267,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		}
 	>();
 	private nextCarryId = 1;
+	/** Riding: who rides what, and this player's climb-on waiting for the room. */
+	private readonly rides = new CreatureClaims(CARRY_CLAIM_TIMEOUT_MS);
 	private selfSlot: number | null = null;
 	/** Public waypoints go through here: only while connected, with this player's current role. */
 	private readonly waypointLink: WaypointLink;
@@ -289,6 +307,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 					this.interactions = [];
 					this.context?.setInteractions?.([], this.options.identity.playerId, true);
 					this.settleClaims({ ok: false, reason: 'offline' });
+					this.rides.settle({ ok: false, reason: 'offline' });
 				}
 				this.updateLock();
 				options.onStatus?.(status, detail);
@@ -332,6 +351,22 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 				this.claimedCreature.delete(message.id);
 			},
 			onCarried: (message) => this.applyCarried(message.slot, message.creature, message.at ?? null),
+			onRideResult: (message) => {
+				if (this.rides.answer(message.id, message.ok, message.reason, this.selfSlot)) return;
+				// Granted after we gave up waiting: the room thinks this player rides it; let it go.
+				if (message.ok && this.lastLocal) {
+					const { x, feetY, z, yaw } = this.lastLocal;
+					this.net.sendDismount(this.rides.messageId(), [x, feetY, z, yaw]);
+				}
+			},
+			onRidden: (message) =>
+				this.rides.apply(
+					message.slot,
+					message.creature,
+					this.selfSlot,
+					(slot, creature, previous, self) =>
+						this.context?.setRidden?.(slot, creature, previous, message.at ?? null, self)
+				),
 			onWaypoints: (message) => this.context?.applySharedWaypoints?.(message),
 			onScores: (message) => this.applyScores(message),
 			onShot: (message) => {
@@ -481,6 +516,11 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			(playerId) => {
 				const slot = this.roster.find((p) => p.playerId === playerId)?.slot;
 				const id = slot === undefined ? undefined : this.carries.get(slot);
+				return id ? { id, definition: context.resolveCreature?.(id) ?? null } : null;
+			},
+			(playerId) => {
+				const slot = this.roster.find((p) => p.playerId === playerId)?.slot;
+				const id = slot === undefined ? undefined : this.rides.held.get(slot);
 				return id ? { id, definition: context.resolveCreature?.(id) ?? null } : null;
 			}
 		);
@@ -647,6 +687,16 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		this.net.sendDrop(this.nextCarryId++, at);
 	}
 
+	claimRide(creature: string): Promise<ClaimResult> {
+		if (this.status !== 'connected') return Promise.resolve({ ok: false, reason: 'offline' });
+		return this.rides.claim(creature, (id) => this.net.sendRide(id, creature));
+	}
+
+	dropRide(at: CarryPlacement): void {
+		this.rides.release(this.selfSlot);
+		this.net.sendDismount(this.rides.messageId(), at);
+	}
+
 	private settleClaims(result: { ok: boolean; reason?: string }): void {
 		for (const [id, pending] of this.pendingClaims) {
 			clearTimeout(pending.timer);
@@ -697,6 +747,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 
 	detach(): void {
 		this.settleClaims({ ok: false, reason: 'offline' });
+		this.rides.settle({ ok: false, reason: 'offline' });
 		if (this.envTimer !== null) clearTimeout(this.envTimer);
 		this.envTimer = null;
 		// Anything the room hasn't confirmed yet is flushed first: a quit straight after an edit
@@ -736,6 +787,10 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			this.carries.set(slot, creature);
 			this.context.setCarried?.(slot, creature, null, null, slot === this.selfSlot);
 		}
+		// Riding: likewise, who rides what now.
+		this.rides.reconcile(welcome.rides, this.selfSlot, (slot, creature, previous, self) =>
+			this.context?.setRidden?.(slot, creature, previous, null, self)
+		);
 		this.context.setSharedWaypoints?.(welcome.waypoints, this.waypointLink);
 		this.applyScores({ t: 'scores', entries: welcome.scores, replace: true });
 		for (const id of this.sharedDoors) {

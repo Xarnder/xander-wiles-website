@@ -25,6 +25,10 @@
 					'Pick up a small four-legged creature (the ones with a gold paw badge) and tuck it under your arm; press K again to put it down. A door or seat under the crosshair comes first. Pause → Waypoints can point you to the nearest one.'
 				],
 				[
+					'K on a two-legged creature',
+					'Ride it (the ones with a teal saddle badge): astride its neck if it is small, on its right shoulder if it is large. W/A/S/D steer where you look, Shift sprints, and bigger creatures run faster. K gets off onto the ground beside it. You can climb on while carrying a creature, and fire from the seat.'
+				],
+				[
 					'Left click while carrying',
 					"Fire a seed pellet from the creature's mouth. Hold to keep firing: 5 shots, one comes back every 1.5 s. Not while building, flying or under water."
 				],

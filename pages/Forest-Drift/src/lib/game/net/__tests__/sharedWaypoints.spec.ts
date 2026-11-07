@@ -39,8 +39,8 @@ const put = (waypoint: WaypointDraft): ClientWaypointMessage => ({
 });
 
 describe('public waypoints: who may do what', () => {
-	it('arrived with protocol 7', () => {
-		expect(PROTOCOL_VERSION).toBe(7);
+	it('arrived with protocol 7 (8 adds riding)', () => {
+		expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(7);
 	});
 
 	it('lets anyone see, but only the creator (or the world owner) manage', () => {

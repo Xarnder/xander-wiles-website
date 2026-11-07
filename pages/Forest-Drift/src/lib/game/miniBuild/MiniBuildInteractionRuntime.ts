@@ -15,7 +15,7 @@ import {
 	chooseInteraction,
 	type InteractionPrompt
 } from '../player/PlayerInteractionController';
-import { PlayerInteractionView } from '../player/PlayerInteractionView';
+import { PlayerInteractionView, type LocalRidePose } from '../player/PlayerInteractionView';
 import { PLAYER_BODY } from '../player/PlayerBodyDimensions';
 import type { GridVec3 } from './MiniBuildTypes';
 import {
@@ -201,8 +201,9 @@ export class MiniBuildInteractionRuntime {
 	get localCharacter() {
 		return this.view.localCharacter;
 	}
-	afterPlayerUpdate(dt = 1 / 60, building = false): void {
-		this.view.update(this.o.player, dt, building);
+	/** Poses the local body; `ride` while the player rides a creature. */
+	afterPlayerUpdate(dt = 1 / 60, building = false, ride: LocalRidePose | null = null): void {
+		this.view.update(this.o.player, dt, building, ride);
 	}
 
 	private updateDebug(instanceId: string, locations: ResolvedMiniBuildInteraction[]): void {

@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { touchButton } from '#lib/components/touchButton';
 	import type { ThreeScene } from '#lib/game/ThreeScene';
+	import type { CreaturePrompt } from '#lib/game/player/creatureKeyRouting';
 	import type { BuildUiState, HotbarUiState, ToolId } from '#lib/game/building/FoundationTypes';
 	import {
 		snapKeyForHints,
@@ -39,10 +40,12 @@
 		onOpenHelp: () => void;
 		/** Online, walking around (not building): show the Punch button. */
 		punchAvailable?: boolean;
-		/** Ranged weapons: a creature to pick up, or "Put down" while carrying. */
-		carryPrompt?: { label: string; carrying: boolean } | null;
+		/** The creature button: pick up, put down, ride, get off (`creatureKeyRouting.ts`). */
+		creaturePrompt?: CreaturePrompt | null;
 		/** Carrying a creature: Fire replaces Punch. */
 		carrying?: boolean;
+		/** Riding a creature: no jumping, and its button wins over doors. */
+		riding?: boolean;
 	}
 
 	const {
@@ -56,9 +59,12 @@
 		onOpenPause,
 		onOpenHelp,
 		punchAvailable = false,
-		carryPrompt = null,
-		carrying = false
+		creaturePrompt = null,
+		carrying = false,
+		riding = false
 	}: Props = $props();
+	/** While riding, the creature button replaces the door one (doors don't open from a mount). */
+	const doorShown = $derived(!!lookedAtDoorId && !riding);
 
 	/** Fire is press-and-hold: a pellet whenever a charge is ready while the finger stays down. */
 	function fireDown(event: PointerEvent) {
@@ -469,7 +475,7 @@
 	</header>
 
 	<!-- Contextual opening action for doors and window shutters -->
-	{#if lookedAtDoorId}
+	{#if doorShown}
 		<div class="touch-door-bar">
 			<button
 				type="button"
@@ -487,17 +493,17 @@
 		</div>
 	{/if}
 
-	{#if carryPrompt && !lookedAtDoorId}
+	{#if creaturePrompt && !doorShown}
 		<div class="touch-door-bar touch-carry-bar">
 			<button
 				type="button"
 				class="touch-door-btn"
-				use:touchButton={() => scene?.toggleCarry()}
+				use:touchButton={() => scene?.useCreatureKey()}
 				onpointerdown={(e) => e.stopPropagation()}
 				data-testid="touch-carry-button"
-				aria-label={carryPrompt.label}
+				aria-label={creaturePrompt.label}
 			>
-				<span>{carryPrompt.carrying ? 'Put down' : 'Pick up'}</span>
+				<span>{creaturePrompt.button}</span>
 			</button>
 		</div>
 	{/if}
@@ -547,7 +553,7 @@
 		{/if}
 
 		<!-- Also put the opening action under the right thumb -->
-		{#if lookedAtDoorId}
+		{#if doorShown}
 			<div class="touch-path-actions">
 				<button
 					type="button"
@@ -743,16 +749,18 @@
 					<span>Punch</span>
 				</button>
 			{/if}
-			<button
-				type="button"
-				class="touch-action-btn jump-btn"
-				use:touchButton={triggerJump}
-				data-testid="touch-jump-btn"
-				aria-label="Jump"
-			>
-				<img class="touch-icon" src={jumpIcon} alt="" />
-				<span>Jump</span>
-			</button>
+			{#if !riding}
+				<button
+					type="button"
+					class="touch-action-btn jump-btn"
+					use:touchButton={triggerJump}
+					data-testid="touch-jump-btn"
+					aria-label="Jump"
+				>
+					<img class="touch-icon" src={jumpIcon} alt="" />
+					<span>Jump</span>
+				</button>
+			{/if}
 		</div>
 	</div>
 </div>

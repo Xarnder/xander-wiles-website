@@ -9,17 +9,29 @@ const MAX_HINTS = 24;
 const SIZE = 0.03;
 const TARGET_SIZE = 0.042;
 
+/** Which badges to show this frame. */
+export interface CreatureHintOptions {
+	/** Paw badges over creatures that can be picked up. */
+	carry: boolean;
+	/** Saddle badges over creatures that can be ridden (riding Q20). */
+	ride: boolean;
+	/** Never badged: the creature being ridden. */
+	riddenId: string | null;
+}
+
 /**
- * Makes it easy to see which creatures can be picked up and used as a weapon: a small gold paw
- * badge floats above every small four-legged creature within reach of a short walk, bigger on the
- * one under the crosshair (and on the one the "nearest carryable" waypoint follows). Badges are
- * hidden behind terrain and walls (depth-tested), shape not just colour carries the meaning (a
- * paw), and nothing is allocated per frame once the pool is warm.
+ * Makes it easy to see which creatures can be picked up (and used as a weapon) or ridden: a small
+ * badge floats above each within reach of a short walk — a gold paw disc over small four-legged
+ * creatures, a teal saddle square over two-legged ones — bigger on the one under the crosshair
+ * (and on the one a "nearest" waypoint follows). Badges are hidden behind terrain and walls
+ * (depth-tested), shape not just colour carries the meaning, and nothing is allocated per frame
+ * once the pool is warm.
  */
 export class CarryHints {
 	readonly group = new THREE.Group();
 	private readonly sprites: THREE.Sprite[] = [];
 	private readonly texture: THREE.CanvasTexture;
+	private readonly rideTexture: THREE.CanvasTexture;
 	private readonly cameraPosition = new THREE.Vector3();
 	private time = 0;
 	/** How many badges were shown last frame (tests and diagnostics). */
@@ -28,34 +40,45 @@ export class CarryHints {
 	constructor() {
 		this.group.name = 'carry-hints';
 		this.texture = pawBadge();
+		this.rideTexture = saddleBadge();
 	}
 
 	/**
-	 * `visible`: hints are on, and the player could pick something up (walking, not carrying).
-	 * `targetId`: the creature under the crosshair; `followedId`: the waypoint's creature.
+	 * `show`: which kinds of badge are wanted now. `targetId`: the creature under the crosshair;
+	 * `followedIds`: the creatures waypoints follow.
 	 */
 	update(
 		creatures: CreatureRuntimeManager,
 		camera: THREE.Camera,
 		dt: number,
-		visible: boolean,
+		show: CreatureHintOptions,
 		targetId: string | null,
-		followedId: string | null,
+		followedIds: readonly string[],
 		reducedMotion: boolean
 	): void {
 		this.time += Math.min(dt, 0.1);
 		let used = 0;
-		if (visible) {
+		if (show.carry || show.ride) {
 			camera.getWorldPosition(this.cameraPosition);
 			for (const [id, live] of creatures.live) {
 				if (used >= MAX_HINTS) break;
-				if (!creatures.isCarryable(id)) continue;
+				const texture =
+					show.carry && creatures.isCarryable(id)
+						? this.texture
+						: show.ride && id !== show.riddenId && creatures.isRideable(id)
+							? this.rideTexture
+							: null;
+				if (!texture) continue;
 				const p = live.compiled.object.position;
 				const distance = Math.hypot(p.x - this.cameraPosition.x, p.z - this.cameraPosition.z);
 				if (distance > CARRY_HINT_RANGE) continue;
 				const sprite = this.sprites[used] ?? this.createSprite();
 				used++;
-				const emphasised = id === targetId || id === followedId;
+				if (sprite.material.map !== texture) {
+					sprite.material.map = texture;
+					sprite.material.needsUpdate = true;
+				}
+				const emphasised = id === targetId || followedIds.includes(id);
 				const fade = Math.min(
 					1,
 					Math.max(0, (CARRY_HINT_RANGE - distance) / (CARRY_HINT_RANGE - FADE_FROM))
@@ -98,6 +121,7 @@ export class CarryHints {
 	dispose(): void {
 		for (const sprite of this.sprites) sprite.material.dispose();
 		this.texture.dispose();
+		this.rideTexture.dispose();
 		this.group.removeFromParent();
 	}
 }
@@ -131,6 +155,50 @@ function pawBadge(): THREE.CanvasTexture {
 		ctx.arc(x, y, r, 0, Math.PI * 2);
 		ctx.fill();
 	}
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	return texture;
+}
+
+/**
+ * A teal rounded square with a dark rim and a saddle over a stirrup: "you can ride this one". A
+ * different shape from the paw disc, so the two read apart without colour.
+ */
+function saddleBadge(): THREE.CanvasTexture {
+	const canvas = document.createElement('canvas');
+	canvas.width = 64;
+	canvas.height = 64;
+	const ctx = canvas.getContext('2d')!;
+	ctx.beginPath();
+	ctx.roundRect(5, 5, 54, 54, 12);
+	ctx.fillStyle = '#5fd0c2';
+	ctx.fill();
+	ctx.lineWidth = 4;
+	ctx.strokeStyle = 'rgba(4, 18, 31, 0.85)';
+	ctx.stroke();
+	ctx.fillStyle = '#123a36';
+	ctx.strokeStyle = '#123a36';
+	// Saddle: a seat curving up at both ends.
+	ctx.beginPath();
+	ctx.moveTo(14, 26);
+	ctx.quadraticCurveTo(32, 14, 50, 26);
+	ctx.lineTo(44, 34);
+	ctx.lineTo(20, 34);
+	ctx.closePath();
+	ctx.fill();
+	// Stirrup strap and loop.
+	ctx.lineWidth = 3.5;
+	ctx.beginPath();
+	ctx.moveTo(32, 34);
+	ctx.lineTo(32, 42);
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.moveTo(25, 48);
+	ctx.lineTo(39, 48);
+	ctx.lineTo(36, 42);
+	ctx.lineTo(28, 42);
+	ctx.closePath();
+	ctx.stroke();
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.colorSpace = THREE.SRGBColorSpace;
 	return texture;

@@ -41,7 +41,8 @@ import type { DamageSource, HealthState } from '../player/PlayerHealth';
 // 7: public waypoints (waypoint, waypoints, welcome.waypoints): see `sharedWaypoints.ts`. Also
 //    multiplayer stats (scores, resetScores, welcome.scores): see `playerScores.ts`. Both sides
 //    ignore stats messages they don't know, so stats needed no bump of their own.
-export const PROTOCOL_VERSION = 7;
+// 8: riding bipeds (ride, dismount, rideResult, ridden, welcome.rides): see `creatureRiding.ts`.
+export const PROTOCOL_VERSION = 8;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world
@@ -508,6 +509,24 @@ export interface ClientDropMessage {
 	at: CarryPlacement;
 }
 
+/**
+ * Riding: climbs onto the biped `creature` (an ambient `group:…` id or a placed `placed_…` one).
+ * The room checks it's free, rideable and plausibly near, then answers with `rideResult`; everyone
+ * else hears `ridden`.
+ */
+export interface ClientRideMessage {
+	t: 'ride';
+	id: number;
+	creature: string;
+}
+
+/** Riding: gets off, leaving the creature standing at `at` (where it is, facing its way). */
+export interface ClientDismountMessage {
+	t: 'dismount';
+	id: number;
+	at: CarryPlacement;
+}
+
 /** Fires a pellet (Phase 3). `shot` rises per connection; `at` is the room-clock time. */
 export interface ClientShootMessage {
 	t: 'shoot';
@@ -527,6 +546,27 @@ export interface ClientShotHitMessage {
 }
 
 export type CarryRefusal = 'taken' | 'far' | 'ineligible' | 'rule' | 'role' | 'state';
+
+export type RideRefusal = 'taken' | 'far' | 'ineligible' | 'role' | 'state';
+
+/** The room's answer to the sender's `ride`. */
+export interface ServerRideResultMessage {
+	t: 'rideResult';
+	id: number;
+	ok: boolean;
+	reason?: RideRefusal;
+}
+
+/**
+ * Who rides what: `creature` is the id `slot` now rides, or null when they got off (`at`: where
+ * the creature was left, so everyone puts it back in their own herd at the same spot).
+ */
+export interface ServerRiddenMessage {
+	t: 'ridden';
+	slot: number;
+	creature: string | null;
+	at?: CarryPlacement;
+}
 
 /** The room's answer to the sender's `carry`. */
 export interface ServerCarryResultMessage {
@@ -581,6 +621,8 @@ export type ClientJsonMessage =
 	| ClientPunchMessage
 	| ClientCarryMessage
 	| ClientDropMessage
+	| ClientRideMessage
+	| ClientDismountMessage
 	| ClientShootMessage
 	| ClientShotHitMessage
 	| ClientWaypointMessage
@@ -620,6 +662,8 @@ export interface WelcomeMessage {
 	interactions?: OccupiedMiniBuildInteraction[];
 	/** Creatures being carried right now, by slot (ranged weapons). */
 	carries?: { slot: number; creature: string }[];
+	/** Creatures being ridden right now, by slot (riding). */
+	rides?: { slot: number; creature: string }[];
 	/** The world's public waypoints (private ones never leave their creator's browser). */
 	waypoints?: SharedWaypoint[];
 	/** Multiplayer stats: hits and knockouts per player, kept with the world. */
@@ -761,6 +805,8 @@ export type ServerJsonMessage =
 	| ServerPunchResultMessage
 	| ServerCarryResultMessage
 	| ServerCarriedMessage
+	| ServerRideResultMessage
+	| ServerRiddenMessage
 	| ServerShotMessage
 	| ServerShotResultMessage;
 
@@ -921,6 +967,17 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		if (!isMessageId(message.id) || !at) return null;
 		return { t: 'drop', id: message.id, at: at as CarryPlacement };
 	}
+	if (message.t === 'ride') {
+		const { id, creature } = message;
+		if (!isMessageId(id)) return null;
+		if (typeof creature !== 'string' || creature.length === 0 || creature.length > 160) return null;
+		return { t: 'ride', id, creature };
+	}
+	if (message.t === 'dismount') {
+		const at = finiteTuple(message.at, 4);
+		if (!isMessageId(message.id) || !at) return null;
+		return { t: 'dismount', id: message.id, at: at as CarryPlacement };
+	}
 	if (message.t === 'shoot') {
 		const origin = finiteTuple(message.origin, 3);
 		const dir = finiteTuple(message.dir, 3);
@@ -979,6 +1036,8 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'punchResult' ||
 		t === 'carryResult' ||
 		t === 'carried' ||
+		t === 'rideResult' ||
+		t === 'ridden' ||
 		t === 'shot' ||
 		t === 'shotResult' ||
 		t === 'waypoints' ||

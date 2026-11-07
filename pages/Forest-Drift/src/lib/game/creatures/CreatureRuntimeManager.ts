@@ -33,6 +33,21 @@ import type {
 } from './CreatureTypes';
 import { CREATURE_GRAPHICS_BUDGETS, type GraphicsQuality } from '../graphics/GraphicsTypes';
 import { abilityFor } from './creatureAbilities';
+import { rideFor, type RideProfile, type RideSeatKind } from './creatureRiding';
+import {
+	advanceRiddenCreature,
+	type RideInput,
+	type RideObstacle,
+	type RideStepResult
+} from './CreatureRideMotion';
+import {
+	rideSeatAnchors,
+	rideSeatLayout,
+	type RideSeatAnchors,
+	type RideSeatLayout
+} from './RideSeat';
+import { anchorToWorld, boneToWorld } from './boneAnchors';
+import { creatureDimensions } from './creatureDimensions';
 
 interface LiveCreature {
 	compiled: CompiledCreature;
@@ -54,13 +69,71 @@ export interface CarriedCreature {
 	synthetic?: boolean;
 }
 
-/** What `pickCarryable` found under the crosshair. */
+/** What `pickCarryable` / `pickRideable` found under the crosshair. */
 export interface CarryCandidate {
 	id: string;
 	definition: CreatureDefinition;
 	/** Distance along the look ray, metres. */
 	distance: number;
 }
+
+/** The creature this player is riding: still in the herd's maps, but steered, not simulated. */
+interface LocalRide {
+	id: string;
+	profile: RideProfile;
+	seat: RideSeatLayout;
+	/** `seat`, pinned to the bones that carry it (so the rider moves with the body's sway). */
+	anchors: RideSeatAnchors;
+	/** The carried-creature clearance `seat` was laid out with. */
+	carryClearance: number;
+	/**
+	 * The pelvis in its bone's space, eased toward `anchors.pelvis.offset` when the layout changes
+	 * (picking a creature up mid-ride moves the seat out from the neck).
+	 */
+	pelvisOffset: THREE.Vector3;
+}
+
+/** Where the rider is this frame, in world space (riding plan §4.4). */
+export interface RideFrame {
+	kind: RideSeatKind;
+	/** The pelvis support point. */
+	anchor: THREE.Vector3;
+	/** The creature's heading (`atan2(x, z)`). */
+	heading: number;
+	/** The top of the creature's head, world height. */
+	headTop: number;
+	/** Hand holds, or null for a hand resting on the thigh. */
+	hands: { left: THREE.Vector3 | null; right: THREE.Vector3 | null };
+	/**
+	 * The anchor's height without the body's bob and sway (where it would be on a still body), so
+	 * a reduced-motion camera can hold steady while the rider's body still moves with the mount.
+	 */
+	steadyY: number;
+}
+
+/** Where a ridden creature stands and how much room it takes. */
+export interface RideFootprint {
+	x: number;
+	y: number;
+	z: number;
+	heading: number;
+	/** Body (collision) radius, metres. */
+	radius: number;
+}
+
+/** The nearest creature of some kind, where it's drawn. */
+export interface NearestCreature {
+	id: string;
+	name: string;
+	x: number;
+	y: number;
+	z: number;
+}
+
+/** Other creatures shorter than this fraction of the ridden one are stepped over, not avoided. */
+const RIDE_OBSTACLE_HEIGHT_FRACTION = 0.25;
+/** How quickly the seat eases to a new layout (picking a creature up mid-ride), 1/s. */
+const SEAT_EASE_RATE = 6;
 
 /** Bounded runtime window over an infinite deterministic ecology. Ambient state is never serialized. */
 export class CreatureRuntimeManager {
@@ -77,6 +150,12 @@ export class CreatureRuntimeManager {
 	 * cell never spawns a second copy.
 	 */
 	readonly carried = new Map<string, CarriedCreature>();
+	/**
+	 * The creature this player rides. It stays in `logical` and `live` (it's still in the world and
+	 * drawn), but `steerRide` moves and animates it instead of behaviour, it is never culled or
+	 * unloaded, and the player isn't pushed out of it.
+	 */
+	private ride: LocalRide | null = null;
 	state: CreatureWorldState;
 	revision = 0;
 	/**
@@ -164,8 +243,9 @@ export class CreatureRuntimeManager {
 		for (const id of [...this.live.keys()]) this.unload(id);
 		this.grounding.clear();
 		this.logical.clear();
-		// A new seed or new creature settings: whatever was carried no longer belongs to this world.
+		// A new seed or new creature settings: whatever was carried or ridden no longer belongs here.
 		this.carried.clear();
+		this.ride = null;
 		this.cells.clear();
 		this.scanAt = -1;
 		this.restorePersistent();
@@ -219,7 +299,12 @@ export class CreatureRuntimeManager {
 				}
 		for (const [key] of this.cells) if (!keep.has(key)) this.cells.delete(key);
 		for (const [id, r] of this.logical)
-			if (!r.spawn.persistent && !this.demo && !keep.has(`${r.spawn.cellX},${r.spawn.cellZ}`)) {
+			if (
+				!r.spawn.persistent &&
+				!this.demo &&
+				id !== this.ride?.id &&
+				!keep.has(`${r.spawn.cellX},${r.spawn.cellZ}`)
+			) {
 				this.unload(id);
 				this.logical.delete(id);
 			}
@@ -230,6 +315,7 @@ export class CreatureRuntimeManager {
 		if (!this.state.settings.enabled) {
 			for (const id of [...this.live.keys()]) this.unload(id);
 			this.carried.clear();
+			this.ride = null;
 			return;
 		}
 		const budget = CREATURE_GRAPHICS_BUDGETS[quality];
@@ -247,7 +333,9 @@ export class CreatureRuntimeManager {
 				: distance < budget.nearDistance * (quality === 'low' ? 1.6 : 2.4)
 					? 1
 					: 2;
+		const rideId = this.ride && this.logical.has(this.ride.id) ? this.ride.id : null;
 		for (const [id, r] of this.logical) {
+			if (id === rideId) continue;
 			const p = r.spawn.species.proportions,
 				size =
 					(p.legLength + p.bodyDepth + p.headSize + p.neckLength) * r.spawn.individual.sizeFactor;
@@ -262,6 +350,9 @@ export class CreatureRuntimeManager {
 			visible,
 			Math.min(this.state.settings.maxActiveCreatures, budget.maxActive)
 		);
+		// The mount is always drawn, in full detail, whatever the cap.
+		if (rideId)
+			selected.push({ id: rideId, distance: 0, lod: lodFor(0), height: this.ride!.profile.height });
 		const ids = new Set(selected.map((p) => p.id));
 		for (const id of this.live.keys())
 			if (!ids.has(id)) {
@@ -291,7 +382,9 @@ export class CreatureRuntimeManager {
 						item.lod
 					);
 					if (live) this.unload(item.id);
-					live = { compiled, lod: item.lod, lastAnimation: -1, born: this.time };
+					// A mount gaining detail must not shrink away and grow back under its rider.
+					const born = item.id === rideId ? -Infinity : this.time;
+					live = { compiled, lod: item.lod, lastAnimation: -1, born };
 					for (const mesh of compiled.skinnedMeshes) {
 						for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material])
 							if (!this.materialRegistered.has(m)) {
@@ -315,6 +408,14 @@ export class CreatureRuntimeManager {
 				compiledThisFrame = true;
 			}
 			if (!live) continue;
+			if (item.id === rideId) {
+				// Moved and posed by `steerRide`, before the camera reads the seat.
+				for (const mesh of live.compiled.skinnedMeshes) {
+					mesh.castShadow = budget.shadows;
+					mesh.receiveShadow = budget.shadows;
+				}
+				continue;
+			}
 			const behaviourStart = performance.now();
 			if (this.time >= r.nextDecision) {
 				const oldState = r.state;
@@ -353,31 +454,15 @@ export class CreatureRuntimeManager {
 			} else if (!animateNow && !serpent) {
 				c.object.rotation.set(0, r.heading, 0);
 			}
-			if (animateNow) {
-				const start = performance.now();
-				let grounding = this.grounding.get(item.id);
-				if (!grounding) {
-					grounding = new CreatureGroundingController(c.compilation);
-					this.grounding.set(item.id, grounding);
-				}
-				// Grounding detail follows the animation cadence: full planting/IK near, simplified
-				// stepping at medium range, body-only slope alignment far away.
-				animateCreature(
-					c,
-					{ ...r.intent, heading: r.heading },
-					this.time,
-					Math.min(0.4, this.time - live.lastAnimation),
-					this.access.surface,
-					{
-						grounding,
-						lod: item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 1 : 2,
-						standable: this.access.standable
-					}
+			// Grounding detail follows the animation cadence: full planting/IK near, simplified
+			// stepping at medium range, body-only slope alignment far away.
+			if (animateNow)
+				this.animateLive(
+					item.id,
+					r,
+					live,
+					item.distance < budget.nearDistance ? 0 : item.distance < 160 ? 1 : 2
 				);
-				live.lastAnimation = this.time;
-				this.stats.animationMs += performance.now() - start;
-				this.stats.skeletonUpdates++;
-			}
 			for (const mesh of c.skinnedMeshes) {
 				mesh.castShadow = budget.shadows && item.distance < budget.nearDistance;
 				mesh.receiveShadow = budget.shadows;
@@ -413,6 +498,33 @@ export class CreatureRuntimeManager {
 			this.persistenceAt = this.time;
 			if (this.state.individuals.length) this.revision++;
 		}
+	}
+	/** Poses a live creature on the terrain (grounding, gait, look) for this moment. */
+	private animateLive(
+		id: string,
+		r: CreatureRuntimeDefinition,
+		live: LiveCreature,
+		lod: CreatureLod,
+		maxCadence?: number
+	): void {
+		const start = performance.now();
+		const c = live.compiled;
+		let grounding = this.grounding.get(id);
+		if (!grounding) {
+			grounding = new CreatureGroundingController(c.compilation);
+			this.grounding.set(id, grounding);
+		}
+		animateCreature(
+			c,
+			{ ...r.intent, heading: r.heading },
+			this.time,
+			Math.min(0.4, this.time - live.lastAnimation),
+			this.access.surface,
+			{ grounding, lod, standable: this.access.standable, maxCadence }
+		);
+		live.lastAnimation = this.time;
+		this.stats.animationMs += performance.now() - start;
+		this.stats.skeletonUpdates++;
 	}
 	private updateDebug(live: LiveCreature, r: CreatureRuntimeDefinition) {
 		const text = [
@@ -486,6 +598,20 @@ export class CreatureRuntimeManager {
 	 * (ray against each live creature's coarse collision cylinder). `dir` must be unit length.
 	 */
 	pickCarryable(eye: Vec3, dir: Vec3, reach: number): CarryCandidate | null {
+		return this.pickAlongRay(eye, dir, reach, (id) => this.isCarryable(id));
+	}
+
+	/** The nearest rideable creature (a biped nobody rides) the look ray reaches; see `pickCarryable`. */
+	pickRideable(eye: Vec3, dir: Vec3, reach: number): CarryCandidate | null {
+		return this.pickAlongRay(eye, dir, reach, (id) => id !== this.ride?.id && this.isRideable(id));
+	}
+
+	private pickAlongRay(
+		eye: Vec3,
+		dir: Vec3,
+		reach: number,
+		accept: (id: string) => boolean
+	): CarryCandidate | null {
 		let best: CarryCandidate | null = null;
 		for (const [id, live] of this.live) {
 			const r = this.logical.get(id);
@@ -495,15 +621,18 @@ export class CreatureRuntimeManager {
 			const height = live.compiled.compilation.collision.height;
 			// Cheap reject: the cylinder's closest point is beyond reach.
 			if (Math.hypot(p.x - eye.x, p.z - eye.z) - radius > reach) continue;
-			const definition = { species: r.spawn.species, individual: r.spawn.individual };
 			for (let t = 0; t <= reach; t += 0.05) {
 				const x = eye.x + dir.x * t,
 					y = eye.y + dir.y * t,
 					z = eye.z + dir.z * t;
 				if (y < p.y - 0.05 || y > p.y + height + 0.05) continue;
 				if (Math.hypot(x - p.x, z - p.z) > radius) continue;
-				if ((!best || t < best.distance) && abilityFor(definition))
-					best = { id, definition, distance: t };
+				if ((!best || t < best.distance) && accept(id))
+					best = {
+						id,
+						definition: { species: r.spawn.species, individual: r.spawn.individual },
+						distance: t
+					};
 				break;
 			}
 		}
@@ -512,31 +641,55 @@ export class CreatureRuntimeManager {
 
 	/** Whether a creature in the herd can be picked up (cached per spawn: recipes never change). */
 	isCarryable(id: string): boolean {
-		const r = this.logical.get(id);
-		if (!r) return false;
-		let carryable = this.carryableCache.get(r.spawn);
-		if (carryable === undefined) {
-			carryable = abilityFor({ species: r.spawn.species, individual: r.spawn.individual }) !== null;
-			this.carryableCache.set(r.spawn, carryable);
-		}
-		return carryable;
+		return this.cachedAbility(id, this.carryableCache, (d) => abilityFor(d) !== null);
 	}
 	private readonly carryableCache = new WeakMap<CreatureSpawnDefinition, boolean>();
+
+	/** Whether a creature in the herd can be ridden (cached per spawn). */
+	isRideable(id: string): boolean {
+		return this.cachedAbility(id, this.rideableCache, (d) => rideFor(d) !== null);
+	}
+	private readonly rideableCache = new WeakMap<CreatureSpawnDefinition, boolean>();
+
+	private cachedAbility(
+		id: string,
+		cache: WeakMap<CreatureSpawnDefinition, boolean>,
+		test: (definition: CreatureDefinition) => boolean
+	): boolean {
+		const r = this.logical.get(id);
+		if (!r) return false;
+		let able = cache.get(r.spawn);
+		if (able === undefined) {
+			able = test({ species: r.spawn.species, individual: r.spawn.individual });
+			cache.set(r.spawn, able);
+		}
+		return able;
+	}
 
 	/**
 	 * The nearest creature in the herd that can be picked up (not carried by anyone), within
 	 * `maxDistance` metres horizontally of `from`, or null. Its position is where it's drawn when it
 	 * has a mesh, so a waypoint sits on the animal rather than a step behind it.
 	 */
-	nearestCarryable(
+	nearestCarryable(from: Vec3, maxDistance = Number.POSITIVE_INFINITY): NearestCreature | null {
+		return this.nearest(from, maxDistance, (id) => this.isCarryable(id));
+	}
+
+	/** The nearest creature nobody is riding that can be ridden (riding Q20 B); see `nearestCarryable`. */
+	nearestRideable(from: Vec3, maxDistance = Number.POSITIVE_INFINITY): NearestCreature | null {
+		return this.nearest(from, maxDistance, (id) => id !== this.ride?.id && this.isRideable(id));
+	}
+
+	private nearest(
 		from: Vec3,
-		maxDistance = Number.POSITIVE_INFINITY
-	): { id: string; name: string; x: number; y: number; z: number } | null {
+		maxDistance: number,
+		accept: (id: string) => boolean
+	): NearestCreature | null {
 		let best: CreatureRuntimeDefinition | null = null;
 		let bestDistance = maxDistance;
 		for (const [id, r] of this.logical) {
 			const d = Math.hypot(r.position.x - from.x, r.position.z - from.z);
-			if (d >= bestDistance || !this.isCarryable(id)) continue;
+			if (d >= bestDistance || !accept(id)) continue;
 			best = r;
 			bestDistance = d;
 		}
@@ -639,6 +792,20 @@ export class CreatureRuntimeManager {
 			y: Number.isFinite(ground) ? ground : position.y,
 			z: position.z
 		};
+		if (carried.synthetic) r.spawn = { ...r.spawn, groupCentre: { ...at } };
+		this.settle(r, at, heading, options.save !== false);
+		if (this.state.settings.enabled) this.logical.set(id, r);
+		this.scanAt = -1;
+		return true;
+	}
+
+	/**
+	 * A creature set down after a player carried or rode it: standing still at `at`, then back to its
+	 * own behaviour. An ambient one now belongs to the cell it stands in; its herd's home is unchanged,
+	 * so it wanders back. A placed one's saved spot (and home) moves there, unless `save` is false
+	 * (online, only the player who moved it saves the edit; everyone else waits for it).
+	 */
+	private settle(r: CreatureRuntimeDefinition, at: Vec3, heading: number, save: boolean): void {
 		r.position = { ...at };
 		r.heading = heading;
 		r.state = 'IDLE';
@@ -650,10 +817,10 @@ export class CreatureRuntimeManager {
 		};
 		r.target = { ...at };
 		r.nextDecision = this.time + 1;
-		if (carried.synthetic) r.spawn = { ...r.spawn, groupCentre: { ...at } };
-		// Online, only the carrier saves a placed creature's new spot (as a world edit); everyone else
-		// just shows it there until that edit arrives.
-		if (r.spawn.persistent && options.save !== false) {
+		if (r.spawn.persistent) {
+			r.spawn = { ...r.spawn, groupCentre: { ...at } };
+			if (!save) return;
+			const id = r.spawn.id;
 			this.state = {
 				...this.state,
 				individuals: this.state.individuals.map((p) =>
@@ -662,16 +829,203 @@ export class CreatureRuntimeManager {
 			};
 			this.revision++;
 			this.placedRevision++;
-		} else if (!r.spawn.persistent) {
+		} else {
 			r.spawn = {
 				...r.spawn,
 				cellX: Math.floor(at.x / CREATURE_CELL_SIZE),
 				cellZ: Math.floor(at.z / CREATURE_CELL_SIZE)
 			};
 		}
-		if (this.state.settings.enabled) this.logical.set(id, r);
-		this.scanAt = -1;
-		return true;
+	}
+
+	// ------------------------------------------------------------------ riding (2026-11-07 plan)
+
+	/** The id of the creature this player rides, or null. */
+	get riddenId(): string | null {
+		return this.ride?.id ?? null;
+	}
+
+	isRidden(id: string): boolean {
+		return this.ride?.id === id && this.logical.has(id);
+	}
+
+	/**
+	 * Hands `id` (a live biped in the herd) over to the rider: behaviour stops and `steerRide` moves
+	 * it from now on. `carryClearance` is the half-width of a creature the rider carries (Q12 C).
+	 * Returns its recipe and how it carries a rider, or null when it can't be ridden here.
+	 */
+	mountRide(
+		id: string,
+		carryClearance = 0
+	): { definition: CreatureDefinition; profile: RideProfile } | null {
+		const r = this.logical.get(id);
+		const live = this.live.get(id);
+		if (!r || !live || this.ride) return null;
+		const definition = { species: r.spawn.species, individual: r.spawn.individual };
+		const profile = rideFor(definition);
+		if (!profile) return null;
+		const seat = rideSeatLayout(live.compiled.compilation, profile.seat, carryClearance);
+		const anchors = rideSeatAnchors(live.compiled.compilation, seat);
+		const { x, y, z } = anchors.pelvis.offset;
+		this.ride = {
+			id,
+			profile,
+			seat,
+			anchors,
+			carryClearance,
+			pelvisOffset: new THREE.Vector3(x, y, z)
+		};
+		r.state = 'IDLE';
+		r.intent = { ...r.intent, velocity: { x: 0, y: 0, z: 0 }, gait: 'idle', lookTarget: undefined };
+		return { definition, profile };
+	}
+
+	/** The rider picked up or put down a creature: lay the seat out again (it eases across). */
+	setRideCarryClearance(clearance: number): void {
+		const ride = this.ride;
+		const live = ride && this.live.get(ride.id);
+		if (!ride || !live || Math.abs(ride.carryClearance - clearance) < 1e-3) return;
+		ride.carryClearance = clearance;
+		ride.seat = rideSeatLayout(live.compiled.compilation, ride.profile.seat, clearance);
+		const anchors = rideSeatAnchors(live.compiled.compilation, ride.seat);
+		// Easing across to another bone's space would jump: then the seat moves at once.
+		if (anchors.pelvis.bone !== ride.anchors.pelvis.bone) {
+			const { x, y, z } = anchors.pelvis.offset;
+			ride.pelvisOffset.set(x, y, z);
+		}
+		ride.anchors = anchors;
+	}
+
+	/**
+	 * Steers, moves and poses the mount for this frame. Call before the camera reads `rideFrame`.
+	 * `look` (the rider's aim point) is where the creature's head turns to.
+	 */
+	steerRide(
+		input: RideInput,
+		cameraYaw: number,
+		runSpeed: number,
+		dt: number,
+		look?: Vec3
+	): RideStepResult {
+		const ride = this.ride;
+		const r = ride && this.logical.get(ride.id);
+		if (!ride || !r) return { blocked: false };
+		const result = advanceRiddenCreature(
+			r,
+			ride.profile,
+			input,
+			cameraYaw,
+			runSpeed,
+			dt,
+			this.access,
+			this.rideObstacles(r, ride.profile)
+		);
+		r.intent.lookTarget = look ? { ...look } : undefined;
+		const live = this.live.get(ride.id);
+		if (live) {
+			live.compiled.object.position.copy(r.position);
+			this.animateLive(ride.id, r, live, live.lod, ride.profile.maxCadence);
+			const ease = 1 - Math.exp(-SEAT_EASE_RATE * Math.max(0, dt));
+			const p = ride.anchors.pelvis.offset;
+			ride.pelvisOffset.lerp(this.seatScratch.set(p.x, p.y, p.z), ease);
+		}
+		return result;
+	}
+	private readonly seatScratch = new THREE.Vector3();
+
+	/** Creatures the mount slides around: not itself, and nothing small enough to step over. */
+	private rideObstacles(r: CreatureRuntimeDefinition, profile: RideProfile): RideObstacle[] {
+		const out: RideObstacle[] = [];
+		const minHeight = profile.height * RIDE_OBSTACLE_HEIGHT_FRACTION;
+		for (const other of this.spatial.query(r.position, 32)) {
+			if (other === r) continue;
+			const dims = creatureDimensions(other.spawn.species, other.spawn.individual.sizeFactor);
+			if (dims.height < minHeight) continue;
+			out.push({ x: other.position.x, z: other.position.z, radius: dims.radius });
+		}
+		return out;
+	}
+
+	/**
+	 * Where the rider sits this frame (world space), or null when there's no drawn mount. The same
+	 * object is reused every call (no per-frame allocation): copy anything kept.
+	 */
+	rideFrame(): RideFrame | null {
+		const ride = this.ride;
+		const r = ride && this.logical.get(ride.id);
+		const live = ride && this.live.get(ride.id);
+		if (!ride || !r || !live) return null;
+		const compiled = live.compiled;
+		const { anchors, seat } = ride;
+		const frame = this.frame;
+		frame.kind = seat.kind;
+		boneToWorld(compiled, anchors.pelvis.bone, ride.pelvisOffset, frame.anchor);
+		frame.heading = r.heading;
+		frame.headTop = anchorToWorld(compiled, anchors.headTop, this.seatScratch).y;
+		frame.hands.left = anchors.hands.left
+			? anchorToWorld(compiled, anchors.hands.left, this.handScratch[0])
+			: null;
+		frame.hands.right = anchors.hands.right
+			? anchorToWorld(compiled, anchors.hands.right, this.handScratch[1])
+			: null;
+		const p = seat.pelvis;
+		frame.steadyY = this.seatScratch.set(p.x, p.y, p.z).applyMatrix4(compiled.object.matrixWorld).y;
+		return frame;
+	}
+	private readonly frame: RideFrame = {
+		kind: 'neck',
+		anchor: new THREE.Vector3(),
+		heading: 0,
+		headTop: 0,
+		hands: { left: null, right: null },
+		steadyY: 0
+	};
+	private readonly handScratch = [new THREE.Vector3(), new THREE.Vector3()] as const;
+
+	/**
+	 * The mount's skin as points in its own space, so the third-person camera stays out of it (a
+	 * giant's head is well within the camera boom). Null when not riding. The matrix is reused.
+	 */
+	rideCameraBody(): {
+		points: ArrayLike<number>;
+		worldToLocal: THREE.Matrix4;
+		radius: number;
+	} | null {
+		const ride = this.ride;
+		const live = ride && this.live.get(ride.id);
+		if (!ride || !live) return null;
+		this.cameraBodyMatrix.copy(live.compiled.object.matrixWorld).invert();
+		return {
+			points: live.compiled.compilation.geometry.positions,
+			worldToLocal: this.cameraBodyMatrix,
+			radius: Math.max(0.1, ride.profile.height * 0.025)
+		};
+	}
+	private readonly cameraBodyMatrix = new THREE.Matrix4();
+
+	/** Where the mount stands and how much room its body takes (for choosing where to get off). */
+	rideFootprint(): RideFootprint | null {
+		const ride = this.ride;
+		const r = ride && this.logical.get(ride.id);
+		if (!ride || !r) return null;
+		const live = this.live.get(ride.id);
+		const radius =
+			live?.compiled.compilation.collision.radius ??
+			creatureDimensions(r.spawn.species, r.spawn.individual.sizeFactor).radius;
+		return { ...r.position, heading: r.heading, radius };
+	}
+
+	/**
+	 * The rider got off: the mount stands where it is, then goes back to its own behaviour (Q19 A).
+	 * A placed creature's new spot is saved (Q14 A) unless `save` is false. Returns the mount's id.
+	 */
+	dismountRide(options: { save?: boolean } = {}): string | null {
+		const ride = this.ride;
+		this.ride = null;
+		const r = ride && this.logical.get(ride.id);
+		if (!ride || !r) return null;
+		this.settle(r, r.position, r.heading, options.save !== false);
+		return ride.id;
 	}
 
 	/** Placed creatures as shared online: their recipes at their saved spots (not mid-wander). */
@@ -704,7 +1058,8 @@ export class CreatureRuntimeManager {
 				this.carried.delete(id);
 				continue;
 			}
-			if (this.carried.has(id)) continue;
+			// Carried or ridden here: its new spot applies when it's put down or left.
+			if (this.carried.has(id) || this.ride?.id === id) continue;
 			const existing = this.logical.get(id);
 			if (existing) {
 				existing.position = { ...definition.position };
@@ -796,7 +1151,9 @@ export class CreatureRuntimeManager {
 		this.reset();
 	}
 	resolvePlayer(x: number, z: number, feetY: number, headY: number) {
-		for (const { compiled: c } of this.live.values()) {
+		for (const [id, { compiled: c }] of this.live) {
+			// Never shove the rider off their own mount.
+			if (id === this.ride?.id) continue;
 			const p = c.object.position;
 			const radius = c.compilation.collision.radius + 0.3;
 			if (headY < p.y || feetY > p.y + c.compilation.collision.height) continue;

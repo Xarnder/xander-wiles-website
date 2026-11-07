@@ -20,11 +20,11 @@ You can also open [Forest Drift](https://www.xanderwiles.com/pages/Forest-Drift/
 
 Use the private invite sheet above to copy the appropriate link. In the game, click the world-name/player-count button to open the online panel; any invite links available to that browser appear there with **Copy** buttons.
 
-| Link | What it allows |
-| --- | --- |
-| **Viewer / Visitor** | Explore and see other players and shared changes. Cannot build. |
+| Link                 | What it allows                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Viewer / Visitor** | Explore and see other players and shared changes. Cannot build.                                                    |
 | **Editor / Builder** | Explore, add objects, and change existing objects, including other builders’ work. Can delete their own additions. |
-| **Owner** | Build, change and delete anyone’s objects; control shared sky, weather and time. Keep this link private. |
+| **Owner**            | Build, change and delete anyone’s objects; control shared sky, weather and time. Keep this link private.           |
 
 The server checks these permissions. Deletions affecting other people’s attached work can require confirmation.
 
@@ -39,6 +39,7 @@ A browser that joined using only the owner link may show only that link, rather 
 - **Forest Drift Online** is a separate published copy of Main World. Playing the default **Main World** offline does not join this session, and local edits do not automatically sync to the online copy.
 - Shared time pauses when the room is empty. The owner controls the shared environment.
 - Ambient creatures run locally, so their exact movement is not necessarily the same for everyone. Flight is disabled online.
+- **Riding:** press `K` on a two-legged creature to ride it. It's faster than running (bigger creatures are faster), which makes it the quick way to travel online. The world decides who rides which creature: if someone else is on it you'll be told, and everyone sees riders on their mounts. Viewers can ride wild creatures; moving a creature placed from the Creature Lab needs edit rights.
 - Internet interruptions trigger reconnection. Wait for **Saved online** before closing the game after building. A disconnected or pending-save message is not confirmation that your changes reached the server.
 
 ## Finding other players
@@ -70,16 +71,16 @@ This matters for builders: using the same name on a new device does not make you
 
 ## If joining does not work
 
-| Symptom | What to do |
-| --- | --- |
-| Missing invite code | Copy the original complete invite from the invite sheet or the game’s Copy button. Do not use the cleaned address-bar URL. |
-| You see the offline Main World | Leave it and use **Join Online**, or open the complete invite. |
-| You cannot build | Check your role in the online panel. Ask for the builder link if you joined as a visitor. |
-| Room is full | Wait for a place to become available; the current cap is 20 players. |
-| Connecting or reconnecting persists | Check your connection, keep the tab active, then reopen the original invite if needed. Avoid closing while edits are still pending. |
-| Different game/world version | Refresh the game. If it persists, ask the owner to check the published world and deployment versions. |
-| Slow graphics | Reduce graphics quality in Settings and close other running game tabs. |
-| Service unavailable after heavy usage | The Cloudflare Free quota may have been reached. Daily quotas reset at 00:00 UTC; other limits may require owner attention. |
+| Symptom                               | What to do                                                                                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Missing invite code                   | Copy the original complete invite from the invite sheet or the game’s Copy button. Do not use the cleaned address-bar URL.          |
+| You see the offline Main World        | Leave it and use **Join Online**, or open the complete invite.                                                                      |
+| You cannot build                      | Check your role in the online panel. Ask for the builder link if you joined as a visitor.                                           |
+| Room is full                          | Wait for a place to become available; the current cap is 20 players.                                                                |
+| Connecting or reconnecting persists   | Check your connection, keep the tab active, then reopen the original invite if needed. Avoid closing while edits are still pending. |
+| Different game/world version          | Refresh the game. If it persists, ask the owner to check the published world and deployment versions.                               |
+| Slow graphics                         | Reduce graphics quality in Settings and close other running game tabs.                                                              |
+| Service unavailable after heavy usage | The Cloudflare Free quota may have been reached. Daily quotas reset at 00:00 UTC; other limits may require owner attention.         |
 
 Desktop keyboard/mouse play is the verified path. Automated multiplayer tests passed in Chromium, Firefox and WebKit. A real iPad/Safari playtest has not yet been completed, so touch-device behaviour is not fully verified.
 
@@ -94,7 +95,6 @@ Online persistence is not a substitute for backups. A validated manual backup is
 That backup is a snapshot from 18 October, not a continuously updated copy. Scheduled R2 backups are not enabled. The planned four-hour load test and real iPad test remain outstanding; a short 20-player transport test completed without disconnects.
 
 This guide intentionally contains no secret invite tokens and can be shared. The private invite sheet and secrets files should remain private.
-
 
 ## Online help and owner invites
 

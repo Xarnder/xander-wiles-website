@@ -51,8 +51,11 @@
 	import Hotbar from '#lib/components/Hotbar.svelte';
 	import HealthBar from '#lib/components/HealthBar.svelte';
 	import CarryHud from '#lib/components/CarryHud.svelte';
+	import RideHud from '#lib/components/RideHud.svelte';
 	import { playCreatureSound } from '#lib/game/audio/creatureSounds';
-	import type { CarryPrompt, CarryState } from '#lib/game/player/CarryController';
+	import type { CarryState } from '#lib/game/player/CarryController';
+	import type { CreaturePrompt } from '#lib/game/player/creatureKeyRouting';
+	import type { RideState } from '#lib/game/player/RideController';
 	import type { WaypointView } from '#lib/game/waypoints/WaypointSystem';
 	import DamageVignette from '#lib/components/DamageVignette.svelte';
 	import DeathCard from '#lib/components/DeathCard.svelte';
@@ -198,10 +201,23 @@
 		if (measuredHotbarWidth > 0) healthRowWidth = measuredHotbarWidth;
 	});
 	let healthAnnouncement = $state('');
-	/** Ranged weapons: the carried creature (HUD), the pick-up prompt and screen-reader text. */
+	/** Ranged weapons: the carried creature (HUD). Riding: the ridden one. */
 	let carryState = $state<CarryState | null>(null);
-	let carryPrompt = $state<CarryPrompt | null>(null);
-	let carryAnnouncement = $state('');
+	let rideState = $state<RideState | null>(null);
+	/** What K (or the touch creature button) does now: pick up, put down, ride, get off. */
+	let creaturePrompt = $state<CreaturePrompt | null>(null);
+	/** Screen-reader text for carrying and riding. */
+	let creatureAnnouncement = $state('');
+	/** Online climb-ons the room refused (riding), in the player's words. */
+	const RIDE_REFUSALS: Record<string, string> = {
+		taken: 'Someone else is riding it.',
+		far: 'Too far away.',
+		ineligible: "That creature can't be ridden.",
+		role: "You can't ride that one here.",
+		state: "You can't climb on right now.",
+		timeout: 'No answer from the world. Try again.',
+		offline: "You're offline. Try again when you're back."
+	};
 	/** Online pick-ups the room refused (ranged weapons), in the player's words. */
 	const CARRY_REFUSALS: Record<string, string> = {
 		taken: 'Someone else picked it up.',
@@ -948,12 +964,31 @@
 				},
 				onPlayerDeath: ({ source }) => handlePlayerDeath(source),
 				onCarryChange: (state) => (carryState = state.carrying ? state : null),
-				onCarryPrompt: (prompt) => (carryPrompt = prompt),
+				onCreaturePrompt: (prompt) => (creaturePrompt = prompt),
+				onRideChange: (state) => (rideState = state.riding ? state : null),
+				onRideEvent: (event) => {
+					if (event.type === 'refused') {
+						const message = RIDE_REFUSALS[event.reason] ?? "You can't climb on right now.";
+						showSaveToast(message);
+						creatureAnnouncement = message;
+						return;
+					}
+					if (event.type === 'blocked') {
+						playCreatureSound('rideBlocked');
+						creatureAnnouncement = "Can't go that way.";
+						return;
+					}
+					playCreatureSound(event.type);
+					creatureAnnouncement =
+						event.type === 'mount'
+							? `Riding ${event.species}. Press K to get off.`
+							: `Got off ${event.species}.`;
+				},
 				onCarryEvent: (event) => {
 					if (event.type === 'refused') {
 						const message = CARRY_REFUSALS[event.reason] ?? "You can't pick that up right now.";
 						showSaveToast(message);
-						carryAnnouncement = message;
+						creatureAnnouncement = message;
 						return;
 					}
 					if (event.type === 'hit') {
@@ -963,8 +998,8 @@
 						return;
 					}
 					playCreatureSound(event.type);
-					if (event.type === 'pickUp') carryAnnouncement = `Picked up ${event.species}`;
-					else if (event.type === 'putDown') carryAnnouncement = `Put down ${event.species}`;
+					if (event.type === 'pickUp') creatureAnnouncement = `Picked up ${event.species}`;
+					else if (event.type === 'putDown') creatureAnnouncement = `Put down ${event.species}`;
 				}
 			});
 			if (typeof window !== 'undefined') {
@@ -1727,8 +1762,9 @@
 					{heightToolId}
 					onOpenPause={openPause}
 					onOpenHelp={() => (showHelp = true)}
-					{carryPrompt}
+					{creaturePrompt}
 					carrying={!!carryState?.carrying}
+					riding={!!rideState?.riding}
 					punchAvailable={!!onlineWorld &&
 						!hotbar?.buildModeActive &&
 						(hotbar?.globalMode ?? 'none') === 'none' &&
@@ -1873,6 +1909,12 @@
 							<dd>Punch the player in front of you</dd>
 							<dt>K on a small creature</dt>
 							<dd>Pick it up under your arm; K again puts it down</dd>
+							<dt>K on a two-legged creature</dt>
+							<dd>
+								Ride it: astride its neck if it's small, on its right shoulder if it's large. WASD
+								steers, Shift sprints, K gets off. You can bring a carried creature along and fire
+								from the seat.
+							</dd>
 							<dt>Left click (carrying a creature)</dt>
 							<dd>
 								Fire a seed pellet from its mouth; hold to keep firing (5 shots, 1 back every 1.5 s)
@@ -2569,18 +2611,27 @@
 				style:--hud-above-hotbar={showHealthBar ? '18px' : '0px'}
 				data-testid="bottom-hud"
 			>
-				{#if carryState?.carrying}
+				{#if carryState?.carrying || rideState?.riding}
 					<div
 						class="carry-hud-row"
 						style:width={healthRowWidth ? `${healthRowWidth}px` : undefined}
 					>
-						<CarryHud
-							species={carryState.species ?? 'creature'}
-							colour={carryState.colour ?? '#f6e7a8'}
-							charges={carryState.charges}
-							max={carryState.maxCharges}
-							stowed={carryState.stowed}
-						/>
+						{#if rideState?.riding}
+							<RideHud
+								species={rideState.species ?? 'creature'}
+								seat={rideState.seat}
+								touch={showTouchControls}
+							/>
+						{/if}
+						{#if carryState?.carrying}
+							<CarryHud
+								species={carryState.species ?? 'creature'}
+								colour={carryState.colour ?? '#f6e7a8'}
+								charges={carryState.charges}
+								max={carryState.maxCharges}
+								stowed={carryState.stowed}
+							/>
+						{/if}
 					</div>
 				{/if}
 				{#if showHealthBar && health}
@@ -2631,7 +2682,7 @@
 			</div>
 
 			<div class="sr-only" aria-live="polite" data-testid="carry-announcement">
-				{carryAnnouncement}
+				{creatureAnnouncement}
 			</div>
 			{#if PLAYER_HEALTH_ENABLED}
 				<DamageVignette hit={damageHit} amount={damageAmount} />
@@ -2750,17 +2801,18 @@
 					>{/if}
 			{/if}
 
-			{#if carryPrompt && !miniBuildInteractionPrompt && !lookedAtDoorId && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
+			<!-- While riding, K always means the mount, even with a door in view. -->
+			{#if creaturePrompt && !miniBuildInteractionPrompt && (!lookedAtDoorId || creaturePrompt.riding) && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
 				<button
 					class="door-toast carry-toast"
 					data-testid="carry-prompt"
-					onclick={() => session?.scene.toggleCarry()}
+					onclick={() => session?.scene.useCreatureKey()}
 				>
-					[K] {carryPrompt.label}{carryPrompt.carrying ? ' · Left click to fire' : ''}
+					[K] {creaturePrompt.label}{creaturePrompt.carrying ? ' · Left click to fire' : ''}
 				</button>
 			{/if}
 
-			{#if !miniBuildInteractionPrompt && lookedAtDoorId && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
+			{#if !miniBuildInteractionPrompt && lookedAtDoorId && !rideState?.riding && pointerLocked && !paused && !showHelp && !settingsOpen && !creatureLabOpen && !midiOpen && !paintPaletteOpen && !placementCustomizeOpen && !placementHeightOpen && !foundationDeleteId}
 				{#if !showTouchControls}
 					<div
 						class="door-toast"

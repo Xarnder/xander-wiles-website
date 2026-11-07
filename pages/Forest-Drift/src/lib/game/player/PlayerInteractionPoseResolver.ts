@@ -1,6 +1,12 @@
 import { PLAYER_BODY as BODY } from './PlayerBodyDimensions';
 import type { GridVec3, MiniBuildInteractionType } from '../miniBuild/MiniBuildTypes';
 
+/** Seated: the pelvis sits this far above the support point (a chair's seat, a creature's back). */
+export const SEATED_PELVIS_SUPPORT = BODY.bodyDepth * 0.16;
+/** Seated: the eye is this far above the support point. */
+export const SEATED_EYE_ABOVE_SUPPORT =
+	SEATED_PELVIS_SUPPORT + (BODY.eyeHeight - BODY.pelvisHeight);
+
 /** Avatar-specific offsets stay out of authored Mini Build data. The plane is the
  * pelvis support point. Lie rotates the standing body -90° about local X (head -Z). */
 export function resolvePlayerInteractionPose(
@@ -9,7 +15,7 @@ export function resolvePlayerInteractionPose(
 	yaw: number
 ) {
 	const lying = action === 'lie';
-	const support = lying ? BODY.bodyDepth / 2 - BODY.pelvisDepthOffset : BODY.bodyDepth * 0.16;
+	const support = lying ? BODY.bodyDepth / 2 - BODY.pelvisDepthOffset : SEATED_PELVIS_SUPPORT;
 	const eyeAbovePelvis = BODY.eyeHeight - BODY.pelvisHeight;
 	const forward = lying ? eyeAbovePelvis : 0;
 	return {

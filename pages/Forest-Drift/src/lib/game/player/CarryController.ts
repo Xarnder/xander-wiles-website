@@ -23,6 +23,8 @@ export const AIM_CONVERGENCE = 20;
 export interface CarryCandidateLike {
 	id: string;
 	definition: CreatureDefinition;
+	/** Distance along the look ray, metres (lets the scene pick the nearer of two creatures). */
+	distance?: number;
 }
 
 export interface CarryHost {
@@ -88,7 +90,8 @@ export interface CarryPrompt {
 
 export interface CarryEvents {
 	change(state: CarryState): void;
-	prompt(prompt: CarryPrompt | null): void;
+	/** Carry-only prompt. The game scene composes its own with riding (`creatureKeyRouting.ts`). */
+	prompt?(prompt: CarryPrompt | null): void;
 	pickedUp(species: string): void;
 	putDown(species: string): void;
 	/** The room refused a pick-up (online). */
@@ -131,6 +134,15 @@ export class CarryController {
 	/** The creature under the crosshair that K would pick up (refreshed ten times a second). */
 	get targetId(): string | null {
 		return this.candidate?.id ?? null;
+	}
+
+	get target(): CarryCandidateLike | null {
+		return this.candidate;
+	}
+
+	/** Species waiting for the room's answer (online), for the prompt. */
+	get pendingSpecies(): string | null {
+		return this.claiming?.definition.species.name ?? null;
 	}
 
 	state(): CarryState {
@@ -330,7 +342,7 @@ export class CarryController {
 		const key = prompt ? `${prompt.carrying}:${prompt.label}` : '';
 		if (key === this.lastPrompt) return;
 		this.lastPrompt = key;
-		this.events.prompt(prompt);
+		this.events.prompt?.(prompt);
 	}
 
 	private publish(force: boolean): void {

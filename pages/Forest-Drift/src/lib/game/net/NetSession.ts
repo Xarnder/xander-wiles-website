@@ -32,6 +32,8 @@ import {
 	type ServerPunchResultMessage,
 	type ServerCarryResultMessage,
 	type ServerCarriedMessage,
+	type ServerRideResultMessage,
+	type ServerRiddenMessage,
 	type ServerShotMessage,
 	type ServerShotResultMessage,
 	type Vec3Tuple,
@@ -73,6 +75,8 @@ export interface WelcomeInfo {
 	health?: WelcomeMessage['health'];
 	/** Creatures being carried right now, by slot (ranged weapons). */
 	carries: { slot: number; creature: string }[];
+	/** Creatures being ridden right now, by slot (riding). */
+	rides: { slot: number; creature: string }[];
 	/** The world's public waypoints. */
 	waypoints: SharedWaypoint[];
 	/** Multiplayer stats, per player. */
@@ -124,6 +128,10 @@ export interface NetSessionOptions {
 	onCarryResult?: (message: ServerCarryResultMessage) => void;
 	/** Ranged weapons: someone (possibly this player) picked up or put down a creature. */
 	onCarried?: (message: ServerCarriedMessage) => void;
+	/** Riding: the room's answer to this player's climb-on. */
+	onRideResult?: (message: ServerRideResultMessage) => void;
+	/** Riding: someone (possibly this player) climbed on or got off a creature. */
+	onRidden?: (message: ServerRiddenMessage) => void;
 	/** Ranged weapons: someone else fired a pellet. */
 	onShot?: (message: ServerShotMessage) => void;
 	/** Ranged weapons: whether this player's pellet was refused, or hurt someone. */
@@ -384,6 +392,14 @@ export class NetSession {
 		return this.sendText({ t: 'drop', id, at });
 	}
 
+	sendRide(id: number, creature: string): boolean {
+		return this.sendText({ t: 'ride', id, creature });
+	}
+
+	sendDismount(id: number, at: CarryPlacement): boolean {
+		return this.sendText({ t: 'dismount', id, at });
+	}
+
 	sendShoot(shot: number, origin: Vec3Tuple, dir: Vec3Tuple, at: number): boolean {
 		return this.sendText({ t: 'shoot', shot, origin, dir, at });
 	}
@@ -527,6 +543,7 @@ export class NetSession {
 					names: message.names ?? {},
 					health: message.health,
 					carries: message.carries ?? [],
+					rides: message.rides ?? [],
 					waypoints: message.waypoints ?? [],
 					scores: message.scores ?? [],
 					first
@@ -599,6 +616,12 @@ export class NetSession {
 				break;
 			case 'carried':
 				this.options.onCarried?.(message);
+				break;
+			case 'rideResult':
+				this.options.onRideResult?.(message);
+				break;
+			case 'ridden':
+				this.options.onRidden?.(message);
 				break;
 			case 'shot':
 				this.options.onShot?.(message);

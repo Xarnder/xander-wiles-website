@@ -57,6 +57,13 @@ Open the printed local URL and click the canvas to enter mouse-look mode.
 - `2` then `↑`/`↓` to Wooden Pillars (fifth subtool) — place vertical timber posts on the building
   grid at the selected storey; `E` chooses square/circular, height, thickness, and independent
   top/bottom base widths, heights, and on/off settings
+- `K` on a small four-legged creature — pick it up under your arm (`K` again puts it down); left
+  click fires seed pellets from its mouth while carrying
+- `K` on a two-legged creature — ride it: astride its neck if it's small, on its right shoulder if
+  it's large (a giant with a head too big to sit beside carries you on top of its head). `W` /
+  `A` / `S` / `D` steer relative to where you look, `Shift` sprints, and bigger creatures are
+  faster than you can run (1.2× to 1.5× run speed). `K` gets you off onto safe ground beside it.
+  See `docs/2026/11-07/bipedal-speed-creature/`
 - `H`, or the "? Help" button in the bottom-left corner — toggle an in-game controls overlay
   (`src/routes/+page.svelte`) that lists every control above, grouped by category, so a player
   never has to leave the game to look them up

@@ -13,7 +13,7 @@ type Vec = { x: number; y: number; z: number };
 interface SceneLike {
 	setTouchActive(active: boolean): void;
 	toggleBuildMode(): void;
-	toggleCarry(): boolean;
+	useCreatureKey(): boolean;
 	buildToolManager: { isNormalMode(): boolean };
 	carry: { carrying: boolean };
 	carryHints: { shown: number };

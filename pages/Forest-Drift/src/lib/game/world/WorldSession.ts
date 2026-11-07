@@ -42,8 +42,10 @@ export interface WorldSessionOptions {
 	onPlayerDamaged?: ThreeSceneOptions['onPlayerDamaged'];
 	onPlayerDeath?: ThreeSceneOptions['onPlayerDeath'];
 	onCarryChange?: ThreeSceneOptions['onCarryChange'];
-	onCarryPrompt?: ThreeSceneOptions['onCarryPrompt'];
+	onCreaturePrompt?: ThreeSceneOptions['onCreaturePrompt'];
 	onCarryEvent?: ThreeSceneOptions['onCarryEvent'];
+	onRideChange?: ThreeSceneOptions['onRideChange'];
+	onRideEvent?: ThreeSceneOptions['onRideEvent'];
 	/** An online world's connection to its room (see `MultiplayerSession`). */
 	multiplayer?: SceneMultiplayerHooks;
 	/**
@@ -106,8 +108,10 @@ export class WorldSession {
 			onPlayerDamaged: options.onPlayerDamaged,
 			onPlayerDeath: options.onPlayerDeath,
 			onCarryChange: options.onCarryChange,
-			onCarryPrompt: options.onCarryPrompt,
+			onCreaturePrompt: options.onCreaturePrompt,
 			onCarryEvent: options.onCarryEvent,
+			onRideChange: options.onRideChange,
+			onRideEvent: options.onRideEvent,
 			multiplayer: options.multiplayer
 		});
 

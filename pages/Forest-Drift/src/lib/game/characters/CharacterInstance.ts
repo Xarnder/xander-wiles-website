@@ -6,6 +6,7 @@ import { TwoBoneIK } from './twoBoneIK';
 import manifest from './assets/character.manifest.json';
 import { POSE_FLAGS } from '../net/protocol';
 import type { MotionFrame } from '../net/RemoteMotion';
+import type { RideSeatKind } from '../creatures/creatureRiding';
 
 export type CharacterSurface = (x: number, z: number, referenceY: number) => number;
 interface RestBone {
@@ -47,6 +48,20 @@ const CARRY_COMFORT = 0.8;
 const CARRY_MAX_EXTRA_DROP = 0.18;
 /** Hand under the far flank: this far down from the middle, as a fraction of the half-height. */
 const CARRY_HAND_BELOW = 0.35;
+
+/** How far each thigh turns out round a small mount's neck, radians. */
+const RIDE_STRADDLE_SPREAD = 0.5;
+
+/** How the rider sits (see `CharacterInstance.poseRide`). */
+export interface CharacterRidePose {
+	kind: RideSeatKind;
+	/** Pelvis height above the support point (the seated-pose maths seats use). */
+	pelvisSupportOffset: number;
+	/** World-space hand holds; null rests that hand on the thigh. */
+	hands: { left: THREE.Vector3 | null; right: THREE.Vector3 | null };
+	/** 0 standing … 1 fully seated (climbing on and off). */
+	blend: number;
+}
 
 /** Where a carried body sits and the hand goes, from the carrying shoulder (see `carryHold`). */
 export interface CarryHold {
@@ -540,6 +555,69 @@ export class CharacterInstance {
 		this.object.position.set(-hips.x, pose.pelvisSupportOffset - hips.y, -hips.z);
 		this.object.updateWorldMatrix(true, true);
 		this.object.userData.animation = pose.action;
+	}
+
+	/**
+	 * Seated on a creature (riding, docs/2026/11-07/bipedal-speed-creature §4.7): astride its neck
+	 * with the knees spread round it, or side-saddle on a shoulder with the legs hanging forward.
+	 * Hands reach for `pose.hands` (world space) or rest on the thighs; while `carrying`, the left
+	 * arm holds the carried creature instead (Q12 C). The parent sits at the pelvis support point.
+	 */
+	poseRide(pose: CharacterRidePose, dt: number): void {
+		if (this.disposed) return;
+		const blend = Math.max(0, Math.min(1, pose.blend));
+		this.carry += ((this.carrying ? 1 : 0) - this.carry) * (1 - Math.exp(-Math.max(0, dt) * 10));
+		for (const rest of this.rest) {
+			rest.bone.position.copy(rest.position);
+			rest.bone.quaternion.copy(rest.rotation);
+		}
+		this.object.rotation.set(0, 0, 0);
+		this.object.position.set(0, 0, 0);
+		this.object.updateWorldMatrix(true, true);
+		const straddle = pose.kind === 'neck';
+		this.aimAxis.copy(X);
+		if (this.object.parent)
+			this.aimAxis.applyQuaternion(this.object.parent.getWorldQuaternion(this.rotation));
+		for (const [side, sign] of [
+			['Left', 1],
+			['Right', -1]
+		] as const) {
+			this.offsetWorld(`${side}UpLeg`, this.aimAxis, (straddle ? 1.3 : Math.PI / 2) * blend);
+			// Astride: thighs open round the neck (left thigh turns toward the body's left).
+			if (straddle) this.offsetWorld(`${side}UpLeg`, UP, sign * RIDE_STRADDLE_SPREAD * blend);
+			this.offsetWorld(`${side}Leg`, this.aimAxis, -(straddle ? 1.65 : 1.45) * blend);
+		}
+		// Sit the hips on the support point, then reach for world-space holds.
+		this.object.updateWorldMatrix(true, true);
+		const hips = this.bone('Hips').getWorldPosition(this.point);
+		if (this.object.parent) this.object.parent.worldToLocal(hips);
+		this.object.position.set(-hips.x, pose.pelvisSupportOffset - hips.y, -hips.z);
+		this.object.updateWorldMatrix(true, true);
+		this.object.getWorldQuaternion(this.rootRotation);
+		const hipsWorld = this.bone('Hips').getWorldPosition(this.point);
+		for (const [side, sign] of [
+			['Left', -1],
+			['Right', 1]
+		] as const) {
+			if (side === 'Left' && this.carry > 0.001) continue;
+			const hold = side === 'Left' ? pose.hands.left : pose.hands.right;
+			if (hold) this.armTarget.copy(hold);
+			else
+				this.armTarget
+					.set(sign * 0.13, 0.08, -0.23)
+					.applyQuaternion(this.rootRotation)
+					.add(hipsWorld);
+			const arm = this.bone(`${side}Arm`),
+				elbow = this.bone(`${side}ForeArm`),
+				hand = this.bone(`${side}Hand`);
+			hand.getWorldPosition(this.armCurrent);
+			this.armTarget.lerpVectors(this.armCurrent, this.armTarget, blend);
+			this.pole.set(sign, -0.3, 0).applyQuaternion(this.rootRotation);
+			this.solver.solve(arm, elbow, hand, this.armTarget, this.pole);
+		}
+		this.updateCarry();
+		this.object.updateWorldMatrix(true, true);
+		this.object.userData.animation = 'ride';
 	}
 
 	private support(

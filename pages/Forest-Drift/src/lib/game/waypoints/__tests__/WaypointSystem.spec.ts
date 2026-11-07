@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	MAX_PERSONAL_WAYPOINTS,
 	NEAREST_CARRYABLE_ID,
+	NEAREST_RIDEABLE_ID,
 	WaypointSystem,
 	cleanWaypointName,
 	type WaypointHost,
@@ -25,31 +26,39 @@ function world() {
 	const state = {
 		player: { x: 0, y: 0, z: 0 },
 		creatures: new Map<string, WaypointTarget>(),
-		carrying: false
+		rideables: new Map<string, WaypointTarget>(),
+		carrying: false,
+		riding: false
+	};
+	const nearest = (from: { x: number; z: number }, list: Map<string, WaypointTarget>) => {
+		let best: WaypointTarget | null = null;
+		for (const c of list.values())
+			if (
+				!best ||
+				Math.hypot(c.x - from.x, c.z - from.z) < Math.hypot(best.x - from.x, best.z - from.z)
+			)
+				best = c;
+		return best;
 	};
 	const host: WaypointHost = {
 		player: () => ({ ...state.player }),
-		nearestCarryable: (from) => {
-			let best: WaypointTarget | null = null;
-			for (const c of state.creatures.values())
-				if (
-					!best ||
-					Math.hypot(c.x - from.x, c.z - from.z) < Math.hypot(best.x - from.x, best.z - from.z)
-				)
-					best = c;
-			return best;
-		},
+		nearestCarryable: (from) => nearest(from, state.creatures),
+		nearestRideable: (from) => nearest(from, state.rideables),
 		creaturePosition: (id) => {
-			const c = state.creatures.get(id);
+			const c = state.creatures.get(id) ?? state.rideables.get(id);
 			return c ? { x: c.x, y: c.y, z: c.z } : null;
 		},
-		carrying: () => state.carrying
+		carrying: () => state.carrying,
+		riding: () => state.riding
 	};
 	const storage = new MemoryStorage();
 	const waypoints = new WaypointSystem(host, storage);
 	waypoints.setWorld('world-a');
 	return { state, waypoints, storage };
 }
+
+/** The creature waypoints (nearest carryable, nearest rideable) come before personal ones. */
+const CREATURE_ROWS = 2;
 
 const active = (w: WaypointSystem) => {
 	const out: { id: string; x: number; z: number; label: string }[] = [];
@@ -84,7 +93,7 @@ describe('WaypointSystem: the nearest carryable creature', () => {
 			detail: 'Moon Ribbon',
 			distance: 30
 		});
-		expect(waypoints.followedCreature).toBe('a');
+		expect(waypoints.followedCreatures).toEqual(['a']);
 	});
 
 	it('moves with the creature every frame', () => {
@@ -104,10 +113,10 @@ describe('WaypointSystem: the nearest carryable creature', () => {
 		waypoints.update(0);
 		state.creatures.set('b', { id: 'b', name: 'B', x: 29, y: 0, z: 0 });
 		waypoints.update(600);
-		expect(waypoints.followedCreature).toBe('a');
+		expect(waypoints.followedCreatures).toEqual(['a']);
 		state.creatures.get('b')!.x = 10;
 		waypoints.update(1200);
-		expect(waypoints.followedCreature).toBe('b');
+		expect(waypoints.followedCreatures).toEqual(['b']);
 	});
 
 	it('finds another when its creature is picked up or wanders out of range', () => {
@@ -118,7 +127,7 @@ describe('WaypointSystem: the nearest carryable creature', () => {
 		waypoints.update(0);
 		state.creatures.delete('a');
 		waypoints.update(16);
-		expect(waypoints.followedCreature).toBe('b');
+		expect(waypoints.followedCreatures).toEqual(['b']);
 	});
 
 	it('says none are nearby, and hides itself while this player carries one', () => {
@@ -140,6 +149,43 @@ describe('WaypointSystem: the nearest carryable creature', () => {
 	});
 });
 
+describe('WaypointSystem: the nearest rideable creature (riding Q20 B)', () => {
+	it('is listed second, off until turned on, then follows the nearest biped', () => {
+		const { state, waypoints } = world();
+		expect(waypoints.list()[1]).toMatchObject({ id: NEAREST_RIDEABLE_ID, status: 'off' });
+		state.creatures.set('small', { id: 'small', name: 'Moon Pebbleback', x: 5, y: 0, z: 0 });
+		state.rideables.set('giant', { id: 'giant', name: 'River Ribbon', x: 60, y: 0, z: 0 });
+		waypoints.setEnabled(NEAREST_RIDEABLE_ID, true);
+		waypoints.update(0);
+		expect(active(waypoints)).toEqual([
+			{ id: NEAREST_RIDEABLE_ID, x: 60, z: 0, label: 'River Ribbon' }
+		]);
+		expect(waypoints.followedCreatures).toEqual(['giant']);
+	});
+
+	it('hides itself while this player rides, and both creature waypoints can be on at once', () => {
+		const { state, waypoints, storage } = world();
+		state.creatures.set('small', { id: 'small', name: 'Moon Pebbleback', x: 5, y: 0, z: 0 });
+		state.rideables.set('giant', { id: 'giant', name: 'River Ribbon', x: 60, y: 0, z: 0 });
+		waypoints.setEnabled(NEAREST_CARRYABLE_ID, true);
+		waypoints.setEnabled(NEAREST_RIDEABLE_ID, true);
+		waypoints.update(0);
+		expect(waypoints.followedCreatures).toEqual(['small', 'giant']);
+		state.riding = true;
+		waypoints.update(16);
+		expect(waypoints.list()[1]!.status).toBe('riding');
+		expect(active(waypoints).map((a) => a.id)).toEqual([NEAREST_CARRYABLE_ID]);
+		// Saved with the world, and older saves without it load as off.
+		const saved = JSON.parse(storage.data.get('forest-drift.waypoints.v1:world-a')!);
+		expect(saved.nearestRideable).toBe(true);
+		delete saved.nearestRideable;
+		storage.data.set('forest-drift.waypoints.v1:world-old', JSON.stringify(saved));
+		waypoints.setWorld('world-old');
+		expect(waypoints.list()[1]!.enabled).toBe(false);
+		expect(waypoints.list()[0]!.enabled).toBe(true);
+	});
+});
+
 describe('WaypointSystem: personal waypoints', () => {
 	it('adds one where the player stands, turned on, with a name', () => {
 		const { state, waypoints } = world();
@@ -147,18 +193,22 @@ describe('WaypointSystem: personal waypoints', () => {
 		const id = waypoints.addHere('  Old   oak ')!;
 		expect(active(waypoints)).toEqual([{ id, x: 5, z: -7, label: 'Old oak' }]);
 		state.player = { x: 5, y: 2, z: 13 };
-		expect(waypoints.list()[1]).toMatchObject({ name: 'Old oak', enabled: true, distance: 20 });
+		expect(waypoints.list()[CREATURE_ROWS]).toMatchObject({
+			name: 'Old oak',
+			enabled: true,
+			distance: 20
+		});
 	});
 
 	it('names unnamed ones, turns them on and off, and removes only personal ones', () => {
 		const { waypoints } = world();
 		const id = waypoints.addHere('')!;
-		expect(waypoints.list()[1]!.name).toBe('Waypoint 1');
+		expect(waypoints.list()[CREATURE_ROWS]!.name).toBe('Waypoint 1');
 		waypoints.setEnabled(id, false);
 		expect(waypoints.anyActive).toBe(false);
 		expect(waypoints.remove(NEAREST_CARRYABLE_ID)).toBe(false);
 		expect(waypoints.remove(id)).toBe(true);
-		expect(waypoints.list()).toHaveLength(1);
+		expect(waypoints.list()).toHaveLength(CREATURE_ROWS);
 	});
 
 	it(`holds at most ${MAX_PERSONAL_WAYPOINTS}`, () => {
@@ -174,11 +224,12 @@ describe('WaypointSystem: personal waypoints', () => {
 		state.player = { x: 1, y: 0, z: 1 };
 		waypoints.addHere('Camp');
 		waypoints.setWorld('world-b');
-		expect(waypoints.list()).toHaveLength(1);
+		expect(waypoints.list()).toHaveLength(CREATURE_ROWS);
 		expect(waypoints.list()[0]!.enabled).toBe(false);
 		waypoints.setWorld('world-a');
 		expect(waypoints.list().map((w) => [w.name, w.enabled])).toEqual([
 			['Nearest carryable creature', true],
+			['Nearest rideable creature', false],
 			['Camp', true]
 		]);
 	});
@@ -187,13 +238,15 @@ describe('WaypointSystem: personal waypoints', () => {
 		const { storage, waypoints } = world();
 		storage.data.set('forest-drift.waypoints.v1:world-c', '{not json');
 		waypoints.setWorld('world-c');
-		expect(waypoints.list()).toHaveLength(1);
+		expect(waypoints.list()).toHaveLength(CREATURE_ROWS);
 		const blocked = new WaypointSystem(
 			{
 				player: () => ({ x: 0, y: 0, z: 0 }),
 				nearestCarryable: () => null,
+				nearestRideable: () => null,
 				creaturePosition: () => null,
-				carrying: () => false
+				carrying: () => false,
+				riding: () => false
 			},
 			{
 				getItem: () => {
@@ -218,8 +271,10 @@ describe('WaypointSystem: personal waypoints', () => {
 			{
 				player: () => ({ x: 0, y: 0, z: 0 }),
 				nearestCarryable: () => null,
+				nearestRideable: () => null,
 				creaturePosition: () => null,
-				carrying: () => false
+				carrying: () => false,
+				riding: () => false
 			},
 			storage
 		);
@@ -416,6 +471,11 @@ describe('WaypointSystem: public waypoints online', () => {
 		waypoints.setShared([shared()]);
 		expect(sent.filter((m) => m.op === 'put')).toHaveLength(2);
 		expect(row(waypoints, id)).toMatchObject({ visibility: 'public', pending: true });
-		expect(waypoints.list().map((r) => r.id)).toEqual([NEAREST_CARRYABLE_ID, id, 'wp-alex']);
+		expect(waypoints.list().map((r) => r.id)).toEqual([
+			NEAREST_CARRYABLE_ID,
+			NEAREST_RIDEABLE_ID,
+			id,
+			'wp-alex'
+		]);
 	});
 });
