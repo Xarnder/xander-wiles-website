@@ -208,6 +208,17 @@
 	let creaturePrompt = $state<CreaturePrompt | null>(null);
 	/** Screen-reader text for carrying and riding. */
 	let creatureAnnouncement = $state('');
+	/**
+	 * While carrying, the hint above the health bar, away from the crosshair: `K` puts the creature
+	 * down (unless it means a mount, seat or door just now) and left click fires (unless stowed).
+	 */
+	let carryKeyHint = $derived.by(() => {
+		if (!carryState?.carrying) return null;
+		const putDown =
+			creaturePrompt?.action === 'putDown' && !miniBuildInteractionPrompt && !lookedAtDoorId;
+		const parts = [putDown && '[K] Put down', !carryState.stowed && 'Left click to fire'];
+		return parts.filter(Boolean).join(' · ') || null;
+	});
 	/** Online climb-ons the room refused (riding), in the player's words. */
 	const RIDE_REFUSALS: Record<string, string> = {
 		taken: 'Someone else is riding it.',
@@ -2615,6 +2626,9 @@
 						class="carry-hud-row"
 						style:width={healthRowWidth ? `${healthRowWidth}px` : undefined}
 					>
+						{#if carryKeyHint && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
+							<div class="carry-key-hint" data-testid="carry-key-hint">{carryKeyHint}</div>
+						{/if}
 						{#if rideState?.riding}
 							<RideHud
 								species={rideState.species ?? 'creature'}
@@ -2801,13 +2815,14 @@
 			{/if}
 
 			<!-- While riding, K always means the mount, even with a door in view. -->
-			{#if creaturePrompt && !miniBuildInteractionPrompt && (!lookedAtDoorId || creaturePrompt.riding) && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
+			<!-- Putting down is shown above the health bar (carryKeyHint), not here. -->
+			{#if creaturePrompt && creaturePrompt.action !== 'putDown' && !miniBuildInteractionPrompt && (!lookedAtDoorId || creaturePrompt.riding) && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
 				<button
 					class="door-toast carry-toast"
 					data-testid="carry-prompt"
 					onclick={() => session?.scene.useCreatureKey()}
 				>
-					[K] {creaturePrompt.label}{creaturePrompt.carrying ? ' · Left click to fire' : ''}
+					[K] {creaturePrompt.label}
 				</button>
 			{/if}
 
@@ -3658,8 +3673,29 @@
 
 	.carry-hud-row {
 		display: flex;
+		flex-wrap: wrap;
 		justify-content: flex-end;
+		align-items: center;
+		gap: 6px;
 		max-width: 100%;
+	}
+	.carry-key-hint {
+		margin-right: auto;
+		padding: 4px 10px;
+		border-radius: 999px;
+		background: rgba(10, 20, 15, 0.72);
+		color: #eaf6ff;
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		line-height: 1;
+		white-space: nowrap;
+		pointer-events: none;
+		backdrop-filter: blur(4px);
 	}
 	.bottom-hud {
 		position: fixed;

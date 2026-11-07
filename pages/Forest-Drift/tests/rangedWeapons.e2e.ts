@@ -183,6 +183,16 @@ test.describe('ranged weapons: carrying a small creature (single player)', () =>
 		await expect(page.getByTestId('carry-announcement')).toContainText(
 			`Picked up ${state.species}`
 		);
+		// The put-down hint sits just above the health bar, not by the crosshair.
+		const hint = page.getByTestId('carry-key-hint');
+		await expect(hint).toHaveText('[K] Put down · Left click to fire');
+		await expect(page.getByTestId('carry-prompt')).toBeHidden();
+		const hintBox = (await hint.boundingBox())!;
+		const healthBox = (await page.getByTestId('health-hud').boundingBox())!;
+		const viewport = page.viewportSize()!;
+		expect(hintBox.y + hintBox.height).toBeLessThanOrEqual(healthBox.y + 1);
+		expect(healthBox.y - (hintBox.y + hintBox.height)).toBeLessThan(16);
+		expect(hintBox.y).toBeGreaterThan(viewport.height * 0.75);
 		if (SHOTS) await page.screenshot({ path: `${SHOTS}/carry-first-person.png` });
 
 		// One shot, aimed level so it flies a while: a pellet leaves and a charge is spent.
@@ -246,6 +256,7 @@ test.describe('ranged weapons: carrying a small creature (single player)', () =>
 		// Build mode stows the creature: still carried, can't fire, and the HUD dims.
 		await page.evaluate(() => (window as unknown as TestWindow).forestScene.toggleBuildMode());
 		await expect.poll(async () => (await carryState(page)).stowed).toBe(true);
+		await expect(hint).toHaveText('[K] Put down');
 		await page.waitForTimeout(400);
 		expect(
 			await page.evaluate(() => (window as unknown as TestWindow).forestScene.carry.fire())
