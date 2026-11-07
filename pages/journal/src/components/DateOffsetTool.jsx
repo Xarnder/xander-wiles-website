@@ -1,3 +1,4 @@
+import { loadTimeTravelPeriod, saveTimeTravelPeriod } from '../lib/timeTravelPreferences';
 import { useToday } from '../lib/useToday';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -36,9 +37,14 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     const [customDateKey, setCustomDateKey] = useState(todayKey);
 
     // States
-    const [direction, setDirection] = useState('backward'); // 'backward' | 'forward'
-    const [offset, setOffset] = useState({ years: 0, months: 4, weeks: 2, days: 0 }); // 4 months and 2 weeks
-    const [textQuery, setTextQuery] = useState('4 months and 2 weeks ago');
+    const [savedPeriod] = useState(loadTimeTravelPeriod);
+    const [direction, setDirection] = useState(savedPeriod.direction);
+    const [offset, setOffset] = useState(savedPeriod.offset);
+    const [textQuery, setTextQuery] = useState(() => formatOffsetDescription(savedPeriod.offset, savedPeriod.direction));
+
+    useEffect(() => {
+        saveTimeTravelPeriod(offset, direction);
+    }, [offset, direction]);
     const [searchResult, setSearchResult] = useState({
         loading: true,
         targetDateStr: '',
