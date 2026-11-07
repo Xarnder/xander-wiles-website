@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import {
     Clock,
     Calendar,
@@ -32,6 +32,8 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     const location = useLocation();
 
     const todayKey = useToday();
+    const [useCustomDate, setUseCustomDate] = useState(false);
+    const [customDateKey, setCustomDateKey] = useState(todayKey);
 
     // States
     const [direction, setDirection] = useState('backward'); // 'backward' | 'forward'
@@ -53,8 +55,9 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
     const searchRequestIdRef = useRef(0);
     const textInputRef = useRef(null);
 
-    // Always use the live local date, regardless of the entry currently open.
-    const baseDate = useMemo(() => parseISO(todayKey), [todayKey]);
+    // Today remains live unless the user explicitly enables a custom starting date.
+    const baseDateKey = useCustomDate ? customDateKey : todayKey;
+    const baseDate = useMemo(() => parseISO(baseDateKey), [baseDateKey]);
     const baseDateFormatted = format(baseDate, 'd MMMM yyyy');
 
     // Calculate target date
@@ -271,9 +274,37 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                     </div>
                 </div>
 
-                <div className="text-xs text-text-muted px-1 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-text-muted" />
-                    <span>Always calculated from today: <strong className="text-white">{baseDateFormatted}</strong></span>
+                <div className="space-y-2">
+                    <label className="flex items-center justify-between gap-3 text-sm text-white cursor-pointer">
+                        <span>Use a custom starting date</span>
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            checked={useCustomDate}
+                            onChange={(event) => setUseCustomDate(event.target.checked)}
+                            className="w-5 h-5 accent-primary"
+                        />
+                    </label>
+                    {useCustomDate && (
+                        <label className="flex items-center gap-2 text-xs text-text-muted">
+                            <span>Starting date</span>
+                            <input
+                                type="date"
+                                aria-label="Custom starting date"
+                                value={customDateKey}
+                                onChange={(event) => {
+                                    const value = event.target.value;
+                                    if (value && isValid(parseISO(value))) setCustomDateKey(value);
+                                }}
+                                style={{ colorScheme: 'dark' }}
+                                className="glass-input min-w-0 flex-1 py-2 px-3 text-base text-white"
+                            />
+                        </label>
+                    )}
+                    <div className="text-xs text-text-muted px-1 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-text-muted" />
+                        <span>Calculated from {useCustomDate ? 'custom date' : 'today'}: <strong className="text-white">{baseDateFormatted}</strong></span>
+                    </div>
                 </div>
 
                 {/* Natural text search input */}
