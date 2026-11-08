@@ -24,6 +24,7 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=3">
+    <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -100,6 +101,11 @@
             <a href="/pages/Watch-Later/" aria-current="page">Private watch list</a>
             <a href="/pages/Watch-Later/recommendations.html">Public recommendations</a>
         </nav>
+
+        <div class="media-switch" id="media-type-switch" hidden role="group" aria-label="Filter by media type">
+            <button type="button" data-type="movie" aria-pressed="true">Movies</button>
+            <button type="button" data-type="tv" aria-pressed="false">TV Shows</button>
+        </div>
 
         <div class="mode-container hidden" id="mode-selector">
             <div class="mode-toggle">
@@ -181,13 +187,6 @@
             </div>
 
             <div id="filter-groups-container" class="filter-groups-container">
-                <div class="filter-group" id="group-type">
-                    <div class="filter-pills" id="type-filter-pills">
-                        <button class="filter-pill active" data-type="all">All Types</button>
-                        <button class="filter-pill" data-type="movie">Movies</button>
-                        <button class="filter-pill" data-type="tv">TV Shows</button>
-                    </div>
-                </div>
                 <div class="filter-group" id="group-status">
                     <div class="filter-pills" id="status-filter-pills">
                         <button class="filter-pill active" data-status="all">All Status</button>
@@ -621,7 +620,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=9"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=10"></script>
 </body>
 
 </html>

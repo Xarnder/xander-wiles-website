@@ -285,7 +285,7 @@ let tierSortable = null; // Store SortableJS instance for tiers
 let selectedCardIds = new Set(); // Track selected cards for multi-select
 
 let cachedWatches = []; // Store raw watch data
-let typeFilter = 'all'; // all, movie, tv
+let typeFilter = 'movie';
 let watchStatusFilter = 'all'; // all, first-watch, rewatch
 let peopleFilters = new Set(); // Set of person names
 let genreFilters = new Set(); // Set of genre names
@@ -375,7 +375,8 @@ modeBtns.forEach(btn => {
 });
 
 // Filter Bar Logic
-const typeFilterPills = document.querySelectorAll('#type-filter-pills .filter-pill');
+const mediaTypeSwitch = document.getElementById('media-type-switch');
+const mediaTypeButtons = mediaTypeSwitch.querySelectorAll('button');
 const peopleFilterPillsContainer = document.getElementById('people-filter-pills');
 const genreFilterPillsContainer = document.getElementById('genre-filter-pills');
 const openRenameGenreModalBtn = document.getElementById('open-rename-genre-modal-btn');
@@ -386,11 +387,12 @@ const confirmRenameGenreBtn = document.getElementById('confirm-rename-genre-btn'
 const deleteGenreBtn = document.getElementById('delete-genre-btn');
 const closeRenameGenreModalBtn = document.getElementById('close-rename-genre-modal-btn');
 
-typeFilterPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-        typeFilterPills.forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        typeFilter = pill.dataset.type;
+mediaTypeButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        if (typeFilter === button.dataset.type) return;
+        typeFilter = button.dataset.type;
+        mediaTypeButtons.forEach(control => control.setAttribute('aria-pressed', String(control === button)));
+        clearSelection();
         renderAllCards();
     });
 });
@@ -1192,6 +1194,7 @@ onAuthStateChanged(auth, async (user) => {
         console.log(`[Auth] State change: ${user ? 'Logged In' : 'Logged Out'}`);
         if (user) {
             currentUser = user;
+            mediaTypeSwitch.hidden = false;
 
             // Immediate UI Transition
             if (loginOverlay) loginOverlay.classList.add('hidden');
@@ -1217,6 +1220,7 @@ onAuthStateChanged(auth, async (user) => {
             loadData();
         } else {
             currentUser = null;
+            mediaTypeSwitch.hidden = true;
             if (loginOverlay) loginOverlay.classList.remove('hidden');
             if (document.getElementById('user-info')) document.getElementById('user-info').classList.add('hidden');
             if (inputSection) inputSection.classList.add('hidden');
@@ -1824,9 +1828,8 @@ function renderAllCards() {
     }
     // Lists will be cleared at the end of rendering to prevent screen flashing
 
-    const filtered = cachedWatches.filter(watch => {
-        // Type filter
-        if (typeFilter !== 'all' && watch.type !== typeFilter) return false;
+    const watchesOfType = cachedWatches.filter(watch => (watch.type || 'movie') === typeFilter);
+    const filtered = watchesOfType.filter(watch => {
 
         // Watch Status filter
         if (watchStatusFilter !== 'all' && (watch.watchStatus || 'first-watch') !== watchStatusFilter) return false;
@@ -1902,10 +1905,10 @@ function renderAllCards() {
             renderFilterGenres();
 
             // Update Tier Labels with Counts
-            const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || searchQuery !== "";
+            const isFiltered = filtered.length !== watchesOfType.length;
 
             userTiers.forEach(tier => {
-                const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
+                const totalInTier = watchesOfType.filter(w => w.tier === tier.id).length;
                 const filteredInTier = filtered.filter(w => w.tier === tier.id).length;
 
                 const tierDiv = document.querySelector(`.tier[data-tier="${tier.id}"]`);
@@ -1939,9 +1942,9 @@ function renderAllCards() {
             
             let statsText = "";
             if (isFiltered) {
-                statsText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
+                statsText = `Showing ${filtered.length} of ${watchesOfType.length} items`;
             } else {
-                statsText = `Total: ${cachedWatches.length} items`;
+                statsText = `Total: ${watchesOfType.length} items`;
             }
 
             if (totalCountEl) totalCountEl.innerText = statsText;

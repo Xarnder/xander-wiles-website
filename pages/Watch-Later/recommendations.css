@@ -304,28 +304,6 @@ h1 span {
     gap: 16px;
     align-items: center;
 }
-.type-filters {
-    display: flex;
-    padding: 4px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: #0f121b;
-}
-.type-filters button {
-    background: transparent;
-    border-radius: 7px;
-    padding: 10px 18px;
-    font-size: 12px;
-    color: var(--muted);
-}
-.type-filters button[aria-pressed='true'] {
-    background: #30303e;
-    color: var(--text);
-    box-shadow: 0 1px 3px #0004;
-}
-.type-filters button:hover {
-    color: var(--text);
-}
 .search-field {
     display: flex;
     align-items: center;
@@ -859,12 +837,6 @@ form textarea {
         margin: 23px 0;
         gap: 12px;
     }
-    .type-filters {
-        justify-content: space-between;
-    }
-    .type-filters button {
-        flex: 1;
-    }
     .search-field {
         width: 100%;
     }
@@ -1011,8 +983,6 @@ body {
 .trailer-link:hover, .edit-pick:hover, .text-button:hover, .quiet-button:hover { background: #35314a; }
 .danger-button:hover { background: #633343; }
 .close-button { width: 44px; padding: 0; font-size: 1.45rem; }
-.type-filters button { min-height: 44px; padding-inline: 14px; font-size: .875rem; }
-.type-filters button[aria-pressed='true'] { color: #211925; background: #e9d9f1; }
 .search-field input { min-height: 46px; font-size: 1rem; }
 .card-note, .card-meta, .tier-label h3, .collection-state p { overflow-wrap: anywhere; }
 .card-note { font-size: .875rem; }
@@ -1028,7 +998,6 @@ dialog input, dialog select, dialog textarea { font-size: 1rem; }
     .tier-guide ol { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .tier-guide li { justify-content: center; }
     .tier-guide .tier-chip { max-width: 100%; }
-    .type-filters button { padding-inline: 6px; }
     .tier-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tier-items:has(> .recommendation-card:only-child) { grid-template-columns: minmax(0, 1fr); }
 }

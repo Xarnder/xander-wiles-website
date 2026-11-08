@@ -42,7 +42,7 @@ const removeDialog = $('remove-dialog');
 const signInButton = $('owner-sign-in');
 let user = null;
 let items = [];
-let type = 'all';
+let type = 'movie';
 let search = '';
 let editingId = null;
 let editingItem = null;
@@ -151,9 +151,10 @@ function card(item) {
 
 function render() {
     if (!loaded || failed) return;
-    const visible = filterRecommendations(items, { type, search });
+    const picksOfType = items.filter(item => item.type === type);
+    const visible = filterRecommendations(picksOfType, { search });
     $('collection-count').textContent =
-        `${visible.length} ${visible.length === 1 ? 'pick' : 'picks'}${visible.length !== items.length ? ` / ${items.length} total` : ''}`;
+        `${visible.length} ${visible.length === 1 ? 'pick' : 'picks'}${visible.length !== picksOfType.length ? ` / ${picksOfType.length} total` : ''}`;
     $('collection-state').hidden = true;
     if (!items.length) {
         showState(
@@ -165,7 +166,7 @@ function render() {
     } else if (!visible.length) {
         showState(
             'No picks found just yet.',
-            'Try another title or genre, or switch back to Everything.',
+            'Try another search or switch between Movies and TV Shows.',
         );
     }
     const fragment = document.createDocumentFragment();
@@ -196,7 +197,7 @@ function render() {
                 element(
                     'p',
                     'empty-tier',
-                    search || type !== 'all'
+                    search
                         ? 'No matching picks in this tier.'
                         : 'Room for the next good recommendation.',
                 ),
@@ -272,7 +273,7 @@ function openEditor(item = null) {
         : 'Publish recommendation';
     const initial = item || {
         tier: 'A',
-        type: 'movie',
+        type,
         rank: Math.min(
             9999,
             items.reduce((max, entry) => Math.max(max, entry.rank), -1) + 1,
@@ -378,17 +379,13 @@ $('search').addEventListener('input', (event) => {
     search = event.target.value;
     render();
 });
-document.querySelectorAll('[data-type]').forEach((button) =>
+const mediaTypeButtons = $('media-type-switch').querySelectorAll('button');
+mediaTypeButtons.forEach((button) =>
     button.addEventListener('click', () => {
         type = button.dataset.type;
-        document
-            .querySelectorAll('[data-type]')
-            .forEach((control) =>
-                control.setAttribute(
-                    'aria-pressed',
-                    String(control === button),
-                ),
-            );
+        mediaTypeButtons.forEach((control) => {
+            control.setAttribute('aria-pressed', String(control === button));
+        });
         render();
     }),
 );

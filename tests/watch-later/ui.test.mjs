@@ -146,10 +146,11 @@ test('guest browsing, combined filters, safe text, empty results and retry', asy
             sample('film', 'Film <script>alert(1)</script>'),
             sample('tv', 'Series', 'tv', 'A'),
         ]);
-        assert.equal(
-            w.document.querySelectorAll('.recommendation-card').length,
-            2,
-        );
+        const switcher = $('media-type-switch');
+        assert.equal(switcher.querySelectorAll('button').length, 2);
+        assert.equal(switcher.querySelector('[aria-pressed="true"]').dataset.type, 'movie');
+        assert.equal(w.document.querySelectorAll('.recommendation-card').length, 1);
+        assert.match(w.document.querySelector('.recommendation-card').textContent, /Film/);
         assert.equal(
             w.document.querySelectorAll('.recommendation-card script').length,
             0,
@@ -160,6 +161,8 @@ test('guest browsing, combined filters, safe text, empty results and retry', asy
             w.document.querySelectorAll('.recommendation-card').length,
             1,
         );
+        assert.equal(switcher.querySelector('[aria-pressed="true"]').dataset.type, 'tv');
+        assert.match(w.document.querySelector('.recommendation-card').textContent, /Series/);
         $('search').value = 'Missing';
         $('search').dispatchEvent(new w.Event('input'));
         assert.match($('collection-state').textContent, /No picks found/);

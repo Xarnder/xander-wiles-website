@@ -21,7 +21,8 @@
             href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap"
             rel="stylesheet"
         />
-        <link rel="stylesheet" href="recommendations.css?v=3" />
+        <link rel="stylesheet" href="recommendations.css?v=4" />
+        <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css" />
     </head>
     <body>
         <a class="skip-link" href="#recommendations">Skip to recommendations</a>
@@ -107,6 +108,10 @@
                     id="recommendations"
                     aria-labelledby="collection-title"
                 >
+                    <div class="media-switch" id="media-type-switch" role="group" aria-label="Filter by media type">
+                        <button type="button" data-type="movie" aria-pressed="true">Movies</button>
+                        <button type="button" data-type="tv" aria-pressed="false">TV Shows</button>
+                    </div>
                     <div class="collection-heading">
                         <div>
                             <p class="eyebrow">THE SHORTLIST</p>
@@ -117,33 +122,6 @@
                         </p>
                     </div>
                     <div class="collection-toolbar">
-                        <div
-                            class="type-filters"
-                            role="group"
-                            aria-label="Filter by type"
-                        >
-                            <button
-                                type="button"
-                                data-type="all"
-                                aria-pressed="true"
-                            >
-                                Everything
-                            </button>
-                            <button
-                                type="button"
-                                data-type="movie"
-                                aria-pressed="false"
-                            >
-                                Movies
-                            </button>
-                            <button
-                                type="button"
-                                data-type="tv"
-                                aria-pressed="false"
-                            >
-                                TV shows
-                            </button>
-                        </div>
                         <label class="search-field"
                             ><span class="ui-icon icon-search" aria-hidden="true"></span
                             ><span class="sr-only"
@@ -384,6 +362,6 @@
             </div>
         </dialog>
         <div id="toast" role="status" hidden></div>
-        <script type="module" src="recommendations.js?v=2"></script>
+        <script type="module" src="recommendations.js?v=3"></script>
     </body>
 </html>
