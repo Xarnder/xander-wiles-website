@@ -31,7 +31,8 @@ import {
     filterRecommendations,
 } from './recommendations-model.mjs';
 
-import { cleanTitle, getVideoData } from './youtube-title.mjs';
+import { mountMediaEditor, bindTitleAutofill } from './media-editor.mjs';
+mountMediaEditor();
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -40,11 +41,6 @@ const $ = (id) => document.getElementById(id);
 const board = $('tier-board');
 const editor = $('recommendation-editor');
 const form = $('recommendation-form');
-const titleInput = form.elements.namedItem('title');
-const trailerInput = form.elements.namedItem('trailerUrl');
-const trailerTitleStatus = $('trailer-title-status');
-let titleLookup = null;
-let autoFilledTitle = '';
 const removeDialog = $('remove-dialog');
 const signInButton = $('owner-sign-in');
 let user = null;
@@ -269,19 +265,15 @@ function openEditor(item = null) {
     if (!isOwner(user) || saving) return;
     editingId = item?.id || doc(collection(db, PUBLIC_COLLECTION)).id;
     editingItem = item;
-    titleLookup?.abort();
-    titleLookup = null;
-    autoFilledTitle = '';
-    trailerTitleStatus.textContent = '';
     form.reset();
     $('form-error').hidden = true;
     $('remove-recommendation').hidden = !item;
     $('editor-title').textContent = item
-        ? 'Edit recommendation'
-        : 'Add a recommendation';
+        ? 'Edit title'
+        : 'Add a title';
     $('publish').textContent = item
-        ? 'Save public changes'
-        : 'Publish recommendation';
+        ? 'Save title'
+        : 'Save title';
     const initial = item || {
         tier: 'A',
         type,
@@ -303,8 +295,9 @@ function openEditor(item = null) {
     ]) {
         form.elements.namedItem(key).value = initial[key] ?? '';
     }
+    $('editor-genres').replaceChildren(...[...new Set(items.map(i => i.genre).filter(Boolean))].map(genre => { const option = document.createElement('option'); option.value = genre; return option; }));
     editor.showModal();
-    form.elements.namedItem('title').focus();
+    form.elements.namedItem(item ? 'title' : 'trailerUrl').focus();
 }
 
 function setSaving(value) {
@@ -319,38 +312,7 @@ function setSaving(value) {
     });
 }
 
-trailerInput.addEventListener('input', async () => {
-    titleLookup?.abort();
-    titleLookup = null;
-    trailerTitleStatus.textContent = '';
-    if (!editor.open || !isOwner(user) || saving) return;
-    if (titleInput.value.trim() && titleInput.value !== autoFilledTitle) return;
-
-    const id = youtubeId(trailerInput.value.trim());
-    if (!id) return;
-
-    const lookup = new AbortController();
-    titleLookup = lookup;
-    const previousTitle = titleInput.value;
-    trailerTitleStatus.textContent = 'Looking up the trailer title…';
-    const timeout = setTimeout(() => lookup.abort(), 8000);
-    const rawTitle = await getVideoData(`https://www.youtube.com/watch?v=${id}`, {
-        signal: lookup.signal,
-    });
-    clearTimeout(timeout);
-    if (titleLookup !== lookup || !editor.open || !isOwner(user)) return;
-    if (saving || titleInput.value !== previousTitle) {
-        trailerTitleStatus.textContent = '';
-        return;
-    }
-    if (!rawTitle || lookup.signal.aborted) {
-        trailerTitleStatus.textContent = 'Title unavailable. Enter it manually.';
-        return;
-    }
-    autoFilledTitle = cleanTitle(rawTitle).slice(0, titleInput.maxLength);
-    titleInput.value = autoFilledTitle;
-    trailerTitleStatus.textContent = 'Title filled in. You can edit it.';
-});
+bindTitleAutofill(editor, () => isOwner(user) && !saving);
 
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -360,6 +322,9 @@ form.addEventListener('submit', async (event) => {
         const payload = recommendationPayload(
             Object.fromEntries(new FormData(form)),
         );
+        const duplicate = items.find(item => item.id !== editingId &&
+            (payload.trailerUrl ? item.trailerUrl === payload.trailerUrl : item.title.toLowerCase() === payload.title.toLowerCase()));
+        if (duplicate && !window.confirm(`“${duplicate.title}” is already in your recommendations. Save another copy?`)) return;
         setSaving(true);
         const ref = doc(db, PUBLIC_COLLECTION, editingId);
         if (editingItem) {

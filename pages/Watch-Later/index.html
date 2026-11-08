@@ -24,7 +24,8 @@
         <link rel="stylesheet" href="/pages/Watch-Later/recommendations.css?v=7" />
         <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css" />
         <link rel="stylesheet" href="/pages/Watch-Later/theme.css" />
-    </head>
+        <link rel="stylesheet" href="/pages/Watch-Later/media-editor.css?v=1">
+</head>
     <body>
         <a class="skip-link" href="#recommendations">Skip to recommendations</a>
         <div class="page-shell watch-shell">
@@ -84,7 +85,7 @@
                             class="primary-button"
                             type="button"
                         >
-                            + Add recommendation
+                            Add a title
                         </button>
                     </div>
                     <div
@@ -148,133 +149,6 @@
             </footer>
         </div>
 
-        <dialog id="recommendation-editor" aria-labelledby="editor-title">
-            <form id="recommendation-form">
-                <div class="dialog-heading">
-                    <div>
-                        <p class="eyebrow">PUBLIC RECOMMENDATION</p>
-                        <h2 id="editor-title">Add a recommendation</h2>
-                    </div>
-                    <button
-                        type="button"
-                        id="close-editor"
-                        class="close-button"
-                        aria-label="Close editor"
-                    >
-                        <span class="ui-icon icon-close" aria-hidden="true"></span>
-                    </button>
-                </div>
-                <p class="form-intro">
-                    Everything in this form will be public when you publish.
-                </p>
-                <label
-                    >Title
-                    <input
-                        name="title"
-                        required
-                        maxlength="160"
-                        placeholder="Movie or TV show title"
-                /></label>
-                <div class="form-row">
-                    <label
-                        >Type<select name="type">
-                            <option value="movie">Movie</option>
-                            <option value="tv">TV show</option>
-                        </select></label
-                    ><label
-                        >Tier<select name="tier">
-                            <option value="S">S · The essentials</option>
-                            <option value="A" selected>
-                                A · Highly recommended
-                            </option>
-                            <option value="B">B · Worth a watch</option>
-                            <option value="C">C · For the right mood</option>
-                            <option value="D">D · A little more niche</option>
-                        </select></label
-                    >
-                </div>
-                <div class="form-row">
-                    <label
-                        >Release year <span>(optional)</span
-                        ><input
-                            name="year"
-                            inputmode="numeric"
-                            pattern="[0-9]{4}"
-                            maxlength="4"
-                            placeholder="2026" /></label
-                    ><label
-                        >Genre <span>(optional)</span
-                        ><input
-                            name="genre"
-                            maxlength="80"
-                            placeholder="Sci-fi, drama…"
-                    /></label>
-                </div>
-                <label
-                    >Why I recommend it <span>(optional)</span
-                    ><textarea
-                        name="note"
-                        rows="3"
-                        maxlength="1000"
-                        placeholder="A few spoiler-free words…"
-                    ></textarea>
-                </label>
-                <label
-                    >YouTube trailer <span>(optional)</span
-                    ><input
-                        name="trailerUrl"
-                        aria-describedby="trailer-title-status"
-                        type="url"
-                        maxlength="2048"
-                        placeholder="https://www.youtube.com/watch?v=…"
-                /></label>
-                <small id="trailer-title-status" role="status"></small>
-                <label
-                    >Cover image URL <span>(optional)</span
-                    ><input
-                        name="imageUrl"
-                        type="url"
-                        maxlength="2048"
-                        placeholder="https://…"
-                    /><small
-                        >Use an HTTPS image. A trailer thumbnail is used if you
-                        leave this blank.</small
-                    ></label
-                >
-                <label
-                    >Position in tier<input
-                        name="rank"
-                        type="number"
-                        min="0"
-                        max="9999"
-                        step="1"
-                        value="0"
-                        required
-                    /><small
-                        >Lower numbers appear first. Equal positions sort by
-                        title.</small
-                    ></label
-                >
-                <p
-                    id="form-error"
-                    class="error-message"
-                    role="alert"
-                    hidden
-                ></p>
-                <div class="form-actions">
-                    <button
-                        type="button"
-                        id="remove-recommendation"
-                        class="danger-button"
-                        hidden
-                    >
-                        Remove from public list</button
-                    ><button type="submit" id="publish" class="primary-button">
-                        Publish recommendation
-                    </button>
-                </div>
-            </form>
-        </dialog>
         <dialog id="remove-dialog" aria-labelledby="remove-title">
             <div class="confirm-content">
                 <p class="eyebrow">REMOVE RECOMMENDATION</p>
@@ -304,6 +178,6 @@
             </div>
         </dialog>
         <div id="toast" role="status" hidden></div>
-        <script type="module" src="/pages/Watch-Later/recommendations.js?v=6"></script>
+        <script type="module" src="/pages/Watch-Later/recommendations.js?v=7"></script>
     </body>
 </html>

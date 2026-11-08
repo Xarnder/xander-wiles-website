@@ -100,7 +100,16 @@ async function setup(initialUser = null, fetchTitle) {
         },
     };
     const module = new vm.SourceTextModule(source, { context });
-    await module.link(async (specifier) => {
+    const cache = new Map();
+    await module.link(async function link(specifier) {
+        if (specifier === './media-editor.mjs') {
+            if (!cache.has(specifier)) {
+                const shared = new vm.SourceTextModule(await readFile(new URL(specifier, root), 'utf8'), { context });
+                cache.set(specifier, shared);
+                await shared.link(link);
+            }
+            return cache.get(specifier);
+        }
         if (specifier === './youtube-title.mjs') {
             return new vm.SourceTextModule(youtubeSource, { context });
         }
@@ -292,4 +301,61 @@ test('pasting a YouTube link fills the cleaned title and preserves manual edits'
     } finally {
         app.close();
     }
+});
+
+test('shared private editor adds, edits tiers, preserves drafts, and blocks visitors', async () => {
+    const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.com', runScripts: 'outside-only' });
+    const w = dom.window;
+    w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+    w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+    w.confirm = () => true;
+    const context = dom.getInternalVMContext(), cache = new Map();
+    async function load(name) {
+        if (cache.has(name)) return cache.get(name);
+        const mod = new vm.SourceTextModule(await readFile(new URL(name, root), 'utf8'), { context });
+        cache.set(name, mod);
+        await mod.link(load);
+        return mod;
+    }
+    const mod = await load('private-editor.mjs');
+    await mod.evaluate();
+    let user = { email: model.OWNER_EMAIL, emailVerified: true }, fail = false;
+    const writes = [];
+    const editor = mod.namespace.createPrivateEditor({
+        getUser: () => user, getItems: () => [], getPeople: () => [{ name: 'Friend' }],
+        getTiers: () => [{ id: 'later', name: 'Later' }, { id: 'next', name: 'Next' }],
+        save: async (...args) => { if (fail) throw { code: 'unavailable' }; writes.push(args); },
+        remove: async () => {},
+    });
+    try {
+        const form = w.document.querySelector('form'), dialog = w.document.querySelector('dialog');
+        editor.open(null, 'tv');
+        assert.equal(form.elements.type.value, 'tv');
+        assert.equal(form.elements.trailerUrl, w.document.activeElement);
+        form.elements.title.value = 'My series';
+        form.elements.tier.value = 'next';
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(writes[0][1].movieTitle, 'My series');
+        assert.equal(writes[0][1].tier, 'next');
+        assert.equal(writes[0][2], true);
+        assert.equal(dialog.open, false);
+        editor.open({ id: 'existing', movieTitle: 'My series', type: 'tv', tier: 'next', watchWith: 'Friend', watched: true, watchedAt: 123 });
+        form.elements.tier.value = 'later';
+        fail = true;
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(dialog.open, true);
+        assert.equal(w.document.getElementById('form-error').hidden, false);
+        assert.equal(form.elements.title.value, 'My series');
+        fail = false;
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(writes[1][0], 'existing');
+        assert.equal(writes[1][1].tier, 'later');
+        assert.equal(writes[1][1].watchedAt, 123);
+        assert.equal(writes[1][1].watchWith, 'Friend');
+        user = null;
+        editor.open();
+        assert.equal(dialog.open, false);
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(writes.length, 2);
+    } finally { w.close(); }
 });

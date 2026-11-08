@@ -1,9 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, setDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { firebaseConfig } from './firebase-config.js';
 import { isOwner } from './recommendations-model.mjs';
+import { createPrivateEditor } from './private-editor.mjs';
 import { cleanTitle, getVideoData } from './youtube-title.mjs';
 
 
@@ -309,6 +310,13 @@ toggleBatchBtn.addEventListener('click', (e) => {
         singleInputRow.classList.remove('hidden');
         batchInputRow.classList.add('hidden');
     }
+});
+
+document.querySelector('.legacy-batch').addEventListener('toggle', event => {
+    if (!event.currentTarget.open) return;
+    if (!isBatchMode) toggleBatchBtn.click();
+    inputSection.classList.remove('collapsed');
+    typeToggle.value = typeFilter;
 });
 
 // Tier Manager Toggle
@@ -1171,6 +1179,8 @@ logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
     document.getElementById('owner-navigation').hidden = !isOwner(user);
+    document.getElementById('private-add-toolbar').hidden = !isOwner(user);
+    document.getElementById('recommendation-editor')?.close();
     const revision = ++authRevision;
     privateSubscriptions.forEach(unsubscribe => unsubscribe());
     privateSubscriptions = [];
@@ -1195,7 +1205,7 @@ onAuthStateChanged(auth, async (user) => {
     renderFilterPeople();
     try {
         console.log(`[Auth] State change: ${user ? 'Logged In' : 'Logged Out'}`);
-        if (user) {
+        if (isOwner(user)) {
             currentUser = user;
             mediaTypeSwitch.hidden = false;
 
@@ -1826,8 +1836,8 @@ function renderAllCards() {
     if (watchedFilter === 'true') {
         filtered.sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
     } else {
-        // Default: Sort by timestamp (newest first)
-        filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        // Explicit positions first, retaining newest-first order for legacy entries.
+        filtered.sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) || (b.timestamp || 0) - (a.timestamp || 0));
     }
 
     let index = 0;
@@ -2245,7 +2255,22 @@ window.markAsWatched = async (id) => {
     }
 };
 
+const sharedPrivateEditor = createPrivateEditor({
+    getUser: () => currentUser, getItems: () => cachedWatches,
+    getTiers: () => userTiers, getPeople: () => userPeople,
+    save: (id, data, creating) => creating
+        ? setDoc(doc(db, 'watches', id), { ...data, uid: currentUser.uid, timestamp: Date.now() })
+        : updateDoc(doc(db, 'watches', id), data),
+    remove: id => deleteDoc(doc(db, 'watches', id)),
+});
+document.getElementById('open-add-title').onclick = () => sharedPrivateEditor.open(null, typeFilter);
+
 window.openEditModal = function(id, data) {
+    if (!isQuickSortMode && !isTitleFixMode) {
+        const item = data || cachedWatches.find(w => w.id === id);
+        if (item) sharedPrivateEditor.open(item);
+        return;
+    }
     if (!data) data = cachedWatches.find(w => w.id === id);
     if (!data) return;
 
@@ -2380,6 +2405,7 @@ function initSortable(el) {
 
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
+    if (document.getElementById('recommendation-editor')?.open) return;
     const genrePickerOpen = genreSelectors.some(cb => cb.isOpen());
 
     // 1. ESC to close modals

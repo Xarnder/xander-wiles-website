@@ -27,11 +27,12 @@
     <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- External Libraries (SortableJS for Drag & Drop) -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="/pages/Watch-Later/theme.css">
+    <link rel="stylesheet" href="/pages/Watch-Later/media-editor.css?v=1">
 </head>
 
 <body>
@@ -120,6 +121,11 @@
             </div>
         </div>
 
+        <div id="private-add-toolbar" class="owner-toolbar" hidden>
+            <div><strong>Your private collection</strong><p>Save a movie or TV show for later.</p></div>
+            <button id="open-add-title" class="primary-button" type="button">Add a title</button>
+        </div>
+        <details class="legacy-batch"><summary>Bulk import links</summary>
         <section id="input-section" class="glass-card hidden collapsed">
             <div class="input-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -181,6 +187,7 @@
             </div>
         </section>
 
+        </details>
         <div id="filter-bar" class="filter-bar hidden collapsed">
             <div class="filter-header-mobile">
                 <div id="filter-stats-mobile" class="filter-stats">
@@ -623,7 +630,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=13"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=14"></script>
 </body>
 
 </html>
