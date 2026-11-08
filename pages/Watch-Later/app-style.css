@@ -974,12 +974,11 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 }
 
 .media-card.selected::after {
-    content: '✓';
+    content: '';
     position: absolute;
     top: 5px;
     right: 5px;
-    background: var(--accent);
-    color: white;
+    background: url('/assets/SVGs/check.svg') center / 14px no-repeat, var(--accent);
     width: 22px;
     height: 22px;
     border-radius: 50%;
@@ -2240,6 +2239,11 @@ input:checked+.slider:before {
     padding: 0;
     box-shadow: none;
     transition: transform 0.3s ease;
+}
+
+#debug-toggle-btn img {
+    display: block;
+    filter: invert(1);
 }
 
 #debug-console.collapsed #debug-toggle-btn {

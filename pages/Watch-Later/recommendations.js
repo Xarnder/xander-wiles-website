@@ -79,16 +79,12 @@ function toast(message) {
 
 function showState(title, description, loading = false) {
     const state = $('collection-state');
-    state.replaceChildren(
-        element(
-            'span',
-            loading ? 'loading-ring' : 'state-icon',
-            loading ? '' : '↗',
-        ),
-        element('h3', '', title),
-        element('p', '', description),
-    );
-    state.firstChild.setAttribute('aria-hidden', 'true');
+    state.replaceChildren(element('h3', '', title), element('p', '', description));
+    if (loading) {
+        const spinner = element('span', 'loading-ring');
+        spinner.setAttribute('aria-hidden', 'true');
+        state.prepend(spinner);
+    }
     state.hidden = false;
 }
 
@@ -130,7 +126,7 @@ function card(item) {
     if (videoId || isOwner(user)) {
         const actions = element('div', 'card-actions');
         if (videoId) {
-            const link = element('a', 'trailer-link', '▷ Watch trailer');
+            const link = element('a', 'trailer-link', 'Watch trailer');
             link.href = `https://www.youtube.com/watch?v=${videoId}`;
             link.target = '_blank';
             link.rel = 'noopener noreferrer';

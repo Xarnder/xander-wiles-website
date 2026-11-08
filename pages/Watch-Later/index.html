@@ -23,7 +23,7 @@
 
     <!-- Stylesheets -->
     <link rel="stylesheet" href="/assets/css/style.css">
-    <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=2">
+    <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@
                 alt="G">
             Login with Google
         </button>
-        <a class="public-collection-link" href="/pages/Watch-Later/recommendations.html">Explore Xander’s public recommendations ↗</a>
+        <a class="public-collection-link" href="/pages/Watch-Later/recommendations.html">Explore Xander’s public recommendations</a>
 
 
 
@@ -98,7 +98,7 @@
 
         <nav class="watch-later-sections" aria-label="Watch Later sections">
             <a href="/pages/Watch-Later/" aria-current="page">Private watch list</a>
-            <a href="/pages/Watch-Later/recommendations.html">Public recommendations ↗</a>
+            <a href="/pages/Watch-Later/recommendations.html">Public recommendations</a>
         </nav>
 
         <div class="mode-container hidden" id="mode-selector">
@@ -608,7 +608,7 @@
     <div id="debug-console" class="glass-card collapsed hidden">
         <div id="debug-header">
             <span>API Debug Console</span>
-            <button id="debug-toggle-btn">▲</button>
+            <button id="debug-toggle-btn" aria-label="Toggle debug console"><img src="/assets/SVGs/Up-ArrowIcons.svg" width="14" height="14" alt=""></button>
         </div>
         <div id="debug-log"></div>
     </div>
@@ -621,7 +621,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=8"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=9"></script>
 </body>
 
 </html>

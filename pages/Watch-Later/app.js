@@ -2177,7 +2177,7 @@ function renderCard(id, data, autoAppend = true) {
         ${data.watched && data.watchedAt ? `<span class="watched-at-tag">Watched ${timeAgo(data.watchedAt)} ago</span>` : ''}
         <span class="badge">${data.type.toUpperCase()}</span>
         ${data.imdbScore && data.imdbScore !== 'N/A' ? `<span class="badge imdb-badge">IMDb ${data.imdbScore}</span>` : ''}
-        ${data.rtScore && data.rtScore !== 'N/A' ? `<span class="badge rt-badge">🍅 ${data.rtScore}</span>` : ''}
+        ${data.rtScore && data.rtScore !== 'N/A' ? `<span class="badge rt-badge">RT ${data.rtScore}</span>` : ''}
         ${data.watched ? '<span class="badge watched-badge">WATCHED</span>' : ''}
         ${data.watchStatus === 'rewatch'
             ? '<span class="badge rewatch-badge">REWATCH</span>'
