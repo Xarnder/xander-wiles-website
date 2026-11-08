@@ -429,6 +429,7 @@ onAuthStateChanged(auth, (nextUser) => {
     user = nextUser;
     const owner = isOwner(user);
     $('owner-toolbar').hidden = !owner;
+    $('owner-navigation').hidden = !owner;
     $('private-watch-link').hidden = !owner;
     signInButton.hidden = !!user;
     $('sign-out').hidden = !user;

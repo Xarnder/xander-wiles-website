@@ -2426,6 +2426,7 @@ input:checked+.slider:before {
     gap: 8px;
     margin: 0 0 20px;
 }
+.watch-later-sections[hidden] { display: none; }
 .watch-later-sections a, #login-overlay .public-collection-link {
     display: inline-flex;
     align-items: center;

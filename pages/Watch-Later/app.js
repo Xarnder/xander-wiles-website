@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRe
 import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { firebaseConfig } from './firebase-config.js';
+import { isOwner } from './recommendations-model.mjs';
 
 
 const app = initializeApp(firebaseConfig);
@@ -1168,6 +1169,7 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
 logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
+    document.getElementById('owner-navigation').hidden = !isOwner(user);
     const revision = ++authRevision;
     privateSubscriptions.forEach(unsubscribe => unsubscribe());
     privateSubscriptions = [];

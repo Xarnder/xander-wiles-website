@@ -809,3 +809,29 @@ dialog input, dialog select, dialog textarea { font-size: 1rem; }
 .icon-close { --icon: url('/assets/SVGs/close-icon.svg'); font-size: 1.1rem; }
 
 .account-controls .text-button { font-size: .8rem; padding-inline: 10px; }
+
+.owner-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.owner-navigation a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: .875rem;
+}
+.owner-navigation a[aria-current="page"] {
+    background: #242337;
+}
+@media (max-width: 600px) {
+    .site-header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-block: 10px;
+    }
+}

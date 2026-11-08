@@ -140,6 +140,7 @@ test('guest browsing, combined filters, safe text, empty results and retry', asy
     try {
         const { $, w } = app;
         assert.equal($('owner-toolbar').hidden, true);
+        assert.equal($('owner-navigation').hidden, true);
         assert.equal($('private-watch-link').hidden, true);
         assert.match($('collection-state').textContent, /hasn’t published/);
         assert.equal(w.document.querySelectorAll('.tier-row').length, 5);
@@ -183,6 +184,7 @@ test('owner can publish, edit, remove, and loses controls immediately on sign-ou
         const { $, w } = app;
         const form = $('recommendation-form');
         assert.equal($('owner-toolbar').hidden, false);
+        assert.equal($('owner-navigation').hidden, false);
         assert.equal($('private-watch-link').hidden, false);
         $('add-recommendation').click();
         form.elements.namedItem('title').value = 'Published title';
@@ -209,6 +211,7 @@ test('owner can publish, edit, remove, and loses controls immediately on sign-ou
         $('add-recommendation').click();
         app.setUser(null);
         assert.equal($('owner-toolbar').hidden, true);
+        assert.equal($('owner-navigation').hidden, true);
         assert.equal($('private-watch-link').hidden, true);
         assert.equal($('recommendation-editor').open, false);
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
@@ -238,6 +241,7 @@ test('failed save preserves draft and unverified/nonowner accounts stay read-onl
         ]) {
             app.setUser(user);
             assert.equal($('owner-toolbar').hidden, true);
+            assert.equal($('owner-navigation').hidden, true);
             assert.equal($('recommendation-editor').open, false);
         }
     } finally {
