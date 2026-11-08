@@ -1,0 +1,193 @@
+/* Shared Watch Later presentation. Page styles own their layout and controls. */
+:root {
+    color-scheme: dark;
+    --bg: #0c0d16;
+    --panel: #171826;
+    --line: #343346;
+    --text: #f3f2f6;
+    --muted: #c0bed0;
+    --accent: #ffd0ad;
+    --accent-ink: #241b17;
+    --accent-glow: #ffd0ad30;
+    --button-bg: #242337;
+    --button-hover: #35314a;
+    --tier-surface: #11131d;
+    --card-surface: #1a1d29;
+    --watch-background: radial-gradient(ellipse at 15% 0%, #3c284e80, transparent 44rem), var(--bg);
+}
+
+body {
+    background: var(--watch-background);
+    color: var(--text);
+    font-family: Outfit, system-ui, sans-serif;
+}
+
+.watch-shell {
+    max-width: 1240px;
+    margin: auto;
+    padding: 0 40px;
+}
+
+.site-header {
+    min-height: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--line);
+}
+.site-header .brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 18px;
+    font-weight: 600;
+}
+.brand small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 2px;
+}
+.brand-mark {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: #f0e9df;
+    color: #10111a;
+    font-weight: 800;
+}
+.owner-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.owner-navigation[hidden] { display: none; }
+.owner-navigation a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: .875rem;
+    text-decoration: none;
+}
+.owner-navigation a:hover,
+.owner-navigation a[aria-current="page"] { background: var(--button-bg); }
+.watch-shell :is(a, button, input, select, textarea):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.tier-row, .app-container .tier {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--tier-surface);
+}
+.recommendation-card, .app-container .media-card {
+    border: 1px solid #ffffff0b;
+    border-radius: 10px;
+    background: var(--card-surface);
+}
+
+.app-container > .media-switch { margin-top: 27px; }
+.app-container .app-header {
+    margin-bottom: 14px;
+    padding: 0;
+}
+.app-container .app-header h1 {
+    background: none;
+    color: var(--text);
+    -webkit-text-fill-color: currentColor;
+    text-shadow: none;
+    font-size: clamp(1.5rem, 4vw, 1.8rem);
+    font-weight: 500;
+    letter-spacing: -.8px;
+}
+.watch-eyebrow {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+}
+.app-container .tier { gap: 0; }
+.app-container .tier-label {
+    justify-content: flex-start;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    background: #151621;
+    color: var(--text);
+    box-shadow: none;
+}
+.app-container .tier-name {
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--private-tier-color);
+    color: var(--private-tier-text);
+    font-size: .875rem;
+}
+.app-container .tier-list {
+    border: 0;
+    background: transparent;
+}
+.app-container .media-card:hover {
+    background: var(--card-surface);
+    border-color: var(--line);
+    box-shadow: none;
+    transform: none;
+}
+.app-container .media-card.selected { border-color: var(--accent); }
+.app-container .media-card:hover img { transform: none; }
+.app-container :is(.glass-card, .filter-bar),
+#login-overlay {
+    background: var(--panel);
+    border-color: var(--line);
+    box-shadow: none;
+}
+#login-overlay { background: var(--watch-background); }
+.app-container :is(.mode-btn, .filter-pill, .secondary-btn, #user-info button) {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--button-bg);
+    color: var(--text);
+    box-shadow: none;
+    text-transform: none;
+    letter-spacing: normal;
+}
+.app-container :is(.mode-btn.active, .filter-pill.active, #add-btn) {
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: none;
+}
+.app-container :is(input, select, textarea) { border-color: var(--line); }
+
+@media (max-width: 850px) {
+    .watch-shell { padding-inline: 24px; }
+}
+@media (max-width: 600px) {
+    .watch-shell { padding-inline: 18px; }
+    .site-header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-block: 10px;
+    }
+}
+
+@media (min-width: 769px) {
+    .app-container .tier-label {
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+        border-radius: 14px 0 0 14px;
+    }
+}

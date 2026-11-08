@@ -2419,15 +2419,8 @@ input:checked+.slider:before {
     transform: scale(1.02);
 }
 
-/* Navigation and sign-in share the recommendations palette. */
-.watch-later-sections {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 0 0 20px;
-}
-.watch-later-sections[hidden] { display: none; }
-.watch-later-sections a, #login-overlay .public-collection-link {
+/* Sign-in controls */
+#login-overlay .public-collection-link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2442,9 +2435,8 @@ input:checked+.slider:before {
     text-decoration: none;
     text-align: center;
 }
-.watch-later-sections a[aria-current] { background: #e9d9f1; color: #211925; }
-.watch-later-sections a:hover, #login-overlay .public-collection-link:hover { border-color: #ffd0ad; }
-.watch-later-sections a:focus-visible, #login-overlay :is(a, button):focus-visible,
+#login-overlay .public-collection-link:hover { border-color: #ffd0ad; }
+#login-overlay :is(a, button):focus-visible,
 .app-container :is(button, input, select, textarea):focus-visible {
     outline: 3px solid #ffd0ad;
     outline-offset: 3px;
@@ -2471,7 +2463,6 @@ input:checked+.slider:before {
 }
 #google-login-btn:hover { background: #ffdfc7; box-shadow: none; transform: none; }
 @media (max-width: 768px) {
-    .watch-later-sections a { flex: 1 1 130px; }
     #user-info button, .mode-toggle .mode-btn, #toggle-filters-btn { min-height: 44px; }
     #single-input-row > :is(input, select), #batch-links { min-width: 0 !important; max-width: 100%; font-size: 16px; }
     #single-input-row > input { flex: 1 1 100% !important; }

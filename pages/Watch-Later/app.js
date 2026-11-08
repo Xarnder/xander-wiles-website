@@ -1973,7 +1973,7 @@ function renderTiers() {
         const textColor = getContrastColor(bgColor);
 
         tierDiv.innerHTML = `
-            <div class="tier-label" style="background:${bgColor}; color:${textColor};">${tier.name}</div>
+            <div class="tier-label" style="--private-tier-color:${bgColor}; --private-tier-text:${textColor};"><span class="tier-name">${tier.name}</span></div>
             <div class="tier-list" id="list-${tier.id}"></div>
         `;
         tierContainer.appendChild(tierDiv);
@@ -2180,7 +2180,7 @@ function renderCard(id, data, autoAppend = true) {
     card.innerHTML = `
         <img src="${data.thumb}" alt="thumbnail">
         ${data.watched && data.watchedAt ? `<span class="watched-at-tag">Watched ${timeAgo(data.watchedAt)} ago</span>` : ''}
-        <span class="badge">${data.type.toUpperCase()}</span>
+        <span class="badge">${(data.type || 'movie').toUpperCase()}</span>
         ${data.imdbScore && data.imdbScore !== 'N/A' ? `<span class="badge imdb-badge">IMDb ${data.imdbScore}</span>` : ''}
         ${data.rtScore && data.rtScore !== 'N/A' ? `<span class="badge rt-badge">RT ${data.rtScore}</span>` : ''}
         ${data.watched ? '<span class="badge watched-badge">WATCHED</span>' : ''}

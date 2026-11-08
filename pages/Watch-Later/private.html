@@ -23,7 +23,7 @@
 
     <!-- Stylesheets -->
     <link rel="stylesheet" href="/assets/css/style.css">
-    <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=4">
+    <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=5">
     <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,6 +31,7 @@
 
     <!-- External Libraries (SortableJS for Drag & Drop) -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="/pages/Watch-Later/theme.css">
 </head>
 
 <body>
@@ -76,17 +77,29 @@
 
     </div>
 
-    <div class="bg-glow">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-        <div class="orb orb-3"></div>
-    </div>
-    <div id="main-nav-placeholder"></div>
-    <script src="/assets/js/nav-loader.js"></script>
+    <div class="app-container watch-shell">
+        <header class="site-header">
+            <a class="brand" href="/" aria-label="Xander Wiles home"
+                ><span class="brand-mark" aria-hidden="true"
+                    >W</span
+                ><span>Watch Later<small>BY XANDER WILES</small></span></a
+            >
+            <nav id="owner-navigation" class="owner-navigation" aria-label="Watch Later sections" hidden>
+                <a href="/pages/Watch-Later/">Recommendations</a>
+                <a href="/pages/Watch-Later/private.html" aria-current="page">Private watch list</a>
+            </nav>
+        </header>
 
-    <div class="app-container">
+        <div class="media-switch" id="media-type-switch" hidden role="group" aria-label="Filter by media type">
+            <button type="button" data-type="movie" aria-pressed="true">Movies</button>
+            <button type="button" data-type="tv" aria-pressed="false">TV Shows</button>
+        </div>
+
         <header class="app-header">
-            <h1>Watch Later</h1>
+            <div>
+                <p class="watch-eyebrow">YOUR COLLECTION</p>
+                <h1>Private watch list</h1>
+            </div>
             <div id="auth-section">
                 <div id="user-info" class="hidden">
                     <!-- <span id="user-name"></span> -->
@@ -96,16 +109,6 @@
                 </div>
             </div>
         </header>
-
-        <nav id="owner-navigation" class="watch-later-sections" hidden aria-label="Watch Later sections">
-            <a href="/pages/Watch-Later/private.html" aria-current="page">Private watch list</a>
-            <a href="/pages/Watch-Later/">Public recommendations</a>
-        </nav>
-
-        <div class="media-switch" id="media-type-switch" hidden role="group" aria-label="Filter by media type">
-            <button type="button" data-type="movie" aria-pressed="true">Movies</button>
-            <button type="button" data-type="tv" aria-pressed="false">TV Shows</button>
-        </div>
 
         <div class="mode-container hidden" id="mode-selector">
             <div class="mode-toggle">
@@ -620,7 +623,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=11"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=12"></script>
 </body>
 
 </html>

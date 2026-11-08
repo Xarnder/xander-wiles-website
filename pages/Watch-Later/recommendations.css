@@ -79,46 +79,6 @@ a:hover {
 [hidden] {
     display: none !important;
 }
-.page-shell {
-    max-width: 1240px;
-    margin: auto;
-    padding: 0 40px;
-}
-.site-header {
-    min-height: 72px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 24px;
-    border-bottom: 1px solid var(--line);
-}
-.brand {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.3px;
-}
-.brand small {
-    display: block;
-    font-size: 9px;
-    letter-spacing: 2px;
-    color: var(--muted);
-    font-weight: 500;
-    margin-top: 2px;
-}
-.brand-mark {
-    background: #f0e9df;
-    color: #10111a;
-    display: grid;
-    place-items: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    font-weight: 800;
-    position: relative;
-}
 .eyebrow {
     font-size: 10px;
     font-weight: 600;
@@ -213,9 +173,6 @@ textarea::placeholder {
     display: grid;
     grid-template-columns: 165px minmax(0, 1fr);
     margin-bottom: 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: #11131d;
     overflow: hidden;
 }
 .tier-label {
@@ -266,9 +223,6 @@ textarea::placeholder {
 }
 .recommendation-card {
     min-width: 0;
-    background: #1a1d29;
-    border: 1px solid #ffffff0b;
-    border-radius: 10px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -412,7 +366,7 @@ textarea::placeholder {
 }
 .primary-button {
     background: var(--accent);
-    color: #241b17;
+    color: var(--accent-ink);
 }
 .primary-button:hover {
     background: #ffc9a5;
@@ -603,9 +557,6 @@ form textarea {
     }
 }
 @media (max-width: 850px) {
-    .page-shell {
-        padding: 0 24px;
-    }
     .tier-row {
         grid-template-columns: 140px minmax(0, 1fr);
     }
@@ -614,9 +565,6 @@ form textarea {
     }
 }
 @media (max-width: 600px) {
-    .page-shell {
-        padding: 0 18px;
-    }
     .collection {
         padding-top: 27px;
     }
@@ -747,17 +695,6 @@ form textarea {
     }
 }
 
-/* Shared visual language with the private watch list. */
-:root {
-    --bg: #0c0d16;
-    --panel: #171826;
-    --line: #343346;
-    --accent: #ffd0ad;
-    --muted: #c0bed0;
-}
-body {
-    background: radial-gradient(ellipse at 15% 0%, #3c284e80, transparent 44rem), var(--bg);
-}
 .tier-label, .collection-heading > div { min-width: 0; }
 .primary-button, .quiet-button, .danger-button,
 .text-button, .edit-pick, .trailer-link, .close-button {
@@ -772,10 +709,10 @@ body {
     font-size: .875rem;
     font-weight: 600;
 }
-.primary-button { background: var(--accent); border-color: transparent; color: #241b17; }
-.primary-button:hover { color: #241b17; }
-.text-button, .edit-pick, .trailer-link { background: #242337; text-decoration: none; }
-.trailer-link:hover, .edit-pick:hover, .text-button:hover, .quiet-button:hover { background: #35314a; }
+.primary-button { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.primary-button:hover { color: var(--accent-ink); }
+.text-button, .edit-pick, .trailer-link { background: var(--button-bg); text-decoration: none; }
+.trailer-link:hover, .edit-pick:hover, .text-button:hover, .quiet-button:hover { background: var(--button-hover); }
 .danger-button:hover { background: #633343; }
 .close-button { width: 44px; padding: 0; font-size: 1.45rem; }
 .search-field input { min-height: 46px; font-size: 1rem; }
@@ -809,29 +746,3 @@ dialog input, dialog select, dialog textarea { font-size: 1rem; }
 .icon-close { --icon: url('/assets/SVGs/close-icon.svg'); font-size: 1.1rem; }
 
 .account-controls .text-button { font-size: .8rem; padding-inline: 10px; }
-
-.owner-navigation {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-.owner-navigation a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    padding: 8px 12px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    font-size: .875rem;
-}
-.owner-navigation a[aria-current="page"] {
-    background: #242337;
-}
-@media (max-width: 600px) {
-    .site-header {
-        flex-wrap: wrap;
-        gap: 8px;
-        padding-block: 10px;
-    }
-}
