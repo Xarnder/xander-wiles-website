@@ -1837,7 +1837,10 @@ function renderAllCards() {
         filtered.sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
     } else {
         // Explicit positions first, retaining newest-first order for legacy entries.
-        filtered.sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) || (b.timestamp || 0) - (a.timestamp || 0));
+        filtered.sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) ||
+            (a.rank != null && b.rank != null
+                ? (a.movieTitle || '').localeCompare(b.movieTitle || '')
+                : (b.timestamp || 0) - (a.timestamp || 0)));
     }
 
     let index = 0;
