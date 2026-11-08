@@ -20,7 +20,9 @@ const sample = (id, title, type = 'movie', tier = 'S') => ({
     imageUrl: '',
     trailerUrl: '',
 });
-async function setup(initialUser = null) {
+const youtubeSource = await readFile(new URL('youtube-title.mjs', root), 'utf8');
+
+async function setup(initialUser = null, fetchTitle) {
     const dom = new JSDOM(html, {
         url: 'http://localhost/pages/Watch-Later/',
         runScripts: 'outside-only',
@@ -40,6 +42,7 @@ async function setup(initialUser = null) {
         this.open = false;
     };
     const context = dom.getInternalVMContext();
+    w.fetch = fetchTitle;
     const snap = () => ({
         docs: records.map((record) => ({ id: record.id, data: () => record })),
     });
@@ -98,6 +101,9 @@ async function setup(initialUser = null) {
     };
     const module = new vm.SourceTextModule(source, { context });
     await module.link(async (specifier) => {
+        if (specifier === './youtube-title.mjs') {
+            return new vm.SourceTextModule(youtubeSource, { context });
+        }
         const exports = specifier.includes('firebase-auth')
             ? auth
             : specifier.includes('firebase-firestore')
@@ -244,6 +250,45 @@ test('failed save preserves draft and unverified/nonowner accounts stay read-onl
             assert.equal($('owner-navigation').hidden, true);
             assert.equal($('recommendation-editor').open, false);
         }
+    } finally {
+        app.close();
+    }
+});
+
+test('pasting a YouTube link fills the cleaned title and preserves manual edits', async () => {
+    const requests = [];
+    const app = await setup(
+        { email: model.OWNER_EMAIL, emailVerified: true },
+        (url, options) => new Promise((resolve) => requests.push({ url, ...options, resolve })),
+    );
+    try {
+        const { $, w } = app;
+        $('add-recommendation').click();
+        const form = $('recommendation-form');
+        const trailer = form.elements.namedItem('trailerUrl');
+        const title = form.elements.namedItem('title');
+        const paste = (url) => {
+            trailer.value = url;
+            trailer.dispatchEvent(new w.Event('input'));
+        };
+        const reply = (request, value) => request.resolve({ ok: true, json: async () => ({ title: value }) });
+        paste('https://youtu.be/abcdefghijk');
+        assert.equal(new URL(requests[0].url).searchParams.get('url'), 'https://www.youtube.com/watch?v=abcdefghijk');
+        reply(requests[0], 'Interstellar | Official Trailer (HD)');
+        await tick();
+        assert.equal(title.value, 'Interstellar');
+
+        paste('https://youtu.be/lmnopqrstuv');
+        paste('https://youtu.be/01234567890');
+        assert.equal(requests[1].signal.aborted, true);
+        reply(requests[1], 'Stale title');
+        await tick();
+        assert.equal(title.value, 'Interstellar');
+
+        title.value = 'My preferred title';
+        reply(requests[2], 'Different title | Official Trailer');
+        await tick();
+        assert.equal(title.value, 'My preferred title');
     } finally {
         app.close();
     }

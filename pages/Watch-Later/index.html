@@ -223,10 +223,12 @@
                     >YouTube trailer <span>(optional)</span
                     ><input
                         name="trailerUrl"
+                        aria-describedby="trailer-title-status"
                         type="url"
                         maxlength="2048"
                         placeholder="https://www.youtube.com/watch?v=…"
                 /></label>
+                <small id="trailer-title-status" role="status"></small>
                 <label
                     >Cover image URL <span>(optional)</span
                     ><input
@@ -302,6 +304,6 @@
             </div>
         </dialog>
         <div id="toast" role="status" hidden></div>
-        <script type="module" src="/pages/Watch-Later/recommendations.js?v=5"></script>
+        <script type="module" src="/pages/Watch-Later/recommendations.js?v=6"></script>
     </body>
 </html>
