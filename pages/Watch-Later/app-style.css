@@ -1,10 +1,3 @@
-.watch-later-sections { display: flex; flex-wrap: wrap; gap: 12px; margin: -20px 0 24px; }
-.watch-later-sections a, .public-collection-link { color: #b8cafa; font-size: 14px; text-decoration: none; padding: 12px 16px; border: 1px solid #ffffff24; border-radius: 12px; }
-.watch-later-sections a[aria-current] { color: white; background: #ffffff0d; }
-.watch-later-sections a:hover, .public-collection-link:hover { border-color: #b8cafa; }
-#login-overlay .public-collection-link { display: block; margin: 24px 16px 0; text-align: center; }
-.private-list-note { color: #c0c2d4; margin: 0 0 24px; }
-
 /* 
     Futuristic Antigravity Glassmorphism Design System
     Created for: Watch Later Web App
@@ -2420,4 +2413,64 @@ input:checked+.slider:before {
     border-color: #ef4444 !important;
     color: white !important;
     transform: scale(1.02);
+}
+
+/* Navigation and sign-in share the recommendations palette. */
+.watch-later-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 20px;
+}
+.watch-later-sections a, #login-overlay .public-collection-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 15px;
+    border: 1px solid #52465d;
+    border-radius: 10px;
+    background: #242033;
+    color: #f6ecfc;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+}
+.watch-later-sections a[aria-current] { background: #e9d9f1; color: #211925; }
+.watch-later-sections a:hover, #login-overlay .public-collection-link:hover { border-color: #ffd0ad; }
+.watch-later-sections a:focus-visible, #login-overlay :is(a, button):focus-visible,
+.app-container :is(button, input, select, textarea):focus-visible {
+    outline: 3px solid #ffd0ad;
+    outline-offset: 3px;
+}
+#login-overlay {
+    inset: 0;
+    width: auto;
+    height: auto;
+    overflow-y: auto;
+    justify-content: safe center;
+    padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+    gap: 14px;
+    background: radial-gradient(ellipse at 30% 20%, #3c284e, transparent 36rem), #0c0d16;
+}
+#login-overlay h1 { font-size: clamp(2.75rem, 11vw, 4.5rem); text-align: center; }
+.private-list-note { color: #c0bed0; margin: 0 0 8px; }
+#google-login-btn {
+    min-height: 48px;
+    border-radius: 12px;
+    background: #ffd0ad;
+    color: #241b17;
+    animation: none;
+    box-shadow: none;
+}
+#google-login-btn:hover { background: #ffdfc7; box-shadow: none; transform: none; }
+@media (max-width: 768px) {
+    .watch-later-sections a { flex: 1 1 130px; }
+    #user-info button, .mode-toggle .mode-btn, #toggle-filters-btn { min-height: 44px; }
+    #single-input-row > :is(input, select), #batch-links { min-width: 0 !important; max-width: 100%; font-size: 16px; }
+    #single-input-row > input { flex: 1 1 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .orb { animation: none; }
 }
