@@ -383,6 +383,7 @@ const mediaTypeButtons = $('media-type-switch').querySelectorAll('button');
 mediaTypeButtons.forEach((button) =>
     button.addEventListener('click', () => {
         type = button.dataset.type;
+        $('collection-title').textContent = type === 'movie' ? 'Movie tier list' : 'TV show tier list';
         mediaTypeButtons.forEach((control) => {
             control.setAttribute('aria-pressed', String(control === button));
         });
@@ -428,6 +429,7 @@ onAuthStateChanged(auth, (nextUser) => {
     user = nextUser;
     const owner = isOwner(user);
     $('owner-toolbar').hidden = !owner;
+    $('private-watch-link').hidden = !owner;
     signInButton.hidden = !!user;
     $('sign-out').hidden = !user;
     $('account-status').textContent = owner

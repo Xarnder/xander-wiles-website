@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Watch Later">
+    <title>Private watch list · Watch Later</title>
+
+    <!-- Favicon Links -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#050508" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#050508" media="(prefers-color-scheme: dark)">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="/pages/Watch-Later/app-style.css?v=3">
+    <link rel="stylesheet" href="/pages/Watch-Later/media-switch.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- External Libraries (SortableJS for Drag & Drop) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+
+<body>
+    <!-- PERSISTENT SVG DEFS -->
+    <svg width="0" height="0" style="position: absolute; pointer-events: none;">
+        <defs>
+            <linearGradient id="loader-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF56A1" />
+                <stop offset="100%" stop-color="#FF9350" />
+            </linearGradient>
+        </defs>
+    </svg>
+
+
+
+
+
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay">
+        <h1>Watch Later</h1>
+        <p class="private-list-note">Your private watch list</p>
+        <button id="google-login-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24"
+                alt="G">
+            Login with Google
+        </button>
+        <a class="public-collection-link" href="/pages/Watch-Later/">Explore Xander’s public recommendations</a>
+
+
+
+        <!-- Login screen mini-loader -->
+        <div class="login-loader hidden">
+            <svg viewBox="0 0 100 100" class="premium-loader">
+                <g>
+                    <path d="M 50,100 A 1,1 0 0 1 50,0" />
+                </g>
+                <g>
+                    <path d="M 50,75 A 1,1 0 0 0 50,-25" />
+                </g>
+            </svg>
+        </div>
+
+
+    </div>
+
+    <div class="bg-glow">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="app-container">
+        <header class="app-header">
+            <h1>Watch Later</h1>
+            <div id="auth-section">
+                <div id="user-info" class="hidden">
+                    <!-- <span id="user-name"></span> -->
+                    <button id="edit-tiers-btn">Tiers</button>
+                    <button id="quick-sort-btn" class="quick-sort-btn">Quick Sort</button>
+                    <button id="open-settings-btn" class="settings-btn">Settings</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="watch-later-sections" aria-label="Watch Later sections">
+            <a href="/pages/Watch-Later/private.html" aria-current="page">Private watch list</a>
+            <a href="/pages/Watch-Later/">Public recommendations</a>
+        </nav>
+
+        <div class="media-switch" id="media-type-switch" hidden role="group" aria-label="Filter by media type">
+            <button type="button" data-type="movie" aria-pressed="true">Movies</button>
+            <button type="button" data-type="tv" aria-pressed="false">TV Shows</button>
+        </div>
+
+        <div class="mode-container hidden" id="mode-selector">
+            <div class="mode-toggle">
+                <button class="mode-btn" data-mode="edit">Edit</button>
+                <button class="mode-btn" data-mode="organize">Organize</button>
+                <button class="mode-btn active" data-mode="watch">Watch</button>
+                <button class="mode-btn" data-mode="select">Select</button>
+                <button class="mode-btn" data-mode="reorder-tiers">Reorder Tiers</button>
+            </div>
+        </div>
+
+        <section id="input-section" class="glass-card hidden collapsed">
+            <div class="input-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="mode-label">Add Single Link</span>
+                    <button id="toggle-input-expand" class="icon-btn expand-btn" title="Toggle Add Card">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="collapsible-content">
+                <div id="single-input-row" class="input-row" style="flex-wrap: wrap;">
+                    <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)..." style="flex: 1; min-width: 250px;">
+                    <input type="text" id="movie-title-input" placeholder="Movie/TV Title (Auto-extracted)" style="flex: 1.5; min-width: 250px;">
+                    <select id="type-toggle">
+                        <option value="movie">Movie</option>
+                        <option value="tv">TV Show</option>
+                    </select>
+                    <select id="status-toggle" style="max-width: 130px;">
+                        <option value="first-watch">First Watch</option>
+                        <option value="rewatch">Rewatch</option>
+                        <option value="new-episodes">New Episodes Coming</option>
+                    </select>
+                    <details class="genre-selector">
+                        <summary>Genre: <span class="genre-selection">None selected</span></summary>
+                        <div class="genre-selector-content">
+                            <div class="genre-options" role="group" aria-label="Choose a genre"></div>
+                            <label for="genre-input">Or enter a new genre</label>
+                            <input type="text" id="genre-input" placeholder="Genre..." autocomplete="off"
+                                autocapitalize="sentences" spellcheck="false">
+                            <button type="button" class="genre-clear secondary-btn">Clear genre</button>
+                        </div>
+                    </details>
+                </div>
+                <div id="batch-input-row" class="input-row hidden">
+                    <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..."
+                        rows="4"></textarea>
+                </div>
+                <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                    <div style="font-size: 12px; color: #aaa;">Watch with:</div>
+                    <div id="people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <!-- People pills will be rendered here -->
+                    </div>
+                    <select id="initial-tier-select" style="width: 100%;"></select>
+                </div>
+                <button id="add-btn">Add to List</button>
+                <div id="progress-section" class="hidden" style="margin-top: 15px;">
+                    <div class="progress-container">
+                        <div id="progress-bar" class="progress-bar"></div>
+                    </div>
+                    <div id="progress-status" class="progress-status">Processing...</div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                    <a href="#" id="toggle-batch">Switch to Batch Mode</a>
+                </div>
+            </div>
+        </section>
+
+        <div id="filter-bar" class="filter-bar hidden collapsed">
+            <div class="filter-header-mobile">
+                <div id="filter-stats-mobile" class="filter-stats">
+                    <span id="total-count-mobile">0 items</span>
+                </div>
+                <button id="toggle-filters-btn" class="secondary-btn">Filters</button>
+            </div>
+
+            <div id="filter-groups-container" class="filter-groups-container">
+                <div class="filter-group" id="group-status">
+                    <div class="filter-pills" id="status-filter-pills">
+                        <button class="filter-pill active" data-status="all">All Status</button>
+                        <button class="filter-pill" data-status="first-watch">First Watch</button>
+                        <button class="filter-pill" data-status="rewatch">Rewatch</button>
+                        <button class="filter-pill" data-status="new-episodes">New Episodes</button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-watched">
+                    <div class="filter-pills" id="watched-filter-pills">
+                        <button class="filter-pill active" data-watched="false">Not Watched</button>
+                        <button class="filter-pill" data-watched="true">Watched</button>
+                        <button class="filter-pill" data-watched="all">All</button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-people">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="filter-pills" id="people-filter-pills">
+                            <!-- Dynamic people pills -->
+                        </div>
+                        <button id="edit-people-btn" class="icon-btn circle-btn" title="Manage People">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-genre">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="filter-pills" id="genre-filter-pills">
+                            <!-- Dynamic genre pills -->
+                        </div>
+                        <button id="open-rename-genre-modal-btn" class="icon-btn circle-btn" title="Rename a Genre">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-group" id="group-search" style="flex: 1; justify-content: flex-end;">
+                    <input type="text" id="search-input" placeholder="Search titles..."
+                        style="padding: 8px 16px; font-size: 13px; margin: 0; width: 100%; max-width: 300px;">
+                </div>
+                <div id="filter-stats" class="filter-stats desktop-only">
+                    <span id="total-count">0 items</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Actions Bar -->
+        <div id="batch-actions-bar" class="batch-bar hidden">
+            <span id="selection-count">0 selected</span>
+            <div class="batch-btns">
+                <button id="batch-select-all-btn"
+                    style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">All</button>
+                <button id="batch-deselect-all-btn"
+                    style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">None</button>
+                <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+                <button id="batch-move-btn">Move</button>
+                <button id="batch-people-btn">Edit</button>
+                <button id="batch-delete-btn"
+                    style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fecaca;">Delete</button>
+                <button id="batch-cancel-btn"
+                    style="background:none; border:1px solid rgba(255,255,255,0.2);">Done</button>
+            </div>
+        </div>
+
+        <!-- Tier Manager Section -->
+        <section id="tier-manager" class="glass-card hidden">
+            <div class="input-header">
+                <h3>Manage Tiers</h3>
+                <button id="close-manager-btn" style="background:none; border:none; color:#aaa;">Close</button>
+            </div>
+            <div id="tier-edit-list"></div>
+            <button id="add-tier-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New Tier</button>
+            <button id="auto-color-btn"
+                style="width:100%; margin-top:10px; background:linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff); border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 3px rgba(0,0,0,0.5);">Auto
+                Spectrum Colors</button>
+        </section>
+
+        <!-- People Manager Section -->
+        <section id="people-manager" class="glass-card hidden">
+            <div class="input-header">
+                <h3>Manage People</h3>
+                <button id="close-people-btn" style="background:none; border:none; color:#aaa;">Close</button>
+            </div>
+            <div id="people-edit-list"></div>
+            <button id="add-person-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New
+                Person</button>
+        </section>
+
+        <main id="tier-container" class="hidden">
+            <!-- Tiers will be rendered here dynamically -->
+        </main>
+    </div>
+
+    <!-- Modals (Placed at the end of body for best overlay behavior) -->
+
+    <!-- Rename Genre Modal -->
+    <div id="rename-genre-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Rename Genre</h3>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Select Genre:</div>
+                    <select id="rename-genre-select" style="width: 100%;"></select>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
+                    <input type="text" id="rename-genre-new-name" placeholder="Enter new name...">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button id="confirm-rename-genre-btn" class="primary-btn" style="flex: 2;">Rename All</button>
+                    <button id="delete-genre-btn" class="secondary-btn"
+                        style="flex: 1; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.2);">Delete</button>
+                    <button id="close-rename-genre-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Person Modal -->
+    <div id="rename-person-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Rename Person</h3>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Current Name:</div>
+                    <input type="text" id="rename-person-old-name" disabled style="opacity: 0.6; cursor: not-allowed;">
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
+                    <input type="text" id="rename-person-new-name" placeholder="Enter new name...">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button id="confirm-rename-person-btn" class="primary-btn" style="flex: 1;">Update
+                        Everywhere</button>
+                    <button id="close-rename-person-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Overlay -->
+    <div id="success-overlay" class="hidden"
+        style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 12000; background: var(--accent); color: white; padding: 12px 24px; border-radius: 30px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4); animation: slideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                stroke-linejoin="round" style="width: 18px; height: 18px;">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span id="success-msg">Success!</span>
+        </div>
+    </div>
+
+    <!-- Quick Sort Tier Modal -->
+    <div id="quick-sort-tier-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Quick Sort: Select Tier</h3>
+            <p style="font-size: 12px; color: #aaa; margin-bottom: 15px;">One-by-one editing for all items in the
+                selected tier.</p>
+            <div id="quick-sort-tier-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Batch Move Modal -->
+    <div id="batch-move-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Move Selected to...</h3>
+            <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+            </div>
+            <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Batch People Modal -->
+    <div id="batch-people-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Batch Edit People</h3>
+            <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all
+                selected items.</p>
+            <div id="batch-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Type:</div>
+                    <select id="batch-type-select" style="width: 100%;">
+                        <option value="no-change">-- No Change --</option>
+                        <option value="movie">Movie</option>
+                        <option value="tv">TV Show</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Status:</div>
+                    <select id="batch-status-select" style="width: 100%;">
+                        <option value="no-change">-- No Change --</option>
+                        <option value="first-watch">First Watch</option>
+                        <option value="rewatch">Rewatch</option>
+                        <option value="new-episodes">New Episodes Coming</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="save-batch-people-btn" style="flex: 2; background: #3b82f6;">Apply to All</button>
+                <button class="close-modal-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h3 id="confirm-title" style="margin-bottom: 10px;">Confirm</h3>
+            <p id="confirm-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button id="confirm-yes-btn" class="primary-btn" style="flex: 1;">Yes, Proceed</button>
+                <button id="confirm-no-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="alert-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="margin-bottom: 15px; color: var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" style="width: 48px; height: 48px;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            </div>
+            <h3 id="alert-title" style="margin-bottom: 10px;">Notice</h3>
+            <p id="alert-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+            <button id="alert-ok-btn" class="primary-btn" style="width: 100%;">Got it!</button>
+        </div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div id="prompt-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="prompt-title">Enter Value</h3>
+            <div style="margin: 20px 0;">
+                <input type="text" id="prompt-input" style="width: 100%;" placeholder="Type here...">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="prompt-confirm-btn" class="primary-btn" style="flex: 1;">Confirm</button>
+                <button id="prompt-cancel-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duplicate Detection Modal -->
+    <div id="duplicate-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card duplicate-card">
+            <div class="duplicate-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" style="width: 30px; height: 30px;">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </div>
+            <h3 id="duplicate-title">Duplicate Detected</h3>
+            <p id="duplicate-message">This link has already been added to your list.</p>
+            <div class="duplicate-btns">
+                <button id="duplicate-anyway-btn">Add Anyway</button>
+                <button id="duplicate-skip-btn">Skip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <div class="input-header">
+                <div class="modal-title-group">
+                    <h3>Edit Entry</h3>
+                    <div id="edit-date-added" class="modal-date">Added on: --</div>
+                    <div id="edit-date-watched" class="modal-date hidden" style="color: #10b981; margin-top: 2px;">Watched on: --</div>
+                </div>
+                <button id="close-edit-modal">&times;</button>
+            </div>
+            <div id="edit-thumb-container">
+                <img id="edit-thumb" src="" alt="thumbnail">
+            </div>
+            <div class="input-row">
+                <input type="text" id="edit-title" placeholder="Title">
+                <select id="edit-type-select" style="max-width: 100px;">
+                    <option value="movie">Movie</option>
+                    <option value="tv">TV Show</option>
+                </select>
+                <select id="edit-status-select" style="max-width: 120px;">
+                    <option value="first-watch">First Watch</option>
+                    <option value="rewatch">Rewatch</option>
+                    <option value="new-episodes">New Episodes Coming</option>
+                </select>
+                <details class="genre-selector">
+                    <summary>Genre: <span class="genre-selection">None selected</span></summary>
+                    <div class="genre-selector-content">
+                        <div class="genre-options" role="group" aria-label="Choose a genre"></div>
+                        <label for="edit-genre-input">Or enter a new genre</label>
+                        <input type="text" id="edit-genre-input" placeholder="Genre..." autocomplete="off"
+                            autocapitalize="sentences" spellcheck="false">
+                        <button type="button" class="genre-clear secondary-btn">Clear genre</button>
+                    </div>
+                </details>
+            </div>
+            <div class="input-row">
+                <input type="text" id="edit-imdb-score" placeholder="IMDb Score (e.g., 8.8)">
+                <input type="text" id="edit-rt-score" placeholder="RT Score (e.g., 87%)">
+                <div class="switch-container" style="padding: 0 10px;">
+                    <span class="switch-text">Watched</span>
+                    <label class="switch">
+                        <input type="checkbox" id="edit-watched-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <div style="font-size: 12px; color: #aaa;">Watched with:</div>
+                <div id="edit-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            </div>
+            <!-- Quick Sort Key Guide -->
+            <div id="quick-sort-key-guide" class="hidden"
+                style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div
+                        style="font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                        Tier Shortcuts</div>
+                    <div class="switch-container">
+                        <span class="switch-text">Enable Shortcuts</span>
+                        <label class="switch">
+                            <input type="checkbox" id="enable-shortcuts-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div id="key-guide-list" style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px;"></div>
+            </div>
+            <div style="margin-top: 15px;">
+                <a id="edit-youtube-link" href="#" target="_blank" class="youtube-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                        <path
+                            d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                    </svg>
+                    Watch on YouTube
+                </a>
+            </div>
+            <div class="modal-nav-row" style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                <button id="prev-quick-sort-btn" class="nav-btn hidden" title="Previous (Arrow Left)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <button id="save-edit-btn" style="flex: 2;">Save Changes</button>
+                <button id="delete-entry-btn" style="flex: 1;">Delete</button>
+                <button id="next-quick-sort-btn" class="nav-btn hidden" title="Next (Arrow Right)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card settings-modal-content">
+            <div class="input-header">
+                <h3>Settings</h3>
+                <button id="close-settings-modal">&times;</button>
+            </div>
+            
+            <div class="settings-actions">
+                <button id="quick-sort-btn-modal" class="action-btn quick-sort-btn-alt">Quick Sort</button>
+                <button id="edit-tiers-btn-modal" class="action-btn tiers-btn">Manage Tiers</button>
+                <button id="backfill-scores-btn" class="action-btn backfill-btn">Backfill Scores</button>
+                <button id="fix-titles-btn" class="action-btn fix-btn">Fix Titles</button>
+                <button id="fix-thumbnails-btn" class="action-btn thumb-fix-btn">Fix Thumbnails</button>
+                
+                <div class="settings-group">
+                    <div class="switch-container">
+                        <span class="switch-text">API Debug Console</span>
+                        <label class="switch">
+                            <input type="checkbox" id="debug-menu-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <div style="font-size: 11px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; text-align: center;">Backup & Restore</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; gap: 8px;">
+                            <button id="export-json-btn" class="secondary-btn" style="flex: 1; padding: 10px; font-size: 12px; border-radius: 10px;">Export JSON</button>
+                            <button id="export-csv-btn" class="secondary-btn" style="flex: 1; padding: 10px; font-size: 12px; border-radius: 10px;">Export CSV</button>
+                        </div>
+                        <button id="restore-btn" class="primary-btn" style="width: 100%; padding: 10px; font-size: 12px; border-radius: 10px;">Restore Backup</button>
+                        <input type="file" id="restore-file-input" accept=".json,.csv" style="display:none;">
+                    </div>
+                </div>
+
+                <button id="logout-btn" class="action-btn logout-btn">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Console -->
+    <div id="debug-console" class="glass-card collapsed hidden">
+        <div id="debug-header">
+            <span>API Debug Console</span>
+            <button id="debug-toggle-btn" aria-label="Toggle debug console"><img src="/assets/SVGs/Up-ArrowIcons.svg" width="14" height="14" alt=""></button>
+        </div>
+        <div id="debug-log"></div>
+    </div>
+
+    <script>
+        // Environment Detection
+        window.isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        window.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        window.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    </script>
+
+    <!-- Firebase SDKs -->
+    <script type="module" src="/pages/Watch-Later/app.js?v=10"></script>
+</body>
+
+</html>

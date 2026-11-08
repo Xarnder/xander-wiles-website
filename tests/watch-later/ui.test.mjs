@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 import * as model from '../../pages/Watch-Later/recommendations-model.mjs';
 const root = new URL('../../pages/Watch-Later/', import.meta.url);
 const source = await readFile(new URL('recommendations.js', root), 'utf8');
-const html = await readFile(new URL('recommendations.html', root), 'utf8');
+const html = await readFile(new URL('index.html', root), 'utf8');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const sample = (id, title, type = 'movie', tier = 'S') => ({
     id,
@@ -22,7 +22,7 @@ const sample = (id, title, type = 'movie', tier = 'S') => ({
 });
 async function setup(initialUser = null) {
     const dom = new JSDOM(html, {
-        url: 'http://localhost/recommendations.html',
+        url: 'http://localhost/pages/Watch-Later/',
         runScripts: 'outside-only',
     });
     const w = dom.window,
@@ -140,6 +140,7 @@ test('guest browsing, combined filters, safe text, empty results and retry', asy
     try {
         const { $, w } = app;
         assert.equal($('owner-toolbar').hidden, true);
+        assert.equal($('private-watch-link').hidden, true);
         assert.match($('collection-state').textContent, /hasn’t published/);
         assert.equal(w.document.querySelectorAll('.tier-row').length, 5);
         app.seed([
@@ -182,6 +183,7 @@ test('owner can publish, edit, remove, and loses controls immediately on sign-ou
         const { $, w } = app;
         const form = $('recommendation-form');
         assert.equal($('owner-toolbar').hidden, false);
+        assert.equal($('private-watch-link').hidden, false);
         $('add-recommendation').click();
         form.elements.namedItem('title').value = 'Published title';
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
@@ -207,6 +209,7 @@ test('owner can publish, edit, remove, and loses controls immediately on sign-ou
         $('add-recommendation').click();
         app.setUser(null);
         assert.equal($('owner-toolbar').hidden, true);
+        assert.equal($('private-watch-link').hidden, true);
         assert.equal($('recommendation-editor').open, false);
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
         await tick();

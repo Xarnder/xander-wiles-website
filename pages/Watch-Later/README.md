@@ -2,8 +2,8 @@
 
 Two separate experiences share Firebase Authentication, but never share list data:
 
-- `index.html` (`/pages/Watch-Later/`): the existing private watch list. Its `watches`, `tiers`, and `people` records stay scoped to the signed-in user's UID.
-- `recommendations.html` (`/pages/Watch-Later/recommendations.html`): Xander's public movie and TV tier list. Visitors do not need an account. Only the verified `xanderwiles@gmail.com` account may publish, edit, rank, or remove recommendations.
+- `private.html` (`/pages/Watch-Later/private.html`): the private watch list. Its `watches`, `tiers`, and `people` records stay scoped to the signed-in user's UID.
+- `index.html` (`/pages/Watch-Later/`): Xander's public movie and TV tier list. Visitors do not need an account. Only the verified `xanderwiles@gmail.com` account may publish, edit, rank, or remove recommendations.
 
 The public page reads only `publicRecommendations`. There is no automatic import, migration, or sync from the private list. Publishing constructs a new record from an explicit allowlist; the Firestore rules also reject private fields such as `uid`, `watchWith`, and `watchStatus`.
 
@@ -15,7 +15,7 @@ The collection starts empty. Personal rankings and movie choices are not seeded 
 
 ## Local development and deployment
 
-From the repository root, run `npm run dev` and open `/pages/Watch-Later/recommendations.html`. This page is buildless and is copied by the existing website build. Deploy website source through the repository's normal Vercel workflow; it does not use Firebase Hosting.
+From the repository root, run `npm run dev` and open `/pages/Watch-Later/`. This page is buildless and is copied by the existing website build. Deploy website source through the repository's normal Vercel workflow; it does not use Firebase Hosting.
 
 Firestore rules are independent of the website deployment. Apply the checked-in rules to the dedicated Watch Later project:
 
