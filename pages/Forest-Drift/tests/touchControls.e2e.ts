@@ -159,12 +159,12 @@ test.describe('Touch / iPad Controls', () => {
 		await expect(page.getByTestId('touch-build-toggle')).toHaveClass(/active/);
 
 		// Tap hotbar slot to change tools
-		await page.getByTestId('hotbar-slot-polygon-wall').click();
-		await expect(page.getByTestId('hotbar-slot-polygon-wall')).toHaveClass(/active/);
+		await page.getByTestId('hotbar-slot-corner-wall').click();
+		await expect(page.getByTestId('hotbar-slot-corner-wall')).toHaveClass(/active/);
 
 		// Tap touch variant button to switch tool variant inside slot
 		await page.getByTestId('touch-variant-btn').click();
-		await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
+		await expect(page.getByTestId('hotbar-slot-polygon-wall')).toHaveClass(/active/);
 
 		// Verify Touch Edit button appears for customizable tools and opens scrollable edit modal
 		const editBtn = page.getByTestId('touch-edit-btn');

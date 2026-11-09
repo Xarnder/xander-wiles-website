@@ -15,7 +15,7 @@ test('slot 2 Skirting draws boards on the wall faces toward the player, and they
 	await createAndEnterWorld(page, { name: 'Skirting World', seed: 'remove-seed' });
 
 	await page.keyboard.press('2');
-	for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+	for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
 	await expect(page.getByTestId('hotbar-slot-skirting')).toHaveClass(/active/);
 	await expect(page.getByTestId('build-hud')).toContainText('SKIRTING');
 

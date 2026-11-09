@@ -9,7 +9,9 @@ import {
 describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 	it('uses numbered slots 1–6 and 8 with the requested defaults', () => {
 		expect(DEFAULT_HOTBAR_SLOTS.map((s) => s.slot)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[1], 0).toolId).toBe('polygon-wall');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[1], 0).toolId).toBe('corner-wall');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[1], 1).toolId).toBe('polygon-wall');
+		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[1], 2).toolId).toBe('wall');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 0).toolId).toBe('door');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 1).toolId).toBe('window');
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[2], 2).toolId).toBe('beam');
@@ -22,15 +24,32 @@ describe('DEFAULT_HOTBAR_SLOTS groupings', () => {
 		expect(resolveHotbarSlot(DEFAULT_HOTBAR_SLOTS[7], 0).toolId).toBe('place-object');
 	});
 
-	it('adds customizable Wooden Pillars as the fifth wall subtool', () => {
+	it('adds customizable Wooden Pillars as the last (sixth) wall subtool', () => {
 		const wallSlot = DEFAULT_HOTBAR_SLOTS.find((slot) => slot.slot === 2)!;
-		expect(wallSlot.variants).toHaveLength(5);
-		expect(resolveHotbarSlot(wallSlot, 4)).toMatchObject({
+		expect(wallSlot.variants).toHaveLength(6);
+		expect(resolveHotbarSlot(wallSlot, 5)).toMatchObject({
 			toolId: 'pillar',
 			label: 'Wooden Pillars',
-			variantIndex: 4
+			variantIndex: 5
 		});
 		expect(isCustomizablePlacementTool('pillar')).toBe(true);
+	});
+
+	it('makes two-click Corner Walls the default wall subtool, keeping every other way to draw', () => {
+		const wallSlot = DEFAULT_HOTBAR_SLOTS.find((slot) => slot.slot === 2)!;
+		expect(resolveHotbarSlot(wallSlot, 0)).toMatchObject({
+			toolId: 'corner-wall',
+			label: 'Corner Walls'
+		});
+		expect(wallSlot.variants.map((v) => v.toolId)).toEqual([
+			'corner-wall',
+			'polygon-wall',
+			'wall',
+			'barrier',
+			'skirting',
+			'pillar'
+		]);
+		expect(isCustomizablePlacementTool('corner-wall')).toBe(true);
 	});
 
 	it('keeps stairs on their own slot', () => {

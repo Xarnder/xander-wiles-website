@@ -76,17 +76,19 @@ test('groups walls, openings and slabs on slots 2–4, with ↑/↓ cycling the 
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	const polyWallSlot = page.getByTestId('hotbar-slot-polygon-wall');
+	const cornerWallSlot = page.getByTestId('hotbar-slot-corner-wall');
 	const doorSlot = page.getByTestId('hotbar-slot-door');
 	const ceilingSlot = page.getByTestId('hotbar-slot-ceiling');
 	const stairsSlot = page.getByTestId('hotbar-slot-stairs');
-	await expect(polyWallSlot).toBeVisible();
+	await expect(cornerWallSlot).toBeVisible();
 	await expect(doorSlot).toBeVisible();
 	await expect(ceilingSlot).toBeVisible();
 	await expect(stairsSlot).toBeVisible();
 
 	await page.keyboard.press('2');
-	await expect(polyWallSlot).toHaveClass(/active/);
+	await expect(cornerWallSlot).toHaveClass(/active/);
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-polygon-wall')).toHaveClass(/active/);
 	await page.keyboard.press('ArrowDown');
 	await expect(page.getByTestId('hotbar-slot-wall')).toHaveClass(/active/);
 
@@ -132,9 +134,11 @@ test('pressing B cycles the draw-snap mode on Wall, Polygon Wall and Ceiling too
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	// Slot 2 (Poly Wall), slot 2+↓ (Wall), slot 4 (Ceiling) — pressing B on each just
-	// needs to not throw; the resulting snap behavior itself is covered by polygonDrawSnap.spec.ts.
+	// Slot 2 (Corner Walls), 2+↓ (Poly Wall), 2+↓↓ (Wall), slot 4 (Ceiling) — pressing B on each
+	// just needs to not throw; the snap behavior itself is covered by polygonDrawSnap.spec.ts.
 	await page.keyboard.press('2');
+	for (let i = 0; i < 3; i++) await page.keyboard.press('b');
+	await page.keyboard.press('ArrowDown');
 	for (let i = 0; i < 3; i++) await page.keyboard.press('b');
 	await page.keyboard.press('ArrowDown');
 	for (let i = 0; i < 3; i++) await page.keyboard.press('b');
@@ -312,7 +316,7 @@ test('the on-screen floor selector stays hidden until a foundation is targeted, 
 	await page.goto('/');
 	await createAndEnterWorld(page);
 
-	await page.keyboard.press('2'); // Poly Wall — a level-aware tool
+	await page.keyboard.press('2'); // Corner Walls — a level-aware tool
 	const floorSelector = page.getByTestId('floor-selector');
 	// No foundation exists anywhere in a fresh world, so nothing can ever be targeted — the selector
 	// (which only appears once buildHud.level is set) must stay absent rather than show a misleading
@@ -363,6 +367,7 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and B still toggles it 
 	// `'axis-inline' -> 'off'` (the new default) is observably different from the old `'off' ->
 	// 'axis'` a single press would have produced.
 	await page.keyboard.press('2');
+	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('ArrowDown');
 	await expect(page.getByTestId('hotbar-slot-wall')).toBeVisible();
 	const snapBadge = page.getByTestId('snap-badge');

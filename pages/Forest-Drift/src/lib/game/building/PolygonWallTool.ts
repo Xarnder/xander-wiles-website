@@ -55,7 +55,24 @@ function makeMarker(color: number): THREE.Mesh {
 	return mesh;
 }
 
+/**
+ * `path`: point by point, closing on the first point or finishing open (Poly Wall).
+ * `rectangle`: two clicks, one corner then the opposite one, for a closed right-angled room
+ * (Corner Walls, slot 2's default).
+ */
+export type WallDrawShape = 'path' | 'rectangle';
+
+/** The four corners of the right-angled room with opposite corners `a` and `c`, in drawing order. */
+export function rectangleWallPoints(
+	a: BuildingGridPoint,
+	c: BuildingGridPoint
+): BuildingGridPoint[] {
+	return [a, { gridX: c.gridX, gridZ: a.gridZ }, c, { gridX: a.gridX, gridZ: c.gridZ }];
+}
+
 export interface PolygonWallToolOptions {
+	/** Defaults to `path`. */
+	shape?: WallDrawShape;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	foundationManager: FoundationManager;
@@ -77,7 +94,8 @@ export interface PolygonWallToolOptions {
  * per-segment box.
  */
 export class PolygonWallTool implements BuildTool {
-	readonly toolId: ToolId = 'polygon-wall';
+	readonly toolId: ToolId;
+	private readonly shape: WallDrawShape;
 
 	private readonly scene: THREE.Scene;
 	private readonly camera: THREE.PerspectiveCamera;
@@ -134,11 +152,22 @@ export class PolygonWallTool implements BuildTool {
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
 		if (event.code === 'KeyB') {
-			this.snapMode = cycleSnapMode(this.snapMode, this.points.length, true);
+			// Corner Walls only snaps to existing wall corners or not at all (an axis snap would line
+			// the opposite corner up with the first and flatten the room).
+			this.snapMode =
+				this.shape === 'rectangle'
+					? this.snapMode === 'wall-corners'
+						? 'off'
+						: 'wall-corners'
+					: cycleSnapMode(this.snapMode, this.points.length, true);
 			this.refreshVisuals();
 			return;
 		}
 		if (this.state !== 'drawing') return;
+		if (this.shape === 'rectangle') {
+			if (event.code === 'Backspace') this.undoLastPoint();
+			return;
+		}
 		if (event.code === 'Enter') {
 			this.finishOpenPath();
 		} else if (event.code === 'Backspace') {
@@ -147,6 +176,8 @@ export class PolygonWallTool implements BuildTool {
 	};
 
 	constructor(options: PolygonWallToolOptions) {
+		this.shape = options.shape ?? 'path';
+		this.toolId = this.shape === 'rectangle' ? 'corner-wall' : 'polygon-wall';
 		this.scene = options.scene;
 		this.camera = options.camera;
 		this.foundationManager = options.foundationManager;
@@ -265,17 +296,18 @@ export class PolygonWallTool implements BuildTool {
 
 		// Only snap against the in-progress path's own points, on its own foundation — a hover on a
 		// different foundation (rejected on confirm anyway) has no meaningful "last point" to lock to.
+		const drawingHere = this.state === 'drawing' && hit.foundationId === this.activeFoundationId;
+		// A rectangle's opposite corner never snaps in line with its first one.
+		const snapAgainst = drawingHere && this.shape === 'path' ? this.points : [];
 		const gridPoint =
 			this.snapMode === 'wall-corners'
 				? snapToNearestCorner(
 						hit.gridPoint,
 						wallCornersForPlacement(this.buildingManager, this.levelManager, hit.foundationId),
-						this.state === 'drawing' && hit.foundationId === this.activeFoundationId
-							? this.points
-							: []
+						snapAgainst
 					)
-				: this.state === 'drawing' && hit.foundationId === this.activeFoundationId
-					? snapDrawingPoint(this.points, hit.gridPoint, this.snapMode)
+				: snapAgainst.length > 0
+					? snapDrawingPoint(snapAgainst, hit.gridPoint, this.snapMode)
 					: hit.gridPoint;
 
 		if (
@@ -313,6 +345,14 @@ export class PolygonWallTool implements BuildTool {
 
 		// drawing
 		if (this.hoverTarget.foundationId !== this.activeFoundationId) return; // invalid target, ignore click
+
+		if (this.shape === 'rectangle') {
+			// The opposite corner: build the four walls at once.
+			if (this.rectangleProblem(this.hoverTarget.gridPoint)) return;
+			this.points = rectangleWallPoints(this.points[0], this.hoverTarget.gridPoint);
+			this.confirmPath(true);
+			return;
+		}
 
 		if (this.isHoveringFirstPoint() && this.points.length >= 3) {
 			this.confirmPath(true);
@@ -356,8 +396,22 @@ export class PolygonWallTool implements BuildTool {
 		this.refreshVisuals();
 	}
 
+	/** Why `corner` can't be the opposite corner of the room being drawn, or null when it can. */
+	private rectangleProblem(corner: BuildingGridPoint): string | null {
+		const first = this.points[0];
+		if (!first) return null;
+		const size = this.buildingSettings.buildingGridSize;
+		const width = Math.abs(corner.gridX - first.gridX) * size;
+		const depth = Math.abs(corner.gridZ - first.gridZ) * size;
+		if (width === 0 || depth === 0) return 'Pick the opposite corner';
+		const shortest = this.buildingSettings.minimumWallLength;
+		if (width < shortest || depth < shortest) return 'Room is too small';
+		return null;
+	}
+
 	/** Axis → axis-inline after the third point, if the player left the default on. */
 	private promoteSnapModeIfNeeded(): void {
+		if (this.shape === 'rectangle') return;
 		this.snapMode = autoPromotePolygonWallSnap(this.snapMode, this.points.length);
 	}
 
@@ -400,7 +454,12 @@ export class PolygonWallTool implements BuildTool {
 			minimumSegmentLength: this.buildingSettings.minimumWallLength
 		});
 
-		if (!result.valid || !result.value) return;
+		if (!result.valid || !result.value) {
+			// A rectangle that couldn't be built goes back to its first corner (try another opposite).
+			if (this.shape === 'rectangle') this.points = this.points.slice(0, 1);
+			this.refreshVisuals();
+			return;
+		}
 		this.undoManager.record({ kind: 'wallPath', pathId: result.value.id });
 
 		this.state = 'idle';
@@ -435,6 +494,20 @@ export class PolygonWallTool implements BuildTool {
 		}
 
 		const sameFoundation = this.hoverTarget.foundationId === this.activeFoundationId;
+		if (this.shape === 'rectangle') {
+			const problem = sameFoundation
+				? this.rectangleProblem(this.hoverTarget.gridPoint)
+				: 'Must stay on the same foundation';
+			this.updateHoverMarker(problem ? INVALID_COLOR : CLOSE_LOOP_COLOR);
+			if (problem) {
+				this.hidePreview();
+				this.onHudChange?.(this.buildInvalidHud(problem));
+				return;
+			}
+			this.updatePreview(true);
+			this.onHudChange?.(this.buildDrawingHud(true));
+			return;
+		}
 		const closingLoop = this.isHoveringFirstPoint() && this.points.length >= 3;
 		const last = this.points[this.points.length - 1];
 		const duplicate =
@@ -475,7 +548,12 @@ export class PolygonWallTool implements BuildTool {
 			return;
 		}
 
-		const previewPoints = closing ? this.points : [...this.points, this.hoverTarget.gridPoint];
+		const previewPoints =
+			this.shape === 'rectangle'
+				? rectangleWallPoints(this.points[0], this.hoverTarget.gridPoint)
+				: closing
+					? this.points
+					: [...this.points, this.hoverTarget.gridPoint];
 		if (previewPoints.length < 2) {
 			this.hidePreview();
 			return;
@@ -675,24 +753,51 @@ export class PolygonWallTool implements BuildTool {
 
 	/** The current snap mode as an extra HUD line, or `[]` when off — spread directly into a hintLines array. */
 	private snapHudLines(): string[] {
-		const label = snapModeLabel(this.snapMode);
+		const label =
+			this.shape === 'rectangle'
+				? this.snapMode === 'wall-corners'
+					? 'Snap: Wall Corners'
+					: null
+				: snapModeLabel(this.snapMode);
 		return label ? [label] : [];
+	}
+
+	/** Corner Walls' own badge: it snaps to wall corners only, never to an axis. */
+	private snapBadge(): string | undefined {
+		return this.shape === 'rectangle' && this.snapMode === 'wall-corners'
+			? 'WALL CORNER SNAP'
+			: undefined;
+	}
+
+	/** The HUD's title line for this tool. */
+	private title(): string {
+		return this.shape === 'rectangle' ? 'CORNER WALLS' : 'CONTINUOUS WALL';
+	}
+
+	/** The room's size in metres between the first corner and `corner`, for the HUD. */
+	private rectangleSizeLine(corner: BuildingGridPoint): string {
+		const first = this.points[0];
+		const size = this.buildingSettings.buildingGridSize;
+		const width = Math.abs(corner.gridX - first.gridX) * size;
+		const depth = Math.abs(corner.gridZ - first.gridZ) * size;
+		return `Room: ${width.toFixed(2)}m × ${depth.toFixed(2)}m`;
 	}
 
 	private buildIdleHud(): BuildUiState {
 		return {
-			toolId: 'polygon-wall',
+			toolId: this.toolId,
 			snapMode: this.snapMode,
+			snapBadge: this.snapBadge(),
 			level: this.currentLevelUiState(),
 			crosshair: this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
 				'',
-				'CONTINUOUS WALL',
+				this.title(),
 				'',
-				'Click to start',
+				this.shape === 'rectangle' ? 'Click: First corner' : 'Click to start',
 				...this.snapHudLines(),
-				'B: Cycle snap',
+				this.shape === 'rectangle' ? 'B: Snap to wall corners' : 'B: Cycle snap',
 				'E customise'
 			]
 		};
@@ -708,17 +813,42 @@ export class PolygonWallTool implements BuildTool {
 		const levelLines = this.levelHudLines(this.activeFoundationId ?? undefined);
 		const level = this.currentLevelUiState(this.activeFoundationId ?? undefined);
 
+		if (this.shape === 'rectangle') {
+			return {
+				toolId: this.toolId,
+				snapMode: this.snapMode,
+				snapBadge: this.snapBadge(),
+				level,
+				crosshair: 'valid',
+				canFinishOpenPath: false,
+				hintLines: [
+					...levelLines,
+					'',
+					this.title(),
+					'',
+					...(this.hoverTarget ? [this.rectangleSizeLine(this.hoverTarget.gridPoint)] : []),
+					'',
+					...this.snapHudLines(),
+					'Click: Opposite corner',
+					'B: Snap to wall corners',
+					'E customise',
+					'Right click: Cancel'
+				]
+			};
+		}
+
 		if (closingLoop) {
 			return {
-				toolId: 'polygon-wall',
+				toolId: this.toolId,
 				snapMode: this.snapMode,
+				snapBadge: this.snapBadge(),
 				level,
 				crosshair: 'valid',
 				canFinishOpenPath: this.points.length >= 2,
 				hintLines: [
 					...levelLines,
 					'',
-					'CONTINUOUS WALL',
+					this.title(),
 					'',
 					`Points: ${this.points.length}`,
 					`Total length: ${length.toFixed(2)}m`,
@@ -730,15 +860,16 @@ export class PolygonWallTool implements BuildTool {
 		}
 
 		return {
-			toolId: 'polygon-wall',
+			toolId: this.toolId,
 			snapMode: this.snapMode,
+			snapBadge: this.snapBadge(),
 			level,
 			crosshair: 'valid',
 			canFinishOpenPath: this.points.length >= 2,
 			hintLines: [
 				...levelLines,
 				'',
-				'CONTINUOUS WALL',
+				this.title(),
 				'',
 				`Points: ${this.points.length}`,
 				`Total length: ${length.toFixed(2)}m`,
@@ -755,24 +886,24 @@ export class PolygonWallTool implements BuildTool {
 	}
 
 	private buildInvalidHud(reason: string): BuildUiState {
+		const rectangle = this.shape === 'rectangle';
 		return {
-			toolId: 'polygon-wall',
+			toolId: this.toolId,
 			snapMode: this.snapMode,
+			snapBadge: this.snapBadge(),
 			level: this.currentLevelUiState(this.activeFoundationId ?? undefined),
 			crosshair: 'invalid',
-			canFinishOpenPath: this.points.length >= 2,
+			canFinishOpenPath: !rectangle && this.points.length >= 2,
 			hintLines: [
 				...this.levelHudLines(this.activeFoundationId ?? undefined),
 				'',
-				'CONTINUOUS WALL',
+				this.title(),
 				'',
-				`Points: ${this.points.length}`,
+				...(rectangle ? [] : [`Points: ${this.points.length}`]),
 				reason,
 				'',
 				...this.snapHudLines(),
-				'Enter: Finish',
-				'Backspace: Undo point',
-				'B: Cycle snap',
+				...(rectangle ? [] : ['Enter: Finish', 'Backspace: Undo point', 'B: Cycle snap']),
 				'Right click: Cancel'
 			]
 		};

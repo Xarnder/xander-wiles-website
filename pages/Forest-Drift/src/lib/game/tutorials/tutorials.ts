@@ -53,7 +53,11 @@ export function lessons(touch: boolean): Lesson[] {
 		),
 		guide(
 			'walls',
-			`${select('two')} ${variant('Poly Wall')} Aim at your foundation. ${place} to add wall points. Select the first point again to close the outline.${touch ? '' : ' Enter finishes an open wall path.'}`
+			`${select('two')} This is Corner Walls. Aim at your foundation. ${place} on one corner of your room, then on the opposite corner. That builds all four walls at once.`
+		),
+		guide(
+			'poly-wall',
+			`${variant('Poly Wall')} For any other shape. ${place} to add wall points. Select the first point again to close the outline.${touch ? '' : ' Enter finishes an open wall path.'}`
 		),
 		guide(
 			'wall-segment',

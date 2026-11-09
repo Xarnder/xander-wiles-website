@@ -121,6 +121,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 			this.speciesIndex = index;
 		}
 	});
+	const cornerWallTool = makeFakeTool('corner-wall');
 	const polyWallTool = makeFakeTool('polygon-wall');
 	const wallTool = makeFakeTool('wall');
 	const doorTool = makeFakeTool('door');
@@ -145,6 +146,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		domElement: domElement as unknown as HTMLElement,
 		tools: {
 			foundation: foundationTool,
+			'corner-wall': cornerWallTool,
 			'polygon-wall': polyWallTool,
 			wall: wallTool,
 			door: doorTool,
@@ -207,6 +209,7 @@ function buildHarness(pointerLocked: { value: boolean }) {
 		moveTool,
 		musicTool,
 		paintTool,
+		cornerWallTool,
 		polyWallTool,
 		wallTool,
 		doorTool,
@@ -762,26 +765,27 @@ describe('Hotbar slot variants (↑/↓)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('reaches Wooden Pillars fifth in slot 2 and opens its customise panel', () => {
+	it('reaches Wooden Pillars last in slot 2 and opens its customise panel', () => {
 		const { buildToolManager, pillarTool, key, hotbarStates } = buildHarness(pointerLocked);
 		key('Digit2');
-		for (let index = 0; index < 4; index++) key('ArrowDown');
+		for (let index = 0; index < 5; index++) key('ArrowDown');
 		expect(pillarTool.activateCount).toBe(1);
 		expect(hotbarStates.at(-1)).toMatchObject({
 			toolId: 'pillar',
-			variantIndex: 4,
-			variantCount: 5
+			variantIndex: 5,
+			variantCount: 6
 		});
 		key('KeyE');
 		expect(buildToolManager.isPlacementCustomizeOpen()).toBe(true);
 	});
 
 	it('selects each group default from the number keys', () => {
-		const { polyWallTool, doorTool, ceilingTool, key, hotbarStates } = buildHarness(pointerLocked);
+		const { cornerWallTool, doorTool, ceilingTool, key, hotbarStates } =
+			buildHarness(pointerLocked);
 
 		key('Digit2');
-		expect(polyWallTool.activateCount).toBe(1);
-		expect(hotbarStates.at(-1)?.toolId).toBe('polygon-wall');
+		expect(cornerWallTool.activateCount).toBe(1);
+		expect(hotbarStates.at(-1)?.toolId).toBe('corner-wall');
 
 		key('Digit3');
 		expect(doorTool.activateCount).toBe(1);
@@ -815,11 +819,22 @@ describe('Hotbar slot variants (↑/↓)', () => {
 		expect(hotbarStates.at(-1)?.toolId).toBe('beam');
 	});
 
-	it('cycles Poly Wall ↔ Wall and Ceiling → Floor → Roof', () => {
-		const { polyWallTool, wallTool, ceilingTool, floorTool, roofTool, key, hotbarStates } =
-			buildHarness(pointerLocked);
+	it('cycles Corner Walls → Poly Wall → Wall and Ceiling → Floor → Roof', () => {
+		const {
+			cornerWallTool,
+			polyWallTool,
+			wallTool,
+			ceilingTool,
+			floorTool,
+			roofTool,
+			key,
+			hotbarStates
+		} = buildHarness(pointerLocked);
 
 		key('Digit2');
+		key('ArrowDown');
+		expect(cornerWallTool.deactivateCount).toBe(1);
+		expect(polyWallTool.activateCount).toBe(1);
 		key('ArrowDown');
 		expect(polyWallTool.deactivateCount).toBe(1);
 		expect(wallTool.activateCount).toBe(1);
@@ -879,7 +894,7 @@ describe('BuildToolManager placement customize (E)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('opens on Wall and Poly Wall', () => {
+	it('opens on Corner Walls and Poly Wall', () => {
 		const { buildToolManager, key } = buildHarness(pointerLocked);
 
 		key('Digit2');

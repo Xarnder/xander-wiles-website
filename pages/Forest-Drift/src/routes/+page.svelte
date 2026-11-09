@@ -1979,10 +1979,11 @@
 							</dd>
 							<dt>↑ / ↓</dt>
 							<dd>
-								Cycle tools inside the selected slot — Poly Wall / Wall / Fence &amp; Railing /
-								Skirting / Wooden Pillars, Door / Window / Beam, Ceiling / Floor / Roof, Carpet /
-								Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently used objects. The last
-								choice is remembered. While a roof is being adjusted, ↑/↓ still change rise instead.
+								Cycle tools inside the selected slot — Corner Walls / Poly Wall / Wall / Fence &amp;
+								Railing / Skirting / Wooden Pillars, Door / Window / Beam, Ceiling / Floor / Roof,
+								Carpet / Path / Planks / Tiles. On slot 8, ↑/↓ cycle your recently used objects. The
+								last choice is remembered. While a roof is being adjusted, ↑/↓ still change rise
+								instead.
 							</dd>
 							<dt>Left click</dt>
 							<dd>Place / confirm</dd>
@@ -2011,6 +2012,16 @@
 								(carpets, paths, planks, tiles) before placing. On Ceiling, Floor, or Roof, set how
 								high the next piece sits above this storey's floor. Esc or E again closes the panel.
 								Settings apply to the next piece, not ones already built.
+							</dd>
+						</dl>
+
+						<h3>Corner Walls (2, the default wall tool)</h3>
+						<dl>
+							<dt>Two clicks</dt>
+							<dd>
+								Click one corner of the room, then the opposite corner: all four walls of a
+								right-angled room are built at once. E sets their height and thickness, B toggles
+								snapping to existing wall corners, right click or Backspace starts again.
 							</dd>
 						</dl>
 

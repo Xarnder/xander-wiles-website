@@ -63,6 +63,7 @@ export type ToolId =
 	| 'door'
 	| 'beam'
 	| 'polygon-wall'
+	| 'corner-wall'
 	| 'barrier'
 	| 'skirting'
 	| 'pillar'
@@ -110,7 +111,7 @@ export interface HotbarSlot {
 }
 
 /**
- * 1 Foundation · 2 Poly Wall/Wall/Fence & Railing/Skirting/Wooden Pillars · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
+ * 1 Foundation · 2 Corner Walls/Poly Wall/Wall/Fence & Railing/Skirting/Wooden Pillars · 3 Door/Window/Beam · 4 Ceiling/Floor/Roof · 5 Stairs ·
  * 6 Floor Detailing (Carpet / Path / Planks / Tiles) · 8 Place Object (Mini Builds + lights, chosen in
  * the Object Library with `E`). Slot 7 is the Shovel.
  */
@@ -119,6 +120,8 @@ export const DEFAULT_HOTBAR_SLOTS: readonly HotbarSlotDefinition[] = [
 	{
 		slot: 2,
 		variants: [
+			// Two clicks, opposite corners: a closed right-angled room. The default wall tool.
+			{ toolId: 'corner-wall', label: 'Corner Walls' },
 			{ toolId: 'polygon-wall', label: 'Poly Wall' },
 			{ toolId: 'wall', label: 'Wall' },
 			{ toolId: 'barrier', label: 'Fence / Rail' },
@@ -205,6 +208,7 @@ export const CUSTOMIZABLE_PLACEMENT_TOOLS = [
 	'beam',
 	'wall',
 	'polygon-wall',
+	'corner-wall',
 	'barrier',
 	'skirting',
 	'pillar',
@@ -227,6 +231,7 @@ export function isCustomizablePlacementTool(id: ToolId): id is CustomizablePlace
 		id === 'beam' ||
 		id === 'wall' ||
 		id === 'polygon-wall' ||
+		id === 'corner-wall' ||
 		id === 'barrier' ||
 		id === 'skirting' ||
 		id === 'pillar' ||

@@ -16,9 +16,8 @@ test('slot 2 cycles to Fence / Railing, E customises it, and a fence survives a 
 	await createAndEnterWorld(page, { name: 'Fence World', seed: 'remove-seed' });
 
 	await page.keyboard.press('2');
-	await expect(page.getByTestId('hotbar-slot-polygon-wall')).toHaveClass(/active/);
-	await page.keyboard.press('ArrowDown');
-	await page.keyboard.press('ArrowDown');
+	await expect(page.getByTestId('hotbar-slot-corner-wall')).toHaveClass(/active/);
+	for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
 	const slot = page.getByTestId('hotbar-slot-barrier');
 	await expect(slot).toHaveClass(/active/);
 	await expect(slot).toHaveAccessibleName('Fence / Rail (slot 2)');

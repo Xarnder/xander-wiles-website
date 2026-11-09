@@ -673,6 +673,8 @@ export class ThreeScene implements WorldRuntime {
 	readonly miniBuildInteraction: MiniBuildInteractionRuntime;
 	private readonly doorInteraction: DoorInteractionController;
 	private readonly polygonWallTool: PolygonWallTool;
+	/** Corner Walls: the same tool drawing a right-angled room from two opposite corners. */
+	private readonly cornerWallTool: PolygonWallTool;
 	private readonly ceilingTool: CeilingTool;
 	private readonly floorTool: FloorTool;
 	private readonly roofTool: RoofTool;
@@ -1488,7 +1490,7 @@ export class ThreeScene implements WorldRuntime {
 		for (const material of this.pillarTool.getPreviewMaterials())
 			this.graphicsPipeline.registerMaterial(material);
 
-		this.polygonWallTool = new PolygonWallTool({
+		const wallDrawOptions = {
 			scene: this.scene,
 			camera: this.camera,
 			foundationManager: this.foundationManager,
@@ -1498,7 +1500,9 @@ export class ThreeScene implements WorldRuntime {
 			terrainSettings: this.settings,
 			buildingSettings,
 			onHudChange: options.onBuildHudChange
-		});
+		};
+		this.polygonWallTool = new PolygonWallTool(wallDrawOptions);
+		this.cornerWallTool = new PolygonWallTool({ ...wallDrawOptions, shape: 'rectangle' });
 
 		this.ceilingTool = new CeilingTool({
 			scene: this.scene,
@@ -1749,6 +1753,7 @@ export class ThreeScene implements WorldRuntime {
 				door: this.doorTool,
 				beam: this.beamTool,
 				'polygon-wall': this.polygonWallTool,
+				'corner-wall': this.cornerWallTool,
 				barrier: this.barrierTool,
 				skirting: this.skirtingTool,
 				pillar: this.pillarTool,
@@ -5230,6 +5235,7 @@ export class ThreeScene implements WorldRuntime {
 		this.doorTool.dispose();
 		this.beamTool.dispose();
 		this.polygonWallTool.dispose();
+		this.cornerWallTool.dispose();
 		this.barrierTool.dispose();
 		this.ceilingTool.dispose();
 		this.floorTool.dispose();

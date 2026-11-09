@@ -46,7 +46,7 @@
 	});
 	let revision = $state(0);
 	let resetEpoch = $state(0);
-	let isWall = $derived(toolId === 'wall' || toolId === 'polygon-wall');
+	let isWall = $derived(toolId === 'wall' || toolId === 'polygon-wall' || toolId === 'corner-wall');
 	let isOpening = $derived(toolId === 'window' || toolId === 'door');
 	let isFloorDetail = $derived(isFloorDetailTool(toolId));
 	let isStairs = $derived(toolId === 'stairs');

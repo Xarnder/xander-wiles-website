@@ -568,7 +568,7 @@ export function buildPlacementPreviewModel(
 		);
 	} else if (toolId === 'beam') {
 		group = buildWallPreview(settings, materials.building, [], true);
-	} else if (toolId === 'polygon-wall') {
+	} else if (toolId === 'polygon-wall' || toolId === 'corner-wall') {
 		group = buildPolygonWallPreview(settings, materials.building);
 	} else if (toolId === 'barrier') {
 		group = buildBarrierPreview(settings, materials.building);
