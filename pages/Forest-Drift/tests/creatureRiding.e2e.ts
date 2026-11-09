@@ -200,7 +200,15 @@ test.describe('riding a two-legged creature (single player)', () => {
 		expect(state.seat === 'neck' || state.seat === 'right-shoulder').toBe(true);
 		await expect(page.getByTestId('ride-hud')).toBeVisible();
 		await expect(page.getByTestId('carry-announcement')).toContainText(`Riding ${state.species}`);
-		await expect(page.getByTestId('carry-prompt')).toContainText('[K] Get off');
+		// Get off is shown just above the health bar, not by the crosshair.
+		const hint = page.getByTestId('carry-key-hint');
+		await expect(hint).toHaveText('[K] Get off');
+		await expect(page.getByTestId('carry-prompt')).toBeHidden();
+		const hintBox = (await hint.boundingBox())!;
+		const healthBox = (await page.getByTestId('health-hud').boundingBox())!;
+		expect(hintBox.y + hintBox.height).toBeLessThanOrEqual(healthBox.y + 1);
+		expect(healthBox.y - (hintBox.y + hintBox.height)).toBeLessThan(16);
+		expect(hintBox.y).toBeGreaterThan(page.viewportSize()!.height * 0.75);
 
 		// Sprint for a while: the mount runs faster than the player can.
 		await scene(page, (s) => {
@@ -279,6 +287,7 @@ test.describe('riding a two-legged creature (single player)', () => {
 		}
 		expect(await scene(page, (s) => s.getCarryState().carrying)).toBe(true);
 		expect(await scene(page, (s) => s.getRideState().riding)).toBe(true);
+		await expect(page.getByTestId('carry-key-hint')).toHaveText('[K] Get off · Left click to fire');
 		const launched = await scene(page, (s) => {
 			const before = s.projectiles.launched;
 			s.setCarryTrigger(true);

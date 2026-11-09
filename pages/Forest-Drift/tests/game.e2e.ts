@@ -380,7 +380,10 @@ test('Wall Tool defaults to Axis + Inline snap on entry, and B still toggles it 
 	await expect(snapBadge).toHaveText('AXIS SNAP'); // off -> axis
 
 	await page.keyboard.press('b');
-	await expect(snapBadge).not.toBeVisible(); // axis -> off (Wall Tool never reaches axis-inline by cycling)
+	await expect(snapBadge).toHaveText('WALL CORNER + AXIS SNAP'); // axis -> wall corners
+
+	await page.keyboard.press('b');
+	await expect(snapBadge).not.toBeVisible(); // wall corners -> off (never axis-inline by cycling)
 
 	// Re-selecting the tool resets back to the default rather than remembering the last choice —
 	// the very next `B` press goes straight back to `off` again, not `axis`.

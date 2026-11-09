@@ -209,15 +209,23 @@
 	/** Screen-reader text for carrying and riding. */
 	let creatureAnnouncement = $state('');
 	/**
-	 * While carrying, the hint above the health bar, away from the crosshair: `K` puts the creature
-	 * down (unless it means a mount, seat or door just now) and left click fires (unless stowed).
+	 * While carrying or riding, the hint above the health bar, away from the crosshair: `K` puts the
+	 * creature down or gets off the mount (unless it means something else just now), and left click
+	 * fires while carrying (unless stowed).
 	 */
 	let carryKeyHint = $derived.by(() => {
-		if (!carryState?.carrying) return null;
-		const putDown =
-			creaturePrompt?.action === 'putDown' && !miniBuildInteractionPrompt && !lookedAtDoorId;
-		const parts = [putDown && '[K] Put down', !carryState.stowed && 'Left click to fire'];
-		return parts.filter(Boolean).join(' · ') || null;
+		const riding = !!rideState?.riding;
+		if (!carryState?.carrying && !riding) return null;
+		const action = creaturePrompt?.action;
+		// Riding, K gets off even with a door in view; on foot, a door or seat takes K first.
+		const key =
+			riding && action === 'dismount' && !miniBuildInteractionPrompt
+				? '[K] Get off'
+				: !riding && action === 'putDown' && !miniBuildInteractionPrompt && !lookedAtDoorId
+					? '[K] Put down'
+					: null;
+		const fire = carryState?.carrying && !carryState.stowed ? 'Left click to fire' : null;
+		return [key, fire].filter(Boolean).join(' · ') || null;
 	});
 	/** Online climb-ons the room refused (riding), in the player's words. */
 	const RIDE_REFUSALS: Record<string, string> = {
@@ -2830,8 +2838,8 @@
 			{/if}
 
 			<!-- While riding, K always means the mount, even with a door in view. -->
-			<!-- Putting down is shown above the health bar (carryKeyHint), not here. -->
-			{#if creaturePrompt && creaturePrompt.action !== 'putDown' && !miniBuildInteractionPrompt && (!lookedAtDoorId || creaturePrompt.riding) && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
+			<!-- Putting down and getting off are shown above the health bar (carryKeyHint), not here. -->
+			{#if creaturePrompt && creaturePrompt.action !== 'putDown' && creaturePrompt.action !== 'dismount' && !miniBuildInteractionPrompt && (!lookedAtDoorId || creaturePrompt.riding) && pointerLocked && !clockBlocked() && !showHelp && !showTouchControls}
 				<button
 					class="door-toast carry-toast"
 					data-testid="carry-prompt"
