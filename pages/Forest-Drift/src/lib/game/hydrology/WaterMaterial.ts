@@ -105,15 +105,18 @@ const FRAG = /* glsl */ `
 		float viewDist = length(toCamera);
 		vec3 viewDir = toCamera / max(viewDist, 1e-4);
 		float fine = 1.0 - smoothstep(14.0, 40.0, viewDist);
-		bool river = vKind < 0.5;
+		// 0 on a river, 1 on a lake, and in between where a river runs into or out of a lake, so the
+		// current's ripples fade into the lake's instead of switching at a line.
+		float lakeMix = clamp(vKind, 0.0, 1.0);
 
 		// --- Flow-mapped waves: two phases half a cycle apart, cross-faded, so the pattern travels
 		// with the current but never stretches.
-		float speed = river ? length(vFlow) : 0.0;
-		vec2 dir = river ? vFlow / max(speed, 1e-4) : vec2(0.0);
+		float flowLength = length(vFlow);
+		float speed = flowLength * (1.0 - lakeMix);
+		vec2 dir = flowLength > 1e-4 ? vFlow / flowLength : vec2(1.0, 0.0);
 		vec2 p = vWorld.xz;
-		vec2 grad;
-		if (river) {
+		vec2 grad = vec2(0.0);
+		if (lakeMix < 0.999) {
 			float cycle = uTime * 0.45;
 			float ph0 = fract(cycle);
 			float ph1 = fract(cycle + 0.5);
@@ -127,9 +130,12 @@ const FRAG = /* glsl */ `
 			vec2 gq = mix(g1, g0, w0);
 			grad = dir * gq.x * 0.6 + across * gq.y;
 			grad *= 0.7 + 0.6 * min(speed, 1.5);
-		} else {
+		}
+		if (lakeMix > 0.001) {
 			vec2 wind = vec2(uTime * 0.21, -uTime * 0.13);
-			grad = wWaves(p * 0.7 + wind, fine) * 0.75 + wWaves(p * 0.31 - wind * 0.6 + 5.0, 0.0) * 0.35;
+			vec2 lakeGrad =
+				wWaves(p * 0.7 + wind, fine) * 0.75 + wWaves(p * 0.31 - wind * 0.6 + 5.0, 0.0) * 0.35;
+			grad = mix(grad, lakeGrad, lakeMix);
 		}
 		// Ripples flatten with distance: far away they would only alias into grey static.
 		float waveScale = uWaveStrength * 0.32 * (1.0 - 0.75 * smoothstep(25.0, 140.0, viewDist));
@@ -170,12 +176,12 @@ const FRAG = /* glsl */ `
 		float foam = 0.0;
 		if (uQuality >= 0.5) {
 			vec2 fp = vWorld.xz;
-			if (river) fp -= dir * uTime * speed * 1.1;
+			fp -= dir * uTime * speed * 1.1;
 			float breakup = wNoised(fp * 2.3).x * 0.35 + wNoised(fp * 0.7 + 4.0).x * 0.15 + 0.5;
 			float edge = (1.0 - smoothstep(0.02, 0.14, depth)) * smoothstep(0.45, 0.75, breakup);
 			// Rivers churn against their banks; lakes barely lap at theirs.
-			foam = edge * (river ? 0.45 : 0.12);
-			if (river) {
+			foam = edge * mix(0.45, 0.12, lakeMix);
+			if (speed > 1e-4) {
 				// Soft, broken streaks along fast currents (broad and faint, so they never read as lines).
 				vec2 sp = vec2(dot(vWorld.xz, dir) - uTime * speed * 1.6, dot(vWorld.xz, vec2(-dir.y, dir.x)));
 				float streak = smoothstep(0.62, 0.9, wNoised(sp * vec2(0.3, 0.9)).x * 0.5 + 0.5);
@@ -188,6 +194,9 @@ const FRAG = /* glsl */ `
 		}
 		// Soft contact with the bank.
 		alpha *= smoothstep(0.0, 0.05, depth + 0.012);
+		// A river's surface carrying on under a lake fades out there (1 to 2), so the two overlap
+		// instead of leaving a strip between them.
+		alpha *= 1.0 - clamp(vKind - 1.0, 0.0, 1.0);
 
 		gl_FragColor = vec4(col, alpha);
 		#include <fog_fragment>

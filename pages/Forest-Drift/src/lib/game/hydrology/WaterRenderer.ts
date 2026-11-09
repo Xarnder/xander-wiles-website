@@ -11,6 +11,7 @@ import {
 	type HydrologySample,
 	type HydrologyVisualSettings,
 	type LakeDefinition,
+	type RiverDefinition,
 	type RiverSample
 } from './HydrologyTypes';
 import { applyWaterLook, createWaterMaterial, waterQualityFor } from './WaterMaterial';
@@ -130,11 +131,14 @@ export class WaterRenderer {
 		const bankScale = hydrology.settings.riverBankScale;
 		for (const river of hydrology.riversNear(playerX, playerZ, radius)) {
 			const end = Math.max(2, river.endIndex);
+			let blend: Float32Array | null = null;
 			for (let start = 0; start < end - 1; start += SECTION) {
 				const key = `${river.id}:${start}`;
 				keep.add(key);
 				if (this.sections.has(key)) continue;
-				const slice = river.samples.slice(start, Math.min(end, start + SECTION + 1));
+				const stop = Math.min(end, start + SECTION + 1);
+				const slice = river.samples.slice(start, stop);
+				blend ??= lakeKinds(river, end, inLake);
 				const geometry = ribbonGeometry(
 					slice,
 					river.id,
@@ -142,7 +146,7 @@ export class WaterRenderer {
 					columns,
 					bankScale,
 					readAt,
-					inLake
+					blend.subarray(start, stop)
 				);
 				if (!geometry) continue;
 				const mesh = new THREE.Mesh(geometry, this.material);
@@ -259,7 +263,8 @@ function ribbonGeometry(
 	columns: number,
 	bankScale: number,
 	read: WaterRead,
-	inLake: InLake
+	/** Per sample, how it's drawn near a lake (`lakeKinds`): from 2 on, not at all. */
+	kindsAt: ArrayLike<number>
 ): THREE.BufferGeometry | null {
 	const usedIndex: number[] = [];
 	for (let i = 0; i < samples.length; i += stride) usedIndex.push(i);
@@ -273,12 +278,12 @@ function ribbonGeometry(
 	const depths = new Float32Array(count);
 	const kinds = new Float32Array(count);
 	const indices: number[] = [];
-	// Rows whose centreline is on a lake: the lake surface is drawn there, not a second river skin.
-	const lakeRow = usedIndex.map((index) => inLake(samples[index].x, samples[index].z));
+	// Rows fully faded out on a lake: the lake surface is drawn there, not a second river skin.
+	const hidden = usedIndex.map((index) => (kindsAt[index] ?? 0) >= 2);
 
 	for (let row = 0; row < usedIndex.length; row++) {
 		const index = usedIndex[row];
-		const sample = shoreRow(samples, usedIndex, lakeRow, row, inLake);
+		const sample = samples[index];
 		const px = -sample.tangentZ;
 		const pz = sample.tangentX;
 		const left = ribbonReach(sample, -1, riverId, bankScale, read);
@@ -298,9 +303,9 @@ function ribbonGeometry(
 			flows[v * 2] = sample.tangentX * speed;
 			flows[v * 2 + 1] = sample.tangentZ * speed;
 			depths[v] = y - read(x, z).terrainY;
-			kinds[v] = 0;
+			kinds[v] = kindsAt[index] ?? 0;
 		}
-		if (row + 1 < usedIndex.length && !(lakeRow[row] && lakeRow[row + 1])) {
+		if (row + 1 < usedIndex.length && !(hidden[row] && hidden[row + 1])) {
 			for (let c = 0; c < columns - 1; c++) {
 				const a = row * columns + c;
 				const b = a + 1;
@@ -319,39 +324,6 @@ function ribbonGeometry(
  * back to where the centreline crosses the shoreline, so the ribbon stops exactly at the lake's edge
  * instead of running on under the lake surface.
  */
-function shoreRow(
-	samples: RiverSample[],
-	usedIndex: number[],
-	lakeRow: boolean[],
-	row: number,
-	inLake: InLake
-): RiverSample {
-	const sample = samples[usedIndex[row]];
-	if (!lakeRow[row]) return sample;
-	const neighbour =
-		row > 0 && !lakeRow[row - 1]
-			? row - 1
-			: row + 1 < usedIndex.length && !lakeRow[row + 1]
-				? row + 1
-				: -1;
-	if (neighbour < 0) return sample;
-	const land = samples[usedIndex[neighbour]];
-	let lo = 0;
-	let hi = 1;
-	for (let n = 0; n < 8; n++) {
-		const mid = (lo + hi) * 0.5;
-		const x = land.x + (sample.x - land.x) * mid;
-		const z = land.z + (sample.z - land.z) * mid;
-		if (inLake(x, z)) hi = mid;
-		else lo = mid;
-	}
-	return {
-		...sample,
-		x: land.x + (sample.x - land.x) * hi,
-		z: land.z + (sample.z - land.z) * hi
-	};
-}
-
 function waterGeometry(
 	positions: Float32Array,
 	normals: Float32Array,
@@ -376,6 +348,98 @@ function waterGeometry(
  * shoreline get no depth, so the surface fades out there instead of flooding low land beyond it.
  */
 const LAKE_RINGS = [0.3, 0.55, 0.75, 0.87, 0.95, 1.0, 1.03];
+/** A river this close (m) to a lake's level where it crosses the shoreline runs into or out of it. */
+const MOUTH_LEVEL_TOLERANCE = 0.2;
+/** Over this far (m) along a river from where it meets a lake, its ripples fade into the lake's. */
+const LAKE_BLEND_DISTANCE = 16;
+/** How far (m) a river's surface carries on past the shore under the lake, fading out. */
+const LAKE_OVERLAP = 6;
+
+/**
+ * The depth a lake surface vertex is drawn with at `fraction` of the shore radius. The shoreline
+ * (1.0) fades the surface out and anything beyond it is hidden, except where a river at the lake's
+ * own level runs in or out across the shoreline: there the lake stays at full depth to meet the
+ * river's surface, with no seam and no foam line.
+ */
+export function lakeEdgeDepth(
+	fraction: number,
+	depth: number,
+	water: Pick<HydrologySample, 'waterType' | 'waterSurfaceY'>,
+	lakeLevel: number
+): number {
+	if (fraction > 1.0) return Math.min(depth, -0.05);
+	if (fraction < 1.0) return depth;
+	const riverMouth =
+		water.waterType === 'river' &&
+		Math.abs(water.waterSurfaceY - lakeLevel) <= MOUTH_LEVEL_TOLERANCE;
+	return riverMouth ? depth : Math.min(depth, 0);
+}
+
+/**
+ * Per sample (up to `end`), how a river's surface is drawn near a lake it runs out of or into:
+ * - 0 on the river itself;
+ * - rising smoothly to 1 over its last `LAKE_BLEND_DISTANCE` before the shore, where its flowing
+ *   ripples fade into the lake's;
+ * - past the shore, on the lake, from 1 to 2 over `LAKE_OVERLAP`: the surface carries on under the
+ *   lake's look and fades out, so the river and lake always overlap whatever angle the shore crosses
+ *   it at, and no strip of water is left undrawn between them. From 2 on it isn't drawn.
+ * Distances are measured from where the centreline actually crosses the shore.
+ */
+export function lakeKinds(river: RiverDefinition, end: number, inLake: InLake): Float32Array {
+	const count = Math.max(0, Math.min(end, river.samples.length));
+	const kinds = new Float32Array(count);
+	if (!river.outletOfLakeId && !river.sinkLakeId) return kinds;
+	const samples = river.samples;
+	const near = (i: number) =>
+		i < (river.lakeLockEnd ?? 0) + 4 || i >= (river.lakeLockStart ?? Number.POSITIVE_INFINITY) - 4;
+	const onLake = Array.from({ length: count }, (_, i) =>
+		near(i) ? inLake(samples[i].x, samples[i].z) : false
+	);
+	// Signed distance from the shore along the river: negative on the river, positive on the lake.
+	const shore = new Float32Array(count).fill(Number.NEGATIVE_INFINITY);
+	const crossing = (a: number, b: number) => {
+		// Fraction of the way from sample a (off the lake) to b (on it) where the shore is.
+		let lo = 0,
+			hi = 1;
+		for (let n = 0; n < 10; n++) {
+			const mid = (lo + hi) / 2;
+			const x = samples[a].x + (samples[b].x - samples[a].x) * mid;
+			const z = samples[a].z + (samples[b].z - samples[a].z) * mid;
+			if (inLake(x, z)) hi = mid;
+			else lo = mid;
+		}
+		return hi;
+	};
+	const gap = (a: number, b: number) =>
+		Math.hypot(samples[b].x - samples[a].x, samples[b].z - samples[a].z);
+	for (let i = 0; i + 1 < count; i++) {
+		if (onLake[i] === onLake[i + 1]) continue;
+		const [off, on] = onLake[i] ? [i + 1, i] : [i, i + 1];
+		const f = crossing(off, on);
+		const length = gap(i, i + 1);
+		// Walk away from this crossing both ways, keeping the nearest crossing's distance.
+		const mark = (from: number, dir: number, sign: number, first: number) => {
+			let d = first;
+			for (let j = from; j >= 0 && j < count && onLake[j] === sign > 0; j += dir) {
+				if (Math.abs(d) < Math.abs(shore[j])) shore[j] = d;
+				const next = j + dir;
+				if (next >= 0 && next < count) d += sign * gap(Math.min(j, next), Math.max(j, next));
+			}
+		};
+		mark(on, on > off ? 1 : -1, 1, (1 - f) * length);
+		mark(off, off > on ? 1 : -1, -1, -f * length);
+	}
+	for (let i = 0; i < count; i++) {
+		const d = shore[i];
+		if (!Number.isFinite(d)) continue;
+		if (d >= 0) kinds[i] = 1 + Math.min(1, d / LAKE_OVERLAP);
+		else {
+			const t = Math.min(1, -d / LAKE_BLEND_DISTANCE);
+			kinds[i] = 1 - t * t * (3 - 2 * t);
+		}
+	}
+	return kinds;
+}
 
 /** A lake as concentric rings around its centre, with the real depth sampled at every vertex. */
 function lakeGeometry(
@@ -407,9 +471,8 @@ function lakeGeometry(
 			positions[v * 3 + 1] = y;
 			positions[v * 3 + 2] = z;
 			normals[v * 3 + 1] = 1;
-			const depth = y - terrainAt(x, z);
-			const fraction = LAKE_RINGS[ring];
-			depths[v] = fraction >= 1.0 ? Math.min(depth, fraction > 1.0 ? -0.05 : 0) : depth;
+			const water = read(x, z);
+			depths[v] = lakeEdgeDepth(LAKE_RINGS[ring], y - water.terrainY, water, lake.waterLevel);
 		}
 	}
 	const indices: number[] = [];

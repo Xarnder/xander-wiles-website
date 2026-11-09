@@ -56,3 +56,29 @@ Existing determinism, spawn-river and bank tests still pass. The spawn test now 
 In the in-app browser, all five rivers within 600 m of spawn on the `forest` seed now start from a lake or a spring pond and end in a lake or end pond. Seen from above:
 - The spawn river leaves a round spring pond with a sandy shore.
 - It ends in a rounded end pond, the water levels matching.
+
+## River and lake surfaces blend where they meet (2026-11-09)
+
+At both ends the river and its lake were already at one height (the locked mouth samples sit on the lake level). But they were drawn with a seam:
+- the river's surface stopped exactly at the shoreline;
+- the lake's surface faded to nothing along its whole shoreline, foam line included, which put a thin see-through, foamy strip across the mouth;
+- the river's flowing ripples also switched to the lake's wind ripples right at that line.
+
+What changed:
+- `WaterRenderer.lakeEdgeDepth`: where a river at the lake's own level (within 0.2 m) crosses the shoreline, the lake keeps its real depth there instead of fading, so the two surfaces meet with no gap and no foam line. Everywhere else the shore fades as before.
+- `WaterRenderer.lakeKinds`: each river's surface carries a per-vertex value in the existing `aKind` attribute.
+  - It rises from 0 to 1 over the river's last 16 m before a lake, at its source and at its sink.
+  - Past the shore it goes on from 1 to 2 over 6 m.
+  - Distances are measured from where the centreline really crosses the shore (found by bisection), not from the nearest 8 m sample.
+- The river's surface no longer stops at the shoreline. It carries on 6 m under the lake with the lake's look and fades out there; past 2 it isn't drawn. A straight cut across the river had left a strip of water 1–2 m wide undrawn on one side wherever the shore crossed the river at an angle. Now the two surfaces always overlap.
+- `WaterMaterial`:
+  - The shader cross-fades the river's flowing ripples into the lake's wind ripples between 0 and 1. The current's speed, its foam streaks and its bank foam fade with it.
+  - It fades the surface's opacity out between 1 and 2.
+
+This only changes how water is drawn: the world fingerprints are unchanged. Tests are in `riverLakeBlend.spec.ts`:
+- the value rises smoothly before the shore;
+- 4 m past it, the surface is two-thirds faded, and from 6 m on it's gone, at both a sink lake and a source pond;
+- a river with no lakes gets nothing;
+- the shoreline keeps full depth only at a river at the lake's level.
+
+Checked in the in-app browser at both ends of the spawn river. Rays cast straight down over a 29 × 25 m grid around each mouth found every wet point along the river's channel covered by the river, the lake or both. The only uncovered points were a couple on the lake's own shoreline beside the mouth, where a lake always fades out. Close up at midday, both joins read as one surface.
