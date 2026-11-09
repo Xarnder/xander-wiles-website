@@ -102,7 +102,7 @@ interface SceneHandle {
 	setCarryTrigger(held: boolean): void;
 	getHealth(): { current: number };
 	getCarryState(): { carrying: boolean; charges: number };
-	projectiles: { launched: number; playerHits: number };
+	projectiles: { launched: number; playerHits: number; remoteDrawn: number };
 	buildToolManager: { isNormalMode(): boolean };
 	carry: { carriedId: string | null; pending: boolean };
 	controller: {
@@ -367,11 +367,12 @@ test('online carrying: the room arbitrates and everyone sees who holds what', as
 			() => (window as unknown as GameWindow).__forestSession.scene.getHealth().current
 		)
 	).toBe(36);
-	// The watcher saw the pellet too.
+	// The watcher saw the pellet too: actually drawn in flight, not just received. (It used to stop
+	// against the shooter's own body on its first frame, so nobody but the shooter saw it.)
 	await expect
 		.poll(() =>
 			watcher.evaluate(
-				() => (window as unknown as GameWindow).__forestSession.scene.projectiles.launched
+				() => (window as unknown as GameWindow).__forestSession.scene.projectiles.remoteDrawn
 			)
 		)
 		.toBeGreaterThanOrEqual(1);

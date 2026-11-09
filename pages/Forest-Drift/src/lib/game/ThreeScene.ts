@@ -1842,7 +1842,8 @@ export class ThreeScene implements WorldRuntime {
 		};
 		// Online, this player's pellets can hit the other players as drawn here.
 		this.projectiles.targets = () => this.multiplayer?.shotTargets?.() ?? [];
-		// Other players' pellets stop where they meet anyone, this player included (visual only).
+		// Other players' pellets stop where they meet anyone but their shooter, this player included
+		// (visual only).
 		this.projectiles.bodies = () => {
 			if (!this.multiplayer) return [];
 			const self = this.controller.worldPosition;
@@ -2241,12 +2242,13 @@ export class ThreeScene implements WorldRuntime {
 					this.waypoints.setShared(list);
 				},
 				applySharedWaypoints: (message) => this.waypoints.applyShared(message),
-				remoteShot: (origin, dir, colour, ageMs) =>
-					this.projectiles.spawn(
+				remoteShot: (origin, dir, colour, ageMs, slot) =>
+					this.projectiles.spawnRemote(
 						{ x: origin[0], y: origin[1], z: origin[2] },
 						{ x: dir[0], y: dir[1], z: dir[2] },
 						colour,
-						performance.now() - ageMs
+						performance.now() - ageMs,
+						slot
 					),
 				shotResult: ({ shot, hit, refused, charges }) => {
 					if (hit) this.carryFeedback?.({ type: 'hit' });

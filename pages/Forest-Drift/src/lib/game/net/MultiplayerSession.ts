@@ -114,7 +114,14 @@ export interface SceneMultiplayerContext {
 		self: boolean
 	) => void;
 	/** Ranged weapons: someone else's pellet, `ageMs` after it was fired. */
-	remoteShot?: (origin: Vec3Tuple, dir: Vec3Tuple, colour: string, ageMs: number) => void;
+	/** Someone else's pellet, fired by `slot`, already `ageMs` old. */
+	remoteShot?: (
+		origin: Vec3Tuple,
+		dir: Vec3Tuple,
+		colour: string,
+		ageMs: number,
+		slot: number
+	) => void;
 	/** Ranged weapons: the room's verdict on this player's pellet `shot`. */
 	shotResult?: (result: {
 		shot: number;
@@ -375,7 +382,8 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 					message.origin,
 					message.dir,
 					message.colour,
-					Number.isFinite(age) ? Math.max(0, age) : 0
+					Number.isFinite(age) ? Math.max(0, age) : 0,
+					message.slot
 				);
 			},
 			onShotResult: (message) => {

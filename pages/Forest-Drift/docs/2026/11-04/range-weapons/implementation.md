@@ -346,3 +346,16 @@ A quiet helper, with no prompt or toast. Pressing `K` (or the touch creature but
 - `ThreeScene.useCreatureKey` triggers it on the `none` route.
 
 The calm is local to each player's own view of the herd.
+
+## Other players' pellets were never seen (2026-11-09)
+
+**The bug:** only the shooter ever saw a pellet. On everyone else's screen it stopped against the shooter's own body on its first frame:
+- Remote pellets stop at any player's body (visual only), and that list includes the shooter.
+- A pellet starts 0.2–0.7 m in front of the shooter's eye, inside their 0.57 m body hit zone as drawn by other players.
+- The two-browser test only checked `projectiles.launched`, which counts a pellet even if it stops at once.
+
+**The fix:**
+- `ProjectileSystem.spawnRemote` takes the shooter's slot (passed on from the room's `shot` message) and never stops a pellet at its own shooter's body. The room already refuses self-hits.
+- `remoteDrawn` counts remote pellets actually drawn, and the e2e now requires it. That check fails without the fix.
+
+It's client only: no protocol change and no Worker deploy, and each shot is still one message from the shooter and one relayed by the room. Next steps, such as starting the pellet from the creature the viewer sees and adding streaks, are in `docs/2026/11-09/remote-projectiles/plan.md`.

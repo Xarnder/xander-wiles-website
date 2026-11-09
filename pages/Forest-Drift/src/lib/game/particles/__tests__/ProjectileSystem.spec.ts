@@ -58,10 +58,10 @@ describe('ProjectileSystem', () => {
 		expect(impacts.map((i) => i.kind)).toEqual(['world']);
 	});
 
-	it("never reports hits for other players' pellets (no shot id)", () => {
+	it("never reports hits for other players' pellets", () => {
 		const { projectiles, impacts } = system();
 		projectiles.targets = () => [{ slot: 4, x: 0, y: 0, z: -10 }];
-		projectiles.spawn(origin, forward, '#ffcc00', 0);
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 2);
 		run(projectiles);
 		expect(impacts.every((i) => i.kind !== 'player')).toBe(true);
 	});
@@ -100,9 +100,27 @@ describe('ProjectileSystem', () => {
 	it("stops other players' pellets at bodies, this player's included, without reporting", () => {
 		const { projectiles, impacts } = system();
 		projectiles.bodies = () => [{ slot: -1, x: 0, y: 0, z: -10 }];
-		projectiles.spawn(origin, forward, '#ffcc00', 0);
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 2);
 		run(projectiles);
 		expect(impacts.map((i) => i.kind)).toEqual(['body']);
 		expect(projectiles.playerHits).toBe(0);
+	});
+
+	it("flies out of its own shooter's body: it starts at their creature's mouth, inside it", () => {
+		const { projectiles, impacts } = system();
+		// Slot 2 fired from 0.4 m in front of their eye, well inside their body as drawn here.
+		const shooter = { slot: 2, x: 0, y: 0, z: 0 };
+		projectiles.bodies = () => [shooter, { slot: -1, x: 0, y: 0, z: -10 }];
+		projectiles.spawnRemote({ x: 0, y: 1.5, z: -0.4 }, forward, '#ffcc00', 0, 2);
+		projectiles.update(100);
+		// Still flying, drawn about 3.5 m out.
+		expect(projectiles.activeCount).toBe(1);
+		expect(projectiles.remoteDrawn).toBe(1);
+		expect(impacts).toEqual([]);
+		run(projectiles);
+		// It lands on the other player, 10 m away, not on the shooter.
+		expect(impacts).toHaveLength(1);
+		expect(impacts[0].kind).toBe('body');
+		expect(impacts[0].point.z).toBeLessThan(-9);
 	});
 });

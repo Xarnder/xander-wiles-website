@@ -45,6 +45,13 @@ interface Pellet {
 	colour: THREE.Color;
 	/** This player's shot id (online), when hits on other players should be reported. */
 	shot: number | null;
+	/**
+	 * Someone else's pellet: the slot of the player who fired it. It starts at their creature's
+	 * mouth, inside their own body as drawn here, so that body never stops it.
+	 */
+	shooter: number | null;
+	/** Drawn on at least one frame (for `remoteDrawn`). */
+	drawn: boolean;
 }
 
 /**
@@ -76,6 +83,8 @@ export class ProjectileSystem {
 	bodies: (() => ProjectileTarget[]) | null = null;
 	/** Pellets that met another player (local shots). */
 	playerHits = 0;
+	/** Other players' pellets that were actually drawn, on at least one frame (diagnostics, tests). */
+	remoteDrawn = 0;
 
 	constructor(
 		private readonly world: ProjectileWorld,
@@ -106,7 +115,9 @@ export class ProjectileSystem {
 				firedAt: 0,
 				checkedMs: 0,
 				colour: new THREE.Color(),
-				shot: null
+				shot: null,
+				shooter: null,
+				drawn: false
 			};
 		});
 		this.mesh.count = MAX_PROJECTILES;
@@ -120,13 +131,41 @@ export class ProjectileSystem {
 		return n;
 	}
 
-	/** Launches a pellet. Returns false when the pool is full. `dir` is normalised here. */
+	/**
+	 * Draws another player's pellet, fired by `shooter` (online). Visual only: it stops at any body
+	 * but its shooter's, and never reports a hit. Returns false when the pool is full.
+	 */
+	spawnRemote(
+		origin: Vec3Like,
+		dir: Vec3Like,
+		colour: string,
+		nowMs: number,
+		shooter: number
+	): boolean {
+		return this.launch(origin, dir, colour, nowMs, null, shooter);
+	}
+
+	/**
+	 * Launches this player's pellet (`shot`: its id online, so hits on other players are reported).
+	 * Returns false when the pool is full. `dir` is normalised here.
+	 */
 	spawn(
 		origin: Vec3Like,
 		dir: Vec3Like,
 		colour: string,
 		nowMs: number,
 		shot: number | null = null
+	): boolean {
+		return this.launch(origin, dir, colour, nowMs, shot, null);
+	}
+
+	private launch(
+		origin: Vec3Like,
+		dir: Vec3Like,
+		colour: string,
+		nowMs: number,
+		shot: number | null,
+		shooter: number | null
 	): boolean {
 		let index = this.pellets.findIndex((p) => !p.active);
 		// Full: this player's own shot takes the slot of the oldest pellet someone else fired, so a
@@ -147,6 +186,8 @@ export class ProjectileSystem {
 		p.firedAt = nowMs;
 		p.checkedMs = 0;
 		p.shot = shot;
+		p.shooter = shooter;
+		p.drawn = false;
 		p.colour.set(colour);
 		this.mesh.setColorAt(index, p.colour);
 		if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
@@ -173,6 +214,7 @@ export class ProjectileSystem {
 				p.shot !== null ? (targets ??= this.targets?.() ?? []) : (bodies ??= this.bodies?.() ?? []);
 			if (age > p.checkedMs && list.length > 0) {
 				for (const target of list) {
+					if (target.slot === p.shooter) continue;
 					const at = sweepBody(p.origin, p.dir, p.checkedMs, age, target);
 					if (at !== null && (!met || at < met.at)) met = { slot: target.slot, at };
 				}
@@ -207,6 +249,8 @@ export class ProjectileSystem {
 			}
 			this.matrix.makeTranslation(this.to.x, this.to.y, this.to.z);
 			this.mesh.setMatrixAt(i, this.matrix);
+			if (!p.drawn && p.shooter !== null) this.remoteDrawn++;
+			p.drawn = true;
 		}
 		if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
 	}
