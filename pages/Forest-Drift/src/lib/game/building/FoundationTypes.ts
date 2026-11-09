@@ -329,6 +329,12 @@ export interface BuildingSettings {
 	wallHeight: number;
 	wallThickness: number;
 	minimumWallLength: number;
+	/**
+	 * On upper floors, walls (Corner Walls, Poly Wall, Wall) can only go on a ceiling, floor or flat
+	 * roof below, or on top of a wall below (`upperWallSupport.ts`). The ground floor is never
+	 * restricted. On by default; `false` lets walls go anywhere on any floor, as before.
+	 */
+	upperWallsNeedSupport: boolean;
 	showWallBounds: boolean;
 	showCollisionGeometry: boolean;
 
@@ -611,6 +617,7 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		wallHeight: 3,
 		wallThickness: 0.15,
 		minimumWallLength: 0.25,
+		upperWallsNeedSupport: true,
 		showWallBounds: false,
 		showCollisionGeometry: false,
 

@@ -1473,6 +1473,12 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 							0.05
 						),
 						boolField(
+							'building.walls.upperSupport',
+							'Upper-floor walls need support below',
+							building,
+							'upperWallsNeedSupport'
+						),
+						boolField(
 							'building.walls.bounds',
 							'Show wall bounds',
 							building,

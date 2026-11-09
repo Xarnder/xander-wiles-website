@@ -55,13 +55,15 @@ test('slot 2 defaults to Corner Walls: two clicks on opposite corners build a cl
 		page.evaluate(
 			async ({ site, gx, gz }) => {
 				const s = (window as unknown as TestWindow).__forestSession.scene;
-				const stand = { x: site.origin.x + 3, y: site.origin.y + 1.7, z: site.origin.z + 2.5 };
+				// Aim at the current level's floor height, standing on it.
+				const floorY = site.origin.y + s.levelManager.getLevelUiState('corner-foundation').baseY;
+				const stand = { x: site.origin.x + 3, y: floorY + 1.7, z: site.origin.z + 2.5 };
 				const dx = site.origin.x + gx * 0.25 - stand.x;
 				const dz = site.origin.z + gz * 0.25 - stand.z;
 				s.controller.restoreState(
 					stand,
 					Math.atan2(-dx, -dz),
-					Math.atan2(site.origin.y - stand.y, Math.hypot(dx, dz))
+					Math.atan2(floorY - stand.y, Math.hypot(dx, dz))
 				);
 				s.camera.updateMatrixWorld(true);
 				s.buildToolManager.update();
@@ -100,6 +102,35 @@ test('slot 2 defaults to Corner Walls: two clicks on opposite corners build a cl
 	]);
 	// Ready for the next room straight away.
 	await expect(page.getByTestId('build-hud')).toContainText('Click: First corner');
+
+	// Upstairs (]), walls need something under them: a room hanging past the walls below is
+	// refused, with the reason shown…
+	await page.keyboard.press('BracketRight');
+	await expect(page.getByTestId('build-hud')).toContainText('FIRST FLOOR');
+	// Fly, so standing up there with no floor yet doesn't mean falling between aim and click.
+	await page.evaluate(() =>
+		(window as unknown as TestWindow).__forestSession.scene.controller.setFlying(true)
+	);
+	await clickAt(4, 4);
+	await clickAt(28, 16);
+	await expect(page.getByTestId('build-hud')).toContainText('Needs a ceiling, floor or wall below');
+	expect(await wallPaths()).toHaveLength(1);
+	// …a first corner over thin air isn't taken at all…
+	await page.mouse.click(10, 10, { button: 'right' });
+	await clickAt(28, 4);
+	await expect(page.getByTestId('build-hud')).toContainText('Needs a ceiling, floor or wall below');
+	await expect(page.getByTestId('build-hud')).toContainText('Click: First corner');
+	// …and the same room right on top of the walls below is built.
+	await clickAt(4, 4);
+	await clickAt(20, 16);
+	await expect.poll(async () => (await wallPaths()).length).toBe(2);
+	const upstairs = (await wallPaths())[1];
+	expect(upstairs.baseY).toBeGreaterThan(2);
+	// Undo it and go back down to the ground floor.
+	await page.keyboard.press('Minus');
+	await expect.poll(async () => (await wallPaths()).length).toBe(1);
+	await page.keyboard.press('BracketLeft');
+	await expect(page.getByTestId('build-hud')).toContainText('GROUND FLOOR');
 
 	// Undo takes the whole room away in one step.
 	await page.keyboard.press('Minus');

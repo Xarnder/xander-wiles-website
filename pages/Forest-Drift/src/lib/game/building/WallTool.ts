@@ -21,6 +21,7 @@ import { applyWallTransform, buildWallGeometry } from './WallGeometryBuilder';
 import { computeSolidWallSegments, computeWallLength } from './wallGeometryMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
+import { UNSUPPORTED_WALL_REASON, wallSupportFor } from './upperWallSupport';
 
 /** Preallocated capacity for the full-footprint grid overlay before falling back to a radius around the cursor — see updateGridOverlay. */
 const MAX_FULL_GRID_POINTS = 4096;
@@ -255,6 +256,7 @@ export class WallTool implements BuildTool {
 		if (!this.active || !this.target) return;
 
 		if (this.state === 'idle') {
+			if (!this.heldUp(this.target, this.target)) return;
 			this.firstPoint = this.target;
 			this.levelManager.lockActiveFoundation(this.target.foundationId);
 			this.state = 'first-point-selected';
@@ -292,8 +294,26 @@ export class WallTool implements BuildTool {
 		).baseY;
 	}
 
+	/**
+	 * Whether a wall between two targets on the current level has something under it: always on the
+	 * ground floor, or with "Upper-floor walls need support below" off (`upperWallSupport.ts`).
+	 */
+	private heldUp(
+		from: { foundationId: string; point: BuildingGridPoint },
+		to: { foundationId: string; point: BuildingGridPoint }
+	): boolean {
+		if (this.buildingSettings.upperWallsNeedSupport === false) return true;
+		return wallSupportFor(
+			this.buildingManager.getBuildingForFoundation(from.foundationId),
+			this.currentBaseY(from.foundationId),
+			this.buildingSettings.buildingGridSize,
+			this.buildingSettings.wallThickness
+		).segmentSupported(from.point, to.point);
+	}
+
 	private confirmWall(): void {
 		if (!this.firstPoint || !this.target) return;
+		if (!this.heldUp(this.firstPoint, this.target)) return;
 
 		const result = this.buildingManager.addWall({
 			start: {
@@ -332,8 +352,9 @@ export class WallTool implements BuildTool {
 		if (this.state === 'idle') {
 			this.firstPointMarker.visible = false;
 			this.hidePreview();
-			this.updateTargetMarker(this.target, VALID_COLOR);
-			this.onHudChange?.(this.buildIdleHud());
+			const unsupported = !!this.target && !this.heldUp(this.target, this.target);
+			this.updateTargetMarker(this.target, unsupported ? INVALID_COLOR : VALID_COLOR);
+			this.onHudChange?.(this.buildIdleHud(unsupported ? UNSUPPORTED_WALL_REASON : null));
 			return;
 		}
 
@@ -358,7 +379,9 @@ export class WallTool implements BuildTool {
 			},
 			this.buildingSettings.buildingGridSize
 		);
-		const valid = sameFoundation && length >= this.buildingSettings.minimumWallLength;
+		const longEnough = length >= this.buildingSettings.minimumWallLength;
+		const heldUp = sameFoundation && longEnough && this.heldUp(this.firstPoint, this.target);
+		const valid = sameFoundation && longEnough && heldUp;
 
 		this.updateTargetMarker(this.target, valid ? VALID_COLOR : INVALID_COLOR);
 
@@ -366,7 +389,9 @@ export class WallTool implements BuildTool {
 			this.hidePreview();
 			const reason = !sameFoundation
 				? 'Both points must be on the same foundation'
-				: `Wall must be at least ${this.buildingSettings.minimumWallLength.toFixed(2)}m`;
+				: !longEnough
+					? `Wall must be at least ${this.buildingSettings.minimumWallLength.toFixed(2)}m`
+					: UNSUPPORTED_WALL_REASON;
 			this.onHudChange?.(this.buildInvalidHud(reason));
 			return;
 		}
@@ -549,17 +574,18 @@ export class WallTool implements BuildTool {
 		return label ? [label] : [];
 	}
 
-	private buildIdleHud(): BuildUiState {
+	private buildIdleHud(problem: string | null = null): BuildUiState {
 		return {
 			toolId: 'wall',
 			snapMode: this.snapMode,
 			level: this.currentLevelUiState(),
-			crosshair: this.target ? 'valid' : 'default',
+			crosshair: problem ? 'invalid' : this.target ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.target?.foundationId),
 				'',
 				'WALL',
 				'',
+				...(problem ? [problem, ''] : []),
 				'Look at a foundation',
 				`Grid: ${this.buildingSettings.buildingGridSize.toFixed(2)}m`,
 				'Left click: Select start point',

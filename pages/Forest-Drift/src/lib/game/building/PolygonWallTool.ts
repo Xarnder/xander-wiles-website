@@ -31,6 +31,7 @@ import { buildWallPath } from './WallPathGeometryBuilder';
 import { computePathLength, pathSelfIntersects } from './wallPathMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
+import { UNSUPPORTED_WALL_REASON, wallSupportFor, type WallSupport } from './upperWallSupport';
 
 const MAX_FULL_GRID_POINTS = 4096;
 const FALLBACK_RADIUS_CELLS = 12;
@@ -331,6 +332,7 @@ export class PolygonWallTool implements BuildTool {
 		if (!this.active || !this.hoverTarget) return;
 
 		if (this.state === 'idle') {
+			if (this.startProblem()) return;
 			this.points = [this.hoverTarget.gridPoint];
 			this.activeFoundationId = this.hoverTarget.foundationId;
 			this.levelManager.lockActiveFoundation(this.hoverTarget.foundationId);
@@ -355,6 +357,7 @@ export class PolygonWallTool implements BuildTool {
 		}
 
 		if (this.isHoveringFirstPoint() && this.points.length >= 3) {
+			if (!this.segmentHeldUp(this.points[this.points.length - 1], this.points[0])) return;
 			this.confirmPath(true);
 			return;
 		}
@@ -369,6 +372,7 @@ export class PolygonWallTool implements BuildTool {
 
 		const candidatePoints = [...this.points, this.hoverTarget.gridPoint];
 		if (this.wouldSelfIntersect(candidatePoints, false)) return;
+		if (!this.segmentHeldUp(last, this.hoverTarget.gridPoint)) return;
 
 		this.points = candidatePoints;
 		this.promoteSnapModeIfNeeded();
@@ -406,7 +410,37 @@ export class PolygonWallTool implements BuildTool {
 		if (width === 0 || depth === 0) return 'Pick the opposite corner';
 		const shortest = this.buildingSettings.minimumWallLength;
 		if (width < shortest || depth < shortest) return 'Room is too small';
+		const support = this.support();
+		if (support && !support.runSupported(rectangleWallPoints(first, corner), true))
+			return UNSUPPORTED_WALL_REASON;
 		return null;
+	}
+
+	/**
+	 * What holds up walls on the level being drawn (or hovered), or null when anything goes: the
+	 * ground floor, or the "Upper-floor walls need support below" setting switched off.
+	 */
+	private support(): WallSupport | null {
+		if (this.buildingSettings.upperWallsNeedSupport === false) return null;
+		const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId;
+		if (!foundationId) return null;
+		return wallSupportFor(
+			this.buildingManager.getBuildingForFoundation(foundationId),
+			this.resolveBaseY(foundationId),
+			this.buildingSettings.buildingGridSize,
+			this.buildingSettings.wallThickness
+		);
+	}
+
+	/** Whether a wall from `a` to `b` on the level being drawn has something under it. */
+	private segmentHeldUp(a: BuildingGridPoint, b: BuildingGridPoint): boolean {
+		return this.support()?.segmentSupported(a, b) ?? true;
+	}
+
+	/** Why the first point can't go where the crosshair is (nothing under it upstairs), or null. */
+	private startProblem(): string | null {
+		const at = this.hoverTarget?.gridPoint;
+		return at && !this.segmentHeldUp(at, at) ? UNSUPPORTED_WALL_REASON : null;
 	}
 
 	/** Axis → axis-inline after the third point, if the player left the default on. */
@@ -481,8 +515,9 @@ export class PolygonWallTool implements BuildTool {
 
 		if (this.state === 'idle') {
 			this.hidePreview();
-			this.updateHoverMarker(VALID_COLOR);
-			this.onHudChange?.(this.buildIdleHud());
+			const problem = this.startProblem();
+			this.updateHoverMarker(problem ? INVALID_COLOR : VALID_COLOR);
+			this.onHudChange?.(this.buildIdleHud(problem));
 			return;
 		}
 
@@ -525,6 +560,13 @@ export class PolygonWallTool implements BuildTool {
 			if (this.wouldSelfIntersect(candidatePoints, false)) {
 				valid = false;
 				reason = 'Wall path would cross itself';
+			}
+		}
+		if (valid) {
+			const to = closingLoop ? this.points[0] : this.hoverTarget.gridPoint;
+			if (!this.segmentHeldUp(last, to)) {
+				valid = false;
+				reason = UNSUPPORTED_WALL_REASON;
 			}
 		}
 
@@ -783,18 +825,19 @@ export class PolygonWallTool implements BuildTool {
 		return `Room: ${width.toFixed(2)}m × ${depth.toFixed(2)}m`;
 	}
 
-	private buildIdleHud(): BuildUiState {
+	private buildIdleHud(problem: string | null = null): BuildUiState {
 		return {
 			toolId: this.toolId,
 			snapMode: this.snapMode,
 			snapBadge: this.snapBadge(),
 			level: this.currentLevelUiState(),
-			crosshair: this.hoverTarget ? 'valid' : 'default',
+			crosshair: problem ? 'invalid' : this.hoverTarget ? 'valid' : 'default',
 			hintLines: [
 				...this.levelHudLines(this.hoverTarget?.foundationId),
 				'',
 				this.title(),
 				'',
+				...(problem ? [problem, ''] : []),
 				this.shape === 'rectangle' ? 'Click: First corner' : 'Click to start',
 				...this.snapHudLines(),
 				this.shape === 'rectangle' ? 'B: Snap to wall corners' : 'B: Cycle snap',

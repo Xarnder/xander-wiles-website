@@ -2031,6 +2031,13 @@
 								right-angled room are built at once. E sets their height and thickness, B toggles
 								snapping to existing wall corners, right click or Backspace starts again.
 							</dd>
+							<dt>Upper floors</dt>
+							<dd>
+								On the ground floor walls can go anywhere on the foundation. Upstairs, every wall
+								(Corner Walls, Poly Wall, Wall) has to stand on a ceiling, floor or flat roof below,
+								or on top of a wall below; otherwise the preview turns red and says why. Switch this
+								off in Settings → Building → Walls → "Upper-floor walls need support below".
+							</dd>
 						</dl>
 
 						<h3>Continuous Wall / Ceiling / Floor</h3>
