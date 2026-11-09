@@ -4,19 +4,19 @@
 		{
 			"seed": "soft-lowlands-431",
 			"terrain": {
-				"exact": "a0379c03",
+				"exact": "de9f3ecd",
 				"coarse": "8125f366",
 				"count": 10000
 			},
 			"hydrology": {
-				"exact": "d0efa5c0",
-				"coarse": "454de015",
+				"exact": "bc743812",
+				"coarse": "97d84883",
 				"count": 4096,
-				"lakes": 55,
+				"lakes": 96,
 				"rivers": 38
 			},
 			"trees": {
-				"exact": "9de51bf2",
+				"exact": "7e5d6050",
 				"coarse": "7dca5695",
 				"count": 571
 			}
@@ -24,19 +24,19 @@
 		{
 			"seed": "peaceful-world",
 			"terrain": {
-				"exact": "276a8e84",
+				"exact": "c7601140",
 				"coarse": "c49d724f",
 				"count": 10000
 			},
 			"hydrology": {
-				"exact": "80a092fc",
-				"coarse": "86db9f8d",
+				"exact": "4d308810",
+				"coarse": "b71d7bfe",
 				"count": 4096,
-				"lakes": 46,
+				"lakes": 68,
 				"rivers": 23
 			},
 			"trees": {
-				"exact": "7ca734ac",
+				"exact": "12d67f83",
 				"coarse": "84df0c94",
 				"count": 613
 			}
@@ -44,19 +44,19 @@
 		{
 			"seed": "Ünïcode seed #42",
 			"terrain": {
-				"exact": "067a0476",
+				"exact": "7bb71fd9",
 				"coarse": "51bb59d6",
 				"count": 10000
 			},
 			"hydrology": {
-				"exact": "c24426d7",
-				"coarse": "a8c8bcc6",
+				"exact": "5ab9e088",
+				"coarse": "a77290e4",
 				"count": 4096,
-				"lakes": 52,
+				"lakes": 89,
 				"rivers": 32
 			},
 			"trees": {
-				"exact": "a118a59b",
+				"exact": "5aa33c58",
 				"coarse": "bc42a97b",
 				"count": 555
 			}

@@ -324,7 +324,9 @@ export class HydrologySystem implements HydrologyCarver {
 			minZ: worldZ - radius,
 			maxZ: worldZ + radius
 		};
-		return this.generator.allLakes.filter((lake) => boundsOverlap(lake.bounds, box, 0));
+		return this.generator.allLakes.filter(
+			(lake) => !lake.inactive && boundsOverlap(lake.bounds, box, 0)
+		);
 	}
 
 	occupiedCells(): { cx: number; cz: number }[] {
@@ -439,6 +441,19 @@ export class HydrologySystem implements HydrologyCarver {
 			if (!lake) continue;
 			const arrival = river.samples[start - 1].waterY;
 			if (Number.isFinite(arrival) && arrival < lake.waterLevel) lake.waterLevel = arrival;
+		}
+	}
+
+	/**
+	 * A river that joins a bigger one before its end never reaches its end pond: that pond goes dry
+	 * (no water, no carving, not drawn). It comes back if the river turns out to reach it after all.
+	 */
+	private retireEndPonds(): void {
+		const rivers = new Map(this.generator.allRivers.map((river) => [river.id, river]));
+		for (const lake of this.generator.allLakes) {
+			if (lake.pond !== 'end' || !lake.riverId) continue;
+			const river = rivers.get(lake.riverId);
+			lake.inactive = !!river && river.endIndex < river.samples.length;
 		}
 	}
 
@@ -582,6 +597,7 @@ export class HydrologySystem implements HydrologyCarver {
 	private resolveAndIndex(): void {
 		const rivers = this.generator.allRivers;
 		resolveConfluence(rivers, this.settings, clampedHydrology(this.settings).gridSpacing);
+		this.retireEndPonds();
 		this.containRiverSurfaces();
 		for (const river of rivers) {
 			const stamp = this.surfaceStamp(river);
@@ -638,7 +654,7 @@ export class HydrologySystem implements HydrologyCarver {
 			}
 		}
 		for (const lake of bucket.lakes) {
-			applyLake(worldX, worldZ, baseHeight, lake, out, bank);
+			if (!lake.inactive) applyLake(worldX, worldZ, baseHeight, lake, out, bank);
 		}
 		// The ribbon is a flat plane. Ground under its outer edge has to stand above that plane.
 		// Lakes keep their bed; a lake carve must not leave a river bank below the river again.
@@ -862,7 +878,12 @@ function sameLakePair(a: RiverDefinition, b: RiverDefinition): boolean {
 	);
 }
 
-/** Truncates lower-priority rivers where they meet a higher one, then adds their flow downstream. */
+/**
+ * Where rivers meet. A river joins a higher-priority one where it first comes near it, except near
+ * that river's own final stretch when it simply ends there (it would otherwise be cut off at a dead
+ * end, and no water would go on). A river whose own end lies on another river joins it there, even
+ * a lower one. Then every joining river's flow is added downstream.
+ */
 export function resolveConfluence(
 	rivers: readonly RiverDefinition[],
 	settings: HydrologySettings,
@@ -874,11 +895,21 @@ export function resolveConfluence(
 		let end = river.samples.length;
 		for (const other of sorted) {
 			if (other.id === river.id) continue;
-			if (other.priority < river.priority) continue;
-			if (other.priority === river.priority && other.id >= river.id) continue;
 			if (sameLakePair(river, other)) continue;
 			if (!boundsOverlap(river.bounds, other.bounds, merge)) continue;
-			const hit = firstApproach(river, other, merge);
+			// Only values settled in this pass: higher rivers' ends (already resolved above) and
+			// lower rivers' full courses. Nothing carried over from an earlier pass, so the result
+			// never depends on which area was built first.
+			let hit = -1;
+			if (outranks(other, river)) {
+				const limit =
+					endsOpen(other) && other.endIndex >= other.samples.length
+						? finalStretchStart(other, merge * 1.5)
+						: other.endIndex;
+				hit = firstApproach(river, other, merge, limit);
+			} else if (endsOpen(river) && endsNear(river, other, merge)) {
+				hit = firstApproach(river, other, merge, other.samples.length);
+			}
 			if (hit >= 0) end = Math.min(end, hit + 1);
 		}
 		river.endIndex = Math.max(1, end);
@@ -893,34 +924,11 @@ export function resolveConfluence(
 	for (const tributary of rivers) {
 		if (tributary.endIndex >= tributary.samples.length) continue;
 		const endSample = tributary.samples[Math.max(0, tributary.endIndex - 1)];
-		let best: RiverDefinition | null = null;
-		let bestDist = merge;
-		let bestIndex = 0;
-		for (const other of rivers) {
-			if (other.id === tributary.id) continue;
-			if (other.priority < tributary.priority) continue;
-			if (other.priority === tributary.priority && other.id >= tributary.id) continue;
-			if (sameLakePair(tributary, other)) continue;
-			// Only samples within merge distance can receive this tributary's flow.
-			if (
-				endSample.x < other.bounds.minX - merge ||
-				endSample.x > other.bounds.maxX + merge ||
-				endSample.z < other.bounds.minZ - merge ||
-				endSample.z > other.bounds.maxZ + merge
-			)
-				continue;
-			const limit = other.endIndex;
-			for (let i = 0; i < limit; i++) {
-				const sample = other.samples[i];
-				const dist = Math.hypot(sample.x - endSample.x, sample.z - endSample.z);
-				if (dist < bestDist) {
-					bestDist = dist;
-					best = other;
-					bestIndex = i;
-				}
-			}
-		}
-		if (best) best.flowExtra[bestIndex] += endSample.baseFlow;
+		// The higher river it joined; failing that, the lower one it ran out onto.
+		const into =
+			nearestReceiver(tributary, endSample, rivers, merge, true) ??
+			nearestReceiver(tributary, endSample, rivers, merge, false);
+		if (into) into.river.flowExtra[into.index] += endSample.baseFlow;
 	}
 
 	for (const river of rivers) {
@@ -946,8 +954,79 @@ const approachGrids = new WeakMap<
 	}
 >();
 
-function firstApproach(river: RiverDefinition, other: RiverDefinition, merge: number): number {
-	const limit = other.endIndex;
+/** The closest active sample within `merge` of `at` on another river (only higher ones, or any). */
+function nearestReceiver(
+	tributary: RiverDefinition,
+	at: RiverSample,
+	rivers: readonly RiverDefinition[],
+	merge: number,
+	higherOnly: boolean
+): { river: RiverDefinition; index: number } | null {
+	let best: { river: RiverDefinition; index: number } | null = null;
+	let bestDist = merge;
+	for (const other of rivers) {
+		if (other.id === tributary.id) continue;
+		if (higherOnly && !outranks(other, tributary)) continue;
+		if (sameLakePair(tributary, other)) continue;
+		// Only samples within merge distance can receive this tributary's flow.
+		if (
+			at.x < other.bounds.minX - merge ||
+			at.x > other.bounds.maxX + merge ||
+			at.z < other.bounds.minZ - merge ||
+			at.z > other.bounds.maxZ + merge
+		)
+			continue;
+		for (let i = 0; i < other.endIndex; i++) {
+			const sample = other.samples[i];
+			const dist = Math.hypot(sample.x - at.x, sample.z - at.z);
+			if (dist < bestDist) {
+				bestDist = dist;
+				best = { river: other, index: i };
+			}
+		}
+	}
+	return best;
+}
+
+/** Whether `a` wins a shared valley over `b` (higher priority; the id breaks ties). */
+function outranks(a: RiverDefinition, b: RiverDefinition): boolean {
+	return a.priority > b.priority || (a.priority === b.priority && a.id < b.id);
+}
+
+/** A river whose course runs to its own end (its end pond, or nothing) rather than into a lake. */
+function endsOpen(river: RiverDefinition): boolean {
+	return river.sinkLakeId === undefined || river.sinkLakeId.startsWith('end:');
+}
+
+/** The first sample of a river's final stretch: those within `reach` of its last sample. */
+function finalStretchStart(river: RiverDefinition, reach: number): number {
+	const last = river.samples[river.samples.length - 1];
+	let i = river.samples.length;
+	while (i > 0) {
+		const s = river.samples[i - 1];
+		if (Math.hypot(s.x - last.x, s.z - last.z) >= reach) break;
+		i--;
+	}
+	return i;
+}
+
+/** Whether a river's last sample lies within `merge` of another river's course. */
+function endsNear(river: RiverDefinition, other: RiverDefinition, merge: number): boolean {
+	const last = river.samples[river.samples.length - 1];
+	for (let i = 0; i < other.samples.length; i++) {
+		const s = other.samples[i];
+		if (Math.hypot(s.x - last.x, s.z - last.z) < merge) return true;
+	}
+	return false;
+}
+
+/** The first sample of `river` within `merge` of `other`'s samples before `limit`, or −1. */
+function firstApproach(
+	river: RiverDefinition,
+	other: RiverDefinition,
+	merge: number,
+	limit: number
+): number {
 	let grid = approachGrids.get(other);
 	if (!grid || grid.limit !== limit || grid.merge !== merge) {
 		grid = { limit, merge, cells: new Map() };

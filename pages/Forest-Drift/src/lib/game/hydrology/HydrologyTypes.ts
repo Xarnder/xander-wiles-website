@@ -11,6 +11,12 @@ export const HYDROLOGY_GENERATOR_VERSION = 2;
  */
 export const SPAWN_RIVER_RADIUS = 100;
 export const SPAWN_RIVER_MIN_VERSION = 2;
+/**
+ * From generator version 2, every river rises in a small pond (instead of out of bare ground at a
+ * spring) and every river that would otherwise just stop ends in one. Applied to existing version-2
+ * worlds too: it only adds small ponds where rivers already start and end, never moves a river.
+ */
+export const RIVER_POND_MIN_VERSION = 2;
 
 /**
  * Walkable water versus water that blocks ordinary movement. Kept here so the controller, creatures,
@@ -135,6 +141,17 @@ export interface LakeDefinition {
 	outletRiverId?: string;
 	/** True when the candidate was a drainage sink rather than a scanned basin. */
 	sink: boolean;
+	/**
+	 * A small pond made for one river (`riverId`): `source`, which the river rises in and flows out
+	 * of, or `end`, which a river that would otherwise just stop flows into.
+	 */
+	pond?: 'source' | 'end';
+	riverId?: string;
+	/**
+	 * An end pond whose river turned out to join a bigger river before reaching it: kept for ids,
+	 * but no water, no carving and not drawn.
+	 */
+	inactive?: boolean;
 }
 
 export interface LakeCandidate {

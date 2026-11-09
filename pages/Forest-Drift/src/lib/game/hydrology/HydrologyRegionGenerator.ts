@@ -23,6 +23,7 @@ import {
 	widthForFlow
 } from './HydrologyMath';
 import {
+	RIVER_POND_MIN_VERSION,
 	SPAWN_RIVER_MIN_VERSION,
 	SPAWN_RIVER_RADIUS,
 	type BaseTerrainSampler,
@@ -43,6 +44,15 @@ const SPAWN_RIVER_UPHILL_CELLS = 7;
  * time it reaches spawn rather than a trickle.
  */
 const SPAWN_RIVER_START_FLOW = 2.6;
+/** Flow at a spring (a river's default start). */
+const SPRING_FLOW = 0.5;
+/** Pond radius (m): a base plus this share of the river's width there, between the limits. */
+const SOURCE_POND_RADIUS = { base: 4.5, perWidth: 0.9, min: 6, max: 12 } as const;
+const END_POND_RADIUS = { base: 5, perWidth: 0.9, min: 8, max: 18 } as const;
+/** A pond steeper than this across its rim (rise over diameter) would be a cliff, not a pond. */
+const MAX_POND_GRADE = 0.9;
+/** Metres kept between a new pond's shore and any lake already there (else none is made). */
+const POND_CLEARANCE = 4;
 
 const DIRS: readonly (readonly [number, number])[] = [
 	[1, 0],
@@ -87,6 +97,11 @@ export class HydrologyRegionGenerator {
 	private readonly regions = new Map<string, HydrologyRegion>();
 	private readonly lakes: LakeDefinition[] = [];
 	private readonly rivers: RiverDefinition[] = [];
+	/**
+	 * Ponds made while routing a river, added to the world only when that river is (so a candidate
+	 * route the spawn search throws away leaves no pond behind). Keyed by river id.
+	 */
+	private readonly pendingPonds = new Map<string, LakeDefinition[]>();
 
 	constructor(
 		private readonly base: BaseTerrainSampler,
@@ -104,6 +119,7 @@ export class HydrologyRegionGenerator {
 		this.regions.clear();
 		this.lakes.length = 0;
 		this.rivers.length = 0;
+		this.pendingPonds.clear();
 	}
 
 	get allLakes(): readonly LakeDefinition[] {
@@ -246,7 +262,7 @@ export class HydrologyRegionGenerator {
 					z: (cz + 0.5) * this.limits.gridSpacing,
 					height
 				});
-				const river = this.route({
+				const river = this.routeFromSpring({
 					cx,
 					cz,
 					id: `r:${cx}:${cz}`,
@@ -268,7 +284,8 @@ export class HydrologyRegionGenerator {
 		}
 
 		for (const lake of [...region.lakes]) {
-			if (lake.outletRiverId) continue;
+			// End ponds are where rivers stop: they have no outflow of their own.
+			if (lake.outletRiverId || lake.pond === 'end') continue;
 			const outlet = this.routeOutlet(lake);
 			if (!outlet) continue;
 			lake.outletRiverId = outlet.id;
@@ -329,7 +346,7 @@ export class HydrologyRegionGenerator {
 				const key = packCell(cell.cx, cell.cz);
 				let river = routed.get(key);
 				if (river === undefined) {
-					river = this.route({
+					river = this.routeFromSpring({
 						cx: cell.cx,
 						cz: cell.cz,
 						id: `spawn:${cell.cx}:${cell.cz}`,
@@ -367,6 +384,120 @@ export class HydrologyRegionGenerator {
 		if (this.rivers.some((other) => other.id === river.id)) return;
 		region.rivers.push(river);
 		this.rivers.push(river);
+		// Its ponds join the world with it, each in the region it lies in.
+		for (const pond of this.pendingPonds.get(river.id) ?? []) {
+			const home = this.generateLakes(
+				floorDiv(pond.x, this.limits.regionSize),
+				floorDiv(pond.z, this.limits.regionSize)
+			);
+			this.addLake(home, pond);
+		}
+		this.pendingPonds.delete(river.id);
+	}
+
+	private holdPond(riverId: string, pond: LakeDefinition): void {
+		const list = this.pendingPonds.get(riverId) ?? [];
+		list.push(pond);
+		this.pendingPonds.set(riverId, list);
+	}
+
+	private pondsEnabled(): boolean {
+		return this.settings.generatorVersion >= RIVER_POND_MIN_VERSION;
+	}
+
+	/**
+	 * A small pond for river `riverId` at (x, z), its water at the lowest point of its rim so it
+	 * stays in the ground on any slope (its bed is dug into the hillside). Null on a cliff, or where
+	 * a lake already is.
+	 */
+	private makePond(
+		kind: 'source' | 'end',
+		riverId: string,
+		x: number,
+		z: number,
+		radius: number
+	): LakeDefinition | null {
+		// Only the natural lakes scanned for each region, and every region around the pond scanned
+		// first, so whether a pond is made never depends on which area was built first.
+		const { regionSize } = this.limits;
+		const rx = floorDiv(x, regionSize),
+			rz = floorDiv(z, regionSize);
+		for (let dz = -1; dz <= 1; dz++)
+			for (let dx = -1; dx <= 1; dx++) this.generateLakes(rx + dx, rz + dz);
+		if (this.lakeNear(x, z, radius + POND_CLEARANCE, (lake) => !lake.pond && !lake.sink))
+			return null;
+		const shape = this.lakeShape(x, z);
+		const probe = { ...shape, baseRadius: radius } as LakeDefinition;
+		let rimMin = Number.POSITIVE_INFINITY;
+		let rimMax = Number.NEGATIVE_INFINITY;
+		const samples = 20;
+		for (let i = 0; i < samples; i++) {
+			const angle = (i / samples) * Math.PI * 2;
+			const reach = lakeRadiusAt(probe, angle) * 1.03;
+			const h = this.base.sample(x + Math.cos(angle) * reach, z + Math.sin(angle) * reach);
+			rimMin = Math.min(rimMin, h);
+			rimMax = Math.max(rimMax, h);
+		}
+		if ((rimMax - rimMin) / (radius * 2) > MAX_POND_GRADE) return null;
+		const pond = this.makeLake(
+			`${kind === 'source' ? 'spring' : 'end'}:${riverId}`,
+			x,
+			z,
+			radius,
+			rimMin - 0.06,
+			kind === 'end',
+			shape
+		);
+		pond.pond = kind;
+		pond.riverId = riverId;
+		return pond;
+	}
+
+	/**
+	 * A river rising at a spring: it starts in a small pond there and flows out of the pond's lowest
+	 * side, so its water begins on the pond rather than appearing out of the ground at full width.
+	 * Falls back to the bare spring when no pond fits (a lake already there, or a cliff).
+	 */
+	private routeFromSpring(opts: {
+		cx: number;
+		cz: number;
+		id: string;
+		priority: number;
+		seed: number;
+		originX: number;
+		originZ: number;
+		startFlow?: number;
+	}): RiverDefinition | null {
+		if (!this.pondsEnabled()) return this.route(opts);
+		const width = widthForFlow(opts.startFlow ?? SPRING_FLOW, this.settings);
+		const radius = clamp(
+			SOURCE_POND_RADIUS.base + width * SOURCE_POND_RADIUS.perWidth,
+			SOURCE_POND_RADIUS.min,
+			SOURCE_POND_RADIUS.max
+		);
+		const pond = this.makePond('source', opts.id, opts.originX, opts.originZ, radius);
+		if (!pond) return this.route(opts);
+		// Out of its lowest side; failing that (a hollow right there), along the spring's own course,
+		// still rising on the pond.
+		const river =
+			this.routeOutlet(pond, {
+				id: opts.id,
+				priority: opts.priority,
+				seed: opts.seed,
+				startFlow: opts.startFlow
+			}) ??
+			this.route({
+				...opts,
+				lockWaterY: pond.waterLevel,
+				forbidLakeId: pond.id,
+				outletGrace: 5,
+				outletOfLakeId: pond.id,
+				sourceLake: pond
+			});
+		if (!river) return this.route(opts);
+		pond.outletRiverId = river.id;
+		this.holdPond(river.id, pond);
+		return river;
 	}
 
 	private lakeShape(
@@ -470,7 +601,14 @@ export class HydrologyRegionGenerator {
 		return lake;
 	}
 
-	private routeOutlet(lake: LakeDefinition): RiverDefinition | null {
+	/**
+	 * The river leaving `lake` at the lowest point of its rim. `own` routes it for a pond not yet in
+	 * the world (a spring's), under the spring river's own id, priority, seed and flow.
+	 */
+	private routeOutlet(
+		lake: LakeDefinition,
+		own?: { id: string; priority: number; seed: number; startFlow?: number }
+	): RiverDefinition | null {
 		let bestX = lake.x;
 		let bestZ = lake.z;
 		let bestH = Number.POSITIVE_INFINITY;
@@ -495,16 +633,20 @@ export class HydrologyRegionGenerator {
 		return this.route({
 			cx: floorDiv(sx, grid),
 			cz: floorDiv(sz, grid),
-			id: `o:${lake.id}`,
-			priority: lake.waterLevel - 0.05,
-			seed: Math.floor(this.hash(Math.round(lake.x), Math.round(lake.z), 4, 12) * 1_000_000),
+			id: own?.id ?? `o:${lake.id}`,
+			priority: own?.priority ?? lake.waterLevel - 0.05,
+			seed:
+				own?.seed ??
+				Math.floor(this.hash(Math.round(lake.x), Math.round(lake.z), 4, 12) * 1_000_000),
 			originX: sx,
 			originZ: sz,
 			lockWaterY: lake.waterLevel,
 			forbidLakeId: lake.id,
 			outletGrace: 5,
 			outletOfLakeId: lake.id,
-			noSinkLake: false
+			sourceLake: own ? lake : undefined,
+			noSinkLake: false,
+			startFlow: own?.startFlow
 		});
 	}
 
@@ -523,6 +665,8 @@ export class HydrologyRegionGenerator {
 		noSinkLake?: boolean;
 		/** Flow at the source (default 0.5, a spring). */
 		startFlow?: number;
+		/** The lake this river leaves when it isn't in the world yet (a spring's pond). */
+		sourceLake?: LakeDefinition;
 	}): RiverDefinition | null {
 		const grid = this.limits.gridSpacing;
 		const raw: RawNode[] = [];
@@ -593,7 +737,43 @@ export class HydrologyRegionGenerator {
 		if (raw.length < 2) return null;
 		// An outlet that wanders back into its own lake is not an outlet: the lake keeps no outflow.
 		if (sink && sink.id === opts.forbidLakeId) return null;
-		return this.finishRiver(raw, cells, opts, sink, phase);
+		// A river that would just stop (out of reach, boxed in, back on itself) ends in a pond.
+		const endPond = sink ? null : this.endPond(raw, opts.id, opts.startFlow ?? SPRING_FLOW);
+		const river = this.finishRiver(raw, cells, opts, sink ?? endPond, phase);
+		if (river && endPond) this.holdPond(river.id, endPond);
+		return river;
+	}
+
+	/** The pond a river that would otherwise just stop flows into, just past its last step. */
+	private endPond(
+		raw: readonly RawNode[],
+		riverId: string,
+		startFlow: number
+	): LakeDefinition | null {
+		if (!this.pondsEnabled()) return null;
+		const last = raw[raw.length - 1];
+		const before = raw[raw.length - 2];
+		const dx = last.x - before.x,
+			dz = last.z - before.z;
+		const step = Math.hypot(dx, dz) || 1;
+		let length = 0;
+		for (let i = 1; i < raw.length; i++)
+			length += Math.hypot(raw[i].x - raw[i - 1].x, raw[i].z - raw[i - 1].z);
+		// Flow grows 0.15 per 8 m resampled step (see `profile`).
+		const width = widthForFlow(startFlow + (0.15 * length) / 8, this.settings);
+		const radius = clamp(
+			END_POND_RADIUS.base + width * END_POND_RADIUS.perWidth,
+			END_POND_RADIUS.min,
+			END_POND_RADIUS.max
+		);
+		const reach = radius * 0.55;
+		return this.makePond(
+			'end',
+			riverId,
+			last.x + (dx / step) * reach,
+			last.z + (dz / step) * reach,
+			radius
+		);
 	}
 
 	private pickStep(
@@ -722,12 +902,13 @@ export class HydrologyRegionGenerator {
 			lockWaterY?: number;
 			outletOfLakeId?: string;
 			startFlow?: number;
+			sourceLake?: LakeDefinition;
 		},
 		sink: LakeDefinition | null,
 		phase: number
 	): RiverDefinition | null {
 		const meandered = this.applyMeander(raw, phase);
-		const source = this.lakeById(opts.outletOfLakeId);
+		const source = opts.sourceLake ?? this.lakeById(opts.outletOfLakeId);
 		// An outlet starts out on its lake, so its ribbon begins under the lake surface and leaves
 		// through the shoreline at the lake level rather than appearing beyond a dry gap.
 		if (source && meandered.length > 0) {
@@ -909,7 +1090,9 @@ export class HydrologyRegionGenerator {
 		let best: LakeDefinition | null = null;
 		let bestD = 0.94;
 		for (const lake of this.lakes) {
-			if (lake.id === forbidId) continue;
+			// Ponds belong to one river each and never stop another's course: whether one exists yet
+			// depends on which area was built first, and routes must not.
+			if (lake.id === forbidId || lake.pond) continue;
 			if (!boundsOverlap(lake.bounds, { minX: x, maxX: x, minZ: z, maxZ: z }, 0)) continue;
 			const d = pointInLake(lake, x, z);
 			if (d < bestD) {
@@ -920,8 +1103,15 @@ export class HydrologyRegionGenerator {
 		return best;
 	}
 
-	private lakeNear(x: number, z: number, radius: number): LakeDefinition | null {
+	/** A lake (never a pond, see `lakeAt`) whose shore comes within `radius` of (x, z). */
+	private lakeNear(
+		x: number,
+		z: number,
+		radius: number,
+		accept: (lake: LakeDefinition) => boolean = (lake) => !lake.pond
+	): LakeDefinition | null {
 		for (const lake of this.lakes) {
+			if (!accept(lake)) continue;
 			if (Math.hypot(lake.x - x, lake.z - z) < radius + lake.baseRadius) return lake;
 		}
 		return null;

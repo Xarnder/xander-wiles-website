@@ -9,12 +9,15 @@ import {
 import { createDefaultTerrainSettings } from '../../terrain/TerrainSettings';
 import { TerrainHeightSampler } from '../../terrain/TerrainHeightSampler';
 
-/** Closest active river water to spawn (the origin), after confluence is resolved. */
+/**
+ * Closest active river water to spawn (the origin), after confluence is resolved. A river's start
+ * on its source pond is pond water, so the search begins where it leaves the pond.
+ */
 function nearestRiverToSpawn(system: HydrologySystem): { distance: number; x: number; z: number } {
 	let best = { distance: Number.POSITIVE_INFINITY, x: 0, z: 0 };
 	for (const river of system.getRivers()) {
 		const end = Math.min(river.samples.length, river.endIndex);
-		for (let i = 0; i < end; i++) {
+		for (let i = river.lakeLockEnd ?? 0; i < end; i++) {
 			const s = river.samples[i];
 			const d = Math.hypot(s.x, s.z);
 			if (d < best.distance) best = { distance: d, x: s.x, z: s.z };
